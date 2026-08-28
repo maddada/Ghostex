@@ -99,19 +99,11 @@
   width: min(178px, calc(100vw - 24px));
 }
 
-.session-tag-submenu,
-.sidebar-v2-context-submenu {
+.session-tag-submenu {
   /*
    * CDXC:SessionTags 2026-06-05-21:23:
    * The Tag as submenu opens only after the Tag as row is clicked and shares
    * the same sidebar-centered placement as the parent session context menu.
-   *
-   * CDXC:SidebarV2ContextMenuLook 2026-07-30:
-   * Sidebar V2's submenu panels (Tag as, Snooze presets, project grouping) are
-   * the same surface and share this one rule rather than carrying a second copy
-   * of it, so the two sidebars' submenus cannot drift apart. The stacking order
-   * moves here too: V1's panel used to set it inline with this exact value, and
-   * a panel that is not above its parent menu is not a submenu.
    */
   z-index: var(--sidebar-context-menu-submenu-z-index, 301);
   max-width: calc(100vw - 24px);

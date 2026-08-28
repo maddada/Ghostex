@@ -12,13 +12,6 @@ pub(crate) enum WindowsTerminalBackendPreference {
     PowerShell,
 }
 
-impl WindowsTerminalBackendPreference {
-    #[allow(dead_code)] // used by the windows path
-    pub(crate) fn from_settings_value(_value: Option<&str>) -> Self {
-        Self::Wsl
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)] // used by the windows path
 pub(crate) enum ResolvedWindowsTerminalBackend {
@@ -65,13 +58,7 @@ pub(crate) struct WindowsWslGhostexCliStatus {
 
 #[allow(dead_code)] // used by the windows path
 pub(crate) fn current_preference() -> WindowsTerminalBackendPreference {
-    let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
-    WindowsTerminalBackendPreference::from_settings_value(
-        settings
-            .object()
-            .get("windowsTerminalBackend")
-            .and_then(serde_json::Value::as_str),
-    )
+    WindowsTerminalBackendPreference::Wsl
 }
 
 #[cfg(target_os = "windows")]

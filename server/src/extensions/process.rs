@@ -70,15 +70,10 @@ impl ExtensionRuntime {
     }
 
     pub(crate) fn status(&self, id: &str, manifest: &ExtensionManifest) -> ExtensionRuntimeStatus {
-        if manifest
-            .server
-            .as_ref()
-            .and_then(|server| server.static_dir.as_ref())
-            .is_some()
-        {
+        if let Some(url) = spawnless_server_url(id, manifest, &self.api_url) {
             return ExtensionRuntimeStatus {
                 state: ExtensionRuntimeState::Ready,
-                url: Some(format!("{}/ext/{id}/", self.api_url)),
+                url: Some(url),
                 pid: None,
                 error: None,
             };
@@ -107,7 +102,7 @@ impl ExtensionRuntime {
         let server = manifest.server.as_ref().ok_or_else(|| {
             ExtensionError::bad_request(format!("Extension {id:?} has no web server."))
         })?;
-        if server.static_dir.is_some() {
+        if server.static_dir.is_some() || server.url.is_some() {
             return Ok(self.status(id, manifest));
         }
         let command_template = server.command.as_ref().ok_or_else(|| {
@@ -480,6 +475,27 @@ fn monitor_process(
             Ok(None) => {}
         }
     }
+}
+
+/*
+Static and URL servers are the two web-extension shapes gxserver never spawns a
+process for: a static bundle is already served from this process at
+`/ext/{id}/`, and a URL server is a fixed remote page the manifest points at.
+Both are ready the moment the extension is installed and enabled, so start is a
+status read and stop has no process to terminate.
+*/
+fn spawnless_server_url(id: &str, manifest: &ExtensionManifest, api_url: &str) -> Option<String> {
+    let server = manifest.server.as_ref()?;
+    if let Some(url) = server.url.as_ref() {
+        // Manifest validation already parsed this; hand callers the normalized
+        // form so the scheme and host casing match what a browser reports back
+        // for the loaded page.
+        return url::Url::parse(url).ok().map(|parsed| parsed.to_string());
+    }
+    server
+        .static_dir
+        .as_ref()
+        .map(|_| format!("{api_url}/ext/{id}/"))
 }
 
 fn spawn_child(api_url: &str, spec: &LaunchSpec) -> io::Result<Child> {

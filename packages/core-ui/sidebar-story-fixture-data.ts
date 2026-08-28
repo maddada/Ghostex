@@ -1,6 +1,5 @@
 import type { SidebarStoryFixture } from './sidebar-story-fixtures';
 import { createStorySession, type SidebarStoryGroup } from './sidebar-story-fixture-helpers';
-import { SIDEBAR_V2_STORY_GROUPS } from './v2/sidebar-v2-story-fixtures';
 import { createDefaultSidebarProjectDiffStats } from '../shared/project-diff-stats';
 
 function minutesAgo(minutes: number): string {
@@ -703,13 +702,6 @@ export const GROUPS_BY_FIXTURE: Record<SidebarStoryFixture, SidebarStoryGroup[]>
   'overflow-stress': OVERFLOW_STRESS_GROUPS,
   'scroll-end-retention': SCROLL_END_RETENTION_GROUPS,
   'selector-states': SELECTOR_STATE_GROUPS,
-  'sidebar-v2-empty': SIDEBAR_V2_STORY_GROUPS['sidebar-v2-empty'] as SidebarStoryGroup[],
-  'sidebar-v2-gxserver-unavailable': SIDEBAR_V2_STORY_GROUPS['sidebar-v2-gxserver-unavailable'] as SidebarStoryGroup[],
-  'sidebar-v2-inbox': SIDEBAR_V2_STORY_GROUPS['sidebar-v2-inbox'] as SidebarStoryGroup[],
-  'sidebar-v2-monorepo': SIDEBAR_V2_STORY_GROUPS['sidebar-v2-monorepo'] as SidebarStoryGroup[],
-  'sidebar-v2-multi-machine': SIDEBAR_V2_STORY_GROUPS['sidebar-v2-multi-machine'] as SidebarStoryGroup[],
-  'sidebar-v2-project-icons': SIDEBAR_V2_STORY_GROUPS['sidebar-v2-project-icons'] as SidebarStoryGroup[],
-  'sidebar-v2-row-width': SIDEBAR_V2_STORY_GROUPS['sidebar-v2-row-width'] as SidebarStoryGroup[],
   'sort-toggle-demo': SORT_TOGGLE_DEMO_GROUPS,
   'three-groups-stress': THREE_GROUPS_STRESS,
 };

@@ -151,6 +151,9 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             "agentIcon",
             "agentName",
             "agentSessionId",
+            // CDXC:DraftAgentSwitch 2026-08-28: present-only draft marker; a
+            // daemon/sidebar that predates drafts simply omits it.
+            "isDraft",
             "isGeneratingFirstPromptTitle",
             "isSleeping",
             "kind",
@@ -182,6 +185,7 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
         Some(_) => return Err(GpuiGxserverPresentationFocusStateContractError::MalformedField),
     };
     let is_sleeping = json_bool_field(object, "isSleeping").unwrap_or(false);
+    let is_draft = json_bool_field(object, "isDraft").unwrap_or(false);
     let is_generating_first_prompt_title =
         json_bool_field(object, "isGeneratingFirstPromptTitle").unwrap_or(false);
     let agent_name = match object.get("agentName") {
@@ -257,6 +261,7 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
         agent_session_id,
         key,
         kind,
+        is_draft,
         is_generating_first_prompt_title,
         presentation_state,
         has_session_note,

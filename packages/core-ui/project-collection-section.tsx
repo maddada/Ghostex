@@ -10,7 +10,10 @@ import {
   IconPinned,
   IconPinnedOff,
   IconPlayerPlay,
+  IconPlus,
+  IconChevronRight,
   IconRefresh,
+  IconStack,
   IconTag,
   IconTrash,
   IconX,
@@ -38,6 +41,11 @@ import {
   SIDEBAR_PROJECT_COLLECTION_COLORS,
   type SidebarProjectCollection,
 } from './project-collections';
+import { SidebarCommandIconGlyph } from './sidebar-command-icon';
+import { openAppModal } from './app-modal-host-bridge';
+import { resolveSidebarSpaceIcon } from './space-filter-row';
+import { createRemoteSidebarSpaceSectionKey, LOCAL_SIDEBAR_SPACE_SECTION_KEY } from './sidebar-app/space-filtering';
+import { getSidebarSpaceIdsContainingCollection, type SidebarSpacesState } from './spaces';
 
 type ProjectCollectionSectionProps = {
   autoEdit: boolean;
@@ -68,9 +76,21 @@ type ProjectCollectionSectionProps = {
   onDelete: () => void;
   onHide: () => void;
   onSelectSessions: (sessionIds: string[]) => void;
+  /*
+   * CDXC:SidebarSpaces 2026-08-27:
+   * Space membership for this group, per the Spaces decision that membership is
+   * managed only from an item's own context menu. `spaces` is this section's
+   * gxserver's Space set: `undefined` means that daemon delivered no Space state
+   * at all, and the Spaces entry is then hidden rather than shown inert. A
+   * delivered-but-empty set still shows the entry, with a disabled placeholder
+   * row, so the menu never lies about the feature existing.
+   */
+  onToggleSpaceMembership?: (spaceId: string) => void;
+  remoteMachineId?: string;
   sessionIds: readonly string[];
   sessionTagListItems: readonly SidebarSessionTagListItem[];
   sessionsById: Record<string, SidebarSessionItem | undefined>;
+  spaces?: SidebarSpacesState;
   bulkProjectActionLabel: 'Collapse All' | 'Expand Previous';
   /*
    * CDXC:RemoteProjectCollections 2026-07-21:
@@ -82,7 +102,7 @@ type ProjectCollectionSectionProps = {
   vscode: WebviewApi;
 };
 
-type MenuView = 'actions' | 'colors' | 'tags';
+type MenuView = 'actions' | 'colors' | 'spaces' | 'tags';
 
 type ContextMenuPosition = {
   x: number;
@@ -123,9 +143,12 @@ export function ProjectCollectionSection({
   onDelete,
   onHide,
   onSelectSessions,
+  onToggleSpaceMembership,
+  remoteMachineId,
   sessionIds,
   sessionTagListItems,
   sessionsById,
+  spaces,
   bulkProjectActionLabel,
   sortableId,
   vscode,
@@ -228,6 +251,32 @@ export function ProjectCollectionSection({
     dismissMenu();
     onSelectSessions([]);
     runSidebarBulkContextMenuActionInBackground(targetSessionIds, run);
+  };
+  /*
+   * CDXC:SidebarSpaces 2026-08-27:
+   * A group may belong to any number of Spaces, and every project inside it
+   * inherits those memberships. Toggling closes the menu, which is the Tags
+   * submenu's own behaviour and what the Spaces decision asks this submenu to
+   * match.
+   */
+  const spaceMenuEnabled = Boolean(spaces && onToggleSpaceMembership);
+  const memberSpaceIds = spaces ? getSidebarSpaceIdsContainingCollection(spaces, collection.collectionId) : [];
+  const toggleSpaceMembership = (spaceId: string) => {
+    dismissMenu();
+    onToggleSpaceMembership?.(spaceId);
+  };
+  const createSpaceForCollection = () => {
+    dismissMenu();
+    openAppModal({
+      memberCollectionId: collection.collectionId,
+      mode: 'create',
+      modal: 'sidebarSpaceEditor',
+      ...(remoteMachineId ? { remoteMachineId } : {}),
+      sectionKey: remoteMachineId
+        ? createRemoteSidebarSpaceSectionKey(remoteMachineId)
+        : LOCAL_SIDEBAR_SPACE_SECTION_KEY,
+      type: 'open',
+    });
   };
   const setSleeping = (targetSessionIds: readonly string[], sleeping: boolean) => {
     if (targetSessionIds.length === 0) {
@@ -432,6 +481,61 @@ export function ProjectCollectionSection({
                 </button>
               ))}
             </>
+          ) : menuView === 'spaces' ? (
+            <>
+              <button
+                className='session-context-menu-item'
+                onClick={() => setMenuView('actions')}
+                role='menuitem'
+                type='button'
+              >
+                <IconCaretRightFilled className='session-context-menu-icon project-collection-menu-back' size={14} />
+                Back
+              </button>
+              <div className='session-context-menu-divider' role='separator' />
+              <button
+                className='session-context-menu-item'
+                onClick={createSpaceForCollection}
+                role='menuitem'
+                type='button'
+              >
+                <IconPlus aria-hidden='true' className='session-context-menu-icon' size={14} />
+                New Space
+              </button>
+              {spaces && spaces.order.length > 0 ? (
+                <div className='session-context-menu-divider' role='separator' />
+              ) : null}
+              {spaces && spaces.order.length > 0
+                ? spaces.order.flatMap((spaceId) => {
+                    const space = spaces.spaces[spaceId];
+                    if (!space) {
+                      return [];
+                    }
+                    const isMember = memberSpaceIds.includes(spaceId);
+                    return [
+                      <button
+                        aria-checked={isMember}
+                        className='session-context-menu-item'
+                        key={spaceId}
+                        onClick={() => toggleSpaceMembership(spaceId)}
+                        role='menuitemcheckbox'
+                        type='button'
+                      >
+                        <SidebarCommandIconGlyph
+                          className='session-context-menu-icon'
+                          color={space.color}
+                          icon={resolveSidebarSpaceIcon(space.icon)}
+                          size={14}
+                        />
+                        <span className='sidebar-space-filter-menu-name'>{space.name}</span>
+                        {isMember ? (
+                          <IconCheck aria-hidden='true' className='session-context-menu-trailing-icon' size={14} />
+                        ) : null}
+                      </button>,
+                    ];
+                  })
+                : null}
+            </>
           ) : menuView === 'tags' ? (
             <>
               <button
@@ -594,6 +698,18 @@ export function ProjectCollectionSection({
                 <IconPalette className='session-context-menu-icon' size={14} />
                 Group color
               </button>
+              {spaceMenuEnabled ? (
+                <button
+                  className='session-context-menu-item'
+                  onClick={() => setMenuView('spaces')}
+                  role='menuitem'
+                  type='button'
+                >
+                  <IconStack className='session-context-menu-icon' size={14} />
+                  Spaces
+                  <IconChevronRight aria-hidden='true' className='session-context-menu-trailing-icon' size={14} />
+                </button>
+              ) : null}
               <button
                 className='session-context-menu-item'
                 onClick={() => {

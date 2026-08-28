@@ -199,6 +199,8 @@ fn is_known_command(name: &str) -> bool {
         "restore-recent-project",
         "read-sidebar-project-collections",
         "update-sidebar-project-collections",
+        "read-sidebar-spaces",
+        "update-sidebar-spaces",
         "close-session",
         "restart-session",
         "fork-session",
@@ -417,6 +419,15 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "update-sidebar-project-collections" => run_bridge_action(
             "updateSidebarProjectCollections",
             Parser::SidebarProjectCollectionsState,
+            fail_on_not_ok,
+            args,
+        ),
+        "read-sidebar-spaces" => {
+            run_bridge_action("readSidebarSpaces", Parser::None, fail_on_not_ok, args)
+        }
+        "update-sidebar-spaces" => run_bridge_action(
+            "updateSidebarSpaces",
+            Parser::SidebarSpacesState,
             fail_on_not_ok,
             args,
         ),

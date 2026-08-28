@@ -121,6 +121,7 @@ pub(crate) struct GpuiRemoteMachineConfig {
     pub(crate) ssh_user: Option<String>,
     pub(crate) has_saved_password: bool,
     pub(crate) wsl_distribution: Option<String>,
+    pub(crate) disabled: bool,
 }
 
 impl GpuiRemoteMachineConfig {

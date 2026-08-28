@@ -520,6 +520,16 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         snapshot.and_then(|snapshot| snapshot.get("sidebarProjectCollections")),
     );
     /*
+     * CDXC:SidebarSpaces 2026-08-27:
+     * The snapshot also carries the daemon-owned saved sidebar filters so
+     * phones render and edit the same Space row as the desktop sidebar.
+     */
+    insert_present(
+        &mut result,
+        "sidebarSpaces",
+        snapshot.and_then(|snapshot| snapshot.get("sidebarSpaces")),
+    );
+    /*
      * CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
      * Machine-scoped capability flags travel with the inventory so a client
      * talking to an older daemon hides settle/snooze affordances instead of
@@ -1596,6 +1606,9 @@ fn to_mobile_session_list(result: &Value) -> Value {
     {
         map.insert("sidebarProjectCollections".to_string(), collections);
     }
+    if let Some(spaces) = to_mobile_sidebar_spaces(result.get("sidebarSpaces")) {
+        map.insert("sidebarSpaces".to_string(), spaces);
+    }
     if let Some(groups) = to_mobile_workspace_groups(result.get("workspaceGroups")) {
         map.insert("workspaceGroups".to_string(), groups);
     }
@@ -1740,6 +1753,84 @@ fn to_mobile_sidebar_project_collections(collections_state: Option<&Value>) -> O
         "collections": collections,
         "nextCollectionNumber": next_collection_number,
         "order": order,
+    }))
+}
+
+fn to_mobile_sidebar_spaces(spaces_state: Option<&Value>) -> Option<Value> {
+    /*
+     * CDXC:SidebarSpaces 2026-08-27:
+     * Mobile keeps the server-normalized {order, spaces} contract but
+     * re-sanitizes rows because fallback caches may carry stale shapes. A Space
+     * with no members is kept — it is a real, selectable, still-empty filter —
+     * so only a document with no Spaces at all collapses to an absent key.
+     */
+    let object = spaces_state?.as_object()?;
+    let mut spaces = Map::new();
+    if let Some(entries) = object.get("spaces").and_then(Value::as_object) {
+        for (space_id, space) in entries {
+            if space_id.is_empty() {
+                continue;
+            }
+            let member_ids = |key: &str| -> Vec<Value> {
+                space
+                    .get(key)
+                    .and_then(Value::as_array)
+                    .map(|ids| {
+                        ids.iter()
+                            .filter(
+                                |value| matches!(value, Value::String(text) if !text.is_empty()),
+                            )
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let name = match space.get("name") {
+                Some(Value::String(text)) if !text.is_empty() => text.clone(),
+                _ => space_id.clone(),
+            };
+            let icon = match space.get("icon") {
+                Some(Value::String(text)) if !text.is_empty() => text.clone(),
+                _ => "stack".to_string(),
+            };
+            let color = match space.get("color") {
+                Some(Value::String(text)) if !text.is_empty() => text.clone(),
+                _ => "#4f5663".to_string(),
+            };
+            spaces.insert(
+                space_id.clone(),
+                json!({
+                    "color": color,
+                    "icon": icon,
+                    "memberCollectionIds": member_ids("memberCollectionIds"),
+                    "memberProjectIds": member_ids("memberProjectIds"),
+                    "name": name,
+                    "spaceId": space_id,
+                }),
+            );
+        }
+    }
+    if spaces.is_empty() {
+        return None;
+    }
+    let mut order: Vec<Value> = Vec::new();
+    let mut seen_order_ids = std::collections::HashSet::new();
+    if let Some(entries) = object.get("order").and_then(Value::as_array) {
+        for entry in entries {
+            let Some(id) = entry.as_str() else { continue };
+            if spaces.contains_key(id) && seen_order_ids.insert(id.to_string()) {
+                order.push(Value::String(id.to_string()));
+            }
+        }
+    }
+    for space_id in spaces.keys() {
+        if seen_order_ids.insert(space_id.clone()) {
+            order.push(Value::String(space_id.clone()));
+        }
+    }
+    Some(json!({
+        "order": order,
+        "spaces": spaces,
     }))
 }
 

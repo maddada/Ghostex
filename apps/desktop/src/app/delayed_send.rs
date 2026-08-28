@@ -1938,6 +1938,18 @@ impl GhostexGpuiApp {
                 }
                 self.dispatch_gpui_sidebar_host_message(message, cx);
             }
+            /*
+            CDXC:SidebarSpaces 2026-08-27:
+            The New/Edit Space dialog's confirm and delete. Like `setSessionNote`
+            this is a sidebar-owned write issued from an app-modal window, so it
+            is forwarded to the sidebar rather than acted on here — and unlike
+            `setSessionNote`, its owner is SidebarApp itself, because the Space
+            document lives in React state and the edit must be applied to the
+            CURRENT one.
+            */
+            "sidebarSpaceEditorResult" => {
+                self.forward_gpui_sidebar_space_editor_result_to_sidebar(command, cx);
+            }
             "confirmAgentHookLaunch" => {
                 let bounded_text = |key: &str, max_len: usize| {
                     command
@@ -2973,6 +2985,13 @@ impl GhostexGpuiApp {
             "restoreRecentProject" => {
                 self.handle_gpui_app_modal_recent_project_mutation(
                     GpuiRecentProjectMutation::Restore,
+                    command,
+                    cx,
+                );
+            }
+            "closeProjectFromProjects" => {
+                self.handle_gpui_app_modal_recent_project_mutation(
+                    GpuiRecentProjectMutation::Close,
                     command,
                     cx,
                 );

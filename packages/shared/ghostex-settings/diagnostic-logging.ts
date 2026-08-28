@@ -191,6 +191,14 @@ export const DIAGNOSTIC_LOGGING_SCENARIOS = [
     logFiles: ['gpui-app-modal-debug.jsonl'],
   },
   {
+    description:
+      'Session Chat view-state transitions, seed/resync reads, state frames, and loading-flash repro breadcrumbs.',
+    group: 'GPUI',
+    id: 'gpui.sessionChat.viewState',
+    label: 'GPUI session chat view state',
+    logFiles: ['gpui-session-chat-debug.jsonl'],
+  },
+  {
     description: 'gxserver process startup, shutdown, and daemon lifecycle breadcrumbs.',
     group: 'gxserver',
     id: 'gxserver.lifecycle',
@@ -223,6 +231,14 @@ export const DIAGNOSTIC_LOGGING_SCENARIOS = [
     group: 'gxserver',
     id: 'gxserver.portless',
     label: 'Portless',
+    logFiles: ['gxserver.jsonl'],
+  },
+  {
+    description:
+      'gxserver agent-activity transitions (hooks, terminal titles, suppression) behind working/idle/attention flips.',
+    group: 'gxserver',
+    id: 'gxserver.agentActivity',
+    label: 'Agent activity transitions',
     logFiles: ['gxserver.jsonl'],
   },
 ] as const satisfies readonly DiagnosticLoggingScenarioDefinition[];

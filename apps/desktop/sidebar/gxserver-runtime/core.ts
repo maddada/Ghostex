@@ -71,6 +71,8 @@ import type { GpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
 import { gpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
 import type { GpuiSidebarRuntimeConversationJumpMethods } from './session-conversation-jump';
 import { gpuiSidebarRuntimeConversationJumpMethods } from './session-conversation-jump';
+import type { GpuiSidebarRuntimeDraftSessionMethods } from './draft-sessions';
+import { gpuiSidebarRuntimeDraftSessionMethods } from './draft-sessions';
 import type { GpuiSidebarRuntimeSessionCreateMethods } from './session-create';
 import { gpuiSidebarRuntimeSessionCreateMethods } from './session-create';
 import type { GpuiSidebarRuntimeSessionFocusMethods } from './sessions-and-focus';
@@ -112,6 +114,7 @@ import type {
   GxserverRecentProjectDomainState,
   GxserverSidebarHudResponse,
   GxserverSidebarProjectCollectionsState,
+  GxserverSidebarSpacesState,
 } from '@/packages/shared/gxserver-protocol';
 import { NAVIGATION_HISTORY_SCOPE_GPUI } from '@/packages/shared/navigation-history/navigation-history-contract';
 import { NavigationHistoryController } from '@/packages/shared/navigation-history/navigation-history-controller';
@@ -441,6 +444,7 @@ export class GpuiSidebarRuntime {
   visibleSessionIds = new Set<string>();
   didAutoMaterializeStartupSession = false;
   didConnectSavedRemoteMachinesOnStartup = false;
+  enabledRemoteMachineIdsForReconnect = new Set<string>();
   workspaceGroups: GpuiWorkspaceSessionGroupsState = createEmptyGpuiWorkspaceSessionGroupsState();
   workspaceGroupsServerSyncTimeoutId: number | undefined;
   workspaceGroupsServerSyncPending = false;
@@ -449,6 +453,11 @@ export class GpuiSidebarRuntime {
   sidebarProjectCollectionsServerSyncPending = false;
   lastForwardedSidebarProjectCollectionsJson: string | undefined;
   lastForwardedRemoteSidebarProjectCollectionsJsonByMachineId = new Map<string, string>();
+  latestSidebarSpacesUpdate: GxserverSidebarSpacesState | undefined;
+  sidebarSpacesServerSyncTimeoutId: number | undefined;
+  sidebarSpacesServerSyncPending = false;
+  lastForwardedSidebarSpacesJson: string | undefined;
+  lastForwardedRemoteSidebarSpacesJsonByMachineId = new Map<string, string>();
   workspaceTerminalLifecycleBridgeRetryId: number | undefined;
 
   start(): void {
@@ -934,6 +943,21 @@ export class GpuiSidebarRuntime {
       this.publishRemotePresentationPatch();
       return;
     }
+    if (remoteEvent.payload.type === 'sidebarSpacesChanged') {
+      if (remoteEvent.payload.revision < previous.revision) {
+        void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+        return;
+      }
+      const snapshot: GxserverPresentationSnapshot = {
+        ...previous,
+        revision: remoteEvent.payload.revision as GxserverPresentationSnapshot['revision'],
+        sidebarSpaces: remoteEvent.payload.sidebarSpaces,
+      };
+      this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
+      this.forwardRemoteSidebarSpacesFromGxserver(remoteEvent.remoteMachineId, remoteEvent.payload.sidebarSpaces);
+      this.publishRemotePresentationPatch();
+      return;
+    }
     if (remoteEvent.payload.type === 'workspaceGroupsChanged') {
       if (remoteEvent.payload.revision < previous.revision) {
         void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
@@ -1124,6 +1148,9 @@ export class GpuiSidebarRuntime {
       case 'forkSession':
         await this.forkSession(message.sessionId);
         return;
+      case 'exportSessionTranscript':
+        await this.exportSessionTranscript(message.sessionId);
+        return;
       case 'renameSession':
         await this.renameSession(message);
         return;
@@ -1145,9 +1172,7 @@ export class GpuiSidebarRuntime {
         });
         return;
       case 'setSessionParked':
-        await this.updateSessionFlags(message.sessionId, {
-          isParked: message.parked,
-        });
+        await this.setSessionParked(message.sessionId, message.parked);
         return;
       case 'setSessionNote':
         await this.saveSessionNote(message.sessionId, message.note);
@@ -1206,6 +1231,13 @@ export class GpuiSidebarRuntime {
           return;
         }
         this.queueSidebarProjectCollectionsServerSync(message.state);
+        return;
+      case 'updateSidebarSpaces':
+        if (message.remoteMachineId) {
+          await this.updateRemoteSidebarSpaces(message.remoteMachineId, message.state);
+          return;
+        }
+        this.queueSidebarSpacesServerSync(message.state);
         return;
       case 'requestPreviousSessions':
         await this.requestPreviousSessions(message);
@@ -1472,6 +1504,7 @@ export interface GpuiSidebarRuntime
     GpuiSidebarRuntimePresentationStreamMethods,
     GpuiSidebarRuntimeSessionFocusMethods,
     GpuiSidebarRuntimeSessionCreateMethods,
+    GpuiSidebarRuntimeDraftSessionMethods,
     GpuiSidebarRuntimeAutoSleepMethods,
     GpuiSidebarRuntimePreviousSessionMethods,
     GpuiSidebarRuntimeProjectBoardMethods,
@@ -1503,6 +1536,7 @@ installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeSidebarGroupMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimePresentationStreamMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeSessionFocusMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeSessionCreateMethods);
+installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeDraftSessionMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeAutoSleepMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimePreviousSessionMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeProjectBoardMethods);

@@ -23,6 +23,7 @@ import {
   isGpuiPresentationChatDomainProject,
   isGpuiPresentationChatProjectPath,
 } from './helpers/presentation-projection';
+import { createGpuiSidebarSettings } from './helpers/bootstrap';
 import { normalizeNonEmptyString } from './helpers/records';
 import {
   createGpuiRemotePresentationGroupId,
@@ -96,6 +97,7 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
     sessionId: string,
     flags: { isFavorite?: boolean; isParked?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
   ): Promise<void>;
+  setSessionParked(sessionId: string, parked: boolean): Promise<void>;
   openSessionNoteEditor(sessionId: string): void;
   saveSessionNote(sessionId: string, note: string): Promise<void>;
   runSessionLifecycleCommand(
@@ -848,6 +850,28 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     });
   },
 
+  async setSessionParked(this: GpuiSidebarRuntime, sessionId: string, parked: boolean): Promise<void> {
+    const shouldSleep = parked && createGpuiSidebarSettings(this.runtimeSettings).sleepSessionWhenParking;
+    const remoteSession = shouldSleep ? parseGpuiRemotePresentationSessionId(sessionId) : undefined;
+    if (remoteSession) {
+      /*
+      A fire-and-forget remote update can race a response-backed sleep request.
+      When parking also sleeps, await the durable flag mutation before entering
+      the existing remote sleep lifecycle.
+      */
+      await this.requestRemoteGxserver(remoteSession.machineId, '/api/updateSession', {
+        isParked: parked,
+        projectId: remoteSession.projectId,
+        sessionId: remoteSession.sessionId,
+      });
+    } else {
+      await this.updateSessionFlags(sessionId, { isParked: parked });
+    }
+    if (shouldSleep) {
+      await this.setSessionSleeping(sessionId, true);
+    }
+  },
+
   /*
   CDXC:SessionAgentNotes 2026-08-25:
   Open the note editor for a session, as the session row's context menu does.
@@ -1108,6 +1132,14 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     if (!normalizedProjectId || !normalizedSessionId) {
       return;
     }
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    Captured before the write below, because this method IS the moment the user
+    navigates away from whatever was focused. Only the two focus WRITERS are
+    hooked; `dropLocalPresentationSessionFocus` is not, because that one fires
+    when gxserver goes away, which is a disconnect, not a decision to leave.
+    */
+    const previousFocusedSessionId = this.focusedSessionId;
     this.activeProjectId = normalizedProjectId;
     this.activeGroupId =
       targetGroupId ??
@@ -1120,6 +1152,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       ? new Set(exactVisibleSessionIds)
       : this.nextVisibleSessionIdsForLocalFocus(normalizedProjectId, normalizedSessionId);
     this.postGxserverPresentationFocusState();
+    this.discardEmptyDraftAfterFocusAway(previousFocusedSessionId);
   },
 
   nextVisibleSessionIdsForLocalFocus(this: GpuiSidebarRuntime, projectId: string, sessionId: string): Set<string> {
@@ -1178,6 +1211,8 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     if (!machineId || !projectId || !sessionId) {
       return;
     }
+    /* CDXC:DraftSessions 2026-08-28: see `setLocalPresentationSessionFocus`. */
+    const previousFocusedSessionId = this.focusedSessionId;
     const scopedSessionId = createGpuiRemotePresentationSessionId(machineId, projectId, sessionId);
     const project = this.remotePresentations
       .get(machineId)
@@ -1190,6 +1225,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this.focusedSessionId = scopedSessionId;
     this.visibleSessionIds = new Set([scopedSessionId]);
     this.postGxserverPresentationFocusState();
+    this.discardEmptyDraftAfterFocusAway(previousFocusedSessionId);
   },
 
   dropLocalPresentationSessionFocus(this: GpuiSidebarRuntime): void {

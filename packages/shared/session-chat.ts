@@ -437,6 +437,13 @@ export interface GxserverReadSessionChatParams {
   fingerprint?: string;
 }
 
+/**
+ * Prefix gxserver stamps on the synthesized divider that marks where stitched
+ * scroll-back crosses from one fork ancestor into the next. Mirrors
+ * `FORK_BOUNDARY_MESSAGE_ID_PREFIX` in server/src/session_chat_fork_stitch.rs.
+ */
+export const SESSION_CHAT_FORK_BOUNDARY_ID_PREFIX = 'fork-boundary:';
+
 export interface GxserverReadSessionChatResult {
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
@@ -446,6 +453,14 @@ export interface GxserverReadSessionChatResult {
   beforeOffset: number;
   epoch: number;
   seq: number;
+  /**
+   * Present only when this session's Codex rollout was opened by `codex fork`.
+   * `forkedFromId` is the predecessor rollout named by its `session_meta`, and
+   * `ancestorIds` walks that lineage oldest-last. Scroll-back is stitched across
+   * those files server side, so this is metadata for labelling the boundary, not
+   * something a client has to fetch pages with.
+   */
+  forkInfo?: { forkedFromId: string; ancestorIds: string[] };
   /** Opaque change token for `waitMs` long-polling. */
   fingerprint?: string;
   status: SessionChatStatus;
@@ -498,7 +513,45 @@ export interface GxserverReadSessionChatResult {
    * /api/setSessionChatDraft instead.
    */
   draft?: SessionChatDraft;
+  /**
+   * CDXC:DraftSessions 2026-08-28:
+   * The agents this session may still be switched to, resolved by the daemon
+   * that owns the project. PRESENT ONLY while the session is a draft: once the
+   * first user prompt reaches the agent the session's agent is fixed, so an
+   * omitted field is the client's signal to hide the composer's "Agents"
+   * section entirely (it is also what a daemon predating drafts sends).
+   *
+   * The list is the five chat-supported base families plus the project's custom
+   * agents whose base family is chat-supported — never every launchable agent,
+   * because chat cannot read a transcript it has no decoder for.
+   */
+  availableAgents?: SessionChatAvailableAgent[];
+  /**
+   * CDXC:DraftSessions 2026-08-28:
+   * The session's own launch agent id, which `agent` above is NOT: that one is
+   * the transcript family, so a project custom agent built on Claude reports
+   * `claude` there and cannot be told apart from Claude itself. This is the id
+   * `/api/switchDraftAgent` takes and the one that matches an `availableAgents`
+   * row, so the composer can tick the current agent and — after a switch —
+   * follow the new agent without a reload instead of trusting its boot-time URL
+   * parameter. Absent on plain terminals and on daemons that predate drafts.
+   */
+  sessionAgentId?: string;
   error?: string;
+}
+
+/**
+ * CDXC:DraftSessions 2026-08-28:
+ * One row of the composer's "Agents" section. `agentId` is what
+ * `/api/switchDraftAgent` takes; `baseAgentId` is the chat-supported family the
+ * agent belongs to (`agentId` itself for a built-in, the custom agent's declared
+ * base otherwise) and is what brand-logo and transcript-decoder lookups use.
+ */
+export interface SessionChatAvailableAgent {
+  agentId: string;
+  name: string;
+  icon: string;
+  baseAgentId: string;
 }
 
 export type SessionChatSkillSourceKind = 'global' | 'pluginCache' | 'repository';

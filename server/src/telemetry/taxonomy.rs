@@ -83,10 +83,6 @@ pub const EXTENSION_SOURCES: &[&str] = &["local", "store"];
 
 pub const INTERFACE_KINDS: &[&str] = &["chat", "terminal"];
 
-pub const SIDEBAR_VERSIONS: &[&str] = &["v1", "v2"];
-
-pub const SIDEBAR_V2_LAYOUTS: &[&str] = &["byProject", "flat"];
-
 /// Which link of the `distinct_id` chain produced this install's id
 /// (`telemetry::identity`).
 pub const IDENTITY_SOURCES: &[&str] = &["claude", "codex", "install"];
@@ -247,13 +243,12 @@ next event added to the taxonomy silently loses them:
 - `person_property_spec`   — keys valid INSIDE the heartbeat's `$set` object.
 
 `property_spec` merges the first two. Where a key appears in both layers (the
-heartbeat also reports `default_agent` and `sidebar_version` from its own fresh
+heartbeat also reports `default_agent` from its own fresh
 read), the specs are identical, so the merge order is irrelevant to validation.
 */
 fn profile_property_spec(key: &str) -> Option<PropertySpec> {
     match key {
         "interface" => Some(PropertySpec::Enum(INTERFACE_KINDS)),
-        "sidebar_version" => Some(PropertySpec::Enum(SIDEBAR_VERSIONS)),
         "default_agent" => Some(PropertySpec::Enum(KNOWN_AGENT_IDS)),
         "project_bucket" => Some(PropertySpec::Enum(PROJECT_BUCKETS)),
         "identity_source" => Some(PropertySpec::Enum(IDENTITY_SOURCES)),
@@ -271,7 +266,6 @@ fn event_property_spec(event: &str, key: &str) -> Option<PropertySpec> {
         | (EVENT_HEARTBEAT, "days_since_install") => Some(PropertySpec::Number),
         (EVENT_HEARTBEAT, "agents_used") => Some(PropertySpec::EnumList(KNOWN_AGENT_IDS)),
         (EVENT_HEARTBEAT, "preferred_interface") => Some(PropertySpec::Enum(INTERFACE_KINDS)),
-        (EVENT_HEARTBEAT, "sidebar_v2_layout") => Some(PropertySpec::Enum(SIDEBAR_V2_LAYOUTS)),
         /*
         Person properties are attached ONLY to the heartbeat. Every other event
         would just rewrite the same person record with staler numbers, and a
@@ -304,14 +298,13 @@ fn person_property_spec(key: &str) -> Option<PropertySpec> {
         "os" => Some(PropertySpec::Enum(PLATFORMS)),
         "arch" => Some(PropertySpec::Enum(ARCHES)),
         "server_version" => Some(PropertySpec::Version),
-        "sidebar_v2_layout" => Some(PropertySpec::Enum(SIDEBAR_V2_LAYOUTS)),
         "project_count"
         | "session_count"
         | "extension_count"
         | "remote_machine_count"
         | "days_since_install" => Some(PropertySpec::Number),
         /*
-        `interface`, `sidebar_version`, `default_agent`, `project_bucket`, and
+        `interface`, `default_agent`, `project_bucket`, and
         `identity_source` reuse the profile table verbatim rather than being
         restated, so a change to an enum member cannot apply to the event copy
         of a field and not to the person copy.

@@ -91,6 +91,53 @@ pub(crate) fn claude_content_block(record: &Map<String, Value>) -> Option<Sessio
     }
 }
 
+/*
+CDXC:SessionChatApiRefusal 2026-08-28:
+Claude Code records a safeguards refusal as a SYNTHETIC assistant row it writes
+itself (`message.model` is `<synthetic>`): `isApiErrorMessage: true` plus
+`message.stop_reason == "refusal"` (mirrored in `stop_details.type`), with the
+full user-facing explanation — including the category tag and request id — as
+the row's only text block. Detection reads exactly those structured fields,
+never the prose, so an agent that merely QUOTES an "API Error:" line cannot
+trigger it. Transient API errors (retries, overloads) carry
+`isApiErrorMessage` without a `refusal` stop reason and are deliberately not
+matched: they resolve on their own and a notice for them would be noise.
+*/
+pub(crate) fn claude_api_refusal_text(line: &str) -> Option<String> {
+    let record = parse_json_object(line)?;
+    if record.get("type").and_then(Value::as_str) != Some("assistant")
+        || record.get("isApiErrorMessage") != Some(&Value::Bool(true))
+    {
+        return None;
+    }
+    let message = record.get("message")?.as_object()?;
+    let refusal = message.get("stop_reason").and_then(Value::as_str) == Some("refusal")
+        || message
+            .get("stop_details")
+            .and_then(Value::as_object)
+            .and_then(|details| details.get("type"))
+            .and_then(Value::as_str)
+            == Some("refusal");
+    if !refusal {
+        return None;
+    }
+    let text = message
+        .get("content")?
+        .as_array()?
+        .iter()
+        .filter_map(|block| {
+            let block = block.as_object()?;
+            if block.get("type").and_then(Value::as_str) != Some("text") {
+                return None;
+            }
+            block.get("text").and_then(Value::as_str)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_string())
+}
+
 /// Claude stamps `uuid`/`parentUuid` on every non-sidechain row, including the
 /// `system` and `attachment` rows a prompt can hang off, so the whole tree is
 /// readable from the same scan the decoder already runs.

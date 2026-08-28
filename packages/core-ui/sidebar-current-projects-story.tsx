@@ -144,9 +144,16 @@ function createCurrentProjectsSidebarMessage(
       agents: createDefaultSidebarAgentButtons(),
       commands: createDefaultSidebarCommandButtons(),
       commandSessionIndicators: [],
-      completionBellEnabled: currentSettings?.completionBellEnabled ?? false,
-      completionSound: currentSettings?.completionSound ?? DEFAULT_COMPLETION_SOUND,
-      completionSoundLabel: getCompletionSoundLabel(currentSettings?.completionSound ?? DEFAULT_COMPLETION_SOUND),
+      completionBellEnabled: currentSettings?.completionSound !== 'off',
+      completionSound:
+        currentSettings?.completionSound === 'off'
+          ? DEFAULT_COMPLETION_SOUND
+          : (currentSettings?.completionSound ?? DEFAULT_COMPLETION_SOUND),
+      completionSoundLabel: getCompletionSoundLabel(
+        currentSettings?.completionSound === 'off'
+          ? DEFAULT_COMPLETION_SOUND
+          : (currentSettings?.completionSound ?? DEFAULT_COMPLETION_SOUND)
+      ),
       createSessionOnSidebarDoubleClick:
         currentSettings?.createSessionOnSidebarDoubleClick ?? args.createSessionOnSidebarDoubleClick,
       debuggingMode: currentSettings?.debuggingMode ?? args.debuggingMode,

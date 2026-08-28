@@ -363,8 +363,9 @@ export function ManageFileRow({
 export function ManageFileContextMenu({
   canAddToSessionContext,
   canCreateHere,
+  canDelete,
   canDuplicate,
-  canRenameOrDelete,
+  canRename,
   confirmingDelete,
   creatingKind,
   isCreatingFolder,
@@ -383,8 +384,9 @@ export function ManageFileContextMenu({
 }: {
   canAddToSessionContext: boolean;
   canCreateHere: boolean;
+  canDelete: boolean;
   canDuplicate: boolean;
-  canRenameOrDelete: boolean;
+  canRename: boolean;
   confirmingDelete: boolean;
   creatingKind?: ManageArtifactKind;
   isCreatingFolder: boolean;
@@ -537,32 +539,36 @@ export function ManageFileContextMenu({
           </button>
         </>
       ) : null}
-      {canRenameOrDelete ? (
+      {canRename || canDelete ? (
         <>
           {!canDuplicate ? (
             <div className='session-context-menu-divider manage-file-context-menu-divider' role='separator' />
           ) : null}
-          <button
-            className='session-context-menu-item manage-file-context-menu-item'
-            disabled={isBusy}
-            onClick={onRename}
-            role='menuitem'
-            type='button'
-          >
-            <IconEdit aria-hidden='true' size={14} stroke={1.8} />
-            Rename
-          </button>
-          <button
-            className='session-context-menu-item session-context-menu-item-danger manage-file-context-menu-item manage-file-context-menu-item-danger'
-            data-confirming={String(confirmingDelete)}
-            disabled={isBusy}
-            onClick={onDelete}
-            role='menuitem'
-            type='button'
-          >
-            <IconTrash aria-hidden='true' size={14} stroke={1.8} />
-            {pendingAction === 'delete' ? 'Deleting' : confirmingDelete ? 'Confirm delete' : 'Delete'}
-          </button>
+          {canRename ? (
+            <button
+              className='session-context-menu-item manage-file-context-menu-item'
+              disabled={isBusy}
+              onClick={onRename}
+              role='menuitem'
+              type='button'
+            >
+              <IconEdit aria-hidden='true' size={14} stroke={1.8} />
+              Rename
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              className='session-context-menu-item session-context-menu-item-danger manage-file-context-menu-item manage-file-context-menu-item-danger'
+              data-confirming={String(confirmingDelete)}
+              disabled={isBusy}
+              onClick={onDelete}
+              role='menuitem'
+              type='button'
+            >
+              <IconTrash aria-hidden='true' size={14} stroke={1.8} />
+              {pendingAction === 'delete' ? 'Deleting' : confirmingDelete ? 'Confirm delete' : 'Delete'}
+            </button>
+          ) : null}
         </>
       ) : null}
     </SidebarContextMenuPortal>

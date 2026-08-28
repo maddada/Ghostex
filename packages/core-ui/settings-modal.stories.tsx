@@ -13,7 +13,6 @@ import type {
 const modalSettings: ghostexSettings = {
   ...DEFAULT_ghostex_SETTINGS,
   agentManagerZoomPercent: 95,
-  completionBellEnabled: true,
   showCloseButtonOnSessionCards: true,
   terminalFontSize: 16,
   terminalFontWeight: 400,
@@ -214,44 +213,6 @@ export const DarkGray: Story = {
       }}
     />
   ),
-};
-
-/*
- * CDXC:SidebarV2 2026-07-29:
- * Sidebar version is the first General setting. This story selects the Inbox
- * sidebar so the nested Group by project row is visible for review.
- */
-export const SidebarVersionInbox: Story = {
-  render: () => (
-    <SettingsModalStory
-      initialSettings={{
-        ...modalSettings,
-        sidebarV2Layout: 'byProject',
-        sidebarVersion: 'v2',
-      }}
-    />
-  ),
-  play: async ({ canvasElement, step }) => {
-    const body = within(canvasElement.ownerDocument.body);
-
-    /*
-     * CDXC:SidebarV2Lifecycle 2026-07-29:
-     * Auto-settle is nested under the Inbox sidebar because it drives a shelf
-     * only that sidebar has. This pins the nesting: the row must appear with
-     * V2 selected and disappear when the user goes back to Classic, so the
-     * classic sidebar never advertises a shelf that does not exist.
-     */
-    await step('show the auto-settle window while the Inbox sidebar is selected', async () => {
-      await body.findByText('Auto-settle inactive sessions');
-    });
-
-    await step('hide it again when the classic sidebar is selected', async () => {
-      await userEvent.click(await body.findByRole('button', { name: 'Classic' }));
-      await waitFor(() => {
-        expect(body.queryByText('Auto-settle inactive sessions')).toBeNull();
-      });
-    });
-  },
 };
 
 export const AccessibilityOff: Story = {

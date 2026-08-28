@@ -13,7 +13,7 @@ export type QuickAccessTab = QuickAccessPage;
 
 const QUICK_ACCESS_TABS = [
   { hotkey: 'cmd+1', id: 'commands', label: 'Command Pane' },
-  { hotkey: 'cmd+2', id: 'recentProjects', label: 'Recent Projects' },
+  { hotkey: 'cmd+2', id: 'recentProjects', label: 'Projects' },
   { hotkey: 'cmd+3', id: 'recentSessions', label: 'Sessions' },
   { hotkey: 'cmd+4', id: 'savedPrompts', label: 'Saved Prompts' },
 ] as const satisfies ReadonlyArray<{

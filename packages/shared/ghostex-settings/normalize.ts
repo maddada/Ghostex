@@ -1,10 +1,6 @@
-import {
-  clampAgentManagerZoomPercent,
-  clampSidebarThemeSetting,
-  normalizeTerminalEngine,
-} from '../session-grid-contract-session';
+import { clampAgentManagerZoomPercent, clampSidebarThemeSetting } from '../session-grid-contract-session';
 import { normalizeSessionChatTheme } from '../session-chat';
-import { clampCompletionSoundSetting } from '../completion-sound';
+import { clampCompletionSoundPreference, clampCompletionSoundSetting } from '../completion-sound';
 import {
   getGhosttyFontFamilyForPreset,
   getTerminalFontFamilyForPreset,
@@ -48,8 +44,6 @@ import {
 import {
   type AppShotsHotkey,
   type AutoSleepIdleMinutes,
-  type BrowserFeedbackTool,
-  type BrowserOpenMode,
   type ChatFileOpenView,
   type CommandsPanelSide,
   type DefaultEditorCommand,
@@ -60,18 +54,12 @@ import {
   type PortlessProtocol,
   type PreferredAgentInterface,
   type PromptEditorBackend,
-  type SessionStatusIndicatorSize,
-  type SidebarNewSessionEnvMode,
   type SidebarProjectGroupStyle,
-  type SidebarProjectGroupingMode,
   type SidebarSettingsPresetId,
   type SidebarSide,
-  type SidebarV2Layout,
-  type SidebarVersion,
   type TerminalBackgroundImageFit,
   type TerminalCursorStyle,
   type WebLinkOpenTarget,
-  type WindowsTerminalBackend,
   clampCommandsPanelDefaultHeightPx,
   clampProjectSessionListCollapsedCount,
   clampSessionChatTranscriptWidthPercent,
@@ -202,18 +190,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     webLinkOpenTarget,
     markdownFileOpenView,
     htmlFileOpenView,
-    /** Normalize legacy feedback-tool settings to the sole supported tool. */
-    browserFeedbackTool: normalizeBrowserFeedbackTool(
-      readString(source, 'browserFeedbackTool', DEFAULT_ghostex_SETTINGS.browserFeedbackTool)
-    ),
-    /**
-     * CDXC:BrowserPanes 2026-05-27-07:24
-     * Existing settings files may still contain the deleted Chrome Canary value.
-     * Treat every stored value as Browser Panes so the old attachment route cannot reappear after reload.
-     */
-    browserOpenMode: normalizeBrowserOpenMode(
-      readString(source, 'browserOpenMode', DEFAULT_ghostex_SETTINGS.browserOpenMode)
-    ),
     /**
      * CDXC:SettingsAdvanced 2026-06-28-08:01:
      * Persist the Show Advanced density switch with other Settings so advanced
@@ -336,10 +312,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'showUntrackedProjectDiffWhenNoTrackedChanges',
       DEFAULT_ghostex_SETTINGS.showUntrackedProjectDiffWhenNoTrackedChanges
     ),
-    completionBellEnabled: readBoolean(source, 'completionBellEnabled', DEFAULT_ghostex_SETTINGS.completionBellEnabled),
-    completionSound: clampCompletionSoundSetting(
-      readString(source, 'completionSound', DEFAULT_ghostex_SETTINGS.completionSound)
-    ),
+    completionSound: normalizeCompletionSoundPreference(source),
     showNotificationOnTerminalBell: readBoolean(
       source,
       'showNotificationOnTerminalBell',
@@ -351,6 +324,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.createSessionOnSidebarDoubleClick
     ),
     enableSessionParking: readBoolean(source, 'enableSessionParking', DEFAULT_ghostex_SETTINGS.enableSessionParking),
+    sleepSessionWhenParking: readBoolean(
+      source,
+      'sleepSessionWhenParking',
+      DEFAULT_ghostex_SETTINGS.sleepSessionWhenParking
+    ),
     analyticsEnabled: readBoolean(source, 'analyticsEnabled', DEFAULT_ghostex_SETTINGS.analyticsEnabled),
     debuggingMode: readBoolean(source, 'debuggingMode', DEFAULT_ghostex_SETTINGS.debuggingMode),
     diagnosticLogging: normalizeDiagnosticLoggingSettings(source.diagnosticLogging),
@@ -424,54 +402,40 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
      * Normalize Auto Sleep policy independently from keep-awake so Mac power
      * assertions and Ghostex session retirement can be configured separately.
      */
-    autoSleepAgentSessionsEnabled: readBoolean(
-      source,
-      'autoSleepAgentSessionsEnabled',
-      DEFAULT_ghostex_SETTINGS.autoSleepAgentSessionsEnabled
-    ),
     autoSleepAgentIdleMinutes: normalizeAutoSleepIdleMinutes(
-      readNumber(source, 'autoSleepAgentIdleMinutes', DEFAULT_ghostex_SETTINGS.autoSleepAgentIdleMinutes),
-      DEFAULT_ghostex_SETTINGS.autoSleepAgentIdleMinutes
-    ),
-    autoSleepBrowserSessionsEnabled: readBoolean(
       source,
-      'autoSleepBrowserSessionsEnabled',
-      DEFAULT_ghostex_SETTINGS.autoSleepBrowserSessionsEnabled
+      'autoSleepAgentIdleMinutes',
+      'autoSleepAgentSessionsEnabled',
+      DEFAULT_ghostex_SETTINGS.autoSleepAgentIdleMinutes,
+      15
     ),
     autoSleepBrowserIdleMinutes: normalizeAutoSleepIdleMinutes(
-      readNumber(source, 'autoSleepBrowserIdleMinutes', DEFAULT_ghostex_SETTINGS.autoSleepBrowserIdleMinutes),
-      DEFAULT_ghostex_SETTINGS.autoSleepBrowserIdleMinutes
-    ),
-    autoSleepCodeEditorEnabled: readBoolean(
       source,
-      'autoSleepCodeEditorEnabled',
-      DEFAULT_ghostex_SETTINGS.autoSleepCodeEditorEnabled
+      'autoSleepBrowserIdleMinutes',
+      'autoSleepBrowserSessionsEnabled',
+      DEFAULT_ghostex_SETTINGS.autoSleepBrowserIdleMinutes,
+      10
     ),
     autoSleepCodeEditorIdleMinutes: normalizeAutoSleepIdleMinutes(
-      readNumber(source, 'autoSleepCodeEditorIdleMinutes', DEFAULT_ghostex_SETTINGS.autoSleepCodeEditorIdleMinutes),
-      DEFAULT_ghostex_SETTINGS.autoSleepCodeEditorIdleMinutes
-    ),
-    autoSleepGitEditorEnabled: readBoolean(
       source,
-      'autoSleepGitEditorEnabled',
-      DEFAULT_ghostex_SETTINGS.autoSleepGitEditorEnabled
+      'autoSleepCodeEditorIdleMinutes',
+      'autoSleepCodeEditorEnabled',
+      DEFAULT_ghostex_SETTINGS.autoSleepCodeEditorIdleMinutes,
+      10
     ),
     autoSleepGitEditorIdleMinutes: normalizeAutoSleepIdleMinutes(
-      readNumber(source, 'autoSleepGitEditorIdleMinutes', DEFAULT_ghostex_SETTINGS.autoSleepGitEditorIdleMinutes),
-      DEFAULT_ghostex_SETTINGS.autoSleepGitEditorIdleMinutes
-    ),
-    autoSleepProjectEditorEnabled: readBoolean(
       source,
-      'autoSleepProjectEditorEnabled',
-      DEFAULT_ghostex_SETTINGS.autoSleepProjectEditorEnabled
+      'autoSleepGitEditorIdleMinutes',
+      'autoSleepGitEditorEnabled',
+      DEFAULT_ghostex_SETTINGS.autoSleepGitEditorIdleMinutes,
+      5
     ),
     autoSleepProjectEditorIdleMinutes: normalizeAutoSleepIdleMinutes(
-      readNumber(
-        source,
-        'autoSleepProjectEditorIdleMinutes',
-        DEFAULT_ghostex_SETTINGS.autoSleepProjectEditorIdleMinutes
-      ),
-      DEFAULT_ghostex_SETTINGS.autoSleepProjectEditorIdleMinutes
+      source,
+      'autoSleepProjectEditorIdleMinutes',
+      'autoSleepProjectEditorEnabled',
+      DEFAULT_ghostex_SETTINGS.autoSleepProjectEditorIdleMinutes,
+      5
     ),
     autoSleepRequireAgentResumeCommand: readBoolean(
       source,
@@ -498,17 +462,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'keepAwakeAllowDisplaySleep',
       DEFAULT_ghostex_SETTINGS.keepAwakeAllowDisplaySleep
     ),
-    keepAwakeBatteryThresholdPercent: clampNumber(
-      readNumber(source, 'keepAwakeBatteryThresholdPercent', DEFAULT_ghostex_SETTINGS.keepAwakeBatteryThresholdPercent),
-      10,
-      90,
-      DEFAULT_ghostex_SETTINGS.keepAwakeBatteryThresholdPercent
-    ),
-    keepAwakeDeactivateBelowBatteryThreshold: readBoolean(
-      source,
-      'keepAwakeDeactivateBelowBatteryThreshold',
-      DEFAULT_ghostex_SETTINGS.keepAwakeDeactivateBelowBatteryThreshold
-    ),
+    keepAwakeBatteryThresholdPercent: normalizeKeepAwakeBatteryThresholdPercent(source),
     keepAwakeDeactivateOnLowPowerMode: readBoolean(
       source,
       'keepAwakeDeactivateOnLowPowerMode',
@@ -566,17 +520,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'showMacOSAttentionNotifications',
       DEFAULT_ghostex_SETTINGS.showMacOSAttentionNotifications
     ),
-    /**
-     * CDXC:SessionStatusIndicators 2026-05-09-17:30
-     * Visibility is persisted as explicit hide flags: floating is hidden by
-     * default, while the menu bar remains visible by default. Normalize missing
-     * values to those defaults without coupling either surface to indicator size.
-     */
-    hideFloatingSessionStatusIndicators: readBoolean(
-      source,
-      'hideFloatingSessionStatusIndicators',
-      DEFAULT_ghostex_SETTINGS.hideFloatingSessionStatusIndicators
-    ),
     hideMenuBarSessionStatusIndicators: readBoolean(
       source,
       'hideMenuBarSessionStatusIndicators',
@@ -584,20 +527,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     ),
     petOverlayEnabled: readBoolean(source, 'petOverlayEnabled', DEFAULT_ghostex_SETTINGS.petOverlayEnabled),
     selectedPetId: normalizePetId(readString(source, 'selectedPetId', DEFAULT_ghostex_SETTINGS.selectedPetId)),
-    /**
-     * CDXC:SessionStatusIndicators 2026-05-07-18:20
-     * Indicator size is a named UX preference, not raw pixels. Normalize to
-     * supported sizes so the native AppKit renderer can apply deterministic
-     * scale factors while preserving Medium as the first-install default.
-     *
-     * CDXC:SessionStatusIndicators 2026-06-27-20:11:
-     * After removing standalone floating session indicators from macOS and
-     * GPUI, this normalizer is compatibility-only for existing settings JSON.
-     * Do not use the value for menu bar or floating pet presentation.
-     */
-    sessionStatusIndicatorSize: normalizeSessionStatusIndicatorSize(
-      readString(source, 'sessionStatusIndicatorSize', DEFAULT_ghostex_SETTINGS.sessionStatusIndicatorSize)
-    ),
     /**
      * CDXC:SessionPersistence 2026-05-23-00:50:
      * Older settings should normalize the session-id overlay preference from
@@ -610,30 +539,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'showSessionIdInTerminalPanes',
       DEFAULT_ghostex_SETTINGS.showSessionIdInTerminalPanes
     ),
-    /**
-     * CDXC:SidebarV2 2026-07-29:
-     * Unknown or missing sidebar version values normalize to the classic
-     * sidebar, so a corrupted or older settings file can never strand a user
-     * inside the opt-in Inbox surface.
-     */
-    sidebarVersion: normalizeSidebarVersion(
-      readString(source, 'sidebarVersion', DEFAULT_ghostex_SETTINGS.sidebarVersion)
-    ),
     preferredAgentInterface: normalizePreferredAgentInterface(
       readString(source, 'preferredAgentInterface', DEFAULT_ghostex_SETTINGS.preferredAgentInterface)
     ),
     preferredAgentInterfaceOverrides: normalizePreferredAgentInterfaceOverrides(
       source['preferredAgentInterfaceOverrides']
-    ),
-    sidebarV2Layout: normalizeSidebarV2Layout(
-      readString(source, 'sidebarV2Layout', DEFAULT_ghostex_SETTINGS.sidebarV2Layout)
-    ),
-    sidebarAutoSettleAfterDays: normalizeSidebarAutoSettleAfterDays(source['sidebarAutoSettleAfterDays']),
-    sidebarProjectGroupingOverrides: normalizeSidebarProjectGroupingOverrides(
-      source['sidebarProjectGroupingOverrides']
-    ),
-    newSessionsDefaultEnvMode: normalizeSidebarNewSessionEnvMode(
-      readString(source, 'newSessionsDefaultEnvMode', DEFAULT_ghostex_SETTINGS.newSessionsDefaultEnvMode)
     ),
     /**
      * CDXC:SidebarPlacement 2026-05-06-17:32
@@ -665,6 +575,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     sidebarProjectGroupStyle: normalizeSidebarProjectGroupStyle(
       readString(source, 'sidebarProjectGroupStyle', DEFAULT_ghostex_SETTINGS.sidebarProjectGroupStyle)
     ),
+    sidebarSpacesEnabled: readBoolean(source, 'sidebarSpacesEnabled', DEFAULT_ghostex_SETTINGS.sidebarSpacesEnabled),
     expandCollapsedProjectsOnJump: readBoolean(
       source,
       'expandCollapsedProjectsOnJump',
@@ -694,7 +605,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'sessionChatVerboseMode',
       DEFAULT_ghostex_SETTINGS.sessionChatVerboseMode
     ),
-    customSidebarTitlebarColorsEnabled: true,
     customSidebarTitlebarForegroundColor: getSidebarTitlebarForegroundForBackground(
       customSidebarTitlebarBackgroundColor
     ),
@@ -709,12 +619,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       source,
       'terminalCursorStyleBlink',
       DEFAULT_ghostex_SETTINGS.terminalCursorStyleBlink
-    ),
-    terminalEngine: normalizeTerminalEngine(
-      readString(source, 'terminalEngine', DEFAULT_ghostex_SETTINGS.terminalEngine)
-    ),
-    windowsTerminalBackend: normalizeWindowsTerminalBackend(
-      readString(source, 'windowsTerminalBackend', DEFAULT_ghostex_SETTINGS.windowsTerminalBackend)
     ),
     windowsWslDistribution: normalizeWindowsWslDistribution(
       readString(source, 'windowsWslDistribution', DEFAULT_ghostex_SETTINGS.windowsWslDistribution)
@@ -906,18 +810,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readString(source, 'portlessProtocol', DEFAULT_ghostex_SETTINGS.portlessProtocol)
     ),
     promptEditorBackend,
-    customPromptEditorCommand: normalizeCustomPromptEditorCommand(
-      readString(source, 'customPromptEditorCommand', DEFAULT_ghostex_SETTINGS.customPromptEditorCommand)
-    ),
-    /**
-     * CDXC:GtePromptEditing 2026-05-10-11:11
-     * Keep reading the old opt-in keys so older snapshots round-trip cleanly.
-     *
-     * CDXC:PromptEditorBackend 2026-06-30-00:08:
-     * Removed gte Settings choices normalize to inherit, so legacy mirrors must no longer resurrect gte after the canonical backend has been migrated.
-     */
-    richPromptEditingWithGte: false,
-    useGteForCtrlGPromptEditing: false,
     /**
      * CDXC:Hotkeys 2026-04-28-05:20
      * User-defined app shortcuts are normalized with defaults on every settings
@@ -1023,20 +915,8 @@ function normalizeTerminalCursorStyle(value: string | undefined): TerminalCursor
   return value === 'block' || value === 'underline' ? value : 'bar';
 }
 
-function normalizeWindowsTerminalBackend(_value: string | undefined): WindowsTerminalBackend {
-  return 'wsl';
-}
-
 function normalizeWindowsWslDistribution(value: string | undefined): string {
   return (value ?? '').replace(/\0/gu, '').replace(/\r?\n/gu, '').trim().slice(0, 128);
-}
-
-function normalizeBrowserOpenMode(value: string | undefined): BrowserOpenMode {
-  return 'browser-pane';
-}
-
-function normalizeBrowserFeedbackTool(_value: string | undefined): BrowserFeedbackTool {
-  return 'agentation';
 }
 
 function normalizeAppShotsHotkey(value: string | undefined): AppShotsHotkey {
@@ -1094,10 +974,6 @@ function normalizeAppIconSourceId(value: string | undefined): string {
 
 function normalizeDefaultPromptAgentId(value: string | undefined): string {
   return ((value ?? '').trim() || DEFAULT_ghostex_SETTINGS.defaultPromptAgentId).slice(0, 120);
-}
-
-function normalizeCustomPromptEditorCommand(value: string | undefined): string {
-  return ((value ?? '').trim() || DEFAULT_ghostex_SETTINGS.customPromptEditorCommand).slice(0, 240);
 }
 
 /*
@@ -1168,10 +1044,6 @@ function normalizeSidebarProjectGroupStyle(value: string | undefined): SidebarPr
     : DEFAULT_ghostex_SETTINGS.sidebarProjectGroupStyle;
 }
 
-function normalizeSidebarVersion(value: string | undefined): SidebarVersion {
-  return value === 'v2' ? 'v2' : DEFAULT_ghostex_SETTINGS.sidebarVersion;
-}
-
 /* Both spellings are real user choices: normalizing "terminal" to the default
    would silently re-enable the automatic Chat handoff for a user who explicitly
    turned it off. Only unknown or missing values fall back to the default. */
@@ -1200,79 +1072,47 @@ function normalizePreferredAgentInterfaceOverrides(value: unknown): Readonly<Rec
   return normalized;
 }
 
-function normalizeSidebarV2Layout(value: string | undefined): SidebarV2Layout {
-  return value === 'byProject' ? 'byProject' : DEFAULT_ghostex_SETTINGS.sidebarV2Layout;
-}
-
-/* An unknown value falls back to "local": the worktree default must be an
-   explicit choice, never something a corrupted settings file can turn on. */
-function normalizeSidebarNewSessionEnvMode(value: string | undefined): SidebarNewSessionEnvMode {
-  return value === 'worktree' ? 'worktree' : DEFAULT_ghostex_SETTINGS.newSessionsDefaultEnvMode;
-}
-
-/*
-CDXC:SidebarV2Lifecycle 2026-07-29:
-Exact twin of server `normalize_auto_settle_after_days`. The two ends must
-agree or the shelf a user sees and the shelf the daemon writes drift apart:
-  missing key            -> the default window
-  explicit null          -> auto-settle disabled
-  finite number > 0      -> that window
-  any other number       -> disabled (0 and negatives mean "never", not "always")
-  a non-number value     -> the default window
-*/
-function normalizeSidebarAutoSettleAfterDays(value: unknown): number | null {
-  if (value === undefined) {
-    return DEFAULT_ghostex_SETTINGS.sidebarAutoSettleAfterDays;
-  }
-  if (value === null) {
-    return null;
-  }
-  if (typeof value !== 'number') {
-    return DEFAULT_ghostex_SETTINGS.sidebarAutoSettleAfterDays;
-  }
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
-
-/*
-CDXC:SidebarV2LogicalProjects 2026-07-29:
-Grouping overrides are user-visible state that a user can also hand-edit, so
-normalization drops anything it does not recognize instead of substituting a
-default. An unrecognized value must not silently become "repository": that
-would re-merge checkouts the user explicitly separated. Keys are kept verbatim
-because they are opaque physical-project keys minted by the sidebar module.
-*/
-function normalizeSidebarProjectGroupingOverrides(
-  value: unknown
-): Readonly<Record<string, SidebarProjectGroupingMode>> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return DEFAULT_ghostex_SETTINGS.sidebarProjectGroupingOverrides;
-  }
-  const normalized: Record<string, SidebarProjectGroupingMode> = {};
-  for (const [key, mode] of Object.entries(value as Record<string, unknown>)) {
-    if (key.trim().length === 0) {
-      continue;
-    }
-    if (mode === 'repository' || mode === 'repositoryPath' || mode === 'separate') {
-      normalized[key] = mode;
-    }
-  }
-  return normalized;
-}
-
-function normalizeSessionStatusIndicatorSize(value: string | undefined): SessionStatusIndicatorSize {
-  return value === 'small' || value === 'large' || value === 'x-large' ? value : 'medium';
-}
-
 function normalizeKeepAwakeDurationMinutes(value: number): KeepAwakeDurationMinutes {
   return KEEP_AWAKE_DURATION_OPTIONS.some((option) => option.value === value)
     ? (value as KeepAwakeDurationMinutes)
     : DEFAULT_ghostex_SETTINGS.keepAwakeDefaultDurationMinutes;
 }
 
-function normalizeAutoSleepIdleMinutes(value: number, fallback: AutoSleepIdleMinutes): AutoSleepIdleMinutes {
+function normalizeAutoSleepIdleMinutes(
+  source: Record<string, unknown>,
+  idleMinutesKey: string,
+  legacyEnabledKey: string,
+  fallback: AutoSleepIdleMinutes,
+  legacyEnabledFallback: AutoSleepIdleMinutes
+): AutoSleepIdleMinutes {
+  const legacyEnabled = source[legacyEnabledKey];
+  if (legacyEnabled === false) {
+    return 0;
+  }
+  const effectiveFallback = legacyEnabled === true ? legacyEnabledFallback : fallback;
+  const storedValue = source[idleMinutesKey];
+  const value = typeof storedValue === 'number' && Number.isFinite(storedValue) ? storedValue : effectiveFallback;
   return AUTO_SLEEP_IDLE_MINUTE_OPTIONS.some((option) => option.value === value)
     ? (value as AutoSleepIdleMinutes)
-    : fallback;
+    : effectiveFallback;
+}
+
+function normalizeKeepAwakeBatteryThresholdPercent(source: Record<string, unknown>): number {
+  if (source.keepAwakeDeactivateBelowBatteryThreshold === false) {
+    return 0;
+  }
+  const fallback = source.keepAwakeDeactivateBelowBatteryThreshold === true ? 20 : 0;
+  const value = readNumber(source, 'keepAwakeBatteryThresholdPercent', fallback);
+  return value === 0 ? 0 : clampNumber(value, 10, 90, fallback || 20);
+}
+
+function normalizeCompletionSoundPreference(source: Record<string, unknown>) {
+  if (source.completionBellEnabled === false) {
+    return 'off' as const;
+  }
+  return clampCompletionSoundPreference(
+    readString(source, 'completionSound', DEFAULT_ghostex_SETTINGS.completionSound)
+  );
 }
 
 function normalizePromptEditorBackend(source: Record<string, unknown>): PromptEditorBackend {
@@ -1283,10 +1123,7 @@ function normalizePromptEditorBackend(source: Record<string, unknown>): PromptEd
   if (backend === 'gte' || backend === 'custom') {
     return 'inherit';
   }
-  if (
-    readBoolean(source, 'useGteForCtrlGPromptEditing', false) ||
-    readBoolean(source, 'richPromptEditingWithGte', false)
-  ) {
+  if (source.useGteForCtrlGPromptEditing === true || source.richPromptEditingWithGte === true) {
     return 'inherit';
   }
   return DEFAULT_ghostex_SETTINGS.promptEditorBackend;

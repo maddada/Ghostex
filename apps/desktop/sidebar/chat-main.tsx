@@ -26,6 +26,8 @@ import {
   type GxserverPresentationSnapshot,
   type GxserverReadSessionAgentNoteResult,
   type GxserverReadSessionTerminalTailResult,
+  type GxserverSessionForkBranch,
+  type GxserverSessionForkBranchesResult,
 } from '@/packages/shared/gxserver-protocol';
 import { gxserverRpcErrorFromResponseBody } from '@/packages/shared/gxserver-rpc-error';
 import { listProjectMarkdownDocumentPaths, saveProjectMarkdownDocument } from '@/packages/shared/project-docs';
@@ -59,6 +61,7 @@ import {
   type SessionChatHostComposerBridge,
   type SessionChatHostLinks,
 } from '@/packages/core-ui/chat/session-chat-view';
+import { markSessionChatComposerOpened } from '@/packages/core-ui/chat/session-chat-draft-storage';
 import type { SessionChatBarExtension } from '@/packages/core-ui/chat/session-chat-extension-panel';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 
@@ -318,6 +321,20 @@ function createGpuiSessionChatTransport(
         sessionId,
       });
     },
+    /*
+    CDXC:SessionForkFamilies 2026-08-28:
+    The chat's branch switcher reads the fork family from the session's OWN
+    daemon on the same bootstrap as the transcript, so a remote session's
+    branches are derived by the registry on the machine that ran them. It is
+    not a sidebar-bridge call, so it needs nothing from the remote sidebar
+    allowlist.
+    */
+    forkBranches() {
+      return rpc<GxserverSessionForkBranchesResult>(bootstrap, '/api/sessionForkBranches', {
+        projectId,
+        sessionId,
+      });
+    },
     readFiles() {
       return rpc<GxserverReadSessionChatFilesResult>(bootstrap, '/api/readSessionChatFiles', {
         projectId,
@@ -465,6 +482,22 @@ function createGpuiSessionChatTransport(
     async saveSessionNote(note) {
       await rpc(bootstrap, '/api/saveSessionAgentNote', {
         note,
+        projectId,
+        sessionId,
+      });
+    },
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    Switching a draft's agent is a plain gxserver round trip on the same
+    bootstrap as every other chat call, so a remote draft is re-launched by the
+    daemon that owns it. Unconditional here for the same reason the queue calls
+    are: the daemon's `availableAgents` field is the capability probe the shared
+    UI gates the "Agents" section on, so a daemon predating drafts hides the
+    section without this host guessing at versions.
+    */
+    async switchDraftAgent(params) {
+      await rpc(bootstrap, '/api/switchDraftAgent', {
+        agentId: params.agentId,
         projectId,
         sessionId,
       });
@@ -900,6 +933,7 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
     return value ? formatSidebarHotkeyLabel(value) : undefined;
   };
   return {
+    onPasteIntoComposer: () => postSessionChatHostAction('pasteIntoComposer'),
     onSwitchToTerminal: () => postSessionChatHostAction('terminalView'),
     onSwitchToTerminalForAgentPicker: () => postSessionChatHostAction('agentPickerTerminalView'),
     moreActionsShortcut: shortcut('toggleAgentActions'),
@@ -955,7 +989,7 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
       },
       {
         id: 'exportTranscript',
-        label: 'Export transcript',
+        label: 'Handoff / Export',
         shortcut: shortcut('exportTranscript'),
       },
     ],
@@ -983,6 +1017,17 @@ function GpuiSessionChatPage({
   transport,
 }: GpuiSessionChatPageProps) {
   const sessionKey = `${projectId}:${sessionId}`;
+  /*
+  CDXC:DraftSessionsDiscardOwnership 2026-08-28:
+  Vouch for this session's composer cache. The sidebar page's empty-draft
+  discard only removes drafts whose composer THIS installation has hosted,
+  because for any other draft an empty cache says nothing about text sitting
+  unsynced in another client. The sidebar is a different CEF page, so the mark
+  goes through the shared store rather than process memory.
+  */
+  useEffect(() => {
+    markSessionChatComposerOpened(sessionKey);
+  }, [sessionKey]);
   const [sessionTitle, setSessionTitle] = useState('');
   const [extensions, setExtensions] = useState<GhostexInstalledExtension[]>([]);
   const extensionsRef = useRef<GhostexInstalledExtension[]>([]);
@@ -1241,6 +1286,29 @@ function GpuiSessionChatPage({
     };
   }, [extensions.length, updatePanelState]);
 
+  /*
+  CDXC:SessionForkFamilies 2026-08-28:
+  Switching branches is a workspace focus change, and this page is bound to one
+  session, so it asks the daemon to do it: `/api/focusSession` dispatches the
+  renderer command the sidebar page already answers with its normal focusSession
+  routing (pane selection, terminal materialization, presentation focus). No new
+  native message shape is involved.
+
+  Remote chats deliberately get NO switch: their bootstrap points at the remote
+  machine's own daemon through the SSH tunnel, and that daemon has no renderer
+  attached from this Mac, so the command would only sit until it timed out. The
+  switcher then lists the family read-only, which is the honest state.
+  */
+  const focusForkBranch = useCallback(
+    (branch: GxserverSessionForkBranch): void => {
+      void rpc(bootstrap, '/api/focusSession', {
+        projectId: branch.projectId,
+        sessionId: branch.sessionId,
+      }).catch(() => undefined);
+    },
+    [bootstrap]
+  );
+
   const handleBridgeRequest = useCallback(
     async (
       extensionId: string,
@@ -1310,6 +1378,7 @@ function GpuiSessionChatPage({
         onChatBarBridgeRequest={handleBridgeRequest}
         onChatBarPanelStateChange={updatePanelState}
         onDelayedActions={() => postSessionChatHostAction('delayedActions')}
+        {...(remote ? {} : { onSelectForkBranch: focusForkBranch })}
         sessionKey={sessionKey}
         sessionTitle={sessionTitle}
         theme={theme}
@@ -1418,6 +1487,13 @@ if (!projectId || !sessionId) {
     .then((bootstrap) => {
       const transport = createGpuiSessionChatTransport(bootstrap, projectId, sessionId, remote);
       const composerBridge = createGpuiSessionChatComposerBridge(bootstrap, projectId, sessionId);
+      /*
+      CDXC:DraftSessions 2026-08-28:
+      A SEED, not the truth: the URL parameter is whatever agent the session had
+      when this page was opened, and a draft's agent can be switched from the
+      composer without the page reloading. SessionChatView follows the chat read
+      state once it lands and falls back to this only until then.
+      */
       const agentLabel = agentId ? (resolveSessionChatDisplayAgent(agentId) ?? agentId) : null;
       renderReadyChat = (theme) => {
         root.render(

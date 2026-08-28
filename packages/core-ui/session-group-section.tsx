@@ -20,6 +20,7 @@ import {
   IconPlus,
   IconRefresh,
   IconSettings,
+  IconStack,
   IconTerminal2,
   IconTrash,
   IconWorld,
@@ -47,7 +48,7 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 import { AppTooltip } from './app-tooltip';
 import { AgentMenuChatIndicator } from './agent-menu-chat-indicator';
-import { SidebarV2ProjectIcon } from './v2/sidebar-v2-icons';
+import { SidebarProjectIcon } from './sidebar-project-icon';
 import {
   getSidebarSessionLifecycleState,
   type SidebarSessionItem,
@@ -82,6 +83,9 @@ import {
   type SortableSessionCardSharedSettings,
 } from './sortable-session-card';
 import { SidebarContextMenuPortal } from './sidebar-context-menu-portal';
+import { resolveSidebarSpaceIcon } from './space-filter-row';
+import { createRemoteSidebarSpaceSectionKey, LOCAL_SIDEBAR_SPACE_SECTION_KEY } from './sidebar-app/space-filtering';
+import { getSidebarSpaceIdsContainingProject, type SidebarSpacesState } from './spaces';
 import { useCollapsibleHeight } from './use-collapsible-height';
 import { useSidebarCollapsiblePresence } from './sidebar-collapse-animation';
 import type { WebviewApi } from './webview-api';
@@ -273,7 +277,7 @@ type ContextMenuPosition = {
 };
 
 type GroupContextMenuPosition = ContextMenuPosition & {
-  view: 'group' | 'project-collections' | 'project-custom-theme' | 'project-themes';
+  view: 'group' | 'project-collections' | 'project-custom-theme' | 'project-spaces' | 'project-themes';
 };
 
 type GroupControlMenu = 'project-agent';
@@ -479,6 +483,21 @@ export type SessionGroupSectionProps = {
   onCreateProjectCollection?: (projectId: string) => void;
   onMoveProjectToCollection?: (projectId: string, collectionId: string | undefined) => void;
   onProjectSessionListCollapsedChange?: (projectId: string, collapsed: boolean) => void;
+  /*
+   * CDXC:SidebarSpaces 2026-08-27:
+   * Space membership for an UNGROUPED project row. Per the Spaces decision, a
+   * project inside a group cannot be assigned directly — it inherits its group's
+   * Spaces — and a worktree can never be assigned at all, so this entry renders
+   * only on ordinary ungrouped project rows.
+   *
+   * `spaces` is the owning gxserver's Space set (`undefined` = that daemon is
+   * Space-incapable, so no entry at all), and `spaceMemberProjectId` is the
+   * project id in THAT daemon's own id space: the local editor project id, or a
+   * remote machine's raw project id.
+   */
+  onToggleSpaceMembership?: (spaceId: string) => void;
+  spaceMemberProjectId?: string;
+  spaces?: SidebarSpacesState;
   onHideGroup?: () => void;
   onSessionSelectionChange?: (request: SidebarSessionSelectionChangeRequest) => void;
   orderedSessionIds?: readonly string[];
@@ -531,10 +550,12 @@ function getProjectSessionSection(
 }
 
 function ProjectSessionSectionToggle({
+  count,
   isCollapsed,
   label,
   onToggle,
 }: {
+  count: number;
   isCollapsed: boolean;
   label: string;
   onToggle: () => void;
@@ -551,7 +572,10 @@ function ProjectSessionSectionToggle({
       }}
       type='button'
     >
-      <span>{label}</span>
+      <span>
+        {label}
+        {isCollapsed ? ` ⋅ ${count}` : null}
+      </span>
       <IconChevronRight
         aria-hidden='true'
         className='session-kind-toggle-chevron'
@@ -583,6 +607,7 @@ export function getGroupContextMenuItemCount({
   hasProjectContext,
   isWorktreeProject,
   projectCollectionsEnabled = false,
+  spacesEnabled = false,
 }: {
   canCreateSessionGroup?: boolean;
   canFullReloadGroup: boolean;
@@ -591,6 +616,7 @@ export function getGroupContextMenuItemCount({
   hasProjectContext: boolean;
   isWorktreeProject: boolean;
   projectCollectionsEnabled?: boolean;
+  spacesEnabled?: boolean;
 }): number {
   /*
    * CDXC:ProjectGroups 2026-06-08-09:19:
@@ -606,6 +632,14 @@ export function getGroupContextMenuItemCount({
    * — which the sidebar always does — and was never counted, so every project
    * menu was measured one row short and the last item could open off-screen. It
    * is not part of the group menu, so only the project branches take it.
+   *
+   * CDXC:SidebarSpaces 2026-08-27:
+   * The Spaces submenu entry renders only on ORDINARY ungrouped project rows —
+   * grouped projects inherit their group's Spaces and worktrees can never be
+   * assigned — so it is counted only in the non-worktree project branch, and the
+   * caller passes the same condition the menu itself renders on. Miscounting
+   * here does not hide the row, it opens the menu at the wrong y and pushes the
+   * last item off-screen, which is why it moves with the menu.
    */
   if (hasProjectContext) {
     return (
@@ -613,7 +647,11 @@ export function getGroupContextMenuItemCount({
       Number(canCopyProjectRemoteUrl) +
       (isWorktreeProject
         ? 5 + Number(projectCollectionsEnabled)
-        : 5 + Number(canFullReloadGroup) + Number(canCreateSessionGroup) + Number(projectCollectionsEnabled))
+        : 5 +
+          Number(canFullReloadGroup) +
+          Number(canCreateSessionGroup) +
+          Number(projectCollectionsEnabled) +
+          Number(spacesEnabled))
     );
   }
 
@@ -694,6 +732,9 @@ export function SessionGroupSection({
   onCreateProjectCollection,
   onMoveProjectToCollection,
   onProjectSessionListCollapsedChange,
+  onToggleSpaceMembership,
+  spaceMemberProjectId,
+  spaces,
   onHideGroup,
   onSessionSelectionChange,
   orderedSessionIds: orderedSessionIdsProp,
@@ -987,6 +1028,13 @@ export function SessionGroupSection({
   const renderedParkedSessionIds = renderedSessionIds.filter((sessionId) => {
     return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'parked';
   });
+  const projectSessionSectionCounts = orderedSessionIds.reduce<Record<ProjectSessionSection, number>>(
+    (counts, sessionId) => {
+      counts[getProjectSessionSection(sessionsById[sessionId], enableSessionParking)] += 1;
+      return counts;
+    },
+    { browser: 0, parked: 0, pinned: 0, sessions: 0 }
+  );
   const shouldRenderSessionKindLabels =
     renderedBrowserSessionIds.length > 0 && renderedBrowserSessionIds.length < renderedSessionIds.length;
   const firstBrowserSessionId = renderedBrowserSessionIds[0];
@@ -1199,6 +1247,22 @@ export function SessionGroupSection({
         session.activity !== 'attention'
     );
   const canFullReloadGroup = groupSessions.length > 0;
+  /*
+   * CDXC:SidebarSpaces 2026-08-27:
+   * The exact condition the Spaces entry renders on, so the menu-height budget
+   * and the menu itself can never disagree: an ordinary (non-worktree) project
+   * row that is NOT inside a group, on a Space-capable gxserver.
+   */
+  const isProjectSpacesMenuEnabled = Boolean(
+    projectContext &&
+    !projectContext.worktree &&
+    projectCollectionId === undefined &&
+    spaceMemberProjectId &&
+    spaces &&
+    onToggleSpaceMembership
+  );
+  const projectMemberSpaceIds =
+    spaces && spaceMemberProjectId ? getSidebarSpaceIdsContainingProject(spaces, spaceMemberProjectId) : [];
   const collapsedIndicatorActivity = sessionSummary.indicatorActivity;
   const hasCollapsedSummary = collapsedIndicatorActivity !== undefined;
   /**
@@ -1826,6 +1890,33 @@ export function SessionGroupSection({
     onMoveProjectToCollection(projectContext.editor.projectId, collectionId);
   };
 
+  const openProjectSpacesMenu = () => {
+    setContextMenuPosition((previous) => (previous ? { ...previous, view: 'project-spaces' } : previous));
+  };
+
+  const toggleProjectSpaceMembership = (spaceId: string) => {
+    setContextMenuPosition(undefined);
+    onToggleSpaceMembership?.(spaceId);
+  };
+
+  const createSpaceForProject = () => {
+    if (!spaceMemberProjectId) {
+      return;
+    }
+    const remoteMachineId = group.remoteMachineContext?.machineId;
+    setContextMenuPosition(undefined);
+    openAppModal({
+      memberProjectId: spaceMemberProjectId,
+      mode: 'create',
+      modal: 'sidebarSpaceEditor',
+      ...(remoteMachineId ? { remoteMachineId } : {}),
+      sectionKey: remoteMachineId
+        ? createRemoteSidebarSpaceSectionKey(remoteMachineId)
+        : LOCAL_SIDEBAR_SPACE_SECTION_KEY,
+      type: 'open',
+    });
+  };
+
   const removeWorktreeProject = () => {
     if (!projectContext?.worktree || !projectContext.canRemoveProject) {
       return;
@@ -1968,6 +2059,7 @@ export function SessionGroupSection({
           hasProjectContext: Boolean(projectContext),
           isWorktreeProject: Boolean(projectContext?.worktree),
           projectCollectionsEnabled: Boolean(onCreateProjectCollection && onMoveProjectToCollection),
+          spacesEnabled: isProjectSpacesMenuEnabled,
         })
       )
     );
@@ -2134,7 +2226,7 @@ export function SessionGroupSection({
                   </button>
                 )}
                 {showProjectIcons && projectContext && !isChatCollection ? (
-                  <SidebarV2ProjectIcon
+                  <SidebarProjectIcon
                     discoveredIconDataUrl={projectContext.discoveredIconDataUrl}
                     fallback={projectContext.worktree ? 'worktree' : isCollapsed ? 'folder' : 'folder-open'}
                     icon={projectContext.icon}
@@ -2569,6 +2661,7 @@ export function SessionGroupSection({
                       <Fragment key={sessionId}>
                         {projectContext && sessionId === firstBrowserSessionId ? (
                           <ProjectSessionSectionToggle
+                            count={projectSessionSectionCounts.browser}
                             isCollapsed={collapsedProjectSessionSections.browser}
                             label='Browser'
                             onToggle={() => toggleProjectSessionSection('browser')}
@@ -2576,6 +2669,7 @@ export function SessionGroupSection({
                         ) : null}
                         {projectContext && sessionId === firstPinnedSessionId ? (
                           <ProjectSessionSectionToggle
+                            count={projectSessionSectionCounts.pinned}
                             isCollapsed={collapsedProjectSessionSections.pinned}
                             label='Pinned'
                             onToggle={() => toggleProjectSessionSection('pinned')}
@@ -2583,6 +2677,7 @@ export function SessionGroupSection({
                         ) : null}
                         {projectContext && sessionId === firstUnpinnedSessionId ? (
                           <ProjectSessionSectionToggle
+                            count={projectSessionSectionCounts.sessions}
                             isCollapsed={collapsedProjectSessionSections.sessions}
                             label='Sessions'
                             onToggle={() => toggleProjectSessionSection('sessions')}
@@ -2590,6 +2685,7 @@ export function SessionGroupSection({
                         ) : null}
                         {(projectContext || isChatCollection) && sessionId === firstParkedSessionId ? (
                           <ProjectSessionSectionToggle
+                            count={projectSessionSectionCounts.parked}
                             isCollapsed={collapsedProjectSessionSections.parked}
                             label='Parked'
                             onToggle={() => toggleProjectSessionSection('parked')}
@@ -2829,6 +2925,68 @@ export function SessionGroupSection({
                     </button>
                   </>
                 ) : null}
+              </>
+            ) : contextMenuPosition.view === 'project-spaces' ? (
+              <>
+                {/*
+                 * CDXC:SidebarSpaces 2026-08-27:
+                 * Membership rows for one ungrouped project, in the owning
+                 * gxserver's Space order. Multi-membership is allowed, so these
+                 * are checkboxes rather than radios; toggling closes the menu,
+                 * which is what the Tags submenu this pattern is modeled on does.
+                 */}
+                <button
+                  className='session-context-menu-item'
+                  onClick={openProjectRootMenu}
+                  role='menuitem'
+                  type='button'
+                >
+                  <IconChevronLeft aria-hidden='true' className='session-context-menu-icon' size={14} />
+                  Back
+                </button>
+                <div className='session-context-menu-divider' role='separator' />
+                <button
+                  className='session-context-menu-item'
+                  onClick={createSpaceForProject}
+                  role='menuitem'
+                  type='button'
+                >
+                  <IconPlus aria-hidden='true' className='session-context-menu-icon' size={14} />
+                  New Space
+                </button>
+                {spaces && spaces.order.length > 0 ? (
+                  <div className='session-context-menu-divider' role='separator' />
+                ) : null}
+                {spaces && spaces.order.length > 0
+                  ? spaces.order.flatMap((spaceId) => {
+                      const space = spaces.spaces[spaceId];
+                      if (!space) {
+                        return [];
+                      }
+                      const isMember = projectMemberSpaceIds.includes(spaceId);
+                      return [
+                        <button
+                          aria-checked={isMember}
+                          className='session-context-menu-item'
+                          key={spaceId}
+                          onClick={() => toggleProjectSpaceMembership(spaceId)}
+                          role='menuitemcheckbox'
+                          type='button'
+                        >
+                          <SidebarCommandIconGlyph
+                            className='session-context-menu-icon'
+                            color={space.color}
+                            icon={resolveSidebarSpaceIcon(space.icon)}
+                            size={14}
+                          />
+                          <span className='sidebar-space-filter-menu-name'>{space.name}</span>
+                          {isMember ? (
+                            <IconCheck aria-hidden='true' className='session-context-menu-trailing-icon' size={14} />
+                          ) : null}
+                        </button>,
+                      ];
+                    })
+                  : null}
               </>
             ) : contextMenuPosition.view === 'project-themes' ? (
               <>
@@ -3102,6 +3260,25 @@ export function SessionGroupSection({
                   >
                     <IconPlus aria-hidden='true' className='session-context-menu-icon' size={14} />
                     Add to project group
+                    <IconChevronRight aria-hidden='true' className='session-context-menu-trailing-icon' size={14} />
+                  </button>
+                ) : null}
+                {/*
+                 * CDXC:SidebarSpaces 2026-08-27:
+                 * Ungrouped projects only. A project inside a group takes its
+                 * Spaces from that group and cannot be assigned on its own, so
+                 * offering the entry there would promise an override the model
+                 * does not have.
+                 */}
+                {isProjectSpacesMenuEnabled ? (
+                  <button
+                    className='session-context-menu-item'
+                    onClick={openProjectSpacesMenu}
+                    role='menuitem'
+                    type='button'
+                  >
+                    <IconStack aria-hidden='true' className='session-context-menu-icon' size={14} />
+                    Spaces
                     <IconChevronRight aria-hidden='true' className='session-context-menu-trailing-icon' size={14} />
                   </button>
                 ) : null}

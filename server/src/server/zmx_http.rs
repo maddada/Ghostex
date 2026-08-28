@@ -159,6 +159,66 @@ pub(crate) async fn handle_zmx_lifecycle_http(
     }
 }
 
+pub(crate) struct ZmxStopAllCounts {
+    pub(crate) attempted: u64,
+    pub(crate) failed: u64,
+    pub(crate) killed: u64,
+    pub(crate) skipped: u64,
+}
+
+/*
+CDXC:StopAllKillsSessions 2026-08-28:
+`/api/control/stopAll` promised "kill tracked zmx sessions, mark them stopped,
+then stop the control plane" (gx server stop-all), but the Rust port only ever
+stopped the control plane and reported zero counts. The app's Quit Ghostex &
+BG Service menu item depends on the promise being real: quitting must leave no
+Ghostex-spawned zmx daemon running. Sleeping and stopped sessions are skipped
+because their zmx process is already gone — sleep kills the provider too and
+only keeps the transcript resumable.
+*/
+pub(crate) fn kill_all_tracked_zmx_sessions(state: &AppState) -> ZmxStopAllCounts {
+    let mut counts = ZmxStopAllCounts {
+        attempted: 0,
+        failed: 0,
+        killed: 0,
+        skipped: 0,
+    };
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return counts;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Ok(sessions) = repository.list_sessions(None) else {
+        return counts;
+    };
+    for session in sessions {
+        let lifecycle_state = session
+            .get("lifecycleState")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if matches!(lifecycle_state, "stopped" | "sleeping") {
+            counts.skipped += 1;
+            continue;
+        }
+        let (Some(project_id), Some(session_id)) = (
+            session.get("projectId").and_then(Value::as_str),
+            session.get("sessionId").and_then(Value::as_str),
+        ) else {
+            counts.skipped += 1;
+            continue;
+        };
+        counts.attempted += 1;
+        let lifecycle = crate::zmx::LifecycleParams {
+            project_id: project_id.to_string(),
+            session_id: session_id.to_string(),
+        };
+        match crate::zmx::kill_and_cache_session_provider(&repository, &lifecycle, "stopped") {
+            Ok((kill, _)) if kill.killed => counts.killed += 1,
+            _ => counts.failed += 1,
+        }
+    }
+    counts
+}
+
 pub(crate) async fn handle_zmx_session_interaction_http(
     state: &AppState,
     endpoint_path: String,

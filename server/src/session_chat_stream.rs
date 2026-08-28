@@ -252,6 +252,11 @@ pub struct SessionChatFollowerConfig {
     /// ⇒ the follower still re-resolves by the stored identity but never
     /// re-binds the session.
     pub successor_hooks: Option<SessionChatSuccessorHooks>,
+    /// Pushes the session's current terminal notice to every live follower
+    /// after the drain stores a transcript-derived notice (the API refusal
+    /// card, CDXC:SessionChatApiRefusal). Absent ⇒ refusal rows still render
+    /// inline as chat text but no notice card is raised.
+    pub notice_publisher: Option<crate::session_chat_watchdog::SessionChatWatchdogPublisher>,
     /// Timers the reconcile loop runs on. Production uses `Default`; tests
     /// shrink them so the whole identity-repair path runs in milliseconds.
     pub tuning: SessionChatFollowerTuning,

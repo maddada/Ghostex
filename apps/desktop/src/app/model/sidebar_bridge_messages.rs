@@ -13,6 +13,13 @@ pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) agent_session_id: Option<String>,
     pub(crate) key: GpuiWorkspaceTerminalSessionKey,
     pub(crate) kind: AgentsWorkspaceSessionKind,
+    /*
+    CDXC:DraftAgentSwitch 2026-08-28:
+    The session is a draft: created from the sidebar, its agent CLI running,
+    but no first prompt sent. It is the one session shape that is chat-eligible
+    without an `agent_session_id`.
+    */
+    pub(crate) is_draft: bool,
     pub(crate) is_generating_first_prompt_title: bool,
     pub(crate) presentation_state: TerminalSessionPresentationState,
     pub(crate) has_session_note: bool,

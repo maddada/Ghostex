@@ -4,7 +4,6 @@ export type ghostexHotkeyActionId =
   | 'attachFileOrFolder'
   | 'closeAfterDone'
   | 'closeFocusedSession'
-  | 'copyAgentSessionId'
   | 'createSession'
   | 'delayedSend'
   | 'exportTranscript'
@@ -74,7 +73,6 @@ export type ghostexFocusedPaneAction =
 
 export type ghostexTerminalToolbarAction =
   | 'attachFileOrFolder'
-  | 'copyAgentSessionId'
   | 'exportTranscript'
   | 'promptEditor'
   | 'scrollTerminalToBottom'
@@ -381,17 +379,6 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   },
   {
     action: {
-      id: 'copyAgentSessionId',
-      kind: 'terminalToolbarAction',
-      terminalToolbarAction: 'copyAgentSessionId',
-    },
-    defaultKey: 'cmd+alt+c',
-    description: 'Copy the focused agent conversation id.',
-    id: 'copyAgentSessionId',
-    title: 'Copy Agent Session ID',
-  },
-  {
-    action: {
       id: 'stashPrompt',
       kind: 'terminalToolbarAction',
       terminalToolbarAction: 'stashPrompt',
@@ -422,14 +409,14 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     },
     /**
      * CDXC:ExportTranscript 2026-08-20:
-     * Export transcript writes the focused agent session's conversation to a
+     * Handoff / Export writes the focused agent session's conversation to a
      * markdown file on the machine that owns the transcript, then offers to
      * seed a new conversation from it.
      */
     defaultKey: 'cmd+alt+e',
-    description: "Export the focused agent session's transcript to a markdown file.",
+    description: "Export the focused agent session's transcript and hand it off to another agent.",
     id: 'exportTranscript',
-    title: 'Export Transcript',
+    title: 'Handoff / Export',
   },
   {
     action: {

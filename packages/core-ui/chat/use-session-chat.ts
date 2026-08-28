@@ -15,6 +15,7 @@ import type {
   GxserverSessionChatEvent,
   SessionChatAgentFleet,
   SessionChatAppCommand,
+  SessionChatAvailableAgent,
   SessionChatDetectedOptions,
   SessionChatDraft,
   SessionChatInteractivePrompt,
@@ -191,6 +192,11 @@ export interface UseSessionChatOptions {
   /** Verified command catalog for local "Ran /x" markers. */
   commandCatalog?: readonly string[];
   initialLimit?: number;
+  /**
+   * Host diagnostic breadcrumb sink; the host gates it behind its own
+   * scenario, so calls are cheap and carry only enums, counts, and booleans.
+   */
+  diagnosticLog?: (event: string, details?: Record<string, unknown>) => void;
 }
 
 /*
@@ -275,6 +281,23 @@ export interface UseSessionChatResult {
   screenProbed: boolean;
   agent: string | null;
   agentSessionId: string | null;
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  The draft-only agent switcher's two inputs, and the only chat state that is
+  carried by READ RESULTS ALONE: no frame type has a field for either, so they
+  are folded in `refresh`/seed reads and left untouched by every frame. Null
+  means "this session is not a draft" — including a draft that was just
+  promoted by its first Send, whose next read simply stops carrying them.
+  */
+  availableAgents: readonly SessionChatAvailableAgent[] | null;
+  /** The session's own launch agent id (never the transcript family). */
+  sessionAgentId: string | null;
+  /**
+   * Re-reads the authoritative state now. Callers use it after an action whose
+   * result lives only in a read result — switching a draft's agent, or a send
+   * that may have promoted the draft — because no frame carries those fields.
+   */
+  refresh: () => void;
   error: string | null;
   hasMore: boolean;
   loadingEarlier: boolean;
@@ -303,11 +326,14 @@ export interface UseSessionChatResult {
 export function useSessionChat(options: UseSessionChatOptions): UseSessionChatResult {
   const {
     commandCatalog = SESSION_CHAT_DEFAULT_COMMAND_CATALOG,
+    diagnosticLog,
     initialLimit = SESSION_CHAT_INITIAL_LIMIT,
     previewText = null,
     transport,
     working: externalWorking = false,
   } = options;
+  const diagnosticLogRef = useRef(diagnosticLog);
+  diagnosticLogRef.current = diagnosticLog;
 
   const [transcript, setTranscript] = useState<readonly SessionChatMessage[]>([]);
   const [serverStatus, setServerStatus] = useState<SessionChatStatus>('loading');
@@ -315,6 +341,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const [prompt, setPrompt] = useState<SessionChatInteractivePrompt | null>(null);
   const [agent, setAgent] = useState<string | null>(null);
   const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
+  /*
+  CDXC:DraftSessions 2026-08-28: read-result-only state (see the doc on
+  UseSessionChatResult.availableAgents). Both are set from a read and from
+  nothing else, so an omission on a read is authoritative: the session is not
+  (or is no longer) a draft.
+  */
+  const [availableAgents, setAvailableAgents] = useState<readonly SessionChatAvailableAgent[] | null>(null);
+  const [sessionAgentId, setSessionAgentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
@@ -428,8 +462,16 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const autoReconnectsRef = useRef(0);
   /** Transport that last seeded the view state; gates the session-identity wipe. */
   const seededTransportRef = useRef<SessionChatTransport | null>(null);
+  /*
+  CDXC:DraftAgentSwitch 2026-08-28:
+  The launch agent id the last read carried, so a read can tell "this draft is
+  now running a different agent CLI" from "this is the first read". A ref, not
+  the state above, because the comparison happens inside the fold itself.
+  */
+  const sessionAgentIdRef = useRef<string | null>(null);
 
   const reconnect = useCallback((): void => {
+    diagnosticLogRef.current?.('sessionChat.reconnect');
     setReconnectNonce((nonce) => nonce + 1);
   }, []);
 
@@ -474,36 +516,47 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   );
 
   const applyAuthoritative = useCallback(
-    (result: {
-      messages: SessionChatMessage[];
-      lifecycle?: SessionChatTurnLifecycle;
-      hasMore: boolean;
-      hasMoreExact?: boolean;
-      beforeOffset: number;
-      status: SessionChatStatus;
-      prompt?: SessionChatInteractivePrompt;
-      agent?: string;
-      agentSessionId?: string;
-      error?: string;
-      /** Hook-derived live-work flag carried by reads and snapshots. */
-      working?: boolean;
-      /** Detected model/effort; omitted when the agent's screen said nothing. */
-      selectedOptions?: SessionChatDetectedOptions;
-      /** Blocking/failed terminal state; omitted ⇒ cleared. */
-      terminalNotice?: SessionChatTerminalNotice;
-      /** Live on-screen progress; omitted ⇒ cleared. */
-      terminalActivity?: SessionChatTerminalActivity;
-      /** Sub-agents on screen; omitted ⇒ cleared. */
-      agentFleet?: SessionChatAgentFleet;
-      /** Commands Ghostex sent; omitted ⇒ unchanged, never cleared. */
-      appCommands?: SessionChatAppCommand[];
-      /** gxserver has read the screen; latched, never cleared by omission. */
-      screenProbed?: boolean;
-      /** Ghostex prompt queue; PRESENT (even empty) is the capability probe. */
-      queue?: SessionChatQueuedPrompt[];
-      /** Synced composer draft; omitted ⇒ unchanged, never cleared. */
-      draft?: SessionChatDraft;
-    }): void => {
+    (
+      result: {
+        messages: SessionChatMessage[];
+        lifecycle?: SessionChatTurnLifecycle;
+        hasMore: boolean;
+        hasMoreExact?: boolean;
+        beforeOffset: number;
+        status: SessionChatStatus;
+        prompt?: SessionChatInteractivePrompt;
+        agent?: string;
+        agentSessionId?: string;
+        error?: string;
+        /** Hook-derived live-work flag carried by reads and snapshots. */
+        working?: boolean;
+        /** Detected model/effort; omitted when the agent's screen said nothing. */
+        selectedOptions?: SessionChatDetectedOptions;
+        /** Blocking/failed terminal state; omitted ⇒ cleared. */
+        terminalNotice?: SessionChatTerminalNotice;
+        /** Live on-screen progress; omitted ⇒ cleared. */
+        terminalActivity?: SessionChatTerminalActivity;
+        /** Sub-agents on screen; omitted ⇒ cleared. */
+        agentFleet?: SessionChatAgentFleet;
+        /** Commands Ghostex sent; omitted ⇒ unchanged, never cleared. */
+        appCommands?: SessionChatAppCommand[];
+        /** gxserver has read the screen; latched, never cleared by omission. */
+        screenProbed?: boolean;
+        /** Ghostex prompt queue; PRESENT (even empty) is the capability probe. */
+        queue?: SessionChatQueuedPrompt[];
+        /** Synced composer draft; omitted ⇒ unchanged, never cleared. */
+        draft?: SessionChatDraft;
+      },
+      source: string
+    ): void => {
+      diagnosticLogRef.current?.('sessionChat.authoritative', {
+        hasAgentSessionId: result.agentSessionId !== undefined,
+        hasMore: result.hasMore,
+        messageCount: result.messages.length,
+        source,
+        status: result.status,
+        working: result.working === true,
+      });
       replaceSessionChatMergerList(mergerRef.current, result.messages);
       setTranscript(mergerRef.current.list);
       setLifecycle(result.lifecycle ?? null);
@@ -537,6 +590,44 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     [applyQueueCarriage, applyTerminalActivity]
   );
 
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  Folded from READ RESULTS ONLY — snapshot/replaced/state frames have no field
+  for either value, so folding them in `applyAuthoritative` (which frames also
+  go through) would clear the switcher on the next frame. An omission on a read
+  is the promotion signal and clears both.
+  */
+  const applyDraftAgentCarriage = useCallback(
+    (result: { availableAgents?: SessionChatAvailableAgent[]; sessionAgentId?: string }): void => {
+      const nextSessionAgentId = result.sessionAgentId ?? null;
+      const previousSessionAgentId = sessionAgentIdRef.current;
+      sessionAgentIdRef.current = nextSessionAgentId;
+      setAvailableAgents(result.availableAgents ?? null);
+      setSessionAgentId(nextSessionAgentId);
+      /*
+      CDXC:DraftAgentSwitch 2026-08-28:
+      A draft that came back running a DIFFERENT agent CLI has no detected
+      options any more: the model, effort and mode this chat is holding belong
+      to the CLI that was just replaced. Both are dropped here rather than left
+      to be overwritten, because the new agent may name none of them — and the
+      probe latch has to go with them, or the pill would present the previous
+      agent's model as a settled answer instead of showing that the new one has
+      not been read yet. Applied only on an id-to-id change: the first read of a
+      session (null → id) is this chat learning its own identity, and it runs
+      right after `applyAuthoritative` has folded that same read's detection.
+      */
+      if (
+        previousSessionAgentId !== null &&
+        nextSessionAgentId !== null &&
+        previousSessionAgentId !== nextSessionAgentId
+      ) {
+        setSelectedOptions(null);
+        setScreenProbed(false);
+      }
+    },
+    []
+  );
+
   const requestResync = useCallback((): void => {
     if (resyncInFlightRef.current || closedRef.current) {
       // Frames arriving from here on are recorded by onEvent and covered by
@@ -545,6 +636,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     }
     resyncInFlightRef.current = true;
     resyncSeenInFlightRef.current = null;
+    diagnosticLogRef.current?.('sessionChat.resyncRequested');
     const generation = generationRef.current;
     void withReadTimeout(transport.read({ limit: limitRef.current }))
       .then((result) => {
@@ -577,7 +669,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         // the cursor at the read's older seq would make every following
         // append look like a gap and resync forever.
         frameState.seq = outrun ? observed.seq : result.seq;
-        applyAuthoritative(result);
+        applyAuthoritative(result, 'resyncRead');
+        applyDraftAgentCarriage(result);
         if (outrun) {
           scheduleResyncFollowUp();
         } else {
@@ -660,6 +753,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     */
     const sessionChanged = seededTransportRef.current !== transport;
     seededTransportRef.current = transport;
+    diagnosticLogRef.current?.('sessionChat.subscribeStarted', {
+      generation,
+      sessionChanged,
+    });
     if (sessionChanged) {
       limitRef.current = initialLimit;
       setServerWorking(false);
@@ -686,6 +783,13 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       // capability from scratch is what keeps a mixed old/new daemon honest.
       setQueuePrompts(null);
       setSyncedDraft(null);
+      // CDXC:DraftSessions 2026-08-28: another session's draft agent list must
+      // never tick a row (or offer a switch) for this one.
+      setAvailableAgents(null);
+      setSessionAgentId(null);
+      // Another session's agent id must not read as an agent SWITCH on this
+      // one's first read (which would wipe the detection that read carried).
+      sessionAgentIdRef.current = null;
     }
 
     const acceptSequencedFrame = (event: { epoch: number; seq: number }): 'apply' | 'drop' | 'resync' => {
@@ -721,7 +825,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         frameState.epoch = event.epoch;
         frameState.seq = event.seq;
         frameState.frameArrived = true;
-        applyAuthoritative(event);
+        applyAuthoritative(event, event.type);
         return;
       }
       const verdict = acceptSequencedFrame(event);
@@ -757,6 +861,13 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       }
       // sessionChatState — also how hook activity transitions (working ↔ idle)
       // reach every host.
+      diagnosticLogRef.current?.('sessionChat.stateFrame', {
+        epoch: event.epoch,
+        hasAgentSessionId: event.agentSessionId !== undefined,
+        seq: event.seq,
+        status: event.status,
+        working: event.working === true,
+      });
       setServerStatus(event.status);
       setServerWorking(event.working === true || event.status === 'working');
       if (event.lifecycle) {
@@ -806,7 +917,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           lastFrameAtRef.current = Date.now();
           frameState.epoch = result.epoch;
           frameState.seq = result.seq;
-          applyAuthoritative(result);
+          applyAuthoritative(result, 'seedRead');
+          applyDraftAgentCarriage(result);
           if (result.status === 'starting' && Date.now() - startedAt < NOTFOUND_RETRY_WINDOW_MS) {
             scheduleRetry(seedRead);
           }
@@ -815,7 +927,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           if (closedRef.current || generationRef.current !== generation || frameState.frameArrived) {
             return;
           }
-          if (Date.now() - startedAt < NOTFOUND_RETRY_WINDOW_MS) {
+          const retryScheduled = Date.now() - startedAt < NOTFOUND_RETRY_WINDOW_MS;
+          diagnosticLogRef.current?.('sessionChat.seedReadRejected', { retryScheduled });
+          if (retryScheduled) {
             scheduleRetry(seedRead);
             return;
           }
@@ -846,6 +960,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         now - lastFrameAtRef.current > INITIAL_STALL_THRESHOLD_MS
       ) {
         autoReconnectsRef.current += 1;
+        diagnosticLogRef.current?.('sessionChat.initialStallRecycle', {
+          attempt: autoReconnectsRef.current,
+        });
         reconnect();
         return;
       }
@@ -884,6 +1001,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     };
   }, [
     applyAuthoritative,
+    applyDraftAgentCarriage,
     applyQueueCarriage,
     applyTerminalActivity,
     initialLimit,
@@ -1017,6 +1135,13 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const view = selectSessionChatViewState({
     error,
     hasKnownAgentSession: agentSessionId !== null,
+    /*
+    CDXC:DraftAgentSwitch 2026-08-28:
+    `availableAgents` is the daemon's own draft marker (it is sent for a draft
+    and for nothing else), so its presence is what keeps an agent switch from
+    unmounting this pane. See selectSessionChatViewState.
+    */
+    isDraft: availableAgents !== null,
     messageCount: messages.length,
     status,
   });
@@ -1304,6 +1429,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     agent,
     agentSessionId,
     answerPrompt,
+    availableAgents,
     draft,
     error,
     hasMore,
@@ -1314,7 +1440,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     messages,
     prompt,
     queue,
+    refresh: requestResync,
     retry: reconnect,
+    sessionAgentId,
     selectedOptions,
     send,
     status,

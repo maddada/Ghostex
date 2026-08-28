@@ -17,13 +17,11 @@ import {
   PREFERRED_AGENT_INTERFACE_OPTIONS,
   PROMPT_EDITOR_BACKEND_OPTIONS,
   SESSION_CHAT_THEME_OPTIONS,
-  SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS,
   SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
   SIDEBAR_SETTINGS_PRESETS,
   SIDEBAR_SIDE_OPTIONS,
-  SIDEBAR_VERSION_OPTIONS,
+  SIDEBAR_SPACES_ENABLED_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
-  WINDOWS_TERMINAL_BACKEND_OPTIONS,
   type ghostexSettings,
 } from '../../shared/ghostex-settings';
 import { PET_CONTROLS_VISIBLE, PET_OPTIONS } from '../../shared/pets';
@@ -109,23 +107,13 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
     ]),
     autoSleep: getSettingsSectionSearch(settingsSearchQuery, 'Auto Sleep', [
       {
-        key: 'autoSleepCodeEditorEnabled',
-        subtitle: 'Sleep inactive VS Code panes after the selected idle period.',
-        title: 'Sleep inactive VS Code panes',
-      },
-      {
         key: 'autoSleepCodeEditorIdleMinutes',
         options: AUTO_SLEEP_IDLE_MINUTE_OPTIONS.map((option) => ({
           label: option.label,
           value: String(option.value),
         })),
-        subtitle: 'Idle time before inactive VS Code panes sleep.',
-        title: 'VS Code idle time',
-      },
-      {
-        key: 'autoSleepGitEditorEnabled',
-        subtitle: 'Sleep inactive Git panes after the selected idle period.',
-        title: 'Sleep inactive Git panes',
+        subtitle: 'Choose when inactive VS Code panes sleep, or turn Auto Sleep off.',
+        title: 'VS Code Auto Sleep',
       },
       {
         key: 'autoSleepGitEditorIdleMinutes',
@@ -133,13 +121,8 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
           label: option.label,
           value: String(option.value),
         })),
-        subtitle: 'Idle time before inactive Git panes sleep.',
-        title: 'Git idle time',
-      },
-      {
-        key: 'autoSleepProjectEditorEnabled',
-        subtitle: 'Sleep inactive Project panes after the selected idle period.',
-        title: 'Sleep inactive Project panes',
+        subtitle: 'Choose when inactive Git panes sleep, or turn Auto Sleep off.',
+        title: 'Git Auto Sleep',
       },
       {
         key: 'autoSleepProjectEditorIdleMinutes',
@@ -147,13 +130,8 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
           label: option.label,
           value: String(option.value),
         })),
-        subtitle: 'Idle time before inactive Project panes sleep.',
-        title: 'Project idle time',
-      },
-      {
-        key: 'autoSleepBrowserSessionsEnabled',
-        subtitle: 'Sleep inactive browser panes after the selected idle period.',
-        title: 'Sleep inactive browser panes',
+        subtitle: 'Choose when inactive Project panes sleep, or turn Auto Sleep off.',
+        title: 'Project Auto Sleep',
       },
       {
         key: 'autoSleepBrowserIdleMinutes',
@@ -161,13 +139,8 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
           label: option.label,
           value: String(option.value),
         })),
-        subtitle: 'Idle time before inactive browser panes sleep.',
-        title: 'Browser idle time',
-      },
-      {
-        key: 'autoSleepAgentSessionsEnabled',
-        subtitle: 'Sleep idle agent terminal sessions automatically.',
-        title: 'Sleep idle agent sessions',
+        subtitle: 'Choose when inactive browser panes sleep, or turn Auto Sleep off.',
+        title: 'Browser Auto Sleep',
       },
       {
         key: 'autoSleepAgentIdleMinutes',
@@ -175,8 +148,8 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
           label: option.label,
           value: String(option.value),
         })),
-        subtitle: 'Idle time before eligible agent terminals sleep.',
-        title: 'Agent idle time',
+        subtitle: 'Choose when eligible agent terminals sleep, or turn Auto Sleep off.',
+        title: 'Agent Auto Sleep',
       },
       {
         key: 'autoSleepRequireAgentResumeCommand',
@@ -231,13 +204,15 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Keep awake for working sessions',
       },
       {
-        key: 'keepAwakeDeactivateBelowBatteryThreshold',
-        subtitle: 'Stop preventing sleep when battery capacity drops below the threshold.',
-        title: 'Deactivate below battery threshold',
-      },
-      {
         key: 'keepAwakeBatteryThresholdPercent',
-        subtitle: 'Battery percentage used by the threshold rule.',
+        options: [
+          { label: 'Off', value: '0' },
+          ...Array.from({ length: 17 }, (_, index) => {
+            const percent = 10 + index * 5;
+            return { label: `${percent}%`, value: String(percent) };
+          }),
+        ],
+        subtitle: 'Stop preventing sleep below this battery level, or turn the rule off.',
         title: 'Battery threshold',
       },
       {
@@ -303,34 +278,6 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         : []
     ),
     sidebar: getSettingsSectionSearch(settingsSearchQuery, 'Sidebar', [
-      /*
-       * CDXC:SidebarV2 2026-07-29:
-       * Sidebar version must be findable by searching for the new Inbox
-       * sidebar, its Classic alternative, or the Group by Project sub-mode.
-       */
-      {
-        key: 'sidebarVersion',
-        options: SIDEBAR_VERSION_OPTIONS,
-        subtitle: 'Choose the classic sidebar or the Inbox sidebar, a flat list of sessions across all projects.',
-        title: 'Sidebar version',
-      },
-      {
-        key: 'sidebarV2Layout',
-        subtitle: 'Group Inbox sidebar sessions into collapsible project groups.',
-        title: 'Group by project',
-      },
-      /*
-       * CDXC:SidebarV2Lifecycle 2026-07-29:
-       * Auto-settle must be findable by searching for "settle", "snooze", or
-       * "inactive", because the visible symptom is a session leaving the inbox.
-       */
-      {
-        key: 'sidebarAutoSettleAfterDays',
-        options: SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS,
-        subtitle:
-          'Move inactive Inbox sidebar sessions to the Settled shelf after this many days. Working and blocked sessions never settle.',
-        title: 'Auto-settle inactive sessions',
-      },
       {
         key: 'sidebarSettingsPreset',
         options: [
@@ -348,6 +295,12 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         options: SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
         subtitle: 'Choose how project groups are marked in the sidebar.',
         title: 'Project group style',
+      },
+      {
+        key: 'sidebarSpacesEnabled',
+        options: SIDEBAR_SPACES_ENABLED_OPTIONS,
+        subtitle: "Show a row of Space filter buttons in each server's sidebar section.",
+        title: 'Spaces',
       },
       {
         key: 'showProjectIcons',
@@ -449,6 +402,11 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Enable session parking',
       },
       {
+        key: 'sleepSessionWhenParking',
+        subtitle: 'Sleep a session automatically when it is moved into the Parked section.',
+        title: 'Sleep session when parking',
+      },
+      {
         key: 'renameSessionOnDoubleClick',
         subtitle: RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_SUBTITLE,
         title: RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_LABEL,
@@ -529,14 +487,9 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
     ]),
     sounds: getSettingsSectionSearch(settingsSearchQuery, 'Sounds', [
       {
-        key: 'completionBellEnabled',
-        subtitle: 'Play a completion sound when work finishes.',
-        title: 'Enable completion bell',
-      },
-      {
         key: 'completionSound',
-        options: COMPLETION_SOUND_OPTIONS,
-        subtitle: 'Sound for terminal completions.',
+        options: [{ label: 'Off', value: 'off' }, ...COMPLETION_SOUND_OPTIONS],
+        subtitle: 'Sound for terminal completions, or Off.',
         title: 'Completion Sound',
       },
       {
@@ -588,12 +541,6 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
     terminal: getSettingsSectionSearch(settingsSearchQuery, 'Terminal', [
       ...(IS_WINDOWS_HOST
         ? [
-            {
-              key: 'windowsTerminalBackend',
-              options: WINDOWS_TERMINAL_BACKEND_OPTIONS,
-              subtitle: 'Windows terminals currently run through WSL2.',
-              title: 'Windows terminal backend',
-            },
             {
               key: 'windowsWslDistribution',
               subtitle:

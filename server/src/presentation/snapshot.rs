@@ -23,12 +23,14 @@ pub fn read_presentation_snapshot(
     );
     insert_delayed_send_presentation_payload(db, &mut snapshot)?;
     insert_session_chat_queue_presentation_payload(&mut snapshot, db);
+    insert_draft_title_presentation_payload(&mut snapshot, db);
     insert_session_agent_note_presentation_payload(&mut snapshot, db);
     insert_stashed_prompt_counts_presentation_payload(&mut snapshot, db);
     insert_auto_settle_window_presentation_payload(&mut snapshot, auto_settle_after_days);
     insert_portless_presentation_payload(&mut snapshot, db);
     insert_workspace_groups_presentation_payload(&mut snapshot, db)?;
     insert_sidebar_project_collections_presentation_payload(&mut snapshot, db)?;
+    insert_sidebar_spaces_presentation_payload(&mut snapshot, db)?;
     Ok(snapshot)
 }
 
@@ -118,8 +120,20 @@ pub fn build_presentation_session_delta(
         project_id,
         session_id,
     );
+    insert_draft_title_session_projection(&mut presentation_session, db, project_id, session_id);
     insert_session_agent_note_session_projection(&mut presentation_session, db);
     insert_stashed_prompt_count_session_projection(&mut presentation_session, db);
+    /*
+    CDXC:SessionForkFamilies 2026-08-28:
+    A delta must carry the branch shape too, or the first update after a fork
+    would silently strip the badge the snapshot had just published. The family
+    derivation needs the whole registry, which is one indexed read of the same
+    table the snapshot pass already walks.
+    */
+    if let Some(output) = presentation_session.as_object_mut() {
+        SessionForkFamilies::build(&repository.list_sessions(None)?)
+            .insert_fork_fields(session_id, output);
+    }
     Ok(json!({
         "session": presentation_session,
         "type": "sessionPresentationChanged",
@@ -181,6 +195,14 @@ pub(crate) fn project_snapshot(
     sidebar_v2_selected: bool,
 ) -> Value {
     let generated_at = now_iso();
+    /*
+    CDXC:SessionForkFamilies 2026-08-28:
+    Derived once over every registry row, then stamped onto each projected
+    session, so live sidebar cards carry the same branch shape the Previous
+    Sessions list publishes instead of learning about forks only after a row
+    closes.
+    */
+    let families = SessionForkFamilies::build(&sessions);
     let mut projects_sorted = projects;
     projects_sorted.sort_by_key(project_sort_key);
     let mut presentation_projects = Vec::new();
@@ -211,7 +233,15 @@ pub(crate) fn project_snapshot(
         let project_presentation_sessions = project_sessions
             .into_iter()
             .map(|session| {
-                project_presentation_session(&project, &group_id, &session, &generated_at)
+                let mut presentation_session =
+                    project_presentation_session(&project, &group_id, &session, &generated_at);
+                if let (Some(output), Some(session_id)) = (
+                    presentation_session.as_object_mut(),
+                    string_field(&session, "sessionId"),
+                ) {
+                    families.insert_fork_fields(&session_id, output);
+                }
+                presentation_session
             })
             .collect::<Vec<_>>();
         groups.push(json!({
@@ -276,6 +306,15 @@ pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
         "sessionGitStatus": sidebar_v2_selected,
         "sessionSettlement": true,
         "sessionSnooze": true,
+        /*
+        CDXC:SidebarSpaces 2026-08-27:
+        `spaces` promises `/api/readSidebarSpaces` and `/api/updateSidebarSpaces`
+        exist on this machine, so a client can render this daemon's Space row and
+        its Spaces context submenu instead of failing those calls on an older
+        daemon. A daemon without the flag has no Spaces at all, and its section
+        shows the built-in All Projects view only.
+        */
+        "spaces": true,
         /*
         CDXC:SidebarV2Worktrees 2026-07-29-00:00:
         `worktreeSessions` promises `/api/createWorktreeSession` and

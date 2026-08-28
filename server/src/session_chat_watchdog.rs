@@ -135,9 +135,6 @@ pub struct SessionChatSendProbe {
     /// the rollout lazily); the watchdog re-resolves it every tick.
     transcript_path: Option<PathBuf>,
     transcript_offset: u64,
-    /// Hook activity at send time. A turn that was already running when the
-    /// message was typed explains a silent transcript without any failure.
-    working_at_send: bool,
     /*
     CDXC:SessionChatTerminalNotices 2026-08-20:
     What the CLI itself swallows instead of sending to the model, if anything.
@@ -153,6 +150,9 @@ pub struct SessionChatSendProbe {
     suppression for the guess-based verdicts in `escalate_undelivered_send`.
     */
     intercepted: Option<InterceptedInput>,
+    /// Wall-clock send time, for the deadline's last-chance scan: only a
+    /// transcript file written after this instant can testify about the send.
+    sent_at: std::time::SystemTime,
     text: String,
 }
 
@@ -160,7 +160,6 @@ impl SessionChatSendProbe {
     /// `None` disables the watchdog for this send: only the catalogued agents
     /// (claude/openclaude/codex) have verified transcript-write semantics, and
     /// an image-only send has no text to look for.
-    #[allow(clippy::too_many_arguments)]
     pub async fn sample(
         project_id: &str,
         session_id: &str,
@@ -168,7 +167,6 @@ impl SessionChatSendProbe {
         agent: Option<&str>,
         agent_session_id: Option<&str>,
         agent_session_path: Option<&str>,
-        working_at_send: bool,
         text: &str,
     ) -> Option<Self> {
         if session_chat_option_agent(agent).is_none() {
@@ -213,8 +211,8 @@ impl SessionChatSendProbe {
             agent_session_path: agent_session_path.map(str::to_string),
             transcript_path,
             transcript_offset,
-            working_at_send,
             intercepted: InterceptedInput::detect(text),
+            sent_at: std::time::SystemTime::now(),
             text: text.to_string(),
         })
     }
@@ -510,12 +508,16 @@ worse than a missed one:
      screen detector on the next read, which does not need the watchdog.
   3. Clean screen: consult Claude's own session registry before blaming the
      process.
-  4. A turn was already running when the message was typed and is still running
-     — normal, stay silent. (Silence only, and NOT for `MismatchedInput`: there
-     the running turn is the one the mismatched input started, so reading it as
-     an innocent explanation is exactly what swallowed this alarm before.)
-  5. Otherwise the honest verdict: nothing proves the message arrived — or, for
-     `MismatchedInput`, positive proof that something else was submitted.
+  4. The agent is working at the deadline — normal, stay silent: either the
+     turn that was already running is holding the input queued, or the send
+     itself started the turn. (Silence only, and NOT for `MismatchedInput`:
+     there the running turn is the one the mismatched input started, so reading
+     it as an innocent explanation is exactly what swallowed this alarm before.)
+  5. Otherwise the honest verdict — after one last-chance scan of freshly
+     re-resolved transcript candidates, which clears a send whose watched file
+     rotated out from under the watchdog: nothing proves the message arrived
+     (a WARNING suggestion, not an error) — or, for `MismatchedInput`, positive
+     proof that something else was submitted.
 */
 async fn escalate_undelivered_send(
     probe: &SessionChatSendProbe,
@@ -618,11 +620,16 @@ async fn escalate_undelivered_send(
 
     if typed_into_terminal {
         /*
-        Typed into a running turn that is still running, with a clean screen and
-        a live agent: the transcript is silent for a reason that is not a
-        failure — the input is queued behind the turn that was already going
-        when it was typed (the Codex queue banner above is the same story with a
-        visible witness).
+        The agent is working at the deadline, with a clean screen and a live
+        process: the silent transcript has an innocent explanation either way.
+        A turn that was already running when the message was typed is holding
+        the input queued behind it (the Codex queue banner above is the same
+        story with a visible witness); a turn that STARTED after the send is
+        the send itself being processed, because the only submission recorded
+        since the send is ours-or-nothing — a different one would have produced
+        `MismatchedInput` above. The started-after case used to alarm (the old
+        rule also required hook activity at send time), which fired falsely
+        whenever the watched transcript file had gone stale under the watchdog.
 
         CDXC:SessionChatTerminalNotices 2026-08-24: `MismatchedInput` is
         excluded, and that exclusion is the whole fix. There the transcript
@@ -631,7 +638,7 @@ async fn escalate_undelivered_send(
         Treating it as an innocent explanation is what let an empty submit lose
         a message with no notice at all.
         */
-        if reasoning_from_silence && probe.working_at_send && live.working {
+        if reasoning_from_silence && live.working {
             return;
         }
         /*
@@ -659,6 +666,18 @@ async fn escalate_undelivered_send(
         if probe.intercepted.is_some() {
             return;
         }
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-28:
+        Last chance before alarming from silence: re-resolve the transcript and
+        scan the tail of every candidate file written since the send. The poll
+        loop watches ONE path resolved at send time, and that path can go stale
+        under it — Codex rotates its rollout, a recorded agentSessionPath
+        outlives the file it named — after which every poll reads a file the
+        agent no longer writes and a perfectly delivered message looks silent.
+        */
+        if reasoning_from_silence && delivered_elsewhere_at_deadline(probe).await {
+            return;
+        }
     }
 
     let notice = match reason {
@@ -667,27 +686,34 @@ async fn escalate_undelivered_send(
         UndeliveredSendReason::MismatchedInput { submitted_empty } => {
             session_chat_delivery_mismatch_notice(submitted_empty, screen_tail)
         }
-        UndeliveredSendReason::TranscriptSilent | UndeliveredSendReason::WriteFailed => {
-            SessionChatTerminalNotice::new(
-                SESSION_CHAT_NOTICE_DELIVERY_FAILED,
-                SessionChatTerminalNoticeSeverity::Error,
-                SessionChatTerminalNoticeSource::Watchdog,
-                match reason {
-                    UndeliveredSendReason::WriteFailed => {
-                        "Your message could not be sent to the agent"
-                    }
-                    _ => "Your message did not reach the agent",
-                },
-            )
-            .with_detail(match reason {
-                UndeliveredSendReason::WriteFailed => "This session's terminal did not respond while the message was being typed into it, so the message was never delivered to the agent. Open the terminal to see what it is showing.",
-                _ => "Nothing was written to the session transcript in the 10 seconds after this message was sent, so it most likely never reached the agent. Open the terminal to see what it is showing.",
-            })
-            .with_screen_tail(screen_tail)
-            .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
-                "Open terminal",
-            )])
-        }
+        /*
+        CDXC:SessionChatTerminalNotices 2026-08-28: this verdict rests on
+        NOT having observed something, so it is a suggestion, not a failure:
+        a yellow "go make sure" card, never a red alarm. The red card is
+        reserved for the two verdicts above/below with affirmative evidence.
+        */
+        UndeliveredSendReason::TranscriptSilent => SessionChatTerminalNotice::new(
+            SESSION_CHAT_NOTICE_DELIVERY_FAILED,
+            SessionChatTerminalNoticeSeverity::Warning,
+            SessionChatTerminalNoticeSource::Watchdog,
+            "Your message might not have reached the agent",
+        )
+        .with_detail("Nothing was recorded in the session transcript in the 10 seconds after this message was sent, so delivery could not be confirmed. Open the terminal to make sure it arrived.")
+        .with_screen_tail(screen_tail)
+        .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+            "Open terminal",
+        )]),
+        UndeliveredSendReason::WriteFailed => SessionChatTerminalNotice::new(
+            SESSION_CHAT_NOTICE_DELIVERY_FAILED,
+            SessionChatTerminalNoticeSeverity::Error,
+            SessionChatTerminalNoticeSource::Watchdog,
+            "Your message could not be sent to the agent",
+        )
+        .with_detail("This session's terminal did not respond while the message was being typed into it, so the message was never delivered to the agent. Open the terminal to see what it is showing.")
+        .with_screen_tail(screen_tail)
+        .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+            "Open terminal",
+        )]),
     };
     publish_watchdog_notice(probe, notice, publish);
 }
@@ -705,6 +731,96 @@ fn undelivered_prefix(reason: UndeliveredSendReason) -> &'static str {
             "Your message could not be typed into this session's terminal — this is what it is showing instead."
         }
     }
+}
+
+/*
+CDXC:SessionChatTerminalNotices 2026-08-28:
+Deadline-time delivery proof that does not trust the send-time path. Resolution
+runs twice — once as the send did (recorded path first) and once by session id
+alone — so a stale recorded path cannot mask the live file the id sweep finds.
+Every candidate written since the send gets its tail scanned for the message,
+both as raw JSON-escaped bytes and as decoded composer submissions (which is
+what covers a send too short for the raw scan). A hit means the message IS in
+a transcript the agent is writing, so the alarm would be a lie; the residual
+risk — an identical earlier message in the same tail masking a real loss — is
+the cheap side of "a false 'your message was lost' is worse than a missed one".
+*/
+async fn delivered_elsewhere_at_deadline(probe: &SessionChatSendProbe) -> bool {
+    let transcript_agent = probe.transcript_agent;
+    let agent_session_id = probe.agent_session_id.clone();
+    let agent_session_path = probe.agent_session_path.clone();
+    let text = probe.text.clone();
+    let sent_at = probe.sent_at;
+    tokio::task::spawn_blocking(move || {
+        transcript_tail_proves_delivery(
+            transcript_agent,
+            agent_session_id.as_deref(),
+            agent_session_path.as_deref(),
+            &text,
+            sent_at,
+        )
+    })
+    .await
+    .unwrap_or(false)
+}
+
+/// BLOCKING (filesystem walk + bounded tail reads).
+fn transcript_tail_proves_delivery(
+    agent: SessionChatTranscriptAgent,
+    agent_session_id: Option<&str>,
+    agent_session_path: Option<&str>,
+    text: &str,
+    sent_at: std::time::SystemTime,
+) -> bool {
+    let needle = normalize_watchdog_text(text);
+    if needle.is_empty() {
+        return false;
+    }
+    let raw_needles: Vec<String> = json_escaped_needle(text).into_iter().collect();
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    for path in [
+        resolve_session_chat_transcript_path(agent, agent_session_id, agent_session_path),
+        // Session-id sweep with the recorded path ignored: this is the lookup
+        // that finds the newest live file after a rotation.
+        resolve_session_chat_transcript_path(agent, agent_session_id, None),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !candidates.contains(&path) {
+            candidates.push(path);
+        }
+    }
+    for path in candidates {
+        let Ok(metadata) = std::fs::metadata(&path) else {
+            continue;
+        };
+        // Only a file the agent wrote AFTER the send can testify about it.
+        if !metadata
+            .modified()
+            .is_ok_and(|modified| modified >= sent_at)
+        {
+            continue;
+        }
+        let offset = metadata.len().saturating_sub(WATCHDOG_RAW_SCAN_LIMIT_BYTES);
+        let Some(tail) = read_appended_text(&path, offset, WATCHDOG_RAW_SCAN_LIMIT_BYTES) else {
+            continue;
+        };
+        if raw_needles.iter().any(|raw| tail.contains(raw)) {
+            return true;
+        }
+        // The first line of a mid-file tail is truncated; its parse just fails.
+        for line in tail.lines() {
+            if let Some(WatchdogRecord::UserSubmission(submitted)) =
+                classify_watchdog_record(agent, line)
+            {
+                if watchdog_text_matches(&submitted, &needle) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// Stores the verdict and pushes a frame only when it actually says something

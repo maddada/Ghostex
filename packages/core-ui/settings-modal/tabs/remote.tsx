@@ -11,6 +11,7 @@ import {
   PopoverTrigger,
 } from '@/packages/components/ui/popover';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
+import { Switch } from '@/packages/components/ui/switch';
 import {
   IconDeviceDesktop,
   IconDownload,
@@ -35,6 +36,7 @@ export type RemoteMachineDraft = {
   sshPort: string;
   sshUser: string;
   wslDistribution: string;
+  disabled: boolean;
 };
 
 export const REMOTE_GXSERVER_INSTALL_PROBE_DEBOUNCE_MS = 600;
@@ -50,6 +52,7 @@ export function createRemoteMachineDraft(): RemoteMachineDraft {
     sshPort: '',
     sshUser: '',
     wslDistribution: '',
+    disabled: false,
   };
 }
 
@@ -67,6 +70,7 @@ export function createRemoteMachineDraftFromSettings(
     sshPort: machine.sshPort ? String(machine.sshPort) : '',
     sshUser: machine.sshUser ?? '',
     wslDistribution: machine.wslDistribution ?? '',
+    disabled: machine.disabled === true,
   };
 }
 
@@ -84,6 +88,7 @@ export function applyRemoteMachineDraftPatch(
     sshPort: patch.sshPort !== undefined ? patch.sshPort : draft.sshPort,
     sshUser: patch.sshUser !== undefined ? patch.sshUser : draft.sshUser,
     wslDistribution: patch.wslDistribution !== undefined ? patch.wslDistribution : draft.wslDistribution,
+    disabled: patch.disabled !== undefined ? patch.disabled : draft.disabled,
   };
 }
 
@@ -275,6 +280,7 @@ export function RemoteSettingsTab({
       sshPort: patch.sshPort,
       sshUser: patch.sshUser,
       wslDistribution: patch.wslDistribution,
+      disabled: patch.disabled,
     };
     if (Object.values(settingsPatch).every((value) => value === undefined)) {
       return;
@@ -394,7 +400,10 @@ export function RemoteSettingsTab({
         <header className='settings-management-header'>
           <div className='settings-management-header-text'>
             <h3 className='settings-management-heading'>Remote machines</h3>
-            <p className='settings-management-description'>Saved SSH machines appear as separate sidebar sections.</p>
+            <p className='settings-management-description'>
+              Saved SSH machines appear as separate sidebar sections. Hide a machine from the sidebar without deleting
+              it.
+            </p>
           </div>
           <Popover onOpenChange={setIsTailscaleHelpOpen} open={isTailscaleHelpOpen}>
             <PopoverTrigger
@@ -525,6 +534,7 @@ export function RemoteSettingsTab({
                       onChange={(patch) => updateRemoteMachine(machine.id, patch)}
                       onPasswordSave={() => saveRemoteMachinePassword(machine)}
                       passwordSaveDisabled={!vscode}
+                      showSidebarVisibility
                     />
                     {/*
                      * CDXC:RemoteMachines 2026-06-23-08:30:
@@ -578,6 +588,7 @@ export function RemoteMachineFields({
   onPasswordSave,
   passwordSaveDisabled = false,
   passwordDescription,
+  showSidebarVisibility = false,
 }: {
   draft: RemoteMachineDraft;
   identityDescription?: string;
@@ -585,12 +596,31 @@ export function RemoteMachineFields({
   onPasswordSave?: () => void;
   passwordSaveDisabled?: boolean;
   passwordDescription?: string;
+  showSidebarVisibility?: boolean;
 }) {
   const showPasswordSaveButton = typeof onPasswordSave === 'function';
   const canSavePassword =
     !passwordSaveDisabled && showPasswordSaveButton && (draft.sshPassword.trim().length > 0 || draft.sshPasswordSaved);
   return (
     <FieldGroup className='settings-remote-machine-fields'>
+      {showSidebarVisibility ? (
+        <Field
+          className='settings-remote-machine-field settings-remote-machine-sidebar-visibility'
+          orientation='horizontal'
+        >
+          <div className='min-w-0 flex-1'>
+            <FieldLabel className='settings-remote-machine-field-label'>Show in sidebar</FieldLabel>
+            <FieldDescription className='settings-remote-machine-field-description'>
+              Turn off to hide this machine from the sidebar without deleting it.
+            </FieldDescription>
+          </div>
+          <Switch
+            aria-label='Show remote machine in the sidebar'
+            checked={!draft.disabled}
+            onCheckedChange={(checked) => onChange({ disabled: !checked })}
+          />
+        </Field>
+      ) : null}
       <Field className='settings-remote-machine-field'>
         <FieldLabel className='settings-remote-machine-field-label'>Name</FieldLabel>
         <SettingsInput
@@ -732,6 +762,7 @@ export function normalizeRemoteMachineDraft(
       sshPort: draft.sshPort ? Number(draft.sshPort) : undefined,
       sshUser: draft.sshUser,
       wslDistribution,
+      disabled: draft.disabled,
     },
   ])[0];
 }

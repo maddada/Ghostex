@@ -217,22 +217,31 @@ pub(crate) const WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghoste
 pub(crate) const WEBKIT_NATIVE_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghostexNativeHost";
 pub(crate) const WEBKIT_POST_MESSAGE_JS_FUNCTION: &str = "postMessage";
 
+/*
+CDXC:GPUIExtensionRemoteUrlSurface 2026-08-28:
+An extension surface spec pins the one origin+path prefix a given extension's
+CEF surface is allowed to be, and whether that surface gets the extension
+bridge. `new` builds the first-party case: gxserver's static `/ext/{id}/`
+bundle or the extension's own loopback command server, both of which are
+extension-shipped code and do get the bridge. `new_remote` builds a
+`server.url` extension's surface: a third-party HTTPS origin nobody in this
+process serves or verifies, so `bridge_enabled` is false and the browser never
+sends the install message, never installs `ghostexExtensionHost` or
+`window.ghostex`, drops inbound bridge messages, and refuses to dispatch
+outbound context to the page. The origin still pins the surface so a remote
+page cannot navigate itself into a bridged origin and inherit the bridge.
+*/
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtensionBridgeSurfaceSpec {
     pub id: String,
     pub origin: String,
     pub path_prefix: String,
+    pub bridge_enabled: bool,
 }
 
 impl ExtensionBridgeSurfaceSpec {
     pub fn new(id: String, origin: String, path_prefix: String) -> Result<Self, String> {
-        if id.is_empty()
-            || !id
-                .bytes()
-                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-        {
-            return Err("extension bridge id must be kebab-case".to_string());
-        }
+        let id = validated_extension_bridge_id(id)?;
         let origin = origin.trim_end_matches('/').to_string();
         if !is_loopback_http_origin(&origin) {
             return Err("extension bridge origin must be loopback HTTP".to_string());
@@ -248,6 +257,23 @@ impl ExtensionBridgeSurfaceSpec {
             id,
             origin,
             path_prefix,
+            bridge_enabled: true,
+        })
+    }
+
+    pub fn new_remote(id: String, origin: String) -> Result<Self, String> {
+        let id = validated_extension_bridge_id(id)?;
+        let origin = origin.trim_end_matches('/').to_string();
+        if !is_remote_https_origin(&origin) {
+            return Err("extension remote surface origin must be HTTPS".to_string());
+        }
+        Ok(Self {
+            id,
+            origin,
+            // The user navigates inside the remote site, so every path under
+            // the pinned origin belongs to this surface.
+            path_prefix: "/".to_string(),
+            bridge_enabled: false,
         })
     }
 
@@ -255,9 +281,14 @@ impl ExtensionBridgeSurfaceSpec {
         let Some(base) = url.split(['?', '#']).next() else {
             return false;
         };
-        let Some(path) = base.strip_prefix(&self.origin) else {
+        // Scheme and host are case-insensitive, and CEF hands back frame URLs
+        // with both lowercased regardless of how the manifest spelled them.
+        let Some((candidate_origin, path)) = base.split_at_checked(self.origin.len()) else {
             return false;
         };
+        if !candidate_origin.eq_ignore_ascii_case(&self.origin) {
+            return false;
+        }
         let path = if path.is_empty() { "/" } else { path };
         path.starts_with(&self.path_prefix)
             && (self.path_prefix.ends_with('/')
@@ -266,11 +297,30 @@ impl ExtensionBridgeSurfaceSpec {
     }
 }
 
+fn validated_extension_bridge_id(id: String) -> Result<String, String> {
+    if id.is_empty()
+        || !id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err("extension bridge id must be kebab-case".to_string());
+    }
+    Ok(id)
+}
+
 fn is_loopback_http_origin(origin: &str) -> bool {
     let Some(port) = origin.strip_prefix("http://127.0.0.1:") else {
         return false;
     };
     port.parse::<u16>().is_ok_and(|port| port != 0)
+}
+
+fn is_remote_https_origin(origin: &str) -> bool {
+    let Some(authority) = origin.strip_prefix("https://") else {
+        return false;
+    };
+    !authority.is_empty()
+        && !authority.contains(['/', '?', '#', '@', '\\', ' ', '\t', '\n', '\r', '"', '\''])
 }
 
 pub(crate) const EXTENSION_BRIDGE_RUNTIME_SHIM: &str = r#"

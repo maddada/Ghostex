@@ -145,6 +145,13 @@ pub(crate) fn create_agent_session_params_for_project(
             runtime_settings.remove(FIRST_USER_INPUT_DRAFT_STATUS_KEY);
         }
     }
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    Arm the draft marker in the same place the first-input draft above is armed,
+    and for the same reason: only a session created as a draft can ever be one.
+    See `agents/drafts.rs` for what the marker means and where it is removed.
+    */
+    apply_draft_session_create_param(params, &mut runtime_settings);
 
     let mut runtime_relevant = Map::new();
     if let Some(deadline_at) = launch_plan_object

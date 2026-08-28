@@ -1,5 +1,24 @@
 # Changelog
 
+## 8.2.0 - 2026-08-28
+
+- Major
+  - Spaces let you organize projects into named working sets and filter each local or remote gxserver independently, while machine tabs make it quick to move between this computer and connected machines without losing each machine's selected Space.
+  - New agent sessions can begin as durable drafts: choose the agent, model, effort, view, and first prompt before Ghostex launches a terminal, then recover the draft across desktop, web, and Android after navigation, reconnects, or crashes.
+  - Forked conversations now appear as a family across Session Chat and Previous Sessions, with branch badges and an in-chat switcher that follows successor sessions without losing the shared transcript.
+  - Arch Linux users now get an official, hash-verified `ghostex-8.2.0-linux-x64.tar.zst` package alongside the DEB and RPM downloads; its prefix-preserving layout installs Ghostex under `/opt` with the `ghostex` and `gx` commands on `PATH`.
+- Minor
+  - Session Chat preserves atomic file references in Monaco, keeps synced drafts until delivery is confirmed, restores unsent Saved Prompt drafts, shows clearer terminal readiness and refusal feedback, and presents compaction summaries and file-open paths more clearly.
+  - Agent and remote-machine settings are simpler to scan and configure, terminal width can apply to command panes, and sidebar tooltip delay is adjustable down to instant display.
+  - Docs can delete folders, style supported documents, and include temporary project files that were previously hidden.
+  - Quick Access includes already-open projects and offers direct Close and Remove actions, while sidebar grouping, active-session state, and empty states stay consistent across local and remote sections.
+  - Export Transcript is now Handoff, with a clearer agent action bar and shortcuts for carrying a session into another agent or conversation.
+  - Extensions can open approved remote URL surfaces while preserving the extension host's launch, consent, and bridge boundaries.
+  - Quitting the desktop app can shut down the full Ghostex service stack, including gxserver and its managed sessions, when you explicitly choose that option.
+  - Usage analytics now has a complete public field inventory, immediate opt-out controls, and clear disclosure of the one-way hashed identity used to group a person's own machines; retired sidebar-layout dimensions are no longer reported.
+  - Titlebar dropdowns keep their final row visible and return focus reliably, empty command-pane titlebars explain their controls, and action tooltips keep their intended spacing and hit area.
+  - Android preserves sent drafts across navigation, adds a default agent-view preference, and uses the same Handoff terminology as the desktop and web apps.
+
 ## 8.1.0 - 2026-08-27
 
 - Major

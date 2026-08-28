@@ -68,6 +68,8 @@ pub struct ExtensionServer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub readiness: Option<ExtensionReadiness>,
@@ -434,8 +436,8 @@ impl ExtensionManifest {
                         "A web extension requires server.",
                     ));
                 };
-                match (&server.static_dir, &server.command) {
-                    (Some(static_dir), None) => {
+                match (&server.static_dir, &server.command, &server.url) {
+                    (Some(static_dir), None, None) => {
                         validate_relative_path(static_dir, "server.static")?;
                         if server.readiness.is_some()
                             || server.cwd.is_some()
@@ -446,7 +448,18 @@ impl ExtensionManifest {
                             ));
                         }
                     }
-                    (None, Some(command)) if !command.trim().is_empty() => {
+                    (None, None, Some(url)) => {
+                        validate_remote_server_url(url)?;
+                        if server.readiness.is_some()
+                            || server.cwd.is_some()
+                            || !server.install.is_empty()
+                        {
+                            return Err(ExtensionError::bad_request(
+                                "A URL server cannot declare command-server fields.",
+                            ));
+                        }
+                    }
+                    (None, Some(command), None) if !command.trim().is_empty() => {
                         let readiness = server.readiness.as_ref().ok_or_else(|| {
                             ExtensionError::bad_request(
                                 "A command server requires readiness.httpGet.",
@@ -469,7 +482,7 @@ impl ExtensionManifest {
                     }
                     _ => {
                         return Err(ExtensionError::bad_request(
-                            "server must declare exactly one of static or command.",
+                            "server must declare exactly one of static, command, or url.",
                         ));
                     }
                 }
@@ -620,6 +633,42 @@ fn valid_semver_identifiers(value: &str, reject_numeric_leading_zero: bool) -> b
                     || identifier == "0"
                     || !identifier.starts_with('0'))
         })
+}
+
+/*
+A `server.url` extension hosts a web page gxserver never starts, serves, or
+verifies, so the manifest URL is the whole trust boundary: it must be absolute,
+carry no embedded credentials, and be transport-encrypted. Plain HTTP is
+accepted only for loopback hosts, where there is no network to intercept.
+*/
+fn validate_remote_server_url(value: &str) -> ExtensionResult<()> {
+    let url = url::Url::parse(value).map_err(|_| {
+        ExtensionError::bad_request(format!(
+            "Extension server.url must be an absolute URL: {value}"
+        ))
+    })?;
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(ExtensionError::bad_request(
+            "Extension server.url must not embed credentials.",
+        ));
+    }
+    let host_is_loopback = match url.host() {
+        Some(url::Host::Domain(domain)) => domain.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => {
+            return Err(ExtensionError::bad_request(
+                "Extension server.url must name a host.",
+            ))
+        }
+    };
+    if url.scheme() == "https" || (url.scheme() == "http" && host_is_loopback) {
+        Ok(())
+    } else {
+        Err(ExtensionError::bad_request(
+            "Extension server.url must use https, except for loopback hosts.",
+        ))
+    }
 }
 
 fn validate_relative_path(value: &str, field: &str) -> ExtensionResult<()> {

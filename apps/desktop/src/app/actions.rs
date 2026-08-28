@@ -67,6 +67,7 @@ gpui::actions!(
         HideGhostexGpuiOthers,
         ShowAllGhostexGpuiApps,
         QuitGhostexGpui,
+        QuitGhostexGpuiAndBackgroundServices,
         MinimizeGhostexGpuiWindow,
         ZoomGhostexGpuiWindow,
         GpuiEditMenuCut,

@@ -5,6 +5,7 @@ import {
   IconEyeOff,
   IconFileExport,
   IconGitBranch,
+  IconListDetails,
   IconMaximize,
   IconMinimize,
   IconNote,
@@ -15,7 +16,7 @@ import {
   IconTerminal2,
   type Icon as TablerIcon,
 } from '@tabler/icons-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Button } from '../../components/ui/button';
 import {
   DropdownMenu,
@@ -29,8 +30,12 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import { cn } from '@/packages/components/utils';
+import type { GxserverReadSessionTerminalTailResult } from '@/packages/shared/gxserver-protocol';
 import { AppTooltip } from '../app-tooltip';
+import { formatSidebarHotkeyLabel } from '../hotkey-label';
 import type { SessionChatHostAction, SessionChatHostActions } from './session-chat-host-actions';
+import { sessionChatSummaryToggleHotkey } from './session-chat-summary-override';
+import { formatSessionTerminalTailPreview, useSessionTerminalTail } from './use-session-terminal-tail';
 
 /**
  * Host actions intentionally excluded from the dots menu. Most already render
@@ -81,14 +86,22 @@ interface SessionChatComposerActionsProps {
   maximized: boolean;
   onAttach?: () => void;
   onDelayedActions?: () => void;
+  /**
+   * Session-scoped terminal tail read. Drives the Terminal View button's
+   * readiness tint and its hover preview; hosts whose transport has no route to
+   * /api/readSessionTerminalTail omit it and the button stays neutral.
+   */
+  onReadTerminalTail?: () => Promise<GxserverReadSessionTerminalTailResult>;
   onSessionNote?: () => void;
   onShowStashedPrompts?: () => void;
   onStash?: () => void;
   onToggleMaximized: () => void;
+  onToggleSummary?: () => void;
   onToggleVerbose?: () => void;
   sessionNoteActive: boolean;
   sessionNoteHasText: boolean;
   stashedPromptCount: number;
+  summaryMode: boolean;
   verboseMode: boolean;
 }
 
@@ -99,14 +112,17 @@ export function SessionChatComposerActions({
   maximized,
   onAttach,
   onDelayedActions,
+  onReadTerminalTail,
   onSessionNote,
   onShowStashedPrompts,
   onStash,
   onToggleMaximized,
+  onToggleSummary,
   onToggleVerbose,
   sessionNoteActive,
   sessionNoteHasText,
   stashedPromptCount,
+  summaryMode,
   verboseMode,
 }: SessionChatComposerActionsProps) {
   /*
@@ -120,15 +136,30 @@ export function SessionChatComposerActions({
     hostActions?.actions?.find((action) => action.id === id)?.shortcut;
   const withShortcut = (label: string, shortcut?: string): string => (shortcut ? `${label} (${shortcut})` : label);
 
-  const stashOpensSavedPrompts = !hasSendableDraft && onShowStashedPrompts !== undefined;
-  const stashLabel = stashOpensSavedPrompts
-    ? `View stashed prompts${stashedPromptCount > 0 ? ` (${stashedPromptCount})` : ''}`
-    : 'Stash prompt';
-  const stashTooltip = withShortcut(
-    stashLabel,
-    hostActionShortcut(stashOpensSavedPrompts ? 'stashedPrompts' : 'stashPrompt')
-  );
-  const stashMenuLabel = stashOpensSavedPrompts ? 'View stashed' : 'Stash prompt';
+  const stashLabel = 'Stash prompt';
+  const stashTooltip = [
+    withShortcut(stashLabel, hostActionShortcut('stashPrompt')),
+    ...(onShowStashedPrompts
+      ? [withShortcut('Right-click to open Saved prompts', hostActionShortcut('stashedPrompts'))]
+      : []),
+  ].join('\n');
+  const stashCurrentPrompt = () => {
+    if (!hasSendableDraft) {
+      onShowStashedPrompts?.();
+      return;
+    }
+    if (!disabled) {
+      onStash?.();
+    }
+  };
+  const openSavedPromptsFromContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
+    if (!onShowStashedPrompts) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onShowStashedPrompts();
+  };
   const maximizeLabel = maximized ? 'Exit maximize' : 'Maximize';
   const verboseLabel = verboseMode ? 'Verbose mode on' : 'Verbose mode off';
   const VerboseIcon = verboseMode ? IconEyeFilled : IconEyeOff;
@@ -197,10 +228,11 @@ export function SessionChatComposerActions({
   const agentHostActions = foldedHostActions.filter((action) => AGENT_HOST_ACTION_IDS.has(action.id));
   const otherHostActions = foldedHostActions.filter((action) => !AGENT_HOST_ACTION_IDS.has(action.id));
 
-  // Verbose and Delayed actions live only inside the dots menu, on every
-  // footer width, so both menus share these items.
+  // Chat presentation toggles and Delayed actions live only inside the dots
+  // menu, on every footer width, so both menus share these items.
   const verboseMenuItem = onToggleVerbose ? (
     <DropdownMenuCheckboxItem
+      className='whitespace-nowrap'
       checked={verboseMode}
       closeOnClick={false}
       onCheckedChange={(checked: boolean) => {
@@ -213,9 +245,26 @@ export function SessionChatComposerActions({
       Verbose mode
     </DropdownMenuCheckboxItem>
   ) : null;
+  const summaryMenuItem = onToggleSummary ? (
+    <DropdownMenuCheckboxItem
+      className='whitespace-nowrap'
+      checked={summaryMode}
+      closeOnClick={false}
+      onCheckedChange={(checked: boolean) => {
+        if (checked !== summaryMode) {
+          onToggleSummary();
+        }
+      }}
+    >
+      <IconListDetails aria-hidden='true' />
+      Summary mode
+      <DropdownMenuShortcut>{formatSidebarHotkeyLabel(sessionChatSummaryToggleHotkey())}</DropdownMenuShortcut>
+    </DropdownMenuCheckboxItem>
+  ) : null;
   const delayedActionsMenuItem =
     onDelayedActions || delayedHostAction ? (
       <DropdownMenuItem
+        className='whitespace-nowrap'
         disabled={onDelayedActions ? disabled : false}
         onClick={onDelayedActions ?? (delayedHostAction ? () => runHostAction(delayedHostAction) : undefined)}
       >
@@ -227,7 +276,7 @@ export function SessionChatComposerActions({
   const stashCountBadge =
     stashedPromptCount > 0 ? (
       <span aria-hidden='true' className='ghostex-chat-stash-count-badge'>
-        {stashedPromptCount > 99 ? '99+' : stashedPromptCount}
+        {Math.min(stashedPromptCount, 9)}
       </span>
     ) : null;
 
@@ -259,18 +308,56 @@ export function SessionChatComposerActions({
       ) : null}
     </>
   );
-  const hasBaseMenuItems = verboseMenuItem !== null || delayedActionsMenuItem !== null;
+  const hasBaseMenuItems = verboseMenuItem !== null || summaryMenuItem !== null || delayedActionsMenuItem !== null;
   const hasExpandedMenu = hasBaseMenuItems || agentMenuSection !== null || otherHostMenuSection !== null;
 
+  /*
+  CDXC:ComposerTerminalReadiness 2026-08-28:
+  The Terminal View button doubles as the composer's readiness light. Its tint
+  comes from the polled terminal tail (use-session-terminal-tail.ts) and only
+  ever takes a color for a *measured* verdict: `unknown`, an uncaptured screen,
+  a host without the endpoint, and the moments before the first read all keep
+  the neutral footer color, because the daemon fails open on `unknown` and a
+  red button there would accuse a session that sends fine.
+
+  Hovering reads again before the tooltip's open delay elapses, so the excerpt
+  shows the screen as it is now rather than up to one poll ago.
+  */
+  const { refreshNow: refreshTerminalTail, tail: terminalTail } = useSessionTerminalTail(onReadTerminalTail);
+  const terminalReadiness =
+    terminalTail?.captured && terminalTail.composerState !== 'unknown' ? terminalTail.composerState : null;
+  const terminalTailPreview =
+    terminalTail?.captured === true ? formatSessionTerminalTailPreview(terminalTail.lines) : '';
+  const switchViewTitle = withShortcut('Terminal View', hostActions?.switchViewShortcut);
+  const switchViewNotReadyReason = terminalReadiness === 'notReady' ? (terminalTail?.reason ?? null) : null;
+  const switchViewTooltip: ReactNode =
+    terminalTailPreview.length > 0 ? (
+      <div className='flex min-w-0 flex-col gap-1.5'>
+        <div>{switchViewTitle}</div>
+        {switchViewNotReadyReason ? <div className='opacity-70'>{switchViewNotReadyReason}</div> : null}
+        {/* Clipped, never scrolled: the tooltip is pointer-events-none, so a
+            scrollbar in here would be unreachable. */}
+        <pre className='max-w-full overflow-hidden font-mono text-[10px] leading-[1.5] whitespace-pre opacity-85'>
+          {terminalTailPreview}
+        </pre>
+      </div>
+    ) : (
+      switchViewTitle
+    );
+
   const switchViewButton = hostActions ? (
-    <AppTooltip content={withShortcut('Terminal View', hostActions.switchViewShortcut)}>
-      <span className='inline-flex'>
+    <AppTooltip
+      content={switchViewTooltip}
+      {...(terminalTailPreview.length > 0 ? { contentStyle: { maxWidth: 'min(92vw, 46rem)' } } : {})}
+    >
+      <span className='inline-flex' onFocus={refreshTerminalTail} onMouseEnter={refreshTerminalTail}>
         <Button
           aria-label='Terminal View'
           className='ghostex-chat-footer-control rounded-full'
           onClick={hostActions.onSwitchToTerminal}
           size='icon-sm'
           variant='ghost'
+          {...(terminalReadiness ? { 'data-terminal-ready': terminalReadiness } : {})}
         >
           <IconTerminal2 aria-hidden='true' stroke={2} />
         </Button>
@@ -320,7 +407,7 @@ export function SessionChatComposerActions({
                 <IconDots aria-hidden='true' stroke={2.2} />
               </DropdownMenuTrigger>
             </AppTooltip>
-            <DropdownMenuContent align='end' className='min-w-52' side='top'>
+            <DropdownMenuContent align='end' className='w-60' side='top'>
               {hasBaseMenuItems ? (
                 <DropdownMenuGroup>
                   {/*
@@ -332,6 +419,7 @@ export function SessionChatComposerActions({
                   */}
                   <DropdownMenuLabel>Chat</DropdownMenuLabel>
                   {verboseMenuItem}
+                  {summaryMenuItem}
                   {delayedActionsMenuItem}
                 </DropdownMenuGroup>
               ) : null}
@@ -356,7 +444,9 @@ export function SessionChatComposerActions({
                 <IconNote aria-hidden='true' stroke={2} />
               </Button>
               {sessionNoteHasText ? (
-                <span aria-hidden='true' className='ghostex-chat-session-note-presence-dot' />
+                <span aria-hidden='true' className='ghostex-chat-session-note-presence-dot'>
+                  1
+                </span>
               ) : null}
             </span>
           </AppTooltip>
@@ -367,8 +457,9 @@ export function SessionChatComposerActions({
               <Button
                 aria-label={stashLabel}
                 className='ghostex-chat-footer-control rounded-full'
-                disabled={disabled || (!hasSendableDraft && onShowStashedPrompts === undefined)}
-                onClick={stashOpensSavedPrompts ? onShowStashedPrompts : onStash}
+                disabled={hasSendableDraft ? disabled : onShowStashedPrompts === undefined}
+                onClick={stashCurrentPrompt}
+                onContextMenu={openSavedPromptsFromContextMenu}
                 size='icon-sm'
                 variant='ghost'
               >
@@ -432,10 +523,11 @@ export function SessionChatComposerActions({
               <IconDots aria-hidden='true' stroke={2.2} />
             </DropdownMenuTrigger>
           </AppTooltip>
-          <DropdownMenuContent align='end' className='min-w-52' side='top'>
+          <DropdownMenuContent align='end' className='w-60' side='top'>
             <DropdownMenuGroup>
               <DropdownMenuLabel>Chat</DropdownMenuLabel>
               {verboseMenuItem}
+              {summaryMenuItem}
               {delayedActionsMenuItem}
               {onSessionNote ? (
                 <DropdownMenuCheckboxItem
@@ -446,10 +538,12 @@ export function SessionChatComposerActions({
                     }
                   }}
                 >
-                  <span className='relative inline-flex'>
+                  <span className='ghostex-chat-composer-menu-indicator relative inline-flex'>
                     <IconNote aria-hidden='true' />
                     {sessionNoteHasText ? (
-                      <span aria-hidden='true' className='ghostex-chat-session-note-presence-dot' />
+                      <span aria-hidden='true' className='ghostex-chat-session-note-presence-dot'>
+                        1
+                      </span>
                     ) : null}
                   </span>
                   Session note
@@ -459,17 +553,20 @@ export function SessionChatComposerActions({
                 </DropdownMenuCheckboxItem>
               ) : null}
               {onStash ? (
-                <DropdownMenuItem
-                  aria-label={stashLabel}
-                  disabled={disabled || (!hasSendableDraft && onShowStashedPrompts === undefined)}
-                  onClick={stashOpensSavedPrompts ? onShowStashedPrompts : onStash}
-                >
-                  <span className='relative inline-flex'>
-                    <IconStackPush aria-hidden='true' />
-                    {stashCountBadge}
-                  </span>
-                  {stashMenuLabel}
-                </DropdownMenuItem>
+                <AppTooltip content={stashTooltip} side='left'>
+                  <DropdownMenuItem
+                    aria-label={stashLabel}
+                    disabled={hasSendableDraft ? disabled : onShowStashedPrompts === undefined}
+                    onClick={stashCurrentPrompt}
+                    onContextMenu={openSavedPromptsFromContextMenu}
+                  >
+                    <span className='ghostex-chat-composer-menu-indicator relative inline-flex'>
+                      <IconStackPush aria-hidden='true' />
+                      {stashCountBadge}
+                    </span>
+                    {stashLabel}
+                  </DropdownMenuItem>
+                </AppTooltip>
               ) : null}
               {onAttach ? (
                 <DropdownMenuItem disabled={disabled} onClick={onAttach}>

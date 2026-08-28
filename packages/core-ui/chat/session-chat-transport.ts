@@ -4,7 +4,10 @@
 // scoped to one (projectId, sessionId): subscribe frames are pre-filtered by
 // the host and the mutation calls omit the identity params.
 
-import type { GxserverReadSessionTerminalTailResult } from '../../shared/gxserver-protocol';
+import type {
+  GxserverReadSessionTerminalTailResult,
+  GxserverSessionForkBranchesResult,
+} from '../../shared/gxserver-protocol';
 import type {
   GxserverAnswerSessionChatPromptParams,
   GxserverQueueSessionChatPromptResult,
@@ -30,6 +33,15 @@ export interface SessionChatTransport {
    * on the session's machine. Hosts without it leave "@" as plain text.
    */
   readFiles?(): Promise<GxserverReadSessionChatFilesResult>;
+  /*
+  CDXC:SessionForkFamilies 2026-08-28:
+  Every session that shares this conversation's earlier history, ancestors
+  included (`/api/sessionForkBranches`). Optional on the same gate as
+  everything else here: a host without a route to the endpoint omits it and the
+  chat's branch switcher is not rendered at all, rather than offering a control
+  whose list would 404.
+  */
+  forkBranches?(): Promise<GxserverSessionForkBranchesResult>;
   /** Returns an unsubscribe function. Events must already be filtered to this session. */
   subscribe(handlers: {
     onEvent: (e: GxserverSessionChatEvent) => void;
@@ -102,6 +114,17 @@ export interface SessionChatTransport {
   offering a disclosure that would 404.
   */
   readTerminalTail?(): Promise<GxserverReadSessionTerminalTailResult>;
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  Switches a DRAFT session's agent (`/api/switchDraftAgent`): gxserver kills the
+  draft's background CLI, rewrites its agent identity and launch plan, and
+  starts the new agent's CLI. Optional on the same gate as everything else here
+  — a host without a route to the endpoint omits it and the composer's "Agents"
+  section is not rendered at all, rather than offering a switch that 404s. The
+  daemon refuses the call once the draft has been promoted, and that rejection
+  is surfaced, never swallowed.
+  */
+  switchDraftAgent?(params: { agentId: string }): Promise<void>;
   answerPrompt(params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>): Promise<void>;
   interrupt(): Promise<void>;
   /*

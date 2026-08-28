@@ -79,6 +79,14 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     has no note" before it offers the Session Note affordances.
     */
     "sessionAgentNotes",
+    /*
+    CDXC:SidebarSpaces 2026-08-27:
+    Spaces are the daemon-owned saved sidebar filter. Same split as the flags
+    above: the presentation snapshot's `capabilities` object is what clients
+    read before offering the Space row and the Spaces context submenu; this
+    string keeps /api/health/server's inventory in step for diagnostics.
+    */
+    "spaces",
 ];
 
 pub const GXSERVER_MIGRATION_IDS: &[&str] = &[

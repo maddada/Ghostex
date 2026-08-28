@@ -19,12 +19,18 @@ import {
   IconChevronRight,
   IconCopy,
   IconFile,
+  IconGitBranch,
   IconInfoCircle,
   IconPhoto,
   IconSparkles,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { SessionChatMessage, SessionChatTerminalActivity, SessionChatTheme } from '../../shared/session-chat';
+import {
+  SESSION_CHAT_FORK_BOUNDARY_ID_PREFIX,
+  type SessionChatMessage,
+  type SessionChatTerminalActivity,
+  type SessionChatTheme,
+} from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
 import { Button } from '../../components/ui/button';
 import { Separator } from '../../components/ui/separator';
@@ -42,7 +48,7 @@ import {
 } from './session-chat-image-viewer';
 import { normalizeSessionChatImageTranscriptMessages } from './session-chat-image-transcript-markers';
 import { Bubble, BubbleContent } from '../../components/ui/bubble';
-import { Marker, MarkerContent } from '../../components/ui/marker';
+import { Marker, MarkerContent, MarkerIcon } from '../../components/ui/marker';
 import { Message, MessageContent, MessageFooter } from '../../components/ui/message';
 import {
   MessageScroller,
@@ -55,7 +61,12 @@ import {
 } from '../../components/ui/message-scroller';
 import { SessionChatActivityRow } from './session-chat-activity-row';
 import { orderSessionChatMessages } from './session-chat-assembler';
-import { centerSessionChatExpansion, SessionChatExpansion } from './session-chat-expansion';
+import {
+  anchorSessionChatExpansionTop,
+  centerSessionChatExpansion,
+  SessionChatDisclosure,
+  SessionChatExpansion,
+} from './session-chat-expansion';
 import { SessionChatMarkdown } from './session-chat-markdown';
 import { SessionChatScrollCap } from './session-chat-scroll-cap';
 import {
@@ -115,6 +126,8 @@ export interface SessionChatMessageListProps {
   theme?: SessionChatTheme;
   /** Reveal reasoning-owned tool activity by default. */
   verboseMode?: boolean;
+  /** Show only user prompts with each completed final reply collapsed beneath it. */
+  summaryMode?: boolean;
 }
 
 function isPastedImagePath(path: string | undefined): boolean {
@@ -749,6 +762,27 @@ function MessageRow({
     );
   }
 
+  /*
+  CDXC:SessionForkFamilies 2026-08-28:
+  The seam where stitched scroll-back crosses from one fork ancestor into the
+  next. gxserver synthesizes it as a system row, but it is not a note about the
+  session: it is the boundary between two threads, so it reads as a labeled
+  horizontal rule instead of another centered sentence. The text stays exactly
+  as the daemon wrote it.
+  */
+  if (isSystem && message.id.startsWith(SESSION_CHAT_FORK_BOUNDARY_ID_PREFIX)) {
+    return (
+      <Marker className='pt-1 pb-3' variant='separator'>
+        <MarkerContent className='inline-flex items-center gap-1.5'>
+          <MarkerIcon className='size-3.5'>
+            <IconGitBranch aria-hidden='true' className='size-3.5' stroke={2} />
+          </MarkerIcon>
+          {markdown}
+        </MarkerContent>
+      </Marker>
+    );
+  }
+
   if (isSystem) {
     return (
       <Marker className='pb-2'>
@@ -839,6 +873,13 @@ interface CompletedWorkTurn {
   work: SessionChatMessage[];
 }
 
+interface SummaryModeTurn {
+  active: boolean;
+  activeWork: SessionChatMessage[];
+  final: SessionChatMessage | null;
+  user: SessionChatMessage;
+}
+
 type SessionChatRenderItem =
   { kind: 'message'; message: SessionChatMessage } | { kind: 'completed-work'; turn: CompletedWorkTurn };
 
@@ -850,6 +891,34 @@ function hasAgentResponseContent(message: SessionChatMessage): boolean {
       (block) => block.type === 'image-ref' || (block.type === 'text' && block.text.trim().length > 0)
     )
   );
+}
+
+/** One compact row per genuine user prompt, paired with its settled final reply. */
+function summaryModeTurns(
+  messages: readonly SessionChatMessage[],
+  finalAssistantMessageIds: ReadonlySet<string>,
+  isWorking: boolean
+): SummaryModeTurn[] {
+  const turns: SummaryModeTurn[] = [];
+  let current: SummaryModeTurn | null = null;
+
+  for (const message of messages) {
+    const isGenuineUserMessage = message.role === 'user' && sessionChatSuppressedTurnLabel(message) === null;
+    if (isGenuineUserMessage) {
+      current = { active: false, activeWork: [], final: null, user: message };
+      turns.push(current);
+    } else if (current !== null) {
+      current.activeWork.push(message);
+      if (finalAssistantMessageIds.has(message.id)) {
+        current.final = message;
+      }
+    }
+  }
+  const newest = turns.at(-1);
+  if (isWorking && newest) {
+    newest.active = true;
+  }
+  return turns;
 }
 
 function isVisibleAssistantArtifact(message: SessionChatMessage): boolean {
@@ -1000,11 +1069,13 @@ function hoistedQuestionExchanges(
 }
 
 function CompletedWork({
+  onExpand,
   onSaveMarkdown,
   showAssistantCopy,
   turn,
   verboseMode,
 }: {
+  onExpand: (target: HTMLElement | null) => void;
   onSaveMarkdown?: (markdown: string) => void;
   /**
    * A folded turn ends at the next user row, and a harness-injected turn
@@ -1034,7 +1105,7 @@ function CompletedWork({
           onClick={() => {
             if (hasWork) {
               if (!open) {
-                centerSessionChatExpansion(triggerRef.current);
+                onExpand(triggerRef.current);
               }
               setOpen((value) => !value);
             }
@@ -1100,6 +1171,25 @@ function CompletedWork({
   );
 }
 
+function WorkingIndicator() {
+  return (
+    <div
+      aria-label='Agent is responding'
+      aria-live='polite'
+      className='flex h-8 items-center gap-1.5 text-muted-foreground'
+      role='status'
+    >
+      {[0, 1, 2].map((index) => (
+        <span
+          className='size-1.5 animate-bounce rounded-full bg-muted-foreground/70'
+          key={index}
+          style={{ animationDelay: `${index * 160}ms` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 /**
  * A local send must bring the newest row back into view even when the reader
  * had scrolled up, without asking message-scroller to anchor that row to the
@@ -1131,6 +1221,7 @@ export function SessionChatMessageList({
   listMessageMarkdownPaths,
   saveMessageMarkdown,
   sessionTitle = '',
+  summaryMode = false,
   theme = 'dark',
   verboseMode = false,
 }: SessionChatMessageListProps) {
@@ -1143,6 +1234,12 @@ export function SessionChatMessageList({
   const shouldFollowBottomRef = useRef(true);
   const scrollbarFadeTimeoutRef = useRef<number | undefined>(undefined);
   const [markdownToSave, setMarkdownToSave] = useState<string | null>(null);
+  const anchorExpandedAreaTop = useCallback((target: HTMLElement | null): void => {
+    // Opening a disclosure is explicit navigation away from the newest row.
+    // Clear bottom-follow before its resize can pin the viewport to the end.
+    shouldFollowBottomRef.current = false;
+    anchorSessionChatExpansionTop(target);
+  }, []);
 
   useEffect(
     () => () => {
@@ -1223,13 +1320,17 @@ export function SessionChatMessageList({
     [messages]
   );
 
-  const showActivity = terminalActivity != null;
+  const showActivity = !summaryMode && terminalActivity != null;
   const showTypingIndicator =
-    !showActivity && isWorking && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
+    !summaryMode && !showActivity && isWorking && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
   const renderItems = useMemo(() => completedWorkRenderItems(rendered, isWorking), [isWorking, rendered]);
   const copyableAssistantMessageIds = useMemo(
     () => finalAssistantMessageIds(rendered, isWorking),
     [isWorking, rendered]
+  );
+  const summaryTurns = useMemo(
+    () => summaryModeTurns(rendered, copyableAssistantMessageIds, isWorking),
+    [copyableAssistantMessageIds, isWorking, rendered]
   );
 
   const pendingMessageId = useMemo(() => {
@@ -1257,66 +1358,90 @@ export function SessionChatMessageList({
             className='mx-auto w-full max-w-3xl gap-0 px-4 pt-8 pb-4 [direction:ltr]'
             ref={contentRef}
           >
-            {renderItems.map((item, index) => (
-              <MessageScrollerItem
-                key={
-                  item.kind === 'message'
-                    ? item.message.id
-                    : `completed-work:${item.turn.user.id}:${item.turn.final.id}`
-                }
-                messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
-                // No row is a scroll anchor: anchoring a message to the top of
-                // the viewport makes message-scroller pad the transcript with a
-                // spacer so that message can reach the top, which leaves a
-                // viewport-sized scrollable gap between the newest row and the
-                // composer until the reply grows tall enough to fill it.
-                // Following the bottom keeps the newest row above the composer.
-              >
-                {item.kind === 'message' ? (
-                  <MessageRow
-                    /*
-                     * Only the newest row can still be growing, and only while
-                     * the agent is working: transcript tailing appends to the
-                     * last message, and the synthetic streaming preview row is
-                     * always last when it exists. Earlier rows are settled, so
-                     * their code fences are safe to highlight and cache.
-                     * `completedWorkRenderItems` never folds the newest turn
-                     * while working, so a "completed-work" item is settled by
-                     * construction and keeps the default `isStreaming={false}`.
-                     */
-                    isStreaming={isWorking && index === renderItems.length - 1}
-                    message={item.message}
-                    {...(saveMessageMarkdown && listMessageMarkdownPaths ? { onSaveMarkdown: setMarkdownToSave } : {})}
-                    showAssistantCopy={copyableAssistantMessageIds.has(item.message.id)}
-                    verboseMode={verboseMode}
-                  />
-                ) : (
-                  <CompletedWork
-                    {...(saveMessageMarkdown && listMessageMarkdownPaths ? { onSaveMarkdown: setMarkdownToSave } : {})}
-                    showAssistantCopy={copyableAssistantMessageIds.has(item.turn.final.id)}
-                    turn={item.turn}
-                    verboseMode={verboseMode}
-                  />
-                )}
-              </MessageScrollerItem>
-            ))}
-            {showActivity && terminalActivity ? <SessionChatActivityRow activity={terminalActivity} /> : null}
-            {showTypingIndicator ? (
-              <div
-                aria-label='Agent is responding'
-                aria-live='polite'
-                className='flex h-8 items-center gap-1.5 text-muted-foreground'
-                role='status'
-              >
-                {[0, 1, 2].map((index) => (
-                  <span
-                    className='size-1.5 animate-bounce rounded-full bg-muted-foreground/70'
-                    key={index}
-                    style={{ animationDelay: `${index * 160}ms` }}
-                  />
+            {summaryMode
+              ? summaryTurns.map((turn) => (
+                  <MessageScrollerItem key={`summary:${turn.user.id}`} messageId={turn.user.id}>
+                    <MessageRow message={turn.user} showAssistantCopy={false} verboseMode={verboseMode} />
+                    {turn.final ? (
+                      <SessionChatDisclosure key='agent-reply' label='Agent reply' onExpand={anchorExpandedAreaTop}>
+                        <MessageRow
+                          message={turn.final}
+                          {...(saveMessageMarkdown && listMessageMarkdownPaths
+                            ? { onSaveMarkdown: setMarkdownToSave }
+                            : {})}
+                          showAssistantCopy={copyableAssistantMessageIds.has(turn.final.id)}
+                          verboseMode={verboseMode}
+                        />
+                      </SessionChatDisclosure>
+                    ) : turn.active ? (
+                      <SessionChatDisclosure key='active-work' label='Active work' onExpand={anchorExpandedAreaTop}>
+                        {turn.activeWork.map((message, index) => (
+                          <MessageRow
+                            isStreaming={index === turn.activeWork.length - 1}
+                            key={message.id}
+                            message={message}
+                            showAssistantCopy={false}
+                            verboseMode={verboseMode}
+                          />
+                        ))}
+                        {terminalActivity ? <SessionChatActivityRow activity={terminalActivity} /> : null}
+                        {!terminalActivity && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID) ? (
+                          <WorkingIndicator />
+                        ) : null}
+                      </SessionChatDisclosure>
+                    ) : null}
+                  </MessageScrollerItem>
+                ))
+              : renderItems.map((item, index) => (
+                  <MessageScrollerItem
+                    key={
+                      item.kind === 'message'
+                        ? item.message.id
+                        : `completed-work:${item.turn.user.id}:${item.turn.final.id}`
+                    }
+                    messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
+                    // No row is a scroll anchor: anchoring a message to the top of
+                    // the viewport makes message-scroller pad the transcript with a
+                    // spacer so that message can reach the top, which leaves a
+                    // viewport-sized scrollable gap between the newest row and the
+                    // composer until the reply grows tall enough to fill it.
+                    // Following the bottom keeps the newest row above the composer.
+                  >
+                    {item.kind === 'message' ? (
+                      <MessageRow
+                        /*
+                         * Only the newest row can still be growing, and only while
+                         * the agent is working: transcript tailing appends to the
+                         * last message, and the synthetic streaming preview row is
+                         * always last when it exists. Earlier rows are settled, so
+                         * their code fences are safe to highlight and cache.
+                         * `completedWorkRenderItems` never folds the newest turn
+                         * while working, so a "completed-work" item is settled by
+                         * construction and keeps the default `isStreaming={false}`.
+                         */
+                        isStreaming={isWorking && index === renderItems.length - 1}
+                        message={item.message}
+                        {...(saveMessageMarkdown && listMessageMarkdownPaths
+                          ? { onSaveMarkdown: setMarkdownToSave }
+                          : {})}
+                        showAssistantCopy={copyableAssistantMessageIds.has(item.message.id)}
+                        verboseMode={verboseMode}
+                      />
+                    ) : (
+                      <CompletedWork
+                        onExpand={anchorExpandedAreaTop}
+                        {...(saveMessageMarkdown && listMessageMarkdownPaths
+                          ? { onSaveMarkdown: setMarkdownToSave }
+                          : {})}
+                        showAssistantCopy={copyableAssistantMessageIds.has(item.turn.final.id)}
+                        turn={item.turn}
+                        verboseMode={verboseMode}
+                      />
+                    )}
+                  </MessageScrollerItem>
                 ))}
-              </div>
-            ) : null}
+            {showActivity && terminalActivity ? <SessionChatActivityRow activity={terminalActivity} /> : null}
+            {showTypingIndicator ? <WorkingIndicator /> : null}
           </MessageScrollerContent>
         </MessageScrollerViewport>
         <MessageScrollerButton className='ghostex-chat-scroll-bottom-button' />

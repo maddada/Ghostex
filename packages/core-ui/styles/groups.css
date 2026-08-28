@@ -445,11 +445,10 @@
 
 /*
  * Project identity sits in normal flow immediately before the project name.
- * V2 owns the renderer because it already resolves the discovered
- * favicon chain; classic project rows reuse it here so both sidebar modes show
- * the same image, typed glyph, worktree, or folder state.
+ * The shared renderer resolves the discovered favicon chain so project rows
+ * consistently show the same image, typed glyph, worktree, or folder state.
  */
-.group[data-project-group='true'] .sidebar-v2-project-icon {
+.group[data-project-group='true'] .sidebar-project-icon {
   border-radius: 5px;
   color: color-mix(in srgb, var(--app-muted) 65%, transparent);
   flex: none;
@@ -458,7 +457,7 @@
   width: 16px;
 }
 
-.group[data-project-group='true'] .sidebar-v2-project-icon[data-icon-variant='tabler'] {
+.group[data-project-group='true'] .sidebar-project-icon[data-icon-variant='tabler'] {
   align-items: center;
   display: inline-flex;
   justify-content: center;

@@ -16,7 +16,7 @@
 // native pickers, terminal buffer access, or modal hosts the web app does not
 // have.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   GxserverForkSessionResult,
   GxserverSessionRenameRequestResult,
@@ -29,6 +29,7 @@ import '@/packages/core-ui/styles.css';
 import { rpcForMachine } from '../connections/connection-registry';
 import type { GhostexWebFocusSessionDetail } from '../sidebar-runtime/sidebar-runtime';
 import { createSidebarSessionId } from '../sidebar-runtime/sidebar-ids';
+import { recordWebSessionChatSurfaceOpened } from '../sidebar-runtime/draft-session-discard';
 import type { WorkspaceSession } from '../workspace/workspace-model';
 import { createSessionChatTransport } from '../chat/session-chat-transport';
 import type { ExportTranscriptSessionRef } from './action-events';
@@ -165,7 +166,7 @@ export function createWebSessionHostActions(
       // Sentence case, matching the desktop hosts' labels so the same menu row
       // reads the same on every surface.
       { id: 'fullReload', label: 'Full reload' },
-      { id: 'exportTranscript', label: 'Export transcript' },
+      { id: 'exportTranscript', label: 'Handoff / Export' },
     ],
     onAction: (id, value) => {
       runChatAgentAction(session, id, value).catch((error: unknown) => {
@@ -190,6 +191,17 @@ export function SessionChatHost({
     window.addEventListener(WEB_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
     return () => window.removeEventListener(WEB_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
   }, []);
+  const sessionKey = `${session.machineId}:${session.projectId}:${session.sessionId}`;
+  /*
+  CDXC:DraftSessionsDiscardOwnership 2026-08-28:
+  Vouch for this session's composer cache. The sidebar's empty-draft discard
+  only removes drafts whose chat this browser session actually opened, because
+  for any other draft an empty cache here says nothing about text sitting
+  unsynced in the desktop app or on another device.
+  */
+  useEffect(() => {
+    recordWebSessionChatSurfaceOpened(sessionKey);
+  }, [sessionKey]);
   const transport = useMemo(
     () => createSessionChatTransport(session.machineId, session.projectId, session.sessionId),
     [session.machineId, session.projectId, session.sessionId]
@@ -198,6 +210,28 @@ export function SessionChatHost({
   const hostActions = useMemo<SessionChatHostActions | undefined>(
     () => (onSwitchToTerminal ? createWebSessionHostActions(session, onSwitchToTerminal) : undefined),
     [onSwitchToTerminal, session]
+  );
+  /*
+  CDXC:SessionForkFamilies 2026-08-28:
+  Switching branches is the web app's own navigation, so it goes through the
+  same focusSession event the sidebar and the Fork action already dispatch: the
+  Agents page selects the target and this chat surface is replaced with the
+  branch's own. The whole family lives on one machine, so the target keeps this
+  session's machineId.
+  */
+  const selectForkBranch = useCallback(
+    (branch: { projectId: string; sessionId: string }): void => {
+      const detail: GhostexWebFocusSessionDetail = {
+        machineId: session.machineId,
+        projectId: branch.projectId,
+        sessionId: branch.sessionId,
+        placement: 'focusedPane',
+        placementTargetSessionId: session.sessionId,
+        source: 'sidebar',
+      };
+      window.dispatchEvent(new CustomEvent('ghostex-web:focusSession', { detail }));
+    },
+    [session.machineId, session.sessionId]
   );
   return (
     <SessionChatView
@@ -209,7 +243,8 @@ export function SessionChatHost({
       // config's monaco plugin.
       monacoVsBaseUrl='/monaco/vs'
       onDelayedActions={() => openSessionDelayedActions(session)}
-      sessionKey={`${session.machineId}:${session.projectId}:${session.sessionId}`}
+      onSelectForkBranch={selectForkBranch}
+      sessionKey={sessionKey}
       sessionTitle={session.title}
       theme={chatSettings.sessionChatTheme}
       transport={transport}

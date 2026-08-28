@@ -3,14 +3,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/maddada/Ghostex/releases"><img alt="GitHub Releases" src="https://img.shields.io/badge/Releases-DMG%2C%20EXE%2C%20DEB%2C%20RPM%20%26%20APK-111827?logo=github&logoColor=white"></a>
+  <a href="https://github.com/maddada/Ghostex/releases"><img alt="GitHub Releases" src="https://img.shields.io/badge/Releases-DMG%2C%20EXE%2C%20DEB%2C%20RPM%2C%20TAR.ZST%20%26%20APK-111827?logo=github&logoColor=white"></a>
   <a href="https://discord.gg/df7b3G92CS"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white"></a>
   <a href="https://ghostex.dev"><img alt="Website" src="https://img.shields.io/badge/Website-ghostex.dev-0EA5E9"></a>
 </p>
 
 # Ghostex
 
-Cross-platform Ghostty-based desktop app (not using Electron or Tauri) for running agent CLIs with persistent terminals, GUI panes, browser panes, notifications, mobile access, and a built-in IDE.
+A native desktop app for Claude Code, Codex, OpenCode, and any other CLI agent. Run them side by side, review their work, and keep going from your computer or your phone.
 
 Ghostex is built for developers who keep multiple agents and terminals alive at once. It combines low-RAM Ghostty terminals, a native Rust/GPUI interface, Chromium CEF browser panes, and Mobile (iOS/Android) session access in one workspace.
 
@@ -38,7 +38,7 @@ Starting with 7.0.0, Windows installations receive automatic updates from GitHub
 
 ### Linux
 
-Latest downloads: [Linux DEB](https://maddada.com/download/linux-deb-x64) · [Linux RPM](https://maddada.com/download/linux-rpm-x64) · [Linux tarball](https://maddada.com/download/linux-tar-x64).
+Latest downloads: [Linux DEB](https://maddada.com/download/linux-deb-x64) · [Linux RPM](https://maddada.com/download/linux-rpm-x64) · [Arch Linux tarball](https://maddada.com/download/linux-tar-x64).
 
 #### Arch Linux and other distributions
 
@@ -58,9 +58,6 @@ On Arch the runtime dependencies are `gtk3`, `nss`, `nspr`, `mesa`, `libxkbcommo
 `libxrandr`, `libxshmfence`, `pango`, `cairo`, `fontconfig` and `wmctrl` — most are already
 present on a desktop install. Ghostex does not bundle Chromium; the first GUI launch
 downloads the browser runtime into your cache directory.
-
-A vendor-maintained `ghostex-bin` AUR package is prepared and will be published once
-[AUR registration](https://aur.archlinux.org/register) reopens.
 
 ### Android
 
@@ -101,6 +98,17 @@ Comes with Annotations, Chrome Devtools MCP for Agents, Profiles.<br />
 /ghostex-embedded-browser-use lets the agent control your embedded browser tabs.
 
 <img width="1200" alt="image" src="https://github.com/user-attachments/assets/ce9fbe6b-8c2b-41f1-88f6-67d8254846e5" />
+
+### Terminal-backed Chat GUI!
+
+You can't click on images in the terminal, editing long prompts really sucks, and typing is slow when you're sshing on a slow connection. But the terminal is more powerful than chat interfaces and gets all the features first.
+
+The Solution is here! Render the same session as a CLI or a Chat GUI.
+Toggle between the two with a single hotkey or click!
+
+<img width="500" alt="48380" src="https://github.com/user-attachments/assets/fc050d47-1627-4d6c-9f17-2175b6412ab4" />
+
+<img width="500" alt="48382" src="https://github.com/user-attachments/assets/6db91470-b859-4a09-873b-45e0947560ac" />
 
 ### Rich Prompt Editor with Ctrl+G
 
@@ -189,18 +197,19 @@ See how many agents are running with just a glance at your menu bar. Click to ju
 | ------------------------- | ------- | --------- | ---- |
 | macOS support             | Yes     | Yes       | Yes  |
 | Windows support           | Yes     | Yes       | No   |
-| Linux support             | Yes     | No        | No   |
+| Linux support             | Yes     | Yes       | No   |
 | Open source               | Yes     | -         | Yes  |
 | Ghostty terminal          | Yes     | -         | Yes  |
 | Chromium Browser          | Yes     | Yes       | No   |
+| Chat GUI view             | Yes     | Yes       | No   |
 | Fully featured IDE        | Yes     | -         | -    |
 | Built-in Computer use     | Yes     | Yes       | -    |
 | Built-in Browser use      | Yes     | Yes       | Yes  |
 | Use any model             | Yes     | -         | Yes  |
 | Cross Model Orchestration | Yes     | -         | Yes  |
 | Rich Prompt Editor        | Yes     | N/A       | -    |
-| Android                   | Yes     | Yes       | -    |
-| Appshots                  | Yes     | Yes       | -    |
+| iOS                       | Yes     | Yes       | Yes  |
+| Android                   | Yes     | Yes       | Yes  |
 | Automations               | Yes     | Yes       | -    |
 
 ## Main Features

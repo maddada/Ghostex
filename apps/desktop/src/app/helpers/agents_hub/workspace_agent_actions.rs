@@ -44,6 +44,15 @@ pub(crate) fn gpui_create_local_project_workspace_agent(
         "/api/createAgentSession",
         &serde_json::json!({
             "agentId": agent_id,
+            /*
+            CDXC:DraftSessions 2026-08-28:
+            The Windows project-header agent launch is the same promptless
+            sidebar create as the macOS/Linux CEF path, so it creates a draft
+            row too. The attach step below starts the provider, so the agent CLI
+            is warm while the user types; gxserver clears `draftStatus` when the
+            first prompt reaches the agent.
+            */
+            "draft": true,
             "projectId": project_id,
             "requireLaunchCommand": true,
             "surface": "workspace",

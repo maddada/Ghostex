@@ -65,17 +65,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   sessionTitleGenerationAgent: 'codex',
   customSessionTitleGenerationCommand: '',
   /**
-   * Browser feedback always uses Agentation. Keep the normalized field for
-   * compatibility with older host payloads, but do not expose it in Settings.
-   */
-  browserFeedbackTool: 'agentation',
-  /**
-   * CDXC:BrowserPanes 2026-05-27-07:24
-   * Browser actions should no longer expose or route through Chrome Canary attachment.
-   * Normalize all browser-action launches to in-workspace browser panes so Settings and native startup do not preserve the old external Canary path.
-   */
-  browserOpenMode: 'browser-pane',
-  /**
    * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
    * In-app link routing is the default so cmd-clicked web links land in the
    * project Browser view unless the user opts back into the system browser in
@@ -168,7 +157,8 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   /**
    * CDXC:DocsSidebar 2026-06-30-19:47:
    * Additional Docs scan folders remain opt-in beyond the built-in ./docs,
-   * ./artifacts, and ./ai roots plus root Markdown, HTML, and Excalidraw files.
+   * ./artifacts, ./ai, and ./tmp roots (and the same folder names one level
+   * down) plus root Markdown, HTML, and Excalidraw files.
    * A configured Docs directory adds its own tree on top of whatever this
    * lists (CDXC:DocsRootAdditive).
    */
@@ -196,12 +186,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * +0 -0.
    */
   showUntrackedProjectDiffWhenNoTrackedChanges: false,
-  /**
-   * CDXC:CompletionSounds 2026-05-29-12:00:
-   * The completion bell should be enabled by default so finished agent work is
-   * audible without requiring users to discover the Sounds setting first.
-   */
-  completionBellEnabled: true,
   completionSound: DEFAULT_COMPLETION_SOUND,
   /**
    * CDXC:TerminalBellAttention 2026-07-01-01:13:
@@ -213,6 +197,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   showNotificationOnTerminalBell: false,
   createSessionOnSidebarDoubleClick: false,
   enableSessionParking: false,
+  sleepSessionWhenParking: false,
   /**
    * CDXC:AnonymousAnalytics 2026-08-26:
    * Usage analytics are on by default and opt-out. Events carry only counts and
@@ -304,23 +289,17 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Focused agent sessions must never auto-sleep and no longer have a Settings
    * override because sleeping the active conversation is not a supported UX.
    */
-  autoSleepAgentSessionsEnabled: false,
-  autoSleepAgentIdleMinutes: 15,
-  autoSleepBrowserSessionsEnabled: true,
+  autoSleepAgentIdleMinutes: 0,
   autoSleepBrowserIdleMinutes: 10,
-  autoSleepCodeEditorEnabled: true,
   autoSleepCodeEditorIdleMinutes: 10,
-  autoSleepGitEditorEnabled: true,
   autoSleepGitEditorIdleMinutes: 5,
-  autoSleepProjectEditorEnabled: true,
   autoSleepProjectEditorIdleMinutes: 5,
   autoSleepRequireAgentResumeCommand: true,
   autoSleepFavoriteAgentSessions: false,
   keepAwakeActivateOnExternalDisplay: false,
   keepAwakeActivateOnLaunch: false,
   keepAwakeAllowDisplaySleep: false,
-  keepAwakeBatteryThresholdPercent: 20,
-  keepAwakeDeactivateBelowBatteryThreshold: false,
+  keepAwakeBatteryThresholdPercent: 0,
   keepAwakeDeactivateOnLowPowerMode: false,
   keepAwakeDeactivateOnUserSwitch: false,
   keepAwakeDefaultDurationMinutes: 0,
@@ -363,39 +342,9 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * controls; users should opt out explicitly when they do not want banners.
    */
   showMacOSAttentionNotifications: true,
-  /**
-   * CDXC:SessionStatusIndicators 2026-05-09-17:30
-   * Floating and menu bar desktop status badges stay independently controlled.
-   *
-   * CDXC:SessionStatusIndicators 2026-06-15-02:01:
-   * Floating session indicators previously started hidden for new installs, while the menu bar session indicator stayed visible unless that separate setting changed.
-   *
-   * CDXC:SessionStatusIndicators 2026-06-15-14:00:
-   * Sidebar presets did not provide the legacy floating indicator value.
-   *
-   * CDXC:SessionStatusIndicators 2026-06-16-09:20:
-   * The legacy floating indicator defaulted on before the surface was removed.
-   *
-   * CDXC:SessionStatusIndicators 2026-06-27-20:11:
-   * The floating badge surface and Settings rows were removed from macOS and
-   * GPUI. Keep this legacy key normalized so existing settings JSON remains
-   * readable, but no current native or GPUI presentation should consume it.
-   */
-  hideFloatingSessionStatusIndicators: false,
   hideMenuBarSessionStatusIndicators: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideMenuBarSessionStatusIndicators,
   petOverlayEnabled: false,
   selectedPetId: DEFAULT_PET_ID,
-  /**
-   * CDXC:SessionStatusIndicators 2026-05-07-18:20
-   * The legacy AppKit floating session indicator size was persisted as a named
-   * value rather than raw pixels.
-   *
-   * CDXC:SessionStatusIndicators 2026-06-27-20:11:
-   * Floating size is retained only as a legacy normalized value after removing
-   * the floating badge from macOS and GPUI. Do not expose it in Settings or
-   * send it through native/GPUI status payloads.
-   */
-  sessionStatusIndicatorSize: 'medium',
   /**
    * CDXC:SessionPersistence 2026-05-23-00:50:
    * The session-id pane overlay preference is configurable, and the
@@ -414,37 +363,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * until the user picks a different view for that agent in Settings > Agents.
    */
   preferredAgentInterfaceOverrides: {},
-  /**
-   * CDXC:SidebarV2 2026-07-29:
-   * The classic sidebar stays the default for every user. Sidebar V2 must be
-   * chosen explicitly, so a settings file without this key keeps V1 behavior.
-   */
-  sidebarVersion: 'v1',
-  /**
-   * CDXC:SidebarV2 2026-07-29:
-   * Sidebar V2 opens with sessions grouped into collapsible project groups.
-   * Users can switch back to the flat, position-stable inbox when preferred.
-   */
-  sidebarV2Layout: 'byProject',
-  /**
-   * CDXC:SidebarV2Lifecycle 2026-07-29:
-   * Three days is the agreed default window, and it matches
-   * `DEFAULT_AUTO_SETTLE_AFTER_DAYS` in server so a settings file that has
-   * never been written and one that carries the default behave identically.
-   */
-  sidebarAutoSettleAfterDays: 3,
-  /**
-   * CDXC:SidebarV2LogicalProjects 2026-07-29:
-   * No overrides: every project follows the automatic origin-remote rule, which
-   * is a no-op for anyone with a single machine.
-   */
-  sidebarProjectGroupingOverrides: {},
-  /**
-   * CDXC:SidebarV2Worktree 2026-07-29:
-   * The plain "+" keeps its historic meaning until the user asks otherwise, so
-   * an untouched settings file starts instant local sessions exactly as today.
-   */
-  newSessionsDefaultEnvMode: 'local',
   /**
    * CDXC:SidebarPlacement 2026-05-06-17:32
    * Sidebar side is a first-class setting so users can choose left or right
@@ -466,6 +384,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   sidebarDefaultWidthPx: DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
   projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   sidebarProjectGroupStyle: 'branched',
+  sidebarSpacesEnabled: false,
   expandCollapsedProjectsOnJump: true,
   showLessForExpandedProjectJumps: false,
   /**
@@ -516,12 +435,8 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Default app chrome to neutral #808080 at 93 Background Contrast,
    * resolving to #141414.
    *
-   * CDXC:SettingsTheming 2026-06-15-21:35:
-   * Background Contrast and Background Tint are standard Theming controls.
-   * Enable the retained protocol field by default so the removed toggle cannot
-   * make those visible controls inert.
+   * Background Contrast and Background Tint are always-active Theming controls.
    */
-  customSidebarTitlebarColorsEnabled: true,
   customSidebarTitlebarForegroundColor: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_FOREGROUND_COLOR,
   customSidebarTitlebarBackgroundTintColor: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
   customSidebarTitlebarBackgroundDarknessPercent: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
@@ -539,8 +454,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   terminalCursorStyle: 'bar',
   terminalCursorStyleBlink: true,
-  terminalEngine: 'ghostty-native',
-  windowsTerminalBackend: 'wsl',
   windowsWslDistribution: '',
   terminalFontFamily: 'JetBrains Mono',
   terminalFontSize: 13,
@@ -595,16 +508,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Settings must expose only Monaco and the user's machine default editor. Removed gte and custom selections migrate to inherit so Ctrl+G stops injecting a Ghostex-owned editor command when users choose the machine default path.
    */
   promptEditorBackend: 'monaco',
-  customPromptEditorCommand: 'code --wait',
-  /**
-   * CDXC:GtePromptEditing 2026-05-22-09:56
-   * The boolean mirrors keep legacy Ctrl+G prompt-editor settings readable while promptEditorBackend remains the source of truth for launch behavior.
-   *
-   * CDXC:PromptEditorBackend 2026-06-30-00:08:
-   * The Settings UI no longer offers gte. New normalized settings keep these legacy mirrors false so removed gte choices cannot keep exporting a gte editor command.
-   */
-  richPromptEditingWithGte: false,
-  useGteForCtrlGPromptEditing: false,
   hotkeys: DEFAULT_ghostex_HOTKEYS,
   workspaceActivePaneBorderColor: '#3b82f6',
   /**

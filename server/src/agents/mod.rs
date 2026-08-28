@@ -1,5 +1,6 @@
 pub mod accept_all;
 pub mod activity;
+pub mod drafts;
 pub mod endpoint;
 pub mod fork;
 pub mod helpers;
@@ -15,6 +16,7 @@ pub mod title_reconcile;
 
 pub(crate) use accept_all::*;
 pub(crate) use activity::*;
+pub(crate) use drafts::*;
 pub use endpoint::*;
 pub(crate) use fork::*;
 pub(crate) use helpers::*;

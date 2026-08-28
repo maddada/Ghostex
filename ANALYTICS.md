@@ -58,7 +58,7 @@ Things worth knowing about this id:
   reinstalling produce a new id.
 - If you sign out of the agent CLI that produced it, Ghostex falls to the next
   source in the list and you appear as a new person from then on.
-- Every event records *which* source was used, as `identity_source`
+- Every event records _which_ source was used, as `identity_source`
   (`codex` / `claude` / `install`). That is the name of the source only, never
   the value it produced.
 - It is resolved once when gxserver starts and held in memory for that process.

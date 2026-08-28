@@ -67,8 +67,6 @@ fn collect_heartbeat_snapshot(
             agent_settings.as_ref(),
         ),
         preferred_interface: settings.preferred_interface,
-        sidebar_version: settings.sidebar_version,
-        sidebar_v2_layout: settings.sidebar_v2_layout,
         extension_count,
         remote_machine_count: settings.remote_machine_count,
         days_since_install: crate::telemetry::heartbeat::days_since_install(install_created_at),

@@ -7,14 +7,19 @@
 //
 // Values are local (see session-chat-session-options.ts): a dispatch marks the
 // value "dispatched", never "confirmed".
+//
+// CDXC:DraftSessions 2026-08-28: the model pill's menu also carries a
+// "Switch Agent CLI" submenu while (and only while) the session is a draft —
+// the one control here that changes the session itself rather than typing at
+// its TUI. The submenu sits above the model section.
 
 import { IconChevronDown } from '@tabler/icons-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppTooltip } from '../app-tooltip';
-import type { SessionChatSendKey } from '../../shared/session-chat';
+import type { SessionChatAvailableAgent, SessionChatSendKey } from '../../shared/session-chat';
 import { Button } from '../../components/ui/button';
 import { cn } from '@/packages/components/utils';
-import { getDefaultSidebarAgentByIcon } from '../../shared/sidebar-agents';
+import { getDefaultSidebarAgentByIcon, isSidebarAgentIcon } from '../../shared/sidebar-agents';
 import { ProjectAgentLauncherIcon } from '../project-agent-launcher-icon';
 import {
   DropdownMenu,
@@ -25,6 +30,9 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import {
@@ -79,19 +87,54 @@ export interface SessionChatSessionOptionsController {
  */
 export function useSessionChatSessionOptions({
   agent,
+  draftAgentId,
   sessionKey,
 }: {
   agent: string | null | undefined;
+  /*
+  CDXC:DraftAgentSwitch 2026-08-28:
+  The draft's CONCRETE launch agent id (`sessionAgentId`), passed only while the
+  session is a draft. `agent` above is the chat family, which a switch between
+  two agents of the same family — Claude Code and a project custom agent built
+  on Claude — does not change at all.
+  */
+  draftAgentId?: string | null;
   sessionKey?: string;
 }): SessionChatSessionOptionsController {
   const catalog = useMemo(() => sessionChatSessionOptionCatalog(agent), [agent]);
   const [state, setState] = useState<SessionChatOptionState>({});
 
-  // Reseed whenever the session or the agent changes: the stored values are
-  // per (session, agent), and a different agent has a different catalog.
+  /*
+  CDXC:DraftAgentSwitch 2026-08-28: the option-storage key scheme.
+
+  A session that has never been a draft in this client keeps the original key
+  (`…options.<sessionKey>`), so every existing session still reads exactly what
+  it stored. A draft appends `#<agentId>`, which is what makes switching its
+  agent CLI start from that agent's own values instead of carrying the previous
+  CLI's dispatched model — the family-level catalog cannot tell those apart.
+
+  The suffix LATCHES for the life of this mount: promotion (the first send)
+  stops the daemon sending `availableAgents`, and without the latch the key
+  would move back mid-session and drop a dispatched value gxserver has not
+  confirmed yet. A later reload of a promoted session lands on the plain key
+  again, by which time detection is the authority anyway.
+  */
+  const latchedDraftAgentRef = useRef<{ agentId: string; sessionKey: string | undefined } | null>(null);
+  if (draftAgentId) {
+    latchedDraftAgentRef.current = { agentId: draftAgentId, sessionKey };
+  }
+  const latchedDraftAgent = latchedDraftAgentRef.current;
+  const storageAgentId =
+    latchedDraftAgent !== null && latchedDraftAgent.sessionKey === sessionKey ? latchedDraftAgent.agentId : null;
+  const storageKey =
+    sessionKey === undefined ? undefined : storageAgentId === null ? sessionKey : `${sessionKey}#${storageAgentId}`;
+
+  // Reseed whenever the session, the agent, or the draft's agent id changes:
+  // the stored values are per (session, agent), and a different agent has a
+  // different catalog — or, within one family, different values entirely.
   useEffect(() => {
-    setState(catalog ? seedSessionChatOptionState(catalog, readStoredSessionChatOptions(sessionKey)) : {});
-  }, [catalog, sessionKey]);
+    setState(catalog ? seedSessionChatOptionState(catalog, readStoredSessionChatOptions(storageKey)) : {});
+  }, [catalog, storageKey]);
 
   const optionDescriptors = useMemo(() => {
     if (!catalog) {
@@ -103,10 +146,10 @@ export function useSessionChatSessionOptions({
 
   const persist = useCallback(
     (next: SessionChatOptionState) => {
-      writeStoredSessionChatOptions(sessionKey, next);
+      writeStoredSessionChatOptions(storageKey, next);
       return next;
     },
-    [sessionKey]
+    [storageKey]
   );
 
   const recordDispatched = useCallback(
@@ -173,6 +216,19 @@ export interface SessionChatSessionOptionPillsProps {
   onSwitchingChange?: (switching: boolean) => void;
   /** Agent-picker options flip the pane to the terminal after typing. */
   onSwitchToTerminal?: () => void;
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  The composer's draft agent switcher. It exists ONLY while the session is a
+  draft: `draftAgents` comes from `availableAgents` on the chat read state,
+  which the daemon stops sending the moment the draft's first prompt reaches
+  the agent. Absent (or empty, or without a switch handler) means the submenu
+  is not rendered at all — the agent of a real conversation cannot be changed.
+  */
+  draftAgents?: readonly SessionChatAvailableAgent[];
+  /** The draft's own launch agent id: the row that renders checked. */
+  draftAgentId?: string | null;
+  /** Runs `/api/switchDraftAgent`; rejections are shown, never swallowed. */
+  onSwitchDraftAgent?: (agentId: string) => Promise<void>;
 }
 
 /*
@@ -312,19 +368,34 @@ function ClaudePermissionModeIcon({ mode }: { mode: string }) {
   );
 }
 
+/*
+CDXC:DraftSessions 2026-08-28:
+Brand artwork for an "Agents" row. The daemon sends the icon as a plain wire
+string, so it is narrowed to the sidebar icon union and then drawn by the same
+component, with the same brand colouring, that the model pill already uses.
+*/
+function DraftAgentIcon({ icon }: { icon: string }) {
+  const agent = getDefaultSidebarAgentByIcon(isSidebarAgentIcon(icon) ? icon : undefined);
+  return <ProjectAgentLauncherIcon agent={agent ? { ...agent, isDefault: true } : undefined} colorMode='brand' />;
+}
+
 export function SessionChatSessionOptionPills({
   canSend,
   canSendKey,
   controller,
+  draftAgentId,
+  draftAgents,
   isWorking,
   onDispatchCommand,
   onDispatchKey,
+  onSwitchDraftAgent,
   onSwitchingChange,
   onSwitchToTerminal,
   screenProbed,
 }: SessionChatSessionOptionPillsProps) {
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [switchingAgent, setSwitchingAgent] = useState(false);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -430,11 +501,121 @@ export function SessionChatSessionOptionPills({
     [onDispatchCommand, onDispatchKey, onSwitchToTerminal, onSwitchingChange, recordDispatched, state]
   );
 
-  if (!catalog) {
-    return null;
-  }
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  Drafts only, and only when this host can actually reach the endpoint: both
+  gates have to pass before the section exists, exactly like every other
+  daemon-capability + transport-capability pair in the chat surfaces.
+  */
+  const agentRows = onSwitchDraftAgent && draftAgents && draftAgents.length > 0 ? draftAgents : null;
+  const currentDraftAgent = agentRows?.find((row) => row.agentId === draftAgentId) ?? null;
 
-  const disabled = isWorking || !canSend || dispatchingId !== null;
+  const switchAgent = (agentId: string): void => {
+    if (!onSwitchDraftAgent || agentId === draftAgentId) {
+      return;
+    }
+    setSwitchingAgent(true);
+    setFailure(null);
+    void onSwitchDraftAgent(agentId)
+      .catch((error: unknown) => {
+        if (!mountedRef.current) {
+          return;
+        }
+        /*
+        The daemon refuses the switch once the draft has been promoted (its
+        first prompt reached the agent). Its own sentence is the useful one, so
+        it is shown verbatim rather than replaced by a generic failure — and
+        nothing here pretends the switch happened.
+        */
+        const message = error instanceof Error ? error.message.trim() : '';
+        setFailure(message === '' ? 'Could not switch agent' : message);
+      })
+      .finally(() => {
+        if (mountedRef.current) {
+          setSwitchingAgent(false);
+        }
+      });
+  };
+
+  const disabled = isWorking || !canSend || dispatchingId !== null || switchingAgent;
+
+  const failureNotice = failure ? (
+    <AppTooltip content={failure}>
+      <span className='max-w-32 truncate text-[11px] text-destructive/80' role='status'>
+        {failure}
+      </span>
+    </AppTooltip>
+  ) : null;
+
+  const agentsSubmenu = agentRows ? (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className='rounded-md'>Switch Agent CLI</DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
+        <DropdownMenuRadioGroup
+          onValueChange={(value) => {
+            if (typeof value === 'string') {
+              switchAgent(value);
+            }
+          }}
+          value={draftAgentId ?? ''}
+        >
+          {agentRows.map((row) => (
+            <DropdownMenuRadioItem className='rounded-md' key={row.agentId} value={row.agentId}>
+              <DraftAgentIcon icon={row.icon} />
+              <span className='truncate'>{row.name}</span>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  ) : null;
+
+  /** Draft agent switcher above an existing menu body, hence the trailing rule. */
+  const agentsSection = agentsSubmenu ? (
+    <>
+      {agentsSubmenu}
+      <DropdownMenuSeparator />
+    </>
+  ) : null;
+
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  A draft whose agent has no option catalog (an unknown family) still needs the
+  agent pill, because it is the only way to reach the switcher. It shows the
+  draft's own agent instead of a model it cannot name, and its menu is the
+  Switch Agent CLI submenu alone. A NON-draft session with no catalog keeps
+  rendering nothing at all.
+  */
+  if (!catalog) {
+    if (!agentsSubmenu) {
+      return null;
+    }
+    const agentTitle = currentDraftAgent ? `Agent ${currentDraftAgent.name}` : 'Agent';
+    return (
+      <>
+        {failureNotice}
+        <DropdownMenu>
+          <PillTrigger
+            ariaLabel={agentTitle}
+            className='ghostex-chat-model-pill'
+            disabled={disabled}
+            icon={
+              currentDraftAgent ? (
+                <span className='contents' data-icon='inline-start'>
+                  <DraftAgentIcon icon={currentDraftAgent.icon} />
+                </span>
+              ) : undefined
+            }
+            label={currentDraftAgent?.name ?? 'Agent'}
+            title={agentTitle}
+          />
+          <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
+            {agentsSubmenu}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>
+    );
+  }
 
   const menuRows = (descriptor: SessionChatOptionDescriptor): ReactNode => {
     const current = state[descriptor.id];
@@ -544,16 +725,50 @@ export function SessionChatSessionOptionPills({
     );
     return (
       <>
-        <PillButton
-          ariaLabel={modelHandoffTitle}
-          className='ghostex-chat-model-pill'
-          disabled={onSwitchToTerminal === undefined}
-          icon={modelIcon}
-          label={modelLabel ?? catalog.model.label}
-          onClick={() => onSwitchToTerminal?.()}
-          skeleton={skeletonFor('model', modelLabel)}
-          title={modelHandoffTitle}
-        />
+        {failureNotice}
+        {/*
+        CDXC:DraftSessions 2026-08-28:
+        On a draft the model pill has to open a menu even here, because the
+        Switch Agent CLI submenu lives inside it. The handoff itself stays
+        below that row, so the read-only pill loses nothing by growing one.
+        */}
+        {agentsSection ? (
+          <DropdownMenu>
+            <PillTrigger
+              ariaLabel={modelHandoffTitle}
+              className='ghostex-chat-model-pill'
+              disabled={disabled}
+              icon={modelIcon}
+              label={modelLabel ?? catalog.model.label}
+              skeleton={skeletonFor('model', modelLabel)}
+              title={modelHandoffTitle}
+            />
+            <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
+              {agentsSection}
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{catalog.model.label}</DropdownMenuLabel>
+                <DropdownMenuItem
+                  className='rounded-md'
+                  disabled={onSwitchToTerminal === undefined}
+                  onClick={() => onSwitchToTerminal?.()}
+                >
+                  {catalog.model.actionLabel ?? 'Change it in the CLI'}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <PillButton
+            ariaLabel={modelHandoffTitle}
+            className='ghostex-chat-model-pill'
+            disabled={onSwitchToTerminal === undefined}
+            icon={modelIcon}
+            label={modelLabel ?? catalog.model.label}
+            onClick={() => onSwitchToTerminal?.()}
+            skeleton={skeletonFor('model', modelLabel)}
+            title={modelHandoffTitle}
+          />
+        )}
         {visibleOptions.length > 0 ? (
           <PillButton
             ariaLabel={optionsHandoffTitle}
@@ -578,13 +793,7 @@ export function SessionChatSessionOptionPills({
 
     return (
       <>
-        {failure ? (
-          <AppTooltip content={failure}>
-            <span className='max-w-32 truncate text-[11px] text-destructive/80' role='status'>
-              {failure}
-            </span>
-          </AppTooltip>
-        ) : null}
+        {failureNotice}
         <DropdownMenu>
           <PillTrigger
             ariaLabel={combinedTitle}
@@ -596,6 +805,7 @@ export function SessionChatSessionOptionPills({
             title={tooltipText(combinedTitle, combinedHint)}
           />
           <DropdownMenuContent align='start' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
+            {agentsSection}
             <DropdownMenuItem className='rounded-md' onClick={() => dispatch(catalog.model)}>
               Select Model &amp; Effort in CLI
             </DropdownMenuItem>
@@ -607,13 +817,7 @@ export function SessionChatSessionOptionPills({
 
   return (
     <>
-      {failure ? (
-        <AppTooltip content={failure}>
-          <span className='max-w-32 truncate text-[11px] text-destructive/80' role='status'>
-            {failure}
-          </span>
-        </AppTooltip>
-      ) : null}
+      {failureNotice}
       <DropdownMenu>
         <PillTrigger
           ariaLabel={modelTitle}
@@ -625,6 +829,7 @@ export function SessionChatSessionOptionPills({
           title={tooltipText(modelTitle, modelHint)}
         />
         <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
+          {agentsSection}
           {/* Base UI's GroupLabel throws outside a Menu.Group context. */}
           <DropdownMenuGroup>
             <DropdownMenuLabel>{catalog.model.label}</DropdownMenuLabel>

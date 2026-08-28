@@ -232,7 +232,7 @@ pub(crate) const MANAGE_SESSION_CONTEXT_MAX_BYTES: usize = 300_000;
 pub(crate) static MANAGE_REMOTE_RESOURCE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 pub(crate) const MANAGE_DOCS_RELATIVE_PATH: &str = "docs";
 pub(crate) const MANAGE_BUILT_IN_DOCS_RELATIVE_PATHS: &[&str] =
-    &[MANAGE_DOCS_RELATIVE_PATH, "artifacts", "ai"];
+    &[MANAGE_DOCS_RELATIVE_PATH, "artifacts", "ai", "tmp"];
 /*
 CDXC:DocsRootAdditive 2026-08-09:
 Mirrors `EXTRA_ROOT_MOUNT_SEGMENT` in `server/src/project_docs.rs`: the

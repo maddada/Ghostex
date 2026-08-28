@@ -135,16 +135,13 @@ impl GhostexGpuiApp {
         */
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
         let settings = settings_snapshot.object();
-        let completion_sound_enabled =
-            json_bool_field(settings, "completionBellEnabled").unwrap_or(true);
+        let completion_sound = json_string_field(settings, "completionSound");
+        let completion_sound_enabled = completion_sound != Some("off");
         let notifications_enabled =
             json_bool_field(settings, "showMacOSAttentionNotifications").unwrap_or(true);
         let mut played_sound = false;
         if completion_sound_enabled {
-            played_sound = self.play_gpui_completion_sound_preview(
-                json_string_field(settings, "completionSound"),
-                cx,
-            );
+            played_sound = self.play_gpui_completion_sound_preview(completion_sound, cx);
         }
 
         if notifications_enabled {

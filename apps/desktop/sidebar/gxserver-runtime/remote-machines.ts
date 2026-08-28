@@ -31,7 +31,7 @@ import type {
 import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
 import { createAppToastRequest } from '@/packages/shared/app-toast-contract';
-import type { PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
+import { isRemoteMachineEnabledInSidebar, type PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import type {
   GxserverEndpointPath,
   GxserverPresentationProject,
@@ -150,7 +150,9 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     }
     this.didConnectSavedRemoteMachinesOnStartup = true;
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
-    for (const machine of settings.remoteMachines) {
+    const enabledMachines = settings.remoteMachines.filter(isRemoteMachineEnabledInSidebar);
+    this.enabledRemoteMachineIdsForReconnect = new Set(enabledMachines.map((machine) => machine.id));
+    for (const machine of enabledMachines) {
       this.reconnectRemoteMachine(machine.id, false, true);
     }
   },
@@ -159,8 +161,10 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     if (!this.didConnectSavedRemoteMachinesOnStartup) {
       return;
     }
-    const savedRemoteMachineIds = new Set(
-      createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.map((machine) => machine.id)
+    const enabledRemoteMachineIds = new Set(
+      createGpuiSidebarSettings(this.runtimeSettings)
+        .remoteMachines.filter(isRemoteMachineEnabledInSidebar)
+        .map((machine) => machine.id)
     );
     const retryMachineIds = new Set([
       ...this.remoteReconnectAttempts.keys(),
@@ -168,11 +172,18 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       ...this.remoteReconnectTimeouts.keys(),
     ]);
     for (const machineId of retryMachineIds) {
-      if (savedRemoteMachineIds.has(machineId)) {
+      if (enabledRemoteMachineIds.has(machineId)) {
         continue;
       }
       this.resetRemoteReconnect(machineId);
     }
+    for (const machineId of enabledRemoteMachineIds) {
+      if (this.enabledRemoteMachineIdsForReconnect.has(machineId)) {
+        continue;
+      }
+      this.reconnectRemoteMachine(machineId, false, true);
+    }
+    this.enabledRemoteMachineIdsForReconnect = enabledRemoteMachineIds;
   },
 
   reconnectRemoteMachine(
@@ -228,7 +239,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       return;
     }
     const isStillSaved = createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.some(
-      (machine) => machine.id === normalizedMachineId
+      (machine) => machine.id === normalizedMachineId && isRemoteMachineEnabledInSidebar(machine)
     );
     if (!isStillSaved) {
       this.resetRemoteReconnect(normalizedMachineId);
@@ -242,7 +253,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     const timeout = window.setTimeout(() => {
       this.remoteReconnectTimeouts.delete(normalizedMachineId);
       const remainsSaved = createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.some(
-        (machine) => machine.id === normalizedMachineId
+        (machine) => machine.id === normalizedMachineId && isRemoteMachineEnabledInSidebar(machine)
       );
       if (!remainsSaved) {
         this.resetRemoteReconnect(normalizedMachineId);

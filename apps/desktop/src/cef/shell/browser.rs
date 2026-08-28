@@ -582,6 +582,7 @@ pub struct CefBrowser {
     pub(crate) last_bounds: RefCell<Option<(f32, f32, f32, f32, f32)>>,
     pub(crate) last_visible: Cell<Option<bool>>,
     pub(crate) uses_system_page_appearance: bool,
+    pub(crate) extension_bridge_installed: bool,
 }
 
 impl CefBrowser {
@@ -652,8 +653,23 @@ impl CefBrowser {
         {
             return Err("app-modal CEF surface does not match its first-party entry URL".into());
         }
+        /*
+        CDXC:GPUIExtensionRemoteUrlSurface 2026-08-28:
+        A `server.url` extension's surface is pinned to a third-party HTTPS
+        origin with `bridge_enabled` false. Drop its bridge event handler here
+        rather than at each caller, so the browser process is the single place
+        that decides a remote page gets no bridge: no install message, no
+        `ghostexExtensionHost`, no inbound handler, and no outbound dispatch.
+        */
+        let extension_bridge_installed = extension_bridge_surface
+            .as_ref()
+            .is_some_and(|surface| surface.bridge_enabled);
+        let extension_bridge_event_handler = extension_bridge_installed
+            .then_some(extension_bridge_event_handler)
+            .flatten();
         if let Some(surface) = extension_bridge_surface.as_ref()
-            && (!surface.matches_url(&requested_url) || extension_bridge_event_handler.is_none())
+            && (!surface.matches_url(&requested_url)
+                || (extension_bridge_installed && extension_bridge_event_handler.is_none()))
         {
             return Err("extension CEF surface does not match its registered origin".into());
         }
@@ -713,7 +729,10 @@ impl CefBrowser {
                     .map(GhostexGpuiBrowserRequestHandler::new)
             });
         let browser_lifecycle_handler = page_metadata_handler.clone();
-        let load_handler = if let Some(surface) = extension_bridge_surface.clone() {
+        let load_handler = if let Some(surface) = extension_bridge_surface
+            .clone()
+            .filter(|_| extension_bridge_installed)
+        {
             Some(GhostexGpuiExtensionBridgeLoadHandler::new(surface))
         } else if let Some(page_load_end_handler) = page_load_end_handler {
             /*
@@ -829,7 +848,12 @@ impl CefBrowser {
             last_bounds: RefCell::new(None),
             last_visible: Cell::new(None),
             uses_system_page_appearance,
+            extension_bridge_installed,
         })
+    }
+
+    pub fn extension_bridge_installed(&self) -> bool {
+        self.extension_bridge_installed
     }
 
     pub fn identifier(&self) -> i32 {
@@ -975,6 +999,12 @@ impl CefBrowser {
         */
         platform::focus_native_view(platform::native_view_ptr(host.window_handle()));
         host.set_focus(1);
+    }
+
+    pub fn paste(&self) -> bool {
+        self.focus();
+        let browser = self.browser.borrow();
+        edit_command_in_browser(&browser, CefEditCommand::Paste)
     }
 
     pub fn blur(&self) {

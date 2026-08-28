@@ -29,6 +29,7 @@ import type {
   GxserverPortlessStatus,
   GxserverPresentationSessionGitStatus,
   GxserverSidebarProjectCollectionsState,
+  GxserverSidebarSpacesState,
   GxserverStashedPrompt,
   GxserverStashedPromptTag,
 } from './gxserver-protocol';
@@ -305,21 +306,6 @@ export type SidebarSessionPrState = NonNullable<SidebarSessionGitStatus['prState
  * another cannot. A false/absent flag renders identically to a session that
  * simply has no `gitStatus`.
  */
-export type SidebarSessionLifecycleCapabilities = {
-  sessionGitStatus?: boolean;
-  sessionSettlement?: boolean;
-  sessionSnooze?: boolean;
-  /**
-   * CDXC:SidebarV2Worktree 2026-07-29:
-   * The daemon serves the V2 worktree flow (`createWorktreeSession` /
-   * `removeSessionWorktree`). Machine-scoped exactly like the flags above: only
-   * the gxserver holding the repository can cut a worktree in it. A false or
-   * absent flag collapses V2's split "+" back to the plain instant-session
-   * button for that machine's projects, and hides the worktree context item.
-   */
-  worktreeSessions?: boolean;
-};
-
 export type SidebarSessionItem = {
   kind?: 'browser' | 'workspace';
   sessionKind?: 'browser' | 'terminal';
@@ -333,6 +319,28 @@ export type SidebarSessionItem = {
    * Agent CLI hook installs capture the stable provider session id separately from Ghostex's visible session id. Sidebar cards carry that value so hover tooltips can show the exact resume target while title-based restore remains a backup.
    */
   agentSessionId?: string;
+  /**
+   * CDXC:SessionForkFamilies 2026-08-28:
+   * The registry session this row's conversation branched off, when gxserver
+   * could prove the edge: a Ghostex fork or restore records it directly, and an
+   * out-of-band `codex fork` becomes provable once the chat follower adopts the
+   * successor rollout id. Absent means "no known parent", which is also what a
+   * daemon that predates fork awareness reports.
+   */
+  forkedFromSessionId?: string;
+  /**
+   * How many VISIBLE sessions share this row's earlier history, this row
+   * included. Only present at two or more, so any value here means the row is
+   * one branch of a fork and the branch badge should render. Superseded
+   * ancestors are not counted, because they are not offered as rows anywhere.
+   */
+  forkBranchCount?: number;
+  /**
+   * The session ids behind `forkBranchCount`, in the same id space this row's
+   * own `sessionId` uses, so a client can route straight to a sibling branch
+   * without asking the daemon who the relatives are.
+   */
+  forkFamilySessionIds?: string[];
   faviconDataUrl?: string;
   firstUserMessage?: string;
   isGeneratingFirstPromptTitle?: boolean;
@@ -366,6 +374,17 @@ export type SidebarSessionItem = {
   isPinned?: boolean;
   /** Parked rows render in a collapsible section at the bottom of the sidebar. */
   isParked?: boolean;
+  /**
+   * CDXC:DraftSessions 2026-08-28:
+   * The session was created from the sidebar and has not received its first user
+   * prompt yet, copied straight through from
+   * `GxserverPresentationSession.isDraft`. PRESENT-ONLY (never `false`), which
+   * is also what a daemon that predates drafts publishes, so absence means
+   * "not a draft". Rows render a draft inline in its normal position with a
+   * pencil glyph instead of the agent logo and a dimmed title; the drafted text
+   * already arrives as `displayTitle`, derived server-side.
+   */
+  isDraft?: true;
   /**
    * CDXC:SidebarV2 2026-07-29:
    * Session creation stamp, projected straight from gxserver's presentation
@@ -879,45 +898,6 @@ export type SidebarHudState = {
    */
   globalCommands?: SidebarCommandButton[];
   isFocusModeActive: boolean;
-  /**
-   * CDXC:SidebarV2Lifecycle 2026-07-29:
-   * Settle/snooze capability is a per-DAEMON fact, and one sidebar renders rows
-   * from several daemons at once: the local gxserver plus one presentation
-   * snapshot per connected remote machine (each remote group carries
-   * `remoteMachineContext.machineId`, and its rows are built from that
-   * machine's own snapshot). So the capability cannot be one global boolean.
-   *
-   * The scoping that falls out of that merge shape is machine-scoped with a
-   * local default: `lifecycleCapabilities` is the LOCAL daemon's answer and
-   * applies to every group without a `remoteMachineContext`, while
-   * `lifecycleCapabilitiesByMachineId` answers for remote groups keyed by their
-   * machine id. A remote machine missing from the map is treated as
-   * incapable — never as "same as local" — because guessing would show a settle
-   * button that the remote daemon would reject.
-   */
-  lifecycleCapabilities?: SidebarSessionLifecycleCapabilities;
-  lifecycleCapabilitiesByMachineId?: Readonly<Record<string, SidebarSessionLifecycleCapabilities>>;
-  /**
-   * CDXC:SidebarV2LogicalProjects 2026-07-29:
-   * The inactivity auto-settle window each daemon actually applies, in days,
-   * scoped exactly like `lifecycleCapabilities` above: this field is the LOCAL
-   * daemon's window and `autoSettleAfterDaysByMachineId` answers for remote
-   * groups keyed by machine id.
-   *
-   * The absent/`null` distinction is load-bearing and mirrors the wire
-   * (`GxserverPresentationSnapshot.autoSettleAfterDays`):
-   * - absent (local): the daemon predates the field, so V2 falls back to the
-   *   local `sidebarAutoSettleAfterDays` setting — the same file that daemon
-   *   reads — which is the P2 behavior.
-   * - absent (a remote machine): V2 applies NO client-side inactivity settle to
-   *   that machine's rows. Applying the local window there is exactly the P2
-   *   minor this field exists to fix, and the remote daemon's own
-   *   `settledOverride` is authoritative for machines that cannot state a
-   *   window.
-   * - `null`: that daemon has inactivity auto-settle switched off.
-   */
-  autoSettleAfterDays?: number | null;
-  autoSettleAfterDaysByMachineId?: Readonly<Record<string, number | null>>;
   pendingAgentIds: string[];
   portless?: SidebarPortlessState;
   /**
@@ -963,8 +943,10 @@ export type SidebarHydrateMessage = {
   pinnedPrompts: SidebarPinnedPrompt[];
   previousSessions: SidebarPreviousSessionItem[];
   remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
+  remoteSidebarSpacesByMachineId?: Readonly<Record<string, GxserverSidebarSpacesState>>;
   revision: number;
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
+  sidebarSpaces?: GxserverSidebarSpacesState;
   type: 'hydrate';
   hud: SidebarHudState;
 };
@@ -974,8 +956,10 @@ export type SidebarSessionStateMessage = {
   pinnedPrompts: SidebarPinnedPrompt[];
   previousSessions: SidebarPreviousSessionItem[];
   remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
+  remoteSidebarSpacesByMachineId?: Readonly<Record<string, GxserverSidebarSpacesState>>;
   revision: number;
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
+  sidebarSpaces?: GxserverSidebarSpacesState;
   type: 'sessionState';
   hud: SidebarHudState;
 };
@@ -1010,6 +994,55 @@ export type SidebarProjectCollectionsChangedMessage = {
   sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
   remoteMachineId?: string;
   type: 'sidebarProjectCollectionsChanged';
+};
+
+export type SidebarSpacesChangedMessage = {
+  /*
+  CDXC:SidebarSpaces 2026-08-27:
+  gxserver owns the Space document (the saved sidebar filters and their
+  memberships) for the projects it hosts. Hosts forward the normalized wire
+  state (snapshot field, live event, or update ack) to SidebarApp, tagged with
+  the owning machine so a remote daemon's Spaces stay in that daemon's own
+  sidebar section instead of merging into the local set.
+  */
+  remoteMachineId?: string;
+  sidebarSpaces: GxserverSidebarSpacesState;
+  type: 'sidebarSpacesChanged';
+};
+
+/**
+ * CDXC:SidebarSpaces 2026-08-27:
+ * What the New/Edit Space dialog reports back, and nothing more: the user's
+ * typed field values plus the identity of the Space and the daemon they belong
+ * to. The dialog deliberately never carries a Space document — it renders in a
+ * separate app-modal window (desktop) or a sibling host (web) and would be
+ * writing back a snapshot that is already stale by the time it lands. SidebarApp
+ * applies these fields to whatever Space state it holds at apply time.
+ *
+ * `mode: 'create'` uses name/icon/color and may carry the group/project that
+ * should become the new Space's first member; it ignores `spaceId`. `mode:
+ * 'edit'` patches the named Space; `mode: 'delete'` needs only `spaceId`.
+ * `remoteMachineId` selects the owning daemon, exactly like `updateSidebarSpaces`.
+ */
+export type SidebarSpaceEditorResultFields = {
+  color?: string;
+  icon?: string;
+  memberCollectionId?: string;
+  memberProjectId?: string;
+  mode: 'create' | 'delete' | 'edit';
+  name?: string;
+  remoteMachineId?: string;
+  spaceId?: string;
+};
+
+/**
+ * The host-to-sidebar half of the Space editor round trip. The dialog posts
+ * `sidebarSpaceEditorResult` (a sidebar-to-extension command, because the dialog
+ * is a separate window); the host forwards exactly those fields back into
+ * SidebarApp under this type, which is the only place the mutation is applied.
+ */
+export type ApplySidebarSpaceEditorResultMessage = SidebarSpaceEditorResultFields & {
+  type: 'applySidebarSpaceEditorResult';
 };
 
 export type SidebarHudChangedMessage = {
@@ -1415,6 +1448,8 @@ export type ExtensionToSidebarMessage =
   | SidebarSessionPresentationChangedMessage
   | SidebarGroupsChangedMessage
   | SidebarProjectCollectionsChangedMessage
+  | SidebarSpacesChangedMessage
+  | ApplySidebarSpaceEditorResultMessage
   | SidebarHudChangedMessage
   | SidebarPlayCompletionSoundMessage
   | SidebarOrderSyncResultMessage
@@ -2185,7 +2220,7 @@ export type SidebarToExtensionMessage =
       remoteUrl: string;
     }
   | {
-      type: 'focusRecentProject' | 'restoreRecentProject';
+      type: 'closeProjectFromProjects' | 'focusRecentProject' | 'restoreRecentProject';
       projectId: string;
     }
   | {
@@ -2472,6 +2507,11 @@ export type SidebarToExtensionMessage =
       sessionId: string;
     }
   | {
+      /** Open the existing transcript export flow for this exact agent session. */
+      type: 'exportSessionTranscript';
+      sessionId: string;
+    }
+  | {
       type: 'fullReloadSession';
       sessionId: string;
     }
@@ -2697,6 +2737,31 @@ export type SidebarToExtensionMessage =
       remoteMachineId?: string;
       type: 'updateSidebarProjectCollections';
     }
+  | {
+      /*
+      CDXC:SidebarSpaces 2026-08-27:
+      SidebarApp write-through-syncs the whole Space document of one gxserver
+      after each local edit. The host debounces and pushes the wire state to
+      that daemon's /api/updateSidebarSpaces; only bounded metadata (space ids,
+      names, icon ids, colors, collection/project membership, ordering) crosses
+      this message. `remoteMachineId` selects the owning daemon, because each
+      gxserver section keeps its own Space set.
+      */
+      remoteMachineId?: string;
+      state: GxserverSidebarSpacesState;
+      type: 'updateSidebarSpaces';
+    }
+  | (SidebarSpaceEditorResultFields & {
+      /*
+      CDXC:SidebarSpaces 2026-08-27:
+      The New/Edit Space dialog's confirm (and its Delete). It travels as a
+      sidebar command because the dialog is a separate app-modal window, and the
+      host bounces it straight back to SidebarApp as
+      `applySidebarSpaceEditorResult` instead of acting on it: only SidebarApp
+      holds the Space document, and only it can apply an edit to the CURRENT one.
+      */
+      type: 'sidebarSpaceEditorResult';
+    })
   | {
       /*
       CDXC:GPUICommandPane 2026-06-26-05:11:

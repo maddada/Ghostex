@@ -578,15 +578,6 @@ export function areSameRemoteMachineDropTarget(
 
 export const LOCAL_PROJECT_LIST_SCOPE_ID = 'local';
 
-/*
- * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
- * The key the LOCAL daemon's project order rides under in grouped V2's
- * per-machine order map. It is deliberately not a bare "local": remote machine
- * ids come from user settings, and a machine the user happened to id "local"
- * would otherwise silently overwrite this Mac's list and swallow its reorder.
- */
-export const SIDEBAR_V2_LOCAL_GROUP_ORDER_KEY = 'sidebar-v2:local-project-order';
-
 export function createRemoteProjectListScopeId(remoteMachineId: string): string {
   return `remote:${remoteMachineId}`;
 }

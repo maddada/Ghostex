@@ -326,6 +326,36 @@ fn is_horizontal_rule(line: &str) -> bool {
 }
 
 /*
+The TOP rule of a sandwich, which may carry a right-aligned session title:
+
+    ───────────────────────────────── posthog-privacy-tracking-setup ─
+
+A ratio test cannot recognize this row: the title's length is fixed while the
+`─` fill shrinks with the pane, so on a narrow pane the dashes fall under any
+proportion threshold and the composer reads as absent (seen live on 2026-08-28
+with the title above in a ~66-column pane). So this is a SHAPE test instead —
+a leading `─` run, a trailing `─`, no box verticals — and the discrimination
+against transcript prose stays where it belongs, in the sandwich adjacency the
+caller also requires. The leading-run floor is deliberately small and FIXED:
+the fill is `pane width − title − 2`, so any width-scaled minimum recreates the
+ratio failure at some width/title pair (a 30-char title in a 40-column pane
+leaves 8 dashes).
+*/
+const TITLED_RULE_MIN_LEAD: usize = 4;
+
+fn is_titled_horizontal_rule(line: &str) -> bool {
+    if line
+        .chars()
+        .any(|ch| matches!(ch, '\u{2502}' | '\u{2503}' | '\u{256d}' | '\u{2570}'))
+    {
+        return false;
+    }
+    let trimmed = line.trim();
+    trimmed.ends_with('\u{2500}')
+        && trimmed.chars().take_while(|&ch| ch == '\u{2500}').count() >= TITLED_RULE_MIN_LEAD
+}
+
+/*
 The filter that keeps a dialog's SELECTED row from reading as a composer. Both
 codex and copilot draw the highlighted option with the very glyph their composer
 uses:
@@ -383,16 +413,19 @@ about picking the honest witness rather than about correctness of the verdict.
 */
 fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
     match signature {
+        // In both sandwiches the BOTTOM rule stays strict (it is always solid
+        // and spans the pane) and only the top rule is allowed to be the
+        // titled kind.
         ComposerSignature::RuleSandwich { marker } => {
             (0..lines.len().saturating_sub(2)).rev().any(|index| {
-                is_horizontal_rule(&lines[index])
+                is_horizontal_rule(&lines[index + 2])
                     && is_marker_line(&lines[index + 1], marker)
-                    && is_horizontal_rule(&lines[index + 2])
+                    && is_titled_horizontal_rule(&lines[index])
             })
         }
         ComposerSignature::EmptyRuleSandwich => {
             (0..lines.len().saturating_sub(1)).rev().any(|index| {
-                is_horizontal_rule(&lines[index]) && is_horizontal_rule(&lines[index + 1])
+                is_horizontal_rule(&lines[index + 1]) && is_titled_horizontal_rule(&lines[index])
             })
         }
         ComposerSignature::BareMarker { marker } => lines.iter().rev().any(|line| {

@@ -60,9 +60,7 @@ import {
   MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   PROMPT_EDITOR_BACKEND_OPTIONS,
-  WINDOWS_TERMINAL_BACKEND_OPTIONS,
   type PromptEditorBackend,
-  SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS,
   SIDEBAR_SIDE_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
   areDiagnosticLoggingSettingsEqual,
@@ -80,8 +78,6 @@ import {
   SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP,
   TERMINAL_VIEW_WIDTH_PERCENT_STEP,
   normalizeghostexSettings,
-  parseSidebarAutoSettleAfterDaysSelectValue,
-  sidebarAutoSettleAfterDaysSelectValue,
   type AutoSleepIdleMinutes,
   type GhosttyConfirmCloseSurface,
   type GhosttyCopyOnSelect,
@@ -119,8 +115,8 @@ import {
   SettingsSelectContent,
   SidebarPresetField,
   SidebarProjectGroupStyleField,
+  SidebarSpacesField,
   SidebarTagListSettingsField,
-  SidebarVersionField,
   SliderNumberField,
   SoundField,
   StaticNoteField,
@@ -259,7 +255,13 @@ export type SettingsModalProps = {
   onInstallMoveCodexSessionSkill?: () => void;
   onPlayCompletionSound?: (sound: CompletionSoundSetting) => void;
   onRequestMacOSNotificationPermission?: () => void;
-  onInstallAgentHooks?: () => void;
+  /*
+   * CDXC:AgentHookSettings 2026-08-28:
+   * Settings installs hooks for one agent from its roster row and for the whole
+   * supported set from the toolbar, so install takes the same optional agentIds
+   * the uninstall side and the native message contract already carry.
+   */
+  onInstallAgentHooks?: (agentIds?: readonly string[]) => void;
   onUninstallAgentHooks?: (agentIds?: readonly string[]) => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onUninstallBundledAgentSkills?: () => void;
@@ -1069,57 +1071,6 @@ export function SettingsModal({
                          */}
                         {mainSubsectionVisible('sidebar', settingsSearch.sidebar) ? (
                           <SettingsSection sectionRef={sidebarSectionRef} title='Sidebar'>
-                            {/*
-                             * CDXC:SidebarV2 2026-07-29:
-                             * Sidebar version stays near the top of the General tab so the
-                             * opt-in Inbox sidebar is discoverable without scrolling. Its
-                             * Group by Project sub-mode only appears while V2 is selected,
-                             * because the classic sidebar has no such layout.
-                             */}
-                            {mainSettingVisible(settingsSearch.sidebar, 'sidebarVersion') ? (
-                              <SidebarVersionField
-                                description="Classic keeps today's project-grouped sidebar. Inbox (V2) is a flat, position-stable list of sessions across all projects."
-                                label='Sidebar version'
-                                {...getSettingModificationProps('sidebarVersion')}
-                                onChange={(sidebarVersion) => updateDraft('sidebarVersion', sidebarVersion)}
-                                value={draft.sidebarVersion}
-                              />
-                            ) : null}
-                            {draft.sidebarVersion === 'v2' &&
-                            mainSettingVisible(settingsSearch.sidebar, 'sidebarV2Layout') ? (
-                              <ToggleField
-                                checked={draft.sidebarV2Layout === 'byProject'}
-                                description='Group Inbox sidebar sessions into collapsible project groups instead of one flat list.'
-                                label='Group by project'
-                                subtitle='Inbox sidebar only.'
-                                {...getSettingModificationProps('sidebarV2Layout')}
-                                onChange={(checked) => updateDraft('sidebarV2Layout', checked ? 'byProject' : 'flat')}
-                              />
-                            ) : null}
-                            {/*
-                             * CDXC:SidebarV2Lifecycle 2026-07-29:
-                             * Auto-settle is nested with the other Inbox-only controls: it
-                             * changes nothing in the classic sidebar, and showing it there
-                             * would advertise a shelf that does not exist. gxserver reads the
-                             * same key from the shared settings file for its server-side
-                             * sweep, so this one control drives both ends.
-                             */}
-                            {draft.sidebarVersion === 'v2' &&
-                            mainSettingVisible(settingsSearch.sidebar, 'sidebarAutoSettleAfterDays') ? (
-                              <SelectField
-                                description='Move sessions with no meaningful activity to the Settled shelf. Working and blocked sessions never settle automatically.'
-                                label='Auto-settle inactive sessions'
-                                {...getSettingModificationProps('sidebarAutoSettleAfterDays')}
-                                onChange={(value) =>
-                                  updateDraft(
-                                    'sidebarAutoSettleAfterDays',
-                                    parseSidebarAutoSettleAfterDaysSelectValue(value)
-                                  )
-                                }
-                                options={SIDEBAR_AUTO_SETTLE_AFTER_DAYS_OPTIONS}
-                                value={sidebarAutoSettleAfterDaysSelectValue(draft.sidebarAutoSettleAfterDays)}
-                              />
-                            ) : null}
                             {/* CDXC:SidebarSettingsPresets 2026-06-12-07:10: Preset is the first Sidebar setting so users can apply Codex, Minimal, Detailed, or Recommended sidebar UI defaults before tuning individual controlled settings. */}
                             {mainSettingVisible(settingsSearch.sidebar, 'sidebarSettingsPreset') ? (
                               <SidebarPresetField
@@ -1138,6 +1089,21 @@ export function SettingsModal({
                                 {...getSettingModificationProps('sidebarProjectGroupStyle')}
                                 onChange={(value) => updateDraft('sidebarProjectGroupStyle', value)}
                                 value={draft.sidebarProjectGroupStyle}
+                              />
+                            ) : null}
+                            {/*
+                             * CDXC:SidebarSpaces 2026-08-28:
+                             * Spaces is off until the user asks for it, so the switch sits
+                             * directly under Project group style where the other sidebar
+                             * structure controls are.
+                             */}
+                            {mainSettingVisible(settingsSearch.sidebar, 'sidebarSpacesEnabled') ? (
+                              <SidebarSpacesField
+                                description="Show a row of Space filter buttons in each server's sidebar section."
+                                label='Spaces'
+                                {...getSettingModificationProps('sidebarSpacesEnabled')}
+                                onChange={(value) => updateDraft('sidebarSpacesEnabled', value)}
+                                value={draft.sidebarSpacesEnabled}
                               />
                             ) : null}
                             {/*
@@ -1355,6 +1321,17 @@ export function SettingsModal({
                                 label='Enable session parking'
                                 {...getSettingModificationProps('enableSessionParking')}
                                 onChange={(checked) => updateDraft('enableSessionParking', checked)}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'sleepSessionWhenParking') ? (
+                              <ToggleField
+                                checked={draft.sleepSessionWhenParking}
+                                description='Sleep a session through its normal lifecycle immediately after it is parked.'
+                                disabled={!draft.enableSessionParking}
+                                disabledReason='Turn on “Enable session parking” first.'
+                                label='Sleep session when parking'
+                                {...getSettingModificationProps('sleepSessionWhenParking')}
+                                onChange={(checked) => updateDraft('sleepSessionWhenParking', checked)}
                               />
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'renameSessionOnDoubleClick') ? (
@@ -1799,17 +1776,6 @@ export function SettingsModal({
                               />
                             ) : null}
                             {IS_WINDOWS_HOST &&
-                            mainSettingVisible(settingsSearch.terminal, 'windowsTerminalBackend') ? (
-                              <SelectField
-                                description='Windows terminals currently use WSL2 with gxserver and zmx persistence. PowerShell mode will be added later.'
-                                label='Windows terminal backend'
-                                {...getSettingModificationProps('windowsTerminalBackend')}
-                                onChange={() => updateDraft('windowsTerminalBackend', 'wsl')}
-                                options={WINDOWS_TERMINAL_BACKEND_OPTIONS}
-                                value={draft.windowsTerminalBackend}
-                              />
-                            ) : null}
-                            {IS_WINDOWS_HOST &&
                             mainSettingVisible(settingsSearch.terminal, 'windowsWslDistribution') ? (
                               <TextField
                                 description='Leave blank to use the default initialized WSL2 distribution. If discovery cannot find the intended install, enter its exact name as shown by `wsl.exe --list --verbose` (for example, Ubuntu-24.04). Ghostex never installs WSL automatically.'
@@ -2247,20 +2213,10 @@ export function SettingsModal({
                         {mainSubsectionVisible('autoSleep', settingsSearch.autoSleep) ? (
                           <SettingsSection sectionRef={autoSleepSectionRef} title='Auto Sleep'>
                             {/* CDXC:AutoSleep 2026-05-28-08:32: Auto Sleep controls belong in one Settings section so VS Code, Git, Project, Manage, browser, and agent sessions can be tuned independently without hiding the relationship between the policies. */}
-                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepCodeEditorEnabled') ? (
-                              <ToggleField
-                                checked={draft.autoSleepCodeEditorEnabled}
-                                description='Sleep inactive VS Code panes after the selected idle period.'
-                                label='Sleep inactive VS Code panes'
-                                {...getSettingModificationProps('autoSleepCodeEditorEnabled')}
-                                onChange={(checked) => updateDraft('autoSleepCodeEditorEnabled', checked)}
-                              />
-                            ) : null}
-                            {draft.autoSleepCodeEditorEnabled &&
-                            mainSettingVisible(settingsSearch.autoSleep, 'autoSleepCodeEditorIdleMinutes') ? (
+                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepCodeEditorIdleMinutes') ? (
                               <SelectField
-                                description='Idle time before inactive VS Code panes sleep.'
-                                label='VS Code idle time'
+                                description='Choose when inactive VS Code panes sleep, or turn Auto Sleep off.'
+                                label='VS Code Auto Sleep'
                                 {...getSettingModificationProps('autoSleepCodeEditorIdleMinutes')}
                                 onChange={(value) =>
                                   updateDraft('autoSleepCodeEditorIdleMinutes', Number(value) as AutoSleepIdleMinutes)
@@ -2272,20 +2228,10 @@ export function SettingsModal({
                                 value={String(draft.autoSleepCodeEditorIdleMinutes)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepGitEditorEnabled') ? (
-                              <ToggleField
-                                checked={draft.autoSleepGitEditorEnabled}
-                                description='Sleep inactive Git panes after the selected idle period.'
-                                label='Sleep inactive Git panes'
-                                {...getSettingModificationProps('autoSleepGitEditorEnabled')}
-                                onChange={(checked) => updateDraft('autoSleepGitEditorEnabled', checked)}
-                              />
-                            ) : null}
-                            {draft.autoSleepGitEditorEnabled &&
-                            mainSettingVisible(settingsSearch.autoSleep, 'autoSleepGitEditorIdleMinutes') ? (
+                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepGitEditorIdleMinutes') ? (
                               <SelectField
-                                description='Idle time before inactive Git panes sleep.'
-                                label='Git idle time'
+                                description='Choose when inactive Git panes sleep, or turn Auto Sleep off.'
+                                label='Git Auto Sleep'
                                 {...getSettingModificationProps('autoSleepGitEditorIdleMinutes')}
                                 onChange={(value) =>
                                   updateDraft('autoSleepGitEditorIdleMinutes', Number(value) as AutoSleepIdleMinutes)
@@ -2297,20 +2243,10 @@ export function SettingsModal({
                                 value={String(draft.autoSleepGitEditorIdleMinutes)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepProjectEditorEnabled') ? (
-                              <ToggleField
-                                checked={draft.autoSleepProjectEditorEnabled}
-                                description='Sleep inactive Project panes after the selected idle period.'
-                                label='Sleep inactive Project panes'
-                                {...getSettingModificationProps('autoSleepProjectEditorEnabled')}
-                                onChange={(checked) => updateDraft('autoSleepProjectEditorEnabled', checked)}
-                              />
-                            ) : null}
-                            {draft.autoSleepProjectEditorEnabled &&
-                            mainSettingVisible(settingsSearch.autoSleep, 'autoSleepProjectEditorIdleMinutes') ? (
+                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepProjectEditorIdleMinutes') ? (
                               <SelectField
-                                description='Idle time before inactive Project panes sleep.'
-                                label='Project idle time'
+                                description='Choose when inactive Project panes sleep, or turn Auto Sleep off.'
+                                label='Project Auto Sleep'
                                 {...getSettingModificationProps('autoSleepProjectEditorIdleMinutes')}
                                 onChange={(value) =>
                                   updateDraft(
@@ -2325,20 +2261,10 @@ export function SettingsModal({
                                 value={String(draft.autoSleepProjectEditorIdleMinutes)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepBrowserSessionsEnabled') ? (
-                              <ToggleField
-                                checked={draft.autoSleepBrowserSessionsEnabled}
-                                description='Sleep inactive browser panes after the selected idle period.'
-                                label='Sleep inactive browser panes'
-                                {...getSettingModificationProps('autoSleepBrowserSessionsEnabled')}
-                                onChange={(checked) => updateDraft('autoSleepBrowserSessionsEnabled', checked)}
-                              />
-                            ) : null}
-                            {draft.autoSleepBrowserSessionsEnabled &&
-                            mainSettingVisible(settingsSearch.autoSleep, 'autoSleepBrowserIdleMinutes') ? (
+                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepBrowserIdleMinutes') ? (
                               <SelectField
-                                description='Idle time before inactive browser panes sleep.'
-                                label='Browser idle time'
+                                description='Choose when inactive browser panes sleep, or turn Auto Sleep off.'
+                                label='Browser Auto Sleep'
                                 {...getSettingModificationProps('autoSleepBrowserIdleMinutes')}
                                 onChange={(value) =>
                                   updateDraft('autoSleepBrowserIdleMinutes', Number(value) as AutoSleepIdleMinutes)
@@ -2350,20 +2276,10 @@ export function SettingsModal({
                                 value={String(draft.autoSleepBrowserIdleMinutes)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepAgentSessionsEnabled') ? (
-                              <ToggleField
-                                checked={draft.autoSleepAgentSessionsEnabled}
-                                description='Sleep idle agent terminal sessions automatically.'
-                                label='Sleep idle agent sessions'
-                                {...getSettingModificationProps('autoSleepAgentSessionsEnabled')}
-                                onChange={(checked) => updateDraft('autoSleepAgentSessionsEnabled', checked)}
-                              />
-                            ) : null}
-                            {draft.autoSleepAgentSessionsEnabled &&
-                            mainSettingVisible(settingsSearch.autoSleep, 'autoSleepAgentIdleMinutes') ? (
+                            {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepAgentIdleMinutes') ? (
                               <SelectField
-                                description='Idle time before eligible agent terminals sleep.'
-                                label='Agent idle time'
+                                description='Choose when eligible agent terminals sleep, or turn Auto Sleep off.'
+                                label='Agent Auto Sleep'
                                 {...getSettingModificationProps('autoSleepAgentIdleMinutes')}
                                 onChange={(value) =>
                                   updateDraft('autoSleepAgentIdleMinutes', Number(value) as AutoSleepIdleMinutes)
@@ -2375,7 +2291,7 @@ export function SettingsModal({
                                 value={String(draft.autoSleepAgentIdleMinutes)}
                               />
                             ) : null}
-                            {draft.autoSleepAgentSessionsEnabled &&
+                            {draft.autoSleepAgentIdleMinutes > 0 &&
                             mainSettingVisible(settingsSearch.autoSleep, 'autoSleepRequireAgentResumeCommand') ? (
                               <ToggleField
                                 checked={draft.autoSleepRequireAgentResumeCommand}
@@ -2385,7 +2301,7 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('autoSleepRequireAgentResumeCommand', checked)}
                               />
                             ) : null}
-                            {draft.autoSleepAgentSessionsEnabled &&
+                            {draft.autoSleepAgentIdleMinutes > 0 &&
                             mainSettingVisible(settingsSearch.autoSleep, 'autoSleepFavoriteAgentSessions') ? (
                               <ToggleField
                                 checked={draft.autoSleepFavoriteAgentSessions}
@@ -2472,27 +2388,20 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('keepAwakeWhileWorkingSessions', checked)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.power, 'keepAwakeDeactivateBelowBatteryThreshold') ? (
-                              <ToggleField
-                                checked={draft.keepAwakeDeactivateBelowBatteryThreshold}
-                                description='Stop preventing sleep when battery capacity drops below the threshold.'
-                                label='Deactivate below battery threshold'
-                                {...getSettingModificationProps('keepAwakeDeactivateBelowBatteryThreshold')}
-                                onChange={(checked) => updateDraft('keepAwakeDeactivateBelowBatteryThreshold', checked)}
-                              />
-                            ) : null}
-                            {draft.keepAwakeDeactivateBelowBatteryThreshold &&
-                            mainSettingVisible(settingsSearch.power, 'keepAwakeBatteryThresholdPercent') ? (
-                              <SliderNumberField
-                                description='Battery percentage used by the threshold rule.'
+                            {mainSettingVisible(settingsSearch.power, 'keepAwakeBatteryThresholdPercent') ? (
+                              <SelectField
+                                description='Stop preventing sleep below this battery level, or turn the rule off.'
                                 label='Battery threshold'
                                 {...getSettingModificationProps('keepAwakeBatteryThresholdPercent')}
-                                max={90}
-                                min={10}
-                                onCommit={(value) => updateDraft('keepAwakeBatteryThresholdPercent', value)}
-                                onChange={(value) => updateDraftDebounced('keepAwakeBatteryThresholdPercent', value)}
-                                step={5}
-                                value={draft.keepAwakeBatteryThresholdPercent}
+                                onChange={(value) => updateDraft('keepAwakeBatteryThresholdPercent', Number(value))}
+                                options={[
+                                  { label: 'Off', value: '0' },
+                                  ...Array.from({ length: 17 }, (_, index) => {
+                                    const percent = 10 + index * 5;
+                                    return { label: `${percent}%`, value: String(percent) };
+                                  }),
+                                ]}
+                                value={String(draft.keepAwakeBatteryThresholdPercent)}
                               />
                             ) : null}
                             {mainSettingVisible(settingsSearch.power, 'keepAwakeDeactivateOnLowPowerMode') ? (
@@ -2528,17 +2437,9 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('sounds', settingsSearch.sounds) ? (
                           <SettingsSection sectionRef={soundsSectionRef} title='Sounds'>
-                            {mainSettingVisible(settingsSearch.sounds, 'completionBellEnabled') ? (
-                              <ToggleField
-                                checked={draft.completionBellEnabled}
-                                description='Play a completion sound when work finishes.'
-                                label='Enable completion bell'
-                                {...getSettingModificationProps('completionBellEnabled')}
-                                onChange={(checked) => updateDraft('completionBellEnabled', checked)}
-                              />
-                            ) : null}
                             {mainSettingVisible(settingsSearch.sounds, 'completionSound') ? (
                               <SoundField
+                                allowOff
                                 description='Sound for terminal completions.'
                                 label='Completion Sound'
                                 {...getSettingModificationProps('completionSound')}
@@ -2590,7 +2491,7 @@ export function SettingsModal({
                                 description='Sound for action completions.'
                                 label='Action Completion Sound'
                                 {...getSettingModificationProps('actionCompletionSound')}
-                                onChange={(value) => updateDraft('actionCompletionSound', value)}
+                                onChange={(value) => value !== 'off' && updateDraft('actionCompletionSound', value)}
                                 onPlay={onPlayCompletionSound}
                                 value={draft.actionCompletionSound}
                               />

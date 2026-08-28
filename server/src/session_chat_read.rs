@@ -28,6 +28,9 @@ path while it still exists on disk.
 */
 pub(crate) struct SessionChatReadResolution {
     agent: Option<String>,
+    /// CDXC:DraftSessions 2026-08-28: the session's own `agentId`, not the
+    /// transcript family `agent` above.
+    session_agent_id: Option<String>,
     terminal_agent: Option<String>,
     agent_session_id: Option<String>,
     agent_session_path: Option<String>,
@@ -44,6 +47,14 @@ pub(crate) struct SessionChatReadResolution {
     learn that the queue or the draft changed at all.
     */
     queue: crate::session_chat_queue::SessionChatQueueSnapshot,
+    /*
+    CDXC:DraftSessions 2026-08-28: the agents this session may still be switched
+    to, resolved from the project's agent configuration. `Some` ONLY while the
+    session is a draft — its absence is what tells the composer to hide the
+    "Agents" section — and folded into the fingerprint below so a long-polling
+    client learns about a promotion (or a project agent edit) without a reload.
+    */
+    available_agents: Option<Value>,
     fingerprint: String,
 }
 
@@ -65,6 +76,21 @@ pub(crate) fn resolve_session_chat_read_state(
             message: "The session no longer exists.".to_string(),
         })?;
     let agent = session_chat_agent_for_session(&session);
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    The session's OWN launch agent id, which `agent` above is not: that one is
+    the transcript family, so a project custom agent built on Claude reports
+    `claude` there and is indistinguishable from Claude itself. The composer's
+    agent switcher needs the concrete id to tick the right row and to name the
+    agent it is switching away from, and it is the id `/api/switchDraftAgent`
+    takes.
+    */
+    let session_agent_id = session
+        .get("agentId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
     let terminal_agent = crate::session_chat_composer::session_chat_composer_agent_id(&session)
         .or_else(|| agent.clone());
     let agent_session_id = read_runtime_text(&session, "agentSessionId");
@@ -75,6 +101,14 @@ pub(crate) fn resolve_session_chat_read_state(
     let queue = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
         &db, project_id, session_id,
     );
+    let available_agents = if crate::agents::session_is_draft(&session) {
+        repository
+            .get_project(project_id)?
+            .as_ref()
+            .map(crate::agents::available_draft_agents)
+    } else {
+        None
+    };
     drop(session);
     drop(repository);
     drop(db);
@@ -105,6 +139,9 @@ pub(crate) fn resolve_session_chat_read_state(
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     agent.hash(&mut hasher);
+    // CDXC:DraftSessions 2026-08-28: a switch between two agents of the SAME
+    // transcript family moves only this value, and the composer has to follow it.
+    session_agent_id.hash(&mut hasher);
     terminal_agent.hash(&mut hasher);
     agent_session_id.hash(&mut hasher);
     stored_prompt.hash(&mut hasher);
@@ -195,10 +232,22 @@ pub(crate) fn resolve_session_chat_read_state(
     no extra query, no extra connection.
     */
     queue.revision().hash(&mut hasher);
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    Already-materialised value, no extra query. It has to be in the fingerprint
+    because an SSH-only client rebuilds its frames from long-polled reads: the
+    field going away is how it learns the draft was promoted and the "Agents"
+    section must disappear.
+    */
+    available_agents
+        .as_ref()
+        .map(Value::to_string)
+        .hash(&mut hasher);
     let fingerprint = format!("{:016x}", hasher.finish());
 
     Ok(SessionChatReadResolution {
         agent,
+        session_agent_id,
         terminal_agent,
         agent_session_id,
         agent_session_path,
@@ -207,6 +256,7 @@ pub(crate) fn resolve_session_chat_read_state(
         stored_prompt,
         transcript_path,
         queue,
+        available_agents,
         fingerprint,
     })
 }
@@ -295,6 +345,7 @@ pub(crate) async fn handle_read_session_chat_http(
     }
     let SessionChatReadResolution {
         agent,
+        session_agent_id,
         terminal_agent,
         agent_session_id,
         agent_session_path: _,
@@ -303,6 +354,7 @@ pub(crate) async fn handle_read_session_chat_http(
         stored_prompt,
         transcript_path,
         queue,
+        available_agents,
         fingerprint,
     } = resolution;
 
@@ -335,6 +387,19 @@ pub(crate) async fn handle_read_session_chat_http(
     one: an omitted draft means unchanged, never cleared.
     */
     queue.insert_into(&mut result);
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    Written on EVERY answer for a draft, including the early "unsupported" /
+    "starting" returns below — a draft's CLI is usually still booting, which is
+    exactly when the user reaches for the agent switcher. Absent on a promoted
+    session: the agent is fixed once its first prompt has landed.
+    */
+    if let Some(available_agents) = available_agents.clone() {
+        result.insert("availableAgents".to_string(), available_agents);
+    }
+    if let Some(session_agent_id) = session_agent_id.as_deref() {
+        result.insert("sessionAgentId".to_string(), json!(session_agent_id));
+    }
     if let Some(agent) = agent.as_deref() {
         result.insert("agent".to_string(), json!(agent));
     }
@@ -493,9 +558,18 @@ pub(crate) async fn handle_read_session_chat_http(
         let path = transcript_path.clone();
         let outcome = tokio::task::spawn_blocking(move || {
             let Some(path) = path else {
-                return Ok(crate::session_chat::SessionChatTailPage::NotFound);
+                return Ok(crate::session_chat_fork_stitch::SessionChatStitchedPage {
+                    page: crate::session_chat::SessionChatTailPage::NotFound,
+                    fork_info: None,
+                });
             };
-            crate::session_chat::read_session_chat_tail_page(
+            /*
+            CDXC:SessionChatForkStitch 2026-08-28:
+            Scroll-back follows a `codex fork` lineage across rollout files. Any
+            other agent, and any Codex rollout without a `forked_from_id`, takes
+            the untouched single-file read inside this helper.
+            */
+            crate::session_chat_fork_stitch::read_session_chat_tail_page_stitched(
                 transcript_agent,
                 &path,
                 limit,
@@ -514,6 +588,23 @@ pub(crate) async fn handle_read_session_chat_http(
     };
     result.insert("epoch".to_string(), json!(epoch));
     result.insert("seq".to_string(), json!(seq));
+
+    let read_outcome = match read_outcome {
+        Ok(Ok(stitched)) => {
+            /*
+            CDXC:SessionChatForkStitch 2026-08-28: lineage of the rollout this
+            chat is reading, present only when it was opened by `codex fork`.
+            Emitted next to the page so a client can label the boundary rows the
+            stitched page carries.
+            */
+            if let Some(fork_info) = stitched.fork_info.as_ref() {
+                result.insert("forkInfo".to_string(), fork_info.to_value());
+            }
+            Ok(Ok(stitched.page))
+        }
+        Ok(Err(error)) => Ok(Err(error)),
+        Err(error) => Err(error),
+    };
 
     match read_outcome {
         Ok(Ok(crate::session_chat::SessionChatTailPage::Page {

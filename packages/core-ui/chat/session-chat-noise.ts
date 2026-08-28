@@ -32,6 +32,7 @@ const MARKUP_TAG = /<\/?[a-z][a-z0-9-]*(?:\s[^>]*)?>/gi;
 const ANSI_STYLE_SEQUENCE = /(?:\u001b|\u009b)?\[[0-9;]{1,8}m/g;
 const COMPACTION_OUTPUT =
   /^compact(?:ed|ing|ion)\b(?:\s+(?:is\s+)?(?:complete[d]?|done|finished|successful(?:ly)?))?(?:\s*\([^)]*\))?\s*[.!…]*$/i;
+const POST_COMPACT_SUCCESS_OUTPUT = /^postcompact\b.*\bcompleted successfully:\s*\{\s*"continue"\s*:\s*true\s*\}\s*$/i;
 
 /** Claude: the row derived from `/compact`'s local-command output. */
 const COMPACTION_COMPLETED_LABEL = 'Compaction completed';
@@ -140,7 +141,15 @@ function normalizedSuppressedTurnBody(text: string): string {
 }
 
 function isCompactionCommandOutput(text: string): boolean {
-  return COMPACTION_OUTPUT.test(normalizedSuppressedTurnBody(text));
+  const [completion, ...hookResults] = stripSessionChatAnsi(sessionChatSuppressedTurnBody(text))
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return (
+    completion !== undefined &&
+    COMPACTION_OUTPUT.test(completion) &&
+    hookResults.every((line) => POST_COMPACT_SUCCESS_OUTPUT.test(line))
+  );
 }
 
 interface ModelDefaultOutput {

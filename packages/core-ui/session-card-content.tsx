@@ -2,6 +2,7 @@ import {
   IconClock,
   IconLoader2,
   IconMessageCircle,
+  IconPencil,
   IconPin,
   IconTerminal2,
   IconWorld,
@@ -239,6 +240,7 @@ export function SessionCardContent({
             <SessionHeaderAgentIcon
               agentIcon={session.agentIcon}
               faviconDataUrl={session.faviconDataUrl}
+              isDraft={session.isDraft === true}
               isGeneratingFirstPromptTitle={session.isGeneratingFirstPromptTitle}
               isReloading={session.isReloading}
               sessionPersistenceName={session.sessionPersistenceName}
@@ -835,6 +837,15 @@ type SessionAgentIconProps = {
   isFavorite?: boolean;
   isPinned?: boolean;
   sessionTag?: SidebarSessionTag;
+  /**
+   * CDXC:DraftSessions 2026-08-28:
+   * The session has not received its first prompt yet, so the pencil REPLACES
+   * the agent logo in the leading slot: the row is something the user is still
+   * writing, not a running conversation with that agent. The draft's agent is
+   * still switchable until the first Send, which is the other reason its logo
+   * would be a promise the row cannot keep.
+   */
+  isDraft?: boolean;
   isGeneratingFirstPromptTitle?: boolean;
   isReloading?: boolean;
   /**
@@ -868,6 +879,7 @@ function SessionAgentIconDecoration({
   agentIcon,
   className,
   faviconDataUrl,
+  isDraft = false,
   isGeneratingFirstPromptTitle = false,
   isReloading = false,
   loadingClassName,
@@ -876,6 +888,19 @@ function SessionAgentIconDecoration({
 }: SessionAgentIconDecorationProps) {
   if (isReloading || isGeneratingFirstPromptTitle) {
     return <IconLoader2 aria-hidden='true' className={loadingClassName} size={14} stroke={1.8} />;
+  }
+
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  The pencil takes the slot from the agent logo for a session with no first
+  prompt yet. It sits below the loading branch (a spinner is a live transition
+  and still wins) and above every identity branch, because "this is unsent" is
+  the fact the row is reporting — the agent name behind it can still change.
+  Browser sessions are never drafts, so the browser branch below is unreachable
+  for them either way.
+  */
+  if (isDraft && agentIcon !== 'browser') {
+    return <IconPencil aria-hidden='true' className={tablerClassName} data-agent-icon='draft' size={14} stroke={1.8} />;
   }
 
   if (agentIcon === 'browser') {
@@ -947,6 +972,7 @@ export function SessionFloatingAgentIcon({
   delayedSendRemainingLabel,
   faviconDataUrl,
   hasSessionNote = false,
+  isDraft = false,
   isFavorite = false,
   isPinned = false,
   onCloseAfterDoneClick,
@@ -1041,6 +1067,7 @@ export function SessionFloatingAgentIcon({
         agentIcon={agentIcon}
         className='session-floating-agent-icon'
         faviconDataUrl={faviconDataUrl}
+        isDraft={isDraft}
         isFavorite={isFavorite}
         loadingClassName='session-floating-reloading-icon'
         showTerminalIcon={showTerminalIcon}
@@ -1183,6 +1210,7 @@ function SessionTagSidebarIcon({ sessionTag }: { sessionTag: SidebarSessionTag }
 function SessionHeaderAgentIcon({
   agentIcon,
   faviconDataUrl,
+  isDraft = false,
   isGeneratingFirstPromptTitle = false,
   isReloading = false,
   sessionPersistenceName,
@@ -1195,6 +1223,7 @@ function SessionHeaderAgentIcon({
         agentIcon={agentIcon}
         className='session-header-agent-icon'
         faviconDataUrl={faviconDataUrl}
+        isDraft={isDraft}
         isGeneratingFirstPromptTitle={isGeneratingFirstPromptTitle}
         isReloading={isReloading}
         loadingClassName='session-header-reloading-icon'

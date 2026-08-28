@@ -1,5 +1,5 @@
 import { IconCheck, IconCopy, IconFolderSearch, IconLoader2 } from '@tabler/icons-react';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import {
   Select,
@@ -97,7 +97,7 @@ export type ExportTranscriptModalProps = {
   /** Configured agents offered for the follow-up conversation. */
   agents?: SidebarAgentButton[];
   /**
-   * The exported session's own agent, preselected so the obvious "continue with
+   * The exported session's own agent, preselected so the obvious "handoff to
    * the same agent" choice is one click away.
    */
   defaultAgentId?: string;
@@ -108,7 +108,7 @@ export type ExportTranscriptModalProps = {
   onRevealInFinder?: () => void;
   onStartNewConversation: (agentId: string) => void;
   stage: ExportTranscriptModalStage;
-  /** Disables Start New Conversation while the host is creating the session. */
+  /** Disables Handoff while the host is creating the session. */
   startBusy?: boolean;
 };
 
@@ -134,9 +134,11 @@ const INCLUDE_TOGGLE_ROWS: Array<{
   },
 ];
 
+const EXPORT_TRANSCRIPT_PRIMARY_ACTION_ID = 'export-transcript-primary-action';
+
 /**
  * CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
- * Export Transcript's one dialog: an options stage with include-toggles, the
+ * Handoff / Export's one dialog: an options stage with include-toggles, the
  * in-flight stage, and the result stage. The export only runs once the user
  * confirms it here, so the toggles govern the file that is actually written.
  * On the result, two numbered choices separate copying the path from staging
@@ -146,7 +148,9 @@ const INCLUDE_TOGGLE_ROWS: Array<{
  * typed into the new agent's input and left unsubmitted. Reveal is omitted
  * entirely — not disabled — when the file lives on another machine, because
  * there is nothing on this host to reveal.
+ * Enter advances both stages while the primary footer button stays focused.
  */
+
 export function ExportTranscriptModal({
   actionErrorMessage,
   agents = [],
@@ -171,6 +175,11 @@ export function ExportTranscriptModal({
     promptAgents[0]?.agentId ??
     '';
 
+  const isExporting = stage.stage === 'exporting';
+  const showOptions = stage.stage !== 'done';
+  const canHandoff = stage.stage === 'done' && promptAgents.length > 0 && Boolean(effectiveAgentId) && !startBusy;
+  const canAdvanceOptions = showOptions && !isExporting;
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -188,16 +197,61 @@ export function ExportTranscriptModal({
     return () => window.clearTimeout(timeoutId);
   }, [copied]);
 
-  const isExporting = stage.stage === 'exporting';
-  const showOptions = stage.stage !== 'done';
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      document.getElementById(EXPORT_TRANSCRIPT_PRIMARY_ACTION_ID)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isOpen, stage.stage]);
+
+  const advance = () => {
+    if (canAdvanceOptions) {
+      onExport(includeOptions);
+      return;
+    }
+    if (canHandoff) {
+      onStartNewConversation(effectiveAgentId);
+    }
+  };
+
+  const onDialogKeyDownCapture = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Enter' || event.repeat || event.nativeEvent.isComposing) {
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    if (target.closest('[role="listbox"]') || target.closest('[data-slot="select-content"]')) {
+      return;
+    }
+    if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') {
+      return;
+    }
+    if (!canAdvanceOptions && !canHandoff) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    advance();
+  };
 
   return (
-    <AppModalShell className='export-transcript-modal-shadcn' isOpen={isOpen} onClose={onClose} width={540}>
+    <AppModalShell
+      className='export-transcript-modal-shadcn'
+      isOpen={isOpen}
+      onClose={onClose}
+      onKeyDownCapture={onDialogKeyDownCapture}
+      width={540}
+    >
       <AppModalHeader className='gap-1'>
-        <AppModalTitle>{stage.stage === 'done' ? 'Transcript Exported' : 'Export Transcript'}</AppModalTitle>
+        <AppModalTitle>{stage.stage === 'done' ? 'Transcript Exported' : 'Handoff / Export'}</AppModalTitle>
         <AppModalDescription>
           {stage.stage === 'done'
-            ? 'Copy the exported file path, or continue the conversation with another agent.'
+            ? 'Copy the exported file path, or hand the conversation off to another agent.'
             : 'The conversation is written as a markdown file. Choose what to include alongside the messages.'}
         </AppModalDescription>
       </AppModalHeader>
@@ -282,10 +336,10 @@ export function ExportTranscriptModal({
                 <span aria-hidden='true' className='export-transcript-result-option-number'>
                   2
                 </span>
-                <div className='export-transcript-result-option-title'>Continue with another agent</div>
+                <div className='export-transcript-result-option-title'>Handoff to another agent</div>
               </div>
               <Select onValueChange={setSelectedAgentId} value={effectiveAgentId}>
-                <SelectTrigger aria-label='New conversation agent' id={agentSelectId}>
+                <SelectTrigger aria-label='Handoff agent' id={agentSelectId}>
                   <SelectValue placeholder='Select agent' />
                 </SelectTrigger>
                 <SelectContent alignItemWithTrigger={false} className={APP_MODAL_SELECT_CONTENT_CLASS}>
@@ -298,14 +352,6 @@ export function ExportTranscriptModal({
                   </SelectGroup>
                 </SelectContent>
               </Select>
-              <AppModalButton
-                className='export-transcript-result-action'
-                disabled={!effectiveAgentId || startBusy}
-                onClick={() => onStartNewConversation(effectiveAgentId)}
-                type='button'
-              >
-                {startBusy ? 'Starting…' : 'Start New Conversation'}
-              </AppModalButton>
             </section>
           ) : null}
           {actionErrorMessage ? (
@@ -315,19 +361,35 @@ export function ExportTranscriptModal({
           ) : null}
         </div>
       )}
-      {showOptions ? (
-        <AppModalFooter>
-          <AppModalButton onClick={onClose} type='button'>
-            Cancel
-          </AppModalButton>
-          <AppModalButton disabled={isExporting} onClick={() => onExport(includeOptions)} type='button'>
+      <AppModalFooter>
+        <AppModalButton onClick={onClose} type='button'>
+          {showOptions ? 'Cancel' : 'Done'}
+        </AppModalButton>
+        {showOptions ? (
+          <AppModalButton
+            disabled={isExporting}
+            id={EXPORT_TRANSCRIPT_PRIMARY_ACTION_ID}
+            onClick={() => onExport(includeOptions)}
+            tone='primary'
+            type='button'
+          >
             {isExporting ? (
               <IconLoader2 aria-hidden='true' className='export-transcript-spinner' size={15} stroke={1.9} />
             ) : null}
-            {isExporting ? 'Exporting…' : stage.stage === 'failed' ? 'Try Again' : 'Export'}
+            {isExporting ? 'Exporting…' : stage.stage === 'failed' ? 'Try Again' : 'Next'}
           </AppModalButton>
-        </AppModalFooter>
-      ) : null}
+        ) : promptAgents.length > 0 ? (
+          <AppModalButton
+            disabled={!effectiveAgentId || startBusy}
+            id={EXPORT_TRANSCRIPT_PRIMARY_ACTION_ID}
+            onClick={() => onStartNewConversation(effectiveAgentId)}
+            tone='primary'
+            type='button'
+          >
+            {startBusy ? 'Starting…' : 'Handoff'}
+          </AppModalButton>
+        ) : null}
+      </AppModalFooter>
     </AppModalShell>
   );
 }

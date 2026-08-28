@@ -299,7 +299,6 @@ export function useSidebarDocumentChromeEffects({
   useEffect(() => {
     document.body.dataset.sidebarTheme = theme;
     const normalizedThemeColor = normalizeWorkspaceThemeColor(customThemeColor);
-    const customSidebarTitlebarColorsEnabled = effectiveSettings.customSidebarTitlebarColorsEnabled === true;
     const customSidebarTitlebarForegroundColor = getSidebarTitlebarForegroundForBackground(
       effectiveSettings.customSidebarTitlebarBackgroundColor
     );
@@ -332,48 +331,20 @@ export function useSidebarDocumentChromeEffects({
      */
     document.body.style.setProperty('--ghostex-accent', effectiveSettings.accentColor);
 
-    if (customSidebarTitlebarColorsEnabled) {
-      /**
-       * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
-       * Custom sidebar/titlebar colors are an experimental chrome override.
-       * Publish dedicated CSS variables instead of mutating app theme tokens so
-       * Settings modals, sidebar dropdowns, and other overlay surfaces continue
-       * to resolve their normal Dark Gray/Dark 2 colors.
-       *
-       * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
-       * The foreground is derived from the selected background at apply time.
-       * Do not preserve older stored foreground choices in the sidebar DOM.
-       *
-       * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
-       * The sidebar custom chrome background is a fixed-strength vertical
-       * gradient derived from the selected tint-adjusted background. Publish
-       * explicit gradient stop variables while keeping the solid background
-       * token for row/card contrast calculations.
-       */
-      document.body.dataset.customSidebarTitlebarColors = 'true';
-      document.body.style.setProperty(
-        '--custom-sidebar-titlebar-foreground-color',
-        customSidebarTitlebarForegroundColor
-      );
-      document.body.style.setProperty(
-        '--custom-sidebar-titlebar-background-color',
-        effectiveSettings.customSidebarTitlebarBackgroundColor
-      );
-      document.body.style.setProperty(
-        '--custom-sidebar-titlebar-gradient-top-color',
-        customSidebarTitlebarGradientColors.sidebarTop
-      );
-      document.body.style.setProperty(
-        '--custom-sidebar-titlebar-gradient-bottom-color',
-        customSidebarTitlebarGradientColors.sidebarBottom
-      );
-    } else {
-      delete document.body.dataset.customSidebarTitlebarColors;
-      document.body.style.removeProperty('--custom-sidebar-titlebar-foreground-color');
-      document.body.style.removeProperty('--custom-sidebar-titlebar-background-color');
-      document.body.style.removeProperty('--custom-sidebar-titlebar-gradient-top-color');
-      document.body.style.removeProperty('--custom-sidebar-titlebar-gradient-bottom-color');
-    }
+    document.body.dataset.customSidebarTitlebarColors = 'true';
+    document.body.style.setProperty('--custom-sidebar-titlebar-foreground-color', customSidebarTitlebarForegroundColor);
+    document.body.style.setProperty(
+      '--custom-sidebar-titlebar-background-color',
+      effectiveSettings.customSidebarTitlebarBackgroundColor
+    );
+    document.body.style.setProperty(
+      '--custom-sidebar-titlebar-gradient-top-color',
+      customSidebarTitlebarGradientColors.sidebarTop
+    );
+    document.body.style.setProperty(
+      '--custom-sidebar-titlebar-gradient-bottom-color',
+      customSidebarTitlebarGradientColors.sidebarBottom
+    );
 
     return () => {
       delete document.body.dataset.sidebarTheme;
@@ -387,13 +358,7 @@ export function useSidebarDocumentChromeEffects({
       document.body.style.removeProperty('--custom-sidebar-titlebar-gradient-top-color');
       document.body.style.removeProperty('--custom-sidebar-titlebar-gradient-bottom-color');
     };
-  }, [
-    customThemeColor,
-    effectiveSettings.accentColor,
-    effectiveSettings.customSidebarTitlebarBackgroundColor,
-    effectiveSettings.customSidebarTitlebarColorsEnabled,
-    theme,
-  ]);
+  }, [customThemeColor, effectiveSettings.accentColor, effectiveSettings.customSidebarTitlebarBackgroundColor, theme]);
 
   useEffect(() => {
     document.body.style.setProperty('--ghostex-agent-manager-zoom', `${agentManagerZoomPercent}%`);

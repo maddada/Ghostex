@@ -88,8 +88,8 @@ use crate::{
     },
     presentation::{
         build_presentation_project_delta, build_presentation_session_delta,
-        increment_presentation_revision, list_previous_sessions, read_presentation_snapshot,
-        search_presentation_sessions,
+        increment_presentation_revision, list_previous_sessions, list_session_fork_branches,
+        read_presentation_snapshot, search_presentation_sessions,
     },
     project_docs, project_git_remote, project_icon,
     protocol::{
@@ -136,6 +136,9 @@ use crate::{
     sidebar_project_collections::{
         assign_project_to_sidebar_collection, read_sidebar_project_collections,
         update_sidebar_project_collections,
+    },
+    sidebar_spaces::{
+        prune_sidebar_spaces_for_collections, read_sidebar_spaces, update_sidebar_spaces,
     },
     source_control::{dispatch_source_control_endpoint, SourceControlError},
     storage::{
@@ -574,11 +577,22 @@ pub async fn run_gxserver_foreground(
     path restores it with its saved resume plan.
     */
     if let Ok(db) = open_gxserver_database(&paths) {
-        cycle_wire_incompatible_zmx_session_daemons(
-            &DomainRepository::new(&db, metadata.server_id.as_str()),
-            &logger,
-            &metadata.server_id,
-        );
+        let repository = DomainRepository::new(&db, metadata.server_id.as_str());
+        cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
+        /*
+        CDXC:DraftSessions 2026-08-28:
+        Discard drafts nobody typed into. The client discards an empty draft when
+        the user navigates away from it, but a daemon that was killed with one
+        open never got that call, so without a boot sweep abandoned rows and
+        their zmx daemons would pile up across restarts. Runs ONCE, here, before
+        the title observers and chat followers below subscribe to sessions, so a
+        swept row never gets a watcher attached to it in the first place.
+
+        The sweep also collects the throwaway `~/ghostex/chats` workspace a
+        quick chat's draft was the only session of; see
+        `discard_stranded_quick_project` for the guards on that delete.
+        */
+        let _ = crate::agents::sweep_empty_draft_sessions(&repository, &db, &paths.home_dir);
     }
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
@@ -1391,7 +1405,34 @@ async fn route_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
+                /*
+                CDXC:DraftSessions 2026-08-28:
+                A navigate-away discard is a REQUEST the daemon revalidates
+                against its own current state, because the client decided from a
+                presentation snapshot that may be one delta stale and the race it
+                loses is destructive (see `decline_empty_draft_discard`). A
+                removal that carries no `reason` never reaches this branch and
+                behaves exactly as it always has.
+                */
+                let is_discard_request = crate::agents::is_empty_draft_discard_request(params);
+                if let Some(declined) =
+                    crate::agents::decline_empty_draft_discard(repository, db, params)?
+                {
+                    return Ok(declined);
+                }
                 let session = repository.remove_session(params)?;
+                /*
+                CDXC:DraftSessions 2026-08-28:
+                Removing a DRAFT also kills its background agent CLI. The row
+                being deleted is the last thing that pointed at that zmx daemon,
+                so the empty-draft discard clients fire on navigate-away would
+                otherwise leave an orphaned CLI running with nothing in any
+                sidebar able to stop it. Scoped strictly to drafts: removing any
+                other session behaves exactly as it did before — those are
+                sessions the user is expected to have closed deliberately, and
+                changing that is not this feature's call to make.
+                */
+                crate::agents::kill_draft_session_provider(&session);
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
                 schedule_presentation_session_delta(
@@ -1401,6 +1442,37 @@ async fn route_http(
                     &project_id,
                     &session_id,
                 )?;
+                if is_discard_request {
+                    /*
+                    CDXC:DraftSessions 2026-08-28:
+                    A quick chat's draft was created inside a throwaway
+                    `~/ghostex/chats` workspace made for it alone, so discarding
+                    the draft has to collect that workspace too or the sidebar
+                    accumulates empty "Chat …" projects over real directories
+                    nobody will ever open. A no-op unless the project is a quick
+                    one with no sessions left; see
+                    `discard_stranded_quick_project` for the guards on its
+                    directory delete.
+                    */
+                    if crate::agents::discard_stranded_quick_project(
+                        repository,
+                        &state.paths.home_dir,
+                        &project_id,
+                    )? {
+                        schedule_presentation_project_delta(
+                            &state,
+                            db,
+                            repository,
+                            &project_id,
+                            "projectUpdated",
+                        )?;
+                    }
+                    // Answers the discard's own question without making the
+                    // client infer "it worked" from an absent key. Added only
+                    // for discards, so every other removal's payload is
+                    // byte-identical to what it has always been.
+                    return Ok(json!({ "removed": true, "session": session }));
+                }
                 Ok(json!({ "session": session }))
             },
         ),
@@ -1694,6 +1766,7 @@ async fn route_http(
                     "sidebarProjectCollections": collections.clone(),
                     "type": "sidebarProjectCollectionsChanged",
                 }));
+                broadcast_pruned_sidebar_spaces(&state, db, &collections)?;
                 Ok(json!({ "sidebarProjectCollections": collections }))
             },
         ),
@@ -1726,10 +1799,45 @@ async fn route_http(
                     "sidebarProjectCollections": collections.clone(),
                     "type": "sidebarProjectCollectionsChanged",
                 }));
+                broadcast_pruned_sidebar_spaces(&state, db, &collections)?;
                 Ok(json!({
                     "projectId": project_id,
                     "sidebarProjectCollections": collections,
                 }))
+            },
+        ),
+        "/api/readSidebarSpaces" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, _, _| read_sidebar_spaces(db).map(|spaces| json!({ "sidebarSpaces": spaces })),
+        ),
+        "/api/updateSidebarSpaces" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, _| {
+                /*
+                CDXC:SidebarSpaces 2026-08-27:
+                Space editors write-through-sync the whole normalized Space
+                document after each local edit, exactly like the project
+                collections beside them. Bump the presentation revision and
+                broadcast a dedicated event so snapshot pollers (mobile via CLI)
+                and live sidebar clients converge without re-sending project rows.
+                */
+                let _event_sequence = lock_presentation_event_sequence(&state)?;
+                let spaces = update_sidebar_spaces(db, params)?;
+                let revision = increment_presentation_revision(db)?;
+                state.event_hub.broadcast(json!({
+                    "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+                    "revision": revision,
+                    "serverId": state.metadata.server_id.clone(),
+                    "sidebarSpaces": spaces.clone(),
+                    "type": "sidebarSpacesChanged",
+                }));
+                Ok(json!({ "sidebarSpaces": spaces }))
             },
         ),
         "/api/readAppUserData" => handle_domain_http(
@@ -1921,11 +2029,26 @@ async fn route_http(
             &body_json,
             |_, db, params, server_id| list_previous_sessions(db, server_id, params),
         ),
+        /*
+        CDXC:SessionForkFamilies 2026-08-28:
+        Previous Sessions hides a closed row once something continues from it, so
+        the branch a user forked away from can vanish from every list. This is how
+        a client gets the whole family back, ancestors included, to offer a switch
+        between branches that share earlier history.
+        */
+        "/api/sessionForkBranches" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, server_id| list_session_fork_branches(db, server_id, params),
+        ),
         "/api/readAgentSettings"
         | "/api/updateAgentSettings"
         | "/api/readAgentLaunchPlan"
         | "/api/readAgentResumePlan"
         | "/api/forkSession"
+        | "/api/switchDraftAgent"
         | "/api/requestSessionRename"
         | "/api/cancelFirstPromptAutoTitle"
         | "/api/ingestSessionStateEvent"
@@ -2069,6 +2192,17 @@ async fn route_http(
         | "/api/setSessionChatDraft" => {
             handle_session_chat_queue_http(&state, endpoint.path, request_id, &body_json).await
         }
+        // CDXC:DraftCrashSafety 2026-08-28: the boot-time draft-cache
+        // reconcile read; see list_session_chat_drafts_value.
+        "/api/listSessionChatDrafts" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_repository, db, _params, _| {
+                crate::session_chat_queue::list_session_chat_drafts_value(db)
+            },
+        ),
         /*
         CDXC:SessionChatComposerReady 2026-08-26:
         The evidence read behind a `composerNotReady` refusal. Domain-shaped
@@ -2153,16 +2287,34 @@ async fn route_http(
         }
         "/api/control/stopAll" => {
             broadcast_server_stopping(&state);
+            /*
+            CDXC:StopAllKillsSessions 2026-08-28:
+            Kill the tracked zmx sessions BEFORE answering and before the
+            shutdown broadcast, so the reported counts are real and the kills
+            cannot race the control plane's own teardown. The kill loop runs
+            zmx subprocesses per session, so it leaves the async executor.
+            */
+            let stop_all_state = state.clone();
+            let counts = tokio::task::spawn_blocking(move || {
+                zmx_http::kill_all_tracked_zmx_sessions(&stop_all_state)
+            })
+            .await
+            .unwrap_or(zmx_http::ZmxStopAllCounts {
+                attempted: 0,
+                failed: 0,
+                killed: 0,
+                skipped: 0,
+            });
             let response = routed_json(
                 Some(endpoint.path),
                 StatusCode::OK,
                 rpc_success(
                     request_id,
                     json!({
-                        "attemptedSessions": 0,
-                        "failedSessions": 0,
-                        "killedSessions": 0,
-                        "skippedSessions": 0,
+                        "attemptedSessions": counts.attempted,
+                        "failedSessions": counts.failed,
+                        "killedSessions": counts.killed,
+                        "skippedSessions": counts.skipped,
                     }),
                 ),
             );

@@ -3,7 +3,6 @@ import {
   clampVisibleSessionCount,
   type SidebarSessionGroup,
   type SidebarSessionItem,
-  type SidebarSessionLifecycleCapabilities,
 } from './session-grid-contract';
 import type {
   GxserverDomainLifecycleState,
@@ -388,6 +387,15 @@ export function createGxserverPresentationSidebarSession({
     agentName: presentation.agentName ?? presentation.agentId,
     agentSessionId: presentation.agentSessionId ?? localSession?.agentSessionId,
     alias: presentation.title,
+    /*
+    CDXC:SessionForkFamilies 2026-08-28:
+    Fork lineage is derived by the daemon that owns the registry, so this is a
+    straight forward of what it published. A daemon that predates fork awareness
+    sends nothing and the row simply has no branch badge.
+    */
+    forkedFromSessionId: presentation.forkedFromSessionId,
+    forkBranchCount: presentation.forkBranchCount,
+    forkFamilySessionIds: presentation.forkFamilySessionIds,
     closeAfterDone: closeAfterDone?.armed,
     closeAfterDoneDeadlineAt: closeAfterDone?.deadlineAt,
     closeAfterDoneRemainingLabel: closeAfterDone?.remainingLabel,
@@ -444,6 +452,15 @@ export function createGxserverPresentationSidebarSession({
     daemon) with nothing to say.
     */
     gitStatus: presentation.gitStatus,
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    Draft-ness is server-owned and PRESENT-ONLY, so it is copied through by
+    reference: `true` stays `true`, anything else (including the `undefined` a
+    daemon that predates drafts publishes) stays absent. Never normalize it to a
+    boolean — `isDraft: false` would claim a session is definitely not a draft
+    on a daemon that cannot answer the question at all.
+    */
+    isDraft: presentation.isDraft === true ? true : undefined,
     isFavorite: presentation.isFavorite,
     isFocused: isActiveProject && focusedSessionId === presentation.sessionId,
     isGeneratingFirstPromptTitle: presentation.isGeneratingFirstPromptTitle,
@@ -496,67 +513,6 @@ export function createGxserverPresentationSidebarSession({
     titleObservation: presentation.titleObservation,
     workingStartedAt: presentation.workingStartedAt,
   };
-}
-
-/**
- * CDXC:SidebarV2Lifecycle 2026-07-29:
- * One daemon's settle/snooze capability, projected for `SidebarHudState`.
- * Returns `undefined` when the snapshot carries no `capabilities` block at all
- * — that is exactly how an older gxserver looks, and the sidebar must hide the
- * lifecycle affordances rather than assume support.
- *
- * CDXC:SidebarV2Git 2026-07-29:
- * `sessionGitStatus` is normalized here too, and every flag is normalized to a
- * real boolean rather than passed through: a daemon that publishes the block
- * for settle/snooze but predates the git probe omits the key, and the sidebar
- * must read that as "no git data from this machine".
- */
-export function gxserverPresentationSidebarLifecycleCapabilities(
-  presentation: Pick<GxserverPresentationSnapshot, 'capabilities'> | undefined
-): SidebarSessionLifecycleCapabilities | undefined {
-  const capabilities = presentation?.capabilities;
-  if (!capabilities) {
-    return undefined;
-  }
-  return {
-    sessionGitStatus: capabilities.sessionGitStatus === true,
-    sessionSettlement: capabilities.sessionSettlement === true,
-    sessionSnooze: capabilities.sessionSnooze === true,
-    /*
-    CDXC:SidebarV2Worktree 2026-07-29:
-    Normalized to a real boolean for the same reason as the git flag: a daemon
-    that publishes this block for settle/snooze but predates the worktree flow
-    omits the key, and the sidebar must read that as "this machine cannot cut
-    worktrees" rather than as undefined-means-maybe.
-    */
-    worktreeSessions: capabilities.worktreeSessions === true,
-  };
-}
-
-/*
-CDXC:SidebarV2LogicalProjects 2026-07-29:
-The auto-settle window a daemon states for ITSELF. `undefined` is preserved as
-"this daemon never said" — the caller decides what that means per machine — and
-anything the daemon publishes is normalized with the exact rule the settings
-schema and server already share: a finite positive number is a window,
-every other number (0, negatives, NaN) means auto-settle is off, and so does an
-explicit null. A non-number value is treated as unstated rather than as off, so
-a malformed field cannot silently disable a machine's shelf.
-*/
-export function gxserverPresentationSidebarAutoSettleAfterDays(
-  presentation: Pick<GxserverPresentationSnapshot, 'autoSettleAfterDays'> | undefined
-): number | null | undefined {
-  const value = presentation?.autoSettleAfterDays;
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === null) {
-    return null;
-  }
-  if (typeof value !== 'number') {
-    return undefined;
-  }
-  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export function presentationLifecycleStateForSidebar(

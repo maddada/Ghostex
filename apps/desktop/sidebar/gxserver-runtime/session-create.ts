@@ -679,6 +679,15 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
         '/api/createAgentSession',
         {
           agentId: normalizedAgentId,
+          /*
+          CDXC:DraftSessions 2026-08-28:
+          Sidebar agent launches carry no prompt, so the remote gxserver creates
+          a draft row: the CLI still starts in the background below (the
+          promptless `startRemoteAgentSessionAndSendPrompt` call only starts the
+          provider), but the session stays a draft until a first user prompt
+          actually reaches the agent. Never combine with firstUserMessage.
+          */
+          draft: true,
           projectId: remoteGroup.projectId,
           requireLaunchCommand: true,
           runtimeSettings: this.createFirstPromptTitleRuntimeSettings(),
@@ -785,6 +794,16 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     try {
       response = await this.client.rpc<GpuiGxserverCreatedSessionResult>('/api/createAgentSession', {
         agentId: agent.agentId,
+        /*
+        CDXC:DraftSessions 2026-08-28:
+        A sidebar agent launch has no prompt, so the row is created as a draft.
+        The agent CLI is NOT started here: `focusLocalWorkspaceSession` below
+        hands the session to the Rust attach path, whose
+        `should_start_local_zmx_provider_before_gpui_attach` check starts the
+        missing provider, so trust/login/update screens surface while the user
+        types. gxserver drops `draftStatus` when the first prompt lands.
+        */
+        draft: true,
         launchSettings: {
           agentCommand: agent.command,
           icon: agent.icon,

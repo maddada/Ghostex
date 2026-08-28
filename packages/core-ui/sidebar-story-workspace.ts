@@ -12,7 +12,6 @@ import {
   type SidebarSessionStateMessage,
   type SidebarToExtensionMessage,
 } from '../shared/session-grid-contract';
-import type { SidebarV2SessionOverrides, SidebarV2SessionSource } from '../shared/sidebar-v2-session';
 import type { SidebarAgentButton } from '../shared/sidebar-agents';
 import type { SidebarCommandButton } from '../shared/sidebar-commands';
 import { normalizeghostexSettings, type ghostexSettings } from '../shared/ghostex-settings';
@@ -46,7 +45,6 @@ type SidebarStoryWorkspaceOptions = {
    * without it the V2 shelves classify nothing and the lifecycle stories would
    * pass against an empty inbox.
    */
-  lifecycleCapabilities?: SidebarHydrateMessage['hud']['lifecycleCapabilities'];
   /*
    * CDXC:SidebarV2LogicalProjects 2026-07-29:
    * Per-remote-machine capability and per-daemon auto-settle window. Same
@@ -54,9 +52,6 @@ type SidebarStoryWorkspaceOptions = {
    * round trip, so a multi-machine story would lose its remote machine's
    * lifecycle answers and its own settle window on the first re-render.
    */
-  autoSettleAfterDays?: SidebarHydrateMessage['hud']['autoSettleAfterDays'];
-  autoSettleAfterDaysByMachineId?: SidebarHydrateMessage['hud']['autoSettleAfterDaysByMachineId'];
-  lifecycleCapabilitiesByMachineId?: SidebarHydrateMessage['hud']['lifecycleCapabilitiesByMachineId'];
   recentProjects: SidebarHydrateMessage['hud']['recentProjects'];
   showCloseButtonOnSessionCards: boolean;
   settings?: ghostexSettings;
@@ -113,16 +108,7 @@ type SidebarSessionDecoration = Pick<
   | 'queuedPromptFailedCount'
   | 'terminalTitle'
   | 'workingStartedAt'
-> &
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * The Storybook workspace round trip rebuilds sidebar sessions from a
-   * SessionRecord snapshot, so anything not listed here is dropped. The V2
-   * lifecycle fields are carried as overrides because gxserver does not
-   * publish them until P2 — declaring them here lets shelf stories exercise
-   * settled/snoozed rows now without inventing a client-side lifecycle.
-   */
-  SidebarV2SessionOverrides;
+>;
 
 export type SidebarStoryWorkspace = {
   groupMetadataById: Readonly<
@@ -158,10 +144,6 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
       completionBellEnabled: message.hud.completionBellEnabled,
       completionSound: message.hud.completionSound,
       debuggingMode: message.hud.debuggingMode,
-      autoSettleAfterDays: message.hud.autoSettleAfterDays,
-      autoSettleAfterDaysByMachineId: message.hud.autoSettleAfterDaysByMachineId,
-      lifecycleCapabilities: message.hud.lifecycleCapabilities,
-      lifecycleCapabilitiesByMachineId: message.hud.lifecycleCapabilitiesByMachineId,
       recentProjects: message.hud.recentProjects,
       showCloseButtonOnSessionCards: message.hud.showCloseButtonOnSessionCards,
       settings: message.hud.settings,
@@ -197,7 +179,6 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
     sessionDecorationsById: Object.fromEntries(
       message.groups.flatMap((group) =>
         group.sessions.map((session) => {
-          const v2Session = session as SidebarV2SessionSource;
           return [
             session.sessionId,
             {
@@ -224,10 +205,6 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
               lastInteractionAt: session.lastInteractionAt,
               queuedPromptCount: session.queuedPromptCount,
               queuedPromptFailedCount: session.queuedPromptFailedCount,
-              settledAt: v2Session.settledAt,
-              settledOverride: v2Session.settledOverride,
-              snoozedAt: v2Session.snoozedAt,
-              snoozedUntil: v2Session.snoozedUntil,
               terminalTitle: session.terminalTitle,
               workingStartedAt: session.workingStartedAt,
             } satisfies SidebarSessionDecoration,
@@ -307,20 +284,6 @@ export function createSidebarStoryMessage(
     groups,
     hud: {
       ...hud,
-      ...(workspace.options.lifecycleCapabilities
-        ? { lifecycleCapabilities: workspace.options.lifecycleCapabilities }
-        : {}),
-      ...(workspace.options.lifecycleCapabilitiesByMachineId
-        ? {
-            lifecycleCapabilitiesByMachineId: workspace.options.lifecycleCapabilitiesByMachineId,
-          }
-        : {}),
-      ...(workspace.options.autoSettleAfterDays === undefined
-        ? {}
-        : { autoSettleAfterDays: workspace.options.autoSettleAfterDays }),
-      ...(workspace.options.autoSettleAfterDaysByMachineId
-        ? { autoSettleAfterDaysByMachineId: workspace.options.autoSettleAfterDaysByMachineId }
-        : {}),
       /*
        * CDXC:ProjectActions 2026-08-01:
        * Project rows read their Actions from `commandsByProject`, not the flat
@@ -413,28 +376,8 @@ export function reduceSidebarStoryWorkspace(
         },
       };
 
-    /*
-     * CDXC:SidebarV2LogicalProjects 2026-07-29:
-     * Only the project-grouping write is echoed back into story settings, and
-     * deliberately so. That write's whole point is that the list RE-GROUPS, so
-     * a story that only asserted the outgoing message would prove nothing about
-     * the feature. Every other settings source stays one-way here: the sidebar
-     * version switch in particular is asserted by several V1 stories that expect
-     * the classic sidebar to stay mounted after the click.
-     */
     case 'updateSettingsPatch':
-      return message.source === 'sidebar:projectGrouping' && workspace.options.settings
-        ? {
-            ...workspace,
-            options: {
-              ...workspace.options,
-              settings: normalizeghostexSettings({
-                ...workspace.options.settings,
-                ...message.patch,
-              }),
-            },
-          }
-        : undefined;
+      return undefined;
 
     case 'toggleFullscreenSession':
       return {

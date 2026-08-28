@@ -8,7 +8,10 @@
 // the transcript/statusline by gxserver. No catalog value is presented as the
 // current session truth without evidence.
 //
-// Agents without a catalog (unknown ids) get no pills at all.
+// Agents without a catalog (unknown ids) get no pills at all — with one
+// exception owned by the pills, not by this module: a DRAFT session still
+// renders its agent pill, because the composer's "Agents" switcher lives in
+// that pill's menu (CDXC:DraftSessions 2026-08-28).
 
 import type { SessionChatSendKey } from '../../shared/session-chat';
 import type { SidebarAgentIcon } from '../../shared/sidebar-agents';
@@ -712,6 +715,13 @@ export function sessionChatOptionsPillLabel(
 // Persistence — last dispatched values per session
 // ---------------------------------------------------------------------------
 
+/*
+The key after this prefix is composed by `useSessionChatSessionOptions`
+(session-chat-option-pills.tsx), which appends the draft's concrete agent id to
+the session key while the session is a draft. Read/write here take whatever key
+they are handed; the scheme itself — and why a non-draft session keeps the bare
+session key — is documented at that call site.
+*/
 const STORAGE_PREFIX = 'ghostex.sessionChat.options.';
 
 function storage(): Storage | null {

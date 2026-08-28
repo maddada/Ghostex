@@ -167,6 +167,10 @@ fn parse_installed_extension(value: &serde_json::Value) -> Option<GpuiInstalledE
         pinned: state.get("pinned").and_then(serde_json::Value::as_bool) == Some(true),
         terminal_pane: manifest.get("kind").and_then(serde_json::Value::as_str)
             == Some("terminal-pane"),
+        remote_url_server: manifest
+            .get("server")
+            .and_then(serde_json::Value::as_object)
+            .is_some_and(|server| server.contains_key("url")),
     })
 }
 

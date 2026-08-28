@@ -42,6 +42,7 @@ import {
   createGpuiRemotePresentationSessionId,
   createGpuiRemotePresentationSidebarGroups,
   isSidebarProjectCollectionsState,
+  isSidebarSpacesState,
   parseGpuiRemotePresentationGroupId,
   parseGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationSessionId,
@@ -72,6 +73,7 @@ import type {
   GxserverPresentationSession,
   GxserverPresentationSnapshot,
   GxserverSidebarProjectCollectionsState,
+  GxserverSidebarSpacesState,
 } from '@/packages/shared/gxserver-protocol';
 import { createDefaultSidebarProjectDiffStats } from '@/packages/shared/project-diff-stats';
 import type {
@@ -113,6 +115,7 @@ export interface GpuiSidebarRuntimeSidebarGroupMethods {
   postGpuiStatusPetState(): void;
   createHydrateMessage(groups: SidebarSessionGroup[], hud: SidebarHudState): SidebarHydrateMessage;
   remoteSidebarProjectCollectionsByMachineId(): Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
+  remoteSidebarSpacesByMachineId(): Readonly<Record<string, GxserverSidebarSpacesState>>;
   createSidebarGroups(presentation: GxserverPresentationSnapshot): SidebarSessionGroup[];
   withQuickAutomationsOverviewGroup(groups: SidebarSessionGroup[]): SidebarSessionGroup[];
   createQuickAutomationsSidebarSession(): SidebarSessionItem;
@@ -293,6 +296,9 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     for (const [machineId, snapshot] of this.remotePresentations) {
       if (isSidebarProjectCollectionsState(snapshot.sidebarProjectCollections)) {
         this.forwardRemoteSidebarProjectCollectionsFromGxserver(machineId, snapshot.sidebarProjectCollections);
+      }
+      if (isSidebarSpacesState(snapshot.sidebarSpaces)) {
+        this.forwardRemoteSidebarSpacesFromGxserver(machineId, snapshot.sidebarSpaces);
       }
     }
     const previousGroups = this.latestGroups;
@@ -584,6 +590,9 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
         ...(typeof session.stashedPromptCount === 'number' && session.stashedPromptCount > 0
           ? { stashedPromptCount: Math.floor(session.stashedPromptCount) }
           : {}),
+        // CDXC:DraftAgentSwitch 2026-08-28: present-only, so a non-draft row
+        // publishes exactly what it published before drafts existed.
+        ...(session.isDraft === true ? { isDraft: true } : {}),
         isGeneratingFirstPromptTitle: session.isGeneratingFirstPromptTitle === true,
         isSleeping: session.isSleeping === true,
         kind,
@@ -682,6 +691,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       pinnedPrompts: [...this.appUserData.pinnedPrompts],
       previousSessions: [],
       remoteSidebarProjectCollectionsByMachineId: this.remoteSidebarProjectCollectionsByMachineId(),
+      remoteSidebarSpacesByMachineId: this.remoteSidebarSpacesByMachineId(),
       revision: ++this.revision,
       type: 'hydrate',
     };
@@ -702,6 +712,31 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     for (const [machineId, snapshot] of this.remotePresentations) {
       if (savedMachineIds.has(machineId) && isSidebarProjectCollectionsState(snapshot.sidebarProjectCollections)) {
         result[machineId] = snapshot.sidebarProjectCollections;
+      }
+    }
+    return result;
+  },
+
+  /*
+  CDXC:SidebarSpaces 2026-08-27:
+  Each gxserver owns its own Space set, so hydrate carries the remote documents
+  keyed by machine and never merges them. LOCAL Spaces stay out of hydrate for
+  the same reason the local project collections do: they arrive through
+  `sidebarSpacesChanged` once the presentation snapshot lands.
+  */
+  remoteSidebarSpacesByMachineId(this: GpuiSidebarRuntime): Readonly<Record<string, GxserverSidebarSpacesState>> {
+    const result: Record<string, GxserverSidebarSpacesState> = {};
+    const savedMachineIds = new Set(
+      createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.map((machine) => machine.id)
+    );
+    for (const [machineId, snapshot] of this.remoteLastSeenPresentations) {
+      if (savedMachineIds.has(machineId) && isSidebarSpacesState(snapshot.sidebarSpaces)) {
+        result[machineId] = snapshot.sidebarSpaces;
+      }
+    }
+    for (const [machineId, snapshot] of this.remotePresentations) {
+      if (savedMachineIds.has(machineId) && isSidebarSpacesState(snapshot.sidebarSpaces)) {
+        result[machineId] = snapshot.sidebarSpaces;
       }
     }
     return result;

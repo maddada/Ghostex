@@ -39,6 +39,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/packages/com
 import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
 import { Switch } from '@/packages/components/ui/switch';
 import { cn } from '@/packages/components/utils';
+import { DEFAULT_COMPLETION_SOUND } from '../shared/completion-sound';
 import type { FirstLaunchSetupMainSettingKey } from '../shared/first-launch-setup-settings';
 import type { SidebarTheme } from '../shared/session-grid-contract';
 import type {
@@ -1041,7 +1042,7 @@ export function FirstLaunchSetupModal({
             <FirstLaunchProjectPage
               attentionNotificationsEnabled={settings.showMacOSAttentionNotifications}
               backgroundAgentId={backgroundAgentId}
-              completionSoundEnabled={settings.completionBellEnabled}
+              completionSoundEnabled={settings.completionSound !== 'off'}
               onAddFirstProject={(path) => void finishFirstLaunchSetup(path)}
               onChangePreferredInterface={(preferredAgentInterface) => updateSettings({ preferredAgentInterface })}
               onSelectBackgroundAgent={(agentId) => {
@@ -1054,7 +1055,9 @@ export function FirstLaunchSetupModal({
                 }
               }}
               onToggleAttentionNotifications={(enabled) => updateSettings({ showMacOSAttentionNotifications: enabled })}
-              onToggleCompletionSound={(enabled) => updateSettings({ completionBellEnabled: enabled })}
+              onToggleCompletionSound={(enabled) =>
+                updateSettings({ completionSound: enabled ? DEFAULT_COMPLETION_SOUND : 'off' })
+              }
               preferredInterface={settings.preferredAgentInterface}
               titleAndCommitAgents={titleAndCommitAgents}
             />
@@ -1893,11 +1896,11 @@ function FirstLaunchPreferencesPage({
           onChange={(checked) => updateSetting('showMacOSAttentionNotifications', checked)}
         />
         <FirstLaunchCheckboxSetting
-          checked={settings.completionBellEnabled}
+          checked={settings.completionSound !== 'off'}
           description='Play a completion sound when long-running work finishes.'
           icon={IconCircleCheck}
           label='Completion sound'
-          onChange={(checked) => updateSetting('completionBellEnabled', checked)}
+          onChange={(checked) => updateSetting('completionSound', checked ? DEFAULT_COMPLETION_SOUND : 'off')}
         />
       </div>
     </section>

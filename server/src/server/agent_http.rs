@@ -49,6 +49,7 @@ pub(crate) async fn handle_agent_http(
             let mut result = output.result;
             let fork_initial_rename = fork_initial_rename_target(&endpoint_path, &result);
             log_agent_hook_passive_identity_conflict(state, &endpoint_path, &params, &result);
+            log_agent_activity_transition(state, &endpoint_path, &params, &result);
             let session_chat_state_changed = endpoint_path == "/api/ingestAgentHookEvent"
                 && (result
                     .get("sessionChatPromptChanged")
@@ -64,6 +65,31 @@ pub(crate) async fn handle_agent_http(
             let should_schedule_first_prompt_auto_title =
                 result.get("reason").and_then(Value::as_str)
                     == Some("first-prompt-auto-title-claimed");
+            /*
+            CDXC:DraftSessions 2026-08-28 (live-pane switching):
+            Everything the daemon has detected off this session's screen belongs
+            to the agent that just got interrupted — its model/effort pills, its
+            statusline, its terminal notice, and its composer-readiness verdict.
+            None of it survives the switch, and on the live-pane path nothing
+            else drops it: the provider never restarts, so the follower is never
+            stopped and `stop_session_chat_follower`'s forget never runs. Drop
+            the whole detection entry here, so the next read re-detects against
+            the NEW agent instead of showing the previous one's model for as
+            long as the 5s cache holds.
+
+            `switch_draft_agent` cannot do this itself: the cache lives on
+            `AppState` and agent endpoints are dispatched without it. Keyed off
+            `presentation_session`, which the endpoint sets only when the row
+            actually changed agent (a switch to the agent already in use is a
+            no-op and must not blank a valid detection).
+            */
+            if endpoint_path == "/api/switchDraftAgent" {
+                if let Some((project_id, session_id)) = presentation_session.as_ref() {
+                    crate::session_chat_options::forget_session_chat_options(
+                        state, project_id, session_id,
+                    );
+                }
+            }
             if endpoint_path == "/api/updateAgentActivity" {
                 if let Some((project_id, session_id)) = presentation_session.as_ref() {
                     let _ = reconcile_agent_metadata_title_for_session(
@@ -149,6 +175,19 @@ pub(crate) async fn handle_agent_http(
                 );
                 send_params.insert("submit".to_string(), Value::Bool(true));
                 send_params.insert("text".to_string(), Value::String(command));
+                /*
+                CDXC:DraftSessions 2026-08-28:
+                `request_session_rename` already armed the draft's suppression
+                window when it accepted this rename, but the bytes go out HERE,
+                a round trip later. Re-arm from the moment they are actually
+                typed so the window covers the churn they cause rather than
+                having been partly spent getting to this line. No-op unless the
+                target is a draft.
+                */
+                if let Ok(Some(session)) = repository.get_session(&project_id, &session_id) {
+                    let _ =
+                        crate::agents::arm_draft_launch_activity_suppression(&repository, &session);
+                }
                 if let Err(error) = dispatch_zmx_session_interaction_endpoint(
                     &repository,
                     "/api/sendSessionMessage",
@@ -348,6 +387,76 @@ pub(crate) fn log_agent_hook_passive_identity_conflict(
             "source": "agent-hook-event",
         })),
     });
+}
+
+/*
+CDXC:SessionChatLoadingDiagnostics 2026-08-28:
+Every agent-activity flip (working/idle/attention) with its trigger, the
+event that carried it, its working source (explicit hook vs terminal title),
+and whether the initial passive-signal suppression window was still armed.
+This is the server half of the "Loading conversation…" flash repro: the chat
+view blanks when a working flip reaches an empty transcript, so the question
+the log answers is where that working came from. Transitions only — title
+ticks that keep the same activity never write — and only enum fields, stable
+ids, and booleans, never the title text itself.
+*/
+pub(crate) fn log_agent_activity_transition(
+    state: &AppState,
+    endpoint_path: &str,
+    params: &Map<String, Value>,
+    result: &Value,
+) {
+    let trigger = match endpoint_path {
+        "/api/ingestAgentHookEvent" => "agentHook",
+        "/api/ingestSessionStateEvent" => "sessionState",
+        "/api/ingestTerminalTitleEvent" => "terminalTitle",
+        "/api/updateAgentActivity" => "activityRpc",
+        _ => return,
+    };
+    let Some(previous) = result.get("previousActivity").and_then(Value::as_str) else {
+        return;
+    };
+    let Some(activity) = result.get("activity").and_then(Value::as_object) else {
+        return;
+    };
+    let next = activity
+        .get("activity")
+        .and_then(Value::as_str)
+        .unwrap_or("idle");
+    if previous == next {
+        return;
+    }
+    let suppression_active = activity
+        .get("suppressedUntil")
+        .and_then(Value::as_str)
+        .and_then(crate::session_status::parse_iso_ms)
+        .is_some_and(|until| until > chrono::Utc::now().timestamp_millis());
+    let _ = state.logger.log_routine(
+        DiagnosticLogScenario::AgentActivity,
+        GxserverLogInput {
+            level: LogLevel::Debug,
+            event: "agentActivity.transition".to_string(),
+            server_id: Some(state.metadata.server_id.clone()),
+            request_id: None,
+            client: None,
+            duration_ms: None,
+            error: None,
+            details: Some(json!({
+                "activityEvent": params.get("event").and_then(Value::as_str),
+                "agent": activity.get("agentName").and_then(Value::as_str),
+                "enteredAttention": result.get("enteredAttention").and_then(Value::as_bool),
+                "hasHookEventName": params.get("eventName").is_some() || params.get("rawEventName").is_some(),
+                "next": next,
+                "previous": previous,
+                "projectId": params.get("projectId").and_then(Value::as_str),
+                "reason": result.get("reason").and_then(Value::as_str),
+                "sessionId": params.get("sessionId").and_then(Value::as_str),
+                "suppressionActive": suppression_active,
+                "trigger": trigger,
+                "workingSource": activity.get("workingSource").and_then(Value::as_str),
+            })),
+        },
+    );
 }
 
 pub(crate) fn strip_agent_hook_internal_result_fields(endpoint_path: &str, result: &mut Value) {

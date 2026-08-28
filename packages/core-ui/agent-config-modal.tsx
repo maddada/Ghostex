@@ -33,6 +33,7 @@ import {
 } from '../shared/sidebar-agent-accept-all';
 import { DEFAULT_SIDEBAR_AGENTS, getDefaultSidebarAgentByIcon, type SidebarAgentIcon } from '../shared/sidebar-agents';
 import type { SidebarTheme } from '../shared/session-grid-contract';
+import { AgentTypeSelectOption } from './agent-type-select-option';
 
 export type AgentConfigDraft = {
   acceptAllMode?: AgentAcceptAllMode;
@@ -107,6 +108,7 @@ export function AgentConfigModal({ draft, isOpen, onCancel, onSave, theme = 'dar
   const resolvedAgentId =
     draft.agentId ?? getDefaultSidebarAgentByIcon(icon === 'custom' ? undefined : icon)?.agentId ?? '';
   const acceptAllSupported = supportsAgentAcceptAll(resolvedAgentId, icon === 'custom' ? undefined : icon);
+  const selectedDefaultAgent = getDefaultSidebarAgentByIcon(icon === 'custom' ? undefined : icon);
 
   return (
     <Dialog
@@ -169,14 +171,18 @@ export function AgentConfigModal({ draft, isOpen, onCancel, onSave, theme = 'dar
               value={icon}
             >
               <SelectTrigger className='h-10 w-full px-3 text-sm' id={agentTypeId}>
-                <SelectValue />
+                <SelectValue>
+                  <AgentTypeSelectOption icon={icon} name={selectedDefaultAgent?.name ?? 'Custom'} />
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectItem value='custom'>Custom</SelectItem>
+                  <SelectItem value='custom'>
+                    <AgentTypeSelectOption icon='custom' name='Custom' />
+                  </SelectItem>
                   {DEFAULT_SIDEBAR_AGENTS.map((agent) => (
                     <SelectItem key={agent.agentId} value={agent.icon}>
-                      {agent.name}
+                      <AgentTypeSelectOption icon={agent.icon} name={agent.name} />
                     </SelectItem>
                   ))}
                 </SelectGroup>

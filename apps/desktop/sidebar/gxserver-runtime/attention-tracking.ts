@@ -660,7 +660,7 @@ export const gpuiSidebarRuntimeAttentionMethods = {
     nextSessions: readonly GxserverPresentationSession[]
   ): void {
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
-    if (!settings.completionBellEnabled) {
+    if (settings.completionSound === 'off') {
       return;
     }
     let previousActivityBySessionKey: Map<string, GxserverPresentationSession['activity']> | undefined;

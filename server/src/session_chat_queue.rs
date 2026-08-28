@@ -732,6 +732,96 @@ fn set_draft(
     Ok(draft)
 }
 
+/*
+CDXC:DraftSessions 2026-08-28:
+The synced composer draft on its own, without the queue rows `read_snapshot`
+carries. Draft sessions read it for two things that must never pay for the
+queue: the sidebar display title (published on every presentation delta) and
+the boot sweep's "did anybody type into this?" test. A blank draft answers
+`Ok(None)`, exactly like a missing row — a draft cleared to empty text and a
+draft that never existed are the same state everywhere in the feature.
+
+A FAILED read is deliberately NOT folded into `None`. The boot sweep deletes
+sessions on the strength of this answer, so a transient SQLite error that read
+as "nobody typed anything" would destroy a user's unsent prompt. Callers that
+are only decorating a projection may discard the error; the sweep must not.
+*/
+pub fn read_session_chat_draft_content(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+) -> Result<Option<String>, DomainStateError> {
+    let content = db
+        .query_row(
+            "SELECT content FROM session_chat_drafts WHERE projectId = ?1 AND sessionId = ?2",
+            params![project_id, session_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(sql_error)?;
+    Ok(content.filter(|content| !content.trim().is_empty()))
+}
+
+/// Every non-blank synced draft, keyed by `(projectId, sessionId)`. One grouped
+/// read of a table that holds at most one row per session with unsent text —
+/// never one query per session, because presentation snapshots publish many
+/// times a second on a busy sidebar.
+pub fn read_non_blank_session_chat_draft_contents(
+    db: &Connection,
+) -> std::collections::HashMap<(String, String), String> {
+    let Ok(mut statement) = db.prepare(
+        "SELECT projectId, sessionId, content FROM session_chat_drafts WHERE TRIM(content) <> ''",
+    ) else {
+        return std::collections::HashMap::new();
+    };
+    let Ok(rows) = statement.query_map([], |row| {
+        Ok((
+            (row.get::<_, String>(0)?, row.get::<_, String>(1)?),
+            row.get::<_, String>(2)?,
+        ))
+    }) else {
+        return std::collections::HashMap::new();
+    };
+    rows.filter_map(Result::ok)
+        .filter(|(_, content)| !content.trim().is_empty())
+        .collect()
+}
+
+/*
+CDXC:DraftCrashSafety 2026-08-28:
+The `/api/listSessionChatDrafts` read behind the client-side draft-cache
+reconcile. The composer's per-keystroke localStorage cache is not durable — a
+kill that skips a clean Chromium shutdown drops uncommitted batches — so this
+table is the copy that survives, and clients heal their cache from it at boot.
+One bounded list (at most one row per session with unsent text), stamped so
+the client can refuse anything older than what it still holds.
+*/
+pub fn list_session_chat_drafts_value(db: &Connection) -> Result<Value, DomainStateError> {
+    let mut statement = db
+        .prepare(
+            r#"
+            SELECT projectId, sessionId, content, updatedAt
+            FROM session_chat_drafts
+            WHERE TRIM(content) <> ''
+            ORDER BY updatedAt DESC
+            "#,
+        )
+        .map_err(sql_error)?;
+    let drafts = statement
+        .query_map([], |row| {
+            Ok(json!({
+                "projectId": row.get::<_, String>(0)?,
+                "sessionId": row.get::<_, String>(1)?,
+                "content": row.get::<_, String>(2)?,
+                "updatedAt": row.get::<_, String>(3)?,
+            }))
+        })
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    Ok(json!({ "drafts": drafts }))
+}
+
 /// Text an armed Delayed Send must deliver instead of a bare Enter: the
 /// session's synced chat composer draft, when one is non-empty. Chat clients
 /// hand the terminal composer's text off into this draft, so an Enter fired

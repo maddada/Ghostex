@@ -243,7 +243,6 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("promptEditor", "ctrl+g"),
     ("attachFileOrFolder", "cmd+alt+p"),
     ("sessionNote", "cmd+alt+n"),
-    ("copyAgentSessionId", "cmd+alt+c"),
     ("stashPrompt", "alt+s"),
     ("stashedPrompts", "cmd+alt+s"),
     ("exportTranscript", "cmd+alt+e"),

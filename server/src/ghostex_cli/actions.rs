@@ -84,6 +84,7 @@ pub enum Parser {
     AssertCard,
     WaitFor,
     SidebarProjectCollectionsState,
+    SidebarSpacesState,
     /// session selector plus readSessionChat paging/long-poll flags.
     SessionChatRead,
     /*
@@ -247,6 +248,8 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "assignProjectToSidebarCollection" => {
             rpc::call_gxserver_rpc("/api/assignProjectToSidebarCollection", payload, flags)
         }
+        "readSidebarSpaces" => rpc::call_gxserver_rpc("/api/readSidebarSpaces", payload, flags),
+        "updateSidebarSpaces" => rpc::call_gxserver_rpc("/api/updateSidebarSpaces", payload, flags),
         "closeSession" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/killSession", &params, flags)
@@ -1104,6 +1107,7 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         Parser::SidebarProjectCollectionsState => {
             parse_sidebar_project_collections_state(rest, flags)?
         }
+        Parser::SidebarSpacesState => parse_sidebar_spaces_state(rest, flags)?,
         Parser::SessionChatRead => parse_session_chat_read(rest, flags),
         Parser::AgentPromptSearch => parse_agent_prompt_search(flags)?,
         Parser::AgentPromptRef => parse_agent_prompt_ref(flags)?,
@@ -2124,6 +2128,40 @@ fn parse_sidebar_project_collections_state(rest: &[String], flags: &Flags) -> Cl
     if !state.is_object() {
         return Err(CliError::Other(
             "update-sidebar-project-collections --state-json must be a JSON object with collections, order, and nextCollectionNumber.".to_string(),
+        ));
+    }
+    Ok(json!({ "state": state }))
+}
+
+fn parse_sidebar_spaces_state(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    /*
+    CDXC:SidebarSpaces 2026-08-27:
+    Mobile edits durable sidebar Spaces by SSH-exec'ing `ghostex
+    update-sidebar-spaces --state-json '<json>'` for a full read-modify-write of
+    the Space document, exactly like the project-collections command beside it.
+    The CLI passes the whole state through untouched; gxserver owns
+    normalization (order authority, member dedupe, grouped-project exclusion,
+    limits) and the normalized result is printed back for the client to adopt.
+    */
+    let state_json = flag_json(flags, "stateJson")
+        .or_else(|| flag_json(flags, "state"))
+        .unwrap_or_else(|| Value::String(join_rest(rest, 0)));
+    let state_text = match state_json {
+        Value::String(text) => text,
+        _ => String::new(),
+    };
+    if state_text.trim().is_empty() {
+        return Err(CliError::Other(
+            "update-sidebar-spaces requires --state-json '<json>' with the full spaces state."
+                .to_string(),
+        ));
+    }
+    let state: Value = serde_json::from_str(&state_text)
+        .map_err(|error| CliError::Other(format!("Invalid --state-json: {error}")))?;
+    if !state.is_object() {
+        return Err(CliError::Other(
+            "update-sidebar-spaces --state-json must be a JSON object with spaces and order."
+                .to_string(),
         ));
     }
     Ok(json!({ "state": state }))

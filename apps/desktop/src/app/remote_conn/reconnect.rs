@@ -71,6 +71,15 @@ impl GhostexGpuiApp {
             );
             return;
         };
+        if automatic && config.disabled {
+            self.stop_gpui_remote_gxserver_connection(&remote_machine_id);
+            self.dispatch_gpui_remote_machine_status(
+                remote_machine_id.as_str(),
+                "disconnected",
+                cx,
+            );
+            return;
+        }
 
         self.stop_gpui_remote_gxserver_connection(&remote_machine_id);
         let status_state = if install_approved {

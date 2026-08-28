@@ -83,6 +83,13 @@ pub(crate) struct GpuiInstalledExtension {
     pub(crate) enabled: bool,
     pub(crate) pinned: bool,
     pub(crate) terminal_pane: bool,
+    /*
+    Read from the manifest, never guessed from the runtime URL: a `server.url`
+    extension points the surface at a third-party page, which must not receive
+    the extension bridge even if that page happens to be served over loopback
+    HTTP.
+    */
+    pub(crate) remote_url_server: bool,
 }
 
 impl GpuiInstalledExtension {
@@ -97,6 +104,15 @@ impl GpuiInstalledExtension {
         &self,
         url: &str,
     ) -> Option<crate::cef::ExtensionBridgeSurfaceSpec> {
+        if self.remote_url_server {
+            let rest = url.strip_prefix("https://")?;
+            let authority = rest.get(..rest.find('/').unwrap_or(rest.len()))?;
+            return crate::cef::ExtensionBridgeSurfaceSpec::new_remote(
+                self.id.clone(),
+                format!("https://{authority}"),
+            )
+            .ok();
+        }
         let rest = url.strip_prefix("http://")?;
         let origin_end = rest.find('/').unwrap_or(rest.len());
         let authority = &rest[..origin_end];

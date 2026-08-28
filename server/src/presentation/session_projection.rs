@@ -1,5 +1,6 @@
 use serde_json::{json, Map, Value};
 
+use crate::agents::session_is_draft;
 use crate::session_status::{effective_working_started_at, meaningful_activity_at};
 
 use super::*;
@@ -223,6 +224,17 @@ pub(crate) fn project_presentation_session(
             string_field(session, "lastActiveAt").is_some_and(|value| !value.trim().is_empty()),
         ),
     );
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    A session created from the sidebar that has never received a user prompt.
+    Published as a PRESENT-ONLY key — never `false` — so it reads identically to
+    what a daemon predating drafts sends, and so promotion clears it through the
+    same whole-object session upsert every other field uses. The sidebar swaps
+    the agent logo for a pencil and dims the row on the strength of this alone.
+    */
+    if session_is_draft(session) {
+        output.insert("isDraft".to_string(), Value::Bool(true));
+    }
     output.insert("isFavorite".to_string(), Value::Bool(is_favorite(session)));
     /*
     CDXC:GxserverSessionTitle 2026-07-02-15:10:

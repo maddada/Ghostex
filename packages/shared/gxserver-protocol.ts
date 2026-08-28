@@ -166,6 +166,12 @@ export type GxserverEndpointPath =
   | '/api/createSession'
   | '/api/createAgentSession'
   | '/api/forkSession'
+  /*
+   * CDXC:DraftSessions 2026-08-28:
+   * Rewrites which agent CLI a DRAFT session launches. Drafts only — after the
+   * first prompt reaches the agent the session's agent is fixed.
+   */
+  | '/api/switchDraftAgent'
   | '/api/readAgentLaunchPlan'
   | '/api/readAgentResumePlan'
   | '/api/requestSessionRename'
@@ -191,6 +197,8 @@ export type GxserverEndpointPath =
   | '/api/readSidebarProjectCollections'
   | '/api/updateSidebarProjectCollections'
   | '/api/assignProjectToSidebarCollection'
+  | '/api/readSidebarSpaces'
+  | '/api/updateSidebarSpaces'
   | '/api/scheduleDelayedSend'
   | '/api/cancelDelayedSend'
   | '/api/readDelayedSends'
@@ -203,6 +211,7 @@ export type GxserverEndpointPath =
   | '/api/markAutomationRunRead'
   | '/api/searchSessions'
   | '/api/listPreviousSessions'
+  | '/api/sessionForkBranches'
   | '/api/readSessionTranscriptSizes'
   | '/api/transitionSession'
   | '/api/holdSessionsAwake'
@@ -236,6 +245,7 @@ export type GxserverEndpointPath =
   | '/api/reorderSessionChatQueue'
   | '/api/sendSessionChatQueuedPrompt'
   | '/api/setSessionChatDraft'
+  | '/api/listSessionChatDrafts'
   | '/api/exportSessionTranscript'
   | '/api/sendSessionText'
   | '/api/sendSessionMessage'
@@ -1827,6 +1837,17 @@ export interface GxserverCreateSessionParams {
   commandId?: string;
   completionRules?: Record<string, unknown>;
   cwd?: string;
+  /**
+   * CDXC:DraftSessions 2026-08-28:
+   * Create this agent session as a DRAFT: a real durable row whose agent CLI is
+   * started in the background, but which has not received a first prompt yet.
+   * gxserver records it as `runtimeSettings.draftStatus = 'draft'` and REMOVES
+   * that marker the moment a first user prompt actually reaches the agent, so a
+   * promoted draft is indistinguishable from an ordinary session. Never combine
+   * with a first prompt (`firstUserMessage` / `firstUserInputDraft`): a flow
+   * that already carries a prompt is not a draft.
+   */
+  draft?: boolean;
   isFavorite?: boolean;
   isParked?: boolean;
   isPinned?: boolean;
@@ -1971,6 +1992,33 @@ export interface GxserverForkSessionResult {
 }
 
 /*
+CDXC:DraftSessions 2026-08-28:
+Agent switching is DRAFTS ONLY. A draft has no conversation, so swapping its
+agent needs no confirmation and loses nothing: gxserver kills the draft's
+background CLI, clears the session's agent identity, rebuilds its launch plan
+with the same resolution `/api/createAgentSession` uses, and starts the new
+agent's CLI. The call is refused with `invalidState` once the session has been
+promoted (its first user prompt reached the agent), because at that point the
+transcript, the resume plan, and the session's agent identity all belong to the
+agent that produced them.
+
+`agentId` is a project agent id: one of the five chat-supported base families or
+a project custom agent whose base family is chat-supported. Clients read the
+allowed set from `availableAgents` on `/api/readSessionChat` rather than
+building it themselves.
+*/
+export interface GxserverSwitchDraftAgentParams extends GxserverSessionLifecycleParams {
+  agentId: string;
+}
+
+export interface GxserverSwitchDraftAgentResult {
+  agentId: string;
+  /** The provider start for the new agent's CLI, when one ran. */
+  provider?: GxserverStartSessionProviderResult;
+  session: GxserverSessionDomainState;
+}
+
+/*
 CDXC:SessionChatComposerReady 2026-08-26:
 readSessionTerminalTail answers "is the agent CLI's input box on screen, and if
 not, what IS on screen". The daemon reads the same capture every other
@@ -2063,14 +2111,64 @@ export interface GxserverUpdateSessionOrderResult {
 
 export interface GxserverRemoveSessionParams {
   projectId: GxserverProjectId;
+  /**
+   * Why the session is being removed. Free-form and ignored by gxserver, with
+   * ONE exception:
+   *
+   * CDXC:DraftSessions 2026-08-28: `DISCARD_EMPTY_DRAFT_SESSION_REASON`
+   * (`'discardEmptyDraft'`, see ./draft-sessions) marks the navigate-away
+   * discard of an empty draft. That removal is a REQUEST, not an instruction —
+   * the client decided from a presentation snapshot that may be one delta
+   * stale, so the daemon re-derives the predicate from its own current state
+   * and DECLINES if the session has since been promoted or gained draft text.
+   * See `GxserverRemoveSessionResult`.
+   */
   reason?: string;
   sessionId: GxserverSessionId;
+}
+
+/**
+ * CDXC:DraftSessions 2026-08-28:
+ * `removed` and `declined` are published ONLY for a `discardEmptyDraft`
+ * removal, so every other removal's payload is unchanged. A discard therefore
+ * never has to infer its outcome from an absent key: `removed: true` means the
+ * row is gone, `removed: false` with a `declined` code means the daemon refused
+ * and `session` is the row as it stands now.
+ *
+ * A decline is a SUCCESS, not an error — the client raced the daemon rather
+ * than doing anything wrong. Clients that hid the row optimistically (the
+ * desktop sidebar calls `removePresentationSession` before the RPC) MUST put it
+ * back when they see `removed === false`.
+ */
+export interface GxserverRemoveSessionResult {
+  declined?: 'draftHasText' | 'sessionIsNotADraft';
+  removed?: boolean;
+  session: GxserverSessionDomainState;
 }
 
 export interface GxserverSessionLifecycleParams {
   projectId: GxserverProjectId;
   reason?: string;
   sessionId: GxserverSessionId;
+}
+
+/**
+ * CDXC:DraftCrashSafety 2026-08-28:
+ * One row per session with unsent composer text, from `/api/listSessionChatDrafts`.
+ * Clients reconcile their per-keystroke draft cache from this at boot, because
+ * that cache does not survive a kill that skips a clean Chromium shutdown —
+ * the daemon's SQLite copy does. `updatedAt` is the daemon's ISO stamp of the
+ * last synced push, which is what the reconcile compares against.
+ */
+export interface GxserverSessionChatDraftListEntry {
+  content: string;
+  projectId: GxserverProjectId;
+  sessionId: GxserverSessionId;
+  updatedAt: string;
+}
+
+export interface GxserverListSessionChatDraftsResult {
+  drafts: GxserverSessionChatDraftListEntry[];
 }
 
 /*
@@ -2171,7 +2269,14 @@ export interface GxserverCancelFirstPromptAutoTitleResult {
   session: GxserverSessionDomainState;
 }
 
-export type GxserverSessionTitleSource = 'browser-auto' | 'generated' | 'placeholder' | 'terminal-auto' | 'user';
+/**
+ * CDXC:DraftSessions 2026-08-28:
+ * `'draft'` is projection-only and never durable: gxserver publishes it for a
+ * draft session whose synced composer content supplies the row's display title,
+ * so a client can tell "the user's unsent text" apart from a real session title.
+ */
+export type GxserverSessionTitleSource =
+  'browser-auto' | 'draft' | 'generated' | 'placeholder' | 'terminal-auto' | 'user';
 
 export interface GxserverSessionTitleProjection {
   displayTitle?: string;
@@ -2368,6 +2473,14 @@ export interface GxserverPresentationCapabilities {
   sessionSettlement: boolean;
   sessionSnooze: boolean;
   /**
+   * CDXC:SidebarSpaces 2026-08-27:
+   * `/api/readSidebarSpaces` + `/api/updateSidebarSpaces` are served by this
+   * daemon. Absent means the machine has no Spaces at all, and its sidebar
+   * section renders the built-in All Projects view only — no Space row, no
+   * Spaces context submenu.
+   */
+  spaces?: boolean;
+  /**
    * CDXC:SidebarV2Worktree 2026-07-29:
    * `/api/createWorktreeSession` + `/api/removeSessionWorktree` are served by
    * this daemon. Optional for the same reason as `sessionGitStatus`: a machine
@@ -2386,6 +2499,17 @@ export interface GxserverPresentationSession {
   agentName?: string;
   agentSessionId?: string;
   agentSessionPath?: string;
+  /**
+   * CDXC:SessionForkFamilies 2026-08-28:
+   * Fork lineage derived by the daemon from its own registry, never from the
+   * transcript files: the parent session this conversation branched off, how
+   * many VISIBLE branches share its earlier history (present only at two or
+   * more), and who those branches are. A daemon that predates fork awareness
+   * publishes none of the three.
+   */
+  forkedFromSessionId?: GxserverSessionId;
+  forkBranchCount?: number;
+  forkFamilySessionIds?: GxserverSessionId[];
   /** Stable Action identity used to reuse an existing command-surface session. */
   commandId?: string;
   attention?: GxserverPresentationAttentionState;
@@ -2414,6 +2538,16 @@ export interface GxserverPresentationSession {
    * Absent from daemons that predate this field; treat that as not-yet-active.
    */
   hasEverBeenActive?: boolean;
+  /**
+   * CDXC:DraftSessions 2026-08-28:
+   * This session was created from the sidebar and has not received its first
+   * user prompt yet. Present ONLY while the session is a draft (never `false`),
+   * which is also what a daemon that predates drafts publishes. Sidebars render
+   * a draft inline in its normal position with a pencil glyph instead of the
+   * agent logo and a dimmed title; `displayTitle` carries the first line of the
+   * user's unsent composer text once any exists (`titleSource: 'draft'`).
+   */
+  isDraft?: true;
   isFavorite: boolean;
   isGeneratingFirstPromptTitle: boolean;
   isParked?: boolean;
@@ -2536,6 +2670,46 @@ export interface GxserverSidebarProjectCollectionsState {
   order: readonly string[];
 }
 
+/*
+CDXC:SidebarSpaces 2026-08-27:
+A Space is a server-owned saved sidebar filter: a name, an icon id, a color, a
+manual position, and the sidebar members it shows. Members are sidebar project
+collections ("groups") and ungrouped projects, and a member may belong to any
+number of Spaces. gxserver owns the document so every client on that daemon
+shares one Space set, and a remote daemon's Spaces stay that daemon's own.
+
+The wire state is fully normalized by gxserver:
+  - `order` is the authoritative Space ordering; `spaces` is keyed by spaceId.
+  - A project held by a collection can never carry direct membership, so
+    gxserver strips grouped project ids from `memberProjectIds`.
+  - Member collection ids that no longer exist are dropped; a collection
+    disappears from the collections document as soon as it empties.
+  - Member ids are deduped, and ids/names/icon ids are bounded (256 chars,
+    512 ids per list, 256 Spaces).
+  - `color` is normalized to lowercase `#rrggbb`, falling back to the shared
+    sidebar palette.
+  - An EMPTY Space is valid and kept, unlike an empty project collection.
+Member project ids for a deleted project may linger as soft references, so
+clients must tolerate member ids they cannot resolve. Worktree inheritance and
+the built-in "All Projects" view are pure client concerns and never stored.
+Clients write-through-sync the whole state via /api/updateSidebarSpaces and read
+it back from the same endpoint, the presentation snapshot, or the
+`sidebarSpacesChanged` event.
+*/
+export interface GxserverSidebarSpace {
+  color: string;
+  icon: string;
+  memberCollectionIds: readonly string[];
+  memberProjectIds: readonly string[];
+  name: string;
+  spaceId: string;
+}
+
+export interface GxserverSidebarSpacesState {
+  order: readonly string[];
+  spaces: Readonly<Record<string, GxserverSidebarSpace>>;
+}
+
 export interface GxserverWorkspaceSessionGroup {
   groupId: string;
   sessionIds: readonly string[];
@@ -2564,6 +2738,18 @@ export interface GxserverUpdateSidebarProjectCollectionsResult {
   sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
 }
 
+export interface GxserverReadSidebarSpacesResult {
+  sidebarSpaces: GxserverSidebarSpacesState;
+}
+
+export interface GxserverUpdateSidebarSpacesParams {
+  state: GxserverSidebarSpacesState;
+}
+
+export interface GxserverUpdateSidebarSpacesResult {
+  sidebarSpaces: GxserverSidebarSpacesState;
+}
+
 export interface GxserverPresentationSnapshot {
   /*
   CDXC:SidebarV2LogicalProjects 2026-07-29:
@@ -2590,6 +2776,7 @@ export interface GxserverPresentationSnapshot {
   revision: GxserverPresentationRevision;
   sessions: readonly GxserverPresentationSession[];
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
+  sidebarSpaces?: GxserverSidebarSpacesState;
   workspaceGroups?: GxserverWorkspaceSessionGroupsState;
 }
 
@@ -2702,6 +2889,38 @@ export interface GxserverPresentationSearchResult {
 export interface GxserverPresentationSearchResponse {
   cursor?: string;
   results: readonly GxserverPresentationSearchResult[];
+}
+
+/**
+ * CDXC:SessionForkFamilies 2026-08-28:
+ * `/api/sessionForkBranches` answers "what else shares this conversation's
+ * history". The daemon derives the family from its own registry, so the reply
+ * includes the ancestors Previous Sessions hides once something continues from
+ * them, flagged `ancestor`. A session with no relatives answers with just
+ * itself, which is why a caller can ask unconditionally and gate its UI on the
+ * branch count instead of on an error.
+ */
+export interface GxserverSessionForkBranchesParams {
+  projectId: GxserverProjectId;
+  sessionId: GxserverSessionId;
+}
+
+export interface GxserverSessionForkBranch {
+  /** Present only for a superseded row: a branch with no card of its own. */
+  ancestor?: boolean;
+  agentSessionId?: string;
+  /** True for the session that asked. */
+  current: boolean;
+  lastActiveMs: number;
+  lifecycleState: GxserverDomainLifecycleState;
+  projectId: GxserverProjectId;
+  sessionId: GxserverSessionId;
+  title: string;
+}
+
+export interface GxserverSessionForkBranchesResult {
+  /** Newest activity first. */
+  branches: readonly GxserverSessionForkBranch[];
 }
 
 export interface GxserverTerminalTitleEventParams extends GxserverSessionLifecycleParams {
@@ -3000,6 +3219,13 @@ export type GxserverEvent =
       serverId: GxserverServerId;
       sidebarProjectCollections: GxserverSidebarProjectCollectionsState;
       type: 'sidebarProjectCollectionsChanged';
+    }
+  | {
+      protocolVersion: GxserverProtocolVersion;
+      revision: GxserverPresentationRevision;
+      serverId: GxserverServerId;
+      sidebarSpaces: GxserverSidebarSpacesState;
+      type: 'sidebarSpacesChanged';
     }
   | {
       groups: GxserverWorkspaceSessionGroupsState;

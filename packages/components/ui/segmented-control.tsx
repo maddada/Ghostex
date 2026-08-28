@@ -30,8 +30,15 @@ const SegmentedControlContext = React.createContext<{ size: SegmentedControlSize
   size: 'default',
 });
 
+/*
+ * The container owns the control height (border-box, matching Button and
+ * SelectTrigger of the same size) and the items fill it. Sizing the items
+ * instead made every segmented control 2px taller than the buttons and
+ * dropdowns sharing its row, because the container border wrapped around the
+ * full-height items.
+ */
 const segmentedControlClass =
-  'group/segmented inline-flex w-fit items-stretch overflow-hidden rounded-[8px] border border-border bg-transparent [&>[data-slot=segmented-control-item]+[data-slot=segmented-control-item]]:border-l [&>[data-slot=segmented-control-item]+[data-slot=segmented-control-item]]:border-border';
+  'group/segmented box-border inline-flex w-fit items-stretch overflow-hidden rounded-[8px] border border-border bg-transparent [&>[data-slot=segmented-control-item]+[data-slot=segmented-control-item]]:border-l [&>[data-slot=segmented-control-item]+[data-slot=segmented-control-item]]:border-border';
 
 /*
  * The icon sizing deliberately avoids any `size-*` utility: the settings sheet
@@ -63,6 +70,7 @@ function SegmentedControl({
       data-size={size}
       className={cn(
         segmentedControlClass,
+        size === 'sm' ? 'h-7' : 'h-8',
         stretch && 'w-full [&>[data-slot=segmented-control-item]]:flex-1',
         className
       )}
@@ -92,7 +100,7 @@ function SegmentedControlItem({ className, children, ...props }: TogglePrimitive
     <TogglePrimitive
       data-slot='segmented-control-item'
       data-size={size}
-      className={cn(segmentedControlItemClass, size === 'sm' ? 'h-7 text-xs' : 'h-8 text-[0.8125rem]', className)}
+      className={cn(segmentedControlItemClass, 'h-full', size === 'sm' ? 'text-xs' : 'text-[0.8125rem]', className)}
       {...props}
     >
       {children}

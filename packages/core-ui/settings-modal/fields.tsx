@@ -50,7 +50,11 @@ import {
   IconTrash,
   IconX,
 } from '@tabler/icons-react';
-import { COMPLETION_SOUND_OPTIONS, type CompletionSoundSetting } from '../../shared/completion-sound';
+import {
+  COMPLETION_SOUND_OPTIONS,
+  type CompletionSoundPreference,
+  type CompletionSoundSetting,
+} from '../../shared/completion-sound';
 import { type SidebarAppIconInfo, type SidebarAppIconStateMessage } from '../../shared/session-grid-contract';
 import {
   DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
@@ -60,7 +64,7 @@ import {
   SESSION_CHAT_THEME_OPTIONS,
   SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
   SIDEBAR_SETTINGS_PRESETS,
-  SIDEBAR_VERSION_OPTIONS,
+  SIDEBAR_SPACES_ENABLED_OPTIONS,
   normalizeTerminalDevServerIgnoredPortRuleInput,
   normalizeTerminalDevServerIgnoredPortRules,
   type DiagnosticLoggingScenarioId,
@@ -68,7 +72,6 @@ import {
   type PreferredAgentInterface,
   type SidebarSettingsPresetId,
   type SidebarProjectGroupStyle,
-  type SidebarVersion,
 } from '../../shared/ghostex-settings';
 import { type SessionChatTheme } from '../../shared/session-chat';
 import { PET_OPTIONS, type PetId } from '../../shared/pets';
@@ -856,6 +859,7 @@ export function AppIconPickerField({
 
 export function SoundField({
   advanced,
+  allowOff = false,
   description,
   isModified,
   label,
@@ -865,11 +869,12 @@ export function SoundField({
   value,
 }: {
   advanced?: boolean;
+  allowOff?: boolean;
   description?: string;
   label: string;
-  onChange: (value: CompletionSoundSetting) => void;
+  onChange: (value: CompletionSoundPreference) => void;
   onPlay?: (value: CompletionSoundSetting) => void;
-  value: CompletionSoundSetting;
+  value: CompletionSoundPreference;
 } & SettingModificationProps) {
   /**
    * CDXC:Settings 2026-04-29-17:01
@@ -893,12 +898,13 @@ export function SoundField({
       onResetToDefault={onResetToDefault}
     >
       <div className='grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2'>
-        <SettingsSelect onValueChange={(nextValue) => onChange(nextValue as CompletionSoundSetting)} value={value}>
+        <SettingsSelect onValueChange={(nextValue) => onChange(nextValue as CompletionSoundPreference)} value={value}>
           <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={id}>
             <SelectValue />
           </SelectTrigger>
           <SettingsSelectContent className='max-h-72' showScrollButtons={false}>
             <SelectGroup>
+              {allowOff ? <SelectItem value='off'>Off</SelectItem> : null}
               {COMPLETION_SOUND_OPTIONS.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
@@ -907,15 +913,18 @@ export function SoundField({
             </SelectGroup>
           </SettingsSelectContent>
         </SettingsSelect>
-        <DisabledSettingControlTooltip disabled={!onPlay} reason='Sound preview isn’t available here.'>
+        <DisabledSettingControlTooltip
+          disabled={!onPlay || value === 'off'}
+          reason={value === 'off' ? 'Choose a sound to preview it.' : 'Sound preview isn’t available here.'}
+        >
           <Tooltip>
             <TooltipTrigger
               render={
                 <Button
                   aria-label={`Play ${label}`}
                   className='size-8 rounded-none'
-                  disabled={!onPlay}
-                  onClick={() => onPlay?.(value)}
+                  disabled={!onPlay || value === 'off'}
+                  onClick={() => value !== 'off' && onPlay?.(value)}
                   size='icon'
                   type='button'
                   variant='outline'
@@ -1454,13 +1463,13 @@ export function SidebarProjectGroupStyleField({
 }
 
 /*
- * CDXC:SidebarV2 2026-07-29:
- * The sidebar version selector reuses the Preset toggle-group shape so the
- * sidebar version setting reads as one two-option switch.
+ * CDXC:SidebarSpaces 2026-08-28:
+ * Spaces is a feature switch rather than a density tweak, so it reads as the
+ * same combined button the Project group style row above it uses instead of the
+ * small toggle the per-row visibility settings use.
  */
-export function SidebarVersionField({
+export function SidebarSpacesField({
   advanced,
-  badge,
   description,
   isModified,
   label,
@@ -1469,17 +1478,15 @@ export function SidebarVersionField({
   value,
 }: {
   advanced?: boolean;
-  badge?: string;
   description?: string;
   label: string;
-  onChange: (value: SidebarVersion) => void;
-  value: SidebarVersion;
+  onChange: (value: boolean) => void;
+  value: boolean;
 } & SettingModificationProps) {
   const id = useId();
   return (
     <SettingRow
       advanced={advanced}
-      badge={badge}
       description={description}
       htmlFor={id}
       isModified={isModified}
@@ -1488,13 +1495,13 @@ export function SidebarVersionField({
     >
       <SegmentedControl
         aria-label={label}
-        onValueChange={(nextVersion) => {
-          onChange(nextVersion as SidebarVersion);
+        onValueChange={(nextValue) => {
+          onChange(nextValue === 'on');
         }}
         stretch
-        value={value}
+        value={value ? 'on' : 'off'}
       >
-        {SIDEBAR_VERSION_OPTIONS.map((option, index) => (
+        {SIDEBAR_SPACES_ENABLED_OPTIONS.map((option, index) => (
           <SegmentedControlItem
             aria-label={option.label}
             id={index === 0 ? id : undefined}
@@ -2040,11 +2047,7 @@ export function SettingRow({
   subtitle,
 }: {
   advanced?: boolean;
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * Rows for newly shipped settings may carry a short label badge, matching the
-   * Beta badge treatment already used by integration rows.
-   */
+  /** Rows for newly shipped settings may carry a short label badge. */
   badge?: string;
   children: ReactNode;
   description?: string;
@@ -2066,16 +2069,7 @@ export function SettingRow({
               {label}
             </FieldLabel>
             {badge ? (
-              /*
-               * CDXC:SidebarV2 2026-07-29:
-               * The badge reads the shadcn theme tokens the rest of this modal
-               * uses, so it inverts with the Light themes instead of painting a
-               * fixed dark-theme sky tint that washes out on white.
-               *
-               * CDXC:ModalRedesign 2026-08-24:
-               * Quiet chip: the accent label carries the emphasis, so the chip
-               * itself drops to a hairline on the raised tone and normal weight.
-               */
+              /* The badge uses the modal theme tokens and a quiet raised chip. */
               <span className='settings-row-badge inline-flex px-1.5 py-0.5 text-[11px] font-normal'>{badge}</span>
             ) : null}
             {advanced ? <AdvancedSettingTooltip label={label} /> : null}

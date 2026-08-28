@@ -2,13 +2,10 @@ import { describe, expect, test } from 'vitest';
 import {
   createGxserverPresentationSidebarGroup,
   createGxserverPresentationSidebarSession,
-  gxserverPresentationSidebarAutoSettleAfterDays,
-  gxserverPresentationSidebarLifecycleCapabilities,
 } from './gxserver-presentation-sidebar-projection';
 import type {
   GxserverPresentationProject,
   GxserverPresentationSession,
-  GxserverPresentationSnapshot,
   GxserverProjectId,
   GxserverSessionId,
   GxserverZmxSessionName,
@@ -152,75 +149,6 @@ describe('gxserver presentation sidebar projection', () => {
   });
 });
 
-describe('gxserverPresentationSidebarLifecycleCapabilities', () => {
-  test('normalizes a published capability block', () => {
-    expect(
-      gxserverPresentationSidebarLifecycleCapabilities({
-        capabilities: { sessionSettlement: true, sessionSnooze: false },
-      } as GxserverPresentationSnapshot)
-    ).toEqual({
-      sessionGitStatus: false,
-      sessionSettlement: true,
-      sessionSnooze: false,
-      worktreeSessions: false,
-    });
-  });
-
-  /*
-  CDXC:SidebarV2Git 2026-07-29:
-  A daemon can publish settle/snooze and still predate the git probe, so the
-  missing key must normalize to false rather than undefined — the sidebar reads
-  "no git data from this machine" and renders plain cards.
-  */
-  test('reports the git capability separately from the lifecycle ones', () => {
-    expect(
-      gxserverPresentationSidebarLifecycleCapabilities({
-        capabilities: {
-          sessionGitStatus: true,
-          sessionSettlement: true,
-          sessionSnooze: true,
-        },
-      } as GxserverPresentationSnapshot)
-    ).toEqual({
-      sessionGitStatus: true,
-      sessionSettlement: true,
-      sessionSnooze: true,
-      worktreeSessions: false,
-    });
-  });
-
-  /*
-  CDXC:SidebarV2Worktree 2026-07-29:
-  The worktree flow is its own capability step: a P3 daemon publishes git state
-  and still cannot cut worktrees, and V2's split "+" must collapse for it.
-  */
-  test('reports the worktree capability separately', () => {
-    expect(
-      gxserverPresentationSidebarLifecycleCapabilities({
-        capabilities: {
-          sessionGitStatus: true,
-          sessionSettlement: true,
-          sessionSnooze: true,
-          worktreeSessions: true,
-        },
-      } as GxserverPresentationSnapshot)
-    ).toEqual({
-      sessionGitStatus: true,
-      sessionSettlement: true,
-      sessionSnooze: true,
-      worktreeSessions: true,
-    });
-  });
-
-  /* An older gxserver publishes no `capabilities` at all. Reporting `undefined`
-     (rather than a pair of falses) lets the sidebar tell "unsupported" apart
-     from "supported but off", which is what hides the affordances. */
-  test('reports undefined when the snapshot predates session lifecycle', () => {
-    expect(gxserverPresentationSidebarLifecycleCapabilities({} as GxserverPresentationSnapshot)).toBeUndefined();
-    expect(gxserverPresentationSidebarLifecycleCapabilities(undefined)).toBeUndefined();
-  });
-});
-
 function createPresentationSession(overrides: Partial<GxserverPresentationSession> = {}): GxserverPresentationSession {
   return {
     actions: {
@@ -257,33 +185,6 @@ function createPresentationSession(overrides: Partial<GxserverPresentationSessio
     ...overrides,
   };
 }
-
-/*
-CDXC:SidebarV2LogicalProjects 2026-07-29:
-The two P5 wire fields. Both carry a three-state meaning (absent / null /
-value), and both would be silently broken by a projection that collapsed absent
-into null — the sidebar's fallback rules read the difference.
-*/
-describe('gxserverPresentationSidebarAutoSettleAfterDays', () => {
-  test('carries a published window through', () => {
-    expect(gxserverPresentationSidebarAutoSettleAfterDays({ autoSettleAfterDays: 14 })).toBe(14);
-  });
-
-  test('keeps an explicit null (this daemon does not inactivity-settle)', () => {
-    expect(gxserverPresentationSidebarAutoSettleAfterDays({ autoSettleAfterDays: null })).toBeNull();
-  });
-
-  test('keeps an unstated window UNDEFINED, never null', () => {
-    expect(gxserverPresentationSidebarAutoSettleAfterDays({})).toBeUndefined();
-    expect(gxserverPresentationSidebarAutoSettleAfterDays(undefined)).toBeUndefined();
-  });
-
-  test("treats zero and negatives as 'off', matching the settings normalizer", () => {
-    expect(gxserverPresentationSidebarAutoSettleAfterDays({ autoSettleAfterDays: 0 })).toBeNull();
-    expect(gxserverPresentationSidebarAutoSettleAfterDays({ autoSettleAfterDays: -3 })).toBeNull();
-    expect(gxserverPresentationSidebarAutoSettleAfterDays({ autoSettleAfterDays: Number.NaN })).toBeNull();
-  });
-});
 
 describe('gitRemoteOriginUrl projection', () => {
   function createPresentationProject(

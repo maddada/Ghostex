@@ -430,7 +430,6 @@ impl GhostexGpuiApp {
             "promptEditor"
                 | "attachFileOrFolder"
                 | "exportTranscript"
-                | "copyAgentSessionId"
                 | "sessionNote"
                 | "stashPrompt"
                 | "stashedPrompts"
@@ -439,14 +438,6 @@ impl GhostexGpuiApp {
                 | "scrollTerminalToBottom"
         ) {
             return false;
-        }
-        if action_id == "copyAgentSessionId" {
-            if let Some(session_id) = self.focused_agents_or_companion_shell_session_id()
-                && let Some(agent_session_id) = self.agents_session_agent_session_id(session_id)
-            {
-                cx.write_to_clipboard(ClipboardItem::new_string(agent_session_id.to_string()));
-            }
-            return true;
         }
         if action_id == "sessionNote" {
             if let Some(session_id) = self.focused_agents_or_companion_shell_session_id() {

@@ -104,6 +104,20 @@ pub fn dispatch_agent_endpoint(
             let lifecycle = read_lifecycle(params)?;
             fork_session(repository, &lifecycle, db, context)?
         }
+        /*
+        CDXC:DraftSessions 2026-08-28:
+        Drafts-only agent switching. Grouped with fork above because it has the
+        same shape: an agent-policy decision that has to reach into zmx to kill
+        and restart a provider, so it needs the same zmx context.
+        */
+        "/api/switchDraftAgent" => {
+            let context = zmx_context.ok_or_else(|| {
+                AgentEndpointError::DependencyUnavailable(
+                    "Cannot switch a draft's agent without gxserver zmx context.".to_string(),
+                )
+            })?;
+            switch_draft_agent(repository, db, params, context)?
+        }
         "/api/requestSessionRename" => {
             let lifecycle = read_lifecycle(params)?;
             let result = request_session_rename(repository, &lifecycle, params, home_dir)?;

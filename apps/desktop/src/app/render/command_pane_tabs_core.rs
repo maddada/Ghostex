@@ -29,6 +29,9 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
+const COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP: &str =
+    "Double click an empty space for a new terminal, and right click to toggle collapsing.";
+
 impl GhostexGpuiApp {
     pub(crate) fn render_command_pane_leaf(
         &self,
@@ -184,6 +187,9 @@ impl GhostexGpuiApp {
                     .items_center()
                     .overflow_hidden()
                     .track_scroll(&scroll_handle)
+                    .managed_tooltip_with_placement(ManagedTooltipPlacement::Below, |window, cx| {
+                        Tooltip::new(COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP).build(window, cx)
+                    })
                     .on_scroll_wheel(cx.listener(
                         move |_this, event: &ScrollWheelEvent, window, cx| {
                             if command_pane_handle_tab_strip_scroll_wheel(
@@ -369,6 +375,13 @@ impl GhostexGpuiApp {
                             .items_center()
                             .overflow_hidden()
                             .track_scroll(&scroll_handle)
+                            .managed_tooltip_with_placement(
+                                ManagedTooltipPlacement::Below,
+                                |window, cx| {
+                                    Tooltip::new(COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP)
+                                        .build(window, cx)
+                                },
+                            )
                             .on_scroll_wheel(cx.listener(
                                 move |_this, event: &ScrollWheelEvent, window, cx| {
                                     if command_pane_handle_tab_strip_scroll_wheel(

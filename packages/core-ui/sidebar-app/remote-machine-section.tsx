@@ -2,12 +2,16 @@ import { PointerSensor } from '@dnd-kit/dom';
 import { useSortable } from '@dnd-kit/react/sortable';
 import type { ReactNode } from 'react';
 import type { SidebarActiveSessionsSortMode } from '../../shared/session-grid-contract';
-import type { RemoteMachineSettings, SidebarV2Layout, SidebarVersion } from '../../shared/ghostex-settings';
+import type { RemoteMachineSettings } from '../../shared/ghostex-settings';
 import type { SidebarSessionTagListItem } from '../../shared/session-tags';
 import { useSidebarCollapsiblePresence } from '../sidebar-collapse-animation';
 import { createRemoteMachineDragData } from '../sidebar-dnd';
 import { getSidebarReorderActivationConstraints } from '../sidebar-reorder-activation';
 import type { SidebarSessionTagFilter } from '../session-tag-ui';
+import { SpaceFilterRow } from '../space-filter-row';
+import { createRemoteSidebarSpaceSectionKey } from './space-filtering';
+import type { SidebarSpacesState } from '../spaces';
+import type { WebviewApi } from '../webview-api';
 import { createRemoteProjectListScopeId } from './drag-drop-geometry';
 import { ProjectListEndUngroupDropZone } from './drag-ghosts';
 import { SidebarReferenceSectionHeader } from './reference-chrome';
@@ -81,8 +85,8 @@ export function RemoteMachineSidebarSection({
   onEdit,
   onReconnect,
   onSetActiveSessionsSortMode,
-  onSetSidebarV2Layout,
-  onSetSidebarVersion,
+  onReorderSpaces,
+  onSelectSpace,
   onToggleSessionTagFilter,
   onToggleCollapsed,
   projectCollectionItems,
@@ -94,10 +98,11 @@ export function RemoteMachineSidebarSection({
   selectedSessionTagFilters,
   sessionSummary,
   sessionTagListItems,
-  sidebarV2Layout,
-  sidebarVersion,
+  selectedSpaceId,
+  spaces,
   status,
   statusMessage,
+  vscode,
 }: {
   activeSessionsSortMode: SidebarActiveSessionsSortMode;
   bulkActionLabel?: string;
@@ -111,8 +116,19 @@ export function RemoteMachineSidebarSection({
   onEdit: () => void;
   onReconnect: () => void;
   onSetActiveSessionsSortMode: (sortMode: SidebarActiveSessionsSortMode) => void;
-  onSetSidebarV2Layout: (layout: SidebarV2Layout) => void;
-  onSetSidebarVersion: (sidebarVersion: SidebarVersion) => void;
+  /*
+   * CDXC:SidebarSpaces 2026-08-27:
+   * A remote gxserver's Spaces come from that server and are never mixed with
+   * the local set, so this section takes its own Space state plus its own
+   * selection and reorder callback. `spaces` is undefined for a machine whose
+   * daemon has never delivered one: that machine is Space-incapable and shows
+   * no Space row.
+   */
+  onReorderSpaces: (orderedSpaceIds: string[]) => void;
+  onSelectSpace: (spaceId: string | undefined) => void;
+  selectedSpaceId?: string;
+  spaces?: SidebarSpacesState;
+  vscode: WebviewApi;
   onToggleSessionTagFilter: (tag: SidebarSessionTagFilter) => void;
   onToggleCollapsed: () => void;
   projectCollectionItems?: readonly SidebarProjectCollectionRenderItem[];
@@ -127,8 +143,6 @@ export function RemoteMachineSidebarSection({
   selectedSessionTagFilters: readonly SidebarSessionTagFilter[];
   sessionSummary?: SidebarSectionSessionSummary;
   sessionTagListItems: readonly SidebarSessionTagListItem[];
-  sidebarV2Layout: SidebarV2Layout;
-  sidebarVersion: SidebarVersion;
   status: RemoteMachineRuntimeStatus['state'];
   statusMessage?: string;
 }) {
@@ -201,8 +215,6 @@ export function RemoteMachineSidebarSection({
         onBulkProjectToggle={onBulkProjectToggle}
         onEdit={onEdit}
         onSetActiveSessionsSortMode={onSetActiveSessionsSortMode}
-        onSetSidebarV2Layout={onSetSidebarV2Layout}
-        onSetSidebarVersion={onSetSidebarVersion}
         onToggleSessionTagFilter={onToggleSessionTagFilter}
         onToggleCollapsed={onToggleCollapsed}
         remoteConnectionControl={remoteConnectionControl}
@@ -210,10 +222,20 @@ export function RemoteMachineSidebarSection({
         selectedSessionTagFilters={selectedSessionTagFilters}
         sessionSummary={sessionSummary}
         sessionTagListItems={sessionTagListItems}
-        sidebarV2Layout={sidebarV2Layout}
-        sidebarVersion={sidebarVersion}
         title={machine.name}
       />
+      {spaces ? (
+        <SpaceFilterRow
+          collapsed={collapsed}
+          onReorderSpaces={onReorderSpaces}
+          onSelectSpace={onSelectSpace}
+          remoteMachineId={machine.id}
+          sectionKey={createRemoteSidebarSpaceSectionKey(machine.id)}
+          selectedSpaceId={selectedSpaceId}
+          spaces={spaces}
+          vscode={vscode}
+        />
+      ) : null}
       {showProjectList && projectListPresence.isPresent ? (
         <div
           aria-hidden={projectListPresence.isVisuallyCollapsed}
@@ -224,6 +246,7 @@ export function RemoteMachineSidebarSection({
           ref={projectListPresence.setCollapsibleElement}
           data-sidebar-project-list-scope={projectListScopeId}
           data-sidebar-remote-project-list='true'
+          data-sidebar-space-content-section={createRemoteSidebarSpaceSectionKey(machine.id)}
           data-stale={String(!isConnected)}
         >
           {projectGroupIds.length > 0 ? (

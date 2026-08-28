@@ -75,7 +75,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
       return;
     }
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
-    if (!settings.autoSleepAgentSessionsEnabled || !this.presentation) {
+    if (settings.autoSleepAgentIdleMinutes === 0 || !this.presentation) {
       return;
     }
     const sessionIdsToSleep = createGpuiAutoSleepAgentSessionIds({

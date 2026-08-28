@@ -94,6 +94,11 @@ pub(crate) fn update_agent_activity_endpoint(
     carry_session_chat_prompt(&current, &mut update.activity);
     let mut runtime_settings = object_field(&current, "runtimeSettings");
     runtime_settings.insert("agentActivity".to_string(), update.activity.clone());
+    promote_draft_on_first_activity(
+        &current,
+        &mut runtime_settings,
+        update.last_active_at.as_deref(),
+    );
     let mut session_update = lifecycle_update(lifecycle);
     session_update.insert(
         "runtimeSettings".to_string(),
@@ -251,6 +256,11 @@ pub(crate) fn ingest_agent_hook_event(
             if activity_changed {
                 let mut runtime_settings = object_field(&session, "runtimeSettings");
                 runtime_settings.insert("agentActivity".to_string(), update.activity.clone());
+                promote_draft_on_first_activity(
+                    &session,
+                    &mut runtime_settings,
+                    update.last_active_at.as_deref(),
+                );
                 let mut session_update = lifecycle_update(lifecycle);
                 session_update.insert(
                     "runtimeSettings".to_string(),
@@ -274,6 +284,27 @@ pub(crate) fn ingest_agent_hook_event(
             // reached disk.
             session_chat_prompt_changed = false;
             session_chat_activity_changed = false;
+        }
+    }
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    The PRECISE half of draft promotion, and the reason the activity-based half
+    above can stay conservative. `UserPromptSubmit` — or any hook carrying the
+    prompt text itself — is positive evidence that the USER prompted this agent,
+    which nothing a CLI does while starting up can produce. It runs outside the
+    activity block on purpose: a prompt-submit hook often carries no status at
+    all, so `hook_activity` is `None` and that block never executes.
+    */
+    if session_is_draft(&session) {
+        let mut runtime_settings = object_field(&session, "runtimeSettings");
+        if promote_draft_on_prompt_evidence(params, &mut runtime_settings) {
+            let mut session_update = lifecycle_update(lifecycle);
+            session_update.insert(
+                "runtimeSettings".to_string(),
+                Value::Object(runtime_settings),
+            );
+            session = repository.update_session(&session_update)?;
+            changed = true;
         }
     }
     /*
@@ -1103,10 +1134,11 @@ pub(crate) fn agent_hook_event_matches(
 
 pub(crate) fn default_activity(agent_id: Option<&str>, override_activity: Option<&str>) -> Value {
     let timestamp = now_iso();
+    let initial_activity = override_activity.unwrap_or("idle");
     let mut activity = Map::new();
     activity.insert(
         "activity".to_string(),
-        Value::String(override_activity.unwrap_or("idle").to_string()),
+        Value::String(initial_activity.to_string()),
     );
     if let Some(agent_id) = agent_id.and_then(|value| normalize_status_agent_name(Some(value))) {
         activity.insert("agentName".to_string(), Value::String(agent_id));
@@ -1117,6 +1149,26 @@ pub(crate) fn default_activity(agent_id: Option<&str>, override_activity: Option
         "lastChangedAt".to_string(),
         Value::String(timestamp.clone()),
     );
-    activity.insert("suppressedUntil".to_string(), Value::String(timestamp));
+    /*
+    Creation IS a launch, so an idle-born session arms the same initial
+    passive-signal suppression window the launch/resume/wake transitions do
+    (ActivitySuppressionPolicy layer 1). Without it, Codex's startup spinner in
+    the terminal title flipped a brand-new session to "working" before anything
+    had happened, and the chat surface — empty transcript, known agent session
+    — read that as "turn in flight, transcript not flushed" and replaced its
+    welcome with the blank "Loading conversation…" hold until the spinner
+    settled. A creation that starts "working" (launch startup text) keeps the
+    expired stamp: its own titles must stay able to settle it back to idle.
+    */
+    activity.insert(
+        "suppressedUntil".to_string(),
+        Value::String(if initial_activity == "idle" {
+            crate::session_status::iso_from_ms(
+                now_ms() + crate::session_status::INITIAL_ACTIVITY_SUPPRESSION_MS,
+            )
+        } else {
+            timestamp
+        }),
+    );
     Value::Object(activity)
 }

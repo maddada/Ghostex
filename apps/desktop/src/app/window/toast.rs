@@ -24,6 +24,7 @@ pub(crate) const GPUI_APP_TOAST_TITLE_LINE_HEIGHT: f32 = 18.0;
 pub(crate) const GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT: f32 = 17.0;
 pub(crate) const GPUI_APP_TOAST_TITLE_CHARS_PER_LINE: usize = 36;
 pub(crate) const GPUI_APP_TOAST_DESCRIPTION_CHARS_PER_LINE: usize = 40;
+pub(crate) const GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID: &str = "gpui-session-chat-file-opening";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GpuiAppToastLevel {
@@ -179,11 +180,14 @@ pub(crate) fn gpui_app_toast_estimated_height(toast: &GpuiAppToast) -> f32 {
         .as_deref()
         .map(|description| {
             GPUI_APP_TOAST_CONTENT_GAP
-                + gpui_app_toast_wrapped_line_count(
-                    description,
-                    GPUI_APP_TOAST_DESCRIPTION_CHARS_PER_LINE,
-                ) as f32
-                    * GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT
+                + if toast.id == GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID {
+                    1.0
+                } else {
+                    gpui_app_toast_wrapped_line_count(
+                        description,
+                        GPUI_APP_TOAST_DESCRIPTION_CHARS_PER_LINE,
+                    ) as f32
+                } * GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT
         })
         .unwrap_or(0.0);
     GPUI_APP_TOAST_VERTICAL_PADDING * 2.0 + title_height + description_height
@@ -351,6 +355,8 @@ impl Render for GpuiAppToastWindow {
                 let hover_toast_id = toast.id.clone();
                 let show_close_button = hovered_toast_id.as_deref() == Some(toast.id.as_str());
                 let description = toast.description.clone();
+                let truncate_description_from_start =
+                    toast.id == GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID;
                 let indicator = if toast.loading && toast.id != GPUI_GXSERVER_DAEMON_TOAST_ID {
                     canvas(
                         move |_bounds, _window, _cx| {},
@@ -419,11 +425,21 @@ impl Render for GpuiAppToastWindow {
                                             .when_some(description, |text_column, description| {
                                                 text_column.child(
                                                     div()
+                                                        .w_full()
                                                         .text_size(px(12.0))
                                                         .line_height(px(
                                                             GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT,
                                                         ))
                                                         .text_color(rgba(0xffffffb8))
+                                                        .when(
+                                                            truncate_description_from_start,
+                                                            |description| {
+                                                                description
+                                                                    .overflow_hidden()
+                                                                    .whitespace_nowrap()
+                                                                    .text_ellipsis_start()
+                                                            },
+                                                        )
                                                         .child(description),
                                                 )
                                             }),

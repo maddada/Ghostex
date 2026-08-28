@@ -1585,6 +1585,83 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
   padding-right: 7px;
 }
 
+/*
+ * CDXC:SidebarMachineTabs 2026-08-28:
+ * With remote machines saved, the panel's top row carries the machine tab strip
+ * and must size to it; the reference layout's single-row override above is for
+ * the empty top row that renders when there is nothing to switch between.
+ */
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-panel[data-sidebar-machine-tabs='true'] {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .session-groups-panel[data-sidebar-machine-tabs='true']
+  .session-groups-top {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.reference-sidebar-machine-tabs {
+  min-width: 0;
+  padding-bottom: 4px;
+}
+
+.reference-sidebar-machine-tab-strip[data-slot='segmented-control'] {
+  border-radius: 0;
+  width: 100%;
+}
+
+/*
+ * The canonical segmented-control rules pin 12px segment padding for settings
+ * rows; sidebar machine tabs are narrow and user-named, so they trade that for
+ * a tighter box plus a truncating label. Written with the strip class in the
+ * selector so it outranks those unlayered rules instead of racing them.
+ */
+.reference-sidebar-machine-tab-strip[data-slot='segmented-control'] [data-slot='segmented-control-item'] {
+  gap: 4px;
+  min-width: 0;
+  padding: 0 6px;
+}
+
+.sidebar-reference-layout .reference-sidebar-machine-tab svg {
+  height: 14px;
+  width: 14px;
+}
+
+.reference-sidebar-machine-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-sidebar-machine-tab-status {
+  align-items: center;
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+}
+
+/*
+ * Connection state is carried on the tab so an unreachable machine reads as
+ * such without opening it, matching the section header's error cloud color.
+ */
+.sidebar-reference-layout
+  .reference-sidebar-machine-tab-strip
+  [data-slot='segmented-control-item'][data-machine-connection='failed'] {
+  color: color-mix(in srgb, #ff6b6b 58%, #fff);
+}
+
+.sidebar-reference-layout
+  .reference-sidebar-machine-tab-strip
+  [data-slot='segmented-control-item'][data-machine-connection='disconnected'],
+.sidebar-reference-layout
+  .reference-sidebar-machine-tab-strip
+  [data-slot='segmented-control-item'][data-machine-connection='busy'] {
+  opacity: 0.72;
+}
+
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-search-toolbar {
   padding: 0;
   /*
@@ -1976,13 +2053,6 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
   padding-block: 0;
   pointer-events: none;
   transform: translateY(-4px) scaleY(0.985);
-}
-
-.sidebar-v2-shelf-body,
-.sidebar-v2-shelf-body-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2477,5 +2547,89 @@ manual mode visibly selected without adding text to the section row.
   min-width: 34px;
   padding: 5px 5px;
   text-align: center;
+  white-space: nowrap;
+}
+
+/*
+ * CDXC:SidebarSpaces 2026-08-27:
+ * The per-gxserver Space filter row. It is compact section chrome that sits
+ * between a section header and that section's project list, so it borrows the
+ * header's row height and the sidebar's existing chip vocabulary instead of
+ * introducing a new control shape.
+ *
+ * `overflow: hidden` is what makes the measuring pass invisible: the row renders
+ * every Space button for one pre-paint layout pass so their real widths can be
+ * read, and the clipped overflow keeps that pass from ever widening the sidebar.
+ */
+.sidebar-space-filter-row {
+  box-sizing: border-box;
+  margin: -10px 0 13px;
+  overflow: hidden;
+  padding-left: 3px;
+  width: 100%;
+}
+
+/*
+ * CDXC:SidebarSpaces 2026-08-28:
+ * Keep the Space switcher aligned with the project content on the left. During
+ * the pre-paint measuring pass every button renders at once, and the row clips
+ * any temporary overflow at its right edge.
+ */
+.sidebar-space-filter-track {
+  align-items: center;
+  column-gap: 4px;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+/*
+ * Icon-only square buttons: the Space name lives in the shared sidebar tooltip
+ * and in the More menu, so every button measures the same small width and the
+ * overflow split stays purely a function of how many Spaces there are.
+ */
+.sidebar-space-filter-button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: inherit;
+  height: 22px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 22px;
+}
+
+.sidebar-space-filter-button:hover {
+  background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
+  color: color-mix(in srgb, var(--app-foreground) 86%, transparent);
+}
+
+.sidebar-space-filter-button[data-selected='true'] {
+  background: color-mix(in srgb, var(--app-foreground) 12%, transparent);
+  border-color: color-mix(in srgb, var(--app-foreground) 16%, transparent);
+  color: color-mix(in srgb, var(--app-foreground) 94%, transparent);
+}
+
+.sidebar-space-filter-button[data-dragging='true'] {
+  cursor: grabbing;
+  opacity: 0.55;
+}
+
+.sidebar-space-filter-icon {
+  flex: 0 0 auto;
+}
+
+.sidebar-space-filter-menu-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -3,9 +3,9 @@
 // the composer while showing. Hosts inject a SessionChatTransport; everything
 // else is derived by useSessionChat.
 
-import { IconBlockquote, IconCopy, IconLoader2, IconRobot } from '@tabler/icons-react';
+import { IconBlockquote, IconCopy, IconLoader2 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ClipboardEvent, DragEvent, KeyboardEvent, MouseEvent, RefObject } from 'react';
+import type { ClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, RefObject } from 'react';
 import { Button } from '../../components/ui/button';
 import {
   ContextMenu,
@@ -15,10 +15,11 @@ import {
   ContextMenuTrigger,
 } from '../../components/ui/context-menu';
 import { cn } from '@/packages/components/utils';
+import type { GxserverSessionForkBranch } from '../../shared/gxserver-protocol';
 import type { SessionChatSkill, SessionChatTheme } from '../../shared/session-chat';
-import { getDefaultSidebarAgentById } from '../../shared/sidebar-agents';
-import { getBrandAgentLogoStyle } from '../agent-logos';
+import { ghostexHotkeyTextFromKeyboardEvent } from '../../shared/ghostex-hotkeys';
 import { AppTooltip, TooltipProvider } from '../app-tooltip';
+import { displayAgentName, NewSessionWelcome } from './session-chat-new-session-welcome';
 import { SessionChatComposer, type SessionChatComposerHandle } from './session-chat-composer';
 import { sessionChatDataTransferHasFiles } from './session-chat-drop-attachments';
 import { sessionChatEmptyStateCopy } from './session-chat-empty-state';
@@ -30,11 +31,17 @@ import {
 } from './session-chat-extension-panel';
 import type { SessionChatHostAction, SessionChatHostActions } from './session-chat-host-actions';
 import { SessionChatImageViewerProvider } from './session-chat-image-viewer';
+import { SessionChatForkBranchSwitcher } from './session-chat-fork-branch-switcher';
 import { SessionChatHostLinksProvider, type SessionChatHostLinks } from './session-chat-links';
 import { SessionChatInteractiveCard } from './session-chat-interactive-card';
 import { SessionChatMessageList } from './session-chat-message-list';
 import { SessionChatNotePanel } from './session-chat-note-panel';
 import { SessionChatSearch, type SessionChatHostSearchBridge } from './session-chat-search';
+import {
+  readStoredSessionChatSummary,
+  sessionChatSummaryToggleHotkey,
+  writeStoredSessionChatSummary,
+} from './session-chat-summary-override';
 import {
   SessionChatTerminalNoticeCard,
   sessionChatTerminalNoticeDismissKey,
@@ -74,6 +81,27 @@ the manual recycle once waiting has clearly stopped being normal.
 const LOADING_INDICATOR_DELAY_MS = 600;
 const LOADING_RETRY_DELAY_MS = 12_000;
 
+/*
+CDXC:DraftSessions 2026-08-28:
+Host actions that mean nothing on a draft. See the filter that uses them.
+*/
+const DRAFT_HIDDEN_HOST_ACTION_IDS = new Set(['fork', 'fullReload']);
+
+/*
+CDXC:DraftAgentSwitch 2026-08-28:
+When to look again after a draft's agent CLI was switched. The endpoint answers
+as soon as it has queued the swap — three interrupts, a settle, then the new
+agent's launch command typed into the same live pane — so the CLI that read
+answers about is still the OLD one, or a bare login shell. These are the two
+reads that see the NEW agent: one shortly after it has been launched, one after
+it has had time to paint its footer. Without them the pills would sit in their
+"reading…" state until something else happened to move the session, because the
+follower publishes detection only when the value it last published CHANGES —
+and switching between two agents of the same family often lands on the very
+same model string.
+*/
+const DRAFT_AGENT_SWITCH_REREAD_DELAYS_MS = [2_000, 6_000];
+
 export type { SessionChatHostAction, SessionChatHostActions, SessionChatHostLinks, SessionChatHostSearchBridge };
 
 /** Where a stash left the durable copy of the text it was given. */
@@ -99,6 +127,8 @@ export interface SessionChatComposerHandoff {
 }
 
 export interface SessionChatHostComposerActions {
+  /** Clears only when the composer still holds this exact acknowledged send. */
+  clearDraft: (expectedContent: string) => boolean;
   focus: () => void;
   handoffToTerminal: () => Promise<SessionChatComposerHandoff>;
   insertPrompt: (content: string) => boolean;
@@ -177,6 +207,14 @@ export interface SessionChatViewProps {
   hostSessionNoteBridge?: SessionChatHostSessionNoteBridge;
   /** Open delayed actions for this session in the host-owned modal. */
   onDelayedActions?: () => void;
+  /*
+  CDXC:SessionForkFamilies 2026-08-28:
+  Navigates the host to another branch of this conversation, picked in the
+  chat's branch switcher. Only the host knows how it selects a session, so a
+  host with no way to do it from this surface omits the callback and the
+  switcher lists the family read-only instead of pretending a click will land.
+  */
+  onSelectForkBranch?: (branch: GxserverSessionForkBranch) => void;
   /**
    * What the host does with links in the conversation (web URLs, machine file
    * paths). Omitted means browser defaults: URLs open in a new tab and file
@@ -238,17 +276,6 @@ function EmptyState({ detail, title }: { detail: string; title: string }) {
       <div className='ghostex-chat-empty-title'>{title}</div>
       <div className='ghostex-chat-empty-detail'>{detail}</div>
     </div>
-  );
-}
-
-function displayAgentName(agentLabel?: string | null): string | null {
-  const normalized = agentLabel?.trim();
-  if (!normalized) {
-    return null;
-  }
-  return (
-    getDefaultSidebarAgentById(normalized)?.name ??
-    normalized.replace(/[-_]+/g, ' ').replace(/\b\p{L}/gu, (letter) => letter.toLocaleUpperCase())
   );
 }
 
@@ -369,40 +396,6 @@ function TranscriptSelectionToolbar({
   );
 }
 
-/*
-The welcome fills the transcript region and nothing else. It used to be an
-`absolute inset-0` overlay spanning the whole chat column, which painted its
-centered logo and title straight through the terminal-notice / interactive
-cards stacked above the composer. Living in flow means the cards take their
-height first and the welcome centers in whatever is left; `showTitle` drops the
-headline once a card is up, so the remaining space belongs to the logo alone.
-*/
-function NewSessionWelcome({ agentLabel, showTitle = true }: { agentLabel?: string | null; showTitle?: boolean }) {
-  const agent = agentLabel ? getDefaultSidebarAgentById(agentLabel) : undefined;
-  const agentName = displayAgentName(agentLabel);
-
-  return (
-    <div className='ghostex-chat-new-session pointer-events-none min-h-0 flex-1 overflow-hidden'>
-      <div aria-label={agentName ?? 'Agent'} className='ghostex-chat-new-session-agent' role='img'>
-        {agent?.icon ? (
-          <span
-            aria-hidden='true'
-            className='ghostex-chat-new-session-agent-logo'
-            style={getBrandAgentLogoStyle(agent.icon)}
-          />
-        ) : (
-          <IconRobot aria-hidden='true' size={28} stroke={1.7} />
-        )}
-      </div>
-      {showTitle ? (
-        <div className='ghostex-chat-new-session-title'>
-          {agentName ? <>What should we build with {agentName}?</> : 'What should we work on?'}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function SessionChatView({
   agentLabel,
   canSend = true,
@@ -421,6 +414,7 @@ export function SessionChatView({
   onDelayedActions,
   onChatBarBridgeRequest,
   onChatBarPanelStateChange,
+  onSelectForkBranch,
   previewText,
   sendOnEnter = true,
   sessionKey,
@@ -439,20 +433,113 @@ export function SessionChatView({
     // palette on body so those explicitly scoped popup surfaces match.
     document.body.dataset.sessionChatTheme = theme;
   }, [theme]);
-  const slashCommands = useMemo(() => sessionChatSlashCommandsForAgent(agentLabel ?? null), [agentLabel]);
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  Which agent this chat renders as. `agentLabel` is the host's BOOT-TIME value
+  (a URL parameter on desktop), and a draft's agent can change under it: picking
+  a different agent in the composer's "Agents" section rewrites the session's
+  identity, and nothing reloads the page. The read state is the live truth, so
+  everything agent-shaped below — slash commands, option catalogs, the empty
+  state's logo and headline, the skills heading — follows it.
+
+  It is held in state rather than derived inline because of a genuine ordering
+  cycle: the transcript hook is SEEDED with this agent's command catalog, and
+  the hook is what produces the read state. The entry is stamped with the
+  transport it was read through, so a different session never inherits it — the
+  view falls straight back to the new host label until that session's own read
+  lands.
+  */
+  const [readAgentEntry, setReadAgentEntry] = useState<{
+    agent: string | null;
+    transport: SessionChatTransport;
+  } | null>(null);
+  const agentLabelFromRead = readAgentEntry?.transport === transport ? readAgentEntry.agent : null;
+  const resolvedAgentLabel = agentLabelFromRead ?? agentLabel ?? null;
+  const slashCommands = useMemo(() => sessionChatSlashCommandsForAgent(resolvedAgentLabel), [resolvedAgentLabel]);
   // The option pills type commands the "/" picker does not offer (/effort,
   // /fast). They still have to classify as commands so a dispatched pill
   // renders the same muted "Ran /model sonnet" row a typed one does.
   const slashCommandNames = useMemo(
-    () => [...slashCommands.map((command) => command.name), ...sessionChatOptionCommandNames(agentLabel ?? null)],
-    [agentLabel, slashCommands]
+    () => [...slashCommands.map((command) => command.name), ...sessionChatOptionCommandNames(resolvedAgentLabel)],
+    [resolvedAgentLabel, slashCommands]
   );
   const chat = useSessionChat({
     commandCatalog: commandCatalog ?? slashCommandNames,
     previewText,
     transport,
     working,
+    ...(diagnosticLog ? { diagnosticLog } : {}),
   });
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  The draft the switcher acts on. `availableAgents` is present only while the
+  session IS a draft, so its absence is what hides the "Agents" section on a
+  promoted session — and `sessionAgentId` (not the transcript family in
+  `chat.agent`) is what ticks the current row, because a project custom agent
+  built on Claude reports `claude` there.
+  */
+  const draftAgents = chat.availableAgents;
+  const draftAgentRow = useMemo(
+    () => draftAgents?.find((row) => row.agentId === chat.sessionAgentId) ?? null,
+    [chat.sessionAgentId, draftAgents]
+  );
+  /*
+  The chat-supported family the read state names: the draft's base family when
+  the session is a draft (a custom agent's own id has no catalog of its own),
+  otherwise the transcript family gxserver resolved.
+  */
+  const readStateAgent = draftAgentRow?.baseAgentId ?? chat.agent ?? null;
+  const chatRefresh = chat.refresh;
+  useEffect(() => {
+    setReadAgentEntry({ agent: readStateAgent, transport });
+  }, [readStateAgent, transport]);
+  const composerRef = useRef<SessionChatComposerHandle | null>(null);
+  const draftAgentSwitchTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearDraftAgentSwitchTimers = useCallback((): void => {
+    for (const timer of draftAgentSwitchTimersRef.current) {
+      clearTimeout(timer);
+    }
+    draftAgentSwitchTimersRef.current = [];
+  }, []);
+  // Unmount, and a move to another session: a follow-up read belongs to the
+  // draft it was armed for and to nothing else.
+  useEffect(() => clearDraftAgentSwitchTimers, [clearDraftAgentSwitchTimers, transport]);
+  const switchDraftAgent = useMemo(() => {
+    const switchAgent = transport.switchDraftAgent?.bind(transport);
+    return switchAgent
+      ? async (agentId: string): Promise<void> => {
+          /*
+          CDXC:DraftAgentSwitch 2026-08-28:
+          The switch restarts the agent CLI inside the draft's pane, so the
+          typed-but-unsent text is persisted BEFORE the request goes out: the
+          localStorage copy synchronously, and gxserver's durable copy through
+          the composer's own sync. Nothing here unmounts the composer any more,
+          which makes this belt-and-braces — but the text is the one thing in
+          this flow that cannot be reconstructed if something does go wrong.
+          */
+          composerRef.current?.flushDraft();
+          clearDraftAgentSwitchTimers();
+          /*
+          The agent identity lives on the read state alone — no frame type
+          carries it — so the switch is followed by a read, which is also what
+          re-seeds the option catalogs and the "/" command set for the agent
+          now running. The read happens on failure too: the most likely
+          refusal is "this session is no longer a draft", and then the switcher
+          itself is what is out of date. The rejection still reaches the pills,
+          which show the daemon's own sentence.
+          */
+          try {
+            await switchAgent({ agentId });
+          } finally {
+            chatRefresh();
+            // The new CLI is launched after this call returns; see the delays.
+            for (const delay of DRAFT_AGENT_SWITCH_REREAD_DELAYS_MS) {
+              draftAgentSwitchTimersRef.current.push(setTimeout(chatRefresh, delay));
+            }
+          }
+        }
+      : undefined;
+  }, [chatRefresh, clearDraftAgentSwitchTimers, transport]);
   const initialTranscriptLoading = chat.view.kind === 'loading';
   /*
   How far the blank hold has been allowed to progress. Keyed to the moment
@@ -532,7 +619,14 @@ export function SessionChatView({
       });
   }, [transport]);
   const sessionOptions = useSessionChatSessionOptions({
-    agent: agentLabel ?? null,
+    agent: resolvedAgentLabel,
+    /*
+    CDXC:DraftAgentSwitch 2026-08-28:
+    Drafts only — `chat.sessionAgentId` is carried for every session, and a
+    session that has never been a draft must keep reading the options it
+    already stored under the unsuffixed key.
+    */
+    draftAgentId: draftAgents !== null ? chat.sessionAgentId : null,
     ...(sessionKey !== undefined ? { sessionKey } : {}),
   });
   // null = this chat has never been toggled, so it follows the global setting.
@@ -548,6 +642,29 @@ export function SessionChatView({
     writeStoredSessionChatVerbose(sessionKey, next);
     setVerboseOverride(next);
   }, [sessionKey, verbose]);
+  const [summaryMode, setSummaryMode] = useState(() => readStoredSessionChatSummary(sessionKey));
+  useEffect(() => {
+    setSummaryMode(readStoredSessionChatSummary(sessionKey));
+  }, [sessionKey]);
+  const toggleSummary = useCallback(() => {
+    const next = !summaryMode;
+    writeStoredSessionChatSummary(sessionKey, next);
+    setSummaryMode(next);
+  }, [sessionKey, summaryMode]);
+  useEffect(() => {
+    const handleSummaryHotkey = (event: globalThis.KeyboardEvent): void => {
+      if (ghostexHotkeyTextFromKeyboardEvent(event) !== sessionChatSummaryToggleHotkey()) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) {
+        toggleSummary();
+      }
+    };
+    window.addEventListener('keydown', handleSummaryHotkey, true);
+    return () => window.removeEventListener('keydown', handleSummaryHotkey, true);
+  }, [toggleSummary]);
   /*
   What the agent is actually running, confirmed by gxserver from structured
   transcript metadata and the terminal statusline. Keyed on detectedAt so a
@@ -564,7 +681,6 @@ export function SessionChatView({
     // detectedOptions is re-created per frame; detectedAt identifies the read.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyDetectedOptions, detectedAt]);
-  const composerRef = useRef<SessionChatComposerHandle | null>(null);
   /*
   CDXC:SessionChatStashBadge 2026-08-24:
   The stash control carries how many prompts are already stashed from THIS
@@ -683,6 +799,7 @@ export function SessionChatView({
       return;
     }
     return hostComposerBridge.register({
+      clearDraft: (expectedContent) => composerRef.current?.clearDraft(expectedContent) ?? false,
       focus: () => composerRef.current?.focus(),
       handoffToTerminal: handoffComposerDraft,
       insertPrompt: (content) => composerRef.current?.insertSavedPrompt(content) ?? false,
@@ -733,6 +850,16 @@ export function SessionChatView({
   const readTerminalTail = useMemo(() => {
     const read = transport.readTerminalTail?.bind(transport);
     return read ? () => read() : undefined;
+  }, [transport]);
+  /*
+  CDXC:SessionForkFamilies 2026-08-28:
+  The branch switcher's one read. Bound like every other optional transport call
+  here, so a host without a route to `/api/sessionForkBranches` hands the
+  switcher nothing and it never renders.
+  */
+  const loadForkBranches = useMemo(() => {
+    const load = transport.forkBranches?.bind(transport);
+    return load ? () => load() : undefined;
   }, [transport]);
   // Machine-path image bytes as a data URL: chat-log overlay + picked-image
   // composer thumbnails both read through it.
@@ -828,9 +955,25 @@ export function SessionChatView({
     diagnosticLogRef.current?.('sessionChat.questionActiveChanged', { active: questionActive });
   }, [questionActive]);
   const viewKind = chat.view.kind;
+  // The inputs selectSessionChatViewState decided from, snapshotted every
+  // render so the kind-change breadcrumb reports the values that produced it.
+  const viewKindInputsRef = useRef<Record<string, unknown>>({});
+  viewKindInputsRef.current = {
+    hasAgentSessionId: chat.agentSessionId !== null,
+    hasError: chat.error !== null,
+    messageCount: chat.messages.length,
+    status: chat.status,
+    working: chat.working,
+  };
   useEffect(() => {
-    diagnosticLogRef.current?.('sessionChat.viewKindChanged', { kind: viewKind });
+    diagnosticLogRef.current?.('sessionChat.viewKindChanged', {
+      kind: viewKind,
+      ...viewKindInputsRef.current,
+    });
   }, [viewKind]);
+  useEffect(() => {
+    diagnosticLogRef.current?.('sessionChat.loadingStageChanged', { stage: loadingStage });
+  }, [loadingStage]);
   useEffect(() => {
     diagnosticLogRef.current?.('sessionChat.workingChanged', { working: chat.working });
   }, [chat.working]);
@@ -897,19 +1040,50 @@ export function SessionChatView({
   // Model pill follows a hand-typed "/model opus" without a second dispatch.
   const chatSend = chat.send;
   const reconcileTypedCommand = sessionOptions.reconcileTypedCommand;
+  const isDraft = draftAgents !== null;
   const send = useCallback(
-    (text: string): Promise<void> => {
+    async (text: string): Promise<void> => {
       reconcileTypedCommand(text);
-      return chatSend(text);
+      await chatSend(text);
+      /*
+      CDXC:DraftSessions 2026-08-28:
+      A delivered prompt PROMOTES a draft server-side (option commands like
+      /model are carved out and do not). Whether it did is only visible on the
+      read state — `availableAgents` simply stops being sent — so a send from a
+      draft is followed by a read, which is what retires the "Agents" section
+      once the conversation exists.
+      */
+      if (isDraft) {
+        chatRefresh();
+      }
     },
-    [chatSend, reconcileTypedCommand]
+    [chatRefresh, chatSend, isDraft, reconcileTypedCommand]
   );
+
+  /*
+  CDXC:DraftSessions 2026-08-28:
+  Fork and Full reload have nothing to act on while the session is a draft:
+  there is no conversation to fork, and no agent run to reload — the CLI has
+  never been given a prompt. The action list is host-built and the draft flag is
+  read state, so this view is the one place that holds both; filtering here
+  covers every surface the list reaches (desktop, web, mobile) at once. Rename,
+  Sleep, Delayed actions, Prompt editor, Stash prompt, Saved prompts, Attach and
+  Export are untouched — they all still mean something on a draft.
+  */
+  const draftAwareHostActions = useMemo(() => {
+    const actions = hostActions?.actions;
+    if (!isDraft || !hostActions || !actions) {
+      return hostActions;
+    }
+    const kept = actions.filter((action) => !DRAFT_HIDDEN_HOST_ACTION_IDS.has(action.id));
+    return kept.length === actions.length ? hostActions : { ...hostActions, actions: kept };
+  }, [hostActions, isDraft]);
 
   // Typing anywhere in the pane lands in the composer (§11.1): a single
   // printable character without Ctrl/Meta is redirected; unmodified
   // Backspace/Delete focuses the composer without inserting anything.
   const handleKeyDownCapture = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>): void => {
+    (event: ReactKeyboardEvent<HTMLDivElement>): void => {
       if (event.defaultPrevented || questionActive) {
         return;
       }
@@ -1096,6 +1270,21 @@ export function SessionChatView({
                 searchRevision={chat.messages}
               />
               <div className='relative flex min-h-0 flex-1 flex-col'>
+                {/*
+                CDXC:SessionForkFamilies 2026-08-28:
+                The chat has no title bar of its own (desktop draws the title
+                natively, the web app draws it in the workspace chrome), so the
+                branch switcher owns this thin strip above the transcript. It
+                renders nothing at all until the daemon reports a family of two
+                or more, which is why an unforked session shows no empty row.
+                */}
+                <div className='mx-auto flex w-full max-w-3xl flex-none justify-end px-4 pt-1 empty:hidden'>
+                  <SessionChatForkBranchSwitcher
+                    {...(loadForkBranches ? { loadBranches: loadForkBranches } : {})}
+                    {...(onSelectForkBranch ? { onSelectBranch: onSelectForkBranch } : {})}
+                    sessionKey={sessionKey ?? 'session-chat'}
+                  />
+                </div>
                 <div className='flex min-h-0 flex-1 flex-col'>
                   {chat.view.kind === 'ready' ? (
                     nativeSelectionMenus ? (
@@ -1111,6 +1300,7 @@ export function SessionChatView({
                           sessionTitle={sessionTitle}
                           terminalActivity={chat.terminalActivity}
                           theme={theme}
+                          summaryMode={summaryMode}
                           verboseMode={verbose}
                         />
                         <TranscriptSelectionToolbar
@@ -1137,6 +1327,7 @@ export function SessionChatView({
                             sessionTitle={sessionTitle}
                             terminalActivity={chat.terminalActivity}
                             theme={theme}
+                            summaryMode={summaryMode}
                             verboseMode={verbose}
                           />
                         </ContextMenuTrigger>
@@ -1169,7 +1360,8 @@ export function SessionChatView({
                     )
                   ) : showNewSessionWelcome ? (
                     <NewSessionWelcome
-                      agentLabel={agentLabel}
+                      agentLabel={resolvedAgentLabel}
+                      {...(draftAgentRow ? { agentIcon: draftAgentRow.icon, agentName: draftAgentRow.name } : {})}
                       showTitle={showNewSessionWelcomeTitle && !bottomCardVisible}
                     />
                   ) : emptyKind ? (
@@ -1180,8 +1372,8 @@ export function SessionChatView({
                       />
                     ) : (
                       <EmptyState
-                        detail={sessionChatEmptyStateCopy(emptyKind, agentLabel).detail}
-                        title={sessionChatEmptyStateCopy(emptyKind, agentLabel).title}
+                        detail={sessionChatEmptyStateCopy(emptyKind, resolvedAgentLabel).detail}
+                        title={sessionChatEmptyStateCopy(emptyKind, resolvedAgentLabel).title}
                       />
                     )
                   ) : null}
@@ -1193,6 +1385,7 @@ export function SessionChatView({
                     onAnswerChoice={answerNoticeChoice}
                     onSendKeys={sendNoticeKeys}
                     onVisibleChange={setNoticeCardVisible}
+                    {...(sessionKey !== undefined ? { sessionKey } : {})}
                     {...(hostActions?.onSwitchToTerminal ? { onSwitchToTerminal: hostActions.onSwitchToTerminal } : {})}
                   />
                   <SessionChatInteractiveCard
@@ -1250,12 +1443,14 @@ export function SessionChatView({
                       {...(readTerminalTail ? { onReadTerminalTail: readTerminalTail } : {})}
                       onSend={send}
                       sendOnEnter={sendOnEnter}
-                      {...(hostActions ? { hostActions } : {})}
+                      {...(draftAwareHostActions ? { hostActions: draftAwareHostActions } : {})}
                       {...(onDelayedActions ? { onDelayedActions } : {})}
                       {...(sessionNoteAvailable ? { onSessionNote: toggleSessionNote } : {})}
                       sessionNoteActive={noteOpen}
                       sessionNoteHasText={sessionNoteHasText}
+                      summaryMode={summaryMode}
                       verboseMode={verbose}
+                      {...(showVerbosePill ? { onToggleSummary: toggleSummary } : {})}
                       {...(showVerbosePill ? { onToggleVerbose: toggleVerbose } : {})}
                       {...(hostComposerBridge?.stashPrompt ? { onStash: stashComposerDraft } : {})}
                       {...(hostComposerBridge?.showStashedPrompts
@@ -1268,6 +1463,9 @@ export function SessionChatView({
                           canSend={canSend}
                           canSendKey={chat.sendKey !== undefined}
                           controller={sessionOptions}
+                          {...(draftAgents ? { draftAgents } : {})}
+                          {...(chat.sessionAgentId !== null ? { draftAgentId: chat.sessionAgentId } : {})}
+                          {...(switchDraftAgent ? { onSwitchDraftAgent: switchDraftAgent } : {})}
                           isWorking={chat.working}
                           screenProbed={chat.screenProbed}
                           onDispatchCommand={send}
@@ -1296,13 +1494,13 @@ export function SessionChatView({
                       }
                       ref={composerRef}
                       slashCommands={slashCommands}
-                      slashHeading={sessionChatSlashHeadingForAgent(agentLabel ?? null)}
+                      slashHeading={sessionChatSlashHeadingForAgent(resolvedAgentLabel)}
                       skills={skills}
                       files={files}
                       filesLoading={filesLoading}
                       onRequestFiles={requestFiles}
                       fileHeading='Project files'
-                      skillHeading={`${displayAgentName(agentLabel) ?? 'Agent'} skills`}
+                      skillHeading={`${draftAgentRow?.name ?? displayAgentName(resolvedAgentLabel) ?? 'Agent'} skills`}
                     />
                   </div>
                   {chatBarPanelState?.open && chatBarExtensions.length > 0 ? (

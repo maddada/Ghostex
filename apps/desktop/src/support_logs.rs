@@ -35,6 +35,7 @@ pub enum GpuiSupportLog {
     SidebarRenderer,
     SidebarRefresh,
     TerminalFocus,
+    SessionChat,
     ProjectBoard,
     AppModal,
     TitlebarPopupRepro,
@@ -49,6 +50,7 @@ impl GpuiSupportLog {
             Self::SidebarRenderer => "gpui-sidebar-renderer-debug.jsonl",
             Self::SidebarRefresh => "gpui-sidebar-refresh-debug.log",
             Self::TerminalFocus => "gpui-terminal-focus-debug.log",
+            Self::SessionChat => "gpui-session-chat-debug.jsonl",
             Self::ProjectBoard => "gpui-project-board-debug.log",
             // Filename from the shared `gpui.app.modal` scenario definition
             // (shared/ghostex-settings.ts logFiles).
@@ -65,6 +67,7 @@ impl GpuiSupportLog {
             Self::SidebarRenderer => Some(GpuiDiagnosticScenario::SidebarRenderer),
             Self::SidebarRefresh => Some(GpuiDiagnosticScenario::SidebarRefresh),
             Self::TerminalFocus => Some(GpuiDiagnosticScenario::TerminalFocus),
+            Self::SessionChat => Some(GpuiDiagnosticScenario::SessionChat),
             Self::ProjectBoard => Some(GpuiDiagnosticScenario::ProjectBoard),
             Self::AppModal => Some(GpuiDiagnosticScenario::AppModal),
             Self::TitlebarPopupRepro => None,
@@ -81,6 +84,7 @@ pub enum GpuiDiagnosticScenario {
     SidebarRenderer,
     SidebarRefresh,
     TerminalFocus,
+    SessionChat,
     ProjectBoard,
     AppModal,
 }
@@ -93,6 +97,7 @@ impl GpuiDiagnosticScenario {
             Self::SidebarRenderer => "gpui.sidebar.renderer",
             Self::SidebarRefresh => "native.sidebar.refresh",
             Self::TerminalFocus => "native.terminal.focus",
+            Self::SessionChat => "gpui.sessionChat.viewState",
             Self::ProjectBoard => "native.project.board",
             Self::AppModal => "gpui.app.modal",
         }

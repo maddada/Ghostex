@@ -40,6 +40,23 @@ pub(crate) fn insert_sidebar_project_collections_presentation_payload(
     Ok(())
 }
 
+pub(crate) fn insert_sidebar_spaces_presentation_payload(
+    snapshot: &mut Value,
+    db: &Connection,
+) -> Result<(), DomainStateError> {
+    /*
+    CDXC:SidebarSpaces 2026-08-27:
+    The saved-filter overlay rides the same presentation snapshot every client
+    already polls, so a Space row and its filtered project list need no second
+    round trip and stay in step with the collections overlay beside it.
+    */
+    let spaces = crate::sidebar_spaces::read_sidebar_spaces(db)?;
+    if let Some(snapshot) = snapshot.as_object_mut() {
+        snapshot.insert("sidebarSpaces".to_string(), spaces);
+    }
+    Ok(())
+}
+
 /*
 CDXC:SessionChatPromptQueue 2026-08-21:
 `queuedPromptCount` is the sidebar badge's whole input: how many Ghostex-owned
@@ -321,6 +338,105 @@ pub(crate) fn insert_stashed_prompt_count_session_projection(session: &mut Value
             object.insert("stashedPromptCount".to_string(), json!(count));
         }
     }
+}
+
+/*
+CDXC:DraftSessions 2026-08-28:
+A draft's sidebar row shows the first line of the text the user is typing into
+it, not "Claude Session". The text lives in the synced `session_chat_drafts`
+table rather than in the session row, so — exactly like the queue counts and
+session notes above — it rides the presentation projection as a post-projection
+overlay instead of a per-row round trip, and `/api/setSessionChatDraft` publishes
+a session delta so every client's title follows the typing live.
+
+The durable `title` is deliberately left alone: it is still the agent default,
+which is what the row goes back to showing the moment the draft is promoted.
+Only the DISPLAY title and its tooltip are rewritten, and `titleSource` is set
+to `draft` so a client can tell this string apart from a real session title.
+*/
+fn apply_draft_display_title(session: &mut Value, content: &str) {
+    let Some(display_title) = crate::agents::draft_display_title(content) else {
+        return;
+    };
+    let Some(object) = session.as_object_mut() else {
+        return;
+    };
+    if object.get("isDraft").and_then(Value::as_bool) != Some(true) {
+        return;
+    }
+    object.insert(
+        "displayTitle".to_string(),
+        Value::String(display_title.clone()),
+    );
+    object.insert(
+        "displayTitleTooltip".to_string(),
+        Value::String(display_title.clone()),
+    );
+    object.insert("primaryTitle".to_string(), Value::String(display_title));
+    object.insert(
+        "titleSource".to_string(),
+        Value::String("draft".to_string()),
+    );
+    object.insert("isTemporaryTitle".to_string(), Value::Bool(false));
+    // The string is the user's unsent text, never something the terminal
+    // painted, so clients must not apply their live-terminal-title treatment
+    // (or the "(Unsynced title)" marker) to it.
+    object.insert(
+        "isPrimaryTitleTerminalTitle".to_string(),
+        Value::Bool(false),
+    );
+}
+
+pub(crate) fn insert_draft_title_presentation_payload(snapshot: &mut Value, db: &Connection) {
+    let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
+        return;
+    };
+    if !sessions
+        .iter()
+        .any(|session| session.get("isDraft").and_then(Value::as_bool) == Some(true))
+    {
+        return;
+    }
+    let drafts = crate::session_chat_queue::read_non_blank_session_chat_draft_contents(db);
+    if drafts.is_empty() {
+        return;
+    }
+    for session in sessions {
+        let key = (
+            session
+                .get("projectId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+            session
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        );
+        if let Some(content) = drafts.get(&key) {
+            apply_draft_display_title(session, content);
+        }
+    }
+}
+
+pub(crate) fn insert_draft_title_session_projection(
+    session: &mut Value,
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+) {
+    if session.get("isDraft").and_then(Value::as_bool) != Some(true) {
+        return;
+    }
+    // A failed read here only costs this delta its draft title; the next one
+    // republishes it. Unlike the boot sweep, nothing is destroyed by guessing.
+    let Ok(Some(content)) =
+        crate::session_chat_queue::read_session_chat_draft_content(db, project_id, session_id)
+    else {
+        return;
+    };
+    apply_draft_display_title(session, &content);
 }
 
 pub(crate) fn insert_auto_settle_window_presentation_payload(

@@ -512,6 +512,29 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         _ => format!("/rename {}", title.as_deref().ok_or(())?),
     };
     let uses_bare_rename = decision.strategy == Some("sendBareRenameCommand");
+    /*
+    CDXC:FirstPromptRealMessage 2026-08-28:
+    A bare `/rename` asks Claude to name the session from the conversation, so
+    submitting it before the conversation holds a real user message makes
+    Claude name the session after startup noise — `/model` and `/effort` local
+    commands produced sticky names like "set-default-model-opus". Gate the send
+    on the transcript itself: wait briefly for the first visible user prompt to
+    land, and if none arrives mark the attempt cancelled (re-armable by the
+    next explicit prompt submit), never skipped/applied, so the session still
+    gets its auto title once the user actually says something.
+    */
+    if uses_bare_rename
+        && !wait_for_visible_first_user_message(&state, &project_id, &session_id, &attempt_id)
+            .await?
+    {
+        mark_first_prompt_auto_title_cancelled_without_user_message(
+            &state,
+            &project_id,
+            &session_id,
+            &attempt_id,
+        );
+        return Ok(());
+    }
     {
         let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
@@ -683,6 +706,99 @@ pub(crate) async fn run_first_prompt_auto_title_job(
     schedule_delta_for_ids(&state, &project_id, &session_id);
     let _ = prompt;
     Ok(())
+}
+
+/*
+CDXC:FirstPromptRealMessage 2026-08-28:
+The transcript is the source of truth for "the user actually said something":
+`recent_session_user_prompts` already filters out `<command-name>` wrappers,
+tool results, and staged slash commands, so a `/model` or `/effort` exchange
+counts as nothing. Polls with the database handle dropped before every await
+(rusqlite connections cannot be held across await points). Returns `true`
+when a visible user prompt exists or when this attempt was superseded — the
+caller's own attempt re-check then decides what to persist.
+*/
+async fn wait_for_visible_first_user_message(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    attempt_id: &str,
+) -> Result<bool, ()> {
+    const POLL_ATTEMPTS: u32 = 10;
+    const POLL_DELAY_MS: u64 = 1_000;
+    for attempt in 0..POLL_ATTEMPTS {
+        let identity = {
+            let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
+            let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+            let Some(session) = repository
+                .get_session(project_id, session_id)
+                .map_err(|_| ())?
+            else {
+                return Ok(false);
+            };
+            if !is_current_first_prompt_auto_title_attempt(&session, attempt_id) {
+                return Ok(true);
+            }
+            (
+                read_runtime_text(&session, "agentSessionId"),
+                read_runtime_text(&session, "agentSessionPath"),
+            )
+        };
+        if !crate::agent_transcripts::recent_session_user_prompts(
+            "claude",
+            identity.0.as_deref(),
+            identity.1.as_deref(),
+        )
+        .is_empty()
+        {
+            return Ok(true);
+        }
+        if attempt + 1 < POLL_ATTEMPTS {
+            tokio::time::sleep(Duration::from_millis(POLL_DELAY_MS)).await;
+        }
+    }
+    Ok(false)
+}
+
+fn mark_first_prompt_auto_title_cancelled_without_user_message(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    attempt_id: &str,
+) {
+    let did_update =
+        update_first_prompt_auto_title_runtime(state, project_id, session_id, |runtime| {
+            if read_text_from_map(runtime, FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY).as_deref()
+                != Some(attempt_id)
+                || read_text_from_map(runtime, "gxserverFirstPromptAutoTitleStatus").as_deref()
+                    != Some("running")
+            {
+                return false;
+            }
+            runtime.remove(FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY);
+            if let Some(prompt) = read_text_from_map(runtime, "firstUserMessage") {
+                runtime.insert(
+                    "gxserverFirstPromptAutoTitleCancelledPrompt".to_string(),
+                    json!(prompt),
+                );
+            }
+            runtime.insert(
+                "gxserverFirstPromptAutoTitleCancelledAt".to_string(),
+                json!(now_iso()),
+            );
+            runtime.insert(
+                "gxserverFirstPromptAutoTitleReason".to_string(),
+                json!("noVisibleUserMessage"),
+            );
+            runtime.insert(
+                "gxserverFirstPromptAutoTitleStatus".to_string(),
+                json!("cancelled"),
+            );
+            true
+        });
+    if did_update {
+        schedule_delta_for_ids(state, project_id, session_id);
+    }
 }
 
 pub(crate) fn mark_first_prompt_auto_title_skipped(

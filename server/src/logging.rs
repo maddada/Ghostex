@@ -40,6 +40,7 @@ pub enum LogLevel {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DiagnosticLogScenario {
+    AgentActivity,
     AgentDetection,
     ApiRequests,
     Portless,
@@ -52,6 +53,7 @@ pub enum DiagnosticLogScenario {
 impl DiagnosticLogScenario {
     pub fn id(self) -> &'static str {
         match self {
+            Self::AgentActivity => "gxserver.agentActivity",
             Self::AgentDetection => "native.agent.detection",
             Self::ApiRequests => "gxserver.requests",
             Self::Portless => "gxserver.portless",

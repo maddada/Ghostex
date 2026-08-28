@@ -515,9 +515,22 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 The decision lives here, next to the keep-awake decline, so every
                 client's sweep gets the same answer. A user-triggered Sleep is
                 never declined.
+
+                CDXC:DraftSessions 2026-08-28:
+                A DRAFT is the one never-active session that IS safe to sleep,
+                and the one it matters most for: it is by definition unprompted,
+                so it would otherwise be the only session class that can never
+                auto-sleep at all, and a user who opens several drafts would
+                leave that many agent CLIs running forever. There is nothing to
+                lose by killing its provider because there is no conversation —
+                waking one relaunches the agent fresh from its stored launch
+                plan (see `get_provider_restart_startup_text_for_session`)
+                rather than resuming anything.
                 */
                 let session = require_session(repository, &lifecycle)?;
-                if !session_has_ever_been_active(&session) {
+                if !session_has_ever_been_active(&session)
+                    && !crate::agents::session_is_draft(&session)
+                {
                     return Ok(ZmxEndpointOutput {
                         created_workspace_terminal: None,
                         result: json!({ "declined": "neverActive", "session": session }),

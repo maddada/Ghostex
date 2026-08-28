@@ -8,6 +8,37 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>8.2.0</title>
+            <pubDate>Fri, 28 Aug 2026 18:15:22 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.2.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>80200</sparkle:version>
+            <sparkle:shortVersionString>8.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 8.2.0
+
+## 8.2.0 - 2026-08-28
+
+- Major
+  - Spaces let you organize projects into named working sets and filter each local or remote gxserver independently, while machine tabs make it quick to move between this computer and connected machines without losing each machine's selected Space.
+  - New agent sessions can begin as durable drafts: choose the agent, model, effort, view, and first prompt before Ghostex launches a terminal, then recover the draft across desktop, web, and Android after navigation, reconnects, or crashes.
+  - Forked conversations now appear as a family across Session Chat and Previous Sessions, with branch badges and an in-chat switcher that follows successor sessions without losing the shared transcript.
+  - Arch Linux users now get an official, hash-verified `ghostex-8.2.0-linux-x64.tar.zst` package alongside the DEB and RPM downloads; its prefix-preserving layout installs Ghostex under `/opt` with the `ghostex` and `gx` commands on `PATH`.
+- Minor
+  - Session Chat preserves atomic file references in Monaco, keeps synced drafts until delivery is confirmed, restores unsent Saved Prompt drafts, shows clearer terminal readiness and refusal feedback, and presents compaction summaries and file-open paths more clearly.
+  - Agent and remote-machine settings are simpler to scan and configure, terminal width can apply to command panes, and sidebar tooltip delay is adjustable down to instant display.
+  - Docs can delete folders, style supported documents, and include temporary project files that were previously hidden.
+  - Quick Access includes already-open projects and offers direct Close and Remove actions, while sidebar grouping, active-session state, and empty states stay consistent across local and remote sections.
+  - Export Transcript is now Handoff, with a clearer agent action bar and shortcuts for carrying a session into another agent or conversation.
+  - Extensions can open approved remote URL surfaces while preserving the extension host's launch, consent, and bridge boundaries.
+  - Quitting the desktop app can shut down the full Ghostex service stack, including gxserver and its managed sessions, when you explicitly choose that option.
+  - Usage analytics now has a complete public field inventory, immediate opt-out controls, and clear disclosure of the one-way hashed identity used to group a person's own machines; retired sidebar-layout dimensions are no longer reported.
+  - Titlebar dropdowns keep their final row visible and return focus reliably, empty command-pane titlebars explain their controls, and action tooltips keep their intended spacing and hit area.
+  - Android preserves sent drafts across navigation, adds a default agent-view preference, and uses the same Handoff terminology as the desktop and web apps.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.2.0/ghostex-8.2.0-arm64.dmg" length="117211816" type="application/octet-stream" sparkle:edSignature="MuopKMzUeiaGVu+j+Rg/8mA7KqBRM+2u9qqXGhg9Ep6yOcA491XisaQrNXOSQd/Q/xY4+7uAt8ucEmjedqbPDw=="/>
+        </item>
+        <item>
             <title>8.1.0</title>
             <pubDate>Thu, 27 Aug 2026 06:25:16 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.1.0</sparkle:fullReleaseNotesLink>
@@ -202,29 +233,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.11.0/ghostex-7.11.0-arm64.dmg" length="120829582" type="application/octet-stream" sparkle:edSignature="d2m5Wxjaj9teJqCaHdjUfsfXivwC5317bpwJK5WZAyi7P/Xz/PgG06UgFnUJQsGAKcGpA/C0RM3TgyBpASRZDA=="/>
         </item>
         <item>
-            <title>7.10.0</title>
-            <pubDate>Mon, 17 Aug 2026 17:36:02 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.10.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>71000</sparkle:version>
-            <sparkle:shortVersionString>7.10.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.10.0
-
-## 7.10.0 - 2026-08-17
-
-- Major
-  - Delayed Send is now owned by the machine hosting the session, so timers and agent-stop triggers keep counting down and still fire after Ghostex is closed or reconnected, including for remote sessions.
-- Minor
-  - Agent sessions set to open in Chat now start directly in Chat with the composer focused instead of briefly showing the terminal first.
-  - Clicking inside a chat now moves keyboard focus there instead of leaving typed keys going to the terminal behind it.
-  - Narrow chat panes now place session options and prompt actions on separate rows and widen chat search, so the controls stay reachable instead of crowding each other.
-  - Android chat now uses the full screen width and reserves Enter for new lines, keeping sending a deliberate tap.
-  - Opening an existing conversation no longer flashes the new-session welcome screen while the transcript loads.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.10.0/ghostex-7.10.0-arm64.dmg" length="114714714" type="application/octet-stream" sparkle:edSignature="ooXzZ//FCn41MMjW06ITo0QfKppJ6xt6Hnhv5rlgS5l6pFfBQ1WY52QEB3kDn5VySCiGKj5GGBRlZL8Cxa52Dg=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -236,6 +244,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: +L3efMZBZkpaS/J/79v93hmxzpto+PMMYa3v+bdVfxfH+qXeZn+hqrE72W20rRJQeb1Ej85LXmHxTMJWaPnwBw==
-length: 27734
+edSignature: p4IRSuQbHAi16JC5j2Qwh8wW3uVHEs6sI8Ccsm/gMlbmI051OX+UIVWxIbWDHnLCcIvYpQ7ZDB53xLBb+6HxDw==
+length: 29602
 -->

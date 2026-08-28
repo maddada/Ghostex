@@ -35,6 +35,7 @@ use gpui::point;
 use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui::rgb;
+use gpui::size;
 use gpui_component::ElementExt;
 use gpui_component::Selectable;
 use gpui_component::h_flex;
@@ -49,17 +50,44 @@ use crate::app::window::*;
 use crate::*;
 
 impl GhostexGpuiApp {
+    pub(crate) fn titlebar_extension_popup_bounds(
+        &self,
+        window: &Window,
+    ) -> Option<Bounds<Pixels>> {
+        let state = self.titlebar_extension_popup.as_ref()?;
+        let horizontal_margin = 8.0;
+        let width = state
+            .size
+            .width
+            .min((window.viewport_size().width.as_f32() - horizontal_margin * 2.0).max(1.0));
+        let height = state.size.height.min(
+            (window.viewport_size().height.as_f32() - TITLEBAR_HEIGHT - horizontal_margin).max(1.0),
+        );
+        let min_right_edge = width + horizontal_margin;
+        let max_right_edge =
+            (window.viewport_size().width.as_f32() - horizontal_margin).max(min_right_edge);
+        let right_edge = state
+            .trigger_bounds
+            .top_right()
+            .x
+            .as_f32()
+            .clamp(min_right_edge, max_right_edge);
+        Some(Bounds::new(
+            point(px(right_edge - width), px(TITLEBAR_HEIGHT)),
+            size(px(width), px(height)),
+        ))
+    }
+
     pub(crate) fn render_titlebar_extension_popup_panel(
         &self,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let Some((id, trigger_bounds, requested_size, panel, error)) =
+        let Some((id, trigger_bounds, panel, error)) =
             self.titlebar_extension_popup.as_ref().map(|state| {
                 (
                     state.id,
                     state.trigger_bounds,
-                    state.size,
                     state.panel.clone(),
                     state.error.clone(),
                 )
@@ -67,22 +95,10 @@ impl GhostexGpuiApp {
         else {
             return div().size_0().into_any_element();
         };
-        let horizontal_margin = 8.0;
-        let width = requested_size
-            .width
-            .min((window.viewport_size().width.as_f32() - horizontal_margin * 2.0).max(1.0));
-        let height = requested_size.height.min(
-            (window.viewport_size().height.as_f32() - TITLEBAR_HEIGHT - horizontal_margin).max(1.0),
-        );
-        let min_right_edge = width + horizontal_margin;
-        let max_right_edge =
-            (window.viewport_size().width.as_f32() - horizontal_margin).max(min_right_edge);
-        let right_edge = trigger_bounds
-            .top_right()
-            .x
-            .as_f32()
-            .clamp(min_right_edge, max_right_edge);
-        let position = point(px(right_edge), px(TITLEBAR_HEIGHT));
+        let Some(popup_bounds) = self.titlebar_extension_popup_bounds(window) else {
+            return div().size_0().into_any_element();
+        };
+        let position = popup_bounds.top_right();
 
         deferred(
             anchored()
@@ -98,8 +114,8 @@ impl GhostexGpuiApp {
                         .tab_group()
                         .key_context(TITLEBAR_DROPDOWN_KEY_CONTEXT)
                         .track_focus(&self.titlebar_dropdown_focus_handle)
-                        .w(px(width))
-                        .h(px(height))
+                        .w(popup_bounds.size.width)
+                        .h(popup_bounds.size.height)
                         .overflow_hidden()
                         .rounded(px(2.0))
                         .border_1()

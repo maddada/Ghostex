@@ -33,6 +33,8 @@ export function InstallConsentDialog({
 }) {
   const permissions = entry?.permissions ?? [];
   const runsBackgroundProcess = Boolean(entry?.server && 'command' in entry.server);
+  const loadsRemoteWebsite = Boolean(entry?.server && 'url' in entry.server);
+  const remoteUrl = entry?.server && 'url' in entry.server ? entry.server.url : undefined;
   return (
     <AppModalShell
       className='extensions-consent-modal'
@@ -49,7 +51,7 @@ export function InstallConsentDialog({
             Review the access this audited extension declares before installing it.
           </AppModalDescription>
         </AppModalHeader>
-        {permissions.length || runsBackgroundProcess ? (
+        {permissions.length || runsBackgroundProcess || loadsRemoteWebsite ? (
           <ul aria-label='Requested access' className='extensions-consent-list'>
             {permissions.map((permission) => (
               <li className='extensions-consent-item' key={permission}>
@@ -69,6 +71,18 @@ export function InstallConsentDialog({
                   <div className='text-foreground'>Runs a background process</div>
                   <div className='mt-0.5 text-xs leading-5 text-muted-foreground'>
                     Server extensions run outside a sandbox. Open-source review remains the primary trust boundary.
+                  </div>
+                </div>
+              </li>
+            ) : null}
+            {loadsRemoteWebsite ? (
+              <li className='extensions-consent-item'>
+                <IconAlertTriangle aria-hidden='true' className='mt-0.5 shrink-0 text-muted-foreground' />
+                <div>
+                  <div className='text-foreground'>Loads a remote website</div>
+                  <div className='mt-0.5 text-xs leading-5 text-muted-foreground'>
+                    This extension opens {remoteUrl} directly. The page runs outside Ghostex and cannot use the
+                    extension bridge, but it sees whatever you type into it.
                   </div>
                 </div>
               </li>

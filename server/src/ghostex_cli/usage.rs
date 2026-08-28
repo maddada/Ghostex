@@ -196,6 +196,14 @@ pub fn usage() -> String {
             "Replace the collections state; prints the normalized result",
         ),
         format_help_command(
+            "read-sidebar-spaces --json",
+            "Print the durable sidebar spaces state",
+        ),
+        format_help_command(
+            "update-sidebar-spaces --state-json json --json",
+            "Replace the spaces state; prints the normalized result",
+        ),
+        format_help_command(
             "focus-session <id|--index n|--session-number n>",
             "Focus a session by raw selector",
         ),
