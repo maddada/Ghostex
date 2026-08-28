@@ -1570,10 +1570,7 @@ export function SidebarApp({
   const unfilteredReferenceProjectGroupIds = useMemo(
     () =>
       displayedWorkspaceGroupIds.filter(
-        (groupId) =>
-          groupId !== SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID &&
-          !groupsById[groupId]?.isChatCollection &&
-          !groupsById[groupId]?.remoteMachineContext
+        (groupId) => !groupsById[groupId]?.isChatCollection && !groupsById[groupId]?.remoteMachineContext
       ),
     [displayedWorkspaceGroupIds, groupsById]
   );
@@ -1586,25 +1583,28 @@ export function SidebarApp({
    * Space. Order does not matter for an intersection, so the empty-group-dropping
    * `shouldFilter` behaviour of `createDisplayedGroupIds` composes unchanged.
    *
-   * Quick chats and the synthetic gxserver-unavailable row are already excluded
-   * from this list, so no Space rule ever applies to them.
+   * Quick chats and the synthetic gxserver-unavailable row are excluded before
+   * Space visibility is evaluated, so no Space rule ever applies to them.
    */
   const selectedLocalSpace = resolveSelectedSidebarSpace(
     spacesState,
     selectedSpaceIdBySectionKey[LOCAL_SIDEBAR_SPACE_SECTION_KEY]
   );
   const displayedReferenceProjectGroupIds = useMemo(() => {
+    const visibleProjectGroupIds = unfilteredReferenceProjectGroupIds.filter(
+      (groupId) => groupId !== SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID
+    );
     if (!selectedLocalSpace) {
-      return unfilteredReferenceProjectGroupIds;
+      return visibleProjectGroupIds;
     }
     const isVisibleInSpace = createSidebarSpaceGroupVisibility({
       collectionState: projectCollections,
-      groupIds: unfilteredReferenceProjectGroupIds,
+      groupIds: visibleProjectGroupIds,
       groupsById,
       resolveProjectId: (groupId) => groupsById[groupId]?.projectContext?.editor.projectId,
       space: selectedLocalSpace,
     });
-    return unfilteredReferenceProjectGroupIds.filter(isVisibleInSpace);
+    return visibleProjectGroupIds.filter(isVisibleInSpace);
   }, [groupsById, projectCollections, selectedLocalSpace, unfilteredReferenceProjectGroupIds]);
   const groupIdsContainingActiveSession = useMemo(
     () =>
