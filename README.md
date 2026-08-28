@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/maddada/Ghostex/releases"><img alt="GitHub Releases" src="https://img.shields.io/badge/Releases-DMG%2C%20EXE%2C%20DEB%2C%20RPM%20%26%20APK-111827?logo=github&logoColor=white"></a>
+  <a href="https://github.com/maddada/Ghostex/releases"><img alt="GitHub Releases" src="https://img.shields.io/badge/Releases-DMG%2C%20EXE%2C%20DEB%2C%20RPM%2C%20TAR.ZST%20%26%20APK-111827?logo=github&logoColor=white"></a>
   <a href="https://discord.gg/df7b3G92CS"><img alt="Discord" src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&logoColor=white"></a>
   <a href="https://ghostex.dev"><img alt="Website" src="https://img.shields.io/badge/Website-ghostex.dev-0EA5E9"></a>
 </p>
@@ -38,9 +38,17 @@ Starting with 7.0.0, Windows installations receive automatic updates from GitHub
 
 ### Linux
 
-Latest downloads: [Linux DEB](https://maddada.com/download/linux-deb-x64) · [Linux RPM](https://maddada.com/download/linux-rpm-x64) · [Linux tarball](https://maddada.com/download/linux-tar-x64).
+Latest downloads: [Linux DEB](https://maddada.com/download/linux-deb-x64) · [Linux RPM](https://maddada.com/download/linux-rpm-x64) · [Arch Linux AUR](https://aur.archlinux.org/packages/ghostex-bin) · [Linux tarball](https://maddada.com/download/linux-tar-x64).
 
 #### Arch Linux and other distributions
+
+Install the vendor-maintained AUR package with your preferred helper:
+
+```sh
+yay -S ghostex-bin
+```
+
+The AUR package tracks each stable Ghostex release and verifies the portable archive's SHA-256 digest before installation.
 
 The portable `ghostex-<version>-linux-x64.tar.zst` on the
 [latest release](https://github.com/maddada/Ghostex/releases/latest) works on any x64
@@ -57,7 +65,7 @@ On Arch the runtime dependencies are `gtk3`, `nss`, `nspr`, `mesa`, `libxkbcommo
 `alsa-lib`, `at-spi2-core`, `libcups`, `libdrm`, `libxcomposite`, `libxdamage`,
 `libxrandr`, `libxshmfence`, `pango`, `cairo`, `fontconfig` and `wmctrl` — most are already
 present on a desktop install. Ghostex does not bundle Chromium; the first GUI launch
-downloads the browser runtime into your cache directory..
+downloads the browser runtime into your cache directory.
 
 ### Android
 
@@ -101,7 +109,7 @@ Comes with Annotations, Chrome Devtools MCP for Agents, Profiles.<br />
 
 ### Terminal-backed Chat GUI!
 
-You can't click on images in the terminal, editing long prompts really sucks, and typing is slow when you're sshing on a slow connection. But the terminal is more powerful than chat interfaces and gets all the features first. 
+You can't click on images in the terminal, editing long prompts really sucks, and typing is slow when you're sshing on a slow connection. But the terminal is more powerful than chat interfaces and gets all the features first.
 
 The Solution is here! Render the same session as a CLI or a Chat GUI.
 Toggle between the two with a single hotkey or click!
