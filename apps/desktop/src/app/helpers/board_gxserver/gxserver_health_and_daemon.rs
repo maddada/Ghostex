@@ -597,6 +597,96 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<(), Stri
     Ok(())
 }
 
+/*
+CDXC:QuitWithBackgroundServices 2026-08-28:
+Full teardown behind the "Quit Ghostex & BG Service" menu item. Plain Quit
+leaves gxserver, the zmx session daemons, and the GhostexEditor daemon alive
+on purpose; this path is the explicit opposite: gxserver kills every tracked
+zmx session and stops itself (`/api/control/stopAll`), then every
+`com.madda.ghostex.*` launchd job is booted out (covering gxserver's own
+LaunchAgent plus any zmx job the server lost track of), and the standalone
+editor daemon is asked to exit over its socket. Every step is best-effort and
+bounded so quitting can never hang on a wedged daemon.
+*/
+pub(crate) fn gpui_stop_all_ghostex_background_services() {
+    if !matches!(
+        gpui_probe_local_gxserver_health(),
+        GpuiLocalGxserverHealthState::Unreachable
+    ) {
+        let _ = gxserver_post_typed_operation(
+            "/api/control/stopAll",
+            &serde_json::json!({}),
+            Duration::from_secs(30),
+        );
+        for _ in 0..40 {
+            std::thread::sleep(Duration::from_millis(250));
+            if matches!(
+                gpui_probe_local_gxserver_health(),
+                GpuiLocalGxserverHealthState::Unreachable
+            ) {
+                break;
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    gpui_bootout_all_ghostex_launchd_jobs();
+    #[cfg(unix)]
+    {
+        let _ = gpui_ghostex_editor_daemon_request(&serde_json::json!({
+            "v": GHOSTEX_EDITOR_PROTOCOL_VERSION,
+            "type": "shutdown",
+        }));
+    }
+}
+
+/// Every launchd job Ghostex registers carries this label prefix (the gxserver
+/// LaunchAgent and the per-session zmx jobs). The app's own Finder-launched
+/// process is labeled `application.com.madda.ghostex.…` by launchd, so the
+/// prefix cannot match the running app itself.
+#[cfg(target_os = "macos")]
+const GPUI_GHOSTEX_LAUNCHD_LABEL_PREFIX: &str = "com.madda.ghostex.";
+
+#[cfg(target_os = "macos")]
+fn gpui_bootout_all_ghostex_launchd_jobs() {
+    let Ok(uid_output) = std::process::Command::new("/usr/bin/id").arg("-u").output() else {
+        return;
+    };
+    let uid = String::from_utf8_lossy(&uid_output.stdout)
+        .trim()
+        .to_string();
+    if uid.is_empty() {
+        return;
+    }
+    // The gxserver label is included unconditionally: the job stays loaded
+    // even after `/api/control/stopAll` exits the process, and it must also
+    // go when the server was already stopped and `launchctl list` still
+    // reports it without a PID.
+    let mut labels = vec![GPUI_GXSERVER_LAUNCH_AGENT_LABEL.to_string()];
+    if let Ok(list_output) = std::process::Command::new("/bin/launchctl")
+        .arg("list")
+        .output()
+    {
+        for line in String::from_utf8_lossy(&list_output.stdout).lines() {
+            let Some(label) = line.split_whitespace().nth(2) else {
+                continue;
+            };
+            if label.starts_with(GPUI_GHOSTEX_LAUNCHD_LABEL_PREFIX)
+                && !labels.iter().any(|known| known == label)
+            {
+                labels.push(label.to_string());
+            }
+        }
+    }
+    for label in labels {
+        let _ = std::process::Command::new("/bin/launchctl")
+            .args(["bootout", &format!("gui/{uid}/{label}")])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+}
+
 /// Last few launch-log lines so a startup-timeout toast can say why, matching
 /// the macOS client's recentGxserverLaunchOutput.
 pub(crate) fn gpui_recent_gxserver_launch_output() -> Option<String> {

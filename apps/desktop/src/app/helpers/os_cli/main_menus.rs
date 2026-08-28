@@ -95,6 +95,26 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
         GPUI_APP_QUIT_IN_PROGRESS.store(true, Ordering::Release);
         cx.quit();
     });
+    cx.on_action(|_: &QuitGhostexGpuiAndBackgroundServices, cx| {
+        /*
+        CDXC:QuitWithBackgroundServices 2026-08-28:
+        Plain Quit deliberately leaves gxserver, the zmx session daemons, and
+        the GhostexEditor daemon running so agents survive app restarts. This
+        item is the opposite promise: nothing Ghostex started stays behind. The
+        teardown runs blocking subprocess/HTTP work, so it happens on the
+        background executor and the app quits only after it finishes (every
+        step inside is bounded, so quitting can never hang indefinitely).
+        */
+        GPUI_APP_QUIT_IN_PROGRESS.store(true, Ordering::Release);
+        let teardown = cx
+            .background_executor()
+            .spawn(async { gpui_stop_all_ghostex_background_services() });
+        cx.spawn(async move |cx| {
+            teardown.await;
+            let _ = cx.update(|cx| cx.quit());
+        })
+        .detach();
+    });
     cx.on_action(move |_: &MinimizeGhostexGpuiWindow, cx| {
         let _ = main_window.update(cx, |_, window, _cx| window.minimize_window());
     });
@@ -142,6 +162,10 @@ pub(crate) fn ghostex_gpui_main_menus_for_source_focus(
             MenuItem::action("Show All", ShowAllGhostexGpuiApps),
             MenuItem::separator(),
             MenuItem::action("Quit Ghostex", QuitGhostexGpui),
+            MenuItem::action(
+                "Quit Ghostex & BG Service",
+                QuitGhostexGpuiAndBackgroundServices,
+            ),
         ]),
         Menu::new("File").items(vec![close_pane_item]),
         Menu::new("Edit").items(vec![
