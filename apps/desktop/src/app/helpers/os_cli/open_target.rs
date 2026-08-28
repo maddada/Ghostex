@@ -162,12 +162,6 @@ pub(crate) fn gpui_reveal_path_in_finder(path: &Path) -> Result<(), String> {
         .map_err(|_| format!("Could not reveal that item in {GPUI_FILE_MANAGER_NAME}."))
 }
 
-/// A path's file name for toast copy; `None` when the path has no final component.
-pub(crate) fn gpui_path_file_name_label(path: &Path) -> Option<String> {
-    path.file_name()
-        .map(|name| name.to_string_lossy().to_string())
-}
-
 #[cfg(all(unix, not(target_os = "macos")))]
 pub(crate) fn gpui_spawn_os_open(target: &std::ffi::OsStr) -> Result<(), String> {
     std::process::Command::new("xdg-open")
