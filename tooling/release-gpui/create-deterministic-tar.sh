@@ -61,7 +61,7 @@ fi
 	cd "$SOURCE"
 	find . -mindepth 1 ! -type d -print0 | LC_ALL=C sort -z >"$FILE_LIST"
 	if tar --version 2>&1 | grep -qi bsdtar; then
-		COPYFILE_DISABLE=1 tar --uid 0 --gid 0 --uname root --gname root --null -T "$FILE_LIST" -cf "$ARCHIVE"
+		COPYFILE_DISABLE=1 tar --no-xattrs --uid 0 --gid 0 --uname root --gname root --null -T "$FILE_LIST" -cf "$ARCHIVE"
 	else
 		tar --owner=0 --group=0 --numeric-owner --null --files-from "$FILE_LIST" -cf "$ARCHIVE"
 	fi
