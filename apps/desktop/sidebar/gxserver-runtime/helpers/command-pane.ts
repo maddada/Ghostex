@@ -25,12 +25,8 @@ import {
   createGpuiRecentProjects,
   createGpuiRemoteRecentProjects,
 } from './recent-projects';
-import { getCompletionSoundLabel } from '@/packages/shared/completion-sound';
-import {
-  gxserverPresentationSidebarAutoSettleAfterDays,
-  gxserverPresentationSidebarLifecycleCapabilities,
-  parseGxserverPresentationProjectSessionId,
-} from '@/packages/shared/gxserver-presentation-sidebar-projection';
+import { DEFAULT_COMPLETION_SOUND, getCompletionSoundLabel } from '@/packages/shared/completion-sound';
+import { parseGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverPresentationSnapshot,
   GxserverProjectDomainState,
@@ -452,56 +448,17 @@ export function createGpuiSidebarHudState({
       activeProjectId,
       presentation,
     }),
-    completionBellEnabled: settings.completionBellEnabled,
-    completionSound: settings.completionSound,
-    completionSoundLabel: getCompletionSoundLabel(settings.completionSound),
+    completionBellEnabled: settings.completionSound !== 'off',
+    completionSound: settings.completionSound === 'off' ? DEFAULT_COMPLETION_SOUND : settings.completionSound,
+    completionSoundLabel: getCompletionSoundLabel(
+      settings.completionSound === 'off' ? DEFAULT_COMPLETION_SOUND : settings.completionSound
+    ),
     debuggingMode: settings.debuggingMode,
     focusedSessionTitle: focusedSession?.displayTitle ?? focusedSession?.primaryTitle ?? focusedSession?.alias,
     git: git ?? createDefaultSidebarGitState(),
     globalCommands,
     highlightedVisibleCount: GPUI_DEFAULT_VISIBLE_COUNT,
     isFocusModeActive: false,
-    /*
-    CDXC:SidebarV2Lifecycle 2026-07-29:
-    Settle/snooze capability is per daemon, and GPUI holds one presentation
-    snapshot per daemon: the local gxserver plus `remotePresentations` keyed by
-    machine id. Publish them separately so the sidebar can gate a remote
-    machine's rows on that machine's own answer. A snapshot with no
-    `capabilities` block (an older daemon) projects to `undefined`, which the
-    sidebar reads as "no lifecycle" and hides the affordances — never as
-    "assume it works".
-
-    CDXC:SidebarV2Git 2026-07-29:
-    The per-session git/PR probe rides the SAME block (`sessionGitStatus`) and
-    the same two paths, so a remote machine whose daemon predates the probe
-    renders plain cards while the local one shows branch/PR lines. The git data
-    itself needs no plumbing here: it lives on the presentation session and
-    reaches the sidebar through the existing snapshot/delta projection.
-    */
-    lifecycleCapabilities: gxserverPresentationSidebarLifecycleCapabilities(presentation),
-    lifecycleCapabilitiesByMachineId: Object.fromEntries(
-      [...(remotePresentationsByMachineId ?? new Map())].flatMap(([machineId, remotePresentation]) => {
-        const capabilities = gxserverPresentationSidebarLifecycleCapabilities(remotePresentation);
-        return capabilities ? [[machineId, capabilities] as const] : [];
-      })
-    ),
-    /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29:
-    The auto-settle WINDOW travels the same two paths as the capability block
-    above, and for the same reason: each daemon runs its own sweep against its
-    own `sidebarAutoSettleAfterDays`, so the local user's window is not an
-    answer for a remote machine. A daemon that omits the field is left OUT of
-    the map entirely rather than defaulted, because "absent" and "null" mean
-    different things to the sidebar (fall back to the local setting vs. do not
-    inactivity-settle at all).
-    */
-    autoSettleAfterDays: gxserverPresentationSidebarAutoSettleAfterDays(presentation),
-    autoSettleAfterDaysByMachineId: Object.fromEntries(
-      [...(remotePresentationsByMachineId ?? new Map())].flatMap(([machineId, remotePresentation]) => {
-        const autoSettleAfterDays = gxserverPresentationSidebarAutoSettleAfterDays(remotePresentation);
-        return autoSettleAfterDays === undefined ? [] : [[machineId, autoSettleAfterDays] as const];
-      })
-    ),
     pendingAgentIds: [],
     projectSettingsProjects: createGpuiProjectSettingsProjects(domainProjects, presentation),
     /*

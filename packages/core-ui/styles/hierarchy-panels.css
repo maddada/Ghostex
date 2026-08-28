@@ -321,8 +321,8 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
  * groups.css), so the card skin needs the same scope to win the cascade.
  * Margins/width carve the card in from the full-bleed column; the header's
  * negative bleed margins are neutralized so its hover surface stays inside
- * the rounded corners. Drop-position lines (::before/::after at -9px) still
- * render because overflow stays visible.
+ * the rounded corners. The scoped reorder rules below keep drop lines inside
+ * each level's real normal-flow gap.
  */
 .sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] {
   /*
@@ -341,6 +341,48 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
   margin-right: 0;
   padding: 0;
   width: 100%;
+}
+
+/*
+ * Project reorder lines must stay inside the real normal-flow gap. The shared
+ * base rule predates project collections and places both pseudo-elements 9px
+ * outside the row. Collection bodies intentionally clip overflow for their
+ * collapse animation, so that offset both pulled interior lines toward the
+ * preceding header and clipped the first/last insertion lines completely.
+ *
+ * These offsets center the 2px line in each hierarchy level's actual gap. The
+ * expanded-row override follows its 7px bottom margin, while the first row in
+ * a collection always uses the collection body's 5px top padding.
+ */
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .project-collection-projects
+  > .group[data-project-group='true'][data-group-drop-position='before']::before {
+  top: -3.5px;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .project-collection-projects
+  > .group[data-project-group='true'][data-group-drop-position='after']::after {
+  bottom: -3.5px;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .project-collection-projects
+  > .group[data-project-group='true'][data-collapsed='false'][data-group-drop-position='after']::after {
+  bottom: -4.5px;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .project-collection-projects
+  > .group[data-project-group='true'][data-collapsed='false']
+  + .group[data-project-group='true'][data-group-drop-position='before']::before {
+  top: -4.5px;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .project-collection-projects
+  > .group[data-project-group='true']:first-child[data-group-drop-position='before']::before {
+  top: -3.5px;
 }
 
 /*
@@ -374,6 +416,25 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
   margin-bottom: 10px;
 }
 
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-project-group-list
+  > .group[data-project-group='true'][data-group-drop-position='before']::before {
+  top: -6px;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-project-group-list
+  > .group[data-project-group='true'][data-group-drop-position='after']::after {
+  bottom: -6px;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-project-group-list
+  > .project-collection
+  + .group[data-project-group='true'][data-group-drop-position='before']::before {
+  top: -4.5px;
+}
+
 /*
  * Compact project headers remain normal-flow rows with no resting surface.
  */
@@ -398,7 +459,7 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
 
 .sidebar-reference-layout[data-reference-sidebar='true']
   .group[data-project-group='true']
-  .sidebar-v2-project-icon
+  .sidebar-project-icon
   + .group-title-handle {
   margin-left: 10px;
 }

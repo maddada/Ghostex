@@ -39,8 +39,6 @@ import type { SidebarActiveSessionsSortMode } from '../../shared/session-grid-co
 import {
   KEEP_AWAKE_DURATION_OPTIONS,
   type KeepAwakeDurationMinutes,
-  type SidebarV2Layout,
-  type SidebarVersion,
   type ghostexSettings,
 } from '../../shared/ghostex-settings';
 import { normalizeghostexHotkeySettings, type ghostexHotkeySettings } from '../../shared/ghostex-hotkeys';
@@ -598,8 +596,6 @@ export function SidebarReferenceSectionHeader({
   onFilterChats,
   onRunAgent,
   onSetActiveSessionsSortMode,
-  onSetSidebarV2Layout,
-  onSetSidebarVersion,
   onToggleShowHidden,
   onToggleSessionTagFilter,
   onToggleCollapsed,
@@ -609,8 +605,6 @@ export function SidebarReferenceSectionHeader({
   selectedSessionTagFilters = [],
   sessionSummary,
   sessionTagListItems,
-  sidebarV2Layout = 'flat',
-  sidebarVersion = 'v1',
   title,
   showHidden = false,
   useColoredAgentIcons = false,
@@ -631,14 +625,6 @@ export function SidebarReferenceSectionHeader({
   onFilterChats?: () => void;
   onRunAgent?: (agent: SidebarAgentButton) => void;
   onSetActiveSessionsSortMode?: (sortMode: SidebarActiveSessionsSortMode) => void;
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * The Sort & Filter menu is the in-sidebar entry point for the Inbox
-   * sidebar. Both writers are optional so section headers rendered without a
-   * settings pipeline (remote machine headers) simply omit the group.
-   */
-  onSetSidebarV2Layout?: (layout: SidebarV2Layout) => void;
-  onSetSidebarVersion?: (sidebarVersion: SidebarVersion) => void;
   onToggleShowHidden?: () => void;
   onToggleSessionTagFilter?: (tag: SidebarSessionTagFilter) => void;
   onToggleCollapsed: () => void;
@@ -648,8 +634,6 @@ export function SidebarReferenceSectionHeader({
   selectedSessionTagFilters?: readonly SidebarSessionTagFilter[];
   sessionSummary?: SidebarSectionSessionSummary;
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
-  sidebarV2Layout?: SidebarV2Layout;
-  sidebarVersion?: SidebarVersion;
   title: string;
   showHidden?: boolean;
   useColoredAgentIcons?: boolean;
@@ -734,18 +718,9 @@ export function SidebarReferenceSectionHeader({
     onSetActiveSessionsSortMode ||
     onToggleShowHidden ||
     onToggleSessionTagFilter;
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * Session sorting is a V1-only concept: the Inbox is position-stable by
-   * construction and ignores the sort mode entirely. So while V2 is active the
-   * whole sort radio group disappears from this menu, and the trigger's
-   * accessible name states the active sidebar instead of advertising a sort
-   * order that does nothing.
-   */
-  const isSidebarV2Active = sidebarVersion === 'v2';
   const sortModeLabel = activeSessionsSortMode === 'manual' ? 'Manual Sorting' : 'Last Active Sorting';
-  const showSortModeOptions = onSetActiveSessionsSortMode !== undefined && !isSidebarV2Active;
-  const filterModeLabel = isSidebarV2Active ? 'Inbox sidebar' : sortModeLabel;
+  const showSortModeOptions = onSetActiveSessionsSortMode !== undefined;
+  const filterModeLabel = sortModeLabel;
   const filterLabel = hasTagFilters
     ? `${filterModeLabel}, ${selectedSessionTagFilters.length} tag filter${
         selectedSessionTagFilters.length === 1 ? '' : 's'
@@ -776,16 +751,6 @@ export function SidebarReferenceSectionHeader({
   const selectSortMode = (sortMode: SidebarActiveSessionsSortMode) => {
     setSortMenuPosition(undefined);
     onSetActiveSessionsSortMode?.(sortMode);
-  };
-
-  const selectSidebarVersion = (nextSidebarVersion: SidebarVersion) => {
-    setSortMenuPosition(undefined);
-    onSetSidebarVersion?.(nextSidebarVersion);
-  };
-
-  const selectSidebarV2Layout = (nextLayout: SidebarV2Layout) => {
-    setSortMenuPosition(undefined);
-    onSetSidebarV2Layout?.(nextLayout);
   };
 
   const runAgent = (agent: SidebarAgentButton | undefined) => {
@@ -896,9 +861,7 @@ export function SidebarReferenceSectionHeader({
               aria-haspopup='menu'
               aria-label={`Filter sessions: ${filterLabel}`}
               className='reference-sidebar-section-action reference-sidebar-section-sort-action reference-sidebar-hover-action-tooltip'
-              data-selected={String(
-                (activeSessionsSortMode === 'manual' && !isSidebarV2Active) || hasTagFilters || showHidden
-              )}
+              data-selected={String(activeSessionsSortMode === 'manual' || hasTagFilters || showHidden)}
               onClick={openSortMenu}
               tooltip='Sort & Filter'
               tooltipAlign='end'
@@ -1027,70 +990,6 @@ export function SidebarReferenceSectionHeader({
                 Show hidden
               </button>
               <div className='session-context-menu-divider' role='separator' />
-            </>
-          ) : null}
-          {/*
-           * CDXC:SidebarV2 2026-07-29:
-           * The sidebar picker sits above the sort radios because it chooses
-           * which sidebar renders at all. Manual Sorting is a V1-only concept,
-           * so it disappears while the Inbox sidebar is active instead of
-           * offering an order the inbox intentionally ignores.
-           */}
-          {onSetSidebarVersion ? (
-            <>
-              <button
-                aria-checked={sidebarVersion !== 'v2'}
-                className='session-context-menu-item'
-                onClick={() => selectSidebarVersion('v1')}
-                role='menuitemradio'
-                type='button'
-              >
-                <IconCheck
-                  aria-hidden='true'
-                  className='session-context-menu-icon'
-                  data-visible={String(sidebarVersion !== 'v2')}
-                  size={14}
-                  stroke={2}
-                />
-                Classic sidebar
-              </button>
-              <button
-                aria-checked={sidebarVersion === 'v2'}
-                className='session-context-menu-item'
-                onClick={() => selectSidebarVersion('v2')}
-                role='menuitemradio'
-                type='button'
-              >
-                <IconCheck
-                  aria-hidden='true'
-                  className='session-context-menu-icon'
-                  data-visible={String(sidebarVersion === 'v2')}
-                  size={14}
-                  stroke={2}
-                />
-                Inbox sidebar
-              </button>
-              {sidebarVersion === 'v2' && onSetSidebarV2Layout ? (
-                <button
-                  aria-checked={sidebarV2Layout === 'byProject'}
-                  className='session-context-menu-item'
-                  onClick={() => selectSidebarV2Layout(sidebarV2Layout === 'byProject' ? 'flat' : 'byProject')}
-                  role='menuitemcheckbox'
-                  type='button'
-                >
-                  <IconCheck
-                    aria-hidden='true'
-                    className='session-context-menu-icon'
-                    data-visible={String(sidebarV2Layout === 'byProject')}
-                    size={14}
-                    stroke={2}
-                  />
-                  Group by Project
-                </button>
-              ) : null}
-              {showSortModeOptions || onToggleSessionTagFilter ? (
-                <div className='session-context-menu-divider' role='separator' />
-              ) : null}
             </>
           ) : null}
           {showSortModeOptions ? (

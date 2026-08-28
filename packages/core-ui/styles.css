@@ -14,14 +14,6 @@
 @import './styles/hierarchy-panels.css';
 @import './styles/chat.css';
 @import './styles/find.css';
-/*
- * CDXC:SidebarV2 2026-07-29:
- * Sidebar V2 imports LAST so its `[data-sidebar-version="v2"]`-scoped rules win
- * over the shared sidebar sheets they deliberately re-specify. The scope
- * attribute exists only on the V2 root, so this import is inert for V1.
- */
-@import './styles/sidebar-v2.css';
-
 /**
  * CDXC:ContextMenus 2026-05-11-01:39
  * Sidebar and app context menus should behave like native menus: menu items
@@ -321,9 +313,7 @@ body {
 }
 
 .settings-select-content [data-slot='select-item']:is(:hover, :focus, :focus-visible),
-.settings-select-content [data-slot='select-item'][aria-selected='true'],
-.settings-select-content [data-slot='select-item'][data-highlighted],
-.settings-select-content [data-slot='select-item'][data-selected] {
+.settings-select-content [data-slot='select-item'][data-highlighted] {
   background: #232323 !important;
   color: var(--accent-foreground);
   outline: none;
@@ -331,14 +321,20 @@ body {
 
 /*
  * CDXC:ModalRedesign 2026-08-24:
- * The selected row is the one place the accent belongs in a settings popup: it
- * marks the value in effect, so it brightens the label (and its check glyph)
- * instead of filling the row a second shade of grey. Base UI marks it with
- * `data-selected`; `data-highlighted` is the separate hover/keyboard state.
+ * Selected values stay neutral in every settings dropdown. The full-white
+ * label and right-side check carry selection without borrowing the app accent
+ * or filling the row. `data-highlighted` remains the separate hover/keyboard
+ * state, except on the selected row itself.
  */
 .settings-select-content [data-slot='select-item'][data-selected],
 .settings-select-content [data-slot='select-item'][aria-selected='true'] {
-  color: var(--ghostex-accent, #38bdf8) !important;
+  background: transparent !important;
+  color: #ffffff !important;
+}
+
+.settings-select-content [data-slot='select-item'][data-selected] *,
+.settings-select-content [data-slot='select-item'][aria-selected='true'] * {
+  color: inherit !important;
 }
 
 /*
@@ -413,6 +409,26 @@ body {
 
 [data-slot='select-item'] {
   border-radius: 6px;
+}
+
+/*
+ * Chosen values in shared select and checked dropdown rows use typography and
+ * a right-side tick only. Accent fills are reserved for pointer and keyboard
+ * highlight states, never persisted selection.
+ */
+[data-slot='select-item'][data-selected],
+[data-slot='select-item'][aria-selected='true'],
+[data-slot='dropdown-menu-checkbox-item'][data-checked],
+[data-slot='dropdown-menu-radio-item'][data-checked] {
+  background: transparent;
+  color: var(--popover-foreground, #ffffff);
+}
+
+[data-slot='select-item'][data-selected] *,
+[data-slot='select-item'][aria-selected='true'] *,
+[data-slot='dropdown-menu-checkbox-item'][data-checked] *,
+[data-slot='dropdown-menu-radio-item'][data-checked] * {
+  color: inherit;
 }
 
 /*
@@ -1090,16 +1106,48 @@ body {
   flex: 0 1 160px;
 }
 
+.ghostex-stashed-prompt-tag-filter-content [data-slot='select-content-header'] {
+  border-bottom: 1px solid color-mix(in srgb, var(--popover-foreground, #ffffff) 10%, transparent);
+  padding: 4px;
+}
+
+.ghostex-stashed-prompt-tag-filter-new-button {
+  align-items: center;
+  border-radius: 6px;
+  column-gap: 8px;
+  display: grid;
+  font-size: 14px;
+  grid-template-columns: 7px minmax(0, 1fr);
+  line-height: 20px;
+  margin: 0;
+  min-height: 28px;
+  padding: 6px 32px 6px 8px;
+  width: 100%;
+}
+
+.ghostex-stashed-prompt-tag-filter-new-button > svg {
+  justify-self: center;
+}
+
 .ghostex-stashed-prompt-add-button {
   margin-left: auto;
 }
 
 .ghostex-stashed-prompt-select-tag-dot {
+  align-self: center;
   background: var(--ghostex-tag-color);
   border-radius: 9999px;
   flex: 0 0 auto;
   height: 7px;
   width: 7px;
+}
+
+.ghostex-stashed-prompt-select-tag-dot[data-tone='all'] {
+  --ghostex-tag-color: #ffffff;
+}
+
+.ghostex-stashed-prompt-select-tag-dot[data-tone='none'] {
+  --ghostex-tag-color: color-mix(in srgb, var(--popover-foreground, #ffffff) 28%, transparent);
 }
 
 /* Row tag menus still use the compact dot and Favorites star. */
@@ -4188,10 +4236,24 @@ body {
 .ghostex-settings-shadcn [data-slot='input'],
 .ghostex-settings-shadcn [data-slot='select-trigger'],
 .ghostex-settings-shadcn [data-slot='toggle'],
-.ghostex-settings-shadcn [data-slot='toggle-group-item'] {
+.ghostex-settings-shadcn [data-slot='toggle-group-item'],
+.ghostex-settings-shadcn [data-slot='segmented-control'] {
   font-size: 0.8125rem;
   height: var(--settings-control-height);
   min-height: var(--settings-control-height);
+}
+
+/*
+ * Segmented controls join the same 32px row: the container is pinned above
+ * like every select trigger (which are pinned regardless of their size prop),
+ * and the segments fill it at the shared 13px/400 type. The explicit weight
+ * and font-size also guarantee a segment keeps its exact metrics when it
+ * becomes selected — selection may only change fill and text color, never
+ * geometry, so it cannot push its row neighbors around.
+ */
+.ghostex-settings-shadcn [data-slot='segmented-control'] [data-slot='segmented-control-item'] {
+  font-size: 0.8125rem;
+  height: 100%;
 }
 
 .ghostex-settings-shadcn [data-slot='button'],
@@ -4248,6 +4310,14 @@ body {
   border: 0;
   border-radius: 0;
   color: color-mix(in srgb, var(--foreground) 78%, transparent);
+  /*
+   * Geometry is pinned here so the selected state can never resize a segment:
+   * theme sheets may restyle fill and text color, but weight, padding, and
+   * height stay constant so selecting a segment never reflows its row.
+   */
+  font-weight: 400;
+  height: 100%;
+  padding: 0 12px;
 }
 
 [data-slot='segmented-control'] [data-slot='segmented-control-item'] + [data-slot='segmented-control-item'] {
@@ -4803,6 +4873,7 @@ body {
 }
 
 .quick-access-surface .recent-projects-row:hover,
+.quick-access-surface .recent-projects-row:focus-within,
 .quick-access-surface .recent-projects-row:focus-visible,
 .quick-access-surface .recent-projects-row[data-search-selected='true'],
 .quick-access-surface .recent-projects-row[data-context-menu-open='true'] {
@@ -4881,14 +4952,21 @@ body {
   grid-column: 3;
 }
 
-.quick-access-surface.previous-sessions-modal .session-history-card[data-running='true'] .session-head-trailing::after {
+.quick-access-surface.previous-sessions-modal .session-history-card .session-head-trailing::after {
   align-self: center;
   background: #fff;
   border-radius: 9999px;
   content: '';
   grid-column: 4;
   height: 6px;
+  opacity: 0.2;
   width: 6px;
+}
+
+.quick-access-surface.previous-sessions-modal
+  .session-history-card[data-in-sidebar='true']
+  .session-head-trailing::after {
+  opacity: 1;
 }
 
 .quick-access-surface.previous-sessions-modal
@@ -4906,19 +4984,11 @@ body {
 /* Sessions filter row: segmented scope + tag filter ----------------------- */
 
 /*
- * The segmented scope and tag-filter button share one explicit border-box
- * height. The shared segmented control normally sizes itself from its items,
- * which would make its outer border two pixels taller than an h-8 button.
+ * No per-surface height pin here any more: the shared control geometry rules
+ * pin every segmented control, select trigger, and toggle in
+ * `.ghostex-settings-shadcn` to the one 32px row, and the tag-filter Button is
+ * `size='icon'` (32px) on its own.
  */
-.quick-access-surface .quick-access-session-scope-segmented,
-.quick-access-surface .previous-sessions-tag-filter-toggle {
-  height: 32px;
-}
-
-.quick-access-surface .quick-access-session-scope-segmented [data-slot='segmented-control-item'] {
-  height: 100%;
-}
-
 .quick-access-surface .previous-sessions-tag-filter-toggle[data-selected='true'] {
   color: var(--ghostex-accent, #38bdf8);
 }

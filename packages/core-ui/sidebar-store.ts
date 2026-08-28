@@ -104,7 +104,7 @@ export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
       agents: createDefaultSidebarAgentButtons(),
       commands: createDefaultSidebarCommandButtons(),
       commandSessionIndicators: [],
-      completionBellEnabled: DEFAULT_ghostex_SETTINGS.completionBellEnabled,
+      completionBellEnabled: DEFAULT_ghostex_SETTINGS.completionSound !== 'off',
       completionSound: DEFAULT_COMPLETION_SOUND,
       completionSoundLabel: getCompletionSoundLabel(DEFAULT_COMPLETION_SOUND),
       customThemeColor: undefined,

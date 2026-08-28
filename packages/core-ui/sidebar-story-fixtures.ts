@@ -2,14 +2,7 @@ import { DEFAULT_COMPLETION_SOUND, getCompletionSoundLabel } from '../shared/com
 import { createDefaultSidebarAgentButtons } from '../shared/sidebar-agents';
 import { createDefaultSidebarCommandButtons } from '../shared/sidebar-commands';
 import { createDefaultSidebarGitState } from '../shared/sidebar-git';
-import {
-  DEFAULT_ghostex_SETTINGS,
-  normalizeghostexSettings,
-  type SidebarProjectGroupingMode,
-  type SidebarV2Layout,
-  type SidebarVersion,
-  type ghostexSettings,
-} from '../shared/ghostex-settings';
+import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings, type ghostexSettings } from '../shared/ghostex-settings';
 import type {
   SidebarHydrateMessage,
   SidebarHudState,
@@ -38,36 +31,6 @@ export type SidebarStoryFixture =
   | 'overflow-stress'
   | 'scroll-end-retention'
   | 'empty-groups'
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * Inbox-sidebar fixtures. They live alongside the V1 fixtures rather than in
-   * a parallel harness so V2 stories exercise the SAME SidebarApp, message
-   * bridge, and settings pipeline the real sidebar runs on.
-   */
-  | 'sidebar-v2-empty'
-  | 'sidebar-v2-gxserver-unavailable'
-  | 'sidebar-v2-inbox'
-  /*
-   * CDXC:SidebarV2LogicalProjects 2026-07-29:
-   * One repository in three physical places plus a non-git project, so the
-   * cross-machine merge, the machine badges, and the per-machine auto-settle
-   * window all have something real to act on.
-   */
-  | 'sidebar-v2-multi-machine'
-  /*
-   * CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
-   * Two sub-projects of ONE repository checkout, which is the only shape where
-   * "Repository" and "Repository + path" disagree.
-   */
-  | 'sidebar-v2-monorepo'
-  /*
-   * CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
-   * One project per branch of the icon precedence chain — a user-attached
-   * image, a user-chosen Tabler glyph, a repository that ships its own favicon
-   * and nothing else, and a project with no icon at all.
-   */
-  | 'sidebar-v2-project-icons'
-  | 'sidebar-v2-row-width'
   | 'three-groups-stress';
 
 export type SidebarStoryArgs = {
@@ -81,42 +44,6 @@ export type SidebarStoryArgs = {
   showSessionCloseContextMenuAction: boolean;
   showSessionCommandCopyActions: boolean;
   showSessionDetailsCopyAction: boolean;
-  /*
-   * CDXC:SidebarV2Lifecycle 2026-07-29:
-   * Which settle/snooze capability the story's gxserver claims. "absent" is not
-   * a cosmetic variant — it is the ONLY way to exercise an un-upgraded daemon,
-   * where the shelves must stay empty and every affordance must be missing
-   * rather than merely disabled.
-   */
-  /*
-   * CDXC:SidebarV2Git 2026-07-29:
-   * "settleAndSnooze" is a daemon that has lifecycle but no git probe, which is
-   * a REAL shape (a machine upgraded to P2 but not P3), so it doubles as the
-   * "git capability absent" case: its cards must look exactly like cards from a
-   * session with no `gitStatus` at all.
-   */
-  /*
-   * CDXC:SidebarV2Worktree 2026-07-29:
-   * "settleSnoozeGitAndWorktree" is the fully upgraded daemon. Keeping it as a
-   * separate step matters: "settleSnoozeAndGit" is a P3 machine, and V2's split
-   * "+" must collapse to the plain button there — that is the capability-absent
-   * case the worktree stories assert.
-   */
-  sidebarLifecycleCapabilities?: 'absent' | 'settleAndSnooze' | 'settleSnoozeAndGit' | 'settleSnoozeGitAndWorktree';
-  /*
-   * CDXC:SidebarV2LogicalProjects 2026-07-29:
-   * Seed grouping overrides so a story can start from an already-separated
-   * project instead of having to click its way there first. Stories that
-   * exercise the CHANGE still click the menu and assert the settings patch.
-   */
-  sidebarProjectGroupingOverrides?: Readonly<Record<string, SidebarProjectGroupingMode>>;
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * Sidebar V2 is an opt-in setting, so stories select it the same way users
-   * do. Leaving these unset keeps every existing story on the classic sidebar.
-   */
-  sidebarV2Layout?: SidebarV2Layout;
-  sidebarVersion?: SidebarVersion;
   theme: SidebarTheme;
   viewMode: TerminalViewMode;
   visibleCount: VisibleSessionCount;
@@ -140,28 +67,6 @@ const PREVIOUS_SESSIONS_BY_FIXTURE: Partial<Record<SidebarStoryFixture, SidebarH
       detail: 'Claude Code',
       historyId: 'history-2',
       sessionId: 'history-session-2',
-      shortcutLabel: '⌘⌥8',
-    }),
-  ],
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * The Inbox sidebar filters the list exactly as V1 does, which includes
-   * offering matching CLOSED sessions. Give the V2 fixture real previous
-   * sessions so that path is exercised there too.
-   */
-  'sidebar-v2-inbox': [
-    createStoryPreviousSession({
-      alias: 'release retro notes',
-      detail: 'OpenAI Codex',
-      historyId: 'v2-history-1',
-      sessionId: 'v2-history-session-1',
-      shortcutLabel: '⌘⌥7',
-    }),
-    createStoryPreviousSession({
-      alias: 'release blockers triage',
-      detail: 'Claude Code',
-      historyId: 'v2-history-2',
-      sessionId: 'v2-history-session-2',
       shortcutLabel: '⌘⌥8',
     }),
   ],
@@ -247,27 +152,7 @@ export function createSidebarStoryMessage(
           showSessionDetailsCopyAction: args.showSessionDetailsCopyAction,
         })
       : undefined;
-  /*
-   * CDXC:SidebarV2 2026-07-29:
-   * Only stories that explicitly ask for the Inbox sidebar carry a settings
-   * override, so the hydrate payload of every other story is unchanged.
-   */
-  const storySettings =
-    args.sidebarVersion || args.sidebarV2Layout || args.sidebarProjectGroupingOverrides
-      ? normalizeghostexSettings({
-          ...(baseStorySettings ?? DEFAULT_ghostex_SETTINGS),
-          /*
-           * CDXC:SidebarV2LogicalProjects 2026-07-29:
-           * Grouping overrides ride the same settings object the sidebar reads
-           * at runtime, so a seeded story starts in exactly the state a user
-           * who had already chosen "Keep separate" would see.
-           */
-          sidebarProjectGroupingOverrides:
-            args.sidebarProjectGroupingOverrides ?? DEFAULT_ghostex_SETTINGS.sidebarProjectGroupingOverrides,
-          sidebarV2Layout: args.sidebarV2Layout ?? DEFAULT_ghostex_SETTINGS.sidebarV2Layout,
-          sidebarVersion: args.sidebarVersion ?? DEFAULT_ghostex_SETTINGS.sidebarVersion,
-        })
-      : baseStorySettings;
+  const storySettings = baseStorySettings;
   const groups = cloneGroups(GROUPS_BY_FIXTURE[args.fixture]).map((group) => {
     const visibleCount = group.isActive
       ? args.visibleCount
@@ -287,57 +172,21 @@ export function createSidebarStoryMessage(
     agents: createDefaultSidebarAgentButtons(),
     commands: createDefaultSidebarCommandButtons(),
     commandSessionIndicators: COMMAND_SESSION_INDICATORS_BY_FIXTURE[args.fixture] ?? [],
-    completionBellEnabled: storySettings?.completionBellEnabled ?? false,
-    completionSound: storySettings?.completionSound ?? DEFAULT_COMPLETION_SOUND,
-    completionSoundLabel: getCompletionSoundLabel(storySettings?.completionSound ?? DEFAULT_COMPLETION_SOUND),
+    completionBellEnabled: storySettings?.completionSound !== 'off',
+    completionSound:
+      storySettings?.completionSound === 'off'
+        ? DEFAULT_COMPLETION_SOUND
+        : (storySettings?.completionSound ?? DEFAULT_COMPLETION_SOUND),
+    completionSoundLabel: getCompletionSoundLabel(
+      storySettings?.completionSound === 'off'
+        ? DEFAULT_COMPLETION_SOUND
+        : (storySettings?.completionSound ?? DEFAULT_COMPLETION_SOUND)
+    ),
     debuggingMode: storySettings?.debuggingMode ?? args.debuggingMode,
     focusedSessionTitle: getFocusedSessionTitle(groups),
     git: createDefaultSidebarGitState(),
     highlightedVisibleCount: args.highlightedVisibleCount,
     isFocusModeActive: args.isFocusModeActive,
-    /*
-     * CDXC:SidebarV2Lifecycle 2026-07-29:
-     * Absent means "this daemon has no session lifecycle", which is exactly
-     * what an older gxserver looks like on the wire. Spelling it as an omitted
-     * key rather than `{sessionSettlement: false}` keeps the story honest about
-     * the shape the sidebar actually has to survive.
-     */
-    ...(args.sidebarLifecycleCapabilities === 'settleAndSnooze' ||
-    args.sidebarLifecycleCapabilities === 'settleSnoozeAndGit' ||
-    args.sidebarLifecycleCapabilities === 'settleSnoozeGitAndWorktree'
-      ? {
-          lifecycleCapabilities: {
-            sessionGitStatus:
-              args.sidebarLifecycleCapabilities === 'settleSnoozeAndGit' ||
-              args.sidebarLifecycleCapabilities === 'settleSnoozeGitAndWorktree',
-            sessionSettlement: true,
-            sessionSnooze: true,
-            worktreeSessions: args.sidebarLifecycleCapabilities === 'settleSnoozeGitAndWorktree',
-          },
-        }
-      : {}),
-    /*
-     * CDXC:SidebarV2LogicalProjects 2026-07-29:
-     * The multi-machine fixture's SECOND daemon. It is fully capable, and it
-     * states a THIRTY-day auto-settle window against the local default of
-     * three, so a five-day-idle session must be parked locally and still active
-     * on Build Box. Applying one window to both machines was the recorded P2
-     * minor; this pairing is what catches a regression back into it.
-     */
-    ...(args.fixture === 'sidebar-v2-multi-machine'
-      ? {
-          autoSettleAfterDays: 3,
-          autoSettleAfterDaysByMachineId: { 'build-box': 30 },
-          lifecycleCapabilitiesByMachineId: {
-            'build-box': {
-              sessionGitStatus: true,
-              sessionSettlement: true,
-              sessionSnooze: true,
-              worktreeSessions: true,
-            },
-          },
-        }
-      : {}),
     pendingAgentIds: [],
     recentProjects:
       args.fixture === 'combined-recent-projects' || args.fixture === 'combined-sparse-reference'

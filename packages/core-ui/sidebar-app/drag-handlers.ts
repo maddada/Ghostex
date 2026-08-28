@@ -1,12 +1,7 @@
 import { move } from '@dnd-kit/helpers';
 import type { DragDropEventHandlers } from '@dnd-kit/react';
-import { useCallback, useEffectEvent, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useEffectEvent, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import type { DiagnosticLoggingScenarioId, RemoteMachineSettings } from '../../shared/ghostex-settings';
-import {
-  moveSidebarV2GroupRows,
-  projectSidebarV2GroupOrderByMachine,
-  type SidebarV2GroupOrderRow,
-} from '../../shared/sidebar-v2-group-order';
 import { setSidebarTooltipsSuppressedForDrag } from '../app-tooltip';
 import {
   getClientPoint,
@@ -83,7 +78,6 @@ export type SidebarDragHandlersOptions = {
   groupIdsRef: RefObject<string[]>;
   groupsById: SidebarGroupsById;
   isManualActiveSessionsSort: boolean;
-  isSidebarV2GroupedActive: boolean;
   moveRemoteMachineSection: (remoteMachineId: string, target: SidebarRemoteMachineDropTarget) => void;
   pinnedSessionDropTargetLogKeyRef: RefObject<string | undefined>;
   pointerDownSessionTargetRef: RefObject<SidebarPointerDownSessionTarget | undefined>;
@@ -107,8 +101,6 @@ export type SidebarDragHandlersOptions = {
   setRemoteMachineDragPreview: Dispatch<SetStateAction<SidebarRemoteMachineDragPreview | undefined>>;
   setRemoteMachineDropIndicator: Dispatch<SetStateAction<SidebarRemoteMachineDropTarget | undefined>>;
   setSessionDropIndicator: Dispatch<SetStateAction<SidebarSessionDropTarget | undefined>>;
-  sidebarV2GroupIdsByMachineId: Record<string, string[]>;
-  sidebarV2GroupOrderRowsRef: RefObject<readonly SidebarV2GroupOrderRow[]>;
   vscode: WebviewApi;
 };
 
@@ -129,7 +121,6 @@ export function useSidebarDragHandlers({
   groupIdsRef,
   groupsById,
   isManualActiveSessionsSort,
-  isSidebarV2GroupedActive,
   moveRemoteMachineSection,
   pinnedSessionDropTargetLogKeyRef,
   pointerDownSessionTargetRef,
@@ -153,8 +144,6 @@ export function useSidebarDragHandlers({
   setRemoteMachineDragPreview,
   setRemoteMachineDropIndicator,
   setSessionDropIndicator,
-  sidebarV2GroupIdsByMachineId,
-  sidebarV2GroupOrderRowsRef,
   vscode,
 }: SidebarDragHandlersOptions) {
   /*
@@ -165,45 +154,12 @@ export function useSidebarDragHandlers({
    * drags keep using the collection-ordered id list.
    */
   const groupDragCandidateIdsForSource = (sourceGroupId: string): readonly string[] => {
-    /*
-     * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
-     * Grouped V2 does not have per-machine sections to scope a drag to. Its rows
-     * ARE logical projects that may span machines, so every rendered row is a
-     * candidate and the machine split moves to the other end of the operation:
-     * the drop is projected back onto each machine's own list on release.
-     */
-    if (isSidebarV2GroupedActive) {
-      return sidebarV2GroupOrderRowsRef.current.map((row) => row.groupId);
-    }
     const machineId = groupsById[sourceGroupId]?.remoteMachineContext?.machineId;
     if (machineId) {
       return remoteProjectGroupIdsByMachineId[machineId] ?? [];
     }
     return groupIdsRef.current;
   };
-
-  /*
-   * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
-   * Written from V2's own render, read only inside a drag. It is a ref rather
-   * than state on purpose: the rendered row list changes on every session
-   * update, and mirroring it into state would re-render the whole sidebar for
-   * information nothing paints. The identity is stable so V2's reporting effect
-   * fires on row changes, not on every SidebarApp render.
-   */
-  const setSidebarV2GroupOrderRows = useCallback((rows: readonly SidebarV2GroupOrderRow[]) => {
-    sidebarV2GroupOrderRowsRef.current = rows;
-  }, []);
-
-  /*
-   * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
-   * Grouped V2's no-op answer, supplied to the shared pointer resolver so the
-   * drop line appears exactly where a release would actually reorder something.
-   */
-  const sidebarV2GroupNoOpTargetForSource = (sourceGroupId: string) =>
-    isSidebarV2GroupedActive
-      ? (target: SidebarGroupDropTarget) =>
-          moveSidebarV2GroupRows(sidebarV2GroupOrderRowsRef.current, sourceGroupId, target) === undefined
-      : undefined;
 
   const updateSessionDropIndicator = useEffectEvent(
     (event: Parameters<NonNullable<DragDropEventHandlers['onDragOver']>>[0]) => {
@@ -245,8 +201,7 @@ export function useSidebarDragHandlers({
               groupDragCandidateIdsForSource(sourceData.groupId),
               groupsById,
               getSidebarDropData(event.operation.target),
-              sourceData,
-              sidebarV2GroupNoOpTargetForSource(sourceData.groupId)
+              sourceData
             );
         setProjectUngroupDropIndicatorScopeId((previous) =>
           previous === resolvedUngroupDropScopeId ? previous : resolvedUngroupDropScopeId
@@ -647,52 +602,6 @@ export function useSidebarDragHandlers({
       }
 
       /*
-       * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
-       * A grouped V2 row is a LOGICAL project: one header can stand for several
-       * physical checkouts, on several machines. So the drop cannot be one
-       * reordered id list — `syncGroupOrder` rejects a mixed local/remote or
-       * cross-machine list, because each machine owns its own project order.
-       *
-       * Instead the row's new index among the LOGICAL rows is projected onto each
-       * participating machine's own list, and one `syncGroupOrder` goes out per
-       * machine that actually changed. The projection itself is pure and unit
-       * tested (`packages/shared/sidebar-v2-group-order.ts`); everything DOM-dependent —
-       * which boundary the pointer is over — stays in the shared resolver above,
-       * so the committed reorder is the same boundary the drop line drew.
-       *
-       * This branch also bypasses V1's collection/ungroup handling below on
-       * purpose: grouped V2 renders neither collections nor per-machine sections,
-       * so there is no collection to drop out of and no machine list to leave.
-       */
-      if (isSidebarV2GroupedActive) {
-        const rows = sidebarV2GroupOrderRowsRef.current;
-        const resolvedTarget = resolveGroupDropTargetFromPoint(
-          nativeEvent,
-          rows.map((row) => row.groupId),
-          groupsById,
-          targetData,
-          sourceData,
-          sidebarV2GroupNoOpTargetForSource(sourceData.groupId)
-        );
-        if (!resolvedTarget) {
-          return;
-        }
-        const projectedOrders = projectSidebarV2GroupOrderByMachine({
-          groupIdsByMachineId: sidebarV2GroupIdsByMachineId,
-          rows,
-          sourceGroupId: sourceData.groupId,
-          target: resolvedTarget,
-        });
-        for (const machineGroupIds of Object.values(projectedOrders)) {
-          vscode.postMessage({
-            groupIds: machineGroupIds,
-            type: 'syncGroupOrder',
-          });
-        }
-        return;
-      }
-
-      /*
        * CDXC:RemoteGroupReorder 2026-07-12:
        * Remote machine groups reorder within their machine section and post the
        * machine-scoped id order through the same syncGroupOrder contract; the
@@ -1059,6 +968,5 @@ export function useSidebarDragHandlers({
     handleDragMove,
     handleDragOver,
     handleDragStart,
-    setSidebarV2GroupOrderRows,
   };
 }

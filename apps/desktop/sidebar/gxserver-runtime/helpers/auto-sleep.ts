@@ -52,17 +52,14 @@ export function createGpuiAutoSleepAgentSessionIds({
   presentation: GxserverPresentationSnapshot;
   settings: Pick<
     ghostexSettings,
-    | 'autoSleepAgentIdleMinutes'
-    | 'autoSleepAgentSessionsEnabled'
-    | 'autoSleepFavoriteAgentSessions'
-    | 'autoSleepRequireAgentResumeCommand'
+    'autoSleepAgentIdleMinutes' | 'autoSleepFavoriteAgentSessions' | 'autoSleepRequireAgentResumeCommand'
   >;
 }): string[] {
   /*
   CDXC:GPUISidebarAutoSleep 2026-06-27-01:24:
   GPUI Agent Auto Sleep must choose only local gxserver presentation agent terminals after protecting selected/visible sidebar owners, focused sessions, active command-pane owners, and popped-out rows. Return bounded project/session routing ids for the existing setSessionSleeping path; do not inspect Browser/project-editor surfaces, titles, paths, commands, terminal output, URLs, tokens, or remote-machine rows.
   */
-  if (!settings.autoSleepAgentSessionsEnabled) {
+  if (settings.autoSleepAgentIdleMinutes === 0) {
     return [];
   }
   const protectedProjectSessionKeys = collectGpuiAutoSleepProtectedProjectSessionKeys({
@@ -193,10 +190,7 @@ export function shouldAutoSleepGpuiPresentationAgentSession({
   session: GxserverPresentationSession;
   settings: Pick<
     ghostexSettings,
-    | 'autoSleepAgentIdleMinutes'
-    | 'autoSleepAgentSessionsEnabled'
-    | 'autoSleepFavoriteAgentSessions'
-    | 'autoSleepRequireAgentResumeCommand'
+    'autoSleepAgentIdleMinutes' | 'autoSleepFavoriteAgentSessions' | 'autoSleepRequireAgentResumeCommand'
   >;
 }): boolean {
   if (session.lifecycleState !== 'running' || session.activity !== 'idle') {
