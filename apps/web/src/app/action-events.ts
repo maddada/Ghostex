@@ -17,6 +17,14 @@ export type OpenDelayedActionsModalDetail = Extract<OpenAppModalMessage, { modal
 export type OpenSessionNoteModalDetail = Extract<OpenAppModalMessage, { modal: 'sessionNote' }>;
 
 /*
+ * CDXC:SidebarSpaces 2026-08-27:
+ * The New/Edit Space dialog's open payload, forwarded verbatim from the shared
+ * sidebar's `openAppModal` call so the web dialog opens on exactly the Space the
+ * row was rendering. `remoteMachineId` is the only routing token it carries.
+ */
+export type OpenSidebarSpaceEditorModalDetail = Extract<OpenAppModalMessage, { modal: 'sidebarSpaceEditor' }>;
+
+/*
  * CDXC:AddProject 2026-07-30:
  * The add-project dialog opens from two different web entry points — the
  * app-modal shim (gpui posts `openAppModal({ modal: "addProject" })`, and the
@@ -70,6 +78,7 @@ declare global {
     'ghostex-web:openDelayedActionsModal': CustomEvent<OpenDelayedActionsModalDetail>;
     'ghostex-web:openRecentProjectsModal': CustomEvent<OpenRecentProjectsModalDetail>;
     'ghostex-web:openSessionNoteModal': CustomEvent<OpenSessionNoteModalDetail>;
+    'ghostex-web:openSidebarSpaceEditorModal': CustomEvent<OpenSidebarSpaceEditorModalDetail>;
     'ghostex-web:runTitlebarAction': CustomEvent<RunTitlebarActionDetail>;
   }
 }

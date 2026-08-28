@@ -4,6 +4,7 @@ import type {
   OpenDelayedActionsModalDetail,
   OpenRecentProjectsModalDetail,
   OpenSessionNoteModalDetail,
+  OpenSidebarSpaceEditorModalDetail,
 } from './action-events';
 
 type OpenRecentProjectsModalMessage = Extract<OpenAppModalMessage, { modal: 'recentProjects' }>;
@@ -55,6 +56,21 @@ function handleAppModalHostMessage(message: unknown): void {
     window.dispatchEvent(
       new CustomEvent('ghostex-web:openSessionNoteModal', {
         detail: message as OpenSessionNoteModalDetail,
+      })
+    );
+    return;
+  }
+
+  /*
+   * CDXC:SidebarSpaces 2026-08-27:
+   * The New/Edit Space dialog is opened by the SHARED sidebar's Space row, so
+   * the web shell answers the same `openAppModal` call gpui's native host does
+   * and forwards the payload unchanged to the one mounted Space editor host.
+   */
+  if (message.type === 'open' && message.modal === 'sidebarSpaceEditor') {
+    window.dispatchEvent(
+      new CustomEvent('ghostex-web:openSidebarSpaceEditorModal', {
+        detail: message as OpenSidebarSpaceEditorModalDetail,
       })
     );
     return;

@@ -39,6 +39,7 @@ import {
 } from '@/packages/core-ui/export-transcript-result-modal';
 import { SessionNoteModal } from '@/packages/core-ui/session-note-modal';
 import { SessionRenameModal } from '@/packages/core-ui/session-rename-modal';
+import { SpaceEditorModal } from '@/packages/core-ui/space-editor-modal';
 import { WatchGhostexVideoModal } from '@/packages/core-ui/watch-ghostex-video-modal';
 import { UpdateAvailableModal, type UpdateAvailableModalState } from '@/packages/core-ui/update-available-modal';
 import { FirstLaunchSetupModal } from '@/packages/core-ui/first-launch-setup-modal';
@@ -112,6 +113,7 @@ type AppModalKind =
   | 'renameSession'
   | 'sessionNote'
   | 'settings'
+  | 'sidebarSpaceEditor'
   | 'stashedPrompts'
   | 'worktree'
   | 'tipsAndTricks'
@@ -150,6 +152,7 @@ const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, s
   renameSession: '.session-rename-modal-shadcn',
   renameWorktree: '.worktree-rename-modal-shadcn',
   sessionNote: '.session-note-modal-shadcn',
+  sidebarSpaceEditor: '.space-editor-modal-shadcn',
   worktree: '.worktree-create-modal-shadcn',
   updateAvailable: '.update-available-modal',
 };
@@ -237,13 +240,27 @@ type AppModalHostMessage =
       latestSidebarStateMessage?: unknown;
       machineId?: string;
       machineName?: string;
+      /** Membership target for a Space created from a group/project menu. */
+      memberCollectionId?: string;
+      memberProjectId?: string;
       modal: AppModalKind;
-      mode?: PortlessSetupModalMode;
+      /**
+       * CDXC:SidebarSpaces 2026-08-27:
+       * `create`/`edit` belong to the Space editor; the two portless values are
+       * that dialog's own modes. They share the field because the modal-open
+       * message is one flat record keyed by `modal`.
+       */
+      mode?: PortlessSetupModalMode | 'create' | 'edit';
       prewarm?: boolean;
       protocol?: 'https' | 'http';
       requestId?: string;
       sessionAgentIcon?: string;
       sessionId?: string;
+      /** CDXC:SidebarSpaces 2026-08-27: see SidebarSpaceEditorModalState. */
+      spaceColor?: string;
+      spaceIcon?: string;
+      spaceId?: string;
+      spaceName?: string;
       showFirstLaunchSetupOnClose?: boolean;
       threadId?: string;
       title?: string;
@@ -370,6 +387,26 @@ type SessionNoteModalState = {
   projectId?: string;
   sessionId: string;
   sessionTitle?: string;
+};
+
+/*
+ * CDXC:SidebarSpaces 2026-08-27:
+ * The New/Edit Space dialog's open payload. `remoteMachineId` is the only
+ * routing token that crosses this boundary — it names the gxserver that owns
+ * the Space — and the optional member id carries the group/project that opened
+ * a create dialog. The name/icon/color are the values the sidebar row was
+ * already rendering, so the dialog opens on live values without a round trip.
+ * No Space document crosses here in either direction: the sidebar owns it.
+ */
+type SidebarSpaceEditorModalState = {
+  memberCollectionId?: string;
+  memberProjectId?: string;
+  mode: 'create' | 'edit';
+  remoteMachineId?: string;
+  spaceColor?: string;
+  spaceIcon?: string;
+  spaceId?: string;
+  spaceName?: string;
 };
 
 type PromptAgentModalKey = 'gitCommit' | 'renameSession';
@@ -1077,6 +1114,7 @@ function AppModalHost() {
     remoteProjectPicker,
     renameSession,
     sessionNote,
+    sidebarSpaceEditor,
     stashedPrompts,
     beginExportTranscriptExport,
     exportTranscriptResult,
@@ -1177,6 +1215,7 @@ function AppModalHost() {
     recentProjects,
     renameSession,
     sessionNote,
+    sidebarSpaceEditor,
     stashedPrompts,
     exportTranscriptResult,
     updateAvailable,
@@ -2253,9 +2292,9 @@ function AppModalHost() {
           setPluginSettingsStatusLoading(true);
           vscode.postMessage({ pluginId, type: 'reinstallPlugin' });
         }}
-        onInstallAgentHooks={() => {
+        onInstallAgentHooks={(agentIds) => {
           setAgentHookStatusLoading(true);
-          vscode.postMessage({ type: 'installAgentHooks' });
+          vscode.postMessage({ agentIds, type: 'installAgentHooks' });
         }}
         onUninstallAgentHooks={(agentIds) => {
           setAgentHookStatusLoading(true);
@@ -2443,6 +2482,55 @@ function AppModalHost() {
         sessionTitle={sessionNote?.sessionTitle}
       />
       {/*
+      CDXC:SidebarSpaces 2026-08-27:
+      New/Edit Space. The dialog reports field values only; the sidebar runtime
+      forwards them to SidebarApp, which is the one place that owns the Space
+      document and can apply an edit to the CURRENT one. That is the same
+      dialog-reports / host-writes split Rename Session and Session Note use, and
+      the reason a Space edit can never clobber a concurrent membership change.
+      */}
+      <SpaceEditorModal
+        initialColor={sidebarSpaceEditor?.spaceColor}
+        initialIcon={sidebarSpaceEditor?.spaceIcon}
+        initialName={sidebarSpaceEditor?.spaceName}
+        isOpen={activeModal === 'sidebarSpaceEditor' && sidebarSpaceEditor !== undefined}
+        mode={sidebarSpaceEditor?.mode ?? 'create'}
+        onCancel={closeModal}
+        onDelete={() => {
+          if (!sidebarSpaceEditor?.spaceId) {
+            return;
+          }
+          vscode.postMessage({
+            mode: 'delete',
+            ...(sidebarSpaceEditor.remoteMachineId ? { remoteMachineId: sidebarSpaceEditor.remoteMachineId } : {}),
+            spaceId: sidebarSpaceEditor.spaceId,
+            type: 'sidebarSpaceEditorResult',
+          });
+          closeModal();
+        }}
+        onSubmit={(space) => {
+          if (!sidebarSpaceEditor) {
+            return;
+          }
+          vscode.postMessage({
+            color: space.color,
+            icon: space.icon,
+            ...(sidebarSpaceEditor.memberCollectionId
+              ? { memberCollectionId: sidebarSpaceEditor.memberCollectionId }
+              : {}),
+            ...(sidebarSpaceEditor.memberProjectId ? { memberProjectId: sidebarSpaceEditor.memberProjectId } : {}),
+            mode: sidebarSpaceEditor.mode,
+            name: space.name,
+            ...(sidebarSpaceEditor.remoteMachineId ? { remoteMachineId: sidebarSpaceEditor.remoteMachineId } : {}),
+            ...(sidebarSpaceEditor.mode === 'edit' && sidebarSpaceEditor.spaceId
+              ? { spaceId: sidebarSpaceEditor.spaceId }
+              : {}),
+            type: 'sidebarSpaceEditorResult',
+          });
+          closeModal();
+        }}
+      />
+      {/*
       CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
       Copy Path is settled inside the dialog; the export itself, Reveal, and
       Start New Conversation are host side effects, so they leave through the
@@ -2575,6 +2663,7 @@ function useModalStateFromNative() {
   const [recentProjects, setRecentProjects] = useState<RecentProjectsModalState>();
   const [renameSession, setRenameSession] = useState<RenameSessionModalState>();
   const [sessionNote, setSessionNote] = useState<SessionNoteModalState>();
+  const [sidebarSpaceEditor, setSidebarSpaceEditor] = useState<SidebarSpaceEditorModalState>();
   const [stashedPrompts, setStashedPrompts] = useState<StashedPromptsModalState>();
   const [exportTranscriptResult, setExportTranscriptResult] = useState<ExportTranscriptResultModalState>();
   const [worktree, setWorktree] = useState<WorktreeModalState>();
@@ -2615,6 +2704,7 @@ function useModalStateFromNative() {
     setRecentProjects(undefined);
     setRenameSession(undefined);
     setSessionNote(undefined);
+    setSidebarSpaceEditor(undefined);
     setStashedPrompts(undefined);
     setExportTranscriptResult(undefined);
     setWorktree(undefined);
@@ -2882,6 +2972,46 @@ function useModalStateFromNative() {
             setFirstUserMessage(undefined);
             setRemoteGxserverInstall(undefined);
             setRemoteProjectPicker(undefined);
+            setWorktree(undefined);
+            setPortlessSetup(undefined);
+            setWorktreeDelete(undefined);
+            setWorktreeRename(undefined);
+          } else if (message.modal === 'sidebarSpaceEditor') {
+            /*
+             * CDXC:SidebarSpaces 2026-08-27:
+             * Edit mode has to name a Space; create mode must not, or Save would
+             * patch whichever Space id happened to be left on the message.
+             */
+            const spaceEditorMode = message.mode === 'edit' ? 'edit' : 'create';
+            if (spaceEditorMode === 'edit' && (typeof message.spaceId !== 'string' || !message.spaceId.trim())) {
+              throw new Error('Space editor request is missing spaceId.');
+            }
+            setSidebarSpaceEditor({
+              ...(spaceEditorMode === 'create' &&
+              typeof message.memberCollectionId === 'string' &&
+              message.memberCollectionId.trim()
+                ? { memberCollectionId: message.memberCollectionId }
+                : {}),
+              ...(spaceEditorMode === 'create' &&
+              typeof message.memberProjectId === 'string' &&
+              message.memberProjectId.trim()
+                ? { memberProjectId: message.memberProjectId }
+                : {}),
+              mode: spaceEditorMode,
+              ...(typeof message.remoteMachineId === 'string' && message.remoteMachineId.trim()
+                ? { remoteMachineId: message.remoteMachineId }
+                : {}),
+              ...(spaceEditorMode === 'edit' ? { spaceId: message.spaceId } : {}),
+              ...(typeof message.spaceColor === 'string' ? { spaceColor: message.spaceColor } : {}),
+              ...(typeof message.spaceIcon === 'string' ? { spaceIcon: message.spaceIcon } : {}),
+              ...(typeof message.spaceName === 'string' ? { spaceName: message.spaceName } : {}),
+            });
+            setConfig({});
+            setDelayedSend(undefined);
+            setFirstUserMessage(undefined);
+            setRemoteGxserverInstall(undefined);
+            setRemoteProjectPicker(undefined);
+            setRenameSession(undefined);
             setWorktree(undefined);
             setPortlessSetup(undefined);
             setWorktreeDelete(undefined);
@@ -3340,6 +3470,7 @@ function useModalStateFromNative() {
           }
           if (
             isPreviousSessionsResultMessage(message.message) ||
+            isSessionTranscriptSizesResultMessage(message.message) ||
             isRecentProjectsResultMessage(message.message) ||
             isStashedPromptsTransientMessage(message.message)
           ) {
@@ -3392,6 +3523,7 @@ function useModalStateFromNative() {
     remoteProjectPicker,
     renameSession,
     sessionNote,
+    sidebarSpaceEditor,
     stashedPrompts,
     beginExportTranscriptExport,
     exportTranscriptResult,
@@ -3487,6 +3619,20 @@ function isPreviousSessionsResultMessage(
   );
 }
 
+function isSessionTranscriptSizesResultMessage(
+  message: unknown
+): message is Extract<ExtensionToSidebarMessage, { type: 'sessionTranscriptSizesResult' }> {
+  /*
+  CDXC:QuickAccessSessionSizes 2026-08-28:
+  Transcript sizes are transient answers owned by PreviousSessionsModal, not
+  persistent sidebar store state. Relay them through the modal window just like
+  the paged previous-session result so the request can leave its loading state.
+  */
+  return Boolean(
+    message && typeof message === 'object' && 'type' in message && message.type === 'sessionTranscriptSizesResult'
+  );
+}
+
 function isRecentProjectsResultMessage(
   message: unknown
 ): message is Extract<ExtensionToSidebarMessage, { type: 'recentProjectsResult' }> {
@@ -3529,6 +3675,7 @@ function isModalRenderable({
   remoteGxserverInstall,
   renameSession,
   sessionNote,
+  sidebarSpaceEditor,
   stashedPrompts,
   exportTranscriptResult,
   updateAvailable,
@@ -3552,6 +3699,7 @@ function isModalRenderable({
   remoteGxserverInstall: RemoteGxserverInstallState | undefined;
   renameSession: RenameSessionModalState | undefined;
   sessionNote: SessionNoteModalState | undefined;
+  sidebarSpaceEditor: SidebarSpaceEditorModalState | undefined;
   stashedPrompts: StashedPromptsModalState | undefined;
   exportTranscriptResult: ExportTranscriptResultModalState | undefined;
   updateAvailable: UpdateAvailableModalState | undefined;
@@ -3595,6 +3743,8 @@ function isModalRenderable({
       return renameSession !== undefined;
     case 'sessionNote':
       return sessionNote !== undefined;
+    case 'sidebarSpaceEditor':
+      return sidebarSpaceEditor !== undefined;
     case 'stashedPrompts':
       return stashedPrompts !== undefined;
     case 'exportTranscriptResult':

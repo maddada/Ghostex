@@ -32,6 +32,7 @@ pub(crate) enum GpuiAppModalKind {
     Worktree,
     DeleteWorktree,
     RenameWorktree,
+    SidebarSpaceEditor,
     GitCommit,
     GitFileDiff,
     PortlessSetup,
@@ -69,6 +70,7 @@ impl GpuiAppModalKind {
             "worktree" => Some(Self::Worktree),
             "deleteWorktree" => Some(Self::DeleteWorktree),
             "renameWorktree" => Some(Self::RenameWorktree),
+            "sidebarSpaceEditor" => Some(Self::SidebarSpaceEditor),
             "gitCommit" => Some(Self::GitCommit),
             "gitFileDiff" => Some(Self::GitFileDiff),
             "portlessSetup" => Some(Self::PortlessSetup),
@@ -109,6 +111,7 @@ impl GpuiAppModalKind {
             Self::Worktree => "worktree",
             Self::DeleteWorktree => "deleteWorktree",
             Self::RenameWorktree => "renameWorktree",
+            Self::SidebarSpaceEditor => "sidebarSpaceEditor",
             Self::GitCommit => "gitCommit",
             Self::GitFileDiff => "gitFileDiff",
             Self::PortlessSetup => "portlessSetup",
@@ -135,7 +138,7 @@ impl GpuiAppModalKind {
             Self::DelayedSend => "Ghostex Session Automations",
             Self::RenameSession => "Ghostex Rename Session",
             Self::SessionNote => "Ghostex Session Note",
-            Self::ExportTranscriptResult => "Ghostex Export Transcript",
+            Self::ExportTranscriptResult => "Ghostex Handoff / Export",
             Self::ConfigureAgents => "Ghostex Configure Agents",
             Self::ConfigureActions => "Ghostex Actions",
             Self::OpenTargets => "Ghostex Open Targets",
@@ -146,6 +149,7 @@ impl GpuiAppModalKind {
             Self::Worktree => "Ghostex Add Worktree",
             Self::DeleteWorktree => "Ghostex Delete Worktree",
             Self::RenameWorktree => "Ghostex Rename Worktree",
+            Self::SidebarSpaceEditor => "Ghostex Space",
             Self::GitCommit => "Ghostex Commit Changes",
             Self::GitFileDiff => "Ghostex File Diff",
             Self::PortlessSetup => "Ghostex Portless Setup",
@@ -237,6 +241,16 @@ impl GpuiAppModalKind {
             Self::RenameWorktree => size(
                 px(APP_MODAL_HOST_COMPACT_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_DELETE_WORKTREE_WINDOW_HEIGHT),
+            ),
+            /*
+            CDXC:SidebarSpaces 2026-08-28:
+            New/Edit Space is a name field, an icon grid, and a color row, so it
+            uses the compact modal width with a 380px GPUI content height. The
+            native titlebar and frame are outside these window content bounds.
+            */
+            Self::SidebarSpaceEditor => size(
+                px(APP_MODAL_HOST_COMPACT_WINDOW_WIDTH),
+                px(APP_MODAL_HOST_SIDEBAR_SPACE_EDITOR_WINDOW_HEIGHT),
             ),
             Self::PortlessSetup => size(
                 px(APP_MODAL_HOST_PORTLESS_SETUP_WINDOW_WIDTH),
@@ -376,11 +390,13 @@ impl GpuiAppModalKind {
             }),
             // These modals are normally opened through bridge messages that
             // carry their full payload (worktree and diff drafts); the bare
-            // open message is the menu-path shape.
+            // open message is the menu-path shape. For the Space editor it is
+            // also the template the bridge's field allowlist fills in.
             Self::Worktree
             | Self::AgentHooksRequired
             | Self::DeleteWorktree
             | Self::RenameWorktree
+            | Self::SidebarSpaceEditor
             | Self::GitCommit
             | Self::GitFileDiff
             | Self::PortlessSetup

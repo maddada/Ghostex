@@ -114,12 +114,24 @@ impl GhostexGpuiApp {
                 }
                 let sidebar_state_message =
                     self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
-                let mut open_message = if modal == GpuiAppModalKind::RecentProjects {
+                /*
+                CDXC:SidebarSpaces 2026-08-28:
+                A modal whose whole open payload is a known, flat set of string
+                fields is rebuilt from its own `open_message()` template plus the
+                allowlist below, so nothing else the sidebar page put on the
+                message can reach the modal host. Modals whose payload is a
+                structured draft (the worktree and diff dialogs) still forward
+                their message verbatim, because there is no flat field list to
+                enumerate for them.
+                */
+                let mut open_message = if let Some(allowed_fields) =
+                    gpui_app_modal_open_message_allowed_fields(modal)
+                {
                     let mut open_message = modal.open_message();
-                    for field in ["machineId", "machineName"] {
-                        if let Some(value) = message.get(field).and_then(serde_json::Value::as_str)
+                    for field in allowed_fields {
+                        if let Some(value) = message.get(*field).and_then(serde_json::Value::as_str)
                         {
-                            open_message[field] = serde_json::json!(value);
+                            open_message[*field] = serde_json::json!(value);
                         }
                     }
                     open_message
@@ -861,5 +873,28 @@ impl GhostexGpuiApp {
         panel.update(cx, |panel, cx| {
             panel.dispatch_native_host_event(event.clone(), cx);
         });
+    }
+}
+
+/// The string fields an `open` message may carry into the modal host, for the
+/// modals whose payload is a flat field set. `None` means "forward the sidebar's
+/// message unchanged", which is what the draft-carrying dialogs need.
+fn gpui_app_modal_open_message_allowed_fields(
+    modal: GpuiAppModalKind,
+) -> Option<&'static [&'static str]> {
+    match modal {
+        GpuiAppModalKind::RecentProjects => Some(&["machineId", "machineName"]),
+        GpuiAppModalKind::SidebarSpaceEditor => Some(&[
+            "memberCollectionId",
+            "memberProjectId",
+            "mode",
+            "remoteMachineId",
+            "sectionKey",
+            "spaceColor",
+            "spaceIcon",
+            "spaceId",
+            "spaceName",
+        ]),
+        _ => None,
     }
 }

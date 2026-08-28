@@ -45,12 +45,29 @@ export type SidebarUiCollapseState = {
   collapsedRemoteMachineSectionsById: Record<string, true>;
   isReferenceChatsCollapsed: boolean;
   isReferenceProjectsCollapsed: boolean;
+  /*
+   * CDXC:SidebarSpaces 2026-08-27:
+   * The Space each gxserver section is filtered by, keyed by section key
+   * ("local" / "remote:<machineId>", see sidebar-app/space-filtering.ts). The
+   * built-in All Projects view is the ABSENCE of a key, never a reserved id, so
+   * a selected Space id here is always a real Space id owned by that section's
+   * daemon. A stored id whose Space no longer exists resolves back to All
+   * Projects at render time instead of being pruned here — the daemon's Space
+   * state arrives long after this record is read.
+   */
+  selectedSpaceIdBySectionKey: Record<string, string>;
 };
 
+/*
+ * Version 3 added `selectedSpaceIdBySectionKey`. Version 2 payloads still load:
+ * they normalize to an empty selection map, which is All Projects everywhere.
+ */
 export type SidebarUiCollapseStorage = {
   state: SidebarUiCollapseState;
-  version: 2;
+  version: 3;
 };
+
+const SUPPORTED_SIDEBAR_UI_COLLAPSE_STORAGE_VERSIONS = new Set([2, 3]);
 
 export type SidebarUiCollapseStateReadResult = {
   reason?: 'invalid-shape' | 'missing' | 'parse-error' | 'storage-unavailable';
@@ -78,6 +95,7 @@ export function createDefaultSidebarUiCollapseState(): SidebarUiCollapseState {
     collapsedRemoteMachineSectionsById: {},
     isReferenceChatsCollapsed: false,
     isReferenceProjectsCollapsed: false,
+    selectedSpaceIdBySectionKey: {},
   };
 }
 
@@ -110,7 +128,22 @@ export function normalizeSidebarUiCollapseState(candidate: unknown): SidebarUiCo
     collapsedRemoteMachineSectionsById: normalizeStoredCollapsedGroupsById(state.collapsedRemoteMachineSectionsById),
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed === true,
     isReferenceProjectsCollapsed: state.isReferenceProjectsCollapsed === true,
+    selectedSpaceIdBySectionKey: normalizeStoredSelectedSpaceIdBySectionKey(state.selectedSpaceIdBySectionKey),
   };
+}
+
+export function normalizeStoredSelectedSpaceIdBySectionKey(candidate: unknown): Record<string, string> {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return {};
+  }
+
+  const selectedSpaceIdBySectionKey: Record<string, string> = {};
+  for (const [sectionKey, spaceId] of Object.entries(candidate)) {
+    if (typeof spaceId === 'string' && spaceId.length > 0 && sectionKey.length > 0) {
+      selectedSpaceIdBySectionKey[sectionKey] = spaceId;
+    }
+  }
+  return selectedSpaceIdBySectionKey;
 }
 
 export function readSidebarUiCollapseState(windowScopeId: string): SidebarUiCollapseStateReadResult {
@@ -124,8 +157,13 @@ export function readSidebarUiCollapseState(windowScopeId: string): SidebarUiColl
   try {
     const scopedStoredValue = window.localStorage.getItem(getSidebarUiCollapseStateStorageKey(windowScopeId));
     if (scopedStoredValue !== null) {
-      const scopedCandidate = JSON.parse(scopedStoredValue) as Partial<SidebarUiCollapseStorage>;
-      if (!scopedCandidate || typeof scopedCandidate !== 'object' || scopedCandidate.version !== 2) {
+      const scopedCandidate = JSON.parse(scopedStoredValue) as { state?: unknown; version?: unknown };
+      if (
+        !scopedCandidate ||
+        typeof scopedCandidate !== 'object' ||
+        typeof scopedCandidate.version !== 'number' ||
+        !SUPPORTED_SIDEBAR_UI_COLLAPSE_STORAGE_VERSIONS.has(scopedCandidate.version)
+      ) {
         return {
           reason: 'invalid-shape',
           state: createDefaultSidebarUiCollapseState(),
@@ -191,6 +229,7 @@ export function summarizeSidebarUiCollapseState(state: SidebarUiCollapseState): 
     collapsedRemoteMachineSectionCount: Object.keys(state.collapsedRemoteMachineSectionsById).length,
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed,
     isReferenceProjectsCollapsed: state.isReferenceProjectsCollapsed,
+    selectedSpaceSectionCount: Object.keys(state.selectedSpaceIdBySectionKey).length,
   };
 }
 
@@ -213,7 +252,7 @@ export function writeSidebarUiCollapseState(
   try {
     const serialized = JSON.stringify({
       state,
-      version: 2,
+      version: 3,
     } satisfies SidebarUiCollapseStorage);
     window.localStorage.setItem(getSidebarUiCollapseStateStorageKey(windowScopeId), serialized);
     return { ok: true, storedByteLength: serialized.length };

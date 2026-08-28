@@ -800,7 +800,7 @@ html:has(body.app-modal-host-native-window-body) {
   color: var(--quick-access-item-color, var(--foreground, var(--app-foreground)));
   cursor: default;
   display: flex;
-  gap: 8px;
+  gap: 0;
   height: var(--quick-access-row-height, 36px);
   min-height: var(--quick-access-row-height, 36px);
   min-width: 0;
@@ -811,10 +811,71 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .recent-projects-row:hover,
+.recent-projects-row:focus-within,
 .recent-projects-row:focus-visible,
 .recent-projects-row[data-search-selected='true'],
 .recent-projects-row[data-context-menu-open='true'] {
   background: var(--muted, #202020);
+  outline: none;
+}
+
+.recent-projects-row-main {
+  align-items: center;
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: default;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.recent-projects-row-main:focus-visible {
+  outline: none;
+}
+
+.recent-projects-row-end {
+  align-items: center;
+  align-self: stretch;
+  display: inline-flex;
+  flex: 0 0 22px;
+  justify-content: center;
+  margin-left: 6px;
+  width: 22px;
+}
+
+.recent-projects-remove-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted-foreground, var(--app-muted));
+  cursor: pointer;
+  display: none;
+  height: 22px;
+  justify-content: center;
+  padding: 0;
+  width: 22px;
+}
+
+.recent-projects-row:hover .recent-projects-status-dot,
+.recent-projects-row:focus-within .recent-projects-status-dot {
+  display: none;
+}
+
+.recent-projects-row:hover .recent-projects-remove-button,
+.recent-projects-row:focus-within .recent-projects-remove-button {
+  display: inline-flex;
+}
+
+.recent-projects-remove-button:hover,
+.recent-projects-remove-button:focus-visible {
+  background: color-mix(in srgb, var(--destructive, #f87171) 12%, transparent);
+  color: var(--destructive, #f87171);
   outline: none;
 }
 
@@ -3155,6 +3216,65 @@ html:has(body.app-modal-host-native-window-body) {
   color: var(--destructive, #f87171);
 }
 
+/*
+ * CDXC:SidebarSpaces 2026-08-27:
+ * The New/Edit Space dialog. It reuses the shared icon picker, so the only
+ * dialog-local shape is the inline color strip: the same palette the group color
+ * menu offers, laid out as swatches rather than a list because the dialog shows
+ * name, icon, and color at once.
+ */
+.gx-app-modal .space-editor-color-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gx-app-modal .space-editor-color-swatch {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  box-shadow: none;
+  cursor: pointer;
+  height: 22px;
+  padding: 0;
+  width: 22px;
+}
+
+.gx-app-modal .space-editor-color-swatch[data-selected='true'] {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 2px var(--gx-modal-surface),
+    0 0 0 3px #fff;
+}
+
+.gx-app-modal .space-editor-color-swatch:focus-visible {
+  outline: 1px solid #fff;
+  outline-offset: 2px;
+}
+
+/* The shared icon picker ships a Settings-shaped uppercase label; align it with
+   the dialog's own field labels instead of restyling the picker for everyone. */
+.gx-app-modal .space-editor-form .command-config-label {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.gx-app-modal .space-editor-form .command-icon-picker-trigger {
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-control) !important;
+  color: var(--foreground);
+  height: var(--gx-modal-control-height);
+  padding: 0 12px;
+  width: 100%;
+}
+
+.gx-app-modal .space-editor-form .command-icon-picker-trigger:hover {
+  background: var(--gx-modal-raised-hover);
+}
+
 .app-modal-host-native-window-body .gx-app-modal {
   --tw-translate-y: 0px;
   box-sizing: border-box;
@@ -4003,6 +4123,11 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .settings-remote-machine-fields {
+  gap: 12px;
+}
+
+.settings-remote-machine-sidebar-visibility {
+  align-items: center;
   gap: 12px;
 }
 

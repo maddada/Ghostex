@@ -188,6 +188,7 @@ fn snapshot_publishes_session_lifecycle_state_and_capability_flags() {
             "sessionGitStatus": true,
             "sessionSettlement": true,
             "sessionSnooze": true,
+            "spaces": true,
             "worktreeSessions": true,
         }))
     );
@@ -443,6 +444,7 @@ fn the_git_status_capability_follows_the_sidebar_version_gate() {
                 "sessionGitStatus": expected_git_status,
                 "sessionSettlement": true,
                 "sessionSnooze": true,
+                "spaces": true,
                 "worktreeSessions": true,
             }),
             "settings {settings} must advertise sessionGitStatus {expected_git_status} \

@@ -8,6 +8,7 @@ import {
   type GxserverRpcEndpointPath,
   type GxserverServerHealthResponse,
   type GxserverSidebarProjectCollectionsState,
+  type GxserverSidebarSpacesState,
   type GxserverWorkspaceSessionGroupsState,
 } from '@/packages/shared/gxserver-protocol';
 import { gxserverRpcErrorFromResponseBody } from '@/packages/shared/gxserver-rpc-error';
@@ -47,6 +48,7 @@ type PresentationSubscriptionHandlers = {
     state: GxserverSidebarProjectCollectionsState,
     revision: GxserverPresentationRevision
   ): void;
+  onSidebarSpaces(state: GxserverSidebarSpacesState, revision: GxserverPresentationRevision): void;
   onSnapshot(snapshot: GxserverPresentationSnapshot): void;
   onWorkspaceGroups(state: GxserverWorkspaceSessionGroupsState, revision: GxserverPresentationRevision): void;
 };
@@ -165,6 +167,8 @@ export function createGxserverClient(machine: GhostexWebMachine) {
         handlers.onDelta(parsed.delta, parsed.revision);
       } else if (parsed?.type === 'sidebarProjectCollectionsChanged') {
         handlers.onSidebarProjectCollections(parsed.sidebarProjectCollections, parsed.revision);
+      } else if (parsed?.type === 'sidebarSpacesChanged') {
+        handlers.onSidebarSpaces(parsed.sidebarSpaces, parsed.revision);
       } else if (parsed?.type === 'workspaceGroupsChanged') {
         handlers.onWorkspaceGroups(parsed.groups, parsed.revision);
       } else if (parsed && isSessionChatEventType(parsed.type)) {

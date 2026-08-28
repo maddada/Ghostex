@@ -328,6 +328,54 @@ impl GhostexGpuiApp {
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
+    /// CDXC:SidebarSpaces 2026-08-27:
+    /// The New/Edit Space dialog's confirm and delete. The dialog is an app-modal
+    /// window, so its result has to cross back into the sidebar page — and it is
+    /// SidebarApp, not Rust, that owns the Space document, so this forwards the
+    /// user's field values verbatim under the inbound
+    /// `applySidebarSpaceEditorResult` type and applies nothing itself. Only
+    /// bounded metadata crosses: the mode enum, a Space id, a name, an icon id, a
+    /// color, an optional member id, and the owning machine id — never a Space
+    /// document, a project path, or daemon state.
+    pub(crate) fn forward_gpui_sidebar_space_editor_result_to_sidebar(
+        &mut self,
+        command: &serde_json::Map<String, serde_json::Value>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(mode) = command
+            .get("mode")
+            .and_then(serde_json::Value::as_str)
+            .filter(|mode| matches!(*mode, "create" | "delete" | "edit"))
+        else {
+            return false;
+        };
+        let mut message = serde_json::Map::new();
+        message.insert("mode".to_string(), serde_json::json!(mode));
+        message.insert(
+            "type".to_string(),
+            serde_json::json!("applySidebarSpaceEditorResult"),
+        );
+        for field in [
+            "color",
+            "icon",
+            "memberCollectionId",
+            "memberProjectId",
+            "name",
+            "remoteMachineId",
+            "spaceId",
+        ] {
+            if let Some(value) = command
+                .get(field)
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && value.chars().count() <= 256)
+            {
+                message.insert(field.to_string(), serde_json::json!(value));
+            }
+        }
+        self.dispatch_gpui_sidebar_host_message(serde_json::Value::Object(message), cx)
+    }
+
     /// Reveal the exported markdown file in the OS file manager. The path comes
     /// from the Rust-held open payload of the dialog that is asking, never from
     /// the modal page's own message, and remote exports hold no local path.

@@ -16,6 +16,7 @@ import {
   isPresentationDelta,
   isPresentationSnapshot,
   isSidebarProjectCollectionsState,
+  isSidebarSpacesState,
 } from './helpers/remote-presentation';
 import { handleGpuiRendererCommand, isGpuiRendererCommand } from './helpers/renderer-commands';
 import type {
@@ -35,6 +36,7 @@ import type {
   GxserverSidebarHudSettingsMutationParams,
   GxserverSidebarHudSettingsMutationResult,
   GxserverSidebarProjectCollectionsState,
+  GxserverSidebarSpacesState,
 } from '@/packages/shared/gxserver-protocol';
 import { GXSERVER_PROTOCOL_VERSION } from '@/packages/shared/gxserver-protocol';
 import type { GxserverSessionChatEvent } from '@/packages/shared/session-chat';
@@ -105,6 +107,13 @@ export class GpuiGxserverClient {
     return sidebarProjectCollections;
   }
 
+  async updateSidebarSpaces(state: GxserverSidebarSpacesState): Promise<unknown> {
+    const { sidebarSpaces } = await this.rpc<{
+      sidebarSpaces?: unknown;
+    }>('/api/updateSidebarSpaces', { state });
+    return sidebarSpaces;
+  }
+
   async fetchAppUserData(): Promise<GxserverAppUserData> {
     return this.rpc<GxserverAppUserData>('/api/readAppUserData');
   }
@@ -150,6 +159,7 @@ export class GpuiGxserverClient {
     onRendererCommand,
     onSessionChatEvent,
     onSidebarProjectCollections,
+    onSidebarSpaces,
     onSnapshot,
     onWorkspaceGroups,
   }: {
@@ -162,6 +172,7 @@ export class GpuiGxserverClient {
     onRendererCommand?: GpuiRendererCommandHandler;
     onSessionChatEvent?: (event: GxserverSessionChatEvent) => void;
     onSidebarProjectCollections?: (state: GxserverSidebarProjectCollectionsState) => void;
+    onSidebarSpaces?: (state: GxserverSidebarSpacesState) => void;
     onSnapshot: (snapshot: GxserverPresentationSnapshot) => void;
     onWorkspaceGroups?: (state: unknown) => void;
   }): GpuiPresentationSubscription {
@@ -209,6 +220,10 @@ export class GpuiGxserverClient {
         isSidebarProjectCollectionsState(message.sidebarProjectCollections)
       ) {
         onSidebarProjectCollections(message.sidebarProjectCollections);
+        return;
+      }
+      if (message.type === 'sidebarSpacesChanged' && onSidebarSpaces && isSidebarSpacesState(message.sidebarSpaces)) {
+        onSidebarSpaces(message.sidebarSpaces);
         return;
       }
       if (message.type === 'workspaceGroupsChanged' && onWorkspaceGroups && parseObject(message.groups)) {

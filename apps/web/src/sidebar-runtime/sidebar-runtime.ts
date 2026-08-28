@@ -13,6 +13,7 @@ import type {
   GxserverRecentProjectDomainState,
   GxserverSidebarHudResponse,
   GxserverSidebarProjectCollectionsState,
+  GxserverSidebarSpacesState,
 } from '@/packages/shared/gxserver-protocol';
 import {
   createDefaultSessionGridSnapshot,
@@ -51,6 +52,7 @@ import {
   type SidebarSessionReference,
 } from './sidebar-ids';
 import { setActiveSidebarProject } from './active-project-store';
+import { discardEmptyDraftAfterFocusAway } from './draft-session-discard';
 import type { NavigationHistoryEntry } from '@/packages/shared/navigation-history/navigation-history-contract';
 import { NAVIGATION_HISTORY_SCOPE_WEB } from '@/packages/shared/navigation-history/navigation-history-contract';
 import {
@@ -223,14 +225,23 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
           : [];
       })
     );
+    const localSidebarSpaces = states.find((state) => state.machine.machineId === 'local')?.presentation?.sidebarSpaces;
+    const remoteSidebarSpacesByMachineId = Object.fromEntries(
+      states.flatMap((state) => {
+        const spaces = state.presentation?.sidebarSpaces;
+        return state.machine.machineId !== 'local' && spaces ? [[state.machine.machineId, spaces] as const] : [];
+      })
+    );
     const message: ExtensionToSidebarMessage = {
       groups,
       hud,
       pinnedPrompts: [],
       previousSessions: [],
       remoteSidebarProjectCollectionsByMachineId,
+      remoteSidebarSpacesByMachineId,
       revision: ++revision,
       ...(localSidebarProjectCollections ? { sidebarProjectCollections: localSidebarProjectCollections } : {}),
+      ...(localSidebarSpaces ? { sidebarSpaces: localSidebarSpaces } : {}),
       type: hasHydrated ? 'sessionState' : 'hydrate',
     };
     hasHydrated = true;
@@ -370,8 +381,15 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     if (!target || !presentationHasSession(getConnectionStates(), target)) {
       return;
     }
+    /*
+    CDXC:DraftSessions 2026-08-28:
+    Captured before the write below: this is the moment the user navigates away
+    from whatever was focused, and an empty draft left behind is discarded.
+    */
+    const previousFocusedTarget = focusedTarget;
     activeTarget = target;
     focusedTarget = target;
+    discardEmptyDraftAfterFocusAway(previousFocusedTarget, target, getConnectionStates());
     const session = findPresentationSession(getConnectionStates(), target);
     if (session?.activity === 'attention') {
       void rpcForMachine(target.machineId, '/api/updateAgentActivity', {
@@ -616,6 +634,28 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
           '/api/updateSidebarProjectCollections',
           { state: message.state }
         );
+        return;
+      }
+      case 'updateSidebarSpaces': {
+        const machineId = message.remoteMachineId ?? 'local';
+        await rpcForMachine<{ sidebarSpaces: GxserverSidebarSpacesState }>(machineId, '/api/updateSidebarSpaces', {
+          state: message.state,
+        });
+        return;
+      }
+      /*
+      CDXC:SidebarSpaces 2026-08-27:
+      The New/Edit Space dialog's confirm and delete. This runtime deliberately
+      does NOT talk to gxserver here: the dialog carries field values only, and
+      the Space document lives in SidebarApp, so the result is bounced straight
+      back to it. SidebarApp applies the edit to the CURRENT document and then
+      posts the resulting `updateSidebarSpaces` through the case above — one
+      daemon write, composed from fresh state. gpui routes this exactly the same
+      way, through Rust's forward to `onSidebarHostMessage`.
+      */
+      case 'sidebarSpaceEditorResult': {
+        const { type: _resultType, ...fields } = message;
+        messageSource.postMessage({ ...fields, type: 'applySidebarSpaceEditorResult' });
         return;
       }
       case 'updateSettingsPatch': {
@@ -879,6 +919,13 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     }
     await rpcForMachine(target.machineId, '/api/createAgentSession', {
       agentId: agentId.trim(),
+      /*
+      CDXC:DraftSessions 2026-08-28:
+      Sidebar agent launches carry no prompt, so the row is created as a draft.
+      gxserver clears `draftStatus` the moment a first user prompt reaches the
+      agent; the provider is started when the session is opened, not here.
+      */
+      draft: true,
       projectId: target.projectId,
       requireLaunchCommand: true,
       surface: 'workspace',
@@ -893,8 +940,13 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       return;
     }
     pendingActiveSessionContext = undefined;
+    /* CDXC:DraftSessions 2026-08-28: see `focusSession`. This is the same move
+       arriving from the workspace (a tab click, a tab close, a pane switch)
+       instead of from the sidebar. */
+    const previousFocusedTarget = focusedTarget;
     activeTarget = { machineId: target.machineId, projectId: target.projectId };
     focusedTarget = target;
+    discardEmptyDraftAfterFocusAway(previousFocusedTarget, target, getConnectionStates());
     publish();
   };
 

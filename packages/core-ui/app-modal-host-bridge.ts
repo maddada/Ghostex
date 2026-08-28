@@ -31,6 +31,7 @@ export type AppModalKind =
   | 'renameSession'
   | 'sessionNote'
   | 'settings'
+  | 'sidebarSpaceEditor'
   | 'stashedPrompts'
   | 'worktree'
   | 'tipsAndTricks'
@@ -58,9 +59,37 @@ export type OpenAppModalMessage =
         | 'renameSession'
         | 'remoteProjectPicker'
         | 'sessionNote'
+        | 'sidebarSpaceEditor'
         | 'stashedPrompts'
         | 'worktree'
       >;
+      type: 'open';
+    }
+  | {
+      /**
+       * CDXC:SidebarSpaces 2026-08-27:
+       * The small New Space / Edit Space popup. A Space belongs to exactly one
+       * gxserver, so the launcher names the sidebar section it was opened from:
+       * `sectionKey` is the sidebar's own key ("local" or "remote:<machineId>")
+       * and `remoteMachineId` is set only for a remote section, which is what
+       * the host needs to route the resulting `updateSidebarSpaces` write.
+       *
+       * `mode: 'create'` may carry one membership target when launched from a
+       * group/project Space menu, so the new Space contains that item
+       * immediately. `mode: 'edit'` carries the Space's id plus its current
+       * name/icon/color so the dialog opens on the live values without a round
+       * trip; the host owns the save and delete.
+       */
+      memberCollectionId?: string;
+      memberProjectId?: string;
+      mode: 'create' | 'edit';
+      modal: 'sidebarSpaceEditor';
+      remoteMachineId?: string;
+      sectionKey: string;
+      spaceColor?: string;
+      spaceIcon?: string;
+      spaceId?: string;
+      spaceName?: string;
       type: 'open';
     }
   | {

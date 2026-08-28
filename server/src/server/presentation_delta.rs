@@ -111,6 +111,35 @@ pub(crate) fn lock_presentation_event_sequence(
         .map_err(|_| DomainStateError::corrupt_state("Presentation event sequencer is poisoned."))
 }
 
+/*
+CDXC:SidebarSpaces 2026-08-27:
+Every collections mutation can invalidate the Space document: grouping a
+project strips that project's direct Space memberships, and a collection that
+just emptied stops existing, so every Space referencing it must let it go. The
+collections routes call this immediately after their own broadcast, still
+holding the event sequencer, so the repair is published in the same ordered run
+rather than waiting for the next client write. The Space broadcast takes its own
+revision so revision order stays identical to broadcast order.
+*/
+pub(crate) fn broadcast_pruned_sidebar_spaces(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    collections: &Value,
+) -> std::result::Result<(), DomainStateError> {
+    let Some(spaces) = prune_sidebar_spaces_for_collections(db, collections)? else {
+        return Ok(());
+    };
+    let revision = increment_presentation_revision(db)?;
+    state.event_hub.broadcast(json!({
+        "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+        "revision": revision,
+        "serverId": state.metadata.server_id.clone(),
+        "sidebarSpaces": spaces,
+        "type": "sidebarSpacesChanged",
+    }));
+    Ok(())
+}
+
 pub(crate) fn read_presentation_snapshot_in_sequence(
     state: &AppState,
     db: &rusqlite::Connection,

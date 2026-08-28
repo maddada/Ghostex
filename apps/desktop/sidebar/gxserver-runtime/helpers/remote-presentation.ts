@@ -21,6 +21,7 @@ import type {
   GxserverPresentationSnapshot,
   GxserverRecentProjectDomainState,
   GxserverSidebarProjectCollectionsState,
+  GxserverSidebarSpacesState,
   GxserverWorkspaceSessionGroupsState,
 } from '@/packages/shared/gxserver-protocol';
 import { createDefaultSidebarProjectDiffStats } from '@/packages/shared/project-diff-stats';
@@ -328,6 +329,17 @@ export function isSidebarProjectCollectionsState(value: unknown): value is Gxser
   );
 }
 
+export function isSidebarSpacesState(value: unknown): value is GxserverSidebarSpacesState {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as GxserverSidebarSpacesState).spaces === 'object' &&
+    !Array.isArray((value as GxserverSidebarSpacesState).spaces) &&
+    Array.isArray((value as GxserverSidebarSpacesState).order)
+  );
+}
+
 export function isGpuiSessionChatEventMessage(
   value: Record<string, unknown>
 ): value is Record<string, unknown> & GxserverSessionChatEvent {
@@ -439,6 +451,21 @@ export function normalizeGpuiSidebarRemoteEvent(value: unknown): GpuiSidebarRemo
         revision: payload.revision,
         sidebarProjectCollections: payload.sidebarProjectCollections,
         type: 'sidebarProjectCollectionsChanged',
+      },
+      remoteMachineId,
+      type: 'remoteGxserverPresentation',
+    };
+  }
+  if (
+    payload.type === 'sidebarSpacesChanged' &&
+    isSidebarSpacesState(payload.sidebarSpaces) &&
+    typeof payload.revision === 'number'
+  ) {
+    return {
+      payload: {
+        revision: payload.revision,
+        sidebarSpaces: payload.sidebarSpaces,
+        type: 'sidebarSpacesChanged',
       },
       remoteMachineId,
       type: 'remoteGxserverPresentation',

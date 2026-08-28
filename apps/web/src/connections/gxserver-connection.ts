@@ -179,6 +179,17 @@ export class GxserverConnection {
               });
             }
           },
+          onSidebarSpaces: (sidebarSpaces, revision) => {
+            if (generation !== this.generation) {
+              return;
+            }
+            const current = this.state.presentation;
+            if (current) {
+              this.updateState({
+                presentation: { ...current, revision, sidebarSpaces },
+              });
+            }
+          },
           onSnapshot: (snapshot) => {
             if (generation !== this.generation) {
               return;

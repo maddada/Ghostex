@@ -11,6 +11,7 @@ import { FindPromptsModalHost } from '../app/find-prompts-host';
 import { RecentProjectsModalHost } from '../app/recent-projects-modal-host';
 import { SessionNoteModalHost } from '../app/session-note-modal-host';
 import { SettingsModalHost } from '../app/settings-modal-host';
+import { SpaceEditorModalHost } from '../app/space-editor-modal-host';
 import { TitlebarActions } from '../app/titlebar-actions';
 import { MachinesControl } from '../machines/MachinesControl';
 import { WebSidebar } from '../sidebar-runtime/WebSidebar';
@@ -196,6 +197,7 @@ function GhostexWebShell() {
         <FindPromptsModalHost />
         <SessionNoteModalHost runtime={runtime} />
         <SettingsModalHost runtime={runtime} />
+        <SpaceEditorModalHost runtime={runtime} />
       </div>
     </TooltipProvider>
   );

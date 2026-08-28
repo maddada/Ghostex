@@ -28,6 +28,18 @@ type ProjectCollectionDragData = {
   kind: 'project-collection';
 };
 
+/*
+ * CDXC:SidebarSpaces 2026-08-27:
+ * A Space button dragged inside its section's Space row. `sectionKey` is part
+ * of the payload because the same row renders once per gxserver section and a
+ * Space may only be reordered among its own section's Spaces.
+ */
+type SpaceDragData = {
+  kind: 'space';
+  sectionKey: string;
+  spaceId: string;
+};
+
 export type SidebarSessionDropTarget =
   | {
       groupId: string;
@@ -52,7 +64,8 @@ export type SidebarDropData =
   | ProjectCollectionDragData
   | RemoteMachineDragData
   | CreateGroupDropData
-  | SessionDropTargetData;
+  | SessionDropTargetData
+  | SpaceDragData;
 
 const SIDEBAR_GROUP_SELECTOR = '[data-sidebar-group-id]';
 const SIDEBAR_SESSION_SELECTOR = '[data-sidebar-session-id]';
@@ -90,6 +103,19 @@ export function createProjectCollectionDragData(collectionId: string): ProjectCo
     collectionId,
     kind: 'project-collection',
   };
+}
+
+export function createSpaceDragData(sectionKey: string, spaceId: string): SpaceDragData {
+  return {
+    kind: 'space',
+    sectionKey,
+    spaceId,
+  };
+}
+
+export function getSidebarSpaceDragData(candidate: unknown): SpaceDragData | undefined {
+  const data = getSidebarDropData(candidate);
+  return data?.kind === 'space' ? data : undefined;
 }
 
 export function createSessionDropTargetData(dropTarget: SidebarSessionDropTarget): SessionDropTargetData {
@@ -151,6 +177,15 @@ export function getSidebarDropData(candidate: unknown): SidebarDropData | undefi
         ? {
             collectionId: data.collectionId,
             kind: 'project-collection',
+          }
+        : undefined;
+
+    case 'space':
+      return typeof data.sectionKey === 'string' && typeof data.spaceId === 'string'
+        ? {
+            kind: 'space',
+            sectionKey: data.sectionKey,
+            spaceId: data.spaceId,
           }
         : undefined;
 
