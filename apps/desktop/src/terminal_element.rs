@@ -2455,7 +2455,6 @@ pub(crate) fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
         "reloadSession" => "ctrl+shift+r",
         "promptEditor" => "ctrl+g",
         "sessionNote" => "cmd+alt+n",
-        "copyAgentSessionId" => "cmd+alt+c",
         "toggleChatView" => "alt+g",
         "stashPrompt" => "alt+s",
         "stashedPrompts" => "cmd+alt+s",

@@ -85,17 +85,8 @@ it. The chat footer renders that one glyph a size up; the bar does the same.
 const TERMINAL_AGENT_BAR_STASH_ICON_SIZE: f32 = 20.0;
 const TERMINAL_AGENT_BAR_MENU_ICON_SIZE: f32 = 14.0;
 const TERMINAL_AGENT_BAR_MENU_SHORTCUT_SIZE: f32 = 11.0;
-/// How far the bottom-bar tooltips are lifted above their trigger. Applied as a
-/// relative `top` inset, not a margin: the tooltip bubble sits inside a plain
-/// block `div`, where block layout collapses child margins through the parent,
-/// so a margin never reaches the overlay positioner's measured bounds and the
-/// tooltip lands flush on the bar. A negative inset shifts the painted bubble
-/// without depending on that measurement. 8px matches the chat composer's
-/// tooltip gap (`sideOffset = 8` in packages/core-ui/app-tooltip.tsx).
-const TERMINAL_AGENT_BAR_TOOLTIP_LIFT: f32 = 8.0;
-const TERMINAL_AGENT_BAR_NOTE_DOT_SIZE: f32 = 5.0;
-const TERMINAL_AGENT_BAR_BADGE_HEIGHT: f32 = 10.0;
-const TERMINAL_AGENT_BAR_BADGE_MIN_WIDTH: f32 = 10.0;
+const TERMINAL_AGENT_BAR_INDICATOR_SIZE: f32 = 12.0;
+const TERMINAL_AGENT_BAR_INDICATOR_BACKGROUND: u32 = 0xe0e0e0;
 const TERMINAL_AGENT_BAR_MENU_WIDTH: f32 = 200.0;
 /// Distance from the ⋯ button's top edge up to the menu's bottom edge.
 const TERMINAL_AGENT_BAR_MENU_GAP: f32 = 6.0;
@@ -195,6 +186,7 @@ impl TerminalAgentBarSurface {
 pub(crate) enum TerminalAgentBarAction {
     ToggleMenu,
     SessionNote,
+    StashPrompt,
     StashedPrompts,
     AttachPath,
     Maximize,
@@ -214,6 +206,7 @@ impl TerminalAgentBarAction {
         match self {
             Self::ToggleMenu => "more-actions",
             Self::SessionNote => "session-note",
+            Self::StashPrompt => "stash-prompt",
             Self::StashedPrompts => "stashed-prompts",
             Self::AttachPath => "attach-path",
             Self::Maximize => "maximize",
@@ -235,6 +228,7 @@ impl TerminalAgentBarAction {
         match self {
             Self::ToggleMenu => ("More actions", "toggleAgentActions"),
             Self::SessionNote => ("Session note", "sessionNote"),
+            Self::StashPrompt => ("Stash prompt", "stashPrompt"),
             Self::StashedPrompts => ("Saved prompts", "stashedPrompts"),
             Self::AttachPath => ("Attach a file or folder", "attachFileOrFolder"),
             Self::Maximize => (
@@ -249,7 +243,7 @@ impl TerminalAgentBarAction {
             Self::Sleep => ("Sleep", "sleepFocusedSession"),
             Self::Fork => ("Fork", "forkSession"),
             Self::FullReload => ("Full reload", "reloadSession"),
-            Self::ExportTranscript => ("Export transcript", "exportTranscript"),
+            Self::ExportTranscript => ("Handoff / Export", "exportTranscript"),
         }
     }
 
@@ -257,6 +251,7 @@ impl TerminalAgentBarAction {
         match self {
             Self::ToggleMenu => TERMINAL_AGENT_BAR_MORE_ACTIONS_ICON,
             Self::SessionNote => TERMINAL_AGENT_BAR_SESSION_NOTE_ICON,
+            Self::StashPrompt => TERMINAL_AGENT_BAR_STASHED_PROMPTS_ICON,
             Self::StashedPrompts => TERMINAL_AGENT_BAR_STASHED_PROMPTS_ICON,
             Self::AttachPath => TERMINAL_AGENT_BAR_ATTACH_PATH_ICON,
             Self::Maximize => TERMINAL_AGENT_BAR_MAXIMIZE_ICON,
@@ -274,7 +269,7 @@ impl TerminalAgentBarAction {
 
     fn icon_size(self) -> f32 {
         match self {
-            Self::StashedPrompts => TERMINAL_AGENT_BAR_STASH_ICON_SIZE,
+            Self::StashPrompt | Self::StashedPrompts => TERMINAL_AGENT_BAR_STASH_ICON_SIZE,
             Self::PromptEditor => 13.5,
             _ => TERMINAL_AGENT_BAR_ICON_SIZE,
         }
@@ -285,6 +280,7 @@ impl TerminalAgentBarAction {
 
         match self {
             Self::SessionNote => Some(Request::SessionNote),
+            Self::StashPrompt => Some(Request::StashPrompt),
             Self::StashedPrompts => Some(Request::StashedPrompts),
             Self::ToggleChatView => Some(Request::ToggleChatView),
             Self::DelayedActions => Some(Request::DelayedActions),
@@ -341,17 +337,6 @@ impl GhostexGpuiApp {
             .as_deref()?
             .iter()
             .find(|session| session.key == key)
-    }
-
-    pub(crate) fn agents_session_agent_session_id(
-        &self,
-        session_id: TerminalSessionId,
-    ) -> Option<&str> {
-        self.agents_sidebar_session_for_terminal(session_id)?
-            .agent_session_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|agent_session_id| !agent_session_id.is_empty())
     }
 
     /// The Agents-view pane bar. `None` for panes that are not showing an agent
@@ -460,7 +445,7 @@ impl GhostexGpuiApp {
                         .child(self.render_terminal_agent_bar_icon_button(
                             surface,
                             session_id,
-                            TerminalAgentBarAction::StashedPrompts,
+                            TerminalAgentBarAction::StashPrompt,
                             false,
                             stashed_prompt_count,
                             &suffix,
@@ -537,6 +522,16 @@ impl GhostexGpuiApp {
             tooltip_override: None,
         };
         match action {
+            TerminalAgentBarAction::StashPrompt => {
+                state.tooltip_override = Some(format!(
+                    "{}\n{}",
+                    terminal_element::terminal_overlay_tooltip("Stash prompt", "stashPrompt"),
+                    terminal_element::terminal_overlay_tooltip(
+                        "Right-click to open Saved prompts",
+                        "stashedPrompts",
+                    ),
+                ));
+            }
             TerminalAgentBarAction::VerboseMode => {
                 // Verbose mode chooses how much of a turn the chat transcript
                 // renders. A terminal shows the agent's own output verbatim, so
@@ -928,6 +923,8 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let state = self.terminal_agent_bar_action_state(surface, session_id, action, agent_name);
         let enabled = state.disabled_reason.is_none();
+        let right_click_action = (action == TerminalAgentBarAction::StashPrompt)
+            .then_some(TerminalAgentBarAction::StashedPrompts);
         terminal_agent_bar_button_base(action, &state, suffix)
             .size(px(TERMINAL_AGENT_BAR_BUTTON_SIZE))
             .when(enabled, |this| {
@@ -943,6 +940,22 @@ impl GhostexGpuiApp {
                         }),
                     )
             })
+            .when_some(right_click_action, |this, right_click_action| {
+                this.on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                        this.perform_terminal_agent_bar_action(
+                            surface,
+                            session_id,
+                            right_click_action,
+                            window,
+                            cx,
+                        );
+                    }),
+                )
+            })
             .child(terminal_agent_bar_icon(
                 state.icon_path,
                 action.icon_size(),
@@ -954,13 +967,18 @@ impl GhostexGpuiApp {
             ))
             .when(show_note_dot, |this| {
                 this.child(
-                    div()
+                    h_flex()
                         .absolute()
-                        .top(px(-1.0))
-                        .right(px(-1.0))
-                        .size(px(TERMINAL_AGENT_BAR_NOTE_DOT_SIZE))
+                        .top_0()
+                        .right_0()
+                        .size(px(TERMINAL_AGENT_BAR_INDICATOR_SIZE))
+                        .justify_center()
                         .rounded_full()
-                        .bg(rgb(TERMINAL_AGENT_BAR_ACCENT_BACKGROUND)),
+                        .bg(rgb(TERMINAL_AGENT_BAR_INDICATOR_BACKGROUND))
+                        .text_size(px(9.0))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(rgb(TERMINAL_AGENT_BAR_ACCENT_ICON_COLOR))
+                        .child("1"),
                 )
             })
             .when(stashed_prompt_count > 0, |this| {
@@ -1052,11 +1070,6 @@ fn terminal_agent_bar_session_id(
     cx: &mut gpui::Context<GhostexGpuiApp>,
 ) -> AnyElement {
     let group = format!("ghostex-gpui-terminal-agent-bar-id-group-{suffix}");
-    let copy_shortcut = terminal_element::terminal_overlay_hotkey_label("copyAgentSessionId");
-    let tooltip = match copy_shortcut {
-        Some(shortcut) => format!("{full_session_id}\nClick to copy ({shortcut})"),
-        None => format!("{full_session_id}\nClick to copy"),
-    };
     let copy_session_id = full_session_id.clone();
     h_flex()
         .id(format!("ghostex-gpui-terminal-agent-bar-id-{suffix}"))
@@ -1067,9 +1080,8 @@ fn terminal_agent_bar_session_id(
         .overflow_hidden()
         .cursor_default()
         .managed_tooltip(move |window, cx| {
-            Tooltip::new(tooltip.clone())
+            Tooltip::new("Click to copy")
                 .text_center()
-                .top(px(-TERMINAL_AGENT_BAR_TOOLTIP_LIFT))
                 .build(window, cx)
         })
         .on_mouse_down(
@@ -1191,11 +1203,7 @@ fn terminal_agent_bar_button_base(
         .justify_center()
         .rounded_full()
         .cursor_default()
-        .managed_tooltip(move |window, cx| {
-            Tooltip::new(tooltip.clone())
-                .top(px(-TERMINAL_AGENT_BAR_TOOLTIP_LIFT))
-                .build(window, cx)
-        })
+        .managed_tooltip(move |window, cx| Tooltip::new(tooltip.clone()).build(window, cx))
 }
 
 fn terminal_agent_bar_agent_name(session: &GpuiSidebarWorkspaceTabSession) -> Option<String> {
@@ -1217,21 +1225,15 @@ fn terminal_agent_bar_agent_name(session: &GpuiSidebarWorkspaceTabSession) -> Op
 }
 
 fn terminal_agent_bar_stashed_prompt_count_badge(count: u64) -> AnyElement {
-    let label = if count > 99 {
-        "99+".to_string()
-    } else {
-        count.to_string()
-    };
+    let label = count.min(9).to_string();
     h_flex()
         .absolute()
-        .top(px(-1.0))
-        .right(px(-1.0))
-        .h(px(TERMINAL_AGENT_BAR_BADGE_HEIGHT))
-        .min_w(px(TERMINAL_AGENT_BAR_BADGE_MIN_WIDTH))
-        .px(px(3.0))
+        .top_0()
+        .right_0()
+        .size(px(TERMINAL_AGENT_BAR_INDICATOR_SIZE))
         .justify_center()
         .rounded_full()
-        .bg(rgb(TERMINAL_AGENT_BAR_ACCENT_BACKGROUND))
+        .bg(rgb(TERMINAL_AGENT_BAR_INDICATOR_BACKGROUND))
         .text_size(px(9.0))
         .font_weight(FontWeight::BOLD)
         .text_color(rgb(TERMINAL_AGENT_BAR_ACCENT_ICON_COLOR))

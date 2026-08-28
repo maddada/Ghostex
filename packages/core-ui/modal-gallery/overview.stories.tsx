@@ -35,7 +35,7 @@ const MODAL_GROUPS: readonly ModalGroup[] = [
       'Missing Project Folder',
       'Portless Setup',
       'Previous Sessions',
-      'Recent Projects',
+      'Projects',
       'Remote gxserver Install',
       'Remote Project Picker',
       'Session Note',
@@ -47,7 +47,7 @@ const MODAL_GROUPS: readonly ModalGroup[] = [
   },
   {
     description: 'Source control review and project lifecycle dialogs.',
-    modals: ['Delete Worktree', 'Export Transcript', 'Git Commit', 'Git File Diff', 'Rename Worktree'],
+    modals: ['Delete Worktree', 'Handoff / Export', 'Git Commit', 'Git File Diff', 'Rename Worktree'],
     title: 'Git and export',
   },
   {
