@@ -7,7 +7,7 @@ import {
 import { createGxserverClient } from '../connections/gxserver-client';
 import { removeMachineConnection, upsertMachineConnection } from '../connections/connection-registry';
 import type { GhostexWebMachine } from '../connections/types';
-import { reconcileWebSessionChatDraftCache } from '../sidebar-runtime/draft-session-discard';
+import { reconcileWebSessionChatDraftCache } from '../sidebar-runtime/draft-session-cache';
 import { applyRemoteMachineOrder } from './machine-order';
 
 export const MACHINES_STORAGE_KEY = 'ghostexWeb.machines.v1';

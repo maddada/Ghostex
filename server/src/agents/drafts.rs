@@ -13,9 +13,16 @@ the agent. A promoted draft is byte-for-byte an ordinary session; there is no
 "was a draft" state to reason about anywhere downstream.
 
 This module owns the marker, the promotion choke point, the draft-derived
-display title, the agent list the composer's "Agents" section renders, the
-agent switch itself, and the boot-time sweep that discards drafts nobody typed
-into. Everything else in the daemon asks here rather than testing the key.
+display title, the agent list the composer's "Agents" section renders, and the
+agent switch itself. Everything else in the daemon asks here rather than
+testing the key.
+
+CDXC:DraftSessions 2026-08-29 (drafts are durable):
+A draft is never thrown away on its own. It survives navigating to another
+session, sleeping, and daemon restarts, whether or not anything has been typed
+into it, and leaves the sidebar by exactly two routes: the user deletes it, or
+it is promoted. There is no navigate-away discard and no boot-time sweep of
+empty drafts any more — an empty draft is a session the user made on purpose.
 */
 
 use std::path::{Path, PathBuf};
@@ -169,10 +176,10 @@ pub(crate) fn arm_draft_launch_activity_suppression(
 
 /*
 Kills a draft's background agent CLI, including the macOS launchd job
-`kill_zmx_session` cleans up. Used on both paths that DELETE a draft row — the
-client's navigate-away discard through `/api/removeSession` and the boot sweep —
-because a removed row is the last thing pointing at that daemon: miss it and the
-CLI runs forever with nothing in the sidebar to stop it.
+`kill_zmx_session` cleans up. Runs when a draft row is DELETED (the user
+deleting it, through `/api/removeSession`), because that row is the last thing
+pointing at that daemon: miss it and the CLI runs forever with nothing in the
+sidebar to stop it.
 
 Deliberately unconditional rather than probe-then-kill. The row is being deleted
 either way, so the `unknown` provider state a kill of an already-dead daemon
@@ -198,9 +205,9 @@ CDXC:DraftSessions 2026-08-28 (stranded quick projects):
 `/api/createQuickAgentSession` creates a throwaway workspace before it creates
 the draft that lives in it: a project row marked `launchSettings.isQuick`, whose
 `path` is a real directory `create_quick_project_params` made under
-`~/ghostex/chats`. Discarding the draft therefore leaves TWO orphans behind, not
-one — an empty project row in the sidebar and a directory on disk — so every
-path that throws a draft away runs this afterwards.
+`~/ghostex/chats`. Deleting the draft therefore leaves TWO orphans behind, not
+one — an empty project row in the sidebar and a directory on disk — so the
+removal path runs this afterwards.
 
 The directory delete is the destructive part of the feature, so it is guarded
 four ways and every guard must pass:
@@ -341,102 +348,6 @@ fn log_quick_project_directory_kept(project_id: &str, reason: &str, detail: &str
         error: Some(reason.to_string()),
         details: Some(json!({ "detail": detail, "projectId": project_id })),
     });
-}
-
-/*
-CDXC:DraftSessions 2026-08-28 (discard revalidation):
-`reason` on `/api/removeSession`, and the server-side recheck behind it. Mirrors
-`DISCARD_EMPTY_DRAFT_SESSION_REASON` in `packages/shared/draft-sessions.ts`.
-
-The navigate-away discard is necessarily client-side — only the client knows the
-user just left the session — but the client's answer is computed from a
-presentation snapshot that can be one delta out of date, and the race that opens
-is destructive. The user types a prompt and presses Enter without ever blurring
-the composer, so the synced draft row is never written; the send succeeds and
-gxserver promotes the session; the user clicks another row before the promotion
-delta lands, so the client still sees `isDraft` with no draft-derived title and
-fires the discard. That request would have DELETED a live session with the
-user's first prompt in flight, and because the row is no longer a draft
-`kill_draft_session_provider` would have declined to kill it — orphaning the
-running CLI as well.
-
-So a discard is a REQUEST, not an instruction: the daemon re-derives both halves
-of the predicate from its own current state and refuses if either has moved. A
-plain removal (a user deleting a session on purpose) carries no reason and is
-untouched by any of this.
-*/
-pub(crate) const DISCARD_EMPTY_DRAFT_SESSION_REASON: &str = "discardEmptyDraft";
-
-pub(crate) fn is_empty_draft_discard_request(params: &Map<String, Value>) -> bool {
-    read_text(params, "reason").as_deref() == Some(DISCARD_EMPTY_DRAFT_SESSION_REASON)
-}
-
-/// Whether this session is, right now, exactly what a navigate-away discard
-/// claims it is: still a draft, and with no text in the synced composer row.
-///
-/// A FAILED draft read declines, for the same reason the boot sweep skips on
-/// one: an unreadable answer is not evidence that nobody typed anything, and
-/// this decision deletes a session.
-fn session_is_discardable_empty_draft(db: &Connection, session: &Value) -> bool {
-    if !session_is_draft(session) {
-        return false;
-    }
-    let (Some(project_id), Some(session_id)) = (
-        read_text_value(session, "projectId"),
-        read_text_value(session, "sessionId"),
-    ) else {
-        return false;
-    };
-    matches!(
-        crate::session_chat_queue::read_session_chat_draft_content(db, &project_id, &session_id),
-        Ok(None)
-    )
-}
-
-/*
-The decline response, or `None` to let the removal proceed.
-
-It is a SUCCESS, not an error: the client did nothing wrong, it merely raced the
-daemon, and a rejected promise would leave the desktop sidebar sitting on the
-optimistic `removePresentationSession` it performed before the call. The payload
-therefore carries everything that client needs to put the row back — an explicit
-`removed: false`, a `declined` code, and the session row as it stands now — and
-the same fields are published for the successful case so a discard never has to
-infer its outcome from an absent key.
-*/
-pub(crate) fn decline_empty_draft_discard(
-    repository: &DomainRepository<'_>,
-    db: &Connection,
-    params: &Map<String, Value>,
-) -> Result<Option<Value>, DomainStateError> {
-    if !is_empty_draft_discard_request(params) {
-        return Ok(None);
-    }
-    let project_id = params
-        .get("projectId")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let session_id = params
-        .get("sessionId")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    // A session that is already gone falls through to `remove_session`, which
-    // answers with the same not-found error it always has.
-    let Some(session) = repository.get_session(project_id, session_id)? else {
-        return Ok(None);
-    };
-    if session_is_discardable_empty_draft(db, &session) {
-        return Ok(None);
-    }
-    Ok(Some(json!({
-        "declined": if session_is_draft(&session) {
-            "draftHasText"
-        } else {
-            "sessionIsNotADraft"
-        },
-        "removed": false,
-        "session": session,
-    })))
 }
 
 /*
@@ -974,67 +885,4 @@ fn next_draft_agent_title(
     );
     (current_title == previous_default && current_title != next_title)
         .then(|| next_title.to_string())
-}
-
-/*
-CDXC:DraftSessions 2026-08-28 (empty-draft discard):
-Drafts nobody typed into are disposable, and a daemon that was killed while one
-was open never got the client's navigate-away discard. Sweep them ONCE at boot,
-before the title observers and chat followers below subscribe to sessions, so a
-crash cannot accumulate abandoned rows and their zmx daemons across restarts.
-
-"Empty" is the SYNCED draft content: the same cross-device text the sidebar
-title is derived from. A draft with any text is permanent until it is sent or
-deleted, which is the promise the composer makes when it stops warning about
-losing work.
-*/
-pub(crate) fn sweep_empty_draft_sessions(
-    repository: &DomainRepository<'_>,
-    db: &Connection,
-    home_dir: &Path,
-) -> Result<Vec<(String, String)>, DomainStateError> {
-    let mut removed = Vec::new();
-    let mut targets = Vec::new();
-    for session in repository.list_sessions(None)? {
-        if !session_is_draft(&session) {
-            continue;
-        }
-        let (Some(project_id), Some(session_id)) = (
-            read_text_value(&session, "projectId"),
-            read_text_value(&session, "sessionId"),
-        ) else {
-            continue;
-        };
-        /*
-        Only a CONFIRMED-empty draft is disposable. A read that failed says
-        nothing about whether the user typed into this session, and deleting on
-        that answer would destroy their unsent prompt — so an error skips the
-        row and leaves it for the next boot, exactly like a draft with text.
-        */
-        match crate::session_chat_queue::read_session_chat_draft_content(
-            db,
-            &project_id,
-            &session_id,
-        ) {
-            Ok(None) => targets.push((project_id, session_id, session)),
-            Ok(Some(_)) | Err(_) => continue,
-        }
-    }
-    for (project_id, session_id, session) in targets {
-        kill_draft_session_provider(&session);
-        let mut remove_params = Map::new();
-        remove_params.insert("projectId".to_string(), json!(project_id.clone()));
-        remove_params.insert("sessionId".to_string(), json!(session_id.clone()));
-        if repository.remove_session(&remove_params).is_ok() {
-            /*
-            A quick chat's workspace exists only to hold that one draft, so
-            sweeping the draft has to sweep the workspace too or the sidebar
-            fills with empty "Chat …" projects across restarts. A no-op unless
-            this project is a quick one that now has no sessions at all.
-            */
-            let _ = discard_stranded_quick_project(repository, home_dir, &project_id);
-            removed.push((project_id, session_id));
-        }
-    }
-    Ok(removed)
 }

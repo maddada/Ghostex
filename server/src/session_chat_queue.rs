@@ -735,16 +735,15 @@ fn set_draft(
 /*
 CDXC:DraftSessions 2026-08-28:
 The synced composer draft on its own, without the queue rows `read_snapshot`
-carries. Draft sessions read it for two things that must never pay for the
-queue: the sidebar display title (published on every presentation delta) and
-the boot sweep's "did anybody type into this?" test. A blank draft answers
-`Ok(None)`, exactly like a missing row — a draft cleared to empty text and a
-draft that never existed are the same state everywhere in the feature.
+carries. Draft sessions read it for the sidebar display title, published on
+every presentation delta, which must never pay for the queue. A blank draft
+answers `Ok(None)`, exactly like a missing row — a draft cleared to empty text
+and a draft that never existed are the same state everywhere in the feature.
 
-A FAILED read is deliberately NOT folded into `None`. The boot sweep deletes
-sessions on the strength of this answer, so a transient SQLite error that read
-as "nobody typed anything" would destroy a user's unsent prompt. Callers that
-are only decorating a projection may discard the error; the sweep must not.
+A FAILED read is deliberately NOT folded into `None`: "nobody typed anything"
+is a claim about the user's unsent text, and a transient SQLite error is not
+evidence for it. Callers that are only decorating a projection may discard the
+error.
 */
 pub fn read_session_chat_draft_content(
     db: &Connection,

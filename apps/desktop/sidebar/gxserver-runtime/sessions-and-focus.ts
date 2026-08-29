@@ -1132,14 +1132,6 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     if (!normalizedProjectId || !normalizedSessionId) {
       return;
     }
-    /*
-    CDXC:DraftSessions 2026-08-28:
-    Captured before the write below, because this method IS the moment the user
-    navigates away from whatever was focused. Only the two focus WRITERS are
-    hooked; `dropLocalPresentationSessionFocus` is not, because that one fires
-    when gxserver goes away, which is a disconnect, not a decision to leave.
-    */
-    const previousFocusedSessionId = this.focusedSessionId;
     this.activeProjectId = normalizedProjectId;
     this.activeGroupId =
       targetGroupId ??
@@ -1152,7 +1144,6 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       ? new Set(exactVisibleSessionIds)
       : this.nextVisibleSessionIdsForLocalFocus(normalizedProjectId, normalizedSessionId);
     this.postGxserverPresentationFocusState();
-    this.discardEmptyDraftAfterFocusAway(previousFocusedSessionId);
   },
 
   nextVisibleSessionIdsForLocalFocus(this: GpuiSidebarRuntime, projectId: string, sessionId: string): Set<string> {
@@ -1211,8 +1202,6 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     if (!machineId || !projectId || !sessionId) {
       return;
     }
-    /* CDXC:DraftSessions 2026-08-28: see `setLocalPresentationSessionFocus`. */
-    const previousFocusedSessionId = this.focusedSessionId;
     const scopedSessionId = createGpuiRemotePresentationSessionId(machineId, projectId, sessionId);
     const project = this.remotePresentations
       .get(machineId)
@@ -1225,7 +1214,6 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this.focusedSessionId = scopedSessionId;
     this.visibleSessionIds = new Set([scopedSessionId]);
     this.postGxserverPresentationFocusState();
-    this.discardEmptyDraftAfterFocusAway(previousFocusedSessionId);
   },
 
   dropLocalPresentationSessionFocus(this: GpuiSidebarRuntime): void {

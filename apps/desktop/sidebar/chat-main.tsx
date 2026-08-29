@@ -61,7 +61,6 @@ import {
   type SessionChatHostComposerBridge,
   type SessionChatHostLinks,
 } from '@/packages/core-ui/chat/session-chat-view';
-import { markSessionChatComposerOpened } from '@/packages/core-ui/chat/session-chat-draft-storage';
 import type { SessionChatBarExtension } from '@/packages/core-ui/chat/session-chat-extension-panel';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 
@@ -1017,17 +1016,6 @@ function GpuiSessionChatPage({
   transport,
 }: GpuiSessionChatPageProps) {
   const sessionKey = `${projectId}:${sessionId}`;
-  /*
-  CDXC:DraftSessionsDiscardOwnership 2026-08-28:
-  Vouch for this session's composer cache. The sidebar page's empty-draft
-  discard only removes drafts whose composer THIS installation has hosted,
-  because for any other draft an empty cache says nothing about text sitting
-  unsynced in another client. The sidebar is a different CEF page, so the mark
-  goes through the shared store rather than process memory.
-  */
-  useEffect(() => {
-    markSessionChatComposerOpened(sessionKey);
-  }, [sessionKey]);
   const [sessionTitle, setSessionTitle] = useState('');
   const [extensions, setExtensions] = useState<GhostexInstalledExtension[]>([]);
   const extensionsRef = useRef<GhostexInstalledExtension[]>([]);

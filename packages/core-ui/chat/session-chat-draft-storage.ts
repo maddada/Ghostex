@@ -175,66 +175,6 @@ export function reconcileSessionChatDraftsFromServer(
 }
 
 /*
- * CDXC:DraftSessionsDiscardOwnership 2026-08-28:
- * Which sessions' composers THIS installation has actually mounted. An empty
- * `readStoredSessionChatDraft` answers two very different questions with the
- * same empty string — "the user typed nothing" and "this client has never shown
- * this composer" — and the empty-draft discard may only act on the first. This
- * ring is what tells them apart.
- *
- * It lives in the shared store rather than in memory because on desktop the
- * composer and the sidebar are DIFFERENT CEF pages: an in-process set in the
- * sidebar could never see a chat page mount. localStorage is shared by the
- * bundled pages and persists across app restarts, which is also correct here —
- * the draft cache it vouches for persists exactly as long.
- *
- * One bounded key, not one key per session, so it can never accumulate: the
- * oldest entries fall off after `MAX_OPENED_COMPOSER_SESSION_KEYS`. Falling off
- * only ever makes the discard MORE conservative (an unvouched draft is kept for
- * gxserver's own sweep), so the cap needs no separate expiry.
- */
-const OPENED_COMPOSER_STORAGE_KEY = 'ghostex.sessionChat.openedComposers';
-
-const MAX_OPENED_COMPOSER_SESSION_KEYS = 200;
-
-function readOpenedComposerSessionKeys(): string[] {
-  try {
-    const raw = draftStorage()?.getItem(OPENED_COMPOSER_STORAGE_KEY);
-    if (!raw) {
-      return [];
-    }
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Record that this client mounted `sessionKey`'s chat composer. */
-export function markSessionChatComposerOpened(sessionKey: string | undefined): void {
-  if (!sessionKey) {
-    return;
-  }
-  try {
-    const existing = readOpenedComposerSessionKeys();
-    // Most-recent-first, so the cap drops the least recently opened session.
-    const next = [sessionKey, ...existing.filter((entry) => entry !== sessionKey)].slice(
-      0,
-      MAX_OPENED_COMPOSER_SESSION_KEYS
-    );
-    draftStorage()?.setItem(OPENED_COMPOSER_STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Storage quota/private-mode failures must not break the composer. The
-    // discard simply stays conservative for this session.
-  }
-}
-
-/** Whether this client has ever mounted `sessionKey`'s chat composer. */
-export function hasSessionChatComposerOpened(sessionKey: string | undefined): boolean {
-  return sessionKey !== undefined && readOpenedComposerSessionKeys().includes(sessionKey);
-}
-
-/*
  * The sessionKey is `<projectId>:<sessionId>` on desktop and
  * `<machineId>:<projectId>:<sessionId>` on web, so the last two `:`-separated
  * segments are the ids in both shapes.

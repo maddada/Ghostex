@@ -430,7 +430,7 @@ pub(crate) fn insert_draft_title_session_projection(
         return;
     }
     // A failed read here only costs this delta its draft title; the next one
-    // republishes it. Unlike the boot sweep, nothing is destroyed by guessing.
+    // republishes it. Nothing is destroyed by guessing.
     let Ok(Some(content)) =
         crate::session_chat_queue::read_session_chat_draft_content(db, project_id, session_id)
     else {

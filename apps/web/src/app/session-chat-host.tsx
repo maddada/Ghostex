@@ -29,7 +29,6 @@ import '@/packages/core-ui/styles.css';
 import { rpcForMachine } from '../connections/connection-registry';
 import type { GhostexWebFocusSessionDetail } from '../sidebar-runtime/sidebar-runtime';
 import { createSidebarSessionId } from '../sidebar-runtime/sidebar-ids';
-import { recordWebSessionChatSurfaceOpened } from '../sidebar-runtime/draft-session-discard';
 import type { WorkspaceSession } from '../workspace/workspace-model';
 import { createSessionChatTransport } from '../chat/session-chat-transport';
 import type { ExportTranscriptSessionRef } from './action-events';
@@ -192,16 +191,6 @@ export function SessionChatHost({
     return () => window.removeEventListener(WEB_SETTINGS_CHANGED_EVENT, handleSettingsChanged);
   }, []);
   const sessionKey = `${session.machineId}:${session.projectId}:${session.sessionId}`;
-  /*
-  CDXC:DraftSessionsDiscardOwnership 2026-08-28:
-  Vouch for this session's composer cache. The sidebar's empty-draft discard
-  only removes drafts whose chat this browser session actually opened, because
-  for any other draft an empty cache here says nothing about text sitting
-  unsynced in the desktop app or on another device.
-  */
-  useEffect(() => {
-    recordWebSessionChatSurfaceOpened(sessionKey);
-  }, [sessionKey]);
   const transport = useMemo(
     () => createSessionChatTransport(session.machineId, session.projectId, session.sessionId),
     [session.machineId, session.projectId, session.sessionId]
