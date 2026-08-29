@@ -768,11 +768,7 @@ pub(crate) fn titlebar_popup_extension_menu_row(
     } else {
         "titlebar/pin.svg"
     };
-    let pin_icon_color = if pinned {
-        titlebar_active_text_color()
-    } else {
-        titlebar_icon_color()
-    };
+    let pin_icon_color = rgb(0xb9b9b9).into();
     let pin_tooltip = if pinned { "Unpin" } else { "Pin" };
     let placement_label = extension.launch_placement_label();
 

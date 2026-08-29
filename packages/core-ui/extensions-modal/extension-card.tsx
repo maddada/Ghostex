@@ -1,17 +1,36 @@
+import type { CSSProperties } from 'react';
 import { IconArrowUpRight, IconPuzzle, IconTrash } from '@tabler/icons-react';
 import { Button } from '@/packages/components/ui/button';
 import { Switch } from '@/packages/components/ui/switch';
 import { cn } from '@/packages/components/utils';
 import type { GhostexExtensionCatalogEntry, GhostexInstalledExtension } from '@/packages/shared/ghostex-extensions';
 
+/** Same chrome gray as titlebar extension glyphs (`normalize_extension_titlebar_svg`). */
+const EXTENSION_ICON_COLOR = '#b9b9b9';
+
+function extensionIconMaskStyle(src: string): CSSProperties {
+  const maskImage = `url(${JSON.stringify(src)})`;
+  return {
+    backgroundColor: EXTENSION_ICON_COLOR,
+    maskImage,
+    maskPosition: 'center',
+    maskRepeat: 'no-repeat',
+    maskSize: 'contain',
+    WebkitMaskImage: maskImage,
+    WebkitMaskPosition: 'center',
+    WebkitMaskRepeat: 'no-repeat',
+    WebkitMaskSize: 'contain',
+  };
+}
+
 export function ExtensionIcon({ className, src, title }: { className?: string; src?: string; title: string }) {
   const iconClassName = cn(
-    'extensions-icon flex size-9 shrink-0 items-center justify-center p-1.5 text-muted-foreground',
+    'extensions-icon flex size-9 shrink-0 items-center justify-center p-1.5 text-[#b9b9b9]',
     className
   );
   return src ? (
-    <span className={iconClassName}>
-      <img alt={`${title} icon`} className='size-full object-contain' src={src} />
+    <span aria-label={`${title} icon`} className={iconClassName} role='img'>
+      <span aria-hidden='true' className='size-full' style={extensionIconMaskStyle(src)} />
     </span>
   ) : (
     <span aria-label={`${title} icon`} className={iconClassName} role='img'>
