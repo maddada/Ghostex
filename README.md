@@ -106,9 +106,9 @@ You can't click on images in the terminal, editing long prompts really sucks, an
 The Solution is here! Render the same session as a CLI or a Chat GUI.
 Toggle between the two with a single hotkey or click!
 
-<img width="500" alt="48380" src="https://github.com/user-attachments/assets/fc050d47-1627-4d6c-9f17-2175b6412ab4" />
+<img width="400" alt="48380" src="https://github.com/user-attachments/assets/fc050d47-1627-4d6c-9f17-2175b6412ab4" />
 
-<img width="500" alt="48382" src="https://github.com/user-attachments/assets/6db91470-b859-4a09-873b-45e0947560ac" />
+<img width="400" alt="48382" src="https://github.com/user-attachments/assets/6db91470-b859-4a09-873b-45e0947560ac" />
 
 ### Rich Prompt Editor with Ctrl+G
 
