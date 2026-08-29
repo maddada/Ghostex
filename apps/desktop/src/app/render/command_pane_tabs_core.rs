@@ -376,7 +376,7 @@ impl GhostexGpuiApp {
                             .overflow_hidden()
                             .track_scroll(&scroll_handle)
                             .managed_tooltip_with_placement(
-                                ManagedTooltipPlacement::Below,
+                                ManagedTooltipPlacement::Right,
                                 |window, cx| {
                                     Tooltip::new(COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP)
                                         .build(window, cx)
