@@ -99,14 +99,28 @@ pub(crate) fn to_agent_resume_input(
     session: &Value,
     settings: &Map<String, Value>,
 ) -> AgentResumeInput {
-    let agent_id = read_text_value(session, "agentId");
+    let configured_agent_id = read_text_value(session, "agentId");
     let runtime_settings = object_field(session, "runtimeSettings");
     let launch_settings = object_field(session, "launchSettings");
     let agent_config = resolve_project_agent_config(
         project,
-        agent_id.as_deref().unwrap_or(""),
+        configured_agent_id.as_deref().unwrap_or(""),
         Some(&launch_settings),
     );
+    /*
+    CDXC:AgentResume 2026-08-29:
+    A `custom-…` agent id names a sidebar CONFIGURATION; the CLI family it runs
+    is declared by its icon — the same contract available_draft_agents,
+    session_chat_composer_agent_id, and launch_agent_mismatch read. Resume
+    planning must speak the family: with the raw configuration id,
+    `restorable_agent_id` matched nothing, `build_agent_resume_plan` emitted no
+    startup text, and a custom-agent session whose daemon was gone could never
+    be woken, restored, or forked — clicking it only flashed the row in the
+    sidebar. The configured command (stored `agentCommand` or the custom
+    config's `command`) still wins below, so the family only selects the resume
+    grammar, not the binary.
+    */
+    let agent_id = resume_agent_family_id(configured_agent_id, &agent_config, &launch_settings);
     let stored_agent_command = read_text_from_map(&runtime_settings, "agentCommand");
     let configured_agent_command = read_text_from_map(&agent_config, "command");
     let base_command = stored_agent_command
@@ -461,6 +475,34 @@ pub(crate) fn build_agent_resume_fallback_command(input: &AgentResumeInput) -> O
         }
         _ => None,
     }
+}
+
+/// The CLI-family agent id resume planning keys off. A built-in id passes
+/// through; a `custom-…` configuration id resolves to the family its icon
+/// declares (custom config icon first, then the session's launch icon), using
+/// the same icon-to-id mapping as accept-all resolution. An unresolvable id is
+/// returned unchanged so it still fails `restorable_agent_id` explicitly.
+fn resume_agent_family_id(
+    agent_id: Option<String>,
+    agent_config: &Map<String, Value>,
+    launch_settings: &Map<String, Value>,
+) -> Option<String> {
+    let configured = agent_id?;
+    if !configured
+        .trim()
+        .to_ascii_lowercase()
+        .starts_with("custom-")
+    {
+        return Some(configured);
+    }
+    read_text_from_map(agent_config, "icon")
+        .or_else(|| read_text_from_map(launch_settings, "icon"))
+        .and_then(|icon| {
+            default_agent_icon_to_id(&icon)
+                .map(str::to_string)
+                .or_else(|| normalize_agent_id(Some(&icon)))
+        })
+        .or(Some(configured))
 }
 
 pub(crate) fn restorable_agent_id(value: Option<&str>) -> Option<&str> {
