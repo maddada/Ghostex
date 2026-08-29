@@ -52,7 +52,6 @@ import {
   type SidebarSessionReference,
 } from './sidebar-ids';
 import { setActiveSidebarProject } from './active-project-store';
-import { discardEmptyDraftAfterFocusAway } from './draft-session-discard';
 import type { NavigationHistoryEntry } from '@/packages/shared/navigation-history/navigation-history-contract';
 import { NAVIGATION_HISTORY_SCOPE_WEB } from '@/packages/shared/navigation-history/navigation-history-contract';
 import {
@@ -76,6 +75,18 @@ type MachineProjectMetadata = {
 
 type MachineRecentProjects = {
   projects: readonly SidebarRecentProject[];
+  signature: string;
+};
+
+/*
+ * CDXC:ProjectActions 2026-08-29:
+ * Quick Actions are stored per gxserver machine, so the HUD is read once per
+ * connected machine instead of once for the active target. Project rows on
+ * every machine need their own machine's `commandsByProject`, and Global
+ * Actions belong to the daemon that stores them.
+ */
+type MachineSidebarHud = {
+  hud: GxserverSidebarHudResponse;
   signature: string;
 };
 
@@ -126,9 +137,9 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   let running = false;
   let unsubscribeConnections: (() => void) | undefined;
   let uninstallNavigationHistoryHotkeys: (() => void) | undefined;
-  let hudRequestKey = '';
-  let remoteHud: GxserverSidebarHudResponse | undefined;
   let settings = readWebSettings();
+  const hudByMachineId = new Map<string, MachineSidebarHud>();
+  const hudRequestSignatures = new Map<string, string>();
   const projectMetadataByMachineId = new Map<string, MachineProjectMetadata>();
   const projectMetadataRequestSignatures = new Map<string, string>();
   const recentProjectsByMachineId = new Map<string, MachineRecentProjects>();
@@ -172,7 +183,6 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       return false;
     }
     activeTarget = projectTarget;
-    hudRequestKey = '';
     publish();
     return true;
   };
@@ -214,7 +224,16 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         title: group.title,
       })),
     });
-    const hud = createWebSidebarHud(groups, focusedTarget, remoteHud, states, recentProjectsByMachineId, settings);
+    const hudTarget = activeTarget ?? primaryProjectTarget(states);
+    const hud = createWebSidebarHud(
+      groups,
+      focusedTarget,
+      hudTarget,
+      hudByMachineId,
+      states,
+      recentProjectsByMachineId,
+      settings
+    );
     const localSidebarProjectCollections = states.find((state) => state.machine.machineId === 'local')?.presentation
       ?.sidebarProjectCollections;
     const remoteSidebarProjectCollectionsByMachineId = Object.fromEntries(
@@ -249,7 +268,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     publishMachineStatuses(states, messageSource);
     refreshProjectMetadata(states);
     refreshRecentProjects(states);
-    refreshHud(activeTarget ?? primaryProjectTarget(states));
+    refreshHud(states, hudTarget);
   };
 
   const applyRecentProjects = (
@@ -350,30 +369,58 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     }
   };
 
-  const refreshHud = (target: SidebarProjectReference | undefined): void => {
-    if (!target) {
-      return;
+  /*
+   * CDXC:ProjectActions 2026-08-29:
+   * One HUD read per connected machine, asking for `includeAllProjectCommands`
+   * so every project row can render its own project's Actions instead of only
+   * the active project's. The active machine also carries `activeProjectId`,
+   * which is what scopes the flat `commands` list Settings and the titlebar
+   * read.
+   */
+  const refreshHud = (
+    states: readonly MachineConnectionState[],
+    hudTarget: SidebarProjectReference | undefined
+  ): void => {
+    const connectedMachineIds = new Set(states.map((state) => state.machine.machineId));
+    for (const machineId of hudByMachineId.keys()) {
+      if (!connectedMachineIds.has(machineId)) {
+        hudByMachineId.delete(machineId);
+        hudRequestSignatures.delete(machineId);
+      }
     }
-    const requestKey = `${target.machineId}\u0000${target.projectId}`;
-    if (requestKey === hudRequestKey) {
-      return;
-    }
-    hudRequestKey = requestKey;
-    void rpcForMachine<GxserverSidebarHudResponse>(target.machineId, '/api/readSidebarHud', {
-      activeProjectId: target.projectId,
-    })
-      .then((hud) => {
-        if (!running || hudRequestKey !== requestKey) {
-          return;
-        }
-        remoteHud = hud;
-        publish();
+    for (const state of states) {
+      if (state.status !== 'connected') {
+        continue;
+      }
+      const machineId = state.machine.machineId;
+      const activeProjectId = hudTarget?.machineId === machineId ? hudTarget.projectId : undefined;
+      const signature = createSidebarHudSignature(state, activeProjectId);
+      if (hudByMachineId.get(machineId)?.signature === signature || hudRequestSignatures.get(machineId) === signature) {
+        continue;
+      }
+      hudRequestSignatures.set(machineId, signature);
+      void rpcForMachine<GxserverSidebarHudResponse>(machineId, '/api/readSidebarHud', {
+        ...(activeProjectId ? { activeProjectId } : {}),
+        includeAllProjectCommands: true,
       })
-      .catch(() => {
-        if (hudRequestKey === requestKey) {
-          remoteHud = undefined;
-        }
-      });
+        .then((hud) => {
+          if (!running || hudRequestSignatures.get(machineId) !== signature) {
+            return;
+          }
+          hudRequestSignatures.delete(machineId);
+          hudByMachineId.set(machineId, { hud, signature });
+          publish();
+        })
+        .catch((error: unknown) => {
+          if (hudRequestSignatures.get(machineId) === signature) {
+            hudRequestSignatures.delete(machineId);
+          }
+          debugLog('sidebarHudError', {
+            error: error instanceof Error ? error.message : String(error),
+            machineId,
+          });
+        });
+    }
   };
 
   const focusSession = async (sessionId: string): Promise<void> => {
@@ -381,15 +428,8 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     if (!target || !presentationHasSession(getConnectionStates(), target)) {
       return;
     }
-    /*
-    CDXC:DraftSessions 2026-08-28:
-    Captured before the write below: this is the moment the user navigates away
-    from whatever was focused, and an empty draft left behind is discarded.
-    */
-    const previousFocusedTarget = focusedTarget;
     activeTarget = target;
     focusedTarget = target;
-    discardEmptyDraftAfterFocusAway(previousFocusedTarget, target, getConnectionStates());
     const session = findPresentationSession(getConnectionStates(), target);
     if (session?.activity === 'attention') {
       void rpcForMachine(target.machineId, '/api/updateAgentActivity', {
@@ -446,7 +486,6 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       { kind }
     );
     activeTarget = { machineId, projectId: project.projectId };
-    hudRequestKey = '';
     if (kind === 'agent' && agentId) {
       await createAgentSession(agentId);
       return;
@@ -473,7 +512,6 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         const target = parseSidebarGroupId(message.groupId);
         if (target) {
           activeTarget = target;
-          hudRequestKey = '';
           publish();
         }
         return;
@@ -940,13 +978,8 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       return;
     }
     pendingActiveSessionContext = undefined;
-    /* CDXC:DraftSessions 2026-08-28: see `focusSession`. This is the same move
-       arriving from the workspace (a tab click, a tab close, a pane switch)
-       instead of from the sidebar. */
-    const previousFocusedTarget = focusedTarget;
     activeTarget = { machineId: target.machineId, projectId: target.projectId };
     focusedTarget = target;
-    discardEmptyDraftAfterFocusAway(previousFocusedTarget, target, getConnectionStates());
     publish();
   };
 
@@ -1126,7 +1159,8 @@ function isChatDomainProject(project: GxserverProjectDomainState): boolean {
 function createWebSidebarHud(
   groups: readonly SidebarSessionGroup[],
   focusedTarget: SidebarSessionReference | undefined,
-  remoteHud: GxserverSidebarHudResponse | undefined,
+  hudTarget: SidebarProjectReference | undefined,
+  hudByMachineId: ReadonlyMap<string, MachineSidebarHud>,
   states: readonly MachineConnectionState[],
   recentProjectsByMachineId: ReadonlyMap<string, MachineRecentProjects>,
   settings: ghostexSettings
@@ -1139,23 +1173,88 @@ function createWebSidebarHud(
   const focusedSession = groups
     .flatMap((group) => group.sessions)
     .find((session) => session.sessionId === focusedSessionId);
+  /*
+   * CDXC:ProjectActions 2026-08-29:
+   * Agent launchers and the flat `commands` list are the active project's, so
+   * they come from the machine that project lives on. Everything keyed by
+   * project or machine is merged across every connected machine below.
+   */
+  const activeMachineHud = hudTarget ? hudByMachineId.get(hudTarget.machineId)?.hud : undefined;
   return {
     ...hud,
     agents:
-      remoteHud?.agents.map((agent) => ({
+      activeMachineHud?.agents.map((agent) => ({
         ...agent,
         icon: resolveAgentIcon(agent.icon ?? agent.agentId),
       })) ?? hud.agents,
     appIconPickerUnavailable: true,
-    commands: (remoteHud?.commands as SidebarHudState['commands']) ?? hud.commands,
+    commands: (activeMachineHud?.commands as SidebarHudState['commands']) ?? hud.commands,
+    commandsByProject: createWebCommandsByProject(hudByMachineId),
     focusedSessionTitle: focusedSession?.displayTitle ?? focusedSession?.primaryTitle ?? focusedSession?.alias,
+    globalCommands: hudByMachineId.get('local')?.hud.globalCommands as SidebarHudState['globalCommands'],
     recentProjects: states.flatMap((state) => recentProjectsByMachineId.get(state.machine.machineId)?.projects ?? []),
+    remoteGlobalCommandsByMachineId: createWebRemoteGlobalCommands(hudByMachineId),
     settings: {
       ...settings,
       remoteMachines: createRemoteMachineSettings(states),
     },
     visibleSlotLabels: visibleSessions.map((session) => session.shortcutLabel),
   };
+}
+
+/*
+ * CDXC:ProjectActions 2026-08-29:
+ * gxserver keys `commandsByProject` by the raw project id on its own machine,
+ * while the sidebar keys project rows with `createSidebarProjectId` so two
+ * machines cannot collide. Re-key on the way in so a row's lookup hits its own
+ * machine's entry.
+ */
+function createWebCommandsByProject(
+  hudByMachineId: ReadonlyMap<string, MachineSidebarHud>
+): SidebarHudState['commandsByProject'] {
+  const commandsByProject: NonNullable<SidebarHudState['commandsByProject']> = {};
+  for (const [machineId, entry] of hudByMachineId) {
+    for (const [projectId, commands] of Object.entries(entry.hud.commandsByProject ?? {})) {
+      commandsByProject[createSidebarProjectId(machineId, projectId)] = commands as SidebarHudState['commands'];
+    }
+  }
+  return commandsByProject;
+}
+
+/*
+ * CDXC:GlobalActions 2026-08-29:
+ * Global Actions belong to the daemon that stores them, and the web app shows
+ * projects from several daemons at once. The local machine's list stays in the
+ * flat `globalCommands` field every host serves; each remote machine's list is
+ * carried beside it so remote rows render their own machine's Actions.
+ */
+function createWebRemoteGlobalCommands(
+  hudByMachineId: ReadonlyMap<string, MachineSidebarHud>
+): SidebarHudState['remoteGlobalCommandsByMachineId'] {
+  const remoteGlobalCommandsByMachineId: NonNullable<SidebarHudState['remoteGlobalCommandsByMachineId']> = {};
+  for (const [machineId, entry] of hudByMachineId) {
+    const globalCommands = entry.hud.globalCommands;
+    if (machineId !== 'local' && globalCommands) {
+      remoteGlobalCommandsByMachineId[machineId] = globalCommands as SidebarHudState['commands'];
+    }
+  }
+  return remoteGlobalCommandsByMachineId;
+}
+
+/*
+ * CDXC:ProjectActions 2026-08-29:
+ * Quick Actions live in project metadata, so a project row's `updatedAt` moves
+ * when one is saved, exactly like the `/api/listProjects` refresh above. Global
+ * Actions are not project metadata, so the daemon announces those separately
+ * and the connection records the revision it announced them at.
+ */
+function createSidebarHudSignature(state: MachineConnectionState, activeProjectId: string | undefined): string {
+  return [
+    state.status,
+    activeProjectId ?? '',
+    String(state.globalSidebarCommandsRevision ?? 0),
+    ...(state.presentation?.projects.map((project) => `${project.projectId}:${project.updatedAt}`) ?? []),
+  ].join('|');
 }
 
 function createRecentProjectsSignature(state: MachineConnectionState | undefined): string {

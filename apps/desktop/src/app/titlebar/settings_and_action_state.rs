@@ -224,11 +224,38 @@ impl GhostexGpuiApp {
             gpui_active_project_id_from_snapshot(self.latest_sidebar_project_snapshot.as_ref())
                 .map(str::to_string);
         let request_project_id = fetched_project_id.clone();
+        /*
+        CDXC:RemoteProjectActions 2026-08-29:
+        A remote project's Actions live on the machine that owns it, so a remote
+        active project reads that machine's HUD through its live tunnel. The
+        local daemon does not know a `remote:` project id and would answer with
+        its own unconfigured defaults, which is what used to make the Actions
+        button deep-link to Settings for every remote project. A remote project
+        whose machine is not connected has no Actions to show, so it stays empty
+        rather than borrowing the local daemon's answer.
+        */
+        let remote_reference = request_project_id
+            .as_deref()
+            .and_then(gpui_remote_project_reference_from_project_id);
+        let remote_request = remote_reference.as_ref().map(|reference| {
+            (
+                self.gpui_remote_gxserver_request_target(reference.remote_machine_id.as_str()),
+                reference.project_id.clone(),
+            )
+        });
         cx.spawn(async move |this, cx| {
             let actions = cx
                 .background_executor()
                 .spawn(async move {
-                    gpui_titlebar_actions_for_active_project_id(request_project_id.as_deref())
+                    match remote_request {
+                        Some((Some(target), project_id)) => {
+                            gpui_remote_titlebar_actions_for_project(&target, project_id.as_str())
+                        }
+                        Some((None, _)) => Vec::new(),
+                        None => gpui_titlebar_actions_for_active_project_id(
+                            request_project_id.as_deref(),
+                        ),
+                    }
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -444,6 +471,19 @@ impl GhostexGpuiApp {
                     &command_id,
                 );
                 self.active_action_command_id = Some(command_id.clone());
+                /*
+                CDXC:RemoteProjectActions 2026-08-29:
+                The Action belongs to a remote project, so its command has to run
+                on the machine that owns that project — the local command pane
+                would run the project's command here, against a path that only
+                exists there. Debug reruns collapse into the same remote launch
+                because the debug workspace terminal is a local surface too.
+                */
+                if let Some(reference) = self.active_gpui_remote_project_reference() {
+                    self.run_gpui_remote_command_action_terminal(reference, title, command, cx);
+                    self.open_gpui_titlebar_action_links(&action.links, window, cx);
+                    return;
+                }
                 match action.run_mode {
                     GpuiTitlebarActionRunMode::Default => {
                         self.open_gpui_command_action_terminal(

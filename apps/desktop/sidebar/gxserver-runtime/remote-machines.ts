@@ -25,6 +25,7 @@ import { normalizeGpuiWorktreeParentProjectId } from './helpers/worktrees';
 import type {
   GpuiRemoteProjectReference,
   GpuiRemoteProjectScope,
+  GpuiRemoteSidebarHud,
   GpuiSidebarNativeProjectPathAction,
   GpuiSidebarRemoteGxserverResponseEvent,
 } from './types-and-protocol';
@@ -98,6 +99,7 @@ export interface GpuiSidebarRuntimeRemoteMachineMethods {
     project: GxserverPresentationProject | undefined
   ): Promise<GxserverPresentationProject>;
   refreshRemotePresentationFromGxserver(remoteMachineId: string): Promise<void>;
+  refreshRemoteSidebarHudFromGxserver(remoteMachineId: string): Promise<void>;
   closeRemoteProjectForGroup(remoteScope: GpuiRemoteProjectScope, groupId: string): Promise<void>;
   restoreRemoteRecentProject(remoteReference: GpuiRemoteProjectReference): Promise<void>;
   removeRemoteRecentProject(remoteReference: GpuiRemoteProjectReference): Promise<void>;
@@ -578,7 +580,27 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       this.pruneRemoteWorkspaceGroupAssignments(remoteMachineId, snapshot);
       this.syncRemotePresentationAttentionTracking(remoteMachineId, previousSessions, snapshot.sessions);
       this.publishRemotePresentationPatch();
+      await this.refreshRemoteSidebarHudFromGxserver(remoteMachineId).catch(() => undefined);
     }
+  },
+
+  async refreshRemoteSidebarHudFromGxserver(this: GpuiSidebarRuntime, remoteMachineId: string): Promise<void> {
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    A remote project's Actions are stored by the daemon that owns the project,
+    so the only place they can come from is that machine's own HUD projection.
+    Ask for the per-project command block, exactly like the local HUD read, so
+    every remote project row can render its own quick actions instead of the
+    empty list a local-only read produced.
+    */
+    const hud = await this.requestRemoteGxserver<GpuiRemoteSidebarHud>(remoteMachineId, '/api/readSidebarHud', {
+      includeAllProjectCommands: true,
+    });
+    if (!Array.isArray(hud.commands)) {
+      return;
+    }
+    this.remoteSidebarHuds.set(remoteMachineId, hud);
+    this.publishHudPatch();
   },
 
   async closeRemoteProjectForGroup(

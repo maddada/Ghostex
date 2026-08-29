@@ -913,6 +913,16 @@ export type SidebarHudState = {
    * storage.
    */
   recentProjects: SidebarRecentProject[];
+  /**
+   * CDXC:GlobalActions 2026-08-29:
+   * Global Actions are owned by ONE gxserver daemon, so a host that shows
+   * projects from several daemons at once (the web app's remote machines)
+   * cannot describe them with a single list: `globalCommands` stays the local
+   * daemon's list, and every other machine's list arrives here keyed by machine
+   * id. Rows resolve their own machine's entry, which is the same local/remote
+   * split `sidebarProjectCollections` and `sidebarSpaces` already use.
+   */
+  remoteGlobalCommandsByMachineId?: Record<string, SidebarCommandButton[]>;
   projectWorktrees?: SidebarProjectWorktree[];
   settings?: ghostexSettings;
   createSessionOnSidebarDoubleClick: boolean;

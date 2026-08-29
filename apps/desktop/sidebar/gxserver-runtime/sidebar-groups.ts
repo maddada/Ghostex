@@ -181,6 +181,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       recentProjects: this.recentProjects,
       remoteRecentProjectsByMachineId: this.remoteRecentProjectsByMachineId,
       remotePresentationsByMachineId: this.remotePresentations,
+      remoteSidebarHudsByMachineId: this.remoteSidebarHuds,
       sidebarHud: this.sidebarHud,
     });
 
@@ -282,6 +283,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       recentProjects: this.recentProjects,
       remoteRecentProjectsByMachineId: this.remoteRecentProjectsByMachineId,
       remotePresentationsByMachineId: this.remotePresentations,
+      remoteSidebarHudsByMachineId: this.remoteSidebarHuds,
       sidebarHud: this.sidebarHud,
     });
     this.messageSource.postMessage(this.createHydrateMessage(this.latestGroups, this.latestHud));
@@ -321,6 +323,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       recentProjects: this.recentProjects,
       remoteRecentProjectsByMachineId: this.remoteRecentProjectsByMachineId,
       remotePresentationsByMachineId: this.remotePresentations,
+      remoteSidebarHudsByMachineId: this.remoteSidebarHuds,
       sidebarHud: this.sidebarHud,
     });
     if (!this.hasHydrated) {
@@ -420,6 +423,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       recentProjects: this.recentProjects,
       remoteRecentProjectsByMachineId: this.remoteRecentProjectsByMachineId,
       remotePresentationsByMachineId: this.remotePresentations,
+      remoteSidebarHudsByMachineId: this.remoteSidebarHuds,
       sidebarHud: this.sidebarHud,
     });
     this.postTitlebarGitMenuState();

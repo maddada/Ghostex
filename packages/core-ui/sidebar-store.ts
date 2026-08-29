@@ -517,10 +517,12 @@ function preserveSidebarHudReferences(previousHud: SidebarHudState, nextHud: Sid
   preserveIfEqual('commandsByProject');
   preserveIfEqual('commandSessionIndicators');
   preserveIfEqual('git');
+  preserveIfEqual('globalCommands');
   preserveIfEqual('pendingAgentIds');
   preserveIfEqual('projectSettingsProjects');
   preserveIfEqual('projectWorktrees');
   preserveIfEqual('recentProjects');
+  preserveIfEqual('remoteGlobalCommandsByMachineId');
   preserveIfEqual('settings');
   preserveIfEqual('visibleSlotLabels');
 

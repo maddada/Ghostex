@@ -18,6 +18,7 @@ import type {
   GxserverPresentationSnapshot,
   GxserverProjectDomainState,
   GxserverRendererCommand,
+  GxserverSidebarHudResponse,
   GxserverSidebarProjectCollectionsState,
   GxserverSidebarSpacesState,
   GxserverWorkspaceSessionGroupsState,
@@ -40,6 +41,19 @@ export type GpuiGxserverBootstrap = {
   protocolVersion?: number;
   visibleSessionIds?: readonly string[];
 };
+
+/*
+CDXC:RemoteProjectActions 2026-08-29:
+A project's Actions are stored by the daemon that owns it, so a remote
+project's Actions come from that machine's own `/api/readSidebarHud`. The Rust
+bridge cuts that answer down to the Action button lists before the renderer
+sees it, so a remote HUD is deliberately narrower than the local one: no
+agents and no project settings rows cross the machine boundary.
+*/
+export type GpuiRemoteSidebarHud = Pick<
+  GxserverSidebarHudResponse,
+  'commands' | 'commandsByProject' | 'globalCommands'
+>;
 
 export type GpuiCommandPaneSessionSummary = {
   commandId?: string;
@@ -174,6 +188,15 @@ export type GhostexGpuiSidebarBridge = {
    */
   dismissSidebarContextMenus?: () => void;
   dismissSidebarTooltips?: () => void;
+  /**
+   * CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+   * A finger scroll gesture began (NSEventPhaseBegan) inside the sidebar's
+   * native frame. Installed by the sidebar entry point, called by Rust's
+   * AppKit observer; the Space-swipe handler resets its gesture lock on it
+   * because DOM wheel events cannot tell a new physical swipe from the
+   * previous swipe's momentum tail.
+   */
+  onNativeScrollGestureBegan?: () => void;
   onWorkspaceFirstPromptTitleGenerationCancel?: (payload: unknown) => void;
   onWorkspaceFolderPicked?: (payload: unknown) => void;
   onWorkspaceSessionAttentionAcknowledge?: (payload: unknown) => void;

@@ -799,8 +799,17 @@ export function SessionGroupSection({
    * Globals render first, matching Settings > Actions, which also lists Global
    * Actions above the project's own. That order also keeps a global button at
    * the same spot on every row, since only the project part varies per row.
+   *
+   * CDXC:GlobalActions 2026-08-29:
+   * The list is owned by the daemon the row's project lives on, so a row on a
+   * remote machine reads that machine's entry instead of the local daemon's
+   * `globalCommands`. Hosts that serve one daemon never set the remote map and
+   * every row keeps reading the single list.
    */
-  const globalCommands = useSidebarStore((state) => state.hud.globalCommands);
+  const globalCommands = useSidebarStore((state) => {
+    const remoteMachineId = state.groupsById[groupId]?.remoteMachineContext?.machineId;
+    return remoteMachineId ? state.hud.remoteGlobalCommandsByMachineId?.[remoteMachineId] : state.hud.globalCommands;
+  });
   const projectRowCommands = useMemo(
     () =>
       [

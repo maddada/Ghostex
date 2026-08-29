@@ -14,12 +14,14 @@ import {
 } from '../constants';
 import type {
   GpuiCommandPaneSessionSummary,
+  GpuiRemoteSidebarHud,
   GpuiSidebarCommandSessionIndicatorScope,
   GpuiSidebarRuntimeSettings,
   GpuiWorkspaceSessionDelayedSendSummary,
 } from '../types-and-protocol';
 import { createGpuiSidebarSettings } from './bootstrap';
 import { createGpuiProjectSettingsProjects } from './presentation-projection';
+import { createGpuiRemotePresentationProjectId } from './remote-presentation';
 import {
   compareGpuiRecentProjectsByClosedAt,
   createGpuiRecentProjects,
@@ -374,6 +376,7 @@ export function createGpuiSidebarHudState({
   recentProjects = [],
   remoteRecentProjectsByMachineId,
   remotePresentationsByMachineId,
+  remoteSidebarHudsByMachineId,
   runtimeSettings,
   sidebarHud,
 }: {
@@ -387,6 +390,7 @@ export function createGpuiSidebarHudState({
   recentProjects?: readonly GxserverRecentProjectDomainState[];
   remoteRecentProjectsByMachineId?: ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]>;
   remotePresentationsByMachineId?: ReadonlyMap<string, GxserverPresentationSnapshot>;
+  remoteSidebarHudsByMachineId?: ReadonlyMap<string, GpuiRemoteSidebarHud>;
   runtimeSettings?: GpuiSidebarRuntimeSettings;
   sidebarHud?: GxserverSidebarHudResponse;
 } = {}): SidebarHudState {
@@ -422,7 +426,27 @@ export function createGpuiSidebarHudState({
   const globalCommands = (
     sidebarHud?.globalCommands ? normalizeHudCommands(sidebarHud.globalCommands) : []
   ) as ReturnType<typeof createSidebarCommandButtons>;
-  const commandsByProject = sidebarHud?.commandsByProject
+  /*
+   * CDXC:RemoteProjectActions 2026-08-29:
+   * A remote machine's per-project Actions arrive keyed by that machine's own
+   * project ids, which mean nothing to this app on their own — two machines can
+   * hand out the same `P1…` id. Re-key them under the machine-scoped project id
+   * the sidebar rows already use, so a remote row resolves its own Actions
+   * through exactly the same lookup a local row does.
+   *
+   * The remote machine's Global Actions stay on that machine: `globalCommands`
+   * is a flat app-wide list here, so mixing a remote machine's globals into it
+   * would put them on every LOCAL project row too.
+   */
+  const remoteCommandsByProject = Object.fromEntries(
+    [...(remoteSidebarHudsByMachineId ?? new Map<string, GpuiRemoteSidebarHud>())].flatMap(([machineId, remoteHud]) =>
+      Object.entries(remoteHud.commandsByProject ?? {}).map(([projectId, projectCommands]) => [
+        createGpuiRemotePresentationProjectId(machineId, projectId),
+        normalizeHudCommands(projectCommands),
+      ])
+    )
+  );
+  const localCommandsByProject = sidebarHud?.commandsByProject
     ? Object.fromEntries(
         Object.entries(sidebarHud.commandsByProject).map(([projectId, projectCommands]) => [
           projectId,
@@ -430,6 +454,10 @@ export function createGpuiSidebarHudState({
         ])
       )
     : undefined;
+  const commandsByProject =
+    localCommandsByProject || Object.keys(remoteCommandsByProject).length > 0
+      ? { ...localCommandsByProject, ...remoteCommandsByProject }
+      : undefined;
   const focusedSession = groups
     .flatMap((group) => group.sessions)
     .find(

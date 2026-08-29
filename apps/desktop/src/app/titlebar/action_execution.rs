@@ -324,4 +324,95 @@ impl GhostexGpuiApp {
         self.persist_shell_layout_state();
         cx.notify();
     }
+
+    pub(crate) fn active_gpui_remote_project_reference(
+        &self,
+    ) -> Option<GpuiRemoteProjectReference> {
+        gpui_active_project_id_from_snapshot(self.latest_sidebar_project_snapshot.as_ref())
+            .and_then(gpui_remote_project_reference_from_project_id)
+    }
+
+    pub(crate) fn run_gpui_remote_command_action_terminal(
+        &mut self,
+        reference: GpuiRemoteProjectReference,
+        title: String,
+        command: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:RemoteProjectActions 2026-08-29:
+        Running a remote project's terminal Action reuses the remote New
+        Terminal path end to end: the owning daemon creates the session row and
+        starts its zmx provider with the Action command, and this app attaches
+        to it over the same saved SSH machine as any other remote terminal. The
+        renderer never supplies the machine, token, SSH details, or the attach
+        command; only the trusted HUD Action title and command reach the tunnel.
+        */
+        let Some(target) =
+            self.gpui_remote_gxserver_request_target(reference.remote_machine_id.as_str())
+        else {
+            self.dispatch_gpui_workspace_action_toast(
+                "warning",
+                "Remote Action unavailable",
+                "Reconnect the remote machine before running its Actions.",
+                cx,
+            );
+            return;
+        };
+        let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        let Some(config) = gpui_remote_machine_config_from_settings(
+            settings_snapshot.object(),
+            reference.remote_machine_id.as_str(),
+        ) else {
+            self.dispatch_gpui_workspace_action_toast(
+                "warning",
+                "Remote Action unavailable",
+                "The saved remote machine is missing required SSH settings.",
+                cx,
+            );
+            return;
+        };
+        let remote_machine_id = reference.remote_machine_id.clone();
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move {
+                    gpui_run_remote_project_action_terminal(
+                        &config,
+                        &target,
+                        &reference,
+                        title.as_str(),
+                        command.as_str(),
+                    )
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok((reference, plan)) => {
+                    let key = GpuiRemoteAttachSessionKey::from(&reference);
+                    this.set_sidebar_gxserver_remote_attach_focus_state(&key, cx);
+                    this.open_gpui_remote_attach_terminal(
+                        reference,
+                        plan,
+                        None,
+                        AgentsWorkspaceNewTerminalPlacement::Tab,
+                        GpuiRemoteAttachOpenIntent::CreatedByThisAction,
+                        cx,
+                    );
+                    this.refresh_gpui_remote_gxserver_presentation_in_background(
+                        remote_machine_id,
+                        false,
+                        cx,
+                    );
+                    this.begin_titlebar_quick_action_button_cooldown(cx);
+                }
+                Err(message) => this.dispatch_gpui_workspace_action_toast(
+                    "warning",
+                    "Remote Action failed",
+                    message.as_str(),
+                    cx,
+                ),
+            });
+        })
+        .detach();
+    }
 }

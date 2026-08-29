@@ -161,6 +161,12 @@ export class GxserverConnection {
               this.disconnectAndRetry('Presentation stream connection failed.');
             }
           },
+          onGlobalSidebarCommands: (revision) => {
+            if (generation !== this.generation) {
+              return;
+            }
+            this.updateState({ globalSidebarCommandsRevision: revision });
+          },
           onOpen: () => {
             if (generation !== this.generation) {
               return;

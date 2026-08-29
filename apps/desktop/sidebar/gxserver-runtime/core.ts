@@ -94,6 +94,7 @@ import type {
   GpuiPendingRemoteGxserverRequest,
   GpuiPresentationSubscription,
   GpuiProjectWorktreesResultMessage,
+  GpuiRemoteSidebarHud,
   GpuiSidebarGitHubState,
   GpuiSidebarRuntimeSettings,
   GpuiTrustedExistingWorktreeList,
@@ -411,6 +412,13 @@ export class GpuiSidebarRuntime {
   recentProjects: GxserverRecentProjectDomainState[] = [];
   remoteGxserverRequestSequence = 0;
   remotePresentations = new Map<string, GxserverPresentationSnapshot>();
+  /*
+   * CDXC:RemoteProjectActions 2026-08-29:
+   * Each connected machine's own Action lists, kept per machine so the merged
+   * HUD can key them under this app's machine-scoped project ids without the
+   * two machines' project id spaces colliding.
+   */
+  remoteSidebarHuds = new Map<string, GpuiRemoteSidebarHud>();
   remoteLastSeenPresentations = new Map<string, GxserverPresentationSnapshot>();
   remoteLastSeenPersistTimeoutId: number | undefined;
   remoteReconnectAttempts = new Map<string, number>();
@@ -892,6 +900,13 @@ export class GpuiSidebarRuntime {
           this.syncRemotePresentationAttentionTracking(remoteEvent.machineId, previousPresentation.sessions, []);
         }
         this.remotePresentations.delete(remoteEvent.machineId);
+        /*
+        CDXC:RemoteProjectActions 2026-08-29:
+        A disconnected machine's Actions are no longer runnable, so its cached
+        Action lists go with its presentation instead of leaving dead buttons on
+        rows the app can no longer reach.
+        */
+        this.remoteSidebarHuds.delete(remoteEvent.machineId);
         this.dropRemotePresentationSessionFocus(remoteEvent.machineId);
         this.publishRemotePresentationPatch();
       }
@@ -917,6 +932,13 @@ export class GpuiSidebarRuntime {
       this.pruneRemoteWorkspaceGroupAssignments(remoteEvent.remoteMachineId, snapshot);
       this.syncRemotePresentationAttentionTracking(remoteEvent.remoteMachineId, previousSessions, snapshot.sessions);
       this.publishRemotePresentationPatch();
+      /*
+      CDXC:RemoteProjectActions 2026-08-29:
+      The snapshot is the point where this app learns which projects the machine
+      has, so it is also where their Actions have to be read. The HUD is a
+      separate projection from presentation, so it needs its own read.
+      */
+      void this.refreshRemoteSidebarHudFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
       return;
     }
 
@@ -983,6 +1005,15 @@ export class GpuiSidebarRuntime {
     this.pruneRemoteWorkspaceGroupAssignments(remoteEvent.remoteMachineId, snapshot);
     this.syncRemotePresentationAttentionTracking(remoteEvent.remoteMachineId, previous.sessions, snapshot.sessions);
     this.publishRemotePresentationPatch();
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    A project row on the remote machine is the one delta that can carry an
+    Actions edit made over there, so re-read that machine's Action lists then
+    and only then — session deltas arrive constantly and cannot change them.
+    */
+    if ('domainProject' in remoteEvent.payload.delta) {
+      void this.refreshRemoteSidebarHudFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+    }
   };
 
   readonly handleGpuiSidebarNavigationHistoryCommand = (event: Event): void => {

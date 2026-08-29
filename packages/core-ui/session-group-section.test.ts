@@ -291,9 +291,8 @@ describe('project row Actions', () => {
     const rowCommandsSource = sessionGroupSectionSource.slice(rowCommandsStart, rowCommandsStart + 600);
 
     expect(rowCommandsStart).toBeGreaterThan(-1);
-    expect(sessionGroupSectionSource).toContain(
-      'const globalCommands = useSidebarStore((state) => state.hud.globalCommands);'
-    );
+    expect(sessionGroupSectionSource).toContain('state.hud.globalCommands');
+    expect(sessionGroupSectionSource).toContain('state.hud.remoteGlobalCommandsByMachineId?.[remoteMachineId]');
     expect(rowCommandsSource).toContain(
       "...(globalCommands ?? []).map((command) => ({ command, scope: 'global' }) as const)"
     );

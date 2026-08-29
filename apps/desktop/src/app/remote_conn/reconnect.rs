@@ -226,6 +226,18 @@ impl GhostexGpuiApp {
                         );
                         self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
                     }
+                    if reconnects_active_remote_docs {
+                        /*
+                        CDXC:RemoteProjectActions 2026-08-29:
+                        The titlebar Actions snapshot for a remote project is
+                        read from the machine that owns it, so any refresh that
+                        ran while the tunnel was down came back empty. The
+                        active project id is unchanged by a reconnect, so the
+                        active-project path will not re-run that read — do it
+                        here, where the tunnel just became usable.
+                        */
+                        self.refresh_titlebar_actions_in_background(cx);
+                    }
                     self.ensure_source_code_server_runtime_for_current_context(cx);
                 }
                 self.dispatch_gpui_remote_machine_status(

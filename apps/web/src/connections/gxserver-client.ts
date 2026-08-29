@@ -43,6 +43,13 @@ type PresentationSubscriptionHandlers = {
   onClose(): void;
   onDelta(delta: GxserverPresentationDelta, revision: GxserverPresentationRevision): void;
   onError(): void;
+  /**
+   * CDXC:GlobalActions 2026-08-29:
+   * A Global Action write produces no presentation delta, so the daemon
+   * announces it separately. The event carries no commands — only the bumped
+   * revision — because `/api/readSidebarHud` stays the single projection.
+   */
+  onGlobalSidebarCommands(revision: GxserverPresentationRevision): void;
   onOpen(): void;
   onSidebarProjectCollections(
     state: GxserverSidebarProjectCollectionsState,
@@ -171,6 +178,8 @@ export function createGxserverClient(machine: GhostexWebMachine) {
         handlers.onSidebarSpaces(parsed.sidebarSpaces, parsed.revision);
       } else if (parsed?.type === 'workspaceGroupsChanged') {
         handlers.onWorkspaceGroups(parsed.groups, parsed.revision);
+      } else if (parsed?.type === 'globalSidebarCommandsChanged') {
+        handlers.onGlobalSidebarCommands(parsed.revision);
       } else if (parsed && isSessionChatEventType(parsed.type)) {
         const chatEvent = parsed as GxserverSessionChatEvent;
         const entry = chatHandlers.get(chatKey(chatEvent.projectId, chatEvent.sessionId));

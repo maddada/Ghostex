@@ -99,6 +99,15 @@ pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
             | "/api/mergeWorktreeIntoMain"
             | "/api/checkoutProjectNewBranch"
             | "/api/readPresentationSnapshot"
+            /*
+            CDXC:RemoteProjectActions 2026-08-29:
+            A project's Actions are stored by the daemon that owns the project,
+            so the sidebar's project-row quick actions for a remote project can
+            only come from that machine's own HUD projection. This is an
+            id-scoped read; its params are reduced and its answer is cut down to
+            the Action button lists in `sidebar_hud.rs`.
+            */
+            | "/api/readSidebarHud"
             | "/api/updateSidebarProjectCollections"
             | "/api/runGitAction"
             | "/api/runGitHubAction"
@@ -122,6 +131,7 @@ pub(crate) fn gpui_remote_sidebar_request_params(
         "/api/readAgentHookStatus" | "/api/installAgentHooks" => {
             gpui_remote_sidebar_agent_hook_params(params)
         }
+        "/api/readSidebarHud" => gpui_remote_sidebar_read_sidebar_hud_params(params),
         "/api/updateSidebarProjectCollections" => {
             gpui_remote_sidebar_project_collections_params(params)
         }
@@ -794,6 +804,7 @@ pub(crate) fn gpui_remote_sidebar_request_refreshes_presentation(path: &str) -> 
             | "/api/listRecentProjects"
             | "/api/listProjectWorktrees"
             | "/api/readPresentationSnapshot"
+            | "/api/readSidebarHud"
             | "/api/checkoutProjectNewBranch"
             | "/api/runGitAction"
             | "/api/runGitHubAction"
@@ -820,6 +831,7 @@ pub(crate) fn gpui_remote_sidebar_response_payload(
         }
         "/api/listRecentProjects" => gpui_remote_sidebar_recent_projects_response_payload(result),
         "/api/readPresentationSnapshot" => result,
+        "/api/readSidebarHud" => gpui_remote_sidebar_hud_response_payload(result),
         "/api/readAgentHookStatus" | "/api/installAgentHooks" => {
             gpui_remote_sidebar_agent_hook_status_response_payload(result)
         }

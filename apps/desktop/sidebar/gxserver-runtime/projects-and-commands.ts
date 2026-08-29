@@ -10,6 +10,7 @@ import { normalizeGpuiReplacementProjectFolderPick, normalizeGpuiWorkspaceFolder
 import { isGpuiPresentationQuickDomainProject } from './helpers/presentation-projection';
 import { normalizeNonEmptyString } from './helpers/records';
 import {
+  createGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationGroupId,
   parseGpuiRemotePresentationProjectId,
 } from './helpers/remote-presentation';
@@ -803,6 +804,22 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     if (!normalizedCommandId) {
       return undefined;
     }
+    /*
+     * CDXC:RemoteProjectActions 2026-08-29:
+     * A remote project's Actions were read from the machine that owns it, so
+     * they are keyed by that machine's own project id inside that machine's HUD
+     * — never in the local daemon's `commandsByProject`, which has no row for a
+     * project it does not host.
+     */
+    const remoteProject = parseGpuiRemotePresentationProjectId(projectId);
+    if (remoteProject) {
+      const remoteCommands = this.remoteSidebarHuds.get(remoteProject.machineId)?.commandsByProject?.[
+        remoteProject.projectId
+      ];
+      return remoteCommands
+        ? ([...remoteCommands] as SidebarCommandButton[]).find((command) => command.commandId === normalizedCommandId)
+        : undefined;
+    }
     const projectCommands = this.sidebarHud?.commandsByProject?.[projectId];
     if (projectCommands) {
       return ([...projectCommands] as SidebarCommandButton[]).find(
@@ -895,7 +912,20 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
      */
     const groupId =
       originalMessage.type !== 'runSidebarCommand' ? undefined : normalizeNonEmptyString(originalMessage.groupId ?? '');
-    const targetProjectId = groupId ? parseGxserverPresentationProjectGroupId(groupId) : undefined;
+    /*
+     * CDXC:RemoteProjectActions 2026-08-29:
+     * A remote project row carries a machine-scoped group id, which the local
+     * group-id parser does not recognize. Resolve it to the same machine-scoped
+     * project id the merged HUD keys its Actions under, so a remote row picks
+     * its own project's Actions instead of silently falling through to the
+     * active project's list.
+     */
+    const remoteGroup = groupId ? parseGpuiRemotePresentationGroupId(groupId) : undefined;
+    const targetProjectId = remoteGroup
+      ? createGpuiRemotePresentationProjectId(remoteGroup.machineId, remoteGroup.projectId)
+      : groupId
+        ? parseGxserverPresentationProjectGroupId(groupId)
+        : undefined;
     const command =
       scope === 'global'
         ? this.resolveSidebarCommand(commandId, scope)
@@ -906,6 +936,24 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     }
     if (!isSidebarCommandConfigured(command)) {
       this.openAppModal('settings');
+      return;
+    }
+    /*
+     * CDXC:RemoteProjectActions 2026-08-29:
+     * A remote selection lives in `activeGroupId`, not `activeProjectId`, so it
+     * activates through the remote focus path. Rust reads the machine-scoped
+     * active project back out of the context this publishes and routes the
+     * launch to that machine, which is what makes the Action run where the
+     * project actually is.
+     */
+    if (remoteGroup) {
+      if (this.focusRemotePresentationProject(remoteGroup)) {
+        this.publishRemotePresentationPatch();
+      }
+      if (this.postSidebarCommandAction(command, selectionMessage)) {
+        return;
+      }
+      this.handleUnsupportedSidebarMessage(selectionMessage);
       return;
     }
     if (targetProjectId && targetProjectId !== this.activeProjectId) {
