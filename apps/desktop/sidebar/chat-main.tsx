@@ -96,6 +96,13 @@ declare global {
 
 interface ChatBridgeNamespace {
   gxserverBootstrap?: ChatGxserverBootstrap;
+  /**
+   * Absolute paths of the OS drag currently over this page, written by the
+   * Rust shell's CEF drag handler at drag-enter (and cleared by non-file
+   * drags). Chromium never exposes `File.path` to the page, so this is the
+   * only way a drop resolves to real local paths.
+   */
+  sessionChatDropPaths?: unknown;
   onGxserverBootstrapChanged?: (bootstrap: ChatGxserverBootstrap) => void;
   onSessionChatFocusComposerRequested?: () => void;
   onSessionChatHandoffToTerminalRequested?: () => void;
@@ -401,6 +408,10 @@ function createGpuiSessionChatTransport(
       : {
           pickAttachmentPaths() {
             return requestNativeAttachmentPaths();
+          },
+          readDropPaths() {
+            const paths = chatBridgeNamespace().sessionChatDropPaths;
+            return Array.isArray(paths) ? paths.filter((path): path is string => typeof path === 'string') : [];
           },
         }),
     // The save panel writes to this Mac, so it is offered for every session:

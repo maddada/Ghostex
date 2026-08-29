@@ -94,6 +94,7 @@ import { SessionChatQueueRows } from './session-chat-queue-rows';
 import { SessionChatComposerActions } from './session-chat-composer-actions';
 import { SessionChatComposerNotReadyNotice } from './session-chat-composer-not-ready';
 import {
+  readSessionChatDroppedAttachments,
   sessionChatDataTransferHasFiles,
   sessionChatNativeDropPaths,
   uploadSessionChatDroppedAttachments,
@@ -306,6 +307,13 @@ export interface SessionChatComposerProps {
    */
   onPickPaths?: () => Promise<string[]>;
   /**
+   * Absolute paths of the OS drag currently over this page, captured by the
+   * host shell at drag-enter (Chromium never exposes `File.path` to a page).
+   * Only hosts whose session runs on this machine provide it; drops elsewhere
+   * upload bytes through onAttachFile instead.
+   */
+  onNativeDropPaths?: () => readonly string[];
+  /**
    * Loads a preview data URL for an image path picked natively (no bytes in
    * the page otherwise). Optional garnish: picks insert their reference even
    * when the preview cannot load.
@@ -385,7 +393,7 @@ function nextFileReferenceIndex(text: string): number {
 
 /** Mentions queue and the two composer pickers so they are discoverable without docs. */
 const DEFAULT_SESSION_CHAT_PLACEHOLDER =
-  'Press Enter to send a message and Tab to Queue.\nUse @ to mention a file and $ for using skills...';
+  'Press Enter to send a message and Tab to Queue.\nUse @ to mention a file and $ for using skills.';
 
 const IMAGE_PATH_PATTERN = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i;
 const LINKED_IMAGE_REFERENCE_PATTERN = /\[Image #\d+\]\(([^)\r\n]+)\)/g;
@@ -515,6 +523,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       onDraftEmptyChange,
       onInterrupt,
       onLoadImagePreview,
+      onNativeDropPaths,
       onPasteImage,
       onPickPaths,
       onReadTerminalTail,
@@ -1337,26 +1346,69 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       api?.focus();
     };
 
+    /**
+     * Inserts references for absolute paths on the session's machine (the
+     * native picker and local drops): image paths keep the image reference
+     * format and fetch their preview thumbnail lazily; everything else
+     * becomes a "[File #N](path)" reference.
+     */
+    const insertNativePathReferences = async (paths: readonly string[]): Promise<void> => {
+      for (const path of paths) {
+        if (IMAGE_PATH_PATTERN.test(path)) {
+          insertImageReference(path);
+          onLoadImagePreview?.(path)
+            .then((dataUrl) => {
+              addImagePreview(path, dataUrl);
+            })
+            .catch(() => {
+              // The preview is garnish; the reference is already inserted.
+            });
+        } else {
+          insertFileReference(path);
+        }
+        // Let the input backend commit before the next caret-relative insert
+        // (the textarea backend applies values on the next frame).
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+      }
+    };
+
     const consumeDroppedAttachments = (data: DataTransfer): boolean => {
       if (disabled || !sessionChatDataTransferHasFiles(data)) {
         return false;
       }
 
-      // A local GPUI CEF drop carries real absolute paths, including folders.
-      // Remote GPUI chats omit onPickPaths, so local paths are never handed to
-      // an agent running on another machine; those bytes follow the web path.
-      const nativePaths = onPickPaths ? sessionChatNativeDropPaths(data) : [];
+      // A local GPUI session resolves the drop to the drag's real absolute
+      // paths, folders included, captured natively by the shell at drag-enter.
+      // Remote GPUI chats omit onNativeDropPaths, so local paths are never
+      // handed to an agent running on another machine; those bytes follow the
+      // upload path below.
+      const nativePaths = sessionChatNativeDropPaths(onNativeDropPaths?.());
       if (nativePaths.length > 0) {
-        appendFileReferences(nativePaths);
+        void insertNativePathReferences(nativePaths);
         return true;
       }
       if (!onAttachFile) {
         return false;
       }
 
+      // Snapshot synchronously: the DataTransfer dies with the drop event.
+      const dropped = readSessionChatDroppedAttachments(data);
       setPendingImagePastes((count) => count + 1);
-      void uploadSessionChatDroppedAttachments(data, onAttachFile)
-        .then(appendFileReferences)
+      void dropped
+        .then(async ({ directories, files }) => {
+          // Dropped images take the shared image intake so they insert
+          // "[Image #N](path)" with a thumbnail, exactly like a pasted one.
+          const imageFiles = onPasteImage ? files.filter(isImageFile) : [];
+          if (imageFiles.length > 0) {
+            consumeImageFiles(imageFiles);
+          }
+          const attachmentFiles = files.filter((file) => !imageFiles.includes(file));
+          if (attachmentFiles.length > 0 || directories.length > 0) {
+            appendFileReferences(
+              await uploadSessionChatDroppedAttachments({ directories, files: attachmentFiles }, onAttachFile)
+            );
+          }
+        })
         .catch((error: unknown) => {
           console.error('[session-chat] dropped attachment failed', error);
           setSendErrorCode(null);
@@ -1444,31 +1496,13 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
 
     /**
      * Host-native picker intake: absolute paths on the session's machine
-     * (folders included), no byte upload. Image paths keep the image reference
-     * format and fetch their preview thumbnail lazily; everything else becomes
-     * a "[File #N](path)" reference.
+     * (folders included), no byte upload, inserted through the shared
+     * native-path reference logic.
      */
     const attachFromNativePicker = (): void => {
       void (async () => {
         try {
-          const paths = (await onPickPaths?.()) ?? [];
-          for (const path of paths) {
-            if (IMAGE_PATH_PATTERN.test(path)) {
-              insertImageReference(path);
-              onLoadImagePreview?.(path)
-                .then((dataUrl) => {
-                  addImagePreview(path, dataUrl);
-                })
-                .catch(() => {
-                  // The preview is garnish; the reference is already inserted.
-                });
-            } else {
-              insertFileReference(path);
-            }
-            // Let the input backend commit before the next caret-relative
-            // insert (the textarea backend applies values on the next frame).
-            await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
-          }
+          await insertNativePathReferences((await onPickPaths?.()) ?? []);
         } catch (error) {
           console.error('[session-chat] attach picker failed', error);
         }

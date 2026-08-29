@@ -19,9 +19,14 @@ wrap_client! {
         permission_handler: Option<PermissionHandler>,
         focus_handler: Option<FocusHandler>,
         keyboard_handler: Option<KeyboardHandler>,
+        drag_handler: Option<DragHandler>,
     }
 
     impl Client {
+        fn drag_handler(&self) -> Option<DragHandler> {
+            self.drag_handler.clone()
+        }
+
         fn focus_handler(&self) -> Option<FocusHandler> {
             self.focus_handler.clone()
         }

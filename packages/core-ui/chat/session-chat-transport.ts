@@ -95,6 +95,13 @@ export interface SessionChatTransport {
    */
   pickAttachmentPaths?(): Promise<string[]>;
   /**
+   * Absolute paths of the OS drag currently over this surface, captured by
+   * the host shell at drag-enter (gpui — Chromium never exposes `File.path`
+   * to a page). Only hosts whose session runs on this machine provide it;
+   * drops elsewhere upload bytes through saveAttachment instead.
+   */
+  readDropPaths?(): readonly string[];
+  /**
    * Writes an image from the conversation into Downloads (gpui — a CEF page
    * has no download handler to write through). Hosts without one omit it and
    * the image viewer's "Save image" uses a browser download instead.

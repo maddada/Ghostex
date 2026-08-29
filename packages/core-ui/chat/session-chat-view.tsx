@@ -829,6 +829,10 @@ export function SessionChatView({
     const pickAttachmentPaths = transport.pickAttachmentPaths?.bind(transport);
     return pickAttachmentPaths ? () => pickAttachmentPaths() : undefined;
   }, [transport]);
+  const nativeDropPaths = useMemo(() => {
+    const readDropPaths = transport.readDropPaths?.bind(transport);
+    return readDropPaths ? () => readDropPaths() : undefined;
+  }, [transport]);
   const saveImageAs = useMemo(() => {
     const save = transport.saveImageAs?.bind(transport);
     return save ? (params: { base64Data: string; suggestedName: string }) => save(params) : undefined;
@@ -1438,6 +1442,7 @@ export function SessionChatView({
                       onAttachFile={attachFile}
                       onInterrupt={interrupt}
                       onLoadImagePreview={loadImageDataUrl}
+                      onNativeDropPaths={nativeDropPaths}
                       onPasteImage={pasteImage}
                       onPickPaths={pickPaths}
                       {...(readTerminalTail ? { onReadTerminalTail: readTerminalTail } : {})}

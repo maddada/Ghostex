@@ -1,8 +1,10 @@
 /*
 Browser drops expose file bytes but deliberately hide absolute local paths.
 Directory entries therefore have to be walked while the drop payload is live,
-then recreated by the session machine's attachment transport. CEF may expose
-an absolute `File.path`; the composer uses that only for a local GPUI session.
+then recreated by the session machine's attachment transport. Chromium (and so
+CEF) never exposes `File.path` to a page, so a local GPUI session gets the
+drag's absolute paths from the host shell, which captures them natively at
+drag-enter; the composer uses those only for a session on this machine.
 */
 
 export interface SessionChatDroppedDirectory {
@@ -47,17 +49,10 @@ export function sessionChatDataTransferHasFiles(dataTransfer: DataTransfer): boo
   return Array.from(dataTransfer.types).includes('Files');
 }
 
-export function sessionChatNativeDropPaths(dataTransfer: DataTransfer): string[] {
-  const transferredFiles = Array.from(dataTransfer.files);
-  const files =
-    transferredFiles.length > 0
-      ? transferredFiles
-      : Array.from(dataTransfer.items)
-          .filter((item) => item.kind === 'file')
-          .map((item) => item.getAsFile())
-          .filter((file): file is File => file !== null);
-  const paths = files.map((file) => (file as File & { path?: string }).path?.trim() ?? '');
-  return paths.length > 0 && paths.every((path) => path !== '') ? [...new Set(paths)] : [];
+/** Cleans the host-captured absolute paths of the drag currently over the page. */
+export function sessionChatNativeDropPaths(hostDragPaths: readonly string[] | undefined): string[] {
+  const paths = (hostDragPaths ?? []).map((path) => path.trim()).filter((path) => path !== '');
+  return [...new Set(paths)];
 }
 
 function createSessionChatDropUploadId(): string {
@@ -106,8 +101,14 @@ async function walkDirectory(
   }
 }
 
-/** Snapshot and resolve a browser drop before the browser releases its data. */
-async function readSessionChatDroppedAttachments(dataTransfer: DataTransfer): Promise<SessionChatDroppedAttachments> {
+/**
+ * Snapshot and resolve a browser drop before the browser releases its data.
+ * Must be called synchronously from the drop event handler: the DataTransfer's
+ * items are neutered once the handler returns.
+ */
+export async function readSessionChatDroppedAttachments(
+  dataTransfer: DataTransfer
+): Promise<SessionChatDroppedAttachments> {
   const items = Array.from(dataTransfer.items);
   const fallbackFiles = Array.from(dataTransfer.files);
   const result: SessionChatDroppedAttachments = { directories: [], files: [] };
@@ -118,15 +119,8 @@ async function readSessionChatDroppedAttachments(dataTransfer: DataTransfer): Pr
       continue;
     }
     const entry = (item as DropItemWithEntry).webkitGetAsEntry?.() as unknown as BrowserFileSystemEntry | null;
-    if (!entry) {
-      const file = item.getAsFile();
-      if (file) {
-        result.files.push(file);
-      }
-      continue;
-    }
-    usedEntries = true;
-    if (entry.isDirectory) {
+    if (entry?.isDirectory) {
+      usedEntries = true;
       const directory: SessionChatDroppedDirectory = {
         directories: [],
         files: [],
@@ -134,8 +128,16 @@ async function readSessionChatDroppedAttachments(dataTransfer: DataTransfer): Pr
       };
       await walkDirectory(entry as BrowserFileSystemDirectoryEntry, '', directory);
       result.directories.push(directory);
-    } else if (entry.isFile) {
-      result.files.push(await readEntryFile(entry as BrowserFileSystemFileEntry));
+      continue;
+    }
+    // Top-level files read through the DataTransfer's own File object. Their
+    // FileSystem-entry mirror cannot be read on file:// pages (Chromium
+    // rejects the isolated-filesystem URL with an EncodingError), which is
+    // exactly where the CEF chat surface runs; only directories, which have
+    // no File object, go through the entry API.
+    const file = item.getAsFile();
+    if (file) {
+      result.files.push(file);
     }
   }
 
@@ -197,10 +199,9 @@ async function uploadDroppedDirectory(
 }
 
 export async function uploadSessionChatDroppedAttachments(
-  dataTransfer: DataTransfer,
+  { directories, files }: SessionChatDroppedAttachments,
   saveAttachment: (payload: SessionChatDropAttachmentUpload) => Promise<string>
 ): Promise<string[]> {
-  const { directories, files } = await readSessionChatDroppedAttachments(dataTransfer);
   const paths: string[] = [];
   for (const file of files) {
     paths.push(
