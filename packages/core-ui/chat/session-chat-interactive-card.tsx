@@ -256,30 +256,74 @@ export function SessionChatInteractiveCard({
     return () => onShowingChange?.(false);
   }, [onShowingChange, showing]);
 
-  const toggleOption = useCallback(
-    (optionIndex: number): void => {
-      if (!question || readOnly) {
+  const submitAnswer = useCallback(
+    (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>): void => {
+      if (submittingRef.current || readOnly) {
         return;
       }
-      setDrafts((current) =>
-        current.map((entry, index) => {
-          if (index !== questionIndex) {
-            return entry;
-          }
-          if (question.multiSelect) {
-            const selected = entry.indices.includes(optionIndex);
-            return {
-              ...entry,
-              indices: selected
-                ? entry.indices.filter((value) => value !== optionIndex)
-                : [...entry.indices, optionIndex].sort((a, b) => a - b),
-            };
-          }
-          return { ...entry, indices: [optionIndex] };
+      submittingRef.current = true;
+      setSubmitting(true);
+      setDeliveryFailed(false);
+      const keyAtSubmit = cardKey;
+      void onAnswer(params)
+        .then(() => {
+          setDismissedKey(keyAtSubmit);
         })
-      );
+        .catch(() => {
+          // The keystrokes never reached the TUI: keep the card and say so.
+          setDeliveryFailed(true);
+        })
+        .finally(() => {
+          submittingRef.current = false;
+          setSubmitting(false);
+        });
     },
-    [question, questionIndex, readOnly]
+    [cardKey, onAnswer, readOnly]
+  );
+
+  const submitQuestions = useCallback(
+    (answerDrafts: DraftAnswer[]): void => {
+      const selections: SessionChatQuestionSelection[] = answerDrafts.map((entry) => ({
+        indices: entry.indices,
+        ...(entry.other.trim() ? { other: entry.other.trim() } : {}),
+      }));
+      submitAnswer({ kind: 'question', selections });
+    },
+    [submitAnswer]
+  );
+
+  const selectOption = useCallback(
+    (optionIndex: number): void => {
+      if (!question || readOnly || submitting) {
+        return;
+      }
+      const nextDrafts = drafts.map((entry, index) => {
+        if (index !== questionIndex) {
+          return entry;
+        }
+        if (question.multiSelect) {
+          const selected = entry.indices.includes(optionIndex);
+          return {
+            ...entry,
+            indices: selected
+              ? entry.indices.filter((value) => value !== optionIndex)
+              : [...entry.indices, optionIndex].sort((a, b) => a - b),
+          };
+        }
+        return { ...entry, indices: [optionIndex] };
+      });
+      setDrafts(nextDrafts);
+
+      if (question.multiSelect) {
+        return;
+      }
+      if (questionIndex >= questions.length - 1) {
+        submitQuestions(nextDrafts);
+      } else {
+        setActiveQuestion(questionIndex + 1);
+      }
+    },
+    [drafts, question, questionIndex, questions.length, readOnly, submitQuestions, submitting]
   );
 
   // Number keys 1-9 pick the matching option while focus sits outside an
@@ -309,37 +353,15 @@ export function SessionChatInteractiveCard({
         return;
       }
       event.preventDefault();
-      toggleOption(optionIndex);
+      selectOption(optionIndex);
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [collapsed, question, readOnly, showingQuestion, submitting, toggleOption]);
+  }, [collapsed, question, readOnly, selectOption, showingQuestion, submitting]);
 
   if (!showing || !prompt) {
     return null;
   }
-
-  const submitAnswer = (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>): void => {
-    if (submittingRef.current || readOnly) {
-      return;
-    }
-    submittingRef.current = true;
-    setSubmitting(true);
-    setDeliveryFailed(false);
-    const keyAtSubmit = cardKey;
-    void onAnswer(params)
-      .then(() => {
-        setDismissedKey(keyAtSubmit);
-      })
-      .catch(() => {
-        // The keystrokes never reached the TUI: keep the card and say so.
-        setDeliveryFailed(true);
-      })
-      .finally(() => {
-        submittingRef.current = false;
-        setSubmitting(false);
-      });
-  };
 
   const dismiss = (): void => {
     setDismissedKey(cardKey);
@@ -412,29 +434,22 @@ export function SessionChatInteractiveCard({
 
   const hasAnswer = drafts.some((entry) => entry.indices.length > 0 || entry.other.trim().length > 0);
 
-  const submitQuestions = (): void => {
-    const selections: SessionChatQuestionSelection[] = drafts.map((entry) => ({
-      indices: entry.indices,
-      ...(entry.other.trim() ? { other: entry.other.trim() } : {}),
-    }));
-    submitAnswer({ kind: 'question', selections });
-  };
-
   const advance = (): void => {
     if (readOnly || submitting) {
       return;
     }
     if (isLastQuestion) {
       if (hasAnswer) {
-        submitQuestions();
+        submitQuestions(drafts);
       }
       return;
     }
     setActiveQuestion(questionIndex + 1);
   };
 
-  // Trailing button cycles Skip → Next → Send answer → Sending… (§2.6);
-  // selecting an option never auto-submits.
+  // Trailing button cycles Skip → Next → Send answer → Sending… (§2.6).
+  // Single-select options advance immediately, including submitting the final
+  // question; multi-select questions keep the explicit trailing action.
   const trailingLabel = submitting
     ? 'Sending…'
     : isLastQuestion
@@ -462,7 +477,7 @@ export function SessionChatInteractiveCard({
             ) : null}
             <div className='mt-3'>
               <SessionChatChoiceRows
-                onSelect={toggleOption}
+                onSelect={selectOption}
                 options={question.options}
                 readOnly={readOnly}
                 selected={customAnswerActive ? [] : draft.indices}
