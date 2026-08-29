@@ -1218,6 +1218,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           id,
           imagePaths,
           sentAt: Date.now(),
+          // Frozen at send time: a prompt issued mid-response is held by the
+          // agent's own queue, so its echo must not read as a new turn that
+          // settles the response still streaming above it.
+          sentWhileWorking: workingRef.current,
           text,
         };
         setPending((current) => {

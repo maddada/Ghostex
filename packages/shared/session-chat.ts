@@ -79,6 +79,19 @@ export function resolveSessionChatDisplayAgent(
   return resolveSessionChatTranscriptAgent(agentId, agentIcon);
 }
 
+/**
+ * Sidebar artwork id for a chat agent label. Read-state labels are transcript
+ * family ids, and two of those differ from the sidebar agent id that owns the
+ * brand artwork (`hermes` → `hermes-agent`, `grok` → `grok-build`); the rest
+ * match their sidebar id as-is.
+ */
+export function sessionChatAgentIconId(agentLabel: string | null | undefined): string | null {
+  const display = resolveSessionChatDisplayAgent(agentLabel);
+  if (display === 'hermes') return 'hermes-agent';
+  if (display === 'grok') return 'grok-build';
+  return display;
+}
+
 export type SessionChatSource = 'transcript' | 'hook' | 'client';
 
 /** Visual palette for the shared chat surface, independent of app chrome. */
@@ -146,8 +159,11 @@ export interface SessionChatMessage {
    * The prompt is still waiting in the agent's own queue and has NOT been
    * handed to the model yet (the user typed it mid-turn). The server retracts
    * the row the moment the queue releases it and the delivered turn replaces
-   * it. Never set on client-sourced optimistic echoes: those render
-   * identically to real turns so the swap is invisible.
+   * it. A client-sourced optimistic echo sets it only when the send was
+   * issued mid-response (`sentWhileWorking` on the pending entry): the agent
+   * will hold that prompt, so the echo pre-renders the queued row that
+   * replaces it — and the transcript's fold logic must not treat it as a new
+   * turn that settles the response still streaming above it.
    *
    * NOT Ghostex's prompt queue. This flag is the AGENT CLI's own internal
    * queue (Claude Code's `queue-operation` rows) holding a prompt the user
@@ -275,8 +291,9 @@ export interface SessionChatTerminalNotice {
   /**
    * Open set (`loginExpired`, `trustPrompt`, `permissionsWarning`,
    * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`,
-   * `queuedInput`, `deliveryFailed`, `resumePrompt`). Clients MUST render an
-   * unknown kind generically — title/detail/severity are self-sufficient.
+   * `queuedInput`, `deliveryFailed`, `resumePrompt`, `switchConfirmPrompt`,
+   * `sessionPausedPrompt`). Clients MUST render an unknown kind generically —
+   * title/detail/severity are self-sufficient.
    */
   kind: string;
   severity: 'error' | 'warning' | 'info';

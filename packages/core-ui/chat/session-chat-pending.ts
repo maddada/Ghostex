@@ -71,6 +71,14 @@ export interface SessionChatPendingSend {
   /** 1-based among identical sends sharing a boundary. */
   matchingOccurrence?: number;
   matchingAfterTimestamp?: number;
+  /**
+   * The agent was already mid-response when this send was issued, so the
+   * prompt is being held (the agent CLI parks mid-turn input in its own
+   * queue) rather than starting a new turn. The echo carries `queued` then,
+   * matching the server's own queued row that replaces it — and keeping the
+   * transcript's fold logic from settling the response still in flight.
+   */
+  sentWhileWorking?: boolean;
 }
 
 export interface SessionChatCommandMarker {
@@ -419,6 +427,7 @@ export function sessionChatPendingSendsAsMessages(pending: readonly SessionChatP
     // Lowest priority: the real transcript turn always supersedes.
     source: 'client' as const,
     timestamp: entry.sentAt,
+    ...(entry.sentWhileWorking === true ? { queued: true as const } : {}),
   }));
 }
 

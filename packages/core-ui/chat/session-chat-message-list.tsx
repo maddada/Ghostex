@@ -813,12 +813,12 @@ function MessageRow({
 
   if (isUser) {
     /*
-     * The "Queued" label is driven ONLY by the agent's own queue bookkeeping
-     * in the transcript (`message.queued`), never by an optimistic echo:
-     * an echo says "we typed it", not "the agent is holding it", and echoes
-     * render IDENTICALLY to real turns so replacement by the transcript turn
-     * causes no visible state change. The server retracts the queued row the
-     * moment the queue releases it, so the label cannot outlive the wait.
+     * The "Queued" label is driven by the agent's own queue bookkeeping in
+     * the transcript (`message.queued`). An optimistic echo carries the flag
+     * only when the send was issued mid-response — the agent will hold that
+     * prompt, so the echo pre-renders the queued row that replaces it and the
+     * swap stays invisible. The server retracts the queued row the moment the
+     * queue releases it, so the label cannot outlive the wait.
      */
     return (
       <Message align='end' className='pb-4' data-role='user'>
@@ -903,7 +903,11 @@ function summaryModeTurns(
   let current: SummaryModeTurn | null = null;
 
   for (const message of messages) {
-    const isGenuineUserMessage = message.role === 'user' && sessionChatSuppressedTurnLabel(message) === null;
+    // A held prompt (agent-CLI queue row, mid-turn send echo — `queued`) has
+    // not started its own response yet: it stays inside the working turn's
+    // activeWork instead of opening a turn whose reply would never come.
+    const isGenuineUserMessage =
+      message.role === 'user' && message.queued !== true && sessionChatSuppressedTurnLabel(message) === null;
     if (isGenuineUserMessage) {
       current = { active: false, activeWork: [], final: null, user: message };
       turns.push(current);
@@ -925,10 +929,37 @@ function isVisibleAssistantArtifact(message: SessionChatMessage): boolean {
   return message.role === 'assistant' && message.blocks.some((block) => block.type === 'image-ref');
 }
 
+/**
+ * Where the response the agent is CURRENTLY producing begins: the last user
+ * row that is a genuine prompt the agent has accepted for delivery. A
+ * harness-injected turn (task notification, local command output) and a
+ * prompt the agent CLI is still holding in its queue (`queued`, including the
+ * optimistic echo of a send made mid-turn) both land as user rows WHILE the
+ * agent is mid-response — none of them starts a new response, so none of them
+ * may settle the one in flight. Falls back to 0 when no such prompt exists
+ * (stitched scroll-back that opens mid-conversation): the whole tail is the
+ * live response then.
+ */
+function activeResponseStartIndex(messages: readonly SessionChatMessage[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (
+      message &&
+      message.role === 'user' &&
+      message.queued !== true &&
+      sessionChatSuppressedTurnLabel(message) === null
+    ) {
+      return index;
+    }
+  }
+  return 0;
+}
+
 /** One copy affordance per response: the last assistant text before the next user turn. */
 function finalAssistantMessageIds(messages: readonly SessionChatMessage[], isWorking: boolean): ReadonlySet<string> {
   const ids = new Set<string>();
   let finalAssistantId: string | null = null;
+  const activeStart = isWorking ? activeResponseStartIndex(messages) : messages.length;
 
   const commitTurn = (): void => {
     if (finalAssistantId !== null) {
@@ -937,18 +968,25 @@ function finalAssistantMessageIds(messages: readonly SessionChatMessage[], isWor
     }
   };
 
-  for (const message of messages) {
+  messages.forEach((message, index) => {
     // A harness-injected turn (a background-task notification, local command
     // output, a message from another session) is authored by the terminal, not
     // by the reader: the agent is still mid-response on both sides of it.
     // Ending the turn there put a copy affordance under commentary that the
     // agent then kept building on.
     if (sessionChatSuppressedTurnLabel(message) !== null) {
-      continue;
+      return;
     }
     if (message.role === 'user') {
-      commitTurn();
-      continue;
+      // A user row past the active response's start is a held prompt (the
+      // agent's queue, or a mid-turn send's echo): the text before it is
+      // still commentary, so it must not mint a final reply.
+      if (index > activeStart) {
+        finalAssistantId = null;
+      } else {
+        commitTurn();
+      }
+      return;
     }
     if (
       message.role === 'assistant' &&
@@ -956,7 +994,7 @@ function finalAssistantMessageIds(messages: readonly SessionChatMessage[], isWor
     ) {
       finalAssistantId = message.id;
     }
-  }
+  });
   // The newest assistant text is only a final reply once the turn has
   // finished. While the agent is still working it is commentary, even when it
   // happens to be the most recent text block for a moment.
@@ -969,14 +1007,22 @@ function finalAssistantMessageIds(messages: readonly SessionChatMessage[], isWor
 /**
  * A completed interaction keeps the user's message and the agent's final
  * response in the normal transcript flow. Everything the agent emitted in
- * between becomes one collapsed work section. The newest interaction stays
- * expanded while the agent is still working.
+ * between becomes one collapsed work section.
+ *
+ * While the agent is still working, everything from the active response's
+ * start onward stays expanded. "Newest turn" is NOT enough for that guard: a
+ * harness-injected user row (task notification, local command output) or a
+ * held prompt (agent-CLI queue row, mid-turn send echo) lands mid-response
+ * and would close the streaming turn the moment it appears — folding live
+ * work into a "Worked for" row and yanking the bottom-pinned viewport onto
+ * it, only for the fold to vanish again when the injected row settles.
  */
 function completedWorkRenderItems(
   messages: readonly SessionChatMessage[],
   isWorking: boolean
 ): SessionChatRenderItem[] {
   const items: SessionChatRenderItem[] = [];
+  const activeStart = isWorking ? activeResponseStartIndex(messages) : messages.length;
   let index = 0;
   while (index < messages.length) {
     const message = messages[index];
@@ -1001,8 +1047,7 @@ function completedWorkRenderItems(
         break;
       }
     }
-    const isNewestTurn = nextUserIndex === messages.length;
-    if (finalIndex < 0 || (isNewestTurn && isWorking)) {
+    if (finalIndex < 0 || index >= activeStart) {
       items.push({ kind: 'message', message });
       for (const turnMessage of turnMessages) {
         items.push({ kind: 'message', message: turnMessage });
@@ -1415,9 +1460,10 @@ export function SessionChatMessageList({
                          * last message, and the synthetic streaming preview row is
                          * always last when it exists. Earlier rows are settled, so
                          * their code fences are safe to highlight and cache.
-                         * `completedWorkRenderItems` never folds the newest turn
-                         * while working, so a "completed-work" item is settled by
-                         * construction and keeps the default `isStreaming={false}`.
+                         * `completedWorkRenderItems` never folds the active
+                         * response while working, so a "completed-work" item is
+                         * settled by construction and keeps the default
+                         * `isStreaming={false}`.
                          */
                         isStreaming={isWorking && index === renderItems.length - 1}
                         message={item.message}
