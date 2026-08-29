@@ -922,6 +922,9 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         return;
       }
       sendInFlightRef.current = true;
+      // Sending closes the maximize overlay: the user's next look is at the
+      // transcript, not an empty full-height editor.
+      setMaximized(false);
       setSendError(null);
       setSendErrorCode(null);
 
