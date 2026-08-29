@@ -89,6 +89,12 @@ pub const SESSION_CHAT_NOTICE_API_REFUSAL: &str = "apiRefusal";
 /// Claude Code's resume-usage picker: an on-screen chooser the chat surface can
 /// ANSWER, not just point at. Its rows ride the notice as `choices`.
 pub use crate::session_chat_resume_prompt::SESSION_CHAT_RESUME_PROMPT_KIND as SESSION_CHAT_NOTICE_RESUME_PROMPT;
+/// Claude Code's safeguards "Session paused" chooser (switch to the fallback
+/// model vs edit the prompt): answerable the same way the resume picker is.
+pub use crate::session_chat_resume_prompt::SESSION_CHAT_SESSION_PAUSED_PROMPT_KIND as SESSION_CHAT_NOTICE_SESSION_PAUSED_PROMPT;
+/// Claude Code's model/effort switch confirmation ("Switch model?" / "Change
+/// effort level?"): answerable the same way the resume picker is.
+pub use crate::session_chat_resume_prompt::SESSION_CHAT_SWITCH_CONFIRM_PROMPT_KIND as SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionChatTerminalNoticeSeverity {
@@ -1243,13 +1249,14 @@ fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRule] {
     match agent {
         SessionChatOptionAgent::Claude => CLAUDE_RULES,
         SessionChatOptionAgent::Codex => CODEX_RULES,
-        // Grok, Omp and Pi are read for their model/effort statuslines; no
-        // agent-specific notice state has been catalogued for them, and
-        // an empty rule set says exactly that. Composer readiness is detected
-        // independently from each agent's measured input chrome.
-        SessionChatOptionAgent::Grok | SessionChatOptionAgent::Omp | SessionChatOptionAgent::Pi => {
-            &[]
-        }
+        // Grok, Hermes, Omp and Pi are read for their model/effort
+        // statuslines; no agent-specific notice state has been catalogued for
+        // them, and an empty rule set says exactly that. Composer readiness is
+        // detected independently from each agent's measured input chrome.
+        SessionChatOptionAgent::Grok
+        | SessionChatOptionAgent::Hermes
+        | SessionChatOptionAgent::Omp
+        | SessionChatOptionAgent::Pi => &[],
     }
 }
 
@@ -1297,6 +1304,16 @@ pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
         its rows are read off the screen rather than declared.
         */
         SESSION_CHAT_NOTICE_RESUME_PROMPT => true,
+        /*
+        CDXC:SessionChatSwitchConfirm 2026-08-29: same shape as the resume
+        picker — a numbered chooser owning the input line, where a digit both
+        selects and commits — so a send delivered into it answers the model/
+        effort switch instead of reaching the model.
+        */
+        SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT => true,
+        // CDXC:SessionChatSessionPaused 2026-08-29: same again — the paused
+        // chooser owns the input line until a row is picked.
+        SESSION_CHAT_NOTICE_SESSION_PAUSED_PROMPT => true,
         _ => ALL_NOTICE_RULES
             .iter()
             .flat_map(|rules| rules.iter())
@@ -1375,17 +1392,36 @@ fn notice_from_picker(
     screen: &NoticeScreen,
     picker: crate::session_chat_resume_prompt::SessionChatTerminalPicker,
 ) -> SessionChatTerminalNotice {
+    use crate::session_chat_resume_prompt::SessionChatTerminalPickerKind;
     const PICKER_GUIDANCE: &str =
         "Claude Code accepts no input until this is answered — pick an option to answer it here.";
     let detail = match picker.detail.as_deref() {
         Some(prose) => format!("{prose} {PICKER_GUIDANCE}"),
         None => PICKER_GUIDANCE.to_string(),
     };
+    let (kind, title) = match picker.kind {
+        SessionChatTerminalPickerKind::Resume => (
+            SESSION_CHAT_NOTICE_RESUME_PROMPT,
+            "Claude Code is asking how to resume this session",
+        ),
+        SessionChatTerminalPickerKind::SwitchModel => (
+            SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT,
+            "Claude Code is asking to confirm the model switch",
+        ),
+        SessionChatTerminalPickerKind::SwitchEffort => (
+            SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT,
+            "Claude Code is asking to confirm the effort switch",
+        ),
+        SessionChatTerminalPickerKind::SessionPaused => (
+            SESSION_CHAT_NOTICE_SESSION_PAUSED_PROMPT,
+            "Claude Code paused this session on a safeguards flag",
+        ),
+    };
     SessionChatTerminalNotice::new(
-        SESSION_CHAT_NOTICE_RESUME_PROMPT,
+        kind,
         SessionChatTerminalNoticeSeverity::Warning,
         SessionChatTerminalNoticeSource::Screen,
-        "Claude Code is asking how to resume this session",
+        title,
     )
     .with_detail(detail)
     .with_screen_tail(screen.screen_tail())

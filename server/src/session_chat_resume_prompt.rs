@@ -81,6 +81,91 @@ const CONFIRM_FOOTER: &str = "Enter to confirm";
 /// Notice kind the picker publishes itself as.
 pub const SESSION_CHAT_RESUME_PROMPT_KIND: &str = "resumePrompt";
 
+/*
+CDXC:SessionChatSwitchConfirm 2026-08-29:
+Claude Code's model/effort switch confirmation (one component paints both,
+verified in the 2.1.251 bundle):
+
+    Switch model?
+    Your next response will be slower and use more tokens
+
+    This conversation is cached for the current model. Switching to Fable 5
+    means the full history gets re-read on your next message.
+
+    ❯ 1. Yes, switch to Fable 5
+      2. No, go back
+
+It appears after picking a row in /model (or /effort) and owns the input line
+exactly like the resume picker, so a `/model` dispatched from the chat composer
+strands the CLI on a dialog chat never showed. Unlike the resume picker the
+component passes `hideInputGuide`, so there is NO "Enter to confirm" footer to
+anchor liveness on; the run must instead sit at the very bottom of the capture.
+Claude's other "No, go back" confirmations (MCP trust, gateway trust) pass
+`hideIndexes`, so they never parse as numbered rows and cannot match here.
+*/
+pub const SESSION_CHAT_SWITCH_CONFIRM_PROMPT_KIND: &str = "switchConfirmPrompt";
+
+const SWITCH_CONFIRM_YES_PREFIX: &str = "Yes, switch to ";
+const SWITCH_CONFIRM_NO_LABEL: &str = "No, go back";
+const SWITCH_MODEL_HEADING: &str = "Switch model?";
+const SWITCH_EFFORT_HEADING: &str = "Change effort level?";
+
+/// With the input guide hidden, only the (optional) statusline and shortcut
+/// hint may follow a live switch-confirm run; anything more is scrollback from
+/// a dialog that was already answered.
+const SESSION_CHAT_SWITCH_CONFIRM_TAIL_LINES: usize = 5;
+
+/*
+CDXC:SessionChatSessionPaused 2026-08-29:
+Claude Code's safeguards pause (labels verified in the 2.1.251 bundle):
+
+    Session paused
+
+    Fable 5's safeguards flagged this message. Our intentionally broad
+    safeguards allow us to deliver more capabilities faster, but can sometimes
+    flag legitimate coding, cybersecurity, and biology tasks. …
+
+    Details: `[bio]`
+
+    ❯ 1. Switch to Opus 5
+      2. Edit prompt and retry with Fable 5
+
+    ✻ Waiting for API response · will retry in 0s · check your network
+
+The API refused the message and the CLI pauses on this chooser (switch to the
+fallback model vs edit the prompt) until it is answered. Row labels carry the
+model names, with fallback wordings "Switch to the fallback model" and "Edit
+prompt and retry" when a display name is unavailable — hence prefix matching.
+Like the switch confirmation it paints no "Enter to confirm" footer, so
+liveness is the run sitting near the bottom of the capture; the retry spinner
+line (and any statusline) below it is why the pause tail window is one line
+deeper than the switch-confirm one.
+
+This is a sibling of the transcript-detected `apiRefusal` watchdog notice, not
+a replacement: that one reports a refusal the CLI already recorded and moved
+past, while this one is a live dialog that blocks all input.
+*/
+pub const SESSION_CHAT_SESSION_PAUSED_PROMPT_KIND: &str = "sessionPausedPrompt";
+
+const SESSION_PAUSED_HEADING: &str = "Session paused";
+const SESSION_PAUSED_SWITCH_PREFIX: &str = "Switch to ";
+const SESSION_PAUSED_EDIT_PREFIX: &str = "Edit prompt and retry";
+const SESSION_CHAT_SESSION_PAUSED_TAIL_LINES: usize = 6;
+
+/// Which on-screen chooser a detection describes; the notice kind and title
+/// come from this.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionChatTerminalPickerKind {
+    /// The resume-usage chooser (summary vs full session).
+    Resume,
+    /// The "Switch model?" confirmation.
+    SwitchModel,
+    /// The "Change effort level?" confirmation, painted by the same component.
+    SwitchEffort,
+    /// The safeguards "Session paused" chooser.
+    SessionPaused,
+}
+
 /// One row of an on-screen picker, in the order it is painted.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionChatTerminalPickerRow {
@@ -97,6 +182,7 @@ pub struct SessionChatTerminalPickerRow {
 /// highlight sits.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionChatTerminalPicker {
+    pub kind: SessionChatTerminalPickerKind,
     /// Prose painted above the rows, joined and capped. `None` when the picker
     /// stands alone.
     pub detail: Option<String>,
@@ -254,40 +340,107 @@ fn prose_above(window: &[String], first_row_line: usize) -> Option<String> {
     Some(capped)
 }
 
-/// `Some` only when the resume-usage picker is live on screen and its highlight
+/// The resume-usage picker, proven live by its "Enter to confirm" footer
+/// sitting at the very bottom of the capture.
+fn resume_run_kind(window: &[String], run: &[PickerRow]) -> Option<SessionChatTerminalPickerKind> {
+    if !run
+        .iter()
+        .any(|row| row.label.starts_with(RESUME_FULL_SESSION_LABEL))
+        || !run
+            .iter()
+            .any(|row| row.label.starts_with(RESUME_FROM_SUMMARY_LABEL))
+    {
+        return None;
+    }
+    let last_row_line = run.last().map(|row| row.line).unwrap_or_default();
+    let confirmed = window
+        .iter()
+        .enumerate()
+        .skip(last_row_line + 1)
+        .find(|(_, line)| line.contains(CONFIRM_FOOTER))
+        .is_some_and(|(line, _)| {
+            window.len() - line <= SESSION_CHAT_RESUME_PROMPT_FOOTER_TAIL_LINES
+        });
+    // Not confirmed ⇒ an answered picker left in scrollback, not a live one.
+    confirmed.then_some(SessionChatTerminalPickerKind::Resume)
+}
+
+/// The model/effort switch confirmation. No footer exists to prove liveness
+/// (see the kind's comment), so the run itself must sit at the bottom of the
+/// capture and its heading must be painted above it.
+fn switch_confirm_run_kind(
+    window: &[String],
+    run: &[PickerRow],
+) -> Option<SessionChatTerminalPickerKind> {
+    if !run
+        .iter()
+        .any(|row| row.label.starts_with(SWITCH_CONFIRM_YES_PREFIX))
+        || !run
+            .iter()
+            .any(|row| row.label.starts_with(SWITCH_CONFIRM_NO_LABEL))
+    {
+        return None;
+    }
+    let first_row_line = run.first().map(|row| row.line).unwrap_or_default();
+    let last_row_line = run.last().map(|row| row.line).unwrap_or_default();
+    if window.len() - last_row_line > SESSION_CHAT_SWITCH_CONFIRM_TAIL_LINES {
+        return None;
+    }
+    window[..first_row_line].iter().rev().find_map(|line| {
+        let line = strip_box_border(line);
+        if line.contains(SWITCH_MODEL_HEADING) {
+            Some(SessionChatTerminalPickerKind::SwitchModel)
+        } else if line.contains(SWITCH_EFFORT_HEADING) {
+            Some(SessionChatTerminalPickerKind::SwitchEffort)
+        } else {
+            None
+        }
+    })
+}
+
+/// The safeguards "Session paused" chooser. Same liveness reasoning as the
+/// switch confirmation, with its heading painted above the rows.
+fn session_paused_run_kind(
+    window: &[String],
+    run: &[PickerRow],
+) -> Option<SessionChatTerminalPickerKind> {
+    if !run
+        .iter()
+        .any(|row| row.label.starts_with(SESSION_PAUSED_SWITCH_PREFIX))
+        || !run
+            .iter()
+            .any(|row| row.label.starts_with(SESSION_PAUSED_EDIT_PREFIX))
+    {
+        return None;
+    }
+    let first_row_line = run.first().map(|row| row.line).unwrap_or_default();
+    let last_row_line = run.last().map(|row| row.line).unwrap_or_default();
+    if window.len() - last_row_line > SESSION_CHAT_SESSION_PAUSED_TAIL_LINES {
+        return None;
+    }
+    window[..first_row_line]
+        .iter()
+        .any(|line| strip_box_border(line).contains(SESSION_PAUSED_HEADING))
+        .then_some(SessionChatTerminalPickerKind::SessionPaused)
+}
+
+/// `Some` only when a known Claude picker is live on screen and its highlight
 /// is proven, so every row is reachable with a derived key count.
 pub fn detect_session_chat_terminal_picker(text: &str) -> Option<SessionChatTerminalPicker> {
     let window = scan_window(text);
     for run in picker_runs(&window).into_iter().rev() {
-        if !run
-            .iter()
-            .any(|row| row.label.starts_with(RESUME_FULL_SESSION_LABEL))
-        {
+        let Some(kind) = resume_run_kind(&window, &run)
+            .or_else(|| switch_confirm_run_kind(&window, &run))
+            .or_else(|| session_paused_run_kind(&window, &run))
+        else {
             continue;
-        }
-        if !run
-            .iter()
-            .any(|row| row.label.starts_with(RESUME_FROM_SUMMARY_LABEL))
-        {
-            continue;
-        }
+        };
         let Some(selected_index) = run.iter().position(|row| row.selected) else {
             continue; // no highlight proven ⇒ no derivable key count
         };
         let first_row_line = run.first().map(|row| row.line).unwrap_or_default();
-        let last_row_line = run.last().map(|row| row.line).unwrap_or_default();
-        let confirmed = window
-            .iter()
-            .enumerate()
-            .skip(last_row_line + 1)
-            .find(|(_, line)| line.contains(CONFIRM_FOOTER))
-            .is_some_and(|(line, _)| {
-                window.len() - line <= SESSION_CHAT_RESUME_PROMPT_FOOTER_TAIL_LINES
-            });
-        if !confirmed {
-            continue; // an answered picker left in scrollback, not a live one
-        }
         return Some(SessionChatTerminalPicker {
+            kind,
             detail: prose_above(&window, first_row_line),
             rows: run
                 .into_iter()
