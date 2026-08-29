@@ -369,6 +369,18 @@ impl GhostexGpuiApp {
                 .as_ref()
                 .map(command_terminal_runtime_session_id_from_gxserver_key)
                 .or_else(|| {
+                    /*
+                    CDXC:RemoteProjectActions 2026-08-29:
+                    A remote Action tab has no local daemon identity, so its
+                    runtime owner is derived from the remote session it attaches
+                    to. Without this the mounted attach would be reported as
+                    lost attach state and the tab would close itself.
+                    */
+                    self.command_remote_action_session_for_command_tab(slot_id.session_id)
+                        .as_ref()
+                        .map(command_terminal_runtime_session_id_from_remote_reference)
+                })
+                .or_else(|| {
                     #[cfg(target_os = "windows")]
                     if matches!(
                         windows_terminal_backend::resolve_current(),

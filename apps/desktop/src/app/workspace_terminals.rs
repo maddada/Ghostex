@@ -819,6 +819,7 @@ impl GhostexGpuiApp {
                             &prepare_target,
                             &prepare_reference,
                             true,
+                            true,
                         )
                     })
                     .await;
@@ -1757,7 +1758,9 @@ impl GhostexGpuiApp {
             cx.spawn(async move |this, cx| {
                 let result = background
                     .spawn(async move {
-                        gpui_prepare_remote_attach_terminal_plan(&config, &target, &reference, true)
+                        gpui_prepare_remote_attach_terminal_plan(
+                            &config, &target, &reference, true, true,
+                        )
                     })
                     .await;
                 let _ = this.update(cx, |this, cx| {

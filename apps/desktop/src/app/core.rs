@@ -664,6 +664,28 @@ pub struct GhostexGpuiApp {
     pub(crate) command_gxserver_session_mappings:
         HashMap<CommandSessionId, GpuiLocalWorkspaceSessionKey>,
     pub(crate) command_gxserver_attach_pending: HashSet<CommandSessionId>,
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    The command-tab-scoped mirror of `command_gxserver_session_mappings` for
+    remote Action tabs. It exists for the same reason the local map does: a tab
+    close removes the session from the command model *before* the close cleanup
+    runs, so the identity needed to close the owning session has to survive
+    outside the model. Rebuilt from the incoming pane on a per-project swap,
+    exactly like the local map.
+    */
+    pub(crate) command_remote_action_sessions:
+        HashMap<CommandSessionId, GpuiRemoteAttachSessionReference>,
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    A remote Action tab spawns its own ssh, so it owns the saved-password
+    askpass helper for the lifetime of that terminal — the command-pane
+    equivalent of `remote_attach_askpass_scripts`. Dropping the handle deletes
+    the temp script and stops its password server, so it must outlive the
+    terminal and no longer.
+    */
+    #[cfg(target_os = "macos")]
+    pub(crate) command_remote_attach_askpass_scripts:
+        HashMap<CommandSessionId, GpuiRemoteAskpassScript>,
     pub(crate) pending_command_gxserver_cleanup: HashSet<GpuiLocalWorkspaceSessionKey>,
     pub(crate) command_gxserver_cleanup_in_flight: HashSet<GpuiLocalWorkspaceSessionKey>,
     /*
@@ -2188,7 +2210,6 @@ impl Render for GhostexGpuiApp {
                             div()
                                 .w(px(self.sidebar_width))
                                 .h_full()
-                                .pl(px(SIDEBAR_LEFT_INSET))
                                 .when_some(self.sidebar.clone(), |this, sidebar| {
                                     this.child(sidebar)
                                 }),
@@ -2196,6 +2217,7 @@ impl Render for GhostexGpuiApp {
                     })
                     .when(sidebar_chrome_visible && sidebar_on_left, |this| {
                         this.child(self.render_sidebar_resize_divider(cx))
+                            .child(self.render_sidebar_workspace_separator())
                     })
                     .child(
                         v_flex()
@@ -2209,14 +2231,14 @@ impl Render for GhostexGpuiApp {
                             .child(self.render_workspace_with_command_pane(window, cx)),
                     )
                     .when(sidebar_chrome_visible && !sidebar_on_left, |this| {
-                        this.child(self.render_sidebar_resize_divider(cx))
+                        this.child(self.render_sidebar_workspace_separator())
+                            .child(self.render_sidebar_resize_divider(cx))
                     })
                     .when(sidebar_chrome_visible && !sidebar_on_left, |this| {
                         this.child(
                             div()
                                 .w(px(self.sidebar_width))
                                 .h_full()
-                                .pl(px(SIDEBAR_LEFT_INSET))
                                 .when_some(self.sidebar.clone(), |this, sidebar| {
                                     this.child(sidebar)
                                 }),

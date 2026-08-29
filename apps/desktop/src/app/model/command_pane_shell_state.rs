@@ -105,6 +105,31 @@ pub(crate) fn command_pane_model_to_shell_state_json_with_optional_delayed_send_
                         serde_json::Value::String(key.session_id.clone()),
                     );
                 }
+                /*
+                CDXC:RemoteProjectActions 2026-08-29:
+                A remote Action's command tab has no local daemon identity, so
+                restart parity persists the remote machine/project/session
+                selectors instead. Without them a restored tab would try to
+                create a *local* command session for a project that only exists
+                on the remote machine. These are selectors only: no SSH host,
+                port, user, token, remote path, or command text.
+                */
+                if let Some(reference) = session.remote_action_session.as_ref()
+                    && let Some(object) = session_json.as_object_mut()
+                {
+                    object.insert(
+                        "remoteMachineId".to_string(),
+                        serde_json::Value::String(reference.remote_machine_id.clone()),
+                    );
+                    object.insert(
+                        "remoteProjectId".to_string(),
+                        serde_json::Value::String(reference.project_id.clone()),
+                    );
+                    object.insert(
+                        "remoteSessionId".to_string(),
+                        serde_json::Value::String(reference.session_id.clone()),
+                    );
+                }
                 if let Some(command_id) = session.action_command_id.as_ref()
                     && let Some(object) = session_json.as_object_mut()
                 {
@@ -390,17 +415,60 @@ pub(crate) fn command_session_from_shell_state(
     let close_after_done_armed = json_bool_field(object, "closeAfterDone").unwrap_or(false);
     let title = command_session_title_from_shell_state(object, id);
     let gxserver_session_key = command_session_gxserver_key_from_shell_state(object);
+    let remote_action_session = command_session_remote_action_session_from_shell_state(object);
     let action_command_id = command_session_action_command_id_from_shell_state(object);
     let mut session = CommandTerminalSession::placeholder(id, title)
         .with_activity(activity)
         .with_delayed_send_active(delayed_send_active)
         .with_close_after_done_armed(close_after_done_armed)
         .with_gxserver_session_key(gxserver_session_key)
+        .with_remote_action_session(remote_action_session)
         .with_sleeping(is_sleeping);
     if let Some(command_id) = action_command_id {
         session = session.with_action_command_id(command_id);
     }
     Some(session)
+}
+
+pub(crate) fn command_session_remote_action_session_from_shell_state(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Option<GpuiRemoteAttachSessionReference> {
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    Restore a remote Action tab's identity only from a complete triple that
+    still passes the same id validation the live remote tunnel applies. A
+    partial or malformed row restores as a plain tab with no remote identity,
+    which is what keeps hand-edited shell state from steering an SSH attach.
+    */
+    let remote_machine_id =
+        gpui_normalize_remote_machine_id(json_string_field(object, "remoteMachineId")?)?;
+    let project_id = json_string_field(object, "remoteProjectId")?.trim();
+    let session_id = json_string_field(object, "remoteSessionId")?.trim();
+    if !gpui_remote_sidebar_project_id_allowed(project_id)
+        || !gpui_remote_sidebar_session_id_allowed(session_id)
+    {
+        return None;
+    }
+    Some(GpuiRemoteAttachSessionReference {
+        remote_machine_id,
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+    })
+}
+
+pub(crate) fn command_remote_action_sessions_from_command_model(
+    command_pane: &CommandPaneModel,
+) -> HashMap<CommandSessionId, GpuiRemoteAttachSessionReference> {
+    command_pane
+        .terminal_sessions
+        .iter()
+        .filter_map(|session| {
+            session
+                .remote_action_session
+                .clone()
+                .map(|reference| (session.id, reference))
+        })
+        .collect()
 }
 
 pub(crate) fn command_session_action_command_id_from_shell_state(

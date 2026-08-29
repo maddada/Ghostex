@@ -100,7 +100,7 @@ impl GhostexGpuiApp {
                     let result = background
                         .spawn(async move {
                             gpui_prepare_remote_attach_terminal_plan(
-                                &config, &target, &reference, false,
+                                &config, &target, &reference, false, false,
                             )
                         })
                         .await;

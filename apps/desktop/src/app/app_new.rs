@@ -61,6 +61,8 @@ impl GhostexGpuiApp {
         );
         let restored_command_gxserver_session_mappings =
             command_gxserver_session_mappings_from_command_model(&shell_layout_state.command_pane);
+        let restored_command_remote_action_sessions =
+            command_remote_action_sessions_from_command_model(&shell_layout_state.command_pane);
         let command_startup_activity_restore_intents = shell_layout_state
             .command_startup_activity_restore_intents
             .clone();
@@ -240,6 +242,9 @@ impl GhostexGpuiApp {
                 command_delayed_send_persistence_ticker_active: false,
                 command_gxserver_session_mappings: restored_command_gxserver_session_mappings,
                 command_gxserver_attach_pending: HashSet::new(),
+                command_remote_action_sessions: restored_command_remote_action_sessions,
+                #[cfg(target_os = "macos")]
+                command_remote_attach_askpass_scripts: HashMap::new(),
                 pending_command_gxserver_cleanup,
                 command_gxserver_cleanup_in_flight: HashSet::new(),
                 agents_sessions_pending_surface_transfer: HashSet::new(),

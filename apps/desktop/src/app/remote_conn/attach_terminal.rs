@@ -107,6 +107,7 @@ impl GhostexGpuiApp {
                         &target,
                         &prepare_reference,
                         true,
+                        true,
                     )
                 })
                 .await;

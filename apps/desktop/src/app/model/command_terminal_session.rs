@@ -88,6 +88,17 @@ pub(crate) struct CommandTerminalSession {
     pub(crate) id: CommandSessionId,
     pub(crate) title: String,
     pub(crate) gxserver_session_key: Option<GpuiLocalWorkspaceSessionKey>,
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    A remote project's terminal Action runs its command on the machine that
+    owns the project, so its command tab attaches over SSH to a session on that
+    machine's daemon instead of owning a local one. This is that session's
+    identity: it is what lets the tab close the remote session when it closes,
+    and reattach to it after a restart. It carries only the machine/project/
+    session selectors, never SSH details, tokens, remote paths, or command
+    text, and a tab has either this or `gxserver_session_key`, never both.
+    */
+    pub(crate) remote_action_session: Option<GpuiRemoteAttachSessionReference>,
     /// Runtime-only zmx persistence session name from gxserver attach
     /// metadata; see `TerminalSession::zmx_session_name`.
     pub(crate) zmx_session_name: Option<String>,
@@ -109,6 +120,7 @@ impl CommandTerminalSession {
             id,
             title,
             gxserver_session_key: None,
+            remote_action_session: None,
             zmx_session_name: None,
             activity: CommandTerminalActivity::Idle,
             delayed_send_active: false,
@@ -154,6 +166,14 @@ impl CommandTerminalSession {
         key: Option<GpuiLocalWorkspaceSessionKey>,
     ) -> Self {
         self.gxserver_session_key = key;
+        self
+    }
+
+    pub(crate) fn with_remote_action_session(
+        mut self,
+        reference: Option<GpuiRemoteAttachSessionReference>,
+    ) -> Self {
+        self.remote_action_session = reference;
         self
     }
 

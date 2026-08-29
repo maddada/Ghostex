@@ -282,6 +282,37 @@ pub(crate) fn command_terminal_runtime_session_id_from_gxserver_key(
     )
 }
 
+pub(crate) fn command_terminal_runtime_session_id_from_remote_reference(
+    reference: &GpuiRemoteAttachSessionReference,
+) -> AgentsTerminalRuntimeSessionId {
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    A remote Action's command tab has no local daemon identity, so it derives
+    its runtime owner from the remote machine/project/session triple instead.
+    That keeps the id stable while the tab is moved between command groups —
+    unlike the mount-slot form — and it can never collide with a local
+    command-surface id because it owns its own namespace.
+    */
+    const COMMAND_REMOTE_RUNTIME_ID_NAMESPACE: u64 = 0xE000_0000_0000_0000;
+    const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = FNV_OFFSET;
+    for byte in reference
+        .remote_machine_id
+        .bytes()
+        .chain([b':'])
+        .chain(reference.project_id.bytes())
+        .chain([b':'])
+        .chain(reference.session_id.bytes())
+    {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+    }
+    AgentsTerminalRuntimeSessionId(
+        COMMAND_REMOTE_RUNTIME_ID_NAMESPACE | (hash & 0x0FFF_FFFF_FFFF_FFFF),
+    )
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn command_terminal_config_request_with_launch_payload_source(
     slot_id: CommandTerminalBodyMountSlotId,

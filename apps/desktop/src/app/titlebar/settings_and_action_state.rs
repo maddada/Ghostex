@@ -480,7 +480,9 @@ impl GhostexGpuiApp {
                 because the debug workspace terminal is a local surface too.
                 */
                 if let Some(reference) = self.active_gpui_remote_project_reference() {
-                    self.run_gpui_remote_command_action_terminal(reference, title, command, cx);
+                    self.run_gpui_remote_command_action_terminal(
+                        reference, command_id, title, command, window, cx,
+                    );
                     self.open_gpui_titlebar_action_links(&action.links, window, cx);
                     return;
                 }

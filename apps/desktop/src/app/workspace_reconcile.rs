@@ -1167,6 +1167,18 @@ impl GhostexGpuiApp {
         */
         self.command_gxserver_session_mappings =
             command_gxserver_session_mappings_from_command_model(&self.command_pane);
+        /*
+        CDXC:RemoteProjectActions 2026-08-29:
+        Remote Action tabs park with their project exactly like local command
+        tabs: the incoming pane's own remote identities replace the outgoing
+        pane's, and the parked project's remote sessions stay alive on their
+        machine until that tab is really closed. The askpass helpers belong to
+        the torn-down local ssh clients, so they are dropped with them.
+        */
+        self.command_remote_action_sessions =
+            command_remote_action_sessions_from_command_model(&self.command_pane);
+        #[cfg(target_os = "macos")]
+        self.command_remote_attach_askpass_scripts.clear();
         self.command_gxserver_attach_pending.clear();
         self.command_terminal_launch_payload_source
             .remove_all_payloads();

@@ -703,6 +703,9 @@ impl GhostexGpuiApp {
         let mapping = self
             .command_gxserver_session_mappings
             .remove(&source_session_id);
+        let remote_reference = self
+            .command_remote_action_sessions
+            .remove(&source_session_id);
 
         let transferred = match placement {
             CommandToAgentsDropPlacement::PaneBody(zone) => {
@@ -737,6 +740,10 @@ impl GhostexGpuiApp {
             if let Some(mapping) = mapping {
                 self.command_gxserver_session_mappings
                     .insert(source_session_id, mapping);
+            }
+            if let Some(reference) = remote_reference {
+                self.command_remote_action_sessions
+                    .insert(source_session_id, reference);
             }
             return None;
         };
@@ -809,6 +816,14 @@ impl GhostexGpuiApp {
                 key,
                 inserted_session_id,
                 0,
+                cx,
+            );
+        }
+        if let Some(reference) = remote_reference {
+            self.adopt_transferred_remote_command_action_session(
+                source_session_id,
+                reference,
+                inserted_session_id,
                 cx,
             );
         }
@@ -1607,6 +1622,7 @@ impl GhostexGpuiApp {
         {
             self.close_command_gxserver_session_in_background(key, cx);
         }
+        self.close_remote_command_action_session_for_closed_tab(current_slot_id.session_id, cx);
         self.command_terminal_launch_payload_source
             .remove_payloads_for_command_session(current_slot_id.session_id);
         let changed = self
@@ -1791,6 +1807,7 @@ impl GhostexGpuiApp {
         if let Some(key) = self.command_gxserver_session_mappings.remove(&session_id) {
             self.close_command_gxserver_session_in_background(key, cx);
         }
+        self.close_remote_command_action_session_for_closed_tab(session_id, cx);
     }
 
     pub(crate) fn prune_command_gxserver_sessions_for_command_model(
@@ -1807,12 +1824,19 @@ impl GhostexGpuiApp {
             .retain(|session_id| live_session_ids.contains(session_id));
         let stale = self
             .command_gxserver_session_mappings
-            .iter()
-            .filter_map(|(session_id, key)| {
-                (!live_session_ids.contains(session_id)).then_some((*session_id, key.clone()))
-            })
-            .collect::<Vec<_>>();
-        for (session_id, _key) in stale {
+            .keys()
+            .copied()
+            /*
+            CDXC:RemoteProjectActions 2026-08-29:
+            Remote Action tabs are pruned by the same sweep as local ones. A tab
+            removed straight from the command model (Action pruning of stale
+            same-command tabs, layout repair) never reaches the tab-close path,
+            so this is the only place that closes the remote session it owned.
+            */
+            .chain(self.command_remote_action_sessions.keys().copied())
+            .filter(|session_id| !live_session_ids.contains(session_id))
+            .collect::<HashSet<_>>();
+        for session_id in stale {
             self.forget_command_gxserver_session_for_closed_tab(session_id, cx);
         }
     }
@@ -1882,6 +1906,44 @@ impl GhostexGpuiApp {
             Ok(windows_terminal_backend::ResolvedWindowsTerminalBackend::PowerShell)
         ) {
             self.start_command_terminal_powershell_for_slot(slot_id, startup_text, cx);
+            return;
+        }
+        /*
+        CDXC:RemoteProjectActions 2026-08-29:
+        A remote Action's command tab owns a session on another machine, so it
+        reattaches over SSH instead of creating or reclaiming a local one. This
+        branch is what keeps a restored remote Action tab from asking the local
+        daemon for a command session in a project that only exists remotely,
+        which fails on the missing local project path.
+        */
+        if let Some(reference) =
+            self.command_remote_action_session_for_command_tab(slot_id.session_id)
+        {
+            self.start_remote_command_terminal_attach_for_slot(slot_id, reference, cx);
+            return;
+        }
+        /*
+        CDXC:RemoteProjectActions 2026-08-29:
+        An Action tab in a remote project's command pane that has neither a
+        remote nor a local identity is unmountable by construction: its Action
+        runs on the remote machine, and the local daemon has no session and no
+        project path for it. That state exists only when the app was quit (or
+        the pane was swapped away) between creating the tab and the remote
+        session's identity landing on it, so retire the leftover tab instead of
+        asking the local daemon for a session it can never create and reporting
+        that as a command-terminal error on every launch. Plain command tabs are
+        untouched: they still take the local path and its honest failure.
+        */
+        if self.active_gpui_remote_project_reference().is_some()
+            && self
+                .command_pane
+                .session(slot_id.session_id)
+                .is_some_and(|session| session.action_command_id.is_some())
+            && self
+                .command_gxserver_session_key_for_command_tab(slot_id.session_id)
+                .is_none()
+        {
+            self.close_command_pane_tab(slot_id.group_id, slot_id.session_id, cx);
             return;
         }
         if let Some(key) = self.command_gxserver_session_key_for_command_tab(slot_id.session_id) {

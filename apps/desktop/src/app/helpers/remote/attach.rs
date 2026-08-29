@@ -51,10 +51,23 @@ pub(crate) fn gpui_prepare_remote_attach_terminal_plan(
     target: &GpuiRemoteGxserverRequestTarget,
     reference: &GpuiRemoteAttachSessionReference,
     wake_session: bool,
+    interactive_attach: bool,
 ) -> Result<GpuiRemoteAttachTerminalPlan, String> {
     /*
     CDXC:GPUIRemoteAttach 2026-06-24-19:06:
     Remote attach validates session/project ownership through the Rust-owned gxserver tunnel before creating a GPUI terminal. The interactive pane runs the authoritative attach command returned by that validation over a fresh SSH connection; asking the remote CLI to resolve the same ids again would repeat its full session-inventory RPC sequence before input becomes available. The human-facing copy command remains `ghostex attach`, and renderer text, gxserver bearer tokens, remote paths, stdout/stderr, and daemon bodies are never logged or copied to CEF.
+
+    CDXC:RemoteProjectActions 2026-08-29:
+    `wake_session` and `interactive_attach` answer different questions and must
+    stay separate. The first picks the RPC that resolves attach metadata: wake
+    for a session whose provider may be asleep, plain metadata for one whose
+    provider this app just started with its own startup command — re-waking
+    that one would restart the command. The second decides whether the caller
+    is going to run the returned SSH command in a terminal the user types into,
+    which is the only case that needs the saved-password askpass helper. A
+    metadata-only plan that still spawns ssh (a remote Action launch) needs
+    askpass exactly as much as a woken one, or ssh falls back to prompting for
+    the password on the pane's own TTY.
     */
     let path = if wake_session {
         "/api/wakeSession"
@@ -79,7 +92,13 @@ pub(crate) fn gpui_prepare_remote_attach_terminal_plan(
             "operation": if wake_session { "wake" } else { "metadata" },
         }),
     );
-    gpui_remote_attach_terminal_plan_from_result(config, target, reference, &result, wake_session)
+    gpui_remote_attach_terminal_plan_from_result(
+        config,
+        target,
+        reference,
+        &result,
+        interactive_attach,
+    )
 }
 
 pub(crate) fn gpui_remote_attach_terminal_plan_from_result(

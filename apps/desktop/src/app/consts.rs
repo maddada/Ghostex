@@ -73,10 +73,13 @@ pub(crate) const SIDEBAR_RESET_WIDTH: f32 = 235.0;
 
 pub(crate) const SIDEBAR_DIVIDER_WIDTH: f32 = 5.0;
 
-/// Gap between the sidebar column's left edge and the sidebar surface itself.
-/// Applied as padding so the column keeps occupying exactly `sidebar_width`
-/// and divider hit-testing stays aligned with the persisted width.
-pub(crate) const SIDEBAR_LEFT_INSET: f32 = 3.0;
+/// Workspace-colored separator between the sidebar's resize rail and the
+/// Agents workspace, mirrored on both sidebar sides:
+/// `window edge | sidebar | 5px rail | 2px separator | workspace` on the left
+/// and the reverse on the right. The sidebar page's own CSS supplies the
+/// 5px sidebar-colored gutter at the window edge, so the native column no
+/// longer pads its outer edge.
+pub(crate) const SIDEBAR_WORKSPACE_SEPARATOR_WIDTH: f32 = 2.0;
 
 pub(crate) const SIDEBAR_DIVIDER_LINE_WIDTH: f32 = 1.0;
 

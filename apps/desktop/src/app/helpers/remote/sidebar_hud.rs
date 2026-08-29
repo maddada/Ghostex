@@ -219,6 +219,14 @@ pub(crate) fn gpui_run_remote_project_action_terminal(
     terminal. Running it through the local command pane would execute the
     project's command on the wrong machine, against a path that does not exist
     here.
+
+    CDXC:RemoteProjectActions 2026-08-29:
+    The row is created on the `commands` surface, exactly like the local
+    command-pane Action session in `gpui_command_terminal_create_session_params`.
+    That is what makes gxserver mark it `visibleInSidebarByDefault: false`, so
+    the remote project's session list and Agents tab strip stay free of a row
+    for a terminal that lives in this app's command pane — the same contract the
+    local Action tabs already have.
     */
     let created = gpui_remote_gxserver_rpc_result(
         target,
@@ -227,7 +235,7 @@ pub(crate) fn gpui_run_remote_project_action_terminal(
             "kind": "terminal",
             "lifecycleState": "running",
             "projectId": project.project_id.as_str(),
-            "surface": "workspace",
+            "surface": "commands",
             "title": title,
         }),
         Duration::from_secs(30),
@@ -263,6 +271,82 @@ pub(crate) fn gpui_run_remote_project_action_terminal(
         }),
         Duration::from_secs(30),
     )?;
-    let plan = gpui_prepare_remote_attach_terminal_plan(config, target, &reference, false)?;
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    The provider was just started with the Action command as its startup text,
+    so this plan reads attach metadata instead of waking the session (a wake
+    would restart the command). It is still an interactive attach: the command
+    pane spawns this ssh itself, so it needs the saved-password askpass helper
+    or ssh prompts for the password inside the Action's own pane.
+    */
+    let plan = gpui_prepare_remote_attach_terminal_plan(config, target, &reference, false, true)?;
     Ok((reference, plan))
+}
+
+pub(crate) fn gpui_update_remote_command_action_session_surface(
+    target: &GpuiRemoteGxserverRequestTarget,
+    reference: &GpuiRemoteAttachSessionReference,
+    surface: &str,
+) -> Result<(), String> {
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    Dragging a remote Action's command tab into the Agents workspace keeps the
+    same live SSH attach, so the remote row has to change surfaces with it for
+    the same reason the local one does: the sidebar projects only `workspace`
+    sessions, and an Agents tab missing from that projection is reconciled away
+    together with its terminal. Only the fixed surface enum and the session
+    selectors cross the tunnel.
+    */
+    if surface != "workspace" && surface != "commands" {
+        return Err("The command terminal surface is invalid.".to_string());
+    }
+    gpui_remote_gxserver_rpc_result(
+        target,
+        "/api/updateSession",
+        &serde_json::json!({
+            "projectId": reference.project_id.as_str(),
+            "sessionId": reference.session_id.as_str(),
+            "surface": surface,
+        }),
+        Duration::from_secs(10),
+    )
+    .map(|_| ())
+}
+
+pub(crate) fn gpui_close_remote_command_action_session(
+    target: &GpuiRemoteGxserverRequestTarget,
+    reference: &GpuiRemoteAttachSessionReference,
+) {
+    /*
+    CDXC:RemoteProjectActions 2026-08-29:
+    A remote Action's command tab owns the gxserver session it created on the
+    owning machine, so closing the tab has to close that session — the same
+    ownership `gpui_close_command_terminal_gxserver_session` implements for a
+    local Action tab, over the remote tunnel. Without it every rerun (which
+    always replaces the tab, see `run_gpui_remote_command_action_terminal`)
+    would leave a live `commands`-surface session and its zmx process behind on
+    the remote machine. Transition first so the daemon owns provider shutdown
+    and lifecycle history, then remove the row.
+    */
+    let _ = gpui_remote_gxserver_rpc_result(
+        target,
+        "/api/transitionSession",
+        &serde_json::json!({
+            "action": "close",
+            "projectId": reference.project_id.as_str(),
+            "reason": "closeTerminal",
+            "sessionId": reference.session_id.as_str(),
+        }),
+        Duration::from_secs(30),
+    );
+    let _ = gpui_remote_gxserver_rpc_result(
+        target,
+        "/api/removeSession",
+        &serde_json::json!({
+            "projectId": reference.project_id.as_str(),
+            "reason": "closeTerminal",
+            "sessionId": reference.session_id.as_str(),
+        }),
+        Duration::from_secs(10),
+    );
 }
