@@ -61,8 +61,13 @@ interface MonacoClipboardBridge {
   copySelection(cut: boolean): string | null;
 }
 
+interface MonacoDecorationsCollectionLike {
+  clear(): void;
+  set(decorations: MonacoDecorationLike[]): void;
+}
+
 interface MonacoEditorInstanceLike {
-  deltaDecorations(oldDecorations: string[], newDecorations: MonacoDecorationLike[]): string[];
+  createDecorationsCollection(decorations?: MonacoDecorationLike[]): MonacoDecorationsCollectionLike;
   dispose(): void;
   executeEdits(source: string, edits: { range: unknown; text: string }[]): void;
   focus(): void;
@@ -78,6 +83,7 @@ interface MonacoEditorInstanceLike {
   onMouseDown(listener: (event: MonacoMouseEventLike) => void): MonacoDisposableLike;
   setSelection(selection: unknown): void;
   setPosition(position: MonacoPositionLike): void;
+  setValue(value: string): void;
   trigger(source: string, handlerId: string, payload: unknown): void;
   updateOptions(options: Record<string, unknown>): void;
 }
@@ -128,12 +134,14 @@ const QUICK_INPUT_MIN_HEIGHT_PX = 280;
 const REFERENCE_PILL_CLASS = 'ghostex-chat-reference-pill';
 const REFERENCE_PILL_ID_CLASS_PREFIX = `${REFERENCE_PILL_CLASS}--id-`;
 const REFERENCE_PILL_WORD_JOINER = '\u2060';
-const REFERENCE_PILL_WRAP_BOUNDARY = '\u200b';
 const REFERENCE_PILL_ICON_SPACE = '\u00a0\u00a0\u2009';
 const REFERENCE_PILL_TRAILING_SPACE = '\u2009';
 const REFERENCE_PILL_MAX_LABEL_CHARACTERS = 18;
 
-function referencePillDisplayLabel(label: string): string {
+function referencePillDisplayLabel(label: string, kind: SessionChatMonacoReferenceOccurrence['kind']): string {
+  if (kind === 'skill') {
+    return label;
+  }
   const characters = [...label];
   if (characters.length <= REFERENCE_PILL_MAX_LABEL_CHARACTERS) {
     return label;
@@ -142,8 +150,8 @@ function referencePillDisplayLabel(label: string): string {
 }
 
 /** Injected text must be one Monaco wrap unit, not merely one DOM box. */
-function referencePillInjectedText(label: string): string {
-  const text = `${REFERENCE_PILL_ICON_SPACE}${referencePillDisplayLabel(label).replaceAll(' ', '\u00a0')}${REFERENCE_PILL_TRAILING_SPACE}`;
+function referencePillInjectedText(label: string, kind: SessionChatMonacoReferenceOccurrence['kind']): string {
+  const text = `${REFERENCE_PILL_ICON_SPACE}${referencePillDisplayLabel(label, kind).replaceAll(' ', '\u00a0')}${REFERENCE_PILL_TRAILING_SPACE}`;
   return [...text].join(REFERENCE_PILL_WORD_JOINER);
 }
 
@@ -383,14 +391,18 @@ export function SessionChatMonacoInput({
           stickyScroll: { enabled: false },
           suggestOnTriggerCharacters: false,
           theme: CHAT_MONACO_THEMES[themeRef.current],
-          unicodeHighlight: { ambiguousCharacters: false },
+          unicodeHighlight: {
+            ambiguousCharacters: false,
+            invisibleCharacters: false,
+          },
           value: initialPresentation,
           wordBasedSuggestions: 'off',
           wordWrap: 'on',
           wrappingStrategy: 'advanced',
         });
         editorRef.current = editor;
-        let referenceDecorationIds: string[] = [];
+        const referenceDecorations = editor.createDecorationsCollection();
+        disposables.push({ dispose: () => referenceDecorations.clear() });
         let references: SessionChatMonacoReferenceOccurrence[] = [];
         const canonicalValue = (): string => referenceModel.expand(editor.getValue());
         const canonicalCaretOffset = (): number => {
@@ -449,9 +461,8 @@ export function SessionChatMonacoInput({
             return;
           }
           references = referenceModel.occurrences(editor.getValue());
-          referenceDecorationIds = editor.deltaDecorations(
-            referenceDecorationIds,
-            references.flatMap((reference, index) => {
+          referenceDecorations.set(
+            references.map((reference, index) => {
               const start = model.getPositionAt(reference.start);
               const end = model.getPositionAt(reference.end);
               const sourceRange = {
@@ -460,45 +471,25 @@ export function SessionChatMonacoInput({
                 startColumn: start.column,
                 startLineNumber: start.lineNumber,
               };
-              const pillRange = {
-                endColumn: start.column,
-                endLineNumber: start.lineNumber,
-                startColumn: start.column,
-                startLineNumber: start.lineNumber,
-              };
-              return [
-                {
-                  options: {
-                    inlineClassName: 'ghostex-chat-composer-reference-source',
+              return {
+                options: {
+                  after: {
+                    attachedData: { referenceIndex: index },
+                    content: referencePillInjectedText(reference.label, reference.kind),
+                    // The pill is projected after its one invisible model
+                    // token. Monaco's only caret stop for that injected text
+                    // is therefore its right edge; the token's start remains
+                    // the natural left edge. No cursor correction is needed.
+                    cursorStops: 1,
+                    inlineClassName: `${REFERENCE_PILL_CLASS} ${REFERENCE_PILL_CLASS}--${reference.kind} ${REFERENCE_PILL_ID_CLASS_PREFIX}${index}`,
                     inlineClassNameAffectsLetterSpacing: true,
-                    stickiness: 1,
                   },
-                  range: sourceRange,
+                  inlineClassName: 'ghostex-chat-composer-reference-source',
+                  inlineClassNameAffectsLetterSpacing: true,
+                  stickiness: 1,
                 },
-                {
-                  options: {
-                    // The model range is one private-use character. Monaco can
-                    // therefore wrap and place its caret only before or after
-                    // this pill, regardless of the canonical Markdown length.
-                    before: {
-                      content: REFERENCE_PILL_WRAP_BOUNDARY,
-                      cursorStops: 3,
-                    },
-                    after: {
-                      attachedData: { referenceIndex: index },
-                      content: `${referencePillInjectedText(reference.label)}${REFERENCE_PILL_WRAP_BOUNDARY}`,
-                      cursorStops: 0,
-                      inlineClassName: `${REFERENCE_PILL_CLASS} ${REFERENCE_PILL_CLASS}--${reference.kind} ${REFERENCE_PILL_ID_CLASS_PREFIX}${index}`,
-                      inlineClassNameAffectsLetterSpacing: true,
-                    },
-                    // This decoration is intentionally a zero-width boundary.
-                    // Monaco otherwise drops its injected text before render.
-                    showIfCollapsed: true,
-                    stickiness: 1,
-                  },
-                  range: pillRange,
-                },
-              ];
+                range: sourceRange,
+              };
             })
           );
           queueMicrotask(syncReferenceTitles);
@@ -654,10 +645,24 @@ export function SessionChatMonacoInput({
             }
             const currentPresentation = editor.getValue();
             if (referenceModel.expand(currentPresentation) !== next) {
-              const nextPresentation = referenceModel.virtualizeCanonical(next, currentPresentation);
               suppressChangeRef.current = true;
               try {
-                editor.executeEdits('ghostex-composer', [{ range: model.getFullModelRange(), text: nextPresentation }]);
+                if (next === '') {
+                  // Sending or explicitly clearing a composer is a hard draft
+                  // boundary. Clear the owned decorations and Monaco undo
+                  // state together, then recycle the invisible token registry
+                  // for the next draft. Full-range executeEdits can retain a
+                  // zero-width injected decoration at column one.
+                  referenceDecorations.clear();
+                  references = [];
+                  editor.setValue('');
+                  referenceModel.reset();
+                } else {
+                  const nextPresentation = referenceModel.virtualizeCanonical(next, currentPresentation);
+                  editor.executeEdits('ghostex-composer', [
+                    { range: model.getFullModelRange(), text: nextPresentation },
+                  ]);
+                }
               } finally {
                 suppressChangeRef.current = false;
               }

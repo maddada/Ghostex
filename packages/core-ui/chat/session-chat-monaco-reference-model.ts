@@ -1,7 +1,17 @@
 import { sessionChatComposerReferences, type SessionChatReferenceKind } from './session-chat-reference-pills';
 
-const FIRST_REFERENCE_TOKEN = 0xe000;
-const LAST_REFERENCE_TOKEN = 0xf8ff;
+const BMP_VARIATION_SELECTOR_START = 0xfe00;
+const BMP_VARIATION_SELECTOR_COUNT = 16;
+const SUPPLEMENTARY_VARIATION_SELECTOR_START = 0xe0100;
+const SUPPLEMENTARY_VARIATION_SELECTOR_COUNT = 240;
+const REFERENCE_TOKEN_CAPACITY = BMP_VARIATION_SELECTOR_COUNT + SUPPLEMENTARY_VARIATION_SELECTOR_COUNT;
+
+function referenceTokenForIndex(index: number): string {
+  if (index < BMP_VARIATION_SELECTOR_COUNT) {
+    return String.fromCharCode(BMP_VARIATION_SELECTOR_START + index);
+  }
+  return String.fromCodePoint(SUPPLEMENTARY_VARIATION_SELECTOR_START + index - BMP_VARIATION_SELECTOR_COUNT);
+}
 
 export interface SessionChatMonacoReference {
   kind: SessionChatReferenceKind;
@@ -18,26 +28,34 @@ export interface SessionChatMonacoReferenceOccurrence extends SessionChatMonacoR
 
 /**
  * Keeps canonical Markdown outside Monaco while its presentation model uses
- * one private-use character for each atomic reference pill.
+ * one intrinsically invisible variation selector for each atomic reference
+ * pill. The token stays invisible even between Monaco decoration updates.
  */
 export class SessionChatMonacoReferenceModel {
-  private nextTokenCodePoint = FIRST_REFERENCE_TOKEN;
+  private nextTokenIndex = 0;
   private readonly referencesByToken = new Map<string, SessionChatMonacoReference>();
+
+  reset(): void {
+    this.nextTokenIndex = 0;
+    this.referencesByToken.clear();
+  }
 
   canonicalOffsetToModel(presentation: string, canonicalOffset: number): number {
     const target = Math.max(0, canonicalOffset);
     let canonicalCursor = 0;
-    for (let modelOffset = 0; modelOffset < presentation.length; modelOffset += 1) {
+    for (let modelOffset = 0; modelOffset < presentation.length;) {
       if (target <= canonicalCursor) {
         return modelOffset;
       }
-      const reference = this.referencesByToken.get(presentation[modelOffset] ?? '');
+      const token = String.fromCodePoint(presentation.codePointAt(modelOffset) ?? 0);
+      const reference = this.referencesByToken.get(token);
       canonicalCursor += reference?.source.length ?? 1;
       if (target <= canonicalCursor) {
         // A canonical caret inside a reference cannot exist in the one-token
         // presentation. Put it after the pill, the useful edge for insertions.
-        return modelOffset + 1;
+        return modelOffset + (reference ? token.length : 1);
       }
+      modelOffset += reference ? token.length : 1;
     }
     return presentation.length;
   }
@@ -53,19 +71,24 @@ export class SessionChatMonacoReferenceModel {
   modelOffsetToCanonical(presentation: string, modelOffset: number): number {
     const end = Math.min(Math.max(0, modelOffset), presentation.length);
     let canonicalOffset = 0;
-    for (let index = 0; index < end; index += 1) {
-      canonicalOffset += this.referencesByToken.get(presentation[index] ?? '')?.source.length ?? 1;
+    for (let index = 0; index < end;) {
+      const token = String.fromCodePoint(presentation.codePointAt(index) ?? 0);
+      const reference = this.referencesByToken.get(token);
+      canonicalOffset += reference?.source.length ?? 1;
+      index += reference ? token.length : 1;
     }
     return canonicalOffset;
   }
 
   occurrences(presentation: string): SessionChatMonacoReferenceOccurrence[] {
     const occurrences: SessionChatMonacoReferenceOccurrence[] = [];
-    for (let index = 0; index < presentation.length; index += 1) {
-      const reference = this.referencesByToken.get(presentation[index] ?? '');
+    for (let index = 0; index < presentation.length;) {
+      const token = String.fromCodePoint(presentation.codePointAt(index) ?? 0);
+      const reference = this.referencesByToken.get(token);
       if (reference) {
-        occurrences.push({ ...reference, end: index + 1, start: index });
+        occurrences.push({ ...reference, end: index + token.length, start: index });
       }
+      index += reference ? token.length : 1;
     }
     return occurrences;
   }
@@ -85,9 +108,9 @@ export class SessionChatMonacoReferenceModel {
   }
 
   private allocateToken(canonical: string): string {
-    while (this.nextTokenCodePoint <= LAST_REFERENCE_TOKEN) {
-      const token = String.fromCharCode(this.nextTokenCodePoint);
-      this.nextTokenCodePoint += 1;
+    while (this.nextTokenIndex < REFERENCE_TOKEN_CAPACITY) {
+      const token = referenceTokenForIndex(this.nextTokenIndex);
+      this.nextTokenIndex += 1;
       if (!this.referencesByToken.has(token) && !canonical.includes(token)) {
         return token;
       }

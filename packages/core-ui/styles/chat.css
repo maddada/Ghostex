@@ -1573,13 +1573,15 @@ so the swap barely moves the composer row.
   white-space: pre-wrap;
 }
 
-/* Monaco keeps one private-use character in its model for each attachment or
-   skill reference. Its zero metrics are intentional: the injected pill owns
-   the token's horizontal space, while the canonical Markdown stays outside
-   Monaco's presentation model. */
+/* Monaco keeps one invisible variation selector in its model for each
+   attachment or skill reference. Its zero metrics are intentional: the
+   injected pill owns the token's horizontal space, while the canonical
+   Markdown stays outside Monaco's presentation model. */
 .ghostex-chat-composer-monaco .ghostex-chat-composer-reference-source {
+  color: transparent !important;
   font-size: 0 !important;
   letter-spacing: 0 !important;
+  opacity: 0 !important;
 }
 
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill,
