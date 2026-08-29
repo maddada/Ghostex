@@ -90,6 +90,7 @@ pub(crate) fn apply_session_state_update(
         &identity,
         object_field(&session, "runtimeSettings"),
         identity_update_source,
+        session_launch_agent_provider_id(&session),
     );
     insert_truthy_from_params(
         &mut runtime_settings,
@@ -369,15 +370,27 @@ pub(crate) fn apply_session_identity_runtime_settings(
     identity: &ResolvedIdentity,
     mut runtime_settings: Map<String, Value>,
     source: SessionIdentityUpdateSource,
+    launch_agent_provider_id: Option<String>,
 ) -> Map<String, Value> {
     let current_agent_id = normalize_agent_id(current_identity.agent_id.as_deref());
     let next_agent_id = normalize_agent_id(identity.agent_id.as_deref());
     let agent_changed =
         current_agent_id.is_some() && next_agent_id.is_some() && current_agent_id != next_agent_id;
     let activity_agent_id = read_agent_activity_agent_id(runtime_settings.get("agentActivity"));
+    /*
+    CDXC:SessionStatus 2026-08-29:
+    agentActivity.agentName always stores the canonical CLI family ("claude",
+    "codex", …), while a `custom-…` agent id names a sidebar CONFIGURATION of
+    that family, declared by launchSettings.icon — the same contract
+    launch_agent_mismatch reads. Comparing the family against the raw
+    configuration id made every hook/title identity pass wipe a custom
+    agent's activity, so continuously working custom Claude sessions flapped
+    working→idle once per hook event (observed live 2026-08-29).
+    */
     let activity_owner_changed = next_agent_id.is_some()
         && activity_agent_id.is_some()
-        && activity_agent_id != next_agent_id;
+        && activity_agent_id != next_agent_id
+        && activity_agent_id != launch_agent_provider_id;
     if let Some(agent_id) = identity.agent_id.clone() {
         runtime_settings.insert("agentName".to_string(), json!(agent_id));
     }
