@@ -3375,6 +3375,7 @@ export function SidebarApp({
           data-project-reorder-drag={String(isProjectReorderDragActive)}
           data-project-group-style={effectiveSettings.sidebarProjectGroupStyle}
           data-reference-sidebar='true'
+          data-sidebar-side={effectiveSettings.sidebarSide}
           data-session-agent-icon-color-mode={effectiveSettings.useColoredSessionAgentIcons ? 'colored' : 'monochrome'}
           ref={setReferenceLayoutElement}
           style={
@@ -3395,6 +3396,7 @@ export function SidebarApp({
             onOpenMobile={openReferenceMobile}
             onOpenPowerSettings={openKeepAwakePowerSettings}
             onOpenPreviousSessions={openPreviousSessions}
+            onOpenSettings={openSidebarSettings}
             onRunKeepAwake={startSidebarKeepAwake}
             onSearchPreviousSessionsByPrompt={searchPreviousSessionsByPrompt}
             onSearch={openPreviousSessions}
@@ -4189,7 +4191,6 @@ export function SidebarApp({
               normalizeghostexHotkeySettings(effectiveSettings.hotkeys).openCommandPalette
             )}
             onOpenQuickAccess={openCommandPalette}
-            onOpenSettings={openSidebarSettings}
           />
         </div>
       </SidebarCollapseAnimationProvider>

@@ -788,6 +788,22 @@ body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'
   padding-left: 13px;
 }
 
+/*
+ * The native reference-sidebar spacing was measured for a left sidebar, so
+ * its 1px container margin and content inset must swap edges when the
+ * sidebar moves right: content sits flush against the resize divider and the
+ * outer window edge keeps a 5px sidebar-colored gutter, mirroring the left
+ * sidebar's visible 5px (1px margin + 13px padding − 9px row bleed) outer
+ * gutter. With the 1px right row bleed, 1px margin + 5px padding renders the
+ * same visible 5px on the right.
+ */
+body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'][data-sidebar-side='right'] {
+  margin-left: 0;
+  margin-right: 1px;
+  padding-left: 1px;
+  padding-right: 5px;
+}
+
 .sidebar-reference-layout[data-reference-sidebar='true'],
 .sidebar-reference-layout[data-reference-sidebar='true'] * {
   font-weight: 300 !important;
@@ -954,22 +970,21 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
 }
 
 /*
- * CDXC:SidebarFooter 2026-08-07:
- * Commands & Recents and Settings have one shared, fixed home at the bottom of the GPUI
- * and web sidebar. The footer owns exactly the bottom 45px, including its top
- * border, and bleeds through the reference layout padding without moving the
- * icon/text scan columns used by Search above it.
+ * CDXC:SidebarFooter 2026-08-29:
+ * Commands has one shared, fixed home at the bottom of the GPUI and web sidebar.
+ * The footer owns exactly the bottom 45px, including its top border, and bleeds
+ * through the reference layout padding without moving the icon/text scan columns
+ * used by Search above it. Settings is in the More overflow menu.
  */
 .reference-sidebar-footer {
   align-items: center;
   border-top: 1px solid var(--app-border);
   box-sizing: border-box;
-  column-gap: 4px;
   container-name: reference-sidebar-footer;
   container-type: inline-size;
   display: grid;
   flex: 0 0 45px;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr);
   height: 45px;
   margin-bottom: -7px;
   margin-left: calc(-1 * var(--reference-sidebar-footer-edge-bleed-left));
@@ -1003,18 +1018,6 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
   margin-left: auto;
   opacity: 0.38;
   white-space: nowrap;
-}
-
-.sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-footer .reference-sidebar-nav-icon-button {
-  border: none;
-  border-radius: 5px;
-  height: 35px;
-  justify-content: center;
-  max-width: none;
-  min-height: 35px;
-  padding-left: 0;
-  padding-right: 0;
-  width: 100%;
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true']

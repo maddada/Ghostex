@@ -76,6 +76,7 @@ export function SidebarReferenceTopChrome({
   onOpenMobile,
   onOpenPowerSettings,
   onOpenPreviousSessions,
+  onOpenSettings,
   onRunKeepAwake,
   onSearchPreviousSessionsByPrompt,
   onSearch,
@@ -92,6 +93,7 @@ export function SidebarReferenceTopChrome({
   onOpenMobile: () => void;
   onOpenPowerSettings: () => void;
   onOpenPreviousSessions: () => void;
+  onOpenSettings: () => void;
   onRunKeepAwake: (durationMinutes: KeepAwakeDurationMinutes) => void;
   onSearchPreviousSessionsByPrompt: () => void;
   onSearch: () => void;
@@ -209,9 +211,9 @@ export function SidebarReferenceTopChrome({
    * Mobile, Keep Awake, Search by Prompt, and Previous Sessions all live under
    * More so the sidebar only spends one row on primary navigation.
    *
-   * CDXC:SidebarFooter 2026-08-07:
-   * Settings now has one icon-only home in the fixed sidebar footer. Keep it
-   * out of More so the same destination is not repeated in two places.
+   * CDXC:SidebarFooter 2026-08-29:
+   * Settings lives at the bottom of More, with the open-settings hotkey, so the
+   * footer can stay a single Commands row.
    */
   return (
     <header className='reference-sidebar-top'>
@@ -257,6 +259,7 @@ export function SidebarReferenceTopChrome({
                 }}
                 onOpenMobile={() => closeMenuAndRun(onOpenMobile)}
                 onOpenPreviousSessions={() => closeMenuAndRun(onOpenPreviousSessions)}
+                onOpenSettings={() => closeMenuAndRun(onOpenSettings)}
                 onSearchPreviousSessionsByPrompt={() => closeMenuAndRun(onSearchPreviousSessionsByPrompt)}
                 onTogglePetOverlay={() => closeMenuAndRun(onTogglePetOverlay)}
                 showKeepAwakeButton={showKeepAwakeButton}
@@ -391,6 +394,7 @@ export function SidebarReferenceSettingsDropdown({
   onOpenMobile,
   onOpenKeepAwakeMenu,
   onOpenPreviousSessions,
+  onOpenSettings,
   onSearchPreviousSessionsByPrompt,
   onTogglePetOverlay,
   showKeepAwakeButton,
@@ -404,6 +408,7 @@ export function SidebarReferenceSettingsDropdown({
   onOpenMobile: () => void;
   onOpenKeepAwakeMenu: () => void;
   onOpenPreviousSessions: () => void;
+  onOpenSettings: () => void;
   onSearchPreviousSessionsByPrompt: () => void;
   onTogglePetOverlay: () => void;
   showKeepAwakeButton: boolean;
@@ -447,6 +452,12 @@ export function SidebarReferenceSettingsDropdown({
         onSelect={onOpenHotkeys}
         shortcut={formatSidebarMenuHotkeyLabel(hotkeys.openHotkeys)}
       />
+      <SidebarReferencePrimaryMenuItem
+        icon={IconSettings}
+        label='Settings'
+        onSelect={onOpenSettings}
+        shortcut={formatSidebarMenuHotkeyLabel(hotkeys.openSettings)}
+      />
     </div>
   );
 }
@@ -454,11 +465,9 @@ export function SidebarReferenceSettingsDropdown({
 export function SidebarReferenceFooter({
   commandPaletteHotkey,
   onOpenQuickAccess,
-  onOpenSettings,
 }: {
   commandPaletteHotkey?: string;
   onOpenQuickAccess: () => void;
-  onOpenSettings: () => void;
 }) {
   return (
     <footer className='reference-sidebar-footer'>
@@ -482,9 +491,6 @@ export function SidebarReferenceFooter({
             {commandPaletteHotkey ? <kbd className='reference-sidebar-nav-shortcut'>{commandPaletteHotkey}</kbd> : null}
           </Button>
         </div>
-      </div>
-      <div className='reference-sidebar-primary-menu-cell'>
-        <SidebarReferenceShortcutButton icon={IconSettings} label='Settings' onClick={onOpenSettings} />
       </div>
     </footer>
   );
