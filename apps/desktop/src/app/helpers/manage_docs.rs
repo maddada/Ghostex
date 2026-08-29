@@ -269,6 +269,32 @@ pub extern "C" fn GhostexGpuiSidebarPointerInsideChanged(inside: bool) {
         .detach();
 }
 
+/*
+CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+A finger scroll gesture began (NSEventPhaseBegan) inside the sidebar's native
+frame. DOM wheel events cannot distinguish a new physical swipe from the
+momentum tail of the previous one, so the AppKit observer reports the begin and
+the page resets its Space-swipe gesture state on it — one signal per physical
+gesture.
+*/
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiSidebarScrollGestureBegan() {
+    let Some(target) = gpui_sidebar_pointer_callback_target() else {
+        return;
+    };
+    let app = target.app.clone();
+    let mut async_app = target.async_app.clone();
+    let foreground = target.async_app.foreground_executor().clone();
+    foreground
+        .spawn(async move {
+            let _ = app.update(&mut async_app, |this, cx| {
+                this.dispatch_gpui_sidebar_scroll_gesture_began(cx);
+            });
+        })
+        .detach();
+}
+
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiSidebarOutsideMouseDown() {

@@ -191,6 +191,7 @@ static GhostexGpuiSidebarPointerTrackingState g_ghostexGpuiSidebarPointerState =
 
 extern void GhostexGpuiSidebarPointerInsideChanged(bool inside);
 extern void GhostexGpuiSidebarOutsideMouseDown(void);
+extern void GhostexGpuiSidebarScrollGestureBegan(void);
 
 void GhostexGpuiCEFSetSidebarPointerTrackingView(void *view) {
   NSView *sidebarView = (__bridge NSView *)view;
@@ -252,8 +253,42 @@ void GhostexGpuiCEFRefreshSidebarPointerInside(void) {
           NSEvent.mouseLocation));
 }
 
+/*
+ CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+ The sidebar page navigates Spaces with horizontal trackpad swipes, and DOM
+ wheel events carry no NSEvent phase/momentumPhase, so the renderer cannot
+ tell "second physical swipe" apart from "momentum tail of the first": every
+ delta-magnitude and timing heuristic tried in the page either ate real
+ re-swipes or double-switched on long uneven swipes. AppKit has the exact
+ bit. A scrollWheel event with phase == NSEventPhaseBegan is fingers landing
+ on the pad and starting a scroll (momentum events carry phase == None), so
+ observe it here — once per physical gesture, never per delta — and report it
+ to Rust when it lands inside the sidebar's frame. Rust forwards it into the
+ page, which resets its swipe gesture state.
+*/
+static void GhostexGpuiSidebarScrollGestureObserveEvent(NSEvent *event) {
+  if (event.phase != NSEventPhaseBegan) {
+    return;
+  }
+  NSView *sidebarView = g_ghostexGpuiSidebarPointerTrackingView;
+  NSWindow *window = event.window;
+  if (!sidebarView || !window || sidebarView.window != window ||
+      sidebarView.isHiddenOrHasHiddenAncestor) {
+    return;
+  }
+  NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds
+                                           toView:nil];
+  if (NSPointInRect(event.locationInWindow, frameInWindow)) {
+    GhostexGpuiSidebarScrollGestureBegan();
+  }
+}
+
 static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent *event) {
   NSEventType type = event.type;
+  if (type == NSEventTypeScrollWheel) {
+    GhostexGpuiSidebarScrollGestureObserveEvent(event);
+    return;
+  }
   BOOL isMove = type == NSEventTypeMouseMoved ||
                 type == NSEventTypeLeftMouseDragged ||
                 type == NSEventTypeRightMouseDragged ||

@@ -100,15 +100,20 @@ const ALL_PROJECTS_SPACE_LABEL = 'All Projects';
  * Trackpad swipes navigate one Space per physical gesture. Horizontal delta
  * must dominate vertical delta before the sidebar prevents default scrolling,
  * and momentum stays locked so one input stream cannot skip several Spaces.
- * DOM wheel events carry no NSEvent momentumPhase, so telling "second physical
- * swipe" apart from "momentum tail of the first" uses the one invariant macOS
- * momentum has: its deltas only ever decay. While locked, the handler tracks
- * the stream's magnitude envelope; after a decay streak is established, a
- * delta that rises well above the running minimum can only be fingers touching
- * the pad again (touching also halts momentum instantly), so it unlocks and
- * starts the next one-Space transition immediately — no waiting for full rest
- * and no pointer movement required. A silence gap still resets everything, and
- * tiny momentum-tail deltas neither extend the lock nor feed the envelope.
+ * DOM wheel events carry no NSEvent phase/momentumPhase, so the renderer alone
+ * cannot tell "second physical swipe" apart from "the rest of the first". On
+ * the desktop app the boundary comes from the native side: the AppKit
+ * sendEvent observer reports each finger scroll-gesture begin
+ * (NSEventPhaseBegan — fired once when fingers land and start scrolling,
+ * never by momentum) over the sidebar, and that signal is the only thing that
+ * releases the lock. One swipe therefore switches exactly one Space no matter
+ * how long, slow, or uneven it is, and a distinct re-swipe during the first
+ * swipe's momentum switches again immediately with no pointer movement.
+ * Hosts without the native signal (the web app) segment the stream by
+ * inter-event silence instead: finger and momentum events flow at frame
+ * cadence without gaps, so a gap at or past the stream-gap threshold means
+ * fingers left and landed again. Delta magnitudes are deliberately never used
+ * for unlocking — a swipe that slows and speeds up must stay one gesture.
  * The old row/list move out first and their newly filtered contents enter from
  * the opposite side; reduced-motion users switch immediately. All Projects is
  * the first destination, and navigation stops at either end instead of wrapping
@@ -118,18 +123,40 @@ const SPACE_SWIPE_THRESHOLD_PX = 44;
 const SPACE_SWIPE_GESTURE_END_DELAY_MS = 120;
 const SPACE_SWIPE_MEANINGFUL_DELTA_MIN_PX = 6;
 /*
- * New-gesture detection while locked: the stream must first show decay (three
- * consecutive non-rising deltas AND a running minimum below 60% of the
- * gesture's peak — a finger merely decelerating mid-swipe fails that), and the
- * unlocking delta must then jump to at least 2.5× that minimum. Momentum decay
- * jitter is ±~10%, nowhere near 2.5×, so a locked stream can never unlock
- * itself — which is exactly the one-Space-per-swipe guarantee.
+ * Gap segmentation for hosts without the native gesture-begin signal: an
+ * unbroken finger/momentum stream never pauses longer than a few dropped
+ * frames (8–16ms cadence), measured on event.timeStamp so late delivery under
+ * renderer load cannot fabricate a gap. 64ms of stream silence can only be
+ * fingers off the pad.
  */
-const SPACE_SWIPE_DECAY_TOLERANCE_RATIO = 1.1;
-const SPACE_SWIPE_DECAY_STREAK_MIN_EVENTS = 3;
-const SPACE_SWIPE_DECAYED_PEAK_FRACTION = 0.6;
-const SPACE_SWIPE_NEW_GESTURE_RISE_RATIO = 2.5;
-const SPACE_SWIPE_NEW_GESTURE_MIN_DELTA_PX = 12;
+const SPACE_SWIPE_STREAM_GAP_MS = 64;
+/*
+ * The native gesture-begin signal and the wheel deltas of the same physical
+ * swipe travel different pipes (AppKit observer → Rust → CEF script vs. the
+ * compositor), so a first swipe from idle can lock-and-switch off its racing
+ * deltas before its own begin lands. A begin that arrives this soon after the
+ * lock was taken belongs to the gesture that just locked and must not release
+ * it; a genuine re-swipe's begin always trails the previous lock by far more
+ * (lift, land, move — plus the previous swipe's own duration past its
+ * threshold).
+ */
+const SPACE_SWIPE_NATIVE_BEGIN_LOCK_GRACE_MS = 80;
+
+export const SIDEBAR_NATIVE_SCROLL_GESTURE_BEGAN_EVENT = 'ghostex-sidebar-native-scroll-gesture-began';
+
+let sidebarNativeScrollGestureReportingActive = false;
+
+/*
+ * Called by the desktop sidebar entry when Rust's AppKit observer reports a
+ * finger scroll-gesture begin (NSEventPhaseBegan) inside the sidebar frame.
+ * The first report proves the host delivers the native signal, which then
+ * owns gesture segmentation outright; the stream-gap heuristic stays off so
+ * a mid-swipe stall can never be misread as a second swipe.
+ */
+export function reportSidebarNativeScrollGestureBegan() {
+  sidebarNativeScrollGestureReportingActive = true;
+  window.dispatchEvent(new Event(SIDEBAR_NATIVE_SCROLL_GESTURE_BEGAN_EVENT));
+}
 const SPACE_SWIPE_EXIT_DURATION_MS = 85;
 const SPACE_SWIPE_ENTER_DURATION_MS = 165;
 
@@ -270,10 +297,8 @@ export function SpaceFilterRow({
   const swipeDirectionSignRef = useRef(0);
   const swipeGestureLockedRef = useRef(false);
   const swipeGestureEndTimerRef = useRef<number | undefined>(undefined);
-  const swipePrevMagnitudeRef = useRef(0);
-  const swipePeakMagnitudeRef = useRef(0);
-  const swipeMinMagnitudeRef = useRef(0);
-  const swipeDecayStreakRef = useRef(0);
+  const swipeLastStreamEventAtRef = useRef(0);
+  const swipeLockTakenAtMsRef = useRef(0);
   const [containerWidth, setContainerWidth] = useState(0);
   const [measurement, setMeasurement] = useState<SpaceRowMeasurement>();
   const [isMeasuring, setIsMeasuring] = useState(true);
@@ -289,8 +314,15 @@ export function SpaceFilterRow({
     [orderedSpaces]
   );
 
+  /*
+   * CDXC:SidebarSpaces 2026-08-29:
+   * Only the filtered CONTENT animates on a Space switch. The switcher row
+   * itself is pinned chrome (it sticks with the Projects header while the
+   * list scrolls) and must hold perfectly still through swipe and click
+   * switches alike, so it is deliberately not part of this set.
+   */
   const getSwipeAnimationElements = (): HTMLElement[] => {
-    const elements: HTMLElement[] = rowElement ? [rowElement] : [];
+    const elements: HTMLElement[] = [];
     for (const element of document.querySelectorAll<HTMLElement>('[data-sidebar-space-content-section]')) {
       if (element.dataset.sidebarSpaceContentSection === sectionKey) {
         elements.push(element);
@@ -405,10 +437,6 @@ export function SpaceFilterRow({
       swipeDirectionSignRef.current = 0;
       swipeGestureLockedRef.current = false;
       swipeGestureEndTimerRef.current = undefined;
-      swipePrevMagnitudeRef.current = 0;
-      swipePeakMagnitudeRef.current = 0;
-      swipeMinMagnitudeRef.current = 0;
-      swipeDecayStreakRef.current = 0;
     };
     const scheduleGestureReset = () => {
       if (swipeGestureEndTimerRef.current !== undefined) {
@@ -446,6 +474,21 @@ export function SpaceFilterRow({
       if (!targetBelongsToActiveScroller) {
         return;
       }
+      /*
+       * Heuristic stream segmentation, only while no native gesture-begin
+       * signal has ever arrived (see reportSidebarNativeScrollGestureBegan).
+       * It runs on every wheel event over the scroller — any delta at all,
+       * horizontal-dominant or not, means the pad is emitting, so a slow
+       * mid-swipe crawl (sub-2px deltas) or a momentum tail keeps the stream
+       * alive and only genuine finger lift-and-land silence starts a new
+       * gesture. The timestamp survives gesture resets: it describes the raw
+       * stream, not the gesture built on top of it.
+       */
+      const gapSinceLastStreamEventMs = event.timeStamp - swipeLastStreamEventAtRef.current;
+      swipeLastStreamEventAtRef.current = event.timeStamp;
+      if (!sidebarNativeScrollGestureReportingActive && gapSinceLastStreamEventMs >= SPACE_SWIPE_STREAM_GAP_MS) {
+        resetGesture();
+      }
       const pageSize = rowElement?.clientWidth ?? window.innerWidth;
       const deltaX = normalizedWheelDelta(event.deltaX, event.deltaMode, pageSize);
       const deltaY = normalizedWheelDelta(event.deltaY, event.deltaMode, window.innerHeight);
@@ -454,33 +497,22 @@ export function SpaceFilterRow({
       }
 
       event.preventDefault();
+      /*
+       * The silence timer is the heuristic hosts' trailing gesture end. It is
+       * re-armed by every horizontal-dominant event — a slow crawl included —
+       * so it can only fire once the pad has truly gone quiet, never in the
+       * middle of an unevenly paced swipe. Under native reporting it stays
+       * unarmed: NSEventPhaseBegan is the only gesture boundary there.
+       */
+      if (!sidebarNativeScrollGestureReportingActive) {
+        scheduleGestureReset();
+      }
       const deltaMagnitude = Math.abs(deltaX);
       if (deltaMagnitude < SPACE_SWIPE_MEANINGFUL_DELTA_MIN_PX) {
         return;
       }
-      scheduleGestureReset();
       if (swipeGestureLockedRef.current) {
-        const isNewGesture =
-          swipeDecayStreakRef.current >= SPACE_SWIPE_DECAY_STREAK_MIN_EVENTS &&
-          swipeMinMagnitudeRef.current <= swipePeakMagnitudeRef.current * SPACE_SWIPE_DECAYED_PEAK_FRACTION &&
-          deltaMagnitude >=
-            Math.max(
-              swipeMinMagnitudeRef.current * SPACE_SWIPE_NEW_GESTURE_RISE_RATIO,
-              SPACE_SWIPE_NEW_GESTURE_MIN_DELTA_PX
-            );
-        if (!isNewGesture) {
-          swipeDecayStreakRef.current =
-            deltaMagnitude <= swipePrevMagnitudeRef.current * SPACE_SWIPE_DECAY_TOLERANCE_RATIO
-              ? swipeDecayStreakRef.current + 1
-              : 0;
-          swipePrevMagnitudeRef.current = deltaMagnitude;
-          swipePeakMagnitudeRef.current = Math.max(swipePeakMagnitudeRef.current, deltaMagnitude);
-          swipeMinMagnitudeRef.current = Math.min(swipeMinMagnitudeRef.current, deltaMagnitude);
-          return;
-        }
-        swipeGestureLockedRef.current = false;
-        swipeDeltaXRef.current = 0;
-        swipeDirectionSignRef.current = 0;
+        return;
       }
       const directionSign = Math.sign(deltaX);
       if (swipeDirectionSignRef.current !== 0 && swipeDirectionSignRef.current !== directionSign) {
@@ -493,17 +525,35 @@ export function SpaceFilterRow({
       }
 
       swipeGestureLockedRef.current = true;
-      swipePrevMagnitudeRef.current = deltaMagnitude;
-      swipePeakMagnitudeRef.current = deltaMagnitude;
-      swipeMinMagnitudeRef.current = deltaMagnitude;
-      swipeDecayStreakRef.current = 0;
+      swipeLockTakenAtMsRef.current = performance.now();
       const direction: SpaceSwipeDirection = swipeDeltaXRef.current > 0 ? 'next' : 'previous';
       void navigateBySwipe(direction);
     };
 
+    /*
+     * Fingers landed on the pad and started a scroll somewhere over the
+     * sidebar. Whatever gesture state exists belongs to the previous physical
+     * swipe (its momentum can no longer emit anything — touching the pad
+     * halts it), so release the lock and let this gesture accumulate toward
+     * its own single switch — unless the lock was taken within the grace
+     * window, in which case this begin raced behind its own gesture's deltas
+     * and releasing would let that same swipe switch twice.
+     */
+    const handleNativeScrollGestureBegan = () => {
+      if (
+        swipeGestureLockedRef.current &&
+        performance.now() - swipeLockTakenAtMsRef.current < SPACE_SWIPE_NATIVE_BEGIN_LOCK_GRACE_MS
+      ) {
+        return;
+      }
+      resetGesture();
+    };
+
     window.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+    window.addEventListener(SIDEBAR_NATIVE_SCROLL_GESTURE_BEGAN_EVENT, handleNativeScrollGestureBegan);
     return () => {
       window.removeEventListener('wheel', handleWheel, { capture: true });
+      window.removeEventListener(SIDEBAR_NATIVE_SCROLL_GESTURE_BEGAN_EVENT, handleNativeScrollGestureBegan);
       if (swipeGestureEndTimerRef.current !== undefined) {
         window.clearTimeout(swipeGestureEndTimerRef.current);
       }
@@ -664,7 +714,7 @@ export function SpaceFilterRow({
             ref={allProjectsButtonRef}
             type='button'
           >
-            <SidebarCommandIconGlyph className='sidebar-space-filter-icon' icon={ALL_PROJECTS_SPACE_ICON} size={14} />
+            <SidebarCommandIconGlyph className='sidebar-space-filter-icon' icon={ALL_PROJECTS_SPACE_ICON} size={16} />
           </button>
         </AppTooltip>
         {visibleSpaces.map((space, index) => (
@@ -694,7 +744,7 @@ export function SpaceFilterRow({
               ref={moreButtonRef}
               type='button'
             >
-              <IconDots aria-hidden='true' size={14} stroke={2} />
+              <IconDots aria-hidden='true' size={16} stroke={2} />
             </button>
           </AppTooltip>
         ) : null}
@@ -825,7 +875,7 @@ function SpaceFilterButton({
           className='sidebar-space-filter-icon'
           color={space.color}
           icon={resolveSidebarSpaceIcon(space.icon)}
-          size={14}
+          size={16}
         />
       </button>
     </AppTooltip>

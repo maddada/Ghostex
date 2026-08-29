@@ -3,6 +3,7 @@ import '@/packages/core-ui/styles.css';
 import { SidebarApp } from '@/packages/core-ui/sidebar-app';
 import { dismissSidebarTooltips } from '@/packages/core-ui/app-tooltip';
 import { dismissAllSidebarContextMenus } from '@/packages/core-ui/sidebar-context-menu-portal';
+import { reportSidebarNativeScrollGestureBegan } from '@/packages/core-ui/space-filter-row';
 import { createGpuiSidebarRuntime } from './gxserver-runtime';
 import './sidebar.css';
 
@@ -66,6 +67,18 @@ tooltips leaves the next pointer-enter free to open a new one.
 */
 window.ghostexGpui.dismissSidebarTooltips = () => {
   dismissSidebarTooltips();
+};
+
+/*
+CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+Rust's AppKit observer reports each finger scroll-gesture begin
+(NSEventPhaseBegan) inside the sidebar's frame. The Space-swipe handler resets
+its one-Space-per-swipe gesture lock on this signal — the renderer's wheel
+stream has no momentum phase, so this is the only reliable boundary between
+one physical swipe and the next.
+*/
+window.ghostexGpui.onNativeScrollGestureBegan = () => {
+  reportSidebarNativeScrollGestureBegan();
 };
 
 const gpuiSidebarRuntime = createGpuiSidebarRuntime();
