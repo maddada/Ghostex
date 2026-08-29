@@ -703,9 +703,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/generateCommitMessage"
         | "/api/createPullRequest"
         | "/api/updatePortlessState"
-        | "/api/queryLogs" => full_local(path),
-        "/api/resolveGitRootForPath"
-        | "/api/updateAuth"
+        | "/api/queryLogs"
+        | "/api/resolveGitRootForPath" => full_local(path),
+        "/api/updateAuth"
         | "/api/updateListenerConfig"
         | "/api/installTool"
         | "/api/browseFilesystem"
