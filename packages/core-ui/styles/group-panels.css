@@ -811,14 +811,6 @@ body:has(.sidebar-reference-layout[data-reference-sidebar='true'])
   flex: none;
 }
 
-.reference-sidebar-top::after {
-  border-bottom: 1px solid var(--app-border);
-  content: '';
-  display: block;
-  margin-left: calc(-1 * var(--reference-sidebar-footer-edge-bleed-left));
-  margin-right: calc(-1 * var(--reference-sidebar-edge-bleed-right));
-}
-
 .reference-sidebar-window-row {
   align-items: center;
   display: none;
@@ -1580,7 +1572,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-top {
-  margin-top: 4px;
+  margin-top: 0;
   padding-left: 6px;
   padding-right: 7px;
 }
@@ -1604,7 +1596,35 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 
 .reference-sidebar-machine-tabs {
   min-width: 0;
-  padding-bottom: 4px;
+  padding-bottom: 0;
+}
+
+/*
+ * The machine strip sits directly under Search. Keep 3px before the first
+ * project/section row instead of the Search-to-list breathing room used when
+ * the top row is empty (15px offset plus the first-section margin that cancels
+ * against it).
+ */
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .session-groups-panel[data-sidebar-machine-tabs='true']
+  .session-groups-content {
+  --reference-sidebar-scroll-top-offset: 3px;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .session-groups-panel[data-sidebar-machine-tabs='true']
+  .session-groups-content
+  > .reference-sidebar-section-row:first-child {
+  margin-top: 0;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .session-groups-panel[data-sidebar-machine-tabs='true']
+  .session-groups-content
+  > .reference-remote-section-list
+  > .reference-remote-machine-section:first-child
+  > .reference-sidebar-section-row {
+  margin-top: 0;
 }
 
 .reference-sidebar-machine-tab-strip[data-slot='segmented-control'] {
@@ -2570,6 +2590,31 @@ manual mode visibly selected without adding text to the section row.
 }
 
 /*
+ * CDXC:SidebarSpaces 2026-08-29:
+ * The Projects header and its Space switcher stay pinned while the project
+ * list scrolls under them. Both stick against the `.session-groups-content`
+ * scroller as direct children of it; the row's offset equals the header's
+ * 34px height so the two stack flush with no see-through seam. They paint the
+ * solid app background token (the same stable contrast color the custom
+ * sidebar gradient mode keys its rows off) so scrolled rows never bleed
+ * through the pinned chrome.
+ */
+.session-groups-content > .reference-sidebar-section-row[data-reference-section='projects'] {
+  background: var(--app-background);
+  position: sticky;
+  top: 0;
+  z-index: 12;
+}
+
+.session-groups-content > .sidebar-space-filter-row {
+  background: var(--app-background);
+  padding-bottom: 4px;
+  position: sticky;
+  top: 34px;
+  z-index: 11;
+}
+
+/*
  * CDXC:SidebarSpaces 2026-08-28:
  * Keep the Space switcher aligned with the project content on the left. During
  * the pre-paint measuring pass every button renders at once, and the row clips
@@ -2593,17 +2638,17 @@ manual mode visibly selected without adding text to the section row.
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 999px;
   color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
   font-family: inherit;
-  height: 22px;
+  height: 28px;
   justify-content: center;
   line-height: 1;
   padding: 0;
-  width: 22px;
+  width: 28px;
 }
 
 .sidebar-space-filter-button:hover {
