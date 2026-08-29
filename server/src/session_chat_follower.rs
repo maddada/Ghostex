@@ -70,6 +70,13 @@ pub(crate) fn follower_drain_once(
     want_snapshot: bool,
 ) -> FollowerDrainOutcome {
     let lineage = session_chat_lineage_extractor(agent);
+    // Hermes's transcript is a mirror of its SQLite rows; freshen it before the
+    // generic file logic reads it so each tick sees the latest turn state. An
+    // in-place rewind rewrite swaps the inode, which the identity check below
+    // reports as `content_replaced`.
+    if agent == SessionChatTranscriptAgent::Hermes {
+        crate::session_chat_hermes::sync_hermes_transcript_mirror_for_path(file_path);
+    }
     let Ok(current) = read_transcript_file_version(file_path) else {
         return FollowerDrainOutcome::Missing;
     };
@@ -625,7 +632,9 @@ async fn detect_and_adopt_successor_transcript(
         }
         // Codex stems are `rollout-<ts>-<uuid>`; only the trailing uuid is it.
         SessionChatTranscriptAgent::Codex => codex_rollout_session_id(stem)?,
-        SessionChatTranscriptAgent::Grok | SessionChatTranscriptAgent::Pi => return None,
+        SessionChatTranscriptAgent::Grok
+        | SessionChatTranscriptAgent::Hermes
+        | SessionChatTranscriptAgent::Pi => return None,
     };
     // The agent is now narrowed to Claude or Codex; a bool keeps the blocking
     // scan below free of arms that could silently absorb a future agent.

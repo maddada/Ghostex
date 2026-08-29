@@ -39,11 +39,14 @@ pub fn resolve_session_chat_transcript_path(
             crate::agent_transcripts::find_codex_transcript(session_id)
         }
         SessionChatTranscriptAgent::Grok => find_grok_session_update_log(session_id),
+        SessionChatTranscriptAgent::Hermes => {
+            crate::session_chat_hermes::resolve_hermes_chat_transcript_path(session_id)
+        }
         SessionChatTranscriptAgent::Pi => find_pi_family_chat_transcript(session_id),
     }
 }
 
-fn configured_agent_directory(env_key: &str, fallback: &str) -> PathBuf {
+pub(crate) fn configured_agent_directory(env_key: &str, fallback: &str) -> PathBuf {
     std::env::var(env_key)
         .ok()
         .map(|value| value.trim().to_string())

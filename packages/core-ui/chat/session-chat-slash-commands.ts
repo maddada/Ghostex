@@ -176,6 +176,28 @@ const GROK_SLASH_COMMANDS: readonly SessionChatSlashCommand[] = [
   { name: 'status', description: 'Show session status' },
 ];
 
+const HERMES_SLASH_COMMANDS: readonly SessionChatSlashCommand[] = [
+  { name: 'new', description: 'Start a new session' },
+  { name: 'clear', description: 'Clear screen and start a new session' },
+  { name: 'history', description: 'Show conversation history' },
+  { name: 'save', description: 'Export the current conversation' },
+  { name: 'retry', description: 'Retry the last message' },
+  { name: 'undo', description: 'Back up N user turns and re-prompt' },
+  { name: 'title', description: 'Set a title for the current session' },
+  { name: 'branch', description: 'Branch the current session' },
+  { name: 'compact', description: 'Compress conversation context' },
+  { name: 'model', description: 'Switch model' },
+  { name: 'reasoning', description: 'Manage reasoning effort and display' },
+  { name: 'status', description: 'Show session, model, token, and context info' },
+  { name: 'context', description: 'Show detailed context window view' },
+  { name: 'skills', description: 'Search, install, inspect, or manage skills' },
+  { name: 'tools', description: 'Manage tools' },
+  { name: 'memory', description: 'Review pending memory writes' },
+  { name: 'usage', description: 'Show token usage and rate limits' },
+  { name: 'help', description: 'Show available commands' },
+  { name: 'quit', description: 'Exit the CLI' },
+];
+
 /** Conservative fallback for unrecognized agents (mirrors the default catalog). */
 const FALLBACK_SLASH_COMMANDS: readonly SessionChatSlashCommand[] = [
   { name: 'clear', description: 'Clear conversation history' },
@@ -190,12 +212,14 @@ const SLASH_COMMANDS_BY_AGENT: Record<string, readonly SessionChatSlashCommand[]
   openclaude: CLAUDE_CODE_SLASH_COMMANDS,
   codex: CODEX_SLASH_COMMANDS,
   grok: GROK_SLASH_COMMANDS,
+  hermes: HERMES_SLASH_COMMANDS,
 };
 
 const SLASH_HEADING_BY_AGENT: Record<string, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   grok: 'Grok',
+  hermes: 'Hermes Agent',
   openclaude: 'OpenClaude',
 };
 

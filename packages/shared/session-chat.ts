@@ -35,11 +35,13 @@ export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
   'codex',
   'grok',
   'grok-build',
+  'hermes',
+  'hermes-agent',
   'pi',
   'omp',
 ]);
 
-export type SessionChatTranscriptAgent = 'claude' | 'codex' | 'grok' | 'pi';
+export type SessionChatTranscriptAgent = 'claude' | 'codex' | 'grok' | 'hermes' | 'pi';
 
 export function resolveSessionChatTranscriptAgent(
   agentId: string | null | undefined,
@@ -51,6 +53,7 @@ export function resolveSessionChatTranscriptAgent(
     if (normalized === 'claude' || normalized === 'openclaude') return 'claude';
     if (normalized === 'codex') return 'codex';
     if (normalized === 'grok' || normalized === 'grok-build') return 'grok';
+    if (normalized === 'hermes' || normalized === 'hermes-agent' || normalized === 'hermes agent') return 'hermes';
     if (normalized === 'pi' || normalized === 'omp') return 'pi';
   }
   return null;

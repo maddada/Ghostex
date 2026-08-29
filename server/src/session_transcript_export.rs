@@ -340,6 +340,7 @@ fn agent_display_name(agent: SessionChatTranscriptAgent) -> &'static str {
         SessionChatTranscriptAgent::Claude => "Claude",
         SessionChatTranscriptAgent::Codex => "Codex",
         SessionChatTranscriptAgent::Grok => "Grok",
+        SessionChatTranscriptAgent::Hermes => "Hermes Agent",
         SessionChatTranscriptAgent::Pi => "Pi",
     }
 }
@@ -705,6 +706,7 @@ fn parse_transcript(agent: SessionChatTranscriptAgent, lines: &[String]) -> Pars
             SessionChatTranscriptAgent::Claude => parse_claude_record(&mut builder, &record),
             SessionChatTranscriptAgent::Codex => parse_codex_record(&mut builder, &record),
             SessionChatTranscriptAgent::Grok => parse_grok_record(&mut builder, &record),
+            SessionChatTranscriptAgent::Hermes => parse_hermes_record(&mut builder, &record),
             SessionChatTranscriptAgent::Pi => parse_pi_record(&mut builder, &record),
         }
     }
@@ -1911,6 +1913,101 @@ fn strip_grok_user_query(text: &str) -> String {
     match lower[body_start..].find("</user_query>") {
         Some(end) => text[body_start..body_start + end].trim().to_string(),
         None => text[body_start..].trim().to_string(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hermes parser — reads the mirrored row records described in
+// `session_chat_decode_hermes.rs` (role + content + OpenAI-style `toolCalls`).
+// ---------------------------------------------------------------------------
+
+fn parse_hermes_record(builder: &mut TranscriptBuilder, record: &Map<String, Value>) {
+    match text_field(record, "role").as_deref() {
+        Some("user") => {
+            builder.push_dialog(
+                TranscriptExportSection::UserMessage,
+                flatten_text(record.get("content")),
+            );
+        }
+        Some("assistant") => {
+            let reasoning = flatten_text(
+                record
+                    .get("reasoning")
+                    .filter(|value| !value.is_null())
+                    .or_else(|| record.get("reasoningContent")),
+            );
+            if !reasoning.trim().is_empty() {
+                builder.push(ExportEntry::new(
+                    TranscriptExportSection::AgentReasoning,
+                    reasoning,
+                ));
+            }
+            builder.push_dialog(
+                TranscriptExportSection::AgentMessage,
+                flatten_text(record.get("content")),
+            );
+            if let Some(Value::Array(tool_calls)) = record.get("toolCalls") {
+                for tool_call in tool_calls {
+                    let Some(tool_call) = tool_call.as_object() else {
+                        continue;
+                    };
+                    parse_hermes_tool_call(builder, tool_call);
+                }
+            }
+        }
+        Some("tool") => {
+            let content = flatten_text(record.get("content"));
+            let (output, is_error) = match parse_json_line(&content) {
+                Some(Value::Object(result)) => {
+                    let is_error = result
+                        .get("error")
+                        .is_some_and(|error| !error.is_null() && error.as_str() != Some(""))
+                        || result.get("success") == Some(&Value::Bool(false))
+                        || result
+                            .get("exit_code")
+                            .and_then(Value::as_i64)
+                            .is_some_and(|code| code != 0);
+                    let output = match result.get("output").or_else(|| result.get("result")) {
+                        Some(Value::String(text)) if !text.trim().is_empty() => text.clone(),
+                        _ => content.clone(),
+                    };
+                    (output, is_error)
+                }
+                _ => (content, false),
+            };
+            builder.push_output(text_field(record, "toolCallId"), output, is_error);
+        }
+        _ => {}
+    }
+}
+
+fn parse_hermes_tool_call(builder: &mut TranscriptBuilder, record: &Map<String, Value>) {
+    let function = record_of(record.get("function"));
+    let name = function
+        .and_then(|function| text_field(function, "name"))
+        .or_else(|| text_field(record, "name"))
+        .unwrap_or_else(|| "tool".to_string());
+    let call_id = text_field(record, "call_id").or_else(|| text_field(record, "id"));
+    // `function.arguments` is a JSON string; decode it so command extraction
+    // and pretty-printing see structured input.
+    let arguments = as_arguments(
+        function
+            .and_then(|function| function.get("arguments"))
+            .filter(|value| !value.is_null()),
+    );
+    let command = argument_text(&arguments, &["command", "cmd", "script"]);
+    let section = classify_tool(&name);
+    match section {
+        TranscriptExportSection::TerminalCmd => builder.push_call(
+            ExportEntry::new(
+                TranscriptExportSection::TerminalCmd,
+                command.unwrap_or_else(|| pretty_arguments(&arguments)),
+            )
+            .with_tool(name, call_id),
+        ),
+        other => builder.push_call(
+            ExportEntry::new(other, pretty_arguments(&arguments)).with_tool(name, call_id),
+        ),
     }
 }
 

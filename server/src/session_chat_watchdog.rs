@@ -1062,7 +1062,9 @@ fn classify_watchdog_record(
         SessionChatTranscriptAgent::Codex => codex_watchdog_record(&record),
         // No catalogued record shapes, so no evidence either way. The delivery
         // tiers and the 10s deadline still cover these agents unchanged.
-        SessionChatTranscriptAgent::Grok | SessionChatTranscriptAgent::Pi => None,
+        SessionChatTranscriptAgent::Grok
+        | SessionChatTranscriptAgent::Hermes
+        | SessionChatTranscriptAgent::Pi => None,
     }
 }
 

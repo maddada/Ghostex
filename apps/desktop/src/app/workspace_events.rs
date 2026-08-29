@@ -1321,6 +1321,7 @@ impl GhostexGpuiApp {
             Some("openclaude") => Some("claude"),
             Some("codex") => Some("codex"),
             Some("grok-build") => Some("grok"),
+            Some("hermes-agent") => Some("hermes-agent"),
             Some("pi") => Some("pi"),
             Some("omp") => Some("omp"),
             _ => None,
