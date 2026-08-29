@@ -207,9 +207,9 @@ already folded.
 Agents deliberately absent, each for a stated reason rather than because nobody
 got to them:
 
-  - **antigravity, amp, droid, kiro, codebuddy, qoder, rovodev, hermes-agent**
-    and every custom agent were not measured. An unmeasured guess would be the
-    same failure as pi's, so they read Unknown until someone captures them.
+  - **antigravity, amp, droid, kiro, codebuddy, qoder, rovodev** and every
+    custom agent were not measured. An unmeasured guess would be the same
+    failure as pi's, so they read Unknown until someone captures them.
 */
 fn composer_signature(agent: &str) -> Option<ComposerSignature> {
     Some(match agent {
@@ -217,6 +217,9 @@ fn composer_signature(agent: &str) -> Option<ComposerSignature> {
         "claude" | "openclaude" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
         // Identical shape to claude's, measured independently.
         "copilot" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
+        // `❯` between two full-width rules, statusline above the top rule
+        // (measured 2026-08-29, Hermes Agent v0.20.4).
+        "hermes-agent" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
         // `› ` with no frame.
         "codex" => ComposerSignature::BareMarker { marker: '\u{203a}' },
         // Empty row bounded by two full-width rules, statusline below.
@@ -249,7 +252,7 @@ pub fn has_session_chat_composer_signature(agent_id: Option<&str>) -> bool {
 /// `session_chat_agent_for_session`, which answers "whose transcript format is
 /// this?" and so knows only the four agents with a transcript decoder.
 pub fn session_chat_composer_agent_id(session: &serde_json::Value) -> Option<String> {
-    normalize_agent_id(crate::server::first_prompt_agent_name(session).as_deref()).or_else(|| {
+    let launch_icon_agent = || {
         normalize_agent_id(
             session
                 .get("launchSettings")
@@ -257,7 +260,20 @@ pub fn session_chat_composer_agent_id(session: &serde_json::Value) -> Option<Str
                 .and_then(|settings| settings.get("icon"))
                 .and_then(serde_json::Value::as_str),
         )
-    })
+    };
+    match normalize_agent_id(crate::server::first_prompt_agent_name(session).as_deref()) {
+        // A `custom-…` id names a sidebar agent CONFIGURATION, not the CLI in
+        // the terminal; the CLI family it runs is declared by its icon — the
+        // same contract available_draft_agents and session_chat_agent_for_session
+        // read. Without this, every terminal classifier (composer signature,
+        // statusline options, notices, activity) sees an unknown agent and the
+        // chat's option pills never leave their loading skeleton.
+        Some(agent_id) if agent_id.starts_with("custom-") => {
+            launch_icon_agent().or(Some(agent_id))
+        }
+        Some(agent_id) => Some(agent_id),
+        None => launch_icon_agent(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +310,27 @@ fn composer_screen_tail(lines: &[String]) -> Vec<String> {
         .skip(lines.len().saturating_sub(SESSION_CHAT_COMPOSER_TAIL_LINES))
         .map(|line| line.trim_end().to_string())
         .collect()
+}
+
+/// Display rows for terminal-preview clients, OLDEST FIRST.
+///
+/// Readiness matching needs whitespace-folded non-blank lines, but a visual
+/// preview must retain indentation, blank rows, and full-width frame rules.
+/// Omit only empty padding below the last painted row, then bound the physical
+/// rows to the same small tail size used by the endpoint today.
+fn composer_terminal_preview_tail(text: &str) -> Vec<String> {
+    let lines: Vec<String> = text
+        .lines()
+        .map(|raw| strip_ansi_sgr(raw).trim_end().to_string())
+        .collect();
+    let Some(end) = lines
+        .iter()
+        .rposition(|line| !line.trim().is_empty())
+        .map(|index| index + 1)
+    else {
+        return Vec::new();
+    };
+    lines[end.saturating_sub(SESSION_CHAT_COMPOSER_TAIL_LINES)..end].to_vec()
 }
 
 /// A run of one frame character wide enough to be composer chrome. `ratio_num`
@@ -703,11 +740,15 @@ pub fn read_session_terminal_tail(
         ),
         None => SessionChatComposerReadiness::default(),
     };
+    let lines = capture
+        .as_ref()
+        .map(|capture| composer_terminal_preview_tail(&capture.text))
+        .unwrap_or_default();
     Ok(serde_json::json!({
         "agentId": agent,
         "captured": capture.is_some(),
         "composerState": readiness.state.as_str(),
-        "lines": readiness.screen_tail,
+        "lines": lines,
         "reason": readiness.reason,
         "sessionId": session_id,
         "projectId": project_id,

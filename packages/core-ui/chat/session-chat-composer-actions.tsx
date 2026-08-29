@@ -314,14 +314,14 @@ export function SessionChatComposerActions({
   /*
   CDXC:ComposerTerminalReadiness 2026-08-28:
   The Terminal View button doubles as the composer's readiness light. Its tint
-  comes from the polled terminal tail (use-session-terminal-tail.ts) and only
+  comes from the last terminal tail read (use-session-terminal-tail.ts) and only
   ever takes a color for a *measured* verdict: `unknown`, an uncaptured screen,
-  a host without the endpoint, and the moments before the first read all keep
-  the neutral footer color, because the daemon fails open on `unknown` and a
-  red button there would accuse a session that sends fine.
+  a host without the endpoint, and the time before the first hover all keep the
+  neutral footer color, because the daemon fails open on `unknown` and a red
+  button there would accuse a session that sends fine.
 
-  Hovering reads again before the tooltip's open delay elapses, so the excerpt
-  shows the screen as it is now rather than up to one poll ago.
+  Hovering reads before the tooltip's open delay elapses. There is deliberately
+  no background timer: an unseen terminal preview costs no captures or RPCs.
   */
   const { refreshNow: refreshTerminalTail, tail: terminalTail } = useSessionTerminalTail(onReadTerminalTail);
   const terminalReadiness =
@@ -335,9 +335,7 @@ export function SessionChatComposerActions({
       <div className='flex min-w-0 flex-col gap-1.5'>
         <div>{switchViewTitle}</div>
         {switchViewNotReadyReason ? <div className='opacity-70'>{switchViewNotReadyReason}</div> : null}
-        {/* Clipped, never scrolled: the tooltip is pointer-events-none, so a
-            scrollbar in here would be unreachable. */}
-        <pre className='max-w-full overflow-hidden font-mono text-[10px] leading-[1.5] whitespace-pre opacity-85'>
+        <pre className='max-w-full font-mono text-[10px] leading-[1.5] whitespace-pre-wrap opacity-85'>
           {terminalTailPreview}
         </pre>
       </div>
@@ -348,7 +346,7 @@ export function SessionChatComposerActions({
   const switchViewButton = hostActions ? (
     <AppTooltip
       content={switchViewTooltip}
-      {...(terminalTailPreview.length > 0 ? { contentStyle: { maxWidth: 'min(92vw, 46rem)' } } : {})}
+      {...(terminalTailPreview.length > 0 ? { contentStyle: { maxWidth: 'min(92vw, calc(46rem + 200px))' } } : {})}
     >
       <span className='inline-flex' onFocus={refreshTerminalTail} onMouseEnter={refreshTerminalTail}>
         <Button

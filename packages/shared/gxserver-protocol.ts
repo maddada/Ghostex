@@ -2047,8 +2047,9 @@ export interface GxserverReadSessionTerminalTailResult {
   captured: boolean;
   composerState: GxserverSessionComposerState;
   /**
-   * Up to 30 non-blank screen lines, ANSI-stripped, OLDEST FIRST — so the
-   * newest line is last, the order a terminal renders in.
+   * Up to 30 ANSI-stripped physical screen rows, OLDEST FIRST, preserving
+   * indentation, blank rows, and box-drawing runs. Empty bottom padding is
+   * omitted, and the newest painted row is last.
    */
   lines: readonly string[];
   /** User-facing sentence, present only for `notReady`. */
@@ -2111,38 +2112,12 @@ export interface GxserverUpdateSessionOrderResult {
 
 export interface GxserverRemoveSessionParams {
   projectId: GxserverProjectId;
-  /**
-   * Why the session is being removed. Free-form and ignored by gxserver, with
-   * ONE exception:
-   *
-   * CDXC:DraftSessions 2026-08-28: `DISCARD_EMPTY_DRAFT_SESSION_REASON`
-   * (`'discardEmptyDraft'`, see ./draft-sessions) marks the navigate-away
-   * discard of an empty draft. That removal is a REQUEST, not an instruction —
-   * the client decided from a presentation snapshot that may be one delta
-   * stale, so the daemon re-derives the predicate from its own current state
-   * and DECLINES if the session has since been promoted or gained draft text.
-   * See `GxserverRemoveSessionResult`.
-   */
+  /** Why the session is being removed. Free-form and ignored by gxserver. */
   reason?: string;
   sessionId: GxserverSessionId;
 }
 
-/**
- * CDXC:DraftSessions 2026-08-28:
- * `removed` and `declined` are published ONLY for a `discardEmptyDraft`
- * removal, so every other removal's payload is unchanged. A discard therefore
- * never has to infer its outcome from an absent key: `removed: true` means the
- * row is gone, `removed: false` with a `declined` code means the daemon refused
- * and `session` is the row as it stands now.
- *
- * A decline is a SUCCESS, not an error — the client raced the daemon rather
- * than doing anything wrong. Clients that hid the row optimistically (the
- * desktop sidebar calls `removePresentationSession` before the RPC) MUST put it
- * back when they see `removed === false`.
- */
 export interface GxserverRemoveSessionResult {
-  declined?: 'draftHasText' | 'sessionIsNotADraft';
-  removed?: boolean;
   session: GxserverSessionDomainState;
 }
 
