@@ -81,10 +81,10 @@ interface MonacoEditorInstanceLike {
   onDidContentSizeChange(listener: () => void): MonacoDisposableLike;
   onKeyDown(listener: (event: MonacoKeyboardEventLike) => void): MonacoDisposableLike;
   onMouseDown(listener: (event: MonacoMouseEventLike) => void): MonacoDisposableLike;
+  pushUndoStop(): boolean;
   setSelection(selection: unknown): void;
   setPosition(position: MonacoPositionLike): void;
   setValue(value: string): void;
-  trigger(source: string, handlerId: string, payload: unknown): void;
   updateOptions(options: Record<string, unknown>): void;
 }
 
@@ -547,11 +547,29 @@ export function SessionChatMonacoInput({
           },
         });
         const insertCanonicalText = (text: string, source: string): boolean => {
+          const model = editor.getModel();
+          const selection = editor.getSelection();
+          if (!model || !selection) {
+            return false;
+          }
+          const start = model.getOffsetAt(selection.getStartPosition());
+          const end = model.getOffsetAt(selection.getEndPosition());
+          const range = modelRangeForOffsets(start, end);
+          if (!range) {
+            return false;
+          }
+          const presentation = referenceModel.virtualizeInsertion(text);
           editor.focus();
-          editor.trigger(source, 'type', { text: referenceModel.virtualizeInsertion(text) });
+          // Paste and programmatic prompt insertion are one edit, regardless
+          // of payload size. Monaco's `type` command processes long strings as
+          // typing chunks, which is slower and creates several undo units.
+          editor.pushUndoStop();
+          editor.executeEdits(source, [{ range, text: presentation }]);
+          editor.setPosition(model.getPositionAt(start + presentation.length));
+          editor.pushUndoStop();
           return true;
         };
-        insertTextRef.current = (text) => insertCanonicalText(text, 'keyboard');
+        insertTextRef.current = (text) => insertCanonicalText(text, 'ghostex-paste');
         clipboardBridgeRef.current = {
           copySelection: (cut) => {
             const model = editor.getModel();
@@ -691,7 +709,7 @@ export function SessionChatMonacoInput({
           },
           getValue: canonicalValue,
           insertSavedPrompt: (text) => insertCanonicalText(text, 'ghostex-saved-prompt'),
-          insertText: (text) => insertCanonicalText(text, 'keyboard'),
+          insertText: (text) => insertCanonicalText(text, 'ghostex-insert-text'),
           selectAll: () => {
             const model = editor.getModel();
             if (!model) {
