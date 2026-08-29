@@ -89,7 +89,7 @@ fn zmx_run_command_uses_initial_command_and_ghostex_identity() {
     assert!(command.contains("zmx_startup_text=' codex --yolo'"));
     assert!(command.contains("export GHOSTEX_GLOBAL_SESSION_REF=\"$zmx_global_session_ref\""));
     assert!(command.contains(
-        "ghostex_prompt_editor_wrapper=\"$ghostex_prompt_editor_home/state/prompt-editor\""
+        "ghostex_prompt_editor_wrapper=\"$ghostex_prompt_editor_state_dir/prompt-editor\""
     ));
     assert!(command.contains("GHOSTEX_PROMPT_EDITOR_MACHINE_EDITOR"));
     assert!(!command.contains("export GHOSTEX_PROMPT_EDITOR_BACKEND=monaco"));
@@ -206,7 +206,7 @@ fn wake_activity_suppression_resets_stale_working_state() {
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Wake Activity" })
+            json!({ "name": "Wake Activity", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -336,7 +336,10 @@ fn codex_process_open_rollout_resolves_exact_session_identity() {
     let identity = read_codex_process_session_identity(Some(i64::from(std::process::id())))
         .expect("process rollout identity");
     assert_eq!(identity.0, "019fda6e-fdbe-7570-a4fd-347e9e0bfb40");
-    assert_eq!(Path::new(&identity.1), rollout);
+    assert_eq!(
+        fs::canonicalize(&identity.1).expect("canonical observed rollout"),
+        fs::canonicalize(rollout).expect("canonical expected rollout")
+    );
 }
 
 #[test]

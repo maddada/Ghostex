@@ -267,12 +267,8 @@ pub(crate) fn read_codex_process_session_identity(
     process_id: Option<i64>,
 ) -> Option<(String, String)> {
     let process_id = process_id.filter(|process_id| *process_id > 0)?;
-    let fd_dir = PathBuf::from(format!("/proc/{process_id}/fd"));
     let mut identities = HashMap::<String, PathBuf>::new();
-    for entry in fs::read_dir(fd_dir).ok()?.flatten() {
-        let Ok(target) = fs::read_link(entry.path()) else {
-            continue;
-        };
+    for target in process_open_file_paths(process_id) {
         let Some(agent_session_id) = codex_session_id_from_transcript_path(&target) else {
             continue;
         };
@@ -285,6 +281,41 @@ pub(crate) fn read_codex_process_session_identity(
         .into_iter()
         .next()
         .map(|(agent_session_id, path)| (agent_session_id, path.to_string_lossy().into_owned()))
+}
+
+#[cfg(target_os = "linux")]
+fn process_open_file_paths(process_id: i64) -> Vec<PathBuf> {
+    let fd_dir = PathBuf::from(format!("/proc/{process_id}/fd"));
+    fs::read_dir(fd_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| fs::read_link(entry.path()).ok())
+        .collect()
+}
+
+#[cfg(target_os = "macos")]
+fn process_open_file_paths(process_id: i64) -> Vec<PathBuf> {
+    let output = std::process::Command::new("/usr/sbin/lsof")
+        .args(["-Fn", "-p", &process_id.to_string()])
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.strip_prefix('n'))
+        .filter(|path| Path::new(path).is_absolute())
+        .map(PathBuf::from)
+        .collect()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn process_open_file_paths(_process_id: i64) -> Vec<PathBuf> {
+    Vec::new()
 }
 
 pub(crate) fn codex_session_id_from_transcript_path(path: &Path) -> Option<String> {
