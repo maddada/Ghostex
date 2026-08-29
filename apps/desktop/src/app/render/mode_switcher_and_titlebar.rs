@@ -81,6 +81,8 @@ impl GhostexGpuiApp {
             .w_full()
             .h(px(TITLEBAR_HEIGHT))
             .bg(titlebar_gradient_fill())
+            .border_b_1()
+            .border_color(titlebar_button_border_color())
             .text_color(titlebar_text_color())
             .font_family("Inter Variable")
             .line_height(px(TITLEBAR_CONTROL_HEIGHT))
