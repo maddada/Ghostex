@@ -109,6 +109,7 @@ import {
   sessionChatTableToCsv,
   sessionChatTableToMarkdown,
 } from './session-chat-table-clipboard';
+import { sessionChatListInterruptSource } from './session-chat-list-interrupt';
 import { remarkSessionChatHardBreaks, sessionChatUserMarkdownSource } from './session-chat-user-text';
 
 /*
@@ -951,7 +952,11 @@ export function SessionChatMarkdown({
   const viewer = useSessionChatImageViewer();
   const hostLinks = useSessionChatHostLinks();
   const components = useMemo(() => markdownComponents(viewer, hostLinks), [hostLinks, viewer]);
-  const source = chatText ? sessionChatUserMarkdownSource(markdown) : markdown;
+  // Both authors hit the same CommonMark rule: an ordered list that does not
+  // start at 1 cannot interrupt a paragraph, so "heading line:\n5. item" would
+  // render as one run-on paragraph (session-chat-list-interrupt.ts).
+  const listSafe = sessionChatListInterruptSource(markdown);
+  const source = chatText ? sessionChatUserMarkdownSource(listSafe) : listSafe;
   return (
     <SessionChatMarkdownStreamingContext value={isStreaming}>
       <div className='ghostex-chat-markdown'>
