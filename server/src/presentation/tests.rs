@@ -346,7 +346,7 @@ fn snapshot_publishes_the_auto_settle_window_this_daemon_sweeps_with() {
     */
     let (temp, db) = open_test_database();
     let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-    let settings_dir = paths.app_state_dir.clone();
+    let settings_dir = paths.app_config_dir.clone();
     let settings_file = settings_dir.join("native-sidebar-settings.json");
 
     let published_window = |db: &Connection| -> Value {
@@ -416,7 +416,7 @@ RPCs are served regardless of which sidebar this machine renders.
 fn the_git_status_capability_follows_the_sidebar_version_gate() {
     let (temp, db) = open_test_database();
     let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-    let settings_dir = paths.app_state_dir.clone();
+    let settings_dir = paths.app_config_dir.clone();
     let settings_file = settings_dir.join("native-sidebar-settings.json");
     std::fs::create_dir_all(&settings_dir).expect("settings dir");
 
@@ -785,6 +785,7 @@ fn list_previous_sessions_reads_domain_rows_with_closed_at() {
         .create_project(
             json!({
                 "name": "History",
+                "path": std::env::temp_dir(),
             })
             .as_object()
             .expect("project params"),

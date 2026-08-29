@@ -249,7 +249,13 @@ mod tests {
         ] {
             let temp = tempfile::tempdir().expect(name);
             let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-            fs::create_dir_all(&paths.root_dir).expect("root");
+            fs::create_dir_all(
+                paths
+                    .config_file
+                    .parent()
+                    .expect("config file parent directory"),
+            )
+            .expect("config directory");
             fs::write(&paths.config_file, format!("{config}\n")).expect("config");
 
             let error = read_gxserver_config(&paths).expect_err("config override should fail");
@@ -262,7 +268,13 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
         let default_port = read_selected_local_api_port().expect("port");
-        fs::create_dir_all(&paths.root_dir).expect("root");
+        fs::create_dir_all(
+            paths
+                .config_file
+                .parent()
+                .expect("config file parent directory"),
+        )
+        .expect("config directory");
         fs::write(
             &paths.config_file,
             format!(

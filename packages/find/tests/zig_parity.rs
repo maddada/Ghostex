@@ -19,7 +19,7 @@ fn rust_matcher_agrees_with_zig_vectors() {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fuzzy-zig-vectors.tsv")
         });
     let data = std::fs::read_to_string(&path).expect("fuzzy vector fixture");
-    let mut matcher = zehn::fuzzy::Matcher::new();
+    let mut matcher = ghostex_find::fuzzy::Matcher::new();
     let mut checked = 0usize;
     for (line_no, line) in data.lines().enumerate() {
         if line.trim().is_empty() {

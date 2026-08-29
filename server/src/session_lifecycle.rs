@@ -666,7 +666,7 @@ mod tests {
     fn create_project(repository: &DomainRepository<'_>) -> String {
         let project = repository
             .create_project(&params(
-                json!({ "name": "Lifecycle", "path": "/tmp/lifecycle" }),
+                json!({ "name": "Lifecycle", "path": std::env::temp_dir() }),
             ))
             .expect("create project");
         project

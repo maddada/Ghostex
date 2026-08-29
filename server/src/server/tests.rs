@@ -331,12 +331,13 @@ fn first_prompt_auto_title_decides_provider_strategy_and_filters_meta_prompts() 
         Some("Please can you help me fix flaky tests."),
         false,
     );
-    assert!(decision.should_run);
+    assert!(!decision.should_run);
     assert_eq!(
         decision.normalized_prompt.as_deref(),
         Some("fix flaky tests")
     );
-    assert_eq!(decision.strategy, Some("generateTitleAndRename"));
+    assert_eq!(decision.reason, "agentAutoTitle");
+    assert_eq!(decision.strategy, Some("agentAutoTitle"));
 
     let claude = json!({
         "agentId": "claude",
@@ -505,6 +506,7 @@ async fn read_project_status_route_returns_project_sessions_and_missing_errors()
             json!({
                 "params": {
                     "name": "Status Project",
+                    "path": temp.path().to_string_lossy(),
                     "runtimeSettings": { "defaultPromptAgentId": "codex" }
                 }
             }),
@@ -1025,7 +1027,12 @@ async fn agent_hook_conflict_response_strips_private_log_metadata() {
         rpc_request(
             "/api/createProject",
             &token,
-            json!({ "params": { "name": "Hook Conflict" } }),
+            json!({
+                "params": {
+                    "name": "Hook Conflict",
+                    "path": temp.path().to_string_lossy()
+                }
+            }),
         ),
         "request-create-hook-conflict-project".to_string(),
     )
@@ -1404,8 +1411,9 @@ async fn resolve_git_root_route_does_not_register_projects() {
         "request-resolve-git-root".to_string(),
     )
     .await;
-    assert_eq!(resolved.response.status(), StatusCode::OK);
+    let resolved_status = resolved.response.status();
     let body = response_json(resolved.response).await;
+    assert_eq!(resolved_status, StatusCode::OK, "response body: {body}");
     assert_eq!(
         body["result"]["gitRoot"],
         json!(path_to_string(

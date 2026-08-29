@@ -167,6 +167,7 @@ mod tests {
             paths.auth_token_file,
             temp.path()
                 .join(".ghostex")
+                .join("state")
                 .join("gxserver")
                 .join("auth")
                 .join("token")

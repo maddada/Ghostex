@@ -695,6 +695,7 @@ fn path_computation_includes_ghostex_managed_portless_state_dir() {
         paths.portless_state_dir,
         temp.path()
             .join(".ghostex")
+            .join("state")
             .join("gxserver")
             .join("portless")
     );
@@ -2491,11 +2492,7 @@ fn owned_listener(
 }
 
 fn enable_debugging_mode_for_test(paths: &crate::paths::GxserverPaths) {
-    let settings_path = paths
-        .home_dir
-        .join(".ghostex")
-        .join("state")
-        .join("native-sidebar-settings.json");
+    let settings_path = paths.app_config_dir.join("native-sidebar-settings.json");
     fs::create_dir_all(settings_path.parent().expect("settings parent"))
         .expect("create settings dir");
     fs::write(

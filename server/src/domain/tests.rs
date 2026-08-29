@@ -90,7 +90,7 @@ fn restored_session_ids_reject_invalid_provided_values() {
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Restore IDs" })
+            json!({ "name": "Restore IDs", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -182,7 +182,7 @@ fn session_provider_state_carries_canonical_zmx_provider() {
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Provider Metadata" })
+            json!({ "name": "Provider Metadata", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -251,7 +251,7 @@ fn session_tags_normalize_persist_and_clear_like_typescript() {
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Session Tags" })
+            json!({ "name": "Session Tags", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -423,7 +423,7 @@ fn persisted_invalid_session_tag_is_rejected_on_hydration() {
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Invalid Stored Tags" })
+            json!({ "name": "Invalid Stored Tags", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -465,7 +465,7 @@ fn update_session_order_defaults_returns_touched_rows_and_list_remains_updated_a
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Sidebar Order" })
+            json!({ "name": "Sidebar Order", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -562,7 +562,7 @@ fn update_session_order_rejects_invalid_duplicate_and_unknown_ids_without_partia
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Sidebar Rollback" })
+            json!({ "name": "Sidebar Rollback", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -770,7 +770,7 @@ fn records_project_and_session_id_allocations() {
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Allocated" })
+            json!({ "name": "Allocated", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -865,7 +865,7 @@ fn title_runtime_settings_only_default_search_by_text_to_placeholder() {
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Title Defaults" })
+            json!({ "name": "Title Defaults", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -911,7 +911,7 @@ fn invalid_surface_values_do_not_create_persisted_launch_surface_defaults() {
     let repository = DomainRepository::new(&db, "S7k");
     let project = repository
         .create_project(
-            json!({ "name": "Surface Defaults" })
+            json!({ "name": "Surface Defaults", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
