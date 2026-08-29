@@ -269,6 +269,7 @@ pub enum SessionChatOptionAgent {
     Claude,
     Codex,
     Grok,
+    Hermes,
     Omp,
     Pi,
 }
@@ -278,6 +279,7 @@ pub fn session_chat_option_agent(agent: Option<&str>) -> Option<SessionChatOptio
         "claude" | "openclaude" => Some(SessionChatOptionAgent::Claude),
         "codex" => Some(SessionChatOptionAgent::Codex),
         "grok" => Some(SessionChatOptionAgent::Grok),
+        "hermes" | "hermes-agent" => Some(SessionChatOptionAgent::Hermes),
         "omp" => Some(SessionChatOptionAgent::Omp),
         "pi" => Some(SessionChatOptionAgent::Pi),
         _ => None,
@@ -734,6 +736,51 @@ fn match_omp_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
 }
 
 // ---------------------------------------------------------------------------
+// Hermes grammar
+//   ⚕ grok-4.6 │ ctx -- │ [░░░░░░░░░░] -- │ 34s │ ⏲ 0s
+//
+// The model is the first `│` segment: one single-glyph marker, then the id
+// (measured 2026-08-29, Hermes Agent v0.20.4). The `⏲ …` timer segment plus
+// the segment count keep prose from matching; the context segment cannot
+// anchor anything because it changes shape after the first exchange (`ctx --`
+// becomes `26.2K/900K`). No reasoning effort is drawn anywhere on screen.
+// ---------------------------------------------------------------------------
+
+fn match_hermes_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
+    let segments: Vec<&str> = line.split('\u{2502}').map(str::trim).collect();
+    if segments.len() < 4
+        || !segments[1..]
+            .iter()
+            .any(|segment| segment.starts_with('\u{23f2}'))
+    {
+        return None;
+    }
+    let mut head = segments[0].split_whitespace();
+    let marker = head.next()?;
+    let model = head.next()?;
+    if head.next().is_some()
+        || marker.chars().count() != 1
+        || marker
+            .chars()
+            .next()
+            .is_some_and(|ch| ch.is_ascii_alphanumeric())
+        || !is_pi_family_model_id(model)
+    {
+        return None;
+    }
+    Some(SessionChatDetectedSelection {
+        model: Some(SessionChatDetectedChoice {
+            value: model.to_string(),
+            label: model.to_string(),
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        effort: None,
+        mode: None,
+        fast: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Detection
 // ---------------------------------------------------------------------------
 
@@ -754,6 +801,12 @@ pub fn detect_session_chat_selection(
             }
             SessionChatOptionAgent::Omp => {
                 if let Some(selection) = match_omp_statusline(scanned) {
+                    return Some(selection);
+                }
+                continue;
+            }
+            SessionChatOptionAgent::Hermes => {
+                if let Some(selection) = match_hermes_statusline(scanned) {
                     return Some(selection);
                 }
                 continue;
@@ -799,6 +852,9 @@ pub fn detect_session_chat_selection(
                             found = selection;
                         }
                     }
+                }
+                SessionChatOptionAgent::Hermes => {
+                    unreachable!("Hermes is parsed as a complete statusline")
                 }
                 SessionChatOptionAgent::Omp => {
                     unreachable!("Omp is parsed as a complete statusline")
@@ -984,6 +1040,12 @@ fn read_session_chat_transcript_selection(
             is nothing a transcript read could add here.
             */
             SessionChatOptionAgent::Grok => return None,
+            /*
+            Hermes names the model in a statusline that is on screen for the
+            whole session, and its mirrored transcript rows carry no model
+            field, so there is nothing a transcript read could add here.
+            */
+            SessionChatOptionAgent::Hermes => return None,
             SessionChatOptionAgent::Omp => return None,
             SessionChatOptionAgent::Pi => return None,
         })?;

@@ -131,6 +131,43 @@ fn open_hermes_state_db() -> Option<Connection> {
     Some(connection)
 }
 
+/*
+The name the agent gave one session, plus the provenance it recorded for it
+(`derived` for the instant name taken from the opening message, `llm` for the
+model's upgrade of it, `user` for a name typed with `/title`). The provenance
+travels with the title because it is the only thing that distinguishes the
+throwaway first name from the one meant to stick.
+*/
+pub(crate) struct HermesSessionTitle {
+    pub(crate) title: String,
+    pub(crate) title_source: Option<String>,
+}
+
+/// The current title for one session, or `None` while it has no name yet.
+pub(crate) fn read_hermes_session_title(session_id: &str) -> Option<HermesSessionTitle> {
+    if !is_safe_hermes_session_id(session_id) {
+        return None;
+    }
+    let connection = open_hermes_state_db()?;
+    let (title, title_source) = connection
+        .query_row(
+            "SELECT title, title_source FROM sessions WHERE id = ?1",
+            rusqlite::params![session_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            },
+        )
+        .ok()?;
+    let title = title?.trim().to_string();
+    (!title.is_empty()).then_some(HermesSessionTitle {
+        title,
+        title_source,
+    })
+}
+
 fn read_hermes_active_rows(
     connection: &Connection,
     session_id: &str,

@@ -641,6 +641,9 @@ pub(crate) fn first_prompt_claim_strategy(agent_name: Option<&str>) -> Option<&'
     match normalize_first_prompt_claim_agent_name(agent_name).as_deref() {
         Some("claude") => Some("sendBareRenameCommand"),
         Some("codex") => Some("agentAutoTitle"),
+        // See first_prompt_auto_title_strategy: this agent names its own
+        // sessions and the metadata sync adopts those names.
+        Some("hermes-agent") => Some("agentAutoTitle"),
         Some("pi") => Some("generateTitleAndName"),
         Some("omp") => Some("generateTitleAndName"),
         _ => None,
@@ -653,6 +656,7 @@ pub(crate) fn normalize_first_prompt_claim_agent_name(value: Option<&str>) -> Op
         "" => None,
         "openai codex" | "codex cli" => Some("codex".to_string()),
         "claude code" => Some("claude".to_string()),
+        "hermes" | "hermes agent" | "hermes-agent" => Some("hermes-agent".to_string()),
         "π" => Some("pi".to_string()),
         other => Some(other.to_string()),
     }

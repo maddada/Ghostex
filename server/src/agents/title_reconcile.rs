@@ -197,6 +197,16 @@ pub(crate) enum AgentMetadataTitleSource {
         agent_session_id: String,
         index_paths: Vec<PathBuf>,
     },
+    /*
+    Hermes keeps its session names in the `sessions` table of its own state
+    database rather than in any per-session file, and names a session twice on
+    its own: instantly from the opening message, then again once a small model
+    upgrades that name. Reading the row is what lets both land on the card.
+    */
+    HermesStateDb {
+        agent_session_id: String,
+        state_db_path: PathBuf,
+    },
 }
 
 impl AgentMetadataTitleSource {
@@ -206,6 +216,7 @@ impl AgentMetadataTitleSource {
             Self::CodexSessionIndex { index_paths, .. } => {
                 index_paths.iter().map(PathBuf::as_path).collect()
             }
+            Self::HermesStateDb { state_db_path, .. } => vec![state_db_path.as_path()],
         }
     }
 }
@@ -222,6 +233,9 @@ pub(crate) fn read_agent_metadata_title(
             agent_session_id,
             index_paths,
         } => read_codex_session_index_title(&index_paths, &agent_session_id),
+        AgentMetadataTitleSource::HermesStateDb {
+            agent_session_id, ..
+        } => read_hermes_state_db_title(&agent_session_id),
     }
 }
 
@@ -266,6 +280,14 @@ pub(crate) fn agent_metadata_title_source(
                 identity.agent_session_path.as_deref(),
             ),
         }),
+        Some("hermes-agent")
+            if crate::session_chat_hermes::is_safe_hermes_session_id(agent_session_id) =>
+        {
+            Some(AgentMetadataTitleSource::HermesStateDb {
+                agent_session_id: agent_session_id.to_string(),
+                state_db_path: crate::session_chat_hermes::hermes_state_db_path(),
+            })
+        }
         _ => None,
     }
 }
@@ -421,6 +443,28 @@ pub(crate) fn read_codex_session_index_title_from_path(
         });
     }
     None
+}
+
+/*
+The agent names a session twice on its own — instantly from the opening
+message, then again once a small model upgrades that name — and records which
+stage a stored name came from. Both stages are adopted, so a card is named the
+moment the session starts and sharpens a moment later, and the provenance rides
+along in the record revision so an upgrade that keeps the same text is still
+seen as the same title rather than a new one.
+*/
+pub(crate) fn read_hermes_state_db_title(agent_session_id: &str) -> Option<AgentMetadataTitle> {
+    let session_title = crate::session_chat_hermes::read_hermes_session_title(agent_session_id)?;
+    let title = normalize_metadata_title(Some(&Value::String(session_title.title)))?;
+    Some(AgentMetadataTitle {
+        agent_session_id: Some(agent_session_id.to_string()),
+        provider: "hermes-state-db",
+        record_revision: session_title
+            .title_source
+            .map(|source| format!("{agent_session_id}:{source}")),
+        title,
+        updated_at: None,
+    })
 }
 
 /*

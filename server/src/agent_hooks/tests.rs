@@ -45,7 +45,7 @@ fn hook_status_uses_home_scoped_paths() {
 fn hook_status_reports_profile_only_provider_hook_paths() {
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-    let hook_paths = HookPaths::new(paths.home_dir.clone());
+    let hook_paths = HookPaths::from_paths(&paths);
     write_test_executable(&temp.path().join(".local").join("bin").join("claude"));
     install_notify_hook(&hook_paths).expect("notify hook");
     let profile_path = temp
@@ -148,38 +148,37 @@ fn hook_status_detects_stale_profile_only_provider_hook() {
 }
 
 #[test]
-fn hook_status_uses_pi_root_extension_before_legacy_agent_paths() {
+fn hook_status_uses_pi_agent_extension_before_legacy_root_paths() {
     let temp = tempfile::tempdir().expect("tempdir");
     let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-    let hook_paths = HookPaths::new(paths.home_dir.clone());
+    let hook_paths = HookPaths::from_paths(&paths);
     write_test_executable(&temp.path().join(".local").join("bin").join("pi"));
     install_notify_hook(&hook_paths).expect("notify hook");
     let pi = HookDefinition {
         agent_id: "pi",
         cli_command: "pi",
     };
-    let root_extension_path = temp
+    let legacy_root_extension_path = temp
         .path()
         .join(".pi")
         .join("extensions")
         .join("ghostex-session.ts");
-    let legacy_agent_extension_path = temp
+    let agent_extension_path = temp
         .path()
         .join(".pi")
         .join("agent")
         .join("extensions")
-        .join("ghostex-session")
-        .join("index.ts");
+        .join("ghostex-session.ts");
     write_test_file(
-        &root_extension_path,
+        &agent_extension_path,
         &format!(
             "// {PI_EXTENSION_MARKER} v4\nconst hook = \"{}\";\n",
             path_string(&hook_paths.notify_hook_path)
         ),
     );
     write_test_file(
-        &legacy_agent_extension_path,
-        &format!("// {PI_EXTENSION_MARKER} v2\n"),
+        &legacy_root_extension_path,
+        &format!("// {PI_EXTENSION_MARKER} v4\n"),
     );
 
     let provider_paths = provider_hook_paths("pi", &hook_paths);
@@ -187,9 +186,9 @@ fn hook_status_uses_pi_root_extension_before_legacy_agent_paths() {
     assert!(inspection.current_hook_installed);
     assert_eq!(
         provider_paths.first().map(|path| path_string(path)),
-        Some(path_string(&root_extension_path))
+        Some(path_string(&agent_extension_path))
     );
-    assert!(provider_paths.contains(&legacy_agent_extension_path));
+    assert!(provider_paths.contains(&legacy_root_extension_path));
 
     let status = read_agent_hook_status(
         &paths,
@@ -209,7 +208,7 @@ fn hook_status_uses_pi_root_extension_before_legacy_agent_paths() {
         .get("paths")
         .and_then(Value::as_array)
         .expect("paths")
-        .contains(&json!(path_string(&legacy_agent_extension_path))));
+        .contains(&json!(path_string(&legacy_root_extension_path))));
 }
 
 #[test]

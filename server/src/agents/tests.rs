@@ -32,8 +32,9 @@ fn write_metadata_value(db: &Connection, key: &str, value: Value) {
     .expect("write metadata value");
 }
 
-fn create_codex_agent_session(
+fn create_agent_session(
     repository: &DomainRepository<'_>,
+    agent_id: &str,
     agent_session_id: &str,
     project_path: &Path,
 ) -> (LifecycleParams, Value) {
@@ -55,15 +56,15 @@ fn create_codex_agent_session(
     let session = repository
         .create_session(
             json!({
-                "agentId": "codex",
+                "agentId": agent_id,
                 "kind": "agent",
                 "projectId": project_id,
                 "runtimeSettings": {
-                    "agentName": "codex",
+                    "agentName": agent_id,
                     "agentSessionId": agent_session_id,
                     "titleSource": "placeholder"
                 },
-                "title": "Codex Session"
+                "title": create_agent_session_default_title(None, Some(agent_id))
             })
             .as_object()
             .expect("session params"),
@@ -85,12 +86,28 @@ fn create_codex_agent_session(
     (lifecycle, session)
 }
 
+fn create_codex_agent_session(
+    repository: &DomainRepository<'_>,
+    agent_session_id: &str,
+    project_path: &Path,
+) -> (LifecycleParams, Value) {
+    create_agent_session(repository, "codex", agent_session_id, project_path)
+}
+
+fn create_claude_agent_session(
+    repository: &DomainRepository<'_>,
+    agent_session_id: &str,
+    project_path: &Path,
+) -> (LifecycleParams, Value) {
+    create_agent_session(repository, "claude", agent_session_id, project_path)
+}
+
 fn create_pi_agent_session_without_launch_lock(
     repository: &DomainRepository<'_>,
 ) -> (LifecycleParams, Value) {
     let project = repository
         .create_project(
-            json!({ "name": "Pi Lock Project" })
+            json!({ "name": "Pi Lock Project", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -145,13 +162,13 @@ fn first_prompt_claim_decision_matches_provider_strategy_and_prompt_normalizatio
         false,
         false,
     );
-    assert!(decision.should_run);
-    assert_eq!(decision.reason, "eligible");
+    assert!(!decision.should_run);
+    assert_eq!(decision.reason, "agentAutoTitle");
     assert_eq!(
         decision.normalized_prompt.as_deref(),
         Some("fix the sidebar")
     );
-    assert_eq!(decision.strategy, Some("generateTitleAndRename"));
+    assert_eq!(decision.strategy, Some("agentAutoTitle"));
 
     let claude = json!({
         "agentId": "claude",
@@ -188,13 +205,13 @@ fn first_prompt_claim_decision_matches_provider_strategy_and_prompt_normalizatio
 
 #[test]
 fn first_prompt_claim_decision_skips_non_claimable_prompts_without_running_state() {
-    let codex = json!({
-        "agentId": "codex",
+    let claude = json!({
+        "agentId": "claude",
         "runtimeSettings": {},
         "title": "Agent",
     });
     let meta = decide_first_prompt_auto_title_claim(
-        &codex,
+        &claude,
         Some("# AGENTS.md instructions for this repository"),
         false,
         false,
@@ -203,7 +220,7 @@ fn first_prompt_claim_decision_skips_non_claimable_prompts_without_running_state
     assert_eq!(meta.reason, "metaPrompt");
 
     let slash = decide_first_prompt_auto_title_claim(
-        &codex,
+        &claude,
         Some("notes before command\n  /status please"),
         false,
         false,
@@ -235,7 +252,7 @@ fn first_prompt_claim_decision_skips_non_claimable_prompts_without_running_state
 fn first_prompt_claim_retries_cancelled_job_for_new_submit_or_later_prompt() {
     let first_prompt = "Please cancel this generated title before rename";
     let session = json!({
-        "agentId": "codex",
+        "agentId": "claude",
         "runtimeSettings": {
             "firstUserMessage": first_prompt,
             "gxserverFirstPromptAutoTitleCancelledAt": "2026-06-22T04:00:00.000Z",
@@ -274,7 +291,7 @@ fn first_prompt_claim_retries_cancelled_job_for_new_submit_or_later_prompt() {
 fn user_prompt_submit_hook_rearms_cancelled_identical_prompt() {
     let (temp, db) = open_test_database();
     let repository = DomainRepository::new(&db, "test-server");
-    let (lifecycle, session) = create_codex_agent_session(
+    let (lifecycle, session) = create_claude_agent_session(
         &repository,
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         temp.path(),
@@ -305,7 +322,7 @@ fn user_prompt_submit_hook_rearms_cancelled_identical_prompt() {
         &repository,
         &lifecycle,
         json!({
-            "agentName": "codex",
+            "agentName": "claude",
             "eventName": "UserPromptSubmit",
             "firstUserMessage": first_prompt,
             "projectId": lifecycle.project_id.clone(),
@@ -345,7 +362,7 @@ fn user_prompt_submit_hook_rearms_cancelled_identical_prompt() {
 fn first_prompt_claim_clears_cancelled_metadata_for_repeated_explicit_prompt() {
     let (temp, db) = open_test_database();
     let repository = DomainRepository::new(&db, "test-server");
-    let (lifecycle, session) = create_codex_agent_session(
+    let (lifecycle, session) = create_claude_agent_session(
         &repository,
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         temp.path(),
@@ -429,7 +446,7 @@ fn terminal_title_capture_preserves_decision_reason_when_identity_title_is_trust
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
         .create_project(
-            json!({ "name": "Terminal Title Capture" })
+            json!({ "name": "Terminal Title Capture", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -508,7 +525,7 @@ fn terminal_title_applies_zmx_title_with_previous_source_reason_without_agent_pr
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
         .create_project(
-            json!({ "name": "Terminal Title Canonical" })
+            json!({ "name": "Terminal Title Canonical", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -581,7 +598,7 @@ fn terminal_title_strips_factory_droid_status_marker_before_sync() {
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
         .create_project(
-            json!({ "name": "Factory Droid Titles" })
+            json!({ "name": "Factory Droid Titles", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -654,7 +671,7 @@ fn terminal_title_rejects_untrusted_provider_off_title() {
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
         .create_project(
-            json!({ "name": "Terminal Title Trust" })
+            json!({ "name": "Terminal Title Trust", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -719,7 +736,7 @@ fn terminal_title_status_bookkeeping_does_not_schedule_presentation_delta() {
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
         .create_project(
-            json!({ "name": "Terminal Title Status" })
+            json!({ "name": "Terminal Title Status", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -1036,7 +1053,6 @@ fn agent_hook_unchanged_activity_reports_unchanged_without_rewriting_state() {
         create_codex_agent_session(&repository, agent_session_id, temp.path());
     let activity_at = "2026-06-09T18:08:19.857Z";
     let mut runtime_settings = object_field(&session, "runtimeSettings");
-    runtime_settings.insert("titleSource".to_string(), json!("terminal-auto"));
     runtime_settings.insert(
         "agentActivity".to_string(),
         json!({
@@ -1078,7 +1094,11 @@ fn agent_hook_unchanged_activity_reports_unchanged_without_rewriting_state() {
     )
     .expect("hook result");
 
-    assert_eq!(result.get("changed"), Some(&json!(false)));
+    assert_eq!(
+        result.get("changed"),
+        Some(&json!(false)),
+        "hook result: {result:#}"
+    );
     assert_eq!(result.get("reason"), Some(&json!("activity-unchanged")));
     assert_eq!(
         result
@@ -1226,7 +1246,7 @@ fn terminal_title_capture_reconciles_codex_metadata_title() {
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
         .create_project(
-            json!({ "name": "Terminal Title Metadata" })
+            json!({ "name": "Terminal Title Metadata", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -1530,7 +1550,7 @@ fn live_process_identity_promotes_running_zmx_terminal_to_codex() {
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
         .create_project(
-            json!({ "name": "Ghostex" })
+            json!({ "name": "Ghostex", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )
@@ -1670,7 +1690,7 @@ fn live_process_identity_claims_codex_id_observed_before_process_promotion() {
 }
 
 #[test]
-fn live_process_identity_replaces_wsl_shell_title_and_first_hook_claims_auto_title() {
+fn live_process_identity_replaces_wsl_shell_title_and_defers_to_codex_auto_title() {
     let (temp, db) = open_test_database();
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
@@ -1757,10 +1777,7 @@ fn live_process_identity_replaces_wsl_shell_title_and_first_hook_claims_auto_tit
     )
     .expect("hook result");
 
-    assert_eq!(
-        result.get("reason"),
-        Some(&json!("first-prompt-auto-title-claimed"))
-    );
+    assert_eq!(result.get("reason"), Some(&json!("activity-updated")));
     let hooked_session = result.get("session").expect("hooked session");
     assert_eq!(hooked_session.get("title"), Some(&json!("Codex Session")));
     assert_eq!(
@@ -1768,7 +1785,7 @@ fn live_process_identity_replaces_wsl_shell_title_and_first_hook_claims_auto_tit
             .get("runtimeSettings")
             .and_then(Value::as_object)
             .and_then(|settings| settings.get("gxserverFirstPromptAutoTitleStatus")),
-        Some(&json!("running"))
+        None
     );
 }
 
@@ -1932,7 +1949,8 @@ fn create_agent_session_params_use_project_agent_config_and_settings() {
                     "command": "claude",
                     "icon": "claude"
                 }],
-                "name": "Agent CRUD"
+                "name": "Agent CRUD",
+                "path": std::env::temp_dir()
             })
             .as_object()
             .expect("project params"),
@@ -2561,7 +2579,7 @@ fn transcript_successor_identity_write_is_compare_and_set() {
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
         .create_project(
-            json!({ "name": "Successor Identity Project" })
+            json!({ "name": "Successor Identity Project", "path": std::env::temp_dir() })
                 .as_object()
                 .expect("project params"),
         )

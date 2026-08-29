@@ -1406,6 +1406,10 @@ pub(crate) fn first_prompt_auto_title_strategy(agent_name: Option<&str>) -> Opti
     match normalize_agent_name(agent_name).as_deref() {
         Some("claude") => Some("sendBareRenameCommand"),
         Some("codex") => Some("agentAutoTitle"),
+        // Names its own sessions in its state database, in two stages, and the
+        // metadata sync adopts both. Generating a second title here would race
+        // that with a worse name.
+        Some("hermes-agent") => Some("agentAutoTitle"),
         Some("pi") => Some("generateTitleAndName"),
         Some("omp") => Some("generateTitleAndName"),
         _ => None,
