@@ -42,7 +42,6 @@ export function useSettingsModalEffects({
   pendingNavigationPersistTimeoutRef,
   pendingTimeoutRef,
   powerSectionRef,
-  privacySectionRef,
   sessionCardsSectionRef,
   setActiveMainSettingsSectionId,
   setActiveTabState,
@@ -85,7 +84,6 @@ export function useSettingsModalEffects({
   pendingNavigationPersistTimeoutRef: RefObject<ReturnType<typeof setTimeout> | undefined>;
   pendingTimeoutRef: RefObject<ReturnType<typeof setTimeout> | undefined>;
   powerSectionRef: RefObject<HTMLDivElement | null>;
-  privacySectionRef: RefObject<HTMLDivElement | null>;
   sessionCardsSectionRef: RefObject<HTMLDivElement | null>;
   setActiveMainSettingsSectionId: Dispatch<SetStateAction<MainSettingsScrollTargetId>>;
   setActiveTabState: Dispatch<SetStateAction<SettingsModalTab>>;
@@ -122,7 +120,6 @@ export function useSettingsModalEffects({
       editor: editorSectionRef,
       notifications: soundsSectionRef,
       power: powerSectionRef,
-      privacy: privacySectionRef,
       sessionCards: sessionCardsSectionRef,
       sidebar: sidebarSectionRef,
       sounds: soundsSectionRef,

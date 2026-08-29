@@ -251,6 +251,15 @@ pub(crate) fn gpui_session_chat_font_family_from_settings(
         .to_string()
 }
 
+pub(crate) fn gpui_session_chat_custom_transcript_width_enabled_from_settings(
+    settings: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    settings
+        .get("sessionChatCustomTranscriptWidthEnabled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+}
+
 pub(crate) fn gpui_session_chat_transcript_width_percent_from_settings(
     settings: &serde_json::Map<String, serde_json::Value>,
 ) -> u8 {

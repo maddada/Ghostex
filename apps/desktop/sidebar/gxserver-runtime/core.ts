@@ -1068,6 +1068,9 @@ export class GpuiSidebarRuntime {
       case 'openBrowserChat':
         this.openQuickBrowserTab();
         return;
+      case 'openMobileBrowserChat':
+        this.openMobileBrowserChat();
+        return;
       case 'openBrowserPaneInGroup':
         this.openBrowserPaneInGroup(message.groupId);
         return;

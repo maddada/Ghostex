@@ -132,13 +132,6 @@ export type MainSettingsSectionId =
   | 'statusIndicators'
   | 'notifications'
   | 'system'
-  /*
-   * CDXC:AnonymousAnalytics 2026-08-26:
-   * Privacy is its own always-visible General group instead of a row under
-   * Advanced or System, because every one of those sections is advanced-gated
-   * and the analytics opt-out must stay findable without Show Advanced.
-   */
-  | 'privacy'
   | 'advanced';
 
 export type MainSettingsScrollTargetId =
@@ -204,6 +197,7 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'preferredAgentInterface',
     'sessionChatTheme',
     'sessionChatFontFamily',
+    'sessionChatCustomTranscriptWidthEnabled',
     'sessionChatTranscriptWidthPercent',
     'sessionChatVerboseMode',
   ],
@@ -271,7 +265,7 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'terminalFontWeight',
     'terminalLineHeight',
     'terminalLetterSpacing',
-    'terminalNarrowerViewEnabled',
+    'terminalViewWidthMode',
     'terminalViewWidthPercent',
     'terminalWidthApplyToCommandPaneTerminals',
     'terminalPaneHorizontalPaddingPx',
@@ -335,12 +329,6 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'keepAwakeDeactivateOnUserSwitch',
     'ghostexFolderStats',
   ],
-  /*
-   * CDXC:AnonymousAnalytics 2026-08-26:
-   * The analytics opt-out is deliberately not an advanced row, so it renders in
-   * ordinary Settings browsing.
-   */
-  privacy: ['analyticsEnabled'],
   /*
    * CDXC:DebuggingSettings 2026-06-15-21:34:
    * Debugging controls belong in a dedicated bottom Settings section so support-oriented logging and session metadata copy actions are grouped away from everyday Workspace and Session Cards preferences.
@@ -594,7 +582,7 @@ export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
   'terminalFontWeight',
   'terminalLineHeight',
   'terminalLetterSpacing',
-  'terminalNarrowerViewEnabled',
+  'terminalViewWidthMode',
   'terminalViewWidthPercent',
   'terminalWidthApplyToCommandPaneTerminals',
   'terminalCursorStyleBlink',

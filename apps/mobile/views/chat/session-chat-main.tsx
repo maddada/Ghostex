@@ -70,11 +70,11 @@ Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
 - RN config (injected before content loads):
   window.__ghostexMobileChatConfig = {
     acknowledgedDraft?, agentId?, projectId?, sessionId?, sessionKey?, theme?, fontFamily?,
-    transcriptWidthPercent?, verboseMode?
+    customTranscriptWidthEnabled?, transcriptWidthPercent?, verboseMode?
   }
 - RN presentation updates (pushed when mobile settings change):
   window.ghostexMobileChatSetPresentation({
-    theme?, fontFamily?, transcriptWidthPercent?, verboseMode?
+    theme?, fontFamily?, customTranscriptWidthEnabled?, transcriptWidthPercent?, verboseMode?
   })
 - RN host state (pushed on every change, may arrive before or after mount):
   window.ghostexMobileChatSetHostState({ working? })
@@ -96,6 +96,7 @@ interface MobileChatConfig {
   /** A send that completed after the previous WebView had already unmounted. */
   acknowledgedDraft?: string;
   agentId?: string;
+  customTranscriptWidthEnabled?: boolean;
   fontFamily?: string;
   projectId?: string;
   sessionId?: string;
@@ -106,6 +107,7 @@ interface MobileChatConfig {
 }
 
 interface MobileChatPresentation {
+  customTranscriptWidthEnabled: boolean;
   fontFamily: string;
   theme: SessionChatTheme;
   transcriptWidthPercent: number;
@@ -413,6 +415,7 @@ function clampTranscriptWidthPercent(value: number): number {
 }
 
 let presentationState: MobileChatPresentation = {
+  customTranscriptWidthEnabled: false,
   fontFamily: '',
   theme: 'dark',
   transcriptWidthPercent: DEFAULT_TRANSCRIPT_WIDTH_PERCENT,
@@ -432,7 +435,7 @@ function readPresentation(): MobileChatPresentation {
 }
 
 function applyDocumentPresentation(presentation: MobileChatPresentation): void {
-  const background = presentation.theme === 'light' ? '#fdfdfd' : '#0a0a0a';
+  const background = presentation.theme === 'light' ? '#fdfdfd' : '#0d0d0d';
   document.documentElement.style.colorScheme = presentation.theme;
   document.documentElement.style.backgroundColor = background;
   // CDXC:SessionChatTypeScale 2026-08-22: unset, not a written-out fallback —
@@ -452,6 +455,10 @@ function applyDocumentPresentation(presentation: MobileChatPresentation): void {
 
 window.ghostexMobileChatSetPresentation = (state) => {
   const next: MobileChatPresentation = {
+    customTranscriptWidthEnabled:
+      typeof state?.customTranscriptWidthEnabled === 'boolean'
+        ? state.customTranscriptWidthEnabled
+        : presentationState.customTranscriptWidthEnabled,
     fontFamily: typeof state?.fontFamily === 'string' ? state.fontFamily.trim() : presentationState.fontFamily,
     theme: state?.theme === 'dark' || state?.theme === 'light' ? state.theme : presentationState.theme,
     transcriptWidthPercent:
@@ -461,6 +468,7 @@ window.ghostexMobileChatSetPresentation = (state) => {
     verboseMode: typeof state?.verboseMode === 'boolean' ? state.verboseMode : presentationState.verboseMode,
   };
   if (
+    next.customTranscriptWidthEnabled === presentationState.customTranscriptWidthEnabled &&
     next.fontFamily === presentationState.fontFamily &&
     next.theme === presentationState.theme &&
     next.transcriptWidthPercent === presentationState.transcriptWidthPercent &&
@@ -998,7 +1006,11 @@ function MobileSessionChat({
   transport: SessionChatTransport;
 }) {
   const { working } = useSyncExternalStore(subscribeHostState, readHostState, readHostState);
-  const { theme, verboseMode } = useSyncExternalStore(subscribePresentation, readPresentation, readPresentation);
+  const { customTranscriptWidthEnabled, theme, verboseMode } = useSyncExternalStore(
+    subscribePresentation,
+    readPresentation,
+    readPresentation
+  );
   const [savedPromptsOpen, setSavedPromptsOpen] = useState(false);
   const showSavedPrompts = useMemo(() => () => setSavedPromptsOpen(true), []);
   const composerBridge = useMemo(
@@ -1033,6 +1045,7 @@ function MobileSessionChat({
         hostSearchBridge={mobileSearchBridge}
         hostSessionNoteBridge={mobileSessionNoteBridge}
         nativeSelectionMenus
+        customTranscriptWidthEnabled={customTranscriptWidthEnabled}
         onSwitchToTerminalForAgentPicker={() => {
           void bridgeCall('switchToTerminalForAgentPicker');
         }}
@@ -1073,6 +1086,7 @@ void waitForConfig().then((config) => {
     clearStoredSessionChatDraftIfUnchanged(sessionKey, config.acknowledgedDraft);
   }
   window.ghostexMobileChatSetPresentation?.({
+    customTranscriptWidthEnabled: config.customTranscriptWidthEnabled,
     fontFamily: config.fontFamily,
     theme: normalizeSessionChatTheme(config.theme),
     transcriptWidthPercent: config.transcriptWidthPercent,

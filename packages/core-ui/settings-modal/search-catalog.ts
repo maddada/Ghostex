@@ -458,9 +458,14 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Chat font family',
       },
       {
+        key: 'sessionChatCustomTranscriptWidthEnabled',
+        subtitle: 'Let the transcript use a different width from the prompt composer.',
+        title: 'Custom transcript width',
+      },
+      {
         key: 'sessionChatTranscriptWidthPercent',
-        subtitle: 'Set the width of the message transcript without changing the prompt composer.',
-        title: 'Chat message width',
+        subtitle: 'Set the centered transcript width without changing the prompt composer.',
+        title: 'Transcript width',
       },
       {
         key: 'sessionChatVerboseMode',
@@ -507,23 +512,6 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         options: COMPLETION_SOUND_OPTIONS,
         subtitle: 'Sound for action completions.',
         title: 'Action Completion Sound',
-      },
-    ]),
-    /*
-     * CDXC:AnonymousAnalytics 2026-08-26:
-     * Searching for privacy, analytics, telemetry, or tracking must land on the
-     * opt-out switch.
-     */
-    privacy: getSettingsSectionSearch(settingsSearchQuery, 'Privacy', [
-      {
-        key: 'analyticsEnabled',
-        options: [
-          { label: 'Telemetry', value: 'telemetry' },
-          { label: 'Tracking', value: 'tracking' },
-        ],
-        subtitle:
-          'Share usage data (OS, feature usage, counts) under a one-way hashed ID that groups your own machines. Never prompts, file paths, project names, emails, or the raw account ID.',
-        title: 'Usage analytics',
       },
     ]),
     storage: getSettingsSectionSearch(settingsSearchQuery, 'Storage', [
@@ -618,9 +606,9 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Letter Spacing',
       },
       {
-        key: 'terminalNarrowerViewEnabled',
-        subtitle: 'Center and constrain terminal body width on wide panes.',
-        title: 'Narrower Terminal View',
+        key: 'terminalViewWidthMode',
+        subtitle: 'Use the full pane, match the chat transcript, or set an independent terminal width.',
+        title: 'Terminal width mode',
       },
       {
         key: 'terminalViewWidthPercent',
@@ -843,7 +831,6 @@ export function getMainSettingsGroupSearch(settingsSearchQuery: string, settings
     ]),
     statusIndicators: settingsSearch.statusIndicators,
     notifications: getGroupedSettingsSectionSearch(settingsSearchQuery, 'Notifications', [settingsSearch.sounds]),
-    privacy: settingsSearch.privacy,
     system: getGroupedSettingsSectionSearch(settingsSearchQuery, 'System', [
       settingsSearch.autoSleep,
       settingsSearch.power,
@@ -907,11 +894,6 @@ export function getMainSettingsSectionNavigation(mainSettingsGroupSearch: MainSe
       id: 'notifications',
       searchResult: mainSettingsGroupSearch.notifications,
       title: 'Notifications',
-    },
-    {
-      id: 'privacy',
-      searchResult: mainSettingsGroupSearch.privacy,
-      title: 'Privacy',
     },
     { id: 'advanced', searchResult: mainSettingsGroupSearch.advanced, title: 'Advanced' },
   ];

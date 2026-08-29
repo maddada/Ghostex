@@ -74,7 +74,7 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
   );
 }
 
-.ghostex-session-chat-scope [data-slot='message-scroller-content'] {
+.ghostex-session-chat-scope[data-chat-custom-transcript-width='true'] [data-slot='message-scroller-content'] {
   width: calc(var(--ghostex-session-chat-transcript-width-percent, 75) * 1%);
   max-width: calc(100% - 60px);
 }
@@ -197,7 +197,7 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
  * narrow panes and phones never squeeze the conversation further.
  */
 @media (max-width: 1070px) {
-  .ghostex-session-chat-scope [data-slot='message-scroller-content'] {
+  .ghostex-session-chat-scope[data-chat-custom-transcript-width='true'] [data-slot='message-scroller-content'] {
     max-width: 100%;
     width: 100%;
   }
@@ -260,11 +260,11 @@ body[data-session-chat-theme='dark'] .ghostex-session-chat-popup {
   color-scheme: dark;
   /*
    * CDXC:ModalRedesign 2026-08-24 (round 2):
-   * The chat page shares the app-wide #0e0e0e window tone instead of its own
-   * slightly-darker #0a0a0a, so Chat, the sidebar, and every modal read as one
-   * surface.
+   * Keep every chat backing layer on the same #0d0d0d tone. A one-step
+   * difference between the document, the transcript, and the native host is
+   * visible as horizontal strips while Chromium composites the page.
    */
-  --background: #0e0e0e;
+  --background: #0d0d0d;
   --foreground: #fcfcfc;
   --card: var(--background);
   --card-foreground: var(--foreground);
@@ -283,13 +283,13 @@ body[data-session-chat-theme='dark'] .ghostex-session-chat-popup {
   --input: color-mix(in srgb, #fff 8%, transparent);
   --ring: oklch(55.6% 0 0);
   --info-foreground: oklch(70.7% 0.165 254.624);
-  /* See the light theme. The 4%-white --muted lands on #0a0a0a at roughly
+  /* See the light theme. The 4%-white --muted lands on #0d0d0d at roughly
      #151515, which is where the "the chips are too dark" reading comes from;
      these are opaque rather than mixed with transparent so a chip reads the
      same on the page, inside a bubble, and inside an alert. */
   --chat-inline-code-surface: color-mix(in srgb, var(--foreground) 11%, var(--background));
   --chat-inline-code-border: color-mix(in srgb, var(--foreground) 18%, transparent);
-  /* Same 82% step as light. #fcfcfc on #0a0a0a is the loudest pairing in the
+  /* Same 82% step as light. #fcfcfc on #0d0d0d is the loudest pairing in the
      app, so this is the theme the softening was really for: 19.6:1 -> 13.4:1,
      well clear of the muted lane. */
   --chat-prose-foreground: color-mix(in srgb, var(--foreground) 82%, var(--background));
@@ -1029,7 +1029,7 @@ the markdown block) rather than pinned to a tier of its own.
 .ghostex-chat-scroll-bottom-button,
 .ghostex-chat-scroll-bottom-button:not(:disabled):hover {
   /* Matches the chat page background (see the dark-theme --background). */
-  background-color: #0e0e0e;
+  background-color: var(--background);
   border-radius: 9999px;
 }
 

@@ -59,6 +59,7 @@ import {
   type SidebarSide,
   type TerminalBackgroundImageFit,
   type TerminalCursorStyle,
+  type TerminalViewWidthMode,
   type WebLinkOpenTarget,
   clampCommandsPanelDefaultHeightPx,
   clampProjectSessionListCollapsedCount,
@@ -90,6 +91,17 @@ function normalizeTitlebarProjectSelectionMap(candidate: unknown): Record<string
     normalized[projectId] = selection;
   }
   return normalized;
+}
+
+function normalizeTerminalViewWidthMode(source: Record<string, unknown>): TerminalViewWidthMode {
+  const candidate = source.terminalViewWidthMode;
+  if (candidate === 'full' || candidate === 'match-chat' || candidate === 'custom') {
+    return candidate;
+  }
+  // The removed boolean had only two states. Preserve its explicit narrow
+  // state as Custom; its old default false migrates to the new Match Chat
+  // default instead of pinning existing installs to Full.
+  return source.terminalNarrowerViewEnabled === true ? 'custom' : DEFAULT_ghostex_SETTINGS.terminalViewWidthMode;
 }
 
 export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
@@ -593,6 +605,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'sessionChatFontFamily',
       DEFAULT_ghostex_SETTINGS.sessionChatFontFamily
     ).trim(),
+    sessionChatCustomTranscriptWidthEnabled: readBoolean(
+      source,
+      'sessionChatCustomTranscriptWidthEnabled',
+      DEFAULT_ghostex_SETTINGS.sessionChatCustomTranscriptWidthEnabled
+    ),
     sessionChatTranscriptWidthPercent: clampSessionChatTranscriptWidthPercent(
       readNumber(
         source,
@@ -680,11 +697,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       2,
       DEFAULT_ghostex_SETTINGS.terminalLineHeight
     ),
-    terminalNarrowerViewEnabled: readBoolean(
-      source,
-      'terminalNarrowerViewEnabled',
-      DEFAULT_ghostex_SETTINGS.terminalNarrowerViewEnabled
-    ),
+    terminalViewWidthMode: normalizeTerminalViewWidthMode(source),
     terminalViewWidthPercent: clampTerminalViewWidthPercent(
       readNumber(source, 'terminalViewWidthPercent', DEFAULT_ghostex_SETTINGS.terminalViewWidthPercent)
     ),

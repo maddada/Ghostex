@@ -21,6 +21,12 @@ export const DEFAULT_SIDEBAR_COMMANDS = [
 
 export const DEFAULT_BROWSER_ACTION_URL = 'http://localhost:5173';
 export const DEFAULT_BROWSER_LAUNCH_URL = 'https://www.google.com';
+/**
+ * CDXC:Mobile 2026-06-16-01:23:
+ * Sidebar Mobile opens the product site so download routing stays on ghostex.dev
+ * instead of a GitHub README anchor.
+ */
+export const GHOSTEX_MOBILE_DOWNLOAD_URL = 'https://ghostex.dev';
 
 /**
  * CDXC:ProjectActions 2026-05-19-17:10:

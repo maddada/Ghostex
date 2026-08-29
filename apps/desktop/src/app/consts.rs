@@ -106,7 +106,7 @@ pub(crate) const COMMAND_ACTION_STATUS_POLL_INTERVAL: Duration = Duration::from_
 
 pub(crate) const CEF_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF0E0E0E;
 
-pub(crate) const CEF_SESSION_CHAT_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF0A0A0A;
+pub(crate) const CEF_SESSION_CHAT_DARK_PREPAINT_BACKGROUND_COLOR: u32 = 0xFF0D0D0D;
 
 /* Find keeps the older near-black its own page paints; only the chat surface
 moved. */

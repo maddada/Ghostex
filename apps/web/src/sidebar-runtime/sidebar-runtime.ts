@@ -30,6 +30,7 @@ import {
   type SidebarAgentButton,
 } from '@/packages/shared/sidebar-agents';
 import { type RemoteMachineSettings, type ghostexSettings } from '@/packages/shared/ghostex-settings';
+import { GHOSTEX_MOBILE_DOWNLOAD_URL } from '@/packages/shared/sidebar-commands';
 import { readWebSettings } from '../app/web-settings';
 import {
   normalizeWorkspaceProjectIcon,
@@ -522,6 +523,9 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         return;
       case 'createChat':
         await createQuickSession('terminal');
+        return;
+      case 'openMobileBrowserChat':
+        window.open(GHOSTEX_MOBILE_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
         return;
       case 'createSessionInGroup':
         await createSession(message.groupId);

@@ -970,6 +970,21 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
 }
 
 /*
+ * CDXC:SidebarMachineTabs 2026-08-30:
+ * With remote machines saved, the machine tab strip under Search visually
+ * closes off the top chrome. Without machines that strip is absent, so the
+ * Search row itself draws the separator: a full-bleed hairline at its bottom
+ * edge, using the same border token as the footer's top border. The layout
+ * root mirrors the panel's machine-tabs state so this can scope without a
+ * descendant :has() probe.
+ */
+.sidebar-reference-layout[data-reference-sidebar='true'][data-sidebar-machine-tabs='false']
+  .reference-sidebar-primary-nav
+  > .reference-sidebar-search-more-row {
+  border-bottom: 1px solid var(--app-border);
+}
+
+/*
  * CDXC:SidebarFooter 2026-08-29:
  * Commands has one shared, fixed home at the bottom of the GPUI and web sidebar.
  * The footer owns exactly the bottom 45px, including its top border, and bleeds
@@ -2601,7 +2616,41 @@ manual mode visibly selected without adding text to the section row.
  * solid app background token (the same stable contrast color the custom
  * sidebar gradient mode keys its rows off) so scrolled rows never bleed
  * through the pinned chrome.
+ *
+ * CDXC:SidebarSpaces 2026-08-30:
+ * Pinned chrome must not move at all while the list scrolls, which means each
+ * row's resting position has to coincide exactly with its sticky pin position:
+ *
+ * - The header's first-child top margin (23px - scroll-top-offset +
+ *   quick-top-extra) is scrollable space, so the header used to travel up by
+ *   that margin before pinning at `top: 0`. The tabless panel instead zeroes
+ *   that margin and carries all breathing room in the scroll-top offset,
+ *   outside the scrollport where it cannot scroll away. The offset is 7px +
+ *   quick-top-extra: the pre-sticky resting position was 23px +
+ *   quick-top-extra below the panel, and the tabless header sits 16px higher
+ *   than that by design. The machine-tabs panel already rests the header at 0
+ *   (3px offset plus an explicit first-child margin of 0) and needs no bump.
+ * - The Space row rested 2px below its `top: 34px` pin because the header's
+ *   12px bottom margin collapsed with the row's -10px top margin, so it slid
+ *   up 2px before pinning. A -12px top margin collapses to 0 and lands the
+ *   row exactly at the header's 34px bottom edge, flush at rest and pinned
+ *   alike.
  */
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .session-groups-panel:not([data-sidebar-machine-tabs='true'])
+  .session-groups-content:has(
+    > .reference-sidebar-section-row[data-reference-section='projects']:first-child
+  ) {
+  --reference-sidebar-scroll-top-offset: calc(7px + var(--reference-sidebar-quick-top-extra, 5px));
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .session-groups-panel:not([data-sidebar-machine-tabs='true'])
+  .session-groups-content
+  > .reference-sidebar-section-row[data-reference-section='projects']:first-child {
+  margin-top: 0;
+}
+
 .session-groups-content > .reference-sidebar-section-row[data-reference-section='projects'] {
   background: var(--app-background);
   position: sticky;
@@ -2611,6 +2660,7 @@ manual mode visibly selected without adding text to the section row.
 
 .session-groups-content > .sidebar-space-filter-row {
   background: var(--app-background);
+  margin-top: -12px;
   padding-bottom: 4px;
   position: sticky;
   top: 34px;

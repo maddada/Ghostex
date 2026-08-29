@@ -229,6 +229,8 @@ export interface SessionChatViewProps {
   monacoVsBaseUrl?: string;
   /** Chat-only palette. It does not change the host application's chrome. */
   theme?: SessionChatTheme;
+  /** Let the transcript use its configured percentage instead of the composer column. */
+  customTranscriptWidthEnabled?: boolean;
   /** Reveal thinking-owned tool calls without requiring a click. */
   verboseMode?: boolean;
   /** Presentation of the transcript search box (see SessionChatSearch). */
@@ -403,6 +405,7 @@ export function SessionChatView({
   chatBarPanelState,
   className,
   commandCatalog,
+  customTranscriptWidthEnabled = false,
   diagnosticLog,
   hostActions,
   hostComposerBridge,
@@ -470,6 +473,18 @@ export function SessionChatView({
     working,
     ...(diagnosticLog ? { diagnosticLog } : {}),
   });
+  /*
+  The transcript's working gate. `chat.view.isWorking` settles the moment the
+  turn lifecycle looks terminal, but the session process can still be running
+  then (hooks, background tasks, an immediate follow-up turn) with the
+  user-visible session status still saying "working" — and the transcript
+  folding the turn into "Worked for Xs" in that window is exactly the mid-run
+  fold flash. So the list also holds on `chat.workingSignal`, the raw live
+  signal, and only settles once BOTH agree the session is quiet. Stop-vs-Send
+  and the composer keep `chat.working` so they cannot get stuck on a stale
+  signal.
+  */
+  const transcriptWorking = (chat.view.kind === 'ready' && chat.view.isWorking) || chat.workingSignal;
   /*
   CDXC:DraftSessions 2026-08-28:
   The draft the switcher acts on. `availableAgents` is present only while the
@@ -1207,6 +1222,7 @@ export function SessionChatView({
           theme === 'dark' && 'dark',
           className
         )}
+        data-chat-custom-transcript-width={customTranscriptWidthEnabled ? 'true' : 'false'}
         data-chat-theme={theme}
         {...(nativeSelectionMenus
           ? {}
@@ -1249,6 +1265,7 @@ export function SessionChatView({
           theme === 'dark' && 'dark',
           className
         )}
+        data-chat-custom-transcript-width={customTranscriptWidthEnabled ? 'true' : 'false'}
         data-chat-theme={theme}
         {...(nativeSelectionMenus
           ? {}
@@ -1295,7 +1312,7 @@ export function SessionChatView({
                       <div className='relative flex min-h-0 flex-1 select-text' ref={transcriptRef}>
                         <SessionChatMessageList
                           hasMore={chat.hasMore}
-                          isWorking={chat.view.isWorking}
+                          isWorking={transcriptWorking}
                           loadingEarlier={chat.loadingEarlier}
                           messages={chat.messages}
                           onLoadEarlier={chat.loadEarlier}
@@ -1322,7 +1339,7 @@ export function SessionChatView({
                         >
                           <SessionChatMessageList
                             hasMore={chat.hasMore}
-                            isWorking={chat.view.isWorking}
+                            isWorking={transcriptWorking}
                             loadingEarlier={chat.loadingEarlier}
                             messages={chat.messages}
                             onLoadEarlier={chat.loadEarlier}

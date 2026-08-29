@@ -320,6 +320,6 @@ pub(crate) fn gpui_session_chat_background_color() -> Hsla {
     {
         rgb(0xfdfdfd).into()
     } else {
-        rgb(0x0a0a0a).into()
+        rgb(0x0d0d0d).into()
     }
 }

@@ -1905,6 +1905,13 @@ impl GhostexGpuiApp {
                 ),
             ),
             (
+                "customTranscriptWidthEnabled",
+                gpui_session_chat_custom_transcript_width_enabled_from_settings(
+                    shared_settings::shared_sidebar_settings_snapshot().object(),
+                )
+                .to_string(),
+            ),
+            (
                 "transcriptWidthPercent",
                 gpui_session_chat_transcript_width_percent_from_settings(
                     shared_settings::shared_sidebar_settings_snapshot().object(),
@@ -2100,7 +2107,7 @@ impl GhostexGpuiApp {
         let background = if chat_theme == "light" {
             rgb(0xfdfdfd).into()
         } else {
-            rgb(0x0a0a0a).into()
+            rgb(0x0d0d0d).into()
         };
         /*
         CDXC:GPUISessionChatContextMenu 2026-08-21:

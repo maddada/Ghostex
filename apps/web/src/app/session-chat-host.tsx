@@ -227,6 +227,7 @@ export function SessionChatHost({
       agentLabel={agentLabel}
       canSend={session.presentationState === 'running'}
       className='workspace-session-chat'
+      customTranscriptWidthEnabled={chatSettings.sessionChatCustomTranscriptWidthEnabled}
       hostActions={hostActions}
       // Served from node_modules in dev and copied into dist by the vite
       // config's monaco plugin.

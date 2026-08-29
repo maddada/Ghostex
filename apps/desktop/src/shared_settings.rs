@@ -66,10 +66,11 @@ const DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX: f64 = 16.0;
 const DEFAULT_TERMINAL_PANE_VERTICAL_PADDING_PX: f64 = 0.0;
 const MIN_TERMINAL_PANE_PADDING_PX: f64 = 0.0;
 const MAX_TERMINAL_PANE_PADDING_PX: f64 = 64.0;
-const DEFAULT_TERMINAL_NARROWER_VIEW_ENABLED: bool = false;
+const DEFAULT_TERMINAL_VIEW_WIDTH_MODE: &str = "match-chat";
 const DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 75.0;
 const MIN_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 50.0;
 const MAX_TERMINAL_VIEW_WIDTH_PERCENT: f64 = 100.0;
+const DEFAULT_CHAT_CONTENT_MAX_WIDTH_PX: f32 = 768.0;
 const DEFAULT_TERMINAL_WIDTH_APPLY_TO_COMMAND_PANE_TERMINALS: bool = false;
 const MIN_TERMINAL_FONT_WEIGHT: f64 = 100.0;
 const MAX_TERMINAL_FONT_WEIGHT: f64 = 900.0;
@@ -534,6 +535,12 @@ pub struct SharedSidebarSettingsSnapshot {
     object: Arc<Map<String, Value>>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TerminalContentWidth {
+    MaxWidth(f32),
+    Percent(f32),
+}
+
 impl SharedSidebarSettingsSnapshot {
     pub fn empty() -> Self {
         Self {
@@ -944,23 +951,63 @@ impl SharedSidebarSettingsSnapshot {
         )
     }
 
-    pub fn terminal_pane_layout(&self, apply_narrower_width: bool) -> (f32, f32, Option<f32>) {
+    pub fn terminal_pane_layout(
+        &self,
+        apply_width_mode: bool,
+    ) -> (f32, f32, Option<TerminalContentWidth>) {
         let (horizontal_padding, vertical_padding) = self.terminal_pane_padding_px();
-        let narrower_width = (apply_narrower_width
-            && strict_bool_field(&self.object, "terminalNarrowerViewEnabled")
-                .unwrap_or(DEFAULT_TERMINAL_NARROWER_VIEW_ENABLED))
-        .then(|| {
-            read_finite_number_field(
-                &self.object,
-                "terminalViewWidthPercent",
-                DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
-            )
-            .clamp(
-                MIN_TERMINAL_VIEW_WIDTH_PERCENT,
-                MAX_TERMINAL_VIEW_WIDTH_PERCENT,
-            ) as f32
-        });
-        (horizontal_padding, vertical_padding, narrower_width)
+        let width = if apply_width_mode {
+            let legacy_mode = if strict_bool_field(&self.object, "terminalNarrowerViewEnabled")
+                .unwrap_or(false)
+            {
+                "custom"
+            } else {
+                DEFAULT_TERMINAL_VIEW_WIDTH_MODE
+            };
+            match self
+                .object
+                .get("terminalViewWidthMode")
+                .and_then(Value::as_str)
+                .unwrap_or(legacy_mode)
+            {
+                "match-chat" => {
+                    if strict_bool_field(&self.object, "sessionChatCustomTranscriptWidthEnabled")
+                        .unwrap_or(false)
+                    {
+                        Some(TerminalContentWidth::Percent(
+                            read_finite_number_field(
+                                &self.object,
+                                "sessionChatTranscriptWidthPercent",
+                                DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
+                            )
+                            .clamp(
+                                MIN_TERMINAL_VIEW_WIDTH_PERCENT,
+                                MAX_TERMINAL_VIEW_WIDTH_PERCENT,
+                            ) as f32,
+                        ))
+                    } else {
+                        Some(TerminalContentWidth::MaxWidth(
+                            DEFAULT_CHAT_CONTENT_MAX_WIDTH_PX,
+                        ))
+                    }
+                }
+                "custom" => Some(TerminalContentWidth::Percent(
+                    read_finite_number_field(
+                        &self.object,
+                        "terminalViewWidthPercent",
+                        DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
+                    )
+                    .clamp(
+                        MIN_TERMINAL_VIEW_WIDTH_PERCENT,
+                        MAX_TERMINAL_VIEW_WIDTH_PERCENT,
+                    ) as f32,
+                )),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        (horizontal_padding, vertical_padding, width)
     }
 
     pub fn terminal_width_applies_to_command_pane_terminals(&self) -> bool {

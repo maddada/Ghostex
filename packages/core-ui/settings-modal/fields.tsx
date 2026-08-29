@@ -65,6 +65,7 @@ import {
   SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS,
   SIDEBAR_SETTINGS_PRESETS,
   SIDEBAR_SPACES_ENABLED_OPTIONS,
+  TERMINAL_VIEW_WIDTH_MODE_OPTIONS,
   normalizeTerminalDevServerIgnoredPortRuleInput,
   normalizeTerminalDevServerIgnoredPortRules,
   type DiagnosticLoggingScenarioId,
@@ -72,6 +73,7 @@ import {
   type PreferredAgentInterface,
   type SidebarSettingsPresetId,
   type SidebarProjectGroupStyle,
+  type TerminalViewWidthMode,
 } from '../../shared/ghostex-settings';
 import { type SessionChatTheme } from '../../shared/session-chat';
 import { PET_OPTIONS, type PetId } from '../../shared/pets';
@@ -1448,6 +1450,52 @@ export function SidebarProjectGroupStyleField({
         value={value}
       >
         {SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS.map((option, index) => (
+          <SegmentedControlItem
+            aria-label={option.label}
+            id={index === 0 ? id : undefined}
+            key={option.value}
+            value={option.value}
+          >
+            {option.label}
+          </SegmentedControlItem>
+        ))}
+      </SegmentedControl>
+    </SettingRow>
+  );
+}
+
+export function TerminalViewWidthModeField({
+  advanced,
+  description,
+  isModified,
+  label,
+  onChange,
+  onResetToDefault,
+  value,
+}: {
+  advanced?: boolean;
+  description?: string;
+  label: string;
+  onChange: (value: TerminalViewWidthMode) => void;
+  value: TerminalViewWidthMode;
+} & SettingModificationProps) {
+  const id = useId();
+  return (
+    <SettingRow
+      advanced={advanced}
+      description={description}
+      htmlFor={id}
+      isModified={isModified}
+      label={label}
+      onResetToDefault={onResetToDefault}
+    >
+      <SegmentedControl
+        aria-label={label}
+        onValueChange={(nextValue) => onChange(nextValue as TerminalViewWidthMode)}
+        stretch
+        value={value}
+      >
+        {TERMINAL_VIEW_WIDTH_MODE_OPTIONS.map((option, index) => (
           <SegmentedControlItem
             aria-label={option.label}
             id={index === 0 ? id : undefined}

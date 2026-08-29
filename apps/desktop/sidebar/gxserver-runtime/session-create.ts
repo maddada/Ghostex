@@ -45,7 +45,7 @@ import {
   createAgentSessionDefaultTitle,
 } from '@/packages/shared/session-grid-contract';
 import { getDefaultSidebarAgentByIcon, type SidebarAgentButton } from '@/packages/shared/sidebar-agents';
-import { DEFAULT_BROWSER_LAUNCH_URL } from '@/packages/shared/sidebar-commands';
+import { DEFAULT_BROWSER_LAUNCH_URL, GHOSTEX_MOBILE_DOWNLOAD_URL } from '@/packages/shared/sidebar-commands';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -66,6 +66,7 @@ export interface GpuiSidebarRuntimeSessionCreateMethods {
   createQuickTerminal(): Promise<void>;
   createQuickAgentSession(agentId: string): Promise<void>;
   openQuickBrowserTab(): void;
+  openMobileBrowserChat(): void;
   openBrowserPaneInGroup(groupId: string): void;
   createSession(groupId?: string | undefined): Promise<void>;
   createProjectTerminal(message: Extract<SidebarToExtensionMessage, { type: 'createProjectTerminal' }>): Promise<void>;
@@ -225,30 +226,17 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
   },
 
   openQuickBrowserTab(this: GpuiSidebarRuntime): void {
+    openQuickHeaderBrowserUrl(this, DEFAULT_BROWSER_LAUNCH_URL);
+  },
+
+  openMobileBrowserChat(this: GpuiSidebarRuntime): void {
     /*
-    GPUI currently owns Browser tabs at the window level instead of as Agents
-    workspace sessions. Send the Quick header's explicit browser launch through
-    the existing app-owned Browser bridge, with a distinct fixed origin so Rust
-    can honor this projectless launcher even while project-scoped Browser mode
-    is otherwise disabled in Quick context.
+    CDXC:Mobile 2026-06-16-00:45:
+    Sidebar Mobile is a fixed-destination Quick browser tab, not a project
+    Browser pane, so it reuses the same projectless open-URL origin as Quick
+    Browser.
     */
-    const post = window.ghostexGpui?.postOpenBrowserUrl;
-    if (typeof post !== 'function') {
-      this.postSidebarActionToast('warning', 'Quick Browser unavailable');
-      return;
-    }
-    const accepted = post(
-      JSON.stringify({
-        origin: 'quickHeader',
-        reuse: 'none',
-        type: GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE,
-        url: DEFAULT_BROWSER_LAUNCH_URL,
-        version: GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION,
-      })
-    );
-    if (!accepted) {
-      this.postSidebarActionToast('warning', 'Quick Browser unavailable');
-    }
+    openQuickHeaderBrowserUrl(this, GHOSTEX_MOBILE_DOWNLOAD_URL);
   },
 
   openBrowserPaneInGroup(this: GpuiSidebarRuntime, groupId: string): void {
@@ -1114,6 +1102,33 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     await this.refreshRemotePresentationFromGxserver(remoteScope.machineId).catch(() => undefined);
   },
 };
+
+function openQuickHeaderBrowserUrl(runtime: GpuiSidebarRuntime, url: string): void {
+  /*
+  GPUI currently owns Browser tabs at the window level instead of as Agents
+  workspace sessions. Send the Quick header's explicit browser launch through
+  the existing app-owned Browser bridge, with a distinct fixed origin so Rust
+  can honor this projectless launcher even while project-scoped Browser mode
+  is otherwise disabled in Quick context.
+  */
+  const post = window.ghostexGpui?.postOpenBrowserUrl;
+  if (typeof post !== 'function') {
+    runtime.postSidebarActionToast('warning', 'Quick Browser unavailable');
+    return;
+  }
+  const accepted = post(
+    JSON.stringify({
+      origin: 'quickHeader',
+      reuse: 'none',
+      type: GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE,
+      url,
+      version: GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION,
+    })
+  );
+  if (!accepted) {
+    runtime.postSidebarActionToast('warning', 'Quick Browser unavailable');
+  }
+}
 
 const gpuiSidebarRuntimeSessionCreateMethodsShapeCheck: GpuiSidebarRuntimeSessionCreateMethods =
   gpuiSidebarRuntimeSessionCreateMethods;

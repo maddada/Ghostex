@@ -3375,6 +3375,7 @@ export function SidebarApp({
           data-project-reorder-drag={String(isProjectReorderDragActive)}
           data-project-group-style={effectiveSettings.sidebarProjectGroupStyle}
           data-reference-sidebar='true'
+          data-sidebar-machine-tabs={String(remoteMachines.length > 0)}
           data-sidebar-side={effectiveSettings.sidebarSide}
           data-session-agent-icon-color-mode={effectiveSettings.useColoredSessionAgentIcons ? 'colored' : 'monochrome'}
           ref={setReferenceLayoutElement}

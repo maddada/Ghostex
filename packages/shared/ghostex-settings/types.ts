@@ -15,6 +15,7 @@ export type GhosttyCopyOnSelect = 'false' | 'true' | 'clipboard';
 export type GhosttyScrollbar = 'system' | 'never';
 export type TerminalCursorStyle = 'bar' | 'block' | 'underline';
 export type TerminalBackgroundImageFit = 'cover' | 'contain' | 'stretch' | 'natural';
+export type TerminalViewWidthMode = 'full' | 'match-chat' | 'custom';
 export type PortlessProtocol = 'https' | 'http';
 /**
  * CDXC:WebLinkOpenTarget 2026-08-19:
@@ -46,6 +47,12 @@ export const MIN_TERMINAL_VIEW_WIDTH_PERCENT = MIN_SESSION_CHAT_TRANSCRIPT_WIDTH
 export const MAX_TERMINAL_VIEW_WIDTH_PERCENT = MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
 export const TERMINAL_VIEW_WIDTH_PERCENT_STEP = SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP;
 export const DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT = DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
+export const DEFAULT_TERMINAL_VIEW_WIDTH_MODE: TerminalViewWidthMode = 'match-chat';
+export const TERMINAL_VIEW_WIDTH_MODE_OPTIONS: readonly { label: string; value: TerminalViewWidthMode }[] = [
+  { label: 'Full', value: 'full' },
+  { label: 'Match Chat', value: 'match-chat' },
+  { label: 'Custom', value: 'custom' },
+];
 
 export function clampSessionChatTranscriptWidthPercent(value: number): number {
   if (!Number.isFinite(value)) {
@@ -342,11 +349,12 @@ export type ghostexSettings = {
   sleepSessionWhenParking: boolean;
   /**
    * CDXC:AnonymousAnalytics 2026-08-26:
-   * Opt-out switch for the anonymous PostHog usage analytics gxserver sends.
-   * Default true. gxserver reads this key straight out of
-   * native-sidebar-settings.json and treats an absent key as enabled, so the
-   * app never has to write the file before analytics can be gated. Turning it
-   * off stops capture and drops the queue; see ANALYTICS.md.
+   * File-level opt-out for the anonymous PostHog usage analytics gxserver
+   * sends. Default true. gxserver reads this key straight out of
+   * native-sidebar-settings.json and treats an absent key as enabled. There is
+   * no Settings UI for this; `GHOSTEX_TELEMETRY_DISABLED` and `DO_NOT_TRACK`
+   * are the supported switches. Turning it off stops capture and drops the
+   * queue.
    */
   analyticsEnabled: boolean;
   debuggingMode: boolean;
@@ -502,7 +510,9 @@ export type ghostexSettings = {
   sessionChatTheme: SessionChatTheme;
   /** CSS font-family used by chat messages and the prompt composer. */
   sessionChatFontFamily: string;
-  /** Transcript width on a 64rem scale; 75% preserves the historical 48rem cap. */
+  /** Whether the transcript departs from the prompt composer's 48rem column. */
+  sessionChatCustomTranscriptWidthEnabled: boolean;
+  /** Centered transcript width as a percentage of wide chat panes. */
   sessionChatTranscriptWidthPercent: number;
   /**
    * Reveal thinking-owned tool calls by default in Session Chat. Chats that
@@ -566,9 +576,9 @@ export type ghostexSettings = {
   terminalBackgroundImageFit: TerminalBackgroundImageFit;
   terminalLetterSpacing: number;
   terminalLineHeight: number;
-  /** Whether wide terminal bodies use the centered percentage width below. */
-  terminalNarrowerViewEnabled: boolean;
-  /** Width of a centered terminal body while narrower terminal view is enabled. */
+  /** How wide terminal content is relative to its pane and the chat transcript. */
+  terminalViewWidthMode: TerminalViewWidthMode;
+  /** Width of a centered terminal body while custom terminal width is selected. */
   terminalViewWidthPercent: number;
   /** Apply the narrower terminal width to command pane terminals too. */
   terminalWidthApplyToCommandPaneTerminals: boolean;

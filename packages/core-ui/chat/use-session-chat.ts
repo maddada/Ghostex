@@ -249,6 +249,17 @@ export interface UseSessionChatResult {
   prompt: SessionChatInteractivePrompt | null;
   working: boolean;
   /**
+   * The raw live signal — server status/working frames plus the host's hook —
+   * BEFORE the lifecycle settle folded into `working`. A terminal turn
+   * lifecycle (or trailing-prose recovery) settles `working` so Stop-vs-Send
+   * and the typing indicator cannot get stuck, but the session process may
+   * still be running then (hooks, background tasks, an immediate follow-up
+   * turn) and the session status the user sees still says "working". The
+   * transcript keys off THIS so it never settles a turn — folding it into
+   * "Worked for Xs" — while any live signal still reports the session busy.
+   */
+  workingSignal: boolean;
+  /**
    * Model/effort gxserver read out of the agent's own terminal, when it could
    * detect them. Null while nothing has been detected — the option pills then
    * keep their local truth.
@@ -1456,6 +1467,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     screenProbed,
     view,
     working,
+    workingSignal: workingSignal && !interrupted,
     ...(transportSendKey ? { sendKey } : {}),
   };
 }

@@ -1910,6 +1910,13 @@ impl GhostexGpuiApp {
         let chat_font_family_script = format!(
             "window.ghostexSetSessionChatFontFamily?.({chat_font_family_literal});undefined;"
         );
+        let chat_custom_transcript_width_enabled =
+            gpui_session_chat_custom_transcript_width_enabled_from_settings(
+                settings_snapshot.object(),
+            );
+        let chat_custom_transcript_width_script = format!(
+            "window.ghostexSetSessionChatCustomTranscriptWidthEnabled?.({chat_custom_transcript_width_enabled});undefined;"
+        );
         let chat_transcript_width_percent =
             gpui_session_chat_transcript_width_percent_from_settings(settings_snapshot.object());
         let chat_transcript_width_script = format!(
@@ -1923,6 +1930,7 @@ impl GhostexGpuiApp {
             surface.update(cx, |surface, _| {
                 surface.execute_app_owned_script(&chat_theme_script);
                 surface.execute_app_owned_script(&chat_font_family_script);
+                surface.execute_app_owned_script(&chat_custom_transcript_width_script);
                 surface.execute_app_owned_script(&chat_transcript_width_script);
                 surface.execute_app_owned_script(&chat_verbose_mode_script);
             });

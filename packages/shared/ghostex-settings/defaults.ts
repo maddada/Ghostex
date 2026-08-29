@@ -20,6 +20,7 @@ import {
   DEFAULT_ACCENT_COLOR,
   DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
+  DEFAULT_TERMINAL_VIEW_WIDTH_MODE,
   DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
   DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX,
@@ -203,7 +204,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Usage analytics are on by default and opt-out. Events carry only counts and
    * fixed-list values, tied to a one-way salted hash so one person's machines
    * group together. Nothing personal: no prompts, no paths, no project names,
-   * and never the raw account id the hash is derived from. See ANALYTICS.md.
+   * and never the raw account id the hash is derived from.
    */
   analyticsEnabled: true,
   debuggingMode: false,
@@ -395,6 +396,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   sidebarTheme: 'dark-2',
   sessionChatTheme: 'dark',
   sessionChatFontFamily: '',
+  sessionChatCustomTranscriptWidthEnabled: false,
   sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   sessionChatVerboseMode: false,
   /**
@@ -464,7 +466,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   terminalBackgroundImageFit: 'cover',
   terminalLetterSpacing: 0,
   terminalLineHeight: 1.2,
-  terminalNarrowerViewEnabled: false,
+  terminalViewWidthMode: DEFAULT_TERMINAL_VIEW_WIDTH_MODE,
   terminalViewWidthPercent: DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT,
   terminalWidthApplyToCommandPaneTerminals: false,
   terminalPaneHorizontalPaddingPx: DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX,

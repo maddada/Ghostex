@@ -87,6 +87,7 @@ interface ChatGxserverBootstrap {
 
 declare global {
   interface Window {
+    ghostexSetSessionChatCustomTranscriptWidthEnabled?: (enabled: unknown) => void;
     ghostexSetSessionChatFontFamily?: (fontFamily: unknown) => void;
     ghostexSetSessionChatTheme?: (theme: unknown) => void;
     ghostexSetSessionChatTranscriptWidthPercent?: (widthPercent: unknown) => void;
@@ -1369,6 +1370,7 @@ function GpuiSessionChatPage({
         chatBarExtensions={chatBarExtensions}
         chatBarPanelState={panelState}
         className='gpui-session-chat-view'
+        customTranscriptWidthEnabled={chatCustomTranscriptWidthEnabled}
         diagnosticLog={postSessionChatDiagnosticLog}
         hostActions={GPUI_SESSION_CHAT_HOST_ACTIONS}
         hostComposerBridge={composerBridge}
@@ -1418,6 +1420,7 @@ try {
 const GPUI_SESSION_CHAT_HOST_ACTIONS = createGpuiSessionChatHostActions(hotkeysValue);
 let chatTheme = normalizeSessionChatTheme(searchParams.get('theme'));
 let chatFontFamily = searchParams.get('fontFamily')?.trim() ?? '';
+let chatCustomTranscriptWidthEnabled = searchParams.get('customTranscriptWidthEnabled') === 'true';
 let chatTranscriptWidthPercent = clampSessionChatTranscriptWidthPercent(
   Number(searchParams.get('transcriptWidthPercent')) || DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT
 );
@@ -1426,9 +1429,9 @@ let renderReadyChat: ((theme: SessionChatTheme) => void) | null = null;
 
 function applyDocumentChatTheme(theme: SessionChatTheme): void {
   document.documentElement.style.colorScheme = theme;
-  /* Dark matches the app-wide #0e0e0e window tone (see chat.css dark theme). */
-  document.documentElement.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#0e0e0e';
-  document.body.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#0e0e0e';
+  /* Keep the document backing identical to the chat surface and native host. */
+  document.documentElement.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#0d0d0d';
+  document.body.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#0d0d0d';
 }
 
 /*
@@ -1469,6 +1472,10 @@ window.ghostexSetSessionChatTheme = (value) => {
 window.ghostexSetSessionChatFontFamily = (value) => {
   chatFontFamily = typeof value === 'string' ? value : '';
   applyDocumentChatFontFamily(chatFontFamily);
+};
+window.ghostexSetSessionChatCustomTranscriptWidthEnabled = (value) => {
+  chatCustomTranscriptWidthEnabled = value === true;
+  renderReadyChat?.(chatTheme);
 };
 window.ghostexSetSessionChatTranscriptWidthPercent = (value) => {
   chatTranscriptWidthPercent = clampSessionChatTranscriptWidthPercent(Number(value));

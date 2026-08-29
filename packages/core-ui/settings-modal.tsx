@@ -121,6 +121,7 @@ import {
   SoundField,
   StaticNoteField,
   TerminalDevServerIgnoredPortsField,
+  TerminalViewWidthModeField,
   TextField,
   ToggleField,
   WebColorPickerField,
@@ -415,8 +416,6 @@ export function SettingsModal({
   const sidebarTagsSectionRef = useRef<HTMLDivElement>(null);
   const soundsSectionRef = useRef<HTMLDivElement>(null);
   const storageSectionRef = useRef<HTMLDivElement>(null);
-  // CDXC:AnonymousAnalytics 2026-08-26: Anchor for the always-visible Privacy section.
-  const privacySectionRef = useRef<HTMLDivElement>(null);
   const hotkeyActionsSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyGeneralSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyNavigationSectionRef = useRef<HTMLDivElement>(null);
@@ -725,7 +724,6 @@ export function SettingsModal({
     editor: editorSectionRef,
     notifications: soundsSectionRef,
     power: powerSectionRef,
-    privacy: privacySectionRef,
     sessionCards: sessionCardsSectionRef,
     sidebar: sidebarSectionRef,
     sidebarTags: sidebarTagsSectionRef,
@@ -823,7 +821,6 @@ export function SettingsModal({
     pendingNavigationPersistTimeoutRef,
     pendingTimeoutRef,
     powerSectionRef,
-    privacySectionRef,
     sessionCardsSectionRef,
     setActiveMainSettingsSectionId,
     setActiveTabState,
@@ -1559,10 +1556,20 @@ export function SettingsModal({
                                 value={draft.sessionChatFontFamily}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.chat, 'sessionChatTranscriptWidthPercent') ? (
+                            {mainSettingVisible(settingsSearch.chat, 'sessionChatCustomTranscriptWidthEnabled') ? (
+                              <ToggleField
+                                checked={draft.sessionChatCustomTranscriptWidthEnabled}
+                                description='Let the transcript use a different width from the prompt composer.'
+                                label='Custom Transcript Width'
+                                {...getSettingModificationProps('sessionChatCustomTranscriptWidthEnabled')}
+                                onChange={(checked) => updateDraft('sessionChatCustomTranscriptWidthEnabled', checked)}
+                              />
+                            ) : null}
+                            {draft.sessionChatCustomTranscriptWidthEnabled &&
+                            mainSettingVisible(settingsSearch.chat, 'sessionChatTranscriptWidthPercent') ? (
                               <SliderNumberField
-                                description='Adjust message width only. The prompt composer at the bottom keeps its current width.'
-                                label='Message Width (%)'
+                                description='Set the centered transcript width on wide panes. The prompt composer keeps its standard width.'
+                                label='Transcript Width (%)'
                                 {...getSettingModificationProps('sessionChatTranscriptWidthPercent')}
                                 max={MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
                                 min={MIN_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
@@ -1899,16 +1906,16 @@ export function SettingsModal({
                                 value={draft.terminalLetterSpacing}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.terminal, 'terminalNarrowerViewEnabled') ? (
-                              <ToggleField
-                                checked={draft.terminalNarrowerViewEnabled}
-                                description='Center and constrain terminal content on wide panes. Narrow panes stay full-width.'
-                                label='Narrower Terminal View'
-                                {...getSettingModificationProps('terminalNarrowerViewEnabled')}
-                                onChange={(checked) => updateDraft('terminalNarrowerViewEnabled', checked)}
+                            {mainSettingVisible(settingsSearch.terminal, 'terminalViewWidthMode') ? (
+                              <TerminalViewWidthModeField
+                                description='Use the full pane, match the chat transcript, or set an independent terminal width. Narrow panes stay full-width.'
+                                label='Terminal Width'
+                                {...getSettingModificationProps('terminalViewWidthMode')}
+                                onChange={(value) => updateDraft('terminalViewWidthMode', value)}
+                                value={draft.terminalViewWidthMode}
                               />
                             ) : null}
-                            {draft.terminalNarrowerViewEnabled &&
+                            {draft.terminalViewWidthMode === 'custom' &&
                             mainSettingVisible(settingsSearch.terminal, 'terminalViewWidthPercent') ? (
                               <SliderNumberField
                                 description='Set the centered terminal body width. Panes 1070px wide or narrower remain full-width.'
@@ -1922,7 +1929,7 @@ export function SettingsModal({
                                 value={draft.terminalViewWidthPercent}
                               />
                             ) : null}
-                            {draft.terminalNarrowerViewEnabled &&
+                            {draft.terminalViewWidthMode !== 'full' &&
                             mainSettingVisible(settingsSearch.terminal, 'terminalWidthApplyToCommandPaneTerminals') ? (
                               <ToggleField
                                 checked={draft.terminalWidthApplyToCommandPaneTerminals}
@@ -2494,28 +2501,6 @@ export function SettingsModal({
                                 onChange={(value) => value !== 'off' && updateDraft('actionCompletionSound', value)}
                                 onPlay={onPlayCompletionSound}
                                 value={draft.actionCompletionSound}
-                              />
-                            ) : null}
-                          </SettingsSection>
-                        ) : null}
-
-                        {/*
-                         * CDXC:AnonymousAnalytics 2026-08-26:
-                         * The analytics opt-out is its own always-visible
-                         * Privacy section. It must never sit behind Show
-                         * Advanced or the Experimental gate: a user who wants
-                         * to turn analytics off has to be able to find the
-                         * switch by browsing Settings.
-                         */}
-                        {mainSectionVisible('privacy', settingsSearch.privacy) ? (
-                          <SettingsSection sectionRef={privacySectionRef} title='Privacy'>
-                            {mainSettingVisible(settingsSearch.privacy, 'analyticsEnabled') ? (
-                              <ToggleField
-                                checked={draft.analyticsEnabled}
-                                description='Share usage data (OS, feature usage, counts) under a one-way hashed ID that groups your own machines. Never prompts, file paths, project names, emails, or the raw account ID.'
-                                label='Usage analytics'
-                                {...getSettingModificationProps('analyticsEnabled')}
-                                onChange={(checked) => updateDraft('analyticsEnabled', checked)}
                               />
                             ) : null}
                           </SettingsSection>
