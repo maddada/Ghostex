@@ -16,6 +16,7 @@ import { IconRobot } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/packages/components/utils';
 import { getDefaultSidebarAgentById, isSidebarAgentIcon, type SidebarAgentIcon } from '../../shared/sidebar-agents';
+import { sessionChatAgentIconId } from '../../shared/session-chat';
 import { getBrandAgentLogoStyle } from '../agent-logos';
 
 export function displayAgentName(agentLabel?: string | null): string | null {
@@ -64,7 +65,11 @@ export function NewSessionWelcome({
   showTitle?: boolean;
 }) {
   const defaultAgent = agentLabel ? getDefaultSidebarAgentById(agentLabel) : undefined;
-  const icon = (isSidebarAgentIcon(agentIcon) ? agentIcon : undefined) ?? defaultAgent?.icon;
+  // A read-state label is the transcript family id, which is not always the
+  // sidebar agent id the artwork is registered under.
+  const familyIconId = sessionChatAgentIconId(agentLabel) ?? undefined;
+  const familyIcon = isSidebarAgentIcon(familyIconId) ? familyIconId : undefined;
+  const icon = (isSidebarAgentIcon(agentIcon) ? agentIcon : undefined) ?? defaultAgent?.icon ?? familyIcon;
   const agentName = agentNameOverride ?? displayAgentName(agentLabel);
   const identity = `${icon ?? ''}|${agentName ?? ''}`;
   const [layers, setLayers] = useState<WelcomeAgentLayer[]>(() => [{ agentName, icon, id: 0, identity }]);

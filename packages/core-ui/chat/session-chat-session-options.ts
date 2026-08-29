@@ -69,6 +69,12 @@ export interface SessionChatOptionDescriptor {
   defaultValue?: string;
   /** Row label for toggle / agent-picker / key rows. */
   actionLabel?: string;
+  /**
+   * Tooltip for a `terminal-handoff` pill, replacing the generic
+   * "<category> <value> — change it in the CLI". Set it when the CLI has a
+   * named command for the change, so the handoff can say which one to type.
+   */
+  handoffHint?: string;
   /** Muted line under the menu heading. */
   description?: string;
 }
@@ -263,6 +269,21 @@ const PI_EFFORT: SessionChatOptionDescriptor = {
   dispatch: { kind: 'terminal-handoff' },
 };
 
+/*
+Hermes names its model in the leading segment of its terminal statusline and
+owns model selection in its interactive /model picker, so the pill is the same
+read-only terminal mirror used for Grok and Pi. Its statusline never names a
+reasoning effort, so there is no effort pill to mirror.
+*/
+const HERMES_MODEL: SessionChatOptionDescriptor = {
+  id: 'model',
+  label: 'Model',
+  category: 'model',
+  actionLabel: 'Change it in the CLI',
+  handoffHint: 'Change the model in the CLI by using /model',
+  dispatch: { kind: 'terminal-handoff' },
+};
+
 const OMP_MODEL: SessionChatOptionDescriptor = {
   id: 'model',
   label: 'Model',
@@ -313,6 +334,12 @@ const GROK_CATALOG: SessionChatSessionOptionCatalog = {
   optionsForModel: () => [GROK_EFFORT],
 };
 
+const HERMES_CATALOG: SessionChatSessionOptionCatalog = {
+  model: HERMES_MODEL,
+  modelIcon: 'hermes-agent',
+  optionsForModel: () => [],
+};
+
 const PI_CATALOG: SessionChatSessionOptionCatalog = {
   model: PI_MODEL,
   modelIcon: 'pi',
@@ -330,6 +357,10 @@ const CATALOG_BY_AGENT: Record<string, SessionChatSessionOptionCatalog> = {
   openclaude: CLAUDE_CATALOG,
   codex: CODEX_CATALOG,
   grok: GROK_CATALOG,
+  // Both the transcript family id (read state) and the sidebar agent id reach
+  // this lookup, so the catalog answers to either spelling.
+  hermes: HERMES_CATALOG,
+  'hermes-agent': HERMES_CATALOG,
   omp: OMP_CATALOG,
   pi: PI_CATALOG,
 };

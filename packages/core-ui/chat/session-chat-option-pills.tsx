@@ -716,10 +716,16 @@ export function SessionChatSessionOptionPills({
   this side cannot honour.
   */
   if (catalog.model.dispatch.kind === 'terminal-handoff') {
-    const handoffTitle = (category: string, value: string | null): string =>
-      value ? `${category} ${value} — change it in the CLI` : `${category} — set it in the CLI`;
-    const modelHandoffTitle = handoffTitle(catalog.model.label, modelLabel);
+    const handoffTitle = (
+      descriptor: SessionChatOptionDescriptor | null,
+      category: string,
+      value: string | null
+    ): string =>
+      descriptor?.handoffHint ??
+      (value ? `${category} ${value} — change it in the CLI` : `${category} — set it in the CLI`);
+    const modelHandoffTitle = handoffTitle(catalog.model, catalog.model.label, modelLabel);
     const optionsHandoffTitle = handoffTitle(
+      visibleOptions.length === 1 ? (visibleOptions[0] ?? null) : null,
       visibleOptions.length === 1 ? (visibleOptions[0]?.label ?? 'Options') : 'Options',
       optionsLabel
     );
