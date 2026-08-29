@@ -1394,7 +1394,10 @@ impl GhostexGpuiApp {
         } else {
             GHOSTEX_TUTORIAL_VIDEO_URL.to_string()
         };
-        let window_bounds = WindowBounds::centered(window_size, cx);
+        let window_bounds = WindowBounds::Windowed(gpui::Bounds::centered_at(
+            self.main_window_bounds.center(),
+            window_size,
+        ));
         let options = WindowOptions {
             window_bounds: Some(window_bounds),
             app_id: gpui_platform_window_app_id(),
@@ -1403,6 +1406,7 @@ impl GhostexGpuiApp {
             show: true,
             is_resizable: modal.is_resizable(),
             window_min_size: Some(modal.window_min_size()),
+            display_id: self.main_window_display_id,
             titlebar: Some(gpui::TitlebarOptions {
                 title: Some(window_title.into()),
                 appears_transparent: false,

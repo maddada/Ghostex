@@ -959,8 +959,9 @@ pub struct GhostexGpuiApp {
     pub(crate) cef_component_install_generation: u64,
     /*
     CDXC:GPUIMainWindowToasts 2026-08-18:
-    The last-known frame of the main workspace window, refreshed from this
-    entity's own render pass. Toast placement must never read the ambient
+    The last-known frame and display of the main workspace window, refreshed
+    from this entity's render pass and main-window bounds observer. Child
+    window placement must never read the ambient
     `&mut Window` of whatever context happens to deliver the toast: gpui
     resolves `WeakEntity::update_in` through `current_window_by_entity`, which
     points at the last window that drew after this entity was touched. Any
@@ -969,6 +970,7 @@ pub struct GhostexGpuiApp {
     stack up the screen one toast at a time.
     */
     pub(crate) main_window_bounds: Bounds<Pixels>,
+    pub(crate) main_window_display_id: Option<gpui::DisplayId>,
     pub(crate) app_toast_window: Option<WindowHandle<GpuiAppToastWindow>>,
     pub(crate) app_toast_window_height: Pixels,
     pub(crate) app_toast_anchor: Option<Point<Pixels>>,
@@ -1267,9 +1269,10 @@ impl EntityInputHandler for GhostexGpuiApp {
 
 impl Render for GhostexGpuiApp {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
-        // Only the main workspace window renders this entity, so this is the
-        // authoritative frame every child popup anchors against.
+        // Only the main workspace window renders this entity, so this keeps
+        // the authoritative frame and display every child popup anchors against.
         self.main_window_bounds = window.bounds();
+        self.main_window_display_id = window.display(cx).map(|display| display.id());
         #[cfg(target_os = "windows")]
         if self.windows_first_run_setup_state != GpuiWindowsFirstRunSetupState::Ready {
             return self.render_windows_first_run_setup(cx);

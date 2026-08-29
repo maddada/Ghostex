@@ -405,6 +405,8 @@ fn main() {
                 view.update(cx, |_, cx| {
                     record_gpui_window_frame_state(window, cx);
                     cx.observe_window_bounds(window, |app, window, cx| {
+                        app.main_window_bounds = window.bounds();
+                        app.main_window_display_id = window.display(cx).map(|display| display.id());
                         /*
                         macOS delivers bounds observer callbacks for window events
                         that do not actually change the frame (e.g. key/order

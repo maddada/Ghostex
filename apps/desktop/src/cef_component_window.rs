@@ -266,19 +266,21 @@ impl GhostexGpuiApp {
             self.cef_component_window = None;
         }
 
+        let window_size = size(
+            px(CEF_COMPONENT_WINDOW_WIDTH),
+            px(CEF_COMPONENT_WINDOW_HEIGHT),
+        );
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::centered(
-                size(
-                    px(CEF_COMPONENT_WINDOW_WIDTH),
-                    px(CEF_COMPONENT_WINDOW_HEIGHT),
-                ),
-                cx,
-            )),
+            window_bounds: Some(WindowBounds::Windowed(gpui::Bounds::centered_at(
+                self.main_window_bounds.center(),
+                window_size,
+            ))),
             app_id: gpui_platform_window_app_id(),
             focus: true,
             icon: gpui_platform_window_icon(),
             show: true,
             is_resizable: false,
+            display_id: self.main_window_display_id,
             titlebar: Some(gpui::TitlebarOptions {
                 title: Some("Ghostex Setup".into()),
                 appears_transparent: false,

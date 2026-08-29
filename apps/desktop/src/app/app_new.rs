@@ -97,6 +97,7 @@ impl GhostexGpuiApp {
             };
 
         let main_window_bounds = window.bounds();
+        let main_window_display_id = window.display(cx).map(|display| display.id());
         let app = cx.new(move |cx| {
             let mut this = Self {
                 parent_ns_view: parent,
@@ -402,6 +403,7 @@ impl GhostexGpuiApp {
                 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
                 cef_component_install_generation: 0,
                 main_window_bounds,
+                main_window_display_id,
                 app_toast_window: None,
                 app_toast_window_height: px(0.0),
                 app_toast_anchor: None,
