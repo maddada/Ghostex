@@ -260,11 +260,18 @@ export const Theming: Story = {
     await step('jump the General page to the Theming section', async () => {
       await userEvent.click(await body.findByRole('button', { name: 'Appearance' }));
       await waitFor(() => {
-        expect(body.getByText('Accent Color')).toBeTruthy();
+        expect(body.getByText('Background Contrast')).toBeTruthy();
       });
     });
   },
-  render: () => <SettingsModalStory />,
+  render: () => (
+    <SettingsModalStory
+      initialSettings={{
+        ...modalSettings,
+        showAdvancedSettings: true,
+      }}
+    />
+  ),
 };
 
 export const CustomColorPicker: Story = {
@@ -277,7 +284,14 @@ export const CustomColorPicker: Story = {
       await body.findByRole('dialog', { name: 'Pick Color' });
     });
   },
-  render: () => <SettingsModalStory />,
+  render: () => (
+    <SettingsModalStory
+      initialSettings={{
+        ...modalSettings,
+        showAdvancedSettings: true,
+      }}
+    />
+  ),
 };
 
 export const LightOrange: Story = {

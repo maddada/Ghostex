@@ -240,7 +240,7 @@ body {
   --settings-raised: #161616;
   --settings-raised-hover: #1d1d1d;
   --settings-hairline: rgba(255, 255, 255, 0.08);
-  --settings-accent: var(--ghostex-accent, #38bdf8);
+  --settings-accent: var(--ghostex-accent, #86d3f8);
 
   --background: var(--settings-surface);
   --card: var(--settings-raised);
@@ -1584,7 +1584,7 @@ body {
  CDXC:FirstLaunchSetup 2026-08-24:
  Onboarding redesign styles. The branching flow reuses the Automate/Project-board design
  language through the --settings-* tokens (surface #0e0e0e, raised #161616,
- cards #1d1d1d, accent #38bdf8): labeled step chips in the header, row cards
+ cards #1d1d1d, accent #86d3f8): labeled step chips in the header, row cards
  with pill switches, flat disclosure lines instead of boxed <details>, and chip
  radio options for the default agent and session view.
 */
@@ -4541,7 +4541,7 @@ body {
   background: color-mix(in srgb, var(--settings-raised-hover) 70%, transparent);
   border: 1px solid var(--settings-hairline);
   border-radius: var(--settings-radius-menu-item);
-  color: var(--ghostex-accent, #38bdf8);
+  color: var(--ghostex-accent, #86d3f8);
   line-height: 1.25;
 }
 
@@ -4549,14 +4549,16 @@ body {
   /*
    * CDXC:SettingsAdvanced 2026-06-16-18:22:
    * Advanced setting arrows must stay visible without row hover so users can
-   * scan advanced rows immediately. Give the marker a little left-side air so
-   * it does not visually run into the setting label.
+   * scan advanced rows immediately. Color them from the Accent Color setting
+   * (--ghostex-accent) so those markers track the same highlight as accent
+   * text. Give the marker a little left-side air so it does not visually run
+   * into the setting label.
    */
   align-items: center;
   background: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
-  color: color-mix(in srgb, #7dd3fc 88%, var(--foreground) 12%);
+  color: color-mix(in srgb, var(--ghostex-accent, #86d3f8) 88%, var(--foreground) 12%);
   display: inline-flex;
   flex: 0 0 auto;
   height: 1rem;
@@ -4576,7 +4578,7 @@ body {
 .ghostex-settings-shadcn .settings-row-advanced-button:hover,
 .ghostex-settings-shadcn .settings-row-advanced-button:focus-visible {
   background: transparent !important;
-  color: color-mix(in srgb, #bae6fd 92%, var(--foreground) 8%);
+  color: color-mix(in srgb, var(--ghostex-accent, #86d3f8) 70%, white 30%);
 }
 
 /* CDXC:Settings 2026-04-26-22:29: Section title pills in the settings modal
@@ -4990,7 +4992,7 @@ body {
  * `size='icon'` (32px) on its own.
  */
 .quick-access-surface .previous-sessions-tag-filter-toggle[data-selected='true'] {
-  color: var(--ghostex-accent, #38bdf8);
+  color: var(--ghostex-accent, #86d3f8);
 }
 
 /*
@@ -5027,7 +5029,7 @@ body {
 }
 
 .previous-sessions-tag-filter-menu .previous-sessions-tag-filter-item[data-selected='true'] {
-  color: var(--ghostex-accent, #38bdf8);
+  color: var(--ghostex-accent, #86d3f8);
 }
 
 .previous-sessions-tag-filter-menu .session-context-menu-divider {

@@ -33,7 +33,7 @@ export const PAGE_THEME: CSSProperties & Record<string, string> = {
    * Mirror the shipped default accent so redesign stories keep rendering the
    * accent text that now reads from --ghostex-accent.
    */
-  '--ghostex-accent': '#38bdf8',
+  '--ghostex-accent': '#86d3f8',
 };
 
 export const PAGE_SCOPED_CSS = `

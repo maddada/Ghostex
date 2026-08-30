@@ -1054,8 +1054,12 @@ describe('normalizeghostexSettings', () => {
      * background colors still seed the slider during migration.
      *
      * CDXC:SidebarTitlebarColors 2026-07-22:
-     * New app defaults use neutral #808080 at 93 Background Contrast,
+     * New app defaults used neutral #808080 at 93 Background Contrast,
      * resolving to #141414.
+     *
+     * CDXC:SidebarTitlebarColors 2026-08-30:
+     * New app defaults use ice #88d7ff at 98 Background Contrast, resolving
+     * to #040607.
      *
      * CDXC:SidebarTitlebarColors 2026-06-19-14:20:
      * Preset tint previews stay brighter than the applied chrome. The default
@@ -1064,26 +1068,28 @@ describe('normalizeghostexSettings', () => {
      * receiving a blue cast.
      */
     expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarForegroundColor).toBe('#d8d8d8');
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundTintColor).toBe('#808080');
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundDarknessPercent).toBe(93);
-    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundColor).toBe('#141414');
+    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundTintColor).toBe('#88d7ff');
+    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundDarknessPercent).toBe(98);
+    expect(DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundColor).toBe('#040607');
+    expect(DEFAULT_ghostex_SETTINGS.accentColor).toBe('#86d3f8');
     expect(getSidebarTitlebarBackgroundForDarkness(95, '#884444')).toBe('#0d0005');
     expect(getSidebarTitlebarBackgroundForDarkness(95, '#336699')).toBe('#0c0e11');
     expect(getSidebarTitlebarBackgroundForDarkness(95, '#000000')).toBe('#000000');
     expect(normalizeghostexSettings({})).toMatchObject({
       customSidebarTitlebarForegroundColor: '#d8d8d8',
-      customSidebarTitlebarBackgroundTintColor: '#808080',
-      customSidebarTitlebarBackgroundDarknessPercent: 93,
-      customSidebarTitlebarBackgroundColor: '#141414',
+      customSidebarTitlebarBackgroundTintColor: '#88d7ff',
+      customSidebarTitlebarBackgroundDarknessPercent: 98,
+      customSidebarTitlebarBackgroundColor: '#040607',
+      accentColor: '#86d3f8',
     });
     expect(
       normalizeghostexSettings({
         customSidebarTitlebarBackgroundColor: '#080c0e',
       })
     ).toMatchObject({
-      customSidebarTitlebarBackgroundTintColor: '#808080',
+      customSidebarTitlebarBackgroundTintColor: '#88d7ff',
       customSidebarTitlebarBackgroundDarknessPercent: 96,
-      customSidebarTitlebarBackgroundColor: '#0b0b0b',
+      customSidebarTitlebarBackgroundColor: '#080c0e',
     });
     expect(
       normalizeghostexSettings({
@@ -1106,9 +1112,9 @@ describe('normalizeghostexSettings', () => {
       })
     ).toMatchObject({
       customSidebarTitlebarForegroundColor: '#d8d8d8',
-      customSidebarTitlebarBackgroundTintColor: '#808080',
+      customSidebarTitlebarBackgroundTintColor: '#88d7ff',
       customSidebarTitlebarBackgroundDarknessPercent: 85,
-      customSidebarTitlebarBackgroundColor: '#2a2a2a',
+      customSidebarTitlebarBackgroundColor: '#1e2d36',
     });
     expect(
       normalizeghostexSettings({
@@ -1117,8 +1123,8 @@ describe('normalizeghostexSettings', () => {
       })
     ).toMatchObject({
       customSidebarTitlebarForegroundColor: '#d8d8d8',
-      customSidebarTitlebarBackgroundDarknessPercent: 93,
-      customSidebarTitlebarBackgroundColor: '#141414',
+      customSidebarTitlebarBackgroundDarknessPercent: 98,
+      customSidebarTitlebarBackgroundColor: '#040607',
     });
   });
 
@@ -1133,8 +1139,8 @@ describe('normalizeghostexSettings', () => {
      * White, black, and gray custom chrome must stay neutral. The old cool
      * fallback direction should not add blue to same-channel backgrounds.
      *
-     * CDXC:SidebarTitlebarColors 2026-07-22:
-     * Invalid gradient input falls back to the neutral #808080/90 default.
+     * CDXC:SidebarTitlebarColors 2026-08-30:
+     * Invalid gradient input falls back to the ice #88d7ff/98 default (#040607).
      */
     expect(getSidebarTitlebarGradientColors('#0e0e0e')).toEqual({
       sidebarTop: '#0e0e0e',
@@ -1155,10 +1161,10 @@ describe('normalizeghostexSettings', () => {
       titlebarRight: '#030d1b',
     });
     expect(getSidebarTitlebarGradientColors('invalid')).toEqual({
-      sidebarTop: '#141414',
-      sidebarBottom: '#141414',
-      titlebarLeft: '#141414',
-      titlebarRight: '#141414',
+      sidebarTop: '#020609',
+      sidebarBottom: '#00080f',
+      titlebarLeft: '#020609',
+      titlebarRight: '#00080f',
     });
   });
 

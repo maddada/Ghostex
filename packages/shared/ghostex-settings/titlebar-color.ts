@@ -1,16 +1,21 @@
 export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_FOREGROUND_COLOR = '#d8d8d8';
 export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_DARK_FOREGROUND_COLOR = '#262626';
-export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR = '#141414';
-export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR = '#808080';
-export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT = 93;
+export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR = '#040607';
+export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR = '#88d7ff';
+export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT = 98;
 /*
  * CDXC:SidebarTitlebarColors 2026-06-28-08:01:
  * The tint scale keeps the original 95 reference so existing saved contrast
  * values do not darken or brighten when the app default changes.
  *
  * CDXC:SidebarTitlebarColors 2026-07-22:
- * New installs use the neutral #808080 tint at 93 Background Contrast,
+ * New installs used the neutral #808080 tint at 93 Background Contrast,
  * resolving to #141414 while preserving the existing calibrated scale.
+ *
+ * CDXC:SidebarTitlebarColors 2026-08-30:
+ * New installs use ice #88d7ff at 98 Background Contrast, resolving to
+ * #040607. Neutral Gray remains a swatch at #808080; it is no longer the
+ * first-run default.
  */
 const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_SCALE_REFERENCE_DARKNESS_PERCENT = 95;
 export const MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT = 85;

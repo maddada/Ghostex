@@ -437,7 +437,12 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Default app chrome to neutral #808080 at 93 Background Contrast,
    * resolving to #141414.
    *
+   * CDXC:SidebarTitlebarColors 2026-08-30:
+   * Default app chrome to ice #88d7ff at 98 Background Contrast, resolving
+   * to #040607.
+   *
    * Background Contrast and Background Tint are always-active Theming controls.
+   * Accent Color is advanced.
    */
   customSidebarTitlebarForegroundColor: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_FOREGROUND_COLOR,
   customSidebarTitlebarBackgroundTintColor: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,

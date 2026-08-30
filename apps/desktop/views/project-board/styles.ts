@@ -52,7 +52,7 @@ export const PROJECT_BOARD_STYLES = `
      * its bridge state carries no settings, so it can only paint the shipped
      * default accent until live accentColor plumbing reaches this page.
      */
-    --ghostex-accent: #38bdf8;
+    --ghostex-accent: #86d3f8;
   }
 
   * { box-sizing: border-box; }

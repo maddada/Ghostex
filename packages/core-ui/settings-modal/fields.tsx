@@ -1113,7 +1113,7 @@ export function ColorField({
 
 export const SIDEBAR_TITLEBAR_TINT_SWATCHES: ReadonlyArray<{ label: string; value: string }> = [
   { label: 'White', value: '#ffffff' },
-  { label: 'Neutral Gray', value: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR },
+  { label: 'Neutral Gray', value: '#808080' },
   { label: 'Black', value: '#000000' },
   { label: 'Steel', value: '#4f6672' },
   { label: 'Red', value: '#884444' },

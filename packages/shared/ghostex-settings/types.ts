@@ -98,9 +98,10 @@ export type AutoSleepIdleMinutes = 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300;
  * CDXC:AccentColor 2026-08-24:
  * The Codex-style redesign paints its accent text (Automate "Active", unread
  * counts, and upcoming modal accents) from a single user-configurable color.
- * The default is the sky tone those surfaces shipped hardcoded.
+ * The default is a lighter sky tone than the original hardcoded #38bdf8 so
+ * accent text and Settings advanced-row arrows stay readable on dark chrome.
  */
-export const DEFAULT_ACCENT_COLOR = '#38bdf8';
+export const DEFAULT_ACCENT_COLOR = '#86d3f8';
 export const DEFAULT_TERMINAL_PANE_HORIZONTAL_PADDING_PX = 16;
 export const DEFAULT_TERMINAL_PANE_PADDING_PX = 0;
 export const MIN_TERMINAL_PANE_PADDING_PX = 0;

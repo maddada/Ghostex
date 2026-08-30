@@ -236,7 +236,7 @@ function KanbanPage() {
                 <IconFilter data-icon='inline-start' />
                 Filters
                 {activeFilterCount > 0 ? (
-                  <span className='inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ghostex-accent,#38bdf8)_22%,transparent)] px-1 text-[11px] leading-none text-[var(--ghostex-accent,#38bdf8)]'>
+                  <span className='inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ghostex-accent,#86d3f8)_22%,transparent)] px-1 text-[11px] leading-none text-[var(--ghostex-accent,#86d3f8)]'>
                     {activeFilterCount}
                   </span>
                 ) : null}
