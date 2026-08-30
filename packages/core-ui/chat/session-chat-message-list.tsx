@@ -1393,8 +1393,10 @@ export function SessionChatMessageList({
       <ScrollToLatestSend pendingMessageId={pendingMessageId} />
       <MessageScroller className='flex-1'>
         {/* RTL viewport + LTR content puts the scrollbar on the left edge. */}
+        {/* outline-none: Chromium makes scrollers keyboard-focusable and paints
+            its default focus ring on them; a transcript is not a control. */}
         <MessageScrollerViewport
-          className='[direction:rtl]'
+          className='outline-none [direction:rtl]'
           onScroll={handleScroll}
           preserveScrollOnPrepend
           ref={viewportRef}

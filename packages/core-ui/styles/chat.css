@@ -769,10 +769,10 @@ and a copy still carries the markdown.
 .ghostex-chat-expansion {
   align-items: stretch;
   display: flex;
-  gap: calc(0.75rem - 3px);
-  margin-inline-start: -3px;
+  gap: calc(0.75rem - 5px);
+  margin-inline-start: -5px;
   min-width: 0;
-  width: calc(100% + 3px);
+  width: calc(100% + 5px);
 }
 
 .ghostex-chat-expansion-body {
@@ -780,19 +780,19 @@ and a copy still carries the markdown.
   min-width: 0;
 }
 
-/* The button is an eleven-pixel hit target centered on the unchanged visible
-   two-pixel rail. The expansion starts three pixels earlier and contracts its
+/* The button is a fifteen-pixel hit target centered on the unchanged visible
+   two-pixel rail. The expansion starts five pixels earlier and contracts its
    adjacent gap so the rail and expanded content remain in their original
    visual positions. */
 .ghostex-chat-expansion-rail {
   align-self: stretch;
   background: transparent;
   border: 0;
-  flex: 0 0 11px;
-  min-width: 11px;
+  flex: 0 0 15px;
+  min-width: 15px;
   padding: 0;
   position: relative;
-  width: 11px;
+  width: 15px;
 }
 
 .ghostex-chat-expansion-rail::before {
@@ -1525,6 +1525,13 @@ so the swap barely moves the composer row.
   width: 5.5rem;
 }
 
+/* The resolved mode pill is icon-only (the ⏵⏵ / pause glyph), so its bar is
+   glyph-sized. Without an explicit width this bar collapsed to 0 and the
+   loading mode pill rendered as nothing at all. */
+.ghostex-chat-pill-skeleton[data-pill='mode'] {
+  width: 1.25rem;
+}
+
 @keyframes ghostex-chat-pill-skeleton-pulse {
   0%,
   100% {
@@ -1563,6 +1570,15 @@ so the swap barely moves the composer row.
 
 .ghostex-chat-composer-monaco {
   min-height: 4.5rem;
+}
+
+/* While a terminal picker blocks the composer, Monaco goes read-only and
+   Chromium paints its default blue focus ring on the editor's focused/
+   scrollable internals. Monaco owns its own focus visuals (the caret and
+   selection), so the UA ring is never wanted anywhere inside the input. */
+.ghostex-chat-composer-monaco :is(:focus, :focus-visible),
+.ghostex-chat-composer-monaco:is(:focus, :focus-visible) {
+  outline: none;
 }
 
 .ghostex-chat-composer-monaco .editorPlaceholder {
