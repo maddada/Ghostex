@@ -50,15 +50,24 @@ impl GhostexGpuiApp {
         );
     }
 
-    pub(crate) fn open_gpui_settings_plugins_page(
+    pub(crate) fn open_gpui_settings_extensions_page(
         &mut self,
         window: Option<&mut Window>,
         cx: &mut gpui::Context<Self>,
     ) {
+        /*
+        CDXC:SettingsExtensionsTab 2026-08-30:
+        The standalone Extensions browser modal and the Settings "Customize"
+        page are one Settings tab now, so every extensions entry point (app
+        menu, titlebar Settings menu, titlebar right-click, the puzzle popup's
+        browse row, and the `openExtensions` hotkey) deep-links here with
+        `{ modal: "settings", initialTab: "extensions" }`. There is no
+        `extensionsBrowser` app-modal kind any more.
+        */
         let modal = GpuiAppModalKind::Settings;
         let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
         let mut open_message = serde_json::json!({
-            "initialTab": "plugins",
+            "initialTab": "extensions",
             "modal": modal.modal_id(),
             "type": "open",
         });

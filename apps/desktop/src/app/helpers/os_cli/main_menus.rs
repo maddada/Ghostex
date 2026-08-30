@@ -77,12 +77,12 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
     });
     cx.on_action({
         let app = app.clone();
-        move |_: &OpenGpuiPluginsModal, cx| {
+        move |_: &OpenGpuiExtensionsModal, cx| {
             let app = app.clone();
             cx.defer(move |cx| {
                 let _ = main_window.update(cx, |_, window, cx| {
                     let _ = app.update(cx, |app, cx| {
-                        app.open_gpui_settings_plugins_page(Some(window), cx);
+                        app.open_gpui_settings_extensions_page(Some(window), cx);
                     });
                 });
             });

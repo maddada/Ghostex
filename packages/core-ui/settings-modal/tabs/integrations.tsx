@@ -163,7 +163,7 @@ export function IntegrationsSettingsTab({
          * CDXC:IntegrationsSetup 2026-05-27-04:17:
          * Settings owns one Integrations tab for post-onboarding CLI, bundled
          * Ghostex skills, Trycua runtime lifecycle, and macOS privacy
-         * permissions. Keeping Trycua here avoids duplicating it in Customize.
+         * permissions. Keeping Trycua here avoids duplicating it in Extensions.
          *
          * CDXC:AgentHookSettings 2026-06-29-01:26:
          * Agent hook install/status UI lives in Settings -> Agents, where the detailed per-agent hook list already exists. Integrations should not duplicate that setup row.

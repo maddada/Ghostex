@@ -50,7 +50,6 @@ pub(crate) enum GpuiTelemetrySurface {
     Automate,
     Docs,
     Find,
-    ExtensionsStore,
     Settings,
 }
 
@@ -64,7 +63,6 @@ impl GpuiTelemetrySurface {
             Self::Automate => "automate",
             Self::Docs => "docs",
             Self::Find => "find",
-            Self::ExtensionsStore => "extensions_store",
             Self::Settings => "settings",
         }
     }
@@ -87,15 +85,15 @@ pub(crate) fn gpui_telemetry_surface_for_titlebar_mode(
     }
 }
 
-/// App modal → spec surface. Only the three modals the spec names are
-/// reportable; every other modal (including per-extension modals) sends
-/// nothing.
+/// App modal → spec surface. Only the modals the spec names are reportable;
+/// every other modal (including per-extension modals) sends nothing. The
+/// extensions store lost its own surface when it became a Settings tab, so it
+/// now reports as `settings` like every other Settings page.
 pub(crate) fn gpui_telemetry_surface_for_app_modal(
     modal: GpuiAppModalKind,
 ) -> Option<GpuiTelemetrySurface> {
     match modal {
         GpuiAppModalKind::FindPrompts => Some(GpuiTelemetrySurface::Find),
-        GpuiAppModalKind::ExtensionsBrowser => Some(GpuiTelemetrySurface::ExtensionsStore),
         GpuiAppModalKind::Settings => Some(GpuiTelemetrySurface::Settings),
         _ => None,
     }

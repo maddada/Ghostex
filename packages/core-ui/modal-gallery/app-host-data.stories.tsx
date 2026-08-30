@@ -4,11 +4,9 @@ import type {
   GhostexExtensionStatePatch,
   GhostexInstalledExtension,
 } from '@/packages/shared/ghostex-extensions';
-import { ExtensionsModal } from '../extensions-modal';
+import { ExtensionsBrowser } from '../extensions-modal';
 import type { ExtensionsModalTransport } from '../extensions-modal/transport';
 import { ModalStorySurface, modalStoryParameters } from './modal-story-surface';
-
-const noop = () => undefined;
 
 const EXTENSION: GhostexInstalledExtension = {
   id: 'storybook',
@@ -72,10 +70,18 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/*
+ * CDXC:Extensions 2026-08-30:
+ * Extensions is no longer an app modal; it is the Settings Extensions page.
+ * The story keeps the app-host surface so the store rows stay reviewable in
+ * isolation, but renders the embedded browser instead of a dialog.
+ */
 export const Extensions: Story = {
   render: () => (
     <ModalStorySurface>
-      <ExtensionsModal isOpen onClose={noop} theme='dark-2' transport={extensionsTransport} />
+      <div className='dark w-[1000px] p-6 font-sans text-foreground'>
+        <ExtensionsBrowser active transport={extensionsTransport} />
+      </div>
     </ModalStorySurface>
   ),
 };

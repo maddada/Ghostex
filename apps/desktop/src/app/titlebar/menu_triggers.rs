@@ -113,7 +113,7 @@ impl GhostexGpuiApp {
         */
         NativeMenu::new()
             .menu("Settings", Box::new(OpenGpuiSettingsModal))
-            .menu("Plugins", Box::new(OpenGpuiPluginsModal))
+            .menu("Extensions", Box::new(OpenGpuiExtensionsModal))
             .menu("Hotkeys", Box::new(OpenGpuiHotkeysModal))
             .menu("Quick Access", Box::new(OpenGpuiCommandPaletteModal))
             .menu("Configure Agents", Box::new(OpenGpuiConfigureAgentsModal))
@@ -164,11 +164,12 @@ impl GhostexGpuiApp {
         CDXC:GPUITitlebarCustomize 2026-08-11:
         Right-clicking blank titlebar chrome or a workarea mode button should
         expose the page that owns titlebar visibility. Keep this as an OS-owned
-        NativeMenu action into the existing Settings > Customize route; normal
-        titlebar layout and hit testing remain unchanged.
+        NativeMenu action into the existing Settings > Extensions route (the
+        page formerly called Customize); normal titlebar layout and hit testing
+        remain unchanged.
         */
         NativeMenu::new()
-            .menu("Customize", Box::new(OpenGpuiCustomizeSettingsModal))
+            .menu("Extensions", Box::new(OpenGpuiExtensionsModal))
             .show(position, window, cx);
     }
 

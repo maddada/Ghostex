@@ -1852,22 +1852,17 @@ impl Render for GhostexGpuiApp {
                     );
                 }),
             )
-            .on_action(
-                cx.listener(|this, _: &OpenGpuiCustomizeSettingsModal, window, cx| {
-                    /*
-                    CDXC:GPUITitlebarCustomize 2026-08-13:
-                    NativeMenu dispatches through the main window's rendered
-                    action tree. Handle Customize on that tree, alongside the
-                    other titlebar menu actions, so right-click selection opens
-                    the explicit Settings > Customize route instead of relying
-                    on an app-global fallback that this window dispatch may
-                    never reach.
-                    */
-                    this.open_gpui_settings_plugins_page(Some(window), cx);
-                }),
-            )
-            .on_action(cx.listener(|this, _: &OpenGpuiPluginsModal, window, cx| {
-                this.open_gpui_settings_plugins_page(Some(window), cx);
+            .on_action(cx.listener(|this, _: &OpenGpuiExtensionsModal, window, cx| {
+                /*
+                CDXC:GPUITitlebarCustomize 2026-08-13:
+                NativeMenu dispatches through the main window's rendered
+                action tree. Handle Extensions on that tree, alongside the
+                other titlebar menu actions, so right-click selection opens
+                the explicit Settings > Extensions route instead of relying
+                on an app-global fallback that this window dispatch may
+                never reach.
+                */
+                this.open_gpui_settings_extensions_page(Some(window), cx);
             }))
             .on_action(
                 cx.listener(|this, _: &OpenGpuiPreviousSessionsModal, window, cx| {

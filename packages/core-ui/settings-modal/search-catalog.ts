@@ -7,6 +7,7 @@
 import { COMPLETION_SOUND_OPTIONS } from '../../shared/completion-sound';
 import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
+  CHAT_FILE_OPEN_VIEW_OPTIONS,
   COMMANDS_PANEL_SIDE_OPTIONS,
   DIAGNOSTIC_LOGGING_SCENARIOS,
   GHOSTTY_CONFIRM_CLOSE_SURFACE_OPTIONS,
@@ -56,26 +57,25 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'App Icon',
       },
     ]),
-    builtInFeatures: getSettingsSectionSearch(settingsSearchQuery, 'Built-in feature switches', [
+    /*
+     * CDXC:Extensions 2026-08-30:
+     * The built-in view switches are owned by Settings → Extensions and are
+     * searchable from that page's own definitions. General no longer claims
+     * them, so a query like "kanban" lands on Extensions instead of matching a
+     * General page that has no such section to scroll to.
+     */
+    fileOpening: getSettingsSectionSearch(settingsSearchQuery, 'File opening', [
       {
-        key: 'codeViewTabHidden',
-        subtitle: 'Show or hide Code in the title bar without disabling its runtime.',
-        title: 'Code',
+        key: 'markdownFileOpenView',
+        options: CHAT_FILE_OPEN_VIEW_OPTIONS,
+        subtitle: 'Choose whether Markdown links from agent chat open in Docs or Code.',
+        title: 'Markdown files',
       },
       {
-        key: 'kanbanViewTabHidden',
-        subtitle: 'Show or hide Kanban in the title bar without disabling its runtime.',
-        title: 'Kanban',
-      },
-      {
-        key: 'automateViewTabHidden',
-        subtitle: 'Show or hide Automate in the title bar without disabling its runtime.',
-        title: 'Automate',
-      },
-      {
-        key: 'docsViewTabHidden',
-        subtitle: 'Show or hide Docs in the title bar without disabling its runtime.',
-        title: 'Docs',
+        key: 'htmlFileOpenView',
+        options: CHAT_FILE_OPEN_VIEW_OPTIONS,
+        subtitle: 'Choose whether HTML links from agent chat open in Docs or Code.',
+        title: 'HTML files',
       },
     ]),
     browser: getSettingsSectionSearch(settingsSearchQuery, 'Browser', [
@@ -430,7 +430,7 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
       },
       {
         key: 'accentColor',
-        subtitle: 'Highlight color for accent text and status highlights.',
+        subtitle: 'Highlight color for accent text, status highlights, and advanced-setting markers. This color is used minimally in the app.',
         title: 'Accent Color',
       },
       {

@@ -42,8 +42,6 @@ gpui::actions!(
         SwitchManageWorkarea,
         OpenGpuiSettingsModal,
         OpenGpuiExtensionsModal,
-        OpenGpuiCustomizeSettingsModal,
-        OpenGpuiPluginsModal,
         OpenGpuiHotkeysModal,
         OpenGpuiCommandPaletteModal,
         OpenGpuiPreviousSessionsModal,

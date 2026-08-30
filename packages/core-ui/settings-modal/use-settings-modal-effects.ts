@@ -27,6 +27,7 @@ export function useSettingsModalEffects({
   debuggingSectionRef,
   dialogContentRef,
   editorSectionRef,
+  fileOpeningSectionRef,
   getMainSettingsSectionMeasurementItems,
   ghostexFolderStats,
   ghostexFolderStatsLoading,
@@ -69,6 +70,7 @@ export function useSettingsModalEffects({
   debuggingSectionRef: RefObject<HTMLDivElement | null>;
   dialogContentRef: RefObject<HTMLDivElement | null>;
   editorSectionRef: RefObject<HTMLDivElement | null>;
+  fileOpeningSectionRef: RefObject<HTMLDivElement | null>;
   getMainSettingsSectionMeasurementItems: () => SettingsSectionMeasurementItem<MainSettingsScrollTargetId>[];
   ghostexFolderStats: SidebarGhostexFolderStatsMessage | undefined;
   ghostexFolderStatsLoading: boolean;
@@ -114,7 +116,7 @@ export function useSettingsModalEffects({
       advanced: betaSectionRef,
       appearance: themingSectionRef,
       autoSleep: autoSleepSectionRef,
-      builtInFeatures: browserSectionRef,
+      fileOpening: fileOpeningSectionRef,
       browser: browserSectionRef,
       chat: chatSectionRef,
       editor: editorSectionRef,

@@ -17,7 +17,6 @@ export type ghostexHotkeyActionId =
   | 'moveSidebar'
   | 'openCommandsPanel'
   | 'openExtensions'
-  | 'openPlugins'
   | 'popOutPane'
   | 'promptEditor'
   | 'reloadSession'
@@ -196,7 +195,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { id: 'openExtensions', kind: 'openExtensions' },
     defaultKey: '',
-    description: 'Browse and manage Ghostex extensions.',
+    description: 'Open the Extensions page in Settings to manage built-in features and installed extensions.',
     id: 'openExtensions',
     title: 'Open Extensions',
   },

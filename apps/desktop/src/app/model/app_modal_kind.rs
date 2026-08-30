@@ -37,7 +37,6 @@ pub(crate) enum GpuiAppModalKind {
     GitFileDiff,
     PortlessSetup,
     DiscoverGhostex,
-    ExtensionsBrowser,
     Extension(ExtensionId),
     UpdateAvailable,
 }
@@ -75,7 +74,6 @@ impl GpuiAppModalKind {
             "gitFileDiff" => Some(Self::GitFileDiff),
             "portlessSetup" => Some(Self::PortlessSetup),
             "discoverGhostex" => Some(Self::DiscoverGhostex),
-            "extensionsBrowser" => Some(Self::ExtensionsBrowser),
             value if value.starts_with("extension:") => {
                 ExtensionId::new(value.trim_start_matches("extension:")).map(Self::Extension)
             }
@@ -116,7 +114,6 @@ impl GpuiAppModalKind {
             Self::GitFileDiff => "gitFileDiff",
             Self::PortlessSetup => "portlessSetup",
             Self::DiscoverGhostex => "discoverGhostex",
-            Self::ExtensionsBrowser => "extensionsBrowser",
             Self::Extension(id) => extension_modal_id(id),
             Self::UpdateAvailable => "updateAvailable",
         }
@@ -154,7 +151,6 @@ impl GpuiAppModalKind {
             Self::GitFileDiff => "Ghostex File Diff",
             Self::PortlessSetup => "Ghostex Portless Setup",
             Self::DiscoverGhostex => "Discover Ghostex",
-            Self::ExtensionsBrowser => "Ghostex Extensions",
             Self::Extension(_) => "Ghostex Extension",
             Self::UpdateAvailable => "Ghostex Update",
         }
@@ -261,7 +257,6 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_UPDATE_AVAILABLE_WINDOW_HEIGHT),
             ),
             Self::DiscoverGhostex => size(px(1120.0), px(850.0)),
-            Self::ExtensionsBrowser => size(px(1120.0), px(850.0)),
             Self::Extension(id) => extension_modal_window_size(id),
             Self::RemoteGxserverInstall => size(
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH),
@@ -279,15 +274,16 @@ impl GpuiAppModalKind {
 
         CDXC:GPUIAppModalSizes 2026-07-26-07:20:
         Every app-modal window is now fitted to its own dialog, so none of them are resizable. The React dialogs own their internal scrolling, and a resizable frame only ever produced dead space around a fixed-height form or a stretched compact dialog.
+
+        CDXC:SettingsExtensionsTab 2026-08-30:
+        The Extensions browser was the last resizable app modal; it is a
+        Settings tab now, so this is unconditionally false again.
         */
-        matches!(self, Self::ExtensionsBrowser)
+        false
     }
 
     pub(crate) fn window_min_size(self) -> Size<Pixels> {
-        match self {
-            Self::ExtensionsBrowser => size(px(720.0), px(560.0)),
-            _ => self.window_size(),
-        }
+        self.window_size()
     }
 
     pub(crate) fn uses_react_modal_host(self) -> bool {
@@ -355,8 +351,7 @@ impl GpuiAppModalKind {
             | Self::RenameSession
             | Self::SessionNote
             | Self::WatchGhostexVideo
-            | Self::FirstLaunchSetup
-            | Self::ExtensionsBrowser => serde_json::json!({
+            | Self::FirstLaunchSetup => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
             }),
@@ -428,7 +423,13 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
         "configureAgents" => Some(GpuiAppModalKind::ConfigureAgents),
         "actions" | "configureActions" => Some(GpuiAppModalKind::ConfigureActions),
         "openTargets" => Some(GpuiAppModalKind::OpenTargets),
-        "openExtensions" => Some(GpuiAppModalKind::ExtensionsBrowser),
+        /*
+        CDXC:SettingsExtensionsTab 2026-08-30:
+        `openExtensions` is deliberately absent: the Extensions surface is a
+        Settings tab now, so the shell route in `run_ghostex_hotkey_action`
+        opens Settings with `initialTab: "extensions"` before this app-modal
+        allowlist is consulted.
+        */
         _ => None,
     }
 }

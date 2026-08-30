@@ -96,8 +96,8 @@ export function StoreTab({
   const shownCount = filteredInstalled.length + filteredStore.length;
 
   return (
-    <div className='flex min-h-0 flex-1 flex-col'>
-      <div className='extensions-modal-toolbar flex shrink-0 items-center gap-2 px-5 py-3'>
+    <div className='flex flex-col gap-3'>
+      <div className='flex flex-wrap items-center gap-2'>
         <Field className='min-w-48 flex-1 gap-0'>
           <FieldLabel className='sr-only' htmlFor='extensions-store-search'>
             Search extensions
@@ -108,11 +108,11 @@ export function StoreTab({
             </InputGroupAddon>
             <InputGroupInput
               /*
-               * Extensions opens on a search surface, so the query field is the
-               * first control. Without this the dialog's focus fallback lands on
-               * the close button and paints a focus ring over the ghost X.
+               * CDXC:Extensions 2026-08-30:
+               * This list is embedded in the Settings Extensions page, so the
+               * query field must never autofocus: opening Settings on this page
+               * would steal focus from the global settings search field.
                */
-              autoFocus
               className='h-8 font-normal'
               id='extensions-store-search'
               onChange={(event) => setQuery(event.currentTarget.value)}
@@ -165,30 +165,28 @@ export function StoreTab({
         </Button>
       </div>
       {shownCount ? (
-        <div className='vertical-scroll-fade-mask min-h-0 flex-1 overflow-y-auto px-5 py-4 [--edge-fade-distance:16px]'>
-          <ExtensionGroup>
-            {filteredInstalled.map((extension) => (
-              <InstalledExtensionCard
-                extension={extension}
-                iconUrl={iconUrlForInstalled(extension)}
-                key={extension.id}
-                onDetails={() => onInstalledDetails(extension)}
-                onRemove={() => onRemove(extension)}
-                onSetChatBarAutoOpen={(autoOpen) => onSetChatBarAutoOpen(extension, autoOpen)}
-                onSetEnabled={(enabled) => onSetEnabled(extension, enabled)}
-                pending={pendingIds.has(extension.id)}
-              />
-            ))}
-            {filteredStore.map((entry) => (
-              <StoreExtensionCard
-                entry={entry}
-                iconUrl={iconUrlForCatalogEntry(entry)}
-                key={entry.name}
-                onDetails={() => onStoreDetails(entry)}
-              />
-            ))}
-          </ExtensionGroup>
-        </div>
+        <ExtensionGroup>
+          {filteredInstalled.map((extension) => (
+            <InstalledExtensionCard
+              extension={extension}
+              iconUrl={iconUrlForInstalled(extension)}
+              key={extension.id}
+              onDetails={() => onInstalledDetails(extension)}
+              onRemove={() => onRemove(extension)}
+              onSetChatBarAutoOpen={(autoOpen) => onSetChatBarAutoOpen(extension, autoOpen)}
+              onSetEnabled={(enabled) => onSetEnabled(extension, enabled)}
+              pending={pendingIds.has(extension.id)}
+            />
+          ))}
+          {filteredStore.map((entry) => (
+            <StoreExtensionCard
+              entry={entry}
+              iconUrl={iconUrlForCatalogEntry(entry)}
+              key={entry.name}
+              onDetails={() => onStoreDetails(entry)}
+            />
+          ))}
+        </ExtensionGroup>
       ) : (
         <ExtensionEmptyState
           description='Try a different search or clear one of the filters.'

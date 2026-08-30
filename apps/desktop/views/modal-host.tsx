@@ -19,7 +19,6 @@ import { AgentsHubModal } from '@/packages/core-ui/agents-hub-modal';
 import { CommandPalette } from '@/packages/core-ui/command-palette';
 import { DelayedSendModal } from '@/packages/core-ui/delayed-send-modal';
 import { DiscoverGhostexModal } from '@/packages/core-ui/discover-ghostex-modal';
-import { ExtensionsModal } from '@/packages/core-ui/extensions-modal';
 import { FirstUserMessageModal } from '@/packages/core-ui/first-user-message-modal';
 import { StashedPromptsModal, type StashedPromptsScope } from '@/packages/core-ui/stashed-prompts-modal';
 import { PortlessSetupModal, type PortlessSetupModalMode } from '@/packages/core-ui/portless-setup-modal';
@@ -49,6 +48,7 @@ import { WorktreeDeleteModal, type WorktreeDeleteModalDraft } from '@/packages/c
 import { WorktreeRenameModal, type WorktreeRenameModalDraft } from '@/packages/core-ui/worktree-rename-modal';
 import { WorktreeCreateModal } from '@/packages/core-ui/worktree-create-modal';
 import { normalizeAppToastDescription, type AppToastRequest } from '@/packages/shared/app-toast-contract';
+import type { BundledGhostexAgentSkillId } from '@/packages/shared/ghostex-agent-skills';
 import {
   sidebarAgentIconSupportsSessionHistoryTitleGeneration,
   type SidebarAgentButton,
@@ -94,7 +94,6 @@ type AppModalKind =
   | 'configureAgents'
   | 'delayedSend'
   | 'discoverGhostex'
-  | 'extensionsBrowser'
   | 'exportTranscriptResult'
   | 'watchGhostexVideo'
   | 'hotkeys'
@@ -271,6 +270,7 @@ type AppModalHostMessage =
       type: 'open';
     }
   | { type: 'close' }
+  | { type: 'completeFirstLaunchSetup' }
   | AppToastRequest
   | { keepOpen?: boolean; type: 'toastDismissed' }
   | { initialPath?: string; type: 'pickRepositoryFolder' }
@@ -664,6 +664,10 @@ function notifyNativeModalClosed() {
   postAppModalHostMessage({ type: 'close' }, 'AppModals:close');
 }
 
+function notifyNativeFirstLaunchSetupCompleted() {
+  postAppModalHostMessage({ type: 'completeFirstLaunchSetup' }, 'FirstLaunchSetup:complete');
+}
+
 function isSettingsModalKind(modal: AppModalKind | undefined): boolean {
   return (
     modal === 'settings' ||
@@ -715,7 +719,7 @@ function getSettingsInitialTab(modal: AppModalKind | undefined): SettingsModalTa
  * CDXC:SettingsNavigation 2026-08-19-00:00:
  * Settings deep links carry a tab id over the app-modal host message. Validate
  * it against the single canonical tab list instead of a hand-maintained copy,
- * which silently dropped newer pages such as Customize (`plugins`) and made
+ * which silently dropped newer pages such as Extensions (`extensions`) and made
  * their entry points open the remembered tab instead.
  */
 const SETTINGS_MODAL_TAB_SET = new Set<string>(SETTINGS_MODAL_NAVIGATION_TABS);
@@ -761,44 +765,87 @@ function createRemoteProjectRequestId(kind: 'add' | 'browse'): string {
   return `remote-project-${kind}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-const FIRST_LAUNCH_CREATE_PROJECT_SESSION_TIMEOUT_MS = 60_000;
+const FIRST_LAUNCH_SKILL_INSTALL_TIMEOUT_MS = 150_000;
 
-function requestFirstLaunchCreateProjectSession(agentId: string, path: string): Promise<void> {
-  const requestId = `first-launch-project-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+type FirstLaunchSkillInstallAction =
+  | 'installBrowserControl'
+  | 'installBrowserUseSkill'
+  | 'installComputerUseSkill'
+  | 'installCliSkill'
+  | 'installFable56OrchestrationSkill'
+  | 'installGenerateTitleSkill'
+  | 'installManageBeadsSkill'
+  | 'installMoveCodexSessionSkill';
+
+const FIRST_LAUNCH_SKILL_INSTALL_ACTION_BY_ID: Record<BundledGhostexAgentSkillId, FirstLaunchSkillInstallAction> = {
+  browserUse: 'installBrowserUseSkill',
+  cli: 'installCliSkill',
+  computerUse: 'installComputerUseSkill',
+  embeddedBrowserUse: 'installBrowserControl',
+  fable56Orchestration: 'installFable56OrchestrationSkill',
+  generateTitle: 'installGenerateTitleSkill',
+  manageBeads: 'installManageBeadsSkill',
+  moveCodexSession: 'installMoveCodexSessionSkill',
+};
+
+function requestAppModalSettingsAction(action: FirstLaunchSkillInstallAction): Promise<void> {
   return new Promise((resolve, reject) => {
     let timeoutId = 0;
     const handleMessage = (event: Event) => {
-      const message = (event as CustomEvent<AppModalHostMessage>).detail;
+      const hostMessage = (event as CustomEvent<AppModalHostMessage>).detail;
+      if (!hostMessage || typeof hostMessage !== 'object' || hostMessage.type !== 'sidebarState') {
+        return;
+      }
+      const status = hostMessage.message;
       if (
-        !message ||
-        typeof message !== 'object' ||
-        message.type !== 'firstLaunchCreateProjectSessionResult' ||
-        message.requestId !== requestId
+        !status ||
+        typeof status !== 'object' ||
+        !('type' in status) ||
+        status.type !== 'settingsActionStatus' ||
+        !('action' in status) ||
+        status.action !== action
       ) {
         return;
       }
       window.clearTimeout(timeoutId);
       window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
-      if (!message.ok) {
-        reject(new Error(message.error || 'Ghostex could not open the selected project.'));
+      if ('available' in status && status.available === true) {
+        resolve();
         return;
       }
-      resolve();
+      reject(
+        new Error(
+          'message' in status && typeof status.message === 'string'
+            ? status.message
+            : 'Ghostex could not install the selected skill.'
+        )
+      );
     };
 
     window.addEventListener('ghostex-app-modal-host-message', handleMessage);
     timeoutId = window.setTimeout(() => {
       window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
-      reject(new Error('Opening the selected project timed out.'));
-    }, FIRST_LAUNCH_CREATE_PROJECT_SESSION_TIMEOUT_MS);
+      reject(new Error('Installing the selected skills timed out.'));
+    }, FIRST_LAUNCH_SKILL_INSTALL_TIMEOUT_MS);
     try {
-      vscode.postMessage({ agentId, path, requestId, type: 'firstLaunchCreateProjectSession' });
+      vscode.postMessage({ type: action });
     } catch (error) {
       window.clearTimeout(timeoutId);
       window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
       reject(error);
     }
   });
+}
+
+async function requestFirstLaunchInstallSelectedSkills(skillIds: readonly BundledGhostexAgentSkillId[]): Promise<void> {
+  for (const skillId of skillIds) {
+    await requestAppModalSettingsAction(FIRST_LAUNCH_SKILL_INSTALL_ACTION_BY_ID[skillId]);
+  }
+}
+
+function startFirstLaunchCreateProjectSession(agentId: string, path: string): void {
+  const requestId = `first-launch-project-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  vscode.postMessage({ agentId, path, requestId, type: 'firstLaunchCreateProjectSession' });
 }
 
 function waitForRemoteProjectDirectoryBrowseResult(requestId: string): Promise<RemoteFilesystemBrowseResult> {
@@ -1109,6 +1156,7 @@ function AppModalHost() {
     isCommandPalettePrewarm,
     closeGitFileDiff,
     closeModal,
+    completeFirstLaunchSetup,
     recentProjects,
     remoteGxserverInstall,
     remoteProjectPicker,
@@ -2328,7 +2376,6 @@ function AppModalHost() {
         appIconState={appIconState}
       />
       <DiscoverGhostexModal isOpen={activeModal === 'discoverGhostex'} onClose={closeModal} theme={theme} />
-      <ExtensionsModal isOpen={activeModal === 'extensionsBrowser'} onClose={closeModal} theme={theme} />
       <WatchGhostexVideoModal isOpen={activeModal === 'watchGhostexVideo'} onClose={closeModal} theme={theme} />
       <FirstLaunchSetupModal
         agentHookStatus={agentHookStatus}
@@ -2343,7 +2390,7 @@ function AppModalHost() {
             type: 'updateSettings',
           });
         }}
-        onClose={closeModal}
+        onClose={completeFirstLaunchSetup}
         onInstallAgentHooks={(agentIds) => {
           setAgentHookStatusLoading(true);
           vscode.postMessage({ agentIds, type: 'installAgentHooks' });
@@ -2384,6 +2431,7 @@ function AppModalHost() {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: 'installMoveCodexSessionSkill' });
         }}
+        onInstallSelectedSkills={requestFirstLaunchInstallSelectedSkills}
         onUninstallBundledAgentSkill={(skillId) => {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ skillId, type: 'uninstallBundledAgentSkill' });
@@ -2409,7 +2457,7 @@ function AppModalHost() {
           runtime over the workspaceFolderPicked chain, which owns project
           registration + focus.
           */
-          return requestFirstLaunchCreateProjectSession(agentId, path);
+          startFirstLaunchCreateProjectSession(agentId, path);
         }}
         onRequestAgentHookStatus={(agentIds) => {
           setAgentHookStatusLoading(true);
@@ -2736,6 +2784,11 @@ function useModalStateFromNative() {
      */
     clearActiveModalState();
     notifyNativeModalClosed();
+  }, [clearActiveModalState]);
+
+  const completeFirstLaunchSetup = useCallback(() => {
+    clearActiveModalState();
+    notifyNativeFirstLaunchSetupCompleted();
   }, [clearActiveModalState]);
 
   const closeGitFileDiff = useCallback(() => {
@@ -3519,6 +3572,7 @@ function useModalStateFromNative() {
     isCommandPalettePrewarm,
     closeGitFileDiff,
     closeModal,
+    completeFirstLaunchSetup,
     recentProjects,
     remoteProjectPicker,
     renameSession,
@@ -3763,7 +3817,6 @@ function isModalRenderable({
       return portlessSetup !== undefined;
     case 'previousSessions':
     case 'discoverGhostex':
-    case 'extensionsBrowser':
     case 'watchGhostexVideo':
     case 'tipsAndTricks':
     case 'firstLaunchSetup':

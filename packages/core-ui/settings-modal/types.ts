@@ -145,7 +145,7 @@ export type MainSettingsScrollTargetId =
   | 'terminalBehavior'
   | 'terminalScrolling'
   | 'terminalDevServers'
-  | 'builtInFeatures'
+  | 'fileOpening'
   | 'browser'
   | 'editor'
   | 'autoSleep'
@@ -302,6 +302,8 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
      */
     'terminalDevServerDetectionEnabled',
     'terminalDevServerIgnoredPortRules',
+    'markdownFileOpenView',
+    'htmlFileOpenView',
   ],
   notifications: [
     'completionSound',
@@ -342,6 +344,7 @@ export const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
     'sidebarTheme',
     'customSidebarTitlebarBackgroundDarknessPercent',
     'customSidebarTitlebarBackgroundTintColor',
+    'accentColor',
   ],
   // CDXC:AppIconPicker 2026-06-25-21:50: App Icon owns the persisted Dock icon source id selection.
   appIcon: ['appIconSourceId'],
@@ -364,7 +367,7 @@ export const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
     'terminalScrollToBottomWhenTyping',
   ],
   terminalDevServers: ['terminalDevServerDetectionEnabled', 'terminalDevServerIgnoredPortRules'],
-  builtInFeatures: ['codeViewTabHidden', 'kanbanViewTabHidden', 'automateViewTabHidden', 'docsViewTabHidden'],
+  fileOpening: ['markdownFileOpenView', 'htmlFileOpenView'],
   browser: ['webLinkOpenTarget'],
   editor: [
     'codeServerLinkVscodeUserConfig',
@@ -409,6 +412,7 @@ export type MainSettingsSubsectionId =
   | 'browser'
   | 'debugging'
   | 'editor'
+  | 'fileOpening'
   | 'power'
   | 'sessionCards'
   | 'sidebar'
@@ -463,6 +467,12 @@ export const MAIN_SETTINGS_SUBSECTION_NAVIGATION: Partial<
     { id: 'browser', title: 'Browser' },
     { id: 'terminalDevServers', title: 'Dev Servers' },
     { id: 'editor', title: 'Editor' },
+    /*
+     * CDXC:Extensions 2026-08-30:
+     * Where Markdown/HTML links from agent chat open is app behaviour, not an
+     * extension, so it moved here when Customize became the Extensions page.
+     */
+    { id: 'fileOpening', title: 'File opening' },
   ],
 };
 
@@ -532,6 +542,10 @@ export const DIAGNOSTIC_LOGGING_GROUPS: readonly ['macOS', 'GPUI', 'gxserver'] =
  * CDXC:SettingsTheming 2026-06-16-08:58:
  * Theming controls should remain visible without Show Advanced. Do not mark Theme, Background Contrast, or Background Tint as advanced rows.
  *
+ * CDXC:SettingsTheming 2026-08-30:
+ * Accent Color is an advanced Theming row. Search still finds it; Show
+ * Advanced keeps it under Background Tint.
+ *
  * CDXC:SettingsAdvanced 2026-06-16-09:20:
  * Empty-sidebar double-click creation remains a low-frequency interaction preference and should hide behind Show Advanced. The menu-bar indicator is preset-owned and stays beside the sidebar preset controls.
  *
@@ -571,6 +585,7 @@ export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
   'sleepSessionWhenParking',
   'renameSessionOnDoubleClick',
   'showSessionCloseContextMenuAction',
+  'accentColor',
   'workspaceActivePaneBorderColor',
   'workspaceBackgroundColor',
   'terminalBackgroundImage',

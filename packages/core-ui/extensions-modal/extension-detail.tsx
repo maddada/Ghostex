@@ -136,8 +136,13 @@ export function InstalledExtensionDetail({
   const webManifest = extension.manifest.kind === 'terminal-pane' ? undefined : extension.manifest;
 
   return (
-    <div className='vertical-scroll-fade-mask min-h-0 flex-1 overflow-y-auto [--edge-fade-distance:16px]'>
-      <div className='mx-auto flex max-w-5xl flex-col gap-6 p-6'>
+    <div>
+      {/*
+       * CDXC:Extensions 2026-08-30:
+       * The detail view is embedded in the scrolling Settings Extensions page,
+       * so it must not own a scroll container or an edge-fade mask of its own.
+       */}
+      <div className='mx-auto flex max-w-5xl flex-col gap-6'>
         <DetailHeader
           description={extension.manifest.description}
           iconUrl={iconUrl}
@@ -323,8 +328,8 @@ export function StoreExtensionDetail({
   const updateAvailable = Boolean(installedVersion && isVersionNewer(entry.version, installedVersion));
   const actionLabel = updateAvailable ? `Update to ${entry.version}` : installedVersion ? 'Installed' : 'Install';
   return (
-    <div className='vertical-scroll-fade-mask min-h-0 flex-1 overflow-y-auto [--edge-fade-distance:16px]'>
-      <div className='mx-auto flex max-w-5xl flex-col gap-6 p-6'>
+    <div>
+      <div className='mx-auto flex max-w-5xl flex-col gap-6'>
         <DetailHeader description={entry.description} iconUrl={iconUrl} onBack={onBack} title={entry.title} />
         <div className='grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]'>
           <div className='flex min-w-0 flex-col gap-6'>

@@ -942,7 +942,7 @@ export function SessionGroupSection({
   );
   /*
    * CDXC:DisabledPluginRouting 2026-08-23:
-   * Turning Browser off in Settings → Customize removes the Browser workarea,
+   * Turning Browser off in Settings → Extensions removes the Browser workarea,
    * so the project header's New Browser Tab button has nowhere left to put a
    * tab. Hide it rather than leaving a control whose only outcome is a refusal.
    */

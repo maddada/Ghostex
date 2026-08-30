@@ -154,23 +154,16 @@ type CommandPaletteSearchItem =
     };
 
 type AppModalPaletteCommandId =
-  'actions' | 'addProject' | 'agentsHub' | 'configureAgents' | 'extensions' | 'openTargets' | 'previousSessions';
+  'actions' | 'addProject' | 'agentsHub' | 'configureAgents' | 'openTargets' | 'previousSessions';
 
 type AppModalPaletteModal =
-  | 'addProject'
-  | 'agentsHub'
-  | 'configureActions'
-  | 'configureAgents'
-  | 'extensionsBrowser'
-  | 'hotkeys'
-  | 'openTargets'
-  | 'previousSessions';
+  'addProject' | 'agentsHub' | 'configureActions' | 'configureAgents' | 'hotkeys' | 'openTargets' | 'previousSessions';
 
 type SidebarMessagePaletteCommandId =
   | 'automations'
   | 'changelog'
+  | 'extensions'
   | 'features'
-  | 'plugins'
   | 'openCurrentProjectInFinder'
   | 'quickBrowserTab'
   | 'quickTerminal'
@@ -234,14 +227,6 @@ const APP_MODAL_PALETTE_COMMANDS = [
     modal: 'configureAgents',
     searchText: 'Configure Agents agents settings modal',
     title: 'Configure Agents',
-  },
-  {
-    commandId: 'extensions',
-    hotkey: '',
-    kind: 'appModal',
-    modal: 'extensionsBrowser',
-    searchText: 'Extensions store installed plugins add-ons browser modal',
-    title: 'Extensions',
   },
   {
     commandId: 'actions',
@@ -317,12 +302,19 @@ const SIDEBAR_MESSAGE_PALETTE_COMMANDS = [
     title: 'Find Prompts',
   },
   {
-    commandId: 'plugins',
+    /*
+     * CDXC:Extensions 2026-08-30:
+     * Extensions is one Settings page now, so the palette has one row for it.
+     * The old pair (an app-modal row for the standalone store and a "Plugins"
+     * row for the built-in features) pointed at two surfaces that merged.
+     */
+    commandId: 'extensions',
     hotkey: '',
     kind: 'sidebarMessage',
-    message: { actionId: 'openPlugins', type: 'runGhostexHotkeyAction' },
-    searchText: 'Plugins components VS Code code-server CEF gxserver Beads bd runtimes',
-    title: 'Plugins',
+    message: { actionId: 'openExtensions', type: 'runGhostexHotkeyAction' },
+    searchText:
+      'Extensions store installed add-ons official built-in features components VS Code code-server CEF gxserver Beads bd runtimes',
+    title: 'Extensions',
   },
   {
     commandId: 'openCurrentProjectInFinder',
@@ -451,7 +443,7 @@ export function CommandPalette({
   const commandRunStates = useSidebarStore((state) => state.commandRunStates);
   /*
    * CDXC:DisabledPluginRouting 2026-08-23:
-   * A view turned off in Settings → Customize is gone from the titlebar, and
+   * A view turned off in Settings → Extensions is gone from the titlebar, and
    * the host refuses to switch to it, so its palette rows would be commands
    * that cannot run. Filter them here — the switchers for the hidden views,
    * plus the two Browser creators — instead of leaving dead rows that report
@@ -724,11 +716,6 @@ export function CommandPalette({
       return;
     }
     if (command.kind === 'appModal') {
-      if (command.modal === 'extensionsBrowser') {
-        onOpenChange(false);
-        vscode.postMessage({ actionId: 'openExtensions', type: 'runGhostexHotkeyAction' });
-        return;
-      }
       if (command.modal === 'previousSessions') {
         openQuickAccess('recentSessions');
         return;
@@ -1044,9 +1031,6 @@ function BuiltInCommandIcon({ command }: { command: BuiltInPaletteCommand }) {
 }
 
 function AppModalCommandIcon({ modal }: { modal: AppModalPaletteModal }) {
-  if (modal === 'extensionsBrowser') {
-    return <IconPuzzle aria-hidden='true' />;
-  }
   if (modal === 'previousSessions') {
     return <IconHistory aria-hidden='true' />;
   }
@@ -1078,8 +1062,8 @@ function SidebarMessageCommandIcon({ commandId }: { commandId: SidebarMessagePal
   if (commandId === 'automations') {
     return <IconSettingsAutomation aria-hidden='true' />;
   }
-  if (commandId === 'plugins') {
-    return <IconSettings aria-hidden='true' />;
+  if (commandId === 'extensions') {
+    return <IconPuzzle aria-hidden='true' />;
   }
   if (commandId === 'openCurrentProjectInFinder') {
     return <IconFolderOpen aria-hidden='true' />;

@@ -1233,7 +1233,7 @@ export type SidebarPluginSettingsItem = {
   version: string;
 };
 
-/** Native component-store state shown by Settings -> Plugins. */
+/** Native component-store state shown by Settings -> Extensions. */
 export type SidebarPluginSettingsStatusMessage = {
   plugins: SidebarPluginSettingsItem[];
   type: 'pluginSettingsStatus';

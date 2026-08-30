@@ -101,9 +101,17 @@ impl GpuiAppModalHostWindow {
                 None,
                 None,
                 None,
+                /*
+                CDXC:SettingsExtensionsTab 2026-08-30:
+                The extensions store's registry/catalog transport reads
+                `window.ghostexGpui.gxserverBootstrap`, so the bootstrap
+                follows the surface: it moved from the retired
+                `extensionsBrowser` modal onto Settings, which now hosts the
+                Extensions tab.
+                */
                 matches!(
                     modal,
-                    GpuiAppModalKind::FindPrompts | GpuiAppModalKind::ExtensionsBrowser
+                    GpuiAppModalKind::FindPrompts | GpuiAppModalKind::Settings
                 )
                 .then_some(sidebar_gxserver_bootstrap)
                 .flatten(),

@@ -4,6 +4,7 @@ import { APP_SHOTS_HOTKEY_OPTIONS, SESSION_TITLE_GENERATION_AGENT_OPTIONS } from
 import { BUILT_IN_WORKSPACE_OPEN_TARGETS } from '../../shared/workspace-open-targets';
 import { BUNDLED_GHOSTEX_AGENT_SKILLS } from '../../shared/ghostex-agent-skills';
 import { DEFAULT_SIDEBAR_AGENTS } from '../../shared/sidebar-agents';
+import { GHOSTEX_OFFICIAL_EXTENSIONS } from '../../shared/ghostex-official-extensions';
 import {
   ADVANCED_MAIN_SETTING_KEYS,
   AGENT_HOOK_SUPPORTED_DEFAULT_AGENTS,
@@ -209,7 +210,15 @@ export type SettingsTabSearch = {
 };
 
 export type SearchableExtraSettingsTabId =
-  'about' | 'actions' | 'agents' | 'integrations' | 'plugins' | 'openTargets' | 'osIntegration' | 'projects' | 'remote';
+  | 'about'
+  | 'actions'
+  | 'agents'
+  | 'extensions'
+  | 'integrations'
+  | 'openTargets'
+  | 'osIntegration'
+  | 'projects'
+  | 'remote';
 
 export type ExtraSettingsTabSearches = Record<SearchableExtraSettingsTabId, SettingsTabSearch>;
 
@@ -407,59 +416,42 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
     ],
     title: 'Integrations',
   },
-  plugins: {
+  /*
+   * CDXC:Extensions 2026-08-30:
+   * One Extensions page covers the built-in features (searchable by their own
+   * names, straight from the shared descriptor list) and the extension store.
+   */
+  extensions: {
     sections: [
       {
-        id: 'viewTabs',
+        id: 'official',
         settings: [
-          { key: 'code', subtitle: 'Show Code in the title bar and manage its VS Code runtime.', title: 'Code' },
-          { key: 'browser', subtitle: 'Show or hide Browser in the title bar.', title: 'Browser' },
-          { key: 'kanban', subtitle: 'Show Kanban in the title bar and manage its Beads runtime.', title: 'Kanban' },
-          { key: 'automate', subtitle: 'Show or hide Automate in the title bar.', title: 'Automate' },
-          { key: 'docs', subtitle: 'Show or hide Docs in the title bar.', title: 'Docs' },
-        ],
-        title: 'Plugins',
-      },
-      {
-        id: 'fileOpening',
-        settings: [
-          {
-            key: 'markdown',
-            subtitle: 'Choose whether Markdown links from agent chat open in Docs or Code.',
-            title: 'Markdown files',
-          },
-          {
-            key: 'html',
-            subtitle: 'Choose whether HTML links from agent chat open in Docs or Code.',
-            title: 'HTML files',
-          },
-        ],
-        title: 'File opening',
-      },
-      {
-        id: 'components',
-        settings: [
+          ...GHOSTEX_OFFICIAL_EXTENSIONS.map((extension) => ({
+            key: extension.id,
+            subtitle: extension.description,
+            title: extension.title,
+          })),
           {
             key: 'cef',
             subtitle: 'Inspect or reinstall the Chromium runtime used by Ghostex web surfaces.',
             title: 'Chromium runtime (CEF)',
           },
         ],
-        title: 'Shared components',
+        title: 'Official Extensions',
       },
       {
-        id: 'quickAccessButtons',
+        id: 'store',
         settings: [
-          { key: 'tips', subtitle: 'Show or hide the Tips & Tricks titlebar button.', title: 'Tips & Tricks' },
-          { key: 'resources', subtitle: 'Show or hide the Resources titlebar button.', title: 'Resources' },
-          { key: 'gitActions', subtitle: 'Show or hide the Git actions titlebar button.', title: 'Git actions' },
-          { key: 'quickActions', subtitle: 'Show or hide the Quick Actions titlebar button.', title: 'Quick Actions' },
-          { key: 'openIn', subtitle: 'Show or hide the Open In titlebar button.', title: 'Open In' },
+          {
+            key: 'store',
+            subtitle: 'Browse audited extensions, install them, and manage what is already installed.',
+            title: 'Extension store',
+          },
         ],
-        title: 'Quick access buttons',
+        title: 'Extensions Store',
       },
     ],
-    title: 'Customize',
+    title: 'Extensions',
   },
   openTargets: {
     sections: [

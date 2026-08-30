@@ -2155,8 +2155,8 @@ impl GhostexGpuiApp {
                     self.move_gpui_sidebar_to_other_side(cx);
                     return;
                 }
-                if action_id == "openPlugins" {
-                    self.open_gpui_settings_plugins_page(Some(window), cx);
+                if action_id == "openExtensions" {
+                    self.open_gpui_settings_extensions_page(Some(window), cx);
                     return;
                 }
                 if let Some(tab_cycle_action) =

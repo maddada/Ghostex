@@ -6,7 +6,6 @@
  */
 import { type Dispatch, type SetStateAction } from 'react';
 import {
-  IconCashEdit,
   IconCloud,
   IconCodeDots,
   IconDeviceDesktop,
@@ -15,6 +14,7 @@ import {
   IconInfoCircle,
   IconKeyboard,
   IconPlayerPlay,
+  IconPuzzle,
   IconSettings,
   IconTools,
 } from '@tabler/icons-react';
@@ -136,7 +136,7 @@ export function createSettingsSidebarPages({
     },
     { icon: IconCodeDots, id: 'agents', title: 'Agents' },
     { icon: IconTools, id: 'integrations', title: 'Integrations' },
-    { icon: IconCashEdit, id: 'plugins', title: 'Customize' },
+    { icon: IconPuzzle, id: 'extensions', title: 'Extensions' },
     { icon: IconCloud, id: 'remote', title: 'Remote' },
     { icon: IconFolderOpen, id: 'projects', title: 'Projects' },
     {

@@ -79,9 +79,6 @@ export function InstalledExtensionCard({
       <div className='min-w-0 flex-1'>
         <div className='flex min-w-0 items-baseline gap-2'>
           <span className='truncate text-sm font-normal text-foreground'>{extension.manifest.title}</span>
-          <span className='shrink-0 text-xs font-normal text-muted-foreground'>
-            {extension.state.enabled ? 'Enabled' : 'Disabled'}
-          </span>
         </div>
         <p className='mt-0.5 truncate text-[13px] font-normal text-foreground/75'>{extension.manifest.description}</p>
         <p className='mt-0.5 truncate text-xs font-normal text-muted-foreground'>

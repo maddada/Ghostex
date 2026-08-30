@@ -1,9 +1,15 @@
+/*
+ * CDXC:Extensions 2026-08-30:
+ * Extensions is no longer a standalone app modal. The Settings Extensions page
+ * owns the layout: the store list renders inside its "Extensions Store"
+ * section, while opening an extension's details replaces the whole page. To
+ * support that split without losing state between the two placements, all the
+ * browser state lives in `useExtensionsBrowserState`, and the list and detail
+ * surfaces are separate components fed the same state object.
+ */
 import { IconPuzzle, IconRefresh } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/packages/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
-import { cn } from '@/packages/components/utils';
-import type { SidebarTheme } from '@/packages/shared/session-grid-contract';
 import type {
   GhostexExtensionCatalogEntry,
   GhostexExtensionCatalog,
@@ -14,7 +20,7 @@ import { InstalledExtensionDetail, StoreExtensionDetail } from './extension-deta
 import { InstallConsentDialog } from './install-consent';
 import { StoreTab } from './store-tab';
 import { ExtensionEmptyState } from './extension-surface';
-import { createExtensionsModalTransport, extensionStaticAssetUrl, type ExtensionsModalTransport } from './transport';
+import { extensionStaticAssetUrl, type ExtensionsModalTransport } from './transport';
 
 type CatalogSnapshot = {
   catalog: GhostexExtensionCatalog;
@@ -35,19 +41,13 @@ function replaceInstalled(
   ).sort((left, right) => left.manifest.title.localeCompare(right.manifest.title));
 }
 
-export function ExtensionsModal({
-  isOpen,
-  onClose,
-  theme = 'dark-blue',
+export function useExtensionsBrowserState({
+  active,
   transport,
 }: {
-  isOpen: boolean;
-  onClose: () => void;
-  theme?: SidebarTheme;
+  active: boolean;
   transport?: ExtensionsModalTransport;
 }) {
-  const defaultTransport = useMemo(() => createExtensionsModalTransport(), []);
-  const dataSource = transport ?? defaultTransport;
   const [installed, setInstalled] = useState<GhostexInstalledExtension[]>([]);
   const [catalogSnapshot, setCatalogSnapshot] = useState<CatalogSnapshot>();
   const [selectedInstalledId, setSelectedInstalledId] = useState<string>();
@@ -61,10 +61,11 @@ export function ExtensionsModal({
   const [loadingContent, setLoadingContent] = useState(false);
 
   const load = useCallback(async () => {
+    if (!transport) return;
     setLoading(true);
     setError(undefined);
     try {
-      const [installedResult, catalogResult] = await Promise.all([dataSource.list(), dataSource.catalog()]);
+      const [installedResult, catalogResult] = await Promise.all([transport.list(), transport.catalog()]);
       setInstalled(
         [...installedResult.extensions].sort((left, right) => left.manifest.title.localeCompare(right.manifest.title))
       );
@@ -74,15 +75,15 @@ export function ExtensionsModal({
     } finally {
       setLoading(false);
     }
-  }, [dataSource]);
+  }, [transport]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!active) return;
     setSelectedInstalledId(undefined);
     setSelectedStoreId(undefined);
     setConsentEntry(undefined);
     void load();
-  }, [isOpen, load]);
+  }, [active, load]);
 
   const catalog = catalogSnapshot?.catalog.extensions ?? [];
   const catalogById = useMemo(() => new Map(catalog.map((entry) => [entry.name, entry])), [catalog]);
@@ -144,34 +145,37 @@ export function ExtensionsModal({
 
   const setExtensionState = useCallback(
     async (extension: GhostexInstalledExtension, patch: GhostexExtensionStatePatch) => {
+      if (!transport) return;
       await runForExtension(extension.id, async () => {
-        const result = await dataSource.setState(extension.id, patch);
+        const result = await transport.setState(extension.id, patch);
         setInstalled((current) => replaceInstalled(current, result.extension));
       });
     },
-    [dataSource, runForExtension]
+    [runForExtension, transport]
   );
 
   const uninstallExtension = useCallback(
     async (extension: GhostexInstalledExtension) => {
+      if (!transport) return;
       await runForExtension(extension.id, async () => {
-        await dataSource.uninstall(extension.id);
+        await transport.uninstall(extension.id);
         setInstalled((current) => current.filter((candidate) => candidate.id !== extension.id));
         setSelectedInstalledId((current) => (current === extension.id ? undefined : current));
       });
     },
-    [dataSource, runForExtension]
+    [runForExtension, transport]
   );
 
   const installExtension = useCallback(
     async (entry: GhostexExtensionCatalogEntry) => {
+      if (!transport) return;
       await runForExtension(entry.name, async () => {
-        const result = await dataSource.install(entry.name);
+        const result = await transport.install(entry.name);
         setInstalled((current) => replaceInstalled(current, result.extension));
         setConsentEntry(undefined);
       });
     },
-    [dataSource, runForExtension]
+    [runForExtension, transport]
   );
 
   const iconUrlForCatalogEntry = useCallback(
@@ -186,105 +190,146 @@ export function ExtensionsModal({
     []
   );
 
-  const dark = !(theme.startsWith('light-') || theme === 'plain-light');
+  return {
+    catalog,
+    catalogById,
+    catalogSnapshot,
+    changelogMarkdown,
+    consentEntry,
+    detailOpen: Boolean(selectedInstalled || selectedStore),
+    error,
+    iconUrlForCatalogEntry,
+    iconUrlForInstalled,
+    installExtension,
+    installed,
+    load,
+    loading,
+    loadingContent,
+    pendingIds,
+    readmeMarkdown,
+    selectedInstalled,
+    selectedStore,
+    setConsentEntry,
+    setExtensionState,
+    setSelectedInstalledId,
+    setSelectedStoreId,
+    uninstallExtension,
+  };
+}
+
+export type ExtensionsBrowserState = ReturnType<typeof useExtensionsBrowserState>;
+
+function ExtensionsErrorBanner({ error }: { error?: string }) {
+  if (!error) return null;
   return (
-    <Dialog
-      disablePointerDismissal
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) onClose();
-      }}
-      open={isOpen}
-    >
-      <DialogContent
-        className={cn('extensions-modal-dialog gx-app-modal font-sans', dark && 'dark')}
-        data-sidebar-theme={theme}
-        showCloseButton
-      >
-        <DialogHeader className='extensions-modal-header shrink-0 px-5 py-4 pr-16'>
-          <DialogTitle>Extensions</DialogTitle>
-          <DialogDescription>Browse audited extensions and manage what is installed.</DialogDescription>
-        </DialogHeader>
-        {error ? (
-          <div className='extensions-modal-error shrink-0 bg-destructive/10 px-5 py-2 text-[13px] font-normal text-destructive'>
-            {error}
-          </div>
-        ) : null}
-        {loading && !catalogSnapshot ? (
-          <ExtensionEmptyState
-            description='Reading the installed registry and extension catalog.'
-            icon={IconPuzzle}
-            title='Loading extensions…'
-          />
-        ) : error && !catalogSnapshot ? (
-          <ExtensionEmptyState
-            action={
-              <Button className='font-normal' onClick={() => void load()} size='sm' type='button' variant='outline'>
-                <IconRefresh data-icon='inline-start' />
-                Try again
-              </Button>
-            }
-            description={error}
-            icon={IconPuzzle}
-            title='Extensions unavailable'
-          />
-        ) : selectedInstalled ? (
-          <InstalledExtensionDetail
-            catalogEntry={catalogById.get(selectedInstalled.id)}
-            extension={selectedInstalled}
-            iconUrl={iconUrlForInstalled(selectedInstalled)}
-            onBack={() => setSelectedInstalledId(undefined)}
-            onSetState={(patch) => setExtensionState(selectedInstalled, patch)}
-            onUninstall={() => uninstallExtension(selectedInstalled)}
-            onUpdate={() => {
-              const entry = catalogById.get(selectedInstalled.id);
-              return entry ? installExtension(entry) : Promise.resolve();
-            }}
-            pending={pendingIds.has(selectedInstalled.id)}
-          />
-        ) : selectedStore ? (
-          <StoreExtensionDetail
-            changelogMarkdown={changelogMarkdown}
-            entry={selectedStore}
-            iconUrl={iconUrlForCatalogEntry(selectedStore)}
-            installedVersion={installed.find((extension) => extension.id === selectedStore.name)?.state.version}
-            loadingContent={loadingContent}
-            onBack={() => setSelectedStoreId(undefined)}
-            onInstall={() => setConsentEntry(selectedStore)}
-            readmeMarkdown={readmeMarkdown}
-            screenshotUrls={
-              catalogSnapshot ? selectedStore.screenshots.map((path) => assetUrl(catalogSnapshot.url, path)) : []
-            }
-          />
-        ) : (
-          <StoreTab
-            catalog={catalog}
-            iconUrlForCatalogEntry={iconUrlForCatalogEntry}
-            iconUrlForInstalled={iconUrlForInstalled}
-            installed={installed}
-            loading={loading}
-            onInstalledDetails={(extension) => setSelectedInstalledId(extension.id)}
-            onRefresh={() => void load()}
-            onRemove={(extension) => void uninstallExtension(extension)}
-            onSetChatBarAutoOpen={(extension, chatBarAutoOpen) =>
-              void setExtensionState(extension, { chatBarAutoOpen })
-            }
-            onSetEnabled={(extension, enabled) => void setExtensionState(extension, { enabled })}
-            onStoreDetails={(entry) => setSelectedStoreId(entry.name)}
-            pendingIds={pendingIds}
-          />
-        )}
-        <InstallConsentDialog
-          entry={consentEntry}
-          installing={Boolean(consentEntry && pendingIds.has(consentEntry.name))}
-          onCancel={() => setConsentEntry(undefined)}
-          onConfirm={() => {
-            if (consentEntry) void installExtension(consentEntry);
-          }}
-          open={Boolean(consentEntry)}
-        />
-      </DialogContent>
-    </Dialog>
+    <div className='extensions-group bg-destructive/10 px-4 py-2.5 text-[13px] font-normal text-destructive'>
+      {error}
+    </div>
   );
+}
+
+/** The store/installed list, rendered inside the Extensions Store section. */
+export function ExtensionsBrowserList({ state }: { state: ExtensionsBrowserState }) {
+  return (
+    <div className='flex flex-col gap-3'>
+      <ExtensionsErrorBanner error={state.error} />
+      {state.loading && !state.catalogSnapshot ? (
+        <ExtensionEmptyState
+          description='Reading the installed registry and extension catalog.'
+          icon={IconPuzzle}
+          title='Loading extensions…'
+        />
+      ) : state.error && !state.catalogSnapshot ? (
+        <ExtensionEmptyState
+          action={
+            <Button
+              className='font-normal'
+              onClick={() => void state.load()}
+              size='sm'
+              type='button'
+              variant='outline'
+            >
+              <IconRefresh data-icon='inline-start' />
+              Try again
+            </Button>
+          }
+          description={state.error}
+          icon={IconPuzzle}
+          title='Extensions unavailable'
+        />
+      ) : (
+        <StoreTab
+          catalog={state.catalog}
+          iconUrlForCatalogEntry={state.iconUrlForCatalogEntry}
+          iconUrlForInstalled={state.iconUrlForInstalled}
+          installed={state.installed}
+          loading={state.loading}
+          onInstalledDetails={(extension) => state.setSelectedInstalledId(extension.id)}
+          onRefresh={() => void state.load()}
+          onRemove={(extension) => void state.uninstallExtension(extension)}
+          onSetChatBarAutoOpen={(extension, chatBarAutoOpen) =>
+            void state.setExtensionState(extension, { chatBarAutoOpen })
+          }
+          onSetEnabled={(extension, enabled) => void state.setExtensionState(extension, { enabled })}
+          onStoreDetails={(entry) => state.setSelectedStoreId(entry.name)}
+          pendingIds={state.pendingIds}
+        />
+      )}
+    </div>
+  );
+}
+
+/** One extension's detail page, rendered in place of the whole Extensions page. */
+export function ExtensionsBrowserDetail({ state }: { state: ExtensionsBrowserState }) {
+  const { catalogSnapshot, consentEntry, selectedInstalled, selectedStore } = state;
+  return (
+    <div className='flex flex-col gap-3'>
+      <ExtensionsErrorBanner error={state.error} />
+      {selectedInstalled ? (
+        <InstalledExtensionDetail
+          catalogEntry={state.catalogById.get(selectedInstalled.id)}
+          extension={selectedInstalled}
+          iconUrl={state.iconUrlForInstalled(selectedInstalled)}
+          onBack={() => state.setSelectedInstalledId(undefined)}
+          onSetState={(patch) => state.setExtensionState(selectedInstalled, patch)}
+          onUninstall={() => state.uninstallExtension(selectedInstalled)}
+          onUpdate={() => {
+            const entry = state.catalogById.get(selectedInstalled.id);
+            return entry ? state.installExtension(entry) : Promise.resolve();
+          }}
+          pending={state.pendingIds.has(selectedInstalled.id)}
+        />
+      ) : selectedStore ? (
+        <StoreExtensionDetail
+          changelogMarkdown={state.changelogMarkdown}
+          entry={selectedStore}
+          iconUrl={state.iconUrlForCatalogEntry(selectedStore)}
+          installedVersion={state.installed.find((extension) => extension.id === selectedStore.name)?.state.version}
+          loadingContent={state.loadingContent}
+          onBack={() => state.setSelectedStoreId(undefined)}
+          onInstall={() => state.setConsentEntry(selectedStore)}
+          readmeMarkdown={state.readmeMarkdown}
+          screenshotUrls={
+            catalogSnapshot ? selectedStore.screenshots.map((path) => assetUrl(catalogSnapshot.url, path)) : []
+          }
+        />
+      ) : null}
+      <InstallConsentDialog
+        entry={consentEntry}
+        installing={Boolean(consentEntry && state.pendingIds.has(consentEntry.name))}
+        onCancel={() => state.setConsentEntry(undefined)}
+        onConfirm={() => {
+          if (consentEntry) void state.installExtension(consentEntry);
+        }}
+        open={Boolean(consentEntry)}
+      />
+    </div>
+  );
+}
+
+export function ExtensionsBrowser({ active, transport }: { active: boolean; transport: ExtensionsModalTransport }) {
+  const state = useExtensionsBrowserState({ active, transport });
+  return state.detailOpen ? <ExtensionsBrowserDetail state={state} /> : <ExtensionsBrowserList state={state} />;
 }
 
 export { InstalledExtensionCard, StoreExtensionCard } from './extension-card';
@@ -292,4 +337,4 @@ export { InstalledExtensionDetail, StoreExtensionDetail } from './extension-deta
 export { InstallConsentDialog } from './install-consent';
 export { InstalledTab } from './installed-tab';
 export { PreferencesForm } from './preferences-form';
-export type { ExtensionsModalTransport } from './transport';
+export { createExtensionsModalTransport, type ExtensionsModalTransport } from './transport';

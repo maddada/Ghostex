@@ -898,7 +898,7 @@ fn source_code_server_checkout_version(repo_root: &Path) -> Option<String> {
     let package_json = fs::read_to_string(repo_root.join("lib/vscode/package.json")).ok()?;
     let value = serde_json::from_str::<serde_json::Value>(&package_json).ok()?;
     let version = value.get("version")?.as_str()?.trim();
-    (!version.is_empty()).then(|| format!("VS Code {version}"))
+    (!version.is_empty()).then(|| version.to_string())
 }
 
 pub(super) fn plugin_settings_status_message(app: &GhostexGpuiApp) -> serde_json::Value {

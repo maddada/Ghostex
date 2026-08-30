@@ -83,7 +83,18 @@ async function rpc<TResult>(path: string, params: Record<string, unknown>): Prom
   return envelope.result as TResult;
 }
 
-export function createExtensionsModalTransport(): ExtensionsModalTransport {
+/**
+ * CDXC:Extensions 2026-08-30:
+ * The Extensions settings page is part of the shared Settings modal, which the
+ * web app also mounts. Only the desktop shell injects
+ * `window.ghostexGpui.gxserverBootstrap`, so this returns `undefined` where
+ * there is no gxserver to talk to and the page hides the store instead of
+ * rendering a surface whose every request would fail.
+ */
+export function createExtensionsModalTransport(): ExtensionsModalTransport | undefined {
+  if (!gxserverBootstrap()) {
+    return undefined;
+  }
   return {
     catalog: () => rpc<GhostexExtensionsCatalogResult>('/api/extensionsCatalog', {}),
     install: (id) => rpc<GhostexInstallExtensionResult>('/api/installExtension', { id }),

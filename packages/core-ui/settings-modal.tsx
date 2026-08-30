@@ -132,15 +132,16 @@ import {
   rememberSettingsModalScrollTop,
   rememberSettingsModalTab,
 } from './settings-modal/navigation-memory';
+import { ChatFileOpenViewSetting } from './settings-modal/chat-file-open-view-field';
 import { getMostlyVisibleSettingsSectionId, isAdvancedMainSetting } from './settings-modal/search';
 import { AboutSettingsTab } from './settings-modal/tabs/about';
 import { ActionsSettingsTab } from './settings-modal/tabs/actions';
 import { AgentsSettingsTab } from './settings-modal/tabs/agents';
+import { ExtensionsSettingsTab } from './settings-modal/tabs/extensions';
 import { HotkeysSettingsTab } from './settings-modal/tabs/hotkeys';
 import { IntegrationsSettingsTab } from './settings-modal/tabs/integrations';
 import { OpenTargetsSettingsTab } from './settings-modal/tabs/open-targets';
 import { OSIntegrationSettingsTab } from './settings-modal/tabs/os-integration';
-import { PluginsSettingsTab } from './settings-modal/tabs/plugins';
 import { ProjectsSettingsPanel } from './settings-modal/tabs/projects';
 import { RemoteSettingsTab } from './settings-modal/tabs/remote';
 import {
@@ -398,6 +399,7 @@ export function SettingsModal({
   const autoSleepSectionRef = useRef<HTMLDivElement>(null);
   const browserSectionRef = useRef<HTMLDivElement>(null);
   const editorSectionRef = useRef<HTMLDivElement>(null);
+  const fileOpeningSectionRef = useRef<HTMLDivElement>(null);
   const ghosttyBehaviorSectionRef = useRef<HTMLDivElement>(null);
   const ghosttyScrollingSectionRef = useRef<HTMLDivElement>(null);
   const ghosttyTerminalSectionRef = useRef<HTMLDivElement>(null);
@@ -717,7 +719,7 @@ export function SettingsModal({
     appIcon: appIconSectionRef,
     autoSleep: autoSleepSectionRef,
     beta: betaSectionRef,
-    builtInFeatures: browserSectionRef,
+    fileOpening: fileOpeningSectionRef,
     browser: browserSectionRef,
     chat: chatSectionRef,
     debugging: debuggingSectionRef,
@@ -806,6 +808,7 @@ export function SettingsModal({
     debuggingSectionRef,
     dialogContentRef,
     editorSectionRef,
+    fileOpeningSectionRef,
     getMainSettingsSectionMeasurementItems,
     ghostexFolderStats,
     ghostexFolderStatsLoading,
@@ -1479,10 +1482,14 @@ export function SettingsModal({
                   The accent color drives --ghostex-accent on every React
                   surface, so it uses the same web color picker as Background
                   Tint instead of a native input[type=color].
+
+                  CDXC:AccentColor 2026-08-30:
+                  Accent Color is an advanced Theming row. It also colors the
+                  up-arrow markers on advanced Settings rows.
                 */}
                             {mainSettingVisible(settingsSearch.theming, 'accentColor') ? (
                               <WebColorPickerField
-                                description='Highlight color for accent text and status highlights.'
+                                description='Highlight color for accent text, status highlights, and advanced-setting markers. This color is used minimally in the app.'
                                 label='Accent Color'
                                 {...getSettingModificationProps('accentColor')}
                                 onChange={(value) => updateDraftDebounced('accentColor', value)}
@@ -1722,6 +1729,40 @@ export function SettingsModal({
                                 onChange={(checked) =>
                                   updateDraft('showUntrackedProjectDiffWhenNoTrackedChanges', checked)
                                 }
+                              />
+                            ) : null}
+                          </SettingsSection>
+                        ) : null}
+
+                        {mainSubsectionVisible('fileOpening', settingsSearch.fileOpening) ? (
+                          /*
+                           * CDXC:Extensions 2026-08-30:
+                           * These two controls used to sit on the Customize page,
+                           * which became Settings → Extensions. Where a chat file
+                           * link opens is app behaviour rather than something you
+                           * install, so it lives with the other Tools settings.
+                           */
+                          <SettingsSection
+                            description='Choose where supported file links from agent chat open. If that view is unavailable, Ghostex uses the other available view.'
+                            sectionRef={fileOpeningSectionRef}
+                            title='File opening'
+                          >
+                            {mainSettingVisible(settingsSearch.fileOpening, 'markdownFileOpenView') ? (
+                              <ChatFileOpenViewSetting
+                                id='markdown-file-open-view'
+                                label='Markdown files'
+                                onChange={(value) => updateDraft('markdownFileOpenView', value)}
+                                subtitle='Applies to .md, .markdown, .mdown, and .mkdn links in agent chat.'
+                                value={draft.markdownFileOpenView}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.fileOpening, 'htmlFileOpenView') ? (
+                              <ChatFileOpenViewSetting
+                                id='html-file-open-view'
+                                label='HTML files'
+                                onChange={(value) => updateDraft('htmlFileOpenView', value)}
+                                subtitle='Applies to .html and .htm links in agent chat.'
+                                value={draft.htmlFileOpenView}
                               />
                             ) : null}
                           </SettingsSection>
@@ -2703,16 +2744,18 @@ export function SettingsModal({
                   </TabsContent>
                 ) : null}
                 {!isFirstLaunchSetup ? (
-                  <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='plugins'>
-                    <PluginsSettingsTab
+                  <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='extensions'>
+                    <ExtensionsSettingsTab
+                      isActive={isOpen && activeTab === 'extensions'}
                       onRequestStatus={onRequestPluginSettingsStatus}
                       onReinstallPlugin={onReinstallPlugin}
                       onUpdateSetting={updateDraft}
-                      search={extraSettingsTabSearches.plugins}
+                      search={extraSettingsTabSearches.extensions}
                       searchEmptyState={settingsSearchEmptyState}
                       settings={draft}
                       status={pluginSettingsStatus}
                       statusLoading={pluginSettingsStatusLoading}
+                      vscode={vscode}
                     />
                   </TabsContent>
                 ) : null}
