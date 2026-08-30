@@ -473,14 +473,15 @@ export function SessionChatMonacoInput({
               };
               return {
                 options: {
-                  after: {
+                  before: {
                     attachedData: { referenceIndex: index },
                     content: referencePillInjectedText(reference.label, reference.kind),
-                    // The pill is projected after its one invisible model
-                    // token. Monaco's only caret stop for that injected text
-                    // is therefore its right edge; the token's start remains
-                    // the natural left edge. No cursor correction is needed.
-                    cursorStops: 1,
+                    // Project the pill before its one invisible model token.
+                    // Its only injected-text caret stop is the left edge; the
+                    // token's end naturally remains the right edge. The token
+                    // therefore wraps with the pill instead of staying on the
+                    // preceding visual line while the pill moves below it.
+                    cursorStops: 2,
                     inlineClassName: `${REFERENCE_PILL_CLASS} ${REFERENCE_PILL_CLASS}--${reference.kind} ${REFERENCE_PILL_ID_CLASS_PREFIX}${index}`,
                     inlineClassNameAffectsLetterSpacing: true,
                   },
