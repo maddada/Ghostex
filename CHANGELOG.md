@@ -1,5 +1,33 @@
 # Changelog
 
+## 8.3.0 - 2026-08-30
+
+- Major
+  - Hermes Agent is now a first-class Session Chat agent, with its own transcript reader, model pill, welcome art, automatic session titles, hook allowlisting, and handoff hints.
+  - Agent questions asked by Pi, Hermes, and oh-my-pi are answerable straight from the chat card, each driven through that CLI's own picker, alongside the existing Claude and Codex support.
+  - Settings has a single Extensions page: the built-in features Ghostex ships sit above the extension store and your installed list, replacing the separate Customize page and the standalone Extensions window, and every menu, shortcut, and command-palette entry now opens it.
+  - A remote machine's project Actions load in the sidebar and run in the desktop command pane, so remote work no longer has to be started from a terminal by hand.
+- Minor
+  - Session Chat can give the transcript its own width, and the terminal view can use the full pane, match the chat width, or take an independent width of its own.
+  - Terminal notices can be answered with number keys, single-select questions submit as soon as you pick an option, and Claude's model-switch and paused pickers are answerable from chat.
+  - The composer's model and options pills stay as loading placeholders until the agent's screen is actually readable, instead of flashing empty labels while a CLI is still starting.
+  - Files and folders dragged from the desktop attach through their native paths, so local drops land as real attachments rather than unresolved names.
+  - Composer reference pills stay atomic, wrap with their own text, and no longer leak into the message the agent receives; pasting long text into the composer is noticeably faster.
+  - Empty draft sessions now stay until you delete or send them, instead of disappearing on their own.
+  - New installs open with an ice-tinted app chrome and a lighter accent color, and Accent Color now also marks advanced rows in Settings.
+  - First-launch setup finishes only when your first project starts — Escape and the close button no longer end it halfway — and its Skills step sets up the Ghostex CLI for you when a selected skill needs it.
+  - Chinese, Japanese, and Korean input works properly in the terminal: the composition caret is drawn in place, and Backspace edits the composition instead of deleting text behind it.
+  - Opening a file in Code from agent chat or the Agents Hub is queued until the editor is ready, instead of failing when the request beats the workbench.
+  - Spaces respond to trackpad swipes, and the Space switcher and its overflow menu are rounder and easier to hit; Settings moved into the sidebar's More menu.
+  - Prompt search no longer fills up with the title, commit-message, and sub-agent scaffolding turns that agents write into the same transcripts.
+  - Kanban card conversation links display again on large shared boards, and jumping to a dead linked session resumes the agent conversation rather than an empty shell.
+  - Custom agents keep their activity across identity updates and resume through their own CLI family.
+  - Long automation prompts stay inside their detail cards, chat surfaces no longer show stray browser focus rings, and child windows open centered on the main display.
+  - The Terminal View button previews the agent's CLI on hover with a readable tail, and Summary mode shows its state as its own icon.
+  - Markdown ordered lists keep the numbering the agent wrote instead of being merged into one run.
+  - macOS 26 and later no longer crash the zmx daemon on exit, and Codex session files resolve correctly on macOS.
+  - Android and iOS gain the custom transcript width toggle; on iOS the chat view loads reliably again and Send & Attach File opens the document picker as expected.
+
 ## 8.2.0 - 2026-08-28
 
 - Major
