@@ -73,6 +73,14 @@ impl GhostexGpuiApp {
         shell_session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        // This is the Terminal View button's directional command. Native
+        // terminal events and CEF host messages travel through separate
+        // queues, so a rapid click can otherwise arrive after Chat View is
+        // already visible and act like a second toggle. A stale request to
+        // show the view that is already showing is a no-op.
+        if self.agents_chat_mode_sessions.contains(&shell_session_id) {
+            return;
+        }
         if !self.agents_session_chat_eligible(shell_session_id) {
             return;
         }

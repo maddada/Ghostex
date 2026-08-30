@@ -863,7 +863,7 @@ impl GhostexGpuiApp {
                 let _ = self.open_gpui_stashed_prompts_modal_for_focused_agents_session(cx);
             }
             TerminalAgentActionRequest::ToggleChatView => {
-                self.handoff_agents_session_chat_mode(session_id, cx);
+                self.request_terminal_handoff_to_session_chat(session_id, cx);
             }
         }
     }
