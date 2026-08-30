@@ -32,6 +32,24 @@ use crate::*;
 const COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP: &str =
     "Double click an empty space for a new terminal, and right click to toggle collapsing.";
 
+fn build_command_pane_empty_titlebar_tooltip(
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> gpui::AnyView {
+    /*
+    This guidance belongs on the 26px tab bar itself. Remove the standard
+    tooltip's outer vertical margin and size the bubble inside the overlay's
+    4px viewport inset so bottom-docked collapsed chrome is not clamped above
+    the bar.
+    */
+    Tooltip::new(COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP)
+        .h(px(COMMAND_PANE_TAB_BAR_HEIGHT - 8.0))
+        .my_0()
+        .py_0()
+        .text_xs()
+        .build(window, cx)
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn render_command_pane_leaf(
         &self,
@@ -187,8 +205,8 @@ impl GhostexGpuiApp {
                     .items_center()
                     .overflow_hidden()
                     .track_scroll(&scroll_handle)
-                    .managed_tooltip_with_placement(ManagedTooltipPlacement::Below, |window, cx| {
-                        Tooltip::new(COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP).build(window, cx)
+                    .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, |window, cx| {
+                        build_command_pane_empty_titlebar_tooltip(window, cx)
                     })
                     .on_scroll_wheel(cx.listener(
                         move |_this, event: &ScrollWheelEvent, window, cx| {
@@ -377,10 +395,7 @@ impl GhostexGpuiApp {
                             .track_scroll(&scroll_handle)
                             .managed_tooltip_with_placement(
                                 ManagedTooltipPlacement::Right,
-                                |window, cx| {
-                                    Tooltip::new(COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP)
-                                        .build(window, cx)
-                                },
+                                |window, cx| build_command_pane_empty_titlebar_tooltip(window, cx),
                             )
                             .on_scroll_wheel(cx.listener(
                                 move |_this, event: &ScrollWheelEvent, window, cx| {
