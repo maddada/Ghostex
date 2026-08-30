@@ -23,6 +23,7 @@
   - Kanban card conversation links display again on large shared boards, and jumping to a dead linked session resumes the agent conversation rather than an empty shell.
   - Custom agents keep their activity across identity updates and resume through their own CLI family.
   - Saved Prompts lets you change tags and favorites on prompts you already saved, not only while saving them.
+  - Session Chat pins an agent-working indicator above the composer, so a running turn stays visible no matter where the transcript is scrolled.
   - Interrupting a Codex session no longer trips a hook-output error, because the Ghostex notify hook now returns the response Codex's Interrupt event accepts.
   - Long automation prompts stay inside their detail cards, chat surfaces no longer show stray browser focus rings, and child windows open centered on the main display.
   - The Terminal View button previews the agent's CLI on hover with a readable tail, and Summary mode shows its state as its own icon.
