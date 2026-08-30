@@ -271,16 +271,22 @@ impl GhostexGpuiApp {
             px(CEF_COMPONENT_WINDOW_HEIGHT),
         );
         let options = WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(gpui::Bounds::centered_at(
-                self.main_window_bounds.center(),
+            /*
+            This window only ever opens in the ghostex-gpui-cef-bootstrap
+            process, which installs CEF before the real app exists. There is no
+            main window to center against there, so it centers on the primary
+            display.
+            */
+            window_bounds: Some(WindowBounds::Windowed(gpui::Bounds::centered(
+                None,
                 window_size,
+                cx,
             ))),
             app_id: gpui_platform_window_app_id(),
             focus: true,
             icon: gpui_platform_window_icon(),
             show: true,
             is_resizable: false,
-            display_id: self.main_window_display_id,
             titlebar: Some(gpui::TitlebarOptions {
                 title: Some("Ghostex Setup".into()),
                 appears_transparent: false,
