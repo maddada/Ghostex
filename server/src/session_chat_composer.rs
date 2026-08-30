@@ -268,9 +268,7 @@ pub fn session_chat_composer_agent_id(session: &serde_json::Value) -> Option<Str
         // read. Without this, every terminal classifier (composer signature,
         // statusline options, notices, activity) sees an unknown agent and the
         // chat's option pills never leave their loading skeleton.
-        Some(agent_id) if agent_id.starts_with("custom-") => {
-            launch_icon_agent().or(Some(agent_id))
-        }
+        Some(agent_id) if agent_id.starts_with("custom-") => launch_icon_agent().or(Some(agent_id)),
         Some(agent_id) => Some(agent_id),
         None => launch_icon_agent(),
     }

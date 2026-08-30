@@ -259,9 +259,12 @@ function PillTrigger({
   title: string;
 }) {
   // A skeleton has no value to name, so the tooltip and the accessible name
-  // say what is happening instead of reading out the category word.
+  // say what is happening instead of reading out the category word. An
+  // icon-only pill (mode) keeps its icon-only shape while loading: its
+  // skeleton is the glyph-sized bar, and growing a chevron it will not have
+  // when resolved would move the composer row twice.
   const loadingText = skeleton ? pillLoadingText(skeleton) : '';
-  const resolvedIconOnly = iconOnly && skeleton === undefined;
+  const resolvedIconOnly = iconOnly;
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
       <DropdownMenuTrigger
@@ -331,6 +334,16 @@ function PillButton({
         ) : null}
       </Button>
     </AppTooltip>
+  );
+}
+
+/** The Shift+Tab permission-mode cycler: rendered as its own icon pill, never
+ *  as a row of the Options menu. */
+function isShiftTabModeCycler(descriptor: SessionChatOptionDescriptor): boolean {
+  return (
+    descriptor.category === 'mode' &&
+    descriptor.dispatch.kind === 'cyclic-key-steps' &&
+    descriptor.dispatch.key === 'shift-tab'
   );
 }
 
@@ -656,13 +669,29 @@ export function SessionChatSessionOptionPills({
     </span>
   );
   const modelLabel = sessionChatOptionValueLabel(catalog.model, state);
-  const modeButton = visibleOptions.find(
-    (descriptor) =>
-      descriptor.category === 'mode' &&
-      descriptor.dispatch.kind === 'cyclic-key-steps' &&
-      descriptor.dispatch.key === 'shift-tab'
-  );
+  const modeButton = visibleOptions.find(isShiftTabModeCycler);
   const menuOptions = modeButton ? visibleOptions.filter((descriptor) => descriptor !== modeButton) : visibleOptions;
+  /*
+  Claude's catalog withholds model-scoped options (effort) until the model is
+  known, so a session that is still loading has no menu options at all — which
+  would erase the Options pill exactly when it should be a skeleton. If any
+  model in the catalog would grow dispatchable menu options, the pill exists
+  during loading too; an agent that can never have one still shows nothing.
+  */
+  const menuOptionsMayResolve =
+    menuOptions.length > 0 ||
+    (catalog.model.choices ?? []).some((choice) =>
+      catalog
+        .optionsForModel(choice.value)
+        .some(
+          (descriptor) =>
+            !isShiftTabModeCycler(descriptor) &&
+            (canSendKey ||
+              (descriptor.dispatch.kind !== 'key' &&
+                descriptor.dispatch.kind !== 'bounded-key-steps' &&
+                descriptor.dispatch.kind !== 'cyclic-key-steps'))
+        )
+    );
   const modeLabel = modeButton ? sessionChatOptionValueLabel(modeButton, state) : null;
   const modeValue = modeButton ? state[modeButton.id]?.value : undefined;
   const modeIcon = modeValue ? <ClaudePermissionModeIcon mode={modeValue} /> : null;
@@ -846,7 +875,9 @@ export function SessionChatSessionOptionPills({
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
-      {menuOptions.length > 0 ? (
+      {/* The trigger is disabled while its skeleton shows, so the empty menu a
+          still-loading pill would open is unreachable. */}
+      {menuOptions.length > 0 || (menuOptionsMayResolve && skeletonFor('options', optionsLabel) !== undefined) ? (
         <DropdownMenu>
           <PillTrigger
             ariaLabel={optionsTitle}

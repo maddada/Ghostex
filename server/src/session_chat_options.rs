@@ -87,6 +87,22 @@ pub const SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS: u64 = 1;
 /// both values are present instead of leaving a cached startup miss visible.
 pub const SESSION_CHAT_OPTION_STARTUP_RECONCILE_TICKS: u64 = 10;
 
+/*
+CDXC:SessionChatScreenProbed (settled 2026-08-30):
+A drawn screen whose statusline has not painted yet must not settle the probe.
+Claude draws its composer chrome (and the permission-mode footer this grammar
+reads) immediately, but the user's statusline script runs asynchronously, so
+the model segment can trail the rest of the screen by seconds — settling on
+that first capture flashes a bare "Model" pill right before the value lands.
+So a statusline agent's otherwise-settleable capture that names NO model holds
+`attempted` false for this long, counted from the first such capture. Chosen to
+fit inside the 10×1s startup reconcile window, so both the value arriving and
+the grace expiring land on a fast probe rather than the 30s steady tier. After
+it, "this screen names no model" is the settled answer — statuslines are
+user-configured and may legitimately be absent.
+*/
+pub const SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE: Duration = Duration::from_secs(6);
+
 // ---------------------------------------------------------------------------
 // Result types (mirror of packages/shared/session-chat.ts SessionChatDetectedOptions)
 // ---------------------------------------------------------------------------
@@ -228,18 +244,22 @@ pub struct SessionChatTerminalDetection {
     /// or capped capture must never retire a notice.
     pub captured: bool,
     /*
-    CDXC:SessionChatScreenProbed 2026-08-22:
-    True once a capture was ATTEMPTED for this session, whatever came back.
+    CDXC:SessionChatScreenProbed 2026-08-22 (settled 2026-08-30):
+    True once detection has a SETTLED answer for this session — not merely once
+    a capture was tried. A capture of a still-booting CLI comes back as a blank
+    or shell screen that no classifier recognizes; saying "probed" then makes
+    the model pill drop its loading skeleton for a bare category label seconds
+    before the statusline it will name arrives. So the bit is earned by
+    evidence: some classifier recognized the agent's chrome (options, notice,
+    activity, fleet, or a Ready composer), or the capture itself failed —
+    a stopped or sleeping session has no screen to read, and that answer is
+    final until it runs again, so it must never sit under a skeleton.
 
-    Deliberately weaker than `captured`, and for a different consumer. `captured`
-    answers "can I trust an absence?" — only a whole screen proves a notice is
-    gone. `attempted` answers "has the looking happened?", which is what the chat
-    composer needs to stop showing a loading skeleton on its model/effort pills.
-
-    They must not be the same bit: a stopped or sleeping session has no screen to
-    capture, so `captured` is false forever, and a skeleton keyed on it would
-    shimmer for the life of the session. The attempt still happened, and its
-    answer — there is nothing to read — is final until the session runs again.
+    Deliberately different from `captured`, and for a different consumer.
+    `captured` answers "can I trust an absence?" — only a whole screen proves a
+    notice is gone, so a failed capture keeps it false. `attempted` answers
+    "has looking produced an answer?", which is what the chat composer needs to
+    stop showing a loading skeleton on its model/effort pills.
     */
     pub attempted: bool,
 }
@@ -1120,34 +1140,48 @@ pub fn detect_session_chat_terminal_state(
     let notice = screen.and_then(|capture| {
         crate::session_chat_notice::classify_session_chat_terminal_notice(agent_id, &capture.text)
     });
+    let options = merge_session_chat_option_selections(transcript, terminal)
+        .map(SessionChatDetectedOptions::new);
+    let composer = match screen {
+        Some(capture) => crate::session_chat_composer::detect_session_chat_composer_readiness(
+            agent_id,
+            &capture.text,
+            notice.as_ref(),
+        ),
+        None => crate::session_chat_composer::SessionChatComposerReadiness::default(),
+    };
+    let activity = screen.and_then(|capture| {
+        crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
+            agent_id,
+            &capture.text,
+        )
+    });
+    let fleet = screen.and_then(|capture| {
+        crate::session_chat_agent_fleet::detect_session_chat_agent_fleet(agent_id, &capture.text)
+    });
+    /*
+    CDXC:SessionChatScreenProbed (settled 2026-08-30): probed only counts once
+    the answer is settled. A capture that failed IS settled — a sleeping or
+    stopped session has nothing to read, and that stays true until it runs. A
+    capture that succeeded settles only when some classifier recognized the
+    agent on it; a blank screen behind a CLI that is still booting is "not read
+    yet", so the model pill keeps its loading skeleton instead of flashing a
+    bare "Model" label until the statusline draws.
+    */
+    let attempted = capture.is_none()
+        || options.is_some()
+        || notice.is_some()
+        || activity.is_some()
+        || fleet.is_some()
+        || composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
     SessionChatTerminalDetection {
-        options: merge_session_chat_option_selections(transcript, terminal)
-            .map(SessionChatDetectedOptions::new),
-        composer: match screen {
-            Some(capture) => crate::session_chat_composer::detect_session_chat_composer_readiness(
-                agent_id,
-                &capture.text,
-                notice.as_ref(),
-            ),
-            None => crate::session_chat_composer::SessionChatComposerReadiness::default(),
-        },
+        options,
+        composer,
         notice,
-        activity: screen.and_then(|capture| {
-            crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
-                agent_id,
-                &capture.text,
-            )
-        }),
-        fleet: screen.and_then(|capture| {
-            crate::session_chat_agent_fleet::detect_session_chat_agent_fleet(
-                agent_id,
-                &capture.text,
-            )
-        }),
+        activity,
+        fleet,
         captured: screen.is_some(),
-        // We got past the agent check, so a capture was tried. Whether it came
-        // back is `captured`'s business, not this field's.
-        attempted: true,
+        attempted,
     }
 }
 
@@ -1613,6 +1647,10 @@ CLI), so the cache entry carries both readings and neither costs an extra spawn.
 */
 pub(crate) struct SessionChatOptionCacheEntry {
     pub(crate) fetched_at: std::time::Instant,
+    /// First capture that was settle-eligible except for its missing model —
+    /// the anchor `SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE` counts from. Cleared
+    /// the moment a model (or a screen-owning notice) shows up.
+    pub(crate) model_grace_started: Option<std::time::Instant>,
     pub(crate) value: crate::session_chat_options::SessionChatTerminalDetection,
 }
 
@@ -1748,10 +1786,46 @@ impl SessionChatOptionDetector {
             reading an older anchor would make every client count that interval
             twice. Holding a fleet still is `same_fleet`'s job.
             */
+            /*
+            CDXC:SessionChatScreenProbed (settled 2026-08-30): the model grace.
+            The pure detector settles on any recognized chrome, but Claude's
+            permission-mode footer and composer paint seconds before the async
+            statusline that names the model. For an agent whose grammar CAN
+            name a model, an otherwise-settled capture with no model stays
+            unsettled for `SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE` from the
+            first such capture, so the model pill keeps its skeleton until the
+            statusline lands — or until the grace decides no statusline is
+            coming. A screen-owning notice (trust dialog, expired login) is
+            exempt: the model cannot render behind it, and that state can hold
+            indefinitely, so it settles at once. Lives here, not in the pure
+            function, because the anchor needs the per-session cache.
+            */
+            let model_missing = detected
+                .options
+                .as_ref()
+                .map_or(true, |options| options.selection.model.is_none());
+            let mut model_grace_started = None;
+            if detected.attempted
+                && model_missing
+                && detected.notice.is_none()
+                && crate::session_chat_options::session_chat_option_agent(agent).is_some()
+            {
+                let started = cache
+                    .get(&key)
+                    .and_then(|entry| entry.model_grace_started)
+                    .unwrap_or_else(std::time::Instant::now);
+                if started.elapsed()
+                    < crate::session_chat_options::SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE
+                {
+                    detected.attempted = false;
+                }
+                model_grace_started = Some(started);
+            }
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
                     fetched_at: std::time::Instant::now(),
+                    model_grace_started,
                     value: detected.clone(),
                 },
             );
