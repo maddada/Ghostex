@@ -138,9 +138,10 @@ impl GhostexGpuiApp {
                     first page now. Two markers still gate it, and they mean
                     different things: the revision marker says "this revision's
                     setup was presented", written when the window exists, so a
-                    future revision bump shows it again; `complete` says "the
-                    user closed it", written on close, so quitting mid-setup
-                    brings it back on the next launch.
+                    future revision bump shows it again; `complete` says the
+                    user successfully finished setup, written only after the
+                    first project starts, so an interrupted setup comes back
+                    on the next launch.
                     */
                     let show_os_integration_toast = !state.os_integration_onboarding_seen;
                     if changed {

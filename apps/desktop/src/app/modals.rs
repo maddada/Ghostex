@@ -1440,6 +1440,15 @@ impl GhostexGpuiApp {
         self.app_modal_window = cx
             .open_window(options, |modal_window, cx| {
                 modal_window.activate_window();
+                if modal == GpuiAppModalKind::FirstLaunchSetup {
+                    /*
+                    First-launch setup is completed only by its successful
+                    first-project action. Reject native close controls and
+                    Cmd-W while it is open; the completion bridge removes the
+                    window programmatically after persisting completion.
+                    */
+                    modal_window.on_window_should_close(cx, |_window, _cx| false);
+                }
                 GpuiAppModalHostWindow::new(
                     modal_window,
                     url,
@@ -1597,9 +1606,6 @@ impl GhostexGpuiApp {
         self.app_modal_ready_retry_used = false;
         self.restore_gpui_app_modal_command_return_focus_if_needed(cx);
         self.resume_deferred_gpui_portless_setup_prompt(cx);
-        if closed_modal == Some(GpuiAppModalKind::FirstLaunchSetup) {
-            self.complete_first_launch_setup();
-        }
         if closed_modal == Some(GpuiAppModalKind::ExportTranscriptResult) {
             self.pending_export_transcript_reveal_path = None;
         }

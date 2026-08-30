@@ -16,7 +16,7 @@ describe('first launch setup modal source', () => {
   test('shows the redesigned six-step sequence and keeps dormant pages out of it', () => {
     /*
     CDXC:FirstLaunchSetup 2026-08-24:
-    The onboarding redesign flow is Welcome -> Plugins -> Agents -> Connect
+    The onboarding redesign flow is Welcome -> Extensions -> Agents -> Connect
     (hooks) -> Skills -> Get started (project). Older page components stay in
     source for future reuse but never enter the visible sequence.
     */
@@ -26,7 +26,7 @@ describe('first launch setup modal source', () => {
       'const FIRST_LAUNCH_STEP_LABELS'
     );
 
-    expect(visiblePages).toMatch(/'welcome',\s*'plugins',\s*'agents',\s*'hooks',\s*'skills',\s*'project',/u);
+    expect(visiblePages).toMatch(/'welcome',\s*'extensions',\s*'agents',\s*'hooks',\s*'skills',\s*'project',/u);
     expect(visiblePages).not.toContain("'preferences'");
     expect(visiblePages).not.toContain("'cli'");
     expect(visiblePages).not.toContain("'video'");

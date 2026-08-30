@@ -74,7 +74,7 @@ import type { WebviewApi } from './webview-api';
 export type FirstLaunchSetupPage =
   | 'video'
   | 'welcome'
-  | 'plugins'
+  | 'extensions'
   | 'agents'
   | 'preferences'
   | 'hooks'
@@ -107,13 +107,14 @@ export type FirstLaunchSetupModalProps = {
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
+  onInstallSelectedSkills?: (skillIds: readonly BundledGhostexAgentSkillId[]) => Promise<void> | void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onOpenAccessibilityPreferences?: () => void;
   onOpenScreenRecordingPreferences?: () => void;
   /** Opens the native folder dialog; the picked path returns as a `firstLaunchProjectFolderPicked` host message. */
   onPickProjectFolder?: () => void;
-  /** Registers the chosen folder as a project and starts the first session in it. `agentId` is a sidebar agent id or `'terminal'`. */
-  onFinishFirstLaunch?: (options: { agentId: string; path: string }) => Promise<void> | void;
+  /** Starts registering the chosen folder as a project and opening its first session. `agentId` is a sidebar agent id or `'terminal'`. */
+  onFinishFirstLaunch?: (options: { agentId: string; path: string }) => void;
   onRequestAgentHookStatus?: (agentIds?: readonly string[]) => void;
   onRequestGhostexCliStatus?: () => void;
   settings?: ghostexSettings;
@@ -200,7 +201,7 @@ const FIRST_LAUNCH_CLI_MOBILE_BENEFITS: readonly FirstLaunchMobileBenefit[] = [
 /*
  * CDXC:FirstLaunchSetup 2026-08-24:
  * The 2026-08-24 onboarding redesign replaced the video/announcement pages with
- * a branching flow: Welcome (use cases) -> Plugins (title-bar view toggles) ->
+ * a branching flow: Welcome (use cases) -> Extensions (title-bar view toggles) ->
  * either Agents (install guides, only when no agent CLI exists) or Install
  * required hooks (only when an agent CLI exists) -> Skills (checkbox picks) ->
  * Get started (first project + default agent + default view + first session).
@@ -209,7 +210,7 @@ const FIRST_LAUNCH_CLI_MOBILE_BENEFITS: readonly FirstLaunchMobileBenefit[] = [
  */
 const FIRST_LAUNCH_SETUP_PAGES: readonly FirstLaunchSetupPage[] = [
   'welcome',
-  'plugins',
+  'extensions',
   'agents',
   'hooks',
   'skills',
@@ -218,8 +219,8 @@ const FIRST_LAUNCH_SETUP_PAGES: readonly FirstLaunchSetupPage[] = [
 
 const FIRST_LAUNCH_STEP_LABELS: Partial<Record<FirstLaunchSetupPage, string>> = {
   agents: 'Agents',
+  extensions: 'Extensions',
   hooks: 'Install required hooks',
-  plugins: 'Plugins',
   project: 'Get started',
   skills: 'Skills',
   welcome: 'Welcome',
@@ -780,8 +781,10 @@ export function FirstLaunchSetupModal({
   onInstallCuaDriver,
   onInstallFable56OrchestrationSkill,
   onInstallGenerateTitleSkill,
+  onInstallGhostexCli,
   onInstallManageBeadsSkill,
   onInstallMoveCodexSessionSkill,
+  onInstallSelectedSkills,
   onOpenAccessibilityPreferences,
   onOpenScreenRecordingPreferences,
   onPickProjectFolder,
@@ -837,6 +840,9 @@ export function FirstLaunchSetupModal({
   const [backgroundAgentChoice, setBackgroundAgentChoice] = useState<SessionTitleGenerationAgent>();
   const [finishError, setFinishError] = useState<string>();
   const [isFinishing, setIsFinishing] = useState(false);
+  const [isInstallingSelectedSkills, setIsInstallingSelectedSkills] = useState(false);
+  const [pendingSkillInstallIds, setPendingSkillInstallIds] = useState<readonly BundledGhostexAgentSkillId[]>();
+  const [skillInstallError, setSkillInstallError] = useState<string>();
   const titleAndCommitAgents = installedCliAgents.filter((agent) =>
     SESSION_TITLE_GENERATION_AGENT_OPTIONS.some((option) => option.value !== 'custom' && option.value === agent.agentId)
   );
@@ -862,6 +868,9 @@ export function FirstLaunchSetupModal({
       setBackgroundAgentChoice(undefined);
       setFinishError(undefined);
       setIsFinishing(false);
+      setIsInstallingSelectedSkills(false);
+      setPendingSkillInstallIds(undefined);
+      setSkillInstallError(undefined);
       setPluginsDraft(createFirstLaunchPluginsDraft(latestSettingsRef.current));
     }
   }, [initialPage, isOpen]);
@@ -872,27 +881,31 @@ export function FirstLaunchSetupModal({
   const nextPage = visiblePages[Math.min(visiblePages.length - 1, activePageIndex + 1)];
 
   const navigateToPage = (page: FirstLaunchSetupPage) => {
-    // What the plugins page shows is what the user gets, so the draft commits
-    // whenever navigation leaves that page.
-    if (activePage === 'plugins' && page !== 'plugins') {
+    // What the extensions page shows is what the user gets, so the draft
+    // commits whenever navigation leaves that page.
+    if (activePage === 'extensions' && page !== 'extensions') {
       commitPluginsDraft(pluginsDraft);
     }
     setRequestedPage(getVisibleFirstLaunchSetupPage(page, visiblePages));
   };
 
-  const finishFirstLaunchSetup = async (pickedPath: string) => {
-    if (activePage === 'plugins') {
+  const finishFirstLaunchSetup = (pickedPath: string) => {
+    if (activePage === 'extensions') {
       commitPluginsDraft(pluginsDraft);
     }
     const path = pickedPath.trim();
-    if (!path || !onFinishFirstLaunch) {
-      onClose();
+    if (!path) {
+      setFinishError('Choose a project folder to finish setup.');
+      return;
+    }
+    if (!onFinishFirstLaunch) {
+      setFinishError('Ghostex could not start the first project.');
       return;
     }
     setFinishError(undefined);
     setIsFinishing(true);
     try {
-      await onFinishFirstLaunch({ agentId: firstProjectSessionAgentId, path });
+      onFinishFirstLaunch({ agentId: firstProjectSessionAgentId, path });
       onClose();
     } catch (error) {
       setFinishError(error instanceof Error ? error.message : 'Ghostex could not open the selected project.');
@@ -906,7 +919,7 @@ export function FirstLaunchSetupModal({
         setFinishError(undefined);
         onPickProjectFolder();
       } else {
-        onClose();
+        setFinishError('Choose a project folder to finish setup.');
       }
       return;
     }
@@ -926,10 +939,8 @@ export function FirstLaunchSetupModal({
   const installableSkillSelection = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter(
     (skill) => selectedSkillIds.has(skill.id) && !isFirstLaunchSkillInstalled(skill.id, ghostexCliStatus)
   );
-  const selectedSkillsNeedCuaDriver =
-    installableSkillSelection.some((skill) => skill.requiresCuaDriver === true) &&
-    ghostexCliStatus?.cuaDriverInstalled !== true;
   const cliReady = ghostexCliStatus?.installed === true;
+  const isSettingUpCliForSkills = pendingSkillInstallIds !== undefined;
   const installSkillHandlers: Partial<Record<BundledGhostexAgentSkillId, (() => void) | undefined>> = {
     browserUse: onInstallBrowserUseSkill,
     cli: onInstallCliSkill,
@@ -949,23 +960,74 @@ export function FirstLaunchSetupModal({
     navigateToPage(nextPage);
   };
 
-  const installSelectedSkillsAndContinue = () => {
-    if (selectedSkillsNeedCuaDriver) {
+  const runSelectedSkillInstallsAndContinue = async (skillIds: readonly BundledGhostexAgentSkillId[]) => {
+    const skillsToInstall = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skillIds.includes(skill.id));
+    if (skillsToInstall.some((skill) => skill.requiresCuaDriver === true) && !ghostexCliStatus?.cuaDriverInstalled) {
       onInstallCuaDriver?.();
     }
-    for (const skill of installableSkillSelection) {
-      installSkillHandlers[skill.id]?.();
+    setIsInstallingSelectedSkills(true);
+    setSkillInstallError(undefined);
+    try {
+      if (onInstallSelectedSkills) {
+        await onInstallSelectedSkills(skillIds);
+      } else {
+        for (const skill of skillsToInstall) {
+          installSkillHandlers[skill.id]?.();
+        }
+      }
+      navigateToPage(nextPage);
+    } catch (error) {
+      setSkillInstallError(error instanceof Error ? error.message : 'Ghostex could not install the selected skills.');
+    } finally {
+      setIsInstallingSelectedSkills(false);
     }
-    navigateToPage(nextPage);
   };
+
+  const installSelectedSkillsAndContinue = () => {
+    const skillIds = installableSkillSelection.map((skill) => skill.id);
+    if (skillIds.length === 0) {
+      navigateToPage(nextPage);
+      return;
+    }
+    if (!cliReady) {
+      if (!onInstallGhostexCli) {
+        setSkillInstallError('Ghostex CLI setup is unavailable. Continue without skills or try again later.');
+        return;
+      }
+      setSkillInstallError(undefined);
+      setPendingSkillInstallIds(skillIds);
+      onInstallGhostexCli();
+      return;
+    }
+    setSkillInstallError(undefined);
+    void runSelectedSkillInstallsAndContinue(skillIds);
+  };
+
+  useEffect(() => {
+    if (!pendingSkillInstallIds || ghostexCliStatusLoading) {
+      return;
+    }
+    if (!cliReady) {
+      setPendingSkillInstallIds(undefined);
+      setSkillInstallError(
+        'Ghostex CLI setup did not make the `ghostex` command available. Continue without skills or retry the setup.'
+      );
+      return;
+    }
+    const skillIds = pendingSkillInstallIds;
+    setPendingSkillInstallIds(undefined);
+    setSkillInstallError(undefined);
+    void runSelectedSkillInstallsAndContinue(skillIds);
+  }, [cliReady, ghostexCliStatusLoading, pendingSkillInstallIds]);
 
   return (
     <Dialog
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) {
-          onClose();
-        }
-      }}
+      /*
+       * First-launch setup is a required flow. Escape and dialog dismissal
+       * requests must leave this controlled dialog open; the successful
+       * first-project path below is its only completion boundary.
+       */
+      onOpenChange={() => undefined}
       open={isOpen}
     >
       <DialogContent
@@ -974,6 +1036,7 @@ export function FirstLaunchSetupModal({
           getSidebarThemeVariant(theme) === 'dark' && 'dark'
         )}
         data-sidebar-theme={theme}
+        onEscapeKeyDown={(event) => event.preventDefault()}
       >
         <DialogHeader className='first-launch-setup-header'>
           <DialogTitle className='first-launch-setup-dialog-title'>Welcome to Ghostex</DialogTitle>
@@ -998,8 +1061,8 @@ export function FirstLaunchSetupModal({
         <div className='first-launch-setup-body'>
           {activePage === 'welcome' ? (
             <FirstLaunchWelcomePage vscode={vscode} />
-          ) : activePage === 'plugins' ? (
-            <FirstLaunchPluginsPage
+          ) : activePage === 'extensions' ? (
+            <FirstLaunchExtensionsPage
               draft={pluginsDraft}
               onToggle={(key, visible) => setPluginsDraft((draft) => ({ ...draft, [key]: visible }))}
             />
@@ -1025,6 +1088,8 @@ export function FirstLaunchSetupModal({
           ) : activePage === 'skills' ? (
             <FirstLaunchSkillsPage
               ghostexCliStatus={ghostexCliStatus}
+              ghostexCliStatusLoading={ghostexCliStatusLoading}
+              isSettingUpCli={isSettingUpCliForSkills}
               onToggleSkill={(skillId, selected) =>
                 setSelectedSkillIds((current) => {
                   const next = new Set(current);
@@ -1043,7 +1108,7 @@ export function FirstLaunchSetupModal({
               attentionNotificationsEnabled={settings.showMacOSAttentionNotifications}
               backgroundAgentId={backgroundAgentId}
               completionSoundEnabled={settings.completionSound !== 'off'}
-              onAddFirstProject={(path) => void finishFirstLaunchSetup(path)}
+              onAddFirstProject={finishFirstLaunchSetup}
               onChangePreferredInterface={(preferredAgentInterface) => updateSettings({ preferredAgentInterface })}
               onSelectBackgroundAgent={(agentId) => {
                 if (agentId !== 'custom') {
@@ -1085,14 +1150,33 @@ export function FirstLaunchSetupModal({
         <div className='first-launch-setup-footer'>
           <span
             aria-live='polite'
-            className={cn('first-launch-setup-footer-note', finishError && 'first-launch-setup-footer-error')}
-            role={finishError ? 'alert' : undefined}
+            className={cn(
+              'first-launch-setup-footer-note',
+              (activePage === 'skills' ? skillInstallError : finishError) && 'first-launch-setup-footer-error'
+            )}
+            role={(activePage === 'skills' ? skillInstallError : finishError) ? 'alert' : undefined}
           >
-            {finishError ?? 'You can re-run this tour anytime from the Tips panel in the title bar.'}
+            {activePage === 'skills'
+              ? (skillInstallError ??
+                (isSettingUpCliForSkills
+                  ? 'Setting up Ghostex CLI before installing the selected skills…'
+                  : isInstallingSelectedSkills
+                    ? 'Installing the selected agent skills…'
+                    : ghostexCliStatusLoading
+                      ? 'Checking Ghostex CLI…'
+                      : !cliReady && installableSkillSelection.length > 0
+                        ? 'Ghostex CLI setup is required before selected skills can be installed.'
+                        : 'You can re-run this tour anytime from the Tips panel in the title bar.'))
+              : (finishError ?? 'You can re-run this tour anytime from the Tips panel in the title bar.')}
           </span>
           <div className='first-launch-setup-footer-actions' role='group' aria-label='Setup actions'>
             {activePageIndex === 0 ? null : (
-              <Button disabled={isFinishing} onClick={() => navigateToPage(previousPage)} type='button' variant='ghost'>
+              <Button
+                disabled={isFinishing || isSettingUpCliForSkills || isInstallingSelectedSkills}
+                onClick={() => navigateToPage(previousPage)}
+                type='button'
+                variant='ghost'
+              >
                 <IconArrowLeft aria-hidden='true' data-icon='inline-start' />
                 Back
               </Button>
@@ -1139,18 +1223,37 @@ export function FirstLaunchSetupModal({
               </>
             ) : activePage === 'skills' ? (
               <>
-                <Button onClick={() => navigateToPage(nextPage)} type='button' variant='ghost'>
+                <Button
+                  disabled={isSettingUpCliForSkills || isInstallingSelectedSkills}
+                  onClick={() => {
+                    setSkillInstallError(undefined);
+                    navigateToPage(nextPage);
+                  }}
+                  type='button'
+                  variant='ghost'
+                >
                   Skip, Install None
                 </Button>
                 <Button
-                  disabled={ghostexCliStatusLoading || !cliReady}
+                  disabled={
+                    installableSkillSelection.length > 0 &&
+                    (ghostexCliStatusLoading || isSettingUpCliForSkills || isInstallingSelectedSkills)
+                  }
                   onClick={installSelectedSkillsAndContinue}
                   type='button'
                 >
                   {installableSkillSelection.length > 0 ? (
                     <>
                       <IconDownload aria-hidden='true' data-icon='inline-start' />
-                      Install Selected ({installableSkillSelection.length})
+                      {isInstallingSelectedSkills
+                        ? 'Installing Skills…'
+                        : isSettingUpCliForSkills
+                          ? 'Setting Up CLI…'
+                          : ghostexCliStatusLoading
+                            ? 'Checking Ghostex CLI…'
+                            : cliReady
+                              ? `Install Selected (${installableSkillSelection.length})`
+                              : `Set Up CLI & Install Selected (${installableSkillSelection.length})`}
                     </>
                   ) : (
                     <>
@@ -1188,7 +1291,7 @@ function createFirstLaunchPluginsDraft(settings: ghostexSettings): Record<FirstL
   /*
    * CDXC:FirstLaunchSetup 2026-08-24:
    * A brand-new install has every view tab visible (all hidden flags false), so
-   * the plugins step starts from the recommended set instead: Browser and Docs
+   * the extensions step starts from the recommended set instead: Browser and Docs
    * on, Code, Kanban, and Automate off. An install where any tab was already
    * hidden has real user choices, and the step mirrors them instead.
    */
@@ -1256,7 +1359,7 @@ function FirstLaunchWelcomePage({ vscode }: { vscode?: WebviewApi }) {
   );
 }
 
-function FirstLaunchPluginsPage({
+function FirstLaunchExtensionsPage({
   draft,
   onToggle,
 }: {
@@ -1264,9 +1367,9 @@ function FirstLaunchPluginsPage({
   onToggle: (key: FirstLaunchPluginKey, visible: boolean) => void;
 }) {
   return (
-    <section aria-labelledby='first-launch-plugins-title' className='first-launch-onb-page'>
-      <h2 className='first-launch-onb-title' id='first-launch-plugins-title'>
-        Pick your plugins
+    <section aria-labelledby='first-launch-extensions-title' className='first-launch-onb-page'>
+      <h2 className='first-launch-onb-title' id='first-launch-extensions-title'>
+        Pick your extensions
       </h2>
       <p className='first-launch-onb-lede'>
         Ghostex has more than terminals. Turn on what you want in the title bar. You can change this anytime in
@@ -1288,7 +1391,7 @@ function FirstLaunchPluginsPage({
               <span>{row.description}</span>
             </span>
             <Switch
-              aria-label={`${row.title} plugin`}
+              aria-label={`${row.title} extension`}
               checked={visible}
               onCheckedChange={(checked) => onToggle(row.key, checked)}
             />
@@ -1982,9 +2085,9 @@ function FirstLaunchSkillRow({
   skill: BundledGhostexAgentSkill;
 }) {
   const installed = isFirstLaunchSkillInstalled(skill.id, ghostexCliStatus);
-  // "Ghostex CLI" keeps its product prefix; the other rows read cleaner
-  // without repeating "Ghostex" five times in one list.
-  const shortName = skill.id === 'cli' ? skill.name : skill.name.replace(/^Ghostex /u, '');
+  // Distinguish the agent-facing CLI guidance from the executable prerequisite
+  // above it; the other rows read cleaner without repeating "Ghostex".
+  const shortName = skill.id === 'cli' ? 'Ghostex CLI for Agents' : skill.name.replace(/^Ghostex /u, '');
   return (
     <label className='first-launch-onb-row first-launch-onb-skill-row' data-installed={installed}>
       <input
@@ -2013,15 +2116,20 @@ function FirstLaunchSkillRow({
 
 function FirstLaunchSkillsPage({
   ghostexCliStatus,
+  ghostexCliStatusLoading,
+  isSettingUpCli,
   onToggleSkill,
   selectedSkillIds,
 }: {
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
+  ghostexCliStatusLoading: boolean;
+  isSettingUpCli: boolean;
   onToggleSkill: (skillId: BundledGhostexAgentSkillId, selected: boolean) => void;
   selectedSkillIds: ReadonlySet<BundledGhostexAgentSkillId>;
 }) {
   const recommendedSkills = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === 'recommended');
   const optionalSkills = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === 'optional');
+  const cliReady = ghostexCliStatus?.installed === true;
 
   return (
     <section aria-labelledby='first-launch-skills-title' className='first-launch-onb-page'>
@@ -2032,6 +2140,27 @@ function FirstLaunchSkillsPage({
         Skills teach your agents Ghostex tricks, like driving your browser or controlling your machine. Pick what sounds
         useful; everything here is optional and can be added later from Settings.
       </p>
+
+      <div className='first-launch-onb-seclabel'>PREREQUISITE</div>
+      <article className='first-launch-onb-row' data-installed={cliReady}>
+        <input
+          aria-label='Ghostex CLI setup status'
+          checked={cliReady}
+          className='first-launch-onb-checkbox'
+          disabled
+          readOnly
+          type='checkbox'
+        />
+        <span className='first-launch-onb-row-main'>
+          <strong>Ghostex CLI</strong>
+          <span>
+            Included with Ghostex. Set up the `ghostex` and `gx` terminal commands before installing agent skills.
+          </span>
+        </span>
+        <span className='first-launch-onb-pill' data-tone={cliReady ? 'ok' : 'dim'}>
+          {isSettingUpCli ? 'Setting up' : ghostexCliStatusLoading ? 'Checking' : cliReady ? 'Ready' : 'Setup required'}
+        </span>
+      </article>
 
       <div className='first-launch-onb-seclabel'>RECOMMENDED</div>
       {recommendedSkills.map((skill) => (

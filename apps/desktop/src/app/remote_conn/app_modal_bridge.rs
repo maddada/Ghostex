@@ -261,6 +261,20 @@ impl GhostexGpuiApp {
                     self.handle_gpui_remote_gxserver_sidebar_request_message(command, cx);
                 }
             }
+            "completeFirstLaunchSetup" => {
+                let is_first_launch_setup = self.app_modal_window.clone().is_some_and(|handle| {
+                    handle
+                        .update(cx, |host, _window, _cx| {
+                            host.current_modal == GpuiAppModalKind::FirstLaunchSetup
+                        })
+                        .unwrap_or(false)
+                });
+                if !is_first_launch_setup {
+                    return;
+                }
+                self.complete_first_launch_setup();
+                self.close_gpui_app_modal_window_and_restore_command_focus(cx);
+            }
             "close" => {
                 if !self.remote_repository_clone_requests.is_empty() {
                     /*
@@ -274,15 +288,15 @@ impl GhostexGpuiApp {
                         .update(cx, |host, _window, _cx| host.current_modal.modal_id())
                         .ok()
                 });
+                if closing_modal_id.as_deref() == Some("firstLaunchSetup") {
+                    return;
+                }
                 support_logs::append(
                     support_logs::GpuiSupportLog::AppModal,
                     "gpui.appModal.lifecycle",
                     serde_json::json!({ "action": "close", "modal": closing_modal_id }),
                 );
                 self.close_gpui_app_modal_window_and_restore_command_focus(cx);
-                if closing_modal_id.as_deref() == Some("firstLaunchSetup") {
-                    self.complete_first_launch_setup();
-                }
             }
             "toastDismissed" => {
                 if message.get("keepOpen").and_then(serde_json::Value::as_bool) == Some(true)
