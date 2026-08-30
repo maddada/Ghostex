@@ -1408,6 +1408,9 @@ export function SessionChatView({
                     onVisibleChange={setNoticeCardVisible}
                     {...(sessionKey !== undefined ? { sessionKey } : {})}
                     {...(hostActions?.onSwitchToTerminal ? { onSwitchToTerminal: hostActions.onSwitchToTerminal } : {})}
+                    {...(hostActions?.switchViewShortcut
+                      ? { switchToTerminalShortcut: hostActions.switchViewShortcut }
+                      : {})}
                   />
                   <SessionChatInteractiveCard
                     canSend={canSend}

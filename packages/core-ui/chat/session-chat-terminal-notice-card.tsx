@@ -102,6 +102,11 @@ export interface SessionChatTerminalNoticeCardProps {
   /** Host switch-back; `switchToTerminal` actions hide when the host has none. */
   onSwitchToTerminal?: () => void;
   /**
+   * Formatted effective shortcut for the host's Terminal/Chat view switch,
+   * shown beside `switchToTerminal` actions so the card teaches the chord.
+   */
+  switchToTerminalShortcut?: string;
+  /**
    * Reports whether this card is on screen. The parent stacks the card above
    * the composer and needs to know it is there — the new-session welcome is a
    * centered overlay that would otherwise paint straight through it — and the
@@ -123,7 +128,9 @@ interface SeverityStyle {
 const SEVERITY_STYLES: Record<SessionChatTerminalNotice['severity'], SeverityStyle> = {
   error: { icon: 'text-destructive', shell: 'border-destructive/40 bg-destructive/10' },
   info: { icon: 'text-muted-foreground', shell: 'border-input bg-muted/20' },
-  warning: { icon: 'text-amber-400', shell: 'border-amber-500/40 bg-amber-500/10' },
+  // Deliberately neutral (not amber): the warning card sits directly above the
+  // composer, and a yellow slab there shouted over the whole chat surface.
+  warning: { icon: 'text-foreground/80', shell: 'border-foreground/25 bg-muted/25' },
 };
 
 /**
@@ -167,6 +174,7 @@ export function SessionChatTerminalNoticeCard({
   onSwitchToTerminal,
   onVisibleChange,
   sessionKey,
+  switchToTerminalShortcut,
 }: SessionChatTerminalNoticeCardProps) {
   const [dismissedKey, setDismissedKey] = useState<string | null>(() => readStoredDismissedNoticeKey(sessionKey));
   // The card can outlive a session switch when the host reuses the mount.
@@ -208,15 +216,121 @@ export function SessionChatTerminalNoticeCard({
     return () => onVisibleChange?.(false);
   }, [onVisibleChange, visible]);
 
-  if (!visible || !notice) {
-    return null;
-  }
-
   // A picker the daemon proved is answerable from here. Rows without labels are
   // dropped: an unlabelled row is a keystroke with no name, which is exactly
   // the blind confirm this feature exists to stop.
-  const choices = (notice.choices ?? []).filter((choice) => choice.label.trim().length > 0);
+  const choices = (notice?.choices ?? []).filter((choice) => choice.label.trim().length > 0);
   const answerable = choices.length > 0 && onAnswerChoice !== undefined;
+
+  const answerChoice = (choiceIndex: number): void => {
+    if (sendingRef.current || !canSend || !onAnswerChoice) {
+      return;
+    }
+    sendingRef.current = true;
+    setSending(true);
+    setChoiceFailed(false);
+    setPickedChoice(choiceIndex);
+    void onAnswerChoice(choiceIndex)
+      .catch(() => {
+        // The picker was gone (answered in the terminal, or already dismissed
+        // by the CLI): keep the card and say so rather than leaving a row that
+        // reads as confirmed.
+        setChoiceFailed(true);
+        setPickedChoice(null);
+      })
+      .finally(() => {
+        sendingRef.current = false;
+        setSending(false);
+      });
+  };
+
+  // Number keys 1-9 pick the matching row while focus sits outside an editable
+  // field — the same key map the AskUserQuestion card teaches, and the composer
+  // is read-only while a picker waits, so the digits are free.
+  const answerChoiceRef = useRef(answerChoice);
+  answerChoiceRef.current = answerChoice;
+  const keyboardAnswerable = visible && answerable && canSend && !sending && pickedChoice === null;
+  const choiceCount = choices.length;
+  useEffect(() => {
+    if (!keyboardAnswerable) {
+      return;
+    }
+    const handler = (event: KeyboardEvent): void => {
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (target instanceof HTMLElement && target.closest('[contenteditable]:not([contenteditable="false"])')) {
+        return;
+      }
+      const digit = Number.parseInt(event.key, 10);
+      if (Number.isNaN(digit) || digit < 1 || digit > 9 || digit > choiceCount) {
+        return;
+      }
+      event.preventDefault();
+      answerChoiceRef.current(digit - 1);
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [choiceCount, keyboardAnswerable]);
+
+  const firstSendKeys =
+    !answerable && notice
+      ? (notice.actions ?? []).find((action) => action.kind === 'sendKeys' && action.send !== undefined)?.send
+      : undefined;
+
+  const runSendKeys = (send: string): void => {
+    if (sendingRef.current || !canSend) {
+      return;
+    }
+    sendingRef.current = true;
+    setSending(true);
+    setSendFailed(false);
+    void onSendKeys(send)
+      .catch(() => {
+        // The keystrokes never reached the TUI: say so instead of pretending
+        // the notice was handled.
+        setSendFailed(true);
+      })
+      .finally(() => {
+        sendingRef.current = false;
+        setSending(false);
+      });
+  };
+
+  // Digit 1 is the Trust (or other primary sendKeys) action on notices that
+  // are a single confirm, not a numbered picker. The composer is held shut
+  // until that confirm lands, so the key is taken even while the editor has
+  // focus — otherwise 1 would type into a box that cannot reach the agent.
+  const runSendKeysRef = useRef(runSendKeys);
+  runSendKeysRef.current = runSendKeys;
+  const keyboardSendKeys = visible && firstSendKeys !== undefined && canSend && !sending;
+  useEffect(() => {
+    if (!keyboardSendKeys || firstSendKeys === undefined) {
+      return;
+    }
+    const send = firstSendKeys;
+    const handler = (event: KeyboardEvent): void => {
+      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      if (event.key !== '1') {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      runSendKeysRef.current(send);
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [firstSendKeys, keyboardSendKeys]);
+
+  if (!visible || !notice) {
+    return null;
+  }
 
   // Actions are normalized here so the render below never has to re-prove that
   // a `sendKeys` action carries bytes. An action kind this build does not know
@@ -240,47 +354,6 @@ export function SessionChatTerminalNoticeCard({
       });
     }
   }
-
-  const runSendKeys = (send: string): void => {
-    if (sendingRef.current || !canSend) {
-      return;
-    }
-    sendingRef.current = true;
-    setSending(true);
-    setSendFailed(false);
-    void onSendKeys(send)
-      .catch(() => {
-        // The keystrokes never reached the TUI: say so instead of pretending
-        // the notice was handled.
-        setSendFailed(true);
-      })
-      .finally(() => {
-        sendingRef.current = false;
-        setSending(false);
-      });
-  };
-
-  const answerChoice = (choiceIndex: number): void => {
-    if (sendingRef.current || !canSend || !onAnswerChoice) {
-      return;
-    }
-    sendingRef.current = true;
-    setSending(true);
-    setChoiceFailed(false);
-    setPickedChoice(choiceIndex);
-    void onAnswerChoice(choiceIndex)
-      .catch(() => {
-        // The picker was gone (answered in the terminal, or already dismissed
-        // by the CLI): keep the card and say so rather than leaving a row that
-        // reads as confirmed.
-        setChoiceFailed(true);
-        setPickedChoice(null);
-      })
-      .finally(() => {
-        sendingRef.current = false;
-        setSending(false);
-      });
-  };
 
   const SeverityIcon = notice.severity === 'info' ? IconInfoCircle : IconAlertTriangle;
 
@@ -309,6 +382,7 @@ export function SessionChatTerminalNoticeCard({
                 // a second answer arrive at a picker that is already gone.
                 readOnly={!canSend || sending || pickedChoice !== null}
                 selected={pickedChoice === null ? [] : [pickedChoice]}
+                showShortcuts
               />
               {!canSend ? (
                 <p className='mt-2 text-[11px] leading-snug text-muted-foreground'>{READ_ONLY_HINT}</p>
@@ -349,13 +423,12 @@ export function SessionChatTerminalNoticeCard({
           ) : null}
           {actions.length > 0 ? (
             <div className='mt-3 flex flex-wrap items-center gap-2'>
-              {actions.map((action) =>
-                action.kind === 'switchToTerminal' ? (
-                  <Button key={action.id} onClick={onSwitchToTerminal} size='xs' variant='outline'>
-                    <IconTerminal2 aria-hidden='true' stroke={2} />
-                    {action.label}
-                  </Button>
-                ) : (
+              {actions
+                .filter(
+                  (action): action is Extract<RenderableNoticeAction, { kind: 'sendKeys' }> =>
+                    action.kind === 'sendKeys'
+                )
+                .map((action, sendKeysIndex) => (
                   <Button
                     disabled={!canSend || sending}
                     key={action.id}
@@ -365,9 +438,29 @@ export function SessionChatTerminalNoticeCard({
                     {...(canSend ? {} : { title: READ_ONLY_HINT })}
                   >
                     {action.label}
+                    {sendKeysIndex === 0 && keyboardSendKeys ? (
+                      <kbd className='ml-0.5 flex h-4 min-w-4 shrink-0 items-center justify-center rounded border border-border/60 bg-background/50 px-1 text-[10px] font-medium text-muted-foreground tabular-nums'>
+                        1
+                      </kbd>
+                    ) : null}
                   </Button>
-                )
-              )}
+                ))}
+              {/* The escape hatch sits bottom-right, out of the answer flow. */}
+              <div className='ml-auto flex items-center gap-2'>
+                {actions
+                  .filter((action) => action.kind === 'switchToTerminal')
+                  .map((action) => (
+                    <Button key={action.id} onClick={onSwitchToTerminal} size='xs' variant='outline'>
+                      <IconTerminal2 aria-hidden='true' stroke={2} />
+                      {action.label}
+                      {switchToTerminalShortcut ? (
+                        <kbd className='ml-0.5 flex h-4 shrink-0 items-center rounded border border-border/60 bg-background/50 px-1 text-[10px] font-medium text-muted-foreground'>
+                          {switchToTerminalShortcut}
+                        </kbd>
+                      ) : null}
+                    </Button>
+                  ))}
+              </div>
             </div>
           ) : null}
         </div>
