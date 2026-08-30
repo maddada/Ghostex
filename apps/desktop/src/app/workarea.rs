@@ -1099,6 +1099,7 @@ impl GhostexGpuiApp {
         let Some(pending) = self.pending_source_file_open.take() else {
             return false;
         };
+        let origin = pending.origin;
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = background
@@ -1112,11 +1113,21 @@ impl GhostexGpuiApp {
                 .await;
             if let Err(message) = result {
                 let _ = this.update(cx, |this, cx| {
+                    let (id, title) = match origin {
+                        PendingSourceFileOpenOrigin::AgentsHub => (
+                            "gpui-agents-hub-source-open-failed",
+                            "Could not open Agents Hub file",
+                        ),
+                        PendingSourceFileOpenOrigin::SessionChat => (
+                            "gpui-session-chat-source-open-failed",
+                            "Could not open file in Code view",
+                        ),
+                    };
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
-                            id: "gpui-agents-hub-source-open-failed".to_string(),
+                            id: id.to_string(),
                             level: GpuiAppToastLevel::from_raw(Some("warning")),
-                            title: "Could not open Agents Hub file".to_string(),
+                            title: title.to_string(),
                             description: Some(message),
                             loading: false,
                             persistent: false,

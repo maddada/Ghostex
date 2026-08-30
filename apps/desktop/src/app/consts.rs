@@ -1642,8 +1642,6 @@ pub(crate) const SOURCE_CODE_SERVER_INSTALL_PROMPT: &str = "The VS Code IDE comp
 
 pub(crate) const SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR: u64 = 22;
 
-pub(crate) const SOURCE_CODE_SERVER_STARTUP_GRACE_INTERVAL: Duration = Duration::from_secs(10);
-
 pub(crate) const SOURCE_CODE_SERVER_LOADING_PLACEHOLDER_DELAY: Duration = Duration::from_secs(3);
 
 pub(crate) const SOURCE_CODE_SERVER_STARTUP_TIMEOUT: Duration = Duration::from_secs(7);

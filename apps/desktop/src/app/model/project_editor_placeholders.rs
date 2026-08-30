@@ -118,15 +118,22 @@ impl ProjectEditorSleepingPlaceholderSignature {
 }
 
 /*
-Agents Hub Source opens are process-local navigation intent. Keep the validated
-file and its containing workspace only until the matching owned Source surface
-is ready, then hand the file to code-server IPC. Never persist or log either
-path, and never accept a path that was not present in the current Hub catalog.
+Source file opens are process-local navigation intent. Keep the validated file,
+its containing workspace, and the user-visible request origin only until the
+matching owned Source surface can hand the request to code-server IPC. Never
+persist or log either path.
 */
+#[derive(Clone, Copy)]
+pub(crate) enum PendingSourceFileOpenOrigin {
+    AgentsHub,
+    SessionChat,
+}
+
 pub(crate) struct PendingSourceFileOpen {
     pub(crate) column: Option<u32>,
     pub(crate) file_path: PathBuf,
     pub(crate) line: Option<u32>,
+    pub(crate) origin: PendingSourceFileOpenOrigin,
     pub(crate) project_path: PathBuf,
 }
 

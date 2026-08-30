@@ -1574,52 +1574,50 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
     column: Option<u32>,
 ) -> Result<(), String> {
     /*
-    Use the bundled code-server CLI's reviewed session-socket protocol to open
-    the validated file in the already-owned Source workbench. The Source CEF
-    surface may need a moment to register its VS Code socket after creation, so
-    retry only during the normal startup grace window; never launch a second
-    editor server or fall back to an external application.
+    Hand the validated file to code-server's process-local open queue. If the
+    matching Source workbench has not registered its VS Code socket yet, the
+    session manager keeps only the newest request under this fixed key and
+    delivers it on registration. Never launch a second editor server or fall
+    back to an external application.
     */
     let repo_root = source_code_server_resolve_repo_root()?;
     let node_path = source_code_server_resolve_node_path(&repo_root)?;
     let entrypoint_path = repo_root.join("out/node/entry.js");
     let (user_data_dir, _) = source_code_server_runtime_storage()?;
     let session_socket = user_data_dir.join("code-server-ipc.sock");
-    let deadline = Instant::now() + SOURCE_CODE_SERVER_STARTUP_GRACE_INTERVAL;
-
-    while Instant::now() < deadline {
-        let mut command = Command::new(&node_path);
-        command
-            .arg(&entrypoint_path)
-            .arg("--user-data-dir")
-            .arg(&user_data_dir)
-            .arg("--session-socket")
-            .arg(&session_socket)
-            .arg("--reuse-window")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .envs(source_code_server_runtime_environment(&repo_root));
-        if let Some(line) = line {
-            let mut target = file_path.as_os_str().to_owned();
-            target.push(format!(":{line}"));
-            if let Some(column) = column {
-                target.push(format!(":{column}"));
-            }
-            command.arg("--goto").arg(target);
-        } else {
-            command.arg(file_path);
+    let mut command = Command::new(&node_path);
+    command
+        .arg(&entrypoint_path)
+        .arg("--user-data-dir")
+        .arg(&user_data_dir)
+        .arg("--session-socket")
+        .arg(&session_socket)
+        .arg("--reuse-window")
+        .arg("--queue-open")
+        .arg("--open-request-key")
+        .arg("ghostex-source-file-open")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .envs(source_code_server_runtime_environment(&repo_root));
+    if let Some(line) = line {
+        let mut target = file_path.as_os_str().to_owned();
+        target.push(format!(":{line}"));
+        if let Some(column) = column {
+            target.push(format!(":{column}"));
         }
-        if let Some(parent) = file_path.parent() {
-            command.current_dir(parent);
-        }
-        if command.status().is_ok_and(|status| status.success()) {
-            return Ok(());
-        }
-        thread::sleep(SOURCE_CODE_SERVER_HEALTH_POLL_INTERVAL);
+        command.arg("--goto").arg(target);
+    } else {
+        command.arg(file_path);
     }
-
-    Err("Ghostex Source did not become ready to open that file.".to_string())
+    if let Some(parent) = file_path.parent() {
+        command.current_dir(parent);
+    }
+    if command.status().is_ok_and(|status| status.success()) {
+        Ok(())
+    } else {
+        Err("Ghostex Code could not accept the file-open request.".to_string())
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -1628,22 +1626,19 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
     line: Option<u32>,
     column: Option<u32>,
 ) -> Result<(), String> {
-    let deadline = Instant::now() + SOURCE_CODE_SERVER_STARTUP_GRACE_INTERVAL;
-    while Instant::now() < deadline {
-        let mut command = windows_terminal_backend::source_code_server_open_file_command(
-            file_path,
-            line,
-            column,
-            SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR,
-        )?;
-        command
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        if command.status().is_ok_and(|status| status.success()) {
-            return Ok(());
-        }
-        thread::sleep(SOURCE_CODE_SERVER_HEALTH_POLL_INTERVAL);
+    let mut command = windows_terminal_backend::source_code_server_open_file_command(
+        file_path,
+        line,
+        column,
+        SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR,
+    )?;
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if command.status().is_ok_and(|status| status.success()) {
+        Ok(())
+    } else {
+        Err("Ghostex Code could not accept the file-open request.".to_string())
     }
-    Err("Ghostex Source did not become ready to open that file.".to_string())
 }

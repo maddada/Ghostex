@@ -789,6 +789,14 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        // This is the Chat View button's directional command, not the shared
+        // toggle hotkey. Its CEF bridge message crosses an async queue, so it
+        // may arrive after a newer native Chat View click has already switched
+        // the session back from terminal. Ignore that stale request instead of
+        // toggling from whichever state happens to be current when it lands.
+        if !self.agents_chat_mode_sessions.contains(&session_id) {
+            return;
+        }
         /*
         CDXC:SessionChatViewSwitch 2026-08-21:
         A view switch is unconditional UI state, not the success result of a
@@ -1204,6 +1212,7 @@ impl GhostexGpuiApp {
             column,
             file_path,
             line,
+            origin: PendingSourceFileOpenOrigin::SessionChat,
             project_path: root,
         });
         self.switch_workarea_from_hotkey(TitlebarMode::Source, window, cx);

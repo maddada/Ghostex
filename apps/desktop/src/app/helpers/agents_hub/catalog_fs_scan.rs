@@ -126,6 +126,7 @@ pub(crate) fn gpui_agents_hub_source_open_target(
         column: None,
         file_path: resolved,
         line: None,
+        origin: PendingSourceFileOpenOrigin::AgentsHub,
         project_path,
     })
 }

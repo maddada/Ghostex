@@ -681,6 +681,8 @@ exec "$node" "$repo_root/out/node/entry.js" \
     --user-data-dir "$user_data_dir" \
     --session-socket "$session_socket" \
     --reuse-window \
+    --queue-open \
+    --open-request-key ghostex-source-file-open \
     "$@"
 "#;
         let required_node_major = required_node_major.to_string();
