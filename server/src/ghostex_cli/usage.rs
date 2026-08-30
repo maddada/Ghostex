@@ -135,7 +135,7 @@ pub fn usage() -> String {
             "Create and start a configured agent session; --first-input-draft stages text in its input without sending",
         ),
         format_help_command(
-            "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
+            "board start-work <bead-id> [--agent id] [--project-path path|--project-id id] [--json]",
             "Dispatch a Project Board bead: reuse its usable linked session or create the worker",
         ),
         format_help_command(
@@ -658,7 +658,7 @@ Inspect:
 pub fn board_usage() -> String {
     let commands = [
         format_help_command(
-            "board start-work <bead-id> [--agent id] [--project-id id] [--json]",
+            "board start-work <bead-id> [--agent id] [--project-path path|--project-id id] [--json]",
             "Dispatch a Project Board bead through gxserver",
         ),
         format_help_command(
@@ -676,7 +676,7 @@ pub fn board_usage() -> String {
         "Ghostex Project Board - dispatch bead work through gxserver
 
 Usage:
-  ghostex board start-work <bead-id> [--agent <agentId>] [--project-id <id>] [--json]
+  ghostex board start-work <bead-id> [--agent <agentId>] [--project-path <path>|--project-id <id>] [--json]
   ghostex board associate <bead-id> [--session-id <alias|id|title>] [--project-id <id>] [--json]
   gx board start-work <bead-id>
   gx board associate <bead-id>
@@ -691,6 +691,10 @@ Behavior:
   is returned as {{ \"projectId\": ..., \"sessionId\": ..., \"created\": false }} instead of creating a second worker.
   Without --agent, the bead assignee is matched case-insensitively against configured agents,
   falling back to the default prompt agent.
+  Pass --project-path <repo> (or --project-id) to start the worker in the project the card is
+  about; the bead is still looked up on that project's board. Without either, the worker starts
+  in the project whose own path is the Beads directory - the board itself - never in a sibling
+  project that merely mounts the same board.
 
   associate is for an agent that was already asked to work a bead - by hand, or in a session
   someone else started - rather than dispatched from the card. It creates no session: it links the
