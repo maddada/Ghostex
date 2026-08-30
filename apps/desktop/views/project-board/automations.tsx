@@ -101,12 +101,16 @@ function AutomationSectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function AutomationGroupCard({ children }: { children: React.ReactNode }) {
-  return <div className='divide-y divide-border/60 rounded-xl border border-border/80 bg-white/[0.03]'>{children}</div>;
+  return (
+    <div className='min-w-0 overflow-hidden divide-y divide-border/60 rounded-xl border border-border/80 bg-white/[0.03]'>
+      {children}
+    </div>
+  );
 }
 
 function AutomationDetailRow({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className='flex min-h-11 items-center justify-between gap-4 px-4 py-2.5'>
+    <div className='flex min-h-11 min-w-0 items-center justify-between gap-4 px-4 py-2.5'>
       <dt className='shrink-0 text-sm font-normal text-foreground/90'>{label}</dt>
       <dd className='flex min-w-0 items-center gap-1.5 text-sm font-normal text-muted-foreground'>{children}</dd>
     </div>
@@ -470,10 +474,10 @@ export function AutomationDefinitionDetail({
   const isBusy = actionId === automation.id;
   return (
     <section
-      className='vertical-scroll-fade-mask min-h-0 flex-1 overflow-auto [--edge-fade-distance:16px]'
+      className='vertical-scroll-fade-mask min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto [--edge-fade-distance:16px]'
       aria-label='Automation details'
     >
-      <div className='mx-auto flex max-w-2xl flex-col gap-6 p-6'>
+      <div className='mx-auto flex w-full min-w-0 max-w-2xl flex-col gap-6 p-6'>
         <div className='flex items-start justify-between gap-4'>
           <div className='min-w-0'>
             <span
@@ -516,15 +520,15 @@ export function AutomationDefinitionDetail({
             </Button>
           </div>
         </div>
-        <div className='rounded-xl border border-border/80 bg-white/[0.03] p-4'>
-          <p className='whitespace-pre-wrap text-sm font-normal leading-relaxed text-foreground/90'>
+        <div className='min-w-0 overflow-hidden rounded-xl border border-border/80 bg-white/[0.03] p-4'>
+          <p className='whitespace-pre-wrap break-words text-sm font-normal leading-relaxed text-foreground/90'>
             {automation.prompt}
           </p>
         </div>
         <div className='flex flex-col gap-2.5'>
           <AutomationSectionLabel>Details</AutomationSectionLabel>
           <AutomationGroupCard>
-            <dl className='divide-y divide-border/60'>
+            <dl className='min-w-0 divide-y divide-border/60'>
               {showProjectLabels && automationProjectName ? (
                 <AutomationDetailRow label='Project'>{automationProjectName}</AutomationDetailRow>
               ) : null}
@@ -625,10 +629,10 @@ export function AutomationRunDetail({
   const isActiveRun = isAutomationRunActive(run);
   return (
     <section
-      className='vertical-scroll-fade-mask min-h-0 flex-1 overflow-auto [--edge-fade-distance:16px]'
+      className='vertical-scroll-fade-mask min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto [--edge-fade-distance:16px]'
       aria-label='Automation run details'
     >
-      <div className='mx-auto flex max-w-2xl flex-col gap-6 p-6'>
+      <div className='mx-auto flex w-full min-w-0 max-w-2xl flex-col gap-6 p-6'>
         <div className='flex items-start justify-between gap-4'>
           <div className='min-w-0'>
             <span className={`text-[13px] font-normal ${automationRunStatusTone(run.status)}`}>
@@ -680,15 +684,15 @@ export function AutomationRunDetail({
             </Button>
           </div>
         </div>
-        <div className='rounded-xl border border-border/80 bg-white/[0.03] p-4'>
-          <p className='whitespace-pre-wrap text-sm font-normal leading-relaxed text-foreground/90'>
+        <div className='min-w-0 overflow-hidden rounded-xl border border-border/80 bg-white/[0.03] p-4'>
+          <p className='whitespace-pre-wrap break-words text-sm font-normal leading-relaxed text-foreground/90'>
             {run.findingsSummary || run.errorMessage || 'Run is waiting for agent output.'}
           </p>
         </div>
         <div className='flex flex-col gap-2.5'>
           <AutomationSectionLabel>Details</AutomationSectionLabel>
           <AutomationGroupCard>
-            <dl className='divide-y divide-border/60'>
+            <dl className='min-w-0 divide-y divide-border/60'>
               <AutomationDetailRow label='Project'>{projectName}</AutomationDetailRow>
               <AutomationDetailRow label='Agent'>
                 {agentIcon ? <AutomationAgentIcon icon={agentIcon} /> : null}

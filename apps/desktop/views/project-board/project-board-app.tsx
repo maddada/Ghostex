@@ -2492,7 +2492,7 @@ export function ProjectBoardApp() {
                       <IconFilter data-icon='inline-start' />
                       Filters
                       {activeBoardFilterCount > 0 ? (
-                        <span className='inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ghostex-accent,#38bdf8)_22%,transparent)] px-1 text-[11px] leading-none text-[var(--ghostex-accent,#38bdf8)]'>
+                        <span className='inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--ghostex-accent,#86d3f8)_22%,transparent)] px-1 text-[11px] leading-none text-[var(--ghostex-accent,#86d3f8)]'>
                           {activeBoardFilterCount}
                         </span>
                       ) : null}
@@ -2678,7 +2678,7 @@ export function ProjectBoardApp() {
                 />
               </section>
             ) : (
-              <section className='grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
+              <section className='grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*]:min-w-0 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
                 <AutomationRunList
                   actionId={automationActionId}
                   agents={automationState.agents}
@@ -2736,7 +2736,7 @@ export function ProjectBoardApp() {
                 />
               </section>
             ) : (
-              <section className='grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
+              <section className='grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*]:min-w-0 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
                 <AutomationDefinitionList
                   actionId={automationActionId}
                   agents={automationState.agents}
@@ -2787,7 +2787,7 @@ export function ProjectBoardApp() {
                 />
               </section>
             ) : (
-              <section className='grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
+              <section className='grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 pt-1 [&>*]:min-w-0 [&>*:first-child]:border-r [&>*:first-child]:border-border/60'>
                 <AutomationRunList
                   actionId={automationActionId}
                   agents={automationState.agents}

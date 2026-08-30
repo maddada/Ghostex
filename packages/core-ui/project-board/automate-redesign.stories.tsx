@@ -177,7 +177,7 @@ function AutomatePage({ initialTab = 'automations' }: { initialTab?: SurfaceTab 
           </Button>
         </div>
       </header>
-      <div className='grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60'>
+      <div className='grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 [&>*]:min-w-0'>
         {activeTab === 'automations' ? (
           <>
             <div className='flex min-h-0 flex-col border-r border-border/60'>
@@ -295,7 +295,7 @@ export const Empty: Story = {
             </Button>
           </div>
         </header>
-        <div className='grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60'>
+        <div className='grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(320px,1.1fr)] border-t border-border/60 [&>*]:min-w-0'>
           <div className='flex min-h-0 flex-col border-r border-border/60'>
             {activeTab === 'automations' ? (
               <AutomationDefinitionList
