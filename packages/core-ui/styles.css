@@ -1313,20 +1313,59 @@ body {
   padding: 9px;
 }
 
-.ghostex-stashed-prompt-editor[data-editing='true'] {
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
-}
-
 .ghostex-stashed-prompt-editor-metadata {
   display: grid;
   gap: 6px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.ghostex-stashed-prompt-editor[data-editing='true'] .ghostex-stashed-prompt-editor-metadata {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .ghostex-stashed-prompt-editor-metadata [data-slot='field'],
 .ghostex-stashed-prompt-editor-metadata [data-slot='select-trigger'] {
   min-width: 0;
   width: 100%;
+}
+
+.ghostex-stashed-prompt-editor-tag-trigger {
+  justify-content: space-between;
+  min-width: 0;
+  width: 100%;
+}
+
+.ghostex-stashed-prompt-editor-tag-trigger-label {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ghostex-stashed-prompt-editor-tag-value {
+  align-items: center;
+  display: flex;
+  flex: 0 1 auto;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ghostex-stashed-prompt-editor-tag-value > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ghostex-stashed-prompt-editor-tag-selector {
+  color: var(--muted-foreground);
+  flex: 0 0 auto;
+}
+
+.ghostex-stashed-prompt-editor-favorite-icon {
+  color: var(--ghostex-stashed-prompt-favorite, #e3b341);
+  flex: 0 0 auto;
 }
 
 .ghostex-stashed-prompt-editor-heading {

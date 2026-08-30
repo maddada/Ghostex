@@ -48,6 +48,7 @@ import { SidebarCommandIconGlyph } from './sidebar-command-icon';
 import { formatRelativeTime } from './relative-time';
 import { QuickAccessHeader } from './quick-access-tabs';
 import { useSidebarStore } from './sidebar-store';
+import { StashedPromptEditorTagSelect } from './stashed-prompts-editor-tag-select';
 import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import type { WebviewApi } from './webview-api';
 
@@ -291,6 +292,7 @@ export function StashedPromptsModal({
   const [draftContent, setDraftContent] = useState('');
   const [draftProjectId, setDraftProjectId] = useState(NO_PROJECT_VALUE);
   const [draftTagId, setDraftTagId] = useState(NO_TAG_VALUE);
+  const [draftIsFavorite, setDraftIsFavorite] = useState(false);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [selectedPromptValue, setSelectedPromptValue] = useState('');
@@ -396,6 +398,7 @@ export function StashedPromptsModal({
       setDraftContent('');
       setDraftProjectId(NO_PROJECT_VALUE);
       setDraftTagId(NO_TAG_VALUE);
+      setDraftIsFavorite(false);
       setIsSavingPrompt(false);
       setSaveError(undefined);
       latestRequestIdRef.current = undefined;
@@ -448,6 +451,7 @@ export function StashedPromptsModal({
         setDraftContent('');
         setDraftProjectId(NO_PROJECT_VALUE);
         setDraftTagId(NO_TAG_VALUE);
+        setDraftIsFavorite(false);
         setSearchQuery('');
         setSaveError(undefined);
         setIsAddingPrompt(false);
@@ -541,6 +545,7 @@ export function StashedPromptsModal({
       setDraftContent('');
       setDraftProjectId(NO_PROJECT_VALUE);
       setDraftTagId(NO_TAG_VALUE);
+      setDraftIsFavorite(false);
       setSaveError(undefined);
     };
     document.addEventListener('keydown', handleKeyDown, true);
@@ -703,6 +708,7 @@ export function StashedPromptsModal({
     setDraftContent('');
     setDraftProjectId(defaultProjectId ? `project:${defaultProjectId}` : NO_PROJECT_VALUE);
     setDraftTagId(defaultTagId);
+    setDraftIsFavorite(tagFilter.kind === 'tag' && tagFilter.tagId === GXSERVER_FAVORITE_PROMPT_TAG_ID);
     setSaveError(undefined);
     setIsAddingPrompt(true);
   };
@@ -874,7 +880,10 @@ export function StashedPromptsModal({
     setIsSavingPrompt(true);
     setSaveError(undefined);
     const selectedProjectId = draftProjectId === NO_PROJECT_VALUE ? undefined : draftProjectId.slice('project:'.length);
-    const selectedTagIds = draftTagId === NO_TAG_VALUE ? [] : [draftTagId.slice('tag:'.length)];
+    const selectedTagIds = [
+      ...(draftIsFavorite ? [GXSERVER_FAVORITE_PROMPT_TAG_ID] : []),
+      ...(draftTagId === NO_TAG_VALUE ? [] : [draftTagId.slice('tag:'.length)]),
+    ];
     /*
      * CDXC:StashedPromptSessionAssociation 2026-08-24:
      * Post the raw gxserver ids decoded out of the combined presentation key.
@@ -888,7 +897,7 @@ export function StashedPromptsModal({
       ...(!editingPromptId && selectedProjectId ? { projectId: selectedProjectId } : {}),
       requestId,
       ...(!editingPromptId && selectedProjectId === rawProjectId && rawSessionId ? { sessionId: rawSessionId } : {}),
-      ...(!editingPromptId ? { tagIds: selectedTagIds } : {}),
+      tagIds: selectedTagIds,
       type: 'saveStashedPrompt',
     });
   };
@@ -937,8 +946,8 @@ export function StashedPromptsModal({
               <div className='ghostex-stashed-prompt-editor-heading'>
                 {editingPromptId ? 'Edit Saved Prompt' : 'Add Saved Prompt'}
               </div>
-              {!editingPromptId ? (
-                <FieldGroup className='ghostex-stashed-prompt-editor-metadata'>
+              <FieldGroup className='ghostex-stashed-prompt-editor-metadata'>
+                {!editingPromptId ? (
                   <Field>
                     <FieldLabel className='sr-only'>Project</FieldLabel>
                     <Select value={draftProjectId} onValueChange={setDraftProjectId}>
@@ -957,28 +966,18 @@ export function StashedPromptsModal({
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field>
-                    <FieldLabel className='sr-only'>Tag</FieldLabel>
-                    <Select value={draftTagId} onValueChange={setDraftTagId}>
-                      <SelectTrigger aria-label='Tag for saved prompt' size='sm'>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent align='start' alignItemWithTrigger={false}>
-                        <SelectGroup>
-                          <SelectItem value={NO_TAG_VALUE}>No tag</SelectItem>
-                          {tags
-                            .filter((tag) => tag.tagId !== GXSERVER_FAVORITE_PROMPT_TAG_ID)
-                            .map((tag) => (
-                              <SelectItem key={tag.tagId} value={`tag:${tag.tagId}`}>
-                                {tag.name}
-                              </SelectItem>
-                            ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                </FieldGroup>
-              ) : null}
+                ) : null}
+                <Field>
+                  <FieldLabel className='sr-only'>Tags</FieldLabel>
+                  <StashedPromptEditorTagSelect
+                    isFavorite={draftIsFavorite}
+                    selectedTagId={draftTagId === NO_TAG_VALUE ? undefined : draftTagId.slice('tag:'.length)}
+                    tags={tags}
+                    onFavoriteChange={setDraftIsFavorite}
+                    onTagChange={(tagId) => setDraftTagId(tagId ? `tag:${tagId}` : NO_TAG_VALUE)}
+                  />
+                </Field>
+              </FieldGroup>
               <Textarea
                 aria-label='Saved prompt content'
                 className='ghostex-stashed-prompt-editor-textarea'
@@ -987,6 +986,7 @@ export function StashedPromptsModal({
                   setDraftContent(event.target.value);
                 }}
                 onKeyDown={(event) => {
+                  event.stopPropagation();
                   if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                     event.preventDefault();
                     savePrompt();
@@ -1011,6 +1011,7 @@ export function StashedPromptsModal({
                     setDraftContent('');
                     setDraftProjectId(NO_PROJECT_VALUE);
                     setDraftTagId(NO_TAG_VALUE);
+                    setDraftIsFavorite(false);
                     setSaveError(undefined);
                   }}
                   size='sm'
@@ -1165,8 +1166,14 @@ export function StashedPromptsModal({
                                     deletePrompt(prompt);
                                   }}
                                   onEdit={() => {
+                                    const promptTags = promptTagIds(prompt);
+                                    const labelTagId = promptTags.find(
+                                      (tagId) => tagId !== GXSERVER_FAVORITE_PROMPT_TAG_ID
+                                    );
                                     setEditingPromptId(prompt.promptId);
                                     setDraftContent(prompt.content);
+                                    setDraftTagId(labelTagId ? `tag:${labelTagId}` : NO_TAG_VALUE);
+                                    setDraftIsFavorite(promptTags.includes(GXSERVER_FAVORITE_PROMPT_TAG_ID));
                                     setSaveError(undefined);
                                     setIsAddingPrompt(true);
                                   }}
