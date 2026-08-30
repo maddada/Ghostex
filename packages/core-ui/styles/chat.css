@@ -3433,3 +3433,110 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   position: absolute;
   transform: translateX(-50%);
 }
+
+/*
+CDXC:SessionChatWorkingStrip 2026-08-30:
+Pinned "agent is working" strip above the composer (session-chat-working-strip.tsx).
+The spark pulses in scale + glow on a breathing rhythm and slowly rotates;
+reduced-motion turns both off and keeps the static glyph.
+*/
+.ghostex-chat-working-strip {
+  display: grid;
+  gap: 0.375rem;
+  min-height: 1.5rem;
+  padding: 0 0.375rem;
+  user-select: none;
+}
+
+.ghostex-chat-working-strip-row {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* Structured progress (compaction): same bar treatment as the transcript's
+   activity row, scaled down for the strip. */
+.ghostex-chat-working-strip-bar {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-radius: 999px;
+  height: 0.1875rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ghostex-chat-working-strip-bar-fill {
+  background: var(--primary);
+  border-radius: 999px;
+  height: 100%;
+  transition: width 500ms;
+}
+
+.ghostex-chat-working-strip-spark {
+  align-items: center;
+  animation: ghostex-chat-working-spark-pulse 1.6s ease-in-out infinite;
+  display: flex;
+  flex: none;
+  height: 1rem;
+  justify-content: center;
+  width: 1rem;
+  will-change: transform, opacity, filter;
+}
+
+.ghostex-chat-working-strip-spark svg {
+  animation: ghostex-chat-working-spark-spin 9s linear infinite;
+  display: block;
+  fill: var(--foreground);
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
+@keyframes ghostex-chat-working-spark-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1px rgb(255 255 255 / 0.15));
+    opacity: 0.6;
+    transform: scale(0.88);
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgb(255 255 255 / 0.45)) drop-shadow(0 0 12px rgb(160 190 255 / 0.22));
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes ghostex-chat-working-spark-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ghostex-chat-working-strip-text {
+  color: var(--muted-foreground);
+  font-size: 0.78125rem;
+  letter-spacing: 0.01em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-chat-working-strip-detail {
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}
+
+.ghostex-chat-working-strip-elapsed {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostex-chat-working-strip-spark,
+  .ghostex-chat-working-strip-spark svg {
+    animation: none;
+  }
+}

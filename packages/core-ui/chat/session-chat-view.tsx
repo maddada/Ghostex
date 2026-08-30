@@ -21,6 +21,7 @@ import { ghostexHotkeyTextFromKeyboardEvent } from '../../shared/ghostex-hotkeys
 import { AppTooltip, TooltipProvider } from '../app-tooltip';
 import { displayAgentName, NewSessionWelcome } from './session-chat-new-session-welcome';
 import { SessionChatComposer, type SessionChatComposerHandle } from './session-chat-composer';
+import { SessionChatWorkingStrip } from './session-chat-working-strip';
 import { sessionChatDataTransferHasFiles } from './session-chat-drop-attachments';
 import { sessionChatEmptyStateCopy } from './session-chat-empty-state';
 import { SESSION_CHAT_FILE_PATH_ATTRIBUTE } from './session-chat-file-paths';
@@ -1400,6 +1401,7 @@ export function SessionChatView({
                   ) : null}
                 </div>
                 <div className='mx-auto grid w-full max-w-3xl flex-none gap-2 px-4 pt-2 pb-3'>
+                  <SessionChatWorkingStrip activity={chat.terminalActivity} working={transcriptWorking} />
                   <SessionChatTerminalNoticeCard
                     canSend={canSend}
                     notice={chat.terminalNotice}
