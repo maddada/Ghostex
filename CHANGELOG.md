@@ -22,6 +22,8 @@
   - Prompt search no longer fills up with the title, commit-message, and sub-agent scaffolding turns that agents write into the same transcripts.
   - Kanban card conversation links display again on large shared boards, and jumping to a dead linked session resumes the agent conversation rather than an empty shell.
   - Custom agents keep their activity across identity updates and resume through their own CLI family.
+  - Saved Prompts lets you change tags and favorites on prompts you already saved, not only while saving them.
+  - Interrupting a Codex session no longer trips a hook-output error, because the Ghostex notify hook now returns the response Codex's Interrupt event accepts.
   - Long automation prompts stay inside their detail cards, chat surfaces no longer show stray browser focus rings, and child windows open centered on the main display.
   - The Terminal View button previews the agent's CLI on hover with a readable tail, and Summary mode shows its state as its own icon.
   - Markdown ordered lists keep the numbering the agent wrote instead of being merged into one run.
