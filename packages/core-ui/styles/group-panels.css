@@ -973,15 +973,23 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
  * CDXC:SidebarMachineTabs 2026-08-30:
  * With remote machines saved, the machine tab strip under Search visually
  * closes off the top chrome. Without machines that strip is absent, so the
- * Search row itself draws the separator: a full-bleed hairline at its bottom
- * edge, using the same border token as the footer's top border. The layout
- * root mirrors the panel's machine-tabs state so this can scope without a
- * descendant :has() probe.
+ * Search row itself draws the separator: a full-bleed hairline 3px below its
+ * bottom edge, using the same border token as the footer's top border. Draw it
+ * independently so the Search controls keep their existing geometry. The
+ * layout root mirrors the panel's machine-tabs state so this can scope without
+ * a descendant :has() probe.
  */
 .sidebar-reference-layout[data-reference-sidebar='true'][data-sidebar-machine-tabs='false']
   .reference-sidebar-primary-nav
-  > .reference-sidebar-search-more-row {
-  border-bottom: 1px solid var(--app-border);
+  > .reference-sidebar-search-more-row::after {
+  background: var(--app-border);
+  bottom: -3px;
+  content: '';
+  height: 1px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
 }
 
 /*
@@ -2661,7 +2669,7 @@ manual mode visibly selected without adding text to the section row.
 .session-groups-content > .sidebar-space-filter-row {
   background: var(--app-background);
   margin-top: -12px;
-  padding-bottom: 4px;
+  padding-bottom: 8px;
   position: sticky;
   top: 34px;
   z-index: 11;
@@ -2683,7 +2691,7 @@ manual mode visibly selected without adding text to the section row.
 }
 
 /*
- * Icon-only square buttons: the Space name lives in the shared sidebar tooltip
+ * Icon-only circular buttons: the Space name lives in the shared sidebar tooltip
  * and in the More menu, so every button measures the same small width and the
  * overflow split stays purely a function of how many Spaces there are.
  */
@@ -2706,18 +2714,33 @@ manual mode visibly selected without adding text to the section row.
 
 .sidebar-space-filter-button:hover {
   background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
+  border-radius: 999px;
   color: color-mix(in srgb, var(--app-foreground) 86%, transparent);
 }
 
 .sidebar-space-filter-button[data-selected='true'] {
   background: color-mix(in srgb, var(--app-foreground) 12%, transparent);
   border-color: color-mix(in srgb, var(--app-foreground) 16%, transparent);
+  border-radius: 999px;
   color: color-mix(in srgb, var(--app-foreground) 94%, transparent);
 }
 
 .sidebar-space-filter-button[data-dragging='true'] {
   cursor: grabbing;
   opacity: 0.55;
+}
+
+/*
+ * CDXC:SidebarSpaces 2026-08-30:
+ * The Space overflow ("More") dropdown echoes the switcher's pill buttons with
+ * rounded corners instead of the sidebar's default square context menu.
+ */
+.sidebar-space-filter-overflow-menu.session-context-menu {
+  border-radius: 10px;
+}
+
+.sidebar-space-filter-overflow-menu .session-context-menu-item {
+  border-radius: 6px;
 }
 
 .sidebar-space-filter-icon {

@@ -751,6 +751,7 @@ export function SpaceFilterRow({
       </div>
       {moreMenuPosition ? (
         <SidebarContextMenuPortal
+          menuClassName='session-context-menu sidebar-space-filter-overflow-menu'
           menuRef={menuRef}
           menuStyle={{ left: `${moreMenuPosition.x}px`, top: `${moreMenuPosition.y}px`, width: '218px' }}
           onDismiss={dismissMenus}
