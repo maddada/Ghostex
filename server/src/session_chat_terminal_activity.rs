@@ -57,7 +57,8 @@ pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
 /// Claude Code's current assistant status, not yet flushed to transcript JSONL.
 pub const SESSION_CHAT_ACTIVITY_CLAUDE_STATUS: &str = "claude-status";
 
-/// A Claude Code background shell that remains live after the assistant turn.
+/// A Claude Code background shell or monitor that remains live after the
+/// assistant turn.
 pub const SESSION_CHAT_ACTIVITY_SHELLS_RUNNING: &str = "shells-running";
 
 /// Star frames Claude may use for allowlisted non-general status rows. Merely
@@ -269,6 +270,10 @@ fn is_dynamic_workflow_wait_label(label: &str) -> bool {
 ///     <one alphabetic word> for <duration> · <count> shell(s) still running
 ///     <one alphabetic word> for <duration> · done <time> · <count> shell(s) still running
 ///
+/// Claude paints the identical grammar for a running Monitor
+/// (`… · 1 monitor still running`), so the unit word may also be
+/// `monitor`/`monitors`; both share the `shells-running` activity kind.
+///
 /// The first shape is an advancing clock, so move it into progress metadata.
 /// In the second shape Claude has frozen that duration and added a completion
 /// timestamp; keep both in the stable label rather than making a finished
@@ -289,8 +294,11 @@ fn running_shells_activity(label: &str) -> Option<SessionChatTerminalActivity> {
     let elapsed_seconds = parse_elapsed_seconds(elapsed.trim())?;
     let (count, suffix) = shell_status.trim().split_once(' ')?;
     let count = count.parse::<u64>().ok()?;
-    let valid_suffix = (count == 1 && suffix == "shell still running")
-        || (count > 1 && suffix == "shells still running");
+    let valid_suffix = if count == 1 {
+        suffix == "shell still running" || suffix == "monitor still running"
+    } else {
+        suffix == "shells still running" || suffix == "monitors still running"
+    };
     if !valid_suffix {
         return None;
     }
