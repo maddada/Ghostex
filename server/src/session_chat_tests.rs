@@ -541,6 +541,9 @@ mod tests {
                     question: "Which approach?".to_string(),
                     header: None,
                     multi_select: false,
+                    allow_custom: None,
+                    tool_name: None,
+                    recommended: None,
                     options: Vec::new(),
                 }],
             }),
@@ -610,6 +613,9 @@ mod tests {
                 question: "Which animal do you prefer?".to_string(),
                 header: Some("Animal".to_string()),
                 multi_select: false,
+                allow_custom: None,
+                tool_name: None,
+                recommended: None,
                 options: Vec::new(),
             }],
         };
@@ -624,6 +630,9 @@ mod tests {
                 question: "Which color do you prefer?".to_string(),
                 header: None,
                 multi_select: false,
+                allow_custom: None,
+                tool_name: None,
+                recommended: None,
                 options: Vec::new(),
             }],
         };
@@ -1488,6 +1497,7 @@ mod tests {
                         "question": "Which approach?",
                         "header": "Approach",
                         "multiSelect": false,
+                        "toolName": "ask_user_question",
                         "options": [
                             {"label": "Fast", "description": "quick"},
                             {"label": "Careful"},
@@ -1577,13 +1587,16 @@ mod tests {
     fn question_parsing_follows_canonical_shape_rules() {
         // Strict multiSelect === true; strings and label objects both parse;
         // malformed options drop; question objects need text OR options.
-        let parsed = parse_session_chat_questions(&json!({
-            "questions": [
-                {"question": "Q1", "multiSelect": true, "options": ["A", {"label": "B"}, 7]},
-                {"question": "", "options": []},
-                {"question": "Q2", "multiSelect": "yes"},
-            ],
-        }))
+        let parsed = parse_session_chat_questions(
+            None,
+            &json!({
+                "questions": [
+                    {"question": "Q1", "multiSelect": true, "options": ["A", {"label": "B"}, 7]},
+                    {"question": "", "options": []},
+                    {"question": "Q2", "multiSelect": "yes"},
+                ],
+            }),
+        )
         .expect("questions parse");
         assert_eq!(parsed.len(), 2);
         assert!(parsed[0].multi_select);
@@ -1597,8 +1610,8 @@ mod tests {
         );
         assert!(!parsed[1].multi_select);
         assert!(parsed[1].options.is_empty());
-        assert!(parse_session_chat_questions(&json!({"questions": []})).is_none());
-        assert!(parse_session_chat_questions(&json!({"notQuestions": true})).is_none());
+        assert!(parse_session_chat_questions(None, &json!({"questions": []})).is_none());
+        assert!(parse_session_chat_questions(None, &json!({"notQuestions": true})).is_none());
     }
 
     fn write_temp_transcript(lines: &[&str]) -> PathBuf {

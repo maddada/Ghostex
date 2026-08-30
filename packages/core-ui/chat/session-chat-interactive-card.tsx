@@ -499,25 +499,31 @@ export function SessionChatInteractiveCard({
             <IconArrowLeft aria-hidden='true' stroke={2} />
           </Button>
         ) : null}
-        <input
-          className='min-w-0 flex-1 bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-default'
-          disabled={readOnly}
-          onChange={(event) => {
-            const value = event.target.value;
-            setDrafts((current) =>
-              current.map((entry, index) => (index === questionIndex ? { ...entry, other: value } : entry))
-            );
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              advance();
-            }
-          }}
-          placeholder='Write a custom answer…'
-          type='text'
-          value={draft.other}
-        />
+        {question?.allowCustom === false ? (
+          // The asking tool takes no free-text answer (Pi's cursor_ask_question
+          // with allowCustom: false), so only the options are offered.
+          <div aria-hidden='true' className='min-w-0 flex-1' />
+        ) : (
+          <input
+            className='min-w-0 flex-1 bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-default'
+            disabled={readOnly}
+            onChange={(event) => {
+              const value = event.target.value;
+              setDrafts((current) =>
+                current.map((entry, index) => (index === questionIndex ? { ...entry, other: value } : entry))
+              );
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                advance();
+              }
+            }}
+            placeholder='Write a custom answer…'
+            type='text'
+            value={draft.other}
+          />
+        )}
         <Button
           className='min-w-24'
           data-chat-answer-control=''

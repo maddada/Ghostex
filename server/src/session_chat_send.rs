@@ -165,6 +165,8 @@ const ASK_PREVIOUS_ROW: &str = "\u{1b}[A"; // Up
 const ASK_NEXT_ROW: &str = "\u{1b}[B"; // Down
 const ASK_NOTES: &str = "\t"; // Tab → open notes (Codex)
 const ASK_DELETE: &str = "\u{7f}"; // DEL — clear/skip a Codex row
+const ASK_TAB: &str = "\t"; // Tab → next question tab (omp's ask dialog)
+const ASK_SPACE: &str = " "; // Space → toggle a multi-select row (omp)
 
 // ---------------------------------------------------------------------------
 // Clear burst (upstream chat spec §7.2) — measured, not derived
@@ -429,6 +431,241 @@ pub fn build_codex_ask_answer_keys(
     }
     if has_unanswered {
         // Codex opens a confirmation; Proceed is highlighted by default.
+        groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+    }
+    groups
+}
+
+/*
+Pi's cursor_ask_question renders pi-tui selects (ctx.ui.select): ↑/↓ move the
+highlight (wrapping), Enter commits, Esc/Ctrl+C cancels — no digit shortcuts
+and no skip. Questions show ONE AT A TIME, so the groups for question N+1 only
+land after question N's Enter; the queue's per-group pacing covers the repaint.
+A question that allows a custom answer appends one "Type a custom answer" row
+after its options, and committing that row opens a one-line input
+(ctx.ui.input) that submits on Enter. An optionless question shows that bare
+input directly. Cancelling any question ends pi's whole question loop, so an
+unanswered question emits the cancel and nothing after it.
+*/
+pub fn build_pi_ask_answer_keys(
+    questions: &[SessionChatQuestion],
+    selections: &[SessionChatQuestionSelection],
+) -> Vec<AskAnswerKeyGroup> {
+    let mut groups: Vec<AskAnswerKeyGroup> = Vec::new();
+    for (question_index, question) in questions.iter().enumerate() {
+        let selection = selections.get(question_index);
+        let other = selection_other(selection);
+        let selected_index = selection.and_then(|selection| selection.indices.first().copied());
+        let allows_custom = question.allow_custom != Some(false);
+        if question.options.is_empty() {
+            let answer = answer_labels(question, selection).join(", ");
+            if answer.is_empty() {
+                groups.push(AskAnswerKeyGroup::Raw(SESSION_CHAT_INTERRUPT.to_string()));
+                break;
+            }
+            groups.push(AskAnswerKeyGroup::Text(answer));
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+            continue;
+        }
+        if !other.is_empty() && allows_custom {
+            // Single-value answer: any picked labels join the free text as one
+            // string through the custom-answer input (the Claude single-select
+            // rule). The custom row sits one past the last option.
+            groups.push(AskAnswerKeyGroup::Raw(
+                ASK_NEXT_ROW.repeat(question.options.len()),
+            ));
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+            groups.push(AskAnswerKeyGroup::Text(
+                answer_labels(question, selection).join(", "),
+            ));
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+            continue;
+        }
+        if let Some(index) = selected_index {
+            if index > 0 {
+                groups.push(AskAnswerKeyGroup::Raw(ASK_NEXT_ROW.repeat(index)));
+            }
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+            continue;
+        }
+        groups.push(AskAnswerKeyGroup::Raw(SESSION_CHAT_INTERRUPT.to_string()));
+        break;
+    }
+    groups
+}
+
+/*
+Hermes' clarify panel numbers every row: in single-select mode a digit (1-9,
+then 0 for the 10th row) SUBMITS that choice directly — and in batch
+(multi-question) mode it locks the active question's answer and auto-advances
+to the next unanswered one, so the same digit sequence drives both layouts.
+The row one past the last choice is "Other (type your answer)": its digit
+switches the composer into freetext mode, where typed text + Enter submits
+(or locks, in batch mode). Multi-select rows are checkboxes — digits TOGGLE
+and Enter confirms; checking Other routes through freetext the same way.
+There is no skip key and Esc is not bound to the panel, so an unanswered
+question simply stops the key plan and leaves the panel to the terminal.
+*/
+pub fn build_hermes_ask_answer_keys(
+    questions: &[SessionChatQuestion],
+    selections: &[SessionChatQuestionSelection],
+) -> Vec<AskAnswerKeyGroup> {
+    // Panel row digit for 0-based row `index`: 1-9, then 0 for the 10th row.
+    // Clarify caps choices at 4, so Other is at worst row 5 — the guards only
+    // matter if that cap ever moves.
+    fn row_digit(index: usize) -> Option<String> {
+        match index {
+            0..=8 => Some((index + 1).to_string()),
+            9 => Some("0".to_string()),
+            _ => None,
+        }
+    }
+    let mut groups: Vec<AskAnswerKeyGroup> = Vec::new();
+    for (question_index, question) in questions.iter().enumerate() {
+        let selection = selections.get(question_index);
+        let other = selection_other(selection);
+        let indices: &[usize] = selection
+            .map(|selection| selection.indices.as_slice())
+            .unwrap_or_default();
+        if question.options.is_empty() {
+            // Open-ended question: the panel is already in freetext mode.
+            let answer = answer_labels(question, selection).join(", ");
+            if answer.is_empty() {
+                break;
+            }
+            groups.push(AskAnswerKeyGroup::Text(answer));
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+            continue;
+        }
+        let other_row = question.options.len();
+        if question.multi_select {
+            if indices.is_empty() && other.is_empty() {
+                break;
+            }
+            for index in indices {
+                let Some(digit) = row_digit(*index) else {
+                    continue;
+                };
+                // Each digit TOGGLES a checkbox.
+                groups.push(AskAnswerKeyGroup::Raw(digit));
+            }
+            if !other.is_empty() {
+                let Some(digit) = row_digit(other_row) else {
+                    break;
+                };
+                groups.push(AskAnswerKeyGroup::Raw(digit)); // check Other
+                groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // → freetext
+                groups.push(AskAnswerKeyGroup::Text(other.to_string()));
+            }
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+            continue;
+        }
+        if !other.is_empty() {
+            // Single-value answer: any picked labels join the free text as one
+            // string through Other's freetext (the Claude single-select rule).
+            let Some(digit) = row_digit(other_row) else {
+                break;
+            };
+            groups.push(AskAnswerKeyGroup::Raw(digit));
+            groups.push(AskAnswerKeyGroup::Text(
+                answer_labels(question, selection).join(", "),
+            ));
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+            continue;
+        }
+        if let Some(digit) = indices.first().copied().and_then(row_digit) {
+            // Submits (single) / locks and advances (batch).
+            groups.push(AskAnswerKeyGroup::Raw(digit));
+            continue;
+        }
+        break;
+    }
+    groups
+}
+
+/*
+omp's built-in `ask` tool opens its rich dialog (one tab per question plus a
+Submit tab whenever there is more than one question or any multi question).
+The cursor starts on the `recommended` row (default 0, clamped) and ↑/↓ move
+it WITHOUT wrapping; rows are the options in order plus a trailing
+"Other (type your own)" row. Single-select Enter picks the row and
+auto-advances (submitting a single-question dialog directly); Enter on Other
+opens a custom-answer prompt that submits on Enter. Multi-select Space
+toggles, and the plan advances with Tab instead of Enter because Enter on the
+Other row would re-open the prompt. The final Enter confirms the Submit tab.
+Esc cancels the whole dialog, so it is only sent for an unanswered
+single-question dialog, which has no tab to step past.
+*/
+pub fn build_omp_ask_answer_keys(
+    questions: &[SessionChatQuestion],
+    selections: &[SessionChatQuestionSelection],
+) -> Vec<AskAnswerKeyGroup> {
+    fn move_cursor(groups: &mut Vec<AskAnswerKeyGroup>, from: usize, to: usize) {
+        if to > from {
+            groups.push(AskAnswerKeyGroup::Raw(ASK_NEXT_ROW.repeat(to - from)));
+        } else if from > to {
+            groups.push(AskAnswerKeyGroup::Raw(ASK_PREVIOUS_ROW.repeat(from - to)));
+        }
+    }
+    let has_submit_tab =
+        questions.len() > 1 || questions.iter().any(|question| question.multi_select);
+    let mut cancelled = false;
+    let mut groups: Vec<AskAnswerKeyGroup> = Vec::new();
+    for (question_index, question) in questions.iter().enumerate() {
+        let selection = selections.get(question_index);
+        let other = selection_other(selection);
+        let indices: &[usize] = selection
+            .map(|selection| selection.indices.as_slice())
+            .unwrap_or_default();
+        if indices.is_empty() && other.is_empty() {
+            if has_submit_tab {
+                // Skip: step to the next question tab, leaving no answer.
+                groups.push(AskAnswerKeyGroup::Raw(ASK_TAB.to_string()));
+                continue;
+            }
+            groups.push(AskAnswerKeyGroup::Raw(SESSION_CHAT_INTERRUPT.to_string()));
+            cancelled = true;
+            break;
+        }
+        let other_row = question.options.len();
+        // The dialog clamps the initial cursor to [0, other_row].
+        let start = question.recommended.unwrap_or(0).min(other_row);
+        if question.multi_select {
+            let mut cursor = start;
+            for index in indices {
+                if *index >= question.options.len() {
+                    continue;
+                }
+                move_cursor(&mut groups, cursor, *index);
+                groups.push(AskAnswerKeyGroup::Raw(ASK_SPACE.to_string()));
+                cursor = *index;
+            }
+            if !other.is_empty() {
+                move_cursor(&mut groups, cursor, other_row);
+                groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // open the prompt
+                groups.push(AskAnswerKeyGroup::Text(other.to_string()));
+                groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // prompt submits
+            }
+            groups.push(AskAnswerKeyGroup::Raw(ASK_TAB.to_string()));
+            continue;
+        }
+        if !other.is_empty() {
+            // Single-value answer: picked labels join the free text as one
+            // string through the custom-answer prompt (the Claude rule).
+            move_cursor(&mut groups, start, other_row);
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // open the prompt
+            groups.push(AskAnswerKeyGroup::Text(
+                answer_labels(question, selection).join(", "),
+            ));
+            groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // submit + advance
+            continue;
+        }
+        let index = (*indices.first().expect("indices checked non-empty")).min(other_row);
+        move_cursor(&mut groups, start, index);
+        groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // pick + advance/submit
+    }
+    if has_submit_tab && !cancelled && !groups.is_empty() {
+        // Final Submit confirmation.
         groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
     }
     groups
@@ -1556,6 +1793,9 @@ mod tests {
             question: text.to_string(),
             header: None,
             multi_select,
+            allow_custom: None,
+            tool_name: None,
+            recommended: None,
             options: options
                 .iter()
                 .map(|label| SessionChatQuestionOption {
@@ -2177,6 +2417,13 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                     },
                 };
             let agent = session_chat_agent_for_session(&target.session);
+            // One agent can host different asking tools with different
+            // terminal UIs (omp ships its own `ask` dialog next to the pi
+            // cursor bridge), so the key plan follows the tool that asked.
+            let question_tool = questions
+                .first()
+                .and_then(|question| question.tool_name.as_deref())
+                .map(crate::session_chat::normalize_session_chat_tool_name);
             match agent.as_deref() {
                 Some("claude" | "openclaude") => crate::session_chat_send::build_ask_answer_steps(
                     &crate::session_chat_send::build_claude_ask_answer_keys(
@@ -2186,6 +2433,30 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                 ),
                 Some("codex") => crate::session_chat_send::build_ask_answer_steps(
                     &crate::session_chat_send::build_codex_ask_answer_keys(&questions, &selections),
+                ),
+                // omp's built-in `ask` renders its rich dialog; every other
+                // question on a pi-family session is the pi-tui select the
+                // cursor bridge owns while a cursor_ask_question is pending.
+                Some("pi") if question_tool.as_deref() == Some("ask") => {
+                    crate::session_chat_send::build_ask_answer_steps(
+                        &crate::session_chat_send::build_omp_ask_answer_keys(
+                            &questions,
+                            &selections,
+                        ),
+                    )
+                }
+                Some("pi") => crate::session_chat_send::build_ask_answer_steps(
+                    &crate::session_chat_send::build_pi_ask_answer_keys(&questions, &selections),
+                ),
+                // Hermes' clarify panel owns the composer while it is open (the
+                // Enter binding routes buffer text to the clarify queue), so
+                // the composer fallback would corrupt it; drive the panel's
+                // digit/freetext keys instead.
+                Some("hermes") => crate::session_chat_send::build_ask_answer_steps(
+                    &crate::session_chat_send::build_hermes_ask_answer_keys(
+                        &questions,
+                        &selections,
+                    ),
                 ),
                 _ => {
                     /*

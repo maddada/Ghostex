@@ -194,6 +194,21 @@ export interface SessionChatQuestion {
   question: string;
   header?: string;
   multiSelect: boolean;
+  /**
+   * False when the asking tool offers no free-text answer (Pi's
+   * cursor_ask_question with allowCustom: false); absent for tools that always
+   * take one (Claude's "Type something" row).
+   */
+  allowCustom?: boolean;
+  /**
+   * The tool that asked, verbatim (AskUserQuestion, cursor_ask_question,
+   * clarify, ask, …). The server's answer keystroke plan dispatches on it, so
+   * one agent can host multiple asking tools with different terminal UIs.
+   * Absent on prompts stored before 2026-08-30.
+   */
+  toolName?: string;
+  /** omp's recommended option index: its ask dialog opens with the cursor on this row. */
+  recommended?: number;
   options: SessionChatQuestionOption[];
 }
 

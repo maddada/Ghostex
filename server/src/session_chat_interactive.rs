@@ -21,6 +21,22 @@ pub struct SessionChatQuestion {
     pub header: Option<String>,
     #[serde(rename = "multiSelect")]
     pub multi_select: bool,
+    /// `Some(false)` when the asking tool offers no free-text answer (Pi's
+    /// `cursor_ask_question` with `allowCustom: false`). Absent for tools that
+    /// always take one (Claude's "Type something" row).
+    #[serde(rename = "allowCustom", skip_serializing_if = "Option::is_none")]
+    pub allow_custom: Option<bool>,
+    /// The tool that asked, verbatim (`AskUserQuestion`, `cursor_ask_question`,
+    /// `clarify`, `ask`, …). One agent can host multiple asking tools with
+    /// different terminal UIs (omp ships both its `ask` dialog and the pi
+    /// cursor bridge), so the answer keystroke plan dispatches on this, not
+    /// only on the agent. Absent on prompts stored before 2026-08-30.
+    #[serde(rename = "toolName", skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+    /// omp's `recommended` option index: its ask dialog opens with the cursor
+    /// on this row (default 0), so arrow-key answer plans start counting here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommended: Option<usize>,
     pub options: Vec<SessionChatQuestionOption>,
 }
 
@@ -84,15 +100,24 @@ pub fn is_post_tool_hook_event(event_name: Option<&str>) -> bool {
     )
 }
 
-/// Upstream `isAskUserQuestionTool`: strip non-alphanumerics, lowercase, and match
-/// AskUserQuestion (Claude) / request_user_input (Codex 0.145) spellings.
-pub fn is_ask_user_question_tool(tool_name: &str) -> bool {
-    let normalized: String = tool_name
+/// Strip non-alphanumerics and lowercase — the shared spelling-insensitive
+/// form the ask-tool checks below compare against.
+pub fn normalize_session_chat_tool_name(tool_name: &str) -> String {
+    tool_name
         .chars()
         .filter(char::is_ascii_alphanumeric)
         .collect::<String>()
-        .to_ascii_lowercase();
-    normalized == "askuserquestion" || normalized == "requestuserinput"
+        .to_ascii_lowercase()
+}
+
+/// Upstream `isAskUserQuestionTool`: match AskUserQuestion (Claude) /
+/// request_user_input (Codex 0.145) / cursor_ask_question (Pi's pi-cursor-sdk
+/// bridge) / clarify (Hermes Agent) / ask (oh-my-pi) spellings.
+pub fn is_ask_user_question_tool(tool_name: &str) -> bool {
+    matches!(
+        normalize_session_chat_tool_name(tool_name).as_str(),
+        "askuserquestion" | "requestuserinput" | "cursoraskquestion" | "clarify" | "ask"
+    )
 }
 
 fn truncate_approval_summary(value: &str) -> String {
@@ -124,32 +149,80 @@ pub fn summarize_approval_input(tool_input: Option<&Value>) -> String {
     truncate_approval_summary(&json)
 }
 
-/// Upstream `parseQuestionsShape`: the canonical AskUserQuestion tool-input shape.
-pub fn parse_session_chat_questions(input: &Value) -> Option<Vec<SessionChatQuestion>> {
-    let raw_questions = input.as_object()?.get("questions")?.as_array()?;
-    if raw_questions.is_empty() {
-        return None;
-    }
+/// Hermes' clarify tool hard-caps `choices` at 4 and drops the surplus before
+/// the terminal panel renders, so a card offering more would offer picks the
+/// terminal cannot deliver.
+const HERMES_CLARIFY_MAX_CHOICES: usize = 4;
+
+/// Upstream `parseQuestionsShape`: the canonical AskUserQuestion tool-input
+/// shape (`{questions: [...]}`, also Hermes' clarify and omp's ask), plus the
+/// flat single-question shape Pi's `cursor_ask_question` sends (`{question,
+/// options, allowCustom}`, with `prompt`/`choices` accepted as aliases the way
+/// the bridge normalizes them) and Hermes' legacy flat `{question, choices,
+/// multi_select}` call. `tool_name` is the asking tool; it travels on every
+/// parsed question so the answer path can pick that tool's keystroke plan.
+pub fn parse_session_chat_questions(
+    tool_name: Option<&str>,
+    input: &Value,
+) -> Option<Vec<SessionChatQuestion>> {
+    let record = input.as_object()?;
+    let is_hermes_clarify =
+        tool_name.is_some_and(|tool_name| normalize_session_chat_tool_name(tool_name) == "clarify");
+    let raw_questions: Vec<&Value> = match record.get("questions").and_then(Value::as_array) {
+        Some(array) if !array.is_empty() => array.iter().collect(),
+        // No questions array → try the input object itself as one question.
+        _ => vec![input],
+    };
     let mut questions = Vec::new();
+    let bare_entry_record = Map::new();
     for raw in raw_questions {
-        let Some(record) = raw.as_object() else {
-            continue;
+        // Hermes tolerates bare-string batch entries (["Q1?", "Q2?"]).
+        let bare_question = raw.as_str().map(str::trim).filter(|text| !text.is_empty());
+        let record = match raw.as_object() {
+            Some(record) => record,
+            None if bare_question.is_some() => &bare_entry_record,
+            None => continue,
         };
-        let text = record
-            .get("question")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string();
-        let options = parse_session_chat_question_options(record.get("options"));
+        let text = bare_question
+            .map(str::to_string)
+            .or_else(|| {
+                record
+                    .get("question")
+                    .or_else(|| record.get("prompt"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .unwrap_or_default();
+        let mut options = parse_session_chat_question_options(
+            record.get("options").or_else(|| record.get("choices")),
+        );
+        if is_hermes_clarify {
+            options.truncate(HERMES_CLARIFY_MAX_CHOICES);
+        }
         if !text.is_empty() || !options.is_empty() {
+            // The spec uses strict === true; anything else is single-select.
+            // `multi_select` is Hermes' spelling, `multi` is omp's; Hermes
+            // additionally honors it only when choices exist.
+            let multi_select = record
+                .get("multiSelect")
+                .or_else(|| record.get("multi_select"))
+                .or_else(|| record.get("multi"))
+                .and_then(Value::as_bool)
+                == Some(true)
+                && !(is_hermes_clarify && options.is_empty());
             questions.push(SessionChatQuestion {
                 question: text,
                 header: record
                     .get("header")
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                // The spec uses strict === true; anything else is single-select.
-                multi_select: record.get("multiSelect").and_then(Value::as_bool) == Some(true),
+                multi_select,
+                allow_custom: record.get("allowCustom").and_then(Value::as_bool),
+                tool_name: tool_name.map(str::to_string),
+                recommended: record
+                    .get("recommended")
+                    .and_then(Value::as_u64)
+                    .map(|index| index as usize),
                 options,
             });
         }
@@ -168,8 +241,14 @@ fn parse_session_chat_question_options(raw: Option<&Value>) -> Vec<SessionChatQu
                 label: label.clone(),
                 description: None,
             }),
+            // Pi options carry `{label, value}`; the label is what its select
+            // renders, with `value` as the fallback the bridge also uses.
             Value::Object(record) => Some(SessionChatQuestionOption {
-                label: record.get("label").and_then(Value::as_str)?.to_string(),
+                label: record
+                    .get("label")
+                    .or_else(|| record.get("value"))
+                    .and_then(Value::as_str)?
+                    .to_string(),
                 description: record
                     .get("description")
                     .and_then(Value::as_str)
@@ -200,7 +279,7 @@ pub fn derive_session_chat_prompt(
         && !is_post_tool_hook_event(event_name)
         && tool_input.is_some_and(|value| !value.is_null())
     {
-        let questions = parse_session_chat_questions(tool_input?)?;
+        let questions = parse_session_chat_questions(Some(tool_name), tool_input?)?;
         return Some(SessionChatInteractivePrompt::Question { questions });
     }
     if event_name == Some("PermissionRequest") {
@@ -265,7 +344,7 @@ impl SessionChatTranscriptPromptState {
                         if is_ask_user_question_tool(name) =>
                     {
                         self.answered = false;
-                        self.pending = parse_session_chat_questions(input)
+                        self.pending = parse_session_chat_questions(Some(name), input)
                             .map(|questions| SessionChatInteractivePrompt::Question { questions });
                         self.last_question = self.pending.clone();
                     }
