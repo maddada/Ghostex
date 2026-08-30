@@ -1470,15 +1470,36 @@ fn starts_with_injected_provider_envelope(text: &str) -> bool {
         || text.starts_with("<permissions instructions>")
 }
 
+/*
+Headless helper runs and harness scaffolding turns land in the same transcripts
+as real conversations: Ghostex spawns an agent to write a session title or a
+commit message, and agent harnesses inject their own continuation turns. Every
+one of those replays the same instruction block, so the picker fills up with
+rows that read identically. Reject them by their opening line for the same
+reason as the tag envelopes above.
+*/
+const INJECTED_PROMPT_PREFIXES: &[&str] = &[
+    "# AGENTS.md instructions",
+    "[Image extracted from tool result above]",
+    "[Request interrupted",
+    "Briefly inform the user about the task result and perform any follow-up actions",
+    "Caveat: The messages below",
+    "Continue the conversation using Cursor SDK capabilities only.",
+    "Cursor SDK tool boundary:",
+    "The beginning of the above subagent result is already visible to the user.",
+    "The user interrupted the previous turn:",
+    "Write a Git commit message for the staged changes.",
+    "Write a concise session title that summarizes the user's text.",
+    "You write concise git commit messages.",
+];
+
 fn visible_user_prompt(text: &str) -> Option<String> {
     let trimmed = text.trim_matches(|ch: char| ch.is_whitespace() || ch.is_control());
     if trimmed.is_empty()
         || starts_with_injected_provider_envelope(trimmed)
-        || trimmed.starts_with("# AGENTS.md instructions")
-        || trimmed.starts_with("[Image extracted from tool result above]")
-        || trimmed.starts_with("[Request interrupted")
-        || trimmed.starts_with("Caveat: The messages below")
-        || trimmed.starts_with("The user interrupted the previous turn:")
+        || INJECTED_PROMPT_PREFIXES
+            .iter()
+            .any(|prefix| trimmed.starts_with(prefix))
     {
         return None;
     }
