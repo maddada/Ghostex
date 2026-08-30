@@ -5,6 +5,7 @@ import {
   IconEyeOff,
   IconFileExport,
   IconGitBranch,
+  IconListCheck,
   IconListDetails,
   IconMaximize,
   IconMinimize,
@@ -247,7 +248,7 @@ export function SessionChatComposerActions({
   ) : null;
   const summaryMenuItem = onToggleSummary ? (
     <DropdownMenuCheckboxItem
-      className='whitespace-nowrap'
+      className='pr-2 whitespace-nowrap'
       checked={summaryMode}
       closeOnClick={false}
       onCheckedChange={(checked: boolean) => {
@@ -255,8 +256,9 @@ export function SessionChatComposerActions({
           onToggleSummary();
         }
       }}
+      showIndicator={false}
     >
-      <IconListDetails aria-hidden='true' />
+      {summaryMode ? <IconListCheck aria-hidden='true' /> : <IconListDetails aria-hidden='true' />}
       Summary mode
       <DropdownMenuShortcut>{formatSidebarHotkeyLabel(sessionChatSummaryToggleHotkey())}</DropdownMenuShortcut>
     </DropdownMenuCheckboxItem>
@@ -328,20 +330,22 @@ export function SessionChatComposerActions({
     terminalTail?.captured && terminalTail.composerState !== 'unknown' ? terminalTail.composerState : null;
   const terminalTailPreview =
     terminalTail?.captured === true ? formatSessionTerminalTailPreview(terminalTail.lines) : '';
-  const switchViewTitle = withShortcut('Terminal View', hostActions?.switchViewShortcut);
+  const switchViewTitle = withShortcut('Click to Switch to Terminal View', hostActions?.switchViewShortcut);
   const switchViewNotReadyReason = terminalReadiness === 'notReady' ? (terminalTail?.reason ?? null) : null;
-  const switchViewTooltip: ReactNode =
-    terminalTailPreview.length > 0 ? (
-      <div className='flex min-w-0 flex-col gap-1.5'>
+  const switchViewTooltip: ReactNode = (
+    <div className='flex min-w-0 flex-col gap-1.5'>
+      <div className='flex flex-col gap-0.5'>
+        <strong className='font-semibold'>Agent CLI Preview</strong>
         <div>{switchViewTitle}</div>
-        {switchViewNotReadyReason ? <div className='opacity-70'>{switchViewNotReadyReason}</div> : null}
-        <pre className='max-w-full font-mono text-[10px] leading-[1.5] whitespace-pre-wrap opacity-85'>
+      </div>
+      {switchViewNotReadyReason ? <div className='opacity-70'>{switchViewNotReadyReason}</div> : null}
+      {terminalTailPreview.length > 0 ? (
+        <pre className='max-w-full font-mono text-[14px] leading-[1.5] whitespace-pre-wrap opacity-85'>
           {terminalTailPreview}
         </pre>
-      </div>
-    ) : (
-      switchViewTitle
-    );
+      ) : null}
+    </div>
+  );
 
   const switchViewButton = hostActions ? (
     <AppTooltip

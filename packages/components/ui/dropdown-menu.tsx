@@ -156,9 +156,11 @@ function DropdownMenuCheckboxItem({
   children,
   checked,
   inset,
+  showIndicator = true,
   ...props
 }: MenuPrimitive.CheckboxItem.Props & {
   inset?: boolean;
+  showIndicator?: boolean;
 }) {
   return (
     <MenuPrimitive.CheckboxItem
@@ -171,14 +173,16 @@ function DropdownMenuCheckboxItem({
       checked={checked}
       {...props}
     >
-      <span
-        className='pointer-events-none absolute right-2 flex items-center justify-center'
-        data-slot='dropdown-menu-checkbox-item-indicator'
-      >
-        <MenuPrimitive.CheckboxItemIndicator>
-          <IconCheck />
-        </MenuPrimitive.CheckboxItemIndicator>
-      </span>
+      {showIndicator ? (
+        <span
+          className='pointer-events-none absolute right-2 flex items-center justify-center'
+          data-slot='dropdown-menu-checkbox-item-indicator'
+        >
+          <MenuPrimitive.CheckboxItemIndicator>
+            <IconCheck />
+          </MenuPrimitive.CheckboxItemIndicator>
+        </span>
+      ) : null}
       {children}
     </MenuPrimitive.CheckboxItem>
   );
