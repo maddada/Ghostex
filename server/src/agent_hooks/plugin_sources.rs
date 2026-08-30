@@ -18,20 +18,27 @@ else
   IFS= read -r -t 1 INPUT_ARG || true
 fi
 
+# Codex's Interrupt hook output schema permits only `systemMessage`; the
+# generic `continue` field used by the other hook events is rejected.
+HOOK_RESPONSE='{{"continue":true}}'
+if [[ "$INPUT_ARG" == *'"hook_event_name":"Interrupt"'* ]]; then
+  HOOK_RESPONSE='{{}}'
+fi
+
 SESSION_STATE_FILE="${{VSMUX_SESSION_STATE_FILE:-${{GHOSTEX_SESSION_STATE_FILE:-$ghostex_SESSION_STATE_FILE}}}}"
 DEFAULT_HOOK_STATE_DIR={hook_state_directory}
 HOOK_STATE_DIR="${{GHOSTEX_AGENT_HOOK_STATE_DIR:-$DEFAULT_HOOK_STATE_DIR}}"
 if [ "${{GHOSTEX_INTERNAL_PROMPT_GENERATION:-}}" = "1" ] || [ "${{GHOSTEX_INTERNAL_TITLE_GENERATION:-}}" = "1" ]; then
-  printf '{{"continue":true}}'
+  printf '%s' "$HOOK_RESPONSE"
   exit 0
 fi
 if [ -z "$SESSION_STATE_FILE" ] && {{ [ -z "${{GHOSTEX_GLOBAL_SESSION_REF:-}}" ] || [ -z "${{GHOSTEX_GXSERVER_BASE_URL:-}}" ] || [ -z "${{GHOSTEX_GXSERVER_AUTH_TOKEN_FILE:-}}" ]; }}; then
-  printf '{{"continue":true}}'
+  printf '%s' "$HOOK_RESPONSE"
   exit 0
 fi
 
 {executable} agent-hook-notify "$SESSION_STATE_FILE" "$INPUT_ARG" "$HOOK_STATE_DIR" >/dev/null 2>/dev/null || true
-printf '{{"continue":true}}'
+printf '%s' "$HOOK_RESPONSE"
 exit 0
 "#,
         executable = shell_quote(executable),

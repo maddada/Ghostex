@@ -5,7 +5,7 @@ use crate::paths::GxserverPaths;
 use super::probing::{normalize_environment_path, unique_path_bufs};
 
 pub(crate) const NOTIFY_HOOK_MARKER: &str = "ghostex-gxserver-agent-notify-hook-marker";
-pub(crate) const NOTIFY_HOOK_VERSION: usize = 7;
+pub(crate) const NOTIFY_HOOK_VERSION: usize = 8;
 pub(crate) const OPENCODE_PLUGIN_MARKER: &str = "ghostex-opencode-session-plugin-marker";
 pub(crate) const OPENCODE_PLUGIN_SPEC: &str = "./plugins/ghostex-session.js";
 pub(crate) const AMP_PLUGIN_MARKER: &str = "ghostex-amp-session-extension-marker";
