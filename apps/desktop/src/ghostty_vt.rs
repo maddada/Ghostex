@@ -2113,6 +2113,10 @@ pub struct VtKeyInput<'a> {
     pub utf8: Option<&'a str>,
     /// Codepoint the key produces without any modifiers (0 when unknown).
     pub unshifted_codepoint: u32,
+    /// IME composition (marked text) is active. The encoder suppresses
+    /// everything except plain modifiers so composition-owned keys never
+    /// reach the PTY.
+    pub composing: bool,
 }
 
 /// Key encoder plus its reusable event handle. Encodes key events into
@@ -2178,7 +2182,7 @@ impl VtKeyEncoder {
             ffi::ghostty_key_event_set_key(self.event, input.key);
             ffi::ghostty_key_event_set_mods(self.event, input.mods);
             ffi::ghostty_key_event_set_consumed_mods(self.event, input.consumed_mods);
-            ffi::ghostty_key_event_set_composing(self.event, false);
+            ffi::ghostty_key_event_set_composing(self.event, input.composing);
             ffi::ghostty_key_event_set_unshifted_codepoint(self.event, input.unshifted_codepoint);
             match input.utf8 {
                 Some(text) => {

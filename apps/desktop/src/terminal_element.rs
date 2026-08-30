@@ -522,6 +522,9 @@ struct MarkedTextLayout {
     row: u16,
     shaped: ShapedLine,
     background: Hsla,
+    /// Caret x-offset inside the preedit, from the IME-reported selection.
+    caret_x: Option<Pixels>,
+    caret_color: Hsla,
 }
 
 struct ScrollbarLayout {
@@ -576,6 +579,11 @@ pub struct TerminalView {
     /// IME marked (pre-edit) text drawn at the cursor, driven by the
     /// EntityInputHandler impl below.
     pub marked_text: Option<String>,
+    /// Caret/selection inside `marked_text` in UTF-16 offsets, as reported
+    /// by the IME. Backs `selected_text_range` so the IME sees a truthful
+    /// client and keeps owning editing keys mid-composition, and places the
+    /// caret inside the preedit overlay.
+    marked_selection_utf16: Option<Range<usize>>,
     focus_handle: FocusHandle,
     /// Focus state as of the last prepaint; edges send focus reports
     /// (mode 1004) and switch the cursor to hollow.
@@ -686,6 +694,7 @@ impl TerminalView {
             settings: TerminalViewSettings::default(),
             selection: None,
             marked_text: None,
+            marked_selection_utf16: None,
             focus_handle: cx.focus_handle(),
             focused: false,
             last_modifiers: Modifiers::default(),
@@ -766,6 +775,7 @@ impl TerminalView {
         self.input_suppressed = suppressed;
         if suppressed {
             self.marked_text = None;
+            self.marked_selection_utf16 = None;
         }
         cx.notify();
     }
@@ -1271,6 +1281,12 @@ impl TerminalView {
             keystroke_text(keystroke)
         };
         let mods = vt_mods(modifiers);
+        // While IME composition is active every key belongs to the marked
+        // text (the platform routes it to the IME first; a key can only get
+        // here when the IME declined it). The encoder drops everything but
+        // plain modifiers for composing events, so e.g. Backspace can never
+        // delete committed text behind an active pinyin preedit.
+        let composing = self.marked_text.is_some();
         let input = VtKeyInput {
             action: if event.is_held {
                 VtKeyAction::Repeat
@@ -1290,6 +1306,7 @@ impl TerminalView {
             },
             utf8,
             unshifted_codepoint,
+            composing,
         };
         let kitty_keyboard_flags = self.model.kitty_keyboard_flags();
         let accepted = self.model.send_key(&input);
@@ -1350,6 +1367,10 @@ impl TerminalView {
         }
         if accepted {
             self.after_send_input(cx);
+        }
+        // Composition-owned keys are consumed even when the encoder emitted
+        // nothing, so they cannot fall through to app keybindings mid-preedit.
+        if accepted || composing {
             cx.stop_propagation();
         }
     }
@@ -1367,6 +1388,7 @@ impl TerminalView {
             consumed_mods: 0,
             utf8: None,
             unshifted_codepoint,
+            composing: self.marked_text.is_some(),
         });
     }
 
@@ -1398,6 +1420,7 @@ impl TerminalView {
                 consumed_mods: 0,
                 utf8: None,
                 unshifted_codepoint: 0,
+                composing: self.marked_text.is_some(),
             });
         }
     }
@@ -1416,10 +1439,12 @@ impl TerminalView {
         );
         if self.input_suppressed {
             self.marked_text = None;
+            self.marked_selection_utf16 = None;
             cx.notify();
             return;
         }
         self.marked_text = None;
+        self.marked_selection_utf16 = None;
         if text.is_empty() {
             cx.notify();
             return;
@@ -1480,6 +1505,7 @@ impl TerminalView {
             consumed_mods: 0,
             utf8: None,
             unshifted_codepoint: 0,
+            composing: false,
         };
         if self.model.send_key(&input) {
             self.after_send_input(cx);
@@ -1497,6 +1523,7 @@ impl TerminalView {
             consumed_mods: 0,
             utf8: None,
             unshifted_codepoint: letter as u32,
+            composing: false,
         };
         if self.model.send_key(&input) {
             self.after_send_input(cx);
@@ -1520,6 +1547,7 @@ impl TerminalView {
             consumed_mods: 0,
             utf8: None,
             unshifted_codepoint: 0,
+            composing: false,
         };
         let kitty_keyboard_flags = self.model.kitty_keyboard_flags();
         let accepted = self.model.send_key(&input);
@@ -2043,6 +2071,7 @@ impl TerminalView {
                     consumed_mods: 0,
                     utf8: None,
                     unshifted_codepoint: 0,
+                    composing: false,
                 };
                 for _ in 0..steps.abs() {
                     self.model.send_key(&input);
@@ -2263,7 +2292,13 @@ impl TerminalView {
                     window,
                 )
             },
-            marked_text: layout_marked_text(self.marked_text.as_deref(), frame, &self.font, window),
+            marked_text: layout_marked_text(
+                self.marked_text.as_deref(),
+                self.marked_selection_utf16.as_ref(),
+                frame,
+                &self.font,
+                window,
+            ),
             scrollbar: layout_scrollbar(
                 self.settings.scrollbar_visible && self.scrollbar_visible,
                 frame.scrollbar,
@@ -2635,10 +2670,28 @@ impl EntityInputHandler for TerminalView {
     fn text_for_range(
         &mut self,
         range: Range<usize>,
-        _adjusted_range: &mut Option<Range<usize>>,
+        adjusted_range: &mut Option<Range<usize>>,
         window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<String> {
+        // The marked text is the terminal's whole addressable document, so
+        // the IME can read the preedit back (it consults this state before
+        // consuming editing keys like Backspace mid-composition).
+        let result = self.marked_text.as_ref().and_then(|text| {
+            let len_utf16 = text.encode_utf16().count();
+            let start = range.start.min(len_utf16);
+            let end = range.end.clamp(start, len_utf16);
+            if start == end {
+                return None;
+            }
+            if (start..end) != range {
+                *adjusted_range = Some(start..end);
+            }
+            Some(
+                text[utf16_offset_to_byte(text, start)..utf16_offset_to_byte(text, end)]
+                    .to_string(),
+            )
+        });
         crate::support_logs::append_temporary(
             crate::support_logs::GpuiSupportLog::TerminalFocus,
             "TEMP.gpui.fluidVoice.compositedTextServiceQuery",
@@ -2647,10 +2700,10 @@ impl EntityInputHandler for TerminalView {
                 "query": "textForRange",
                 "rangeEnd": range.end,
                 "rangeStart": range.start,
-                "result": "none",
+                "result": if result.is_some() { "markedText" } else { "none" },
             }),
         );
-        None
+        result
     }
 
     fn selected_text_range(
@@ -2669,11 +2722,12 @@ impl EntityInputHandler for TerminalView {
                 "rangeStart": 0,
             }),
         );
-        // The terminal has no editable backing document. This token range is
-        // sufficient for IME composition and keeps the platform from treating
-        // the terminal's scrollback as an editable text buffer.
+        // The terminal has no editable backing document. During composition
+        // the selection is the IME-reported caret inside the marked text;
+        // otherwise a token empty range keeps the platform from treating the
+        // terminal's scrollback as an editable text buffer.
         Some(UTF16Selection {
-            range: 0..0,
+            range: self.marked_selection_utf16.clone().unwrap_or(0..0),
             reversed: false,
         })
     }
@@ -2697,6 +2751,7 @@ impl EntityInputHandler for TerminalView {
                 "hadMarkedText": self.marked_text.is_some(),
             }),
         );
+        self.marked_selection_utf16 = None;
         if self.marked_text.take().is_some() {
             cx.notify();
         }
@@ -2743,16 +2798,28 @@ impl EntityInputHandler for TerminalView {
             }),
         );
         if self.input_suppressed {
+            self.marked_selection_utf16 = None;
             if self.marked_text.take().is_some() {
                 cx.notify();
             }
             return;
         }
-        self.marked_text = if new_text.is_empty() {
-            None
+        if new_text.is_empty() {
+            self.marked_text = None;
+            self.marked_selection_utf16 = None;
         } else {
-            Some(new_text.to_string())
-        };
+            let len_utf16 = new_text.encode_utf16().count();
+            self.marked_text = Some(new_text.to_string());
+            // Default to a caret at the end of the preedit when the IME
+            // doesn't report one.
+            self.marked_selection_utf16 = Some(match new_selected_range {
+                Some(range) => {
+                    let start = range.start.min(len_utf16);
+                    start..range.end.clamp(start, len_utf16)
+                }
+                None => len_utf16..len_utf16,
+            });
+        }
         cx.notify();
     }
 
@@ -3122,6 +3189,15 @@ impl Element for TerminalElement {
                     window,
                     cx,
                 );
+                if let Some(caret_x) = marked.caret_x {
+                    window.paint_quad(fill(
+                        Bounds::new(
+                            point(marked_origin.x + caret_x, marked_origin.y),
+                            size(px(1.), line_height),
+                        ),
+                        marked.caret_color,
+                    ));
+                }
             }
 
             if let Some(cursor) = &layout.cursor {
@@ -4264,8 +4340,21 @@ fn layout_cursor(
     })
 }
 
+/// Byte index in `text` for a UTF-16 code-unit offset (clamped to the end).
+fn utf16_offset_to_byte(text: &str, offset_utf16: usize) -> usize {
+    let mut utf16 = 0;
+    for (byte_index, ch) in text.char_indices() {
+        if utf16 >= offset_utf16 {
+            return byte_index;
+        }
+        utf16 += ch.len_utf16();
+    }
+    text.len()
+}
+
 fn layout_marked_text(
     marked_text: Option<&str>,
+    marked_selection_utf16: Option<&Range<usize>>,
     frame: &TerminalSnapshot,
     config: &TerminalFontConfig,
     window: &mut Window,
@@ -4294,10 +4383,15 @@ fn layout_marked_text(
         &[run],
         None,
     );
+    let caret_x = marked_selection_utf16.map(|selection| {
+        shaped.x_for_index(utf16_offset_to_byte(text, selection.start).min(text.len()))
+    });
     Some(MarkedTextLayout {
         col,
         row,
         shaped,
         background: rgb_to_hsla(frame.background),
+        caret_x,
+        caret_color: fg,
     })
 }
