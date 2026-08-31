@@ -359,7 +359,11 @@ pub(crate) fn session_effective_working_started_at(
     generated_at: &str,
 ) -> Option<String> {
     let generated_at_ms = parse_iso_ms(generated_at).unwrap_or_else(now_ms);
-    effective_working_started_at(session_agent_activity(session), generated_at_ms)
+    effective_working_started_at(session_agent_activity(session), generated_at_ms).or_else(|| {
+        (presentation_activity(session, generated_at) == "working")
+            .then(|| crate::session_chat_compacting::session_chat_compacting_detected_at(session))
+            .flatten()
+    })
 }
 
 pub(crate) fn session_agent_activity(session: &Value) -> Option<&Value> {

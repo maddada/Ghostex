@@ -107,6 +107,14 @@ reads `Unknown` and the queue behaves exactly as it did before this feature.
 pub type SessionChatQueueComposerReader =
     Arc<dyn Fn(&str, &str) -> SessionChatComposerReadiness + Send + Sync>;
 
+/*
+The one deliberate refresh the queue scheduler may request. It is called only
+for a session whose last whole screen capture proved `/compact` was live. That
+keeps headless queues moving after the chat client disconnects without turning
+the one-second scheduler into a general terminal-screen poller.
+*/
+pub type SessionChatQueueCompactingRefresher = Arc<dyn Fn(&str, &str, Option<&str>) + Send + Sync>;
+
 #[derive(Default)]
 struct SessionQueueGate {
     /// First moment this session looked stopped without looking busy since.
@@ -133,6 +141,7 @@ pub struct SessionChatQueueRuntime {
     publisher_factory: SessionChatQueuePublisherFactory,
     notice_reader: SessionChatQueueNoticeReader,
     composer_reader: SessionChatQueueComposerReader,
+    compacting_refresher: SessionChatQueueCompactingRefresher,
     gates: Arc<Mutex<HashMap<String, SessionQueueGate>>>,
     /// Sessions with a delivery in flight. The claim in
     /// `deliver_session_chat_queued_prompt` is the real guard; this only keeps
@@ -149,6 +158,7 @@ impl SessionChatQueueRuntime {
         publisher_factory: SessionChatQueuePublisherFactory,
         notice_reader: SessionChatQueueNoticeReader,
         composer_reader: SessionChatQueueComposerReader,
+        compacting_refresher: SessionChatQueueCompactingRefresher,
     ) -> Self {
         Self {
             paths,
@@ -157,6 +167,7 @@ impl SessionChatQueueRuntime {
             publisher_factory,
             notice_reader,
             composer_reader,
+            compacting_refresher,
             gates: Arc::new(Mutex::new(HashMap::new())),
             delivering: Arc::new(Mutex::new(HashSet::new())),
         }
@@ -233,6 +244,21 @@ impl SessionChatQueueRuntime {
             would lose the text with nothing to show for it.
             */
             if session_text(&session, "lifecycleState").as_deref() != Some("running") {
+                self.reset_gate(&key);
+                continue;
+            }
+            /*
+            A compacting marker is written by the same whole zmx screen capture
+            that feeds chat's progress card. Refresh only this marked state so
+            a queued prompt can leave as soon as compaction disappears even if
+            every client has disconnected. Failed/capped captures do not clear
+            the marker, so uncertainty always holds the prompt safely.
+            */
+            if crate::session_chat_compacting::session_chat_compacting_detected_at(&session)
+                .is_some()
+            {
+                let agent = session_chat_agent_for_session(&session);
+                (self.compacting_refresher)(&project_id, &session_id, agent.as_deref());
                 self.reset_gate(&key);
                 continue;
             }
@@ -1067,4 +1093,23 @@ pub(crate) fn session_chat_queue_composer_reader(
     Arc::new(move |project_id: &str, session_id: &str| {
         cached_session_chat_composer_readiness(&state, project_id, session_id)
     })
+}
+
+pub(crate) fn session_chat_queue_compacting_refresher(
+    state: &Arc<AppState>,
+) -> SessionChatQueueCompactingRefresher {
+    let detector = SessionChatOptionDetector::new(state);
+    Arc::new(
+        move |project_id: &str, session_id: &str, agent: Option<&str>| {
+            let detector = detector.clone();
+            let project_id = project_id.to_string();
+            let session_id = session_id.to_string();
+            let agent = agent.map(str::to_string);
+            tokio::task::spawn_blocking(move || {
+                // Respect the shared TTL. The scheduler asks every second, but at
+                // most one fresh zmx capture is needed per cache window.
+                detector.detect_blocking(&project_id, &session_id, agent.as_deref(), false)
+            });
+        },
+    )
 }

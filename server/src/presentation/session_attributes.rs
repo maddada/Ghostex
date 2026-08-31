@@ -86,6 +86,14 @@ pub(crate) fn presentation_actions(session: &Value, activity: &str) -> Value {
 }
 
 pub(crate) fn presentation_activity(session: &Value, generated_at: &str) -> String {
+    if effective_lifecycle_state(session) == "running"
+        && crate::session_chat_compacting::session_chat_compacting_detected_at(session).is_some()
+    {
+        // A whole live-screen capture is stronger evidence than a stale hook
+        // or title state: the CLI is actively compacting, not waiting for an
+        // answer left over from the preceding turn.
+        return "working".to_string();
+    }
     let generated_at_ms = parse_iso_ms(generated_at).unwrap_or_else(now_ms);
     let raw_activity = session
         .get("runtimeSettings")

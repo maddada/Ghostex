@@ -1657,6 +1657,7 @@ pub(crate) struct SessionChatOptionCacheEntry {
 #[derive(Clone)]
 pub(crate) struct SessionChatOptionDetector {
     cache: Arc<Mutex<HashMap<String, SessionChatOptionCacheEntry>>>,
+    compacting_publisher: crate::session_chat_compacting::SessionChatCompactingPublisher,
     paths: GxserverPaths,
     server_id: String,
 }
@@ -1665,6 +1666,8 @@ impl SessionChatOptionDetector {
     pub(crate) fn new(state: &AppState) -> Self {
         Self {
             cache: state.session_chat_option_cache.clone(),
+            compacting_publisher:
+                crate::session_chat_compacting::SessionChatCompactingPublisher::new(state),
             paths: state.paths.clone(),
             server_id: state.metadata.server_id.clone(),
         }
@@ -1757,7 +1760,17 @@ impl SessionChatOptionDetector {
                 project_id, session_id,
             );
         }
+        let mut compacting_transition: Option<Option<String>> = None;
         if let Ok(mut cache) = self.cache.lock() {
+            let previous_compacting =
+                cache
+                    .get(&key)
+                    .filter(|entry| entry.value.captured)
+                    .map(|entry| {
+                        crate::session_chat_terminal_activity::is_session_chat_compacting_activity(
+                            entry.value.activity.as_ref(),
+                        )
+                    });
             if let Some(notice) = detected.notice.as_mut() {
                 notice.carry_forward_detected_at(
                     cache
@@ -1829,6 +1842,28 @@ impl SessionChatOptionDetector {
                     value: detected.clone(),
                 },
             );
+            if detected.captured {
+                let detected_compacting =
+                    crate::session_chat_terminal_activity::is_session_chat_compacting_activity(
+                        detected.activity.as_ref(),
+                    );
+                if previous_compacting != Some(detected_compacting) {
+                    compacting_transition = Some(
+                        detected_compacting
+                            .then(|| {
+                                detected
+                                    .activity
+                                    .as_ref()
+                                    .map(|activity| activity.detected_at.clone())
+                            })
+                            .flatten(),
+                    );
+                }
+            }
+        }
+        if let Some(detected_at) = compacting_transition {
+            self.compacting_publisher
+                .publish(project_id, session_id, detected_at.as_deref());
         }
         detected
     }
@@ -2058,6 +2093,11 @@ pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, se
     if let Ok(mut cache) = state.session_chat_option_cache.lock() {
         cache.remove(&session_observer_key(project_id, session_id));
     }
+    // Sleeping/stopped sessions have no live screen. Clear the durable
+    // compaction projection with the cache so waking cannot resurrect an old
+    // working status from a run that ended while the provider was stopped.
+    crate::session_chat_compacting::SessionChatCompactingPublisher::new(state)
+        .publish(project_id, session_id, None);
 }
 
 /*

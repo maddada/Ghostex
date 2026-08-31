@@ -1071,7 +1071,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // signal. Settling is owned by an idle transition, a terminal turn
   // lifecycle, or a local interrupt.
   const optimisticWorking = pending.length > 0;
-  const workingSignal = optimisticWorking || serverWorking || serverStatus === 'working' || externalWorking === true;
+  const compacting = terminalActivity?.kind === 'compacting';
+  const workingSignal =
+    optimisticWorking || compacting || serverWorking || serverStatus === 'working' || externalWorking === true;
   workingSignalRef.current = workingSignal;
   if (workingSignal) {
     workingStartedAtRef.current ??= Date.now();

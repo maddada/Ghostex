@@ -175,6 +175,10 @@ pub fn same_session_chat_terminal_activity(
     }
 }
 
+pub fn is_session_chat_compacting_activity(activity: Option<&SessionChatTerminalActivity>) -> bool {
+    activity.is_some_and(|activity| activity.kind == SESSION_CHAT_ACTIVITY_COMPACTING)
+}
+
 /// `1h 2m 3s` / `1m 1s` / `45s` → seconds. `None` unless EVERY token parsed,
 /// so a half-read clock is dropped rather than shown wrong.
 pub(crate) fn parse_elapsed_seconds(text: &str) -> Option<u64> {

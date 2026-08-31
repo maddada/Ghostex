@@ -114,9 +114,9 @@ use crate::{
     },
     session_chat_options::SessionChatOptionCacheEntry,
     session_chat_queue_runtime::{
-        handle_session_chat_queue_http, session_chat_queue_composer_reader,
-        session_chat_queue_notice_reader, session_chat_queue_publisher_factory,
-        session_chat_queue_sender_factory,
+        handle_session_chat_queue_http, session_chat_queue_compacting_refresher,
+        session_chat_queue_composer_reader, session_chat_queue_notice_reader,
+        session_chat_queue_publisher_factory, session_chat_queue_sender_factory,
     },
     session_chat_read::handle_read_session_chat_http,
     session_chat_send::{
@@ -564,6 +564,7 @@ pub async fn run_gxserver_foreground(
         session_chat_queue_publisher_factory(&state),
         session_chat_queue_notice_reader(&state),
         session_chat_queue_composer_reader(&state),
+        session_chat_queue_compacting_refresher(&state),
     )
     .start(shutdown_tx.subscribe());
     /*

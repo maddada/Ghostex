@@ -86,6 +86,9 @@ block the prompt queue — but like `deliveryFailed` it describes a past event,
 so a clean screen must not retire it.
 */
 pub const SESSION_CHAT_NOTICE_API_REFUSAL: &str = "apiRefusal";
+/// A Codex decision surface has replaced the ordinary composer. The concrete
+/// title/detail come from the source-derived screen classifier.
+pub const SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED: &str = "codexInputBlocked";
 /// Claude Code's resume-usage picker: an on-screen chooser the chat surface can
 /// ANSWER, not just point at. Its rows ride the notice as `choices`.
 pub use crate::session_chat_resume_prompt::SESSION_CHAT_RESUME_PROMPT_KIND as SESSION_CHAT_NOTICE_RESUME_PROMPT;
@@ -1295,6 +1298,7 @@ pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
         // The refusal proves the terminal DID deliver the message — the model
         // declined it. A follow-up prompt goes through fine.
         SESSION_CHAT_NOTICE_API_REFUSAL => false,
+        SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED => true,
         /*
         CDXC:SessionChatTerminalPicker 2026-08-21: the resume-usage picker owns
         the input line, and unlike the dialogs in the catalog it does not merely
@@ -1442,6 +1446,23 @@ fn notice_from_picker(
     )])
 }
 
+fn notice_from_codex_blocking_screen(
+    screen: &NoticeScreen,
+    blocking: crate::session_chat_codex_blocking::CodexBlockingScreen,
+) -> SessionChatTerminalNotice {
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED,
+        SessionChatTerminalNoticeSeverity::Warning,
+        SessionChatTerminalNoticeSource::Screen,
+        blocking.title,
+    )
+    .with_detail(blocking.detail)
+    .with_screen_tail(screen.screen_tail())
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
+}
+
 /*
 CDXC:SessionChatTerminalNotices 2026-08-19:
 Pure classifier over ONE terminal capture. Rules are evaluated in the catalog's
@@ -1488,6 +1509,13 @@ pub fn classify_session_chat_terminal_notice(
                 .is_some_and(|needle| screen.has_codex_composer_after(needle))
         }) {
             return Some(notice_from_rule(&screen, rule, signature));
+        }
+    }
+    if agent == SessionChatOptionAgent::Codex {
+        if let Some(blocking) =
+            crate::session_chat_codex_blocking::detect_codex_blocking_screen(screen_text)
+        {
+            return Some(notice_from_codex_blocking_screen(&screen, blocking));
         }
     }
     None

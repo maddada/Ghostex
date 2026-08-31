@@ -307,8 +307,8 @@ export interface SessionChatTerminalNotice {
    * Open set (`loginExpired`, `trustPrompt`, `permissionsWarning`,
    * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`,
    * `queuedInput`, `deliveryFailed`, `resumePrompt`, `switchConfirmPrompt`,
-   * `sessionPausedPrompt`). Clients MUST render an unknown kind generically —
-   * title/detail/severity are self-sufficient.
+   * `sessionPausedPrompt`, `codexInputBlocked`). Clients MUST render an unknown
+   * kind generically; title/detail/severity are self-sufficient.
    */
   kind: string;
   severity: 'error' | 'warning' | 'info';
