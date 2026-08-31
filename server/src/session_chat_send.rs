@@ -2616,9 +2616,11 @@ Nothing about such a session can answer the handshake, so the capture is
 skipped up front and the draft stays in the parked terminal, the documented
 loss-safe failure mode of this endpoint.
 */
+/// Whether the effective agent command transfers control to another user or host.
 fn session_chat_agent_command_is_user_hop(session: &Value) -> bool {
+    let runtime_settings = session.get("runtimeSettings").and_then(Value::as_object);
     let launch_settings = session.get("launchSettings").and_then(Value::as_object);
-    let command = launch_settings
+    let command = runtime_settings
         .and_then(|settings| settings.get("agentCommand"))
         .and_then(Value::as_str)
         .filter(|command| !command.trim().is_empty())
@@ -2628,6 +2630,13 @@ fn session_chat_agent_command_is_user_hop(session: &Value) -> bool {
                 .and_then(Value::as_object)
                 .and_then(|plan| plan.get("command"))
                 .and_then(Value::as_str)
+                .filter(|command| !command.trim().is_empty())
+        })
+        .or_else(|| {
+            launch_settings
+                .and_then(|settings| settings.get("agentCommand"))
+                .and_then(Value::as_str)
+                .filter(|command| !command.trim().is_empty())
         })
         .unwrap_or_default();
     let Some(first_word) = command.split_whitespace().next() else {
@@ -2637,6 +2646,7 @@ fn session_chat_agent_command_is_user_hop(session: &Value) -> bool {
     matches!(program, "ssh" | "autossh" | "mosh" | "et")
 }
 
+/// Transfer a terminal draft into Chat when the session can answer the editor handshake.
 pub(crate) async fn handle_handoff_session_chat_draft_http(
     state: &AppState,
     endpoint_path: String,
