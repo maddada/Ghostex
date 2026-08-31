@@ -1647,6 +1647,15 @@ CLI), so the cache entry carries both readings and neither costs an extra spawn.
 */
 pub(crate) struct SessionChatOptionCacheEntry {
     pub(crate) fetched_at: std::time::Instant,
+    /*
+    The compaction state last projected into presentation. This is deliberately
+    not identical to `value.activity`: Claude leaves completed status rows in
+    terminal scrollback, while its hook-owned working transition tells chat
+    those rows are no longer live. `None` means no trustworthy projection has
+    been made yet (for example, a first capture failed while the hook still
+    reported working).
+    */
+    pub(crate) projected_compacting: Option<bool>,
     /// First capture that was settle-eligible except for its missing model —
     /// the anchor `SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE` counts from. Cleared
     /// the moment a model (or a screen-owning notice) shows up.
@@ -1716,15 +1725,23 @@ impl SessionChatOptionDetector {
                 }
             }
         }
-        let mut detected = open_gxserver_database(&self.paths)
+        let (mut detected, hook_working) = open_gxserver_database(&self.paths)
             .ok()
             .map(|db| {
                 let repository = DomainRepository::new(&db, self.server_id.as_str());
-                crate::session_chat_options::detect_session_chat_terminal_state(
-                    &repository,
-                    project_id,
-                    session_id,
-                    agent,
+                let hook_working = repository
+                    .get_session(project_id, session_id)
+                    .ok()
+                    .flatten()
+                    .map(|session| session_chat_hook_working(&session));
+                (
+                    crate::session_chat_options::detect_session_chat_terminal_state(
+                        &repository,
+                        project_id,
+                        session_id,
+                        agent,
+                    ),
+                    hook_working,
                 )
             })
             .unwrap_or_default();
@@ -1762,15 +1779,7 @@ impl SessionChatOptionDetector {
         }
         let mut compacting_transition: Option<Option<String>> = None;
         if let Ok(mut cache) = self.cache.lock() {
-            let previous_compacting =
-                cache
-                    .get(&key)
-                    .filter(|entry| entry.value.captured)
-                    .map(|entry| {
-                        crate::session_chat_terminal_activity::is_session_chat_compacting_activity(
-                            entry.value.activity.as_ref(),
-                        )
-                    });
+            let previous_compacting = cache.get(&key).and_then(|entry| entry.projected_compacting);
             if let Some(notice) = detected.notice.as_mut() {
                 notice.carry_forward_detected_at(
                     cache
@@ -1834,20 +1843,33 @@ impl SessionChatOptionDetector {
                 }
                 model_grace_started = Some(started);
             }
+            /*
+            Chat already suppresses every ordinary terminal activity as soon
+            as Claude reports idle, because its old status rows remain visible
+            in scrollback. Apply that same liveness rule to presentation. When
+            Claude is still working, only a whole capture may change the zmx
+            verdict; a failed/capped capture preserves the last safe state.
+            */
+            let detected_compacting = match hook_working {
+                Some(false) => Some(false),
+                Some(true) if detected.captured => Some(
+                    crate::session_chat_terminal_activity::is_session_chat_compacting_activity(
+                        detected.activity.as_ref(),
+                    ),
+                ),
+                _ => previous_compacting,
+            };
             cache.insert(
                 key,
                 SessionChatOptionCacheEntry {
                     fetched_at: std::time::Instant::now(),
+                    projected_compacting: detected_compacting,
                     model_grace_started,
                     value: detected.clone(),
                 },
             );
-            if detected.captured {
-                let detected_compacting =
-                    crate::session_chat_terminal_activity::is_session_chat_compacting_activity(
-                        detected.activity.as_ref(),
-                    );
-                if previous_compacting != Some(detected_compacting) {
+            if detected_compacting != previous_compacting {
+                if let Some(detected_compacting) = detected_compacting {
                     compacting_transition = Some(
                         detected_compacting
                             .then(|| {
