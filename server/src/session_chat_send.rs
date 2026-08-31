@@ -2601,6 +2601,52 @@ a transfer leaves no residue in the user's Saved Prompts list.
 Grok Build binds Ctrl+G to its Tasks pane, so its capture opens the editor from
 the command palette with Ctrl+P, `editor`, Enter instead.
 */
+
+/*
+CDXC:SessionChatDraftHandoff 2026-08-30:
+The prompt-editor handshake only works when the agent CLI inherits the session
+shell's environment, where the launch script points $EDITOR/$VISUAL at
+`ghostex prompt-editor`. An agent command that hops to another user or host
+(`ssh -tt qawwi@localhost … hermes`, seen live 2026-08-30) starts the CLI
+outside that environment: the CLI resolves its own editor instead (on current
+macOS the prompt_toolkit fallback chain lands in pico via /usr/bin/nano), the
+response file is never written, and the 16s wait ends with the TUI wedged
+inside that editor — which then makes every send fail composer detection.
+Nothing about such a session can answer the handshake, so the capture is
+skipped up front and the draft stays in the parked terminal, the documented
+loss-safe failure mode of this endpoint.
+*/
+/// Whether the effective agent command transfers control to another user or host.
+fn session_chat_agent_command_is_user_hop(session: &Value) -> bool {
+    let runtime_settings = session.get("runtimeSettings").and_then(Value::as_object);
+    let launch_settings = session.get("launchSettings").and_then(Value::as_object);
+    let command = runtime_settings
+        .and_then(|settings| settings.get("agentCommand"))
+        .and_then(Value::as_str)
+        .filter(|command| !command.trim().is_empty())
+        .or_else(|| {
+            launch_settings
+                .and_then(|settings| settings.get("agentLaunchPlan"))
+                .and_then(Value::as_object)
+                .and_then(|plan| plan.get("command"))
+                .and_then(Value::as_str)
+                .filter(|command| !command.trim().is_empty())
+        })
+        .or_else(|| {
+            launch_settings
+                .and_then(|settings| settings.get("agentCommand"))
+                .and_then(Value::as_str)
+                .filter(|command| !command.trim().is_empty())
+        })
+        .unwrap_or_default();
+    let Some(first_word) = command.split_whitespace().next() else {
+        return false;
+    };
+    let program = first_word.rsplit('/').next().unwrap_or(first_word);
+    matches!(program, "ssh" | "autossh" | "mosh" | "et")
+}
+
+/// Transfer a terminal draft into Chat when the session can answer the editor handshake.
 pub(crate) async fn handle_handoff_session_chat_draft_http(
     state: &AppState,
     endpoint_path: String,
@@ -2615,6 +2661,13 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
         Ok(target) => target,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    if session_chat_agent_command_is_user_hop(&target.session) {
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({ "content": "", "transferred": false })),
+        );
+    }
     let agent = session_chat_agent_for_session(&target.session);
     let captured = match crate::session_chat_send::capture_session_chat_terminal_draft(
         &state.paths.app_state_dir,
