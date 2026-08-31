@@ -46,6 +46,9 @@ Options:
   --skip-tests               Skip bun run release:test.
   --skip-typecheck           Skip bun run typecheck.
   --skip-credentials         Skip gh/signing/notary credential probes.
+  --allow-concurrent-sessions
+                             Release even though another agent session is
+                             actively working in this worktree.
   --freeze-seconds <n>       Freeze window length after checks pass. Default 45.
   --skip-freeze              Skip the freeze window.
   --help                     Show this help.
@@ -58,6 +61,7 @@ bun run release:actions -- <version>.
 
 function parseArgs(argv) {
   const options = {
+    allowConcurrentSessions: false,
     cargo: false,
     freezeSeconds: 45,
     releaseBranch: 'main',
@@ -80,6 +84,8 @@ function parseArgs(argv) {
       options.skipTypecheck = true;
     } else if (arg === '--skip-credentials') {
       options.skipCredentials = true;
+    } else if (arg === '--allow-concurrent-sessions') {
+      options.allowConcurrentSessions = true;
     } else if (arg === '--skip-freeze') {
       options.skipFreeze = true;
     } else if (arg === '--freeze-seconds') {
@@ -420,16 +426,68 @@ async function checkReleaseTests() {
   return pass(summary);
 }
 
+/*
+`--all-targets` is not optional here. Without it cargo skips `src/bin/*`, so
+`apps/desktop/src/bin/ghostex_gpui_cef_bootstrap.rs` was never compiled locally
+and a broken bootstrap binary reached a release runner unopposed in 8.3.0.
+
+Each crate is checked from inside its own directory rather than through
+`--manifest-path`. `apps/desktop` pins its own toolchain in
+`apps/desktop/rust-toolchain.toml`; invoking it from the repo root resolves the
+root toolchain instead and fails on dependency code that needs the pin.
+
+This still cannot see `#[cfg(windows)]` / `#[cfg(linux)]` code on macOS. That
+gap is covered before dispatch by release-gpui-validate.yml, not here.
+*/
 async function checkCargo() {
   for (const crate of ['server', 'apps/desktop']) {
-    const result = await runCommand(`cargo check --manifest-path '${path.join(repoRoot, crate, 'Cargo.toml')}'`, {
-      timeoutMs: 15 * 60 * 1000,
+    const result = await runCommand('cargo check --all-targets', {
+      cwd: path.join(repoRoot, crate),
+      timeoutMs: 25 * 60 * 1000,
     });
     if (result.code !== 0) {
       return fail(`${crate}: ${shortOutput(result.stderr, 8)}`);
     }
   }
-  return pass('server and gpui check clean');
+  return pass('server and gpui check clean (all targets)');
+}
+
+/*
+A release takes hours of runner time and the publisher must still be able to
+fast-forward `origin/main` when it lands. Another agent pushing mid-build cost
+8.3.0 an entire dispatch, so a session actively working in this same worktree
+is a blocking condition, not a note. Read-only inspection: this never messages,
+interrupts, sleeps, or focuses another session.
+*/
+async function checkConcurrentSessions(options) {
+  const result = await runCommand('ghostex sessions --json', { timeoutMs: 30_000 });
+  if (result.code !== 0) {
+    return warn('ghostex CLI unavailable; confirm no other agent is working in this worktree before dispatching.');
+  }
+  let sessions;
+  try {
+    sessions = JSON.parse(result.stdout).sessions ?? [];
+  } catch {
+    return warn('Could not parse ghostex sessions output; confirm concurrent work manually.');
+  }
+  const selfId = process.env.GHOSTEX_SESSION_ID ?? '';
+  const selfRef = process.env.GHOSTEX_GLOBAL_SESSION_REF ?? '';
+  const busy = sessions.filter(
+    (session) =>
+      session.projectPath === repoRoot &&
+      session.activity === 'working' &&
+      session.sessionId !== selfId &&
+      session.globalRef !== selfRef
+  );
+  if (busy.length === 0) {
+    return pass('no other agent session is working in this worktree');
+  }
+  const listed = busy.map((session) => `${session.sessionId} (${session.agentName ?? session.agent ?? 'agent'})`);
+  const detail = `${busy.length} other session(s) working here: ${listed.join(', ')}`;
+  if (options.allowConcurrentSessions) {
+    return warn(`${detail}. Continuing because --allow-concurrent-sessions was passed.`);
+  }
+  return fail(`${detail}. Wait for them to go idle, or pass --allow-concurrent-sessions.`);
 }
 
 async function runChecks(checks) {
@@ -503,6 +561,7 @@ async function main() {
     { fn: () => checkChangelog(options), name: 'changelog-major-minor' },
     { fn: () => checkSparkleBuildNumber(options), name: 'sparkle-build-number' },
     { fn: () => checkSubrepos(), name: 'subrepos-clean' },
+    { fn: () => checkConcurrentSessions(options), name: 'concurrent-sessions' },
     { fn: () => checkSecretScan(), name: 'secret-scan' },
     { fn: () => checkRemoteLinuxPackages(), name: 'remote-linux-packages' },
     { fn: () => checkSparkleKey(), name: 'sparkle-key' },
