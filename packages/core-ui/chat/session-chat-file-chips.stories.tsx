@@ -53,6 +53,17 @@ const SAME_BASENAMES = [
   '- `apps/desktop/sidebar/chat-main.tsx:586` vs `apps/mobile/views/chat/chat-main.tsx:141`',
 ].join('\n');
 
+const BASELINE_CONTEXTS = [
+  'Paragraph before `src/main.rs:12` and [File #1](/tmp/main.rs) after.',
+  '',
+  '# Heading 1 before `src/main.rs:12` and [File #1](/tmp/main.rs) after',
+  '## Heading 2 before `src/main.rs:12` and [File #1](/tmp/main.rs) after',
+  '### Heading 3 before `src/main.rs:12` and [File #1](/tmp/main.rs) after',
+  '#### Heading 4 before `src/main.rs:12` and [File #1](/tmp/main.rs) after',
+  '##### Heading 5 before `src/main.rs:12` and [File #1](/tmp/main.rs) after',
+  '###### Heading 6 before `src/main.rs:12` and [File #1](/tmp/main.rs) after',
+].join('\n');
+
 /*
  * The overflow panel. A transcript column is around 385px and a real path is
  * routinely longer than that, so this is where the layout has to prove itself:
@@ -166,7 +177,17 @@ const STORY_MESSAGES: SessionChatMessage[] = [
   assistantTurn('assistant-5', NOT_PATHS, 10_000),
 ];
 
-function ChatPane({ theme, withEditorSurface }: { theme: 'dark' | 'light'; withEditorSurface: boolean }) {
+const BASELINE_MESSAGES: SessionChatMessage[] = [assistantTurn('assistant-baselines', BASELINE_CONTEXTS, 1_000)];
+
+function ChatPane({
+  messages = STORY_MESSAGES,
+  theme,
+  withEditorSurface,
+}: {
+  messages?: SessionChatMessage[];
+  theme: 'dark' | 'light';
+  withEditorSurface: boolean;
+}) {
   return (
     <SessionChatHostLinksProvider
       {...(withEditorSurface
@@ -190,7 +211,7 @@ function ChatPane({ theme, withEditorSurface }: { theme: 'dark' | 'light'; withE
           hasMore={false}
           isWorking={false}
           loadingEarlier={false}
-          messages={STORY_MESSAGES}
+          messages={messages}
           onLoadEarlier={() => undefined}
           verboseMode={false}
         />
@@ -255,3 +276,14 @@ type Story = StoryObj<typeof meta>;
 export const Dark: Story = { args: { theme: 'dark' } };
 
 export const Light: Story = { args: { theme: 'light' } };
+
+export const BaselineAlignment: Story = {
+  args: { theme: 'dark' },
+  render: ({ theme }) => (
+    <div className='flex h-screen bg-[#0a0a0a] p-2'>
+      <Pane label='inline file references across transcript type sizes' width={720}>
+        <ChatPane messages={BASELINE_MESSAGES} theme={theme} withEditorSurface />
+      </Pane>
+    </div>
+  ),
+};

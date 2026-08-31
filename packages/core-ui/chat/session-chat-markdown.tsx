@@ -502,7 +502,7 @@ function FileChip({
   const title = sessionChatFilePathTitle(reference);
   const Icon = sessionChatFilePathIcon(reference.basename);
   return (
-    <AppTooltip content={title} contentClassName='ghostex-chat-reference-tooltip'>
+    <AppTooltip content={title}>
       <button
         className='ghostex-chat-markdown-file-chip'
         onClick={() => openFile(reference.path, reference.position)}
@@ -739,7 +739,7 @@ function MarkdownReferencePill({
     ? `${path}:${position.line}${position.column === undefined ? '' : `:${position.column}`}`
     : path;
   return (
-    <AppTooltip content={title} contentClassName='ghostex-chat-reference-tooltip'>
+    <AppTooltip content={title}>
       <button
         aria-label={`${action}, ${kind}`}
         className={`ghostex-chat-reference-pill ghostex-chat-reference-pill--${kind}`}
@@ -889,7 +889,7 @@ function markdownComponents(
         const openUrl = hostLinks?.openUrl;
         if (openUrl) {
           return (
-            <AppTooltip content={target.url} contentClassName='ghostex-chat-reference-tooltip'>
+            <AppTooltip content={target.url}>
               <a
                 // Kept an anchor so the URL shows in the status bar and the
                 // context menu still offers Copy Link; the host owns the open.

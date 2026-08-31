@@ -2452,19 +2452,17 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 }
 
 .ghostex-chat-markdown .ghostex-chat-reference-pill::before {
+  align-self: center;
   background-color: currentColor;
   height: 1em;
   width: 1em;
 }
 
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip-icon {
+  align-self: center;
   color: currentColor;
   height: 1em;
   width: 1em;
-}
-
-.ghostex-chat-reference-tooltip {
-  --ghostex-tooltip-radius: 3px;
 }
 
 .ghostex-chat-markdown a:hover,
@@ -2475,6 +2473,7 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible {
   background-color: transparent;
   background-image: none;
+  border-radius: 2px;
   color: var(--ghostex-chat-reference-outline, var(--info-foreground));
   outline: none;
   text-decoration-line: underline;
