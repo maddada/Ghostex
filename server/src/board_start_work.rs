@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -60,14 +59,24 @@ pub fn start_board_work(
         &global_beads_directory,
     )?;
     let board_project_id = project_id_of(&board_project)?;
-    let store_projects =
-        select_link_store_projects(&board_project, &projects, &global_beads_directory);
+    let has_explicit_project_selector = read_trimmed(params, "projectId").is_some()
+        || read_trimmed(params, "projectPath").is_some();
+    let store_projects = if has_explicit_project_selector {
+        vec![board_project.clone()]
+    } else {
+        select_link_store_projects(&board_project, &projects, &global_beads_directory)
+    };
 
     // Redline 2: any usable linked conversation — live, sleeping, or
     // restorable — is an idempotent success, never a second worker.
-    if let Some((existing_project_id, existing_session_id)) =
-        find_usable_linked_session(repository, db, server_id, &store_projects, &bead_id)?
-    {
+    if let Some((existing_project_id, existing_session_id)) = find_usable_linked_session(
+        repository,
+        db,
+        server_id,
+        &store_projects,
+        &bead_id,
+        has_explicit_project_selector.then_some(board_project_id.as_str()),
+    )? {
         return Ok(StartBoardWorkOutcome {
             created: false,
             created_session: None,
@@ -278,10 +287,14 @@ pub fn associate_board_session(
 /*
 Board-project resolution mirrors the shared-mount link-store contract in
 packages/shared/bead-conversation-links.ts: rows that mount the same Beads directory
-(projectBoardConfig.beadsDirectory, else the project path) are one board. An
-explicit projectId wins; otherwise every distinct store is probed with
-`bd show` and the bead must live on exactly one of them.
+(projectBoardConfig.beadsDirectory, else the global default, else the project path)
+are one board. An explicit projectId or projectPath wins - that is how a dispatcher
+puts the worker in the repo the card is about. Otherwise every distinct store is
+probed with `bd show` and the bead must live on exactly one of them; a store that
+several projects mount is represented by the project whose own path IS the store,
+never by whichever sibling happens to sort first.
 */
+/// Resolve the requested bead and the project that should own its worker.
 fn resolve_board_project_and_bead(
     projects: &[Value],
     params: &Map<String, Value>,
@@ -299,36 +312,56 @@ fn resolve_board_project_and_bead(
             .ok_or_else(|| {
                 DomainStateError::not_found(format!("Project {project_id} does not exist."))
             })?;
-        let store = link_store_key(&project, global_beads_directory);
-        if store.is_empty() {
-            return Err(DomainStateError::bad_request(format!(
-                "Project {project_id} has no Beads directory."
-            )));
-        }
-        let bead = run_bd_show(bd_executable_path, &store, bead_id)?.ok_or_else(|| {
-            DomainStateError::not_found(format!(
-                "Bead {bead_id} was not found on the {project_id} project board."
-            ))
-        })?;
-        return Ok((project, bead));
+        return resolve_bead_on_project(
+            project,
+            &project_id,
+            bead_id,
+            bd_executable_path,
+            global_beads_directory,
+        );
     }
-    let mut matches: Vec<(Value, Value)> = Vec::new();
-    let mut probed: HashMap<String, bool> = HashMap::new();
+    if let Some(project_path) = read_trimmed(params, "projectPath") {
+        let wanted = normalize_project_path(&project_path);
+        let project = projects
+            .iter()
+            .find(|candidate| normalized_project_path(candidate).as_deref() == Some(wanted.as_str()))
+            .cloned()
+            .ok_or_else(|| {
+                DomainStateError::not_found(format!(
+                    "No project is registered at {project_path}. Add it with `ghostex add-project` first."
+                ))
+            })?;
+        return resolve_bead_on_project(
+            project,
+            &project_path,
+            bead_id,
+            bd_executable_path,
+            global_beads_directory,
+        );
+    }
+    let mut stores: Vec<(String, Value)> = Vec::new();
     for project in projects {
         let store = link_store_key(project, global_beads_directory);
-        if store.is_empty() || probed.contains_key(&store) {
+        if store.is_empty() {
             continue;
         }
+        match stores.iter_mut().find(|(key, _)| *key == store) {
+            Some((_, chosen)) => {
+                if !project_owns_store(chosen, &store) && project_owns_store(project, &store) {
+                    *chosen = project.clone();
+                }
+            }
+            None => stores.push((store, project.clone())),
+        }
+    }
+    let mut matches: Vec<(Value, Value)> = Vec::new();
+    for (store, project) in stores {
         if !Path::new(&store).join(".beads").is_dir() {
-            probed.insert(store, false);
             continue;
         }
-        let bead = run_bd_show(bd_executable_path, &store, bead_id)?;
-        let found = bead.is_some();
-        if let Some(bead) = bead {
-            matches.push((project.clone(), bead));
+        if let Some(bead) = run_bd_show(bd_executable_path, &store, bead_id)? {
+            matches.push((project, bead));
         }
-        probed.insert(store, found);
     }
     match matches.len() {
         0 => Err(DomainStateError::not_found(format!(
@@ -336,9 +369,49 @@ fn resolve_board_project_and_bead(
         ))),
         1 => Ok(matches.remove(0)),
         _ => Err(DomainStateError::bad_request(format!(
-            "Bead {bead_id} exists on multiple project boards. Pass --project-id to choose one."
+            "Bead {bead_id} exists on multiple project boards. Pass --project-path or --project-id to choose one."
         ))),
     }
+}
+
+/// Resolve `bead_id` on the board of one explicitly named project.
+fn resolve_bead_on_project(
+    project: Value,
+    project_label: &str,
+    bead_id: &str,
+    bd_executable_path: &str,
+    global_beads_directory: &str,
+) -> Result<(Value, Value), DomainStateError> {
+    let store = link_store_key(&project, global_beads_directory);
+    if store.is_empty() {
+        return Err(DomainStateError::bad_request(format!(
+            "Project {project_label} has no Beads directory."
+        )));
+    }
+    let bead = run_bd_show(bd_executable_path, &store, bead_id)?.ok_or_else(|| {
+        DomainStateError::not_found(format!(
+            "Bead {bead_id} was not found on the {project_label} project board."
+        ))
+    })?;
+    Ok((project, bead))
+}
+
+/// A project's registered path, normalized the way `link_store_key` normalizes stores.
+fn normalized_project_path(project: &Value) -> Option<String> {
+    project
+        .get("path")
+        .and_then(Value::as_str)
+        .map(normalize_project_path)
+}
+
+/// Normalize a registered project path without resolving symlinks.
+fn normalize_project_path(path: &str) -> String {
+    path.trim().trim_end_matches('/').to_string()
+}
+
+/// Whether `project` is the store itself rather than a sibling that mounts it.
+fn project_owns_store(project: &Value, store: &str) -> bool {
+    normalized_project_path(project).as_deref() == Some(store)
 }
 
 fn run_bd_show(
@@ -707,10 +780,10 @@ fn percent_decode(value: &str) -> String {
 
 /*
 Redline 2's "usable" definition, evaluated daemon-side: a linked conversation
-whose session row still exists (live or sleeping, in any project) is reused
-directly; a link whose row is gone is still usable when the daemon's
-previous-session history can restore it — the same restore contract the board's
-resumable-link affordance reads.
+whose session row still exists (live or sleeping) is reused directly; a link
+whose row is gone is still usable when the daemon's previous-session history can
+restore it. Unqualified requests may reuse a worker from any project sharing the
+board, while an explicit selector restricts reuse to that selected project.
 */
 fn find_usable_linked_session(
     repository: &DomainRepository<'_>,
@@ -718,8 +791,12 @@ fn find_usable_linked_session(
     server_id: &str,
     store_projects: &[Value],
     bead_id: &str,
+    required_project_id: Option<&str>,
 ) -> Result<Option<(String, String)>, DomainStateError> {
     for reference in read_active_bead_links(store_projects, bead_id) {
+        if required_project_id.is_some_and(|project_id| reference.project_id != project_id) {
+            continue;
+        }
         if repository
             .get_session(&reference.project_id, &reference.session_id)?
             .is_some()

@@ -34,6 +34,7 @@ pub fn board_command(args: &[String]) -> CliResult<()> {
     }
 }
 
+/// Parse and dispatch `board start-work` through gxserver.
 fn start_work_command(args: &[String]) -> CliResult<()> {
     if matches!(
         args.first().map(String::as_str),
@@ -73,6 +74,17 @@ fn start_work_command(args: &[String]) -> CliResult<()> {
     {
         payload.insert("projectId".to_string(), Value::String(project_id));
     }
+    if let Some(project_path) = parsed
+        .flags
+        .text("projectPath")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        payload.insert(
+            "projectPath".to_string(),
+            Value::String(absolute_project_path(&project_path)),
+        );
+    }
     let result = call_gxserver_rpc(
         "/api/startBoardWork",
         &Value::Object(payload),
@@ -83,6 +95,15 @@ fn start_work_command(args: &[String]) -> CliResult<()> {
         crate::ghostex_cli::set_exit_code(1);
     }
     Ok(())
+}
+
+/// `--project-path` the way gxserver registers project paths: absolute, resolved
+/// against the caller's cwd when given relative, and never canonicalized because a
+/// registered path may legitimately go through a symlink.
+fn absolute_project_path(path: &str) -> String {
+    std::path::absolute(path)
+        .map(|absolute| absolute.to_string_lossy().to_string())
+        .unwrap_or_else(|_| path.to_string())
 }
 
 /*
