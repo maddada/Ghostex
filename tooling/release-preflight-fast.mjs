@@ -338,7 +338,10 @@ async function checkRemoteLinuxPackages() {
     if (!workflow.includes(`build-remote-gxserver-linux-release.sh --arch ${arch}`)) {
       problems.push(`${arch}: workflow does not build its pinned architecture`);
     }
-    if (!workflow.includes('GHOSTEX_REQUIRE_BEADS_SMOKE: "1"')) {
+    // Quote-agnostic on purpose: prettier normalizes YAML scalars to single
+    // quotes, so a literal `: "1"` match silently went stale after a formatting
+    // pass while the gate itself was still present in both workflows.
+    if (!/GHOSTEX_REQUIRE_BEADS_SMOKE:\s*['"]?1['"]?\s*$/m.test(workflow)) {
       problems.push(`${arch}: workflow does not require the packaged Beads embedded-Dolt smoke test`);
     }
     if (arch === 'arm64' && !workflow.includes('runs-on: ubuntu-24.04-arm')) {
