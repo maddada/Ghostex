@@ -220,6 +220,7 @@ got to them:
     custom agent were not measured. An unmeasured guess would be the same
     failure as pi's, so they read Unknown until someone captures them.
 */
+/// Return the measured composer chrome signature for a normalized agent id.
 fn composer_signature(agent: &str) -> Option<ComposerSignature> {
     Some(match agent {
         // `❯` between two full-width rules, statusline below.
@@ -474,6 +475,7 @@ codex transcript echoes each submitted prompt with the same `›` the composer
 draws — the lowest match is the live one. Both would answer "ready", so this is
 about picking the honest witness rather than about correctness of the verdict.
 */
+/// Whether the captured non-blank lines contain the requested composer shape.
 fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
     match signature {
         // In both sandwiches the BOTTOM rule stays strict (it is always solid
