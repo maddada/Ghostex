@@ -15,6 +15,7 @@
 // only ⋯ and Chat View render.
 
 import {
+  IconClock,
   IconClockCheck,
   IconDots,
   IconEdit,
@@ -54,6 +55,7 @@ const BAR_OWNED_HOST_ACTION_IDS = new Set(['attachPath', 'promptEditor', 'stashP
 const AGENT_HOST_ACTION_IDS = new Set(['fork', 'fullReload', 'rename', 'sleep']);
 
 const HOST_ACTION_ICONS: Record<string, TablerIcon> = {
+  closeAfterDone: IconClock,
   delayedActions: IconClockCheck,
   exportTranscript: IconFileExport,
   fork: IconGitBranch,
@@ -159,12 +161,15 @@ export function SessionTerminalActionBar({
   const attachAction = findAction('attachPath');
 
   const delayedHostAction = findAction('delayedActions');
+  const closeAfterDoneHostAction = findAction('closeAfterDone');
   const foldedHostActions = hostActionList.filter(
-    (action) => action.id !== 'delayedActions' && !BAR_OWNED_HOST_ACTION_IDS.has(action.id)
+    (action) =>
+      action.id !== 'delayedActions' && action.id !== 'closeAfterDone' && !BAR_OWNED_HOST_ACTION_IDS.has(action.id)
   );
   const agentHostActions = foldedHostActions.filter((action) => AGENT_HOST_ACTION_IDS.has(action.id));
   const otherHostActions = foldedHostActions.filter((action) => !AGENT_HOST_ACTION_IDS.has(action.id));
-  const hasMenuItems = delayedHostAction !== undefined || foldedHostActions.length > 0;
+  const hasAutomationActions = delayedHostAction !== undefined || closeAfterDoneHostAction !== undefined;
+  const hasMenuItems = hasAutomationActions || foldedHostActions.length > 0;
 
   return (
     <div className='ghostex-terminal-action-bar mx-auto mb-3 flex h-9 w-full max-w-3xl flex-none items-center gap-1.5'>
@@ -211,12 +216,15 @@ export function SessionTerminalActionBar({
                 </DropdownMenuTrigger>
               </AppTooltip>
               <DropdownMenuContent align='end' className='min-w-52' side='top'>
-                {delayedHostAction ? (
-                  <DropdownMenuGroup>{hostActionMenuItem(delayedHostAction)}</DropdownMenuGroup>
+                {hasAutomationActions ? (
+                  <DropdownMenuGroup>
+                    {delayedHostAction ? hostActionMenuItem(delayedHostAction) : null}
+                    {closeAfterDoneHostAction ? hostActionMenuItem(closeAfterDoneHostAction) : null}
+                  </DropdownMenuGroup>
                 ) : null}
                 {agentHostActions.length > 0 ? (
                   <>
-                    {delayedHostAction ? <DropdownMenuSeparator /> : null}
+                    {hasAutomationActions ? <DropdownMenuSeparator /> : null}
                     <DropdownMenuGroup>
                       <DropdownMenuLabel>Agent</DropdownMenuLabel>
                       {agentHostActions.map(hostActionMenuItem)}
@@ -225,7 +233,7 @@ export function SessionTerminalActionBar({
                 ) : null}
                 {otherHostActions.length > 0 ? (
                   <>
-                    {delayedHostAction || agentHostActions.length > 0 ? <DropdownMenuSeparator /> : null}
+                    {hasAutomationActions || agentHostActions.length > 0 ? <DropdownMenuSeparator /> : null}
                     <DropdownMenuGroup>{otherHostActions.map(hostActionMenuItem)}</DropdownMenuGroup>
                   </>
                 ) : null}

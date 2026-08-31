@@ -5,16 +5,14 @@
 // (already loaded app-wide by WebSidebar; the duplicate import dedupes).
 //
 // The Agent Actions list is limited to what the web app can actually execute
-// against gxserver — the chat composer's ⋯ menu and the terminal surface's
+// against gxserver. The chat composer's dots menu and the terminal surface's
 // bottom bar both render it from this one list: Rename
-// (/api/requestSessionRename via an inline input), Sleep, Fork (focuses the
-// created session like the sidebar fork), Full Reload (sleep→wake, the same
-// composition gpui uses), and Export Transcript (the daemon writes the
-// markdown and ExportTranscriptModalHost shows the result). Delayed Actions
-// is also exposed beside the chat composer through the web modal host. Prompt
-// Editor, Stash Prompt, the Prompts modal, and Attach File or Folder need
-// native pickers, terminal buffer access, or modal hosts the web app does not
-// have.
+// (/api/requestSessionRename via an inline input), Sleep, Delayed actions,
+// Close After Done, Fork Session (which focuses the created session like the
+// sidebar fork), Full reload (sleep then wake, the same composition gpui
+// uses), and Handoff / Export. Prompt Editor, Stash Prompt, the Prompts modal,
+// and Attach File or Folder need native pickers, terminal buffer access, or
+// modal hosts the web app does not have.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
@@ -99,6 +97,18 @@ async function runChatAgentAction(session: WorkspaceSession, actionId: string, v
     case 'sleep':
       await rpcForMachine(session.machineId, '/api/sleepSession', lifecycleParams);
       return;
+    case 'delayedActions':
+      openSessionDelayedActions(session);
+      return;
+    case 'closeAfterDone':
+      await rpcForMachine(session.machineId, '/api/dispatchRendererCommand', {
+        action: 'toggleCloseAfterDone',
+        payload: {
+          projectId: session.projectId,
+          sessionId: session.sessionId,
+        },
+      });
+      return;
     case 'fork': {
       const result = await rpcForMachine<GxserverForkSessionResult>(
         session.machineId,
@@ -161,10 +171,12 @@ export function createWebSessionHostActions(
         input: { initialValue: session.title, placeholder: 'Session name' },
       },
       { id: 'sleep', label: 'Sleep' },
-      { id: 'fork', label: 'Fork' },
+      { id: 'delayedActions', label: 'Delayed actions' },
+      { id: 'closeAfterDone', label: 'Close After Done' },
       // Sentence case, matching the desktop hosts' labels so the same menu row
       // reads the same on every surface.
       { id: 'fullReload', label: 'Full reload' },
+      { id: 'fork', label: 'Fork Session' },
       { id: 'exportTranscript', label: 'Handoff / Export' },
     ],
     onAction: (id, value) => {

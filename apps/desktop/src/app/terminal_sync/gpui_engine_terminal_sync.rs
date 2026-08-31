@@ -811,6 +811,9 @@ impl GhostexGpuiApp {
             TerminalAgentActionRequest::DelayedActions => {
                 let _ = self.open_gpui_delayed_send_modal_for_focused_agents_session(cx);
             }
+            TerminalAgentActionRequest::CloseAfterDone => {
+                let _ = self.toggle_gpui_close_after_done_for_agents_session(session_id, cx);
+            }
             TerminalAgentActionRequest::Fork => {
                 let _ = self.dispatch_gpui_workspace_terminal_runtime_action(
                     "forkSession",

@@ -972,12 +972,17 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
         label: 'Delayed actions',
         shortcut: shortcut('delayedSend'),
       },
-      { id: 'fork', label: 'Fork', shortcut: shortcut('forkSession') },
+      {
+        id: 'closeAfterDone',
+        label: 'Close After Done',
+        shortcut: shortcut('closeAfterDone'),
+      },
       {
         id: 'fullReload',
         label: 'Full reload',
         shortcut: shortcut('reloadSession'),
       },
+      { id: 'fork', label: 'Fork Session', shortcut: shortcut('forkSession') },
       {
         id: 'promptEditor',
         label: 'Prompt editor',

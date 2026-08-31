@@ -129,7 +129,8 @@ Every glyph below is the Tabler outline icon the chat footer imports from
   IconStackPush   → stack-push.svg    IconPaperclip   → paperclip.svg
   IconMaximize    → maximize.svg      IconMinimize    → minimize.svg
   IconEdit        → edit.svg          IconEyeOff      → eye-off.svg
-  IconClockCheck  → clock-check.svg   IconPencil      → pencil.svg
+  IconClock       → clock.svg         IconClockCheck  → clock-check.svg
+  IconPencil      → pencil.svg
   IconGitBranch   → git-branch.svg    IconRefresh     → refresh.svg
   IconFileExport  → file-export.svg   IconCopy        → copy.svg
 
@@ -148,6 +149,7 @@ const TERMINAL_AGENT_BAR_ATTACH_PATH_ICON: &str = "titlebar/paperclip.svg";
 const TERMINAL_AGENT_BAR_RENAME_ICON: &str = "titlebar/pencil.svg";
 const TERMINAL_AGENT_BAR_SLEEP_ICON: &str = "titlebar/moon.svg";
 const TERMINAL_AGENT_BAR_DELAYED_ACTIONS_ICON: &str = "titlebar/clock-check.svg";
+const TERMINAL_AGENT_BAR_CLOSE_AFTER_DONE_ICON: &str = "titlebar/clock.svg";
 const TERMINAL_AGENT_BAR_FORK_ICON: &str = "titlebar/git-branch.svg";
 const TERMINAL_AGENT_BAR_FULL_RELOAD_ICON: &str = "titlebar/refresh.svg";
 const TERMINAL_AGENT_BAR_STASHED_PROMPTS_ICON: &str = "titlebar/stack-push.svg";
@@ -194,6 +196,7 @@ pub(crate) enum TerminalAgentBarAction {
     PromptEditor,
     VerboseMode,
     DelayedActions,
+    CloseAfterDone,
     Rename,
     Sleep,
     Fork,
@@ -214,6 +217,7 @@ impl TerminalAgentBarAction {
             Self::PromptEditor => "prompt-editor",
             Self::VerboseMode => "verbose-mode",
             Self::DelayedActions => "delayed-actions",
+            Self::CloseAfterDone => "close-after-done",
             Self::Rename => "rename",
             Self::Sleep => "sleep",
             Self::Fork => "fork",
@@ -239,9 +243,10 @@ impl TerminalAgentBarAction {
             Self::PromptEditor => ("Prompt editor", "promptEditor"),
             Self::VerboseMode => ("Verbose mode", ""),
             Self::DelayedActions => ("Delayed actions", "delayedSend"),
+            Self::CloseAfterDone => ("Close After Done", "closeAfterDone"),
             Self::Rename => ("Rename", "renameActiveSession"),
             Self::Sleep => ("Sleep", "sleepFocusedSession"),
-            Self::Fork => ("Fork", "forkSession"),
+            Self::Fork => ("Fork Session", "forkSession"),
             Self::FullReload => ("Full reload", "reloadSession"),
             Self::ExportTranscript => ("Handoff / Export", "exportTranscript"),
         }
@@ -259,6 +264,7 @@ impl TerminalAgentBarAction {
             Self::PromptEditor => TERMINAL_AGENT_BAR_PROMPT_EDITOR_ICON,
             Self::VerboseMode => TERMINAL_AGENT_BAR_VERBOSE_MODE_ICON,
             Self::DelayedActions => TERMINAL_AGENT_BAR_DELAYED_ACTIONS_ICON,
+            Self::CloseAfterDone => TERMINAL_AGENT_BAR_CLOSE_AFTER_DONE_ICON,
             Self::Rename => TERMINAL_AGENT_BAR_RENAME_ICON,
             Self::Sleep => TERMINAL_AGENT_BAR_SLEEP_ICON,
             Self::Fork => TERMINAL_AGENT_BAR_FORK_ICON,
@@ -284,6 +290,7 @@ impl TerminalAgentBarAction {
             Self::StashedPrompts => Some(Request::StashedPrompts),
             Self::ToggleChatView => Some(Request::ToggleChatView),
             Self::DelayedActions => Some(Request::DelayedActions),
+            Self::CloseAfterDone => Some(Request::CloseAfterDone),
             Self::Rename => Some(Request::Rename),
             Self::Sleep => Some(Request::Sleep),
             Self::Fork => Some(Request::Fork),
@@ -303,8 +310,8 @@ The ⋯ menu, top to bottom. It is the chat composer's menu row for row, in the
 same order, with the same icons and the same shortcut column — see
 `packages/core-ui/chat/session-chat-composer-actions.tsx`, whose expanded menu
 renders a "Chat" group of Verbose mode and Delayed actions, then the host's
-"Agent" group, then the host's remaining actions in host-list order under no
-heading at all. The headings themselves come from
+Close After Done action, then the host's "Agent" group, then the host's
+remaining actions in host-list order under no heading at all. The headings themselves come from
 [`terminal_agent_bar_menu_group_heading`], keyed off the row that opens each
 block. Prompt editor is intentionally absent because its accent button is always
 visible immediately beside the menu.
@@ -312,11 +319,12 @@ visible immediately beside the menu.
 const TERMINAL_AGENT_BAR_MENU_ROWS: &[Option<TerminalAgentBarAction>] = &[
     Some(TerminalAgentBarAction::VerboseMode),
     Some(TerminalAgentBarAction::DelayedActions),
+    Some(TerminalAgentBarAction::CloseAfterDone),
     None,
     Some(TerminalAgentBarAction::Rename),
     Some(TerminalAgentBarAction::Sleep),
-    Some(TerminalAgentBarAction::Fork),
     Some(TerminalAgentBarAction::FullReload),
+    Some(TerminalAgentBarAction::Fork),
     None,
     Some(TerminalAgentBarAction::ExportTranscript),
 ];
@@ -1244,8 +1252,9 @@ fn terminal_agent_bar_stashed_prompt_count_badge(count: u64) -> AnyElement {
 /// Which heading, if any, introduces the block this row starts.
 ///
 /// The chat composer's dots menu names exactly two of its blocks — "Chat" over
-/// the chat-surface toggles (Verbose mode, Delayed actions) and "Agent" over the
-/// host's session actions — and leaves its trailing host-action block unnamed;
+/// the chat-surface actions (Verbose mode, Delayed actions, Close After Done)
+/// and "Agent" over the host's session actions, and leaves its trailing
+/// host-action block unnamed;
 /// see `packages/core-ui/chat/session-chat-composer-actions.tsx`. This menu
 /// mirrors that, so Export transcript stays under a bare separator here too.
 fn terminal_agent_bar_menu_group_heading(action: TerminalAgentBarAction) -> Option<&'static str> {

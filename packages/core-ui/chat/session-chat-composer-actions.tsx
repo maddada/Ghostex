@@ -1,4 +1,5 @@
 import {
+  IconClock,
   IconClockCheck,
   IconDots,
   IconEyeFilled,
@@ -48,6 +49,7 @@ const COMPOSER_MENU_EXCLUDED_HOST_ACTION_IDS = new Set(['attachPath', 'promptEdi
 const AGENT_HOST_ACTION_IDS = new Set(['fork', 'fullReload', 'rename', 'sleep']);
 
 const HOST_ACTION_ICONS: Record<string, TablerIcon> = {
+  closeAfterDone: IconClock,
   delayedActions: IconClockCheck,
   exportTranscript: IconFileExport,
   fork: IconGitBranch,
@@ -223,14 +225,18 @@ export function SessionChatComposerActions({
   supplies the shortcut label the composer cannot know.
   */
   const delayedHostAction = hostActionList.find((action) => action.id === 'delayedActions');
+  const closeAfterDoneHostAction = hostActionList.find((action) => action.id === 'closeAfterDone');
   const foldedHostActions = hostActionList.filter(
-    (action) => action.id !== 'delayedActions' && !COMPOSER_MENU_EXCLUDED_HOST_ACTION_IDS.has(action.id)
+    (action) =>
+      action.id !== 'delayedActions' &&
+      action.id !== 'closeAfterDone' &&
+      !COMPOSER_MENU_EXCLUDED_HOST_ACTION_IDS.has(action.id)
   );
   const agentHostActions = foldedHostActions.filter((action) => AGENT_HOST_ACTION_IDS.has(action.id));
   const otherHostActions = foldedHostActions.filter((action) => !AGENT_HOST_ACTION_IDS.has(action.id));
 
-  // Chat presentation toggles and Delayed actions live only inside the dots
-  // menu, on every footer width, so both menus share these items.
+  // Chat presentation toggles, Delayed actions, and Close After Done live only
+  // inside the dots menu, on every footer width, so both menus share them.
   const verboseMenuItem = onToggleVerbose ? (
     <DropdownMenuCheckboxItem
       className='whitespace-nowrap'
@@ -275,6 +281,7 @@ export function SessionChatComposerActions({
         {delayedHostAction?.shortcut ? <DropdownMenuShortcut>{delayedHostAction.shortcut}</DropdownMenuShortcut> : null}
       </DropdownMenuItem>
     ) : null;
+  const closeAfterDoneMenuItem = closeAfterDoneHostAction ? hostActionMenuItem(closeAfterDoneHostAction) : null;
   const stashCountBadge =
     stashedPromptCount > 0 ? (
       <span aria-hidden='true' className='ghostex-chat-stash-count-badge'>
@@ -310,7 +317,11 @@ export function SessionChatComposerActions({
       ) : null}
     </>
   );
-  const hasBaseMenuItems = verboseMenuItem !== null || summaryMenuItem !== null || delayedActionsMenuItem !== null;
+  const hasBaseMenuItems =
+    verboseMenuItem !== null ||
+    summaryMenuItem !== null ||
+    delayedActionsMenuItem !== null ||
+    closeAfterDoneMenuItem !== null;
   const hasExpandedMenu = hasBaseMenuItems || agentMenuSection !== null || otherHostMenuSection !== null;
 
   /*
@@ -423,6 +434,7 @@ export function SessionChatComposerActions({
                   {verboseMenuItem}
                   {summaryMenuItem}
                   {delayedActionsMenuItem}
+                  {closeAfterDoneMenuItem}
                 </DropdownMenuGroup>
               ) : null}
               {hostMenuSections(hasBaseMenuItems)}

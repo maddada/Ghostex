@@ -550,6 +550,7 @@ impl GhostexGpuiApp {
             "rename" => TerminalAgentActionRequest::Rename,
             "sleep" => TerminalAgentActionRequest::Sleep,
             "delayedActions" => TerminalAgentActionRequest::DelayedActions,
+            "closeAfterDone" => TerminalAgentActionRequest::CloseAfterDone,
             "fork" => TerminalAgentActionRequest::Fork,
             "fullReload" => TerminalAgentActionRequest::FullReload,
             "exportTranscript" => TerminalAgentActionRequest::ExportTranscript,

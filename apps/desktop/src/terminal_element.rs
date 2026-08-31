@@ -423,6 +423,7 @@ pub enum TerminalAgentActionRequest {
     Rename,
     Sleep,
     DelayedActions,
+    CloseAfterDone,
     Fork,
     FullReload,
     ExportTranscript,
@@ -2486,6 +2487,7 @@ pub(crate) fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
         // this resolver reads (that constant is in gpui keystroke syntax).
         "sleepFocusedSession" => "alt+shift+s",
         "delayedSend" => "ctrl+shift+s",
+        "closeAfterDone" => "",
         "forkSession" => "ctrl+shift+f",
         "reloadSession" => "ctrl+shift+r",
         "promptEditor" => "ctrl+g",
