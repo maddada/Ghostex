@@ -58,6 +58,7 @@ import {
   type PreferredAgentInterface,
   type SessionTitleGenerationAgent,
   type SidebarSettingsPresetId,
+  type TerminalViewWidthMode,
   type ghostexSettings,
 } from '../shared/ghostex-settings';
 import {
@@ -1110,6 +1111,7 @@ export function FirstLaunchSetupModal({
               completionSoundEnabled={settings.completionSound !== 'off'}
               onAddFirstProject={finishFirstLaunchSetup}
               onChangePreferredInterface={(preferredAgentInterface) => updateSettings({ preferredAgentInterface })}
+              onChangeTerminalWidthMode={(terminalViewWidthMode) => updateSettings({ terminalViewWidthMode })}
               onSelectBackgroundAgent={(agentId) => {
                 if (agentId !== 'custom') {
                   setBackgroundAgentChoice(agentId);
@@ -1124,6 +1126,7 @@ export function FirstLaunchSetupModal({
                 updateSettings({ completionSound: enabled ? DEFAULT_COMPLETION_SOUND : 'off' })
               }
               preferredInterface={settings.preferredAgentInterface}
+              terminalWidthMode={settings.terminalViewWidthMode}
               titleAndCommitAgents={titleAndCommitAgents}
             />
           ) : activePage === 'preferences' ? (
@@ -1614,10 +1617,12 @@ function FirstLaunchProjectPage({
   completionSoundEnabled,
   onAddFirstProject,
   onChangePreferredInterface,
+  onChangeTerminalWidthMode,
   onSelectBackgroundAgent,
   onToggleAttentionNotifications,
   onToggleCompletionSound,
   preferredInterface,
+  terminalWidthMode,
   titleAndCommitAgents,
 }: {
   attentionNotificationsEnabled: boolean;
@@ -1625,10 +1630,12 @@ function FirstLaunchProjectPage({
   completionSoundEnabled: boolean;
   onAddFirstProject: (path: string) => void;
   onChangePreferredInterface: (preferredInterface: PreferredAgentInterface) => void;
+  onChangeTerminalWidthMode: (terminalWidthMode: TerminalViewWidthMode) => void;
   onSelectBackgroundAgent: (agentId: SessionTitleGenerationAgent) => void;
   onToggleAttentionNotifications: (enabled: boolean) => void;
   onToggleCompletionSound: (enabled: boolean) => void;
   preferredInterface: PreferredAgentInterface;
+  terminalWidthMode: TerminalViewWidthMode;
   titleAndCommitAgents: readonly FirstLaunchSidebarAgent[];
 }) {
   /*
@@ -1735,6 +1742,32 @@ function FirstLaunchProjectPage({
             <IconMessageCircle aria-hidden='true' />
             Chat
           </SegmentedControlItem>
+        </SegmentedControl>
+      </div>
+
+      <div className='first-launch-onb-row first-launch-onb-setting-row'>
+        <span className='first-launch-onb-row-icon'>
+          <IconTerminal2 aria-hidden='true' size={16} />
+        </span>
+        <div className='first-launch-onb-row-main'>
+          <strong>Terminal Width</strong>
+          <p className='first-launch-onb-hint'>
+            Match Chat is recommended if you use Chat and agent CLIs most of the time. It keeps the width the same as
+            you switch between them.
+          </p>
+        </div>
+        <SegmentedControl
+          aria-label='Terminal Width'
+          className='first-launch-onb-setting-control'
+          onValueChange={(value) => {
+            if (value === 'full' || value === 'match-chat') {
+              onChangeTerminalWidthMode(value);
+            }
+          }}
+          value={terminalWidthMode}
+        >
+          <SegmentedControlItem value='full'>Full</SegmentedControlItem>
+          <SegmentedControlItem value='match-chat'>Match Chat</SegmentedControlItem>
         </SegmentedControl>
       </div>
 
