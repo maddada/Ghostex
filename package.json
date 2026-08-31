@@ -26,6 +26,7 @@
     "release:plan": "node tooling/release-gpui/plan-cli.mjs",
     "release:classify": "node tooling/release-gpui/failure-classification.mjs",
     "release:references:verify": "node tooling/release-gpui/verify-reference-contract.mjs",
+    "release:validate:windows": "node tooling/release-validate-windows.mjs",
     "release:test": "vitest run --config tooling/release-gpui/vitest.release.config.ts",
     "build:editor": "bun apps/editor/scripts/build-editor-web.mjs && bash apps/editor/scripts/build-editor-app.sh",
     "gxserver:remote-linux": "node server/package-remote-linux.mjs --arch all",
