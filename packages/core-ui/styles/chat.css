@@ -1639,7 +1639,11 @@ so the swap barely moves the composer row.
    inline width. This keeps both cursor stops on the pill's outer edges. */
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill {
   display: inline-block;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
   gap: 0;
+  letter-spacing: inherit;
   padding-inline: 0;
   position: relative;
 }
@@ -2418,12 +2422,75 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   text-decoration: none;
 }
 
+.ghostex-chat-markdown .ghostex-chat-markdown-link-icon {
+  display: inline;
+  height: 1em;
+  margin-right: 0.2em;
+  vertical-align: -0.08em;
+  width: 1em;
+}
+
+/* File-like references belong to the prose here, not to the compact Monaco
+   editing model. Keep their type colour and icon, but make the clickable text
+   read exactly like the transcript's ordinary links instead of a nested UI
+   control with its own surface, border, radius, typeface, and text size. */
+.ghostex-chat-markdown :is(.ghostex-chat-reference-pill, .ghostex-chat-markdown-file-chip) {
+  align-items: baseline;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  color: var(--ghostex-chat-reference-outline);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  margin: 0;
+  padding: 0;
+  transition: none;
+}
+
+.ghostex-chat-markdown .ghostex-chat-reference-pill::before {
+  background-color: currentColor;
+  height: 1em;
+  width: 1em;
+}
+
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip-icon {
+  color: currentColor;
+  height: 1em;
+  width: 1em;
+}
+
+.ghostex-chat-reference-tooltip {
+  --ghostex-tooltip-radius: 3px;
+}
+
 .ghostex-chat-markdown a:hover,
-.ghostex-chat-markdown a:focus-visible {
-  background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
-  background-position: 0 100%;
-  background-repeat: repeat-x;
-  background-size: 4px 2px;
+.ghostex-chat-markdown a:focus-visible,
+.ghostex-chat-markdown .ghostex-chat-reference-pill:hover,
+.ghostex-chat-markdown .ghostex-chat-reference-pill:focus-visible,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:hover,
+.ghostex-chat-markdown .ghostex-chat-markdown-file-chip:focus-visible {
+  background-color: transparent;
+  background-image: none;
+  color: var(--ghostex-chat-reference-outline, var(--info-foreground));
+  outline: none;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-markdown a {
+  color: color-mix(in srgb, var(--info-foreground) 72%, white 28%);
+}
+
+.ghostex-session-chat-scope[data-chat-theme='dark']
+  .ghostex-chat-markdown
+  :is(.ghostex-chat-reference-pill, .ghostex-chat-markdown-file-chip) {
+  color: color-mix(in srgb, var(--ghostex-chat-reference-outline) 72%, white 28%);
 }
 
 /* --- Footnotes ------------------------------------------------------------ */
@@ -3455,23 +3522,6 @@ reduced-motion turns both off and keeps the static glyph.
   min-width: 0;
 }
 
-/* Structured progress (compaction): same bar treatment as the transcript's
-   activity row, scaled down for the strip. */
-.ghostex-chat-working-strip-bar {
-  background: color-mix(in srgb, var(--foreground) 10%, transparent);
-  border-radius: 999px;
-  height: 0.1875rem;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.ghostex-chat-working-strip-bar-fill {
-  background: var(--primary);
-  border-radius: 999px;
-  height: 100%;
-  transition: width 500ms;
-}
-
 .ghostex-chat-working-strip-spark {
   align-items: center;
   animation: ghostex-chat-working-spark-pulse 1.6s ease-in-out infinite;
@@ -3522,16 +3572,6 @@ reduced-motion turns both off and keeps the static glyph.
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.ghostex-chat-working-strip-detail {
-  color: var(--muted-foreground);
-  opacity: 0.75;
-}
-
-.ghostex-chat-working-strip-elapsed {
-  font-variant-numeric: tabular-nums;
-  opacity: 0.6;
 }
 
 @media (prefers-reduced-motion: reduce) {

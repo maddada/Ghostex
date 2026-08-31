@@ -25,6 +25,7 @@ import {
   IconCopy,
   IconExternalLink,
   IconInfoCircle,
+  IconLink,
   IconMessageReport,
   IconTextWrap,
 } from '@tabler/icons-react';
@@ -501,7 +502,7 @@ function FileChip({
   const title = sessionChatFilePathTitle(reference);
   const Icon = sessionChatFilePathIcon(reference.basename);
   return (
-    <AppTooltip content={title}>
+    <AppTooltip content={title} contentClassName='ghostex-chat-reference-tooltip'>
       <button
         className='ghostex-chat-markdown-file-chip'
         onClick={() => openFile(reference.path, reference.position)}
@@ -738,7 +739,7 @@ function MarkdownReferencePill({
     ? `${path}:${position.line}${position.column === undefined ? '' : `:${position.column}`}`
     : path;
   return (
-    <AppTooltip content={title}>
+    <AppTooltip content={title} contentClassName='ghostex-chat-reference-tooltip'>
       <button
         aria-label={`${action}, ${kind}`}
         className={`ghostex-chat-reference-pill ghostex-chat-reference-pill--${kind}`}
@@ -888,7 +889,7 @@ function markdownComponents(
         const openUrl = hostLinks?.openUrl;
         if (openUrl) {
           return (
-            <AppTooltip content={target.url}>
+            <AppTooltip content={target.url} contentClassName='ghostex-chat-reference-tooltip'>
               <a
                 // Kept an anchor so the URL shows in the status bar and the
                 // context menu still offers Copy Link; the host owns the open.
@@ -898,6 +899,7 @@ function markdownComponents(
                   openUrl(target.url, { external: event.shiftKey });
                 }}
               >
+                <IconLink aria-hidden='true' className='ghostex-chat-markdown-link-icon' size={13} stroke={1.8} />
                 {children}
               </a>
             </AppTooltip>
@@ -905,6 +907,7 @@ function markdownComponents(
         }
         return (
           <a href={target.url} rel='noreferrer' target='_blank'>
+            <IconLink aria-hidden='true' className='ghostex-chat-markdown-link-icon' size={13} stroke={1.8} />
             {children}
           </a>
         );

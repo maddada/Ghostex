@@ -12,8 +12,9 @@
 // and sibling assets are unreachable from a base-URL-less html string), so
 // this component is never mounted there and the composer keeps its textarea.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SessionChatTheme } from '../../shared/session-chat';
+import { Tooltip, TooltipContent } from '../app-tooltip';
 import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from './session-chat-composer';
 import { SESSION_CHAT_REFERENCE_REVEAL_MARKER } from './session-chat-reference-pills';
 import {
@@ -133,8 +134,9 @@ open; the height snaps back to the draft's own content height on close.
 const QUICK_INPUT_MIN_HEIGHT_PX = 280;
 const REFERENCE_PILL_CLASS = 'ghostex-chat-reference-pill';
 const REFERENCE_PILL_ID_CLASS_PREFIX = `${REFERENCE_PILL_CLASS}--id-`;
+const REFERENCE_PILL_PATH_ATTRIBUTE = 'data-ghostex-reference-path';
 const REFERENCE_PILL_WORD_JOINER = '\u2060';
-const REFERENCE_PILL_ICON_SPACE = '\u00a0\u00a0\u2009';
+const REFERENCE_PILL_ICON_SPACE = '\u00a0\u00a0\u00a0\u00a0\u2009';
 const REFERENCE_PILL_TRAILING_SPACE = '\u2009';
 const REFERENCE_PILL_MAX_LABEL_CHARACTERS = 18;
 
@@ -285,6 +287,7 @@ export function SessionChatMonacoInput({
   vsBaseUrl: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [referenceTooltip, setReferenceTooltip] = useState<{ anchor: HTMLElement; content: string } | null>(null);
   const editorRef = useRef<MonacoEditorInstanceLike | null>(null);
   const applyHeightRef = useRef<(() => void) | null>(null);
   const clipboardBridgeRef = useRef<MonacoClipboardBridge | null>(null);
@@ -448,10 +451,11 @@ export function SessionChatMonacoInput({
           const nextCaret = reference.start + labelEnd + 1;
           editor.setPosition(model.getPositionAt(nextCaret));
         };
-        const syncReferenceTitles = (): void => {
+        const syncReferenceTooltipPaths = (): void => {
           for (const [index, reference] of references.entries()) {
             for (const pill of container.querySelectorAll<HTMLElement>(`.${REFERENCE_PILL_ID_CLASS_PREFIX}${index}`)) {
-              pill.title = reference.path;
+              pill.removeAttribute('title');
+              pill.setAttribute(REFERENCE_PILL_PATH_ATTRIBUTE, reference.path);
             }
           }
         };
@@ -461,6 +465,7 @@ export function SessionChatMonacoInput({
             return;
           }
           references = referenceModel.occurrences(editor.getValue());
+          setReferenceTooltip(null);
           referenceDecorations.set(
             references.map((reference, index) => {
               const start = model.getPositionAt(reference.start);
@@ -493,9 +498,9 @@ export function SessionChatMonacoInput({
               };
             })
           );
-          queueMicrotask(syncReferenceTitles);
+          queueMicrotask(syncReferenceTooltipPaths);
         };
-        const referenceDomObserver = new MutationObserver(syncReferenceTitles);
+        const referenceDomObserver = new MutationObserver(syncReferenceTooltipPaths);
         referenceDomObserver.observe(container, { childList: true, subtree: true });
         disposables.push({ dispose: () => referenceDomObserver.disconnect() });
         renderReferencePills();
@@ -839,10 +844,42 @@ export function SessionChatMonacoInput({
   }, []);
 
   return (
-    <div
-      className='ghostex-chat-composer-monaco w-full min-w-0 flex-1 overflow-hidden'
-      data-session-chat-typing-redirect-ignore='true'
-      ref={containerRef}
-    />
+    <>
+      <div
+        className='ghostex-chat-composer-monaco w-full min-w-0 flex-1 overflow-hidden'
+        data-session-chat-typing-redirect-ignore='true'
+        onPointerLeave={() => setReferenceTooltip(null)}
+        onPointerOut={(event) => {
+          const pill =
+            event.target instanceof Element ? event.target.closest<HTMLElement>(`.${REFERENCE_PILL_CLASS}`) : null;
+          const nextPill =
+            event.relatedTarget instanceof Element
+              ? event.relatedTarget.closest<HTMLElement>(`.${REFERENCE_PILL_CLASS}`)
+              : null;
+          if (pill && pill !== nextPill) {
+            setReferenceTooltip((current) => (current?.anchor === pill ? null : current));
+          }
+        }}
+        onPointerOver={(event) => {
+          const pill =
+            event.target instanceof Element ? event.target.closest<HTMLElement>(`.${REFERENCE_PILL_CLASS}`) : null;
+          if (!pill || !containerRef.current?.contains(pill)) {
+            return;
+          }
+          const content = pill.getAttribute(REFERENCE_PILL_PATH_ATTRIBUTE);
+          if (content) {
+            setReferenceTooltip({ anchor: pill, content });
+          }
+        }}
+        ref={containerRef}
+      />
+      {referenceTooltip ? (
+        <Tooltip open>
+          <TooltipContent anchor={referenceTooltip.anchor} side='top'>
+            {referenceTooltip.content}
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
+    </>
   );
 }
