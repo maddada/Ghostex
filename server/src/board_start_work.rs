@@ -59,14 +59,24 @@ pub fn start_board_work(
         &global_beads_directory,
     )?;
     let board_project_id = project_id_of(&board_project)?;
-    let store_projects =
-        select_link_store_projects(&board_project, &projects, &global_beads_directory);
+    let has_explicit_project_selector = read_trimmed(params, "projectId").is_some()
+        || read_trimmed(params, "projectPath").is_some();
+    let store_projects = if has_explicit_project_selector {
+        vec![board_project.clone()]
+    } else {
+        select_link_store_projects(&board_project, &projects, &global_beads_directory)
+    };
 
     // Redline 2: any usable linked conversation — live, sleeping, or
     // restorable — is an idempotent success, never a second worker.
-    if let Some((existing_project_id, existing_session_id)) =
-        find_usable_linked_session(repository, db, server_id, &store_projects, &bead_id)?
-    {
+    if let Some((existing_project_id, existing_session_id)) = find_usable_linked_session(
+        repository,
+        db,
+        server_id,
+        &store_projects,
+        &bead_id,
+        has_explicit_project_selector.then_some(board_project_id.as_str()),
+    )? {
         return Ok(StartBoardWorkOutcome {
             created: false,
             created_session: None,
@@ -284,6 +294,7 @@ probed with `bd show` and the bead must live on exactly one of them; a store tha
 several projects mount is represented by the project whose own path IS the store,
 never by whichever sibling happens to sort first.
 */
+/// Resolve the requested bead and the project that should own its worker.
 fn resolve_board_project_and_bead(
     projects: &[Value],
     params: &Map<String, Value>,
@@ -393,6 +404,7 @@ fn normalized_project_path(project: &Value) -> Option<String> {
         .map(normalize_project_path)
 }
 
+/// Normalize a registered project path without resolving symlinks.
 fn normalize_project_path(path: &str) -> String {
     path.trim().trim_end_matches('/').to_string()
 }
@@ -768,10 +780,10 @@ fn percent_decode(value: &str) -> String {
 
 /*
 Redline 2's "usable" definition, evaluated daemon-side: a linked conversation
-whose session row still exists (live or sleeping, in any project) is reused
-directly; a link whose row is gone is still usable when the daemon's
-previous-session history can restore it — the same restore contract the board's
-resumable-link affordance reads.
+whose session row still exists (live or sleeping) is reused directly; a link
+whose row is gone is still usable when the daemon's previous-session history can
+restore it. Unqualified requests may reuse a worker from any project sharing the
+board, while an explicit selector restricts reuse to that selected project.
 */
 fn find_usable_linked_session(
     repository: &DomainRepository<'_>,
@@ -779,8 +791,12 @@ fn find_usable_linked_session(
     server_id: &str,
     store_projects: &[Value],
     bead_id: &str,
+    required_project_id: Option<&str>,
 ) -> Result<Option<(String, String)>, DomainStateError> {
     for reference in read_active_bead_links(store_projects, bead_id) {
+        if required_project_id.is_some_and(|project_id| reference.project_id != project_id) {
+            continue;
+        }
         if repository
             .get_session(&reference.project_id, &reference.session_id)?
             .is_some()

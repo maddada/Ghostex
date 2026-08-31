@@ -34,6 +34,7 @@ pub fn board_command(args: &[String]) -> CliResult<()> {
     }
 }
 
+/// Parse and dispatch `board start-work` through gxserver.
 fn start_work_command(args: &[String]) -> CliResult<()> {
     if matches!(
         args.first().map(String::as_str),
