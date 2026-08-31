@@ -47,7 +47,7 @@ export const MIN_TERMINAL_VIEW_WIDTH_PERCENT = MIN_SESSION_CHAT_TRANSCRIPT_WIDTH
 export const MAX_TERMINAL_VIEW_WIDTH_PERCENT = MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
 export const TERMINAL_VIEW_WIDTH_PERCENT_STEP = SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT_STEP;
 export const DEFAULT_TERMINAL_VIEW_WIDTH_PERCENT = DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT;
-export const DEFAULT_TERMINAL_VIEW_WIDTH_MODE: TerminalViewWidthMode = 'match-chat';
+export const DEFAULT_TERMINAL_VIEW_WIDTH_MODE: TerminalViewWidthMode = 'full';
 export const TERMINAL_VIEW_WIDTH_MODE_OPTIONS: readonly { label: string; value: TerminalViewWidthMode }[] = [
   { label: 'Full', value: 'full' },
   { label: 'Match Chat', value: 'match-chat' },

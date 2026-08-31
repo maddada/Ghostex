@@ -99,8 +99,7 @@ function normalizeTerminalViewWidthMode(source: Record<string, unknown>): Termin
     return candidate;
   }
   // The removed boolean had only two states. Preserve its explicit narrow
-  // state as Custom; its old default false migrates to the new Match Chat
-  // default instead of pinning existing installs to Full.
+  // state as Custom; its old default false migrates to the current default.
   return source.terminalNarrowerViewEnabled === true ? 'custom' : DEFAULT_ghostex_SETTINGS.terminalViewWidthMode;
 }
 
