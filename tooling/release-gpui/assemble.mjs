@@ -61,7 +61,12 @@ const plan = readPublishPlan({
 assertPlanMatchesScope({ expectedPlatforms: [...expected], plan, version });
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { encoding: 'utf8', stdio: options.capture ? 'pipe' : 'inherit' });
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    stdio: options.capture ? 'pipe' : 'inherit',
+    ...(options.env ? { env: options.env } : {}),
+    ...(options.input === undefined ? {} : { input: options.input }),
+  });
   if (result.error) throw result.error;
   if (result.status !== 0)
     throw new Error(`${command} ${args.join(' ')} failed${result.stderr ? `\n${result.stderr}` : ''}`);
@@ -86,6 +91,86 @@ function readLiveAppcast() {
   if (response.status !== 0) return '';
   const encoded = JSON.parse(response.stdout).content?.replace(/\s/gu, '') ?? '';
   return Buffer.from(encoded, 'base64').toString('utf8');
+}
+
+function resolveRemoteMain() {
+  const remoteMain = run('git', ['ls-remote', 'origin', 'refs/heads/main'], { capture: true }).split(/\s+/)[0];
+  if (!remoteMain) throw new Error('Could not resolve origin/main');
+  return remoteMain;
+}
+
+/*
+ * CDXC:ReleaseChangeAwarePlanning 2026-08-30:
+ * `origin/main` moves while a multi-hour build runs, because several agents
+ * share this checkout. 8.3.0 lost an entire dispatch to that: all eleven
+ * products had built and publication was refused because an unrelated mobile
+ * submodule bump landed while the runners worked.
+ *
+ * Drift is only safe to absorb when it is a pure fast-forward -- the commit we
+ * built is still in main's history, so nothing that went into these artifacts
+ * was rewritten or rolled back. Divergence stays fatal, because then the
+ * artifacts describe source that main no longer has.
+ */
+function classifyMainDrift(builtCommit) {
+  const remoteMain = resolveRemoteMain();
+  if (remoteMain === builtCommit) return { kind: 'unchanged', remoteMain };
+  run('git', ['fetch', '--no-tags', 'origin', 'main']);
+  if (spawnSync('git', ['merge-base', '--is-ancestor', builtCommit, remoteMain]).status !== 0) {
+    throw new Error(
+      `origin/main diverged from the built source during the build (${builtCommit} is not an ancestor of ${remoteMain}); refusing partial publication`
+    );
+  }
+  return { kind: 'advanced', remoteMain };
+}
+
+/*
+ * Build `origin/main`-plus-this-appcast without touching the runner's working
+ * tree or index. Plumbing rather than cherry-pick: the final content of
+ * appcast.xml is already known exactly, so there is nothing to merge and no
+ * conflict to resolve, and every other path keeps whatever landed during the
+ * build byte-for-byte.
+ */
+function commitAppcastOnto({ appcastXml, message, parent }) {
+  const blob = run('git', ['hash-object', '-w', '--stdin'], { capture: true, input: appcastXml });
+  const indexDirectory = mkdtempSync(path.join(os.tmpdir(), 'ghostex-release-index-'));
+  const env = { ...process.env, GIT_INDEX_FILE: path.join(indexDirectory, 'index') };
+  try {
+    run('git', ['read-tree', parent], { capture: true, env });
+    run('git', ['update-index', '--add', '--cacheinfo', `100644,${blob},appcast.xml`], { capture: true, env });
+    const tree = run('git', ['write-tree'], { capture: true, env });
+    return run('git', ['commit-tree', tree, '-p', parent, '-m', message], { capture: true });
+  } finally {
+    rmSync(indexDirectory, { force: true, recursive: true });
+  }
+}
+
+/*
+ * Advance the Sparkle feed on `main`. The tag is never moved to accommodate
+ * drift: it keeps pointing at the exact commit that was built and signed. When
+ * main has moved on, the appcast bump is replayed on top of it instead, so the
+ * advance can never revert work that landed during the build.
+ *
+ * `main` can move again between resolving it and pushing, so a rejected push is
+ * retried against the newer tip rather than treated as a failure.
+ */
+function advanceMainWithAppcast({ appcastCommit, appcastXml, builtCommit, message }) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const drift = classifyMainDrift(builtCommit);
+    if (drift.kind === 'unchanged') {
+      run('git', ['push', 'origin', `${appcastCommit}:main`]);
+      return 'fast-forward';
+    }
+    const replayed = commitAppcastOnto({ appcastXml, message, parent: drift.remoteMain });
+    const push = spawnSync('git', ['push', 'origin', `${replayed}:main`], { encoding: 'utf8', stdio: 'pipe' });
+    if (push.status === 0) {
+      console.log(
+        `origin/main advanced during the build; replayed the ${version} appcast bump onto ${drift.remoteMain.slice(0, 10)} as ${replayed.slice(0, 10)}.`
+      );
+      return 'replayed';
+    }
+    console.log(`origin/main moved again while advancing Sparkle; retrying (attempt ${attempt} of 3).`);
+  }
+  throw new Error(`Could not advance origin/main with the ${version} appcast bump after 3 attempts`);
 }
 
 const artifactContracts = new Map([
@@ -492,12 +577,12 @@ if (existingReleaseResult.status === 0) {
     if (taggedAppcast.trim() !== generatedAppcastXml.trim()) {
       throw new Error(`Existing ${tag} contains an appcast that differs from the validated macOS artifact`);
     }
-    const remoteMain = run('git', ['ls-remote', 'origin', 'refs/heads/main'], { capture: true }).split(/\s+/)[0];
-    const tagParent = run('git', ['rev-parse', `${tagCommit}^`], { capture: true });
-    if (remoteMain !== tagParent) {
-      throw new Error(`Cannot safely advance Sparkle: origin/main ${remoteMain} is not ${tag}'s parent ${tagParent}`);
-    }
-    run('git', ['push', 'origin', `${tagCommit}:main`]);
+    advanceMainWithAppcast({
+      appcastCommit: tagCommit,
+      appcastXml: generatedAppcastXml,
+      builtCommit: run('git', ['rev-parse', `${tagCommit}^`], { capture: true }),
+      message: `chore: release ${version}`,
+    });
   }
   if (macos && updateSparkle && !appcastReferencesRelease(readLiveAppcast(), buildNumber, version)) {
     throw new Error(`Live appcast did not advance to ${version} (${buildNumber})`);
@@ -515,12 +600,9 @@ if (macos && updateSparkle) {
   run('git', ['commit', '-m', `chore: release ${version}`]);
 }
 
-const remoteMain = run('git', ['ls-remote', 'origin', 'refs/heads/main'], { capture: true }).split(/\s+/)[0];
-if (remoteMain !== sourceCommit) {
-  throw new Error(
-    `origin/main moved during the build (${sourceCommit} -> ${remoteMain}); refusing partial publication`
-  );
-}
+// Fail before creating the tag if main diverged, rather than after uploading
+// every asset. Pure fast-forward drift is absorbed when Sparkle advances below.
+classifyMainDrift(sourceCommit);
 run('git', ['tag', '-a', tag, '-m', `Release ${tag}`]);
 run('git', ['push', 'origin', tag]);
 const releaseArgs = [
@@ -542,7 +624,14 @@ run('gh', ['release', 'edit', tag, '--repo', 'maddada/Ghostex', '--draft=false']
 
 // Keep the Sparkle feed as the final public mutation. Existing users cannot
 // observe an appcast entry until the matching signed DMG is already live.
-if (macos && updateSparkle) run('git', ['push', 'origin', 'HEAD:main']);
+if (macos && updateSparkle) {
+  advanceMainWithAppcast({
+    appcastCommit: run('git', ['rev-parse', 'HEAD'], { capture: true }),
+    appcastXml: generatedAppcastXml,
+    builtCommit: sourceCommit,
+    message: `chore: release ${version}`,
+  });
+}
 
 const liveRelease = JSON.parse(run('gh', ['api', `repos/maddada/Ghostex/releases/tags/${tag}`], { capture: true }));
 validateLiveRelease(liveRelease);
