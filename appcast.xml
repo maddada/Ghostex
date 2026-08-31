@@ -8,6 +8,34 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>8.4.0</title>
+            <pubDate>Mon, 31 Aug 2026 05:35:08 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.4.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>80400</sparkle:version>
+            <sparkle:shortVersionString>8.4.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 8.4.0
+
+## 8.4.0 - 2026-08-31
+
+- Major
+  - Session Chat now shows what the agent's terminal is doing right now: compaction and other live activity appear as a card pinned above the composer, stay visible wherever the transcript is scrolled, and clear on their own when the agent goes idle.
+  - Codex sessions that open a chooser — model, effort, permissions, approvals, or any other numbered picker — now say so in chat with the choice on screen, instead of refusing your message with a generic "input box is not on screen" error.
+- Minor
+  - The `ghostex` and `gx` commands keep working after an app update; a packaged launch refreshes command wrappers that were still pointing at the previous install's binaries.
+  - Close After Done sits beside Delayed Send in the session menus on desktop, web, and the terminal action bar, and both countdowns tick live instead of only moving when the session refreshes.
+  - First launch asks whether the terminal view should use the full pane or match the chat width, and new installs now default to full width.
+  - The agents tab context menu opens with Rename and Sleep for the session you clicked, above the scoped Sleep Right, Sleep Left, and Sleep Others actions.
+  - File references in the transcript read as ordinary links, and composer reference pills show their full path in a tooltip rather than a native title popup.
+  - Installed extensions show their author, and version labels are written the same way across the Store, your installed list, and Settings.
+  - Hermes sessions running under a named profile are recognized again, so chat no longer refuses every send while the composer is plainly on screen, thanks to @banozz.
+  - Agent commands that hop to another user or host, such as through `ssh`, no longer leave the agent CLI wedged in an editor at launch, thanks to @banozz.
+  - Project Board `start-work` dispatches the worker into the project you name instead of whichever project was touched most recently, thanks to @banozz.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.4.0/ghostex-8.4.0-arm64.dmg" length="118074063" type="application/octet-stream" sparkle:edSignature="tdDcW8KciRoSjLzKb++jUX8bQJrWSbgTfVV1kta+r0r5+71DsKiTjnhcvuF8T+TBb8SBv34SP4fVRsuoVyB1AQ=="/>
+        </item>
+        <item>
             <title>8.3.0</title>
             <pubDate>Sun, 30 Aug 2026 03:40:46 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.3.0</sparkle:fullReleaseNotesLink>
@@ -201,32 +229,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.13.0/ghostex-7.13.0-arm64.dmg" length="124591470" type="application/octet-stream" sparkle:edSignature="ClG2JvM9RbhKgIYZjj65FvXB2+FABR9zHgTxSLNrmlWT4zTxY8SagUjSj/H8JQQZCY18G4aYpRhvYAyOMlj2CQ=="/>
         </item>
         <item>
-            <title>7.12.0</title>
-            <pubDate>Thu, 20 Aug 2026 05:01:45 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.12.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>71200</sparkle:version>
-            <sparkle:shortVersionString>7.12.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.12.0
-
-## 7.12.0 - 2026-08-20
-
-- Major
-  - A new Export Transcript agent action writes the session's conversation to a markdown file — your messages, the agent's replies, the commands it ran with their output, and the files it changed — and offers to start a fresh conversation that already mentions the export, so you can hand a session's context to another agent without copying anything by hand. Available on the desktop, web, and Android apps and from the `ghostex` command line.
-- Minor
-  - Automatic sleep no longer retires a session you are looking at, including one showing its chat surface with the terminal parked behind it, or a session with a Delayed Send still waiting to fire.
-  - Removing an installed agent hook or bundled skill now happens in Settings > Agents next to the control that installed it, with a remove action on each row and one Uninstall All for the whole set.
-  - Remote settings now labels a saved machine's action as Install or Update depending on whether it already runs gxserver, and shows the installed version on the same row.
-  - The project board now explains a refused action — closing an issue that still has open blockers or children, an impossible dependency, an issue id that does not exist — and offers the step that resolves it, instead of reporting the board as unavailable and telling you to reinstall Beads.
-  - The Code tab is now disabled for remote projects, where it would have opened this machine's files rather than the remote ones, and offers to copy the remote path instead.
-  - The session persistence warning in Tips now opens the settings page that actually holds that setting.
-  - Desktop Control settings now reads the real accessibility and screen recording permission state instead of reporting it incorrectly.
-  - The sidebar's scroll fade now settles correctly after a project or collection finishes animating open.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.12.0/ghostex-7.12.0-arm64.dmg" length="120333245" type="application/octet-stream" sparkle:edSignature="W3spGACVwYvhwbo/TaROPZc4JywZZCDf8rgBuom5DfvuGBoDiJjI/CgDv7RSnQpNQpi6ebvuK9gJUIsRF6NiAw=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -238,6 +240,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: 9RK1c2r3p780tZTVulDsHhxUT22yBS1+rKwOL1cwWxxz+9/RcUOO+GgXt71uYKhxCTi89CFyBalLUPsBhOscDQ==
-length: 29464
+edSignature: V21/uV4Nl28dZJafJaVKCFrrI+R9jRjSRxlRHlS9hpvSwq1DUtlA3UTVhXNZUnsp9yYQSC6yBw1KeCibORiOBg==
+length: 29558
 -->
