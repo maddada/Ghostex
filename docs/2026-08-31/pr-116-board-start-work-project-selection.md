@@ -13,7 +13,8 @@ Feature: Start Project Board work in the intended project
     Given several projects share one global Beads board
     When the caller selects a project by path or project ID
     Then Ghostex starts or reuses the worker only in that selected project
-    When the caller does not select a project
-    Then Ghostex uses the project that owns the shared Beads directory
-    And repeated dispatches remain idempotent without crossing explicit project boundaries
+    When the caller does not select a project and no usable worker is already linked
+    Then Ghostex creates the worker in the project that owns the shared Beads directory
+    But an existing usable worker may be reused from any project sharing that board
+    And explicit project selections never reuse a worker across project boundaries
 ```
