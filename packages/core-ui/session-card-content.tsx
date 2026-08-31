@@ -125,7 +125,19 @@ export function SessionCardContent({
     showDebugSessionNumbers,
   });
   const displayedHeadingText = isGeneratingFirstPromptTitle ? 'Generating title...' : headingText;
-  const timerTrailingLabel = getSessionCardTimerTrailingLabel(session);
+  const hasLiveTimerDeadline = Boolean(session.delayedSendDeadlineAt || session.closeAfterDoneDeadlineAt);
+  /*
+  CDXC:SidebarTimerCountdown 2026-08-31:
+  gxserver persists Delayed Send and publishes an absolute deadline, but its
+  accompanying remaining label is only a snapshot from the last presentation
+  update. Tick deadline-backed labels from the client clock so the sidebar
+  continues counting between daemon events. The deadline remains authoritative;
+  this interval changes display text only and does not own or fire the timer.
+  */
+  const relativeTimeTick = useRelativeTimeTick(
+    hasLiveTimerDeadline || (showLastActiveTime && Boolean(session.lastInteractionAt))
+  );
+  const timerTrailingLabel = getSessionCardTimerTrailingLabel(session, relativeTimeTick);
   const hasLastInteractionTime =
     timerTrailingLabel === undefined && showLastActiveTime && Boolean(session.lastInteractionAt);
   const showHeaderLoadingSpinner = session.isReloading === true || isGeneratingFirstPromptTitle;
@@ -148,7 +160,6 @@ export function SessionCardContent({
   CDXC:SidebarRelativeTime 2026-06-07-06:27:
   Session-card Last Active labels must keep aging from the client clock after the row is rendered. Pass the relative-time tick into the formatter so React Compiler cannot cache the first label, such as a newly created session's 0s, until gxserver publishes an unrelated row update.
   */
-  const relativeTimeTick = useRelativeTimeTick(hasLastInteractionTime);
   const lastInteractionLabel =
     hasLastInteractionTime && session.lastInteractionAt
       ? formatRelativeTime(session.lastInteractionAt, {
@@ -276,8 +287,12 @@ function getSessionCardTimerTrailingLabel(
     | 'closeAfterDoneRemainingLabel'
     | 'delayedSendDeadlineAt'
     | 'delayedSendRemainingLabel'
-  >
+  >,
+  nowMs: number
 ): string | undefined {
+  if (session.delayedSendDeadlineAt) {
+    return formatSessionTimerDeadlineCountdown(session.delayedSendDeadlineAt, nowMs);
+  }
   if (session.delayedSendRemainingLabel) {
     /*
      * Send-when-finished triggers do not have a countdown while their agent
@@ -287,14 +302,11 @@ function getSessionCardTimerTrailingLabel(
      */
     return isDelayedSendWaitingLabel(session.delayedSendRemainingLabel) ? undefined : session.delayedSendRemainingLabel;
   }
-  if (session.delayedSendDeadlineAt) {
-    return formatSessionTimerDeadlineCountdown(session.delayedSendDeadlineAt);
+  if (session.closeAfterDoneDeadlineAt) {
+    return formatSessionTimerDeadlineCountdown(session.closeAfterDoneDeadlineAt, nowMs);
   }
   if (session.closeAfterDoneRemainingLabel) {
     return session.closeAfterDoneRemainingLabel;
-  }
-  if (session.closeAfterDoneDeadlineAt) {
-    return formatSessionTimerDeadlineCountdown(session.closeAfterDoneDeadlineAt);
   }
   return session.closeAfterDone === true ? CLOSE_AFTER_DONE_ARMED_REMAINING_LABEL : undefined;
 }
@@ -316,9 +328,9 @@ function getDelayedSendTooltipText(remainingLabel?: string): string {
   return 'Delayed Send is scheduled';
 }
 
-function formatSessionTimerDeadlineCountdown(deadlineAt: string): string | undefined {
+function formatSessionTimerDeadlineCountdown(deadlineAt: string, nowMs: number): string | undefined {
   const deadlineMs = Date.parse(deadlineAt);
-  return Number.isNaN(deadlineMs) ? undefined : formatSessionTimerCountdown(deadlineMs - Date.now());
+  return Number.isNaN(deadlineMs) ? undefined : formatSessionTimerCountdown(deadlineMs - nowMs);
 }
 
 function formatSessionTimerCountdown(delayMs: number): string {
@@ -1279,27 +1291,26 @@ function DelayedSendSidebarIcon({
    * CDXC:DelayedSend 2026-05-17-03:14
    * CDXC:DelayedSend 2026-05-21-12:21
    * Active Delayed Send timers replace the sidebar agent icon in the same DOM
-   * slot and dimensions as the normal agent glyph, expose the remaining
-   * hh:mm:ss/mm:ss countdown on hover, and reopen the modal so users can
-   * change or cancel the pending Enter keypress. Render the clock element
-   * directly in the leading agent-icon slot; a wrapper would become a separate
-   * flow box and can push the clock above the session card.
+   * slot and dimensions as the normal agent glyph, and reopen the modal so
+   * users can change or cancel the pending Enter keypress. The Delayed Send
+   * reason already lives on the session-row tooltip, so this clock must not
+   * grow its own hover tooltip. Render the clock element directly in the
+   * leading agent-icon slot; a wrapper would become a separate flow box and can
+   * push the clock above the session card.
    */
-  const tooltip = getDelayedSendTooltipText(remainingLabel);
+  const ariaLabel = getDelayedSendTooltipText(remainingLabel);
   return (
-    <AppTooltip content={tooltip}>
-      <button
-        aria-label={tooltip}
-        className={className}
-        onClick={(event) => {
-          event.stopPropagation();
-          onClick?.();
-        }}
-        type='button'
-      >
-        <IconClock aria-hidden='true' size={16} stroke={1.9} />
-      </button>
-    </AppTooltip>
+    <button
+      aria-label={ariaLabel}
+      className={className}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick?.();
+      }}
+      type='button'
+    >
+      <IconClock aria-hidden='true' size={16} stroke={1.9} />
+    </button>
   );
 }
 
