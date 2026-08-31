@@ -102,6 +102,53 @@ pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
     )
 }
 
+pub(crate) fn gpui_auto_repair_stale_ghostex_cli_wrappers() {
+    /*
+    CDXC:GPUIStaleCliWrapperAutoRepair 2026-08-30:
+    Sparkle and DMG updates replace the app bundle but never touch the public
+    PATH wrappers, so a wrapper written by an older install keeps exec'ing a
+    path that no longer exists (pre-2026-07-13 wrappers exec a removed Node
+    CLI). Packaged startup therefore refreshes wrappers Ghostex already owns
+    through the same repair the Settings action runs. It is strictly a refresh:
+    when no Ghostex-owned command exists, or every one already matches the
+    canonical wrapper text, nothing is written, so startup never performs a
+    first install for a user who did not opt in.
+    */
+    let Ok(cli_dir) = gpui_bundled_ghostex_cli_resource_dir() else {
+        return;
+    };
+    let cli_binary_path = cli_dir.join("ghostex");
+    let wrapper = gpui_ghostex_cli_wrapper_content(&cli_binary_path);
+    let path_entries = gpui_cli_path_entries();
+    let common_dirs = gpui_common_cli_install_dirs();
+
+    let mut has_stale_wrapper = false;
+    'commands: for command in ["ghostex", "gx"] {
+        for candidate in gpui_cli_command_path_candidates(command, &path_entries, &common_dirs) {
+            if !gpui_path_exists_or_is_symlink(&candidate) {
+                continue;
+            }
+            if !gpui_is_ghostex_owned_command_path(command, &candidate, &cli_dir) {
+                continue;
+            }
+            let is_current = gpui_is_regular_file(&candidate)
+                && fs::read_to_string(&candidate)
+                    .map(|content| content == wrapper)
+                    .unwrap_or(false);
+            if !is_current {
+                has_stale_wrapper = true;
+                break 'commands;
+            }
+        }
+    }
+    if !has_stale_wrapper {
+        return;
+    }
+    if let Err(message) = gpui_repair_ghostex_cli_commands() {
+        eprintln!("ghostex-gpui could not refresh stale Ghostex CLI wrappers: {message}");
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GpuiCliCommandInstallResult {
     Current,

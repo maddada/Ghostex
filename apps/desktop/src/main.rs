@@ -186,6 +186,12 @@ fn main() {
             );
         }
     }
+    // PATH wrappers for `ghostex`/`gx` go stale across Sparkle and DMG
+    // updates, which swap the bundle but never rewrite them. Refresh
+    // Ghostex-owned wrappers off the main thread so filesystem probing cannot
+    // delay first paint, and only after the PATH normalization above so the
+    // scan sees the user's standard tool directories.
+    thread::spawn(gpui_auto_repair_stale_ghostex_cli_wrappers);
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     cef_component_window::configure_cef_framework_path_for_process();
     // The Linux app is X11-only for v1 (CEF child-window embedding requires
