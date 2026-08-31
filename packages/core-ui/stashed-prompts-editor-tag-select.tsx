@@ -86,12 +86,14 @@ export function StashedPromptEditorTagSelect({
             }}
             type='button'
           >
-            <IconStarFilled
-              aria-hidden='true'
-              className='ghostex-stashed-prompt-editor-favorite-icon'
-              size={13}
-              style={{ color: favoriteTag?.color }}
-            />
+            <span className='ghostex-stashed-prompt-tag-menu-marker'>
+              <IconStarFilled
+                aria-hidden='true'
+                className='ghostex-stashed-prompt-editor-favorite-icon'
+                size={13}
+                style={{ color: favoriteTag?.color }}
+              />
+            </span>
             <span className='ghostex-stashed-prompt-tag-menu-name'>{favoriteTag?.name ?? 'Favorite'}</span>
             <IconCheck aria-hidden='true' className='ghostex-stashed-prompt-tag-menu-check' size={13} stroke={2.4} />
           </button>
@@ -110,7 +112,9 @@ export function StashedPromptEditorTagSelect({
                 style={{ '--ghostex-tag-color': tag.color } as CSSProperties}
                 type='button'
               >
-                <span aria-hidden='true' className='ghostex-stashed-prompt-tag-dot' />
+                <span className='ghostex-stashed-prompt-tag-menu-marker'>
+                  <span aria-hidden='true' className='ghostex-stashed-prompt-tag-dot' />
+                </span>
                 <span className='ghostex-stashed-prompt-tag-menu-name'>{tag.name}</span>
                 <IconCheck
                   aria-hidden='true'
@@ -131,7 +135,9 @@ export function StashedPromptEditorTagSelect({
             }}
             type='button'
           >
-            <span aria-hidden='true' className='ghostex-stashed-prompt-select-tag-dot' data-tone='none' />
+            <span className='ghostex-stashed-prompt-tag-menu-marker'>
+              <span aria-hidden='true' className='ghostex-stashed-prompt-select-tag-dot' data-tone='none' />
+            </span>
             <span className='ghostex-stashed-prompt-tag-menu-name'>No tag</span>
             <IconCheck aria-hidden='true' className='ghostex-stashed-prompt-tag-menu-check' size={13} stroke={2.4} />
           </button>

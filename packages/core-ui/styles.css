@@ -1251,6 +1251,13 @@ body {
   width: 100%;
 }
 
+.ghostex-stashed-prompt-tag-menu-marker {
+  display: grid;
+  flex: 0 0 16px;
+  place-items: center;
+  width: 16px;
+}
+
 .ghostex-stashed-prompt-tag-menu-item:hover,
 .ghostex-stashed-prompt-tag-menu-item:focus-visible {
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
