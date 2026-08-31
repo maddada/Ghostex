@@ -428,6 +428,14 @@ impl GhostexGpuiApp {
         let Some(shell_session_id) = self.focused_agents_or_companion_shell_session_id() else {
             return false;
         };
+        self.open_gpui_rename_session_modal_for_agents_tab(shell_session_id, cx)
+    }
+
+    pub(crate) fn open_gpui_rename_session_modal_for_agents_tab(
+        &mut self,
+        shell_session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         let Some(key) = self
             .local_workspace_session_mappings
             .iter()

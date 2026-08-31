@@ -149,6 +149,12 @@ pub(crate) struct SleepAgentsWorkspaceTabsByScope {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct RenameAgentsWorkspaceTab {
+    pub(crate) session_id: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct FocusAgentsWorkspaceTab {
     pub(crate) pane_id: u64,
     pub(crate) session_id: u64,

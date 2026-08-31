@@ -668,6 +668,35 @@ impl GhostexGpuiApp {
                 });
         let mut menu = NativeMenu::new();
 
+        // Rename and direct Sleep are the primary clicked-session actions.
+        // Rename is gxserver-backed, while Sleep also applies to an unmapped
+        // local placeholder tab.
+        let clicked_tab_has_gxserver_mapping = self
+            .local_workspace_session_mappings
+            .values()
+            .any(|mapped| *mapped == session_id);
+        if clicked_tab_has_gxserver_mapping {
+            menu = menu.menu(
+                "Rename",
+                Box::new(RenameAgentsWorkspaceTab {
+                    session_id: session_id.0,
+                }),
+            );
+        }
+        if !clicked_tab_is_sleeping {
+            menu = menu.menu(
+                "Sleep",
+                Box::new(SleepAgentsWorkspaceTabsByScope {
+                    pane_id: pane_id.0,
+                    session_id: session_id.0,
+                    scope: AgentsWorkspaceTabSleepScope::Sleep.action_value(),
+                }),
+            );
+        }
+        if clicked_tab_has_gxserver_mapping || !clicked_tab_is_sleeping {
+            menu = menu.separator();
+        }
+
         let has_focus_row = self.agents_pane_focus_mode_menu_label(pane_id).is_some();
         if has_focus_row {
             menu = menu.menu(
@@ -681,10 +710,6 @@ impl GhostexGpuiApp {
 
         // Fork/Reload mirror the macOS pane-titlebar session actions and are
         // gxserver mutations, so only mapped gxserver sessions offer them.
-        let clicked_tab_has_gxserver_mapping = self
-            .local_workspace_session_mappings
-            .values()
-            .any(|mapped| *mapped == session_id);
         if clicked_tab_has_gxserver_mapping {
             menu = menu.menu(
                 "Fork Session",
@@ -705,7 +730,7 @@ impl GhostexGpuiApp {
         if has_focus_row || clicked_tab_has_gxserver_mapping {
             menu = menu.separator();
         }
-        for scope in agents_workspace_tab_context_sleep_order(clicked_tab_is_sleeping) {
+        for scope in agents_workspace_tab_context_scoped_sleep_order() {
             menu = menu.menu(
                 agents_workspace_tab_context_sleep_scope_label(scope),
                 Box::new(SleepAgentsWorkspaceTabsByScope {

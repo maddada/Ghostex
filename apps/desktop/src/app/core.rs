@@ -1959,6 +1959,14 @@ impl Render for GhostexGpuiApp {
                 },
             ))
             .on_action(
+                cx.listener(|this, action: &RenameAgentsWorkspaceTab, _window, cx| {
+                    this.open_gpui_rename_session_modal_for_agents_tab(
+                        TerminalSessionId(action.session_id),
+                        cx,
+                    );
+                }),
+            )
+            .on_action(
                 cx.listener(|this, action: &FocusAgentsWorkspaceTab, _window, cx| {
                     this.toggle_agents_focus_mode_for_tab_from_action(
                         WorkspacePaneId(action.pane_id),

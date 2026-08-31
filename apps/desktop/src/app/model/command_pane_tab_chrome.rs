@@ -106,23 +106,19 @@ pub(crate) fn agents_workspace_tab_context_scoped_close_order() -> [AgentsWorksp
     ]
 }
 
-pub(crate) fn agents_workspace_tab_context_sleep_order(
-    clicked_tab_is_sleeping: bool,
-) -> Vec<AgentsWorkspaceTabSleepScope> {
+pub(crate) fn agents_workspace_tab_context_scoped_sleep_order() -> [AgentsWorkspaceTabSleepScope; 3]
+{
     /*
-    CDXC:GPUIAgentsTabContextMenu 2026-06-26-06:57:
-    Native workspace tab menus show direct Sleep only for awake clicked tabs, then always show Sleep Right, Sleep Left, and Sleep Other Tabs before the close group. Empty sibling scopes remain action rows and no-op in the pane-local resolver.
+    CDXC:GPUIAgentsTabContextMenu 2026-08-31:
+    Direct Sleep lives beside Rename at the top of the native tab menu. The
+    scoped sibling actions remain together below the session runtime actions.
+    Empty sibling scopes remain action rows and no-op in the pane-local resolver.
     */
-    let mut scopes = Vec::with_capacity(4);
-    if !clicked_tab_is_sleeping {
-        scopes.push(AgentsWorkspaceTabSleepScope::Sleep);
-    }
-    scopes.extend([
+    [
         AgentsWorkspaceTabSleepScope::SleepRight,
         AgentsWorkspaceTabSleepScope::SleepLeft,
         AgentsWorkspaceTabSleepScope::SleepOthers,
-    ]);
-    scopes
+    ]
 }
 
 pub(crate) fn command_pane_tab_context_close_scope_label(
