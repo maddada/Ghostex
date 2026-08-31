@@ -268,8 +268,11 @@ export function InstalledExtensionDetail({
                   size='sm'
                 />
               </div>
+              <DetailRow label='Author'>
+                <span className='truncate'>{extension.manifest.author}</span>
+              </DetailRow>
               <DetailRow label='Installed version'>
-                <span>{extension.state.version}</span>
+                <span>v{extension.state.version}</span>
               </DetailRow>
               {updateAvailable ? (
                 <div className='p-3'>
@@ -281,7 +284,7 @@ export function InstalledExtensionDetail({
                     type='button'
                     variant='outline'
                   >
-                    Update to {catalogEntry?.version}
+                    Update to v{catalogEntry?.version}
                   </Button>
                 </div>
               ) : null}
@@ -326,7 +329,7 @@ export function StoreExtensionDetail({
   screenshotUrls: string[];
 }) {
   const updateAvailable = Boolean(installedVersion && isVersionNewer(entry.version, installedVersion));
-  const actionLabel = updateAvailable ? `Update to ${entry.version}` : installedVersion ? 'Installed' : 'Install';
+  const actionLabel = updateAvailable ? `Update to v${entry.version}` : installedVersion ? 'Installed' : 'Install';
   return (
     <div>
       <div className='mx-auto flex max-w-5xl flex-col gap-6'>
@@ -373,11 +376,11 @@ export function StoreExtensionDetail({
             <section className='flex flex-col gap-2.5'>
               <ExtensionSectionLabel>Details</ExtensionSectionLabel>
               <ExtensionGroup>
-                <DetailRow label='Version'>
-                  <span>{entry.version}</span>
-                </DetailRow>
                 <DetailRow label='Author'>
                   <span className='truncate'>{entry.author}</span>
+                </DetailRow>
+                <DetailRow label='Version'>
+                  <span>v{entry.version}</span>
                 </DetailRow>
               </ExtensionGroup>
             </section>

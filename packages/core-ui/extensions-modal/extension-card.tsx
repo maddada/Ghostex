@@ -83,7 +83,8 @@ export function InstalledExtensionCard({
         <p className='mt-0.5 truncate text-[13px] font-normal text-foreground/75'>{extension.manifest.description}</p>
         <p className='mt-0.5 truncate text-xs font-normal text-muted-foreground'>
           {[
-            `Version ${extension.state.version}`,
+            extension.manifest.author,
+            `v${extension.state.version}`,
             placementLabel(extension),
             supportsChatBar && extension.state.chatBarAutoOpen ? 'Opens automatically in sessions' : undefined,
           ]
@@ -137,7 +138,7 @@ export function StoreExtensionCard({
   installedVersion?: string;
   onDetails: () => void;
 }) {
-  const metadata = [entry.author, `Version ${entry.version}`, ...entry.categories.slice(0, 2)];
+  const metadata = [entry.author, `v${entry.version}`, ...entry.categories.slice(0, 2)];
   return (
     <div
       className='extensions-row group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors'
@@ -166,7 +167,7 @@ export function StoreExtensionCard({
       </div>
       {installedVersion ? (
         <span className='ml-1 shrink-0 text-xs font-normal text-muted-foreground'>
-          {installedVersion === entry.version ? 'Up to date' : `Installed ${installedVersion}`}
+          {installedVersion === entry.version ? 'Up to date' : `Installed v${installedVersion}`}
         </span>
       ) : null}
     </div>

@@ -316,7 +316,7 @@ function OfficialExtensionRow({
   const actionLabel = runtime?.status === 'notInstalled' ? 'Install' : 'Reinstall';
   const metadata = [
     runtime?.statusLabel,
-    runtime?.version ? `Version ${runtime.version}` : undefined,
+    runtime?.version ? `v${runtime.version}` : undefined,
     runtime?.errorMessage,
   ].filter(Boolean);
 
