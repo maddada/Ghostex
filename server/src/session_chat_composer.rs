@@ -161,6 +161,15 @@ enum ComposerSignature {
     /// composer is found by the sandwich and never by counting rows up from the
     /// bottom.
     RuleSandwich { marker: char },
+    /// hermes's rule sandwich. Same frame, but the marker line carries the
+    /// active profile name when one is selected: `hermes -p harry` prompts
+    /// with `harry ❯`, the default profile with a bare `❯` (its
+    /// `_get_tui_prompt_symbols` prepends any non-default profile). The
+    /// 2026-08-29 measurement ran the default profile and missed this, so
+    /// every profiled session read NotReady with its composer on screen.
+    /// At most ONE leading word is accepted: profile names are single CLI
+    /// tokens, and prose that happens to contain the marker has more.
+    ProfiledRuleSandwich { marker: char },
     /// An empty input row between two full-width `─` rules. Blank rows are
     /// removed before matching, so the two rules are adjacent in `lines`.
     EmptyRuleSandwich,
@@ -211,15 +220,17 @@ got to them:
     custom agent were not measured. An unmeasured guess would be the same
     failure as pi's, so they read Unknown until someone captures them.
 */
+/// Return the measured composer chrome signature for a normalized agent id.
 fn composer_signature(agent: &str) -> Option<ComposerSignature> {
     Some(match agent {
         // `❯` between two full-width rules, statusline below.
         "claude" | "openclaude" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
         // Identical shape to claude's, measured independently.
         "copilot" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
-        // `❯` between two full-width rules, statusline above the top rule
-        // (measured 2026-08-29, Hermes Agent v0.20.4).
-        "hermes-agent" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
+        // `❯` (or `<profile> ❯`) between two full-width rules, statusline
+        // above the top rule (measured 2026-08-29, Hermes Agent v0.20.4;
+        // profile prefix confirmed against v0.20.5 source on 2026-08-30).
+        "hermes-agent" => ComposerSignature::ProfiledRuleSandwich { marker: '\u{276f}' },
         // `› ` with no frame.
         "codex" => ComposerSignature::BareMarker { marker: '\u{203a}' },
         // Empty row bounded by two full-width rules, statusline below.
@@ -426,6 +437,24 @@ fn is_marker_line(line: &str, marker: char) -> bool {
     !is_numbered_option(rest)
 }
 
+/// The marker test that admits hermes's profile prefix: `harry ❯ hi` matches,
+/// `❯ hi` matches, and anything with two or more words before the marker is
+/// prose quoting the glyph rather than a prompt.
+fn is_profiled_marker_line(line: &str, marker: char) -> bool {
+    if is_marker_line(line, marker) {
+        return true;
+    }
+    let trimmed = line.trim();
+    let mut words = trimmed.splitn(2, char::is_whitespace);
+    let Some(_profile) = words.next().filter(|word| !word.is_empty()) else {
+        return false;
+    };
+    words
+        .next()
+        .map(str::trim_start)
+        .is_some_and(|tail| is_marker_line(tail, marker))
+}
+
 /// The same test for a row drawn inside a `│ … │` box: the marker follows the
 /// left border rather than the start of the line.
 fn is_boxed_marker_line(line: &str, marker: char) -> bool {
@@ -446,6 +475,7 @@ codex transcript echoes each submitted prompt with the same `›` the composer
 draws — the lowest match is the live one. Both would answer "ready", so this is
 about picking the honest witness rather than about correctness of the verdict.
 */
+/// Whether the captured non-blank lines contain the requested composer shape.
 fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
     match signature {
         // In both sandwiches the BOTTOM rule stays strict (it is always solid
@@ -455,6 +485,13 @@ fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
             (0..lines.len().saturating_sub(2)).rev().any(|index| {
                 is_horizontal_rule(&lines[index + 2])
                     && is_marker_line(&lines[index + 1], marker)
+                    && is_titled_horizontal_rule(&lines[index])
+            })
+        }
+        ComposerSignature::ProfiledRuleSandwich { marker } => {
+            (0..lines.len().saturating_sub(2)).rev().any(|index| {
+                is_horizontal_rule(&lines[index + 2])
+                    && is_profiled_marker_line(&lines[index + 1], marker)
                     && is_titled_horizontal_rule(&lines[index])
             })
         }
