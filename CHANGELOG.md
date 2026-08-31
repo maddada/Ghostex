@@ -1,5 +1,21 @@
 # Changelog
 
+## 8.4.0 - 2026-08-31
+
+- Major
+  - Session Chat now shows what the agent's terminal is doing right now: compaction and other live activity appear as a card pinned above the composer, stay visible wherever the transcript is scrolled, and clear on their own when the agent goes idle.
+  - Codex sessions that open a chooser — model, effort, permissions, approvals, or any other numbered picker — now say so in chat with the choice on screen, instead of refusing your message with a generic "input box is not on screen" error.
+- Minor
+  - The `ghostex` and `gx` commands keep working after an app update; a packaged launch refreshes command wrappers that were still pointing at the previous install's binaries.
+  - Close After Done sits beside Delayed Send in the session menus on desktop, web, and the terminal action bar, and both countdowns tick live instead of only moving when the session refreshes.
+  - First launch asks whether the terminal view should use the full pane or match the chat width, and new installs now default to full width.
+  - The agents tab context menu opens with Rename and Sleep for the session you clicked, above the scoped Sleep Right, Sleep Left, and Sleep Others actions.
+  - File references in the transcript read as ordinary links, and composer reference pills show their full path in a tooltip rather than a native title popup.
+  - Installed extensions show their author, and version labels are written the same way across the Store, your installed list, and Settings.
+  - Hermes sessions running under a named profile are recognized again, so chat no longer refuses every send while the composer is plainly on screen, thanks to @banozz.
+  - Agent commands that hop to another user or host, such as through `ssh`, no longer leave the agent CLI wedged in an editor at launch, thanks to @banozz.
+  - Project Board `start-work` dispatches the worker into the project you name instead of whichever project was touched most recently, thanks to @banozz.
+
 ## 8.3.0 - 2026-08-30
 
 - Major
