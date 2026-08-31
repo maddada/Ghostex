@@ -1320,7 +1320,6 @@ export function SessionChatView({
                           {...(listMessageMarkdownPaths ? { listMessageMarkdownPaths } : {})}
                           {...(saveMessageMarkdown ? { saveMessageMarkdown } : {})}
                           sessionTitle={sessionTitle}
-                          terminalActivity={chat.terminalActivity}
                           theme={theme}
                           summaryMode={summaryMode}
                           verboseMode={verbose}
@@ -1347,7 +1346,6 @@ export function SessionChatView({
                             {...(listMessageMarkdownPaths ? { listMessageMarkdownPaths } : {})}
                             {...(saveMessageMarkdown ? { saveMessageMarkdown } : {})}
                             sessionTitle={sessionTitle}
-                            terminalActivity={chat.terminalActivity}
                             theme={theme}
                             summaryMode={summaryMode}
                             verboseMode={verbose}

@@ -28,7 +28,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   SESSION_CHAT_FORK_BOUNDARY_ID_PREFIX,
   type SessionChatMessage,
-  type SessionChatTerminalActivity,
   type SessionChatTheme,
 } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
@@ -59,7 +58,6 @@ import {
   MessageScrollerViewport,
   useMessageScroller,
 } from '../../components/ui/message-scroller';
-import { SessionChatActivityRow } from './session-chat-activity-row';
 import { orderSessionChatMessages } from './session-chat-assembler';
 import {
   anchorSessionChatExpansionTop,
@@ -107,12 +105,6 @@ const SCROLLBAR_FADE_MS = 2000;
 export interface SessionChatMessageListProps {
   messages: readonly SessionChatMessage[];
   isWorking: boolean;
-  /**
-   * CDXC:SessionChatTerminalActivity 2026-08-22: live on-screen progress
-   * (compaction). Shown INSTEAD of the typing indicator: it says the same
-   * "still working" thing with the detail the indicator cannot carry.
-   */
-  terminalActivity?: SessionChatTerminalActivity | null;
   hasMore: boolean;
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
@@ -1221,7 +1213,7 @@ function WorkingIndicator() {
     <div
       aria-label='Agent is responding'
       aria-live='polite'
-      className='flex h-8 items-center gap-1.5 text-muted-foreground'
+      className='flex h-8 items-center justify-center gap-1.5 text-muted-foreground'
       role='status'
     >
       {[0, 1, 2].map((index) => (
@@ -1259,7 +1251,6 @@ function ScrollToLatestSend({ pendingMessageId }: { pendingMessageId: string | n
 export function SessionChatMessageList({
   hasMore,
   isWorking,
-  terminalActivity,
   loadingEarlier,
   messages,
   onLoadEarlier,
@@ -1365,9 +1356,8 @@ export function SessionChatMessageList({
     [messages]
   );
 
-  const showActivity = !summaryMode && terminalActivity != null;
   const showTypingIndicator =
-    !summaryMode && !showActivity && isWorking && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
+    !summaryMode && isWorking && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
   const renderItems = useMemo(() => completedWorkRenderItems(rendered, isWorking), [isWorking, rendered]);
   const copyableAssistantMessageIds = useMemo(
     () => finalAssistantMessageIds(rendered, isWorking),
@@ -1431,8 +1421,7 @@ export function SessionChatMessageList({
                             verboseMode={verboseMode}
                           />
                         ))}
-                        {terminalActivity ? <SessionChatActivityRow activity={terminalActivity} /> : null}
-                        {!terminalActivity && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID) ? (
+                        {!messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID) ? (
                           <WorkingIndicator />
                         ) : null}
                       </SessionChatDisclosure>
@@ -1488,7 +1477,6 @@ export function SessionChatMessageList({
                     )}
                   </MessageScrollerItem>
                 ))}
-            {showActivity && terminalActivity ? <SessionChatActivityRow activity={terminalActivity} /> : null}
             {showTypingIndicator ? <WorkingIndicator /> : null}
           </MessageScrollerContent>
         </MessageScrollerViewport>

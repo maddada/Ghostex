@@ -6,8 +6,9 @@ compaction is the case this exists for — for a minute or more the chat could s
 nothing better than "the agent is working", while the operation quietly running
 was the one that REPLACES the conversation the user is reading.
 
-It stands where the typing indicator stands, and replaces it: two live
-indicators for one piece of work would just compete.
+Since 2026-08-30 this card renders in the pinned working strip above the
+composer (session-chat-working-strip.tsx), not inside the transcript, so it
+stays visible at any scroll position and never shows twice.
 
 The elapsed clock ticks LOCALLY from `detectedAt`, which the server holds still
 for the whole run. The bar only moves when a probe brings a new percentage
@@ -65,9 +66,10 @@ export function sessionChatActivityElapsedSeconds(
 
 export interface SessionChatActivityRowProps {
   activity: SessionChatTerminalActivity;
+  className?: string;
 }
 
-export function SessionChatActivityRow({ activity }: SessionChatActivityRowProps) {
+export function SessionChatActivityRow({ activity, className }: SessionChatActivityRowProps) {
   const [now, setNow] = useState(() => Date.now());
   const shellsRunning = activity.kind === SHELLS_RUNNING_ACTIVITY_KIND;
 
@@ -88,7 +90,7 @@ export function SessionChatActivityRow({ activity }: SessionChatActivityRowProps
   return (
     <div
       aria-live='polite'
-      className='ghostex-chat-activity-row my-2 grid gap-2 rounded-2xl border border-border/65 bg-muted/20 px-4 py-3'
+      className={cn('ghostex-chat-activity-row my-2 grid gap-2 rounded-2xl border border-border/65 bg-muted/20 px-4 py-3', className)}
       data-kind={activity.kind}
       role='status'
     >
