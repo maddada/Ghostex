@@ -1606,7 +1606,10 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
         if let Some(column) = column {
             target.push(format!(":{column}"));
         }
-        command.arg("--goto").arg(target);
+        // The open pipe already enables goto-line parsing. code-server's
+        // wrapper does not accept VS Code's `--goto` flag, so the positioned
+        // target must remain a positional argument.
+        command.arg(target);
     } else {
         command.arg(file_path);
     }

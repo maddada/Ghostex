@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use futures::StreamExt as _;
 use futures::channel::mpsc;
+use gpui::ClipboardItem;
 use gpui::Entity;
 use gpui::ScrollHandle;
 
@@ -1100,6 +1101,7 @@ impl GhostexGpuiApp {
             return false;
         };
         let origin = pending.origin;
+        let failed_file_path = pending.file_path.to_string_lossy().into_owned();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let result = background
@@ -1113,13 +1115,14 @@ impl GhostexGpuiApp {
                 .await;
             if let Err(message) = result {
                 let _ = this.update(cx, |this, cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(failed_file_path));
                     let (id, title) = match origin {
                         PendingSourceFileOpenOrigin::AgentsHub => (
                             "gpui-agents-hub-source-open-failed",
                             "Could not open Agents Hub file",
                         ),
                         PendingSourceFileOpenOrigin::SessionChat => (
-                            "gpui-session-chat-source-open-failed",
+                            GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID,
                             "Could not open file in Code view",
                         ),
                     };
@@ -1128,7 +1131,9 @@ impl GhostexGpuiApp {
                             id: id.to_string(),
                             level: GpuiAppToastLevel::from_raw(Some("warning")),
                             title: title.to_string(),
-                            description: Some(message),
+                            description: Some(format!(
+                                "{message} The file path was copied to your clipboard."
+                            )),
                             loading: false,
                             persistent: false,
                             duration_ms: GPUI_APP_TOAST_DEFAULT_DURATION_MS,
