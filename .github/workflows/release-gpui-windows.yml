@@ -1,10 +1,12 @@
 name: GPUI release - Windows
 
-# CDXC:ReleaseChangeAwarePlanning 2026-08-13:
-# No `needs: gxserver_*` edge any more. The gxserver tarball and the code-server
-# component archive are awaited just in time, immediately before windows.ps1,
-# so `cargo build` starts at t≈2 min. Release 7.7's one-line Windows-only
-# compile error surfaced an hour after dispatch purely because of that edge.
+# CDXC:ReleaseChangeAwarePlanning 2026-08-13, amended 2026-09-01:
+# No `needs: gxserver_*` edge, and (since 2026-09-01) no `needs: validate_windows`
+# edge either. This job starts as soon as `prepare` is done. The gxserver tarball
+# and the code-server component archive are awaited just in time, immediately
+# before windows.ps1, so the ~7 minutes of runner setup overlap the gxserver jobs
+# instead of queueing behind them. Release 7.7's one-line Windows-only compile
+# error surfaced an hour after dispatch purely because of those edges.
 #
 # The code-server component identity is resolved locally from the pinned
 # submodule instead of being threaded through workflow outputs: the identity is
@@ -63,15 +65,26 @@ permissions:
 jobs:
   build:
     runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-vs2026-arm' || 'windows-2025' }}
-    # CDXC:WindowsArm64BuildBudget 2026-08-19:
-    # Keep this budget tight. During 7.11.0 an ARM64 build sat inside the single
-    # ghostex-gpui crate for 103 minutes and was killed here, on a runner image
-    # identical to the one that had compiled it in ~14 minutes; the immediate
-    # retry of the same source compiled it in 13m33s. So that was one wedged
-    # runner instance, not a slow build and not a codegen cliff in our source.
-    # A larger budget does not fix a wedged runner, it only burns more runner
-    # time before failing, so raising this is the wrong response if it recurs.
-    timeout-minutes: 120
+    # CDXC:WindowsWedgedRunnerWatchdog 2026-09-01 (supersedes
+    # CDXC:WindowsArm64BuildBudget 2026-08-19):
+    # This job has now wedged twice, both times on windows-11-vs2026-arm, both
+    # times mid-`cargo build` with the process alive and completely silent:
+    # 7.11.0 sat inside the ghostex-gpui crate for 103 minutes (retry: 13m33s),
+    # and 8.4.0 emitted its last line at 05:42:59 and nothing at all for the
+    # next 101 minutes until this budget killed it (retry of byte-identical
+    # source, with a cold CEF *and* cold Zig cache: 23m59s). A wedged runner is
+    # not a slow build, so the budget is not the mechanism that should catch it
+    # — the stdout-silence watchdog on the build step below is. This budget is
+    # only the backstop for a wedge the watchdog itself cannot see (a hung
+    # runner agent, a hung `taskkill`).
+    #
+    # 90, not 120, and not 60. The watchdog can legitimately consume one full
+    # silence window plus a second full build inside this one job:
+    #   ~7m setup + up to ~24m of attempt 1 + 15m silence detection
+    #   + ~24m of attempt 2 + ~5m packaging/upload  =  ~75m worst case.
+    # 60 would kill a legitimately-recovering job; 120 buys nothing the
+    # watchdog does not already cover, it only burns runner minutes.
+    timeout-minutes: 90
     env:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
@@ -181,6 +194,33 @@ jobs:
             --archive "build/runtime-artifacts/${{ inputs.arch }}/${{ steps.code_server_identity.outputs.archive_name }}" \
             --version '${{ steps.code_server_identity.outputs.component_version }}' \
             --platform "linux-${{ inputs.arch }}"
+      # CDXC:WindowsWedgedRunnerWatchdog 2026-09-01:
+      # windows.ps1 is the only long step in this job (cargo build + zig +
+      # vite + vpk pack + signtool), and it is the step both documented
+      # windows_arm64 wedges died inside. It runs here as a watched child
+      # process instead of directly, so the job can tell "wedged" apart from
+      # "slow" and recover without a human redispatching the release.
+      #
+      # The signal is ABSENCE OF OUTPUT, never elapsed time. A healthy build
+      # is chatty end to end: cargo prints a line per crate, zig per step, vpk
+      # per package. The wedges were the opposite — an alive, silent process.
+      # Elapsed-time budgets cannot separate the two; silence can.
+      #
+      # Why 15 minutes: the whole healthy step is ~18 minutes inside a ~24
+      # minute cold-cache job (8.4.0 windows_arm64 retry: 23m59s with a cold
+      # CEF distribution cache and a cold Zig package cache). A 15 minute
+      # silent stretch therefore cannot fit inside a healthy run — the longest
+      # single silent unit is one crate's rustc invocation — while the two
+      # observed wedges were silent for 101 and 103 minutes. It is ~5x the
+      # longest plausible healthy gap and ~1/7 of an observed wedge, so there
+      # is no ambiguity in either direction. Tune it with
+      # GHOSTEX_WINDOWS_BUILD_SILENCE_SECONDS if the build's shape changes.
+      #
+      # A watchdog kill is the ONLY thing that retries. A non-zero exit code —
+      # a real compile error, a signing failure, a missing artifact — is
+      # surfaced and fails the step on the first attempt, with the child's
+      # full stdout and stderr already streamed into this log. The second
+      # wedge in a row fails the job for real; we never loop.
       - name: Build installer and portable package
         shell: pwsh
         env:
@@ -193,7 +233,101 @@ jobs:
           GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\gxserver-linux-${{ inputs.arch }}.tar.gz
           GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
           GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE: ${{ github.workspace }}\build\runtime-artifacts\${{ inputs.arch }}\${{ steps.code_server_identity.outputs.archive_name }}
-        run: tooling/release-gpui/windows.ps1 -Version "${{ inputs.version }}" -Arch "${{ inputs.arch }}"
+          GHOSTEX_WINDOWS_BUILD_SILENCE_SECONDS: '900'
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $SilenceLimitSeconds = [int]$env:GHOSTEX_WINDOWS_BUILD_SILENCE_SECONDS
+          if ($SilenceLimitSeconds -le 0) { $SilenceLimitSeconds = 900 }
+          $PollSeconds = 10
+          $MaxAttempts = 2
+
+          $Version = '${{ inputs.version }}'
+          $Arch = '${{ inputs.arch }}'
+          $BuildScript = Join-Path $env:GITHUB_WORKSPACE 'tooling/release-gpui/windows.ps1'
+          $ExitCode = $null
+
+          for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+              if ($attempt -gt 1) {
+                  Write-Host "::notice::Windows $Arch build: restarting from scratch (attempt $attempt of $MaxAttempts) after the wedged-runner watchdog killed attempt $($attempt - 1)"
+              }
+              Write-Host "::group::Windows $Arch build attempt $attempt of $MaxAttempts (stdout-silence watchdog: ${SilenceLimitSeconds}s)"
+
+              $stdoutPath = Join-Path $env:RUNNER_TEMP "ghostex-windows-build-$attempt.out.log"
+              $stderrPath = Join-Path $env:RUNNER_TEMP "ghostex-windows-build-$attempt.err.log"
+              foreach ($logPath in @($stdoutPath, $stderrPath)) {
+                  Set-Content -LiteralPath $logPath -Value '' -NoNewline -Encoding utf8
+              }
+              $offsets = @{ $stdoutPath = [int64]0; $stderrPath = [int64]0 }
+
+              $proc = Start-Process -FilePath 'pwsh' -PassThru -NoNewWindow `
+                  -WorkingDirectory $env:GITHUB_WORKSPACE `
+                  -RedirectStandardOutput $stdoutPath `
+                  -RedirectStandardError $stderrPath `
+                  -ArgumentList @('-NoProfile', '-NonInteractive', '-File', $BuildScript, '-Version', $Version, '-Arch', $Arch)
+
+              $lastOutput = Get-Date
+              $wedged = $false
+
+              while ($true) {
+                  Start-Sleep -Seconds $PollSeconds
+                  # Sample the exit state BEFORE draining, so the final drain
+                  # after the child exits cannot miss its last bytes.
+                  $exited = $proc.HasExited
+                  $sawOutput = $false
+                  foreach ($logPath in @($stdoutPath, $stderrPath)) {
+                      $length = (Get-Item -LiteralPath $logPath).Length
+                      if ($length -le $offsets[$logPath]) { continue }
+                      $stream = [IO.File]::Open($logPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+                      try {
+                          $stream.Seek($offsets[$logPath], [IO.SeekOrigin]::Begin) | Out-Null
+                          $buffer = [byte[]]::new([int]($length - $offsets[$logPath]))
+                          $read = $stream.Read($buffer, 0, $buffer.Length)
+                      }
+                      finally {
+                          $stream.Dispose()
+                      }
+                      if ($read -le 0) { continue }
+                      $offsets[$logPath] += $read
+                      [Console]::Out.Write([Text.Encoding]::UTF8.GetString($buffer, 0, $read))
+                      [Console]::Out.Flush()
+                      $sawOutput = $true
+                  }
+                  if ($sawOutput) { $lastOutput = Get-Date }
+                  if ($exited) { break }
+
+                  $silentFor = (Get-Date) - $lastOutput
+                  if ($silentFor.TotalSeconds -ge $SilenceLimitSeconds) {
+                      $wedged = $true
+                      $silenceLabel = '{0}m{1}s' -f [int]$silentFor.TotalMinutes, $silentFor.Seconds
+                      $nextAction = if ($attempt -lt $MaxAttempts) { 'killing and retrying once' } else { 'killing and failing the job' }
+                      Write-Host "::error::Windows $Arch build (attempt $attempt of $MaxAttempts): no stdout or stderr for $silenceLabel - assuming wedged runner, $nextAction"
+                      & taskkill.exe /T /F /PID $proc.Id 2>&1 | ForEach-Object { Write-Host $_ }
+                      if (-not $proc.WaitForExit(60000)) {
+                          Write-Host "::warning::Windows $Arch build: the wedged process tree did not exit within 60s of taskkill"
+                      }
+                      break
+                  }
+              }
+
+              Write-Host '::endgroup::'
+
+              if (-not $wedged) {
+                  $ExitCode = $proc.ExitCode
+                  break
+              }
+              if ($attempt -ge $MaxAttempts) {
+                  throw "Windows $Arch build wedged $MaxAttempts times in a row (no output for ${SilenceLimitSeconds}s each time). This is not a slow build and not a source problem - the runner instance is stuck. Failing instead of retrying again."
+              }
+              if (-not [string]::IsNullOrEmpty($env:GITHUB_STEP_SUMMARY)) {
+                  Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "- Wedged-runner watchdog fired on attempt $attempt (no output for ${SilenceLimitSeconds}s); rebuilt from scratch"
+              }
+              Start-Sleep -Seconds 15
+          }
+
+          if ($ExitCode -ne 0) {
+              throw "Windows $Arch build failed with exit code $ExitCode"
+          }
       - name: Write release provenance
         if: ${{ inputs.plan != '' }}
         shell: bash
