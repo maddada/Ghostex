@@ -223,6 +223,11 @@ pub(crate) fn resolve_session_chat_read_state(
         }
         None => 0u8.hash(&mut hasher),
     }
+    screen
+        .prompt
+        .as_ref()
+        .and_then(|prompt| serde_json::to_string(prompt).ok())
+        .hash(&mut hasher);
     /*
     CDXC:SessionChatPromptQueue 2026-08-21:
     Queue revision + draft updatedAt. This is load-bearing for Ghostex mobile:
@@ -406,6 +411,7 @@ pub(crate) async fn handle_read_session_chat_http(
     if let Some(agent_session_id) = agent_session_id.as_deref() {
         result.insert("agentSessionId".to_string(), json!(agent_session_id));
     }
+    let mut screen_prompt = None;
     /*
     The pills' "what is the agent ACTUALLY running" value. Structured
     transcript metadata fills values absent from the terminal footer. Read
@@ -445,6 +451,7 @@ pub(crate) async fn handle_read_session_chat_http(
         )
         .await
         .unwrap_or_default();
+        screen_prompt = detection.prompt.clone();
         if let Some(detected) = detection.options {
             result.insert("selectedOptions".to_string(), detected.to_value());
         }
@@ -626,6 +633,7 @@ pub(crate) async fn handle_read_session_chat_http(
                 let transcript_prompt =
                     crate::session_chat::scan_transcript_prompt_state(&messages);
                 crate::session_chat::resolve_session_chat_prompt(stored_prompt, &transcript_prompt)
+                    .or(screen_prompt)
             } else {
                 stored_prompt
             };
@@ -652,6 +660,7 @@ pub(crate) async fn handle_read_session_chat_http(
             // Not-yet-flushed transcript on a running session is "starting",
             // never an error: the follower's resolve-poll keeps looking.
             if let Some(value) = stored_prompt
+                .or(screen_prompt)
                 .as_ref()
                 .and_then(|prompt| serde_json::to_value(prompt).ok())
             {
@@ -671,6 +680,7 @@ pub(crate) async fn handle_read_session_chat_http(
         }
         Ok(Err(_)) | Err(_) => {
             if let Some(value) = stored_prompt
+                .or(screen_prompt)
                 .as_ref()
                 .and_then(|prompt| serde_json::to_value(prompt).ok())
             {

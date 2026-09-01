@@ -339,6 +339,7 @@ fn agent_display_name(agent: SessionChatTranscriptAgent) -> &'static str {
     match agent {
         SessionChatTranscriptAgent::Claude => "Claude",
         SessionChatTranscriptAgent::Codex => "Codex",
+        SessionChatTranscriptAgent::Cursor => "Cursor CLI",
         SessionChatTranscriptAgent::Grok => "Grok",
         SessionChatTranscriptAgent::Hermes => "Hermes Agent",
         SessionChatTranscriptAgent::Pi => "Pi",
@@ -705,6 +706,7 @@ fn parse_transcript(agent: SessionChatTranscriptAgent, lines: &[String]) -> Pars
         match agent {
             SessionChatTranscriptAgent::Claude => parse_claude_record(&mut builder, &record),
             SessionChatTranscriptAgent::Codex => parse_codex_record(&mut builder, &record),
+            SessionChatTranscriptAgent::Cursor => parse_cursor_record(&mut builder, &record),
             SessionChatTranscriptAgent::Grok => parse_grok_record(&mut builder, &record),
             SessionChatTranscriptAgent::Hermes => parse_hermes_record(&mut builder, &record),
             SessionChatTranscriptAgent::Pi => parse_pi_record(&mut builder, &record),
@@ -1383,6 +1385,65 @@ fn parse_claude_tool_use(builder: &mut TranscriptBuilder, block: &Map<String, Va
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Cursor Agent parser
+// ---------------------------------------------------------------------------
+
+fn parse_cursor_record(builder: &mut TranscriptBuilder, record: &Map<String, Value>) {
+    if type_of(record) == "turn_ended" {
+        if text_field(record, "status").as_deref() != Some("success") {
+            builder.push(ExportEntry::new(
+                TranscriptExportSection::SessionEvent,
+                text_field(record, "error")
+                    .unwrap_or_else(|| "Conversation interrupted".to_string()),
+            ));
+        }
+        return;
+    }
+    let Some(role) = text_field(record, "role") else {
+        return;
+    };
+    let Some(message) = record_of(record.get("message")) else {
+        return;
+    };
+    let Some(content) = message.get("content") else {
+        return;
+    };
+    let mut spoken = String::new();
+    for block in claude_blocks(content) {
+        match type_of(&block) {
+            "text" if role == "user" => {
+                append_paragraph(
+                    &mut spoken,
+                    text_field(&block, "text").map(|text| strip_grok_user_query(&text)),
+                );
+            }
+            "text" if role == "assistant" => {
+                let visible = text_field(&block, "text")
+                    .map(|text| {
+                        text.lines()
+                            .filter(|line| line.trim() != "[REDACTED]")
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .filter(|text| !text.trim().is_empty());
+                append_paragraph(&mut spoken, visible);
+            }
+            "tool_use" if role == "assistant" => {
+                flush_dialog(builder, TranscriptExportSection::AgentMessage, &mut spoken);
+                parse_claude_tool_use(builder, &block);
+            }
+            _ => {}
+        }
+    }
+    let section = if role == "user" {
+        TranscriptExportSection::UserMessage
+    } else {
+        TranscriptExportSection::AgentMessage
+    };
+    flush_dialog(builder, section, &mut spoken);
 }
 
 /// Claude has no diff format: `Edit`/`MultiEdit` carry the replaced strings and

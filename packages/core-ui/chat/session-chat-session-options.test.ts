@@ -116,6 +116,24 @@ describe('session chat session-option catalogs', () => {
     ]);
   });
 
+  it('shows Cursor models without the brand prefix and offers every effort level', () => {
+    const catalog = catalogFor('cursor');
+    expect(catalog.model.choices?.find((choice) => choice.value === 'cursor-grok-4.6')?.label).toBe('Grok 4.6');
+    if (catalog.model.dispatch.kind !== 'command-confirm-picker') {
+      throw new Error('cursor model must dispatch a filtered picker command');
+    }
+    expect(catalog.model.dispatch.build('cursor-grok-4.6')).toBe('/model Cursor Grok 4.6');
+    expect(catalog.optionsForModel('cursor-grok-4.6')[0]?.choices?.map((choice) => choice.label)).toEqual([
+      'None',
+      'Low',
+      'Medium',
+      'High',
+      'Extra High',
+      'Max',
+      'Ultra',
+    ]);
+  });
+
   it('uses the effort delta when known and a deterministic boundary when unknown', () => {
     const choices = codexEffortChoices('gpt-5.6-sol');
     expect(sessionChatBoundedKeySteps(choices, 'medium', 'xhigh', 'shift-down', 'shift-up')).toEqual([

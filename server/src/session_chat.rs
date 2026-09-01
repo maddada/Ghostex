@@ -247,6 +247,7 @@ impl SessionChatStatus {
 pub enum SessionChatTranscriptAgent {
     Claude,
     Codex,
+    Cursor,
     Grok,
     Hermes,
     Pi,
@@ -259,6 +260,7 @@ pub fn resolve_session_chat_transcript_agent(
     match agent?.trim().to_ascii_lowercase().as_str() {
         "claude" | "openclaude" => Some(SessionChatTranscriptAgent::Claude),
         "codex" => Some(SessionChatTranscriptAgent::Codex),
+        "cursor" | "cursor-agent" | "cursor cli" => Some(SessionChatTranscriptAgent::Cursor),
         "grok" | "grok-build" => Some(SessionChatTranscriptAgent::Grok),
         "hermes" | "hermes agent" | "hermes-agent" => Some(SessionChatTranscriptAgent::Hermes),
         "pi" | "omp" => Some(SessionChatTranscriptAgent::Pi),
@@ -270,6 +272,7 @@ pub fn session_chat_transcript_agent_id(agent: Option<&str>) -> Option<&'static 
     match resolve_session_chat_transcript_agent(agent)? {
         SessionChatTranscriptAgent::Claude => Some("claude"),
         SessionChatTranscriptAgent::Codex => Some("codex"),
+        SessionChatTranscriptAgent::Cursor => Some("cursor"),
         SessionChatTranscriptAgent::Grok => Some("grok"),
         SessionChatTranscriptAgent::Hermes => Some("hermes"),
         SessionChatTranscriptAgent::Pi => Some("pi"),
@@ -283,6 +286,7 @@ pub fn session_chat_line_decoder(agent: SessionChatTranscriptAgent) -> SessionCh
     match agent {
         SessionChatTranscriptAgent::Claude => decode_claude_transcript_line,
         SessionChatTranscriptAgent::Codex => decode_codex_transcript_line,
+        SessionChatTranscriptAgent::Cursor => decode_cursor_transcript_line,
         SessionChatTranscriptAgent::Grok => decode_grok_transcript_line,
         SessionChatTranscriptAgent::Hermes => decode_hermes_transcript_line,
         SessionChatTranscriptAgent::Pi => decode_pi_transcript_line,
@@ -295,6 +299,7 @@ pub fn session_chat_lifecycle_decoder(
     match agent {
         SessionChatTranscriptAgent::Claude => Some(decode_claude_turn_lifecycle),
         SessionChatTranscriptAgent::Codex => Some(decode_codex_turn_lifecycle),
+        SessionChatTranscriptAgent::Cursor => Some(decode_cursor_turn_lifecycle),
         SessionChatTranscriptAgent::Grok => Some(decode_grok_turn_lifecycle),
         SessionChatTranscriptAgent::Hermes => Some(decode_hermes_turn_lifecycle),
         SessionChatTranscriptAgent::Pi => None,
@@ -347,6 +352,7 @@ pub fn session_chat_lineage_extractor(
     match agent {
         SessionChatTranscriptAgent::Claude => Some(claude_transcript_lineage),
         SessionChatTranscriptAgent::Codex
+        | SessionChatTranscriptAgent::Cursor
         | SessionChatTranscriptAgent::Grok
         | SessionChatTranscriptAgent::Hermes
         | SessionChatTranscriptAgent::Pi => None,
@@ -955,6 +961,7 @@ pub fn boundary_fingerprint(file_path: &Path, offset: u64) -> std::io::Result<St
 // ---------------------------------------------------------------------------
 pub use crate::session_chat_decode_claude::*;
 pub use crate::session_chat_decode_codex::*;
+pub use crate::session_chat_decode_cursor::*;
 pub use crate::session_chat_decode_grok::*;
 pub use crate::session_chat_decode_hermes::*;
 pub use crate::session_chat_decode_pi::*;

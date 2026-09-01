@@ -377,6 +377,7 @@ CLEARS it, so every producer restates the CURRENT value.
 */
 #[derive(Clone, Copy, Debug, Default)]
 pub struct SessionChatScreenState<'a> {
+    pub prompt: Option<&'a SessionChatInteractivePrompt>,
     pub notice: Option<&'a crate::session_chat_notice::SessionChatTerminalNotice>,
     pub activity: Option<&'a crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     /*
@@ -488,7 +489,7 @@ fn emit_state_frame(
         |seq| {
             let mut frame = session_chat_frame(config, "sessionChatState", epoch, seq);
             frame.insert("status".to_string(), json!(status.as_str()));
-            insert_optional_prompt(&mut frame, prompt);
+            insert_optional_prompt(&mut frame, prompt.or(screen.prompt));
             if let Some(working) = working {
                 frame.insert("working".to_string(), json!(working));
             }
@@ -542,7 +543,7 @@ fn emit_snapshot_frame(
             };
             frame.insert("status".to_string(), json!(status.as_str()));
             frame.insert("working".to_string(), json!(working));
-            insert_optional_prompt(&mut frame, prompt);
+            insert_optional_prompt(&mut frame, prompt.or(screen.prompt));
             insert_optional_selected_options(&mut frame, selected_options);
             insert_screen_state(&mut frame, screen);
             insert_optional_queue(&mut frame, queue.as_ref());
@@ -632,7 +633,8 @@ async fn detect_and_adopt_successor_transcript(
         }
         // Codex stems are `rollout-<ts>-<uuid>`; only the trailing uuid is it.
         SessionChatTranscriptAgent::Codex => codex_rollout_session_id(stem)?,
-        SessionChatTranscriptAgent::Grok
+        SessionChatTranscriptAgent::Cursor
+        | SessionChatTranscriptAgent::Grok
         | SessionChatTranscriptAgent::Hermes
         | SessionChatTranscriptAgent::Pi => return None,
     };
@@ -923,6 +925,7 @@ pub async fn run_session_chat_follower(
                         Some(live.working),
                         detection.options.as_ref(),
                         SessionChatScreenState {
+                            prompt: detection.prompt.as_ref(),
                             notice: detection.notice.as_ref(),
                             activity: live
                                 .working
@@ -1017,11 +1020,12 @@ pub async fn run_session_chat_follower(
                 transcript_prompt = SessionChatTranscriptPromptState::default();
                 transcript_prompt.advance(&tail.messages);
                 transcript_prompt.advance(&appended);
-                let prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt);
                 // A subscribing client gets the detected pills value and any
                 // terminal-state notice with its snapshot, so it needs no
                 // separate read.
                 let snapshot_detection = read_cached_detection();
+                let prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt)
+                    .or_else(|| snapshot_detection.prompt.clone());
                 let lineage_path = resolved.clone().expect("resolved transcript path");
                 if fork_ancestor_path.as_ref() != Some(&lineage_path) {
                     let probe_path = lineage_path.clone();
@@ -1047,6 +1051,7 @@ pub async fn run_session_chat_follower(
                     live.working,
                     snapshot_detection.options.as_ref(),
                     SessionChatScreenState {
+                        prompt: None,
                         notice: snapshot_detection.notice.as_ref(),
                         activity: live
                             .working
@@ -1159,7 +1164,8 @@ pub async fn run_session_chat_follower(
         a tool result after it means "answered". The hook prompt still wins when
         both exist, so approvals and richer hook payloads are unaffected.
         */
-        let effective_prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt);
+        let effective_prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt)
+            .or_else(|| read_cached_detection().prompt);
         let became_ready = published_state_valid && published_working && !live.working;
         // A `⏺` row remains in terminal scrollback after Claude stops. Clear
         // that stale status on the ready transition, but retain Claude's
@@ -1191,6 +1197,7 @@ pub async fn run_session_chat_follower(
                     Some(live.working),
                     published_options.as_ref(),
                     SessionChatScreenState {
+                        prompt: None,
                         notice: published_notice.as_ref(),
                         activity: published_activity.as_ref(),
                         fleet: published_fleet.as_ref(),
@@ -1330,11 +1337,16 @@ pub async fn run_session_chat_follower(
                         detection.fleet.as_ref(),
                         published_fleet.as_ref(),
                     );
+                let detected_prompt =
+                    resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt)
+                        .or_else(|| detection.prompt.clone());
+                let prompt_changed = detection.captured && detected_prompt != published_prompt;
                 let probed_changed = detection.attempted && !published_screen_probed;
                 if options_changed
                     || notice_changed
                     || activity_changed
                     || fleet_changed
+                    || prompt_changed
                     || probed_changed
                 {
                     if options_changed {
@@ -1348,6 +1360,9 @@ pub async fn run_session_chat_follower(
                     }
                     if fleet_changed {
                         published_fleet = detection.fleet;
+                    }
+                    if prompt_changed {
+                        published_prompt = detected_prompt;
                     }
                     published_screen_probed = published_screen_probed || detection.attempted;
                     emit_state_frame(
@@ -1364,6 +1379,7 @@ pub async fn run_session_chat_follower(
                         Some(published_working),
                         published_options.as_ref(),
                         SessionChatScreenState {
+                            prompt: None,
                             notice: published_notice.as_ref(),
                             activity: published_activity.as_ref(),
                             fleet: published_fleet.as_ref(),

@@ -139,7 +139,11 @@ pub struct SessionChatDetectedSelection {
     pub effort: Option<SessionChatDetectedChoice>,
     /// Claude's Shift+Tab permission/input mode, available only on screen.
     pub mode: Option<SessionChatDetectedChoice>,
-    /// Codex's trailing `fast` modifier. Informational only.
+    /// Cursor's model context-window label, for example `272K` or `1M`.
+    pub context_window: Option<String>,
+    /// The complete normalized terminal line that supplied this detection.
+    pub terminal_status_line: Option<String>,
+    /// Cursor or Codex's terminal-reported Fast modifier.
     pub fast: Option<bool>,
 }
 
@@ -196,6 +200,15 @@ impl SessionChatDetectedOptions {
                 }),
             );
         }
+        if let Some(context_window) = self.selection.context_window.as_ref() {
+            map.insert("contextWindow".to_string(), json!(context_window));
+        }
+        if let Some(terminal_status_line) = self.selection.terminal_status_line.as_ref() {
+            map.insert(
+                "terminalStatusLine".to_string(),
+                json!(terminal_status_line),
+            );
+        }
         if let Some(fast) = self.selection.fast {
             map.insert("fast".to_string(), json!(fast));
         }
@@ -214,6 +227,10 @@ second process spawn.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionChatTerminalDetection {
     pub options: Option<SessionChatDetectedOptions>,
+    /// Cursor's pending AskQuestion panel. Cursor does not persist this tool
+    /// call until it has been answered, so it is read from the same live screen
+    /// capture as the model, notice, activity, and composer state.
+    pub prompt: Option<crate::session_chat::SessionChatInteractivePrompt>,
     /*
     CDXC:SessionChatComposerReady 2026-08-26: whether the agent CLI's input box
     is on screen and accepting input. Fifth reading of the same capture, for the
@@ -288,6 +305,7 @@ pub type SessionChatOptionsReader = std::sync::Arc<
 pub enum SessionChatOptionAgent {
     Claude,
     Codex,
+    Cursor,
     Grok,
     Hermes,
     Omp,
@@ -298,6 +316,7 @@ pub fn session_chat_option_agent(agent: Option<&str>) -> Option<SessionChatOptio
     match agent.map(str::trim).unwrap_or_default() {
         "claude" | "openclaude" => Some(SessionChatOptionAgent::Claude),
         "codex" => Some(SessionChatOptionAgent::Codex),
+        "cursor" => Some(SessionChatOptionAgent::Cursor),
         "grok" => Some(SessionChatOptionAgent::Grok),
         "hermes" | "hermes-agent" => Some(SessionChatOptionAgent::Hermes),
         "omp" => Some(SessionChatOptionAgent::Omp),
@@ -579,6 +598,137 @@ fn match_codex_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
 }
 
 // ---------------------------------------------------------------------------
+// Cursor Agent grammar
+//   <Title> · GPT-5.6 Sol 272K Medium · 26K used
+//
+// Cursor paints the current model, context window, and reasoning effort in one
+// segment between the chat title and a strict token-usage segment. Model ids
+// are account-dependent, so known labels map to values the client can dispatch
+// and unknown labels remain honest readbacks.
+// ---------------------------------------------------------------------------
+
+const CURSOR_MODEL_LABELS: &[(&str, &str)] = &[
+    ("Auto", "auto"),
+    ("Composer 2.5", "composer-2.5"),
+    ("Cursor Grok 4.6", "cursor-grok-4.6"),
+    ("GPT-5.6 Sol", "gpt-5.6-sol"),
+    ("GPT-5.6 Terra", "gpt-5.6-terra"),
+    ("GPT-5.6 Luna", "gpt-5.6-luna"),
+    ("Claude Opus 5", "claude-opus-5"),
+    ("Claude Sonnet 5", "claude-sonnet-5"),
+];
+
+fn is_cursor_usage_segment(segment: &str) -> bool {
+    let Some(number) = segment.strip_suffix(" used") else {
+        return false;
+    };
+    let number = number.strip_suffix(['K', 'M']).unwrap_or(number);
+    !number.is_empty() && number.chars().all(|ch| ch.is_ascii_digit() || ch == '.')
+}
+
+const CURSOR_EFFORT_LABELS: &[(&str, &str)] = &[
+    ("Extra High", "xhigh"),
+    ("xHigh", "xhigh"),
+    ("XHigh", "xhigh"),
+    ("Medium", "medium"),
+    ("Ultra", "ultra"),
+    ("None", "none"),
+    ("Med", "medium"),
+    ("Low", "low"),
+    ("High", "high"),
+    ("Max", "max"),
+];
+
+fn is_cursor_context_window(token: &str) -> bool {
+    let number = token.strip_suffix(['K', 'M']).unwrap_or(token);
+    token.len() > number.len()
+        && !number.is_empty()
+        && number.chars().all(|ch| ch.is_ascii_digit() || ch == '.')
+}
+
+fn split_cursor_model_context_and_effort(
+    segment: &str,
+) -> (String, Option<String>, Option<SessionChatDetectedChoice>) {
+    for (label, value) in CURSOR_EFFORT_LABELS {
+        let Some(before_effort) = segment.strip_suffix(label) else {
+            continue;
+        };
+        if !before_effort.ends_with(char::is_whitespace) {
+            continue;
+        }
+        let before_effort = before_effort.trim_end();
+        if before_effort.is_empty() {
+            continue;
+        }
+        let (model, context_window) = match before_effort.rsplit_once(' ') {
+            Some((model, context_window)) if is_cursor_context_window(context_window) => {
+                (model.trim_end(), Some(context_window.to_string()))
+            }
+            _ => (before_effort, None),
+        };
+        if model.is_empty() {
+            continue;
+        }
+        return (
+            model.to_string(),
+            context_window,
+            Some(SessionChatDetectedChoice {
+                value: (*value).to_string(),
+                label: (*label).to_string(),
+                source: SessionChatOptionEvidence::Terminal,
+            }),
+        );
+    }
+    (segment.to_string(), None, None)
+}
+
+fn match_cursor_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
+    let segments = line_segments(line);
+    if segments.len() < 3 || !is_cursor_usage_segment(segments.last()?) {
+        return None;
+    }
+    let combined = segments.get(segments.len() - 2)?.trim();
+    if combined.is_empty() || combined == "\u{2014}" {
+        return None;
+    }
+    let (combined, fast) = if let Some(without_fast) = combined
+        .strip_suffix(" Fast")
+        .or_else(|| combined.strip_suffix(" fast"))
+        .or_else(|| combined.strip_suffix(" (Fast)"))
+        .or_else(|| combined.strip_suffix(" (fast)"))
+    {
+        (without_fast.trim_end(), Some(true))
+    } else {
+        (combined, None)
+    };
+    let (model_label, context_window, effort) = split_cursor_model_context_and_effort(combined);
+    let value = CURSOR_MODEL_LABELS
+        .iter()
+        .find(|(candidate, _)| model_label == *candidate)
+        .map_or_else(
+            || model_label.to_string(),
+            |(_, value)| (*value).to_string(),
+        );
+    let display_model_label = model_label
+        .strip_prefix("Cursor ")
+        .or_else(|| model_label.strip_prefix("cursor "))
+        .unwrap_or(&model_label)
+        .to_string();
+    Some(SessionChatDetectedSelection {
+        model: Some(SessionChatDetectedChoice {
+            value,
+            label: display_model_label,
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        effort,
+        context_window,
+        terminal_status_line: Some(line.trim().to_string()),
+        fast,
+        ..SessionChatDetectedSelection::default()
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Grok grammar
 //   ╰──────────────────────── Grok 4.6 (medium) · always-approve ─╯
 // Model and effort share ONE segment, and that segment is drawn INSIDE the
@@ -641,6 +791,8 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
         }),
         effort,
         mode: None,
+        context_window: None,
+        terminal_status_line: None,
         fast: None,
     })
 }
@@ -708,6 +860,8 @@ fn match_pi_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
             source: SessionChatOptionEvidence::Terminal,
         }),
         mode: None,
+        context_window: None,
+        terminal_status_line: None,
         fast: None,
     })
 }
@@ -751,6 +905,8 @@ fn match_omp_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
             source: SessionChatOptionEvidence::Terminal,
         }),
         mode: None,
+        context_window: None,
+        terminal_status_line: None,
         fast: None,
     })
 }
@@ -796,6 +952,8 @@ fn match_hermes_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         }),
         effort: None,
         mode: None,
+        context_window: None,
+        terminal_status_line: None,
         fast: None,
     })
 }
@@ -813,6 +971,12 @@ pub fn detect_session_chat_selection(
     let mut found = SessionChatDetectedSelection::default();
     for scanned in scan_window(text).iter().rev() {
         match agent {
+            SessionChatOptionAgent::Cursor => {
+                if let Some(selection) = match_cursor_statusline(scanned) {
+                    return Some(selection);
+                }
+                continue;
+            }
             SessionChatOptionAgent::Pi => {
                 if let Some(selection) = match_pi_statusline(scanned) {
                     return Some(selection);
@@ -861,10 +1025,14 @@ pub fn detect_session_chat_selection(
                 }
                 SessionChatOptionAgent::Codex => {
                     if found.model.is_none() && found.effort.is_none() {
-                        if let Some(selection) = match_codex_segment(segment) {
+                        if let Some(mut selection) = match_codex_segment(segment) {
+                            selection.terminal_status_line = Some(line.trim().to_string());
                             found = selection;
                         }
                     }
+                }
+                SessionChatOptionAgent::Cursor => {
+                    unreachable!("Cursor is parsed as a complete statusline")
                 }
                 SessionChatOptionAgent::Grok => {
                     if found.model.is_none() && found.effort.is_none() {
@@ -883,6 +1051,9 @@ pub fn detect_session_chat_selection(
             }
         }
         if found.model.is_some() && found.effort.is_some() {
+            if found.terminal_status_line.is_none() {
+                found.terminal_status_line = Some(line.trim().to_string());
+            }
             break;
         }
     }
@@ -1004,6 +1175,8 @@ fn detect_session_chat_transcript_selection(
                     effort: transcript_text(record.get("effort"))
                         .and_then(transcript_effort_choice),
                     mode: None,
+                    context_window: None,
+                    terminal_status_line: None,
                     fast: None,
                 }
             }
@@ -1026,6 +1199,8 @@ fn detect_session_chat_transcript_selection(
                         })
                         .and_then(transcript_effort_choice),
                     mode: None,
+                    context_window: None,
+                    terminal_status_line: None,
                     fast: None,
                 }
             }
@@ -1054,6 +1229,7 @@ fn read_session_chat_transcript_selection(
         crate::session_chat::resolve_session_chat_transcript_agent(match agent {
             SessionChatOptionAgent::Claude => Some("claude"),
             SessionChatOptionAgent::Codex => Some("codex"),
+            SessionChatOptionAgent::Cursor => return None,
             /*
             Grok's statusline is on screen for the whole session and names both
             values, and its update-stream rows carry no effort at all, so there
@@ -1092,6 +1268,12 @@ fn merge_session_chat_option_selections(
         }
         if terminal.mode.is_some() {
             merged.mode = terminal.mode;
+        }
+        if terminal.context_window.is_some() {
+            merged.context_window = terminal.context_window;
+        }
+        if terminal.terminal_status_line.is_some() {
+            merged.terminal_status_line = terminal.terminal_status_line;
         }
         if terminal.fast.is_some() {
             merged.fast = terminal.fast;
@@ -1150,14 +1332,26 @@ pub fn detect_session_chat_terminal_state(
         ),
         None => crate::session_chat_composer::SessionChatComposerReadiness::default(),
     };
-    let activity = screen.and_then(|capture| {
-        crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
-            agent_id,
-            &capture.text,
-        )
-    });
+    let activity = if agent == Some(SessionChatOptionAgent::Cursor)
+        && composer.state == crate::session_chat_composer::SessionChatComposerState::Ready
+    {
+        // Cursor leaves its last Braille working row in scrollback after an
+        // answer or interruption. Its live composer is authoritative idle
+        // evidence, so that older row must not survive as chat activity.
+        None
+    } else {
+        screen.and_then(|capture| {
+            crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
+                agent_id,
+                &capture.text,
+            )
+        })
+    };
     let fleet = screen.and_then(|capture| {
         crate::session_chat_agent_fleet::detect_session_chat_agent_fleet(agent_id, &capture.text)
+    });
+    let prompt = screen.and_then(|capture| {
+        crate::session_chat::detect_cursor_question_prompt(agent_id, &capture.text)
     });
     /*
     CDXC:SessionChatScreenProbed (settled 2026-08-30): probed only counts once
@@ -1173,9 +1367,11 @@ pub fn detect_session_chat_terminal_state(
         || notice.is_some()
         || activity.is_some()
         || fleet.is_some()
+        || prompt.is_some()
         || composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
     SessionChatTerminalDetection {
         options,
+        prompt,
         composer,
         notice,
         activity,
@@ -1274,12 +1470,22 @@ mod tests {
         "  Command Pane Border Fix \u{b7} gpt-5.6-sol high \u{b7} 484K used \u{b7} G\u{2026}\n",
     );
 
+    const CURSOR_WITHOUT_CONTEXT: &str = concat!(
+        "  \u{2192} Plan, search, build anything\n",
+        "  New Agent \u{b7} Cursor Grok 4.6 Medium \u{b7} 0 used\n",
+        "  Ghostex \u{b7} main \u{b7} Ctx 0% used \u{b7} +6702 -472\n",
+    );
+
     fn claude(text: &str) -> Option<SessionChatDetectedSelection> {
         detect_session_chat_selection(SessionChatOptionAgent::Claude, text)
     }
 
     fn codex(text: &str) -> Option<SessionChatDetectedSelection> {
         detect_session_chat_selection(SessionChatOptionAgent::Codex, text)
+    }
+
+    fn cursor(text: &str) -> Option<SessionChatDetectedSelection> {
+        detect_session_chat_selection(SessionChatOptionAgent::Cursor, text)
     }
 
     fn pair(selection: &SessionChatDetectedSelection) -> (Option<&str>, Option<&str>) {
@@ -1386,6 +1592,43 @@ mod tests {
     }
 
     #[test]
+    fn detects_cursor_effort_without_a_context_token_and_hides_the_brand_prefix() {
+        let selection = cursor(CURSOR_WITHOUT_CONTEXT).expect("cursor footer detected");
+        assert_eq!(pair(&selection), (Some("cursor-grok-4.6"), Some("medium")));
+        assert_eq!(selection.model.as_ref().unwrap().label, "Grok 4.6");
+        assert_eq!(selection.effort.as_ref().unwrap().label, "Medium");
+        assert_eq!(selection.context_window, None);
+        assert_eq!(
+            selection.terminal_status_line.as_deref(),
+            Some("New Agent \u{b7} Cursor Grok 4.6 Medium \u{b7} 0 used")
+        );
+    }
+
+    #[test]
+    fn detects_every_cursor_effort_spelling() {
+        for (label, value) in [
+            ("Low", "low"),
+            ("Medium", "medium"),
+            ("Med", "medium"),
+            ("High", "high"),
+            ("xHigh", "xhigh"),
+            ("Extra High", "xhigh"),
+            ("Max", "max"),
+            ("Ultra", "ultra"),
+        ] {
+            let text = format!("New Agent \u{b7} GPT-5.6 Sol {label} \u{b7} 0 used\n");
+            let selection = cursor(&text).expect("cursor footer detected");
+            assert_eq!(
+                selection
+                    .effort
+                    .as_ref()
+                    .map(|choice| choice.value.as_str()),
+                Some(value)
+            );
+        }
+    }
+
+    #[test]
     fn codex_model_id_outside_the_catalog_is_reported_verbatim() {
         let text = "  Some Title \u{b7} gpt-9.1-nova medium \u{b7} 1K used \u{b7} Context 3% used \u{b7} weekly 99% left\n";
         let selection = codex(text).expect("codex footer detected");
@@ -1467,7 +1710,10 @@ mod tests {
 
     #[test]
     fn agents_without_a_table_detect_nothing() {
-        assert_eq!(session_chat_option_agent(Some("cursor")), None);
+        assert_eq!(
+            session_chat_option_agent(Some("cursor")),
+            Some(SessionChatOptionAgent::Cursor)
+        );
         assert_eq!(session_chat_option_agent(None), None);
         assert_eq!(
             session_chat_option_agent(Some("openclaude")),
@@ -1543,6 +1789,8 @@ mod tests {
                 source: SessionChatOptionEvidence::Transcript,
             }),
             mode: None,
+            context_window: None,
+            terminal_status_line: None,
             fast: None,
         };
         let terminal = claude("Ctx Used: 1% | Opus 4.8").unwrap();
@@ -1591,6 +1839,8 @@ mod tests {
                     source: SessionChatOptionEvidence::Terminal,
                 }),
                 mode: None,
+                context_window: None,
+                terminal_status_line: None,
                 fast: Some(true),
             },
             detected_at: "2026-08-01T12:00:00.000Z".to_string(),
@@ -1926,6 +2176,7 @@ and can never be published one frame apart.
 */
 #[derive(Default)]
 pub(crate) struct CachedSessionChatScreenState {
+    pub(crate) prompt: Option<crate::session_chat::SessionChatInteractivePrompt>,
     pub(crate) notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
     pub(crate) activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     pub(crate) fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>,
@@ -1937,6 +2188,7 @@ pub(crate) struct CachedSessionChatScreenState {
 impl CachedSessionChatScreenState {
     pub(crate) fn borrow(&self) -> crate::session_chat::SessionChatScreenState<'_> {
         crate::session_chat::SessionChatScreenState {
+            prompt: self.prompt.as_ref(),
             notice: self.notice.as_ref(),
             activity: self.activity.as_ref(),
             fleet: self.fleet.as_ref(),
@@ -1950,7 +2202,7 @@ pub(crate) fn cached_session_chat_screen_state(
     project_id: &str,
     session_id: &str,
 ) -> CachedSessionChatScreenState {
-    let (screen_notice, activity, fleet, probed) = state
+    let (prompt, screen_notice, activity, fleet, probed) = state
         .session_chat_option_cache
         .lock()
         .ok()
@@ -1959,6 +2211,7 @@ pub(crate) fn cached_session_chat_screen_state(
                 .get(&session_observer_key(project_id, session_id))
                 .map(|entry| {
                     (
+                        entry.value.prompt.clone(),
                         entry.value.notice.clone(),
                         entry.value.activity.clone(),
                         entry.value.fleet.clone(),
@@ -1968,6 +2221,7 @@ pub(crate) fn cached_session_chat_screen_state(
         })
         .unwrap_or_default();
     CachedSessionChatScreenState {
+        prompt,
         notice: crate::session_chat_notice::resolve_session_chat_terminal_notice(
             project_id,
             session_id,
@@ -2041,13 +2295,14 @@ pub(crate) fn session_chat_terminal_notice_publisher(
     let session_id = session_id.to_string();
     Arc::new(move || {
         let key = session_observer_key(&project_id, &session_id);
-        let (options, screen_notice, activity, fleet, captured) = option_cache
+        let (options, prompt, screen_notice, activity, fleet, captured) = option_cache
             .lock()
             .ok()
             .and_then(|cache| {
                 cache.get(&key).map(|entry| {
                     (
                         entry.value.options.clone(),
+                        entry.value.prompt.clone(),
                         entry.value.notice.clone(),
                         entry.value.activity.clone(),
                         entry.value.fleet.clone(),
@@ -2070,6 +2325,7 @@ pub(crate) fn session_chat_terminal_notice_publisher(
             &session_id,
             options.as_ref(),
             crate::session_chat::SessionChatScreenState {
+                prompt: prompt.as_ref(),
                 notice: notice.as_ref(),
                 activity: activity.as_ref(),
                 fleet: fleet.as_ref(),
@@ -2162,6 +2418,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
         );
         let mut published_activity = cached.activity;
         let mut published_fleet = cached.fleet;
+        let mut published_prompt = cached.prompt;
         for delay_ms in crate::session_chat_options::SESSION_CHAT_OPTION_REDETECT_DELAYS_MS {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             let detection = detector
@@ -2191,7 +2448,13 @@ pub(crate) fn schedule_session_chat_option_redetect(
                     detection.fleet.as_ref(),
                     published_fleet.as_ref(),
                 );
-            if !options_changed && !notice_changed && !activity_changed && !fleet_changed {
+            let prompt_changed = detection.captured && detection.prompt != published_prompt;
+            if !options_changed
+                && !notice_changed
+                && !activity_changed
+                && !fleet_changed
+                && !prompt_changed
+            {
                 continue;
             }
             if options_changed {
@@ -2206,6 +2469,9 @@ pub(crate) fn schedule_session_chat_option_redetect(
             if fleet_changed {
                 published_fleet = detection.fleet;
             }
+            if prompt_changed {
+                published_prompt = detection.prompt;
+            }
             emit_session_chat_options_state_frame(
                 &followers,
                 &event_hub,
@@ -2215,6 +2481,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
                 &session_id,
                 published.as_ref(),
                 crate::session_chat::SessionChatScreenState {
+                    prompt: published_prompt.as_ref(),
                     notice: published_notice.as_ref(),
                     activity: published_activity.as_ref(),
                     fleet: published_fleet.as_ref(),

@@ -1441,10 +1441,12 @@ export function SessionChatView({
                         without colliding.
                         */
                         key={`session-note:${sessionKey}`}
+                        monacoVsBaseUrl={monacoVsBaseUrl}
                         onClose={closeSessionNote}
                         onHasNoteChange={setSessionNoteHasText}
                         readNote={readSessionNote}
                         saveNote={saveSessionNote}
+                        theme={theme}
                       />
                     ) : null}
                     <SessionChatComposer
@@ -1488,6 +1490,7 @@ export function SessionChatView({
                           canSend={canSend}
                           canSendKey={chat.sendKey !== undefined}
                           controller={sessionOptions}
+                          detectedOptions={detectedOptions}
                           {...(draftAgents ? { draftAgents } : {})}
                           {...(chat.sessionAgentId !== null ? { draftAgentId: chat.sessionAgentId } : {})}
                           {...(switchDraftAgent ? { onSwitchDraftAgent: switchDraftAgent } : {})}

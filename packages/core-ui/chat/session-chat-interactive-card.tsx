@@ -216,6 +216,7 @@ export function SessionChatInteractiveCard({
   const submittingRef = useRef(false);
 
   const cardKey = sessionChatCardDismissKey(prompt);
+  const promptContentKey = prompt === null ? null : JSON.stringify(prompt);
   const showing = prompt !== null && cardKey !== dismissedKey;
   const showingQuestion = showing && prompt?.kind === 'question';
   const readOnly = !canSend;
@@ -245,7 +246,7 @@ export function SessionChatInteractiveCard({
     } else {
       setDrafts([]);
     }
-  }, [cardKey, canSend, prompt]);
+  }, [canSend, promptContentKey]);
 
   useEffect(() => {
     onShowingQuestionChange?.(showingQuestion === true);

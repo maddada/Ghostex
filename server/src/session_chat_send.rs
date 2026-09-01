@@ -437,6 +437,61 @@ pub fn build_codex_ask_answer_keys(
 }
 
 /*
+Cursor Agent's AskQuestion panel is a checkbox list. Up/down move the
+highlight, Space toggles the current option, Enter advances or submits, and
+Escape skips. Each question starts on its first option. The final row is the
+free-text Other choice; typing while it is highlighted opens the input.
+*/
+pub fn build_cursor_ask_answer_keys(
+    questions: &[SessionChatQuestion],
+    selections: &[SessionChatQuestionSelection],
+) -> Vec<AskAnswerKeyGroup> {
+    let mut groups = Vec::new();
+    for (question_index, question) in questions.iter().enumerate() {
+        let selection = selections.get(question_index);
+        let other = selection_other(selection);
+        let indices = selection
+            .map(|selection| selection.indices.as_slice())
+            .unwrap_or_default();
+        if indices.is_empty() && other.is_empty() {
+            groups.push(AskAnswerKeyGroup::Raw(SESSION_CHAT_INTERRUPT.to_string()));
+            break;
+        }
+
+        let mut cursor = 0usize;
+        for index in indices {
+            if *index >= question.options.len() {
+                continue;
+            }
+            if *index > cursor {
+                groups.push(AskAnswerKeyGroup::Raw(ASK_NEXT_ROW.repeat(*index - cursor)));
+            } else if cursor > *index {
+                groups.push(AskAnswerKeyGroup::Raw(
+                    ASK_PREVIOUS_ROW.repeat(cursor - *index),
+                ));
+            }
+            groups.push(AskAnswerKeyGroup::Raw(ASK_SPACE.to_string()));
+            cursor = *index;
+        }
+        if !other.is_empty() {
+            let other_row = question.options.len();
+            if other_row > cursor {
+                groups.push(AskAnswerKeyGroup::Raw(
+                    ASK_NEXT_ROW.repeat(other_row - cursor),
+                ));
+            } else if cursor > other_row {
+                groups.push(AskAnswerKeyGroup::Raw(
+                    ASK_PREVIOUS_ROW.repeat(cursor - other_row),
+                ));
+            }
+            groups.push(AskAnswerKeyGroup::Text(other.to_string()));
+        }
+        groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
+    }
+    groups
+}
+
+/*
 Pi's cursor_ask_question renders pi-tui selects (ctx.ui.select): ↑/↓ move the
 highlight (wrapping), Enter commits, Esc/Ctrl+C cancels — no digit shortcuts
 and no skip. Questions show ONE AT A TIME, so the groups for question N+1 only
@@ -917,6 +972,12 @@ submission). Unknown names return None so the handler can reject them instead
 of writing something arbitrary.
 */
 pub fn build_session_chat_key_steps(key: &str) -> Option<Vec<SessionChatSendStep>> {
+    if key == "enter" {
+        return Some(vec![
+            SessionChatSendStep::SleepMs(250),
+            SessionChatSendStep::Write("\r".to_string()),
+        ]);
+    }
     let payload = match key {
         "shift-tab" => SESSION_CHAT_SHIFT_TAB,
         "shift-up" => SESSION_CHAT_SHIFT_UP,
@@ -2378,13 +2439,28 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
             )]
         }
         "question" => {
+            let agent = session_chat_agent_for_session(&target.session);
+            let screen_prompt = if matches!(agent.as_deref(), Some("cursor" | "cursor-agent")) {
+                crate::session_chat_options::SessionChatOptionDetector::new(state)
+                    .detect(
+                        &target.project_id,
+                        &target.session_id,
+                        agent.as_deref(),
+                        true,
+                    )
+                    .await
+                    .prompt
+            } else {
+                None
+            };
             let stored_prompt = crate::agents::session_chat_prompt_setting(&target.session)
                 .as_deref()
                 .and_then(crate::session_chat::parse_stored_session_chat_prompt)
                 // A card the transcript produced (hooks that never forwarded
                 // toolInput) must be answerable too, or the user gets a card
                 // that rejects every answer.
-                .or_else(|| transcript_pending_question_prompt(&target.session));
+                .or_else(|| transcript_pending_question_prompt(&target.session))
+                .or(screen_prompt);
             let Some(crate::session_chat::SessionChatInteractivePrompt::Question { questions }) =
                 stored_prompt
             else {
@@ -2416,7 +2492,6 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                         }
                     },
                 };
-            let agent = session_chat_agent_for_session(&target.session);
             // One agent can host different asking tools with different
             // terminal UIs (omp ships its own `ask` dialog next to the pi
             // cursor bridge), so the key plan follows the tool that asked.
@@ -2433,6 +2508,12 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                 ),
                 Some("codex") => crate::session_chat_send::build_ask_answer_steps(
                     &crate::session_chat_send::build_codex_ask_answer_keys(&questions, &selections),
+                ),
+                Some("cursor") => crate::session_chat_send::build_ask_answer_steps(
+                    &crate::session_chat_send::build_cursor_ask_answer_keys(
+                        &questions,
+                        &selections,
+                    ),
                 ),
                 // omp's built-in `ask` renders its rich dialog; every other
                 // question on a pi-family session is the pi-tui select the
@@ -2572,7 +2653,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
     at +2s and +6s and republishes, which is exactly the window the picker
     needs to tear down.
     */
-    if kind == "terminalChoice" {
+    if matches!(kind, "terminalChoice" | "question") {
         let agent = session_chat_agent_for_session(&target.session);
         schedule_session_chat_option_redetect(
             state,

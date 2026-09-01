@@ -553,7 +553,7 @@ impl GhostexGpuiApp {
                 {
                     let agent_name = agent_name.unwrap_or("This agent");
                     state.disabled_reason = Some(format!(
-                        "{agent_name} isn't supported by Ghostex Chat View yet\nOnly Claude, Codex, Pi, Omp, Grok, and Hermes are supported\nPlease request other agents on X or the Discord"
+                        "{agent_name} isn't supported by Ghostex Chat View yet\nOnly Claude, Codex, Cursor, Pi, Omp, Grok, and Hermes are supported\nPlease request other agents on X or the Discord"
                     ));
                 } else if !self.agents_session_chat_eligible(session_id) {
                     let agent_name = agent_name.unwrap_or("this agent");

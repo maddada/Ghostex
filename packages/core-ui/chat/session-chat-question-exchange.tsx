@@ -48,6 +48,7 @@ export function isSessionChatQuestionToolName(name: string): boolean {
   const normalized = name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   return (
     normalized === 'askuserquestion' ||
+    normalized === 'askquestion' ||
     normalized === 'requestuserinput' ||
     normalized === 'cursoraskquestion' ||
     // Hermes Agent / oh-my-pi.
@@ -78,6 +79,8 @@ function parseQuestionsWithIds(input: unknown, toolName?: string): ParsedQuestio
   }
   const isHermesClarify =
     typeof toolName === 'string' && toolName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === 'clarify';
+  const isCursorAskQuestion =
+    typeof toolName === 'string' && toolName.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === 'askquestion';
   const rawQuestions = (input as Record<string, unknown>).questions;
   const candidates = Array.isArray(rawQuestions) && rawQuestions.length > 0 ? rawQuestions : [input];
   const questions: ParsedQuestionWithId[] = [];
@@ -102,7 +105,7 @@ function parseQuestionsWithIds(input: unknown, toolName?: string): ParsedQuestio
       // `multi_select` is Hermes' spelling, `multi` is omp's; Hermes honors
       // it only when choices exist.
       const multiSelect =
-        (record.multiSelect === true || record.multi_select === true || record.multi === true) &&
+        (isCursorAskQuestion || record.multiSelect === true || record.multi_select === true || record.multi === true) &&
         !(isHermesClarify && options.length === 0);
       questions.push({
         id: typeof record.id === 'string' && record.id.length > 0 ? record.id : null,

@@ -35,6 +35,8 @@ export interface SessionChatOptionChoice {
 export type SessionChatOptionDispatch =
   /** Types `build(value)` into the TUI; the chosen value becomes the local truth. */
   | { kind: 'command'; build: (value: string) => string }
+  /** Types a filtered picker command, then confirms its sole matching row. */
+  | { kind: 'command-confirm-picker'; build: (value: string) => string }
   /** Types a fixed command that FLIPS an unknown baseline (no value tracked). */
   | { kind: 'toggle-command'; command: string }
   /** Types a command that opens the agent's own picker, then shows the terminal. */
@@ -208,6 +210,64 @@ const CODEX_MODE: SessionChatOptionDescriptor = {
 };
 
 // ---------------------------------------------------------------------------
+// Cursor Agent
+// ---------------------------------------------------------------------------
+
+const CURSOR_MODELS: readonly SessionChatOptionChoice[] = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'composer-2.5', label: 'Composer 2.5' },
+  { value: 'cursor-grok-4.6', label: 'Grok 4.6' },
+  { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' },
+  { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
+  { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+  { value: 'claude-opus-5', label: 'Claude Opus 5' },
+  { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
+];
+
+const CURSOR_EFFORTS: readonly SessionChatOptionChoice[] = [
+  { value: 'none', label: 'None' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'Extra High' },
+  { value: 'max', label: 'Max' },
+  { value: 'ultra', label: 'Ultra' },
+];
+
+function cursorModelFilter(value: string): string {
+  if (value === 'cursor-grok-4.6') {
+    return 'Cursor Grok 4.6';
+  }
+  return CURSOR_MODELS.find((choice) => choice.value === value)?.label ?? value;
+}
+
+const CURSOR_MODEL: SessionChatOptionDescriptor = {
+  id: 'model',
+  label: 'Model',
+  category: 'model',
+  choices: CURSOR_MODELS,
+  dispatch: {
+    kind: 'command-confirm-picker',
+    build: (value) => `/model ${cursorModelFilter(value)}`,
+  },
+};
+
+/*
+Cursor exposes reasoning effort inside the model picker's Tab-to-edit panel.
+The footer is authoritative, but navigating that nested picker blind would
+also risk changing the context window or Fast toggle. Show the detected value
+and hand the user to the agent-owned picker to change it.
+*/
+const CURSOR_EFFORT: SessionChatOptionDescriptor = {
+  id: 'effort',
+  label: 'Reasoning effort',
+  category: 'thought_level',
+  choices: CURSOR_EFFORTS,
+  actionLabel: 'Change it in the CLI',
+  dispatch: { kind: 'agent-picker', command: '/model' },
+};
+
+// ---------------------------------------------------------------------------
 // Grok
 // ---------------------------------------------------------------------------
 
@@ -324,6 +384,12 @@ const CODEX_CATALOG: SessionChatSessionOptionCatalog = {
     sortDescriptors([{ ...CODEX_EFFORT, choices: codexEffortChoices(modelValue) }, CODEX_MODE]),
 };
 
+const CURSOR_CATALOG: SessionChatSessionOptionCatalog = {
+  model: CURSOR_MODEL,
+  modelIcon: 'cursor-cli',
+  optionsForModel: () => [CURSOR_EFFORT],
+};
+
 function sortDescriptors(descriptors: readonly SessionChatOptionDescriptor[]): readonly SessionChatOptionDescriptor[] {
   return [...descriptors].sort((left, right) => CATEGORY_ORDER[left.category] - CATEGORY_ORDER[right.category]);
 }
@@ -356,6 +422,7 @@ const CATALOG_BY_AGENT: Record<string, SessionChatSessionOptionCatalog> = {
   claude: CLAUDE_CATALOG,
   openclaude: CLAUDE_CATALOG,
   codex: CODEX_CATALOG,
+  cursor: CURSOR_CATALOG,
   grok: GROK_CATALOG,
   // Both the transcript family id (read state) and the sidebar agent id reach
   // this lookup, so the catalog answers to either spelling.
@@ -388,7 +455,7 @@ export function sessionChatOptionCommandNames(agent: string | null | undefined):
   const collect = (descriptor: SessionChatOptionDescriptor): void => {
     const { dispatch } = descriptor;
     const command =
-      dispatch.kind === 'command'
+      dispatch.kind === 'command' || dispatch.kind === 'command-confirm-picker'
         ? dispatch.build(descriptor.choices?.[0]?.value ?? '')
         : dispatch.kind === 'toggle-command' || dispatch.kind === 'agent-picker'
           ? dispatch.command
@@ -458,6 +525,7 @@ function isTrackedValue(descriptor: SessionChatOptionDescriptor, value: string):
 export function sessionChatOptionTracksValue(descriptor: SessionChatOptionDescriptor): boolean {
   return (
     (descriptor.dispatch.kind === 'command' ||
+      descriptor.dispatch.kind === 'command-confirm-picker' ||
       descriptor.dispatch.kind === 'bounded-key-steps' ||
       descriptor.dispatch.kind === 'cyclic-key-steps') &&
     descriptor.choices !== undefined &&
@@ -615,6 +683,9 @@ export interface SessionChatDetectedOptionInput {
   model?: { value: string; label: string; source?: 'terminal' | 'transcript' };
   effort?: { value: string; label: string; source?: 'terminal' | 'transcript' };
   mode?: { value: string; label: string; source?: 'terminal' | 'transcript' };
+  contextWindow?: string;
+  terminalStatusLine?: string;
+  fast?: boolean;
   detectedAt: string;
 }
 

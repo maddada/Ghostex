@@ -38,12 +38,30 @@ pub fn resolve_session_chat_transcript_path(
         SessionChatTranscriptAgent::Codex => {
             crate::agent_transcripts::find_codex_transcript(session_id)
         }
+        SessionChatTranscriptAgent::Cursor => find_cursor_chat_transcript(session_id),
         SessionChatTranscriptAgent::Grok => find_grok_session_update_log(session_id),
         SessionChatTranscriptAgent::Hermes => {
             crate::session_chat_hermes::resolve_hermes_chat_transcript_path(session_id)
         }
         SessionChatTranscriptAgent::Pi => find_pi_family_chat_transcript(session_id),
     }
+}
+
+fn find_cursor_chat_transcript(session_id: &str) -> Option<PathBuf> {
+    let projects_dir = home_dir().join(".cursor/projects");
+    let project_dirs = fs::read_dir(projects_dir).ok()?;
+    let file_name = format!("{session_id}.jsonl");
+    for project_dir in project_dirs.flatten() {
+        let candidate = project_dir
+            .path()
+            .join("agent-transcripts")
+            .join(session_id)
+            .join(&file_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 pub(crate) fn configured_agent_directory(env_key: &str, fallback: &str) -> PathBuf {

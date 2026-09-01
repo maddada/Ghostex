@@ -33,6 +33,7 @@ export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
   'claude',
   'openclaude',
   'codex',
+  'cursor',
   'grok',
   'grok-build',
   'hermes',
@@ -41,7 +42,7 @@ export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
   'omp',
 ]);
 
-export type SessionChatTranscriptAgent = 'claude' | 'codex' | 'grok' | 'hermes' | 'pi';
+export type SessionChatTranscriptAgent = 'claude' | 'codex' | 'cursor' | 'grok' | 'hermes' | 'pi';
 
 export function resolveSessionChatTranscriptAgent(
   agentId: string | null | undefined,
@@ -52,6 +53,7 @@ export function resolveSessionChatTranscriptAgent(
     const normalized = candidate?.trim().toLowerCase();
     if (normalized === 'claude' || normalized === 'openclaude') return 'claude';
     if (normalized === 'codex') return 'codex';
+    if (normalized === 'cursor' || normalized === 'cursor-agent' || normalized === 'cursor cli') return 'cursor';
     if (normalized === 'grok' || normalized === 'grok-build') return 'grok';
     if (normalized === 'hermes' || normalized === 'hermes-agent' || normalized === 'hermes agent') return 'hermes';
     if (normalized === 'pi' || normalized === 'omp') return 'pi';
@@ -245,7 +247,11 @@ export interface SessionChatDetectedOptions {
   effort?: SessionChatDetectedChoice;
   /** Claude's current Shift+Tab permission/input mode, read from its footer. */
   mode?: SessionChatDetectedChoice;
-  /** Codex's trailing `fast` modifier. Informational: no pill tracks it. */
+  /** Cursor's terminal-reported model context window, for example `272K` or `1M`. */
+  contextWindow?: string;
+  /** The complete normalized terminal line that supplied the detected values. */
+  terminalStatusLine?: string;
+  /** Cursor or Codex's terminal-reported Fast mode. */
   fast?: boolean;
   /** ISO-8601 millis; compared against a pending dispatch's own timestamp. */
   detectedAt: string;
@@ -307,8 +313,9 @@ export interface SessionChatTerminalNotice {
    * Open set (`loginExpired`, `trustPrompt`, `permissionsWarning`,
    * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`,
    * `queuedInput`, `deliveryFailed`, `resumePrompt`, `switchConfirmPrompt`,
-   * `sessionPausedPrompt`, `codexInputBlocked`). Clients MUST render an unknown
-   * kind generically; title/detail/severity are self-sufficient.
+   * `sessionPausedPrompt`, `codexInputBlocked`, `cursorInputBlocked`, `grokInputBlocked`,
+   * `hermesInputBlocked`, `ompInputBlocked`, `piInputBlocked`). Clients MUST
+   * render an unknown kind generically; title/detail/severity are self-sufficient.
    */
   kind: string;
   severity: 'error' | 'warning' | 'info';
@@ -632,7 +639,7 @@ export interface GxserverReadSessionChatFilesResult {
  * expressible as text. `shift-tab` is Claude Code's permission-mode cycle;
  * shifted arrows adjust Codex reasoning effort.
  */
-export type SessionChatSendKey = 'shift-tab' | 'shift-up' | 'shift-down';
+export type SessionChatSendKey = 'enter' | 'shift-tab' | 'shift-up' | 'shift-down';
 
 export interface GxserverSendSessionChatMessageParams {
   projectId: string;
@@ -855,6 +862,13 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
    * Clear it by writing an empty `content` through /api/setSessionChatDraft.
    */
   draft?: SessionChatDraft;
+  /**
+   * Mobile's SSH transport synthesizes this frame from a read and carries the
+   * read-only draft-agent state as own-properties. Daemon event frames omit
+   * both fields, so clients must fold them only when either property exists.
+   */
+  availableAgents?: SessionChatAvailableAgent[];
+  sessionAgentId?: string;
   agentSessionId?: string;
 }
 

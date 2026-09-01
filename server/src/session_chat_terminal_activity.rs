@@ -57,6 +57,9 @@ pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
 /// Claude Code's current assistant status, not yet flushed to transcript JSONL.
 pub const SESSION_CHAT_ACTIVITY_CLAUDE_STATUS: &str = "claude-status";
 
+/// Cursor Agent's live reasoning/composition row before its transcript flushes.
+pub const SESSION_CHAT_ACTIVITY_CURSOR_THINKING: &str = "cursor-thinking";
+
 /// A Claude Code background shell or monitor that remains live after the
 /// assistant turn.
 pub const SESSION_CHAT_ACTIVITY_SHELLS_RUNNING: &str = "shells-running";
@@ -391,17 +394,67 @@ fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
     Some(activity)
 }
 
+/*
+Cursor's working row is a Braille spinner followed by one owned state and an
+optional token counter:
+
+    ⠠⠜ Thinking 73 tokens
+    ⠋ Composing 1.2K tokens
+
+The spinner is required so assistant prose containing either word cannot be
+mistaken for live activity. The token count is intentionally not projected:
+it is throughput metadata, not stable reasoning content.
+*/
+fn cursor_activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
+    let mut tokens = line.split_whitespace();
+    let spinner = tokens.next()?;
+    if spinner.is_empty()
+        || !spinner
+            .chars()
+            .all(|ch| ('\u{2800}'..='\u{28ff}').contains(&ch))
+    {
+        return None;
+    }
+    let label = tokens.next()?;
+    if label != "Thinking" && label != "Composing" {
+        return None;
+    }
+    let remaining: Vec<_> = tokens.collect();
+    if !remaining.is_empty()
+        && (remaining.len() != 2
+            || remaining[1] != "tokens"
+            || !remaining[0]
+                .trim_end_matches(['K', 'M'])
+                .chars()
+                .all(|ch| ch.is_ascii_digit() || ch == '.'))
+    {
+        return None;
+    }
+    Some(SessionChatTerminalActivity::new(
+        SESSION_CHAT_ACTIVITY_CURSOR_THINKING,
+        label,
+    ))
+}
+
 /// `Some` while the agent is painting a live line this build understands.
 pub fn detect_session_chat_terminal_activity(
     agent: Option<&str>,
     screen_text: &str,
 ) -> Option<SessionChatTerminalActivity> {
-    // Claude Code is the only CLI whose compaction paints this row; codex
-    // compacts without a progress screen, so it would only ever false-match.
-    if session_chat_option_agent(agent) != Some(SessionChatOptionAgent::Claude) {
+    let agent = session_chat_option_agent(agent)?;
+    let mut lines = crate::session_chat_agent_fleet::normalized_screen_lines(screen_text);
+    if agent == SessionChatOptionAgent::Cursor {
+        return lines
+            .iter()
+            .rev()
+            .take(ACTIVITY_SCAN_LINES)
+            .find_map(|line| cursor_activity_from_line(line));
+    }
+    // Claude Code is the only remaining CLI whose compaction paints this row;
+    // codex compacts without a progress screen, so it would only false-match.
+    if agent != SessionChatOptionAgent::Claude {
         return None;
     }
-    let mut lines = crate::session_chat_agent_fleet::normalized_screen_lines(screen_text);
     /*
     CDXC:SessionChatAgentFleet 2026-08-23: cut the background-agent block off
     the bottom of the screen before reading anything. Its rows are

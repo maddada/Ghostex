@@ -7,14 +7,14 @@ use crate::session_chat::*;
 use crate::session_chat_follower::{insert_optional_selected_options, insert_screen_state};
 use crate::session_chat_options::cached_session_chat_screen_state;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionChatQuestionOption {
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionChatQuestion {
     pub question: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -41,7 +41,7 @@ pub struct SessionChatQuestion {
 }
 
 /// Rust mirror of packages/shared/session-chat.ts `SessionChatInteractivePrompt`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum SessionChatInteractivePrompt {
     Question {
@@ -111,12 +111,18 @@ pub fn normalize_session_chat_tool_name(tool_name: &str) -> String {
 }
 
 /// Upstream `isAskUserQuestionTool`: match AskUserQuestion (Claude) /
-/// request_user_input (Codex 0.145) / cursor_ask_question (Pi's pi-cursor-sdk
-/// bridge) / clarify (Hermes Agent) / ask (oh-my-pi) spellings.
+/// request_user_input (Codex 0.145) / AskQuestion (Cursor Agent) /
+/// cursor_ask_question (Pi's pi-cursor-sdk bridge) / clarify (Hermes Agent) /
+/// ask (oh-my-pi) spellings.
 pub fn is_ask_user_question_tool(tool_name: &str) -> bool {
     matches!(
         normalize_session_chat_tool_name(tool_name).as_str(),
-        "askuserquestion" | "requestuserinput" | "cursoraskquestion" | "clarify" | "ask"
+        "askuserquestion"
+            | "askquestion"
+            | "requestuserinput"
+            | "cursoraskquestion"
+            | "clarify"
+            | "ask"
     )
 }
 
@@ -166,6 +172,8 @@ pub fn parse_session_chat_questions(
     input: &Value,
 ) -> Option<Vec<SessionChatQuestion>> {
     let record = input.as_object()?;
+    let is_cursor_ask_question = tool_name
+        .is_some_and(|tool_name| normalize_session_chat_tool_name(tool_name) == "askquestion");
     let is_hermes_clarify =
         tool_name.is_some_and(|tool_name| normalize_session_chat_tool_name(tool_name) == "clarify");
     let raw_questions: Vec<&Value> = match record.get("questions").and_then(Value::as_array) {
@@ -203,13 +211,14 @@ pub fn parse_session_chat_questions(
             // The spec uses strict === true; anything else is single-select.
             // `multi_select` is Hermes' spelling, `multi` is omp's; Hermes
             // additionally honors it only when choices exist.
-            let multi_select = record
-                .get("multiSelect")
-                .or_else(|| record.get("multi_select"))
-                .or_else(|| record.get("multi"))
-                .and_then(Value::as_bool)
-                == Some(true)
-                && !(is_hermes_clarify && options.is_empty());
+            let multi_select = is_cursor_ask_question
+                || record
+                    .get("multiSelect")
+                    .or_else(|| record.get("multi_select"))
+                    .or_else(|| record.get("multi"))
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                    && !(is_hermes_clarify && options.is_empty());
             questions.push(SessionChatQuestion {
                 question: text,
                 header: record
@@ -257,6 +266,117 @@ fn parse_session_chat_question_options(raw: Option<&Value>) -> Vec<SessionChatQu
             _ => None,
         })
         .collect()
+}
+
+/*
+Cursor Agent does not currently write a pending AskQuestion tool call to its
+JSONL transcript or forward its input through the hook event. The live panel is
+therefore the only source of truth while the agent is blocked. Recognize the
+panel's exact chrome and only when it still owns the bottom of the screen; an
+answered panel left in scrollback must never become a stale chat card.
+*/
+pub fn detect_cursor_question_prompt(
+    agent: Option<&str>,
+    screen_text: &str,
+) -> Option<SessionChatInteractivePrompt> {
+    if !matches!(agent.map(str::trim), Some("cursor" | "cursor-agent")) {
+        return None;
+    }
+
+    let lines: Vec<String> = screen_text
+        .lines()
+        .map(|line| {
+            let normalized = crate::session_chat_options::normalize_spaces(
+                &crate::session_chat_options::strip_ansi_sgr(line),
+            );
+            let mut line = normalized.trim();
+            if line.starts_with('│') && line.ends_with('│') {
+                line = line
+                    .strip_prefix('│')
+                    .and_then(|line| line.strip_suffix('│'))
+                    .unwrap_or(line)
+                    .trim();
+            }
+            line.to_string()
+        })
+        .collect();
+    let question_marker = lines.iter().rposition(|line| {
+        let Some(rest) = line.strip_prefix("Question ") else {
+            return false;
+        };
+        let Some((current, total)) = rest.split_once(" of ") else {
+            return false;
+        };
+        current.parse::<usize>().is_ok() && total.parse::<usize>().is_ok()
+    })?;
+    let footer = lines
+        .iter()
+        .enumerate()
+        .skip(question_marker + 1)
+        .find(|(_, line)| {
+            line.contains("Space select")
+                && line.contains("Enter next/submit")
+                && line.contains("Esc to skip")
+        })
+        .map(|(index, _)| index)?;
+    if lines.iter().skip(footer + 1).any(|line| {
+        !line.is_empty()
+            && !line.starts_with('└')
+            && !line.starts_with('┌')
+            && !line.chars().all(|ch| matches!(ch, '─' | '┘' | '┐' | ' '))
+    }) {
+        return None;
+    }
+
+    let (question_index, question) = lines
+        .iter()
+        .enumerate()
+        .skip(question_marker + 1)
+        .take(footer.saturating_sub(question_marker + 1))
+        .find_map(|(index, line)| {
+            let (number, text) = line.split_once('.')?;
+            (number.trim().parse::<usize>().is_ok() && !text.trim().is_empty())
+                .then(|| (index, text.trim().to_string()))
+        })?;
+    let mut options = Vec::new();
+    let mut allow_custom = false;
+    for line in lines.iter().take(footer).skip(question_index + 1) {
+        let Some((_, after_checkbox)) = line.split_once("[ ]") else {
+            continue;
+        };
+        let label = after_checkbox.trim();
+        if label.starts_with("Other:") {
+            allow_custom = true;
+        } else if !label.is_empty() {
+            options.push(SessionChatQuestionOption {
+                label: label.to_string(),
+                description: None,
+            });
+        }
+    }
+    if options.is_empty() && !allow_custom {
+        return None;
+    }
+    let header = lines[..question_marker]
+        .iter()
+        .rev()
+        .find(|line| {
+            !line.is_empty()
+                && !line.starts_with('┌')
+                && !line.chars().all(|ch| matches!(ch, '─' | '┐' | ' '))
+        })
+        .cloned();
+    Some(SessionChatInteractivePrompt::Question {
+        questions: vec![SessionChatQuestion {
+            question,
+            header,
+            multi_select: true,
+            allow_custom: Some(allow_custom),
+            tool_name: Some("AskQuestion".to_string()),
+            recommended: None,
+            options,
+        }],
+    })
 }
 
 /*
@@ -338,6 +458,23 @@ pub struct SessionChatTranscriptPromptState {
 impl SessionChatTranscriptPromptState {
     pub fn advance(&mut self, messages: &[SessionChatMessage]) {
         for message in messages {
+            let question_call = message.blocks.iter().any(|block| {
+                matches!(
+                    block,
+                    SessionChatBlock::ToolCall { name, .. } if is_ask_user_question_tool(name)
+                )
+            });
+            let answer_after_question = self.pending.is_some()
+                && message.role == SessionChatRole::Assistant
+                && !question_call
+                && message
+                    .blocks
+                    .iter()
+                    .any(|block| matches!(block, SessionChatBlock::Text { .. }));
+            if answer_after_question {
+                self.answered = true;
+                self.pending = None;
+            }
             for block in &message.blocks {
                 match block {
                     SessionChatBlock::ToolCall { name, input }
@@ -475,7 +612,7 @@ pub fn build_session_chat_prompt_state_frame(
     frame.insert("serverId".to_string(), json!(server_id));
     frame.insert("status".to_string(), json!(status.as_str()));
     frame.insert("working".to_string(), json!(working));
-    if let Some(prompt) = prompt {
+    if let Some(prompt) = prompt.or(screen.prompt) {
         if let Ok(value) = serde_json::to_value(prompt) {
             frame.insert("prompt".to_string(), value);
         }

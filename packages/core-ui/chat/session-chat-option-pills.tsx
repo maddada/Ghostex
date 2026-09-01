@@ -13,10 +13,14 @@
 // the one control here that changes the session itself rather than typing at
 // its TUI. The submenu sits above the model section.
 
-import { IconChevronDown } from '@tabler/icons-react';
+import { IconBoltFilled, IconChevronDown } from '@tabler/icons-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppTooltip } from '../app-tooltip';
-import type { SessionChatAvailableAgent, SessionChatSendKey } from '../../shared/session-chat';
+import type {
+  SessionChatAvailableAgent,
+  SessionChatDetectedOptions,
+  SessionChatSendKey,
+} from '../../shared/session-chat';
 import { Button } from '../../components/ui/button';
 import { cn } from '@/packages/components/utils';
 import { getDefaultSidebarAgentByIcon, isSidebarAgentIcon } from '../../shared/sidebar-agents';
@@ -197,6 +201,8 @@ export function useSessionChatSessionOptions({
 
 export interface SessionChatSessionOptionPillsProps {
   controller: SessionChatSessionOptionsController;
+  /** Terminal-only metadata that does not belong in persisted option state. */
+  detectedOptions?: SessionChatDetectedOptions | null;
   /** True while the agent is working: every pill is disabled (§1.2). */
   isWorking: boolean;
   /** False when input is held elsewhere. */
@@ -248,6 +254,7 @@ function PillTrigger({
   label,
   skeleton,
   title,
+  trailingIcon,
 }: {
   ariaLabel: string;
   className?: string;
@@ -257,6 +264,7 @@ function PillTrigger({
   label: string;
   skeleton?: PillSkeleton;
   title: string;
+  trailingIcon?: ReactNode;
 }) {
   // A skeleton has no value to name, so the tooltip and the accessible name
   // say what is happening instead of reading out the category word. An
@@ -284,6 +292,7 @@ function PillTrigger({
         ) : resolvedIconOnly ? null : (
           <span className='truncate'>{label}</span>
         )}
+        {skeleton || resolvedIconOnly ? null : trailingIcon}
         {resolvedIconOnly ? null : <IconChevronDown aria-hidden='true' className='size-3 shrink-0' stroke={2} />}
       </DropdownMenuTrigger>
     </AppTooltip>
@@ -392,10 +401,23 @@ function DraftAgentIcon({ icon }: { icon: string }) {
   return <ProjectAgentLauncherIcon agent={agent ? { ...agent, isDefault: true } : undefined} colorMode='brand' />;
 }
 
+const CURSOR_MODEL_SETTINGS_PICKER: SessionChatOptionDescriptor = {
+  id: 'cursor-model-settings',
+  label: 'Model settings',
+  category: 'mode',
+  actionLabel: 'Change it in the CLI',
+  dispatch: { kind: 'agent-picker', command: '/model' },
+};
+
+function FastModeIcon() {
+  return <IconBoltFilled aria-hidden='true' className='ghostex-chat-fast-mode-icon size-3 shrink-0' />;
+}
+
 export function SessionChatSessionOptionPills({
   canSend,
   canSendKey,
   controller,
+  detectedOptions,
   draftAgentId,
   draftAgents,
   isWorking,
@@ -439,6 +461,14 @@ export function SessionChatSessionOptionPills({
         const { dispatch: delivery } = descriptor;
         if (delivery.kind === 'command') {
           await onDispatchCommand(delivery.build(value ?? ''));
+          if (value !== undefined) {
+            recordDispatched(descriptor.id, value);
+          }
+          return;
+        }
+        if (delivery.kind === 'command-confirm-picker') {
+          await onDispatchCommand(delivery.build(value ?? ''));
+          await onDispatchKey('enter', '');
           if (value !== undefined) {
             recordDispatched(descriptor.id, value);
           }
@@ -669,6 +699,11 @@ export function SessionChatSessionOptionPills({
     </span>
   );
   const modelLabel = sessionChatOptionValueLabel(catalog.model, state);
+  const isCursor = catalog.modelIcon === 'cursor-cli';
+  const isCodex = catalog.modelIcon === 'codex';
+  const contextWindow = isCursor ? detectedOptions?.contextWindow?.trim() : undefined;
+  const fastMode = detectedOptions?.fast === true;
+  const terminalStatusLine = detectedOptions?.terminalStatusLine?.trim();
   const modeButton = visibleOptions.find(isShiftTabModeCycler);
   const menuOptions = modeButton ? visibleOptions.filter((descriptor) => descriptor !== modeButton) : visibleOptions;
   /*
@@ -701,7 +736,11 @@ export function SessionChatSessionOptionPills({
   );
   const usesCombinedAgentPicker = catalog.model.dispatch.kind === 'agent-picker' && combinedPickerEffort !== undefined;
   const modelTitle = modelLabel ? `${catalog.model.label} ${modelLabel}` : catalog.model.label;
-  const optionsTitle = optionsLabel ? `Options ${optionsLabel}` : 'Options';
+  const optionsTitle = optionsLabel
+    ? `Options ${optionsLabel}${isCodex && fastMode ? ', Fast mode' : ''}`
+    : isCodex && fastMode
+      ? 'Options, Fast mode'
+      : 'Options';
   const modeTitle = modeLabel ? `Mode ${modeLabel}` : 'Mode';
   /*
   An unconfirmed dispatch is the weaker claim, so it wins the tooltip while any
@@ -861,7 +900,7 @@ export function SessionChatSessionOptionPills({
           icon={modelIcon}
           label={modelLabel ?? catalog.model.label}
           skeleton={skeletonFor('model', modelLabel)}
-          title={tooltipText(modelTitle, modelHint)}
+          title={terminalStatusLine || tooltipText(modelTitle, modelHint)}
         />
         <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
           {agentsSection}
@@ -886,6 +925,7 @@ export function SessionChatSessionOptionPills({
             label={optionsLabel ?? 'Options'}
             skeleton={skeletonFor('options', optionsLabel)}
             title={tooltipText(optionsTitle, optionsHint)}
+            trailingIcon={isCodex && fastMode ? <FastModeIcon /> : undefined}
           />
           <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
             {menuOptions.map((descriptor, index) => (
@@ -901,6 +941,24 @@ export function SessionChatSessionOptionPills({
                 </DropdownMenuGroup>
               </Fragment>
             ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+      {contextWindow ? (
+        <DropdownMenu>
+          <PillTrigger
+            ariaLabel={`Context window ${contextWindow}${fastMode ? ', Fast mode' : ''}`}
+            className='ghostex-chat-context-pill'
+            disabled={disabled}
+            label={contextWindow}
+            title={`Context window ${contextWindow}${fastMode ? ', Fast mode' : ''}`}
+            trailingIcon={fastMode ? <FastModeIcon /> : undefined}
+          />
+          <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Model settings</DropdownMenuLabel>
+              {menuRows(CURSOR_MODEL_SETTINGS_PICKER)}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
