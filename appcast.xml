@@ -8,6 +8,36 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>8.5.0</title>
+            <pubDate>Tue, 01 Sep 2026 03:03:31 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.5.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>80500</sparkle:version>
+            <sparkle:shortVersionString>8.5.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 8.5.0
+
+## 8.5.0 - 2026-09-01
+
+- Major
+  - Cursor is now a full Chat View agent: sessions read their model, context window, reasoning effort and Fast mode live off the terminal, thinking shows as an activity card, Cursor's own questions are answered inline with Space and Enter, and transcripts export like any other agent.
+  - Remote machines can be reached without a Tailscale account: gxserver runs its own tailcat tunnel, owns its key and address, comes back automatically after a restart, and is set up from the Remote tab in Settings.
+- Minor
+  - Cursor, Grok, Hermes, OMP and Pi sessions now name the screen that is blocking the composer — a picker, approval, sign-in or editor — instead of silently swallowing the message.
+  - Codex and Claude always launch with their unattended permission flag, so turning Accept All off no longer leaves them stuck on an approval prompt nobody can answer.
+  - Resuming or forking a Codex or Claude session no longer replays a stale session id from an earlier one-time command.
+  - Session notes are edited in the same Monaco editor as the composer.
+  - File and skill references appear as pills in the mobile and embedded chat composers instead of raw Markdown, and copy back out as plain text.
+  - Opening a file at a specific line in an already-running Code tab works again, and falls back to copying the path with a notice when it cannot.
+  - A single click on the collapsed command pane expands it, and the double-click-for-a-new-terminal gesture now applies only once it is open.
+  - Close After Done and Sleep Inactive only sleep sessions that are actually running, so pinned, tagged and favorited sessions are no longer swept away.
+  - The sidebar has symmetric gutters, separators that run its full width, and a plain gap against the workspace in place of the stacked separator strip.
+  - The mobile chat view can switch an unprompted draft session's agent and send Enter or a shifted option key without typing into the terminal.
+  - The transcript no longer shows a second typing indicator while the agent works, since the pinned working strip already reports it.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.5.0/ghostex-8.5.0-arm64.dmg" length="117489990" type="application/octet-stream" sparkle:edSignature="4MprJ0VOiOjQ9K33LkiPSOj8p2b5aZYoADPFEPOByUymtXNmlWqD3zaZIV7f4/XvOjk5GXNRvxJivBIIH42hDg=="/>
+        </item>
+        <item>
             <title>8.4.0</title>
             <pubDate>Mon, 31 Aug 2026 05:35:08 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.4.0</sparkle:fullReleaseNotesLink>
@@ -185,50 +215,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.0.0/ghostex-8.0.0-arm64.dmg" length="114719912" type="application/octet-stream" sparkle:edSignature="PTDl1fdqi0dcP+yV0W0W79HnfEMQaouzPoZo2N5cnE2pAfejLHxsnJvoBSbR8a9QhtxZa2uja7iCdLrRAhF3DA=="/>
         </item>
         <item>
-            <title>7.13.0</title>
-            <pubDate>Sat, 22 Aug 2026 09:44:43 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v7.13.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>71300</sparkle:version>
-            <sparkle:shortVersionString>7.13.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 7.13.0
-
-## 7.13.0 - 2026-08-22
-
-- Major
-  - Prompts can now be queued from the chat composer with Tab or a long press on Send, and Ghostex delivers one each time the agent stops — with every client closed, the phone locked, or the desktop app quit — so you can line up a session's next few turns and walk away; queued prompts can be edited, sent immediately, deleted, or reordered, the sidebar and the terminal show how many are waiting, and a session with a queue is never put to sleep automatically.
-  - Your unsent chat draft now follows you between the desktop, web, and Android apps, and a newer draft from another device offers itself in a bar above the composer instead of overwriting what you were typing.
-  - A new Find Prompts surface, opened with Alt+F or from the command palette, searches every prompt this machine has ever sent to an agent — across Claude Code, Codex, grok, Pi, OpenCode, and Cursor Agent — and resumes or forks the session it came from, on the desktop, web, and Android apps, sharing its index and starred prompts with `gx f` in the terminal.
-  - grok sessions can now be opened in Session Chat, which follows its conversation, tool calls, and results as they happen, reads the model and reasoning effort off its statusline, and exports its transcript.
-  - The project board now draws your own custom bd statuses as their own columns instead of showing those cards as fresh work, and columns can be added, renamed, and removed from the board itself.
-  - Adding a project and cloning a repository are now one dialog: paste a repository or pick a folder, and a confirmation step shows where the clone will land, warns when the destination is already taken, and carries the branch name, main-only, and shallow options through to the clone.
-- Minor
-  - Cmd+K clears the focused terminal on macOS the way Ghostty's own binding does, dropping the scrollback and then the rows above the cursor so a half-typed command line lifts to the top, and Settings names the chord as reserved rather than letting a command take it.
-  - The chat transcript is set in one deliberate type scale instead of four sizes with per-host line heights, and opening chat no longer flashes a lighter panel before the conversation appears.
-  - Fenced code in a conversation is syntax highlighted, GitHub-style alerts render as callouts, and tables, file chips, and collapsible details read properly.
-  - A reasoning turn is now headed by its own opening line instead of a column of identical "Thinking" rows.
-  - The transcript shows what Claude Code is doing while it works — the status line it repaints on its terminal, and compaction with its progress — instead of staying empty until the turn lands.
-  - An on-screen picker the agent puts up, such as Claude Code's resume chooser, can now be answered from the chat surface, and it delivers the row you actually chose.
-  - The chat composer has a cut, copy, paste, and select-all context menu.
-  - The model and effort pills no longer sit under a loading skeleton forever on a session whose agent names neither, or on a session that has stopped.
-  - A message the agent CLI handles itself, such as `/usage` or `!ls`, is no longer reported as having failed to reach the agent.
-  - One "Open links in" setting under Browser now decides where every web link an agent sends opens — terminal Command-clicks, chat links, and detected dev servers — replacing two settings that answered the same question with opposite defaults.
-  - Agent menus mark every agent whose sessions can be opened in Session Chat, on the desktop and Android apps.
-  - A custom agent built on a supported provider now keeps that provider's icon on its sessions and can be opened in Session Chat.
-  - Browser tabs show the page's favicon in the sidebar, and a page that asks to close its own tab now closes it.
-  - The project board can be filtered by tag alongside priority and estimate, and the choice follows you into every project.
-  - Android loads Session Chat from assets bundled in the app, keeps Send Answer above the software keyboard, opens transcript search from the terminal overflow menu, and shows the sessions list with the same project rails, icons, tags, and grouping as the desktop sidebar.
-  - Creating a terminal on a remote machine now checks what that machine's gxserver can actually do and says which side needs updating, instead of failing with the daemon's own error text.
-  - Sidebar hover styling works again after switching back to the window, and tooltips dismiss when the pointer leaves.
-  - A project ticket taller than the window now scrolls inside it instead of losing its top and bottom past the screen edges.
-  - The Delayed Send dialog no longer sits low in its own window.
-  - The Stashed Prompts search field takes focus when the dialog opens.
-  - Browser Profiles is a normal Browser feature now rather than an experimental one.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v7.13.0/ghostex-7.13.0-arm64.dmg" length="124591470" type="application/octet-stream" sparkle:edSignature="ClG2JvM9RbhKgIYZjj65FvXB2+FABR9zHgTxSLNrmlWT4zTxY8SagUjSj/H8JQQZCY18G4aYpRhvYAyOMlj2CQ=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -240,6 +226,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: V21/uV4Nl28dZJafJaVKCFrrI+R9jRjSRxlRHlS9hpvSwq1DUtlA3UTVhXNZUnsp9yYQSC6yBw1KeCibORiOBg==
-length: 29558
+edSignature: Ttr/1UUkL/wPbMq99szN744p14YruKhkDcVthVLQds5yd07yRfbVcRf4ztbmfazBTYQMpyFSar0LO1XoWlPCAw==
+length: 26768
 -->
