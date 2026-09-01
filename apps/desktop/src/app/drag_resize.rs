@@ -2281,8 +2281,20 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:GPUICommandTabDoubleClick 2026-06-25-13:58:
-        Native accepts double-click on empty pane-titlebar chrome after real tabs and controls decline the hit. GPUI command tab-strip backgrounds use this shared handler so expanded and collapsed command chrome create a New Terminal without affecting child tab/control clicks.
+        Native accepts double-click on empty pane-titlebar chrome after real tabs and controls decline the hit. GPUI command tab-strip backgrounds use this shared handler so expanded command chrome creates a New Terminal without affecting child tab/control clicks. A single click on collapsed empty chrome expands and focuses the existing active command tab.
         */
+        if !self.command_pane.is_expanded() {
+            window.prevent_default();
+            cx.stop_propagation();
+            self.handle_command_pane_control_action(
+                CommandPaneControlAction::ToggleExpanded,
+                group_id,
+                window,
+                cx,
+            );
+            return;
+        }
+
         if !command_pane_empty_titlebar_double_click_creates_new_terminal(event.click_count) {
             return;
         }

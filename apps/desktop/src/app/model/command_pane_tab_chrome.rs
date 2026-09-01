@@ -272,18 +272,10 @@ pub(crate) fn command_pane_new_command_control_placement() -> CommandPaneNewComm
     CommandPaneNewCommandControlPlacement::InlineTabRun
 }
 
-pub(crate) fn command_pane_tab_add_tooltip() -> &'static str {
-    /*
-    CDXC:GPUICommandPaneControls 2026-06-25-12:23:
-    Native command chrome names the inline plus action New Terminal, even inside the command panel. Keep GPUI's visible tooltip aligned with the macOS tab-add button while the internal model still creates a command-terminal placeholder.
-    */
-    "New Terminal"
-}
-
 pub(crate) fn command_pane_tab_add_icon_path() -> &'static str {
     /*
     CDXC:GPUICommandPaneControls 2026-06-25-13:54:
-    Native command-pane New Terminal chrome is the tab-strip add button, not the generic `.newTerminal` titlebar action button. It uses plus symbol chrome with the New Terminal tooltip, so GPUI should render a plus icon rather than the terminal action symbol here.
+    Native command-pane New Terminal chrome is the tab-strip add button, not the generic `.newTerminal` titlebar action button. It uses plus symbol chrome, so GPUI should render a plus icon rather than the terminal action symbol here.
     */
     COMMAND_ICON_PLUS
 }
@@ -846,22 +838,6 @@ pub(crate) fn command_pane_panel_pin_label(mode: CommandPaneMode) -> &'static st
         CommandPaneMode::Pinned => "Unpin Commands Panel",
         CommandPaneMode::Floating | CommandPaneMode::Collapsed => "Pin Commands Panel",
     }
-}
-
-pub(crate) fn command_pane_panel_minimize_label() -> &'static str {
-    /*
-    CDXC:GPUICommandPaneControls 2026-06-25-12:19:
-    Native `closeCommandsPanel` hides/minimizes the command panel while preserving command sessions. Surface that action as Minimize Commands Panel so GPUI copy matches macOS and does not imply terminal/session deletion.
-    */
-    "Minimize Commands Panel"
-}
-
-pub(crate) fn command_pane_panel_expand_menu_label() -> &'static str {
-    /*
-    CDXC:GPUICommandPaneControls 2026-06-25-12:23:
-    Native collapsed command-panel chrome exposes `.expandCommandsPanel` as Expand Commands Panel. Use that plural panel wording in GPUI collapsed-strip menus and controls instead of the older command-pane phrase.
-    */
-    "Expand Commands Panel"
 }
 
 // CPRAILDBG: temporary diagnostic logging for the command-pane resize-rail

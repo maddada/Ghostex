@@ -87,9 +87,6 @@ impl GhostexGpuiApp {
                     cx.stop_propagation();
                 }),
             )
-            .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
-                Tooltip::new(command_pane_tab_add_tooltip()).build(window, cx)
-            })
             .child(titlebar_svg_icon(
                 command_pane_tab_add_icon_path(),
                 COMMAND_PANE_CONTROL_ICON_SIZE,
@@ -462,11 +459,6 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let pin_tooltip = command_pane_panel_pin_label(self.command_pane.mode);
-        let expand_tooltip = if self.command_pane.is_expanded() {
-            command_pane_panel_minimize_label()
-        } else {
-            command_pane_panel_expand_menu_label()
-        };
         let pin_icon_path = command_pane_panel_pin_icon_path(self.command_pane.mode);
         let expand_icon_path =
             command_pane_panel_visibility_icon_path(self.command_pane.is_expanded());
@@ -513,7 +505,7 @@ impl GhostexGpuiApp {
                     this.child(self.render_command_pane_control_button(
                         "new-command",
                         command_pane_tab_add_icon_path(),
-                        command_pane_tab_add_tooltip(),
+                        None,
                         CommandPaneControlAction::NewCommandPlaceholder,
                         group_id,
                         cx,
@@ -526,7 +518,7 @@ impl GhostexGpuiApp {
                     this.child(self.render_command_pane_control_button(
                         "pin",
                         pin_icon_path,
-                        pin_tooltip,
+                        Some(pin_tooltip),
                         CommandPaneControlAction::TogglePinned,
                         group_id,
                         cx,
@@ -536,7 +528,7 @@ impl GhostexGpuiApp {
             .child(self.render_command_pane_control_button(
                 "expand",
                 expand_icon_path,
-                expand_tooltip,
+                None,
                 CommandPaneControlAction::ToggleExpanded,
                 group_id,
                 cx,
@@ -548,7 +540,7 @@ impl GhostexGpuiApp {
         &self,
         id: &'static str,
         icon_path: &'static str,
-        tooltip: &'static str,
+        tooltip: Option<&'static str>,
         action: CommandPaneControlAction,
         group_id: Option<CommandPaneGroupId>,
         cx: &mut gpui::Context<Self>,
@@ -557,8 +549,7 @@ impl GhostexGpuiApp {
             Some(group_id) => format!("ghostex-gpui-command-pane-control-{id}-{}", group_id.0),
             None => format!("ghostex-gpui-command-pane-control-{id}"),
         };
-        let is_expanded_minimize = matches!(action, CommandPaneControlAction::ToggleExpanded)
-            && self.command_pane.is_expanded();
+        let is_visibility_control = matches!(action, CommandPaneControlAction::ToggleExpanded);
 
         div()
             .id(element_id)
@@ -566,8 +557,8 @@ impl GhostexGpuiApp {
             .size(px(COMMAND_PANE_CONTROL_BUTTON_SIZE))
             .items_center()
             .justify_center()
-            .when(is_expanded_minimize, |this| {
-                this.pl(px(COMMAND_PANE_EXPANDED_MINIMIZE_ICON_LEADING_PADDING))
+            .when(is_visibility_control, |this| {
+                this.pl(px(COMMAND_PANE_VISIBILITY_ICON_LEADING_PADDING))
             })
             .rounded(px(COMMAND_PANE_CONTROL_CORNER_RADIUS))
             .bg(command_pane_control_button_color())
@@ -582,8 +573,11 @@ impl GhostexGpuiApp {
                     this.handle_command_pane_control_action(action, group_id, window, cx);
                 }),
             )
-            .managed_tooltip_with_placement(ManagedTooltipPlacement::Left, move |window, cx| {
-                Tooltip::new(tooltip).build(window, cx)
+            .when_some(tooltip, |this, tooltip| {
+                this.managed_tooltip_with_placement(
+                    ManagedTooltipPlacement::Left,
+                    move |window, cx| Tooltip::new(tooltip).build(window, cx),
+                )
             })
             .child(titlebar_svg_icon(
                 icon_path,

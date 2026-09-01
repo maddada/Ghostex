@@ -71,15 +71,14 @@ pub(crate) const SIDEBAR_MAX_WIDTH: f32 = 520.0;
 
 pub(crate) const SIDEBAR_RESET_WIDTH: f32 = 235.0;
 
+/// The native resize rail between the sidebar column and the Agents
+/// workspace. It is painted with the workspace background so it reads as a
+/// 5px black gap, mirrored on both sidebar sides:
+/// `window edge | sidebar page | 5px rail | workspace` on the left and the
+/// reverse on the right. The sidebar page's own CSS supplies the 5px
+/// sidebar-colored gutters on both of its edges, so the native column adds
+/// no padding of its own.
 pub(crate) const SIDEBAR_DIVIDER_WIDTH: f32 = 5.0;
-
-/// Workspace-colored separator between the sidebar's resize rail and the
-/// Agents workspace, mirrored on both sidebar sides:
-/// `window edge | sidebar | 5px rail | 2px separator | workspace` on the left
-/// and the reverse on the right. The sidebar page's own CSS supplies the
-/// 5px sidebar-colored gutter at the window edge, so the native column no
-/// longer pads its outer edge.
-pub(crate) const SIDEBAR_WORKSPACE_SEPARATOR_WIDTH: f32 = 2.0;
 
 pub(crate) const SIDEBAR_DIVIDER_LINE_WIDTH: f32 = 1.0;
 
@@ -1161,7 +1160,7 @@ pub(crate) const COMMAND_PANE_STRIP_HEIGHT: f32 = 26.0;
 
 pub(crate) const COMMAND_PANE_COLLAPSED_STRIP_LEFT_MARGIN: f32 = 4.0;
 
-pub(crate) const COMMAND_PANE_COLLAPSED_STRIP_RIGHT_MARGIN: f32 = 8.0;
+pub(crate) const COMMAND_PANE_COLLAPSED_STRIP_RIGHT_MARGIN: f32 = 0.0;
 
 /*
 CDXC:GPUICommandPaneFloating 2026-06-25-18:07:
@@ -1316,7 +1315,7 @@ pub(crate) const COMMAND_PANE_CONTROL_ICON_SIZE: f32 = 14.0;
 
 /*
 CDXC:GPUICommandPaneControls 2026-06-25-13:47:
-Command-panel action buttons are contiguous full-height 26px frames with no inter-button gap, no wrapper left border, and flat corners. Expanded titlebars keep the minimize frame flush trailing; asymmetric icon padding supplies the remaining two pixels of its requested ten-pixel visual shift. Collapsed command bars continue to use their outer strip margin.
+Command-panel action buttons are contiguous full-height 26px frames with no inter-button gap, no wrapper left border, and flat corners. Expanded and collapsed titlebars keep the visibility frame flush trailing, and both chevrons use the same asymmetric icon padding so their horizontal placement matches.
 */
 pub(crate) const COMMAND_PANE_CONTROL_BUTTON_GAP: f32 = 0.0;
 
@@ -1326,7 +1325,7 @@ pub(crate) const COMMAND_PANE_CONTROL_EXPANDED_TRAILING_PADDING: f32 = 0.0;
 
 pub(crate) const COMMAND_PANE_CONTROL_COLLAPSED_TRAILING_PADDING: f32 = 0.0;
 
-pub(crate) const COMMAND_PANE_EXPANDED_MINIMIZE_ICON_LEADING_PADDING: f32 = 4.0;
+pub(crate) const COMMAND_PANE_VISIBILITY_ICON_LEADING_PADDING: f32 = 4.0;
 
 pub(crate) const COMMAND_PANE_SPLIT_HANDLE_THICKNESS: f32 = 5.0;
 

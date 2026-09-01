@@ -204,7 +204,9 @@ impl GhostexGpuiApp {
                     .items_center()
                     .overflow_hidden()
                     .track_scroll(&scroll_handle)
-                    .tooltip(|window, cx| build_command_pane_empty_titlebar_tooltip(window, cx))
+                    .managed_tooltip_with_placement(ManagedTooltipPlacement::Auto, |window, cx| {
+                        build_command_pane_empty_titlebar_tooltip(window, cx)
+                    })
                     .on_scroll_wheel(cx.listener(
                         move |_this, event: &ScrollWheelEvent, window, cx| {
                             if command_pane_handle_tab_strip_scroll_wheel(
@@ -357,7 +359,7 @@ impl GhostexGpuiApp {
 
         /*
         CDXC:GPUICommandPaneControls 2026-06-25-12:32:
-        Native minimized command panels are command tab chrome only: the panel frame starts after a 4px left margin, leaves an 8px black right margin, and does not prepend a separate "Command" label block before the tabs.
+        Native minimized command panels are command tab chrome only: the panel frame starts after a 4px left margin and does not prepend a separate "Command" label block before the tabs. Keep the right edge flush so Expand has the same horizontal placement as Minimize.
         */
         h_flex()
             .id("ghostex-gpui-command-pane-collapsed-strip-row")
@@ -390,9 +392,10 @@ impl GhostexGpuiApp {
                             .items_center()
                             .overflow_hidden()
                             .track_scroll(&scroll_handle)
-                            .tooltip(|window, cx| {
-                                build_command_pane_empty_titlebar_tooltip(window, cx)
-                            })
+                            .managed_tooltip_with_placement(
+                                ManagedTooltipPlacement::Auto,
+                                |window, cx| build_command_pane_empty_titlebar_tooltip(window, cx),
+                            )
                             .on_scroll_wheel(cx.listener(
                                 move |_this, event: &ScrollWheelEvent, window, cx| {
                                     if command_pane_handle_tab_strip_scroll_wheel(
