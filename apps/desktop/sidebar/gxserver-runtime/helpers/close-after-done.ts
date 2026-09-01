@@ -7,7 +7,13 @@ import { GPUI_CLOSE_AFTER_DONE_STORAGE_KEY, GPUI_DELAYED_SEND_MIN_DELAY_MS } fro
 import type { GxserverPresentationSession } from '@/packages/shared/gxserver-protocol';
 
 export function isGpuiInactiveProjectPresentationSession(session: GxserverPresentationSession): boolean {
-  return session.lifecycleState !== 'sleeping' && session.activity !== 'working' && session.activity !== 'attention';
+  /*
+  Stopped history can remain in the presentation when it is pinned, tagged, or
+  favorited. It is not an awake inactive terminal: sending it through Sleep
+  would promote it to the active `sleeping` lifecycle and make the old row
+  reappear in the sidebar.
+  */
+  return session.lifecycleState === 'running' && session.activity !== 'working' && session.activity !== 'attention';
 }
 
 export function isGpuiCloseAfterDonePresentationSessionDone(session: GxserverPresentationSession): boolean {

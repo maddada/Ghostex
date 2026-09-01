@@ -1251,6 +1251,7 @@ export function SessionGroupSection({
     groupSessions.some(
       (session) =>
         session.sessionKind === 'terminal' &&
+        session.lifecycleState === 'running' &&
         session.isSleeping !== true &&
         session.activity !== 'working' &&
         session.activity !== 'attention'
