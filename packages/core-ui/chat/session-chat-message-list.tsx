@@ -1208,25 +1208,6 @@ function CompletedWork({
   );
 }
 
-function WorkingIndicator() {
-  return (
-    <div
-      aria-label='Agent is responding'
-      aria-live='polite'
-      className='flex h-8 items-center justify-center gap-1.5 text-muted-foreground'
-      role='status'
-    >
-      {[0, 1, 2].map((index) => (
-        <span
-          className='size-1.5 animate-bounce rounded-full bg-muted-foreground/70'
-          key={index}
-          style={{ animationDelay: `${index * 160}ms` }}
-        />
-      ))}
-    </div>
-  );
-}
-
 /**
  * A local send must bring the newest row back into view even when the reader
  * had scrolled up, without asking message-scroller to anchor that row to the
@@ -1356,8 +1337,6 @@ export function SessionChatMessageList({
     [messages]
   );
 
-  const showTypingIndicator =
-    !summaryMode && isWorking && !messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
   const renderItems = useMemo(() => completedWorkRenderItems(rendered, isWorking), [isWorking, rendered]);
   const copyableAssistantMessageIds = useMemo(
     () => finalAssistantMessageIds(rendered, isWorking),
@@ -1421,9 +1400,6 @@ export function SessionChatMessageList({
                             verboseMode={verboseMode}
                           />
                         ))}
-                        {!messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID) ? (
-                          <WorkingIndicator />
-                        ) : null}
                       </SessionChatDisclosure>
                     ) : null}
                   </MessageScrollerItem>
@@ -1477,7 +1453,6 @@ export function SessionChatMessageList({
                     )}
                   </MessageScrollerItem>
                 ))}
-            {showTypingIndicator ? <WorkingIndicator /> : null}
           </MessageScrollerContent>
         </MessageScrollerViewport>
         <MessageScrollerButton className='ghostex-chat-scroll-bottom-button' />

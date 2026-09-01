@@ -1,9 +1,8 @@
 /*
 CDXC:SessionChatWorkingStrip 2026-08-30:
 Always-visible "agent is working" indicator, pinned directly above the composer
-and OUTSIDE the transcript scroller. The in-transcript typing indicator only
-reads when the user is scrolled to the bottom; this strip is the guarantee the
-working state stays visible at any scroll position.
+and OUTSIDE the transcript scroller so the working state stays visible at any
+scroll position.
 
 When a terminal activity exists (compaction, background shells, a monitor, a
 ⏺ status), the strip renders the SAME activity card the transcript used to

@@ -430,7 +430,7 @@ function LongChatSendHarness({ scrollToTopBeforeSend = false }: { scrollToTopBef
 /**
  * A long transcript must never become scrollable into dead space: after the
  * newest turn is anchored, scrolling to the very bottom has to land on the
- * working indicator instead of a viewport-sized empty gap above the composer.
+ * newest row instead of a viewport-sized empty gap above the composer.
  */
 export const LongChatSendLeavesNoDeadSpace: Story = {
   args: { verboseMode: false },
@@ -438,9 +438,7 @@ export const LongChatSendLeavesNoDeadSpace: Story = {
   play: async ({ canvasElement }) => {
     const viewport = canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
     expect(viewport).not.toBeNull();
-    const workingIndicator = await within(canvasElement).findByRole('status', {
-      name: 'Agent is responding',
-    });
+    const newestRow = await within(canvasElement).findByText('One more question about the footer.');
 
     await waitFor(() => {
       expect(viewport?.scrollHeight ?? 0).toBeGreaterThan(viewport?.clientHeight ?? 0);
@@ -452,7 +450,7 @@ export const LongChatSendLeavesNoDeadSpace: Story = {
       expect(Math.abs(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop)).toBeLessThanOrEqual(1);
     });
 
-    const deadSpace = scroller.getBoundingClientRect().bottom - workingIndicator.getBoundingClientRect().bottom;
+    const deadSpace = scroller.getBoundingClientRect().bottom - newestRow.getBoundingClientRect().bottom;
     expect(deadSpace).toBeLessThanOrEqual(24);
   },
 };
@@ -468,15 +466,13 @@ export const LongChatSendWhileScrolledUpFollowsBottom: Story = {
     const viewport = canvasElement.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
     expect(viewport).not.toBeNull();
     const scroller = viewport as HTMLElement;
-    const workingIndicator = await within(canvasElement).findByRole('status', {
-      name: 'Agent is responding',
-    });
+    const newestRow = await within(canvasElement).findByText('One more question about the footer.');
 
     await waitFor(() => {
       expect(scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop).toBeLessThanOrEqual(1);
     });
 
-    const deadSpace = scroller.getBoundingClientRect().bottom - workingIndicator.getBoundingClientRect().bottom;
+    const deadSpace = scroller.getBoundingClientRect().bottom - newestRow.getBoundingClientRect().bottom;
     expect(deadSpace).toBeLessThanOrEqual(24);
   },
 };
