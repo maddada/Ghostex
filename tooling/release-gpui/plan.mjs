@@ -292,7 +292,16 @@ function planJobs({ components, products }) {
     linux_x64: linuxPackages.length > 0 ? 'build' : 'skip',
     macos: action('macos-arm64'),
     reuse_matrix: PRODUCT_IDS.filter((productId) => action(productId) === 'reuse'),
-    validate_windows: action('windows-x64') === 'build' || action('windows-arm64') === 'build',
+    /*
+     * CDXC:WindowsValidationIsNotAGate 2026-09-01:
+     * There is deliberately no `validate_windows` flag here. Both release-gpui.yml
+     * and release-amend-existing.yml deleted that job — the Windows packaging jobs
+     * compile the same tree natively and ARE the Windows compile validation — so
+     * nothing in the graph reads it. release-gpui-validate.yml is opt-in and
+     * dispatched by hand; it needs no plan input. Do not reintroduce the flag as a
+     * conditional `needs:` gate: a skipped `needs:` skips its dependents, which is
+     * how a release silently ships no Windows package.
+     */
     windows_arm64: action('windows-arm64'),
     windows_x64: action('windows-x64'),
     wsl_arm64: action('gxserver-wsl-windows-arm64'),
@@ -503,7 +512,6 @@ export function renderPlanText(plan) {
   if (plan.jobs.linux_packages.length > 0) {
     jobNames.push(`linux_x64(${plan.jobs.linux_packages.join(',')})`);
   }
-  if (plan.jobs.validate_windows) jobNames.unshift('validate_windows');
   lines.push(`JOBS          ${jobNames.join(', ') || '(none)'}`);
   lines.push(`              reuse[${plan.jobs.reuse_matrix.join(', ') || 'none'}]`);
   lines.push(

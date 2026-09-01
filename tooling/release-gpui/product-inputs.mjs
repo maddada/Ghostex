@@ -267,7 +267,14 @@ function windowsProduct(arch) {
       { pathspec: 'tooling/release-gpui/windows-update-feed.mjs' },
       { pathspec: 'tooling/release-gpui/verify-code-server-archive.mjs' },
       { pathspec: '.github/workflows/release-gpui-windows.yml' },
-      { pathspec: '.github/workflows/release-gpui-validate.yml' },
+      /*
+       * CDXC:WindowsValidationIsNotAGate 2026-09-01:
+       * `.github/workflows/release-gpui-validate.yml` is deliberately NOT an input.
+       * It was one while it gated the Windows packaging jobs; now that it is an
+       * opt-in workflow_dispatch check outside every release run, it cannot affect
+       * a single byte of the Windows output, and keeping it here would rebuild
+       * Windows for a comment edit in a workflow the release never invokes.
+       */
     ],
     platform: { arch, os: 'windows', runnerLabel: arch === 'arm64' ? 'windows-11-vs2026-arm' : 'windows-2025' },
     scopeFlag: arch === 'arm64' ? 'windowsArm64' : 'windowsX64',

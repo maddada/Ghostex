@@ -47,7 +47,8 @@ describe('bootstrap release', () => {
     }
     expect(bootstrapPlan.expectedPlatforms).toHaveLength(11);
     expect(bootstrapPlan.jobs.reuse_matrix).toEqual([]);
-    expect(bootstrapPlan.jobs.validate_windows).toBe(true);
+    expect(bootstrapPlan.jobs.windows_x64).toBe('build');
+    expect(bootstrapPlan.jobs.windows_arm64).toBe('build');
     expect(bootstrapPlan.jobs.linux_packages).toEqual(['deb', 'rpm', 'tar']);
   });
 });
@@ -185,7 +186,7 @@ describe('Scenario D — Windows-only fix after a partial failure', () => {
     });
     expect(plan.products['windows-x64'].reason).toMatch(/windows\.ps1/u);
     expect(plan.products['macos-arm64'].reuse).toMatchObject({ tier: 'run', runId: sourceRun.runId });
-    expect(plan.jobs.validate_windows).toBe(true);
+    expect(plan.jobs.windows_x64).toBe('build');
     expect(plan.jobs.macos).toBe('reuse');
   });
 
@@ -482,7 +483,8 @@ describe('scope, validation, and reporting', () => {
     expect(text).toMatch(/^linux-rpm-x64\s+SKIP\s+not in the requested release scope$/mu);
     expect(text).toMatch(/^cef\s+\S+\s+REUSE\s+/mu);
     expect(text).toContain('FEEDS         sparkle=update  homebrew=update  windows-feeds=x64,arm64');
-    expect(text).toMatch(/^JOBS\s+validate_windows/mu);
+    expect(text).toContain('JOBS          macos, windows_arm64, windows_x64, wsl_arm64, wsl_x64, linux_x64(deb,tar)');
+    expect(text).not.toContain('validate_windows');
     expect(text).toMatch(/SAVED\s+~\d+ runner-minutes/u);
     expect(planSummaryLine(plan)).toMatch(/\d+ built, \d+ reused, 1 skipped by flag/u);
   });

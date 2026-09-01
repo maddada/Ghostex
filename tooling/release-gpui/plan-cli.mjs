@@ -515,7 +515,6 @@ export function planGithubOutputs(plan) {
     job_gxserver_x64: plan.jobs.gxserver_x64,
     job_linux_x64: plan.jobs.linux_x64,
     job_macos: plan.jobs.macos,
-    job_validate_windows: String(Boolean(plan.jobs.validate_windows)),
     job_windows_arm64: plan.jobs.windows_arm64,
     job_windows_x64: plan.jobs.windows_x64,
     job_wsl_arm64: plan.jobs.wsl_arm64,

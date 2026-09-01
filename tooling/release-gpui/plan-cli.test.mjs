@@ -109,7 +109,8 @@ describe('plan-cli workflow outputs', () => {
     expect(JSON.parse(outputs.plan).version).toBe('7.8.0');
     expect(outputs.expected_platforms.split(',')).toEqual(plan.expectedPlatforms);
     expect(outputs.job_macos).toBe(plan.jobs.macos);
-    expect(outputs.job_validate_windows).toBe('true');
+    expect(outputs.job_windows_x64).toBe(plan.jobs.windows_x64);
+    expect(outputs.job_validate_windows).toBeUndefined();
     expect(outputs.linux_packages).toBe('deb,rpm,tar');
     expect(JSON.parse(outputs.reuse_matrix)).toEqual([]);
     expect(outputs.reuse_count).toBe('0');

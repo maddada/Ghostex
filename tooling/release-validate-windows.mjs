@@ -1,19 +1,26 @@
 #!/usr/bin/env node
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-30:
- * Pre-dispatch Windows compile gate.
+ * CDXC:WindowsValidationIsNotAGate 2026-09-01 (supersedes the gate half of
+ * CDXC:ReleaseChangeAwarePlanning 2026-08-30):
+ * Manual, opt-in Windows compile check. NOT a gate, and NOT part of any release.
  *
- * `release-gpui-validate.yml` already runs inside the release workflow, but only
- * as a sibling job: when it fails, the dispatch is dead and the fix has to be
- * redispatched from scratch. In a checkout this busy, `origin/main` will usually
- * have moved by then, which invalidates every product fingerprint the cancelled
- * run had already earned. That is exactly how 8.3.0 lost its first dispatch to
- * one `#[cfg(windows)]` compile error.
+ * `release-gpui-validate.yml` used to run as a job inside the release workflow,
+ * in front of the two Windows packaging jobs. It does not any more: release-gpui.yml
+ * deleted that job on 2026-09-01, the packaging jobs declare `needs: prepare`, and
+ * nothing in a release run calls this workflow. Running this script is never a
+ * prerequisite for `bun run release:actions`.
  *
- * Running the same workflow standalone first costs ~23 minutes against a full
- * matrix that costs ~3 hours, and it is the only gate that compiles the
- * Windows-configured tree. `cargo check` on macOS cannot see that code at any
- * flag setting.
+ * Measured on 8.4.0 (run 33358931668): this workflow took 23m04s while windows_x64
+ * took 22m37s and windows_arm64 23m59s. The Windows packaging jobs compile the same
+ * desktop tree natively, per architecture — they ARE the Windows compile validation,
+ * and a `--reuse-from-run` redispatch after a Windows failure rebuilds only Windows.
+ *
+ * Still worth dispatching by hand for a cycle with heavy Windows-conditional Rust
+ * churn — `#[cfg(windows)]` bodies, new Windows-only crates or FFI, a Cargo.lock
+ * bump that moves a Windows-only dependency — because a Windows compile error is
+ * likely there and neither the macOS/Linux jobs nor `bun run typecheck` can see it.
+ * It also `cargo check`s the gxserver tree targeting Windows, which nothing in the
+ * release pipeline compiles (Windows ships gxserver through WSL as a Linux binary).
  *
  * Usage:
  *   bun run release:validate:windows
@@ -106,7 +113,7 @@ async function main() {
 
   const discovered = await discoverRun({ head, since });
   console.log(`Run: ${discovered.url}`);
-  console.log('Waiting for the Windows compile gate (typically ~20-25 minutes)...');
+  console.log('Waiting for the Windows compile check (typically ~20-25 minutes)...');
 
   const startedAt = Date.now();
   const finished = await watchRun(discovered.databaseId);
@@ -114,12 +121,12 @@ async function main() {
 
   if (finished.conclusion !== 'success') {
     console.error(`\nWindows validation ${finished.conclusion} after ${minutes}m: ${finished.url}`);
-    console.error('Fix the Windows-configured tree before dispatching the release.');
+    console.error("Fix the Windows-configured tree; the release's Windows packaging jobs would fail the same way.");
     process.exitCode = 1;
     return;
   }
   console.log(`\nWindows validation PASSED in ${minutes}m for ${head.slice(0, 10)}.`);
-  console.log('Safe to dispatch: bun run release:actions -- <version>');
+  console.log('This check gates nothing; dispatch when ready: bun run release:actions -- <version>');
 }
 
 main().catch((error) => {

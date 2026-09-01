@@ -133,7 +133,6 @@ jobs:
       job_gxserver_x64: ${{ steps.plan.outputs.job_gxserver_x64 }}
       job_linux_x64: ${{ steps.plan.outputs.job_linux_x64 }}
       job_macos: ${{ steps.plan.outputs.job_macos }}
-      job_validate_windows: ${{ steps.plan.outputs.job_validate_windows }}
       job_windows_arm64: ${{ steps.plan.outputs.job_windows_arm64 }}
       job_windows_x64: ${{ steps.plan.outputs.job_windows_x64 }}
       job_wsl_arm64: ${{ steps.plan.outputs.job_wsl_arm64 }}
@@ -238,12 +237,29 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  validate_windows:
-    if: ${{ needs.prepare.outputs.job_validate_windows == 'true' }}
-    needs: prepare
-    uses: ./.github/workflows/release-gpui-validate.yml
-    with:
-      arm64_target: ${{ needs.prepare.outputs.job_windows_arm64 == 'build' }}
+  # CDXC:WindowsValidationIsNotAGate 2026-09-01:
+  # There is deliberately no `validate_windows` job here any more.
+  #
+  # It was a Windows `cargo check` gate in front of the two Windows packaging
+  # jobs. Measured on 8.4.0 (run 33358931668): validate_windows 23m04s,
+  # windows_x64 22m37s, windows_arm64 23m59s — the gate cost as much as the
+  # thing it gated, and the packaging jobs started 4 seconds after it finished.
+  # So every release paid ~23 minutes of critical path to learn, about one
+  # minute early, exactly what `cargo build` in the Windows jobs was about to
+  # tell it anyway. The Windows builds compile the same tree, natively, per
+  # architecture; they ARE the Windows compile validation.
+  #
+  # The gate's only remaining value was saving the runner-minutes of one
+  # duplicated Windows job on a release that fails to compile on Windows. That
+  # became cheap independently: `--reuse-from-run` reuses every product that
+  # already succeeded, on its own provenance evidence, so a redispatch after a
+  # Windows failure rebuilds only Windows.
+  #
+  # .github/workflows/release-gpui-validate.yml is kept as an opt-in
+  # workflow_dispatch check for cycles with heavy Windows-conditional Rust
+  # churn (it also `cargo check`s the Windows gxserver tree, which nothing in
+  # the release pipeline compiles). It must not be wired back in as a `needs:`
+  # of windows_x64, windows_arm64, or publish.
 
   gxserver_x64:
     if: ${{ needs.prepare.outputs.job_gxserver_x64 == 'build' }}
@@ -365,7 +381,11 @@ jobs:
 
   windows_x64:
     if: ${{ needs.prepare.outputs.job_windows_x64 == 'build' }}
-    needs: [prepare, validate_windows]
+    # `prepare` only. The gxserver tarball and the code-server component are
+    # real data dependencies, but they are awaited just in time inside the job
+    # (await-run-artifacts.mjs), after ~7 minutes of runner setup, so they are
+    # not a `needs:` edge and do not delay the job's start.
+    needs: prepare
     permissions:
       attestations: write
       contents: write
@@ -381,7 +401,9 @@ jobs:
 
   windows_arm64:
     if: ${{ needs.prepare.outputs.job_windows_arm64 == 'build' }}
-    needs: [prepare, validate_windows]
+    # See windows_x64: the runtime artifacts are awaited just in time, not via
+    # a `needs:` edge.
+    needs: prepare
     permissions:
       attestations: write
       contents: write
@@ -417,7 +439,6 @@ jobs:
       ${{
         always() &&
         needs.prepare.result == 'success' &&
-        ((needs.prepare.outputs.job_validate_windows == 'true' && needs.validate_windows.result == 'success') || (needs.prepare.outputs.job_validate_windows != 'true' && needs.validate_windows.result == 'skipped')) &&
         ((needs.prepare.outputs.job_gxserver_x64 == 'build' && needs.gxserver_x64.result == 'success') || (needs.prepare.outputs.job_gxserver_x64 != 'build' && needs.gxserver_x64.result == 'skipped')) &&
         ((needs.prepare.outputs.job_gxserver_arm64 == 'build' && needs.gxserver_arm64.result == 'success') || (needs.prepare.outputs.job_gxserver_arm64 != 'build' && needs.gxserver_arm64.result == 'skipped')) &&
         ((needs.prepare.outputs.job_code_server_x64 != 'skip' && needs.code_server_x64.result == 'success') || (needs.prepare.outputs.job_code_server_x64 == 'skip' && needs.code_server_x64.result == 'skipped')) &&
@@ -433,7 +454,6 @@ jobs:
       }}
     needs:
       - prepare
-      - validate_windows
       - gxserver_x64
       - gxserver_arm64
       - code_server_x64

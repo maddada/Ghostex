@@ -1,14 +1,37 @@
 name: GPUI release - Windows compile validation
 
-# CDXC:ReleaseChangeAwarePlanning 2026-08-13:
-# Fail-fast gate for the two scarcest, slowest runners (§5.2).
+# CDXC:WindowsValidationIsNotAGate 2026-09-01 (supersedes the gate half of
+# CDXC:ReleaseChangeAwarePlanning 2026-08-13):
 #
-# Release 7.7 discovered `cannot find type SharedString in this scope` about an
-# hour after dispatch, because Windows compilation could not start until the
-# gxserver jobs finished. Removing that edge is the primary fix; this job is the
-# cheap second line of defence: it type-checks the Windows-configured tree,
-# including cfg-gated code that `bun run typecheck` cannot see, before either
-# 25-27 minute packaging job starts.
+# THIS IS NO LONGER A GATE. Neither release-gpui.yml nor
+# release-amend-existing.yml calls it, no job in a release or amend run needs
+# it, and the release operator runbook no longer requires a standalone run
+# before dispatch. It is an OPT-IN check.
+#
+# Why it stopped being worth gating with. Measured on 8.4.0 (run 33358931668):
+# this workflow took 23m04s, windows_x64 took 22m37s and windows_arm64 23m59s,
+# and the packaging jobs started 4 seconds after this one finished. It cost as
+# much as the thing it gated, to learn about one minute early exactly what
+# `cargo build` in the Windows jobs reports anyway. Its only real saving was
+# the runner-minutes of one duplicated Windows job on a release that fails to
+# compile on Windows, and `--reuse-from-run` already made that recovery cheap:
+# a redispatch reuses every product that already succeeded and rebuilds only
+# the failed one.
+#
+# When to still run it, by hand, from the Actions tab (or
+# `node tooling/release-validate-windows.mjs`): a cycle with heavy
+# Windows-conditional Rust churn — `#[cfg(windows)]` / `#[cfg(target_os =
+# "windows")]` bodies, new Windows-only crates or FFI, or a Cargo.lock bump
+# that moves a Windows-only dependency. That is the churn where a Windows
+# compile error is likely *and* would not have been caught by the macOS/Linux
+# jobs or by `bun run typecheck`.
+#
+# It still checks one thing nothing else in the release pipeline compiles: the
+# gxserver tree targeting Windows. The Windows packaging jobs only build
+# apps/desktop; Windows ships gxserver through WSL as a Linux binary.
+#
+# What it type-checks that `bun run typecheck` cannot see: cfg-gated Windows
+# code paths, on both x64 and ARM64.
 #
 # Deliberately NOT a source of build outputs (§Q7). `cargo check` emits .rmeta
 # that `cargo build` cannot link, so any "validation feeds packaging" scheme
@@ -18,9 +41,17 @@ name: GPUI release - Windows compile validation
 #
 # Risk R6: the ARM64 leg cross-compiles from windows-2025. If the ARM64 CEF
 # distribution, `rc.exe` discovery, or the Zig aarch64-windows cross build ever
-# stops working on that image, set `arm64_target: false` in release-gpui.yml and
-# add a second call of this workflow on `windows-11-vs2026-arm`. Do not simply
-# drop the ARM64 check: it is the exact failure that motivated this job.
+# stops working on that image, dispatch this workflow twice instead — once with
+# `arm64_target: false`, and once with `runner: windows-11-vs2026-arm`. Do not
+# simply drop the ARM64 check: it is the exact failure that motivated this job.
+#
+# The `workflow_call` trigger is retained so this can be wired into a
+# non-release context (for example a Windows-touching PR check) without
+# reshaping the file. It must NOT be re-added as a `needs:` of windows_x64,
+# windows_arm64, or publish in release-gpui.yml or release-amend-existing.yml;
+# that is the arrangement the 8.4.0 measurements above rejected. It is also a
+# correctness trap: a conditionally-run gate that ends up skipped skips its
+# dependents, so the Windows packages silently never build.
 
 on:
   workflow_call:

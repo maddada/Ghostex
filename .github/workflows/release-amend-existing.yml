@@ -104,7 +104,6 @@ jobs:
       job_gxserver_x64: ${{ steps.plan.outputs.job_gxserver_x64 }}
       job_linux_x64: ${{ steps.plan.outputs.job_linux_x64 }}
       job_macos: ${{ steps.plan.outputs.job_macos }}
-      job_validate_windows: ${{ steps.plan.outputs.job_validate_windows }}
       job_windows_arm64: ${{ steps.plan.outputs.job_windows_arm64 }}
       job_windows_x64: ${{ steps.plan.outputs.job_windows_x64 }}
       job_wsl_arm64: ${{ steps.plan.outputs.job_wsl_arm64 }}
@@ -242,12 +241,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  validate_windows:
-    if: ${{ needs.prepare.outputs.job_validate_windows == 'true' }}
-    needs: prepare
-    uses: ./.github/workflows/release-gpui-validate.yml
-    with:
-      arm64_target: ${{ needs.prepare.outputs.job_windows_arm64 == 'build' }}
+  # CDXC:WindowsValidationIsNotAGate 2026-09-01:
+  # There is deliberately no `validate_windows` job here, for the same reason
+  # release-gpui.yml dropped its own: the gate cost as much as the Windows
+  # packaging jobs it gated (8.4.0, run 33358931668 — validate 23m04s vs
+  # windows_x64 22m37s / windows_arm64 23m59s), and those jobs compile the same
+  # tree natively, so they ARE the Windows compile validation. An amend is a
+  # recovery path; adding ~23 minutes of critical path to it is the worst place
+  # to pay for a duplicate answer. See the longer note in release-gpui.yml.
+  #
+  # release-gpui-validate.yml stays as an opt-in workflow_dispatch check. It
+  # must not be re-added as a `needs:` of windows_x64, windows_arm64, or
+  # publish: a skipped `needs:` skips its dependents, so wiring a conditional
+  # gate back in is also how an amend silently ships no Windows package.
 
   gxserver_x64:
     if: ${{ needs.prepare.outputs.job_gxserver_x64 == 'build' }}
@@ -369,7 +375,7 @@ jobs:
 
   windows_x64:
     if: ${{ needs.prepare.outputs.job_windows_x64 == 'build' }}
-    needs: [prepare, validate_windows]
+    needs: prepare
     permissions:
       attestations: write
       contents: write
@@ -385,7 +391,7 @@ jobs:
 
   windows_arm64:
     if: ${{ needs.prepare.outputs.job_windows_arm64 == 'build' }}
-    needs: [prepare, validate_windows]
+    needs: prepare
     permissions:
       attestations: write
       contents: write
@@ -417,7 +423,6 @@ jobs:
       ${{
         always() &&
         needs.prepare.result == 'success' &&
-        ((needs.prepare.outputs.job_validate_windows == 'true' && needs.validate_windows.result == 'success') || (needs.prepare.outputs.job_validate_windows != 'true' && needs.validate_windows.result == 'skipped')) &&
         ((needs.prepare.outputs.job_gxserver_x64 == 'build' && needs.gxserver_x64.result == 'success') || (needs.prepare.outputs.job_gxserver_x64 != 'build' && needs.gxserver_x64.result == 'skipped')) &&
         ((needs.prepare.outputs.job_gxserver_arm64 == 'build' && needs.gxserver_arm64.result == 'success') || (needs.prepare.outputs.job_gxserver_arm64 != 'build' && needs.gxserver_arm64.result == 'skipped')) &&
         ((needs.prepare.outputs.job_code_server_x64 != 'skip' && needs.code_server_x64.result == 'success') || (needs.prepare.outputs.job_code_server_x64 == 'skip' && needs.code_server_x64.result == 'skipped')) &&
@@ -433,7 +438,6 @@ jobs:
       }}
     needs:
       - prepare
-      - validate_windows
       - gxserver_x64
       - gxserver_arm64
       - code_server_x64
