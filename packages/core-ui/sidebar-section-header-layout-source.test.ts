@@ -27,7 +27,7 @@ describe('reference sidebar section header layout source', () => {
       ".sidebar-reference-layout[data-reference-sidebar='true'],"
     );
     expect(nativeInsetRule).toContain('--reference-sidebar-primary-nav-edge-bleed-left: 9px;');
-    expect(nativeInsetRule).toContain('padding-left: 13px;');
+    expect(nativeInsetRule).toContain('padding-left: 14px;');
 
     const primaryNavBleedRule = sourceBetween(
       groupPanelsSource,

@@ -783,25 +783,38 @@ body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'
   /*
    * CDXC:SidebarReferenceBounds 2026-06-22-01:11:
    * The macOS native sidebar needs 5px more left inset, and the primary buttons for Agents Hub, Automations, Mobile, and Search must honor that inset instead of bleeding back to the viewport edge. Override only the native body contract so non-native reference layouts keep the shared 8px content inset.
+   *
+   * The sidebar page owns a symmetric 5px sidebar-colored gutter on BOTH of
+   * its edges (the native shell adds no padding of its own, only the
+   * workspace-colored resize rail between the page and the Agents area).
+   * Because both edges match, one contract serves the left and right sidebar;
+   * the side-specific override below only swaps the hairline border edge.
    */
   --reference-sidebar-primary-nav-edge-bleed-left: 9px;
-  padding-left: 13px;
+  /*
+   * The sidebar's workspace-facing edge carries a 1px #252525 hairline. With
+   * border-box sizing the border sits at the page edge just past the 5px
+   * gutter, and the layout root's overflow clip runs along its inner face, so
+   * full-bleed hairlines (Search separator, footer top border) meet it
+   * exactly. The default covers the left sidebar (workspace on the right);
+   * the right-sidebar override below swaps it to the other edge.
+   *
+   * The shared rule's 1px container margin is folded into the padding here
+   * (1px margin + 13px padding → 14px padding) so the page paints its full
+   * width and edge hairlines really reach the window edge; every row keeps
+   * its exact position, and both paddings read as 5px visible gutters
+   * (14px − 9px row bleed, 6px − 1px row bleed), making the contract
+   * side-agnostic.
+   */
+  border-right: 1px solid #252525;
+  margin-left: 0;
+  padding-left: 14px;
+  padding-right: 6px;
 }
 
-/*
- * The native reference-sidebar spacing was measured for a left sidebar, so
- * its 1px container margin and content inset must swap edges when the
- * sidebar moves right: content sits flush against the resize divider and the
- * outer window edge keeps a 5px sidebar-colored gutter, mirroring the left
- * sidebar's visible 5px (1px margin + 13px padding − 9px row bleed) outer
- * gutter. With the 1px right row bleed, 1px margin + 5px padding renders the
- * same visible 5px on the right.
- */
 body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'][data-sidebar-side='right'] {
-  margin-left: 0;
-  margin-right: 1px;
-  padding-left: 1px;
-  padding-right: 5px;
+  border-left: 1px solid #252525;
+  border-right: none;
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'],
@@ -978,6 +991,13 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
  * independently so the Search controls keep their existing geometry. The
  * layout root mirrors the panel's machine-tabs state so this can scope without
  * a descendant :has() probe.
+ *
+ * The negative offsets push the line past the row's bleed box through the
+ * layout padding; the layout root's overflow clip trims it to the true page
+ * edges on every host, so it runs edge to edge instead of stopping at the
+ * gutters. The z-index lifts it above the position:relative session-groups
+ * panel that follows in the DOM, which otherwise paints over everything but
+ * the line's leftmost sliver.
  */
 .sidebar-reference-layout[data-reference-sidebar='true'][data-sidebar-machine-tabs='false']
   .reference-sidebar-primary-nav
@@ -986,10 +1006,11 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
   bottom: -3px;
   content: '';
   height: 1px;
-  left: 0;
+  left: -14px;
   pointer-events: none;
   position: absolute;
-  right: 0;
+  right: -6px;
+  z-index: 1;
 }
 
 /*
@@ -1020,6 +1041,27 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
 .reference-sidebar-footer > .reference-sidebar-search-slot {
   margin-top: 0;
   min-width: 0;
+}
+
+/*
+ * In the native sidebar the footer bleeds through the full 14px/6px layout
+ * padding so its top border runs edge to edge like the Search separator,
+ * instead of stopping at the gutters. Raising the bleed var keeps the
+ * Commands icon column in place automatically (the quick-access button's
+ * padding-left is derived from it); the button's padding-right grows by the
+ * extra 5px of right bleed so the shortcut label does not move either.
+ */
+body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'] .reference-sidebar-footer {
+  --reference-sidebar-footer-edge-bleed-left: 14px;
+  margin-right: -6px;
+  width: calc(100% + var(--reference-sidebar-footer-edge-bleed-left) + 6px);
+}
+
+body.native-sidebar-body
+  .sidebar-reference-layout[data-reference-sidebar='true']
+  .reference-sidebar-footer
+  .reference-sidebar-footer-quick-access-button {
+  padding-right: 15px;
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true']
