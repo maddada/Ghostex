@@ -89,6 +89,21 @@ pub const SESSION_CHAT_NOTICE_API_REFUSAL: &str = "apiRefusal";
 /// A Codex decision surface has replaced the ordinary composer. The concrete
 /// title/detail come from the source-derived screen classifier.
 pub const SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED: &str = "codexInputBlocked";
+/// A Cursor model/effort picker owns terminal input while retaining the normal
+/// composer frame around its filter field.
+pub const SESSION_CHAT_NOTICE_CURSOR_INPUT_BLOCKED: &str = "cursorInputBlocked";
+/// A Grok Build card, picker, modal, authentication flow, or special editor
+/// owns terminal input instead of the ordinary composer.
+pub const SESSION_CHAT_NOTICE_GROK_INPUT_BLOCKED: &str = "grokInputBlocked";
+/// A Hermes prompt_toolkit state, Ink overlay, setup, or authentication flow
+/// owns terminal input instead of the ordinary composer.
+pub const SESSION_CHAT_NOTICE_HERMES_INPUT_BLOCKED: &str = "hermesInputBlocked";
+/// An OMP approval, prompt, selector, authentication flow, focused panel, or
+/// modal owns terminal input instead of the ordinary composer.
+pub const SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED: &str = "ompInputBlocked";
+/// A Pi focused selector, prompt, authentication flow, or modal has replaced
+/// its ordinary prompt editor.
+pub const SESSION_CHAT_NOTICE_PI_INPUT_BLOCKED: &str = "piInputBlocked";
 /// Claude Code's resume-usage picker: an on-screen chooser the chat surface can
 /// ANSWER, not just point at. Its rows ride the notice as `choices`.
 pub use crate::session_chat_resume_prompt::SESSION_CHAT_RESUME_PROMPT_KIND as SESSION_CHAT_NOTICE_RESUME_PROMPT;
@@ -1252,11 +1267,11 @@ fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRule] {
     match agent {
         SessionChatOptionAgent::Claude => CLAUDE_RULES,
         SessionChatOptionAgent::Codex => CODEX_RULES,
-        // Grok, Hermes, Omp and Pi are read for their model/effort
-        // statuslines; no agent-specific notice state has been catalogued for
-        // them, and an empty rule set says exactly that. Composer readiness is
-        // detected independently from each agent's measured input chrome.
-        SessionChatOptionAgent::Grok
+        // Grok, Hermes, Omp and Pi have no phrase-catalog rules here. Hermes
+        // and Pi have source-derived focused-component detectors after this
+        // catalog; the other agents rely on measured composer readiness.
+        SessionChatOptionAgent::Cursor
+        | SessionChatOptionAgent::Grok
         | SessionChatOptionAgent::Hermes
         | SessionChatOptionAgent::Omp
         | SessionChatOptionAgent::Pi => &[],
@@ -1299,6 +1314,11 @@ pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
         // declined it. A follow-up prompt goes through fine.
         SESSION_CHAT_NOTICE_API_REFUSAL => false,
         SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED => true,
+        SESSION_CHAT_NOTICE_CURSOR_INPUT_BLOCKED => true,
+        SESSION_CHAT_NOTICE_GROK_INPUT_BLOCKED => true,
+        SESSION_CHAT_NOTICE_HERMES_INPUT_BLOCKED => true,
+        SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED => true,
+        SESSION_CHAT_NOTICE_PI_INPUT_BLOCKED => true,
         /*
         CDXC:SessionChatTerminalPicker 2026-08-21: the resume-usage picker owns
         the input line, and unlike the dialogs in the catalog it does not merely
@@ -1463,6 +1483,91 @@ fn notice_from_codex_blocking_screen(
     )])
 }
 
+fn notice_from_cursor_blocking_screen(
+    screen: &NoticeScreen,
+    blocking: crate::session_chat_cursor_blocking::CursorBlockingScreen,
+) -> SessionChatTerminalNotice {
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_CURSOR_INPUT_BLOCKED,
+        SessionChatTerminalNoticeSeverity::Warning,
+        SessionChatTerminalNoticeSource::Screen,
+        blocking.title,
+    )
+    .with_detail(blocking.detail)
+    .with_screen_tail(screen.screen_tail())
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
+}
+
+fn notice_from_grok_blocking_screen(
+    screen: &NoticeScreen,
+    blocking: crate::session_chat_grok_blocking::GrokBlockingScreen,
+) -> SessionChatTerminalNotice {
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_GROK_INPUT_BLOCKED,
+        SessionChatTerminalNoticeSeverity::Warning,
+        SessionChatTerminalNoticeSource::Screen,
+        blocking.title,
+    )
+    .with_detail(blocking.detail)
+    .with_screen_tail(screen.screen_tail())
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
+}
+
+fn notice_from_pi_blocking_screen(
+    screen: &NoticeScreen,
+    blocking: crate::session_chat_pi_blocking::PiBlockingScreen,
+) -> SessionChatTerminalNotice {
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_PI_INPUT_BLOCKED,
+        SessionChatTerminalNoticeSeverity::Warning,
+        SessionChatTerminalNoticeSource::Screen,
+        blocking.title,
+    )
+    .with_detail(blocking.detail)
+    .with_screen_tail(screen.screen_tail())
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
+}
+
+fn notice_from_hermes_blocking_screen(
+    screen: &NoticeScreen,
+    blocking: crate::session_chat_hermes_blocking::HermesBlockingScreen,
+) -> SessionChatTerminalNotice {
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_HERMES_INPUT_BLOCKED,
+        SessionChatTerminalNoticeSeverity::Warning,
+        SessionChatTerminalNoticeSource::Screen,
+        blocking.title,
+    )
+    .with_detail(blocking.detail)
+    .with_screen_tail(screen.screen_tail())
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
+}
+
+fn notice_from_omp_blocking_screen(
+    screen: &NoticeScreen,
+    blocking: crate::session_chat_omp_blocking::OmpBlockingScreen,
+) -> SessionChatTerminalNotice {
+    SessionChatTerminalNotice::new(
+        SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED,
+        SessionChatTerminalNoticeSeverity::Warning,
+        SessionChatTerminalNoticeSource::Screen,
+        blocking.title,
+    )
+    .with_detail(blocking.detail)
+    .with_screen_tail(screen.screen_tail())
+    .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
+        OPEN_TERMINAL.label,
+    )])
+}
+
 /*
 CDXC:SessionChatTerminalNotices 2026-08-19:
 Pure classifier over ONE terminal capture. Rules are evaluated in the catalog's
@@ -1516,6 +1621,41 @@ pub fn classify_session_chat_terminal_notice(
             crate::session_chat_codex_blocking::detect_codex_blocking_screen(screen_text)
         {
             return Some(notice_from_codex_blocking_screen(&screen, blocking));
+        }
+    }
+    if agent == SessionChatOptionAgent::Cursor {
+        if let Some(blocking) =
+            crate::session_chat_cursor_blocking::detect_cursor_blocking_screen(screen_text)
+        {
+            return Some(notice_from_cursor_blocking_screen(&screen, blocking));
+        }
+    }
+    if agent == SessionChatOptionAgent::Grok {
+        if let Some(blocking) =
+            crate::session_chat_grok_blocking::detect_grok_blocking_screen(screen_text)
+        {
+            return Some(notice_from_grok_blocking_screen(&screen, blocking));
+        }
+    }
+    if agent == SessionChatOptionAgent::Hermes {
+        if let Some(blocking) =
+            crate::session_chat_hermes_blocking::detect_hermes_blocking_screen(screen_text)
+        {
+            return Some(notice_from_hermes_blocking_screen(&screen, blocking));
+        }
+    }
+    if agent == SessionChatOptionAgent::Omp {
+        if let Some(blocking) =
+            crate::session_chat_omp_blocking::detect_omp_blocking_screen(screen_text)
+        {
+            return Some(notice_from_omp_blocking_screen(&screen, blocking));
+        }
+    }
+    if agent == SessionChatOptionAgent::Pi {
+        if let Some(blocking) =
+            crate::session_chat_pi_blocking::detect_pi_blocking_screen(screen_text)
+        {
+            return Some(notice_from_pi_blocking_screen(&screen, blocking));
         }
     }
     None
