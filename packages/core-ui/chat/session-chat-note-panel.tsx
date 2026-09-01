@@ -15,8 +15,11 @@ from is exactly the note they most wanted kept.
 import { IconCheck, IconCopy, IconEraser, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import type { SessionChatTheme } from '../../shared/session-chat';
 import { AppTooltip } from '../app-tooltip';
 import { Button } from '../../components/ui/button';
+import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from './session-chat-composer';
+import { SessionChatMonacoInput } from './session-chat-monaco-input';
 
 export interface SessionChatNotePanelProps {
   /** Closes the panel; the caller keeps the open/closed state. */
@@ -25,11 +28,22 @@ export interface SessionChatNotePanelProps {
   onHasNoteChange: (hasNote: boolean) => void;
   readNote: () => Promise<{ agentSessionId?: string; note?: string }>;
   saveNote: (note: string) => Promise<void>;
+  /** Monaco assets supplied by desktop and web; mobile omits them. */
+  monacoVsBaseUrl?: string;
+  theme: SessionChatTheme;
 }
 
-export function SessionChatNotePanel({ onClose, onHasNoteChange, readNote, saveNote }: SessionChatNotePanelProps) {
+export function SessionChatNotePanel({
+  monacoVsBaseUrl,
+  onClose,
+  onHasNoteChange,
+  readNote,
+  saveNote,
+  theme,
+}: SessionChatNotePanelProps) {
   const [value, setValue] = useState('');
   const [copied, setCopied] = useState(false);
+  const [monacoFailed, setMonacoFailed] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const valueRef = useRef('');
   /*
@@ -40,12 +54,16 @@ export function SessionChatNotePanel({ onClose, onHasNoteChange, readNote, saveN
   const savedRef = useRef('');
   const editedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const monacoApiRef = useRef<SessionChatComposerInputApi | null>(null);
   const saveNoteRef = useRef(saveNote);
   saveNoteRef.current = saveNote;
+  const useMonaco = monacoVsBaseUrl !== undefined && !monacoFailed;
 
   useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
+    if (!useMonaco) {
+      textareaRef.current?.focus();
+    }
+  }, [useMonaco]);
 
   useEffect(() => {
     let active = true;
@@ -61,6 +79,7 @@ export function SessionChatNotePanel({ onClose, onHasNoteChange, readNote, saveN
         }
         valueRef.current = note;
         setValue(note);
+        monacoApiRef.current?.applyValue(note, note.length);
       })
       .catch((error: unknown) => {
         console.error('[session-chat] session note read failed', error);
@@ -135,20 +154,23 @@ export function SessionChatNotePanel({ onClose, onHasNoteChange, readNote, saveN
     setValue('');
     onHasNoteChange(false);
     flushNote();
-    textareaRef.current?.focus();
-  }, [flushNote, onHasNoteChange]);
+    if (useMonaco) {
+      monacoApiRef.current?.applyValue('', 0);
+      monacoApiRef.current?.focus();
+    } else {
+      textareaRef.current?.focus();
+    }
+  }, [flushNote, onHasNoteChange, useMonaco]);
 
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    (event: SessionChatComposerKeyEvent): void => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        event.stopPropagation();
         closePanel();
         return;
       }
       if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
-        event.stopPropagation();
         flushNote();
       }
     },
@@ -201,22 +223,68 @@ export function SessionChatNotePanel({ onClose, onHasNoteChange, readNote, saveN
           </AppTooltip>
         </div>
       </div>
-      <textarea
-        className='ghostex-chat-session-note-input'
-        onBlur={flushNote}
-        onChange={(event) => {
-          editedRef.current = true;
-          valueRef.current = event.target.value;
-          setValue(event.target.value);
-          onHasNoteChange(event.target.value.trim() !== '');
-        }}
-        onKeyDown={handleKeyDown}
-        placeholder='What’s next in this thread…'
-        ref={textareaRef}
-        rows={3}
-        spellCheck={false}
-        value={value}
-      />
+      {useMonaco ? (
+        <div className='ghostex-chat-session-note-editor' onBlur={flushNote}>
+          <SessionChatMonacoInput
+            disabled={false}
+            fillHeight={false}
+            initialValue={valueRef.current}
+            onCaretChange={() => undefined}
+            onChange={(next) => {
+              editedRef.current = true;
+              valueRef.current = next;
+              setValue(next);
+              onHasNoteChange(next.trim() !== '');
+            }}
+            onKeyDown={handleKeyDown}
+            onLoadFailed={(error) => {
+              console.error('[session-chat] Session note Monaco failed to load; using the plain input.', error);
+              setMonacoFailed(true);
+            }}
+            onPasteData={() => false}
+            placeholder='What’s next in this thread…'
+            registerApi={(api) => {
+              monacoApiRef.current = api;
+              if (api) {
+                api.applyValue(valueRef.current, valueRef.current.length);
+                api.focus();
+              }
+            }}
+            theme={theme}
+            vsBaseUrl={monacoVsBaseUrl ?? ''}
+          />
+        </div>
+      ) : (
+        <textarea
+          className='ghostex-chat-session-note-input'
+          onBlur={flushNote}
+          onChange={(event) => {
+            editedRef.current = true;
+            valueRef.current = event.target.value;
+            setValue(event.target.value);
+            onHasNoteChange(event.target.value.trim() !== '');
+          }}
+          onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+            handleKeyDown({
+              altKey: event.altKey,
+              ctrlKey: event.ctrlKey,
+              isComposing: event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229,
+              key: event.key,
+              metaKey: event.metaKey,
+              preventDefault: () => {
+                event.preventDefault();
+                event.stopPropagation();
+              },
+              shiftKey: event.shiftKey,
+            });
+          }}
+          placeholder='What’s next in this thread…'
+          ref={textareaRef}
+          rows={3}
+          spellCheck={false}
+          value={value}
+        />
+      )}
     </div>
   );
 }
