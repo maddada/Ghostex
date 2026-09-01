@@ -9,6 +9,14 @@ import {
   releaseBuildVersion,
   validateMajorMinorReleaseNotes,
 } from './release-ghostex.mjs';
+import {
+  SPARKLE_KEY_SOURCE,
+  evaluatePreflightLiteralProbes,
+  evaluateWorkflowAssertions,
+  extractSparklePublicKey,
+  formatRegressions,
+  formatStale,
+} from './release-workflow-assertions.mjs';
 
 /*
  CDXC:ReleaseAutomation 2026-07-02-14:10:
@@ -21,7 +29,46 @@ import {
 
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const githubRepo = 'maddada/Ghostex';
-const subrepoCandidates = ['apps/mobile/app', 'crossplatform', '.dependencies/zmx'];
+const signingIdentity = 'Developer ID Application: Mohamad Youssef (KTKP595G3B)';
+const subrepoCandidates = ['apps/mobile/app', '.dependencies/zmx'];
+
+/*
+ Both the remote-linux gate check and the assertion-freshness meta-check read
+ the same parsed workflows, and preflight runs its checks concurrently. Evaluate
+ once and share the promise so the two never disagree about what they saw.
+*/
+let workflowAssertionEvaluation = null;
+function evaluateWorkflowGates() {
+  workflowAssertionEvaluation ??= evaluateWorkflowAssertions({ repoRoot });
+  return workflowAssertionEvaluation;
+}
+
+/*
+ The Sparkle EdDSA public key is owned by apps/desktop/scripts/build-macos-app.sh,
+ which stamps it into Info.plist as SUPublicEDKey. Preflight used to carry its own
+ copy of the base64, so rotating the key in the build script would have left this
+ check failing against a value nothing ships. Read the shipped value instead, and
+ make an unreadable assignment a stale-check failure rather than a key mismatch.
+*/
+let sparklePublicKeyPromise = null;
+function expectedSparklePublicKey() {
+  sparklePublicKeyPromise ??= (async () => {
+    const source = path.join(repoRoot, SPARKLE_KEY_SOURCE);
+    if (!existsSync(source)) {
+      throw new Error(
+        `STALE CHECK, not a product regression - ${SPARKLE_KEY_SOURCE} does not exist, so preflight cannot learn which Sparkle public key the app ships.`
+      );
+    }
+    const key = extractSparklePublicKey(await readFile(source, 'utf8'));
+    if (!key) {
+      throw new Error(
+        `STALE CHECK, not a product regression - GHOSTEX_GPUI_SPARKLE_PUBLIC_ED_KEY could not be read out of ${SPARKLE_KEY_SOURCE}. Update extractSparklePublicKey in tooling/release-workflow-assertions.mjs.`
+      );
+    }
+    return key;
+  })();
+  return sparklePublicKeyPromise;
+}
 
 const highConfidenceSecretPatterns = [
   { label: 'private key block', regex: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
@@ -250,8 +297,20 @@ async function checkSparkleBuildNumber(options) {
   const buildVersion = releaseBuildVersion(options.version);
   const xml = await readFile(path.join(repoRoot, 'appcast.xml'), 'utf8');
   let maxVersion = 0;
+  let seen = 0;
   for (const match of xml.matchAll(/<sparkle:version>(\d+)<\/sparkle:version>/g)) {
+    seen += 1;
     maxVersion = Math.max(maxVersion, Number.parseInt(match[1], 10));
+  }
+  /*
+   Without this, a renamed or restructured element would leave maxVersion at 0 and
+   the check would PASS for every conceivable build number - the silent-staleness
+   failure mode, in its worst form, because it hides rather than over-reports.
+  */
+  if (seen === 0) {
+    return fail(
+      'STALE CHECK, not a product regression - appcast.xml contains no <sparkle:version> elements, so this check would pass for any build number. Fix the assertion, not the release.'
+    );
   }
   if (buildVersion <= maxVersion) {
     return fail(`Build ${buildVersion} must exceed latest Sparkle build ${maxVersion}.`);
@@ -326,37 +385,53 @@ async function checkSecretScan() {
   return pass(`${changedFiles.length} changed files since ${previousTag}`);
 }
 
+/*
+ Reports only PRODUCT regressions. Every assertion here reads a parsed workflow
+ document, so quote style, key order, and line wrapping cannot change what it
+ sees. When an assertion cannot be trusted the outcome is `stale`, which is
+ owned by the assertion-freshness meta-check below; this check still fails, but
+ it says the gate is unverified rather than claiming the gate regressed.
+*/
 async function checkRemoteLinuxPackages() {
-  const problems = [];
-  for (const arch of ['x64', 'arm64']) {
-    const workflowPath = path.join(repoRoot, '.github', 'workflows', `release-build-gxserver-${arch}.yml`);
-    if (!existsSync(workflowPath)) {
-      problems.push(`${arch}: missing Actions workflow`);
-      continue;
-    }
-    const workflow = await readFile(workflowPath, 'utf8');
-    if (!workflow.includes(`build-remote-gxserver-linux-release.sh --arch ${arch}`)) {
-      problems.push(`${arch}: workflow does not build its pinned architecture`);
-    }
-    // Quote-agnostic on purpose: prettier normalizes YAML scalars to single
-    // quotes, so a literal `: "1"` match silently went stale after a formatting
-    // pass while the gate itself was still present in both workflows.
-    if (!/GHOSTEX_REQUIRE_BEADS_SMOKE:\s*['"]?1['"]?\s*$/m.test(workflow)) {
-      problems.push(`${arch}: workflow does not require the packaged Beads embedded-Dolt smoke test`);
-    }
-    if (arch === 'arm64' && !workflow.includes('runs-on: ubuntu-24.04-arm')) {
-      problems.push('arm64: workflow does not use a native ARM64 runner for the packaged Beads smoke test');
-    }
-    if (!workflow.includes('stage-package-and-advance')) {
-      problems.push(`${arch}: workflow does not stage and advance durable release state`);
-    }
+  const evaluation = await evaluateWorkflowGates();
+  if (evaluation.regressions.length > 0) {
+    return fail(`release gate regression: ${formatRegressions(evaluation.regressions)}`);
   }
-  const buildScript = path.join(repoRoot, 'tooling', 'build-remote-gxserver-linux-release.sh');
-  if (!existsSync(buildScript)) problems.push('missing shared gxserver build script');
-  if (problems.length > 0) {
-    return fail(problems.join('; '));
+  if (evaluation.stale.length > 0) {
+    return fail(
+      `${evaluation.stale.length} gate(s) UNVERIFIED because their assertions are stale, not because the product regressed: ${formatStale(evaluation.stale)}. See the assertion-freshness check.`
+    );
   }
-  return pass('x64 and ARM64 builds are pinned to independent Actions jobs');
+  return pass(`${evaluation.ok.length} parsed workflow gates verified across x64 and ARM64`);
+}
+
+/*
+ CDXC:ReleaseAutomation 2026-09-01-11:52:
+ The meta-check. `GHOSTEX_REQUIRE_BEADS_SMOKE: "1"` became `: '1'` in a prettier
+ pass and the old substring assertion started failing for a reason that did not
+ exist, indistinguishable from the gate actually being gone. This check exists
+ so the two can never be confused again: everything it reports means "a preflight
+ assertion is out of date, fix the assertion", and it names the file whose rename
+ or reformat broke it. Product regressions never appear here - they appear in
+ remote-linux-packages and the individual gate checks.
+*/
+async function checkAssertionFreshness() {
+  const [workflow, literals] = await Promise.all([
+    evaluateWorkflowGates(),
+    evaluatePreflightLiteralProbes({
+      constants: { githubRepo, signingIdentity, sparklePublicKey: await expectedSparklePublicKey() },
+      repoRoot,
+    }),
+  ]);
+  const staleEntries = [...workflow.stale, ...literals.stale];
+  if (staleEntries.length > 0) {
+    return fail(
+      `STALE CHECK, not a product regression - ${staleEntries.length} preflight assertion(s) no longer match the files they read. Fix the assertion in tooling/release-workflow-assertions.mjs (or the preflight constant it probes), then rerun: ${formatStale(staleEntries)}`
+    );
+  }
+  return pass(
+    `${workflow.results.length} workflow assertions and ${literals.results.length} literal probes are current`
+  );
 }
 
 async function checkGhAuth() {
@@ -370,8 +445,7 @@ async function checkGhAuth() {
 }
 
 async function checkSigningIdentity() {
-  const identity =
-    process.env.GHOSTEX_CODE_SIGN_IDENTITY?.trim() || 'Developer ID Application: Mohamad Youssef (KTKP595G3B)';
+  const identity = process.env.GHOSTEX_CODE_SIGN_IDENTITY?.trim() || signingIdentity;
   const result = await runCommand('security find-identity -v -p codesigning', { timeoutMs: 20_000 });
   if (result.code === 0 && result.stdout.includes(identity)) {
     return pass('visible in this shell');
@@ -406,10 +480,13 @@ async function checkSparkleKey() {
   if (keyResult.code !== 0) {
     return warn(`generate_keys -p failed: ${shortOutput(keyResult.stderr)}`);
   }
-  if (!keyResult.stdout.includes('AGWDPeMqfhmbjt8Pbk+VTC9fDfXAYq+cZoLGCYuGn70=')) {
-    return fail('Sparkle public key does not match the app SUPublicEDKey. Do not sign appcasts with this key.');
+  const shippedKey = await expectedSparklePublicKey();
+  if (!keyResult.stdout.includes(shippedKey)) {
+    return fail(
+      `Sparkle public key does not match the SUPublicEDKey ${SPARKLE_KEY_SOURCE} ships. Do not sign appcasts with this key.`
+    );
   }
-  return pass('EdDSA key matches');
+  return pass('EdDSA key matches the shipped SUPublicEDKey');
 }
 
 async function checkTypecheck() {
@@ -440,7 +517,10 @@ Each crate is checked from inside its own directory rather than through
 root toolchain instead and fails on dependency code that needs the pin.
 
 This still cannot see `#[cfg(windows)]` / `#[cfg(linux)]` code on macOS. That
-gap is covered before dispatch by release-gpui-validate.yml, not here.
+gap is covered inside the release run by the Windows and Linux packaging jobs,
+which compile their own target natively and are their own validation. It is not
+covered before dispatch: release-gpui-validate.yml no longer gates anything and
+is opt-in only (CDXC:WindowsValidationIsNotAGate).
 */
 async function checkCargo() {
   for (const crate of ['server', 'apps/desktop']) {
@@ -567,6 +647,7 @@ async function main() {
     { fn: () => checkConcurrentSessions(options), name: 'concurrent-sessions' },
     { fn: () => checkSecretScan(), name: 'secret-scan' },
     { fn: () => checkRemoteLinuxPackages(), name: 'remote-linux-packages' },
+    { fn: () => checkAssertionFreshness(), name: 'assertion-freshness' },
     { fn: () => checkSparkleKey(), name: 'sparkle-key' },
   ];
   if (!options.skipCredentials) {
