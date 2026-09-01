@@ -107,20 +107,22 @@ pub(crate) fn build_agent_fork_plan(
         .and_then(Value::as_str)
         .map(str::to_string);
     let trusted_title = trusted_resume_title(session);
-    let reference = exact_reference.or(trusted_title);
-    let primary_command = match (agent_id, runtime_command, reference) {
-        (Some("codex"), Some(command), Some(reference)) => Some(format!(
-            "{command} fork {}",
-            quote_shell_double_arg(&reference)
-        )),
-        (Some("claude"), Some(command), Some(reference)) => Some(format!(
-            "{command} --resume {} --fork-session",
-            quote_shell_double_arg(&reference)
-        )),
-        (Some("pi"), Some(command), Some(reference)) => Some(format!(
-            "{command} --fork {}",
-            quote_shell_double_arg(&reference)
-        )),
+    let primary_command = match (agent_id, runtime_command) {
+        (Some("codex"), Some(command)) => exact_reference
+            .as_deref()
+            .and_then(normalize_codex_session_id)
+            .map(|reference| {
+                build_codex_fork_invocation(command, &quote_shell_double_arg(&reference))
+            }),
+        (Some("claude"), Some(command)) => exact_reference
+            .clone()
+            .or_else(|| trusted_title.clone())
+            .map(|reference| {
+                build_claude_fork_invocation(command, &quote_shell_double_arg(&reference))
+            }),
+        (Some("pi"), Some(command)) => exact_reference
+            .or(trusted_title)
+            .map(|reference| format!("{command} --fork {}", quote_shell_double_arg(&reference))),
         _ => None,
     };
     let mut plan = Map::new();

@@ -125,10 +125,10 @@ pub(crate) fn to_agent_resume_input(
     let configured_agent_command = read_text_from_map(&agent_config, "command");
     let base_command = stored_agent_command
         .clone()
-        .filter(|command| !is_one_time_agent_resume_command(agent_id.as_deref(), command))
+        .filter(|command| !is_one_time_agent_session_command(agent_id.as_deref(), command))
         .or_else(|| {
             configured_agent_command
-                .filter(|command| !is_one_time_agent_resume_command(agent_id.as_deref(), command))
+                .filter(|command| !is_one_time_agent_session_command(agent_id.as_deref(), command))
         })
         .or_else(|| {
             agent_id
@@ -175,7 +175,7 @@ pub(crate) fn to_agent_resume_input(
     }
 }
 
-fn is_one_time_agent_resume_command(agent_id: Option<&str>, command: &str) -> bool {
+fn is_one_time_agent_session_command(agent_id: Option<&str>, command: &str) -> bool {
     /*
     CDXC:AgentResume 2026-08-28:
     Find can create a terminal from an exact Codex history launch such as
@@ -184,13 +184,48 @@ fn is_one_time_agent_resume_command(agent_id: Option<&str>, command: &str) -> bo
     runtimeSettings.agentCommand. It is not a reusable agent base command: if
     full reload feeds it back into the ordinary resume planner, the planner
     appends another `resume <uuid>` and Codex rejects the duplicate positional
-    arguments. A Codex command that already contains the `resume` subcommand is
-    a one-time launch command whether its reference is a UUID or session name,
-    so use the configured or built-in base command instead.
+    arguments. Codex `resume` and `fork` are one-time session launch commands,
+    not reusable base commands, so use the configured or built-in base command
+    instead. Treat the invalid legacy `--resume` and `--fork` spellings the
+    same way: they must never survive as the base command and get replayed by
+    Full reload or Fork.
+    Claude history launches have the same persistence shape. Its canonical
+    `--resume` and `--continue` selectors, plus `--fork-session`, are also
+    one-time session invocations rather than reusable agent commands.
     Existing affected rows are repaired at read time without mutating their
     saved metadata.
     */
-    agent_id == Some("codex") && command.split_whitespace().any(|token| token == "resume")
+    let tokens = command.split_whitespace();
+    match agent_id {
+        Some("codex") => tokens.into_iter().any(|token| {
+            matches!(token, "resume" | "fork" | "--resume" | "--fork")
+                || token.starts_with("--resume=")
+                || token.starts_with("--fork=")
+        }),
+        Some("claude") => tokens.into_iter().any(|token| {
+            matches!(token, "--resume" | "--continue" | "--fork-session")
+                || token.starts_with("--resume=")
+                || token.starts_with("--continue=")
+                || token.starts_with("--fork-session=")
+        }),
+        _ => false,
+    }
+}
+
+fn build_codex_resume_invocation(agent_command: &str, shell_reference: &str) -> String {
+    format!("{agent_command} resume {shell_reference}")
+}
+
+pub(crate) fn build_codex_fork_invocation(agent_command: &str, shell_reference: &str) -> String {
+    format!("{agent_command} fork {shell_reference}")
+}
+
+fn build_claude_resume_invocation(agent_command: &str, shell_reference: &str) -> String {
+    format!("{agent_command} --resume {shell_reference}")
+}
+
+pub(crate) fn build_claude_fork_invocation(agent_command: &str, shell_reference: &str) -> String {
+    format!("{agent_command} --resume {shell_reference} --fork-session")
 }
 
 pub(crate) fn build_agent_resume_command(
@@ -270,11 +305,14 @@ pub(crate) fn build_agent_resume_command(
             let reference = codex_reference?;
             if options.display {
                 return Some(if let Some(exact) = codex_exact_reference {
-                    format!("{agent_command} resume {}", quote_shell_double_arg(&exact))
+                    build_codex_resume_invocation(agent_command, &quote_shell_double_arg(&exact))
                 } else {
                     format!(
-                        "{agent_command} resume {}  # lookup Codex session id by title",
-                        quote_shell_double_arg(&reference)
+                        "{}  # lookup Codex session id by title",
+                        build_codex_resume_invocation(
+                            agent_command,
+                            &quote_shell_double_arg(&reference)
+                        )
                     )
                 });
             }
@@ -286,16 +324,19 @@ pub(crate) fn build_agent_resume_command(
         }
         "claude" => {
             if let Some(exact) = claude_exact_reference {
-                return Some(format!(
-                    "{agent_command} --resume {}",
-                    quote_shell_double_arg(&exact)
+                return Some(build_claude_resume_invocation(
+                    agent_command,
+                    &quote_shell_double_arg(&exact),
                 ));
             }
             let resume_title = resume_title?;
             if options.display {
                 Some(format!(
-                    "{agent_command} --resume {}  # lookup Claude session id by title",
-                    quote_shell_double_arg(&resume_title)
+                    "{}  # lookup Claude session id by title",
+                    build_claude_resume_invocation(
+                        agent_command,
+                        &quote_shell_double_arg(&resume_title)
+                    )
                 ))
             } else {
                 Some(build_claude_resume_lookup_command(
@@ -400,16 +441,10 @@ pub(crate) fn build_agent_resume_copy_command(input: &AgentResumeInput) -> Optio
             )
         }),
         "codex" => get_codex_session_reference(input).map(|reference| {
-            format!(
-                "{agent_command} resume {}",
-                quote_shell_double_arg(&reference)
-            )
+            build_codex_resume_invocation(agent_command, &quote_shell_double_arg(&reference))
         }),
         "claude" => get_claude_session_reference(input).map(|reference| {
-            format!(
-                "{agent_command} --resume {}",
-                quote_shell_double_arg(&reference)
-            )
+            build_claude_resume_invocation(agent_command, &quote_shell_double_arg(&reference))
         }),
         "cursor" => get_cursor_session_reference(input).map(|reference| {
             format!(
@@ -754,7 +789,8 @@ pub(crate) fn build_claude_resume_lookup_command(
         quote_shell_arg(input.first_user_message.as_deref().unwrap_or_default()),
     ]
     .join(" ");
-    let resume_invocation = format!("{agent_command} --resume \"$CLAUDE_RESUME_SESSION_ID\"");
+    let resume_invocation =
+        build_claude_resume_invocation(agent_command, "\"$CLAUDE_RESUME_SESSION_ID\"");
     [
         "CLAUDE_RESUME_SESSION_ID=\"$(".to_string(),
         format!("{} claude {args}", build_resume_lookup_command()),
@@ -830,7 +866,7 @@ pub(crate) fn build_codex_validated_resume_command(
         "&&".to_string(),
         "test -n \"$CODEX_RESUME_SESSION_ID\"".to_string(),
         "&&".to_string(),
-        format!("{agent_command} resume \"$CODEX_RESUME_SESSION_ID\""),
+        build_codex_resume_invocation(agent_command, "\"$CODEX_RESUME_SESSION_ID\""),
         "||".to_string(),
         format!(
             "{{ printf '%s\\n' {}; false; }}",
@@ -854,7 +890,7 @@ pub(crate) fn build_codex_resume_lookup_command(agent_command: &str, resume_titl
         "&&".to_string(),
         "test -n \"$CODEX_RESUME_SESSION_ID\"".to_string(),
         "&&".to_string(),
-        format!("{agent_command} resume \"$CODEX_RESUME_SESSION_ID\""),
+        build_codex_resume_invocation(agent_command, "\"$CODEX_RESUME_SESSION_ID\""),
         "||".to_string(),
         format!(
             "{{ printf '%s\\n' {}; false; }}",
