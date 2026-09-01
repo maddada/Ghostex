@@ -24,6 +24,12 @@ release_gpui_require_command xcodebuild
 export GHOSTEX_RELEASE_VERSION="$VERSION"
 export GHOSTEX_RELEASE_BUILD_NUMBER="$BUILD_NUMBER"
 
+# The React Native app packages the shared chat page as generated WebView
+# assets. Rebuild it from the release checkout so a committed asset from an
+# earlier shared-UI revision can never reach the TestFlight archive.
+cd "$REPO_ROOT"
+bun run build:mobile-chat
+
 cd "$MOBILE_ROOT"
 bunx expo prebuild --platform ios --no-install
 pod install --project-directory=ios
