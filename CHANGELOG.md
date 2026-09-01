@@ -1,5 +1,23 @@
 # Changelog
 
+## 8.5.0 - 2026-09-01
+
+- Major
+  - Cursor is now a full Chat View agent: sessions read their model, context window, reasoning effort and Fast mode live off the terminal, thinking shows as an activity card, Cursor's own questions are answered inline with Space and Enter, and transcripts export like any other agent.
+  - Remote machines can be reached without a Tailscale account: gxserver runs its own tailcat tunnel, owns its key and address, comes back automatically after a restart, and is set up from the Remote tab in Settings.
+- Minor
+  - Cursor, Grok, Hermes, OMP and Pi sessions now name the screen that is blocking the composer — a picker, approval, sign-in or editor — instead of silently swallowing the message.
+  - Codex and Claude always launch with their unattended permission flag, so turning Accept All off no longer leaves them stuck on an approval prompt nobody can answer.
+  - Resuming or forking a Codex or Claude session no longer replays a stale session id from an earlier one-time command.
+  - Session notes are edited in the same Monaco editor as the composer.
+  - File and skill references appear as pills in the mobile and embedded chat composers instead of raw Markdown, and copy back out as plain text.
+  - Opening a file at a specific line in an already-running Code tab works again, and falls back to copying the path with a notice when it cannot.
+  - A single click on the collapsed command pane expands it, and the double-click-for-a-new-terminal gesture now applies only once it is open.
+  - Close After Done and Sleep Inactive only sleep sessions that are actually running, so pinned, tagged and favorited sessions are no longer swept away.
+  - The sidebar has symmetric gutters, separators that run its full width, and a plain gap against the workspace in place of the stacked separator strip.
+  - The mobile chat view can switch an unprompted draft session's agent and send Enter or a shifted option key without typing into the terminal.
+  - The transcript no longer shows a second typing indicator while the agent works, since the pinned working strip already reports it.
+
 ## 8.4.0 - 2026-08-31
 
 - Major
