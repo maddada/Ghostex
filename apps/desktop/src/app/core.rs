@@ -2220,7 +2220,6 @@ impl Render for GhostexGpuiApp {
                     })
                     .when(sidebar_chrome_visible && sidebar_on_left, |this| {
                         this.child(self.render_sidebar_resize_divider(cx))
-                            .child(self.render_sidebar_workspace_separator())
                     })
                     .child(
                         v_flex()
@@ -2234,8 +2233,7 @@ impl Render for GhostexGpuiApp {
                             .child(self.render_workspace_with_command_pane(window, cx)),
                     )
                     .when(sidebar_chrome_visible && !sidebar_on_left, |this| {
-                        this.child(self.render_sidebar_workspace_separator())
-                            .child(self.render_sidebar_resize_divider(cx))
+                        this.child(self.render_sidebar_resize_divider(cx))
                     })
                     .when(sidebar_chrome_visible && !sidebar_on_left, |this| {
                         this.child(

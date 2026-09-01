@@ -17,26 +17,6 @@ use gpui::{Hsla, rgb};
 use crate::app::helpers::*;
 use crate::*;
 
-pub(crate) fn sidebar_background_fill() -> gpui::Background {
-    /*
-    CDXC:GPUISidebarDividerColor 2026-07-22:
-    The resize rail is the final sibling inside the sidebar region. Paint it
-    with the same vertical gradient stops as the CEF sidebar instead of a
-    fixed #0e0e0e strip so custom tint/contrast settings reach the true edge.
-    */
-    gpui::linear_gradient(
-        180.,
-        gpui::linear_color_stop(
-            rgb(GPUI_TITLEBAR_GRADIENT_LEFT_RGB.load(Ordering::Relaxed) as u32),
-            0.,
-        ),
-        gpui::linear_color_stop(
-            rgb(GPUI_TITLEBAR_GRADIENT_RIGHT_RGB.load(Ordering::Relaxed) as u32),
-            1.,
-        ),
-    )
-}
-
 pub(crate) fn sidebar_cef_prepaint_background_color() -> u32 {
     /*
     CEF owns the sidebar's native child view right up to the sibling divider.

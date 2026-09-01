@@ -538,7 +538,7 @@ pub(crate) fn command_pane_workspace_width(
     sidebar that is not on screen.
     */
     let sidebar_chrome_width = if gpui_sidebar_chrome_visible(sidebar_collapsed) {
-        sidebar_width + SIDEBAR_DIVIDER_WIDTH + SIDEBAR_WORKSPACE_SEPARATOR_WIDTH
+        sidebar_width + SIDEBAR_DIVIDER_WIDTH
     } else {
         0.0
     };

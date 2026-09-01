@@ -286,10 +286,8 @@ pub(crate) fn gpui_session_chat_verbose_mode_from_settings(
 }
 
 pub(crate) fn current_sidebar_max_width(window: &Window) -> f32 {
-    let max_for_window = window.bounds().size.width.as_f32()
-        - SIDEBAR_DIVIDER_WIDTH
-        - SIDEBAR_WORKSPACE_SEPARATOR_WIDTH
-        - WORKSPACE_MIN_WIDTH;
+    let max_for_window =
+        window.bounds().size.width.as_f32() - SIDEBAR_DIVIDER_WIDTH - WORKSPACE_MIN_WIDTH;
     SIDEBAR_MAX_WIDTH.min(max_for_window).max(SIDEBAR_MIN_WIDTH)
 }
 

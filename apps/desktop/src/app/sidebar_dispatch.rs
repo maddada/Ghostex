@@ -1766,16 +1766,6 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    /// The 2px workspace-colored gap between the sidebar's resize rail and the
-    /// Agents workspace, present on both sidebar sides.
-    pub(crate) fn render_sidebar_workspace_separator(&self) -> impl IntoElement {
-        div()
-            .flex_shrink_0()
-            .w(px(SIDEBAR_WORKSPACE_SEPARATOR_WIDTH))
-            .h_full()
-            .bg(workspace_background_color())
-    }
-
     pub(crate) fn render_sidebar_resize_divider(
         &self,
         cx: &mut gpui::Context<Self>,
@@ -1788,7 +1778,7 @@ impl GhostexGpuiApp {
             .w(px(SIDEBAR_DIVIDER_WIDTH))
             .h_full()
             .cursor_ew_resize()
-            .bg(sidebar_background_fill())
+            .bg(workspace_background_color())
             .on_hover(cx.listener(|this, hovered, _, cx| {
                 this.set_sidebar_divider_hovering(*hovered, cx);
             }))
