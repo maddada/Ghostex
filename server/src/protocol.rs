@@ -703,6 +703,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/generateCommitMessage"
         | "/api/createPullRequest"
         | "/api/updatePortlessState"
+        /*
+        CDXC:Tailcat 2026-09-01:
+        The tailcat status response carries the address blob that dials this
+        machine, so both endpoints stay on the authenticated local listener and
+        are never reachable from the remote listener.
+        */
+        | "/api/tailcatStatus"
+        | "/api/updateTailcatState"
         | "/api/queryLogs"
         | "/api/resolveGitRootForPath" => full_local(path),
         "/api/updateAuth"

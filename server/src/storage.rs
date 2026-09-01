@@ -1456,6 +1456,28 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 26;
     "#,
     },
+    Migration {
+        id: "0027_tailcat_state",
+        /*
+        CDXC:Tailcat 2026-09-01:
+        Only the user's intent is durable: enabled, the served ports, and the
+        client-key allow-list. The address blob is deliberately absent, because
+        it is derived from the on-disk server key at runtime and a persisted
+        copy would outlive a deleted key.
+        */
+        sql: r#"
+      CREATE TABLE IF NOT EXISTS tailcat_state (
+        stateId TEXT PRIMARY KEY CHECK (stateId <> ''),
+        enabled INTEGER NOT NULL,
+        portsCsv TEXT NOT NULL,
+        allowedClientKeysCsv TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      PRAGMA user_version = 27;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1504,10 +1526,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 26);
+        assert_eq!(user_version, 27);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 26);
+        assert_eq!(schema_migration_count(&db), 27);
         assert_eq!(
             explicit_index_names(&db),
             vec![

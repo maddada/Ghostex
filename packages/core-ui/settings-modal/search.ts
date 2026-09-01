@@ -642,6 +642,32 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         ],
         title: 'Remote machines',
       },
+      {
+        id: 'tailcat',
+        settings: [
+          {
+            key: 'tailcatEnabled',
+            subtitle: 'Reach this machine from another device without the Tailscale VPN.',
+            title: 'Enable Tailcat',
+          },
+          {
+            key: 'tailcatPairingAddress',
+            subtitle: 'Pairing address and QR code paired devices dial.',
+            title: 'Pairing address',
+          },
+          {
+            key: 'tailcatPorts',
+            subtitle: 'Local ports tailcat exposes to paired clients.',
+            title: 'Served ports',
+          },
+          {
+            key: 'tailcatAllowedClientKeys',
+            subtitle: 'Client keys allowed to connect; empty allows any paired client.',
+            title: 'Allowed client keys',
+          },
+        ],
+        title: 'Tailcat',
+      },
     ],
     title: 'Remote',
   },

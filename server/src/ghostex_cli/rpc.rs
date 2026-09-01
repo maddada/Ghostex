@@ -10,7 +10,12 @@ use std::{
 
 use serde_json::{json, Map, Value};
 
-use crate::ghostex_cli::args::{js_number, parse_json_value, Flags};
+use crate::ghostex_cli::{
+    args::{js_number, parse_json_value, Flags},
+    tailcat_tunnel::{
+        create_cli_tailcat_forward_plan, start_tailcat_tunnel, TailcatForwardPlan, TailcatTunnel,
+    },
+};
 
 pub const GXSERVER_PRODUCT: &str = "gxserver";
 pub const GXSERVER_PROTOCOL_VERSION: u64 = 1;
@@ -20,8 +25,12 @@ pub const GXSERVER_LOCAL_API_PORT: u16 = 58744;
 const GXSERVER_SSH_FORWARD_DEFAULT_PORT: u16 = GXSERVER_LOCAL_API_PORT + 1;
 const GXSERVER_SSH_FORWARD_PORT_SCAN_LIMIT: u16 = 25;
 const GXSERVER_SSH_TUNNEL_READY_TIMEOUT_MS: u64 = 8_000;
+const GXSERVER_TAILCAT_TUNNEL_READY_TIMEOUT_MS: u64 = 30_000;
 const GXSERVER_SSH_COMMAND_TIMEOUT_MS: u64 = 12_000;
 const GXSERVER_SSH_TUNNEL_IDLE_KILL_MS: u64 = 500;
+/// The tailcat transport reaches the remote's gxserver API port, which is the
+/// same loopback port the daemon binds locally unless the profile overrides it.
+const GXSERVER_TAILCAT_DEFAULT_REMOTE_PORT: u16 = GXSERVER_LOCAL_API_PORT;
 
 /*
 CDXC:GhostexRustCli 2026-07-13:
@@ -157,6 +166,7 @@ pub struct Target {
     pub kind: String,
     pub profile_id: Option<String>,
     pub server_id: Option<String>,
+    pub tailcat_plan: Option<TailcatForwardPlan>,
     pub token: String,
 }
 
@@ -237,7 +247,7 @@ pub fn request_gxserver_rpc(
     params: &Value,
     flags: &Flags,
 ) -> CliResult<Value> {
-    let _tunnel = ensure_gxserver_ssh_tunnel_for_rpc(target, flags)?;
+    let _tunnel = ensure_gxserver_tunnel_for_rpc(target, flags)?;
     let timeout_ms = flags
         .number("timeout")
         .or_else(|| flags.number("timeoutMs"))
@@ -320,7 +330,18 @@ fn read_json_body(response: ureq::Response) -> Option<Value> {
 }
 
 fn connection_error_for_target(target: &Target, _detail: &str) -> CliError {
-    let message = if target.kind == "ssh" {
+    let message = if target.kind == "tailcat" {
+        format!(
+            "Could not connect to tailcat gxserver profile{} at {}. Check that the remote Ghostex has tailcat enabled and is serving port {}, that the profile's tailcatToken is that host's current address, and that the tailcat binary is installed locally.",
+            target.profile_suffix(),
+            target.base_url,
+            target
+                .tailcat_plan
+                .as_ref()
+                .map(|plan| plan.remote_port)
+                .unwrap_or(GXSERVER_TAILCAT_DEFAULT_REMOTE_PORT)
+        )
+    } else if target.kind == "ssh" {
         format!(
             "Could not connect to SSH gxserver profile{} at {}. Check SSH access, remote gxserver status, and the local tunnel, then retry.",
             target.profile_suffix(),
@@ -390,6 +411,27 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
         });
         return resolve_gxserver_profile_target(&profile, flags);
     }
+    /*
+    CDXC:Tailcat 2026-09-01:
+    The inline form requires the explicit `tailcat:` prefix. Address blobs
+    start with "tc" and are otherwise opaque, so sniffing a bare blob would
+    make any connection profile whose name starts with "tc" unreachable.
+    */
+    if let Some(address_blob) = server.strip_prefix("tailcat:") {
+        let address_blob = address_blob.trim();
+        if address_blob.is_empty() {
+            return Err(CliError::Other(
+                "--server tailcat:<address> needs the remote host's tailcat address.".to_string(),
+            ));
+        }
+        let profile = json!({
+            "id": server,
+            "name": server,
+            "tailcatToken": address_blob,
+            "transport": "tailcat",
+        });
+        return resolve_gxserver_profile_target(&profile, flags);
+    }
     if server.starts_with("http://") || server.starts_with("https://") {
         return Ok(Target {
             base_url: server.trim_end_matches('/').to_string(),
@@ -397,6 +439,7 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
             kind: "direct".to_string(),
             profile_id: None,
             server_id: None,
+            tailcat_plan: None,
             token: read_gxserver_credential_secret_from_flags(flags)?,
         });
     }
@@ -438,6 +481,7 @@ pub fn resolve_local_gxserver_target() -> CliResult<Target> {
         kind: "local".to_string(),
         profile_id: None,
         server_id: None,
+        tailcat_plan: None,
         token,
     })
 }
@@ -516,6 +560,12 @@ pub fn resolve_gxserver_profile_target(profile: &Value, flags: &Flags) -> CliRes
         .unwrap_or_else(|| {
             if profile.get("sshUrl").and_then(Value::as_str).is_some() {
                 "ssh".to_string()
+            } else if profile
+                .get("tailcatToken")
+                .and_then(Value::as_str)
+                .is_some()
+            {
+                "tailcat".to_string()
             } else {
                 "direct".to_string()
             }
@@ -530,17 +580,7 @@ pub fn resolve_gxserver_profile_target(profile: &Value, flags: &Flags) -> CliRes
         .and_then(Value::as_str)
         .map(str::to_string);
     if transport == "ssh" {
-        let explicit_local_port = flags
-            .number("localPort")
-            .or_else(|| flags.number("forwardPort"))
-            .or_else(|| {
-                flags
-                    .text("baseUrl")
-                    .and_then(|base_url| local_port_from_base_url(&base_url))
-            })
-            .map(|port| port as u16)
-            .filter(|port| *port != 0);
-        let local_port = select_cli_ssh_forward_local_port(explicit_local_port)?;
+        let local_port = select_cli_forward_local_port(explicit_cli_forward_local_port(flags))?;
         let remote_local_port = flags
             .number("remotePort")
             .map(|port| port as u16)
@@ -554,6 +594,28 @@ pub fn resolve_gxserver_profile_target(profile: &Value, flags: &Flags) -> CliRes
             kind: "ssh".to_string(),
             profile_id,
             server_id,
+            tailcat_plan: None,
+            token,
+        });
+    }
+    if transport == "tailcat" {
+        let local_port = select_cli_forward_local_port(explicit_cli_forward_local_port(flags))?;
+        let remote_port = flags
+            .number("remotePort")
+            .or_else(|| profile.get("remotePort").and_then(Value::as_f64))
+            .map(|port| port as u16)
+            .filter(|port| *port != 0)
+            .unwrap_or(GXSERVER_TAILCAT_DEFAULT_REMOTE_PORT);
+        let tailcat_plan = create_cli_tailcat_forward_plan(profile, local_port, remote_port)?;
+        return Ok(Target {
+            base_url: flags
+                .text("baseUrl")
+                .unwrap_or_else(|| tailcat_plan.base_url.clone()),
+            forward_plan: None,
+            kind: "tailcat".to_string(),
+            profile_id,
+            server_id,
+            tailcat_plan: Some(tailcat_plan),
             token,
         });
     }
@@ -583,8 +645,24 @@ pub fn resolve_gxserver_profile_target(profile: &Value, flags: &Flags) -> CliRes
         },
         profile_id,
         server_id,
+        tailcat_plan: None,
         token,
     })
+}
+
+/// Both forwarding transports honour the same local-port overrides, so the
+/// ssh and tailcat arms read them through one helper.
+fn explicit_cli_forward_local_port(flags: &Flags) -> Option<u16> {
+    flags
+        .number("localPort")
+        .or_else(|| flags.number("forwardPort"))
+        .or_else(|| {
+            flags
+                .text("baseUrl")
+                .and_then(|base_url| local_port_from_base_url(&base_url))
+        })
+        .map(|port| port as u16)
+        .filter(|port| *port != 0)
 }
 
 fn local_port_from_base_url(base_url: &str) -> Option<f64> {
@@ -600,7 +678,7 @@ fn local_port_from_base_url(base_url: &str) -> Option<f64> {
     }
 }
 
-fn select_cli_ssh_forward_local_port(explicit_local_port: Option<u16>) -> CliResult<u16> {
+fn select_cli_forward_local_port(explicit_local_port: Option<u16>) -> CliResult<u16> {
     if let Some(port) = explicit_local_port {
         return Ok(port);
     }
@@ -613,15 +691,14 @@ fn select_cli_ssh_forward_local_port(explicit_local_port: Option<u16>) -> CliRes
     }
     let listener = TcpListener::bind((GXSERVER_LOCAL_API_HOST, 0)).map_err(|_| {
         CliError::Other(
-            "Could not reserve an ephemeral local port for the SSH gxserver tunnel.".to_string(),
+            "Could not reserve an ephemeral local port for the gxserver tunnel.".to_string(),
         )
     })?;
     let port = listener
         .local_addr()
         .map_err(|_| {
             CliError::Other(
-                "Could not reserve an ephemeral local port for the SSH gxserver tunnel."
-                    .to_string(),
+                "Could not reserve an ephemeral local port for the gxserver tunnel.".to_string(),
             )
         })?
         .port();
@@ -670,6 +747,12 @@ pub fn read_gxserver_credential_secret_from_flags(flags: &Flags) -> CliResult<St
 }
 
 fn read_gxserver_one_shot_token_from_stdin() -> CliResult<String> {
+    // stdin can only be drained once, but target resolution runs per RPC call
+    // and a verb may issue several; cache the token for the process lifetime.
+    static STDIN_TOKEN: OnceLock<String> = OnceLock::new();
+    if let Some(token) = STDIN_TOKEN.get() {
+        return Ok(token.clone());
+    }
     #[cfg(unix)]
     {
         let is_tty = unsafe { libc::isatty(0) == 1 };
@@ -683,7 +766,7 @@ fn read_gxserver_one_shot_token_from_stdin() -> CliResult<String> {
     std::io::stdin()
         .read_to_string(&mut text)
         .map_err(|error| CliError::Other(error.to_string()))?;
-    Ok(text)
+    Ok(STDIN_TOKEN.get_or_init(|| text).clone())
 }
 
 pub fn read_gxserver_credential_secret(secret_ref: &Value) -> CliResult<String> {
@@ -822,10 +905,14 @@ fn cli_ssh_target_args(target: &CliSshUrlTarget) -> Vec<String> {
     args
 }
 
-/* --------------------------------------------------------- ssh tunnels */
+/* ----------------------------------------------- ssh and tailcat tunnels */
 
+/// One registry entry per live forwarder. The ssh transport owns an `ssh -N -L`
+/// child; the tailcat transport owns a loopback listener plus its per-connection
+/// children, so a record carries whichever of the two it started.
 struct TunnelRecord {
     child: Option<Child>,
+    tailcat: Option<TailcatTunnel>,
 }
 
 fn active_tunnels() -> &'static Mutex<HashMap<String, TunnelRecord>> {
@@ -850,18 +937,25 @@ impl Drop for TunnelGuard {
             std::thread::sleep(Duration::from_millis(idle_kill_ms));
             if let Ok(mut tunnels) = active_tunnels().lock() {
                 if let Some(mut record) = tunnels.remove(&key) {
-                    stop_tunnel_child(record.child.as_mut());
+                    stop_tunnel_record(&mut record);
                 }
             }
         });
     }
 }
 
-pub fn stop_all_gxserver_ssh_tunnels() {
+pub fn stop_all_gxserver_tunnels() {
     if let Ok(mut tunnels) = active_tunnels().lock() {
         for (_, mut record) in tunnels.drain() {
-            stop_tunnel_child(record.child.as_mut());
+            stop_tunnel_record(&mut record);
         }
+    }
+}
+
+fn stop_tunnel_record(record: &mut TunnelRecord) {
+    stop_tunnel_child(record.child.as_mut());
+    if let Some(tunnel) = record.tailcat.take() {
+        tunnel.stop();
     }
 }
 
@@ -884,10 +978,13 @@ fn gxserver_ssh_tunnel_cache_key(target: &Target, plan: &SshForwardPlan) -> Stri
     parts.join("\0")
 }
 
-pub fn ensure_gxserver_ssh_tunnel_for_rpc(
+pub fn ensure_gxserver_tunnel_for_rpc(
     target: &Target,
     flags: &Flags,
 ) -> CliResult<Option<TunnelGuard>> {
+    if target.kind == "tailcat" {
+        return ensure_gxserver_tailcat_tunnel_for_rpc(target, flags);
+    }
     let Some(plan) = &target.forward_plan else {
         return Ok(None);
     };
@@ -907,17 +1004,133 @@ pub fn ensure_gxserver_ssh_tunnel_for_rpc(
     if !already_running {
         let child = start_gxserver_ssh_tunnel(target, plan, flags)?;
         if let Ok(mut tunnels) = active_tunnels().lock() {
-            tunnels.insert(key.clone(), TunnelRecord { child: Some(child) });
+            tunnels.insert(
+                key.clone(),
+                TunnelRecord {
+                    child: Some(child),
+                    tailcat: None,
+                },
+            );
         }
     }
-    let idle_kill_ms = flags
-        .number("sshTunnelIdleKillMs")
-        .map(|value| value as u64)
-        .unwrap_or(GXSERVER_SSH_TUNNEL_IDLE_KILL_MS);
     Ok(Some(TunnelGuard {
         key: Some(key),
-        idle_kill_ms,
+        idle_kill_ms: gxserver_tunnel_idle_kill_ms(flags),
     }))
+}
+
+fn gxserver_tunnel_idle_kill_ms(flags: &Flags) -> u64 {
+    flags
+        .number("sshTunnelIdleKillMs")
+        .map(|value| value as u64)
+        .unwrap_or(GXSERVER_SSH_TUNNEL_IDLE_KILL_MS)
+}
+
+fn gxserver_tailcat_tunnel_cache_key(target: &Target, plan: &TailcatForwardPlan) -> String {
+    [
+        target.profile_id.clone().unwrap_or_default(),
+        target.server_id.clone().unwrap_or_default(),
+        target.base_url.clone(),
+        plan.local_port.to_string(),
+        plan.remote_port.to_string(),
+        plan.address_blob.clone(),
+    ]
+    .join("\0")
+}
+
+fn ensure_gxserver_tailcat_tunnel_for_rpc(
+    target: &Target,
+    flags: &Flags,
+) -> CliResult<Option<TunnelGuard>> {
+    let Some(plan) = &target.tailcat_plan else {
+        return Ok(None);
+    };
+    // A live listener still dials the remote per connection (~0.75s warm), so
+    // this probe needs more than the ssh arm's 600ms; a dead port refuses
+    // instantly either way.
+    if let Ok(Some(health)) = fetch_gxserver_health(target, 3_000) {
+        if is_expected_gxserver_health(Some(&health), target) {
+            return Ok(None);
+        }
+    }
+    let key = gxserver_tailcat_tunnel_cache_key(target, plan);
+    let already_running = active_tunnels()
+        .lock()
+        .map(|tunnels| tunnels.contains_key(&key))
+        .unwrap_or(false);
+    if !already_running {
+        let tunnel = start_gxserver_tailcat_tunnel(target, plan, flags)?;
+        if let Ok(mut tunnels) = active_tunnels().lock() {
+            tunnels.insert(
+                key.clone(),
+                TunnelRecord {
+                    child: None,
+                    tailcat: Some(tunnel),
+                },
+            );
+        }
+    }
+    Ok(Some(TunnelGuard {
+        key: Some(key),
+        idle_kill_ms: gxserver_tunnel_idle_kill_ms(flags),
+    }))
+}
+
+/*
+CDXC:Tailcat 2026-09-01:
+The ssh arm can check and start the remote daemon because ssh gives it a shell.
+tailcat gives only a TCP pipe, so this arm brings up the forwarder and waits for
+health on the same schedule as ssh; a remote gxserver that is down stays a
+connection error the user resolves on that host.
+*/
+fn start_gxserver_tailcat_tunnel(
+    target: &Target,
+    plan: &TailcatForwardPlan,
+    flags: &Flags,
+) -> CliResult<TailcatTunnel> {
+    let Some(binary_path) = crate::tailcat::resolve_tailcat_binary() else {
+        return Err(tailcat_missing_error(target));
+    };
+    let tunnel = start_tailcat_tunnel(&binary_path, plan)?;
+    /*
+    Unlike an ssh -L forward (whose local socket answers in milliseconds once
+    sshd is up), every probe here dials the remote through a fresh tailcat
+    child: ~0.75s warm, and up to ~10s on the first-ever dial while tailcat
+    waits out path discovery against the DERP relay. The ssh probe schedule
+    (600ms probes, 8s window) can therefore never succeed. Each probe must
+    outlive a warm dial, and the window must outlive a cold one.
+    */
+    let timeout_ms = flags
+        .number("sshTunnelReadyTimeoutMs")
+        .map(|value| value as u64)
+        .unwrap_or(GXSERVER_TAILCAT_TUNNEL_READY_TIMEOUT_MS);
+    let poll_ms = flags
+        .number("sshTunnelPollMs")
+        .map(|value| value as u64)
+        .unwrap_or(500);
+    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    while Instant::now() < deadline {
+        if let Ok(Some(health)) = fetch_gxserver_health(target, 3_000) {
+            if is_expected_gxserver_health(Some(&health), target) {
+                return Ok(tunnel);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(poll_ms));
+    }
+    tunnel.stop();
+    Err(CliError::Connection(format!(
+        "tailcat tunnel for gxserver profile{} did not become healthy on {}. Check that the remote Ghostex has tailcat enabled and is serving port {}, and that the profile's tailcatToken is that host's current address.",
+        target.profile_suffix(),
+        target.base_url,
+        plan.remote_port
+    )))
+}
+
+fn tailcat_missing_error(target: &Target) -> CliError {
+    CliError::Connection(format!(
+        "Could not set up tailcat gxserver profile{} because the \"tailcat\" executable was not found. Install it with \"go install github.com/tailscale/tailcat/cmd/tailcat@latest\", or point GHOSTEX_TAILCAT_BIN at it.",
+        target.profile_suffix()
+    ))
 }
 
 fn start_gxserver_ssh_tunnel(

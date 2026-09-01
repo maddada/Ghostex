@@ -123,6 +123,10 @@ pub fn usage() -> String {
             "Browse, install, and manage gxserver extensions",
         ),
         format_help_command(
+            "tailcat status | enable | disable",
+            "Inspect or toggle the tailcat remote-access sidecar",
+        ),
+        format_help_command(
             "create-session [title] [--input text] [--start] [--project-id id] [--group-id id]",
             "Create a terminal session; --start materializes the live terminal immediately",
         ),
@@ -266,6 +270,8 @@ pub fn usage() -> String {
         format_help_command("toggle-agent-prompt-favorite --key <key> [--favorite true|false] --json", "Star or unstar a prompt; shares gx f's favorites file"),
         format_help_command("resolve-agent-prompt-launch --key <key> [--action resume|fork] [--fork-agent id] --json", "Resolve whether opening a prompt focuses a live session or runs a command"),
         format_help_command("read-session-chat <selector> [--limit n] [--before-offset n] [--wait-ms n --fingerprint f] --json", "Read a session's chat transcript; --wait-ms long-polls until the chat changes"),
+        format_help_command("switch-draft-agent <selector> --agent-id <id> --json", "Switch an unprompted draft session to another project agent"),
+        format_help_command("send-session-chat-key <selector> --key <key> --json", "Queue Enter or a shifted option key behind this session's pending chat writes"),
         format_help_command("read-session-chat-skills <selector> --json", "List skills available to the session's agent"),
         format_help_command("read-session-chat-files <selector> --json", "List the session project's files for @ mentions"),
         format_help_command("send-session-chat-message <selector> <text>", "Send a chat message into an agent session"),
@@ -516,6 +522,20 @@ Commands:
 State keys:
   enabled, pinned, placement, terminalPlacement,
   preferences.<name>, preferences, grantedPermissions
+"
+    .to_string()
+}
+
+pub fn tailcat_usage() -> String {
+    "Ghostex tailcat - control-plane-free remote access through the tailcat sidecar
+
+Usage:
+  ghostex tailcat <command>
+
+Commands:
+  status                                Print the tailcat sidecar status JSON
+  enable                                Serve the configured ports and print the status
+  disable                               Stop the sidecar and print the status
 "
     .to_string()
 }

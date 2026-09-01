@@ -29,6 +29,7 @@ import { RemoteProjectPickerModal } from '@/packages/core-ui/remote-project-pick
 import type { RemoteFilesystemBrowseResult } from '@/packages/core-ui/remote-project-picker/remote-filesystem';
 import {
   SettingsModal,
+  gpuiBootstrapTailcatRpc,
   type MainSettingsInitialSectionId,
   type SettingsModalTab,
 } from '@/packages/core-ui/settings-modal';
@@ -2363,6 +2364,7 @@ function AppModalHost() {
         portless={portless}
         projects={projectSettingsProjects}
         settings={settings}
+        tailcatRpc={gpuiBootstrapTailcatRpc()}
         vscode={vscode}
         ghostexCliStatus={ghostexCliStatus}
         ghostexCliStatusLoading={ghostexCliStatusLoading}

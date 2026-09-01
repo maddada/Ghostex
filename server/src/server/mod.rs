@@ -44,11 +44,11 @@ use crate::{
     agents::{
         agent_metadata_title_revision, apply_created_session_identity,
         apply_live_process_session_identity, create_agent_session_params_for_project,
-        default_agent_command, dispatch_agent_endpoint, get_visible_terminal_title,
-        is_terminal_auto_working_directory_title, normalize_agent_hook_activity,
-        read_agent_settings, read_first_user_input_draft, read_text_from_map,
-        reconcile_agent_metadata_title_for_session, resolve_project_agent_config,
-        terminal_title_indicates_agent_identity, AgentEndpointError,
+        default_agent_command, dispatch_agent_endpoint, enforce_required_agent_permission_flag,
+        get_visible_terminal_title, is_terminal_auto_working_directory_title,
+        normalize_agent_hook_activity, read_agent_settings, read_first_user_input_draft,
+        read_text_from_map, reconcile_agent_metadata_title_for_session,
+        resolve_project_agent_config, terminal_title_indicates_agent_identity, AgentEndpointError,
         FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY, FIRST_USER_INPUT_DRAFT_STATUS_KEY,
         FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY,
     },
@@ -145,6 +145,7 @@ use crate::{
         create_gxserver_migration_status, initialize_gxserver_storage, open_gxserver_database,
         open_gxserver_database_with_busy_timeout,
     },
+    tailcat::{handle_tailcat_http, start_tailcat_from_persisted_state, TailcatRuntime},
     terminal_ws::{handle_terminal_socket, TerminalWsState},
     toolchain::{get_gxserver_tool_statuses, require_bundled_zmx, require_system_bd},
     typed_operations::{
@@ -243,6 +244,7 @@ pub(crate) struct AppState {
     pub(crate) session_chat_option_cache: Arc<Mutex<HashMap<String, SessionChatOptionCacheEntry>>>,
     pub(crate) shutdown_tx: broadcast::Sender<()>,
     pub(crate) stale_activity_timers: Arc<Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    pub(crate) tailcat_runtime: TailcatRuntime,
     pub(crate) version: String,
     pub(crate) zmx_title_observers: Arc<Mutex<HashMap<String, ZmxTitleObserverTask>>>,
 }
@@ -486,6 +488,7 @@ pub async fn run_gxserver_foreground(
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
         shutdown_tx: shutdown_tx.clone(),
         stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
+        tailcat_runtime: TailcatRuntime::new(),
         version,
         zmx_title_observers: Arc::new(Mutex::new(HashMap::new())),
     });
@@ -581,6 +584,13 @@ pub async fn run_gxserver_foreground(
         let repository = DomainRepository::new(&db, metadata.server_id.as_str());
         cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
     }
+    /*
+    CDXC:Tailcat 2026-09-01:
+    The tailcat sidecar is a child of THIS daemon, so a restart has to bring it
+    back from persisted state rather than leaving remote access silently down
+    until someone reopens Settings.
+    */
+    start_tailcat_from_persisted_state(&paths, &state.tailcat_runtime);
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
     let agent_metadata_title_sync_task = spawn_agent_metadata_title_sync_task(&state);
@@ -630,6 +640,7 @@ pub async fn run_gxserver_foreground(
     )
     .await;
     state.extension_registry.stop_all();
+    state.tailcat_runtime.stop();
     serve_result.with_context(|| "run gxserver HTTP listener")?;
 
     remove_runtime_metadata(&paths)?;
@@ -2206,6 +2217,9 @@ async fn route_http(
         "/api/queryLogs" => handle_query_logs_http(&state, endpoint.path, request_id, &body_json),
         "/api/updatePortlessState" => {
             handle_portless_state_http(&state, endpoint.path, request_id, &body_json)
+        }
+        "/api/tailcatStatus" | "/api/updateTailcatState" => {
+            handle_tailcat_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/previewRepositoryClone"
         | "/api/startRepositoryClone"

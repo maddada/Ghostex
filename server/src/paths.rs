@@ -24,6 +24,7 @@ pub struct GxserverPaths {
     pub runtime_dir: PathBuf,
     pub runtime_metadata_file: PathBuf,
     pub state_db_file: PathBuf,
+    pub tailcat_dir: PathBuf,
     pub zmx_dir: PathBuf,
 }
 
@@ -52,6 +53,10 @@ pub fn get_gxserver_paths(home_dir: Option<PathBuf>) -> GxserverPaths {
     let migrations_dir = root_dir.join("migrations");
     let portless_state_dir = root_dir.join("portless");
     let runtime_dir = root_dir.join("runtime");
+    // CDXC:Tailcat 2026-09-01: the tailcat server key and its derived address
+    // blob are daemon-owned state, so they live beside the other gxserver
+    // state directories rather than in a tailcat-default home location.
+    let tailcat_dir = root_dir.join("tailcat");
     let zmx_dir = root_dir.join("zmx");
     let extensions_dir = storage.extensions_dir();
     let extensions_store_file = storage.extensions_store_file();
@@ -76,6 +81,7 @@ pub fn get_gxserver_paths(home_dir: Option<PathBuf>) -> GxserverPaths {
         runtime_metadata_file: runtime_dir.join("server.json"),
         runtime_dir,
         state_db_file: root_dir.join("state.db"),
+        tailcat_dir,
         zmx_dir,
         root_dir,
     }

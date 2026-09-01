@@ -116,4 +116,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0024_stashed_prompt_tag",
     "0025_session_agent_notes",
     "0026_stashed_prompt_agent_session",
+    "0027_tailcat_state",
 ];

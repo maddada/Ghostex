@@ -144,6 +144,7 @@ import { OpenTargetsSettingsTab } from './settings-modal/tabs/open-targets';
 import { OSIntegrationSettingsTab } from './settings-modal/tabs/os-integration';
 import { ProjectsSettingsPanel } from './settings-modal/tabs/projects';
 import { RemoteSettingsTab } from './settings-modal/tabs/remote';
+import { type TailcatSettingsRpc } from './settings-modal/tabs/remote-tailcat';
 import {
   HotkeySettingsSectionId,
   MainSettingsScrollTargetId,
@@ -172,6 +173,7 @@ import { createSettingsActions, type GhosttySettingsAction } from './settings-mo
 import { getActiveSettingsModalScrollViewport } from './settings-modal/scroll-targets';
 
 export type { SettingsModalTab } from './settings-modal-tabs';
+export { gpuiBootstrapTailcatRpc, type TailcatSettingsRpc } from './settings-modal/tabs/remote-tailcat';
 
 const GHOSTTY_THEME_UNMANAGED_VALUE = '__ghostex_ghostty_theme_unmanaged__';
 
@@ -277,6 +279,12 @@ export type SettingsModalProps = {
   onTestAgentTaskCompletion?: () => void;
   projects?: SidebarProjectSettingsItem[];
   settings?: ghostexSettings;
+  /**
+   * Talks to the gxserver that supervises the tailcat sidecar. Absent where the
+   * host has no daemon connection, which leaves the Remote page's Tailcat
+   * section out entirely.
+   */
+  tailcatRpc?: TailcatSettingsRpc;
   theme?: SidebarTheme;
   vscode?: WebviewApi;
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
@@ -339,6 +347,7 @@ export function SettingsModal({
   onTestAgentTaskCompletion,
   projects = [],
   settings,
+  tailcatRpc,
   theme = 'dark-blue',
   vscode,
   ghostexCliStatus,
@@ -2775,6 +2784,7 @@ export function SettingsModal({
                       remoteMachines={draft.remoteMachines}
                       search={extraSettingsTabSearches.remote}
                       searchEmptyState={settingsSearchEmptyState}
+                      tailcatRpc={tailcatRpc}
                       vscode={vscode}
                     />
                   </TabsContent>

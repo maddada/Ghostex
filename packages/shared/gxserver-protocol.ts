@@ -301,6 +301,8 @@ export type GxserverEndpointPath =
   | '/api/updateAuth'
   | '/api/updateListenerConfig'
   | '/api/updatePortlessState'
+  | '/api/tailcatStatus'
+  | '/api/updateTailcatState'
   | '/api/installTool'
   | '/api/browseFilesystem'
   | '/api/destructiveAdminAction';
@@ -459,6 +461,32 @@ export interface GxserverPortlessPresentation {
   routePreviews: readonly GxserverPortlessRoutePreview[];
   status: GxserverPortlessStatus;
 }
+
+/**
+ * tailcat is the control-plane-free remote-access sidecar gxserver supervises.
+ * `token` is the address blob clients dial; it is derived from the daemon-owned
+ * server key at runtime and is null until the running sidecar has published it.
+ */
+export interface GxserverTailcatStatus {
+  enabled: boolean;
+  running: boolean;
+  binaryFound: boolean;
+  binaryPath: string | null;
+  binaryVersion: string | null;
+  token: string | null;
+  ports: readonly number[];
+  allowedClientKeys: readonly string[];
+  lastError: string | null;
+}
+
+export interface GxserverTailcatStatusResult {
+  status: GxserverTailcatStatus;
+}
+
+export type GxserverTailcatStateUpdate =
+  | { kind: 'setEnabled'; enabled: boolean }
+  | { kind: 'setPorts'; ports: readonly number[] }
+  | { kind: 'setAllowedClientKeys'; allowedClientKeys: readonly string[] };
 
 export interface GxserverServerHealthResponse extends GxserverMinimalHealthResponse {
   buildIdentity: string;
@@ -1697,7 +1725,7 @@ export interface GxserverSidebarHudSettingsMutationResult {
   projects: readonly GxserverProjectDomainState[];
 }
 
-export type GxserverConnectionTransport = 'local' | 'tailscale' | 'direct' | 'ssh';
+export type GxserverConnectionTransport = 'local' | 'tailscale' | 'direct' | 'ssh' | 'tailcat';
 export type GxserverConnectionProfileId = string & { readonly __gxserverConnectionProfileId: unique symbol };
 
 export interface GxserverCredentialSecretRef {
@@ -1710,8 +1738,17 @@ export interface GxserverConnectionProfile {
   createdAt: string;
   id: string;
   name: string;
+  /**
+   * CDXC:Tailcat 2026-09-01:
+   * The tailcat transport reaches the remote gxserver's own API port through a
+   * client-side pipe, so the profile carries the peer's address blob and the
+   * port it serves instead of a baseUrl. `remotePort` defaults to the gxserver
+   * API port when absent.
+   */
+  remotePort?: number;
   serverId?: GxserverServerId;
   sshUrl?: string;
+  tailcatToken?: string;
   tokenSecretRef?: GxserverCredentialSecretRef;
   transport: GxserverConnectionTransport;
   updatedAt: string;

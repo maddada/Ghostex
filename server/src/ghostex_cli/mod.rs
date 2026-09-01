@@ -15,6 +15,8 @@ pub mod saved_prompts;
 pub mod selector;
 pub mod sessions;
 pub mod skills;
+pub mod tailcat;
+pub mod tailcat_tunnel;
 pub mod usage;
 pub mod wait;
 pub mod web;
@@ -37,7 +39,7 @@ pub fn run() -> i32 {
             CliError::Other(format!("Could not migrate legacy Ghostex storage: {error}"))
         })
         .and_then(|_| dispatch(&argv));
-    rpc::stop_all_gxserver_ssh_tunnels();
+    rpc::stop_all_gxserver_tunnels();
     match result {
         Ok(code) => code,
         Err(error) => {
@@ -76,6 +78,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "quick-actions",
     "saved-prompts",
     "server",
+    "tailcat",
     "web",
 ];
 
@@ -228,6 +231,8 @@ fn is_known_command(name: &str) -> bool {
         "toggle-agent-prompt-favorite",
         "resolve-agent-prompt-launch",
         "read-session-chat",
+        "switch-draft-agent",
+        "send-session-chat-key",
         "read-session-chat-skills",
         "read-session-chat-files",
         "send-session-chat-message",
@@ -256,6 +261,7 @@ fn is_known_command(name: &str) -> bool {
         "beads",
         "board",
         "server",
+        "tailcat",
         "web",
         "install-browser-skill",
         "install-browser-mcp-skill",
@@ -558,6 +564,18 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "read-session-chat" => {
             run_bridge_action("readSessionChat", Parser::SessionChatRead, plain, args)
         }
+        "switch-draft-agent" => run_bridge_action(
+            "switchDraftAgent",
+            Parser::SessionChatDraftAgent,
+            fail_on_not_ok,
+            args,
+        ),
+        "send-session-chat-key" => run_bridge_action(
+            "sendSessionChatMessage",
+            Parser::SessionChatKey,
+            fail_on_not_ok,
+            args,
+        ),
         "read-session-chat-skills" => run_bridge_action(
             "readSessionChatSkills",
             Parser::SessionSelector,
@@ -663,6 +681,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "bd" | "beads" => launchers::beads_command(args),
         "board" => board::board_command(args),
         "server" => server_command(args),
+        "tailcat" => tailcat::tailcat_command(args),
         "web" => web::web_command(args),
         "install-browser-skill" | "install-browser-mcp-skill" => {
             skills::install_browser_skill_command(args)

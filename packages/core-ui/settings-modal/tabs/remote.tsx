@@ -24,7 +24,8 @@ import {
 import { normalizeRemoteMachineSettings, type RemoteMachineSettings } from '../../../shared/ghostex-settings';
 import { type WebviewApi } from '../../webview-api';
 import { SettingButton, SettingsInput } from '../fields';
-import { SettingsTabSearch, hasVisibleSettingsSearchResult } from '../search';
+import { SettingsTabSearch, hasVisibleSettingsSearchResult, shouldShowSettingsSection } from '../search';
+import { TailcatSettingsPanel, type TailcatSettingsRpc } from './remote-tailcat';
 
 export type RemoteMachineDraft = {
   id: string;
@@ -99,6 +100,7 @@ export function RemoteSettingsTab({
   remoteMachines,
   search,
   searchEmptyState,
+  tailcatRpc,
   vscode,
 }: {
   initialRemoteMachineId?: string;
@@ -107,6 +109,7 @@ export function RemoteSettingsTab({
   remoteMachines: RemoteMachineSettings[];
   search: SettingsTabSearch;
   searchEmptyState?: ReactNode;
+  tailcatRpc?: TailcatSettingsRpc;
   vscode?: WebviewApi;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -394,188 +397,208 @@ export function RemoteSettingsTab({
     );
   }
 
+  /*
+   * CDXC:Tailcat 2026-08-31:
+   * The Remote page now carries two sections, so each one answers the global
+   * Settings search on its own instead of the whole page appearing for any
+   * match on it.
+   */
+  const showRemoteMachines = shouldShowSettingsSection(search.sections.remoteMachines);
+  const showTailcat = shouldShowSettingsSection(search.sections.tailcat);
+
   return (
     <div className='settings-tab-scroll' ref={containerRef}>
       <div className='settings-management-layout'>
-        <header className='settings-management-header'>
-          <div className='settings-management-header-text'>
-            <h3 className='settings-management-heading'>Remote machines</h3>
-            <p className='settings-management-description'>
-              Saved SSH machines appear as separate sidebar sections. Hide a machine from the sidebar without deleting
-              it.
-            </p>
-          </div>
-          <Popover onOpenChange={setIsTailscaleHelpOpen} open={isTailscaleHelpOpen}>
-            <PopoverTrigger
-              render={<Button className='settings-management-help-button' type='button' variant='outline' />}
-            >
-              <IconInfoCircle aria-hidden='true' data-icon='inline-start' />
-              Tailscale setup
-            </PopoverTrigger>
-            <PopoverContent
-              align='end'
-              className='w-80 max-w-[calc(100vw-2rem)] gap-3 p-4'
-              onOpenAutoFocus={(event) => event.preventDefault()}
-              side='top'
-              sideOffset={8}
-            >
-              {/*
-               * CDXC:RemoteMachines 2026-06-08-18:47:
-               * Tailscale setup help should be a compact popover above Remote Machine settings, not a full modal, because it is contextual guidance for filling the SSH host rather than a blocking workflow.
-               *
-               * CDXC:RemoteMachines 2026-06-12-05:42:
-               * The Remote machines header stacks the title over its muted subtitle on the left and pins Tailscale setup as an outline button on the right edge, so the contextual help reads as a real action opposite the header rather than a faint control wedged beside the subtitle.
-               */}
-              <PopoverHeader>
-                <PopoverTitle className='text-sm'>Tailscale setup</PopoverTitle>
-                <PopoverDescription className='text-xs leading-5'>
-                  Use Tailscale when the remote machine is not reachable on your local network.
-                </PopoverDescription>
-              </PopoverHeader>
-              <ol className='flex list-decimal flex-col gap-2 pl-5 text-xs leading-5 text-muted-foreground'>
-                <li>Install Tailscale on this Mac and sign in.</li>
-                <li>Install Tailscale on the remote machine and sign in to the same tailnet.</li>
-                <li>Confirm both machines are connected in Tailscale.</li>
-                <li>Use the remote machine's Tailscale DNS name or Tailscale IP as the SSH host.</li>
-              </ol>
-              <p className='text-xs leading-5 text-muted-foreground'>
-                Ghostex still connects with SSH only; no Tailscale tokens or remote gxserver listener are required.
-              </p>
-            </PopoverContent>
-          </Popover>
-        </header>
-
-        <div className='settings-management-list settings-remote-machine-list'>
-          {/*
-           * CDXC:RemoteMachines 2026-06-12-05:42:
-           * Add remote machine is the fixed first grid item (top-left), saved machines fill the remaining slots and wrap to new rows, and the empty placeholder occupies the slot beside the add card so the Remote tab always reads as a single uniform grid.
-           *
-           * CDXC:RemoteMachines 2026-06-02-23:47:
-           * Remote settings require a human name and SSH host before saving because the sidebar section title comes from this user label and v1 remote connections support SSH only.
-           */}
-          <Card className='settings-remote-machine-card settings-remote-machine-add-card' size='sm'>
-            <div className='settings-remote-machine-summary settings-remote-machine-add-summary settings-management-row'>
-              <span aria-hidden='true' className='settings-management-icon settings-remote-machine-add-icon'>
-                <IconPlus size={16} />
-              </span>
-              <span className='settings-management-main min-w-0 flex-1'>
-                <CardTitle className='settings-management-title'>Add remote machine</CardTitle>
-                <span className='settings-management-detail'>New SSH machine</span>
-              </span>
-            </div>
-            <CardContent className='settings-remote-machine-body'>
-              <RemoteMachineFields
-                draft={newMachine}
-                identityDescription='Provide either an SSH identity file now or an SSH password below.'
-                onChange={(patch) => setNewMachine((draft) => ({ ...draft, ...patch }))}
-                passwordDescription='Passwords are stored in macOS Keychain. Leave blank to add the machine without a saved password.'
-              />
-              <div className='settings-management-actions settings-remote-machine-add-actions'>
-                <SettingButton
-                  disabled={!canAddMachine}
-                  disabledReason='Enter a machine name and SSH host first.'
-                  onClick={addRemoteMachine}
-                  type='button'
-                >
-                  <IconPlus aria-hidden='true' />
-                  Add Machine
-                </SettingButton>
+        {showRemoteMachines ? (
+          <>
+            <header className='settings-management-header'>
+              <div className='settings-management-header-text'>
+                <h3 className='settings-management-heading'>Remote machines</h3>
+                <p className='settings-management-description'>
+                  Saved SSH machines appear as separate sidebar sections. Hide a machine from the sidebar without
+                  deleting it.
+                </p>
               </div>
-            </CardContent>
-          </Card>
-          {remoteMachines.length === 0 ? (
-            <div className='settings-remote-machine-empty'>
-              <span aria-hidden='true' className='settings-remote-machine-empty-icon'>
-                <IconDeviceDesktop size={18} />
-              </span>
-              <span className='settings-remote-machine-empty-text'>
-                <span className='settings-remote-machine-empty-title'>No machines yet</span>
-                <span className='settings-remote-machine-empty-hint'>
-                  Add one to reach it over SSH from the sidebar.
-                </span>
-              </span>
-            </div>
-          ) : (
-            remoteMachines.map((machine) => {
-              const machineDraft = getRemoteMachineEditDraft(machine);
-              const summaryMachine = normalizeRemoteMachineDraft(machineDraft) ?? machine;
-              const gxserverInstall = remoteGxserverInstallsById[machine.id];
-              const gxserverInstalled = gxserverInstall?.installed === true;
-              return (
-                <Card
-                  className='settings-remote-machine-card'
-                  data-settings-remote-machine-id={machine.id}
-                  key={machine.id}
-                  size='sm'
+              <Popover onOpenChange={setIsTailscaleHelpOpen} open={isTailscaleHelpOpen}>
+                <PopoverTrigger
+                  render={<Button className='settings-management-help-button' type='button' variant='outline' />}
                 >
-                  <div className='settings-remote-machine-summary settings-management-row'>
-                    <span className='settings-management-icon flex size-9 shrink-0 items-center justify-center bg-muted'>
-                      <IconDeviceDesktop aria-hidden='true' />
-                    </span>
-                    <span className='settings-management-main min-w-0 flex-1'>
-                      <span className='settings-management-title'>{summaryMachine.name}</span>
-                      <span className='settings-management-detail'>{formatRemoteMachineSshTarget(summaryMachine)}</span>
-                    </span>
-                    <span className='settings-management-row-actions'>
-                      <Button
-                        aria-label={`Remove ${machine.name}`}
-                        onClick={() => removeRemoteMachine(machine.id)}
-                        size='icon-sm'
-                        type='button'
-                        variant='ghost'
-                      >
-                        <IconTrash aria-hidden='true' />
-                      </Button>
-                    </span>
+                  <IconInfoCircle aria-hidden='true' data-icon='inline-start' />
+                  Tailscale setup
+                </PopoverTrigger>
+                <PopoverContent
+                  align='end'
+                  className='w-80 max-w-[calc(100vw-2rem)] gap-3 p-4'
+                  onOpenAutoFocus={(event) => event.preventDefault()}
+                  side='top'
+                  sideOffset={8}
+                >
+                  {/*
+                   * CDXC:RemoteMachines 2026-06-08-18:47:
+                   * Tailscale setup help should be a compact popover above Remote Machine settings, not a full modal, because it is contextual guidance for filling the SSH host rather than a blocking workflow.
+                   *
+                   * CDXC:RemoteMachines 2026-06-12-05:42:
+                   * The Remote machines header stacks the title over its muted subtitle on the left and pins Tailscale setup as an outline button on the right edge, so the contextual help reads as a real action opposite the header rather than a faint control wedged beside the subtitle.
+                   */}
+                  <PopoverHeader>
+                    <PopoverTitle className='text-sm'>Tailscale setup</PopoverTitle>
+                    <PopoverDescription className='text-xs leading-5'>
+                      Use Tailscale when the remote machine is not reachable on your local network.
+                    </PopoverDescription>
+                  </PopoverHeader>
+                  <ol className='flex list-decimal flex-col gap-2 pl-5 text-xs leading-5 text-muted-foreground'>
+                    <li>Install Tailscale on this Mac and sign in.</li>
+                    <li>Install Tailscale on the remote machine and sign in to the same tailnet.</li>
+                    <li>Confirm both machines are connected in Tailscale.</li>
+                    <li>Use the remote machine's Tailscale DNS name or Tailscale IP as the SSH host.</li>
+                  </ol>
+                  <p className='text-xs leading-5 text-muted-foreground'>
+                    Ghostex still connects with SSH only; no Tailscale tokens or remote gxserver listener are required.
+                  </p>
+                </PopoverContent>
+              </Popover>
+            </header>
+
+            <div className='settings-management-list settings-remote-machine-list'>
+              {/*
+               * CDXC:RemoteMachines 2026-06-12-05:42:
+               * Add remote machine is the fixed first grid item (top-left), saved machines fill the remaining slots and wrap to new rows, and the empty placeholder occupies the slot beside the add card so the Remote tab always reads as a single uniform grid.
+               *
+               * CDXC:RemoteMachines 2026-06-02-23:47:
+               * Remote settings require a human name and SSH host before saving because the sidebar section title comes from this user label and v1 remote connections support SSH only.
+               */}
+              <Card className='settings-remote-machine-card settings-remote-machine-add-card' size='sm'>
+                <div className='settings-remote-machine-summary settings-remote-machine-add-summary settings-management-row'>
+                  <span aria-hidden='true' className='settings-management-icon settings-remote-machine-add-icon'>
+                    <IconPlus size={16} />
+                  </span>
+                  <span className='settings-management-main min-w-0 flex-1'>
+                    <CardTitle className='settings-management-title'>Add remote machine</CardTitle>
+                    <span className='settings-management-detail'>New SSH machine</span>
+                  </span>
+                </div>
+                <CardContent className='settings-remote-machine-body'>
+                  <RemoteMachineFields
+                    draft={newMachine}
+                    identityDescription='Provide either an SSH identity file now or an SSH password below.'
+                    onChange={(patch) => setNewMachine((draft) => ({ ...draft, ...patch }))}
+                    passwordDescription='Passwords are stored in macOS Keychain. Leave blank to add the machine without a saved password.'
+                  />
+                  <div className='settings-management-actions settings-remote-machine-add-actions'>
+                    <SettingButton
+                      disabled={!canAddMachine}
+                      disabledReason='Enter a machine name and SSH host first.'
+                      onClick={addRemoteMachine}
+                      type='button'
+                    >
+                      <IconPlus aria-hidden='true' />
+                      Add Machine
+                    </SettingButton>
                   </div>
-                  <CardContent className='settings-remote-machine-body'>
-                    <RemoteMachineFields
-                      draft={machineDraft}
-                      onChange={(patch) => updateRemoteMachine(machine.id, patch)}
-                      onPasswordSave={() => saveRemoteMachinePassword(machine)}
-                      passwordSaveDisabled={!vscode}
-                      showSidebarVisibility
-                    />
-                    {/*
-                     * CDXC:RemoteMachines 2026-06-23-08:30:
-                     * Remote Settings needs a direct gxserver install action for
-                     * first-run Ubuntu SSH machines. Reuse the reconnect flow so
-                     * native opens the approval modal only after SSH proves
-                     * gxserver is missing, and otherwise connects the existing
-                     * remote daemon without reinstalling it.
-                     */}
-                    <div className='settings-management-actions settings-remote-machine-install-actions'>
-                      {gxserverInstalled ? (
-                        <span className='settings-remote-machine-installed-version'>
-                          {gxserverInstall?.version ? `gxserver ${gxserverInstall.version}` : 'gxserver installed'}
+                </CardContent>
+              </Card>
+              {remoteMachines.length === 0 ? (
+                <div className='settings-remote-machine-empty'>
+                  <span aria-hidden='true' className='settings-remote-machine-empty-icon'>
+                    <IconDeviceDesktop size={18} />
+                  </span>
+                  <span className='settings-remote-machine-empty-text'>
+                    <span className='settings-remote-machine-empty-title'>No machines yet</span>
+                    <span className='settings-remote-machine-empty-hint'>
+                      Add one to reach it over SSH from the sidebar.
+                    </span>
+                  </span>
+                </div>
+              ) : (
+                remoteMachines.map((machine) => {
+                  const machineDraft = getRemoteMachineEditDraft(machine);
+                  const summaryMachine = normalizeRemoteMachineDraft(machineDraft) ?? machine;
+                  const gxserverInstall = remoteGxserverInstallsById[machine.id];
+                  const gxserverInstalled = gxserverInstall?.installed === true;
+                  return (
+                    <Card
+                      className='settings-remote-machine-card'
+                      data-settings-remote-machine-id={machine.id}
+                      key={machine.id}
+                      size='sm'
+                    >
+                      <div className='settings-remote-machine-summary settings-management-row'>
+                        <span className='settings-management-icon flex size-9 shrink-0 items-center justify-center bg-muted'>
+                          <IconDeviceDesktop aria-hidden='true' />
                         </span>
-                      ) : null}
-                      <SettingButton
-                        disabled={!vscode || !machineDraft.sshHost.trim()}
-                        disabledReason={
-                          !machineDraft.sshHost.trim()
-                            ? 'Enter an SSH host first.'
-                            : 'This action needs the Ghostex app connection.'
-                        }
-                        onClick={() => {
-                          vscode?.postMessage({
-                            remoteMachineId: machine.id,
-                            type: 'reconnectRemoteMachine',
-                          });
-                        }}
-                        type='button'
-                        variant='secondary'
-                      >
-                        {gxserverInstalled ? <IconRefresh aria-hidden='true' /> : <IconDownload aria-hidden='true' />}
-                        {gxserverInstalled ? 'Update gxserver' : 'Install / Connect gxserver'}
-                      </SettingButton>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
-        </div>
+                        <span className='settings-management-main min-w-0 flex-1'>
+                          <span className='settings-management-title'>{summaryMachine.name}</span>
+                          <span className='settings-management-detail'>
+                            {formatRemoteMachineSshTarget(summaryMachine)}
+                          </span>
+                        </span>
+                        <span className='settings-management-row-actions'>
+                          <Button
+                            aria-label={`Remove ${machine.name}`}
+                            onClick={() => removeRemoteMachine(machine.id)}
+                            size='icon-sm'
+                            type='button'
+                            variant='ghost'
+                          >
+                            <IconTrash aria-hidden='true' />
+                          </Button>
+                        </span>
+                      </div>
+                      <CardContent className='settings-remote-machine-body'>
+                        <RemoteMachineFields
+                          draft={machineDraft}
+                          onChange={(patch) => updateRemoteMachine(machine.id, patch)}
+                          onPasswordSave={() => saveRemoteMachinePassword(machine)}
+                          passwordSaveDisabled={!vscode}
+                          showSidebarVisibility
+                        />
+                        {/*
+                         * CDXC:RemoteMachines 2026-06-23-08:30:
+                         * Remote Settings needs a direct gxserver install action for
+                         * first-run Ubuntu SSH machines. Reuse the reconnect flow so
+                         * native opens the approval modal only after SSH proves
+                         * gxserver is missing, and otherwise connects the existing
+                         * remote daemon without reinstalling it.
+                         */}
+                        <div className='settings-management-actions settings-remote-machine-install-actions'>
+                          {gxserverInstalled ? (
+                            <span className='settings-remote-machine-installed-version'>
+                              {gxserverInstall?.version ? `gxserver ${gxserverInstall.version}` : 'gxserver installed'}
+                            </span>
+                          ) : null}
+                          <SettingButton
+                            disabled={!vscode || !machineDraft.sshHost.trim()}
+                            disabledReason={
+                              !machineDraft.sshHost.trim()
+                                ? 'Enter an SSH host first.'
+                                : 'This action needs the Ghostex app connection.'
+                            }
+                            onClick={() => {
+                              vscode?.postMessage({
+                                remoteMachineId: machine.id,
+                                type: 'reconnectRemoteMachine',
+                              });
+                            }}
+                            type='button'
+                            variant='secondary'
+                          >
+                            {gxserverInstalled ? (
+                              <IconRefresh aria-hidden='true' />
+                            ) : (
+                              <IconDownload aria-hidden='true' />
+                            )}
+                            {gxserverInstalled ? 'Update gxserver' : 'Install / Connect gxserver'}
+                          </SettingButton>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })
+              )}
+            </div>
+          </>
+        ) : null}
+        {showTailcat && tailcatRpc ? <TailcatSettingsPanel isActive={isActive} rpc={tailcatRpc} /> : null}
       </div>
     </div>
   );

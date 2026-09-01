@@ -3907,6 +3907,151 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
+ * CDXC:Tailcat 2026-08-31:
+ * The Tailcat panel is the second section on Settings -> Remote and reads like
+ * the Portless card: one bordered section, a status badge opposite the heading,
+ * and stacked control rows. Pairing material (address + QR) sits in its own
+ * block so the monospace blob never squeezes the toggle rows.
+ */
+.settings-tailcat-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.settings-tailcat-body {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-tailcat-status-badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--app-card-active) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
+  color: var(--app-muted);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  min-height: 24px;
+  padding: 0 8px;
+}
+
+.settings-tailcat-status-badge[data-status='active'] {
+  color: color-mix(in srgb, #6ee7b7 78%, var(--app-foreground) 22%);
+}
+
+.settings-tailcat-status-badge[data-status='failed'] {
+  color: color-mix(in srgb, #f87171 82%, var(--app-foreground) 18%);
+}
+
+.settings-tailcat-status-badge[data-status='needsSetup'] {
+  color: color-mix(in srgb, #facc15 82%, var(--app-foreground) 18%);
+}
+
+.settings-tailcat-row {
+  align-items: center;
+  background: color-mix(in srgb, var(--app-card-active) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 12px;
+}
+
+.settings-tailcat-ports-input {
+  flex: 0 0 172px;
+}
+
+.settings-tailcat-install,
+.settings-tailcat-pairing,
+.settings-tailcat-keys {
+  background: color-mix(in srgb, var(--app-card-active) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.settings-tailcat-command-row,
+.settings-tailcat-token-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.settings-tailcat-command,
+.settings-tailcat-token {
+  background: color-mix(in srgb, var(--app-background) 44%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
+  color: color-mix(in srgb, var(--app-foreground) 88%, var(--app-muted) 12%);
+  font-family: var(--settings-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
+  font-size: 11px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.settings-tailcat-token {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.settings-tailcat-pairing-body {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.settings-tailcat-qr {
+  background: #f4f4f5;
+  display: block;
+  height: 168px;
+  padding: 0;
+  width: 168px;
+}
+
+.settings-tailcat-keys-toggle {
+  justify-content: flex-start;
+  justify-self: start;
+  padding-inline: 6px;
+}
+
+.settings-tailcat-keys-body {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-tailcat-keys-textarea {
+  font-family: var(--settings-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
+  font-size: 11px;
+}
+
+.settings-tailcat-field-error,
+.settings-tailcat-error {
+  color: color-mix(in srgb, #f87171 82%, var(--app-foreground) 18%);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-tailcat-error {
+  align-items: flex-start;
+  display: flex;
+  gap: 8px;
+}
+
+.settings-tailcat-error > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/*
  * CDXC:RemoteMachines 2026-06-08-19:05:
  * Remote machine settings need a clear title/description hierarchy, a single-line muted subtitle, and a compact Tailscale help affordance beside the description, not a full-width outline button under cramped copy.
  */
@@ -4417,6 +4562,14 @@ html:has(body.app-modal-host-native-window-body) {
     .settings-portless-domains,
     .settings-portless-status-badge,
     .settings-portless-status-row,
+    .settings-tailcat-command,
+    .settings-tailcat-install,
+    .settings-tailcat-keys,
+    .settings-tailcat-pairing,
+    .settings-tailcat-qr,
+    .settings-tailcat-row,
+    .settings-tailcat-status-badge,
+    .settings-tailcat-token,
     .settings-management-help-button,
     .settings-management-icon,
     .settings-management-row,

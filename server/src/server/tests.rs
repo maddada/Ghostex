@@ -2850,6 +2850,7 @@ fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
         shutdown_tx,
         stale_activity_timers: Arc::new(Mutex::new(HashMap::new())),
+        tailcat_runtime: crate::tailcat::TailcatRuntime::new(),
         version: "0.0.0-test".to_string(),
         zmx_title_observers: Arc::new(Mutex::new(HashMap::new())),
     })
