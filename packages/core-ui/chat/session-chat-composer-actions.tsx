@@ -239,7 +239,7 @@ export function SessionChatComposerActions({
   // inside the dots menu, on every footer width, so both menus share them.
   const verboseMenuItem = onToggleVerbose ? (
     <DropdownMenuCheckboxItem
-      className='whitespace-nowrap'
+      className={cn('whitespace-nowrap', verboseMode && 'font-medium')}
       checked={verboseMode}
       closeOnClick={false}
       onCheckedChange={(checked: boolean) => {
@@ -254,7 +254,7 @@ export function SessionChatComposerActions({
   ) : null;
   const summaryMenuItem = onToggleSummary ? (
     <DropdownMenuCheckboxItem
-      className='pr-2 whitespace-nowrap'
+      className={cn('whitespace-nowrap', summaryMode && 'font-medium')}
       checked={summaryMode}
       closeOnClick={false}
       onCheckedChange={(checked: boolean) => {
@@ -262,7 +262,6 @@ export function SessionChatComposerActions({
           onToggleSummary();
         }
       }}
-      showIndicator={false}
     >
       {summaryMode ? <IconListCheck aria-hidden='true' /> : <IconListDetails aria-hidden='true' />}
       Summary mode
