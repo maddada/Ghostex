@@ -95,6 +95,11 @@ jobs:
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             test -s "$MODULE/src/main/jniLibs/$abi/libgojni.so"
           done
+      - name: Install repository dependencies
+        # `tooling/release-mobile/android.sh` runs `bun run build:mobile-chat`,
+        # which imports esbuild from the ROOT node_modules. The React Native
+        # install below is scoped to apps/mobile/app and does not provide it.
+        run: .release-automation/tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
       - name: Install JavaScript dependencies
         working-directory: apps/mobile/app
         run: bun install --frozen-lockfile
