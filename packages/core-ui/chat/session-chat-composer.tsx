@@ -88,6 +88,7 @@ import {
   sessionChatFileMention,
 } from './session-chat-composer-trigger';
 import { SessionChatMonacoInput } from './session-chat-monaco-input';
+import { SessionChatPlainInput } from './session-chat-plain-input';
 import { sessionChatImageTargetForHref, useSessionChatImageViewer } from './session-chat-image-viewer';
 import { SessionChatAgentFleetStrip } from './session-chat-agent-fleet-strip';
 import { SessionChatQueueRows } from './session-chat-queue-rows';
@@ -392,8 +393,9 @@ function nextFileReferenceIndex(text: string): number {
 }
 
 /** Mentions queue and the two composer pickers so they are discoverable without docs. */
-const DEFAULT_SESSION_CHAT_PLACEHOLDER =
+const DESKTOP_SESSION_CHAT_PLACEHOLDER =
   'Press Enter to send a message and Tab to Queue.\nUse @ to mention a file and $ for using skills.';
+const MOBILE_SESSION_CHAT_PLACEHOLDER = 'Tap ↑ to send or hold it to queue; use @ for files and $ for skills.';
 
 const IMAGE_PATH_PATTERN = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)$/i;
 const LINKED_IMAGE_REFERENCE_PATTERN = /\[Image #\d+\]\(([^)\r\n]+)\)/g;
@@ -492,7 +494,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function reactKeyEventAdapter(event: KeyboardEvent<HTMLTextAreaElement>): SessionChatComposerKeyEvent {
+function reactKeyEventAdapter(event: KeyboardEvent<HTMLElement>): SessionChatComposerKeyEvent {
   return {
     altKey: event.altKey,
     ctrlKey: event.ctrlKey,
@@ -581,7 +583,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     /** A newer draft from another device, waiting behind the Use / Dismiss bar. */
     const [incomingDraft, setIncomingDraft] = useState<SessionChatDraft | null>(null);
     const imageViewer = useSessionChatImageViewer();
-    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const slashListRef = useRef<HTMLDivElement | null>(null);
     const skillListRef = useRef<HTMLDivElement | null>(null);
@@ -591,6 +592,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const draftRef = useRef(draft);
     draftRef.current = draft;
     const monacoApiRef = useRef<SessionChatComposerInputApi | null>(null);
+    const plainApiRef = useRef<SessionChatComposerInputApi | null>(null);
     const pendingFocusRef = useRef(false);
     const pendingInsertTextRef = useRef('');
     const pendingSavedPromptRef = useRef('');
@@ -721,75 +723,28 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       setFileIndex(0);
     };
 
-    const insertTextareaText = (text: string): boolean => {
-      const textarea = textareaRef.current;
-      if (!textarea) {
-        return false;
-      }
-      const start = textarea.selectionStart ?? textarea.value.length;
-      const end = textarea.selectionEnd ?? textarea.value.length;
-      const next = `${textarea.value.slice(0, start)}${text}${textarea.value.slice(end)}`;
-      updateDraft(next, start + text.length);
-      textarea.focus();
-      requestAnimationFrame(() => {
-        const caret = start + text.length;
-        textarea.setSelectionRange(caret, caret);
-      });
-      return true;
-    };
-
-    const textareaApi: SessionChatComposerInputApi = {
-      applyValue: (next, caret) => {
-        // Value arrives through the controlled `draft`; only the caret needs
-        // repositioning once React has committed it.
-        requestAnimationFrame(() => {
-          const clamped = Math.min(caret, next.length);
-          textareaRef.current?.setSelectionRange(clamped, clamped);
-        });
-      },
-      focus: () => textareaRef.current?.focus(),
-      getSelection: () => {
-        const textarea = textareaRef.current;
-        const fallback = textarea?.value.length ?? draft.length;
-        return {
-          end: textarea?.selectionEnd ?? fallback,
-          start: textarea?.selectionStart ?? fallback,
-        };
-      },
-      getValue: () => textareaRef.current?.value ?? draft,
-      insertSavedPrompt: insertTextareaText,
-      insertText: insertTextareaText,
-      selectAll: () => {
-        const textarea = textareaRef.current;
-        if (!textarea) {
-          return;
-        }
-        textarea.focus();
-        textarea.setSelectionRange(0, textarea.value.length);
-        setCaret(textarea.value.length);
-      },
-    };
-
     // Resolved lazily: the Monaco backend registers its api into a ref after
     // an async load, without a re-render, so a render-scoped const would go
     // stale between load and the next state change.
-    const getInputApi = (): SessionChatComposerInputApi | null => (useMonaco ? monacoApiRef.current : textareaApi);
+    const getInputApi = (): SessionChatComposerInputApi | null =>
+      useMonaco ? monacoApiRef.current : plainApiRef.current;
 
     useEffect(() => {
-      if (!useMonaco && textareaRef.current) {
+      const plainApi = plainApiRef.current;
+      if (!useMonaco && plainApi) {
         if (pendingInsertTextRef.current) {
           const pending = pendingInsertTextRef.current;
           pendingInsertTextRef.current = '';
-          textareaApi.insertText(pending);
+          plainApi.insertText(pending);
         }
         if (pendingSavedPromptRef.current) {
           const pending = pendingSavedPromptRef.current;
           pendingSavedPromptRef.current = '';
-          textareaApi.insertSavedPrompt(pending);
+          plainApi.insertSavedPrompt(pending);
         }
         if (pendingFocusRef.current) {
           pendingFocusRef.current = false;
-          textareaRef.current.focus();
+          plainApi.focus();
         }
       }
     }, [useMonaco]);
@@ -1816,7 +1771,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           setMonacoFailed(true);
         }}
         onPasteData={processClipboardData}
-        placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
+        placeholder={placeholder ?? (sendOnEnter ? DESKTOP_SESSION_CHAT_PLACEHOLDER : MOBILE_SESSION_CHAT_PLACEHOLDER)}
         registerApi={(api) => {
           monacoApiRef.current = api;
           if (api && pendingInsertTextRef.current) {
@@ -1838,13 +1793,12 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         vsBaseUrl={monacoVsBaseUrl ?? ''}
       />
     ) : (
-      <textarea
-        aria-invalid={sendError !== null}
-        className='ghostex-chat-composer-input max-h-40 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground'
+      <SessionChatPlainInput
         disabled={disabled}
-        onChange={(event) => {
-          updateDraft(event.target.value, event.target.selectionStart ?? event.target.value.length);
-        }}
+        initialValue={draft}
+        invalid={sendError !== null}
+        onCaretChange={setCaret}
+        onChange={updateDraft}
         onKeyDown={(event) => {
           const adapted = reactKeyEventAdapter(event);
           if (adapted.isComposing) {
@@ -1855,20 +1809,25 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           }
           handleKeyDown(adapted);
         }}
-        onPaste={(event) => {
-          if (processClipboardData(event.clipboardData)) {
-            event.preventDefault();
+        onPasteData={processClipboardData}
+        placeholder={placeholder ?? (sendOnEnter ? DESKTOP_SESSION_CHAT_PLACEHOLDER : MOBILE_SESSION_CHAT_PLACEHOLDER)}
+        registerApi={(api) => {
+          plainApiRef.current = api;
+          if (api && pendingInsertTextRef.current) {
+            const pending = pendingInsertTextRef.current;
+            pendingInsertTextRef.current = '';
+            api.insertText(pending);
+          }
+          if (api && pendingSavedPromptRef.current) {
+            const pending = pendingSavedPromptRef.current;
+            pendingSavedPromptRef.current = '';
+            api.insertSavedPrompt(pending);
+          }
+          if (api && pendingFocusRef.current) {
+            pendingFocusRef.current = false;
+            api.focus();
           }
         }}
-        onSelect={(event) => {
-          // Caret moves (click, arrows, Home/End) decide which token
-          // the pickers read, so they have to reach state too.
-          setCaret(event.currentTarget.selectionStart ?? null);
-        }}
-        placeholder={placeholder ?? DEFAULT_SESSION_CHAT_PLACEHOLDER}
-        ref={textareaRef}
-        rows={3}
-        value={draft}
       />
     );
     return (

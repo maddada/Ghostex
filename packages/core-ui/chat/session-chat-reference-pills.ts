@@ -10,6 +10,9 @@ export interface SessionChatComposerReference {
 }
 
 export const SESSION_CHAT_REFERENCE_REVEAL_MARKER = '·';
+const REFERENCE_PILL_MAX_LABEL_CHARACTERS = 18;
+const REFERENCE_PILL_ICON_SPACE = '\u00a0\u00a0\u00a0\u00a0\u2009';
+const REFERENCE_PILL_TRAILING_SPACE = '\u2009';
 
 const REFERENCE_LABEL_PATTERN = /\[((?:Image|File|Folder) #\d+|\$(?:\\.|[^\]\\\r\n])+)]\(/g;
 const IMAGE_PATH_PATTERN = /\.(?:avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|tiff?|webp)(?:[?#].*)?$/i;
@@ -47,6 +50,23 @@ function explicitReferenceKind(label: string): SessionChatReferenceKind | null {
   if (/^Folder #\d+$/.test(label)) return 'folder';
   if (label.startsWith('$')) return 'skill';
   return null;
+}
+
+/** The compact label shared by every editable reference-pill backend. */
+export function sessionChatReferenceDisplayLabel(label: string, kind: SessionChatReferenceKind): string {
+  if (kind === 'skill') {
+    return label;
+  }
+  const characters = [...label];
+  if (characters.length <= REFERENCE_PILL_MAX_LABEL_CHARACTERS) {
+    return label;
+  }
+  return `${characters.slice(0, REFERENCE_PILL_MAX_LABEL_CHARACTERS - 1).join('')}\u2026`;
+}
+
+/** Visible text whose measured width owns the pill icon and label. */
+export function sessionChatReferencePillText(label: string, kind: SessionChatReferenceKind): string {
+  return `${REFERENCE_PILL_ICON_SPACE}${sessionChatReferenceDisplayLabel(label, kind).replaceAll(' ', '\u00a0')}${REFERENCE_PILL_TRAILING_SPACE}`;
 }
 
 /** Classifies any rendered machine-path link for the shared pill styling. */

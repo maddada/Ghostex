@@ -1044,24 +1044,24 @@ the markdown block) rather than pinned to a tier of its own.
   background: #141414;
 }
 
-/* The chat pane can be much narrower than the app window, so lay out the
-   footer from its own content rather than a width breakpoint: both groups keep
-   their intrinsic width and the row only breaks onto a second line once the
-   session options and the prompt actions genuinely stop fitting side by side.
-   The actions group keeps `ml-auto`, so it stays right-aligned on either line. */
+/* The chat pane can be much narrower than the app window. Keep its footer on
+   one line: the model pill may truncate, and the Cursor context/Fast pill is
+   removed at narrow desktop widths. The native phone shell restores it below
+   in a compact shape. */
 .ghostex-chat-composer {
   container: ghostex-chat-composer / inline-size;
 }
 
 .ghostex-chat-composer-footer {
-  flex-wrap: wrap;
-  row-gap: 0.25rem;
+  flex-wrap: nowrap;
 }
 
 .ghostex-chat-composer-footer-options {
   flex: 0 1 auto;
-  width: fit-content;
+  min-width: 0;
   overflow: hidden;
+  white-space: nowrap;
+  width: fit-content;
 }
 
 .ghostex-chat-composer-footer-actions {
@@ -1076,6 +1076,33 @@ the markdown block) rather than pinned to a tier of its own.
 
 .ghostex-chat-composer-footer-actions-compact {
   display: none;
+}
+
+.ghostex-chat-context-pill {
+  flex: 0 0 auto;
+}
+
+.ghostex-chat-fast-mode-icon {
+  color: #f6daa0;
+}
+
+@container ghostex-chat-composer (max-width: 32rem) {
+  .ghostex-chat-context-pill {
+    display: none;
+  }
+
+  body[data-session-chat-host='mobile'] .ghostex-chat-context-pill {
+    display: inline-flex;
+    gap: 0.125rem;
+    padding-inline: 0.375rem;
+  }
+
+  /* The context value and optional Fast bolt carry the useful status. The
+     dropdown remains directly tappable, so its chevron is expendable in the
+     phone-width shape. */
+  body[data-session-chat-host='mobile'] .ghostex-chat-context-pill > svg:last-child {
+    display: none;
+  }
 }
 
 /* Send (and the terminal Prompt Editor, which reuses this class) is 25% under
@@ -1470,6 +1497,11 @@ Rendering this one glyph a size up lines its ink up with its neighbours.
   flex: none;
 }
 
+.ghostex-chat-session-note-editor {
+  min-width: 0;
+  width: 100%;
+}
+
 /* field-sizing grows the box with the note up to the cap, so a one-line note
    does not reserve the height of a paragraph. */
 .ghostex-chat-session-note-input {
@@ -1548,8 +1580,7 @@ so the swap barely moves the composer row.
   }
 }
 
-/* The textarea backend uses field-sizing:content so it grows with the draft.
-   That intrinsic sizing also applies horizontally, so a pasted line with no
+/* The plain input backend grows with the draft. A pasted line with no
    break opportunity (a long URL, a base64 blob) would make the input's
    min-content width enormous and push the whole page past the viewport.
    Pin the width to the row and let any long run wrap mid-token instead. */
@@ -1559,6 +1590,27 @@ so the swap barely moves the composer row.
   width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* The mobile/WebView backend keeps canonical Markdown in its component model
+   while this editable text layer projects references as atomic inline pills.
+   A contenteditable is the browser's plain-text editing primitive that can
+   host those spans; all paste/copy/cut paths still expose only text/plain. */
+.ghostex-chat-composer-plain-input {
+  cursor: text;
+  field-sizing: content;
+  white-space: pre-wrap;
+}
+
+.ghostex-chat-composer-plain-input[data-empty='true']::before {
+  color: var(--muted-foreground);
+  content: attr(data-placeholder);
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
+.ghostex-chat-composer-plain-input[contenteditable='false'] {
+  cursor: default;
 }
 
 /* Monaco's stock placeholder is nowrap + ellipsis. The composer copy is two
@@ -1601,6 +1653,7 @@ so the swap barely moves the composer row.
 }
 
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill,
 .ghostex-chat-markdown .ghostex-chat-reference-pill,
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip {
   --ghostex-chat-reference-outline: #94a3b8;
@@ -1629,6 +1682,7 @@ so the swap barely moves the composer row.
 }
 
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill,
 .ghostex-chat-markdown .ghostex-chat-reference-pill {
   gap: 4px;
 }
@@ -1637,18 +1691,27 @@ so the swap barely moves the composer row.
    generated content or horizontal padding. The injected leading spaces own
    the icon's width, while the absolutely positioned mask adds no unmeasured
    inline width. This keeps both cursor stops on the pill's outer edges. */
-.ghostex-chat-composer-monaco .ghostex-chat-reference-pill {
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  color: var(--ghostex-chat-reference-outline);
   display: inline-block;
   font-family: inherit;
   font-size: inherit;
   font-weight: inherit;
   gap: 0;
   letter-spacing: inherit;
-  padding-inline: 0;
+  line-height: inherit;
+  margin: 0;
+  padding: 0;
   position: relative;
+  transition: none;
 }
 
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill::before,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill::before,
 .ghostex-chat-markdown .ghostex-chat-reference-pill::before {
   background: color-mix(in srgb, var(--ghostex-chat-reference-outline) 55%, var(--muted-foreground));
   content: '';
@@ -1659,11 +1722,30 @@ so the swap barely moves the composer row.
   width: 11px;
 }
 
-.ghostex-chat-composer-monaco .ghostex-chat-reference-pill::before {
-  left: 0.3rem;
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill::before,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill::before {
+  background: currentColor;
+  height: 1em;
+  left: 0.1rem;
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+  width: 1em;
+}
+
+.ghostex-chat-composer-monaco .ghostex-chat-reference-pill:hover,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill:hover {
+  background: none;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-composer-monaco .ghostex-chat-reference-pill,
+.ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-composer-plain-input .ghostex-chat-reference-pill,
+.ghostex-chat-composer-monaco .monaco-editor.vs-dark .ghostex-chat-reference-pill {
+  color: color-mix(in srgb, var(--ghostex-chat-reference-outline) 72%, white 28%);
 }
 
 .ghostex-chat-markdown .ghostex-chat-reference-pill {
@@ -1680,12 +1762,14 @@ so the swap barely moves the composer row.
 }
 
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill--image,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill--image,
 .ghostex-chat-markdown .ghostex-chat-reference-pill--image {
   --ghostex-chat-reference-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 8h.01'/%3E%3Cpath d='M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z'/%3E%3Cpath d='m3 16 5-5c.928-.893 2.072-.893 3 0l5 5'/%3E%3Cpath d='m14 14 1-1c.928-.893 2.072-.893 3 0l3 3'/%3E%3C/svg%3E");
-  --ghostex-chat-reference-outline: #9d6c73;
+  --ghostex-chat-reference-outline: #5f9878;
 }
 
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill--file,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill--file,
 .ghostex-chat-markdown .ghostex-chat-reference-pill--file,
 .ghostex-chat-markdown .ghostex-chat-markdown-file-chip {
   --ghostex-chat-reference-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 3v4a1 1 0 0 0 1 1h4'/%3E%3Cpath d='M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z'/%3E%3C/svg%3E");
@@ -1693,12 +1777,14 @@ so the swap barely moves the composer row.
 }
 
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill--folder,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill--folder,
 .ghostex-chat-markdown .ghostex-chat-reference-pill--folder {
   --ghostex-chat-reference-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");
   --ghostex-chat-reference-outline: #9a835b;
 }
 
 .ghostex-chat-composer-monaco .ghostex-chat-reference-pill--skill,
+.ghostex-chat-composer-plain-input .ghostex-chat-reference-pill--skill,
 .ghostex-chat-markdown .ghostex-chat-reference-pill--skill {
   --ghostex-chat-reference-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 3-1.9 5.1L5 10l5.1 1.9L12 18l1.9-5.1L19 11l-5.1-1.9z'/%3E%3Cpath d='M5 3v4'/%3E%3Cpath d='M3 5h4'/%3E%3Cpath d='M19 17v4'/%3E%3Cpath d='M17 19h4'/%3E%3C/svg%3E");
   --ghostex-chat-reference-outline: #668773;

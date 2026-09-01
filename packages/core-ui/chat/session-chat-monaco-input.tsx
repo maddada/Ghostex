@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { SessionChatTheme } from '../../shared/session-chat';
 import { Tooltip, TooltipContent } from '../app-tooltip';
 import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from './session-chat-composer';
-import { SESSION_CHAT_REFERENCE_REVEAL_MARKER } from './session-chat-reference-pills';
+import { SESSION_CHAT_REFERENCE_REVEAL_MARKER, sessionChatReferencePillText } from './session-chat-reference-pills';
 import {
   SessionChatMonacoReferenceModel,
   type SessionChatMonacoReferenceOccurrence,
@@ -136,25 +136,9 @@ const REFERENCE_PILL_CLASS = 'ghostex-chat-reference-pill';
 const REFERENCE_PILL_ID_CLASS_PREFIX = `${REFERENCE_PILL_CLASS}--id-`;
 const REFERENCE_PILL_PATH_ATTRIBUTE = 'data-ghostex-reference-path';
 const REFERENCE_PILL_WORD_JOINER = '\u2060';
-const REFERENCE_PILL_ICON_SPACE = '\u00a0\u00a0\u00a0\u00a0\u2009';
-const REFERENCE_PILL_TRAILING_SPACE = '\u2009';
-const REFERENCE_PILL_MAX_LABEL_CHARACTERS = 18;
-
-function referencePillDisplayLabel(label: string, kind: SessionChatMonacoReferenceOccurrence['kind']): string {
-  if (kind === 'skill') {
-    return label;
-  }
-  const characters = [...label];
-  if (characters.length <= REFERENCE_PILL_MAX_LABEL_CHARACTERS) {
-    return label;
-  }
-  return `${characters.slice(0, REFERENCE_PILL_MAX_LABEL_CHARACTERS - 1).join('')}\u2026`;
-}
-
 /** Injected text must be one Monaco wrap unit, not merely one DOM box. */
 function referencePillInjectedText(label: string, kind: SessionChatMonacoReferenceOccurrence['kind']): string {
-  const text = `${REFERENCE_PILL_ICON_SPACE}${referencePillDisplayLabel(label, kind).replaceAll(' ', '\u00a0')}${REFERENCE_PILL_TRAILING_SPACE}`;
-  return [...text].join(REFERENCE_PILL_WORD_JOINER);
+  return [...sessionChatReferencePillText(label, kind)].join(REFERENCE_PILL_WORD_JOINER);
 }
 
 // Monaco has already normalized the browser event into its cross-platform
