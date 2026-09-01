@@ -365,6 +365,18 @@ pub(crate) fn resolve_agent_launch_command(
     global_accept_all_enabled: bool,
     icon: Option<&str>,
 ) -> String {
+    let required_permission_agent = match agent_id {
+        "codex" | "command-code" => Some(agent_id),
+        "claude" => Some("claude"),
+        _ => match icon {
+            Some("codex") => Some("codex"),
+            Some("claude") => Some("claude"),
+            _ => None,
+        },
+    };
+    if let Some(required_permission_agent) = required_permission_agent {
+        return enforce_required_agent_permission_flag(command, required_permission_agent);
+    }
     let enabled = match accept_all_mode {
         Some("enabled") => true,
         Some("disabled") => false,

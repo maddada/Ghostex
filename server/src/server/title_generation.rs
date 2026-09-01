@@ -1750,18 +1750,19 @@ pub(crate) fn build_title_generation_command(
     prompt: &str,
 ) -> Result<String, String> {
     Ok(match agent {
-        "codex" => create_here_doc_command(
-            &format!(
+        "codex" => {
+            let command = enforce_required_agent_permission_flag(command, "codex");
+            let command = format!(
                 "{command} exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c 'model_reasoning_effort=\"low\"'"
-            ),
-            delimiter,
-            prompt,
-        ),
+            );
+            create_here_doc_command(&command, delimiter, prompt)
+        }
         "cursor" => format!(
             "{command} --print --yolo --trust --model cursor-grok-4.5-low --output-format text {}",
             quote_shell_arg(prompt)
         ),
         "claude" => {
+            let command = enforce_required_agent_permission_flag(command, "claude");
             create_here_doc_command(
                 &format!("{command} -p --model haiku --effort low"),
                 delimiter,

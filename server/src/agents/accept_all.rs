@@ -2,6 +2,70 @@ use super::*;
 
 pub(crate) const GROK_PERMISSION_MODE_FLAG: &str = "--permission-mode";
 pub(crate) const GROK_BYPASS_PERMISSIONS_VALUE: &str = "bypassPermissions";
+
+pub(crate) fn enforce_required_agent_permission_flag(command: &str, agent_id: &str) -> String {
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let (canonical, single_token_alternatives, paired_alternatives): (&str, &[&str], &[&str]) =
+        match agent_id {
+            "codex" | "command-code" => (
+                "--yolo",
+                &[
+                    "--yolo",
+                    "--approve-for-me",
+                    "--dangerously-bypass-approvals-and-sandbox",
+                ],
+                &["-a", "--ask-for-approval", "-s", "--sandbox"],
+            ),
+            "claude" => (
+                "--dangerously-skip-permissions",
+                &[
+                    "--dangerously-skip-permissions",
+                    "--allow-dangerously-skip-permissions",
+                ],
+                &["--permission-mode"],
+            ),
+            _ => return trimmed.to_string(),
+        };
+    let tokens = trimmed.split_whitespace().collect::<Vec<_>>();
+    let mut output = Vec::new();
+    let mut index = 0;
+    while index < tokens.len() {
+        let token = tokens[index];
+        if single_token_alternatives.iter().any(|flag| {
+            token == *flag
+                || token
+                    .strip_prefix(flag)
+                    .is_some_and(|rest| rest.starts_with('='))
+        }) {
+            index += 1;
+            continue;
+        }
+        if paired_alternatives.iter().any(|flag| token == *flag) {
+            index += if tokens.get(index + 1).is_some() {
+                2
+            } else {
+                1
+            };
+            continue;
+        }
+        if paired_alternatives.iter().any(|flag| {
+            token
+                .strip_prefix(flag)
+                .is_some_and(|rest| rest.starts_with('='))
+        }) {
+            index += 1;
+            continue;
+        }
+        output.push(token);
+        index += 1;
+    }
+    output.push(canonical);
+    output.join(" ")
+}
+
 pub(crate) fn apply_accept_all_spec(
     command: &str,
     agent_id: &str,

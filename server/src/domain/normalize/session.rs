@@ -439,14 +439,7 @@ fn default_agent_command(agent_id: &str) -> Option<&'static str> {
 }
 
 fn apply_agent_accept_all(agent_id: &str, command: &str) -> String {
-    let trimmed = command.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    if agent_id == "codex" && !trimmed.split_whitespace().any(|token| token == "--yolo") {
-        return format!("{trimmed} --yolo");
-    }
-    trimmed.to_string()
+    crate::agents::enforce_required_agent_permission_flag(command, agent_id)
 }
 
 fn default_agent_activity(agent_id: Option<&str>, timestamp: &str) -> Value {

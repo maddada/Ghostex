@@ -328,22 +328,30 @@ pub(crate) fn gpui_project_beads_prompt_generation_command(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     if normalized_agent_id.is_empty() {
-        return Ok(format!("codex {CODEX_EXEC_ARGS}"));
+        return Ok(format!("codex --yolo {CODEX_EXEC_ARGS}"));
     }
     if let Some(command) = command {
         return Ok(match normalized_agent_id.as_str() {
-            "codex" => format!("{command} {CODEX_EXEC_ARGS}"),
+            "codex" => format!(
+                "{} {CODEX_EXEC_ARGS}",
+                gpui_project_beads_permission_command(command, "codex")
+            ),
             "cursor" => format!(
                 "{command} --print --mode ask --trust --model cursor-grok-4.5-low --output-format text"
             ),
-            "claude" => format!("{command} -p --model haiku --effort low"),
+            "claude" => format!(
+                "{} -p --model haiku --effort low",
+                gpui_project_beads_permission_command(command, "claude")
+            ),
             "gemini" => format!("{command} -p"),
             _ => command.to_string(),
         });
     }
     match normalized_agent_id.as_str() {
-        "codex" => Ok(format!("codex {CODEX_EXEC_ARGS}")),
-        "claude" => Ok("claude -p --model haiku --effort low".to_string()),
+        "codex" => Ok(format!("codex --yolo {CODEX_EXEC_ARGS}")),
+        "claude" => Ok(
+            "claude --dangerously-skip-permissions -p --model haiku --effort low".to_string(),
+        ),
         "cursor" => Ok(
             "cursor-agent --print --mode ask --trust --model cursor-grok-4.5-low --output-format text"
                 .to_string(),
@@ -353,6 +361,64 @@ pub(crate) fn gpui_project_beads_prompt_generation_command(
             "{normalized_agent_id} does not support background title generation."
         )),
     }
+}
+
+fn gpui_project_beads_permission_command(command: &str, agent_id: &str) -> String {
+    let (canonical, alternatives, paired_alternatives): (&str, &[&str], &[&str]) = match agent_id {
+        "codex" => (
+            "--yolo",
+            &[
+                "--yolo",
+                "--approve-for-me",
+                "--dangerously-bypass-approvals-and-sandbox",
+            ],
+            &["-a", "--ask-for-approval", "-s", "--sandbox"],
+        ),
+        "claude" => (
+            "--dangerously-skip-permissions",
+            &[
+                "--dangerously-skip-permissions",
+                "--allow-dangerously-skip-permissions",
+            ],
+            &["--permission-mode"],
+        ),
+        _ => return command.trim().to_string(),
+    };
+    let source_tokens = command.split_whitespace().collect::<Vec<_>>();
+    let mut output = Vec::new();
+    let mut index = 0;
+    while index < source_tokens.len() {
+        let token = source_tokens[index];
+        if alternatives.iter().any(|flag| {
+            token == *flag
+                || token
+                    .strip_prefix(flag)
+                    .is_some_and(|rest| rest.starts_with('='))
+        }) {
+            index += 1;
+            continue;
+        }
+        if paired_alternatives.iter().any(|flag| token == *flag) {
+            index += if source_tokens.get(index + 1).is_some() {
+                2
+            } else {
+                1
+            };
+            continue;
+        }
+        if paired_alternatives.iter().any(|flag| {
+            token
+                .strip_prefix(flag)
+                .is_some_and(|rest| rest.starts_with('='))
+        }) {
+            index += 1;
+            continue;
+        }
+        output.push(token);
+        index += 1;
+    }
+    output.push(canonical);
+    output.join(" ")
 }
 
 pub(crate) fn gpui_project_beads_title_generation_path(existing: Option<&str>) -> String {

@@ -72,18 +72,19 @@ impl Agent {
         }
     }
 
-    /// Argv that resumes an existing session in this agent. `accept_all` adds
-    /// the same permission-bypass flags Ghostex uses elsewhere; pi has none.
+    /// Argv that resumes an existing session in this agent. Codex and Claude
+    /// always use Ghostex's required permission flags; `accept_all` controls
+    /// the optional flags for the other supported agents.
     pub fn resume_argv(self, session: &str, accept_all: bool) -> Vec<String> {
-        let parts: Vec<&str> = if accept_all {
-            match self {
-                Agent::Claude => vec![
-                    "claude",
-                    "--dangerously-skip-permissions",
-                    "--resume",
-                    session,
-                ],
-                Agent::Codex => vec!["codex", "--yolo", "resume", session],
+        let parts: Vec<&str> = match self {
+            Agent::Claude => vec![
+                "claude",
+                "--dangerously-skip-permissions",
+                "--resume",
+                session,
+            ],
+            Agent::Codex => vec!["codex", "--yolo", "resume", session],
+            _ if accept_all => match self {
                 Agent::Pi => vec!["pi", "--session", session],
                 Agent::Opencode => {
                     vec![
@@ -101,16 +102,15 @@ impl Agent {
                     "--resume",
                     session,
                 ],
-            }
-        } else {
-            match self {
-                Agent::Claude => vec!["claude", "--resume", session],
-                Agent::Codex => vec!["codex", "resume", session],
+                Agent::Claude | Agent::Codex => unreachable!(),
+            },
+            _ => match self {
                 Agent::Pi => vec!["pi", "--session", session],
                 Agent::Opencode => vec!["opencode", "--session", session],
                 Agent::Cursor => vec!["cursor-agent", "--resume", session],
                 Agent::Grok => vec!["grok", "--resume", session],
-            }
+                Agent::Claude | Agent::Codex => unreachable!(),
+            },
         };
         parts.into_iter().map(str::to_string).collect()
     }
@@ -118,13 +118,26 @@ impl Agent {
     /// Argv that starts a brand-new session seeded with `prompt`. Unlike resume
     /// this needs no session id, so a prompt can be branched into any agent.
     pub fn fresh_session_argv(self, prompt: &str) -> Vec<String> {
+        if self == Agent::Claude {
+            return vec![
+                "claude".to_string(),
+                "--dangerously-skip-permissions".to_string(),
+                prompt.to_string(),
+            ];
+        }
+        if self == Agent::Codex {
+            return vec![
+                "codex".to_string(),
+                "--yolo".to_string(),
+                prompt.to_string(),
+            ];
+        }
         let binary = match self {
-            Agent::Claude => "claude",
-            Agent::Codex => "codex",
             Agent::Pi => "pi",
             Agent::Opencode => "opencode",
             Agent::Cursor => "cursor-agent",
             Agent::Grok => "grok",
+            Agent::Claude | Agent::Codex => unreachable!(),
         };
         vec![binary.to_string(), prompt.to_string()]
     }
@@ -143,10 +156,10 @@ mod tests {
     }
 
     #[test]
-    fn resume_argv_optionally_applies_accept_all_flags() {
+    fn resume_argv_uses_required_and_optional_accept_all_flags() {
         assert_eq!(
             Agent::Codex.resume_argv("s", false),
-            vec!["codex", "resume", "s"]
+            vec!["codex", "--yolo", "resume", "s"]
         );
         assert_eq!(
             Agent::Codex.resume_argv("s", true),

@@ -2063,7 +2063,7 @@ fn launch_plan_applies_agent_settings_accept_all() {
     .expect("update settings");
     let disabled_settings = read_agent_settings(&db).expect("disabled settings");
     let plan = build_project_agent_launch_plan(&project, "codex", None, &disabled_settings);
-    assert_eq!(plan.get("command"), Some(&json!("codex")));
+    assert_eq!(plan.get("command"), Some(&json!("codex --yolo")));
 }
 
 #[test]
@@ -2260,7 +2260,7 @@ fn resume_plan_extracts_provider_exact_identity_hints() {
     assert_eq!(
         claude_plan.get("primaryCommand"),
         Some(&json!(
-            "claude --resume \"9970b270-b39f-4d63-a764-fa8d88083995\""
+            "claude --dangerously-skip-permissions --resume \"9970b270-b39f-4d63-a764-fa8d88083995\""
         ))
     );
     assert_eq!(
@@ -2365,9 +2365,10 @@ fn attach_startup_text_uses_agent_resume_plan_and_settings() {
     assert!(startup_text.starts_with(' '));
     assert!(startup_text.ends_with('\r'));
     assert!(startup_text.contains("Restoring session..."));
-    assert!(startup_text
-        .contains("printf '> %s\\n\\n' 'codex resume \"12345678-1234-1234-1234-123456789abc\"'"));
-    assert!(startup_text.contains("codex resume \"12345678-1234-1234-1234-123456789abc\""));
+    assert!(startup_text.contains(
+        "printf '> %s\\n\\n' 'codex --yolo resume \"12345678-1234-1234-1234-123456789abc\"'"
+    ));
+    assert!(startup_text.contains("codex --yolo resume \"12345678-1234-1234-1234-123456789abc\""));
 }
 
 #[test]

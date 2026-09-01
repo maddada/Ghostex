@@ -565,22 +565,23 @@ pub(crate) fn build_commit_message_generation_shell_command(
     prompt: &str,
 ) -> std::result::Result<String, DomainStateError> {
     Ok(match agent.agent_id.as_str() {
-        "codex" => create_here_doc_command(
-            &format!(
-                "{} exec --ephemeral --skip-git-repo-check -m gpt-5.4-mini -c 'model_reasoning_effort=\"low\"'",
-                agent.command
-            ),
-            delimiter,
-            prompt,
-        ),
+        "codex" => {
+            let command = enforce_required_agent_permission_flag(&agent.command, "codex");
+            let command = format!(
+                "{command} exec --ephemeral --skip-git-repo-check -m gpt-5.4-mini -c 'model_reasoning_effort=\"low\"'"
+            );
+            create_here_doc_command(&command, delimiter, prompt)
+        }
         "cursor" => format!(
             "{} --print --mode ask --trust --output-format text {}",
             agent.command,
             quote_shell_arg(prompt)
         ),
-        "claude" | "gemini" => {
-            create_here_doc_command(&format!("{} -p", agent.command), delimiter, prompt)
+        "claude" => {
+            let command = enforce_required_agent_permission_flag(&agent.command, "claude");
+            create_here_doc_command(&format!("{command} -p"), delimiter, prompt)
         }
+        "gemini" => create_here_doc_command(&format!("{} -p", agent.command), delimiter, prompt),
         _ if !agent.is_default => create_here_doc_command(&agent.command, delimiter, prompt),
         _ => {
             return Err(DomainStateError {
