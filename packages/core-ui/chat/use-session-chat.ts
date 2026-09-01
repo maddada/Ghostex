@@ -837,6 +837,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         frameState.seq = event.seq;
         frameState.frameArrived = true;
         applyAuthoritative(event, event.type);
+        /*
+        Ordinary daemon frames do not own these read-only fields. The mobile
+        SSH host synthesizes snapshots from reads and deliberately owns them,
+        including `undefined` on promotion so stale draft controls are cleared.
+        */
+        if ('availableAgents' in event || 'sessionAgentId' in event) {
+          applyDraftAgentCarriage(event);
+        }
         return;
       }
       const verdict = acceptSequencedFrame(event);

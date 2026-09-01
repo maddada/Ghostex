@@ -87,6 +87,10 @@ pub enum Parser {
     SidebarSpacesState,
     /// session selector plus readSessionChat paging/long-poll flags.
     SessionChatRead,
+    /// session selector plus the project agent id for a draft-agent switch.
+    SessionChatDraftAgent,
+    /// session selector plus one serialized Session Chat key name.
+    SessionChatKey,
     /*
     CDXC:AgentHistorySearch 2026-08-20:
     Find over SSH for Ghostex mobile. `AgentPromptSearch` carries the query and
@@ -266,6 +270,10 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "forkSession" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/forkSession", &params, flags)
+        }
+        "switchDraftAgent" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/switchDraftAgent", &params, flags)
         }
         "renameSession" | "tagSession" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
@@ -1109,6 +1117,8 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         }
         Parser::SidebarSpacesState => parse_sidebar_spaces_state(rest, flags)?,
         Parser::SessionChatRead => parse_session_chat_read(rest, flags),
+        Parser::SessionChatDraftAgent => parse_session_chat_draft_agent(rest, flags)?,
+        Parser::SessionChatKey => parse_session_chat_key(rest, flags)?,
         Parser::AgentPromptSearch => parse_agent_prompt_search(flags)?,
         Parser::AgentPromptRef => parse_agent_prompt_ref(flags)?,
         Parser::AgentPromptLaunch => parse_agent_prompt_launch(flags)?,
@@ -1241,6 +1251,32 @@ fn parse_session_chat_read(rest: &[String], flags: &Flags) -> Value {
     }
     set_or_remove(&mut map, "fingerprint", flag_json(flags, "fingerprint"));
     Value::Object(map)
+}
+
+fn parse_session_chat_draft_agent(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    let mut map = parse_session_selector(rest, flags);
+    let Some(agent_id) = flags
+        .text("agentId")
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Err(CliError::Other(
+            "switch-draft-agent requires --agent-id <id> from read-session-chat.".to_string(),
+        ));
+    };
+    map.insert("agentId".to_string(), Value::String(agent_id));
+    Ok(Value::Object(map))
+}
+
+fn parse_session_chat_key(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    let mut map = parse_session_selector(rest, flags);
+    let Some(key) = flags.text("key").filter(|value| !value.trim().is_empty()) else {
+        return Err(CliError::Other(
+            "send-session-chat-key requires --key <enter|shift-tab|shift-up|shift-down>."
+                .to_string(),
+        ));
+    };
+    map.insert("key".to_string(), Value::String(key));
+    Ok(Value::Object(map))
 }
 
 fn parse_session_chat_answer(rest: &[String], flags: &Flags) -> CliResult<Value> {

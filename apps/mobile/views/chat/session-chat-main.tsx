@@ -55,6 +55,7 @@ all chat behavior lives in shared code.
 Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
 - page → RN: window.ReactNativeWebView.postMessage(JSON.stringify(
     { id, op: "read" | "readSkills" | "readFiles" | "send" | "sendKey"
+        | "switchDraftAgent"
         | "switchToTerminalForAgentPicker" | "answerPrompt" | "interrupt"
         | "saveImage" | "saveAttachment" | "loadImage"
         | "queuePrompt" | "updateQueuedPrompt"
@@ -135,6 +136,7 @@ type BridgeOp =
   | 'read'
   | 'readSkills'
   | 'readFiles'
+  | 'switchDraftAgent'
   | 'send'
   | 'sendKey'
   | 'switchToTerminalForAgentPicker'
@@ -725,6 +727,11 @@ function snapshotEventFromRead(result: GxserverReadSessionChatResult): GxserverS
     ...(result.lifecycle !== undefined ? { lifecycle: result.lifecycle } : {}),
     ...(result.prompt !== undefined ? { prompt: result.prompt } : {}),
     ...(result.agentSessionId !== undefined ? { agentSessionId: result.agentSessionId } : {}),
+    // Unlike daemon event frames, this mobile-only snapshot is synthesized
+    // directly from a read. Keep both own-properties even when omitted by the
+    // read: omission is the authoritative signal that a draft was promoted.
+    availableAgents: result.availableAgents,
+    sessionAgentId: result.sessionAgentId,
     // Detected model/effort: this host's only live channel is the synthesized
     // snapshot, so dropping it here would hide the pills' real values.
     ...(result.selectedOptions !== undefined ? { selectedOptions: result.selectedOptions } : {}),
@@ -772,6 +779,9 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     },
     async interrupt() {
       await bridgeCall('interrupt');
+    },
+    async switchDraftAgent(params) {
+      await bridgeCall('switchDraftAgent', { agentId: params.agentId });
     },
     read(params) {
       return bridgeCall<GxserverReadSessionChatResult>('read', {
@@ -951,6 +961,7 @@ if (!rootElement) {
   throw new Error('Ghostex session chat root element was not found.');
 }
 document.body.dataset.sidebarTheme = 'plain-dark';
+document.body.dataset.sessionChatHost = 'mobile';
 document.body.classList.add('vscode-dark', 'native-sidebar-body');
 /*
 The document has to carry the page's starting presentation before any host
