@@ -75,6 +75,29 @@ jobs:
             "platforms;android-36" \
             "build-tools;36.0.0" \
             "ndk;29.0.14206865"
+      # The tailcat gomobile bridge is build output, so it is deliberately not in
+      # git (four ~35 MB libgojni.so files). It is generated here from the
+      # committed Go source, after the submodule checkout that creates its
+      # destination and after the NDK install that gomobile needs, and before the
+      # Gradle build that compiles GhostexSshConnection.kt against it.
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.0'
+          cache-dependency-path: apps/mobile/tailcat-bridge/go.sum
+      - name: Build the tailcat gomobile bridge
+        env:
+          GOMOBILE_PIN: v0.0.0-20260821190718-4776eadac327
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          go install "golang.org/x/mobile/cmd/gomobile@$GOMOBILE_PIN" "golang.org/x/mobile/cmd/gobind@$GOMOBILE_PIN"
+          gomobile init
+          apps/mobile/tailcat-bridge/build.sh --target android
+          MODULE=apps/mobile/app/modules/ghostex-native/android
+          test -s "$MODULE/libs/tailcatbridge.jar"
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            test -s "$MODULE/src/main/jniLibs/$abi/libgojni.so"
+          done
       - name: Install React Native dependencies
         working-directory: apps/mobile/app
         run: bun install --frozen-lockfile
