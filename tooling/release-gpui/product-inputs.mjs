@@ -32,6 +32,13 @@ export const TOOLCHAIN = Object.freeze({
   ripgrepPackageVersion: '1.17.1',
   ripgrepSha256: '2fa16464fd8638588a67c7fc172d3c4b57fbdc65dff366e10b0b0e90734628a6',
   ripgrepVersion: 'v15.0.1',
+  /*
+   * The Android job builds the tailcat gomobile bridge from
+   * apps/mobile/tailcat-bridge before Gradle compiles against it. Both pins are
+   * asserted against that module's go.mod and against the workflow file below.
+   */
+  tailcatBridgeGo: '1.27.0',
+  tailcatBridgeGomobile: 'v0.0.0-20260821190718-4776eadac327',
   vpk: '1.2.0',
   /*
    * One Zig toolchain for the whole repo. zmx pinned 0.15.2 until its fork was
@@ -384,6 +391,19 @@ const PRODUCT_LIST = [
      * §4.5: apps/mobile/app is a self-contained submodule with its own lockfile, so
      * packages/shared/** and packages/core-ui/** are deliberately excluded. Add them and bump the
      * algorithm revision if mobile ever imports from the parent repo.
+     *
+     * The one parent-repo exception is apps/mobile/tailcat-bridge: the submodule's
+     * GhostexSshConnection.kt compiles against dev.ghostex.tailcatbridge, which is
+     * gomobile output that is never committed. The Android job regenerates it from
+     * that Go source on every build, so the Go source is a real input to the APK.
+     *
+     * FINGERPRINT_ALGORITHM_REVISION is deliberately NOT bumped for this purely
+     * additive change. The header rule exists so a stale record can never be
+     * compared against a different input set; here every product already hashes
+     * this file through SHARED_BASE_PATHSPECS, so no product digest can survive
+     * the edit, and the component nodes' input sets are untouched — bumping would
+     * only discard the code-server/cef identity recovery in plan-cli.mjs and force
+     * an unrelated component rebuild.
      */
     artifacts: () => ['ghostex-android.apk'],
     composedFrom: [],
@@ -391,6 +411,8 @@ const PRODUCT_LIST = [
     kind: 'product',
     pathspecs: [
       { pathspec: 'apps/mobile/app' },
+      { pathspec: 'apps/mobile/tailcat-bridge/**' },
+      { pathspec: ':(exclude)apps/mobile/tailcat-bridge/build' },
       { pathspec: 'tooling/release-mobile/android.sh' },
       { pathspec: 'tooling/release-gpui/android.sh' },
       { pathspec: '.github/workflows/release-gpui-android.yml' },
@@ -407,6 +429,8 @@ const PRODUCT_LIST = [
       keystoreAlias: 'ANDROID_RELEASE_KEY_ALIAS',
       node: TOOLCHAIN.node,
       signingMode: 'android-keystore',
+      tailcatBridgeGo: TOOLCHAIN.tailcatBridgeGo,
+      tailcatBridgeGomobile: TOOLCHAIN.tailcatBridgeGomobile,
     },
     versionStamped: false,
   },

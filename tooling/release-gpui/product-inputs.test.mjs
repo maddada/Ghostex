@@ -281,6 +281,25 @@ describe('pinned toolchain values track the workflows', () => {
   });
 
   /*
+   * The Android job builds the tailcat gomobile bridge from committed Go source,
+   * so its Go and gomobile pins must agree with both the workflow and the
+   * bridge's own go.mod; a drifting go directive would otherwise fail the release
+   * job instead of a test.
+   */
+  test('the tailcat bridge Go and gomobile pins match the workflows and its go.mod', () => {
+    for (const name of ['release-gpui-android.yml', 'release-build-android.yml']) {
+      const android = workflow(name);
+      expect(android).toContain(`go-version: '${TOOLCHAIN.tailcatBridgeGo}'`);
+      expect(android).toContain(`GOMOBILE_PIN: ${TOOLCHAIN.tailcatBridgeGomobile}`);
+      expect(android).toContain('apps/mobile/tailcat-bridge/build.sh --target android');
+      expect(android).toContain(`ndk/${TOOLCHAIN.androidNdk}`);
+    }
+    const goMod = readFileSync('apps/mobile/tailcat-bridge/go.mod', 'utf8');
+    expect(goMod).toContain(`\ngo ${TOOLCHAIN.tailcatBridgeGo}\n`);
+    expect(goMod).toContain(`golang.org/x/mobile ${TOOLCHAIN.tailcatBridgeGomobile}`);
+  });
+
+  /*
    * The 7.8.0 Ghostty-sync guard: each vendored Zig source's own
    * minimum_zig_version is the authority for TOOLCHAIN.zig. The standalone check
    * script runs the same assertion pre-dispatch; this test keeps it from rotting.
