@@ -3,6 +3,7 @@ import {
   IconArrowRight,
   IconArrowsDiagonal2,
   IconArrowsDiagonalMinimize,
+  IconArrowsSort,
   IconBolt,
   IconCaretRightFilled,
   IconCheck,
@@ -13,6 +14,7 @@ import {
   IconCoffee,
   IconDeviceMobile,
   IconEdit,
+  IconEye,
   IconFileSearch,
   IconFilter2,
   IconFolders,
@@ -33,7 +35,7 @@ import {
   IconWorld,
   type TablerIcon,
 } from '@tabler/icons-react';
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import type { SidebarActiveSessionsSortMode } from '../../shared/session-grid-contract';
 import {
@@ -65,7 +67,31 @@ import type {
 } from './types';
 
 export const REFERENCE_SECTION_AGENT_MENU_WIDTH_PX = 220;
-export type SidebarReferencePrimaryMenuKind = 'keepAwake' | 'settings';
+export type SidebarReferencePrimaryMenuKind = 'keepAwake' | 'settings' | 'sortFilter';
+
+/*
+ * CDXC:SidebarProjectMenu 2026-09-02:
+ * The Projects header and the remote machine headers are gone; the actions
+ * they carried now live at the top of the More dropdown and always target the
+ * machine selected in the tab strip. The sidebar app resolves that machine and
+ * hands the top chrome one bundle: Add Project, the Sort & Filter submenu
+ * inputs, the Collapse All / Expand Previous toggle, and (remote machines only)
+ * Edit Machine, which opens that machine's Settings → Remote fields.
+ */
+export type SidebarReferenceProjectMenu = {
+  activeSessionsSortMode: SidebarActiveSessionsSortMode;
+  bulkActionLabel?: 'Collapse All' | 'Expand Previous';
+  onAddProject?: () => void;
+  onBulkProjectToggle?: () => void;
+  onEditRemoteMachine?: () => void;
+  onSetActiveSessionsSortMode: (sortMode: SidebarActiveSessionsSortMode) => void;
+  onToggleSessionTagFilter: (tag: SidebarSessionTagFilter) => void;
+  /** Local machine only: the hidden-items toggle has no remote equivalent. */
+  onToggleShowHidden?: () => void;
+  selectedSessionTagFilters: readonly SidebarSessionTagFilter[];
+  sessionTagListItems: readonly SidebarSessionTagListItem[];
+  showHidden?: boolean;
+};
 
 export function SidebarReferenceTopChrome({
   keepAwakeRuntime,
@@ -81,11 +107,21 @@ export function SidebarReferenceTopChrome({
   onSearchPreviousSessionsByPrompt,
   onSearch,
   onStopKeepAwake,
+  machineTabs,
   onTogglePetOverlay,
+  projectMenu,
   settings,
   showKeepAwakeButton,
 }: {
   keepAwakeRuntime?: SidebarKeepAwakeRuntimeState;
+  /*
+   * CDXC:SidebarMachineTabsEdge 2026-09-02:
+   * The machine tab strip renders here, under Search, rather than inside the
+   * scrolling panel: that panel clips its children to the 5px sidebar gutters,
+   * while this header is unclipped, so only from here can the strip span the
+   * page edge to edge.
+   */
+  machineTabs?: ReactNode;
   onOpenAgentsHub: () => void;
   onOpenAutomations: () => void;
   onOpenDiscord: () => void;
@@ -99,6 +135,7 @@ export function SidebarReferenceTopChrome({
   onSearch: () => void;
   onStopKeepAwake: () => void;
   onTogglePetOverlay: () => void;
+  projectMenu: SidebarReferenceProjectMenu;
   settings: ghostexSettings;
   showKeepAwakeButton: boolean;
 }) {
@@ -249,6 +286,14 @@ export function SidebarReferenceTopChrome({
               <SidebarReferenceSettingsDropdown
                 keepAwakeRuntime={keepAwakeRuntime}
                 hotkeys={settingsMenuHotkeys}
+                onAddProject={projectMenu.onAddProject && (() => closeMenuAndRun(projectMenu.onAddProject!))}
+                onBulkProjectToggle={
+                  projectMenu.onBulkProjectToggle && (() => closeMenuAndRun(projectMenu.onBulkProjectToggle!))
+                }
+                bulkProjectActionLabel={projectMenu.bulkActionLabel}
+                onEditRemoteMachine={
+                  projectMenu.onEditRemoteMachine && (() => closeMenuAndRun(projectMenu.onEditRemoteMachine!))
+                }
                 onOpenAgentsHub={() => closeMenuAndRun(onOpenAgentsHub)}
                 onOpenAutomations={() => closeMenuAndRun(onOpenAutomations)}
                 onOpenDiscord={() => closeMenuAndRun(onOpenDiscord)}
@@ -256,6 +301,10 @@ export function SidebarReferenceTopChrome({
                 onOpenKeepAwakeMenu={() => {
                   dismissSidebarTooltips();
                   setOpenMenu('keepAwake');
+                }}
+                onOpenSortFilterMenu={() => {
+                  dismissSidebarTooltips();
+                  setOpenMenu('sortFilter');
                 }}
                 onOpenMobile={() => closeMenuAndRun(onOpenMobile)}
                 onOpenPreviousSessions={() => closeMenuAndRun(onOpenPreviousSessions)}
@@ -278,9 +327,22 @@ export function SidebarReferenceTopChrome({
                 onStopKeepAwake={() => closeMenuAndRun(onStopKeepAwake)}
               />
             ) : null}
+            {openMenu === 'sortFilter' ? (
+              <SidebarReferenceSortFilterDropdown
+                onBack={() => {
+                  dismissSidebarTooltips();
+                  setOpenMenu('settings');
+                }}
+                onSetActiveSessionsSortMode={(sortMode) =>
+                  closeMenuAndRun(() => projectMenu.onSetActiveSessionsSortMode(sortMode))
+                }
+                projectMenu={projectMenu}
+              />
+            ) : null}
           </div>
         </div>
       </nav>
+      {machineTabs}
     </header>
   );
 }
@@ -385,8 +447,12 @@ export function SidebarReferenceShortcutButton({
 }
 
 export function SidebarReferenceSettingsDropdown({
+  bulkProjectActionLabel,
   keepAwakeRuntime,
   hotkeys,
+  onAddProject,
+  onBulkProjectToggle,
+  onEditRemoteMachine,
   onOpenAgentsHub,
   onOpenAutomations,
   onOpenDiscord,
@@ -395,12 +461,17 @@ export function SidebarReferenceSettingsDropdown({
   onOpenKeepAwakeMenu,
   onOpenPreviousSessions,
   onOpenSettings,
+  onOpenSortFilterMenu,
   onSearchPreviousSessionsByPrompt,
   onTogglePetOverlay,
   showKeepAwakeButton,
 }: {
+  bulkProjectActionLabel?: 'Collapse All' | 'Expand Previous';
   keepAwakeRuntime?: SidebarKeepAwakeRuntimeState;
   hotkeys: ghostexHotkeySettings;
+  onAddProject?: () => void;
+  onBulkProjectToggle?: () => void;
+  onEditRemoteMachine?: () => void;
   onOpenAgentsHub: () => void;
   onOpenAutomations: () => void;
   onOpenDiscord: () => void;
@@ -409,12 +480,42 @@ export function SidebarReferenceSettingsDropdown({
   onOpenKeepAwakeMenu: () => void;
   onOpenPreviousSessions: () => void;
   onOpenSettings: () => void;
+  onOpenSortFilterMenu: () => void;
   onSearchPreviousSessionsByPrompt: () => void;
   onTogglePetOverlay: () => void;
   showKeepAwakeButton: boolean;
 }) {
+  /*
+   * CDXC:SidebarProjectMenu 2026-09-02:
+   * The project actions open the menu, in the order Add Project, Sort & Filter,
+   * Collapse All (or Expand Previous), then a separator. Add Project is absent
+   * for a remote machine that is not connected, and the bulk toggle is absent
+   * while the selected machine lists no projects; the rows simply drop out
+   * rather than rendering disabled.
+   */
+  const BulkProjectIcon = bulkProjectActionLabel === 'Collapse All' ? IconArrowsDiagonalMinimize : IconArrowsDiagonal2;
   return (
     <div className='reference-sidebar-primary-dropdown' role='menu'>
+      {onAddProject ? (
+        <SidebarReferencePrimaryMenuItem icon={IconPlus} label='Add Project' onSelect={onAddProject} />
+      ) : null}
+      <SidebarReferencePrimaryMenuItem
+        icon={IconFilter2}
+        label='Sort & Filter'
+        onSelect={onOpenSortFilterMenu}
+        trailingIcon={IconChevronRight}
+      />
+      {onBulkProjectToggle && bulkProjectActionLabel ? (
+        <SidebarReferencePrimaryMenuItem
+          icon={BulkProjectIcon}
+          label={bulkProjectActionLabel}
+          onSelect={onBulkProjectToggle}
+        />
+      ) : null}
+      {onEditRemoteMachine ? (
+        <SidebarReferencePrimaryMenuItem icon={IconEdit} label='Edit Machine' onSelect={onEditRemoteMachine} />
+      ) : null}
+      <SidebarReferencePrimaryMenuSeparator />
       <SidebarReferencePrimaryMenuItem
         icon={IconHistoryToggle}
         label='Sessions'
@@ -534,24 +635,132 @@ export function SidebarReferenceKeepAwakeDropdown({
   );
 }
 
+/*
+ * CDXC:SidebarProjectMenu 2026-09-02:
+ * Sort & Filter is a second page of the More dropdown, like Keep awake: a Back
+ * row, then the same rows the old section-header filter popup offered — Show
+ * hidden (local only), the sort mode radios, and the session tag filters.
+ * Toggles keep the page open so several can be flipped in one visit; choosing
+ * a sort mode closes the menu because it is a one-shot decision.
+ */
+export function SidebarReferenceSortFilterDropdown({
+  onBack,
+  onSetActiveSessionsSortMode,
+  projectMenu,
+}: {
+  onBack: () => void;
+  onSetActiveSessionsSortMode: (sortMode: SidebarActiveSessionsSortMode) => void;
+  projectMenu: SidebarReferenceProjectMenu;
+}) {
+  const {
+    activeSessionsSortMode,
+    onToggleSessionTagFilter,
+    onToggleShowHidden,
+    selectedSessionTagFilters,
+    showHidden,
+  } = projectMenu;
+  const tagListItems = normalizeSidebarSessionTagListItems(projectMenu.sessionTagListItems);
+  return (
+    <div className='reference-sidebar-primary-dropdown' role='menu'>
+      <SidebarReferencePrimaryMenuItem icon={IconArrowLeft} label='More' onSelect={onBack} />
+      <SidebarReferencePrimaryMenuSeparator />
+      {onToggleShowHidden ? (
+        <>
+          <SidebarReferencePrimaryMenuItem
+            active={showHidden === true}
+            icon={IconEye}
+            label='Show hidden'
+            onSelect={onToggleShowHidden}
+            role='menuitemcheckbox'
+          />
+          <SidebarReferencePrimaryMenuSeparator />
+        </>
+      ) : null}
+      <SidebarReferencePrimaryMenuItem
+        active={activeSessionsSortMode !== 'manual'}
+        icon={IconClock}
+        label='Last Active Sorting'
+        onSelect={() => onSetActiveSessionsSortMode('lastActivity')}
+        role='menuitemradio'
+      />
+      <SidebarReferencePrimaryMenuItem
+        active={activeSessionsSortMode === 'manual'}
+        icon={IconArrowsSort}
+        label='Manual Sorting'
+        onSelect={() => onSetActiveSessionsSortMode('manual')}
+        role='menuitemradio'
+      />
+      {tagListItems.map((item) => {
+        if (!item.visible) {
+          return null;
+        }
+        if (item.type === 'separator') {
+          return item.enabled ? <SidebarReferencePrimaryMenuSeparator key={item.id} /> : null;
+        }
+        const filter = getSidebarSessionTagListItemFilter(item);
+        if (!filter) {
+          return null;
+        }
+        const isSelected = selectedSessionTagFilters.includes(filter);
+        return (
+          <SidebarReferencePrimaryMenuItem
+            active={isSelected}
+            disabled={!item.enabled}
+            key={item.id}
+            label={getSidebarSessionTagLabel(filter) ?? filter}
+            leading={
+              <SessionTagIcon
+                className='reference-sidebar-primary-menu-icon session-tag-colored-icon'
+                fillFavorite
+                size={16}
+                stroke={1.8}
+                tag={filter}
+              />
+            }
+            onSelect={() => onToggleSessionTagFilter(filter)}
+            role='menuitemcheckbox'
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export function SidebarReferencePrimaryMenuItem({
   active = false,
+  disabled = false,
   icon: Icon,
   label,
+  leading,
   onSelect,
+  role = 'menuitem',
   shortcut,
   trailingIcon: TrailingIcon,
 }: {
   active?: boolean;
-  icon: TablerIcon;
+  disabled?: boolean;
+  icon?: TablerIcon;
   label: string;
+  /** Rendered in place of `icon` for leading glyphs that are not Tabler icons. */
+  leading?: ReactNode;
   onSelect: () => void;
+  role?: 'menuitem' | 'menuitemcheckbox' | 'menuitemradio';
   shortcut?: string;
   trailingIcon?: TablerIcon;
 }) {
   return (
-    <button className='reference-sidebar-primary-menu-item' onClick={onSelect} role='menuitem' type='button'>
-      <Icon aria-hidden='true' className='reference-sidebar-primary-menu-icon' size={16} stroke={1.8} />
+    <button
+      aria-checked={role === 'menuitem' ? undefined : active}
+      className='reference-sidebar-primary-menu-item'
+      disabled={disabled}
+      onClick={onSelect}
+      role={role}
+      type='button'
+    >
+      {leading ??
+        (Icon ? (
+          <Icon aria-hidden='true' className='reference-sidebar-primary-menu-icon' size={16} stroke={1.8} />
+        ) : null)}
       <span className='reference-sidebar-primary-menu-label-text'>{label}</span>
       {shortcut ? <span className='reference-sidebar-primary-menu-shortcut'>{shortcut}</span> : null}
       {TrailingIcon ? (
@@ -590,7 +799,7 @@ export function SidebarReferenceSectionHeader({
   actionsAlwaysVisible,
   agents = [],
   bulkActionLabel,
-  collapsed,
+  collapsed = false,
   containsActiveSession = false,
   dragHandleRef,
   onAddProject,
@@ -619,7 +828,8 @@ export function SidebarReferenceSectionHeader({
   actionsAlwaysVisible?: boolean;
   agents?: readonly SidebarAgentButton[];
   bulkActionLabel?: string;
-  collapsed: boolean;
+  /** Only meaningful together with `onToggleCollapsed`; a section without one is always expanded. */
+  collapsed?: boolean;
   containsActiveSession?: boolean;
   dragHandleRef?: (element: Element | null) => void;
   onAddProject?: () => void;
@@ -633,7 +843,14 @@ export function SidebarReferenceSectionHeader({
   onSetActiveSessionsSortMode?: (sortMode: SidebarActiveSessionsSortMode) => void;
   onToggleShowHidden?: () => void;
   onToggleSessionTagFilter?: (tag: SidebarSessionTagFilter) => void;
-  onToggleCollapsed: () => void;
+  /*
+   * CDXC:SidebarSectionCollapse 2026-09-02:
+   * Only sections that can actually collapse pass this. Projects and remote
+   * machine sections are always expanded, so they omit it and the header
+   * renders a plain, non-interactive label with no chevron and no
+   * aria-expanded state instead of a button that toggles nothing.
+   */
+  onToggleCollapsed?: () => void;
   primaryAgentId?: string;
   remoteConnectionControl?: RemoteMachineHeaderConnectionControl;
   sectionKey: ReferenceSidebarSectionId;
@@ -646,7 +863,9 @@ export function SidebarReferenceSectionHeader({
 }) {
   /**
    * CDXC:SidebarReference 2026-05-08-01:41
-   * Reference-mode Chats and Projects are collapsible section headers. Chats
+   * Reference-mode Chats is a collapsible section header; Projects and remote
+   * machine sections are always expanded (see the 2026-09-02 note on
+   * onToggleCollapsed). Chats
    * exposes browser-chat and new-chat controls on hover, while Projects expose
    * add-project and expand/collapse-all controls on hover so the compact
    * Codex.app-style list keeps management actions nearby. Add Project owns both
@@ -801,21 +1020,30 @@ export function SidebarReferenceSectionHeader({
           <IconLoader2 aria-hidden='true' size={13} stroke={1.8} />
         </SidebarFixedTooltipButton>
       ) : null}
-      <button
-        aria-expanded={!collapsed}
-        className='reference-sidebar-section-heading'
-        onClick={onToggleCollapsed}
-        ref={dragHandleRef}
-        type='button'
-      >
-        {SectionIcon && !leadingRemoteConnectionControl ? (
-          <SectionIcon aria-hidden='true' className='reference-sidebar-section-icon' size={15} stroke={1.8} />
-        ) : null}
-        <span className='reference-sidebar-section-title'>{title}</span>
-        {remoteConnectionControl ? null : (
-          <IconCaretRightFilled aria-hidden='true' className='reference-sidebar-section-chevron' size={13} />
-        )}
-      </button>
+      {onToggleCollapsed ? (
+        <button
+          aria-expanded={!collapsed}
+          className='reference-sidebar-section-heading'
+          onClick={onToggleCollapsed}
+          ref={dragHandleRef}
+          type='button'
+        >
+          {SectionIcon && !leadingRemoteConnectionControl ? (
+            <SectionIcon aria-hidden='true' className='reference-sidebar-section-icon' size={15} stroke={1.8} />
+          ) : null}
+          <span className='reference-sidebar-section-title'>{title}</span>
+          {remoteConnectionControl ? null : (
+            <IconCaretRightFilled aria-hidden='true' className='reference-sidebar-section-chevron' size={13} />
+          )}
+        </button>
+      ) : (
+        <div className='reference-sidebar-section-heading' ref={dragHandleRef}>
+          {SectionIcon && !leadingRemoteConnectionControl ? (
+            <SectionIcon aria-hidden='true' className='reference-sidebar-section-icon' size={15} stroke={1.8} />
+          ) : null}
+          <span className='reference-sidebar-section-title'>{title}</span>
+        </div>
+      )}
       {trailingRemoteConnectionControl ? (
         <SidebarFixedTooltipButton
           aria-label={trailingRemoteConnectionControl.label}

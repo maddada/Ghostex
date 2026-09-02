@@ -42,25 +42,38 @@ export type SidebarUiCollapseState = {
   collapsedGroupsById: Record<string, true>;
   collapsedProjectCollectionsByKey: Record<string, true>;
   collapsedProjectSessionListsById: ProjectSessionListCollapsedState;
-  collapsedRemoteMachineSectionsById: Record<string, true>;
   isReferenceChatsCollapsed: boolean;
-  isReferenceProjectsCollapsed: boolean;
   /*
    * CDXC:SidebarSpaces 2026-08-27:
    * The Space each gxserver section is filtered by, keyed by section key
-   * ("local" / "remote:<machineId>", see sidebar-app/space-filtering.ts). The
-   * built-in All Projects view is the ABSENCE of a key, never a reserved id, so
-   * a selected Space id here is always a real Space id owned by that section's
-   * daemon. A stored id whose Space no longer exists resolves back to All
-   * Projects at render time instead of being pruned here — the daemon's Space
-   * state arrives long after this record is read.
+   * ("local" / "remote:<machineId>", see sidebar-app/space-filtering.ts). A
+   * value is either a real Space id owned by that section's daemon or the
+   * reserved built-in id `other`.
+   *
+   * CDXC:SidebarSpaces 2026-09-02:
+   * The ABSENCE of a key means "never switched", not a view of its own: it
+   * resolves at render time to the section's first Space, or to Other when it
+   * has none. A stored id whose Space no longer exists resolves the same way
+   * instead of being pruned here — the daemon's Space state arrives long after
+   * this record is read.
    */
   selectedSpaceIdBySectionKey: Record<string, string>;
 };
 
 /*
  * Version 3 added `selectedSpaceIdBySectionKey`. Version 2 payloads still load:
- * they normalize to an empty selection map, which is All Projects everywhere.
+ * they normalize to an empty selection map, which every section resolves
+ * through the default rule (its first Space, else Other). Version 3 payloads
+ * written while the built-in view was still "All Projects" need no migration
+ * for the same reason: an absent key was that view and now resolves through
+ * the same rule.
+ *
+ * CDXC:SidebarSectionCollapse 2026-09-02:
+ * `isReferenceProjectsCollapsed` and `collapsedRemoteMachineSectionsById` were
+ * dropped when the Projects area and the remote machine sections stopped being
+ * collapsible. Stored payloads that still carry them need no version bump:
+ * `normalizeSidebarUiCollapseState` reads only the keys it knows, so the stale
+ * ones are ignored on read and gone after the next write.
  */
 export type SidebarUiCollapseStorage = {
   state: SidebarUiCollapseState;
@@ -92,9 +105,7 @@ export function createDefaultSidebarUiCollapseState(): SidebarUiCollapseState {
     collapsedGroupsById: {},
     collapsedProjectCollectionsByKey: {},
     collapsedProjectSessionListsById: {},
-    collapsedRemoteMachineSectionsById: {},
     isReferenceChatsCollapsed: false,
-    isReferenceProjectsCollapsed: false,
     selectedSpaceIdBySectionKey: {},
   };
 }
@@ -125,9 +136,7 @@ export function normalizeSidebarUiCollapseState(candidate: unknown): SidebarUiCo
     collapsedGroupsById: normalizeStoredCollapsedGroupsById(state.collapsedGroupsById),
     collapsedProjectCollectionsByKey: normalizeStoredCollapsedGroupsById(state.collapsedProjectCollectionsByKey),
     collapsedProjectSessionListsById: normalizeStoredCollapsedGroupsById(state.collapsedProjectSessionListsById),
-    collapsedRemoteMachineSectionsById: normalizeStoredCollapsedGroupsById(state.collapsedRemoteMachineSectionsById),
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed === true,
-    isReferenceProjectsCollapsed: state.isReferenceProjectsCollapsed === true,
     selectedSpaceIdBySectionKey: normalizeStoredSelectedSpaceIdBySectionKey(state.selectedSpaceIdBySectionKey),
   };
 }
@@ -226,9 +235,7 @@ export function summarizeSidebarUiCollapseState(state: SidebarUiCollapseState): 
     collapsedGroupCount: Object.keys(state.collapsedGroupsById).length,
     collapsedProjectCollectionCount: Object.keys(state.collapsedProjectCollectionsByKey).length,
     collapsedProjectSessionListCount: Object.keys(state.collapsedProjectSessionListsById).length,
-    collapsedRemoteMachineSectionCount: Object.keys(state.collapsedRemoteMachineSectionsById).length,
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed,
-    isReferenceProjectsCollapsed: state.isReferenceProjectsCollapsed,
     selectedSpaceSectionCount: Object.keys(state.selectedSpaceIdBySectionKey).length,
   };
 }

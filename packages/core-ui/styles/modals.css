@@ -839,13 +839,20 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .recent-projects-row-end {
-  align-items: center;
-  align-self: stretch;
-  display: inline-flex;
-  flex: 0 0 22px;
-  justify-content: center;
+  /*
+   * CDXC:RecentProjects 2026-09-01:
+   * Close/remove sits in the same 6px trailing column as the open-state dot,
+   * matching Quick Access Sessions. The control is centered on that column so
+   * it replaces the dot instead of sitting beside it.
+   */
+  align-self: center;
+  display: block;
+  flex: 0 0 6px;
+  height: 6px;
   margin-left: 6px;
-  width: 22px;
+  overflow: visible;
+  position: relative;
+  width: 6px;
 }
 
 .recent-projects-remove-button {
@@ -855,21 +862,28 @@ html:has(body.app-modal-host-native-window-body) {
   border-radius: 4px;
   color: var(--muted-foreground, var(--app-muted));
   cursor: pointer;
-  display: none;
-  height: 22px;
-  justify-content: center;
-  padding: 0;
-  width: 22px;
-}
-
-.recent-projects-row:hover .recent-projects-status-dot,
-.recent-projects-row:focus-within .recent-projects-status-dot {
-  display: none;
-}
-
-.recent-projects-row:hover .recent-projects-remove-button,
-.recent-projects-row:focus-within .recent-projects-remove-button {
   display: inline-flex;
+  height: 18px;
+  justify-content: center;
+  left: 50%;
+  opacity: 0;
+  padding: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  z-index: 2;
+}
+
+.recent-projects-row:is(:hover, :focus-visible, :focus-within) .recent-projects-status-dot {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.recent-projects-row:is(:hover, :focus-visible, :focus-within) .recent-projects-remove-button {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .recent-projects-remove-button:hover,
@@ -898,7 +912,7 @@ html:has(body.app-modal-host-native-window-body) {
 .recent-projects-status-dot {
   background: rgb(255 255 255 / 20%);
   border-radius: 999px;
-  flex: 0 0 auto;
+  display: block;
   height: 6px;
   width: 6px;
 }

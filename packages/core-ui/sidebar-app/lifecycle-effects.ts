@@ -12,7 +12,7 @@ import type { WebviewApi } from '../webview-api';
 import { readSidebarUiCollapseState, summarizeSidebarUiCollapseRead } from './collapse-state';
 import type { SidebarCollapseStateLogger } from './collapse-actions';
 import { getSidebarStartupElapsedMs } from './session-ordering';
-import type { ReferenceSidebarSectionId, SidebarEventSource, SidebarSessionsById } from './types';
+import type { SidebarEventSource, SidebarSessionsById } from './types';
 
 export const SIDEBAR_STARTUP_INTERACTION_BLOCK_MS = 1500;
 
@@ -226,27 +226,16 @@ export function useSidebarHostMessageListeners({
 
 export type SidebarTimeoutCleanupOptions = {
   completionFlashTimeoutBySessionIdRef: RefObject<Map<string, number>>;
-  referenceSectionAnimationTimeoutsRef: RefObject<Partial<Record<ReferenceSidebarSectionId, number>>>;
 };
 
-/* Clears the completion-flash and section-animation timers when the app unmounts. */
-export function useSidebarTimeoutCleanup({
-  completionFlashTimeoutBySessionIdRef,
-  referenceSectionAnimationTimeoutsRef,
-}: SidebarTimeoutCleanupOptions) {
+/* Clears the completion-flash timers when the app unmounts. */
+export function useSidebarTimeoutCleanup({ completionFlashTimeoutBySessionIdRef }: SidebarTimeoutCleanupOptions) {
   useEffect(() => {
     return () => {
       for (const timeout of completionFlashTimeoutBySessionIdRef.current.values()) {
         window.clearTimeout(timeout);
       }
       completionFlashTimeoutBySessionIdRef.current.clear();
-
-      for (const timeoutId of Object.values(referenceSectionAnimationTimeoutsRef.current)) {
-        if (timeoutId !== undefined) {
-          window.clearTimeout(timeoutId);
-        }
-      }
-      referenceSectionAnimationTimeoutsRef.current = {};
     };
   }, []);
 }

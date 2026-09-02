@@ -22,7 +22,7 @@ import { playCompletionSound, prepareCompletionSoundPlayback } from './completio
 import { GitCommitModal } from './git-commit-modal';
 import { SidebarPreviousSessionsSearchGroup } from './sidebar-session-search-overlay';
 import { readSidebarHiddenItems, writeSidebarHiddenItems } from './sidebar-hidden-items';
-import { SidebarCollapseAnimationProvider, useSidebarCollapsiblePresence } from './sidebar-collapse-animation';
+import { SidebarCollapseAnimationProvider } from './sidebar-collapse-animation';
 import {
   createSidebarSessionSearchResults,
   createSidebarSessionSearchSelection,
@@ -71,7 +71,7 @@ import {
 import { SpaceFilterRow } from './space-filter-row';
 import {
   createRemoteSidebarSpaceSectionKey,
-  createSidebarSpaceGroupVisibility,
+  createSelectedSidebarSpaceVisibility,
   LOCAL_SIDEBAR_SPACE_SECTION_KEY,
   resolveSelectedSidebarSpace,
 } from './sidebar-app/space-filtering';
@@ -148,9 +148,9 @@ import {
 import { SidebarHotkeyOverlay, useCommandHotkeyOverlay } from './sidebar-app/hotkey-overlay';
 import {
   SidebarReferenceFooter,
-  SidebarReferenceSectionHeader,
   SidebarReferenceTopChrome,
   formatSidebarMenuHotkeyLabel,
+  type SidebarReferenceProjectMenu,
 } from './sidebar-app/reference-chrome';
 import { SidebarMachineTabs, type SidebarMachineTabItem } from './sidebar-app/machine-tabs';
 import {
@@ -158,7 +158,11 @@ import {
   readSidebarSelectedMachineTabId,
   writeSidebarSelectedMachineTabId,
 } from './sidebar-app/machine-tab-selection';
-import { RemoteMachineSidebarSection, remoteMachineBusyLabel } from './sidebar-app/remote-machine-section';
+import {
+  RemoteMachineSidebarSection,
+  remoteMachineBusyLabel,
+  remoteMachineFailureLabel,
+} from './sidebar-app/remote-machine-section';
 import {
   countSidebarSessions,
   createDisplayedGroupIds,
@@ -190,7 +194,6 @@ import {
 import { useSidebarOverlayActions } from './sidebar-app/overlay-actions';
 import { useSidebarActions } from './sidebar-app/sidebar-actions';
 import type {
-  ReferenceSidebarSectionId,
   RemoteMachineRuntimeStatus,
   RemoteMachineRuntimeStatuses,
   RemoteMachineStatusMessages,
@@ -220,8 +223,6 @@ type SidebarSessionRevealRequest = {
   requestId: number;
   sessionId: string;
 };
-
-const REFERENCE_SECTION_CHILD_ANIMATION_RESET_MS = 420;
 
 const sensors = [
   PointerSensor.configure({
@@ -299,9 +300,6 @@ export function SidebarApp({
   const [isReferenceChatsCollapsed, setIsReferenceChatsCollapsed] = useState(
     initialUiCollapseState.isReferenceChatsCollapsed
   );
-  const [isReferenceProjectsCollapsed, setIsReferenceProjectsCollapsed] = useState(
-    initialUiCollapseState.isReferenceProjectsCollapsed
-  );
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isSessionSearchOpen, setIsSessionSearchOpen] = useState(false);
   const [initialHiddenItems] = useState(readSidebarHiddenItems);
@@ -355,9 +353,6 @@ export function SidebarApp({
     initialUiCollapseState.selectedSpaceIdBySectionKey
   );
   const [autoEditingProjectCollectionId, setAutoEditingProjectCollectionId] = useState<string>();
-  const [collapsedRemoteMachineSectionsById, setCollapsedRemoteMachineSectionsById] = useState<Record<string, true>>(
-    initialUiCollapseState.collapsedRemoteMachineSectionsById
-  );
   /*
    * CDXC:SidebarMachineTabs 2026-08-28:
    * Machines are top-level tabs, so exactly one machine's projects are in the
@@ -366,13 +361,6 @@ export function SidebarApp({
   const [selectedMachineTabId, setSelectedMachineTabId] = useState(() =>
     readSidebarSelectedMachineTabId(windowScopeId)
   );
-  const [referenceSectionChildAnimations, setReferenceSectionChildAnimations] = useState<
-    Record<ReferenceSidebarSectionId, boolean>
-  >({
-    projects: false,
-    quick: false,
-    remote: false,
-  });
   const previousExpandedReferenceProjectGroupIdsRef = useRef<string[]>([]);
   const previousExpandedRemoteProjectGroupIdsByMachineIdRef = useRef<Record<string, string[]>>({});
   const previousExpandedProjectGroupIdsByCollectionIdRef = useRef<Record<string, string[]>>({});
@@ -434,7 +422,6 @@ export function SidebarApp({
   const pointerDownSessionTargetRef = useRef<SidebarPointerDownSessionTarget | undefined>(undefined);
   const sessionPointerDragStateRef = useRef<SidebarSessionPointerDragState | undefined>(undefined);
   const completionFlashTimeoutBySessionIdRef = useRef<Map<string, number>>(new Map());
-  const referenceSectionAnimationTimeoutsRef = useRef<Partial<Record<ReferenceSidebarSectionId, number>>>({});
   const sessionGroupsContentRef = useRef<HTMLDivElement>(null);
   const sidebarStartupStartedAtRef = useRef(getSidebarStartupNow());
   const hasAppliedHydrateRef = useRef(false);
@@ -760,11 +747,12 @@ export function SidebarApp({
     /**
      * CDXC:SidebarReference 2026-05-08-11:09
      * When creating a chat, terminal, browser pane, or agent session inside a
-     * collapsed Combined sidebar area, expand the owning Chats/Projects section
+     * collapsed Combined sidebar area, expand the owning Chats section
      * as soon as the host hydrates the added session so the user sees the
-     * result of the action.
+     * result of the action. Projects is always expanded, so it needs no
+     * equivalent auto-expand.
      * CDXC:SidebarReference 2026-05-20-12:00
-     * Do not expand Chats/Projects section headers on the first post-hydrate
+     * Do not expand the Chats section header on the first post-hydrate
      * baseline pass after restart. Restored session counts are not new sessions.
      */
     if (sessionCountIncreaseGroupIds.some((groupId) => groupsById[groupId]?.isChatCollection)) {
@@ -774,15 +762,6 @@ export function SidebarApp({
         sessionCountIncreaseGroupCount: sessionCountIncreaseGroupIds.length,
       });
       setIsReferenceChatsCollapsed(false);
-    }
-
-    if (sessionCountIncreaseGroupIds.some((groupId) => !groupsById[groupId]?.isChatCollection)) {
-      postSidebarCollapseStateLog('sectionAutoExpanded', {
-        reason: 'session-count-increase',
-        section: 'projects',
-        sessionCountIncreaseGroupCount: sessionCountIncreaseGroupIds.length,
-      });
-      setIsReferenceProjectsCollapsed(false);
     }
 
     previousSessionCountsByGroupRef.current = nextSessionCountsByGroup;
@@ -797,22 +776,15 @@ export function SidebarApp({
 
   const isSidebarInteractionBlocked = isStartupInteractionBlocked;
 
-  const {
-    setGroupCollapsed,
-    setGroupsCollapsed,
-    setProjectCollectionCollapsed,
-    setProjectSessionListCollapsed,
-    setRemoteMachineSectionCollapsed,
-  } = useSidebarCollapseActions({
-    collapsedGroupsById,
-    collapsedRemoteMachineSectionsById,
-    groupOrder,
-    postSidebarCollapseStateLog,
-    setCollapsedGroupsById,
-    setCollapsedProjectCollectionsByKey,
-    setCollapsedProjectSessionListsById,
-    setCollapsedRemoteMachineSectionsById,
-  });
+  const { setGroupCollapsed, setGroupsCollapsed, setProjectCollectionCollapsed, setProjectSessionListCollapsed } =
+    useSidebarCollapseActions({
+      collapsedGroupsById,
+      groupOrder,
+      postSidebarCollapseStateLog,
+      setCollapsedGroupsById,
+      setCollapsedProjectCollectionsByKey,
+      setCollapsedProjectSessionListsById,
+    });
 
   const dismissAppModalForSidebarNavigation = (area: string) => {
     /*
@@ -1242,7 +1214,6 @@ export function SidebarApp({
           collapsedGroupCount: Object.keys(collapsedGroupsById).length,
           groupCount: event.data.groups.length,
           isReferenceChatsCollapsed,
-          isReferenceProjectsCollapsed,
           messageRevision: event.data.revision,
           messageType: event.data.type,
           sessionCount: sidebarCollapseMessageSessionCount,
@@ -1315,7 +1286,6 @@ export function SidebarApp({
           collapsedGroupCount: Object.keys(collapsedGroupsById).length,
           groupCount: event.data.groups.length,
           isReferenceChatsCollapsed,
-          isReferenceProjectsCollapsed,
           messageRevision: event.data.revision,
           messageType: event.data.type,
           sessionCount: sidebarCollapseMessageSessionCount,
@@ -1367,10 +1337,7 @@ export function SidebarApp({
     nativeHostEventSource,
   });
 
-  useSidebarTimeoutCleanup({
-    completionFlashTimeoutBySessionIdRef,
-    referenceSectionAnimationTimeoutsRef,
-  });
+  useSidebarTimeoutCleanup({ completionFlashTimeoutBySessionIdRef });
 
   useSidebarStartupInteractionBlock({
     postSidebarStartupReproLog,
@@ -1402,28 +1369,6 @@ export function SidebarApp({
     sessionGroupsPanelRef.current.inert = isSidebarInteractionBlocked;
   }, [isSidebarInteractionBlocked]);
 
-  const triggerReferenceSectionChildAnimation = (section: ReferenceSidebarSectionId) => {
-    /**
-     * CDXC:SidebarSessions 2026-05-17-00:11:
-     * Reference-sidebar child entrance motion is only for explicit section
-     * expansion. Session open/close hydration must not leave a durable CSS
-     * state that replays the project/session "loading in" animation.
-     */
-    setReferenceSectionChildAnimations((previous) => (previous[section] ? previous : { ...previous, [section]: true }));
-
-    const existingTimeoutId = referenceSectionAnimationTimeoutsRef.current[section];
-    if (existingTimeoutId !== undefined) {
-      window.clearTimeout(existingTimeoutId);
-    }
-
-    referenceSectionAnimationTimeoutsRef.current[section] = window.setTimeout(() => {
-      setReferenceSectionChildAnimations((previous) =>
-        previous[section] ? { ...previous, [section]: false } : previous
-      );
-      delete referenceSectionAnimationTimeoutsRef.current[section];
-    }, REFERENCE_SECTION_CHILD_ANIMATION_RESET_MS);
-  };
-
   const isManualActiveSessionsSort = activeSessionsSortMode === 'manual';
   /**
    * CDXC:SidebarLayout 2026-05-13-08:11
@@ -1451,11 +1396,6 @@ export function SidebarApp({
   const normalizedSessionSearchQuery = sessionSearchQuery.trim();
   const isSessionSearchFiltering =
     isSessionSearchOpen && normalizedSessionSearchQuery.length >= MIN_SESSION_SEARCH_QUERY_LENGTH;
-  const isReferenceProjectsRenderedCollapsed = isReferenceProjectsCollapsed && !isSessionSearchFiltering;
-  const projectsSectionPresence = useSidebarCollapsiblePresence(
-    isReferenceProjectsRenderedCollapsed,
-    effectiveSettings.sidebarCollapseAnimationDurationMs
-  );
   const isSidebarSearchProjectGroupRenderedCollapsed = (groupId: string) =>
     !isSessionSearchFiltering && collapsedGroupsById[groupId] === true;
   useEffect(() => {
@@ -1586,9 +1526,9 @@ export function SidebarApp({
    * Quick chats and the synthetic gxserver-unavailable row are excluded before
    * Space visibility is evaluated, so no Space rule ever applies to them.
    */
-  const selectedLocalSpace = resolveSelectedSidebarSpace(
-    spacesState,
-    selectedSpaceIdBySectionKey[LOCAL_SIDEBAR_SPACE_SECTION_KEY]
+  const selectedLocalSpace = useMemo(
+    () => resolveSelectedSidebarSpace(spacesState, selectedSpaceIdBySectionKey[LOCAL_SIDEBAR_SPACE_SECTION_KEY]),
+    [selectedSpaceIdBySectionKey, spacesState]
   );
   const displayedReferenceProjectGroupIds = useMemo(() => {
     const visibleProjectGroupIds = unfilteredReferenceProjectGroupIds.filter(
@@ -1597,12 +1537,12 @@ export function SidebarApp({
     if (!selectedLocalSpace) {
       return visibleProjectGroupIds;
     }
-    const isVisibleInSpace = createSidebarSpaceGroupVisibility({
+    const isVisibleInSpace = createSelectedSidebarSpaceVisibility({
       collectionState: projectCollections,
       groupIds: visibleProjectGroupIds,
       groupsById,
       resolveProjectId: (groupId) => groupsById[groupId]?.projectContext?.editor.projectId,
-      space: selectedLocalSpace,
+      selection: selectedLocalSpace,
     });
     return visibleProjectGroupIds.filter(isVisibleInSpace);
   }, [groupsById, projectCollections, selectedLocalSpace, unfilteredReferenceProjectGroupIds]);
@@ -1832,10 +1772,10 @@ export function SidebarApp({
   /*
    * CDXC:SidebarSpaces 2026-08-27:
    * Each remote gxserver owns its own Spaces and its own selection, so a machine
-   * whose section is on All Projects — or whose daemon never delivered a Space
-   * state — keeps its full list. Remote membership is keyed by the RAW project
-   * id the remote daemon knows (`remoteMachineContext.projectId`), not the
-   * sidebar's machine-scoped editor project id.
+   * whose daemon never delivered a Space state is Space-incapable and keeps its
+   * full list. Remote membership is keyed by the RAW project id the remote
+   * daemon knows (`remoteMachineContext.projectId`), not the sidebar's
+   * machine-scoped editor project id.
    */
   const remoteProjectGroupIdsByMachineId = useMemo(() => {
     const next: Record<string, string[]> = {};
@@ -1848,7 +1788,7 @@ export function SidebarApp({
         next[machineId] = machineGroupIds;
         continue;
       }
-      const isVisibleInSpace = createSidebarSpaceGroupVisibility({
+      const isVisibleInSpace = createSelectedSidebarSpaceVisibility({
         collectionState: remoteProjectCollectionsByMachineId[machineId] ?? {
           collections: [],
           nextCollectionNumber: 1,
@@ -1856,7 +1796,7 @@ export function SidebarApp({
         groupIds: machineGroupIds,
         groupsById,
         resolveProjectId: (groupId) => groupsById[groupId]?.remoteMachineContext?.projectId,
-        space: selectedSpace,
+        selection: selectedSpace,
       });
       next[machineId] = machineGroupIds.filter(isVisibleInSpace);
     }
@@ -1927,6 +1867,22 @@ export function SidebarApp({
    * connect is visible as such without opening it, and the same working/
    * attention/awake counts its section header used to show while collapsed.
    */
+  const reconnectRemoteMachine = useEffectEvent((machineId: string) => {
+    dismissAppModalForSidebarNavigation('SettingsDismissal:remoteReconnect');
+    vscode.postMessage({
+      remoteMachineId: machineId,
+      type: 'reconnectRemoteMachine',
+    });
+  });
+  /*
+   * CDXC:SidebarProjectMenu 2026-09-02:
+   * The remote machine header's connection control moved onto its tab
+   * (CDXC:GPUIRemoteConnectFeedback 2026-07-21 describes the states): a
+   * connected machine shows nothing extra, a busy one spins, and a
+   * disconnected or failed one carries a Connect / retry glyph whose tooltip
+   * is the host's sanitized failure reason. Native still owns the matching
+   * viewport-level toast for progress and failures.
+   */
   const machineTabItems = useMemo<readonly SidebarMachineTabItem[]>(() => {
     const localTab: SidebarMachineTabItem = {
       id: LOCAL_SIDEBAR_MACHINE_TAB_ID,
@@ -1937,17 +1893,31 @@ export function SidebarApp({
       localTab,
       ...remoteMachines.map((machine): SidebarMachineTabItem => {
         const status = remoteMachineRuntimeStatuses[machine.id] ?? 'disconnected';
+        const busyLabel = remoteMachineBusyLabel(status);
+        const connectionState: SidebarMachineTabItem['connectionState'] =
+          status === 'connected'
+            ? 'connected'
+            : busyLabel !== undefined
+              ? 'busy'
+              : status === 'disconnected'
+                ? 'disconnected'
+                : 'failed';
         return {
-          connectionState:
-            status === 'connected'
-              ? 'connected'
-              : remoteMachineBusyLabel(status) !== undefined
-                ? 'busy'
-                : status === 'disconnected'
-                  ? 'disconnected'
-                  : 'failed',
+          connectionLabel:
+            connectionState === 'connected'
+              ? undefined
+              : connectionState === 'busy'
+                ? busyLabel
+                : connectionState === 'disconnected'
+                  ? 'Connect'
+                  : `Error: ${remoteMachineStatusMessages[machine.id] ?? remoteMachineFailureLabel(status)}`,
+          connectionState,
           id: machine.id,
           label: machine.name,
+          onConnect:
+            connectionState === 'disconnected' || connectionState === 'failed'
+              ? () => reconnectRemoteMachine(machine.id)
+              : undefined,
           sessionSummary: remoteSectionSessionSummariesByMachineId[machine.id],
         };
       }),
@@ -1955,6 +1925,7 @@ export function SidebarApp({
   }, [
     referenceProjectsSectionSessionSummary,
     remoteMachineRuntimeStatuses,
+    remoteMachineStatusMessages,
     remoteMachines,
     remoteSectionSessionSummariesByMachineId,
   ]);
@@ -1997,21 +1968,11 @@ export function SidebarApp({
       return;
     }
     const remoteMachineIds = new Set<string>(JSON.parse(savedRemoteMachineIdsKey) as string[]);
-    setCollapsedRemoteMachineSectionsById((previous) => {
-      let next: Record<string, true> | undefined;
-      for (const machineId of Object.keys(previous)) {
-        if (!remoteMachineIds.has(machineId)) {
-          next ??= { ...previous };
-          delete next[machineId];
-        }
-      }
-      return next ?? previous;
-    });
     /*
      * CDXC:SidebarSpaces 2026-08-27:
      * A forgotten machine's Space state and its remembered Space selection go
-     * with it, on the same authoritative saved-machine signal the collapse map
-     * uses, so a re-added machine never inherits a stale selection.
+     * with it, on the authoritative saved-machine signal, so a re-added machine
+     * never inherits a stale selection.
      */
     setRemoteSpacesByMachineId((previous) => {
       let next: Record<string, SidebarSpacesState> | undefined;
@@ -2039,21 +2000,17 @@ export function SidebarApp({
   }, [savedRemoteMachineIdsKey]);
   /*
    * CDXC:SidebarSpaces 2026-08-27:
-   * Every Space selection change goes through here so the persisted map only
-   * ever contains real Space ids: All Projects is the absence of a key.
+   * Every Space selection change goes through here. The persisted map holds
+   * either a real Space id or the reserved built-in `other` id; a section with
+   * no entry has never been switched and resolves through the shared default
+   * rule (first Space, else Other).
    */
-  const selectSidebarSpace = useEffectEvent((sectionKey: string, spaceId: string | undefined) => {
+  const selectSidebarSpace = useEffectEvent((sectionKey: string, spaceId: string) => {
     setSelectedSpaceIdBySectionKey((previous) => {
-      if ((previous[sectionKey] ?? undefined) === spaceId) {
+      if (previous[sectionKey] === spaceId) {
         return previous;
       }
-      const next = { ...previous };
-      if (spaceId) {
-        next[sectionKey] = spaceId;
-      } else {
-        delete next[sectionKey];
-      }
-      return next;
+      return { ...previous, [sectionKey]: spaceId };
     });
   });
   const reorderLocalSpaces = useEffectEvent((orderedSpaceIds: string[]) => {
@@ -2120,10 +2077,12 @@ export function SidebarApp({
    * document this sidebar holds right now — never against the snapshot the
    * dialog opened on.
    *
-   * Deleting the selected Space returns its section to All Projects, per the
-   * Spaces deletion decision. `resolveSelectedSidebarSpace` already renders that
-   * (an unresolvable id filters nothing), and dropping the id here additionally
-   * keeps the persisted selection map free of dead ids.
+   * Deleting the selected Space drops its id from the selection map, so the
+   * section falls back through the shared default rule — its first remaining
+   * Space, or Other when it has none — exactly like a section that has never
+   * been switched. `resolveSelectedSidebarSpace` already renders that for an
+   * unresolvable id; dropping the id here additionally keeps the persisted
+   * selection map free of dead ids.
    */
   const applySpaceEditorResult = useEffectEvent((result: ApplySidebarSpaceEditorResultMessage) => {
     if (result.mode === 'delete' && result.spaceId) {
@@ -2144,6 +2103,29 @@ export function SidebarApp({
       return;
     }
     setSpacesState((previous) => (previous ? applySidebarSpaceEditorResult(previous, result) : previous));
+  });
+  /*
+   * CDXC:SidebarMachineTabMenu 2026-09-02:
+   * Hide Machine from a tab's context menu is the same edit as switching off
+   * "Show in sidebar" in Settings → Remote: the saved machine stays, only its
+   * `disabled` flag flips, sent under the explicit remote-machine source so
+   * the host accepts the machine-list change. The selected-tab effect then
+   * falls back to Local on its own if the hidden machine was the open one.
+   */
+  const hideRemoteMachine = useEffectEvent((machineId: string) => {
+    if (!settings) {
+      return;
+    }
+    vscode.postMessage({
+      baseRevision: revision,
+      patch: {
+        remoteMachines: settings.remoteMachines.map((machine) =>
+          machine.id === machineId ? { ...machine, disabled: true } : machine
+        ),
+      },
+      source: 'settings:remoteMachines',
+      type: 'updateSettingsPatch',
+    });
   });
   const moveRemoteMachineSection = useEffectEvent(
     (sourceRemoteMachineId: string, target: SidebarRemoteMachineDropTarget) => {
@@ -2190,6 +2172,51 @@ export function SidebarApp({
     () => displayedReferenceProjectGroupIds.some((groupId) => collapsedGroupsById[groupId] !== true),
     [collapsedGroupsById, displayedReferenceProjectGroupIds]
   );
+  const toggleReferenceProjectsBulk = () => {
+    postSidebarCollapseStateLog('projectBulkCommand', {
+      expandedProjectGroupCount:
+        displayedReferenceProjectGroupIds.length -
+        Object.keys(collapsedGroupsById).filter((groupId) => displayedReferenceProjectGroupIds.includes(groupId))
+          .length,
+      mode: hasExpandedReferenceProjects ? 'collapse-all' : 'expand-previous',
+      previousExpandedGroupCount: previousExpandedReferenceProjectGroupIdsRef.current.length,
+      projectGroupCount: displayedReferenceProjectGroupIds.length,
+    });
+    if (hasExpandedReferenceProjects) {
+      previousExpandedReferenceProjectGroupIdsRef.current = displayedReferenceProjectGroupIds.filter(
+        (groupId) => collapsedGroupsById[groupId] !== true
+      );
+      setGroupsCollapsed(displayedReferenceProjectGroupIds, true);
+      return;
+    }
+
+    const previousExpandedProjectGroupIds = previousExpandedReferenceProjectGroupIdsRef.current.filter((groupId) =>
+      displayedReferenceProjectGroupIds.includes(groupId)
+    );
+    setGroupsCollapsed(
+      previousExpandedProjectGroupIds.length > 0 ? previousExpandedProjectGroupIds : displayedReferenceProjectGroupIds,
+      false
+    );
+  };
+  const toggleRemoteMachineProjectsBulk = (machineId: string) => {
+    const machineProjectGroupIds = remoteProjectGroupIdsByMachineId[machineId] ?? [];
+    const hasExpandedMachineProjects = machineProjectGroupIds.some((groupId) => collapsedGroupsById[groupId] !== true);
+    if (hasExpandedMachineProjects) {
+      previousExpandedRemoteProjectGroupIdsByMachineIdRef.current[machineId] = machineProjectGroupIds.filter(
+        (groupId) => collapsedGroupsById[groupId] !== true
+      );
+      setGroupsCollapsed(machineProjectGroupIds, true);
+      return;
+    }
+    const previousExpandedProjectGroupIds =
+      previousExpandedRemoteProjectGroupIdsByMachineIdRef.current[machineId]?.filter((groupId) =>
+        machineProjectGroupIds.includes(groupId)
+      ) ?? [];
+    setGroupsCollapsed(
+      previousExpandedProjectGroupIds.length > 0 ? previousExpandedProjectGroupIds : machineProjectGroupIds,
+      false
+    );
+  };
   const handleSidebarProjectJump = useEffectEvent((detail: SidebarProjectJumpEventDetail) => {
     const shouldRevealFocusedSession = detail.revealFocusedSession === true;
     const requestFocusedSessionReveal = () => {
@@ -2205,8 +2232,7 @@ export function SidebarApp({
     }
 
     const wasProjectCollapsed = collapsedGroupsById[detail.groupId] === true;
-    const wasSectionCollapsed = isReferenceProjectsCollapsed;
-    if (!wasProjectCollapsed && !wasSectionCollapsed) {
+    if (!wasProjectCollapsed) {
       requestFocusedSessionReveal();
       return;
     }
@@ -2226,17 +2252,10 @@ export function SidebarApp({
       revealFocusedSession: shouldRevealFocusedSession,
       showLessAfterExpand: detail.showLessAfterExpand,
       wasProjectCollapsed,
-      wasSectionCollapsed,
     });
-    if (wasSectionCollapsed) {
-      triggerReferenceSectionChildAnimation('projects');
-      setIsReferenceProjectsCollapsed(false);
-    }
-    if (wasProjectCollapsed) {
-      setGroupCollapsed(detail.groupId, false);
-      if (detail.showLessAfterExpand) {
-        setProjectSessionListCollapsed(detail.projectId, true);
-      }
+    setGroupCollapsed(detail.groupId, false);
+    if (detail.showLessAfterExpand) {
+      setProjectSessionListCollapsed(detail.projectId, true);
     }
     requestFocusedSessionReveal();
   });
@@ -2573,18 +2592,12 @@ export function SidebarApp({
      * CDXC:SidebarReference 2026-05-20-12:00
      * The first post-hydrate group-collapse reconcile seeds session-count baseline
      * without expand-on-count-increase so restored projects do not reopen on launch.
-     *
-     * CDXC:RemoteMachines 2026-06-09-19:02:
-     * Remote machine section collapse belongs to the same UI navigation state as
-     * Quick and Projects. Persist each machine independently by saved machine id.
      */
     const nextCollapseState = {
       collapsedGroupsById,
       collapsedProjectCollectionsByKey,
       collapsedProjectSessionListsById,
-      collapsedRemoteMachineSectionsById,
       isReferenceChatsCollapsed,
-      isReferenceProjectsCollapsed,
       selectedSpaceIdBySectionKey,
     };
     const writeResult = writeSidebarUiCollapseState(windowScopeId, nextCollapseState);
@@ -2599,9 +2612,7 @@ export function SidebarApp({
     collapsedGroupsById,
     collapsedProjectCollectionsByKey,
     collapsedProjectSessionListsById,
-    collapsedRemoteMachineSectionsById,
     isReferenceChatsCollapsed,
-    isReferenceProjectsCollapsed,
     selectedSpaceIdBySectionKey,
     windowScopeId,
   ]);
@@ -2656,7 +2667,7 @@ export function SidebarApp({
           No Projects Added.
           <br />
           <br />
-          {'Hover over the Projects label and click on the plus button to add your first project and get started!'}
+          {'Open the More menu at the top of the sidebar and choose Add Project to get started!'}
         </>
       ) : (
         'No projects'
@@ -2869,10 +2880,6 @@ export function SidebarApp({
       handledSessionRevealRequestIdRef.current = requestId;
       pendingSessionRevealScrollRequestIdRef.current = requestId;
 
-      if (isReferenceProjectsCollapsed) {
-        triggerReferenceSectionChildAnimation('projects');
-        setIsReferenceProjectsCollapsed(false);
-      }
       const collectionItem = displayedProjectCollectionItems.find(
         (item) => item.kind === 'collection' && item.groupIds.includes(groupId)
       );
@@ -2952,7 +2959,6 @@ export function SidebarApp({
     displayedProjectCollectionItems,
     displayedWorkspaceSessionIdsByGroup,
     groupsById,
-    isReferenceProjectsCollapsed,
     sessionRevealRequest,
   ]);
 
@@ -3032,7 +3038,6 @@ export function SidebarApp({
   const { handleDragEnd, handleDragMove, handleDragOver, handleDragStart } = useSidebarDragHandlers({
     authoritativeSessionIdsByGroup,
     collapsedGroupsById,
-    collapsedRemoteMachineSectionsById,
     displayedProjectCollectionItems,
     effectiveSessionIdsByGroup,
     enableProjectCollections,
@@ -3309,6 +3314,62 @@ export function SidebarApp({
     vscode,
     workspaceGroupIds,
   });
+  /*
+   * CDXC:SidebarProjectMenu 2026-09-02:
+   * The Projects header and the remote machine headers no longer exist. Their
+   * actions sit at the top of the More dropdown and follow the machine tab
+   * strip: whichever machine is selected is the one Add Project, Sort & Filter,
+   * and Collapse All / Expand Previous act on. Add Project is withheld for a
+   * remote machine that is not connected, exactly as its header used to do.
+   */
+  const selectedMachineProjectMenu: SidebarReferenceProjectMenu = (() => {
+    const shared = {
+      activeSessionsSortMode,
+      onSetActiveSessionsSortMode: setActiveSessionsSortMode,
+      onToggleSessionTagFilter: toggleSessionTagFilter,
+      selectedSessionTagFilters: activeSelectedSessionTagFilters,
+      sessionTagListItems: sidebarSessionTagListItems,
+    };
+    if (selectedRemoteMachineId === undefined) {
+      return {
+        ...shared,
+        bulkActionLabel:
+          displayedReferenceProjectGroupIds.length > 0
+            ? hasExpandedReferenceProjects
+              ? 'Collapse All'
+              : 'Expand Previous'
+            : undefined,
+        onAddProject: () => openAddProjectModal(),
+        onBulkProjectToggle: displayedReferenceProjectGroupIds.length > 0 ? toggleReferenceProjectsBulk : undefined,
+        onToggleShowHidden: () => setShowHiddenSidebarItems((current) => !current),
+        showHidden: showHiddenSidebarItems,
+      };
+    }
+    const machineId = selectedRemoteMachineId;
+    const machineProjectGroupIds = remoteProjectGroupIdsByMachineId[machineId] ?? [];
+    const isConnected = remoteMachineRuntimeStatuses[machineId] === 'connected';
+    return {
+      ...shared,
+      bulkActionLabel:
+        machineProjectGroupIds.length > 0
+          ? machineProjectGroupIds.some((groupId) => collapsedGroupsById[groupId] !== true)
+            ? 'Collapse All'
+            : 'Expand Previous'
+          : undefined,
+      onAddProject: isConnected ? () => openAddProjectModal(machineId) : undefined,
+      onBulkProjectToggle:
+        machineProjectGroupIds.length > 0 ? () => toggleRemoteMachineProjectsBulk(machineId) : undefined,
+      onEditRemoteMachine: () => {
+        dismissAppModalForSidebarNavigation('SettingsDismissal:remoteEditSettings');
+        openAppModal({
+          initialRemoteMachineId: machineId,
+          initialTab: 'remote',
+          modal: 'settings',
+          type: 'open',
+        });
+      },
+    };
+  })();
 
   const renderReferenceProjectGroup = (groupId: string) => {
     const projectId = groupsById[groupId]?.projectContext?.editor.projectId;
@@ -3405,6 +3466,22 @@ export function SidebarApp({
             onTogglePetOverlay={() => {
               vscode.postMessage({ type: 'togglePetOverlay' });
             }}
+            machineTabs={
+              remoteMachines.length > 0 ? (
+                <SidebarMachineTabs
+                  items={machineTabItems}
+                  onConfigureMachines={() => {
+                    dismissAppModalForSidebarNavigation('SettingsDismissal:remoteConfigureMachines');
+                    openAppModal({ initialTab: 'remote', modal: 'settings', type: 'open' });
+                  }}
+                  onHideMachine={hideRemoteMachine}
+                  onSelectMachineTab={setSelectedMachineTabId}
+                  selectedMachineTabId={selectedRemoteMachineId ?? LOCAL_SIDEBAR_MACHINE_TAB_ID}
+                  vscode={vscode}
+                />
+              ) : undefined
+            }
+            projectMenu={selectedMachineProjectMenu}
             settings={effectiveSettings}
             showKeepAwakeButton={showSidebarKeepAwakeButton}
           />
@@ -3423,21 +3500,14 @@ export function SidebarApp({
             >
               {/*
                * CDXC:SidebarMachineTabs 2026-08-28:
-               * The machine strip is pinned above the scrolling project list, in
-               * the panel's own top row, so switching machines never depends on
-               * scrolling to the bottom of the list. With no remote machines
-               * saved there is nothing to switch between and the row stays empty
-               * (and hidden), exactly as before.
+               * The machine strip is pinned above the scrolling project list so
+               * switching machines never depends on scrolling to the bottom of
+               * the list. CDXC:SidebarMachineTabsEdge 2026-09-02: it renders in
+               * the top chrome (see SidebarReferenceTopChrome) because this
+               * panel clips to the sidebar gutters; the panel's own top row
+               * stays empty and hidden.
                */}
-              <div className='session-groups-top'>
-                {remoteMachines.length > 0 ? (
-                  <SidebarMachineTabs
-                    items={machineTabItems}
-                    onSelectMachineTab={setSelectedMachineTabId}
-                    selectedMachineTabId={selectedRemoteMachineId ?? LOCAL_SIDEBAR_MACHINE_TAB_ID}
-                  />
-                ) : null}
-              </div>
+              <div className='session-groups-top' />
               {/*
             CDXC:SidebarScroll 2026-06-30-01:59:
             The sidebar's project list must scroll as fast as the browser can move it.
@@ -3478,99 +3548,17 @@ export function SidebarApp({
                   >
                     {
                       <>
-                        {!shouldHideReferenceSectionsForSearchEmptyState && isLocalMachineTabSelected ? (
-                          <SidebarReferenceSectionHeader
-                            activeSessionsSortMode={activeSessionsSortMode}
-                            actionsAlwaysVisible={displayedReferenceProjectGroupIds.length === 0}
-                            bulkActionLabel={
-                              displayedReferenceProjectGroupIds.length > 0
-                                ? hasExpandedReferenceProjects
-                                  ? 'Collapse All'
-                                  : 'Expand Previous'
-                                : undefined
-                            }
-                            collapsed={isReferenceProjectsRenderedCollapsed}
-                            containsActiveSession={[...groupIdsContainingActiveSession].some(
-                              (groupId) =>
-                                groupsById[groupId]?.isChatCollection !== true &&
-                                groupsById[groupId]?.remoteMachineContext === undefined
-                            )}
-                            onAddProject={() => openAddProjectModal()}
-                            onToggleShowHidden={() => setShowHiddenSidebarItems((current) => !current)}
-                            showHidden={showHiddenSidebarItems}
-                            onBulkProjectToggle={
-                              displayedReferenceProjectGroupIds.length > 0
-                                ? () => {
-                                    postSidebarCollapseStateLog('projectBulkCommand', {
-                                      expandedProjectGroupCount:
-                                        displayedReferenceProjectGroupIds.length -
-                                        Object.keys(collapsedGroupsById).filter((groupId) =>
-                                          displayedReferenceProjectGroupIds.includes(groupId)
-                                        ).length,
-                                      mode: hasExpandedReferenceProjects ? 'collapse-all' : 'expand-previous',
-                                      previousExpandedGroupCount:
-                                        previousExpandedReferenceProjectGroupIdsRef.current.length,
-                                      projectGroupCount: displayedReferenceProjectGroupIds.length,
-                                    });
-                                    if (isReferenceProjectsCollapsed && !hasExpandedReferenceProjects) {
-                                      triggerReferenceSectionChildAnimation('projects');
-                                    }
-                                    setIsReferenceProjectsCollapsed(false);
-                                    if (hasExpandedReferenceProjects) {
-                                      previousExpandedReferenceProjectGroupIdsRef.current =
-                                        displayedReferenceProjectGroupIds.filter(
-                                          (groupId) => collapsedGroupsById[groupId] !== true
-                                        );
-                                      setGroupsCollapsed(displayedReferenceProjectGroupIds, true);
-                                      return;
-                                    }
-
-                                    const previousExpandedProjectGroupIds =
-                                      previousExpandedReferenceProjectGroupIdsRef.current.filter((groupId) =>
-                                        displayedReferenceProjectGroupIds.includes(groupId)
-                                      );
-                                    setGroupsCollapsed(
-                                      previousExpandedProjectGroupIds.length > 0
-                                        ? previousExpandedProjectGroupIds
-                                        : displayedReferenceProjectGroupIds,
-                                      false
-                                    );
-                                  }
-                                : undefined
-                            }
-                            onSetActiveSessionsSortMode={setActiveSessionsSortMode}
-                            onToggleSessionTagFilter={toggleSessionTagFilter}
-                            onToggleCollapsed={() => {
-                              const nextCollapsed = !isReferenceProjectsCollapsed;
-                              postSidebarCollapseStateLog('sectionToggle', {
-                                childGroupCount: displayedReferenceProjectGroupIds.length,
-                                collapsed: nextCollapsed,
-                                section: 'projects',
-                              });
-                              if (isReferenceProjectsCollapsed) {
-                                triggerReferenceSectionChildAnimation('projects');
-                              }
-                              setIsReferenceProjectsCollapsed((previous) => !previous);
-                            }}
-                            sectionKey='projects'
-                            selectedSessionTagFilters={activeSelectedSessionTagFilters}
-                            sessionSummary={referenceProjectsSectionSessionSummary}
-                            sessionTagListItems={sidebarSessionTagListItems}
-                            title='Projects'
-                          />
-                        ) : null}
                         {/*
                          * CDXC:SidebarSpaces 2026-08-27:
                          * The local gxserver's Space row sits between its section
-                         * header and its project list, and hides with the section
-                         * exactly like that list does. It renders only once the
+                         * header and its project list. It renders only once the
                          * local daemon has delivered a Space state — a daemon that
                          * never does is Space-incapable, and gets no row and no
                          * filtering rather than an empty control that cannot work.
                          */}
                         {!shouldHideReferenceSectionsForSearchEmptyState && isLocalMachineTabSelected && spacesState ? (
                           <SpaceFilterRow
-                            collapsed={isReferenceProjectsRenderedCollapsed}
+                            collapsed={false}
                             onReorderSpaces={reorderLocalSpaces}
                             onSelectSpace={(spaceId) => selectSidebarSpace(LOCAL_SIDEBAR_SPACE_SECTION_KEY, spaceId)}
                             sectionKey={LOCAL_SIDEBAR_SPACE_SECTION_KEY}
@@ -3579,17 +3567,10 @@ export function SidebarApp({
                             vscode={vscode}
                           />
                         ) : null}
-                        {!shouldHideReferenceSectionsForSearchEmptyState &&
-                        isLocalMachineTabSelected &&
-                        projectsSectionPresence.isPresent ? (
+                        {!shouldHideReferenceSectionsForSearchEmptyState && isLocalMachineTabSelected ? (
                           <div
-                            aria-hidden={projectsSectionPresence.isVisuallyCollapsed}
-                            className='group-list workspace-group-list reference-project-group-list reference-sidebar-collapsible-body'
-                            data-animate-children={String(referenceSectionChildAnimations.projects)}
-                            data-collapsed={String(projectsSectionPresence.isVisuallyCollapsed)}
+                            className='group-list workspace-group-list reference-project-group-list'
                             data-sidebar-space-content-section={LOCAL_SIDEBAR_SPACE_SECTION_KEY}
-                            inert={projectsSectionPresence.isVisuallyCollapsed ? true : undefined}
-                            ref={projectsSectionPresence.setCollapsibleElement}
                             data-sidebar-project-list-scope={LOCAL_PROJECT_LIST_SCOPE_ID}
                           >
                             {displayedReferenceProjectGroupIds.length > 0 ? (
@@ -3740,9 +3721,6 @@ export function SidebarApp({
                                  * result because remote lists were always flat.
                                  */
                                 const machineProjectGroupIds = remoteProjectGroupIdsByMachineId[machine.id] ?? [];
-                                const hasExpandedMachineProjects = machineProjectGroupIds.some(
-                                  (groupId) => collapsedGroupsById[groupId] !== true
-                                );
                                 const machineProjectCollections = remoteProjectCollectionsByMachineId[machine.id] ?? {
                                   collections: [],
                                   nextCollectionNumber: 1,
@@ -3854,21 +3832,6 @@ export function SidebarApp({
                                 };
                                 return (
                                   <RemoteMachineSidebarSection
-                                    activeSessionsSortMode={activeSessionsSortMode}
-                                    bulkActionLabel={
-                                      machineProjectGroupIds.length > 0
-                                        ? hasExpandedMachineProjects
-                                          ? 'Collapse All'
-                                          : 'Expand Previous'
-                                        : undefined
-                                    }
-                                    collapsed={
-                                      !isSessionSearchFiltering &&
-                                      collapsedRemoteMachineSectionsById[machine.id] === true
-                                    }
-                                    containsActiveSession={[...groupIdsContainingActiveSession].some(
-                                      (groupId) => groupsById[groupId]?.remoteMachineContext?.machineId === machine.id
-                                    )}
                                     index={index}
                                     key={machine.id}
                                     machine={machine}
@@ -3878,56 +3841,12 @@ export function SidebarApp({
                                         ? remoteMachineDropIndicator.position
                                         : undefined
                                     }
-                                    onAddProject={() => openAddProjectModal(machine.id)}
-                                    onBulkProjectToggle={
-                                      machineProjectGroupIds.length > 0
-                                        ? () => {
-                                            setRemoteMachineSectionCollapsed(machine.id, false);
-                                            if (hasExpandedMachineProjects) {
-                                              previousExpandedRemoteProjectGroupIdsByMachineIdRef.current[machine.id] =
-                                                machineProjectGroupIds.filter(
-                                                  (groupId) => collapsedGroupsById[groupId] !== true
-                                                );
-                                              setGroupsCollapsed(machineProjectGroupIds, true);
-                                              return;
-                                            }
-                                            const previousExpandedProjectGroupIds =
-                                              previousExpandedRemoteProjectGroupIdsByMachineIdRef.current[
-                                                machine.id
-                                              ]?.filter((groupId) => machineProjectGroupIds.includes(groupId)) ?? [];
-                                            setGroupsCollapsed(
-                                              previousExpandedProjectGroupIds.length > 0
-                                                ? previousExpandedProjectGroupIds
-                                                : machineProjectGroupIds,
-                                              false
-                                            );
-                                          }
-                                        : undefined
-                                    }
-                                    onEdit={() => {
-                                      dismissAppModalForSidebarNavigation('SettingsDismissal:remoteEditSettings');
-                                      openAppModal({
-                                        initialRemoteMachineId: machine.id,
-                                        initialTab: 'remote',
-                                        modal: 'settings',
-                                        type: 'open',
-                                      });
-                                    }}
-                                    onReconnect={() => {
-                                      dismissAppModalForSidebarNavigation('SettingsDismissal:remoteReconnect');
-                                      vscode.postMessage({
-                                        remoteMachineId: machine.id,
-                                        type: 'reconnectRemoteMachine',
-                                      });
-                                    }}
                                     onReorderSpaces={(orderedSpaceIds) =>
                                       reorderRemoteSpaces(machine.id, orderedSpaceIds)
                                     }
                                     onSelectSpace={(spaceId) =>
                                       selectSidebarSpace(createRemoteSidebarSpaceSectionKey(machine.id), spaceId)
                                     }
-                                    onSetActiveSessionsSortMode={setActiveSessionsSortMode}
-                                    onToggleSessionTagFilter={toggleSessionTagFilter}
                                     selectedSpaceId={machineSelectedSpace?.spaceId}
                                     spaces={machineSpaces}
                                     projectCollectionItems={machineCollectionItems}
@@ -4049,18 +3968,7 @@ export function SidebarApp({
                                       </ProjectCollectionSection>
                                     )}
                                     renderProjectGroup={renderRemoteProjectGroup}
-                                    selectedSessionTagFilters={activeSelectedSessionTagFilters}
-                                    sessionSummary={remoteSectionSessionSummariesByMachineId[machine.id]}
-                                    sessionTagListItems={sidebarSessionTagListItems}
-                                    onToggleCollapsed={() => {
-                                      const nextCollapsed = collapsedRemoteMachineSectionsById[machine.id] !== true;
-                                      if (!nextCollapsed) {
-                                        triggerReferenceSectionChildAnimation('remote');
-                                      }
-                                      setRemoteMachineSectionCollapsed(machine.id, nextCollapsed);
-                                    }}
                                     status={remoteMachineRuntimeStatuses[machine.id] ?? 'disconnected'}
-                                    statusMessage={remoteMachineStatusMessages[machine.id]}
                                     vscode={vscode}
                                   />
                                 );

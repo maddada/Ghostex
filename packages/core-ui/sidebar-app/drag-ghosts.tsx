@@ -32,7 +32,6 @@ export type SidebarProjectCollectionDragPreview = {
 };
 
 export type SidebarRemoteMachineDragPreview = {
-  collapsed: boolean;
   left: number;
   machineId: string;
   pointerOffsetY: number;
@@ -141,16 +140,10 @@ export function RemoteMachineDragGhost({ preview }: { preview: SidebarRemoteMach
         data-has-remote-connection-control='false'
         data-reference-section='remote'
       >
-        <button
-          aria-expanded={!preview.collapsed}
-          className='reference-sidebar-section-heading'
-          tabIndex={-1}
-          type='button'
-        >
+        <div className='reference-sidebar-section-heading'>
           <IconCloud aria-hidden='true' className='reference-sidebar-section-icon' size={15} stroke={1.8} />
           <span className='reference-sidebar-section-title'>{preview.title}</span>
-          <IconCaretRightFilled aria-hidden='true' className='reference-sidebar-section-chevron' size={13} />
-        </button>
+        </div>
       </div>
     </div>
   );

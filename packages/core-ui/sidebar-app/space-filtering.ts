@@ -1,3 +1,4 @@
+import { isUnassignedSidebarSpaceProject, OTHER_SIDEBAR_SPACE_ID } from '../../shared/sidebar-spaces-other';
 import type { SidebarProjectCollectionsState } from '../project-collections';
 import type { SidebarSpace, SidebarSpacesState } from '../spaces';
 import { createProjectCollectionIdByProjectId, type SidebarProjectGroupLookup } from './drag-drop-geometry';
@@ -12,8 +13,11 @@ place those keys are minted, so the persisted selection map
 (`selectedSpaceIdBySectionKey`), the dnd sortable ids, and the Space-editor
 modal payload cannot drift apart.
 
-The built-in "All Projects" view is the ABSENCE of a selection for a section, so
-it never needs a reserved id and can never collide with a real Space id.
+CDXC:SidebarSpaces 2026-09-02:
+The one built-in view is "Other" (packages/shared/sidebar-spaces-other.ts): the
+last button of every Space row, showing exactly what no user Space claims. It
+has a reserved id rather than being "no selection", so a section is always
+filtered by something and the persisted selection is never ambiguous.
 */
 
 export const LOCAL_SIDEBAR_SPACE_SECTION_KEY = 'local';
@@ -78,18 +82,132 @@ export function createSidebarSpaceGroupVisibility({
   };
 }
 
+/*
+CDXC:SidebarSpaces 2026-09-02:
+The built-in Other view, built on the shared rule the mobile app mirrors. It is
+the complement of `createSidebarSpaceGroupVisibility` over EVERY Space the
+section's gxserver owns, resolved from the same collection map so a worktree and
+a grouped project inherit here exactly as they do there.
+
+A row whose project id cannot be resolved is shown: it belongs to no Space, and
+Other is the only view left that can show it.
+*/
+export function createOtherSidebarSpaceGroupVisibility({
+  collectionState,
+  groupIds,
+  groupsById,
+  resolveProjectId,
+  spaces,
+}: {
+  collectionState: SidebarProjectCollectionsState;
+  groupIds: readonly string[];
+  groupsById: SidebarProjectGroupLookup;
+  resolveProjectId: (groupId: string) => string | undefined;
+  spaces: readonly SidebarSpace[];
+}): (groupId: string) => boolean {
+  const collectionIdByProjectId = createProjectCollectionIdByProjectId(
+    collectionState,
+    groupIds,
+    groupsById,
+    resolveProjectId
+  );
+
+  return (groupId: string) => {
+    const projectId = resolveProjectId(groupId);
+    if (!projectId) {
+      return true;
+    }
+    return isUnassignedSidebarSpaceProject({
+      collectionId: collectionIdByProjectId.get(projectId),
+      parentProjectId: groupsById[groupId]?.projectContext?.worktree?.parentProjectId,
+      projectId,
+      spaces,
+    });
+  };
+}
+
 /**
- * The Space a section is actually filtered by. A selection whose Space no longer
- * exists — deleted from another client, or from a daemon that has since replaced
- * its whole Space document — resolves to All Projects instead of leaving the
- * section filtered by a ghost.
+ * The view a section is filtered by: one of its Spaces, or the built-in Other.
+ * The Other variant carries the section's whole Space list, because "claimed by
+ * nothing" can only be decided against every Space that section owns.
+ */
+export type SelectedSidebarSpace =
+  | { kind: 'other'; spaceId: typeof OTHER_SIDEBAR_SPACE_ID; spaces: readonly SidebarSpace[] }
+  | { kind: 'space'; space: SidebarSpace; spaceId: string };
+
+/**
+ * CDXC:SidebarSpaces 2026-09-02:
+ * The default selection rule, in one place: a section with nothing stored — and
+ * a section whose stored Space no longer exists, deleted from another client or
+ * from a daemon that has since replaced its whole Space document — shows the
+ * FIRST Space in the section's order, or Other when the section has no Spaces.
+ * Never a ghost Space, and never an "unfiltered" view.
+ */
+export function resolveSelectedSidebarSpaceId(
+  spacesState: SidebarSpacesState,
+  selectedSpaceId: string | undefined
+): string {
+  if (selectedSpaceId === OTHER_SIDEBAR_SPACE_ID) {
+    return OTHER_SIDEBAR_SPACE_ID;
+  }
+  if (selectedSpaceId && spacesState.spaces[selectedSpaceId]) {
+    return selectedSpaceId;
+  }
+  return spacesState.order.find((spaceId) => spacesState.spaces[spaceId] !== undefined) ?? OTHER_SIDEBAR_SPACE_ID;
+}
+
+/**
+ * The resolved view itself. `undefined` only for a Space-incapable daemon, whose
+ * section has no Space row and is not filtered at all.
  */
 export function resolveSelectedSidebarSpace(
   spacesState: SidebarSpacesState | undefined,
   selectedSpaceId: string | undefined
-): SidebarSpace | undefined {
-  if (!spacesState || !selectedSpaceId) {
+): SelectedSidebarSpace | undefined {
+  if (!spacesState) {
     return undefined;
   }
-  return spacesState.spaces[selectedSpaceId];
+  const resolvedSpaceId = resolveSelectedSidebarSpaceId(spacesState, selectedSpaceId);
+  const space = spacesState.spaces[resolvedSpaceId];
+  return space
+    ? { kind: 'space', space, spaceId: resolvedSpaceId }
+    : {
+        kind: 'other',
+        spaceId: OTHER_SIDEBAR_SPACE_ID,
+        spaces: spacesState.order.flatMap((spaceId) =>
+          spacesState.spaces[spaceId] ? [spacesState.spaces[spaceId]] : []
+        ),
+      };
+}
+
+/** The visibility predicate for whichever view a section resolved to. */
+export function createSelectedSidebarSpaceVisibility({
+  collectionState,
+  groupIds,
+  groupsById,
+  resolveProjectId,
+  selection,
+}: {
+  collectionState: SidebarProjectCollectionsState;
+  groupIds: readonly string[];
+  groupsById: SidebarProjectGroupLookup;
+  resolveProjectId: (groupId: string) => string | undefined;
+  selection: SelectedSidebarSpace;
+}): (groupId: string) => boolean {
+  if (selection.kind === 'space') {
+    return createSidebarSpaceGroupVisibility({
+      collectionState,
+      groupIds,
+      groupsById,
+      resolveProjectId,
+      space: selection.space,
+    });
+  }
+  return createOtherSidebarSpaceGroupVisibility({
+    collectionState,
+    groupIds,
+    groupsById,
+    resolveProjectId,
+    spaces: selection.spaces,
+  });
 }

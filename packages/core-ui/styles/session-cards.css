@@ -642,6 +642,14 @@
   opacity: 0;
 }
 
+.session-history-status-slot {
+  display: contents;
+}
+
+.session-history-status-dot {
+  display: none;
+}
+
 .previous-session-delete-button {
   align-items: center;
   background: transparent;
@@ -655,7 +663,7 @@
   padding: 0;
   pointer-events: none;
   position: absolute;
-  right: calc(10px * var(--sidebar-density-scale));
+  right: 0;
   top: 50%;
   transform: translateY(-50%);
   transition:

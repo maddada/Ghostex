@@ -198,6 +198,11 @@ export function RecentProjectRow({
         </button>
       </AppTooltip>
       <span className='recent-projects-row-end'>
+        {/**
+         * CDXC:RecentProjects 2026-09-01:
+         * The open-state dot and the hover remove control share this trailing
+         * column so remove is centered on the dots in the rest of the list.
+         */}
         <span
           aria-label={project.isOpen ? 'Open in sidebar' : 'Closed'}
           className='recent-projects-status-dot'

@@ -10,31 +10,27 @@ export type SidebarCollapseStateLogger = (
 
 export type SidebarCollapseActionsOptions = {
   collapsedGroupsById: Record<string, true>;
-  collapsedRemoteMachineSectionsById: Record<string, true>;
   groupOrder: readonly string[];
   postSidebarCollapseStateLog: SidebarCollapseStateLogger;
   setCollapsedGroupsById: Dispatch<SetStateAction<Record<string, true>>>;
   setCollapsedProjectCollectionsByKey: Dispatch<SetStateAction<Record<string, true>>>;
   setCollapsedProjectSessionListsById: Dispatch<SetStateAction<ProjectSessionListCollapsedState>>;
-  setCollapsedRemoteMachineSectionsById: Dispatch<SetStateAction<Record<string, true>>>;
 };
 
 /*
  * CDXC:SidebarHookDecomposition 2026-08-22:
- * The five collapse setters SidebarApp hands to project rows, collection
- * panels, and remote machine headers. They hold no React state of their own —
+ * The collapse setters SidebarApp hands to project rows and collection
+ * panels. They hold no React state of their own —
  * they only close over the collapse state and the collapse diagnostic logger —
  * so this hook adds no hook calls and cannot move SidebarApp's hook order.
  */
 export function useSidebarCollapseActions({
   collapsedGroupsById,
-  collapsedRemoteMachineSectionsById,
   groupOrder,
   postSidebarCollapseStateLog,
   setCollapsedGroupsById,
   setCollapsedProjectCollectionsByKey,
   setCollapsedProjectSessionListsById,
-  setCollapsedRemoteMachineSectionsById,
 }: SidebarCollapseActionsOptions) {
   const setGroupCollapsed = (groupId: string, collapsed: boolean) => {
     const wasCollapsed = collapsedGroupsById[groupId] === true;
@@ -138,47 +134,10 @@ export function useSidebarCollapseActions({
     });
   };
 
-  const setRemoteMachineSectionCollapsed = (machineId: string, collapsed: boolean) => {
-    const wasCollapsed = collapsedRemoteMachineSectionsById[machineId] === true;
-    postSidebarCollapseStateLog('remoteMachineSectionToggle', {
-      changed: wasCollapsed !== collapsed,
-      collapsed,
-      machineHash: hashSidebarCollapseDebugId(machineId),
-      wasCollapsed,
-    });
-    /*
-     * CDXC:RemoteMachines 2026-06-09-19:02:
-     * Remote machine sections are peers of Quick and Projects in the reference
-     * sidebar. Persist their collapsed state by saved machine id so each machine
-     * can collapse independently without affecting local project groups.
-     */
-    setCollapsedRemoteMachineSectionsById((previous) => {
-      if (collapsed) {
-        if (previous[machineId]) {
-          return previous;
-        }
-
-        return {
-          ...previous,
-          [machineId]: true,
-        };
-      }
-
-      if (!previous[machineId]) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[machineId];
-      return next;
-    });
-  };
-
   return {
     setGroupCollapsed,
     setGroupsCollapsed,
     setProjectCollectionCollapsed,
     setProjectSessionListCollapsed,
-    setRemoteMachineSectionCollapsed,
   };
 }

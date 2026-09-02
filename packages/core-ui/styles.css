@@ -735,7 +735,7 @@ body {
 
 .quick-access-surface.previous-sessions-modal .session-history-frame {
   --reference-session-title-inset: 36px;
-  --reference-session-trailing-inset: 12px;
+  --reference-session-trailing-inset: var(--quick-access-row-padding-x);
   height: var(--quick-access-row-height);
   min-height: var(--quick-access-row-height);
   width: 100%;
@@ -5000,12 +5000,21 @@ body {
   grid-column: 3;
 }
 
-.quick-access-surface.previous-sessions-modal .session-history-card .session-head-trailing::after {
+.quick-access-surface.previous-sessions-modal .session-history-status-slot {
   align-self: center;
+  display: block;
+  grid-column: 4;
+  height: 6px;
+  justify-self: center;
+  overflow: visible;
+  position: relative;
+  width: 6px;
+}
+
+.quick-access-surface.previous-sessions-modal .session-history-status-dot {
   background: #fff;
   border-radius: 9999px;
-  content: '';
-  grid-column: 4;
+  display: block;
   height: 6px;
   opacity: 0.2;
   width: 6px;
@@ -5013,14 +5022,28 @@ body {
 
 .quick-access-surface.previous-sessions-modal
   .session-history-card[data-in-sidebar='true']
-  .session-head-trailing::after {
+  .session-history-status-dot {
   opacity: 1;
 }
 
 .quick-access-surface.previous-sessions-modal
   .session-history-card[data-session-lifecycle='sleeping']
-  .session-head-trailing::after {
+  .session-history-status-dot {
   opacity: 0.2;
+}
+
+.quick-access-surface.previous-sessions-modal .previous-session-delete-button {
+  left: 50%;
+  right: auto;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.quick-access-surface.previous-sessions-modal
+  .session-history-card:has(.previous-session-delete-button):is(:hover, :focus-visible, :focus-within)
+  .session-history-status-dot {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .quick-access-surface .previous-sessions-empty-state,
@@ -5124,6 +5147,31 @@ body {
 .quick-access-surface .ghostex-stashed-prompts-stash-hint:hover,
 .quick-access-surface .ghostex-stashed-prompts-stash-hint:focus-visible {
   background: var(--settings-raised-hover);
+}
+
+/*
+ * Quick Access result rows share the reference sidebar session-card type
+ * scale. Keep these selectors inside each scrollable list so the tab rail,
+ * search inputs, filter controls, and portaled menus retain their compact
+ * control typography.
+ */
+.quick-access-surface .ghostex-command-palette-list [data-slot='command-item'],
+.quick-access-surface .recent-projects-modal-body .recent-projects-row-title,
+.quick-access-surface .previous-sessions-modal-body .session-history-card .session-alias-heading {
+  font-size: 15.55px;
+  line-height: 20px;
+}
+
+.quick-access-surface .ghostex-command-palette-list .ghostex-command-palette-description,
+.quick-access-surface .ghostex-command-palette-list [data-slot='command-shortcut'],
+.quick-access-surface .recent-projects-modal-body .recent-projects-session-count,
+.quick-access-surface .previous-sessions-modal-body .session-history-project-label,
+.quick-access-surface .previous-sessions-modal-body .session-history-file-size,
+.quick-access-surface .previous-sessions-modal-body .session-last-interaction-time,
+.quick-access-surface .ghostex-stashed-prompts-list .ghostex-stashed-prompt-row-meta,
+.quick-access-surface .ghostex-stashed-prompts-list .ghostex-stashed-prompt-time {
+  font-size: 13.55px;
+  line-height: 20px;
 }
 
 /*

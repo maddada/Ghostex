@@ -186,20 +186,6 @@ export function SessionHistoryCard({
             sessionPersistenceProvider={session.sessionPersistenceProvider}
             showTerminalIcon={showTerminalSessionIcon}
           />
-          {onDelete ? (
-            <button
-              aria-label={`Delete ${displayTitle} from session history`}
-              className='previous-session-delete-button'
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onDelete();
-              }}
-              type='button'
-            >
-              <IconX aria-hidden='true' size={14} stroke={1.9} />
-            </button>
-          ) : null}
           <SessionCardContent
             aliasHeadingRef={aliasHeadingRef}
             hideHeaderAgentIcon={true}
@@ -236,6 +222,31 @@ export function SessionHistoryCard({
                   {formatSessionFileSize(fileSizeBytes)}
                 </div>
               </>
+            }
+            trailingSuffix={
+              <div className='session-history-status-slot'>
+                {/**
+                 * CDXC:PreviousSessions 2026-09-01:
+                 * Quick Access Sessions keeps the lifecycle marker in this
+                 * trailing column. Delete replaces that same cell on hover so
+                 * the X is not a separate floating control over the dot.
+                 */}
+                <span aria-hidden='true' className='session-history-status-dot' />
+                {onDelete ? (
+                  <button
+                    aria-label={`Delete ${displayTitle} from session history`}
+                    className='previous-session-delete-button'
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onDelete();
+                    }}
+                    type='button'
+                  >
+                    <IconX aria-hidden='true' size={14} stroke={1.9} />
+                  </button>
+                ) : null}
+              </div>
             }
           />
         </article>

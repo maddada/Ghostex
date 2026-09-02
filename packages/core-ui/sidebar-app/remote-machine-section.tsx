@@ -1,31 +1,21 @@
 import { PointerSensor } from '@dnd-kit/dom';
 import { useSortable } from '@dnd-kit/react/sortable';
 import type { ReactNode } from 'react';
-import type { SidebarActiveSessionsSortMode } from '../../shared/session-grid-contract';
 import type { RemoteMachineSettings } from '../../shared/ghostex-settings';
-import type { SidebarSessionTagListItem } from '../../shared/session-tags';
-import { useSidebarCollapsiblePresence } from '../sidebar-collapse-animation';
 import { createRemoteMachineDragData } from '../sidebar-dnd';
 import { getSidebarReorderActivationConstraints } from '../sidebar-reorder-activation';
-import type { SidebarSessionTagFilter } from '../session-tag-ui';
 import { SpaceFilterRow } from '../space-filter-row';
 import { createRemoteSidebarSpaceSectionKey } from './space-filtering';
 import type { SidebarSpacesState } from '../spaces';
 import type { WebviewApi } from '../webview-api';
 import { createRemoteProjectListScopeId } from './drag-drop-geometry';
 import { ProjectListEndUngroupDropZone } from './drag-ghosts';
-import { SidebarReferenceSectionHeader } from './reference-chrome';
-import type {
-  RemoteMachineHeaderConnectionControl,
-  RemoteMachineRuntimeStatus,
-  SidebarProjectCollectionRenderItem,
-  SidebarSectionSessionSummary,
-} from './types';
+import type { RemoteMachineRuntimeStatus, SidebarProjectCollectionRenderItem } from './types';
 
 /*
  * Remote machines reorder only from their visible header. Pointer-only
- * activation keeps Space/Enter owned by the existing collapse button and
- * prevents a keyboard drag from leaving the shared manager in an unseen drag.
+ * activation keeps Space/Enter out of the drag path and prevents a keyboard
+ * drag from leaving the shared manager in an unseen drag.
  */
 export const remoteMachineSensors = [
   PointerSensor.configure({
@@ -72,50 +62,34 @@ export function remoteMachineFailureLabel(status: RemoteMachineRuntimeStatus['st
   }
 }
 
+/*
+ * CDXC:SidebarProjectMenu 2026-09-02:
+ * The remote machine header is gone. Its connection control (Connect, busy
+ * spinner, error cloud with retry) now lives on the machine's tab in the top
+ * strip, and Add Project, Sort & Filter, Collapse All, and Edit Machine live at
+ * the top of the More dropdown for whichever machine that strip has selected.
+ * This section only renders the machine's Space row and project list.
+ */
 export function RemoteMachineSidebarSection({
-  activeSessionsSortMode,
-  bulkActionLabel,
-  collapsed,
-  containsActiveSession,
   index,
   isDragPreviewSource,
   machine,
-  onAddProject,
-  onBulkProjectToggle,
-  onEdit,
-  onReconnect,
-  onSetActiveSessionsSortMode,
   onReorderSpaces,
   onSelectSpace,
-  onToggleSessionTagFilter,
-  onToggleCollapsed,
   projectCollectionItems,
   projectUngroupDropIndicatorScopeId,
   projectGroupIds,
   remoteMachineDropIndicatorPosition,
   renderProjectCollection,
   renderProjectGroup,
-  selectedSessionTagFilters,
-  sessionSummary,
-  sessionTagListItems,
   selectedSpaceId,
   spaces,
   status,
-  statusMessage,
   vscode,
 }: {
-  activeSessionsSortMode: SidebarActiveSessionsSortMode;
-  bulkActionLabel?: string;
-  collapsed: boolean;
-  containsActiveSession: boolean;
   index: number;
   isDragPreviewSource: boolean;
   machine: RemoteMachineSettings;
-  onAddProject: () => void;
-  onBulkProjectToggle?: () => void;
-  onEdit: () => void;
-  onReconnect: () => void;
-  onSetActiveSessionsSortMode: (sortMode: SidebarActiveSessionsSortMode) => void;
   /*
    * CDXC:SidebarSpaces 2026-08-27:
    * A remote gxserver's Spaces come from that server and are never mixed with
@@ -125,12 +99,10 @@ export function RemoteMachineSidebarSection({
    * no Space row.
    */
   onReorderSpaces: (orderedSpaceIds: string[]) => void;
-  onSelectSpace: (spaceId: string | undefined) => void;
+  onSelectSpace: (spaceId: string) => void;
   selectedSpaceId?: string;
   spaces?: SidebarSpacesState;
   vscode: WebviewApi;
-  onToggleSessionTagFilter: (tag: SidebarSessionTagFilter) => void;
-  onToggleCollapsed: () => void;
   projectCollectionItems?: readonly SidebarProjectCollectionRenderItem[];
   projectUngroupDropIndicatorScopeId?: string;
   projectGroupIds: readonly string[];
@@ -140,42 +112,9 @@ export function RemoteMachineSidebarSection({
     itemIndex: number
   ) => ReactNode;
   renderProjectGroup: (groupId: string, groupIndex: number) => ReactNode;
-  selectedSessionTagFilters: readonly SidebarSessionTagFilter[];
-  sessionSummary?: SidebarSectionSessionSummary;
-  sessionTagListItems: readonly SidebarSessionTagListItem[];
   status: RemoteMachineRuntimeStatus['state'];
-  statusMessage?: string;
 }) {
   const isConnected = status === 'connected';
-  const busyLabel = remoteMachineBusyLabel(status);
-  const isBusy = busyLabel !== undefined;
-  /*
-   * CDXC:GPUIRemoteConnectFeedback 2026-07-21:
-   * Only connected remote machines keep the collapsible chevron. Every other
-   * state replaces it with an always-visible header control: Connect while
-   * disconnected, a spinner during connect/install/download, or an error
-   * button whose tooltip carries the native host's sanitized failure reason.
-   * Native owns the matching viewport-level toast for progress and failures.
-   */
-  const isFailure = !isConnected && !isBusy && status !== 'disconnected';
-  const remoteConnectionControl: RemoteMachineHeaderConnectionControl | undefined = isConnected
-    ? undefined
-    : isBusy
-      ? {
-          kind: 'busy',
-          label: busyLabel,
-        }
-      : isFailure
-        ? {
-            kind: 'error',
-            label: `Error: ${statusMessage ?? remoteMachineFailureLabel(status)}`,
-            onClick: onReconnect,
-          }
-        : {
-            kind: 'connect',
-            label: 'Connect',
-            onClick: onReconnect,
-          };
   /*
    * CDXC:GPUIRemoteLastSeen 2026-07-12:
    * Disconnected machines keep listing their last-seen project groups faded
@@ -184,10 +123,17 @@ export function RemoteMachineSidebarSection({
    */
   const showProjectList = isConnected || projectGroupIds.length > 0;
   const projectListScopeId = createRemoteProjectListScopeId(machine.id);
-  const projectListPresence = useSidebarCollapsiblePresence(collapsed);
+  /*
+   * With machines switched through the top tab strip only one machine section
+   * is ever mounted, and the header that used to be its drag handle is gone,
+   * so the sortable stays registered for the shared drop-indicator plumbing
+   * but never activates: without a handle the whole project list would
+   * otherwise become the machine's drag source.
+   */
   const sortable = useSortable({
     accept: 'remote-machine',
     data: createRemoteMachineDragData(machine.id),
+    disabled: true,
     feedback: 'none',
     id: `remote-machine:${machine.id}`,
     index,
@@ -204,29 +150,9 @@ export function RemoteMachineSidebarSection({
       data-sidebar-remote-machine-id={machine.id}
       ref={sortable.ref}
     >
-      <SidebarReferenceSectionHeader
-        activeSessionsSortMode={activeSessionsSortMode}
-        actionsAlwaysVisible={false}
-        bulkActionLabel={bulkActionLabel}
-        collapsed={collapsed}
-        containsActiveSession={containsActiveSession}
-        dragHandleRef={sortable.handleRef}
-        onAddProject={isConnected ? onAddProject : undefined}
-        onBulkProjectToggle={onBulkProjectToggle}
-        onEdit={onEdit}
-        onSetActiveSessionsSortMode={onSetActiveSessionsSortMode}
-        onToggleSessionTagFilter={onToggleSessionTagFilter}
-        onToggleCollapsed={onToggleCollapsed}
-        remoteConnectionControl={remoteConnectionControl}
-        sectionKey='remote'
-        selectedSessionTagFilters={selectedSessionTagFilters}
-        sessionSummary={sessionSummary}
-        sessionTagListItems={sessionTagListItems}
-        title={machine.name}
-      />
       {spaces ? (
         <SpaceFilterRow
-          collapsed={collapsed}
+          collapsed={false}
           onReorderSpaces={onReorderSpaces}
           onSelectSpace={onSelectSpace}
           remoteMachineId={machine.id}
@@ -236,14 +162,9 @@ export function RemoteMachineSidebarSection({
           vscode={vscode}
         />
       ) : null}
-      {showProjectList && projectListPresence.isPresent ? (
+      {showProjectList ? (
         <div
-          aria-hidden={projectListPresence.isVisuallyCollapsed}
-          className='group-list workspace-group-list reference-project-group-list reference-sidebar-collapsible-body'
-          data-animate-children='false'
-          data-collapsed={String(projectListPresence.isVisuallyCollapsed)}
-          inert={projectListPresence.isVisuallyCollapsed ? true : undefined}
-          ref={projectListPresence.setCollapsibleElement}
+          className='group-list workspace-group-list reference-project-group-list'
           data-sidebar-project-list-scope={projectListScopeId}
           data-sidebar-remote-project-list='true'
           data-sidebar-space-content-section={createRemoteSidebarSpaceSectionKey(machine.id)}

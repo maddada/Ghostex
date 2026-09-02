@@ -105,6 +105,7 @@ export type SessionCardContentProps = {
   showLastActiveTime?: boolean;
   showLastInteractionTime?: boolean;
   trailingPrefix?: ReactNode;
+  trailingSuffix?: ReactNode;
 };
 
 export function SessionCardContent({
@@ -118,6 +119,7 @@ export function SessionCardContent({
   showLastActiveTime = true,
   showLastInteractionTime = false,
   trailingPrefix,
+  trailingSuffix,
 }: SessionCardContentProps) {
   const isGeneratingFirstPromptTitle = session.isGeneratingFirstPromptTitle === true;
   const { headingText } = getSessionCardTitleTooltip({
@@ -225,7 +227,11 @@ export function SessionCardContent({
    */
   const canCloseFromCard = showCloseButton && Boolean(onClose) && timerTrailingLabel === undefined;
   const hasSessionHeadTrailing =
-    Boolean(trailingPrefix) || Boolean(trailingTimeLabel) || hasHeaderAgentIcon || canCloseFromCard;
+    Boolean(trailingPrefix) ||
+    Boolean(trailingSuffix) ||
+    Boolean(trailingTimeLabel) ||
+    hasHeaderAgentIcon ||
+    canCloseFromCard;
 
   return (
     <div className='session-head' data-title-full-width={String(shouldAllowFullWidthTitle)}>
@@ -273,6 +279,7 @@ export function SessionCardContent({
               <IconX aria-hidden='true' size={14} stroke={1.8} />
             </button>
           ) : null}
+          {trailingSuffix}
         </div>
       ) : null}
     </div>

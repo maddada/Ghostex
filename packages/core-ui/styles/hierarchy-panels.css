@@ -627,7 +627,7 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
  * margin by 10px so the boundary does not double-space.
  */
 .sidebar-reference-layout[data-reference-sidebar='true']
-  .reference-project-group-list[data-collapsed='false']:has(> .project-list-end-ungroup-drop-zone)
+  .reference-project-group-list:has(> .project-list-end-ungroup-drop-zone)
   + .reference-remote-section-list
   > .reference-remote-machine-section:first-child
   > .reference-sidebar-section-row {

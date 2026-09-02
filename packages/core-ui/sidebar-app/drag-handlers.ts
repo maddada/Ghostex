@@ -71,7 +71,6 @@ import type {
 export type SidebarDragHandlersOptions = {
   authoritativeSessionIdsByGroup: SessionIdsByGroup;
   collapsedGroupsById: Record<string, true>;
-  collapsedRemoteMachineSectionsById: Record<string, true>;
   displayedProjectCollectionItems: readonly SidebarProjectCollectionRenderItem[];
   effectiveSessionIdsByGroup: SessionIdsByGroup;
   enableProjectCollections: boolean;
@@ -114,7 +113,6 @@ export type SidebarDragHandlersOptions = {
 export function useSidebarDragHandlers({
   authoritativeSessionIdsByGroup,
   collapsedGroupsById,
-  collapsedRemoteMachineSectionsById,
   displayedProjectCollectionItems,
   effectiveSessionIdsByGroup,
   enableProjectCollections,
@@ -370,7 +368,6 @@ export function useSidebarDragHandlers({
       setRemoteMachineDragPreview(
         point && metrics && machine
           ? {
-              collapsed: collapsedRemoteMachineSectionsById[sourceData.remoteMachineId] === true,
               left: metrics.left,
               machineId: sourceData.remoteMachineId,
               pointerOffsetY: metrics.pointerOffsetY,

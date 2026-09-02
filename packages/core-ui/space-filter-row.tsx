@@ -5,22 +5,28 @@ import { useDragDropMonitor, type DragDropEventHandlers } from '@dnd-kit/react';
 import { useSortable } from '@dnd-kit/react/sortable';
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { isSidebarCommandIcon, type SidebarCommandIcon } from '../shared/sidebar-command-icons';
+import {
+  OTHER_SIDEBAR_SPACE_ICON,
+  OTHER_SIDEBAR_SPACE_ID,
+  OTHER_SIDEBAR_SPACE_LABEL,
+} from '../shared/sidebar-spaces-other';
 import { openAppModal } from './app-modal-host-bridge';
 import { AppTooltip, dismissSidebarTooltips } from './app-tooltip';
 import { SidebarCommandIconGlyph } from './sidebar-command-icon';
 import { SidebarContextMenuPortal } from './sidebar-context-menu-portal';
 import { createSpaceDragData, getSidebarSpaceDragData } from './sidebar-dnd';
+import { resolveSelectedSidebarSpaceId } from './sidebar-app/space-filtering';
 import { getSidebarReorderActivationConstraints } from './sidebar-reorder-activation';
 import { DEFAULT_SIDEBAR_SPACE_ICON, type SidebarSpace, type SidebarSpacesState } from './spaces';
 import type { WebviewApi } from './webview-api';
 
 /*
 CDXC:SidebarSpaces 2026-08-27:
-One gxserver section's horizontal Space switcher. "All Projects" is a built-in
-first button that is always visible and never overflows; the user's Spaces
-follow it in their manual order, and whatever does not fit moves into the More
-menu. More renders only when there is overflow. Its New Space action is a
-convenience alongside the same action in project/group Space menus.
+One gxserver section's horizontal Space switcher. The user's Spaces come first
+in their manual order, and whatever does not fit moves into the More menu.
+"Other" is a built-in LAST button that is always visible and never overflows.
+More renders only when there is overflow. Its New Space action is a convenience
+alongside the same action in project/group Space menus.
 
 Which Spaces fit is decided from REAL measurements, never from a name-length
 guess: the row renders every button for one pre-paint layout pass, records each
@@ -34,19 +40,20 @@ type SpaceFilterRowProps = {
   /** True while the owning sidebar section is collapsed; the row hides with it. */
   collapsed: boolean;
   onReorderSpaces: (orderedSpaceIds: string[]) => void;
-  onSelectSpace: (spaceId: string | undefined) => void;
+  onSelectSpace: (spaceId: string) => void;
   /** Present only for a remote gxserver section, and carried into the editor modal. */
   remoteMachineId?: string;
   sectionKey: string;
+  /** The section's stored selection; resolved through the shared default rule. */
   selectedSpaceId?: string;
   spaces: SidebarSpacesState;
   vscode: WebviewApi;
 };
 
 type SpaceRowMeasurement = {
-  allProjectsWidth: number;
   gap: number;
   moreWidth: number;
+  otherWidth: number;
   signature: string;
   widthBySpaceId: Record<string, number>;
 };
@@ -88,12 +95,11 @@ export function createSidebarSpaceSortableId(sectionKey: string, spaceId: string
 
 /*
  * CDXC:SidebarSpaces 2026-08-28:
- * The row is icon-only, so "All Projects" needs a glyph of its own. It comes
+ * The row is icon-only, so the built-in view needs a glyph of its own. It comes
  * from the same icon set the Space icon picker offers, which keeps the built-in
  * button visually part of the row instead of a differently-drawn special case.
  */
-const ALL_PROJECTS_SPACE_ICON: SidebarCommandIcon = 'layoutDashboard';
-const ALL_PROJECTS_SPACE_LABEL = 'All Projects';
+const OTHER_SPACE_ICON: SidebarCommandIcon = OTHER_SIDEBAR_SPACE_ICON;
 
 /*
  * CDXC:SidebarSpaceSwipe 2026-08-28:
@@ -115,8 +121,8 @@ const ALL_PROJECTS_SPACE_LABEL = 'All Projects';
  * fingers left and landed again. Delta magnitudes are deliberately never used
  * for unlocking — a swipe that slows and speeds up must stay one gesture.
  * The old row/list move out first and their newly filtered contents enter from
- * the opposite side; reduced-motion users switch immediately. All Projects is
- * the first destination, and navigation stops at either end instead of wrapping
+ * the opposite side; reduced-motion users switch immediately. Other is the last
+ * destination, and navigation stops at either end instead of wrapping
  * unexpectedly.
  */
 const SPACE_SWIPE_THRESHOLD_PX = 44;
@@ -164,17 +170,21 @@ type SpaceSwipeDirection = 'next' | 'previous';
 
 function resolveSidebarSpaceSwipeDestination(
   spaces: SidebarSpacesState,
-  selectedSpaceId: string | undefined,
+  selectedSpaceId: string,
   direction: SpaceSwipeDirection
-): { spaceId: string | undefined } | undefined {
-  const destinations = [undefined, ...spaces.order.filter((spaceId) => spaces.spaces[spaceId] !== undefined)];
-  const currentIndex = selectedSpaceId ? destinations.indexOf(selectedSpaceId) : 0;
+): { spaceId: string } | undefined {
+  const destinations = [
+    ...spaces.order.filter((spaceId) => spaces.spaces[spaceId] !== undefined),
+    OTHER_SIDEBAR_SPACE_ID,
+  ];
+  const currentIndex = destinations.indexOf(selectedSpaceId);
   const resolvedCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
   const nextIndex = direction === 'next' ? resolvedCurrentIndex + 1 : resolvedCurrentIndex - 1;
-  if (nextIndex < 0 || nextIndex >= destinations.length) {
+  const destinationSpaceId = destinations[nextIndex];
+  if (nextIndex < 0 || destinationSpaceId === undefined) {
     return undefined;
   }
-  return { spaceId: destinations[nextIndex] };
+  return { spaceId: destinationSpaceId };
 }
 
 function normalizedWheelDelta(delta: number, deltaMode: number, pageSize: number): number {
@@ -196,11 +206,11 @@ export function resolveSidebarSpaceIcon(icon: string): SidebarCommandIcon {
 }
 
 /**
- * Split the ordered user Spaces into the ones that fit beside the pinned All
- * Projects button and the permanent More control, then apply the promotion rule:
- * a selected Space that would sit in More takes the LAST visible slot, pushing
- * as many trailing Spaces into More as its own width needs. All Projects is
- * never displaced.
+ * Split the ordered user Spaces into the ones that fit beside the pinned Other
+ * button and the permanent More control, then apply the promotion rule: a
+ * selected Space that would sit in More takes the LAST visible slot, pushing as
+ * many trailing Spaces into More as its own width needs. Other is never
+ * displaced.
  */
 export function createSidebarSpaceRowLayout({
   containerWidth,
@@ -213,16 +223,16 @@ export function createSidebarSpaceRowLayout({
   orderedSpaceIds: readonly string[];
   selectedSpaceId: string | undefined;
 }): SpaceRowLayout {
-  const { allProjectsWidth, gap, moreWidth, widthBySpaceId } = measurement;
+  const { gap, moreWidth, otherWidth, widthBySpaceId } = measurement;
   const allSpacesFit =
     orderedSpaceIds.every((spaceId) => widthBySpaceId[spaceId] !== undefined) &&
-    allProjectsWidth + orderedSpaceIds.reduce((total, spaceId) => total + gap + (widthBySpaceId[spaceId] ?? 0), 0) <=
+    otherWidth + orderedSpaceIds.reduce((total, spaceId) => total + gap + (widthBySpaceId[spaceId] ?? 0), 0) <=
       containerWidth;
   if (allSpacesFit) {
     return { overflowSpaceIds: [], visibleSpaceIds: [...orderedSpaceIds] };
   }
 
-  let budget = containerWidth - allProjectsWidth - moreWidth - gap;
+  let budget = containerWidth - otherWidth - moreWidth - gap;
   const visibleSpaceIds: string[] = [];
   for (const spaceId of orderedSpaceIds) {
     const width = widthBySpaceId[spaceId];
@@ -288,7 +298,7 @@ export function SpaceFilterRow({
 }: SpaceFilterRowProps) {
   const [rowElement, setRowElement] = useState<HTMLDivElement | null>(null);
   const trackRef = useRef<HTMLDivElement>(null);
-  const allProjectsButtonRef = useRef<HTMLButtonElement>(null);
+  const otherButtonRef = useRef<HTMLButtonElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const swipeAnimationsRef = useRef<Animation[]>([]);
@@ -304,6 +314,15 @@ export function SpaceFilterRow({
   const [isMeasuring, setIsMeasuring] = useState(true);
   const [moreMenuPosition, setMoreMenuPosition] = useState<ContextMenuPosition>();
   const [editMenu, setEditMenu] = useState<{ position: ContextMenuPosition; spaceId: string }>();
+
+  /*
+   * CDXC:SidebarSpaces 2026-09-02:
+   * The section's stored selection resolved through the one shared default
+   * rule, so the highlighted button and the filtered list below it can never
+   * disagree: nothing stored means the first Space, and a section with no
+   * Spaces at all means Other.
+   */
+  const activeSpaceId = resolveSelectedSidebarSpaceId(spaces, selectedSpaceId);
 
   const orderedSpaces = useMemo(
     () => spaces.order.flatMap((spaceId) => (spaces.spaces[spaceId] ? [spaces.spaces[spaceId]] : [])),
@@ -357,7 +376,7 @@ export function SpaceFilterRow({
   };
 
   const navigateBySwipe = useEffectEvent(async (direction: SpaceSwipeDirection) => {
-    const destination = resolveSidebarSpaceSwipeDestination(spaces, selectedSpaceId, direction);
+    const destination = resolveSidebarSpaceSwipeDestination(spaces, activeSpaceId, direction);
     if (!destination) {
       animateSwipeBoundary(direction);
       return;
@@ -605,9 +624,9 @@ export function SpaceFilterRow({
     }
     const parsedGap = Number.parseFloat(window.getComputedStyle(track).columnGap);
     setMeasurement({
-      allProjectsWidth: allProjectsButtonRef.current?.getBoundingClientRect().width ?? 0,
       gap: Number.isFinite(parsedGap) ? parsedGap : 0,
       moreWidth: moreButtonRef.current?.getBoundingClientRect().width ?? 0,
+      otherWidth: otherButtonRef.current?.getBoundingClientRect().width ?? 0,
       signature,
       widthBySpaceId,
     });
@@ -627,9 +646,9 @@ export function SpaceFilterRow({
       containerWidth,
       measurement,
       orderedSpaceIds: spaces.order,
-      selectedSpaceId,
+      selectedSpaceId: activeSpaceId,
     });
-  }, [containerWidth, isMeasuring, measurement, selectedSpaceId, signature, spaces.order]);
+  }, [activeSpaceId, containerWidth, isMeasuring, measurement, signature, spaces.order]);
 
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
@@ -704,19 +723,6 @@ export function SpaceFilterRow({
   return (
     <div className='sidebar-space-filter-row' data-sidebar-space-section={sectionKey} ref={setRowElement}>
       <div className='sidebar-space-filter-track' data-measuring={String(isMeasuring)} ref={trackRef}>
-        <AppTooltip content={ALL_PROJECTS_SPACE_LABEL}>
-          <button
-            aria-label={ALL_PROJECTS_SPACE_LABEL}
-            aria-pressed={selectedSpaceId === undefined}
-            className='sidebar-space-filter-button sidebar-space-filter-all'
-            data-selected={String(selectedSpaceId === undefined)}
-            onClick={() => onSelectSpace(undefined)}
-            ref={allProjectsButtonRef}
-            type='button'
-          >
-            <SidebarCommandIconGlyph className='sidebar-space-filter-icon' icon={ALL_PROJECTS_SPACE_ICON} size={16} />
-          </button>
-        </AppTooltip>
         {visibleSpaces.map((space, index) => (
           <SpaceFilterButton
             index={index}
@@ -727,10 +733,29 @@ export function SpaceFilterRow({
             }}
             onSelect={() => onSelectSpace(space.spaceId)}
             sectionKey={sectionKey}
-            selected={selectedSpaceId === space.spaceId}
+            selected={activeSpaceId === space.spaceId}
             space={space}
           />
         ))}
+        {/*
+         * CDXC:SidebarSpaces 2026-09-02:
+         * Other is built-in chrome, not a Space: it sits after every user Space,
+         * is never draggable, never overflows into More, and has no edit/delete
+         * context menu because there is nothing about it to edit.
+         */}
+        <AppTooltip content={OTHER_SIDEBAR_SPACE_LABEL}>
+          <button
+            aria-label={OTHER_SIDEBAR_SPACE_LABEL}
+            aria-pressed={activeSpaceId === OTHER_SIDEBAR_SPACE_ID}
+            className='sidebar-space-filter-button sidebar-space-filter-other'
+            data-selected={String(activeSpaceId === OTHER_SIDEBAR_SPACE_ID)}
+            onClick={() => onSelectSpace(OTHER_SIDEBAR_SPACE_ID)}
+            ref={otherButtonRef}
+            type='button'
+          >
+            <SidebarCommandIconGlyph className='sidebar-space-filter-icon' icon={OTHER_SPACE_ICON} size={16} />
+          </button>
+        </AppTooltip>
         {shouldShowMoreButton ? (
           <AppTooltip content='More Spaces'>
             <button
@@ -772,7 +797,7 @@ export function SpaceFilterRow({
           {overflowSpaces.length > 0 ? <div className='session-context-menu-divider' role='separator' /> : null}
           {overflowSpaces.map((space) => (
             <button
-              aria-checked={selectedSpaceId === space.spaceId}
+              aria-checked={activeSpaceId === space.spaceId}
               className='session-context-menu-item'
               key={space.spaceId}
               onClick={() => {
@@ -789,7 +814,7 @@ export function SpaceFilterRow({
                 size={14}
               />
               <span className='sidebar-space-filter-menu-name'>{space.name}</span>
-              {selectedSpaceId === space.spaceId ? (
+              {activeSpaceId === space.spaceId ? (
                 <IconCheck aria-hidden='true' className='session-context-menu-trailing-icon' size={14} />
               ) : null}
             </button>
@@ -840,8 +865,8 @@ function SpaceFilterButton({
    * CDXC:SidebarSpaces 2026-08-27:
    * The button is both the drag handle and the sortable element, and the
    * accepted type is section-scoped so a Space can only ever be dropped among
-   * its own gxserver's Spaces. All Projects and More render outside this
-   * component, so neither is sortable and neither can be displaced by a drop.
+   * its own gxserver's Spaces. Other and More render outside this component, so
+   * neither is sortable and neither can be displaced by a drop.
    */
   const sortable = useSortable({
     accept: `space:${sectionKey}`,

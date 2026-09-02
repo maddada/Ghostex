@@ -23,8 +23,8 @@ the server's echo remove them. Clients must therefore tolerate member ids they
 cannot resolve — a member project id for a deleted project also lingers as a
 soft reference until the daemon prunes it.
 
-The built-in "All Projects" view and worktree inheritance are pure client
-concerns and never appear in this state.
+The built-in "Other" view (packages/shared/sidebar-spaces-other.ts) and worktree
+inheritance are pure client concerns and never appear in this state.
 */
 
 export type SidebarSpace = {
