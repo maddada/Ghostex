@@ -5,7 +5,9 @@ use crate::paths::GxserverPaths;
 use super::probing::{normalize_environment_path, unique_path_bufs};
 
 pub(crate) const NOTIFY_HOOK_MARKER: &str = "ghostex-gxserver-agent-notify-hook-marker";
-pub(crate) const NOTIFY_HOOK_VERSION: usize = 8;
+pub(crate) const NOTIFY_HOOK_VERSION: usize = 9;
+pub(crate) const STATUSLINE_HOOK_MARKER: &str = "ghostex-gxserver-agent-statusline-hook-marker";
+pub(crate) const STATUSLINE_HOOK_VERSION: usize = 1;
 pub(crate) const OPENCODE_PLUGIN_MARKER: &str = "ghostex-opencode-session-plugin-marker";
 pub(crate) const OPENCODE_PLUGIN_SPEC: &str = "./plugins/ghostex-session.js";
 pub(crate) const AMP_PLUGIN_MARKER: &str = "ghostex-amp-session-extension-marker";
@@ -132,6 +134,9 @@ pub(crate) struct HookPaths {
     pub(crate) home_dir: PathBuf,
     pub(crate) hook_state_directory: PathBuf,
     pub(crate) notify_hook_path: PathBuf,
+    /// The Claude Code `statusLine` command Ghostex installs beside the notify
+    /// hook (CDXC:ClaudeStatusline 2026-09-03, `statusline.rs`).
+    pub(crate) statusline_hook_path: PathBuf,
     pub(crate) respect_config_environment: bool,
 }
 
@@ -153,6 +158,7 @@ impl HookPaths {
                 .unwrap_or_else(|| paths.home_dir.clone()),
             hook_state_directory: paths.app_state_dir.join("agent-hooks"),
             notify_hook_path: paths.app_data_dir.join("hooks/agent-shell-notify.sh"),
+            statusline_hook_path: paths.app_data_dir.join("hooks/agent-statusline.sh"),
             respect_config_environment: isolated_home_dir.is_none(),
         }
     }
@@ -164,6 +170,10 @@ impl HookPaths {
                 .join(".ghostex")
                 .join("hooks")
                 .join("agent-shell-notify.sh"),
+            statusline_hook_path: home_dir
+                .join(".ghostex")
+                .join("hooks")
+                .join("agent-statusline.sh"),
             home_dir,
             respect_config_environment: false,
         }

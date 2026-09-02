@@ -24,6 +24,12 @@ HOOK_RESPONSE='{{"continue":true}}'
 if [[ "$INPUT_ARG" == *'"hook_event_name":"Interrupt"'* ]]; then
   HOOK_RESPONSE='{{}}'
 fi
+# Antigravity CLI (1.1.24+) parses any JSON a PreToolUse hook prints as a tool
+# input override and fails the tool call on the unexpected field; it treats
+# empty stdout as "no change", so its hooks must stay silent.
+if [ "${{GHOSTEX_AGENT:-}}" = "antigravity" ]; then
+  HOOK_RESPONSE=''
+fi
 
 SESSION_STATE_FILE="${{VSMUX_SESSION_STATE_FILE:-${{GHOSTEX_SESSION_STATE_FILE:-$ghostex_SESSION_STATE_FILE}}}}"
 DEFAULT_HOOK_STATE_DIR={hook_state_directory}

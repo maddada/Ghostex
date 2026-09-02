@@ -21,6 +21,7 @@ use super::notify_runtime::{read_hook_state, read_state_string, run_notify_hook}
 use super::plugin_sources::{command_for_agent, shell_quote};
 use super::probing::{command_exists, decode_base64_text, path_string, read_file_text};
 use super::resolution::provider_hook_paths;
+use super::statusline::{install_statusline_hook, statusline_command};
 
 #[test]
 fn hook_status_uses_home_scoped_paths() {
@@ -69,9 +70,20 @@ fn hook_status_reports_profile_only_provider_hook_paths() {
             )
         })
         .collect::<serde_json::Map<String, Value>>();
+    install_statusline_hook(&hook_paths).expect("statusline hook");
     write_test_file(
         &profile_path,
-        &format!("{}\n", json!({ "hooks": Value::Object(hooks) })),
+        &format!(
+            "{}\n",
+            json!({
+                "hooks": Value::Object(hooks),
+                "statusLine": {
+                    "type": "command",
+                    "command": statusline_command(&hook_paths, None),
+                    "padding": 0,
+                },
+            })
+        ),
     );
     let expected_paths = provider_hook_paths("claude", &hook_paths)
         .iter()
@@ -346,7 +358,8 @@ fn install_writes_notify_hook_without_payload_content() {
         .get("installedPaths")
         .and_then(Value::as_array)
         .expect("installed paths");
-    assert_eq!(installed.len(), 1);
+    // The shared notify hook and the shared Claude statusline script.
+    assert_eq!(installed.len(), 2);
     let hook_text = fs::read_to_string(installed[0].as_str().expect("path")).expect("hook");
     assert!(hook_text.contains(NOTIFY_HOOK_MARKER));
     assert!(!hook_text.contains("firstUserMessage"));

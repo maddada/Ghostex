@@ -10,7 +10,7 @@ use anyhow::{anyhow, Context, Result};
 use serde_json::{Map, Value};
 
 use crate::{
-    agent_hooks::{repair_installed_agent_hook_paths, run_notify_hook},
+    agent_hooks::{repair_installed_agent_hook_paths, run_notify_hook, run_statusline_hook},
     agent_skills::{install_agent_skills, read_agent_skill_status},
     auth::read_gxserver_auth_token,
     config::read_selected_local_api_port,
@@ -99,6 +99,9 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         }
         Some("agent-hook-notify") => {
             run_notify_hook(args.iter().skip(1).cloned().collect())?;
+        }
+        Some("agent-statusline") => {
+            run_statusline_hook(args.iter().skip(1).cloned().collect())?;
         }
         Some("resume-lookup") => {
             crate::resume_lookup::run_resume_lookup(args.iter().skip(1).cloned().collect())?;

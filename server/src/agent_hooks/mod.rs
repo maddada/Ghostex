@@ -8,6 +8,7 @@ pub mod plugin_sources;
 mod probe_cache;
 pub mod probing;
 pub mod resolution;
+pub mod statusline;
 #[cfg(test)]
 mod tests;
 
@@ -17,3 +18,4 @@ pub use api::{
 };
 pub use notify_runtime::run_notify_hook;
 pub(crate) use resolution::read_codex_hook_session_identities;
+pub use statusline::run_statusline_hook;

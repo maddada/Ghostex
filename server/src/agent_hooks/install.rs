@@ -28,6 +28,9 @@ use super::resolution::{
     is_ghostex_owned_hook_command, is_opencode_session_plugin_registration, provider_hook_paths,
     text_contains_ghostex_owned_hook_command,
 };
+use super::statusline::{
+    claude_statusline_is_current, register_claude_statusline, unregister_claude_statusline,
+};
 
 pub(crate) fn uninstall_agent_hook(
     definition: &HookDefinition,
@@ -183,7 +186,12 @@ pub(crate) fn remove_json_hook(
     }
     ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
     let mut data = read_json_object(&current_text);
-    let changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
+    let mut changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
+    // CDXC:ClaudeStatusline 2026-09-03: the statusLine Ghostex registered (or
+    // wrapped) leaves with the hooks, restoring the user's own command.
+    if definition.agent_id == "claude" {
+        changed |= unregister_claude_statusline(&mut data);
+    }
     if !changed {
         return Ok(false);
     }
@@ -431,7 +439,7 @@ pub(crate) fn inspect_agent_hook_installation(
             }
             let inspections = paths_to_check
                 .iter()
-                .map(|path| inspect_json_hook_config(path, definition, &command))
+                .map(|path| inspect_json_hook_config(path, definition, hook_paths, &command))
                 .collect::<Vec<_>>();
             let installed_inspections = inspections
                 .iter()
@@ -451,12 +459,18 @@ pub(crate) fn inspect_agent_hook_installation(
 fn inspect_json_hook_config(
     config_path: &Path,
     definition: &HookDefinition,
+    hook_paths: &HookPaths,
     command: &str,
 ) -> HookInspection {
     let data = read_json_object(&read_file_text(config_path));
     let stale_ghostex_hook_present = json_contains_stale_ghostex_owned_hook_command(&data, command);
     let codex_interrupt_timeout_current =
         definition.agent_id != "codex" || codex_interrupt_hook_timeout_is_current(&data, command);
+    // CDXC:ClaudeStatusline 2026-09-03: a Claude install is only current once
+    // its statusLine runs the Ghostex script, so an older install reads as
+    // updateRequired and the Update Hooks button (or daemon repair) adds it.
+    let claude_statusline_current =
+        definition.agent_id != "claude" || claude_statusline_is_current(&data, hook_paths);
     HookInspection {
         current_hook_installed: json_contains_hook_command(&data, command)
             && !stale_ghostex_hook_present
@@ -466,7 +480,8 @@ fn inspect_json_hook_config(
                 command,
                 hook_format(definition.agent_id),
             )
-            && codex_interrupt_timeout_current,
+            && codex_interrupt_timeout_current
+            && claude_statusline_current,
         ghostex_hook_present: json_contains_ghostex_owned_hook_command(&data, command),
     }
 }
@@ -558,9 +573,13 @@ fn json_contains_stale_ghostex_owned_hook_command(value: &Value, command: &str) 
             .any(|item| json_contains_stale_ghostex_owned_hook_command(item, command));
     }
     if let Some(object) = value.as_object() {
+        // CDXC:ClaudeStatusline 2026-09-03: Claude's `statusLine` names the
+        // Ghostex statusline script, which is Ghostex-owned but not a hook;
+        // its currency is judged by `claude_statusline_is_current` instead.
         return object
-            .values()
-            .any(|item| json_contains_stale_ghostex_owned_hook_command(item, command));
+            .iter()
+            .filter(|(key, _)| key.as_str() != "statusLine")
+            .any(|(_, item)| json_contains_stale_ghostex_owned_hook_command(item, command));
     }
     false
 }
@@ -592,9 +611,13 @@ fn json_contains_ghostex_owned_hook_command(value: &Value, command: &str) -> boo
             .any(|item| json_contains_ghostex_owned_hook_command(item, command));
     }
     if let Some(object) = value.as_object() {
+        // CDXC:ClaudeStatusline 2026-09-03: Claude's `statusLine` names the
+        // Ghostex statusline script, which is Ghostex-owned but not a hook;
+        // its currency is judged by `claude_statusline_is_current` instead.
         return object
-            .values()
-            .any(|item| json_contains_ghostex_owned_hook_command(item, command));
+            .iter()
+            .filter(|(key, _)| key.as_str() != "statusLine")
+            .any(|(_, item)| json_contains_ghostex_owned_hook_command(item, command));
     }
     false
 }
@@ -609,7 +632,7 @@ pub(crate) fn read_json_object(text: &str) -> Value {
     }
 }
 
-fn write_json_file(path: &Path, data: &Value) -> Result<(), DomainStateError> {
+pub(crate) fn write_json_file(path: &Path, data: &Value) -> Result<(), DomainStateError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(io_error)?;
     }
@@ -665,7 +688,7 @@ pub(crate) fn install_agent_hook(
         | HookFormat::NestedJson => {
             let mut installed_paths = Vec::new();
             for config_path in config_paths {
-                merge_json_hook(&config_path, definition, &command)?;
+                merge_json_hook(&config_path, definition, hook_paths, &command)?;
                 installed_paths.push(path_string(&config_path));
                 // CDXC:CodexHookTrust 2026-09-02: an explicit install is the
                 // user's approval of the Ghostex hooks, so record it where Codex
@@ -742,7 +765,7 @@ pub(crate) fn repair_agent_hook_paths(
             let command = command_for_agent(definition, &hook_paths.notify_hook_path);
             let mut repaired_paths = Vec::new();
             for config_path in config_paths {
-                merge_json_hook(&config_path, definition, &command)?;
+                merge_json_hook(&config_path, definition, hook_paths, &command)?;
                 repaired_paths.push(path_string(&config_path));
                 // CDXC:CodexHookTrust 2026-09-02: a repaired command changes the
                 // hash Codex checks, so a slot the user already approved is
@@ -768,6 +791,7 @@ pub(crate) fn repair_agent_hook_paths(
 fn merge_json_hook(
     config_path: &Path,
     definition: &HookDefinition,
+    hook_paths: &HookPaths,
     command: &str,
 ) -> Result<(), DomainStateError> {
     let current_text = read_file_text(config_path);
@@ -867,6 +891,11 @@ fn merge_json_hook(
         | HookFormat::PluginFile
         | HookFormat::MarkedYaml
         | HookFormat::TomlMarked => {}
+    }
+    // CDXC:ClaudeStatusline 2026-09-03: the same settings file carries the
+    // statusLine command, registered (or re-pointed) alongside the hooks.
+    if definition.agent_id == "claude" {
+        register_claude_statusline(&mut data, hook_paths);
     }
     write_json_file(config_path, &data)
 }
@@ -1435,7 +1464,10 @@ pub(crate) fn install_notify_hook(hook_paths: &HookPaths) -> Result<(), DomainSt
     Ok(())
 }
 
-fn write_executable_notify_hook(path: &Path, contents: &str) -> Result<(), DomainStateError> {
+pub(crate) fn write_executable_notify_hook(
+    path: &Path,
+    contents: &str,
+) -> Result<(), DomainStateError> {
     let temp_path = temp_path_for(path);
     fs::write(&temp_path, contents).map_err(io_error)?;
     set_executable_permissions(&temp_path).map_err(io_error)?;

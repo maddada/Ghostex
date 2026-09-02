@@ -17,6 +17,7 @@ use super::probing::{
     push_unique_path, read_file_text,
 };
 use super::resolution::{normalize_agent_ids, provider_hook_paths};
+use super::statusline::{install_statusline_hook, is_statusline_hook_current};
 
 /*
 CDXC:AgentHooks 2026-06-16-10:00:
@@ -70,6 +71,8 @@ pub fn install_agent_hooks(
     let mut installed_paths = Vec::new();
     install_notify_hook(&hook_paths)?;
     installed_paths.push(path_string(&hook_paths.notify_hook_path));
+    install_statusline_hook(&hook_paths)?;
+    installed_paths.push(path_string(&hook_paths.statusline_hook_path));
     for agent_id in agent_ids {
         let Some(definition) = HOOK_DEFINITIONS
             .iter()
@@ -165,11 +168,22 @@ pub fn repair_installed_agent_hook_paths(
 
     let notify_hook_contents = read_file_text(&hook_paths.notify_hook_path);
     let notify_stale = !is_notify_hook_current(&hook_paths, &notify_hook_contents);
-    if !notify_stale && stale_targets.is_empty() {
+    let statusline_stale = !is_statusline_hook_current(
+        &hook_paths,
+        &read_file_text(&hook_paths.statusline_hook_path),
+    );
+    if !notify_stale && !statusline_stale && stale_targets.is_empty() {
         return Ok(Vec::new());
     }
 
     let mut repaired_paths = Vec::new();
+    if statusline_stale {
+        install_statusline_hook(&hook_paths)?;
+        push_unique_path(
+            &mut repaired_paths,
+            path_string(&hook_paths.statusline_hook_path),
+        );
+    }
     if notify_stale {
         if let Some(previous_state_directory) = notify_hook_state_directory(&notify_hook_contents) {
             for migrated_path in migrate_hook_session_sidecars(
@@ -221,13 +235,15 @@ pub fn uninstall_agent_hooks(
             .ghostex_hook_present
     });
     if !has_remaining_provider_hook {
-        match fs::remove_file(&hook_paths.notify_hook_path) {
-            Ok(()) => push_unique_path(
-                &mut removed_paths,
-                path_string(&hook_paths.notify_hook_path),
-            ),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(io_error(error)),
+        for shared_path in [
+            &hook_paths.notify_hook_path,
+            &hook_paths.statusline_hook_path,
+        ] {
+            match fs::remove_file(shared_path) {
+                Ok(()) => push_unique_path(&mut removed_paths, path_string(shared_path)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(io_error(error)),
+            }
         }
     }
     let mut status_params = params.clone();
@@ -257,7 +273,14 @@ fn read_hook_status(
         .map(|path| path_string(path))
         .collect::<Vec<_>>();
     let notify_hook_contents = read_file_text(&hook_paths.notify_hook_path);
-    let notify_current = is_notify_hook_current(hook_paths, &notify_hook_contents);
+    let notify_current = is_notify_hook_current(hook_paths, &notify_hook_contents)
+        // CDXC:ClaudeStatusline 2026-09-03: Claude also depends on the shared
+        // statusline script being current; every other provider ignores it.
+        && (definition.agent_id != "claude"
+            || is_statusline_hook_current(
+                hook_paths,
+                &read_file_text(&hook_paths.statusline_hook_path),
+            ));
     let inspection = inspect_agent_hook_installation(definition, hook_paths, &provider_paths);
     let provider_current = inspection.current_hook_installed;
     let ghostex_hook_present = inspection.ghostex_hook_present;
