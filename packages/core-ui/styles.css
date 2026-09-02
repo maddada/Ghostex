@@ -525,6 +525,21 @@ body {
   border-radius: revert-layer;
 }
 
+/*
+ * Chat popups are portalled under <body>, while their palette belongs to the
+ * chat surface rather than the surrounding desktop shell. The shared overlay
+ * rule at the top of this sheet deliberately uses !important, so reassert the
+ * chat-owned surface tokens here after that rule. Without this, light chat
+ * menus combine light-theme foreground tokens with the shell's near-black
+ * --app-dropdown-background.
+ */
+body[data-session-chat-theme] .ghostex-session-chat-popup {
+  background: var(--popover) !important;
+  background-color: var(--popover) !important;
+  border-color: var(--border) !important;
+  color: var(--popover-foreground);
+}
+
 /* Preserve controls intentionally designed as circles/pills. Send is 6px, not
    a circle — see `.ghostex-chat-send-button` in packages/core-ui/styles/chat.css. */
 .ghostex-session-chat-scope :is(.ghostex-chat-footer-control, .ghostex-chat-scroll-bottom-button, button.rounded-full) {
