@@ -1,7 +1,7 @@
 /*
  * Tips & Tricks badge + notices.
  *
- * Tip ids: apps/desktop/src/app/consts.rs:540 TITLEBAR_TIP_IDS (12 tips, all unread on a
+ * Tip ids: apps/desktop/src/app/consts.rs TITLEBAR_TIP_IDS (12 tips, all unread on a
  * fresh profile — apps/desktop/src/app/titlebar/dropdown_panels.rs:370 seeds the badge with the full count).
  *
  * Notices: apps/desktop/views/titlebar-host.tsx:833-975. Only the settings-derived
@@ -18,14 +18,14 @@ export const TITLEBAR_TIP_IDS: readonly string[] = [
   'command-palette-all-actions',
   'customize-sidebar-layout-and-tools',
   'sleep-idle-sessions-from-resources',
-  'attach-browser-pane-to-task',
+  'run-same-project-in-a-worktree',
   'use-ghostex-computer-use-skill',
   'use-ghostex-browser-use-skill',
   'use-ghostex-embedded-browser-use-skill',
-  'use-ghostex-auto-rename-session-skill',
-  'recommend-faster-chrome-devtools-skill',
+  'schedule-recurring-agent-work',
+  'continue-session-from-mobile-app',
   'find-session-by-prompt-text',
-  'pin-important-workspaces',
+  'star-prompts-you-want-again',
   'add-todos-to-kanban-page',
 ];
 

@@ -7,7 +7,6 @@ import type {
   SidebarAgentHookStatusMessage,
   SidebarGhostexCliStatusMessage,
 } from '@/packages/shared/session-grid-contract-sidebar';
-import { FASTER_CHROME_DEVTOOLS_SKILL_URL } from './constants';
 import type { TitlebarNotice, TitlebarResourceGroup, TitlebarResourceSession, TitlebarTip } from './types';
 
 /**
@@ -24,10 +23,9 @@ import type { TitlebarNotice, TitlebarResourceGroup, TitlebarResourceSession, Ti
  * The first tip should introduce Cmd Shift P as the universal entry point for app actions, not only pane moves.
  *
  * CDXC:TipsAndTricks 2026-06-28-08:00:
- * Tips should actively teach the agent-facing Browser Use, Computer Use,
- * Generate Title, and personal Chrome DevTools skills. Ghostex-owned skills
- * deep-link to Settings > Integrations with the relevant row searched; the
- * external Chrome skill opens its repository in a project browser pane.
+ * Tips should actively teach the agent-facing Browser Use and Computer Use
+ * skills. Ghostex-owned skills deep-link to Settings > Integrations with the
+ * relevant row searched.
  */
 export const TITLEBAR_TIPS: TitlebarTip[] = [
   {
@@ -49,10 +47,10 @@ export const TITLEBAR_TIPS: TitlebarTip[] = [
     title: 'Sleep idle sessions from Resources',
   },
   {
-    body: 'Use browser panes beside agents when the task needs screenshots, DOM inspection, or logged-in product state.',
-    icon: 'browser',
-    id: 'attach-browser-pane-to-task',
-    title: 'Attach a browser pane to a task',
+    body: 'Click Add Worktree on a project header so a second agent can work on a branch without touching the main checkout.',
+    icon: 'sidebar',
+    id: 'run-same-project-in-a-worktree',
+    title: 'Run the same project in a worktree',
   },
   {
     action: {
@@ -76,35 +74,37 @@ export const TITLEBAR_TIPS: TitlebarTip[] = [
   },
   {
     action: {
-      settingsSearchQuery: 'Ghostex Auto Rename Session',
+      settingsSearchQuery: 'Ghostex Embedded Browser Use',
       type: 'openSettings',
     },
-    body: 'Configure Ghostex Auto Rename Session in Settings, then ask agents to use $ghostex-auto-rename-session to auto rename the current session from the work they just did.',
-    icon: 'command',
-    id: 'use-ghostex-auto-rename-session-skill',
-    title: 'Use $ghostex-auto-rename-session to auto rename sessions',
+    body: 'Configure Ghostex Embedded Browser Use in Settings, then ask agents to use /ghostex-embedded-browser-use for page inspection, console logs, screenshots, and clicks in Ghostex panes.',
+    icon: 'browser',
+    id: 'use-ghostex-embedded-browser-use-skill',
+    title: 'Use /ghostex-embedded-browser-use for Ghostex panes',
   },
   {
-    action: {
-      type: 'openBrowserPane',
-      url: FASTER_CHROME_DEVTOOLS_SKILL_URL,
-    },
-    body: 'Install Faster Chrome DevTools Skill when agents need fast CLI-backed access to your own Chrome profile, tabs, cookies, and extensions.',
+    body: 'Open the Automate tab to run agents on a schedule without sitting in the session.',
     icon: 'command',
-    id: 'recommend-faster-chrome-devtools-skill',
-    title: 'Give agents fast access to your personal Chrome',
+    id: 'schedule-recurring-agent-work',
+    title: 'Schedule recurring agent work',
   },
   {
-    body: 'Open the sidebar Search row, click "Search by Text", then type any words you remember from the prompt.',
+    body: 'Open More Options in the top right of the sidebar, click "Mobile", then attach the Mobile app to a running agent session.',
+    icon: 'resources',
+    id: 'continue-session-from-mobile-app',
+    title: 'Continue a session from the Mobile app',
+  },
+  {
+    body: 'Open More Options in the top right of the sidebar, click "Search by Prompt", then type any words you remember from the prompt.',
     icon: 'search',
     id: 'find-session-by-prompt-text',
     title: 'Find any session from prompt text',
   },
   {
-    body: 'Pin a session in the sidebar when you need it to stay at the top.',
-    icon: 'resources',
-    id: 'pin-important-workspaces',
-    title: 'Pin important sessions',
+    body: 'In Search by Prompt, favorite a prompt so it stays at the top the next time you search.',
+    icon: 'search',
+    id: 'star-prompts-you-want-again',
+    title: 'Star prompts you want again',
   },
   {
     body: 'Then you can easily ask agents to "work on beads with   high priority from the kanban board"',

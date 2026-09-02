@@ -28,9 +28,9 @@ export const SANDBOX_TIPS: SandboxTip[] = [
     title: 'Sleep idle sessions from Resources',
   },
   {
-    body: 'Use browser panes beside agents when the task needs screenshots, DOM inspection, or logged-in product state.',
-    id: 'attach-browser-pane-to-task',
-    title: 'Attach a browser pane to a task',
+    body: 'Click Add Worktree on a project header so a second agent can work on a branch without touching the main checkout.',
+    id: 'run-same-project-in-a-worktree',
+    title: 'Run the same project in a worktree',
   },
   {
     body: 'Configure Ghostex Computer Use in Settings, then ask agents to use /ghostex-computer-use for native macOS app control.',
@@ -43,24 +43,29 @@ export const SANDBOX_TIPS: SandboxTip[] = [
     title: 'Use /ghostex-browser-use for browser panes',
   },
   {
-    body: 'Configure Ghostex Auto Rename Session in Settings, then ask agents to use $ghostex-auto-rename-session to auto rename the current session from the work they just did.',
-    id: 'use-ghostex-auto-rename-session-skill',
-    title: 'Use $ghostex-auto-rename-session to auto rename sessions',
+    body: 'Configure Ghostex Embedded Browser Use in Settings, then ask agents to use /ghostex-embedded-browser-use for page inspection, console logs, screenshots, and clicks in Ghostex panes.',
+    id: 'use-ghostex-embedded-browser-use-skill',
+    title: 'Use /ghostex-embedded-browser-use for Ghostex panes',
   },
   {
-    body: 'Install Faster Chrome DevTools Skill when agents need fast CLI-backed access to your own Chrome profile, tabs, cookies, and extensions.',
-    id: 'recommend-faster-chrome-devtools-skill',
-    title: 'Give agents fast access to your personal Chrome',
+    body: 'Open the Automate tab to run agents on a schedule without sitting in the session.',
+    id: 'schedule-recurring-agent-work',
+    title: 'Schedule recurring agent work',
   },
   {
-    body: 'Open the sidebar Search row, click "Search by Text", then type any words you remember from the prompt.',
+    body: 'Open More Options in the top right of the sidebar, click "Mobile", then attach the Mobile app to a running agent session.',
+    id: 'continue-session-from-mobile-app',
+    title: 'Continue a session from the Mobile app',
+  },
+  {
+    body: 'Open More Options in the top right of the sidebar, click "Search by Prompt", then type any words you remember from the prompt.',
     id: 'find-session-by-prompt-text',
     title: 'Find any session from prompt text',
   },
   {
-    body: 'Pin a session in the sidebar when you need it to stay at the top.',
-    id: 'pin-important-workspaces',
-    title: 'Pin important sessions',
+    body: 'In Search by Prompt, favorite a prompt so it stays at the top the next time you search.',
+    id: 'star-prompts-you-want-again',
+    title: 'Star prompts you want again',
   },
   {
     body: 'Then you can easily ask agents to "work on beads with high priority from the kanban board"',

@@ -758,8 +758,6 @@ impl GpuiTitlebarReadingPanel {
             "use-ghostex-computer-use-skill"
                 | "use-ghostex-browser-use-skill"
                 | "use-ghostex-embedded-browser-use-skill"
-                | "use-ghostex-auto-rename-session-skill"
-                | "recommend-faster-chrome-devtools-skill"
         );
         let detail = h_flex()
             .id(format!("gpui-titlebar-tip-detail-{tip_index}"))

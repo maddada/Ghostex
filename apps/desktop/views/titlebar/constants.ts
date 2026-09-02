@@ -6,15 +6,10 @@ import type { TitlebarDropdownPanelKind, TitlebarDropdownPanelSize } from './typ
  *
  * CDXC:TipsAndTricks 2026-06-18-04:53:
  * The tips panel header should not repeat the Tips & Tricks label in text. Expose Docs as a first-row action and keep documentation inside the current workspace browser session.
- *
- * CDXC:TipsAndTricks 2026-06-28-08:00:
- * Third-party skill recommendations from Tips should open as current-project
- * browser panes so users can inspect the setup detail without leaving Ghostex.
  */
 export const GHOSTEX_CHANGELOG_URL = 'https://github.com/maddada/ghostex/releases';
 export const GHOSTEX_DOCS_URL = 'https://ghostex.dev/docs';
 export const GHOSTEX_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
-export const FASTER_CHROME_DEVTOOLS_SKILL_URL = 'https://github.com/zeke/faster-chrome-devtools-skill';
 export const TITLEBAR_GRADIENT_BLEND_START_PERCENT = 40;
 export const DEFAULT_CODE_SERVER_RESOURCE_PORT = 3775;
 

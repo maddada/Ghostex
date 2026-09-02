@@ -127,17 +127,6 @@ impl GhostexGpuiApp {
                     window,
                     cx,
                 ),
-            "use-ghostex-auto-rename-session-skill" => self
-                .open_gpui_settings_integrations_from_titlebar(
-                    Some("Ghostex Auto Rename Session"),
-                    window,
-                    cx,
-                ),
-            "recommend-faster-chrome-devtools-skill" => self.open_gpui_browser_action_url(
-                "https://github.com/zeke/faster-chrome-devtools-skill".to_string(),
-                window,
-                cx,
-            ),
             _ => cx.notify(),
         }
     }

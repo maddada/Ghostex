@@ -116,9 +116,8 @@ describe('native titlebar Tips & Tricks source', () => {
     /*
      * CDXC:TipsAndTricks 2026-06-28-08:00:
      * Agent-facing Browser Use and Computer Use tips should open Settings >
-     * Integrations with the relevant skill searched, while the external Faster
-     * Chrome DevTools recommendation should open its repository as a project
-     * browser pane. The read check remains separate from row navigation.
+     * Integrations with the relevant skill searched. The read check remains
+     * separate from row navigation.
      */
     const tipsSource = sourceBetween(
       tipsDataSource,
@@ -133,11 +132,7 @@ describe('native titlebar Tips & Tricks source', () => {
     expect(tipsSource).toContain("id: 'use-ghostex-browser-use-skill'");
     expect(tipsSource).toContain('/ghostex-browser-use');
     expect(tipsSource).toContain("settingsSearchQuery: 'Ghostex Browser Use'");
-    expect(tipsSource).toContain("id: 'recommend-faster-chrome-devtools-skill'");
-    expect(tipsSource).toContain('personal Chrome');
-    expect(constantsSource).toContain(
-      "const FASTER_CHROME_DEVTOOLS_SKILL_URL = 'https://github.com/zeke/faster-chrome-devtools-skill';"
-    );
+    expect(tipsSource).not.toContain("id: 'recommend-faster-chrome-devtools-skill'");
     expect(appSource).toContain('initialSearchQuery: action.settingsSearchQuery');
     expect(appSource).toContain("initialTab: 'integrations'");
     expect(appSource).toContain("postTitlebarSidebarCommand({ type: 'openBrowserPane', url: action.url });");
