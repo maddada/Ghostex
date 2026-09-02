@@ -67,7 +67,9 @@ jobs:
           ASC_KEY_BASE64: ${{ secrets.APPLE_ASC_KEY_BASE64 }}
           ASC_KEY_ID: ${{ secrets.APPLE_ASC_KEY_ID }}
         run: |
-          test -n "$ASC_ISSUER_ID" && test -n "$ASC_KEY_BASE64" && test -n "$ASC_KEY_ID"
+          test -n "$ASC_ISSUER_ID"
+          test -n "$ASC_KEY_BASE64"
+          test -n "$ASC_KEY_ID"
           KEY_PATH="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
           printf '%s' "$ASC_KEY_BASE64" | base64 --decode > "$KEY_PATH"
           chmod 600 "$KEY_PATH"
