@@ -369,6 +369,26 @@ pub(crate) fn schedule_first_user_input_draft(state: AppState, target: FirstUser
             return;
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+        /*
+        CDXC:SessionChatLaunchDraft 2026-09-02:
+        The marker was claimed (`typing`) before this wait, and a Chat launch
+        may have taken the draft for the chat composer in the meantime
+        (`claim_first_user_input_draft_for_chat`). Re-read it here so a draft
+        that already lives in the chat composer is never also typed into the
+        parked terminal, where it would sit unseen and later be stashed as a
+        stray Saved Prompt by the chat send.
+        */
+        let still_typing = repository
+            .get_session(&target.project_id, &target.session_id)
+            .ok()
+            .flatten()
+            .is_some_and(|session| {
+                read_runtime_text(&session, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref()
+                    == Some("typing")
+            });
+        if !still_typing {
+            return;
+        }
         let mut params = Map::new();
         params.insert("projectId".to_string(), json!(target.project_id.clone()));
         params.insert("sessionId".to_string(), json!(target.session_id.clone()));
@@ -397,6 +417,114 @@ pub(crate) fn schedule_first_user_input_draft(state: AppState, target: FirstUser
         );
         schedule_delta_for_ids(&state, &target.project_id, &target.session_id);
     });
+}
+
+/*
+CDXC:SessionChatLaunchDraft 2026-09-02:
+The Chat-side half of the first-input draft. A session that opens straight in
+Chat (Default Agent View = Chat, or a Handoff / Export conversation for a Chat
+user) must find the staged text in the CHAT composer, not typed into the
+terminal that Chat parks behind it. The terminal typing waits for the CLI
+composer to become ready, so at the moment Chat activates the marker is still
+`pending` or `typing` and the text has not reached any composer yet. Claiming
+it here flips the marker to `transferred`, which the typing task honours by
+doing nothing, and hands the verbatim text back for the chat composer.
+
+Only a marker in one of those two states is claimable: `applied` means the
+terminal already holds the text and the ordinary terminal → chat capture is
+the right tool, and anything else means there is nothing to hand over.
+*/
+pub(crate) fn claim_first_user_input_draft_for_chat(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+) -> Result<Option<String>, DomainStateError> {
+    let Some(session) = repository.get_session(project_id, session_id)? else {
+        return Ok(None);
+    };
+    if !matches!(
+        read_runtime_text(&session, FIRST_USER_INPUT_DRAFT_STATUS_KEY).as_deref(),
+        Some("pending" | "typing")
+    ) {
+        return Ok(None);
+    }
+    let Some(draft) = read_first_user_input_draft(&session) else {
+        return Ok(None);
+    };
+    update_first_user_input_draft_status(repository, project_id, session_id, "transferred")?;
+    Ok(Some(draft))
+}
+
+/// `/api/claimSessionChatLaunchDraft`: the launch-time claim above as an
+/// endpoint of its own. It is deliberately NOT a flag on
+/// `/api/handoffSessionChatDraft`: that endpoint's fallback is the
+/// prompt-editor handshake against the live CLI, which must never run against
+/// a CLI that is still booting, and a daemon predating this endpoint would
+/// silently ignore the flag and do exactly that. An unknown endpoint fails
+/// closed instead.
+pub(crate) fn handle_claim_session_chat_launch_draft_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    let params = match crate::domain::read_domain_rpc_params(body) {
+        Ok(params) => params,
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    let project_id = params
+        .get("projectId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    let session_id = params
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string();
+    if project_id.is_empty() || session_id.is_empty() {
+        return domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "invalidParams",
+                message: "claimSessionChatLaunchDraft requires projectId and sessionId."
+                    .to_string(),
+            },
+        );
+    }
+    let db = match open_gxserver_database(&state.paths) {
+        Ok(db) => db,
+        Err(error) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: format!("SQLite gxserver state error: {error}"),
+                },
+            )
+        }
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let content = match claim_first_user_input_draft_for_chat(&repository, &project_id, &session_id)
+    {
+        Ok(content) => content.unwrap_or_default(),
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    };
+    if !content.is_empty() {
+        schedule_delta_for_ids(state, &project_id, &session_id);
+    }
+    routed_json(
+        Some(endpoint_path),
+        axum::http::StatusCode::OK,
+        crate::protocol::rpc_success(
+            request_id,
+            json!({ "content": content, "transferred": !content.is_empty() }),
+        ),
+    )
 }
 
 pub(crate) fn schedule_first_prompt_auto_title_job(

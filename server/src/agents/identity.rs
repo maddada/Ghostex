@@ -13,6 +13,47 @@ pub(crate) enum SessionIdentityUpdateSource {
     TerminalTitle,
 }
 
+/*
+CDXC:GxserverIdentityLazySessions 2026-09-01:
+`apply_session_state_update` used to hydrate the project's WHOLE session list up
+front, for every identity observation. On a registry with a few thousand rows in
+one project that is ~70ms of JSON hydration, and the live zmx process scan calls
+this once per running agent session on every listSessions /
+readPresentationSnapshot / readProjectStatus / WS-subscribe request — the list
+alone was the bulk of a ~900ms response.
+
+Only two places actually read the list, and neither runs on the steady-state
+path: the passive-Codex conflict resolver (`resolve_allowed_session_identity`,
+which needs it only when a passive observation brings a NEW Codex conversation
+id) and the trusted-title search (`select_trusted_title_for_identity`, which
+runs only while the row still has no trusted title of its own). This handle
+hydrates on first use and caches, so a call that reaches neither pays nothing
+while a call that reaches either still sees exactly the same full project list —
+every lifecycle included, because stopped rows can still own an identity.
+*/
+pub(crate) struct LazyProjectSessions<'a, 'db> {
+    project_id: &'a str,
+    repository: &'a DomainRepository<'db>,
+    sessions: Option<Vec<Value>>,
+}
+
+impl<'a, 'db> LazyProjectSessions<'a, 'db> {
+    pub(crate) fn new(repository: &'a DomainRepository<'db>, project_id: &'a str) -> Self {
+        Self {
+            project_id,
+            repository,
+            sessions: None,
+        }
+    }
+
+    pub(crate) fn get(&mut self) -> Result<&[Value], DomainStateError> {
+        if self.sessions.is_none() {
+            self.sessions = Some(self.repository.list_sessions(Some(self.project_id))?);
+        }
+        Ok(self.sessions.as_deref().unwrap_or_default())
+    }
+}
+
 pub(crate) struct SessionIdentityConflict {
     agent_id: String,
     current_agent_session_id: Option<String>,
@@ -31,7 +72,7 @@ pub(crate) fn apply_session_state_update(
 ) -> Result<(Map<String, Value>, Value), DomainStateError> {
     let session = require_session(repository, lifecycle)?;
     let project = require_project(repository, &lifecycle.project_id)?;
-    let project_sessions = repository.list_sessions(Some(&lifecycle.project_id))?;
+    let mut project_sessions = LazyProjectSessions::new(repository, &lifecycle.project_id);
     let observed_identity = align_observed_identity_with_launch_profile(
         &session,
         resolve_session_identity(&IdentityInput {
@@ -61,9 +102,9 @@ pub(crate) fn apply_session_state_update(
         &session,
         &observed_identity,
         &resolved_identity,
-        &project_sessions,
+        &mut project_sessions,
         identity_update_source,
-    );
+    )?;
     if identity_conflict.is_some() && identity_update_source == SessionIdentityUpdateSource::Passive
     {
         let mut result = object_from_value(json!({
@@ -127,12 +168,12 @@ pub(crate) fn apply_session_state_update(
     if trusted_resume_title(&current_with_identity).is_none() {
         if let Some(candidate) = select_trusted_title_for_identity(
             &project,
-            &project_sessions,
+            &mut project_sessions,
             &current_with_identity,
             params.get("title"),
             params.get("titleSource"),
             &identity,
-        ) {
+        )? {
             title = candidate.title;
             runtime_settings.insert("titleSource".to_string(), json!(candidate.title_source));
             reason = candidate.reason;
@@ -238,14 +279,114 @@ pub(crate) fn apply_session_state_update(
     Ok((result, updated))
 }
 
+/*
+CDXC:GxserverLiveProcessIdentityNoop 2026-09-01:
+The live zmx process scan re-observes the SAME identity on every poll, and a
+poll happens on every listSessions / readPresentationSnapshot / readProjectStatus
+/ WS-subscribe request. Steady state is therefore "everything this observation
+carries is already stored", which `apply_session_state_update` answers with
+`changed: false` after re-deriving the identity, re-deriving runtime settings,
+and — until the lazy handle above — hydrating the project's whole session list.
+
+This predicate answers the same question from the row that is already in hand,
+with no database read at all. It replays the update path's own helpers rather
+than re-stating their rules, and returns true ONLY when every term of that
+path's `needs_update` is provably false:
+
+  1. `apply_session_identity_runtime_settings` produced a runtime settings map
+     byte-identical to the stored one. The LiveProcess params carry no
+     `firstPromptTitleGeneration*` / `firstUserMessage` keys, so the
+     `insert_*_from_params` calls that follow it are no-ops, and whole-map
+     equality covers every runtime key `needs_update` compares (agentName,
+     agentId, agentSessionId, agentSessionPath, launchAgentId, agentActivity,
+     titleSource).
+  2. The promoted `agentId` equals the stored one.
+  3. Nothing would promote `kind` that is not already `agent`.
+  4. The row's title is already trusted, so the update path takes the
+     `current-title-already-trusted` branch: it neither consults sibling
+     sessions nor rewrites the title, which is also why this is the one
+     condition that keeps the sibling-title adoption behaviour intact for rows
+     that still carry a placeholder title.
+  5. The stored title is already trimmed, so the trimmed title the update path
+     writes back equals the stored value verbatim.
+
+Under 1-3 the `current_with_identity` the update path builds is the stored row
+itself, so 4 and 5 may be evaluated against the stored row directly.
+
+With `needs_update` false the update path writes nothing: the session-note and
+stashed-prompt re-keys are gated on it, `require_project` cannot fail for a row
+whose project is enforced by an ON DELETE CASCADE foreign key, and the only
+thing the caller reads back is `changed`. Skipping the call is therefore
+observationally identical, not an approximation. Any future write that
+`apply_session_state_update` performs unconditionally must be reflected here.
+*/
+pub(crate) fn live_process_identity_update_is_noop(
+    session: &Value,
+    params: &Map<String, Value>,
+) -> bool {
+    let observed_identity = align_observed_identity_with_launch_profile(
+        session,
+        resolve_session_identity(&IdentityInput {
+            agent_id: None,
+            agent_name: read_text(params, "agentName"),
+            agent_session_id: read_text(params, "agentSessionId"),
+            agent_session_path: read_text(params, "agentSessionPath"),
+            runtime_settings: Map::new(),
+            startup_text: read_text(params, "startupText"),
+        }),
+    );
+    let current_identity = resolve_stored_session_identity(session);
+    /*
+    `resolve_allowed_session_identity` hands every non-passive source its
+    resolved identity back unchanged, so for a LiveProcess observation the
+    identity that would be applied is exactly the merge of observed over stored.
+    */
+    let identity = merge_observed_session_identity(&observed_identity, &current_identity);
+    let stored_runtime_settings = object_field(session, "runtimeSettings");
+    let runtime_settings = apply_session_identity_runtime_settings(
+        &current_identity,
+        &identity,
+        stored_runtime_settings.clone(),
+        SessionIdentityUpdateSource::LiveProcess,
+        session_launch_agent_provider_id(session),
+    );
+    if runtime_settings != stored_runtime_settings {
+        return false;
+    }
+    let stored_agent_id = read_text_value(session, "agentId");
+    let next_agent = identity
+        .agent_id
+        .clone()
+        .or_else(|| stored_agent_id.clone());
+    if next_agent != stored_agent_id {
+        return false;
+    }
+    let should_promote_agent = next_agent.is_some()
+        || identity.agent_session_id.is_some()
+        || identity.agent_session_path.is_some();
+    if should_promote_agent && session.get("kind").and_then(Value::as_str) != Some("agent") {
+        return false;
+    }
+    if trusted_resume_title(session).is_none() {
+        return false;
+    }
+    read_text_value(session, "title").as_deref() == session.get("title").and_then(Value::as_str)
+}
+
+/// Resolves the identity a session is allowed to adopt.
+///
+/// `project_sessions` is only hydrated inside the passive-Codex ownership
+/// branch: every other source (and every passive observation that carries no
+/// new Codex conversation id) returns before the list is ever read. When it IS
+/// read it is the full project list, all lifecycles included.
 pub(crate) fn resolve_allowed_session_identity(
     current_identity: &ResolvedIdentity,
     current_session: &Value,
     observed_identity: &ResolvedIdentity,
     resolved_identity: &ResolvedIdentity,
-    sessions: &[Value],
+    project_sessions: &mut LazyProjectSessions<'_, '_>,
     source: SessionIdentityUpdateSource,
-) -> (ResolvedIdentity, Option<SessionIdentityConflict>) {
+) -> Result<(ResolvedIdentity, Option<SessionIdentityConflict>), DomainStateError> {
     let observed_agent_id = normalize_agent_id(observed_identity.agent_id.as_deref());
     let current_agent_id = normalize_agent_id(current_identity.agent_id.as_deref());
     let resolved_agent_id = normalize_agent_id(resolved_identity.agent_id.as_deref());
@@ -268,7 +409,7 @@ pub(crate) fn resolve_allowed_session_identity(
                 && current_agent_id.as_deref() == Some("codex")
                 && resolved_agent_id.as_deref() == Some("codex")));
     if !is_passive_codex_observation {
-        return (resolved_identity.clone(), None);
+        return Ok((resolved_identity.clone(), None));
     }
     let incoming_agent_session_id = incoming_agent_session_id.expect("checked above");
     if let Some(current_codex_session_id) = current_codex_session_id {
@@ -282,16 +423,18 @@ pub(crate) fn resolve_allowed_session_identity(
                 reason: "passive-agent-session-id-replacement",
                 source,
             };
-            return (
+            return Ok((
                 keep_current_session_identity(resolved_identity, current_identity),
                 Some(conflict),
-            );
+            ));
         }
-        return (resolved_identity.clone(), None);
+        return Ok((resolved_identity.clone(), None));
     }
-    if let Some(owner) =
-        find_active_codex_identity_owner(sessions, current_session, &incoming_agent_session_id)
-    {
+    if let Some(owner) = find_active_codex_identity_owner(
+        project_sessions.get()?,
+        current_session,
+        &incoming_agent_session_id,
+    ) {
         let conflict = SessionIdentityConflict {
             agent_id: "codex".to_string(),
             current_agent_session_id: None,
@@ -301,12 +444,12 @@ pub(crate) fn resolve_allowed_session_identity(
             reason: "active-agent-session-id-owned",
             source,
         };
-        return (
+        return Ok((
             keep_current_session_identity(resolved_identity, current_identity),
             Some(conflict),
-        );
+        ));
     }
-    (resolved_identity.clone(), None)
+    Ok((resolved_identity.clone(), None))
 }
 
 pub(crate) fn keep_current_session_identity(
@@ -520,23 +663,26 @@ pub(crate) struct TrustedTitleCandidate {
     updated_at: Option<String>,
 }
 
+/// `project_sessions` is only hydrated once the event itself carried no trusted
+/// title, i.e. exactly when the sibling-session scan below actually runs.
 pub(crate) fn select_trusted_title_for_identity(
     project: &Value,
-    sessions: &[Value],
+    project_sessions: &mut LazyProjectSessions<'_, '_>,
     current_session: &Value,
     event_title: Option<&Value>,
     event_title_source: Option<&Value>,
     identity: &ResolvedIdentity,
-) -> Option<TrustedTitleCandidate> {
+) -> Result<Option<TrustedTitleCandidate>, DomainStateError> {
     if let Some(candidate) =
         create_trusted_title_candidate(event_title, event_title_source, "event-title", None)
     {
-        return Some(candidate);
+        return Ok(Some(candidate));
     }
 
     let current_session_id = read_text_value(current_session, "sessionId");
     let live_candidate = select_newest_candidate(
-        sessions
+        project_sessions
+            .get()?
             .iter()
             .filter(|session| read_text_value(session, "sessionId") != current_session_id)
             .filter_map(|session| {
@@ -570,10 +716,10 @@ pub(crate) fn select_trusted_title_for_identity(
             .collect(),
     );
     if live_candidate.is_some() {
-        return live_candidate;
+        return Ok(live_candidate);
     }
 
-    select_newest_candidate(
+    Ok(select_newest_candidate(
         project
             .get("previousSessionHistory")
             .and_then(Value::as_array)
@@ -584,7 +730,7 @@ pub(crate) fn select_trusted_title_for_identity(
                     .collect()
             })
             .unwrap_or_default(),
-    )
+    ))
 }
 
 pub(crate) fn create_history_title_candidate(
@@ -800,6 +946,22 @@ pub(crate) fn parse_agent_resume_identity(text: Option<&str>) -> ResolvedIdentit
         if !lower.contains(needle) {
             continue;
         }
+        /*
+        CDXC:SessionForkIdentity 2026-09-02:
+        A fork launch names the PARENT conversation (`codex fork <id>`,
+        `claude --resume <id> --fork-session`); the forked conversation's own id
+        is only known once the agent's hook or transcript reports it. Seeding
+        the parent id here made the fork row and its parent share one identity
+        (see `extract_agent_process_session_id`), so a fork launch contributes
+        the agent only.
+        */
+        if resume_reference_is_fork(text, needle) {
+            return ResolvedIdentity {
+                agent_id: Some(agent_id.to_string()),
+                agent_session_id: None,
+                agent_session_path: None,
+            };
+        }
         if let Some(reference) = quoted_or_next_resume_reference(text, needle) {
             return ResolvedIdentity {
                 agent_id: Some(agent_id.to_string()),
@@ -809,6 +971,21 @@ pub(crate) fn parse_agent_resume_identity(text: Option<&str>) -> ResolvedIdentit
         }
     }
     ResolvedIdentity::default()
+}
+
+fn resume_reference_is_fork(text: &str, command: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    let Some(index) = lower.find(command) else {
+        return false;
+    };
+    text[index + command.len()..]
+        .split_whitespace()
+        .map(|token| token.trim_matches(['"', '\'', '\r', '\n', ';']))
+        .any(|token| {
+            matches!(token, "fork" | "--fork" | "--fork-session")
+                || token.starts_with("--fork=")
+                || token.starts_with("--fork-session=")
+        })
 }
 
 pub(crate) fn quoted_or_next_resume_reference(text: &str, command: &str) -> Option<String> {
@@ -965,7 +1142,20 @@ pub(crate) fn align_observed_identity_with_launch_profile(
     let observed_agent_id = normalize_agent_id(identity.agent_id.as_deref());
     if observed_agent_id.is_some() && observed_agent_id == session_launch_agent_provider_id(session)
     {
-        if let Some(launch_agent_id) = locked_session_agent_id(session) {
+        /*
+        CDXC:ZmxProcessIdentityOwner 2026-09-02:
+        The substitution maps the observed CLI family onto the sidebar
+        CONFIGURATION of that family (`custom-…` built on Claude), which is the
+        only case where the locked id is a different spelling of the same
+        agent. A locked id that names another canonical agent is not a profile
+        of this provider: a live-process scan that had misread a tool child as
+        the session's agent stamped it into launchAgentId, and substituting it
+        here turned every later Claude observation (scan and hook alike) back
+        into that wrong agent, so the row could never recover.
+        */
+        if let Some(launch_agent_id) = locked_session_agent_id(session).filter(|locked| {
+            Some(locked.as_str()) == observed_agent_id.as_deref() || locked.starts_with("custom-")
+        }) {
             identity.agent_id = Some(launch_agent_id);
         }
     }

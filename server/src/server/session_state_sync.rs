@@ -1,13 +1,21 @@
 use super::*;
 use crate::agents::{repair_session_working_directory_title, LifecycleParams};
 
+/*
+CDXC:GxserverSessionSyncOneList 2026-09-01:
+The presentation sync passes used to each run their own `list_sessions`, so a
+single `listSessions` or `readPresentationSnapshot` request built the full JSON
+row set roughly five times over. They now operate on the one list their caller
+already fetched and report whether they changed any row, so the caller re-reads
+only when a (rare) mutation actually happened.
+*/
 pub(crate) fn sync_zmx_provider_existence(
     state: &AppState,
     db: &rusqlite::Connection,
     repository: &DomainRepository<'_>,
-    project_id: Option<&str>,
-) -> std::result::Result<(), DomainStateError> {
-    let sessions = repository.list_sessions(project_id)?;
+    sessions: &[Value],
+) -> std::result::Result<bool, DomainStateError> {
+    let mut changed_any = false;
     let candidates = sessions
         .iter()
         .filter(|session| {
@@ -37,8 +45,9 @@ pub(crate) fn sync_zmx_provider_existence(
             ))
         })
         .collect::<Vec<_>>();
+    let mut sessions_updated_here: HashSet<(String, String)> = HashSet::new();
     if !candidates.is_empty() {
-        if let Ok(existing_names) = read_zmx_existing_session_names() {
+        if let Ok(existing_names) = read_cached_zmx_existing_session_names() {
             for (candidate_project_id, candidate_session_id, zmx_name) in candidates {
                 if existing_names.contains(&zmx_name) {
                     continue;
@@ -79,6 +88,9 @@ pub(crate) fn sync_zmx_provider_existence(
                 );
                 update.insert("providerState".to_string(), Value::Object(provider_state));
                 repository.update_session_for_lifecycle(&update)?;
+                changed_any = true;
+                sessions_updated_here
+                    .insert((candidate_project_id.clone(), candidate_session_id.clone()));
                 schedule_presentation_session_delta(
                     state,
                     db,
@@ -97,18 +109,48 @@ pub(crate) fn sync_zmx_provider_existence(
     by startSessionProvider. Keeping an agent with neither a provider nor that
     startup text as `running` creates an impossible active row: desktop clients
     retain or reveal an empty terminal tab, while gxserver correctly advertises
-    attach/focus as unavailable. Mark only those unrestorable agent rows stopped
+    attach/focus as unavailable. Mark only those unrestorable agent rows
     during the existing authoritative provider reconciliation. Plain terminal
     rows still restart as shells, and agents with queued or resume startup text
     remain running so the ordinary restore path can revive them.
+
+    CDXC:UnrestorableAgentsSleepNotStop 2026-09-01:
+    They are marked "sleeping", not "stopped". "stopped" is the user's close
+    action; writing it here made sessions silently vanish from the sidebar
+    whenever a daemon died outside Ghostex's control (crash, reboot, external
+    kill). Sleeping avoids the impossible active row just as well — a sleeping
+    session holds no terminal tab — while the row stays visible and its chat
+    history reachable; waking one relaunches a plain shell in the session's
+    cwd. Only an explicit user close writes "stopped".
     */
-    let missing_agent_candidates = repository
-        .list_sessions(project_id)?
-        .into_iter()
-        .filter(is_running_missing_zmx_agent)
+    /*
+    The pass above flips providerState `exists` -> `missing`, and this filter
+    looks for `missing`, so it must see those writes. Re-read only the rows the
+    pass actually updated (normally none) instead of re-listing every session.
+    */
+    let mut missing_agent_candidates = sessions
+        .iter()
+        .filter(|session| {
+            let key = (
+                read_session_text(session, "projectId").unwrap_or_default(),
+                read_session_text(session, "sessionId").unwrap_or_default(),
+            );
+            !sessions_updated_here.contains(&key)
+        })
+        .filter(|session| is_running_missing_zmx_agent(session))
+        .cloned()
         .collect::<Vec<_>>();
+    for (updated_project_id, updated_session_id) in &sessions_updated_here {
+        let Some(refreshed) = repository.get_session(updated_project_id, updated_session_id)?
+        else {
+            continue;
+        };
+        if is_running_missing_zmx_agent(&refreshed) {
+            missing_agent_candidates.push(refreshed);
+        }
+    }
     if missing_agent_candidates.is_empty() {
-        return Ok(());
+        return Ok(changed_any);
     }
     let agent_settings = read_agent_settings(db)?;
     for session in missing_agent_candidates {
@@ -121,14 +163,15 @@ pub(crate) fn sync_zmx_provider_existence(
         let Some(project) = repository.get_project(&candidate_project_id)? else {
             continue;
         };
-        if !should_stop_unrestorable_missing_zmx_agent(&project, &session, &agent_settings) {
+        if !should_sleep_unrestorable_missing_zmx_agent(&project, &session, &agent_settings) {
             continue;
         }
         let mut update = Map::new();
         update.insert("projectId".to_string(), json!(candidate_project_id.clone()));
         update.insert("sessionId".to_string(), json!(candidate_session_id.clone()));
-        update.insert("lifecycleState".to_string(), json!("stopped"));
+        update.insert("lifecycleState".to_string(), json!("sleeping"));
         repository.update_session_for_lifecycle(&update)?;
+        changed_any = true;
         schedule_presentation_session_delta(
             state,
             db,
@@ -137,10 +180,10 @@ pub(crate) fn sync_zmx_provider_existence(
             &candidate_session_id,
         )?;
     }
-    Ok(())
+    Ok(changed_any)
 }
 
-pub(crate) fn should_stop_unrestorable_missing_zmx_agent(
+pub(crate) fn should_sleep_unrestorable_missing_zmx_agent(
     project: &Value,
     session: &Value,
     agent_settings: &Map<String, Value>,
@@ -166,11 +209,10 @@ pub(crate) fn sync_live_zmx_process_identities(
     state: &AppState,
     db: &rusqlite::Connection,
     repository: &DomainRepository<'_>,
-    project_id: Option<&str>,
+    sessions: &[Value],
     target_session_id: Option<&str>,
     _reason: &str,
-) -> std::result::Result<(), DomainStateError> {
-    let sessions = repository.list_sessions(project_id)?;
+) -> std::result::Result<bool, DomainStateError> {
     let candidates = sessions
         .iter()
         .filter(|session| should_sync_live_zmx_process_identity(session))
@@ -190,16 +232,18 @@ pub(crate) fn sync_live_zmx_process_identities(
         })
         .collect::<Vec<_>>();
     if candidates.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
     let session_names = candidates
         .iter()
         .map(|(_, _, zmx_name)| zmx_name.clone())
         .collect::<Vec<_>>();
-    let Ok(identities) = read_zmx_session_process_identities(&session_names, &state.paths.home_dir)
+    let Ok(identities) =
+        read_cached_zmx_session_process_identities(&session_names, &state.paths.home_dir)
     else {
-        return Ok(());
+        return Ok(false);
     };
+    let mut changed_any = false;
     let codex_hook_identities = read_codex_hook_session_identities(&state.paths);
     for (candidate_project_id, candidate_session_id, _) in candidates {
         let Some(current) = repository.get_session(&candidate_project_id, &candidate_session_id)?
@@ -243,6 +287,7 @@ pub(crate) fn sync_live_zmx_process_identities(
         */
         let changed = apply_live_process_session_identity(
             repository,
+            &current,
             &candidate_project_id,
             &candidate_session_id,
             identity.agent_id.clone(),
@@ -262,6 +307,7 @@ pub(crate) fn sync_live_zmx_process_identities(
             false
         };
         if changed || reconciled {
+            changed_any = true;
             schedule_presentation_session_delta(
                 state,
                 db,
@@ -271,7 +317,7 @@ pub(crate) fn sync_live_zmx_process_identities(
             )?;
         }
     }
-    Ok(())
+    Ok(changed_any)
 }
 
 pub(crate) fn sync_title_signaled_zmx_process_identity(
@@ -284,14 +330,16 @@ pub(crate) fn sync_title_signaled_zmx_process_identity(
         message: format!("SQLite gxserver state error: {error}"),
     })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let sessions = repository.list_sessions(Some(project_id))?;
     sync_live_zmx_process_identities(
         state,
         &db,
         &repository,
-        Some(project_id),
+        &sessions,
         Some(session_id),
         "terminal-title-agent-signal",
-    )
+    )?;
+    Ok(())
 }
 
 /*
@@ -302,10 +350,11 @@ pub(crate) fn sync_session_state_sidecars(
     state: &AppState,
     db: &rusqlite::Connection,
     repository: &DomainRepository<'_>,
-    project_id: Option<&str>,
+    sessions: &[Value],
     _reason: &str,
-) -> std::result::Result<(), DomainStateError> {
-    for session in repository.list_sessions(project_id)? {
+) -> std::result::Result<bool, DomainStateError> {
+    let mut changed_any = false;
+    for session in sessions.iter().cloned() {
         let Some(session_project_id) = read_session_text(&session, "projectId") else {
             continue;
         };
@@ -319,6 +368,7 @@ pub(crate) fn sync_session_state_sidecars(
         let (session, repaired_working_directory_title) =
             repair_session_working_directory_title(repository, &lifecycle, session)?;
         if repaired_working_directory_title {
+            changed_any = true;
             schedule_presentation_session_delta(
                 state,
                 db,
@@ -347,6 +397,7 @@ pub(crate) fn sync_session_state_sidecars(
             &sidecar,
         )?;
         if changed {
+            changed_any = true;
             schedule_presentation_session_delta(
                 state,
                 db,
@@ -356,7 +407,7 @@ pub(crate) fn sync_session_state_sidecars(
             )?;
         }
     }
-    Ok(())
+    Ok(changed_any)
 }
 
 pub(crate) fn should_sync_session_state_sidecar(session: &Value) -> bool {

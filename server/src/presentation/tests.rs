@@ -350,11 +350,15 @@ fn snapshot_publishes_the_auto_settle_window_this_daemon_sweeps_with() {
     let settings_file = settings_dir.join("native-sidebar-settings.json");
 
     let published_window = |db: &Connection| -> Value {
+        let sessions = DomainRepository::new(db, "S7k")
+            .list_sessions(None)
+            .expect("sessions");
         let snapshot = read_presentation_snapshot(
             db,
             "S7k",
             crate::session_lifecycle::read_sweep_auto_settle_after_days(&paths),
             crate::session_lifecycle::read_sidebar_v2_selected(&paths),
+            sessions,
         )
         .expect("snapshot");
         snapshot
@@ -421,11 +425,15 @@ fn the_git_status_capability_follows_the_sidebar_version_gate() {
     std::fs::create_dir_all(&settings_dir).expect("settings dir");
 
     let published_capabilities = |db: &Connection| -> Value {
+        let sessions = DomainRepository::new(db, "S7m")
+            .list_sessions(None)
+            .expect("sessions");
         read_presentation_snapshot(
             db,
             "S7m",
             crate::session_lifecycle::read_sweep_auto_settle_after_days(&paths),
             crate::session_lifecycle::read_sidebar_v2_selected(&paths),
+            sessions,
         )
         .expect("snapshot")
         .get("capabilities")

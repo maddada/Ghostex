@@ -75,8 +75,12 @@ pub(crate) fn ingest_session_state_event(
     Ok(Value::Object(result))
 }
 
+/// `current` is the caller's already-loaded row for `project_id`/`session_id`;
+/// the scan that drives this reads it one statement earlier, so re-fetching it
+/// here would only repeat that read.
 pub(crate) fn apply_live_process_session_identity(
     repository: &DomainRepository<'_>,
+    current: &Value,
     project_id: &str,
     session_id: &str,
     agent_id: Option<String>,
@@ -89,11 +93,7 @@ pub(crate) fn apply_live_process_session_identity(
     if agent_session_id.is_none()
         && normalize_agent_id(agent_id.as_deref()).as_deref() == Some("codex")
     {
-        let current = repository.get_session(project_id, session_id)?;
-        let runtime_settings = current
-            .as_ref()
-            .map(|session| object_field(session, "runtimeSettings"))
-            .unwrap_or_default();
+        let runtime_settings = object_field(current, "runtimeSettings");
         if read_text_from_map(&runtime_settings, "agentSessionId").is_none() {
             agent_session_id = runtime_settings
                 .get("agentActivity")
@@ -110,6 +110,15 @@ pub(crate) fn apply_live_process_session_identity(
     insert_optional_string(&mut params, "agentName", agent_id);
     insert_optional_string(&mut params, "agentSessionId", agent_session_id);
     insert_optional_string(&mut params, "agentSessionPath", agent_session_path);
+    /*
+    The Codex title consumption above only rewrites the local observation, so
+    the params compared here are the exact params the update path would receive.
+    See `live_process_identity_update_is_noop` for why skipping a call it
+    accepts writes and returns the same thing this call would.
+    */
+    if live_process_identity_update_is_noop(current, &params) {
+        return Ok(false);
+    }
     let (result, _) = apply_session_state_update(
         repository,
         &lifecycle,

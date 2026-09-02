@@ -20,7 +20,7 @@ Two invariants are enforced here rather than in each client:
   - Member collection ids that no longer exist are dropped, because a
     collection disappears from the collections document as soon as it empties.
 Worktree inheritance is a pure client concern and never stored. The built-in
-"All Projects" view is a client-side constant and is never stored here either.
+"Other" view is a client-side constant and is never stored here either.
 
 An empty Space is valid and is kept — unlike a project collection, a Space with
 zero members still exists so the user can fill it later.

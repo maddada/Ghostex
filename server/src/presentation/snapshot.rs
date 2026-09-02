@@ -8,16 +8,25 @@ use crate::domain::{DomainRepository, DomainStateError};
 
 use super::*;
 
+/*
+CDXC:GxserverSessionSyncOneList 2026-09-01:
+The snapshot is projected from a session list its callers have ALREADY read for
+their sync passes, so it takes that list instead of paying for a second full
+hydration of the registry. A caller whose sync passes actually wrote rows
+re-lists first and hands the fresh list here, which is the same freshness rule
+`/api/listSessions` follows.
+*/
 pub fn read_presentation_snapshot(
     db: &Connection,
     server_id: &str,
     auto_settle_after_days: Option<f64>,
     sidebar_v2_selected: bool,
+    sessions: Vec<Value>,
 ) -> Result<Value, DomainStateError> {
     let repository = DomainRepository::new(db, server_id);
     let mut snapshot = project_snapshot(
         repository.list_projects()?,
-        repository.list_sessions(None)?,
+        sessions,
         read_presentation_revision(db)?,
         sidebar_v2_selected,
     );
@@ -129,9 +138,16 @@ pub fn build_presentation_session_delta(
     would silently strip the badge the snapshot had just published. The family
     derivation needs the whole registry, which is one indexed read of the same
     table the snapshot pass already walks.
+
+    CDXC:GxserverSlimSessionQueries 2026-09-01:
+    Every createSession/updateSession pays for that read while holding the
+    presentation event sequencer, so it uses the narrow fork-row statement
+    rather than a full `list_sessions` hydration. The projected fields are
+    byte-identical to the ones family derivation reads off a full row; the
+    snapshot pass keeps building families from the list it already holds.
     */
     if let Some(output) = presentation_session.as_object_mut() {
-        SessionForkFamilies::build(&repository.list_sessions(None)?)
+        SessionForkFamilies::build(&repository.list_session_fork_rows()?)
             .insert_fork_fields(session_id, output);
     }
     Ok(json!({
@@ -312,7 +328,7 @@ pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
         exist on this machine, so a client can render this daemon's Space row and
         its Spaces context submenu instead of failing those calls on an older
         daemon. A daemon without the flag has no Spaces at all, and its section
-        shows the built-in All Projects view only.
+        shows its full unfiltered project list — not even the built-in Other view.
         */
         "spaces": true,
         /*

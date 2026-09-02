@@ -1586,6 +1586,7 @@ fn live_process_identity_promotes_running_zmx_terminal_to_codex() {
 
     let changed = apply_live_process_session_identity(
         &repository,
+        &session,
         &project_id,
         &session_id,
         Some("codex".to_string()),
@@ -1665,6 +1666,7 @@ fn live_process_identity_claims_codex_id_observed_before_process_promotion() {
 
     let changed = apply_live_process_session_identity(
         &repository,
+        &session,
         &project_id,
         &session_id,
         Some("codex".to_string()),
@@ -1734,6 +1736,7 @@ fn live_process_identity_replaces_wsl_shell_title_and_defers_to_codex_auto_title
 
     let changed = apply_live_process_session_identity(
         &repository,
+        &session,
         &project_id,
         &session_id,
         Some("codex".to_string()),

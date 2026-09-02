@@ -299,7 +299,7 @@ pub(crate) fn discard_stranded_quick_project(
     if !project_is_quick_chat_workspace(&project) {
         return Ok(false);
     }
-    if !repository.list_sessions(Some(project_id))?.is_empty() {
+    if repository.has_sessions(project_id)? {
         return Ok(false);
     }
     let directory = quick_chat_directory_to_remove(home_dir, &project);

@@ -95,7 +95,7 @@ fn missing_zmx_agent_without_restore_plan_is_not_kept_running() {
         "sessionId": "G9mmz",
         "title": "Codex Session",
     });
-    assert!(should_stop_unrestorable_missing_zmx_agent(
+    assert!(should_sleep_unrestorable_missing_zmx_agent(
         &project,
         &unrestorable_agent,
         &agent_settings,
@@ -104,7 +104,7 @@ fn missing_zmx_agent_without_restore_plan_is_not_kept_running() {
     let mut restorable_agent = unrestorable_agent.clone();
     restorable_agent["runtimeSettings"]["agentSessionId"] =
         json!("019fca32-5dad-73d3-a0eb-86b6a7486fdd");
-    assert!(!should_stop_unrestorable_missing_zmx_agent(
+    assert!(!should_sleep_unrestorable_missing_zmx_agent(
         &project,
         &restorable_agent,
         &agent_settings,
@@ -112,7 +112,7 @@ fn missing_zmx_agent_without_restore_plan_is_not_kept_running() {
 
     let mut plain_terminal = unrestorable_agent;
     plain_terminal["kind"] = json!("terminal");
-    assert!(!should_stop_unrestorable_missing_zmx_agent(
+    assert!(!should_sleep_unrestorable_missing_zmx_agent(
         &project,
         &plain_terminal,
         &agent_settings,

@@ -194,6 +194,14 @@ fn parent_claims(session: &Value) -> ParentClaims {
     push_registry(read_launch_text(session, "forkedFromSessionId"));
     push_registry(read_hidden_metadata_text(session, "restoredFromSessionId"));
 
+    /*
+    CDXC:SessionForkIdentity 2026-09-02:
+    A row can carry its OWN current id in `previousAgentSessionIds`: an adoption
+    that was later reverted (the live-process scan re-asserting the resumed id)
+    leaves the id it moved away from, which is the id it is back on. A self
+    claim is not lineage, so it is skipped rather than resolved.
+    */
+    let own_agent_session_id = read_runtime_text(session, "agentSessionId");
     let agent_session_ids = session
         .get("runtimeSettings")
         .and_then(Value::as_object)
@@ -213,6 +221,9 @@ fn parent_claims(session: &Value) -> ParentClaims {
                 else {
                     continue;
                 };
+                if own_agent_session_id.as_deref() == Some(value) {
+                    continue;
+                }
                 if !ids.iter().any(|existing| existing == value) {
                     ids.push(value.to_string());
                 }

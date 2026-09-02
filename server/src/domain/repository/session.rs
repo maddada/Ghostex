@@ -5,15 +5,16 @@ use serde_json::{Map, Value};
 
 use crate::domain::repository::project::MAX_ID_GENERATION_ATTEMPTS;
 use crate::domain::{
-    merge_session_update, normalize_create_agent_session_params, normalize_existing_directory_path,
-    normalize_session_input, normalize_session_order_ids, normalize_settled_override, now_iso,
-    path_basename, project_path_state, read_optional_text, read_project_id, read_string_field,
-    read_unvalidated_project_lookup_id, read_unvalidated_session_lookup_id,
+    insert_optional_string, merge_session_update, normalize_create_agent_session_params,
+    normalize_domain_lifecycle_state, normalize_existing_directory_path, normalize_session_input,
+    normalize_session_order_ids, normalize_settled_override, normalize_zmx_provider_state, now_iso,
+    parse_object_map, path_basename, project_path_state, read_optional_text, read_project_id,
+    read_string_field, read_unvalidated_project_lookup_id, read_unvalidated_session_lookup_id,
     reject_stopped_session_revive, session_from_row, session_insert_params, session_row_from_sql,
     sql_error, DomainRepository, DomainResult, DomainStateError, ProjectPathState,
     SessionLifecycleFields,
 };
-use crate::ids::{create_session_id, is_gxserver_project_id};
+use crate::ids::{create_session_id, create_zmx_session_name, is_gxserver_project_id};
 
 impl<'a> DomainRepository<'a> {
     pub fn create_session(
@@ -322,6 +323,138 @@ impl<'a> DomainRepository<'a> {
             .collect()
     }
 
+    /*
+    CDXC:GxserverSlimSessionQueries 2026-09-01:
+    `list_sessions` hydrates all thirty session fields and parses six JSON
+    columns per row, which is hundreds of milliseconds on a registry with a few
+    thousand rows. Callers that consume a narrow slice of the row get their own
+    statement instead, so a hot path never pays for the columns it ignores.
+    */
+
+    /// The rows `SessionForkFamilies::build` reads: fork/restore edges plus
+    /// just enough lifecycle to tell an active row from a closed one. Every key
+    /// carries exactly the value `session_from_row` would have produced for it,
+    /// so family derivation is identical to the full-list version.
+    pub fn list_session_fork_rows(&self) -> DomainResult<Vec<Value>> {
+        let mut statement = self
+            .db
+            .prepare(
+                r#"
+                SELECT projectId, sessionId, lifecycleState, providerStateJson,
+                       launchSettingsJson, runtimeSettingsJson, restoredFromSessionId
+                FROM sessions
+                ORDER BY updatedAt DESC, projectId ASC, sessionId ASC
+                "#,
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(SessionForkRow {
+                    project_id: row.get(0)?,
+                    session_id: row.get(1)?,
+                    lifecycle_state: row.get(2)?,
+                    provider_state_json: row.get(3)?,
+                    launch_settings_json: row.get(4)?,
+                    runtime_settings_json: row.get(5)?,
+                    restored_from_session_id: row.get(6)?,
+                })
+            })
+            .map_err(sql_error)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        rows.into_iter()
+            .map(|row| session_fork_row_value(&self.server_id, row))
+            .collect()
+    }
+
+    /// Whether the project owns any session row at all — the same answer as
+    /// `!list_sessions(Some(project_id))?.is_empty()`, without hydrating every
+    /// row of the project to produce a boolean.
+    pub fn has_sessions(&self, project_id: &str) -> DomainResult<bool> {
+        self.db
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM sessions WHERE projectId = ?1)",
+                params![project_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|exists| exists != 0)
+            .map_err(sql_error)
+    }
+
+    /// `list_sessions` narrowed to rows that are not durably `stopped`, i.e.
+    /// `running`, `sleeping`, `missing`, and `unknown`.
+    ///
+    /// The `missing`/`unknown` rows have to stay: presentation's
+    /// `effective_lifecycle_state` promotes any non-`stopped` row whose
+    /// `providerState` says `exists` to `running`, so dropping them here would
+    /// hide live sessions. A `stopped` row, by contrast, can never be active —
+    /// that same promotion explicitly refuses to override `stopped` — so this
+    /// is a lossless narrowing for every active-only caller.
+    ///
+    /// The column is `TEXT NOT NULL CHECK (lifecycleState IN ('running',
+    /// 'sleeping', 'stopped', 'missing', 'unknown'))`, and hydration passes
+    /// each of those five values through unchanged, so the SQL predicate and
+    /// an in-memory `lifecycleState != "stopped"` filter select the same rows.
+    pub fn list_sessions_excluding_stopped(
+        &self,
+        project_id: Option<&str>,
+    ) -> DomainResult<Vec<Value>> {
+        let rows = if let Some(project_id) = project_id {
+            let mut statement = self
+                .db
+                .prepare(
+                    "SELECT * FROM sessions WHERE projectId = ?1 AND lifecycleState <> 'stopped' ORDER BY updatedAt DESC, sessionId ASC",
+                )
+                .map_err(sql_error)?;
+            let rows = statement
+                .query_map([project_id], session_row_from_sql)
+                .map_err(sql_error)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(sql_error)?;
+            rows
+        } else {
+            let mut statement = self
+                .db
+                .prepare(
+                    "SELECT * FROM sessions WHERE lifecycleState <> 'stopped' ORDER BY updatedAt DESC, projectId ASC, sessionId ASC",
+                )
+                .map_err(sql_error)?;
+            let rows = statement
+                .query_map([], session_row_from_sql)
+                .map_err(sql_error)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(sql_error)?;
+            rows
+        };
+        rows.into_iter()
+            .map(|row| session_from_row(&self.server_id, row))
+            .collect()
+    }
+
+    /// Full session rows narrowed to one durable `lifecycleState`. The stored
+    /// column and the hydrated field agree for every recognized state, so this
+    /// selects exactly the rows a caller's in-memory `lifecycleState` filter
+    /// would have kept.
+    pub fn list_sessions_with_lifecycle_state(
+        &self,
+        lifecycle_state: &str,
+    ) -> DomainResult<Vec<Value>> {
+        let mut statement = self
+            .db
+            .prepare(
+                "SELECT * FROM sessions WHERE lifecycleState = ?1 ORDER BY updatedAt DESC, projectId ASC, sessionId ASC",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([lifecycle_state], session_row_from_sql)
+            .map_err(sql_error)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        rows.into_iter()
+            .map(|row| session_from_row(&self.server_id, row))
+            .collect()
+    }
+
     pub fn get_session(&self, project_id: &str, session_id: &str) -> DomainResult<Option<Value>> {
         let row = self
             .db
@@ -440,6 +573,66 @@ impl<'a> DomainRepository<'a> {
             .map_err(sql_error)?;
         Ok(ids)
     }
+}
+
+struct SessionForkRow {
+    project_id: String,
+    session_id: String,
+    lifecycle_state: String,
+    provider_state_json: String,
+    launch_settings_json: String,
+    runtime_settings_json: String,
+    restored_from_session_id: Option<String>,
+}
+
+fn session_fork_row_value(server_id: &str, row: SessionForkRow) -> DomainResult<Value> {
+    let row_id = format!("{}/{}", row.project_id, row.session_id);
+    let zmx_name = create_zmx_session_name(server_id, &row.project_id, &row.session_id);
+    let provider_state = normalize_zmx_provider_state(
+        parse_object_map(
+            &row.provider_state_json,
+            "providerStateJson",
+            "session",
+            &row_id,
+        )?,
+        &zmx_name,
+    );
+    let mut hidden = Map::new();
+    insert_optional_string(
+        &mut hidden,
+        "restoredFromSessionId",
+        row.restored_from_session_id,
+    );
+    let mut session = Map::new();
+    session.insert("hiddenMetadata".to_string(), Value::Object(hidden));
+    session.insert(
+        "launchSettings".to_string(),
+        Value::Object(parse_object_map(
+            &row.launch_settings_json,
+            "launchSettingsJson",
+            "session",
+            &row_id,
+        )?),
+    );
+    session.insert(
+        "lifecycleState".to_string(),
+        Value::String(normalize_domain_lifecycle_state(Some(&Value::String(
+            row.lifecycle_state,
+        )))),
+    );
+    session.insert("projectId".to_string(), Value::String(row.project_id));
+    session.insert("providerState".to_string(), Value::Object(provider_state));
+    session.insert(
+        "runtimeSettings".to_string(),
+        Value::Object(parse_object_map(
+            &row.runtime_settings_json,
+            "runtimeSettingsJson",
+            "session",
+            &row_id,
+        )?),
+    );
+    session.insert("sessionId".to_string(), Value::String(row.session_id));
+    Ok(Value::Object(session))
 }
 
 fn validate_project_path_for_session(project: &Value) -> DomainResult<()> {

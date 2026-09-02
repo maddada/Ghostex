@@ -407,7 +407,16 @@ pub(crate) fn select_presentation_sessions(sessions: Vec<Value>) -> Vec<Value> {
             pinned_stopped.push(session);
         }
     }
-    pinned_stopped.sort_by_key(session_sort_key);
+    /*
+    CDXC:RecentStoppedCapKeepsNewest 2026-09-01:
+    The cap picks by recency, newest first. It used to take the first 20 by
+    presentation sort key, which orders lastActiveAt ascending — so in a
+    project with more than 20 pinned/tagged stopped rows the OLDEST ones held
+    every slot and a freshly stopped pinned session never appeared. The caller
+    re-sorts the returned rows for display (snapshot.rs), so selection order
+    here does not leak.
+    */
+    pinned_stopped.sort_by_key(|session| std::cmp::Reverse(last_active_at(session)));
     active.extend(
         pinned_stopped
             .into_iter()

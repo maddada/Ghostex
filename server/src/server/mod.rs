@@ -160,8 +160,8 @@ use crate::{
         create_started_workspace_terminal, cycle_wire_incompatible_zmx_session_daemons,
         dispatch_zmx_lifecycle_endpoint, dispatch_zmx_session_interaction_endpoint,
         get_persisted_provider_startup_text_for_session, merge_session_with_renderer_result,
-        prepare_focus_session_renderer_command, read_zmx_existing_session_names,
-        read_zmx_session_process_identities, ZmxEndpointError, ZmxServerContext,
+        prepare_focus_session_renderer_command, read_cached_zmx_existing_session_names,
+        read_cached_zmx_session_process_identities, ZmxEndpointError, ZmxServerContext,
     },
 };
 
@@ -1104,16 +1104,22 @@ async fn route_http(
                 CDXC:ProjectStatusParity 2026-06-22-06:21:
                 readProjectStatus is a polling project-status read, but TypeScript gxserver repairs live zmx process identity before returning the project/session graph and schedules agent metadata title checks for eligible sessions. Keep those side effects here instead of treating the endpoint as a plain repository read so Rust clients receive the same status projection.
                 */
-                sync_zmx_provider_existence(&state, db, repository, Some(project_id.as_str()))?;
-                sync_live_zmx_process_identities(
+                let sessions = repository.list_sessions(Some(project_id.as_str()))?;
+                let mut sessions_changed =
+                    sync_zmx_provider_existence(&state, db, repository, &sessions)?;
+                sessions_changed |= sync_live_zmx_process_identities(
                     &state,
                     db,
                     repository,
-                    Some(project_id.as_str()),
+                    &sessions,
                     None,
                     "read-project-status",
                 )?;
-                let sessions = repository.list_sessions(Some(project_id.as_str()))?;
+                let sessions = if sessions_changed {
+                    repository.list_sessions(Some(project_id.as_str()))?
+                } else {
+                    sessions
+                };
                 schedule_agent_title_metadata_checks_for_sessions(&state, &sessions);
                 Ok(json!({
                     "project": project,
@@ -1257,25 +1263,70 @@ async fn route_http(
             &body_json,
             |repository, db, params, _| {
                 let project_id = read_optional_project_id(params)?;
-                sync_session_state_sidecars(
+                /*
+                CDXC:GxserverActiveOnlySessionList 2026-09-01:
+                A registry accumulates stopped agent history forever — thousands
+                of rows on a working machine — and every one of them was
+                hydrated, serialized, and shipped on each poll even though the
+                CLI, the mobile inventory, and the desktop close check all
+                discard stopped rows on arrival. `includeStopped` lets those
+                callers say so up front; it defaults to true, so the endpoint's
+                published contract is unchanged for anyone who does not send it.
+
+                The filter is the durable `lifecycleState <> 'stopped'`, which
+                is exactly the predicate those callers apply client-side, so an
+                opted-in caller sees the same rows it would have kept anyway.
+
+                The three sync passes below only ever act on rows whose stored
+                `lifecycleState` is `running` (see `session_state_sync.rs`), and
+                every such row survives the filter, so they operate on the same
+                candidate set either way. The one pass that also touches other
+                rows is the working-directory title repair inside
+                `sync_session_state_sidecars`; it stays exhaustive on the
+                unfiltered paths (`/api/readProjectStatus`,
+                `/api/readPresentationSnapshot`, the presentation subscribe) and
+                is idempotent, so an active-only list simply defers it.
+                */
+                let include_stopped = params
+                    .get("includeStopped")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true);
+                let list_sessions = |project_id: Option<&str>| {
+                    if include_stopped {
+                        repository.list_sessions(project_id)
+                    } else {
+                        repository.list_sessions_excluding_stopped(project_id)
+                    }
+                };
+                /*
+                CDXC:GxserverSessionSyncOneList 2026-09-01:
+                One `list_sessions` feeds all three sync passes and the
+                response. The passes can mutate rows, so re-read only when one
+                of them reports an actual change.
+                */
+                let sessions = list_sessions(project_id.as_deref())?;
+                let mut sessions_changed = sync_session_state_sidecars(
                     &state,
                     db,
                     repository,
-                    project_id.as_deref(),
+                    &sessions,
                     "list-sessions",
                 )?;
-                sync_zmx_provider_existence(&state, db, repository, project_id.as_deref())?;
-                sync_live_zmx_process_identities(
+                sessions_changed |= sync_zmx_provider_existence(&state, db, repository, &sessions)?;
+                sessions_changed |= sync_live_zmx_process_identities(
                     &state,
                     db,
                     repository,
-                    project_id.as_deref(),
+                    &sessions,
                     None,
                     "list-sessions",
                 )?;
-                repository
-                    .list_sessions(project_id.as_deref())
-                    .map(|sessions| json!({ "sessions": sessions }))
+                let sessions = if sessions_changed {
+                    list_sessions(project_id.as_deref())?
+                } else {
+                    sessions
+                };
+                Ok(json!({ "sessions": sessions }))
             },
         ),
         "/api/updateSession" => handle_domain_http(
@@ -1461,23 +1512,35 @@ async fn route_http(
             request_id,
             &body_json,
             |repository, db, _, server_id| {
-                sync_session_state_sidecars(
+                /*
+                CDXC:GxserverSessionSyncOneList 2026-09-01:
+                One `list_sessions` feeds all three sync passes and the
+                snapshot projection. The passes can mutate rows, so re-read
+                only when one of them reports an actual change.
+                */
+                let sessions = repository.list_sessions(None)?;
+                let mut sessions_changed = sync_session_state_sidecars(
                     &state,
                     db,
                     repository,
-                    None,
+                    &sessions,
                     "read-presentation-snapshot",
                 )?;
-                sync_zmx_provider_existence(&state, db, repository, None)?;
-                sync_live_zmx_process_identities(
+                sessions_changed |= sync_zmx_provider_existence(&state, db, repository, &sessions)?;
+                sessions_changed |= sync_live_zmx_process_identities(
                     &state,
                     db,
                     repository,
-                    None,
+                    &sessions,
                     None,
                     "read-presentation-snapshot",
                 )?;
-                read_presentation_snapshot_in_sequence(&state, db, server_id)
+                let sessions = if sessions_changed {
+                    repository.list_sessions(None)?
+                } else {
+                    sessions
+                };
+                read_presentation_snapshot_in_sequence(&state, db, server_id, sessions)
                     .map(|snapshot| json!({ "snapshot": snapshot }))
             },
         ),
@@ -2158,10 +2221,31 @@ async fn route_http(
         "/api/interruptSessionChat" => {
             handle_interrupt_session_chat_http(&state, endpoint.path, request_id, &body_json)
         }
+        /*
+        CDXC:SessionChatRewind 2026-09-02:
+        Held open for the whole drive rather than queued-and-acknowledged: the
+        answer a caller needs is whether Claude Code ACCEPTED the rewind, and
+        that is only knowable once the driver has watched the dialog close.
+        */
+        "/api/rewindSessionChat" => {
+            crate::session_chat_rewind::handle_rewind_session_chat_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/handoffSessionChatDraft" => {
             handle_handoff_session_chat_draft_http(&state, endpoint.path, request_id, &body_json)
                 .await
         }
+        "/api/claimSessionChatLaunchDraft" => handle_claim_session_chat_launch_draft_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+        ),
         "/api/readSessionChatQueue"
         | "/api/queueSessionChatPrompt"
         | "/api/updateSessionChatQueuedPrompt"
