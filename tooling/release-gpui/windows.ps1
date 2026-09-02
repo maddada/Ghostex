@@ -1,10 +1,28 @@
+# CDXC:WindowsReleasePhases 2026-09-02:
+# -Phase lets the release workflow run this script as two watched steps so the
+# Rust compile no longer waits on the gxserver job whose tarball only the
+# packaging half reads:
+#   all      (default) the whole release, exactly as before; local and
+#            single-shot callers keep using this.
+#   compile  GPUI reference checkout, sidebar bundle, cargo build. Reads no
+#            runtime artifact. Leaves its results in apps/desktop/target and
+#            apps/desktop/dist and exits.
+#   package  everything after the compile: stage the app directory from the
+#            compiled binaries, seal components, verify, sign, vpk pack,
+#            bundle the launcher, write manifest.json. Requires a completed
+#            `compile` on the same checkout.
+# The command sequence inside each phase is byte-identical to `all`; the
+# phases only gate which contiguous part of it runs.
 param(
     [Parameter(Mandatory = $true)][string]$Version,
     [ValidateSet("x64", "arm64")][string]$Arch = "x64",
-    [string]$Output = ""
+    [string]$Output = "",
+    [ValidateSet("all", "compile", "package")][string]$Phase = "all"
 )
 
 $ErrorActionPreference = "Stop"
+$RunCompile = $Phase -ne "package"
+$RunPackage = $Phase -ne "compile"
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
     throw "Version must be MAJOR.MINOR.PATCH, got $Version"
 }
@@ -24,17 +42,33 @@ $ResolvedParent = [System.IO.Path]::GetFullPath((Split-Path -Parent $Output))
 if (-not $ResolvedParent.StartsWith([System.IO.Path]::GetFullPath($AllowedRoot))) {
     throw "Release output must stay under $AllowedRoot"
 }
-if (Test-Path $Output) { Remove-Item -Recurse -Force $Output }
-New-Item -ItemType Directory -Force -Path $Output | Out-Null
+if ($RunPackage) {
+    if (Test-Path $Output) { Remove-Item -Recurse -Force $Output }
+    New-Item -ItemType Directory -Force -Path $Output | Out-Null
+}
 
-& bash (Join-Path $ScriptDir "prepare-references.sh")
-if ($LASTEXITCODE -ne 0) { throw "GPUI reference preparation failed" }
+if ($RunCompile) {
+    & bash (Join-Path $ScriptDir "prepare-references.sh")
+    if ($LASTEXITCODE -ne 0) { throw "GPUI reference preparation failed" }
+}
 
 $env:GHOSTEX_WINDOWS_ARCH = $Arch
 $env:GHOSTEX_GPUI_MARKETING_VERSION = $Version
 $env:GHOSTEX_ON_DEMAND_ASSETS = "1"
+# build-windows-app.ps1 runs both halves when this is unset.
+$env:GHOSTEX_WINDOWS_BUILD_PHASE = switch ($Phase) {
+    "compile" { "compile" }
+    "package" { "stage" }
+    default { $null }
+}
 & (Join-Path $RepoRoot "apps/desktop/scripts/build-windows-app.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Windows GPUI build failed" }
+Remove-Item Env:GHOSTEX_WINDOWS_BUILD_PHASE -ErrorAction SilentlyContinue
+
+if (-not $RunPackage) {
+    Write-Host "Compiled the Windows $Arch release inputs; run -Phase package to stage and package them"
+    exit 0
+}
 
 $AppDir = Join-Path $RepoRoot "apps/desktop/build/windows/Ghostex"
 foreach ($required in @("Ghostex.exe", "ghostex-gpui-runtime.exe", "ghostex-gpui-cef-helper.exe")) {

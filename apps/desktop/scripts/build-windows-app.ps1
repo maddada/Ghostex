@@ -41,6 +41,14 @@ $ReleaseVersion = if ($env:GHOSTEX_GPUI_MARKETING_VERSION) {
 if ($ReleaseArch -notin @("x64", "arm64")) {
     throw "GHOSTEX_WINDOWS_ARCH must be x64 or arm64, got $ReleaseArch"
 }
+# CDXC:WindowsReleasePhases 2026-09-02: tooling/release-gpui/windows.ps1 runs
+# this script in two watched release steps. "compile" stops after step 2 and
+# "stage" skips steps 1-2 (reusing that compile's dist/ and target/ output);
+# unset runs everything, which is what every other caller does.
+$BuildPhase = if ($env:GHOSTEX_WINDOWS_BUILD_PHASE) { $env:GHOSTEX_WINDOWS_BUILD_PHASE } else { "all" }
+if ($BuildPhase -notin @("all", "compile", "stage")) {
+    throw "GHOSTEX_WINDOWS_BUILD_PHASE must be compile, stage, or unset, got $BuildPhase"
+}
 
 # Same CEF cache location contract as build-macos-app.sh: cef-dll-sys's build
 # script downloads the CEF binary distribution into CEF_PATH.
@@ -49,28 +57,35 @@ $env:CEF_PATH = $CefCacheDir
 $env:ZIG_GLOBAL_CACHE_DIR = Join-Path $RepoRoot "build/zig-global-cache"
 New-Item -ItemType Directory -Force -Path $env:ZIG_GLOBAL_CACHE_DIR | Out-Null
 
-# 1) Sidebar bundle (same steps as the macOS script).
-Push-Location $RepoRoot
-try {
-    bun run build:sidebar-css
-    if ($LASTEXITCODE -ne 0) { throw "build:sidebar-css failed" }
-    & (Join-Path $RepoRoot "node_modules/.bin/vite.exe") build --config (Join-Path $GpuiDir "vite.config.ts")
-    if ($LASTEXITCODE -ne 0) { throw "vite build failed" }
-}
-finally {
-    Pop-Location
+if ($BuildPhase -ne "stage") {
+    # 1) Sidebar bundle (same steps as the macOS script).
+    Push-Location $RepoRoot
+    try {
+        bun run build:sidebar-css
+        if ($LASTEXITCODE -ne 0) { throw "build:sidebar-css failed" }
+        & (Join-Path $RepoRoot "node_modules/.bin/vite.exe") build --config (Join-Path $GpuiDir "vite.config.ts")
+        if ($LASTEXITCODE -ne 0) { throw "vite build failed" }
+    }
+    finally {
+        Pop-Location
+    }
+
+    # 2) Rust binaries (bootstrap, main app, CEF helper, and installer launcher). Requires MSVC toolchain, cmake,
+    # and ninja (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.16.x for
+    # libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
+    Push-Location $GpuiDir
+    try {
+        cargo build --release --bin ghostex-gpui-cef-bootstrap --bin ghostex-gpui --bin ghostex-gpui-cef-helper --bin ghostex-windows-installer
+        if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
-# 2) Rust binaries (bootstrap, main app, CEF helper, and installer launcher). Requires MSVC toolchain, cmake,
-# and ninja (cef-dll-sys builds libcef_dll_wrapper), plus Zig 0.16.x for
-# libghostty-vt (GHOSTEX_ZIG override honored by apps/desktop/build.rs).
-Push-Location $GpuiDir
-try {
-    cargo build --release --bin ghostex-gpui-cef-bootstrap --bin ghostex-gpui --bin ghostex-gpui-cef-helper --bin ghostex-windows-installer
-    if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
-}
-finally {
-    Pop-Location
+if ($BuildPhase -eq "compile") {
+    Write-Host "Compiled $AppName ($ReleaseArch); staging deferred to the stage phase"
+    exit 0
 }
 
 # 3) Locate the extracted CEF distribution. cef-dll-sys may export either a
