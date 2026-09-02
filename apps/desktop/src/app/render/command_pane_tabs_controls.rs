@@ -24,6 +24,9 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
+const COMMAND_PANE_MINIMIZE_TOOLTIP: &str =
+    "Right click an empty spot in the tabs bar to toggle minimizing.\nAlso double click to create a new tab.";
+
 impl GhostexGpuiApp {
     pub(crate) fn render_command_pane_tab_add_button(
         &self,
@@ -462,6 +465,7 @@ impl GhostexGpuiApp {
         let pin_icon_path = command_pane_panel_pin_icon_path(self.command_pane.mode);
         let expand_icon_path =
             command_pane_panel_visibility_icon_path(self.command_pane.is_expanded());
+        let visibility_tooltip = expanded_chrome.then_some(COMMAND_PANE_MINIMIZE_TOOLTIP);
         let controls_id = if expanded_chrome {
             match group_id {
                 Some(group_id) => {
@@ -528,7 +532,7 @@ impl GhostexGpuiApp {
             .child(self.render_command_pane_control_button(
                 "expand",
                 expand_icon_path,
-                None,
+                visibility_tooltip,
                 CommandPaneControlAction::ToggleExpanded,
                 group_id,
                 cx,

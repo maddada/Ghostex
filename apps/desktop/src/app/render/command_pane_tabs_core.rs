@@ -29,26 +29,6 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
-const COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP: &str =
-    "Double click an empty space for a new terminal, and right click to toggle collapsing.";
-
-fn build_command_pane_empty_titlebar_tooltip(
-    window: &mut gpui::Window,
-    cx: &mut gpui::App,
-) -> gpui::AnyView {
-    /*
-    This guidance belongs on the 26px tab bar itself. Remove the tooltip's
-    outer vertical margin and keep the bubble compact so GPUI's cursor-relative
-    edge adjustment keeps it on the tab row even at the bottom window edge.
-    */
-    Tooltip::new(COMMAND_PANE_EMPTY_TITLEBAR_TOOLTIP)
-        .h(px(COMMAND_PANE_TAB_BAR_HEIGHT - 8.0))
-        .my_0()
-        .py_0()
-        .text_xs()
-        .build(window, cx)
-}
-
 impl GhostexGpuiApp {
     pub(crate) fn render_command_pane_leaf(
         &self,
@@ -204,9 +184,6 @@ impl GhostexGpuiApp {
                     .items_center()
                     .overflow_hidden()
                     .track_scroll(&scroll_handle)
-                    .managed_tooltip_with_placement(ManagedTooltipPlacement::Auto, |window, cx| {
-                        build_command_pane_empty_titlebar_tooltip(window, cx)
-                    })
                     .on_scroll_wheel(cx.listener(
                         move |_this, event: &ScrollWheelEvent, window, cx| {
                             if command_pane_handle_tab_strip_scroll_wheel(
@@ -392,10 +369,6 @@ impl GhostexGpuiApp {
                             .items_center()
                             .overflow_hidden()
                             .track_scroll(&scroll_handle)
-                            .managed_tooltip_with_placement(
-                                ManagedTooltipPlacement::Auto,
-                                |window, cx| build_command_pane_empty_titlebar_tooltip(window, cx),
-                            )
                             .on_scroll_wheel(cx.listener(
                                 move |_this, event: &ScrollWheelEvent, window, cx| {
                                     if command_pane_handle_tab_strip_scroll_wheel(
