@@ -29,7 +29,11 @@ import type {
   GpuiRemoteProjectReference,
 } from './types-and-protocol';
 import { openAppModal } from '@/packages/core-ui/app-modal-host-bridge';
-import { resolveEffectivePreferredAgentInterface, type ghostexSettings } from '@/packages/shared/ghostex-settings';
+import {
+  resolveEffectivePreferredAgentInterface,
+  type ghostexSettings,
+  type PreferredAgentInterface,
+} from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectGroupId,
   parseGxserverPresentationProjectGroupId,
@@ -109,8 +113,10 @@ export interface GpuiSidebarRuntimeSessionCreateMethods {
     agent: SidebarAgentButton,
     prompt: string,
     options?: {
+      draft?: boolean;
       errorMessage?: string;
       firstUserInputDraft?: string;
+      preferredInterface?: PreferredAgentInterface;
       renameTitleAfterStart?: string;
       title?: string;
     }
@@ -120,7 +126,7 @@ export interface GpuiSidebarRuntimeSessionCreateMethods {
     agentId: string,
     prompt: string,
     title: string,
-    options?: { firstUserInputDraft?: string }
+    options?: { draft?: boolean; firstUserInputDraft?: string; preferredInterface?: PreferredAgentInterface }
   ): Promise<void>;
 }
 
@@ -1007,8 +1013,10 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     agent: SidebarAgentButton,
     prompt: string,
     options: {
+      draft?: boolean;
       errorMessage?: string;
       firstUserInputDraft?: string;
+      preferredInterface?: PreferredAgentInterface;
       renameTitleAfterStart?: string;
       title?: string;
     } = {}
@@ -1026,6 +1034,14 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       };
     }>('/api/createAgentSession', {
       agentId: agent.agentId,
+      /*
+      CDXC:DraftSessions 2026-09-02:
+      A promptless launch (Handoff / Export) is a draft exactly like a sidebar
+      launch: chat-eligible from the first frame instead of only once the
+      agent's hooks report a conversation id. Never combined with a prompt —
+      the prompt paths below promote the row the moment the prompt is sent.
+      */
+      ...(options.draft && !normalizeNonEmptyString(prompt) ? { draft: true } : {}),
       launchSettings: {
         agentCommand: agent.command,
         icon: agent.icon,
@@ -1043,7 +1059,11 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     if (!sessionId) {
       throw new Error(options.errorMessage ?? 'Could not create an agent session in the worktree.');
     }
-    this.focusLocalWorkspaceSession(project.projectId, sessionId);
+    this.focusLocalWorkspaceSession(
+      project.projectId,
+      sessionId,
+      options.preferredInterface === 'chat' ? { preferredInterface: 'chat' } : undefined
+    );
     const renameTitle = normalizeNonEmptyString(options.renameTitleAfterStart);
     if (normalizeNonEmptyString(prompt) || renameTitle) {
       const renameCommand = renameTitle
@@ -1070,13 +1090,15 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     agentId: string,
     prompt: string,
     title: string,
-    options: { firstUserInputDraft?: string } = {}
+    options: { draft?: boolean; firstUserInputDraft?: string; preferredInterface?: PreferredAgentInterface } = {}
   ): Promise<void> {
     const response = await this.requestRemoteGxserver<GpuiGxserverCreatedSessionResult>(
       remoteScope.machineId,
       '/api/createAgentSession',
       {
         agentId,
+        // CDXC:DraftSessions 2026-09-02: same draft rule as the local helper.
+        ...(options.draft && !normalizeNonEmptyString(prompt) ? { draft: true } : {}),
         projectId: remoteScope.projectId,
         requireLaunchCommand: true,
         runtimeSettings: this.createFirstPromptTitleRuntimeSettings(prompt, options.firstUserInputDraft),
@@ -1098,6 +1120,14 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
         projectId,
         sessionId,
       });
+      if (options.preferredInterface === 'chat') {
+        this.postRemoteSessionNativeAction(
+          'openRemoteSessionTerminal',
+          { machineId: remoteScope.machineId, projectId, sessionId },
+          { agentId, type: 'runSidebarAgent' },
+          { preferredInterface: 'chat' }
+        );
+      }
     }
     await this.refreshRemotePresentationFromGxserver(remoteScope.machineId).catch(() => undefined);
   },

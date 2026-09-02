@@ -4,11 +4,13 @@ Split out of the single 21,861-line `gxserver-runtime.ts`. See `core.ts` for
 how the runtime's methods are re-attached.
 */
 import type { GpuiSidebarRuntime } from './core';
+import { createGpuiSidebarSettings } from './helpers/bootstrap';
 import { normalizeNonEmptyString } from './helpers/records';
 import { parseGpuiRemotePresentationSessionId } from './helpers/remote-presentation';
 import { createExportedTranscriptMentionDraft } from './helpers/terminal-lifecycle';
 import type { GpuiExportTranscriptRequestContext } from './types-and-protocol';
 import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import { resolveEffectivePreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import { parseGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type { GxserverExportSessionTranscriptResult } from '@/packages/shared/gxserver-protocol';
 import { createAgentSessionDefaultTitle } from '@/packages/shared/session-grid-contract';
@@ -251,16 +253,30 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
     provider starts and stops there. Nothing on this side sends a prompt or an
     Enter, so the conversation only begins when the user writes their own
     prompt around the mention and submits it themselves.
+
+    CDXC:SessionChatLaunchDraft 2026-09-02:
+    The row is a draft, like every other promptless sidebar launch, so Chat
+    View is available from the first frame instead of only after the agent's
+    hooks report a conversation id — the old non-draft row left the Chat
+    toggle claiming hooks were missing. When the user's Default Agent View for
+    this agent is Chat, the session also opens straight in Chat and the
+    desktop claims the staged mention for the chat composer before it is ever
+    typed into the parked terminal. A Terminal preference keeps the terminal
+    exactly as before.
     */
     const draft = createExportedTranscriptMentionDraft(exported.path);
     const title = createAgentSessionDefaultTitle(agent.name);
+    const preferredInterface = resolveEffectivePreferredAgentInterface(
+      createGpuiSidebarSettings(this.runtimeSettings),
+      agent.agentId
+    );
     if (exported.machineId) {
       await this.createRemoteAgentSessionForProject(
         { machineId: exported.machineId, projectId: exported.projectId },
         agent.agentId,
         '',
         title,
-        { firstUserInputDraft: draft }
+        { draft: true, firstUserInputDraft: draft, preferredInterface }
       ).catch((error: unknown) => {
         this.postRemoteToast('error', 'Could not start the conversation', {
           description: error instanceof Error ? error.message : String(error),
@@ -273,8 +289,10 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       return;
     }
     await this.createAgentSessionRecordForProject(project, agent, '', {
+      draft: true,
       errorMessage: 'Could not create the new agent session.',
       firstUserInputDraft: draft,
+      preferredInterface,
       title,
     }).catch((error: unknown) => {
       this.postSidebarActionToast('error', 'Could not start the conversation', {
