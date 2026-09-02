@@ -260,10 +260,17 @@ pub(crate) fn gpui_create_local_project_workspace_terminal(
     };
     #[cfg(target_os = "windows")]
     let plan = gpui_local_workspace_attach_terminal_plan_from_result(&result, None, None)?;
+    /*
+    Wake, not Attach: the session was created this instant, so its zmx
+    provider is always missing. /api/wakeSession starts the provider inside
+    the same round trip and returns complete attach metadata, collapsing the
+    former attach -> startSessionProvider -> attach sequence (three serial
+    RPCs) into one.
+    */
     #[cfg(not(target_os = "windows"))]
     let plan = gpui_prepare_local_workspace_attach_terminal_plan(
         &key,
-        GpuiLocalWorkspaceAttachIntent::Attach,
+        GpuiLocalWorkspaceAttachIntent::Wake,
     )?;
     Ok((key, plan))
 }

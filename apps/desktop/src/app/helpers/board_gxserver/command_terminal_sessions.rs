@@ -70,9 +70,21 @@ pub(crate) fn gpui_close_command_terminal_gxserver_session(
     {
         return true;
     }
+    /*
+    CDXC:GxserverActiveOnlySessionList 2026-09-01:
+    This is only asking whether the closed row is still live, after the
+    `close` transition already ran, so it wants the project's active rows —
+    not the project's entire stopped agent history, which on a working
+    machine is thousands of rows and megabytes of JSON per close. A row the
+    transition successfully stopped is closed for this check's purposes,
+    which is exactly what `includeStopped: false` reports.
+    */
     gpui_gxserver_rpc_result(
         "/api/listSessions",
-        &serde_json::json!({ "projectId": key.project_id.as_str() }),
+        &serde_json::json!({
+            "includeStopped": false,
+            "projectId": key.project_id.as_str(),
+        }),
         Duration::from_secs(10),
     )
     .ok()
