@@ -1,0 +1,15 @@
+# CDXC:LocalBuildCache 2026-09-02: every rustc invocation for the gxserver crate
+# goes through sccache so dependency crates are compiled once per source+flags
+# and replayed from the local disk cache afterwards, even after `cargo clean`.
+# Cargo only reads this file when it is invoked from inside server/;
+# prepare-macos-runtime.sh cds here before building so `bun run start` and
+# `bun run build` are covered. `RUSTC_WRAPPER` in the environment overrides it.
+#
+# sccache is a hard requirement here, not an optional accelerator: if it is
+# missing cargo fails with "could not execute process `sccache`". Install it
+# with `brew install sccache` (macOS) or `cargo install sccache`. Cache size
+# and location are configured in the user-level sccache config (see the
+# "Building from source" section in README.md), not here: the sccache server
+# is a long-lived daemon and only reads its configuration when it starts.
+[build]
+rustc-wrapper = "sccache"

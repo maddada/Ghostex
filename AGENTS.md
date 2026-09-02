@@ -341,6 +341,7 @@ Corollary: after you verify a surgical bug fix, tell the user it should be commi
 - Never run "bun run start" or any command that would restart the app unless I ask you to.
 - TypeScript is gated by three configs, not one: `bun run typecheck` (root — `packages/shared`, `packages/core-ui`, `packages/components`, `apps/desktop/views`, `apps/mobile/views`), `bun run web:typecheck` (`apps/web/tsconfig.json`), and `bun run desktop:typecheck` (`apps/desktop/tsconfig.json`, which covers `apps/desktop/sidebar/` and `apps/desktop/views/`). A change under `apps/desktop/sidebar/` is only checked by `desktop:typecheck`.
 - Run desktop-crate cargo commands **from inside `apps/desktop/`**, not with `--manifest-path` from the repo root. The crate pins its own toolchain in `apps/desktop/rust-toolchain.toml` (1.95.0), and `--manifest-path` from the root resolves the root toolchain instead and fails on dependency code that needs the pin.
+- Local Rust builds of `apps/desktop/` and `server/` require `sccache` on PATH: both crates set `rustc-wrapper = "sccache"` in their `.cargo/config.toml` (cargo reads it only when run from inside the crate directory). If cargo fails with `could not execute process 'sccache'`, install it with `brew install sccache`; never work around it by deleting the config or building with `--manifest-path` from the root. Setup details are in README.md, "Building from source".
 
 ### Before committing and pushing: formatting and file-size upkeep
 

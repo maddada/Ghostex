@@ -1106,8 +1106,12 @@ EOF
 	fi
 
 	# CDXC:GxserverRustBuild 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
-	GHOSTEX_GPUI_MARKETING_VERSION="$marketing_version" \
-		"$cargo_bin" build --release --bins --manifest-path "$GXSERVER_RS_ROOT/Cargo.toml" --target "$cargo_target"
+	# CDXC:LocalBuildCache 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `bun run start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (sccache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
+	(
+		cd "$GXSERVER_RS_ROOT"
+		GHOSTEX_GPUI_MARKETING_VERSION="$marketing_version" \
+			"$cargo_bin" build --release --bins --manifest-path "$GXSERVER_RS_ROOT/Cargo.toml" --target "$cargo_target"
+	)
 	if ! binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
 		echo "Rust gxserver binary does not contain $GHOSTEX_MACOS_ARCH: $output_path" >&2
 		exit 1

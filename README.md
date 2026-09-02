@@ -238,6 +238,36 @@ Ghostex is moving quickly, and help is welcome on platform ports, missing agent 
 
 Join the Discord: https://discord.gg/df7b3G92CS
 
+### Building from source
+
+`bun run start` builds and launches the desktop app; `bun run build` only packages it. Both compile
+the desktop crate (`apps/desktop/`, Rust 1.95.0 pinned by its `rust-toolchain.toml`) and the gxserver
+crate (`server/`, your default `rustup` toolchain). Besides Bun, Rust, CMake, Ninja, and Zig 0.16, local
+Rust builds require **sccache**:
+
+```sh
+brew install sccache
+```
+
+Both crates set `rustc-wrapper = "sccache"` in their `.cargo/config.toml`, so every `cargo` invocation
+run from inside `apps/desktop/` or `server/` (the build scripts, `bun run release:preflight --cargo`,
+rust-analyzer, your shell) compiles each dependency crate once and replays it from the local disk cache
+afterwards, including after `cargo clean`. If sccache is missing, cargo fails with
+`could not execute process 'sccache'` instead of silently building without it.
+
+Cache location and size come from the user-level sccache config, because the sccache server is a
+daemon that reads its configuration once at startup. Create
+`~/Library/Application Support/Mozilla.sccache/config` (Linux: `~/.config/sccache/config`) with:
+
+```toml
+[cache.disk]
+dir = "/Users/<you>/Library/Caches/Mozilla.sccache"
+size = 21474836480 # 20 GiB; the default is 10 GiB
+```
+
+Then `sccache --stop-server` so the next build starts a server with the new settings, and check with
+`sccache --show-stats` (it prints the cache location and max size; run it after a build to see hits).
+
 ## Credits
 
 Ghostex builds on open source work from these projects and communities:
