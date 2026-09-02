@@ -1,0 +1,648 @@
+name: Warm the Rust build cache
+
+# CDXC:ReleaseSccacheWarming 2026-09-02:
+# The four release build workflows compile through sccache with the GitHub
+# Actions cache backend (SCCACHE_GHA_ENABLED / RUSTC_WRAPPER=sccache). That only
+# shortens a release when the cache is already warm at dispatch time: cache
+# entries that go unused for 7 days are evicted, the repository is capped at
+# 10 GB, and releases happen roughly weekly or less, so without this workflow
+# the first release after any cargo change compiled almost everything cold
+# (8.5.0: macOS 15m28s of cargo on the 31-minute critical path, Windows ~19m,
+# Linux ~11m). This workflow runs the same compiles on the same runners with
+# the same env after every push that can change the Rust build, plus twice a
+# week so the entries never age out.
+#
+# Design: standalone jobs that call the release build scripts' compile entry
+# points (macos.sh --phase build-server / --phase build-desktop, windows.ps1
+# -Phase compile, build-remote-gxserver-linux-release.sh --arch). Reusing the
+# release workflows through workflow_call was rejected: every later step in
+# those files (certificate import, notarization, artifact awaits, packaging,
+# attestation, uploads) would need an `if:` guard and the macOS workflow marks
+# its signing secrets `required: true`, so a warm-only mode would have touched
+# ~20 release-path steps across all four files for the same compile command
+# this file reaches directly. Only the Linux desktop job has no script entry
+# point that reaches cargo without the gxserver/code-server archives, so it
+# runs the underlying cargo command itself; that command is cited to the exact
+# script line it mirrors, and tooling/release-workflow-assertions.mjs keeps
+# the cited literal, the runner labels, the SCCACHE_GHA_VERSION namespaces,
+# the sccache action tag, and the cargo-affecting job env in lockstep with the
+# release workflows (release preflight fails on drift).
+#
+# THE ONE RULE: an sccache key covers the rustc binary and version, every rustc
+# argument (target, profile, features, -C metadata, RUSTFLAGS, link args from
+# build scripts), the source and extern rlib hashes, every CARGO_* env var, the
+# cwd, and every env var rustc reports in its dep-info `env-dep` lines (the
+# values read through env!/option_env!). Any deviation from the release job
+# in toolchain, target, flags, cwd, or CARGO_* env produces different keys and
+# zero hits, silently defeating this whole workflow. Copy the release job;
+# never "improve" the compile here.
+#
+# Marketing version: the placeholder WARM_MARKETING_VERSION below is fine.
+# GHOSTEX_GPUI_MARKETING_VERSION is only read by the workspace crates'
+# build.rs (server/build.rs, apps/desktop/build.rs), which re-export it as the
+# rustc env GHOSTEX_BUILD_MARKETING_VERSION consumed through env!/option_env!
+# in server telemetry, desktop telemetry, and the Windows installer. rustc
+# lists such reads as `# env-dep:` lines in dep-info and sccache hashes them,
+# so the release build misses only on those workspace crates (which change on
+# nearly every push anyway) and can never be served a placeholder-version
+# object. Third-party crates never see the variable and hit normally.
+#
+# What is deliberately NOT mirrored, because none of it reaches cargo: Beads
+# (Go) builds, code-server npm installs, ripgrep seeding, signing, notarization,
+# artifact awaits/downloads, packaging, attestation, uploads, the Windows
+# wedged-runner watchdog (a wedge here just times the job out and the next push
+# retries), and `fetch-depth: 0` (nothing in the compile reads git history).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/desktop/**'
+      # Pure web trees under apps/desktop never reach rustc.
+      - '!apps/desktop/sidebar/**'
+      - '!apps/desktop/views/**'
+      - '!apps/desktop/test/**'
+      - 'server/**'
+      - 'packages/find/**'
+      - 'packages/paths/**'
+      - 'apps/history-cli/**'
+      - '**/Cargo.lock'
+      - '**/Cargo.toml'
+      - '**/rust-toolchain.toml'
+      # Vendored in-tree (libghostty-vt is built by apps/desktop/build.rs).
+      - '.dependencies/ghostty/**'
+      # Submodule gitlinks: a pin bump shows up as the gitlink path itself.
+      - '.dependencies/zed'
+      - '.dependencies/gpui-component'
+      - '.dependencies/cef-rs'
+      - '.dependencies/zmx'
+      - '.github/workflows/release-gpui-macos.yml'
+      - '.github/workflows/release-gpui-windows.yml'
+      - '.github/workflows/release-gpui-linux.yml'
+      - '.github/workflows/release-gpui-gxserver.yml'
+      - '.github/workflows/warm-rust-build-cache.yml'
+      - 'tooling/release-gpui/macos.sh'
+      - 'tooling/release-gpui/windows.ps1'
+      - 'tooling/release-gpui/linux-stage.sh'
+      - 'tooling/release-gpui/prepare-references.sh'
+      - 'tooling/release-gpui/prepare-zig.ps1'
+      - 'tooling/release-gpui/fetch-zig-deps.sh'
+      - 'tooling/build-remote-gxserver-linux-release.sh'
+  schedule:
+    # Monday and Thursday 04:00 UTC: at most a 4-day gap, under the 7-day
+    # unused-entry eviction window, even if no cargo-relevant push happens.
+    - cron: '0 4 * * 1,4'
+  workflow_dispatch:
+
+# Back-to-back pushes must not pile up runners; only the newest commit matters.
+concurrency:
+  group: warm-rust-build-cache
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Placeholder release version for the build scripts' MAJOR.MINOR.PATCH
+  # checks. See the marketing-version note at the top of this file.
+  WARM_MARKETING_VERSION: 0.0.0
+
+jobs:
+  # Mirrors jobs.build in .github/workflows/release-gpui-macos.yml.
+  macos_arm64:
+    runs-on: macos-15
+    timeout-minutes: 75
+    env:
+      CEF_PATH: ${{ github.workspace }}/apps/desktop/build/cef-cache
+      ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_VERSION: macos-arm64-1
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      # macos.sh requires `bun` on PATH in its prologue.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Resolve dependency cache keys
+        id: cache_keys
+        run: |
+          {
+            printf 'cef=%s\n' "$(git rev-parse HEAD:.dependencies/cef-rs)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/ghostty)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore Cargo registry cache
+        uses: actions/cache@v6
+        id: cargo_cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-reg-macos-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
+          restore-keys: cargo-reg-macos-
+      - name: Restore CEF distribution cache
+        uses: actions/cache@v6
+        id: cef_cache
+        with:
+          path: apps/desktop/build/cef-cache
+          key: cef-macos-arm64-${{ steps.cache_keys.outputs.cef }}
+      - name: Restore Zig package cache
+        uses: actions/cache@v6
+        id: zig_cache
+        with:
+          path: |
+            build/zig-global-cache
+            ~/.cache/zig
+          key: zig-macos-arm64-${{ steps.cache_keys.outputs.zig }}
+          restore-keys: zig-macos-arm64-
+      # Warm-only cache. apps/desktop/build.rs links the GhosttyKit static
+      # archive into the ghostex-gpui binaries, so the desktop cargo build
+      # cannot finish without it. The release builds it fresh inside
+      # `macos.sh --phase prepare`; here it is a pure function of the vendored
+      # ghostty tree and the pinned Zig, so it is cached on that revision. The
+      # archive is a link input only, never an sccache key input.
+      - name: Restore GhosttyKit build cache
+        uses: actions/cache@v6
+        id: ghosttykit_cache
+        with:
+          path: .dependencies/ghostty/macos/GhosttyKit.xcframework
+          key: warm-ghosttykit-macos-arm64-zig0.16.0-${{ steps.cache_keys.outputs.zig }}
+      - name: Install build tools
+        run: tooling/release-gpui/retry.sh 3 5 -- brew install cmake ninja rsync xcodegen
+      - name: Install pinned Zig toolchain
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.16.0" ]]
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
+            "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
+      # The release runs this inside `macos.sh --phase prepare`
+      # (tooling/release-gpui/macos.sh, phase_prepare). It checks out the pinned
+      # zed / cef-rs / gpui-component path dependencies the desktop crate
+      # builds against.
+      - name: Prepare pinned source references
+        run: tooling/release-gpui/prepare-references.sh
+      - name: Pre-fetch Zig package dependencies
+        run: tooling/release-gpui/fetch-zig-deps.sh ghostty
+      # DUPLICATED COMMAND (not a cargo command): mirrors the GhosttyKit build
+      # in tooling/release-gpui/macos.sh phase_prepare, lines 143-160 (the
+      # `zig build -Demit-xcframework -Dxcframework-target=universal
+      # -Demit-macos-app=false` block with DEVELOPER_DIR / SDKROOT /
+      # GHOSTTY_METAL_DEVELOPER_DIR). Only runs on a GhosttyKit cache miss.
+      - name: Build GhosttyKit
+        if: ${{ steps.ghosttykit_cache.outputs.cache-hit != 'true' }}
+        run: |
+          [[ "$("$GHOSTEX_ZIG" version)" == "0.16.0" ]]
+          GHOSTTY_DEVELOPER_DIR="$(xcode-select -p)"
+          GHOSTTY_SDKROOT="$(DEVELOPER_DIR="$GHOSTTY_DEVELOPER_DIR" xcrun --sdk macosx --show-sdk-path)"
+          cd .dependencies/ghostty
+          env \
+            DEVELOPER_DIR="$GHOSTTY_DEVELOPER_DIR" \
+            SDKROOT="$GHOSTTY_SDKROOT" \
+            GHOSTTY_METAL_DEVELOPER_DIR="$GHOSTTY_DEVELOPER_DIR" \
+            "$GHOSTEX_ZIG" build \
+            -Demit-xcframework \
+            -Dxcframework-target=universal \
+            -Demit-macos-app=false
+          [[ -d macos/GhosttyKit.xcframework ]]
+      # macos.sh refuses every phase but `prepare` unless the release output
+      # directory already exists (tooling/release-gpui/macos.sh line 68-72);
+      # `prepare` itself needs the gxserver and code-server archives, which no
+      # cargo build reads, so the directory is created directly.
+      - name: Create the release output directory macos.sh expects
+        run: mkdir -p "build/release-gpui/$WARM_MARKETING_VERSION/macos-arm64"
+      # Same entry points, same cwd (repo root), same args as the release job's
+      # "Cargo build gxserver (server crates)" and "Cargo build ghostex-gpui
+      # (desktop crate)" steps. The env the phases hand cargo lives inside
+      # macos.sh (phase_build_server / phase_build_desktop), so it cannot drift.
+      - name: Cargo build gxserver (server crates)
+        run: tooling/release-gpui/macos.sh --phase build-server "$WARM_MARKETING_VERSION"
+      - name: Cargo build ghostex-gpui (desktop crate)
+        run: tooling/release-gpui/macos.sh --phase build-desktop "$WARM_MARKETING_VERSION"
+      - name: Report sccache statistics
+        if: ${{ always() }}
+        run: '"${SCCACHE_PATH:-sccache}" --show-stats'
+      - name: Record job observability
+        if: ${{ always() }}
+        run: |
+          {
+            echo "- Cargo registry cache: ${{ steps.cargo_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- CEF distribution cache: ${{ steps.cef_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- GhosttyKit build cache: ${{ steps.ghosttykit_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Mirrors jobs.build in .github/workflows/release-gpui-windows.yml with
+  # inputs.arch = x64.
+  windows_x64:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_VERSION: windows-x64-1
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Resolve dependency cache keys
+        id: cache_keys
+        shell: bash
+        run: |
+          {
+            printf 'cef=%s\n' "$(git rev-parse HEAD:.dependencies/cef-rs)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/ghostty)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore Cargo registry cache
+        uses: actions/cache@v6
+        id: cargo_cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-reg-windows-x64-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
+          restore-keys: cargo-reg-windows-x64-
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Restore CEF distribution cache
+        uses: actions/cache@v6
+        id: cef_cache
+        with:
+          path: apps/desktop/build/cef-cache
+          key: cef-windows-x64-${{ steps.cache_keys.outputs.cef }}
+      - name: Restore Zig package cache
+        uses: actions/cache@v6
+        id: zig_cache
+        with:
+          path: build/zig-global-cache
+          key: zig-windows-x64-${{ steps.cache_keys.outputs.zig }}
+          restore-keys: zig-windows-x64-
+      - name: Install pinned Zig
+        shell: pwsh
+        run: tooling/release-gpui/prepare-zig.ps1 -Arch x64
+      - name: Install JavaScript dependencies
+        shell: bash
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+      # Same entry point, cwd (workspace root), and -Phase compile as the
+      # release job's "Compile the desktop app (sidebar bundle + cargo build)"
+      # step, which runs this script under its watchdog with
+      # -WorkingDirectory $env:GITHUB_WORKSPACE. The GHOSTEX_WINDOWS_* env the
+      # release step carries is read by the package phase only.
+      - name: Compile the desktop app (sidebar bundle + cargo build)
+        shell: pwsh
+        run: tooling/release-gpui/windows.ps1 -Version $env:WARM_MARKETING_VERSION -Arch x64 -Phase compile
+      - name: Report sccache statistics
+        if: ${{ always() }}
+        shell: pwsh
+        run: sccache --show-stats
+      - name: Record job observability
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "- Cargo registry cache: ${{ steps.cargo_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- CEF distribution cache: ${{ steps.cef_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Mirrors jobs.build in .github/workflows/release-gpui-windows.yml with
+  # inputs.arch = arm64.
+  windows_arm64:
+    runs-on: windows-11-vs2026-arm
+    timeout-minutes: 60
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_VERSION: windows-arm64-1
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Resolve dependency cache keys
+        id: cache_keys
+        shell: bash
+        run: |
+          {
+            printf 'cef=%s\n' "$(git rev-parse HEAD:.dependencies/cef-rs)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/ghostty)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore Cargo registry cache
+        uses: actions/cache@v6
+        id: cargo_cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-reg-windows-arm64-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
+          restore-keys: cargo-reg-windows-arm64-
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Restore CEF distribution cache
+        uses: actions/cache@v6
+        id: cef_cache
+        with:
+          path: apps/desktop/build/cef-cache
+          key: cef-windows-arm64-${{ steps.cache_keys.outputs.cef }}
+      - name: Restore Zig package cache
+        uses: actions/cache@v6
+        id: zig_cache
+        with:
+          path: build/zig-global-cache
+          key: zig-windows-arm64-${{ steps.cache_keys.outputs.zig }}
+          restore-keys: zig-windows-arm64-
+      - name: Install pinned Zig
+        shell: pwsh
+        run: tooling/release-gpui/prepare-zig.ps1 -Arch arm64
+      - name: Install JavaScript dependencies
+        shell: bash
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+      # See windows_x64.
+      - name: Compile the desktop app (sidebar bundle + cargo build)
+        shell: pwsh
+        run: tooling/release-gpui/windows.ps1 -Version $env:WARM_MARKETING_VERSION -Arch arm64 -Phase compile
+      - name: Report sccache statistics
+        if: ${{ always() }}
+        shell: pwsh
+        run: sccache --show-stats
+      - name: Record job observability
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "- Cargo registry cache: ${{ steps.cargo_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- CEF distribution cache: ${{ steps.cef_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Mirrors jobs.build in .github/workflows/release-gpui-linux.yml.
+  linux_x64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CEF_PATH: ${{ github.workspace }}/apps/desktop/build/cef-cache
+      CARGO_INCREMENTAL: '0'
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_VERSION: linux-x64-1
+      ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Install sccache
+        id: sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Resolve dependency cache keys
+        id: cache_keys
+        run: |
+          {
+            printf 'cef=%s\n' "$(git rev-parse HEAD:.dependencies/cef-rs)"
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/ghostty)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore Cargo registry cache
+        uses: actions/cache@v6
+        id: cargo_cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-reg-linux-${{ hashFiles('apps/desktop/Cargo.lock', 'server/Cargo.lock') }}
+          restore-keys: cargo-reg-linux-
+      - name: Restore CEF distribution cache
+        uses: actions/cache@v6
+        id: cef_cache
+        with:
+          path: apps/desktop/build/cef-cache
+          key: cef-linux-x64-${{ steps.cache_keys.outputs.cef }}
+      - name: Restore Zig package cache
+        uses: actions/cache@v6
+        id: zig_cache
+        with:
+          path: |
+            build/zig-global-cache
+            ~/.cache/zig
+          key: zig-linux-x64-${{ steps.cache_keys.outputs.zig }}
+          restore-keys: zig-linux-x64-
+      - name: Install native packaging dependencies
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y cmake ninja-build pkg-config rpm zstd libasound2-dev libfontconfig1-dev libfreetype-dev libx11-dev libxcb1-dev libxkbcommon-x11-dev
+      - name: Install pinned Zig toolchain
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          ZIG_BIN="$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig"
+          [[ "$($ZIG_BIN version)" == "0.16.0" ]]
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' "$ZIG_BIN" "$ZIG_BIN" >> "$GITHUB_ENV"
+      # The release runs this from tooling/release-gpui/linux-stage.sh line 22.
+      - name: Prepare pinned source references
+        run: tooling/release-gpui/prepare-references.sh
+      - name: Pre-fetch Zig package dependencies
+        run: tooling/release-gpui/fetch-zig-deps.sh ghostty
+      # DUPLICATED CARGO COMMAND. linux-stage.sh cannot be used as the entry
+      # point: it refuses to start without the gxserver runtime package and the
+      # verified code-server archive, neither of which the cargo build reads.
+      # This mirrors apps/desktop/scripts/build-linux-app.sh lines 69-72
+      # (`cd "$GPUI_DIR"; cargo build --release --bins`) as invoked by
+      # tooling/release-gpui/linux-stage.sh lines 35-39, which is the only
+      # place in that chain that sets GHOSTEX_GPUI_MARKETING_VERSION. CEF_PATH
+      # is the job env above, which build-linux-app.sh exports verbatim when
+      # set. The remaining linux-stage.sh env (GHOSTEX_ON_DEMAND_ASSETS,
+      # GHOSTEX_CODE_SERVER_COMPONENT_VERSION,
+      # GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE) is read by the staging
+      # steps after cargo, never by build.rs or any env!() in the crates.
+      # Watched for drift by tooling/release-workflow-assertions.mjs.
+      - name: Cargo build ghostex-gpui (desktop crate)
+        working-directory: apps/desktop
+        env:
+          GHOSTEX_GPUI_MARKETING_VERSION: ${{ env.WARM_MARKETING_VERSION }}
+        run: cargo build --release --bins
+      - name: Report sccache statistics
+        if: ${{ always() && steps.sccache.conclusion == 'success' }}
+        run: sccache --show-stats
+      - name: Record job observability
+        if: ${{ always() }}
+        run: |
+          {
+            echo "- Cargo registry cache: ${{ steps.cargo_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- CEF distribution cache: ${{ steps.cef_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Mirrors jobs.build in .github/workflows/release-gpui-gxserver.yml with
+  # inputs.arch = x64. The whole release build script runs (cargo, the zmx Zig
+  # build, package staging) because its cargo invocation carries the musl
+  # cross-link env (CC_*/AR_* Zig wrappers, CARGO_TARGET_*_LINKER=rust-lld,
+  # CARGO_TARGET_*_RUSTFLAGS) that sccache keys on; re-deriving that env here
+  # would be the drift this workflow exists to avoid. Without
+  # GHOSTEX_BEADS_PREBUILT_BINARY the script stages the pinned Beads release
+  # archive (a verified download, no Go build).
+  gxserver_linux_x64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: '0'
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_VERSION: gxserver-linux-x64-1
+      ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Resolve dependency cache keys
+        id: cache_keys
+        run: |
+          {
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/zmx)"
+            printf 'cargo=%s\n' "$(git rev-parse HEAD:server)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore Cargo registry cache
+        uses: actions/cache@v6
+        id: cargo_cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-reg-gxserver-${{ runner.os }}-x64-${{ steps.cache_keys.outputs.cargo }}
+          restore-keys: cargo-reg-gxserver-${{ runner.os }}-x64-
+      - name: Restore Zig package cache
+        uses: actions/cache@v6
+        id: zig_cache
+        with:
+          path: |
+            build/zig-global-cache
+            ~/.cache/zig
+          key: zig-gxserver-${{ runner.os }}-x64-${{ steps.cache_keys.outputs.zig }}
+          restore-keys: zig-gxserver-${{ runner.os }}-x64-
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install sccache
+        id: sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Install native build dependencies
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
+      - name: Install pinned Zig toolchain
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
+            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" \
+            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" >> "$GITHUB_ENV"
+      - name: Install Rust musl targets
+        run: tooling/release-gpui/retry.sh 3 5 -- rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+      - name: Install JavaScript dependencies
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+      - name: Prepare source dependencies
+        run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 tooling/release-gpui/prepare-references.sh
+      - name: Pre-fetch Zig package dependencies
+        run: tooling/release-gpui/fetch-zig-deps.sh zmx
+      # Same entry point, cwd, and --arch as the release job's "Build remote
+      # runtime" step (minus its tarball/manifest wrap-up).
+      - name: Build remote runtime
+        run: tooling/build-remote-gxserver-linux-release.sh --arch x64
+      - name: Report sccache statistics
+        if: ${{ always() && steps.sccache.conclusion == 'success' }}
+        run: sccache --show-stats
+      - name: Record job observability
+        if: ${{ always() }}
+        run: |
+          {
+            echo "- Cargo registry cache: ${{ steps.cargo_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Mirrors jobs.build in .github/workflows/release-gpui-gxserver.yml with
+  # inputs.arch = arm64. See gxserver_linux_x64.
+  gxserver_linux_arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: '0'
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_VERSION: gxserver-linux-arm64-1
+      ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+      - name: Resolve dependency cache keys
+        id: cache_keys
+        run: |
+          {
+            printf 'zig=%s\n' "$(git rev-parse HEAD:.dependencies/zmx)"
+            printf 'cargo=%s\n' "$(git rev-parse HEAD:server)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Restore Cargo registry cache
+        uses: actions/cache@v6
+        id: cargo_cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-reg-gxserver-${{ runner.os }}-arm64-${{ steps.cache_keys.outputs.cargo }}
+          restore-keys: cargo-reg-gxserver-${{ runner.os }}-arm64-
+      - name: Restore Zig package cache
+        uses: actions/cache@v6
+        id: zig_cache
+        with:
+          path: |
+            build/zig-global-cache
+            ~/.cache/zig
+          key: zig-gxserver-${{ runner.os }}-arm64-${{ steps.cache_keys.outputs.zig }}
+          restore-keys: zig-gxserver-${{ runner.os }}-arm64-
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install sccache
+        id: sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Install native build dependencies
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
+          tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
+      - name: Install pinned Zig toolchain
+        run: |
+          tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
+          tooling/release-gpui/retry.sh 3 5 -- "$HOME/.local/bin/mise" install zig@0.16.0
+          printf 'ZIG=%s\nGHOSTEX_ZIG=%s\n' \
+            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" \
+            "$HOME/.local/share/mise/installs/zig/0.16.0/bin/zig" >> "$GITHUB_ENV"
+      - name: Install Rust musl targets
+        run: tooling/release-gpui/retry.sh 3 5 -- rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+      - name: Install JavaScript dependencies
+        run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile
+      - name: Prepare source dependencies
+        run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 tooling/release-gpui/prepare-references.sh
+      - name: Pre-fetch Zig package dependencies
+        run: tooling/release-gpui/fetch-zig-deps.sh zmx
+      - name: Build remote runtime
+        run: tooling/build-remote-gxserver-linux-release.sh --arch arm64
+      - name: Report sccache statistics
+        if: ${{ always() && steps.sccache.conclusion == 'success' }}
+        run: sccache --show-stats
+      - name: Record job observability
+        if: ${{ always() }}
+        run: |
+          {
+            echo "- Cargo registry cache: ${{ steps.cargo_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+            echo "- Zig package cache: ${{ steps.zig_cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

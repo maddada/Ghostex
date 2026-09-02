@@ -64,6 +64,10 @@ jobs:
       GHOSTEX_RELEASE_PLAN: ${{ inputs.plan }}
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
+      CARGO_INCREMENTAL: '0'
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_VERSION: linux-x64-1
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
     steps:
       - uses: actions/checkout@v6
@@ -73,6 +77,17 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
+      # sccache with the GitHub Actions cache backend. The registry cache below
+      # only stores crate *sources*; every `cargo build --release` on this
+      # runner was a cold compile, ~50% of the 31-minute critical path on 8.5.0.
+      # RUSTC_WRAPPER/SCCACHE_GHA_ENABLED are job-level env so the wrapper
+      # reaches every cargo invocation, including the one inside
+      # build-linux-app.sh (via linux-stage.sh). Zig builds are not cargo and are
+      # untouched. Pinned to an exact tag; the release preflight asserts every
+      # release build workflow uses this same tag.
+      - name: Install sccache
+        id: sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
       - name: Validate the requested package formats
         env:
           REQUESTED_PACKAGES: ${{ inputs.packages }}
@@ -282,6 +297,9 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-gpui/${{ inputs.version }}/linux-deb-x64/ghostex_${{ inputs.version }}_amd64.deb
+      - name: Report sccache statistics
+        if: ${{ always() && steps.sccache.conclusion == 'success' }}
+        run: sccache --show-stats
       - name: Record job observability
         if: ${{ always() }}
         run: |

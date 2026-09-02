@@ -61,6 +61,18 @@ jobs:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
       ZIG_GLOBAL_CACHE_DIR: ${{ github.workspace }}/build/zig-global-cache
+      # CDXC:ReleaseSccache 2026-09-02: both release cargo builds (server/ from
+      # prepare-macos-runtime.sh, apps/desktop/ from build-macos-app.sh) compiled
+      # every crate cold on each run. sccache with the Actions cache backend
+      # caches the rustc outputs; the job-level env reaches every cargo
+      # invocation, including the ones nested inside the macOS build scripts.
+      # Incremental compilation is off because sccache cannot cache incremental
+      # artifacts and release profiles never use them. The namespace is
+      # platform-specific so the four release platforms never share one cache.
+      SCCACHE_GHA_ENABLED: 'true'
+      SCCACHE_GHA_VERSION: macos-arm64-1
+      RUSTC_WRAPPER: sccache
+      CARGO_INCREMENTAL: '0'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -72,6 +84,8 @@ jobs:
           ref: 672d942083a1fd0c8603fa1e77620c58ba9d47c8
           fetch-depth: 1
           path: build/pinned-beads-source
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.11
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
@@ -282,9 +296,17 @@ jobs:
           mkdir -p build/remote-gxserver-linux/x64/package build/remote-gxserver-linux/arm64/package
           tar -xzf build/runtime-artifacts/x64/gxserver-linux-x64.tar.gz -C build/remote-gxserver-linux/x64/package
           tar -xzf build/runtime-artifacts/arm64/gxserver-linux-arm64.tar.gz -C build/remote-gxserver-linux/arm64/package
-      - name: Build, sign, notarize, and optionally generate appcast
+      # CDXC:ReleaseMacosPhases 2026-09-02: macos.sh used to run as one step
+      # (1423 s on run 33462783752), hiding where the time went. It now runs as
+      # one step per phase so the jobs API reports each phase's duration. Steps
+      # share no shell state, so the environment the single step used to carry
+      # is exported once to $GITHUB_ENV here (same literals, same values) and
+      # the two secrets are attached to every phase step. The two cargo phases
+      # pre-warm the exact builds the staging and assembly scripts run
+      # afterwards, so those scripts find every artifact fresh and the shipped
+      # binaries are still produced by their original commands.
+      - name: Export macOS release build environment
         env:
-          GH_TOKEN: ${{ github.token }}
           GHOSTEX_CODE_SIGN_IDENTITY: 'Developer ID Application: Mohamad Youssef (KTKP595G3B)'
           GHOSTEX_NOTARY_PROFILE: notarytool-profile
           GHOSTEX_BEADS_PREBUILT_BINARY: ${{ runner.temp }}/ghostex-pinned-beads/bd
@@ -294,14 +316,68 @@ jobs:
           GHOSTEX_CODE_SERVER_COMPONENT_VERSION: ${{ steps.code_server_identity.outputs.component_version }}
           GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-x64/${{ steps.code_server_identity.outputs.archive_name }}
           GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE: ${{ github.workspace }}/build/runtime-artifacts/code-server-arm64/code-server-${{ steps.code_server_identity.outputs.component_version }}-linux-arm64.tar.gz
+        run: |
+          for name in \
+            GHOSTEX_CODE_SIGN_IDENTITY \
+            GHOSTEX_NOTARY_PROFILE \
+            GHOSTEX_BEADS_PREBUILT_BINARY \
+            GHOSTEX_RELEASE_UPDATE_SPARKLE \
+            GHOSTEX_ON_DEMAND_LINUX_X64_ARCHIVE \
+            GHOSTEX_ON_DEMAND_LINUX_ARM64_ARCHIVE \
+            GHOSTEX_CODE_SERVER_COMPONENT_VERSION \
+            GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_X64_ARCHIVE \
+            GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE; do
+            printf '%s=%s\n' "$name" "${!name}" >> "$GITHUB_ENV"
+          done
+      - name: Prepare references, code-server archives, and GhosttyKit
+        env:
+          GH_TOKEN: ${{ github.token }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: tooling/release-gpui/macos.sh "${{ inputs.version }}"
+        run: tooling/release-gpui/macos.sh --phase prepare "${{ inputs.version }}"
+      - name: Cargo build gxserver (server crates)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: tooling/release-gpui/macos.sh --phase build-server "${{ inputs.version }}"
+      - name: Stage macOS runtime (code-server, zmx, beads, portless, gxserver package)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: tooling/release-gpui/macos.sh --phase stage-runtime "${{ inputs.version }}"
+      - name: Cargo build ghostex-gpui (desktop crate)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: tooling/release-gpui/macos.sh --phase build-desktop "${{ inputs.version }}"
+      - name: Assemble, sign, and validate Ghostex.app
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: tooling/release-gpui/macos.sh --phase assemble "${{ inputs.version }}"
+      - name: Create DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: tooling/release-gpui/macos.sh --phase dmg "${{ inputs.version }}"
+      - name: Notarize and staple DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: tooling/release-gpui/macos.sh --phase notarize "${{ inputs.version }}"
+      - name: Generate appcast and write release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: tooling/release-gpui/macos.sh --phase finalize "${{ inputs.version }}"
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             build/release-gpui/${{ inputs.version }}/macos-arm64/ghostex-${{ inputs.version }}-arm64.dmg
             build/release-gpui/${{ inputs.version }}/macos-arm64/bd-darwin-arm64.tar.gz
+      - name: Report sccache statistics
+        if: ${{ always() }}
+        run: '"${SCCACHE_PATH:-sccache}" --show-stats'
       - name: Record job observability
         if: ${{ always() }}
         run: |

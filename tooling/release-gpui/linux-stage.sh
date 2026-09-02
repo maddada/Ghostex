@@ -9,6 +9,10 @@ PACKAGE_ROOT="${2:-$REPO_ROOT/build/release-gpui/linux-package-root}"
 release_gpui_require_version "$VERSION"
 release_gpui_require_command bun
 release_gpui_require_command cargo
+# CI sets RUSTC_WRAPPER=sccache (release-gpui-linux.yml). cargo does not fall
+# back when the wrapper is missing from PATH; it fails the compile after the
+# sidebar bundle has already been built. Fail here instead, by name.
+[[ -z "${RUSTC_WRAPPER:-}" ]] || release_gpui_require_command "$RUSTC_WRAPPER"
 
 if [[ "$(uname -m)" != "x86_64" ]]; then
 	echo "Linux desktop release packaging is x64-only and requires an x86_64 runner." >&2
