@@ -18,6 +18,20 @@ use crate::*;
 pub(crate) const GPUI_AGENT_HOOK_PRIORITY_STATUS_AGENT_IDS: [&str; 4] =
     ["codex", "claude", "opencode", "pi"];
 
+/// How long a hook status/install call keeps retrying while the local daemon
+/// is still coming up. Comfortably covers a first launch that has to stage
+/// the gxserver package and register its launchd job before it can listen.
+const GPUI_AGENT_HOOK_DAEMON_STARTUP_WAIT: Duration = Duration::from_secs(30);
+const GPUI_AGENT_HOOK_DAEMON_STARTUP_POLL: Duration = Duration::from_millis(500);
+
+/// Only the failures that precede a listening daemon are worth waiting on: a
+/// refused connection, or an auth token file the daemon has not written yet.
+/// HTTP, envelope, or parse errors come from a running daemon and return at
+/// once.
+fn gpui_gxserver_rpc_error_means_daemon_starting(error: &str) -> bool {
+    error.starts_with("gxserver is not reachable") || error.contains("auth token")
+}
+
 pub(crate) fn gpui_ordered_agent_hook_status_agent_ids(
     requested: Option<Vec<String>>,
 ) -> Vec<String> {
@@ -138,13 +152,35 @@ pub(crate) fn gpui_agent_hook_status_message(
         );
     }
 
-    if let Ok(result) = gpui_gxserver_rpc_result(
-        endpoint,
-        &serde_json::Value::Object(params),
-        Duration::from_secs(45),
-    ) {
-        if result.get("type").and_then(serde_json::Value::as_str) == Some("agentHookStatus") {
-            return result;
+    /*
+    CDXC:AgentHookStatusWaitsForDaemon 2026-09-02:
+    First-run onboarding opens the setup modal as soon as CEF is ready, which
+    on a first launch is usually before the freshly staged gxserver daemon is
+    listening or has written its auth token. The modal asks for hook status
+    exactly once; an error payload made it conclude that no agent CLI exists,
+    so the "Install required hooks" step was silently replaced by install
+    guides and hooks were never offered. Transport-level failures that only
+    mean "the daemon is still starting" are therefore retried for a bounded
+    window before the explicit error payload is returned.
+    */
+    let params = serde_json::Value::Object(params);
+    let deadline = std::time::Instant::now() + GPUI_AGENT_HOOK_DAEMON_STARTUP_WAIT;
+    loop {
+        match gpui_gxserver_rpc_result(endpoint, &params, Duration::from_secs(45)) {
+            Ok(result) => {
+                if result.get("type").and_then(serde_json::Value::as_str) == Some("agentHookStatus")
+                {
+                    return result;
+                }
+                break;
+            }
+            Err(error)
+                if gpui_gxserver_rpc_error_means_daemon_starting(&error)
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(GPUI_AGENT_HOOK_DAEMON_STARTUP_POLL);
+            }
+            Err(_) => break,
         }
     }
     serde_json::json!({
