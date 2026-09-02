@@ -1082,6 +1082,18 @@ the markdown block) rather than pinned to a tier of its own.
   flex: 0 0 auto;
 }
 
+/* CDXC:ClaudeStatusline 2026-09-03: the context window usage ring (see
+   session-chat-context-meter.tsx). A fixed 24px circle that never collapses
+   with the other footer pills; the popover is the only place its numbers are
+   spelled out. */
+.ghostex-chat-context-meter {
+  flex: 0 0 auto;
+}
+
+.ghostex-chat-context-meter-popover {
+  max-width: none;
+}
+
 .ghostex-chat-fast-mode-icon {
   color: #f6daa0;
 }

@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import { truncateAgentModelLabel } from '../../shared/agent-model-catalog';
+import { SessionChatContextMeter, resolveSessionChatContextMeterUsage } from './session-chat-context-meter';
 import { useAgentModelCatalog } from '../../shared/agent-model-catalog-store';
 import {
   applySessionChatDetectedOptions,
@@ -753,6 +754,9 @@ export function SessionChatSessionOptionPills({
   const contextWindow = isCursor ? detectedOptions?.contextWindow?.trim() : undefined;
   const fastMode = detectedOptions?.fast === true;
   const terminalStatusLine = detectedOptions?.terminalStatusLine?.trim();
+  // CDXC:ClaudeStatusline 2026-09-03: Claude's statusline payload carries the
+  // context window fill; the ring exists only once it has been read.
+  const contextMeterUsage = resolveSessionChatContextMeterUsage(detectedOptions?.contextUsage);
   const modeButton = visibleOptions.find(isShiftTabModeCycler);
   const menuOptions = modeButton ? visibleOptions.filter((descriptor) => descriptor !== modeButton) : visibleOptions;
   /*
@@ -1014,6 +1018,17 @@ export function SessionChatSessionOptionPills({
             </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
+      ) : null}
+      {contextMeterUsage ? (
+        <SessionChatContextMeter
+          compactDisabled={disabled}
+          compactDisabledReason={isWorking ? 'Available once the agent is idle.' : null}
+          modelLabel={modelLabel}
+          onCompact={() => {
+            void onDispatchCommand('/compact');
+          }}
+          usage={contextMeterUsage}
+        />
       ) : null}
     </>
   );
