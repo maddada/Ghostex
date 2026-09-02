@@ -820,6 +820,7 @@ impl GhostexGpuiApp {
             "TEMP.gpui.sessionSwitchLatency.bridgeReceived",
             serde_json::json!({
                 "activeProjectId": self.agents_workspace_project_id,
+                "epochMs": support_logs::temporary_epoch_ms(),
                 "projectId": message.project_id,
                 "sessionId": message.session_id,
                 "settleWindowActive": self
@@ -839,6 +840,15 @@ impl GhostexGpuiApp {
             Some(message.project_id.as_str()),
             GpuiProjectSwitchRequestKind::WorkspaceTerminalFocus,
         ) {
+            support_logs::append_temporary(
+                support_logs::GpuiSupportLog::TerminalFocus,
+                "TEMP.gpui.sessionSwitchLatency.coalescedDeferred",
+                serde_json::json!({
+                    "epochMs": support_logs::temporary_epoch_ms(),
+                    "projectId": message.project_id,
+                    "sessionId": message.session_id,
+                }),
+            );
             self.enqueue_coalesced_project_switch_request(
                 Some(message.project_id.clone()),
                 GpuiPendingProjectSwitchPayload::WorkspaceTerminalFocus(message),
@@ -924,6 +934,7 @@ impl GhostexGpuiApp {
                         == Some(shell_session_id),
                 ),
                 "attachAlreadyPending": self.local_workspace_attach_pending.contains(&key),
+                "epochMs": support_logs::temporary_epoch_ms(),
                 "liveTerminalOwner": mapped_slot_id.is_some_and(|slot_id| {
                     self.local_workspace_terminal_has_live_terminal_owner(slot_id)
                 }),
@@ -970,6 +981,7 @@ impl GhostexGpuiApp {
                 support_logs::GpuiSupportLog::TerminalFocus,
                 "TEMP.gpui.sessionSwitchLatency.focusExistingCompleted",
                 serde_json::json!({
+                    "epochMs": support_logs::temporary_epoch_ms(),
                     "projectId": key.project_id,
                     "sessionId": key.session_id,
                 }),
@@ -982,6 +994,7 @@ impl GhostexGpuiApp {
             support_logs::GpuiSupportLog::TerminalFocus,
             "TEMP.gpui.sessionSwitchLatency.attachPlanRequired",
             serde_json::json!({
+                "epochMs": support_logs::temporary_epoch_ms(),
                 "projectId": key.project_id,
                 "sessionId": key.session_id,
             }),
@@ -1202,6 +1215,7 @@ impl GhostexGpuiApp {
                     "TEMP.gpui.sessionSwitchLatency.attachPlanCompleted",
                     serde_json::json!({
                         "elapsedMs": attach_started_at.elapsed().as_millis() as u64,
+                        "epochMs": support_logs::temporary_epoch_ms(),
                         "planReady": result.is_ok(),
                         "projectId": key.project_id,
                         "sessionId": key.session_id,
@@ -1821,6 +1835,10 @@ impl GhostexGpuiApp {
         self.pending_agents_terminal_text_focus_slot = None;
         self.pending_project_editor_companion_terminal_text_focus_slot = None;
         self.pending_session_chat_composer_focus = Some(session_id);
+        // A staged first-input draft (Handoff / Export's transcript mention)
+        // belongs in the chat composer the user is about to see, not in the
+        // terminal this launch parks. See `request_session_chat_launch_draft`.
+        self.request_session_chat_launch_draft(session_id, cx);
         self.reconcile_agents_pane_surfaces(cx);
         true
     }

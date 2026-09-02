@@ -188,6 +188,16 @@ pub fn append_repro(log: GpuiSupportLog, event: &str, details: serde_json::Value
     append_unconditionally(log, event, details);
 }
 
+/// TEMPORARY latency instrumentation helper: wall-clock milliseconds since the
+/// UNIX epoch, so the `TEMP.gpui.sessionSwitchLatency.*` markers can be ordered
+/// against each other and against any other timestamped log. Remove with them.
+pub fn temporary_epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since_epoch| since_epoch.as_millis() as u64)
+        .unwrap_or_default()
+}
+
 fn debug_ui_controls_enabled() -> bool {
     shared_settings::shared_sidebar_settings_snapshot().debugging_mode()
 }
