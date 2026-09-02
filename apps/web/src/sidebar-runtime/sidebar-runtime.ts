@@ -890,7 +890,9 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     if (!target) {
       return;
     }
-    const sessions = projectSessions(getConnectionStates(), target);
+    const sessions = projectSessions(getConnectionStates(), target).filter(
+      (session) => session.lifecycleState === (sleeping ? 'running' : 'sleeping')
+    );
     await Promise.all(
       sessions.map((session) =>
         lifecycleRpc({ ...target, sessionId: session.sessionId }, sleeping ? '/api/sleepSession' : '/api/wakeSession')
@@ -910,7 +912,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       if (action === 'wakeSleeping') {
         return session.lifecycleState === 'sleeping';
       }
-      return session.activity === 'idle';
+      return session.lifecycleState === 'running' && session.activity === 'idle';
     });
     await Promise.all(
       sessions.map((session) =>

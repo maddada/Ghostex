@@ -1239,7 +1239,11 @@ export function SessionGroupSection({
   const sessionSummary = getGroupSessionSummary(groupSessions);
   const awakeCount = getAwakeTerminalAndBrowserCount(groupSessions);
   const actualSessionCount = storedSessionIds.length;
-  const allSessionsSleeping = groupSessions.length > 0 && groupSessions.every((session) => session.isSleeping);
+  const hasRunningSessions = groupSessions.some(
+    (session) => getSidebarSessionLifecycleState(session) === 'running'
+  );
+  const hasSleepingSessions = groupSessions.some((session) => getSidebarSessionLifecycleState(session) === 'sleeping');
+  const allSessionsSleeping = !hasRunningSessions && hasSleepingSessions;
   /**
    * CDXC:ProjectSleep 2026-05-27-06:28:
    * Sleep Inactive means awake plus idle/unknown activity, not "no live zmx
@@ -3399,6 +3403,7 @@ export function SessionGroupSection({
               ) : null}
               <button
                 className='session-context-menu-item'
+                disabled={allSessionsSleeping ? !hasSleepingSessions : !hasRunningSessions}
                 onClick={() => requestSetGroupSleeping(!allSessionsSleeping)}
                 role='menuitem'
                 type='button'

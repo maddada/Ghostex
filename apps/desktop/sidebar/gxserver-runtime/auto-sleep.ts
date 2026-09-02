@@ -147,14 +147,14 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
   macOS killTerminalDaemon parity: since the gxserver cutover the Running
   Sessions daemon-stop control is a local-first bulk sleep — macOS routes
   every awake gxserver-presented terminal through the shared sleep path and
-  leaves the shared daemon process running. GPUI sleeps every non-sleeping
-  local daemon session the same way; remote presentations are untouched
+  leaves the shared daemon process running. GPUI sleeps every running local
+  daemon session the same way; remote presentations are untouched
   because the modal lists local daemon state.
   */
   async sleepAllLocalDaemonSessions(this: GpuiSidebarRuntime): Promise<void> {
     const sessionIds = this.browserTabs.filter((tab) => !tab.isSleeping).map(gpuiBrowserSidebarSessionId);
     for (const session of this.presentation?.sessions ?? []) {
-      if (session.lifecycleState !== 'sleeping') {
+      if (session.lifecycleState === 'running') {
         sessionIds.push(createGxserverPresentationProjectSessionId(session.projectId, session.sessionId));
       }
     }
@@ -172,12 +172,26 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
         getGpuiWorkspaceSessionSubgroups(this.workspaceGroups, subgroup.projectId).find(
           (group) => group.groupId === subgroup.groupId
         )?.sessionIds ?? [];
+      const presentation = remoteProject ? this.remotePresentations.get(remoteProject.machineId) : this.presentation;
+      const projectId = remoteProject?.projectId ?? subgroup.projectId;
+      const eligibleMemberIds = new Set<string>(
+        (presentation?.sessions ?? [])
+          .filter(
+            (session) =>
+              session.projectId === projectId &&
+              session.lifecycleState === (sleeping ? 'running' : 'sleeping') &&
+              memberIds.includes(session.sessionId)
+          )
+          .map((session) => session.sessionId)
+      );
       await this.setSessionsSleeping(
-        memberIds.map((sessionId) =>
-          remoteProject
-            ? createGpuiRemotePresentationSessionId(remoteProject.machineId, remoteProject.projectId, sessionId)
-            : createGxserverPresentationProjectSessionId(subgroup.projectId, sessionId)
-        ),
+        memberIds
+          .filter((sessionId) => eligibleMemberIds.has(sessionId))
+          .map((sessionId) =>
+            remoteProject
+              ? createGpuiRemotePresentationSessionId(remoteProject.machineId, remoteProject.projectId, sessionId)
+              : createGxserverPresentationProjectSessionId(subgroup.projectId, sessionId)
+          ),
         sleeping
       );
       return;
@@ -187,11 +201,15 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
       const presentation = this.remotePresentations.get(remoteGroup.machineId);
       const scopedProjectId = createGpuiRemotePresentationProjectId(remoteGroup.machineId, remoteGroup.projectId);
       const sessionIds = this.browserTabs
-        .filter((tab) => tab.projectId === scopedProjectId)
+        .filter((tab) => tab.projectId === scopedProjectId && tab.isSleeping === !sleeping)
         .map(gpuiBrowserSidebarSessionId)
         .concat(
           (presentation?.sessions ?? [])
-            .filter((session) => session.projectId === remoteGroup.projectId)
+            .filter(
+              (session) =>
+                session.projectId === remoteGroup.projectId &&
+                session.lifecycleState === (sleeping ? 'running' : 'sleeping')
+            )
             .map((session) =>
               createGpuiRemotePresentationSessionId(remoteGroup.machineId, remoteGroup.projectId, session.sessionId)
             )
@@ -208,11 +226,14 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
       return;
     }
     const sessionIds = this.browserTabs
-      .filter((tab) => tab.projectId === projectId)
+      .filter((tab) => tab.projectId === projectId && tab.isSleeping === !sleeping)
       .map(gpuiBrowserSidebarSessionId)
       .concat(
         this.presentation.sessions
-          .filter((session) => session.projectId === projectId)
+          .filter(
+            (session) =>
+              session.projectId === projectId && session.lifecycleState === (sleeping ? 'running' : 'sleeping')
+          )
           .map((session) => createGxserverPresentationProjectSessionId(projectId, session.sessionId))
       );
     /*

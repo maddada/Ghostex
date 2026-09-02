@@ -488,7 +488,7 @@ export function getSidebarSessionContextMenuEligibility({
         isRemoteSession,
       }),
     canRenameSession: canUseTerminalAgentMenuAction,
-    canSleepSession: isConcreteSessionRow,
+    canSleepSession: isConcreteSessionRow && (canSleepSidebarSession(session) || canWakeSidebarSession(session)),
     canTagSession: canUseTerminalAgentMenuAction,
     isBrowserSession,
   };
@@ -1899,14 +1899,15 @@ export function SortableSessionCard({
   }
   if (canSleepSession) {
     primaryActions.push({
-      icon: session.isSleeping ? (
-        <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-      ) : (
-        <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-      ),
+      icon:
+        lifecycleState === 'sleeping' ? (
+          <IconPlayerPlay aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+        ) : (
+          <IconMoon aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+        ),
       key: 'sleep',
-      label: session.isSleeping ? 'Wake' : 'Sleep',
-      onClick: () => requestSetSleeping(!session.isSleeping),
+      label: lifecycleState === 'sleeping' ? 'Wake' : 'Sleep',
+      onClick: () => requestSetSleeping(lifecycleState !== 'running'),
     });
   }
   if (canPinSession) {
@@ -2859,11 +2860,11 @@ function getSessionRenameInitialTitle(session: SidebarSessionItem): string {
 export function canSleepSidebarSession(session: SidebarSessionItem | undefined): boolean {
   /*
   CDXC:SidebarContextMenu 2026-06-07-13:34:
-  Sleep below targets every awake sleepable session, including browser panes.
-  Some snapshots mark an already parked row through lifecycleState before
-  isSleeping is reconciled, so check both fields to avoid duplicate work.
+  Sleep below targets every running session, including browser panes. Stopped
+  history can remain visible when pinned, tagged, or favorited, but sleeping it
+  would reactivate that history as a sleeping sidebar row.
   */
-  return Boolean(session) && session?.isSleeping !== true && session?.lifecycleState !== 'sleeping';
+  return session !== undefined && getSidebarSessionLifecycleState(session) === 'running';
 }
 
 export function canWakeSidebarSession(session: SidebarSessionItem | undefined): boolean {
@@ -2873,7 +2874,7 @@ export function canWakeSidebarSession(session: SidebarSessionItem | undefined): 
    * actually parked or sleeping, avoiding no-op wake messages for active
    * terminal, agent, and browser sessions.
    */
-  return Boolean(session) && (session?.isSleeping === true || session?.lifecycleState === 'sleeping');
+  return session !== undefined && getSidebarSessionLifecycleState(session) === 'sleeping';
 }
 
 function getSidebarBulkSessionContextMenuAvailability({
@@ -3074,7 +3075,7 @@ function supportsPopOutPaneMenuAction(
   }
 ): boolean {
   if (isRemoteSession) {
-    return session.canPopOutPane === true && session.isSleeping !== true && session.lifecycleState !== 'sleeping';
+    return session.canPopOutPane === true && getSidebarSessionLifecycleState(session) === 'running';
   }
 
   return supportsPopOutPane(session, isBrowserSession);
@@ -3087,7 +3088,7 @@ function supportsPopOutPane(session: SidebarSessionItem, isBrowserSession: boole
    * sessions. Sleeping sessions dispose their native surface and cannot remain
    * in a detached window.
    */
-  if (session.isSleeping === true) {
+  if (getSidebarSessionLifecycleState(session) !== 'running') {
     return false;
   }
 
