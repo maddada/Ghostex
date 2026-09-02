@@ -150,7 +150,7 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
             gpui_install_bundled_ghostex_skill_action(
                 action,
                 &["cli", "install-skill"],
-                "Ghostex CLI",
+                "Ghostex CLI skill",
             )
         }
         GpuiGhostexCliSettingsAction::InstallFable56OrchestrationSkill => {

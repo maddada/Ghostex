@@ -71,35 +71,45 @@ pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
         gpui_install_ghostex_cli_command("ghostex", &cli_binary_path, &cli_dir, &install_dirs);
     if !ghostex_result.installed() {
         return match ghostex_result {
-            GpuiCliCommandInstallResult::Blocked => Err(
-                "A ghostex command already exists in a writable install location, but GPUI could not prove it belongs to Ghostex. No unrelated command was overwritten."
-                    .to_string(),
-            ),
-            _ => Err(
-                "Ghostex could not create a writable PATH wrapper for the ghostex command. Current CLI status was refreshed without changing files."
-                    .to_string(),
-            ),
+            GpuiCliCommandInstallResult::Blocked { existing_path } => Err(format!(
+                "A ghostex command that does not belong to Ghostex already exists at {}. Remove or rename it, then link the CLI again. No unrelated command was overwritten.",
+                gpui_path_string(&existing_path)
+            )),
+            _ => Err(format!(
+                "Ghostex could not write the ghostex command into any install location ({}). Check that one of them is writable, then link the CLI again.",
+                gpui_describe_cli_install_dirs(&install_dirs)
+            )),
         };
     }
 
     let gx_result =
         gpui_install_ghostex_cli_command("gx", &cli_binary_path, &cli_dir, &install_dirs);
-    if gx_result == GpuiCliCommandInstallResult::Blocked {
-        return Ok(
-            "Ghostex CLI linked. The gx alias was not changed because another command already owns that name."
-                .to_string(),
-        );
-    }
-    if !gx_result.installed() {
-        return Ok(
+    match gx_result {
+        GpuiCliCommandInstallResult::Blocked { existing_path } => Ok(format!(
+            "Ghostex CLI linked. The gx alias was not changed because another command already owns that name at {}.",
+            gpui_path_string(&existing_path)
+        )),
+        GpuiCliCommandInstallResult::Unavailable => Ok(
             "Ghostex CLI linked. The gx alias could not be linked because no writable install location was available."
                 .to_string(),
-        );
+        ),
+        GpuiCliCommandInstallResult::Current | GpuiCliCommandInstallResult::Repaired => Ok(
+            "Ghostex CLI linked. ghostex and gx now launch this GPUI app build where available."
+                .to_string(),
+        ),
     }
-    Ok(
-        "Ghostex CLI linked. ghostex and gx now launch this GPUI app build where available."
-            .to_string(),
-    )
+}
+
+fn gpui_describe_cli_install_dirs(install_dirs: &[PathBuf]) -> String {
+    let mut described = install_dirs
+        .iter()
+        .take(4)
+        .map(|directory| gpui_path_string(directory))
+        .collect::<Vec<_>>();
+    if install_dirs.len() > described.len() {
+        described.push("…".to_string());
+    }
+    described.join(", ")
 }
 
 pub(crate) fn gpui_auto_repair_stale_ghostex_cli_wrappers() {
@@ -149,16 +159,21 @@ pub(crate) fn gpui_auto_repair_stale_ghostex_cli_wrappers() {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum GpuiCliCommandInstallResult {
     Current,
     Repaired,
-    Blocked,
+    /// An executable command with that name exists on PATH and is not one
+    /// Ghostex wrote, so writing a wrapper anywhere would either overwrite the
+    /// user's command or be shadowed by it.
+    Blocked {
+        existing_path: PathBuf,
+    },
     Unavailable,
 }
 
 impl GpuiCliCommandInstallResult {
-    pub(crate) fn installed(self) -> bool {
+    pub(crate) fn installed(&self) -> bool {
         matches!(self, Self::Current | Self::Repaired)
     }
 }
@@ -199,28 +214,43 @@ pub(crate) fn gpui_install_ghostex_cli_command(
     cli_dir: &Path,
     install_dirs: &[PathBuf],
 ) -> GpuiCliCommandInstallResult {
+    /*
+    CDXC:GPUICliInstallRobustness 2026-09-02:
+    First-launch setup links the CLI while the startup wrapper refresh may still
+    be running for a user who upgraded, so the wrapper is staged and renamed
+    into place instead of remove-then-write: two writers can never race each
+    other into a missing command or an "Unavailable" result. A directory whose
+    write fails is skipped for the next candidate instead of aborting the whole
+    install, and a foreign executable is reported with its path (from any PATH
+    directory, writable or not) because a wrapper written elsewhere would just
+    be shadowed by it and status would still say the CLI is unusable.
+    */
     let wrapper = gpui_ghostex_cli_wrapper_content(cli_binary_path);
     for directory in install_dirs {
+        let link_path = directory.join(command);
+        let exists = gpui_path_exists_or_is_symlink(&link_path);
+        if exists && !gpui_can_replace_existing_ghostex_command(command, &link_path, cli_dir) {
+            if gpui_is_executable_file(&link_path) {
+                return GpuiCliCommandInstallResult::Blocked {
+                    existing_path: link_path,
+                };
+            }
+            // Non-executable foreign junk cannot shadow a wrapper; leave it
+            // alone and keep looking for a directory Ghostex can use.
+            continue;
+        }
         if !gpui_prepare_cli_install_directory(directory) {
             continue;
         }
-        let link_path = directory.join(command);
-        if gpui_path_exists_or_is_symlink(&link_path) {
-            if !gpui_can_replace_existing_ghostex_command(command, &link_path, cli_dir) {
-                return GpuiCliCommandInstallResult::Blocked;
-            }
-            if gpui_is_regular_file(&link_path)
-                && fs::read_to_string(&link_path)
-                    .map(|content| content == wrapper)
-                    .unwrap_or(false)
-            {
-                let _ = gpui_set_executable_permissions(&link_path);
-                gpui_clear_macos_execution_policy_xattrs(&link_path);
-                return GpuiCliCommandInstallResult::Current;
-            }
-            if fs::remove_file(&link_path).is_err() {
-                return GpuiCliCommandInstallResult::Unavailable;
-            }
+        if exists
+            && gpui_is_regular_file(&link_path)
+            && fs::read_to_string(&link_path)
+                .map(|content| content == wrapper)
+                .unwrap_or(false)
+        {
+            let _ = gpui_set_executable_permissions(&link_path);
+            gpui_clear_macos_execution_policy_xattrs(&link_path);
+            return GpuiCliCommandInstallResult::Current;
         }
         if gpui_write_executable_wrapper(&link_path, &wrapper).is_ok() {
             gpui_clear_macos_execution_policy_xattrs(&link_path);
@@ -430,8 +460,32 @@ pub(crate) fn gpui_realpath_or_self(path: &Path) -> PathBuf {
 }
 
 pub(crate) fn gpui_write_executable_wrapper(path: &Path, content: &str) -> std::io::Result<()> {
-    fs::write(path, content.as_bytes())?;
-    gpui_set_executable_permissions(path)
+    // Stage beside the target and rename over it: the rename swaps out an
+    // existing wrapper, an app-owned symlink, or a broken link in one step
+    // without ever following the old link (a plain write through a symlink
+    // into the app bundle would clobber the bundled binary).
+    let parent = path.parent().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "wrapper path has no parent directory",
+        )
+    })?;
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("ghostex");
+    let staging_path = parent.join(format!(
+        ".{file_name}.ghostex-gpui-{}-{}",
+        std::process::id(),
+        system_time_epoch_millis_string(SystemTime::now())
+    ));
+    let write_result = fs::write(&staging_path, content.as_bytes())
+        .and_then(|_| gpui_set_executable_permissions(&staging_path))
+        .and_then(|_| fs::rename(&staging_path, path));
+    if write_result.is_err() {
+        let _ = fs::remove_file(&staging_path);
+    }
+    write_result
 }
 
 pub(crate) fn gpui_set_executable_permissions(path: &Path) -> std::io::Result<()> {
