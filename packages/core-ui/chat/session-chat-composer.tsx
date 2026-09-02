@@ -273,6 +273,8 @@ export interface SessionChatComposerProps {
   sessionNoteActive?: boolean;
   /** True when the session note contains non-whitespace text. */
   sessionNoteHasText?: boolean;
+  /** Whether the composer renders shortcut chords in its controls and menu. */
+  showShortcutLabels?: boolean;
   /** Per-session Verbose mode value shown with the right-hand composer actions. */
   verboseMode?: boolean;
   /** Toggle the per-session Verbose mode override. Omitted hides the action. */
@@ -414,6 +416,14 @@ const SESSION_CHAT_STOP_BUTTON_COOLDOWN_MS = 2_000;
  */
 const SESSION_CHAT_DRAFT_SYNC_DEBOUNCE_MS = 2_000;
 const SESSION_CHAT_DRAFT_SYNC_MAX_INTERVAL_MS = 10_000;
+/**
+ * A push that failed is retried on this delay, this many times. Without a
+ * retry the empty push after a send was the only thing clearing gxserver's
+ * copy, and one dropped request left the sent message on the daemon as an
+ * "unsent draft" that every later app start restored into the composer.
+ */
+const SESSION_CHAT_DRAFT_SYNC_RETRY_MS = 2_000;
+const SESSION_CHAT_DRAFT_SYNC_MAX_RETRIES = 3;
 
 function linkedImageReferenceHrefs(text: string): string[] {
   return [...text.matchAll(LINKED_IMAGE_REFERENCE_PATTERN)].map((match) => match[1]?.trim() ?? '').filter(Boolean);
@@ -543,6 +553,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       sessionKey,
       sessionNoteActive = false,
       sessionNoteHasText = false,
+      showShortcutLabels = true,
       slashCommands,
       slashHeading,
       skills,
@@ -910,6 +921,22 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         .then(() => {
           clearStoredSessionChatDraftIfUnchanged(sessionKey, text);
           setHistory((value) => pushSessionChatComposerHistory(value, text));
+          /*
+          CDXC:SessionChatDraftRetireOnSend 2026-09-02:
+          gxserver retires its own copy of a delivered message, but this
+          client still owns what it last pushed: flush the empty composer NOW
+          rather than after the typing debounce, so no window is left in which
+          a kill, a hidden page or a dropped request can leave the sent text
+          standing as the daemon's draft. Anything typed meanwhile is a new
+          draft and keeps its own debounce.
+          */
+          if ((getInputApi()?.getValue() ?? draftRef.current) === '') {
+            if (draftSyncTimerRef.current !== null) {
+              clearTimeout(draftSyncTimerRef.current);
+              draftSyncTimerRef.current = null;
+            }
+            pushDraftRef.current();
+          }
         })
         .catch((error: unknown) => {
           // Do not overwrite a next draft typed while the send was in flight.
@@ -1072,6 +1099,9 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const composerTouchedRef = useRef(false);
     const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const lastDraftSyncAtRef = useRef(0);
+    const draftSyncRetriesRef = useRef(0);
+    /** Set by the unmount cleanup so a late failure cannot arm a timer into a dead composer. */
+    const draftSyncUnmountedRef = useRef(false);
     const pushDraftIfChanged = (): void => {
       const controller = draftSync;
       if (!controller?.canSync) {
@@ -1083,10 +1113,30 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         return;
       }
       lastPushedDraftRef.current = content;
-      void controller.push(content).catch(() => {
-        // Let the next flush retry rather than silently swallowing the draft.
-        lastPushedDraftRef.current = null;
-      });
+      void controller
+        .push(content)
+        .then(() => {
+          draftSyncRetriesRef.current = 0;
+        })
+        .catch(() => {
+          // Forget the push so the next flush sends the live value again, and
+          // schedule that flush instead of waiting for a keystroke that may
+          // never come: after a send the composer is empty and idle, and the
+          // empty push is exactly the one that must not be lost.
+          lastPushedDraftRef.current = null;
+          if (
+            draftSyncUnmountedRef.current ||
+            draftSyncTimerRef.current !== null ||
+            draftSyncRetriesRef.current >= SESSION_CHAT_DRAFT_SYNC_MAX_RETRIES
+          ) {
+            return;
+          }
+          draftSyncRetriesRef.current += 1;
+          draftSyncTimerRef.current = setTimeout(() => {
+            draftSyncTimerRef.current = null;
+            pushDraftRef.current();
+          }, SESSION_CHAT_DRAFT_SYNC_RETRY_MS);
+        });
     };
     const pushDraftRef = useRef(pushDraftIfChanged);
     pushDraftRef.current = pushDraftIfChanged;
@@ -1135,6 +1185,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       () => () => {
         // The unmount cleanup above already flushes; the pending timer must
         // not fire into a dead composer after it.
+        draftSyncUnmountedRef.current = true;
         if (draftSyncTimerRef.current !== null) {
           clearTimeout(draftSyncTimerRef.current);
         }
@@ -2210,6 +2261,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   }}
                   sessionNoteActive={sessionNoteActive}
                   sessionNoteHasText={sessionNoteHasText}
+                  showShortcutLabels={showShortcutLabels}
                   stashedPromptCount={stashedPromptCount}
                   summaryMode={summaryMode}
                   verboseMode={verboseMode}

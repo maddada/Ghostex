@@ -15,7 +15,9 @@
 
 import { IconBoltFilled, IconChevronDown } from '@tabler/icons-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { postAppModalHostMessage } from '../app-modal-host-bridge';
 import { AppTooltip } from '../app-tooltip';
+import { createAppToastRequest } from '../../shared/app-toast-contract';
 import type {
   SessionChatAvailableAgent,
   SessionChatDetectedOptions,
@@ -39,6 +41,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
+import { truncateAgentModelLabel } from '../../shared/agent-model-catalog';
+import { useAgentModelCatalog } from '../../shared/agent-model-catalog-store';
 import {
   applySessionChatDetectedOptions,
   readStoredSessionChatOptions,
@@ -50,9 +54,6 @@ import {
   sessionChatOptionTracksValue,
   sessionChatOptionValueLabel,
   sessionChatSessionOptionCatalog,
-  SESSION_CHAT_DETECTED_HINT,
-  SESSION_CHAT_DISPATCHED_HINT,
-  SESSION_CHAT_TRANSCRIPT_HINT,
   setSessionChatOptionValue,
   writeStoredSessionChatOptions,
   type SessionChatDetectedOptionInput,
@@ -62,6 +63,39 @@ import {
 } from './session-chat-session-options';
 
 type PillSkeleton = 'model' | 'options' | 'combined' | 'mode';
+
+function showSessionChatOptionFailureToast(title: string, description: string): void {
+  const trimmedTitle = title.trim();
+  const trimmedDescription = description.trim();
+  if (trimmedTitle === '' || window.webkit?.messageHandlers?.ghostexAppModalHost === undefined) {
+    return;
+  }
+  try {
+    postAppModalHostMessage(
+      createAppToastRequest('error', trimmedTitle, trimmedDescription === '' ? undefined : trimmedDescription),
+      'SessionChatOptionPills:toast'
+    );
+  } catch {
+    // Toast-host availability must never gate option dispatch.
+  }
+}
+
+function optionChoiceLabel(descriptor: SessionChatOptionDescriptor, value?: string): string | undefined {
+  if (value === undefined || value === '') {
+    return undefined;
+  }
+  return (descriptor.choices ?? []).find((choice) => choice.value === value)?.label ?? value;
+}
+
+function showOptionDispatchFailure(descriptor: SessionChatOptionDescriptor, value?: string): void {
+  const choice = optionChoiceLabel(descriptor, value);
+  showSessionChatOptionFailureToast(
+    `Could not update ${descriptor.label}`,
+    choice
+      ? `Ghostex couldn't apply ${choice} to this session.`
+      : `Ghostex couldn't send the ${descriptor.label.toLowerCase()} change to the agent.`
+  );
+}
 
 function pillLoadingText(skeleton: PillSkeleton): string {
   if (skeleton === 'options') {
@@ -105,7 +139,10 @@ export function useSessionChatSessionOptions({
   draftAgentId?: string | null;
   sessionKey?: string;
 }): SessionChatSessionOptionsController {
-  const catalog = useMemo(() => sessionChatSessionOptionCatalog(agent), [agent]);
+  // CDXC:AgentModelCatalog 2026-09-02: the option catalog is built from the
+  // published agent model catalog, so a remote refresh rebuilds the pills.
+  const agentModelCatalog = useAgentModelCatalog();
+  const catalog = useMemo(() => sessionChatSessionOptionCatalog(agent), [agent, agentModelCatalog]);
   const [state, setState] = useState<SessionChatOptionState>({});
 
   /*
@@ -254,6 +291,7 @@ function PillTrigger({
   label,
   skeleton,
   title,
+  tooltipWhenDisabled = false,
   trailingIcon,
 }: {
   ariaLabel: string;
@@ -264,6 +302,12 @@ function PillTrigger({
   label: string;
   skeleton?: PillSkeleton;
   title: string;
+  /**
+   * Keeps the tooltip hoverable while the pill is disabled: the disabled
+   * button drops its own pointer events, so a wrapper span carries the hover.
+   * The model pill uses this so the terminal status line stays readable.
+   */
+  tooltipWhenDisabled?: boolean;
   trailingIcon?: ReactNode;
 }) {
   // A skeleton has no value to name, so the tooltip and the accessible name
@@ -273,28 +317,32 @@ function PillTrigger({
   // when resolved would move the composer row twice.
   const loadingText = skeleton ? pillLoadingText(skeleton) : '';
   const resolvedIconOnly = iconOnly;
+  const isDisabled = disabled || skeleton !== undefined;
+  const trigger = (
+    <DropdownMenuTrigger
+      render={
+        <Button
+          aria-label={skeleton ? loadingText : ariaLabel}
+          className={cn('ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground', className)}
+          disabled={isDisabled}
+          size={resolvedIconOnly ? 'icon-xs' : 'xs'}
+          variant='ghost'
+        />
+      }
+    >
+      {icon}
+      {skeleton ? (
+        <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
+      ) : resolvedIconOnly ? null : (
+        <span className='truncate'>{label}</span>
+      )}
+      {skeleton || resolvedIconOnly ? null : trailingIcon}
+      {resolvedIconOnly ? null : <IconChevronDown aria-hidden='true' className='size-3 shrink-0' stroke={2} />}
+    </DropdownMenuTrigger>
+  );
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            aria-label={skeleton ? loadingText : ariaLabel}
-            className={cn('ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground', className)}
-            disabled={disabled || skeleton !== undefined}
-            size={resolvedIconOnly ? 'icon-xs' : 'xs'}
-            variant='ghost'
-          />
-        }
-      >
-        {icon}
-        {skeleton ? (
-          <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
-        ) : resolvedIconOnly ? null : (
-          <span className='truncate'>{label}</span>
-        )}
-        {skeleton || resolvedIconOnly ? null : trailingIcon}
-        {resolvedIconOnly ? null : <IconChevronDown aria-hidden='true' className='size-3 shrink-0' stroke={2} />}
-      </DropdownMenuTrigger>
+      {tooltipWhenDisabled && isDisabled ? <span className='inline-flex'>{trigger}</span> : trigger}
     </AppTooltip>
   );
 }
@@ -314,6 +362,7 @@ function PillButton({
   onClick,
   skeleton,
   title,
+  tooltipWhenDisabled = false,
 }: {
   ariaLabel: string;
   className?: string;
@@ -323,25 +372,31 @@ function PillButton({
   onClick: () => void;
   skeleton?: PillSkeleton;
   title: ReactNode;
+  /** See PillTrigger: keeps the tooltip hoverable while disabled. */
+  tooltipWhenDisabled?: boolean;
 }) {
   const loadingText = skeleton ? pillLoadingText(skeleton) : '';
+  const isDisabled = disabled || skeleton !== undefined;
+  const button = (
+    <Button
+      aria-label={skeleton ? loadingText : ariaLabel}
+      className={cn('ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground', className)}
+      disabled={isDisabled}
+      onClick={onClick}
+      size='xs'
+      variant='ghost'
+    >
+      {icon}
+      {skeleton ? (
+        <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
+      ) : label ? (
+        <span className='truncate'>{label}</span>
+      ) : null}
+    </Button>
+  );
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
-      <Button
-        aria-label={skeleton ? loadingText : ariaLabel}
-        className={cn('ghostex-chat-footer-control max-w-40 rounded-full text-muted-foreground', className)}
-        disabled={disabled || skeleton !== undefined}
-        onClick={onClick}
-        size='xs'
-        variant='ghost'
-      >
-        {icon}
-        {skeleton ? (
-          <span aria-hidden='true' className='ghostex-chat-pill-skeleton' data-pill={skeleton} />
-        ) : label ? (
-          <span className='truncate'>{label}</span>
-        ) : null}
-      </Button>
+      {tooltipWhenDisabled && isDisabled ? <span className='inline-flex'>{button}</span> : button}
     </AppTooltip>
   );
 }
@@ -429,7 +484,6 @@ export function SessionChatSessionOptionPills({
   screenProbed,
 }: SessionChatSessionOptionPillsProps) {
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
   const [switchingAgent, setSwitchingAgent] = useState(false);
   const mountedRef = useRef(true);
 
@@ -456,7 +510,6 @@ export function SessionChatSessionOptionPills({
   const dispatch = useCallback(
     (descriptor: SessionChatOptionDescriptor, value?: string): void => {
       setDispatchingId(descriptor.id);
-      setFailure(null);
       const run = async (): Promise<void> => {
         const { dispatch: delivery } = descriptor;
         if (delivery.kind === 'command') {
@@ -531,9 +584,7 @@ export function SessionChatSessionOptionPills({
       };
       void run()
         .catch(() => {
-          if (mountedRef.current) {
-            setFailure('Could not update option');
-          }
+          showOptionDispatchFailure(descriptor, value);
         })
         .finally(() => {
           if (mountedRef.current) {
@@ -558,20 +609,24 @@ export function SessionChatSessionOptionPills({
       return;
     }
     setSwitchingAgent(true);
-    setFailure(null);
     void onSwitchDraftAgent(agentId)
       .catch((error: unknown) => {
-        if (!mountedRef.current) {
-          return;
-        }
         /*
         The daemon refuses the switch once the draft has been promoted (its
         first prompt reached the agent). Its own sentence is the useful one, so
-        it is shown verbatim rather than replaced by a generic failure — and
-        nothing here pretends the switch happened.
+        it is shown as the toast description rather than replaced by a generic
+        failure — and nothing here pretends the switch happened.
         */
-        const message = error instanceof Error ? error.message.trim() : '';
-        setFailure(message === '' ? 'Could not switch agent' : message);
+        const target = agentRows?.find((row) => row.agentId === agentId);
+        const reason = error instanceof Error ? error.message.trim() : '';
+        showSessionChatOptionFailureToast(
+          'Could not switch agent',
+          reason !== ''
+            ? reason
+            : target
+              ? `Ghostex couldn't switch this draft to ${target.name}.`
+              : "Ghostex couldn't change which agent CLI this draft uses."
+        );
       })
       .finally(() => {
         if (mountedRef.current) {
@@ -581,14 +636,6 @@ export function SessionChatSessionOptionPills({
   };
 
   const disabled = isWorking || !canSend || dispatchingId !== null || switchingAgent;
-
-  const failureNotice = failure ? (
-    <AppTooltip content={failure}>
-      <span className='max-w-32 truncate text-[11px] text-destructive/80' role='status'>
-        {failure}
-      </span>
-    </AppTooltip>
-  ) : null;
 
   const agentsSubmenu = agentRows ? (
     <DropdownMenuSub>
@@ -636,7 +683,6 @@ export function SessionChatSessionOptionPills({
     const agentTitle = currentDraftAgent ? `Agent ${currentDraftAgent.name}` : 'Agent';
     return (
       <>
-        {failureNotice}
         <DropdownMenu>
           <PillTrigger
             ariaLabel={agentTitle}
@@ -699,6 +745,9 @@ export function SessionChatSessionOptionPills({
     </span>
   );
   const modelLabel = sessionChatOptionValueLabel(catalog.model, state);
+  // Long catalog names ("Gemini 3.7 Flash", "GPT 5.3 Codex Spark") are cut
+  // for the pill; the tooltip still carries the whole label.
+  const modelPillLabel = modelLabel === null ? null : truncateAgentModelLabel(modelLabel);
   const isCursor = catalog.modelIcon === 'cursor-cli';
   const isCodex = catalog.modelIcon === 'codex';
   const contextWindow = isCursor ? detectedOptions?.contextWindow?.trim() : undefined;
@@ -736,36 +785,17 @@ export function SessionChatSessionOptionPills({
   );
   const usesCombinedAgentPicker = catalog.model.dispatch.kind === 'agent-picker' && combinedPickerEffort !== undefined;
   const modelTitle = modelLabel ? `${catalog.model.label} ${modelLabel}` : catalog.model.label;
-  const optionsTitle = optionsLabel
-    ? `Options ${optionsLabel}${isCodex && fastMode ? ', Fast mode' : ''}`
-    : isCodex && fastMode
-      ? 'Options, Fast mode'
-      : 'Options';
-  const modeTitle = modeLabel ? `Mode ${modeLabel}` : 'Mode';
   /*
-  An unconfirmed dispatch is the weaker claim, so it wins the tooltip while any
-  shown value is still only "sent". Once every shown value has agent-owned
-  evidence, the hint names that evidence source.
+  Every tooltip names what its dropdown represents, never where the value came
+  from: the options pill names its categories ("Effort"), the mode pill names
+  the detected mode itself ("Bypass permissions"), and the model pill shows the
+  agent's full terminal status line whenever gxserver has read one.
   */
-  const hintFor = (descriptors: readonly SessionChatOptionDescriptor[]): string | null => {
-    const sources = descriptors.map((descriptor) => state[descriptor.id]?.source);
-    if (sources.includes('dispatched')) {
-      return SESSION_CHAT_DISPATCHED_HINT;
-    }
-    const detectedValues = descriptors
-      .map((descriptor) => state[descriptor.id])
-      .filter((value) => value?.source === 'detected');
-    if (detectedValues.some((value) => value?.detectedSource === 'terminal')) {
-      return SESSION_CHAT_DETECTED_HINT;
-    }
-    if (detectedValues.some((value) => value?.detectedSource === 'transcript')) {
-      return SESSION_CHAT_TRANSCRIPT_HINT;
-    }
-    return detectedValues.length > 0 ? SESSION_CHAT_DETECTED_HINT : null;
-  };
-  const tooltipText = (title: string, hint: string | null): string => hint ?? title;
-  const modelHint = hintFor([catalog.model]);
-  const optionsHint = hintFor(menuOptions);
+  const optionsTitle =
+    [...menuOptions.map((descriptor) => descriptor.label), ...(isCodex && fastMode ? ['Fast enabled'] : [])].join(
+      ' • '
+    ) || 'Options';
+  const modeTitle = modeLabel ?? 'Mode';
   /*
   CDXC:SessionChatScreenProbed 2026-08-22: a pill is "still loading" only while
   it has NO value AND gxserver has not read the screen yet. Once the screen has
@@ -799,7 +829,6 @@ export function SessionChatSessionOptionPills({
     );
     return (
       <>
-        {failureNotice}
         {/*
         CDXC:DraftSessions 2026-08-28:
         On a draft the model pill has to open a menu even here, because the
@@ -813,9 +842,10 @@ export function SessionChatSessionOptionPills({
               className='ghostex-chat-model-pill'
               disabled={disabled}
               icon={modelIcon}
-              label={modelLabel ?? catalog.model.label}
+              label={modelPillLabel ?? catalog.model.label}
               skeleton={skeletonFor('model', modelLabel)}
-              title={modelHandoffTitle}
+              title={terminalStatusLine || modelHandoffTitle}
+              tooltipWhenDisabled
             />
             <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
               {agentsSection}
@@ -837,10 +867,11 @@ export function SessionChatSessionOptionPills({
             className='ghostex-chat-model-pill'
             disabled={onSwitchToTerminal === undefined}
             icon={modelIcon}
-            label={modelLabel ?? catalog.model.label}
+            label={modelPillLabel ?? catalog.model.label}
             onClick={() => onSwitchToTerminal?.()}
             skeleton={skeletonFor('model', modelLabel)}
-            title={modelHandoffTitle}
+            title={terminalStatusLine || modelHandoffTitle}
+            tooltipWhenDisabled
           />
         )}
         {visibleOptions.length > 0 ? (
@@ -861,13 +892,11 @@ export function SessionChatSessionOptionPills({
   if (usesCombinedAgentPicker) {
     const effortLabel = sessionChatOptionValueLabel(combinedPickerEffort, state);
     const selectedLabel = [modelLabel, effortLabel].filter(Boolean).join(' · ');
-    const combinedLabel = selectedLabel || 'Model & Effort';
+    const combinedLabel = [modelPillLabel, effortLabel].filter(Boolean).join(' · ') || 'Model & Effort';
     const combinedTitle = selectedLabel ? `Model & Effort ${selectedLabel}` : 'Model & Effort';
-    const combinedHint = hintFor([catalog.model, combinedPickerEffort]);
 
     return (
       <>
-        {failureNotice}
         <DropdownMenu>
           <PillTrigger
             ariaLabel={combinedTitle}
@@ -876,7 +905,8 @@ export function SessionChatSessionOptionPills({
             icon={modelIcon}
             label={combinedLabel}
             skeleton={skeletonFor('combined', selectedLabel)}
-            title={tooltipText(combinedTitle, combinedHint)}
+            title={terminalStatusLine || combinedTitle}
+            tooltipWhenDisabled
           />
           <DropdownMenuContent align='start' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
             {agentsSection}
@@ -891,16 +921,16 @@ export function SessionChatSessionOptionPills({
 
   return (
     <>
-      {failureNotice}
       <DropdownMenu>
         <PillTrigger
           ariaLabel={modelTitle}
           className='ghostex-chat-model-pill'
           disabled={disabled}
           icon={modelIcon}
-          label={modelLabel ?? catalog.model.label}
+          label={modelPillLabel ?? catalog.model.label}
           skeleton={skeletonFor('model', modelLabel)}
-          title={terminalStatusLine || tooltipText(modelTitle, modelHint)}
+          title={terminalStatusLine || modelTitle}
+          tooltipWhenDisabled
         />
         <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
           {agentsSection}
@@ -924,7 +954,7 @@ export function SessionChatSessionOptionPills({
             disabled={disabled}
             label={optionsLabel ?? 'Options'}
             skeleton={skeletonFor('options', optionsLabel)}
-            title={tooltipText(optionsTitle, optionsHint)}
+            title={optionsTitle}
             trailingIcon={isCodex && fastMode ? <FastModeIcon /> : undefined}
           />
           <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
@@ -947,11 +977,11 @@ export function SessionChatSessionOptionPills({
       {contextWindow ? (
         <DropdownMenu>
           <PillTrigger
-            ariaLabel={`Context window ${contextWindow}${fastMode ? ', Fast mode' : ''}`}
+            ariaLabel={`Context${fastMode ? ' • Fast enabled' : ''}`}
             className='ghostex-chat-context-pill'
             disabled={disabled}
             label={contextWindow}
-            title={`Context window ${contextWindow}${fastMode ? ', Fast mode' : ''}`}
+            title={`Context${fastMode ? ' • Fast enabled' : ''}`}
             trailingIcon={fastMode ? <FastModeIcon /> : undefined}
           />
           <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
@@ -972,7 +1002,7 @@ export function SessionChatSessionOptionPills({
             iconOnly
             label={modeLabel ?? modeButton.label}
             skeleton={skeletonFor('mode', modeLabel)}
-            title={tooltipText(modeTitle, hintFor([modeButton]))}
+            title={modeTitle}
           />
           <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
             <DropdownMenuGroup>

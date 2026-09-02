@@ -1214,10 +1214,12 @@ the markdown block) rather than pinned to a tier of its own.
 
 /* CDXC:SessionChatDarkButtons: shadcn button fills read as foreign chrome in
    the dark chat theme, so buttons here are flattened to transparent with a
-   neutral hover. Controls that own a deliberate fill opt out — including the
-   interactive prompt card's option rows and its primary answer button, whose
-   `bg-primary` would otherwise be stripped while `text-primary-foreground`
-   stayed dark, leaving dark text on a dark surface.
+   neutral hover, and the label is reset to `--foreground`. Controls that own a
+   deliberate fill opt out — including the interactive prompt card's option
+   rows and its primary answer button, whose `bg-primary` would otherwise be
+   stripped while `text-primary-foreground` stayed dark, leaving dark text on
+   a dark surface. The same pairing hit portaled dialogs (Rewind) until the
+   color reset landed here.
 
    CDXC:SessionChatPickerHighlight 2026-08-19: the composer's "/", "$" and "@"
    picker rows are in that group too. Their keyboard highlight is a `bg-accent`
@@ -1234,6 +1236,7 @@ body[data-session-chat-theme='dark']
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]) {
   background-color: transparent;
+  color: var(--foreground);
 }
 
 .ghostex-session-chat-scope[data-chat-theme='dark']
@@ -1624,13 +1627,15 @@ so the swap barely moves the composer row.
   min-height: 4.5rem;
 }
 
-/* While a terminal picker blocks the composer, Monaco goes read-only and
-   Chromium paints its default blue focus ring on the editor's focused/
-   scrollable internals. Monaco owns its own focus visuals (the caret and
-   selection), so the UA ring is never wanted anywhere inside the input. */
+/* While a terminal picker blocks the composer, Monaco goes read-only and its
+   own stylesheet paints a 1px --vscode-focusBorder outline on the focused
+   editor internals (`.monaco-editor [tabindex]:focus` / `textarea:focus`).
+   The composer owns its focus visuals (the caret, selection, and the shell's
+   focus ring), so that outline is never wanted anywhere inside the input.
+   !important because Monaco's selectors outrank this scoped one. */
 .ghostex-chat-composer-monaco :is(:focus, :focus-visible),
 .ghostex-chat-composer-monaco:is(:focus, :focus-visible) {
-  outline: none;
+  outline: none !important;
 }
 
 .ghostex-chat-composer-monaco .editorPlaceholder {

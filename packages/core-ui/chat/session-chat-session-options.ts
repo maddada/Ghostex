@@ -13,6 +13,13 @@
 // renders its agent pill, because the composer's "Agents" switcher lives in
 // that pill's menu (CDXC:DraftSessions 2026-08-28).
 
+import {
+  agentModelCatalogEffortLabel,
+  type AgentModelCatalog,
+  type AgentModelCatalogAgent,
+  type AgentModelCatalogModel,
+} from '../../shared/agent-model-catalog';
+import { currentAgentModelCatalog } from '../../shared/agent-model-catalog-store';
 import type { SessionChatSendKey } from '../../shared/session-chat';
 import type { SidebarAgentIcon } from '../../shared/sidebar-agents';
 
@@ -29,6 +36,8 @@ const CATEGORY_ORDER: Record<SessionChatOptionCategory, number> = {
 export interface SessionChatOptionChoice {
   value: string;
   label: string;
+  /** The CLI's own row text when it differs from `label` (see AgentModelCatalogModel). */
+  pickerLabel?: string;
   description?: string;
 }
 
@@ -91,24 +100,63 @@ export interface SessionChatSessionOptionCatalog {
 }
 
 // ---------------------------------------------------------------------------
-// Claude / OpenClaude
+// Catalog-driven descriptors
+//
+// CDXC:AgentModelCatalog 2026-09-02: the model lineup, the effort levels and
+// the fast-mode support of every agent come from the published agent model
+// catalog (packages/shared/agent-model-catalog.ts), bundled as a snapshot and
+// refreshed from the repo's main branch at runtime. This module only decides
+// HOW each option is delivered to the TUI; it never names a model itself.
 // ---------------------------------------------------------------------------
 
-const CLAUDE_MODELS: readonly SessionChatOptionChoice[] = [
-  { value: 'fable', label: 'Fable 5' },
-  { value: 'opus', label: 'Opus 5' },
-  { value: 'sonnet', label: 'Sonnet 5' },
-  { value: 'haiku', label: 'Haiku 4.5' },
-];
+function effortChoices(catalog: AgentModelCatalog, efforts: readonly string[]): readonly SessionChatOptionChoice[] {
+  return efforts.map((value) => ({ value, label: agentModelCatalogEffortLabel(catalog, value) }));
+}
 
-const CLAUDE_EFFORTS: readonly SessionChatOptionChoice[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra high' },
-  { value: 'max', label: 'Max' },
-  { value: 'auto', label: 'Auto' },
-];
+function modelChoices(agent: AgentModelCatalogAgent): readonly SessionChatOptionChoice[] {
+  return agent.models.map((model) => {
+    const choice: SessionChatOptionChoice = { value: model.value, label: model.label };
+    if (model.pickerLabel !== undefined) {
+      choice.pickerLabel = model.pickerLabel;
+    }
+    if (model.description !== undefined) {
+      choice.description = model.description;
+    }
+    return choice;
+  });
+}
+
+function catalogModel(agent: AgentModelCatalogAgent, modelValue: string): AgentModelCatalogModel | undefined {
+  return agent.models.find((model) => model.value === modelValue);
+}
+
+/**
+ * Effort levels offered under a model: the model's own list, or every level
+ * the agent knows while the model is unknown or not in the catalog.
+ */
+function effortsForModel(agent: AgentModelCatalogAgent, modelValue: string): readonly string[] {
+  return catalogModel(agent, modelValue)?.efforts ?? agent.efforts;
+}
+
+/** Same descriptor object for the same choice list, so callers can compare identity. */
+function memoByChoices(
+  build: (choices: readonly SessionChatOptionChoice[]) => SessionChatOptionDescriptor
+): (choices: readonly SessionChatOptionChoice[]) => SessionChatOptionDescriptor {
+  const cache = new Map<string, SessionChatOptionDescriptor>();
+  return (choices) => {
+    const key = choices.map((choice) => choice.value).join('\u0000');
+    let descriptor = cache.get(key);
+    if (descriptor === undefined) {
+      descriptor = build(choices);
+      cache.set(key, descriptor);
+    }
+    return descriptor;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Claude / OpenClaude
+// ---------------------------------------------------------------------------
 
 const CLAUDE_MODES: readonly SessionChatOptionChoice[] = [
   { value: 'bypass', label: 'Bypass permissions' },
@@ -117,31 +165,6 @@ const CLAUDE_MODES: readonly SessionChatOptionChoice[] = [
   { value: 'accept-edits', label: 'Accept edits' },
   { value: 'plan', label: 'Plan' },
 ];
-
-const CLAUDE_MODEL: SessionChatOptionDescriptor = {
-  id: 'model',
-  label: 'Model',
-  category: 'model',
-  choices: CLAUDE_MODELS,
-  dispatch: { kind: 'command', build: (value) => `/model ${value}` },
-};
-
-const CLAUDE_EFFORT: SessionChatOptionDescriptor = {
-  id: 'effort',
-  label: 'Effort',
-  category: 'thought_level',
-  choices: CLAUDE_EFFORTS,
-  dispatch: { kind: 'command', build: (value) => `/effort ${value}` },
-};
-
-const CLAUDE_FAST_MODE: SessionChatOptionDescriptor = {
-  id: 'fastMode',
-  label: 'Fast mode',
-  category: 'model_config',
-  actionLabel: 'Toggle Fast mode',
-  description: 'Flips fast mode; the current state is only known to the agent.',
-  dispatch: { kind: 'toggle-command', command: '/fast' },
-};
 
 /*
 Permission mode is Shift+Tab in Claude Code's TUI. The terminal footer supplies
@@ -157,49 +180,59 @@ const CLAUDE_MODE: SessionChatOptionDescriptor = {
   dispatch: { kind: 'cyclic-key-steps', key: 'shift-tab' },
 };
 
+function buildClaudeCatalog(
+  catalog: AgentModelCatalog,
+  agent: AgentModelCatalogAgent
+): SessionChatSessionOptionCatalog {
+  const model: SessionChatOptionDescriptor = {
+    id: 'model',
+    label: 'Model',
+    category: 'model',
+    choices: modelChoices(agent),
+    dispatch: { kind: 'command', build: (value) => `/model ${value}` },
+  };
+  const effortFor = memoByChoices((choices) => ({
+    id: 'effort',
+    label: 'Effort',
+    category: 'thought_level',
+    choices,
+    dispatch: { kind: 'command', build: (value) => `/effort ${value}` },
+  }));
+  const fastMode: SessionChatOptionDescriptor = {
+    id: 'fastMode',
+    label: 'Fast mode',
+    category: 'model_config',
+    actionLabel: 'Toggle Fast mode',
+    description: 'Flips fast mode; the current state is only known to the agent.',
+    dispatch: { kind: 'toggle-command', command: agent.fastMode.command ?? '/fast' },
+  };
+  return {
+    model,
+    modelIcon: 'claude',
+    optionsForModel: (modelValue) => {
+      // Until gxserver confirms the model, do not offer effort controls that
+      // may not exist for the actual model (the catalog gives Haiku none).
+      const current = catalogModel(agent, modelValue);
+      const efforts = current?.efforts ?? [];
+      return sortDescriptors([
+        ...(efforts.length > 0 ? [effortFor(effortChoices(catalog, efforts))] : []),
+        ...(agent.fastMode.available && current?.fastMode === true ? [fastMode] : []),
+        CLAUDE_MODE,
+      ]);
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Codex
 // ---------------------------------------------------------------------------
 
-const CODEX_MODELS: readonly SessionChatOptionChoice[] = [
-  { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' },
-  { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
-  { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
-  { value: 'gpt-5.5', label: 'GPT-5.5' },
-  { value: 'gpt-5.2-codex', label: 'GPT-5.2 Codex' },
-];
-
-const CODEX_EFFORTS: readonly SessionChatOptionChoice[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra high' },
-];
-
-export function codexEffortChoices(_modelValue: string): readonly SessionChatOptionChoice[] {
-  return CODEX_EFFORTS;
+/** Effort levels the catalog gives a Codex model (every level while unknown). */
+export function codexEffortChoices(modelValue: string): readonly SessionChatOptionChoice[] {
+  const catalog = currentAgentModelCatalog();
+  const agent = catalog.agents.codex;
+  return agent ? effortChoices(catalog, effortsForModel(agent, modelValue)) : [];
 }
-
-/* Codex owns model selection in its interactive terminal picker. */
-const CODEX_MODEL: SessionChatOptionDescriptor = {
-  id: 'model',
-  label: 'Model',
-  category: 'model',
-  choices: CODEX_MODELS,
-  actionLabel: "Open the CLI's model picker",
-  dispatch: { kind: 'agent-picker', command: '/model' },
-};
-
-const CODEX_EFFORT: SessionChatOptionDescriptor = {
-  id: 'effort',
-  label: 'Reasoning effort',
-  category: 'thought_level',
-  dispatch: {
-    kind: 'bounded-key-steps',
-    decreaseKey: 'shift-down',
-    increaseKey: 'shift-up',
-  },
-};
 
 const CODEX_MODE: SessionChatOptionDescriptor = {
   id: 'mode',
@@ -209,63 +242,96 @@ const CODEX_MODE: SessionChatOptionDescriptor = {
   dispatch: { kind: 'command', build: () => '/plan' },
 };
 
+function buildCodexCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogAgent): SessionChatSessionOptionCatalog {
+  /* Codex owns model selection in its interactive terminal picker. */
+  const model: SessionChatOptionDescriptor = {
+    id: 'model',
+    label: 'Model',
+    category: 'model',
+    choices: modelChoices(agent),
+    actionLabel: "Open the CLI's model picker",
+    dispatch: { kind: 'agent-picker', command: '/model' },
+  };
+  const effortFor = memoByChoices((choices) => ({
+    id: 'effort',
+    label: 'Reasoning effort',
+    category: 'thought_level',
+    choices,
+    dispatch: {
+      kind: 'bounded-key-steps',
+      decreaseKey: 'shift-down',
+      increaseKey: 'shift-up',
+    },
+  }));
+  const fastMode: SessionChatOptionDescriptor = {
+    id: 'fastMode',
+    label: 'Fast mode',
+    category: 'model_config',
+    actionLabel: 'Toggle Fast mode',
+    description: 'Flips the priority service tier; the footer shows the current state.',
+    dispatch: { kind: 'toggle-command', command: agent.fastMode.command ?? '/fast' },
+  };
+  return {
+    model,
+    modelIcon: 'codex',
+    optionsForModel: (modelValue) => {
+      const current = catalogModel(agent, modelValue);
+      return sortDescriptors([
+        effortFor(effortChoices(catalog, effortsForModel(agent, modelValue))),
+        ...(agent.fastMode.available && (current?.fastMode ?? true) ? [fastMode] : []),
+        CODEX_MODE,
+      ]);
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Cursor Agent
 // ---------------------------------------------------------------------------
 
-const CURSOR_MODELS: readonly SessionChatOptionChoice[] = [
-  { value: 'auto', label: 'Auto' },
-  { value: 'composer-2.5', label: 'Composer 2.5' },
-  { value: 'cursor-grok-4.6', label: 'Grok 4.6' },
-  { value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' },
-  { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra' },
-  { value: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
-  { value: 'claude-opus-5', label: 'Claude Opus 5' },
-  { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
-];
-
-const CURSOR_EFFORTS: readonly SessionChatOptionChoice[] = [
-  { value: 'none', label: 'None' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra High' },
-  { value: 'max', label: 'Max' },
-  { value: 'ultra', label: 'Ultra' },
-];
-
-function cursorModelFilter(value: string): string {
-  if (value === 'cursor-grok-4.6') {
-    return 'Cursor Grok 4.6';
-  }
-  return CURSOR_MODELS.find((choice) => choice.value === value)?.label ?? value;
+function buildCursorCatalog(
+  catalog: AgentModelCatalog,
+  agent: AgentModelCatalogAgent
+): SessionChatSessionOptionCatalog {
+  const choices = modelChoices(agent);
+  /* The picker filter needs the row's literal text ("Cursor Grok 4.6"). */
+  const pickerFilter = (value: string): string => {
+    const choice = choices.find((entry) => entry.value === value);
+    return choice?.pickerLabel ?? choice?.label ?? value;
+  };
+  const model: SessionChatOptionDescriptor = {
+    id: 'model',
+    label: 'Model',
+    category: 'model',
+    choices,
+    dispatch: {
+      kind: 'command-confirm-picker',
+      build: (value) => `/model ${pickerFilter(value)}`,
+    },
+  };
+  /*
+  Cursor exposes reasoning effort inside the model picker's Tab-to-edit panel.
+  The footer is authoritative, but navigating that nested picker blind would
+  also risk changing the context window or Fast toggle. Show the detected value
+  and hand the user to the agent-owned picker to change it.
+  */
+  const effortFor = memoByChoices((effortRows) => ({
+    id: 'effort',
+    label: 'Reasoning effort',
+    category: 'thought_level',
+    choices: effortRows,
+    actionLabel: 'Change it in the CLI',
+    dispatch: { kind: 'agent-picker', command: '/model' },
+  }));
+  return {
+    model,
+    modelIcon: 'cursor-cli',
+    optionsForModel: (modelValue) => {
+      const efforts = effortsForModel(agent, modelValue);
+      return efforts.length > 0 ? [effortFor(effortChoices(catalog, efforts))] : [];
+    },
+  };
 }
-
-const CURSOR_MODEL: SessionChatOptionDescriptor = {
-  id: 'model',
-  label: 'Model',
-  category: 'model',
-  choices: CURSOR_MODELS,
-  dispatch: {
-    kind: 'command-confirm-picker',
-    build: (value) => `/model ${cursorModelFilter(value)}`,
-  },
-};
-
-/*
-Cursor exposes reasoning effort inside the model picker's Tab-to-edit panel.
-The footer is authoritative, but navigating that nested picker blind would
-also risk changing the context window or Fast toggle. Show the detected value
-and hand the user to the agent-owned picker to change it.
-*/
-const CURSOR_EFFORT: SessionChatOptionDescriptor = {
-  id: 'effort',
-  label: 'Reasoning effort',
-  category: 'thought_level',
-  choices: CURSOR_EFFORTS,
-  actionLabel: 'Change it in the CLI',
-  dispatch: { kind: 'agent-picker', command: '/model' },
-};
 
 // ---------------------------------------------------------------------------
 // Grok
@@ -274,35 +340,33 @@ const CURSOR_EFFORT: SessionChatOptionDescriptor = {
 /*
 Grok prints `Grok 4.6 (medium)` in its composer footer and changes both values
 through one interactive `/model` picker, which also owns the effort list per
-model. There is no command that sets either value directly, and blind keystrokes
-into that picker would be guesswork against a menu this side cannot see. So both
-pills are read-only mirrors of the statusline gxserver already reads, and either
-one hands the user to the terminal to make the change.
+model. Blind keystrokes into that picker would be guesswork against a menu this
+side cannot see, so both pills are read-only mirrors of the statusline gxserver
+already reads, and either one hands the user to the terminal to make the change.
 */
-const GROK_EFFORTS: readonly SessionChatOptionChoice[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'Extra high' },
-];
-
-/** No `choices`: grok's model list is account-dependent and never typed here. */
-const GROK_MODEL: SessionChatOptionDescriptor = {
-  id: 'model',
-  label: 'Model',
-  category: 'model',
-  actionLabel: 'Change it in the CLI',
-  dispatch: { kind: 'terminal-handoff' },
-};
-
-const GROK_EFFORT: SessionChatOptionDescriptor = {
-  id: 'effort',
-  label: 'Reasoning effort',
-  category: 'thought_level',
-  choices: GROK_EFFORTS,
-  actionLabel: 'Change it in the CLI',
-  dispatch: { kind: 'terminal-handoff' },
-};
+function buildGrokCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogAgent): SessionChatSessionOptionCatalog {
+  /** No `choices`: the model is never typed from here, only mirrored. */
+  const model: SessionChatOptionDescriptor = {
+    id: 'model',
+    label: 'Model',
+    category: 'model',
+    actionLabel: 'Change it in the CLI',
+    dispatch: { kind: 'terminal-handoff' },
+  };
+  const effortFor = memoByChoices((choices) => ({
+    id: 'effort',
+    label: 'Reasoning effort',
+    category: 'thought_level',
+    choices,
+    actionLabel: 'Change it in the CLI',
+    dispatch: { kind: 'terminal-handoff' },
+  }));
+  return {
+    model,
+    modelIcon: 'grok-build',
+    optionsForModel: (modelValue) => [effortFor(effortChoices(catalog, effortsForModel(agent, modelValue)))],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Pi
@@ -364,41 +428,9 @@ const OMP_EFFORT: SessionChatOptionDescriptor = {
 // Catalog resolution
 // ---------------------------------------------------------------------------
 
-const CLAUDE_CATALOG: SessionChatSessionOptionCatalog = {
-  model: CLAUDE_MODEL,
-  modelIcon: 'claude',
-  optionsForModel: (modelValue) =>
-    sortDescriptors([
-      // Until gxserver confirms the model, do not offer effort controls that
-      // may not exist for the actual model (Haiku has none).
-      ...(modelValue === '' || modelValue === 'haiku' ? [] : [CLAUDE_EFFORT]),
-      ...(modelValue === 'opus' ? [CLAUDE_FAST_MODE] : []),
-      CLAUDE_MODE,
-    ]),
-};
-
-const CODEX_CATALOG: SessionChatSessionOptionCatalog = {
-  model: CODEX_MODEL,
-  modelIcon: 'codex',
-  optionsForModel: (modelValue) =>
-    sortDescriptors([{ ...CODEX_EFFORT, choices: codexEffortChoices(modelValue) }, CODEX_MODE]),
-};
-
-const CURSOR_CATALOG: SessionChatSessionOptionCatalog = {
-  model: CURSOR_MODEL,
-  modelIcon: 'cursor-cli',
-  optionsForModel: () => [CURSOR_EFFORT],
-};
-
 function sortDescriptors(descriptors: readonly SessionChatOptionDescriptor[]): readonly SessionChatOptionDescriptor[] {
   return [...descriptors].sort((left, right) => CATEGORY_ORDER[left.category] - CATEGORY_ORDER[right.category]);
 }
-
-const GROK_CATALOG: SessionChatSessionOptionCatalog = {
-  model: GROK_MODEL,
-  modelIcon: 'grok-build',
-  optionsForModel: () => [GROK_EFFORT],
-};
 
 const HERMES_CATALOG: SessionChatSessionOptionCatalog = {
   model: HERMES_MODEL,
@@ -418,27 +450,56 @@ const OMP_CATALOG: SessionChatSessionOptionCatalog = {
   optionsForModel: () => [OMP_EFFORT],
 };
 
-const CATALOG_BY_AGENT: Record<string, SessionChatSessionOptionCatalog> = {
-  claude: CLAUDE_CATALOG,
-  openclaude: CLAUDE_CATALOG,
-  codex: CODEX_CATALOG,
-  cursor: CURSOR_CATALOG,
-  grok: GROK_CATALOG,
-  // Both the transcript family id (read state) and the sidebar agent id reach
-  // this lookup, so the catalog answers to either spelling.
-  hermes: HERMES_CATALOG,
-  'hermes-agent': HERMES_CATALOG,
-  omp: OMP_CATALOG,
-  pi: PI_CATALOG,
+const CATALOG_BUILDERS: Record<
+  string,
+  (catalog: AgentModelCatalog, agent: AgentModelCatalogAgent) => SessionChatSessionOptionCatalog
+> = {
+  claude: buildClaudeCatalog,
+  codex: buildCodexCatalog,
+  cursor: buildCursorCatalog,
+  grok: buildGrokCatalog,
 };
 
+/** Built once per catalog document, so a refresh swaps every agent at once. */
+const catalogsByDocument = new WeakMap<AgentModelCatalog, Record<string, SessionChatSessionOptionCatalog>>();
+
+function catalogsFor(catalog: AgentModelCatalog): Record<string, SessionChatSessionOptionCatalog> {
+  let byAgent = catalogsByDocument.get(catalog);
+  if (byAgent !== undefined) {
+    return byAgent;
+  }
+  byAgent = {};
+  for (const [agentId, build] of Object.entries(CATALOG_BUILDERS)) {
+    const agent = catalog.agents[agentId];
+    if (agent !== undefined) {
+      byAgent[agentId] = build(catalog, agent);
+    }
+  }
+  if (byAgent.claude !== undefined) {
+    byAgent.openclaude = byAgent.claude;
+  }
+  // Both the transcript family id (read state) and the sidebar agent id reach
+  // this lookup, so the catalog answers to either spelling.
+  byAgent.hermes = HERMES_CATALOG;
+  byAgent['hermes-agent'] = HERMES_CATALOG;
+  byAgent.omp = OMP_CATALOG;
+  byAgent.pi = PI_CATALOG;
+  catalogsByDocument.set(catalog, byAgent);
+  return byAgent;
+}
+
+/**
+ * The option catalog for an agent, built from the agent model catalog in
+ * effect right now. React callers pair this with `useAgentModelCatalog` so a
+ * remote refresh re-renders them (session-chat-option-pills.tsx).
+ */
 export function sessionChatSessionOptionCatalog(
   agent: string | null | undefined
 ): SessionChatSessionOptionCatalog | null {
   if (agent === null || agent === undefined) {
     return null;
   }
-  return CATALOG_BY_AGENT[agent] ?? null;
+  return catalogsFor(currentAgentModelCatalog())[agent] ?? null;
 }
 
 /**
@@ -504,10 +565,6 @@ export interface SessionChatOptionValue {
 
 /** Descriptor id → local value. Only value-carrying options appear. */
 export type SessionChatOptionState = Readonly<Record<string, SessionChatOptionValue>>;
-
-export const SESSION_CHAT_DISPATCHED_HINT = 'Sent to the agent — not confirmed';
-export const SESSION_CHAT_DETECTED_HINT = 'Read from the terminal';
-export const SESSION_CHAT_TRANSCRIPT_HINT = 'Confirmed by the agent transcript';
 
 /**
  * How long a just-typed option command outranks a DISAGREEING detection: the
@@ -675,8 +732,7 @@ reports what it is REALLY running
 (`selectedOptions` on read results and snapshot/replaced/state frames). That
 outranks this surface's local truth, with one exception: a value the user just
 dispatched keeps the pill for a short grace window, because the TUI may not have
-repainted yet. A detection that AGREES with a pending dispatch confirms it —
-the tooltip names the transcript or terminal evidence that confirmed it.
+repainted yet. A detection that AGREES with a pending dispatch confirms it.
 Nothing detected ⇒ nothing here runs and no current value is claimed.
 */
 export interface SessionChatDetectedOptionInput {
@@ -775,13 +831,21 @@ function sessionChatSentenceCaseLabel(label: string): string {
   return first.toUpperCase() + label.slice(1);
 }
 
+/** The detected text names this choice: its id, its label, or the CLI's own row text. */
+function choiceNamesLabel(choice: SessionChatOptionChoice, detectedLabel: string): boolean {
+  const needle = detectedLabel.toLowerCase();
+  return [choice.value, choice.label, choice.pickerLabel ?? ''].some((name) => name.toLowerCase() === needle);
+}
+
 /**
  * Pill label: the value's label, or null when nothing is known.
  *
- * A detected label wins over the catalog's, so a real `Fable 5` / `Opus 4.5` /
- * unknown model id still renders. Lowercase statusline tokens (`grok-4.6`,
- * `medium`) are shown in sentence case. When the terminal only echoed the
- * option's own token (`high`), the catalog's prettier label is used instead.
+ * When the detected text names a catalog choice (its id, its label, or the
+ * CLI's own row text such as `Claude Opus 5` / `gpt-5.6-sol`), the catalog's
+ * display label wins, so the published catalog decides how a model is shown.
+ * Anything else the agent reports (`Opus 4.5` on a `--model` override, an
+ * unknown id) still renders verbatim; lowercase statusline tokens
+ * (`grok-4.6`, `medium`) are shown in sentence case.
  */
 export function sessionChatOptionValueLabel(
   descriptor: SessionChatOptionDescriptor,
@@ -794,7 +858,7 @@ export function sessionChatOptionValueLabel(
   const choice = descriptor.choices?.find((entry) => entry.value === current.value);
   const detectedLabel = current.label?.trim();
   if (detectedLabel) {
-    if (choice && detectedLabel.toLowerCase() === choice.value.toLowerCase()) {
+    if (choice && choiceNamesLabel(choice, detectedLabel)) {
       return choice.label;
     }
     return sessionChatSentenceCaseLabel(detectedLabel);

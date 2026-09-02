@@ -36,10 +36,10 @@ describe('session chat session-option catalogs', () => {
     expect(sessionChatSessionOptionCatalog('openclaude')).toBe(sessionChatSessionOptionCatalog('claude'));
   });
 
-  it('shows the current claude model lineup', () => {
-    expect(catalogFor('claude').model.choices).toEqual([
-      { value: 'fable', label: 'Fable 5' },
+  it('shows the claude model lineup from the published agent model catalog', () => {
+    expect(catalogFor('claude').model.choices?.map(({ value, label }) => ({ value, label }))).toEqual([
       { value: 'opus', label: 'Opus 5' },
+      { value: 'fable', label: 'Fable 5.1' },
       { value: 'sonnet', label: 'Sonnet 5' },
       { value: 'haiku', label: 'Haiku 4.5' },
     ]);
@@ -75,7 +75,14 @@ describe('session chat session-option catalogs', () => {
       throw new Error('claude effort must dispatch a command');
     }
     expect(effort.dispatch.build('xhigh')).toBe('/effort xhigh');
-    expect(effort.choices?.map((choice) => choice.value)).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'auto']);
+    expect(effort.choices?.map((choice) => choice.value)).toEqual([
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+      'ultracode',
+    ]);
     const fast = catalog.optionsForModel('opus').find((descriptor) => descriptor.id === 'fastMode');
     expect(fast?.dispatch).toEqual({ kind: 'toggle-command', command: '/fast' });
   });
@@ -106,13 +113,31 @@ describe('session chat session-option catalogs', () => {
     expect(sessionChatOptionValueLabel(catalog.model, {})).toBeNull();
   });
 
-  it('offers the shifted-arrow effort values for every codex model', () => {
-    expect(codexEffortChoices('gpt-5.6-sol').map((choice) => choice.value)).toEqual(['low', 'medium', 'high', 'xhigh']);
+  it('offers each codex model the effort levels the catalog gives it', () => {
+    expect(codexEffortChoices('gpt-5.6-sol').map((choice) => choice.value)).toEqual([
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+      'ultra',
+    ]);
     expect(codexEffortChoices('gpt-5.6-luna').map((choice) => choice.value)).toEqual([
       'low',
       'medium',
       'high',
       'xhigh',
+      'max',
+    ]);
+    expect(codexEffortChoices('gpt-5.5').map((choice) => choice.value)).toEqual(['low', 'medium', 'high', 'xhigh']);
+    // An unknown model gets every level the agent knows.
+    expect(codexEffortChoices('gpt-9.1-nova').map((choice) => choice.value)).toEqual([
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+      'max',
+      'ultra',
     ]);
   });
 
@@ -124,18 +149,19 @@ describe('session chat session-option catalogs', () => {
     }
     expect(catalog.model.dispatch.build('cursor-grok-4.6')).toBe('/model Cursor Grok 4.6');
     expect(catalog.optionsForModel('cursor-grok-4.6')[0]?.choices?.map((choice) => choice.label)).toEqual([
-      'None',
       'Low',
       'Medium',
       'High',
-      'Extra High',
-      'Max',
-      'Ultra',
+      'Extra high',
     ]);
+    expect(catalog.model.choices?.find((choice) => choice.value === 'claude-opus-5')?.label).toBe('Opus 5');
+    expect(catalog.model.dispatch.build('claude-opus-5')).toBe('/model Claude Opus 5');
+    // A model without effort tiers gets no effort pill at all.
+    expect(catalog.optionsForModel('auto')).toEqual([]);
   });
 
   it('uses the effort delta when known and a deterministic boundary when unknown', () => {
-    const choices = codexEffortChoices('gpt-5.6-sol');
+    const choices = codexEffortChoices('gpt-5.5');
     expect(sessionChatBoundedKeySteps(choices, 'medium', 'xhigh', 'shift-down', 'shift-up')).toEqual([
       'shift-up',
       'shift-up',
@@ -284,7 +310,7 @@ describe('session chat detected options', () => {
       detectedAt: at(0),
     });
     // A catalog id echoed verbatim renders with the catalog's label…
-    expect(sessionChatOptionValueLabel(catalog.model, next)).toBe('GPT-5.6 Sol');
+    expect(sessionChatOptionValueLabel(catalog.model, next)).toBe('GPT 5.6 Sol');
     const [effort] = catalog.optionsForModel('gpt-5.6-sol');
     expect(sessionChatOptionValueLabel(effort!, next)).toBe('Extra high');
     // …and an id it has never heard of still uses the terminal's spelling,

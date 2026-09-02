@@ -848,6 +848,36 @@ pub fn clear_session_chat_draft_after_delivery(
     set_draft(db, project_id, session_id, "", "gxserver-delayed-send").map(|_| ())
 }
 
+/*
+CDXC:SessionChatDraftRetireOnSend 2026-09-02:
+Clears the synced composer draft once a chat send delivered exactly its text.
+Until this existed the row was cleared only by the client's debounced empty
+push after Enter, which is fire-and-forget: when it was skipped, failed, or
+was overtaken by a later flush, the row kept the SENT message forever, and the
+boot-time draft reconcile plus the composer's own-draft crash restore put that
+message straight back into the composer on the next app start. The comparison
+is deliberate — a draft typed while the send was in flight has already reached
+this row and must not be wiped by the message that left before it. The server
+origin id makes every client apply the empty draft instead of treating the
+frame as an echo of its own edit. `Ok(true)` means the row changed and the
+session's followers need the new state.
+*/
+pub fn clear_session_chat_draft_after_send(
+    db: &Connection,
+    project_id: &str,
+    session_id: &str,
+    sent_text: &str,
+) -> Result<bool, DomainStateError> {
+    let Some(content) = read_session_chat_draft_content(db, project_id, session_id)? else {
+        return Ok(false);
+    };
+    if content.trim() != sent_text.trim() {
+        return Ok(false);
+    }
+    set_draft(db, project_id, session_id, "", "gxserver-chat-send")?;
+    Ok(true)
+}
+
 /// Guarded claim: only a `queued` or `failed` row can move to `sending`, so two
 /// scheduler ticks (or a tick racing a "Send now") cannot both deliver it.
 fn claim_prompt(

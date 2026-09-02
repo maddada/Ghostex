@@ -157,12 +157,79 @@ impl SessionChatTerminalActivity {
         Value::Object(map)
     }
 
-    /// Most terminal activity is stale scrollback once the main turn becomes
-    /// ready. A background shell is the exception: Claude reports it precisely
-    /// because that work remains live after the assistant turn has finished.
+    /*
+    CDXC:SessionChatCompactingStatus 2026-09-02:
+    Most terminal activity is stale scrollback once the main turn becomes
+    ready: a `⏺` status row stays on the primary screen after Claude stops, so
+    the hook-derived working flag is what proves it current. Two kinds are
+    proven by the screen itself and must NOT be gated on that flag:
+
+      - a background shell: Claude reports it precisely because that work
+        remains live after the assistant turn has finished;
+      - compaction: Claude repaints the `Compacting conversation` row in place
+        and replaces it with its `Compacted` line when done, so a whole capture
+        that still shows the row is proof the compaction is running, and a
+        whole capture without it is proof it ended. Hooks are not a start
+        authority here — `PreCompact` is deliberately unregistered and a
+        `/compact` typed in the terminal is not proven to raise
+        `UserPromptSubmit` — so gating on "working" hid a compaction the
+        terminal was visibly showing.
+    */
     pub fn remains_live_when_ready(&self) -> bool {
-        self.kind == SESSION_CHAT_ACTIVITY_SHELLS_RUNNING
+        matches!(
+            self.kind,
+            SESSION_CHAT_ACTIVITY_SHELLS_RUNNING | SESSION_CHAT_ACTIVITY_COMPACTING
+        )
     }
+}
+
+/// Which activity a client may be told about given the hook-derived working
+/// flag: everything while the agent is working, and only the screen-proven
+/// kinds (see `remains_live_when_ready`) once it is ready.
+pub fn publishable_session_chat_terminal_activity(
+    working: bool,
+    activity: Option<SessionChatTerminalActivity>,
+) -> Option<SessionChatTerminalActivity> {
+    activity.filter(|activity| working || activity.remains_live_when_ready())
+}
+
+/// Follower reconciles (1s each) probed back-to-back after the transcript
+/// records a command that starts long on-screen work. Claude paints the
+/// compaction row within a second or two of the `/compact` record; eight
+/// covers a slow first repaint without turning into a polling tier.
+pub const SESSION_CHAT_ACTIVITY_COMMAND_PROBE_TICKS: u64 = 8;
+
+/*
+CDXC:SessionChatCompactingStatus 2026-09-02:
+The transcript is the one place BOTH ways of issuing `/compact` land: Claude
+records `<command-name>/compact</command-name>` whether the bytes came from the
+chat composer or were typed straight into the terminal. The follower keys its
+fast re-probe off that row, so a terminal-typed compaction shows its card as
+quickly as a chat-sent one, and the follower stays the single owner of what it
+has published. Only Claude's user-role command envelope counts: prose that
+mentions the command, tool output, and the `<local-command-stdout>` completion
+row do not.
+*/
+pub fn transcript_message_starts_session_chat_activity(
+    agent: Option<&str>,
+    message: &crate::session_chat::SessionChatMessage,
+) -> bool {
+    if message.role != crate::session_chat::SessionChatRole::User {
+        return false;
+    }
+    let text = crate::session_chat_decode_claude::message_text(message);
+    let command = claude_command_envelope_name(&text).unwrap_or(text.as_str());
+    crate::session_chat_options::is_session_chat_activity_command_text(agent, command)
+}
+
+/// `<command-name>/compact</command-name>…` → `/compact`. `None` for any text
+/// that does not open with Claude's command envelope.
+fn claude_command_envelope_name(text: &str) -> Option<&str> {
+    const OPEN: &str = "<command-name>";
+    const CLOSE: &str = "</command-name>";
+    let rest = text.trim_start().strip_prefix(OPEN)?;
+    let end = rest.find(CLOSE)?;
+    Some(rest[..end].trim())
 }
 
 /// Change test for a value that can also disappear; an omitted field on a frame
@@ -436,14 +503,105 @@ fn cursor_activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> 
     ))
 }
 
+/*
+CDXC:SessionChatTerminalActivity 2026-09-02:
+One physical screen row with its layout kept. `normalized_screen_lines` throws
+the indentation away, which is right for every marker scan but wrong for the
+`⏺` row: Claude wraps a long status at the terminal width and paints the rest
+on rows indented by two spaces, and a scan that reads only the marker row
+publishes a label cut mid-sentence. The client showed that cut prefix next to
+the transcript's full sentence for the rest of the session, because a prefix
+never text-matches the sentence it was cut from. Keeping `indent` and
+`after_blank` lets the detector re-join exactly the rows that belong to the
+status line and nothing below it.
+*/
+struct ScreenRow {
+    /// Trimmed text, exactly what `normalized_screen_lines` would hold.
+    text: String,
+    /// Leading spaces on the physical row.
+    indent: usize,
+    /// A blank row separated this row from the previous non-blank one.
+    after_blank: bool,
+}
+
+fn screen_rows(screen_text: &str) -> Vec<ScreenRow> {
+    let mut rows = Vec::new();
+    let mut after_blank = false;
+    for raw in screen_text.lines() {
+        let line = crate::session_chat_options::normalize_spaces(
+            &crate::session_chat_options::strip_ansi_sgr(raw),
+        );
+        let text = line.trim();
+        if text.is_empty() {
+            after_blank = true;
+            continue;
+        }
+        rows.push(ScreenRow {
+            text: text.to_string(),
+            indent: line.len() - line.trim_start().len(),
+            after_blank,
+        });
+        after_blank = false;
+    }
+    rows
+}
+
+/// Minimum indent of a row that continues the `⏺` line above it. Wrapped prose
+/// sits at exactly two spaces; a wrapped list item inside that prose sits
+/// deeper, so anything at least this deep still belongs to the status.
+const CLAUDE_STATUS_CONTINUATION_INDENT: usize = 2;
+
+/// Claude's tool-output gutter. It is indented like a continuation row but
+/// starts the tool block, so it ends the status text.
+const CLAUDE_TOOL_OUTPUT_MARKER: char = '⎿';
+
+/// A row that opens a markdown list item keeps its own line when re-joined, so
+/// the list survives instead of running into the sentence above it.
+fn starts_list_item(text: &str) -> bool {
+    if text.starts_with("- ") || text.starts_with("* ") || text.starts_with("• ") {
+        return true;
+    }
+    let digits = text.trim_start_matches(|ch: char| ch.is_ascii_digit());
+    digits.len() < text.len() && (digits.starts_with(". ") || digits.starts_with(") "))
+}
+
+/*
+The whole status Claude painted, re-joined from its wrapped rows. Continuation
+rows are the indented ones directly below the `⏺` row; a paragraph break inside
+the message survives as one, so the label reads like the message rather than
+one run-on line. The text stops at the first row that is not indented (the
+separator, the prompt, a tip, the statusline), at another marker row, or at the
+`⎿` gutter that opens a tool block.
+*/
+fn joined_claude_status_line(rows: &[ScreenRow], index: usize) -> String {
+    let mut label = rows[index].text.clone();
+    for row in &rows[index + 1..] {
+        if row.indent < CLAUDE_STATUS_CONTINUATION_INDENT
+            || row.text.starts_with(CLAUDE_TOOL_OUTPUT_MARKER)
+            || activity_from_line(&row.text).is_some()
+        {
+            break;
+        }
+        label.push_str(if row.after_blank {
+            "\n\n"
+        } else if starts_list_item(&row.text) {
+            "\n"
+        } else {
+            " "
+        });
+        label.push_str(&row.text);
+    }
+    label
+}
+
 /// `Some` while the agent is painting a live line this build understands.
 pub fn detect_session_chat_terminal_activity(
     agent: Option<&str>,
     screen_text: &str,
 ) -> Option<SessionChatTerminalActivity> {
     let agent = session_chat_option_agent(agent)?;
-    let mut lines = crate::session_chat_agent_fleet::normalized_screen_lines(screen_text);
     if agent == SessionChatOptionAgent::Cursor {
+        let lines = crate::session_chat_agent_fleet::normalized_screen_lines(screen_text);
         return lines
             .iter()
             .rev()
@@ -455,6 +613,7 @@ pub fn detect_session_chat_terminal_activity(
     if agent != SessionChatOptionAgent::Claude {
         return None;
     }
+    let mut rows = screen_rows(screen_text);
     /*
     CDXC:SessionChatAgentFleet 2026-08-23: cut the background-agent block off
     the bottom of the screen before reading anything. Its rows are
@@ -464,21 +623,29 @@ pub fn detect_session_chat_terminal_activity(
     prefer it over the real status line and its rows would spend the scan
     window's line budget getting there.
     */
+    let lines: Vec<String> = rows.iter().map(|row| row.text.clone()).collect();
     if let Some(start) = crate::session_chat_agent_fleet::agent_fleet_block_start(&lines) {
-        lines.truncate(start);
+        rows.truncate(start);
     }
-    let window = &lines[lines.len().saturating_sub(ACTIVITY_SCAN_LINES)..];
+    let window_start = rows.len().saturating_sub(ACTIVITY_SCAN_LINES);
     // Newest match wins: a screen can still hold the tail of a previous run.
-    for (index, line) in window.iter().enumerate().rev() {
+    for index in (window_start..rows.len()).rev() {
+        let line = &rows[index].text;
         let Some(mut activity) = activity_from_line(line) else {
             continue;
         };
         if activity.kind == SESSION_CHAT_ACTIVITY_COMPACTING {
-            activity.percent = window
+            activity.percent = rows[index + 1..]
                 .iter()
-                .skip(index + 1)
                 .take(ACTIVITY_PERCENT_LOOKAHEAD)
-                .find_map(|candidate| parse_percent(candidate));
+                .find_map(|candidate| parse_percent(&candidate.text));
+        } else if activity.kind == SESSION_CHAT_ACTIVITY_CLAUDE_STATUS && line.starts_with('⏺') {
+            // Re-read the status from its whole wrapped extent, so the clock
+            // and parenthetical metadata are stripped from the real end of
+            // the text rather than from the end of its first row.
+            if let Some(joined) = activity_from_line(&joined_claude_status_line(&rows, index)) {
+                activity = joined;
+            }
         }
         return Some(activity);
     }

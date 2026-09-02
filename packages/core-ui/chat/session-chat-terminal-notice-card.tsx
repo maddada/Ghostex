@@ -106,6 +106,8 @@ export interface SessionChatTerminalNoticeCardProps {
    * shown beside `switchToTerminal` actions so the card teaches the chord.
    */
   switchToTerminalShortcut?: string;
+  /** Whether keyboard shortcut hints are rendered in the notice card. */
+  showShortcutLabels?: boolean;
   /**
    * Reports whether this card is on screen. The parent stacks the card above
    * the composer and needs to know it is there — the new-session welcome is a
@@ -174,6 +176,7 @@ export function SessionChatTerminalNoticeCard({
   onSwitchToTerminal,
   onVisibleChange,
   sessionKey,
+  showShortcutLabels = true,
   switchToTerminalShortcut,
 }: SessionChatTerminalNoticeCardProps) {
   const [dismissedKey, setDismissedKey] = useState<string | null>(() => readStoredDismissedNoticeKey(sessionKey));
@@ -382,7 +385,7 @@ export function SessionChatTerminalNoticeCard({
                 // a second answer arrive at a picker that is already gone.
                 readOnly={!canSend || sending || pickedChoice !== null}
                 selected={pickedChoice === null ? [] : [pickedChoice]}
-                showShortcuts
+                showShortcuts={showShortcutLabels}
               />
               {!canSend ? (
                 <p className='mt-2 text-[11px] leading-snug text-muted-foreground'>{READ_ONLY_HINT}</p>
@@ -438,7 +441,7 @@ export function SessionChatTerminalNoticeCard({
                     {...(canSend ? {} : { title: READ_ONLY_HINT })}
                   >
                     {action.label}
-                    {sendKeysIndex === 0 && keyboardSendKeys ? (
+                    {showShortcutLabels && sendKeysIndex === 0 && keyboardSendKeys ? (
                       <kbd className='ml-0.5 flex h-4 min-w-4 shrink-0 items-center justify-center rounded border border-border/60 bg-background/50 px-1 text-[10px] font-medium text-muted-foreground tabular-nums'>
                         1
                       </kbd>
@@ -453,7 +456,7 @@ export function SessionChatTerminalNoticeCard({
                     <Button key={action.id} onClick={onSwitchToTerminal} size='xs' variant='outline'>
                       <IconTerminal2 aria-hidden='true' stroke={2} />
                       {action.label}
-                      {switchToTerminalShortcut ? (
+                      {showShortcutLabels && switchToTerminalShortcut ? (
                         <kbd className='ml-0.5 flex h-4 shrink-0 items-center rounded border border-border/60 bg-background/50 px-1 text-[10px] font-medium text-muted-foreground'>
                           {switchToTerminalShortcut}
                         </kbd>

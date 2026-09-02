@@ -103,6 +103,8 @@ interface SessionChatComposerActionsProps {
   onToggleVerbose?: () => void;
   sessionNoteActive: boolean;
   sessionNoteHasText: boolean;
+  /** Whether shortcut chords are rendered in tooltips and menu rows. */
+  showShortcutLabels?: boolean;
   stashedPromptCount: number;
   summaryMode: boolean;
   verboseMode: boolean;
@@ -124,20 +126,24 @@ export function SessionChatComposerActions({
   onToggleVerbose,
   sessionNoteActive,
   sessionNoteHasText,
+  showShortcutLabels = true,
   stashedPromptCount,
   summaryMode,
   verboseMode,
 }: SessionChatComposerActionsProps) {
   /*
-  Every footer control names its shortcut in its tooltip, the way the desktop
-  terminal's action bar does, so the two surfaces teach the same key. The host's
-  action list is where the effective (user-configurable) chords come from — the
-  composer cannot resolve them itself — and a control whose action the host did
-  not supply simply shows no chord rather than a guessed one.
+  When shortcut labels are enabled, every footer control names its shortcut in
+  its tooltip, the way the desktop terminal's action bar does, so the two
+  surfaces teach the same key. The host's action list is where the effective
+  (user-configurable) chords come from — the composer cannot resolve them
+  itself — and a control whose action the host did not supply simply shows no
+  chord rather than a guessed one. Mobile disables the labels because its chat
+  surface has no keyboard shortcut chrome.
   */
   const hostActionShortcut = (id: string): string | undefined =>
-    hostActions?.actions?.find((action) => action.id === id)?.shortcut;
-  const withShortcut = (label: string, shortcut?: string): string => (shortcut ? `${label} (${shortcut})` : label);
+    showShortcutLabels ? hostActions?.actions?.find((action) => action.id === id)?.shortcut : undefined;
+  const withShortcut = (label: string, shortcut?: string): string =>
+    showShortcutLabels && shortcut ? `${label} (${shortcut})` : label;
 
   const stashLabel = 'Stash prompt';
   const stashTooltip = [
@@ -215,7 +221,7 @@ export function SessionChatComposerActions({
     <DropdownMenuItem key={action.id} onClick={() => runHostAction(action)}>
       {hostActionIcon(action.id)}
       {action.label}
-      {action.shortcut ? <DropdownMenuShortcut>{action.shortcut}</DropdownMenuShortcut> : null}
+      {showShortcutLabels && action.shortcut ? <DropdownMenuShortcut>{action.shortcut}</DropdownMenuShortcut> : null}
     </DropdownMenuItem>
   );
   /*
@@ -254,9 +260,10 @@ export function SessionChatComposerActions({
   ) : null;
   const summaryMenuItem = onToggleSummary ? (
     <DropdownMenuCheckboxItem
-      className={cn('whitespace-nowrap', summaryMode && 'font-medium')}
+      className={cn('whitespace-nowrap pr-2', summaryMode && 'font-medium')}
       checked={summaryMode}
       closeOnClick={false}
+      showIndicator={false}
       onCheckedChange={(checked: boolean) => {
         if (checked !== summaryMode) {
           onToggleSummary();
@@ -265,7 +272,9 @@ export function SessionChatComposerActions({
     >
       {summaryMode ? <IconListCheck aria-hidden='true' /> : <IconListDetails aria-hidden='true' />}
       Summary mode
-      <DropdownMenuShortcut>{formatSidebarHotkeyLabel(sessionChatSummaryToggleHotkey())}</DropdownMenuShortcut>
+      {showShortcutLabels ? (
+        <DropdownMenuShortcut>{formatSidebarHotkeyLabel(sessionChatSummaryToggleHotkey())}</DropdownMenuShortcut>
+      ) : null}
     </DropdownMenuCheckboxItem>
   ) : null;
   const delayedActionsMenuItem =
@@ -277,7 +286,9 @@ export function SessionChatComposerActions({
       >
         <IconClockCheck aria-hidden='true' />
         {onDelayedActions ? 'Delayed actions' : (delayedHostAction?.label ?? 'Delayed actions')}
-        {delayedHostAction?.shortcut ? <DropdownMenuShortcut>{delayedHostAction.shortcut}</DropdownMenuShortcut> : null}
+        {showShortcutLabels && delayedHostAction?.shortcut ? (
+          <DropdownMenuShortcut>{delayedHostAction.shortcut}</DropdownMenuShortcut>
+        ) : null}
       </DropdownMenuItem>
     ) : null;
   const closeAfterDoneMenuItem = closeAfterDoneHostAction ? hostActionMenuItem(closeAfterDoneHostAction) : null;
@@ -560,7 +571,7 @@ export function SessionChatComposerActions({
                     ) : null}
                   </span>
                   Session note
-                  {hostActions?.sessionNoteShortcut ? (
+                  {showShortcutLabels && hostActions?.sessionNoteShortcut ? (
                     <DropdownMenuShortcut>{hostActions.sessionNoteShortcut}</DropdownMenuShortcut>
                   ) : null}
                 </DropdownMenuCheckboxItem>

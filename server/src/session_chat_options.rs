@@ -76,8 +76,10 @@ a direct zmx socket read, so these are priced, not chosen for feel:
     client follows a session that the agent reports as working.
   - idle ⇒ the original 30s, unchanged.
 
-A user-typed `/compact` does not wait for any of this: it rides the +2s/+6s
-post-dispatch redetect (see `is_session_chat_activity_command_text`).
+A `/compact` does not wait for any of this: the follower probes back-to-back as
+soon as the transcript records the command, whether it was sent from the chat
+composer or typed straight into the terminal (see
+`transcript_message_starts_session_chat_activity`).
 */
 pub const SESSION_CHAT_ACTIVITY_RECONCILE_INTERVAL_TICKS: u64 = 1;
 pub const SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS: u64 = 1;
@@ -141,7 +143,9 @@ pub struct SessionChatDetectedSelection {
     pub mode: Option<SessionChatDetectedChoice>,
     /// Cursor's model context-window label, for example `272K` or `1M`.
     pub context_window: Option<String>,
-    /// The complete normalized terminal line that supplied this detection.
+    /// The agent's whole footer — every normalized line from the statusline
+    /// that supplied this detection down to the bottom of the screen, newline
+    /// joined. The chat surface shows it verbatim as the model pill's tooltip.
     pub terminal_status_line: Option<String>,
     /// Cursor or Codex's terminal-reported Fast modifier.
     pub fast: Option<bool>,
@@ -342,9 +346,15 @@ CDXC:SessionChatTerminalActivity 2026-08-22:
 Commands that START long on-screen work. The follower would find a compaction
 on its own within a probe tier, but the user who just typed `/compact` is
 watching for a response RIGHT NOW, and a transcript that sits silent for ten
-seconds before admitting anything is happening reads as a dropped message. This
-reuses the post-dispatch redetect (+2s/+6s), which is already the mechanism for
-"read the screen back after we typed something at it".
+seconds before admitting anything is happening reads as a dropped message.
+
+CDXC:SessionChatCompactingStatus 2026-09-02: the fast look is keyed off the
+transcript row Claude records for the command, not off the chat send path — a
+`/compact` typed straight into the terminal never went through that path and
+used to wait for the idle 30s tier. The send path still treats the command as
+Ghostex-typed for draft handling; the screen is re-read by the follower burst
+(`transcript_message_starts_session_chat_activity`), so one loop owns what was
+published.
 
 Automatic compaction announces itself to nobody, so it is still discovered by
 the working-tier probe; that is the case this cannot help with.
@@ -458,8 +468,8 @@ fn skips_first_segment(segments: &[String]) -> bool {
 // Model family and effort are independent segments, matched independently.
 // ---------------------------------------------------------------------------
 
-/// `(family segment prefix, pill value)` — mirrors CLAUDE_MODELS in
-/// packages/core-ui/chat/session-chat-session-options.ts.
+/// `(family segment prefix, pill value)` — mirrors the Claude models in the
+/// published agent model catalog (`agent-model-catalog.json`).
 const CLAUDE_MODEL_FAMILIES: &[(&str, &str)] = &[
     ("Fable", "fable"),
     ("Opus", "opus"),
@@ -467,8 +477,9 @@ const CLAUDE_MODEL_FAMILIES: &[(&str, &str)] = &[
     ("Haiku", "haiku"),
 ];
 
-/// Rendered lowercase by the TUI; mirrors CLAUDE_EFFORTS.
-const CLAUDE_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
+/// Rendered lowercase by the TUI; mirrors the Claude efforts in the published
+/// agent model catalog (`agent-model-catalog.json`).
+const CLAUDE_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max", "ultracode"];
 
 /// `` or ` 5` or ` 4.5` — the family's optional version suffix.
 fn is_model_version_suffix(rest: &str) -> bool {
@@ -554,8 +565,10 @@ fn match_claude_mode(segment: &str) -> Option<SessionChatDetectedChoice> {
 // Model + effort (+ the `fast` modifier) live in ONE segment.
 // ---------------------------------------------------------------------------
 
-/// Mirrors CODEX_EFFORTS; `max` is Claude-only.
-const CODEX_EFFORTS: &[&str] = &["minimal", "low", "medium", "high", "xhigh"];
+/// Mirrors the Codex efforts in the published agent model catalog
+/// (`agent-model-catalog.json`); `max` and `ultra` sit behind the picker's
+/// "More reasoning…" row.
+const CODEX_EFFORTS: &[&str] = &["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
 /// `gpt-` + a digit + id characters, lowercase and case-sensitive so an
 /// uppercase "GPT-5.6" in prose or a title cannot match.
@@ -607,15 +620,44 @@ fn match_codex_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
 // and unknown labels remain honest readbacks.
 // ---------------------------------------------------------------------------
 
+/// `(picker row text, pill value)` — mirrors the Cursor models in the
+/// published agent model catalog (`agent-model-catalog.json`).
 const CURSOR_MODEL_LABELS: &[(&str, &str)] = &[
     ("Auto", "auto"),
-    ("Composer 2.5", "composer-2.5"),
     ("Cursor Grok 4.6", "cursor-grok-4.6"),
-    ("GPT-5.6 Sol", "gpt-5.6-sol"),
-    ("GPT-5.6 Terra", "gpt-5.6-terra"),
-    ("GPT-5.6 Luna", "gpt-5.6-luna"),
+    ("Composer 2.5", "composer-2.5"),
     ("Claude Opus 5", "claude-opus-5"),
+    ("Claude Opus 4.8", "claude-opus-4-8"),
+    ("GPT-5.6 Sol", "gpt-5.6-sol"),
+    ("GPT-5.5", "gpt-5.5"),
+    ("Claude Fable 5.1", "claude-fable-5-1"),
+    ("Claude Fable 5", "claude-fable-5"),
+    ("Cursor Grok 4.5", "cursor-grok-4.5"),
+    ("Gemini 3.7 Flash", "gemini-3.7-flash"),
+    ("GPT-5.6 Terra", "gpt-5.6-terra"),
     ("Claude Sonnet 5", "claude-sonnet-5"),
+    ("Claude Sonnet 4.6", "claude-sonnet-4-6"),
+    ("Codex 5.3", "gpt-5.3-codex"),
+    ("Claude Opus 4.7", "claude-opus-4-7"),
+    ("GPT-5.4", "gpt-5.4"),
+    ("Claude Opus 4.6", "claude-opus-4-6"),
+    ("Claude Opus 4.5", "claude-opus-4-5"),
+    ("GPT-5.2", "gpt-5.2"),
+    ("GPT-5.6 Luna", "gpt-5.6-luna"),
+    ("Gemini 3.6 Flash", "gemini-3.6-flash"),
+    ("Gemini 3.1 Pro", "gemini-3.1-pro"),
+    ("GPT-5.4 Mini", "gpt-5.4-mini"),
+    ("GPT-5.4 Nano", "gpt-5.4-nano"),
+    ("Claude Haiku 4.5", "claude-haiku-4-5"),
+    ("Claude Sonnet 4.5", "claude-sonnet-4-5"),
+    ("GPT-5.1", "gpt-5.1"),
+    ("Gemini 3.5 Flash", "gemini-3.5-flash"),
+    ("Claude Sonnet 4", "claude-sonnet-4"),
+    ("GPT-5 Mini", "gpt-5-mini"),
+    ("Kimi K3", "kimi-k3"),
+    ("Kimi K2.7 Code", "kimi-k2.7-code"),
+    ("GLM 5.2", "glm-5.2"),
+    ("Gemini 3 Flash", "gemini-3-flash"),
 ];
 
 fn is_cursor_usage_segment(segment: &str) -> bool {
@@ -737,7 +779,8 @@ fn match_cursor_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
 // ---------------------------------------------------------------------------
 
 /// The values grok's model catalog offers (`reasoning_efforts` in
-/// `~/.grok/models_cache.json`); mirrors GROK_EFFORTS on the client.
+/// `~/.grok/models_cache.json`); mirrors the Grok efforts in the published
+/// agent model catalog (`agent-model-catalog.json`).
 const GROK_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh"];
 
 /// Box-drawing runs are chrome, not content: fold them to spaces so the
@@ -963,35 +1006,49 @@ fn match_hermes_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
 // ---------------------------------------------------------------------------
 
 /// Scans the tail window bottom-up; the bottom-most match wins. Returns `None`
-/// when the window carries no statusline this parser understands.
+/// when the window carries no statusline this parser understands. A detection
+/// carries the agent's whole footer (statusline down to the bottom of the
+/// screen) as `terminal_status_line`.
 pub fn detect_session_chat_selection(
     agent: SessionChatOptionAgent,
     text: &str,
 ) -> Option<SessionChatDetectedSelection> {
+    let scanned_lines = scan_window(text);
     let mut found = SessionChatDetectedSelection::default();
-    for scanned in scan_window(text).iter().rev() {
+    // Index of the topmost line that supplied any value; the footer capture
+    // starts there.
+    let mut topmost_match: Option<usize> = None;
+    for (index, scanned) in scanned_lines.iter().enumerate().rev() {
         match agent {
             SessionChatOptionAgent::Cursor => {
                 if let Some(selection) = match_cursor_statusline(scanned) {
-                    return Some(selection);
+                    found = selection;
+                    topmost_match = Some(index);
+                    break;
                 }
                 continue;
             }
             SessionChatOptionAgent::Pi => {
                 if let Some(selection) = match_pi_statusline(scanned) {
-                    return Some(selection);
+                    found = selection;
+                    topmost_match = Some(index);
+                    break;
                 }
                 continue;
             }
             SessionChatOptionAgent::Omp => {
                 if let Some(selection) = match_omp_statusline(scanned) {
-                    return Some(selection);
+                    found = selection;
+                    topmost_match = Some(index);
+                    break;
                 }
                 continue;
             }
             SessionChatOptionAgent::Hermes => {
                 if let Some(selection) = match_hermes_statusline(scanned) {
-                    return Some(selection);
+                    found = selection;
+                    topmost_match = Some(index);
+                    break;
                 }
                 continue;
             }
@@ -1010,6 +1067,11 @@ pub fn detect_session_chat_selection(
         }
         let segments = line_segments(line);
         let first_eligible = usize::from(skips_first_segment(&segments));
+        let matched_before = (
+            found.model.is_some(),
+            found.effort.is_some(),
+            found.mode.is_some(),
+        );
         for segment in segments.iter().skip(first_eligible) {
             match agent {
                 SessionChatOptionAgent::Claude => {
@@ -1025,8 +1087,7 @@ pub fn detect_session_chat_selection(
                 }
                 SessionChatOptionAgent::Codex => {
                     if found.model.is_none() && found.effort.is_none() {
-                        if let Some(mut selection) = match_codex_segment(segment) {
-                            selection.terminal_status_line = Some(line.trim().to_string());
+                        if let Some(selection) = match_codex_segment(segment) {
                             found = selection;
                         }
                     }
@@ -1050,14 +1111,40 @@ pub fn detect_session_chat_selection(
                 SessionChatOptionAgent::Pi => unreachable!("Pi is parsed as a complete statusline"),
             }
         }
+        if (
+            found.model.is_some(),
+            found.effort.is_some(),
+            found.mode.is_some(),
+        ) != matched_before
+        {
+            topmost_match = Some(index);
+        }
         if found.model.is_some() && found.effort.is_some() {
-            if found.terminal_status_line.is_none() {
-                found.terminal_status_line = Some(line.trim().to_string());
-            }
             break;
         }
     }
-    (found.model.is_some() || found.effort.is_some() || found.mode.is_some()).then_some(found)
+    if found.model.is_none() && found.effort.is_none() && found.mode.is_none() {
+        return None;
+    }
+    if let Some(top) = topmost_match {
+        let footer = scanned_lines[top..]
+            .iter()
+            .map(|line| {
+                // Grok draws its statusline on the composer's border chrome.
+                if agent == SessionChatOptionAgent::Grok {
+                    strip_box_drawing(line).trim().to_string()
+                } else {
+                    line.trim().to_string()
+                }
+            })
+            .filter(|line| !line.is_empty() && !is_divider_line(line))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if !footer.is_empty() {
+            found.terminal_status_line = Some(footer);
+        }
+    }
+    Some(found)
 }
 
 fn transcript_tail_text(path: &Path) -> std::io::Result<String> {
@@ -1600,7 +1687,10 @@ mod tests {
         assert_eq!(selection.context_window, None);
         assert_eq!(
             selection.terminal_status_line.as_deref(),
-            Some("New Agent \u{b7} Cursor Grok 4.6 Medium \u{b7} 0 used")
+            Some(concat!(
+                "New Agent \u{b7} Cursor Grok 4.6 Medium \u{b7} 0 used\n",
+                "Ghostex \u{b7} main \u{b7} Ctx 0% used \u{b7} +6702 -472"
+            ))
         );
     }
 
@@ -1975,23 +2065,15 @@ impl SessionChatOptionDetector {
                 }
             }
         }
-        let (mut detected, hook_working) = open_gxserver_database(&self.paths)
+        let mut detected = open_gxserver_database(&self.paths)
             .ok()
             .map(|db| {
                 let repository = DomainRepository::new(&db, self.server_id.as_str());
-                let hook_working = repository
-                    .get_session(project_id, session_id)
-                    .ok()
-                    .flatten()
-                    .map(|session| session_chat_hook_working(&session));
-                (
-                    crate::session_chat_options::detect_session_chat_terminal_state(
-                        &repository,
-                        project_id,
-                        session_id,
-                        agent,
-                    ),
-                    hook_working,
+                crate::session_chat_options::detect_session_chat_terminal_state(
+                    &repository,
+                    project_id,
+                    session_id,
+                    agent,
                 )
             })
             .unwrap_or_default();
@@ -2094,20 +2176,25 @@ impl SessionChatOptionDetector {
                 model_grace_started = Some(started);
             }
             /*
-            Chat already suppresses every ordinary terminal activity as soon
-            as Claude reports idle, because its old status rows remain visible
-            in scrollback. Apply that same liveness rule to presentation. When
-            Claude is still working, only a whole capture may change the zmx
-            verdict; a failed/capped capture preserves the last safe state.
+            CDXC:SessionChatCompactingStatus 2026-09-02:
+            The screen owns this marker outright. It used to be forced false
+            whenever the hooks said idle, on the theory that a finished
+            compaction's row lingers in scrollback like a `⏺` status does — but
+            Claude repaints the compacting row in place and replaces it with
+            its `Compacted` line, so a whole capture is both the start and the
+            end evidence, and the hook gate only hid compactions the hooks
+            never learned about (a `/compact` typed in the terminal). Only a
+            whole capture may change the verdict; a failed/capped capture
+            preserves the last safe state.
             */
-            let detected_compacting = match hook_working {
-                Some(false) => Some(false),
-                Some(true) if detected.captured => Some(
+            let detected_compacting = if detected.captured {
+                Some(
                     crate::session_chat_terminal_activity::is_session_chat_compacting_activity(
                         detected.activity.as_ref(),
                     ),
-                ),
-                _ => previous_compacting,
+                )
+            } else {
+                previous_compacting
             };
             cache.insert(
                 key,

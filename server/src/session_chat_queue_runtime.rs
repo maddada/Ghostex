@@ -326,7 +326,8 @@ impl SessionChatQueueRuntime {
             `Unknown` is not a hold. Only positive evidence that the box is
             absent stops the drain.
             */
-            if (self.composer_reader)(&project_id, &session_id).is_not_ready() {
+            let composer = (self.composer_reader)(&project_id, &session_id);
+            if composer.is_not_ready() && !composer.should_dismiss_with_escape() {
                 self.reset_gate(&key);
                 continue;
             }
@@ -639,7 +640,8 @@ pub(crate) async fn send_session_chat_message_internal(
     carries a code and a message and nothing else, at 169 construction sites);
     clients read it from /api/readSessionTerminalTail instead.
     */
-    if detection.composer.is_not_ready() {
+    let dismiss_claude_settings = detection.composer.should_dismiss_with_escape();
+    if detection.composer.is_not_ready() && !dismiss_claude_settings {
         return Err(DomainStateError {
             code: "composerNotReady",
             message: detection
@@ -671,6 +673,7 @@ pub(crate) async fn send_session_chat_message_internal(
         terminal_agent.as_deref(),
         text,
         image_paths,
+        dismiss_claude_settings,
     );
     if let Err(error) = crate::session_chat_send::execute_session_chat_send(
         &target.project_id,
@@ -751,13 +754,16 @@ pub(crate) async fn send_session_chat_message_internal(
     also NOT a user prompt — Ghostex itself typed it on the user's behalf when
     they picked a model or an effort level out of the composer's dropdown.
     */
-    let is_option_command = crate::session_chat_options::is_session_chat_option_command_text(
-        terminal_agent.as_deref(),
-        text,
-    ) || crate::session_chat_options::is_session_chat_activity_command_text(
-        terminal_agent.as_deref(),
-        text,
-    );
+    let is_option_readback_command =
+        crate::session_chat_options::is_session_chat_option_command_text(
+            terminal_agent.as_deref(),
+            text,
+        );
+    let is_option_command = is_option_readback_command
+        || crate::session_chat_options::is_session_chat_activity_command_text(
+            terminal_agent.as_deref(),
+            text,
+        );
     /*
     CDXC:DraftSessions 2026-08-28:
     THE chat half of the draft promotion choke point. Both callers reach the
@@ -782,7 +788,12 @@ pub(crate) async fn send_session_chat_message_internal(
     } else {
         promote_draft_session_after_send(state, &target.project_id, &target.session_id);
     }
-    if is_option_command {
+    retire_sent_session_chat_draft(state, &target.project_id, &target.session_id, text);
+    // A `/compact` is NOT re-read here: the follower's transcript-keyed probe
+    // burst covers it for chat-sent and terminal-typed commands alike
+    // (CDXC:SessionChatCompactingStatus), and a second publisher of the same
+    // activity only let a later follower frame overwrite what this one showed.
+    if is_option_readback_command {
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,
@@ -976,6 +987,34 @@ fn promote_draft_session_after_send(state: &AppState, project_id: &str, session_
     ) {
         let _ =
             schedule_presentation_session_delta(state, &db, &repository, project_id, session_id);
+    }
+}
+
+/*
+CDXC:SessionChatDraftRetireOnSend 2026-09-02:
+The server half of "a sent message never comes back as a draft". Reached only
+after the bytes were accepted, from both callers of the internal send (the
+composer and the queue scheduler), so every Ghostex-delivered prompt retires the
+draft row it came from. The republish is what makes the desktop, web and mobile
+composers drop their copies right away instead of relying on their own delayed
+empty push.
+*/
+fn retire_sent_session_chat_draft(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    sent_text: &str,
+) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    if matches!(
+        crate::session_chat_queue::clear_session_chat_draft_after_send(
+            &db, project_id, session_id, sent_text
+        ),
+        Ok(true)
+    ) {
+        broadcast_session_chat_queue_state(state, project_id, session_id);
     }
 }
 

@@ -44,6 +44,11 @@ import {
 } from './session-chat-merge';
 import { countSessionChatCompactionRecords } from './session-chat-noise';
 import {
+  mergeSessionChatTerminalStatus,
+  sessionChatTerminalStatusMessage,
+  unreconciledSessionChatTerminalStatuses,
+} from './session-chat-terminal-status';
+import {
   appendSessionChatCommandMarker,
   applySessionChatCommandMarkerBoundaries,
   assignSessionChatPendingOccurrence,
@@ -116,8 +121,6 @@ const INITIAL_STALL_THRESHOLD_MS = 15_000;
 // button (surfaced by the view's loading indicator) is the only recovery.
 const MAX_AUTOMATIC_RECONNECTS = 2;
 
-const CLAUDE_TERMINAL_STATUS_KIND = 'claude-status';
-
 interface SessionChatStreamPosition {
   epoch: number;
   seq: number;
@@ -160,21 +163,6 @@ function normalizedSessionChatText(message: SessionChatMessage): string {
     .join('\n\n')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-function terminalStatusMessage(activity: SessionChatTerminalActivity): SessionChatMessage | null {
-  const text = activity.label.trim();
-  if (activity.kind !== CLAUDE_TERMINAL_STATUS_KIND || !text) {
-    return null;
-  }
-  const timestamp = Date.parse(activity.detectedAt);
-  return {
-    id: `terminal-status:${activity.detectedAt}:${text}`,
-    role: 'reasoning',
-    blocks: [{ type: 'text', text }],
-    timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
-    source: 'hook',
-  };
 }
 
 interface FrameState {
@@ -493,19 +481,13 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   }, [transport]);
 
   const applyTerminalActivity = useCallback((activity: SessionChatTerminalActivity | undefined): void => {
-    const transient = activity ? terminalStatusMessage(activity) : null;
+    const transient = activity ? sessionChatTerminalStatusMessage(activity) : null;
     if (!transient) {
       setTerminalActivity(activity ?? null);
       return;
     }
     setTerminalActivity(null);
-    setTerminalStatusMessages((current) => {
-      const text = normalizedSessionChatText(transient);
-      if (current.some((message) => normalizedSessionChatText(message) === text)) {
-        return current;
-      }
-      return [...current, transient];
-    });
+    setTerminalStatusMessages((current) => mergeSessionChatTerminalStatus(current, transient));
   }, []);
 
   /**
@@ -1133,9 +1115,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     const markerMessages = sessionChatCommandMarkersAsMessages(markers, compactionRecords).filter(
       (message) => message.role !== 'user' || !authoritativeText.has(normalizedSessionChatText(message))
     );
-    const visibleTerminalStatuses = terminalStatusMessages.filter(
-      (message) => !authoritativeText.has(normalizedSessionChatText(message))
-    );
+    const visibleTerminalStatuses = unreconciledSessionChatTerminalStatuses(terminalStatusMessages, boundaried);
     const tail: SessionChatMessage[] = [
       ...visibleTerminalStatuses,
       ...sessionChatAppCommandsAsMessages(appCommands, boundaried),
