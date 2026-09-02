@@ -84,7 +84,7 @@ describe('remote presentation sidebar source', () => {
       expect(menuActionsSource).toContain(`label: '${label}'`);
     }
     expect(menuActionsSource).toContain("label: session.isPinned ? 'Unpin' : 'Pin'");
-    expect(menuActionsSource).toContain("label: session.isSleeping ? 'Wake' : 'Sleep'");
+    expect(menuActionsSource).toContain("label: lifecycleState === 'sleeping' ? 'Wake' : 'Sleep'");
     expect(menuActionsSource).toContain("label: 'Advanced'");
     expect(menuActionsSource).toContain("label: 'Note'");
     expect(menuActionsSource).not.toContain('Pop Out Pane');

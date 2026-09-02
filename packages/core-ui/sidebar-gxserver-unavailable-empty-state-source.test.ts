@@ -52,7 +52,7 @@ describe('gxserver unavailable sidebar empty state source', () => {
     expect(emptyStateSource).toContain('Restart Ghostex to try again.');
     expect(emptyStateSource).toContain('No Projects Added.');
     expect(emptyStateSource).toContain(
-      'Hover over the Projects label and click on the plus button to add your first project and get started!'
+      'Open the More menu at the top of the sidebar and choose Add Project to get started!'
     );
   });
 });

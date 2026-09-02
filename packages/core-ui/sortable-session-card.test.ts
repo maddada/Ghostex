@@ -436,7 +436,9 @@ describe('canSleepSidebarSession', () => {
 
   test('skips already sleeping sessions from bulk sleep actions', () => {
     expect(canSleepSidebarSession(baseSession)).toBe(true);
-    expect(canSleepSidebarSession({ ...baseSession, isSleeping: true })).toBe(false);
+    expect(
+      canSleepSidebarSession({ ...baseSession, isRunning: false, isSleeping: true, lifecycleState: 'sleeping' })
+    ).toBe(false);
     expect(canSleepSidebarSession({ ...baseSession, lifecycleState: 'sleeping' })).toBe(false);
   });
 });
