@@ -4,7 +4,12 @@ Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
 import { GpuiGxserverClient } from './client';
-import { GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS, GPUI_SIDEBAR_BOOTSTRAP_RETRY_DELAY_MS } from './constants';
+import {
+  GPUI_PRESENTATION_STREAM_HEALTHY_MS,
+  GPUI_PRESENTATION_STREAM_RECOVERY_DELAYS_MS,
+  GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS,
+  GPUI_SIDEBAR_BOOTSTRAP_RETRY_DELAY_MS,
+} from './constants';
 import type { GpuiSidebarRuntime } from './core';
 import {
   activeGroupIdForGpuiGxserverBootstrapPresentationState,
@@ -48,6 +53,8 @@ export interface GpuiSidebarRuntimePresentationStreamMethods {
   applyGxserverBootstrapPresentationState(bootstrap: GpuiValidatedGxserverBootstrap): boolean;
   openPresentationSubscription(clientId: string, lastRevision: number): void;
   recoverPresentationStream(clientId: string): void;
+  reopenPresentationStream(clientId: string): void;
+  notePresentationStreamAcknowledged(): void;
   applyPresentationSnapshot(snapshot: GxserverPresentationSnapshot, kind: GpuiSidebarRuntimeSnapshotKind): void;
   autoMaterializeStartupFocusedSession(): void;
   applyPresentationDelta(delta: GxserverPresentationDelta, gxserverRevision: number): void;
@@ -111,6 +118,13 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     }
 
     this.subscription?.close();
+    // A pending recovery belongs to the stream this bootstrap is replacing.
+    if (this.presentationStreamRecoveryTimeoutId !== undefined) {
+      window.clearTimeout(this.presentationStreamRecoveryTimeoutId);
+      this.presentationStreamRecoveryTimeoutId = undefined;
+    }
+    this.presentationStreamRecoveryAttempt = 0;
+    this.presentationStreamAcknowledgedAt = undefined;
     this.gxserverBootstrap = validated;
     this.client = new GpuiGxserverClient(validated);
     this.applyGxserverBootstrapPresentationState(validated);
@@ -217,7 +231,20 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         this.forwardSidebarSpacesFromGxserver(state);
       },
       onSnapshot: (snapshot) => {
+        this.notePresentationStreamAcknowledged();
         this.applyPresentationSnapshot(snapshot, this.hasHydrated ? 'patch' : 'hydrate');
+      },
+      /*
+      CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+      The daemon answers a subscribe that already names its current revision
+      with the revision alone, because there is nothing to send: this runtime
+      applied that exact snapshot over HTTP moments earlier, right before it
+      opened the socket. Keeping the presentation untouched is the whole point,
+      so the only state this moves is the stream's own health — the same thing
+      an unchanged full snapshot would have moved.
+      */
+      onSnapshotCurrent: () => {
+        this.notePresentationStreamAcknowledged();
       },
       onWorkspaceGroups: (state) => {
         const previous = this.workspaceGroups;
@@ -229,7 +256,44 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     });
   },
 
+  notePresentationStreamAcknowledged(this: GpuiSidebarRuntime): void {
+    this.presentationStreamAcknowledgedAt = Date.now();
+  },
+
+  /*
+  CDXC:GxserverPresentationStreamBackoff 2026-09-01:
+  A dropped socket fires `onClose` *and* `onError`, and a daemon that is down
+  keeps dropping the replacement, so recovering inline meant a full presentation
+  snapshot plus three more RPCs per drop with nothing between them. Schedule the
+  recovery instead: the pending timer coalesces the duplicate notifications, and
+  the delay escalates while the stream keeps failing.
+  */
   recoverPresentationStream(this: GpuiSidebarRuntime, clientId: string): void {
+    if (!this.client) {
+      return;
+    }
+    this.subscription?.close();
+    this.subscription = undefined;
+    if (this.presentationStreamRecoveryTimeoutId !== undefined) {
+      return;
+    }
+    const acknowledgedAt = this.presentationStreamAcknowledgedAt;
+    this.presentationStreamAcknowledgedAt = undefined;
+    if (acknowledgedAt !== undefined && Date.now() - acknowledgedAt >= GPUI_PRESENTATION_STREAM_HEALTHY_MS) {
+      this.presentationStreamRecoveryAttempt = 0;
+    }
+    const delay =
+      GPUI_PRESENTATION_STREAM_RECOVERY_DELAYS_MS[
+        Math.min(this.presentationStreamRecoveryAttempt, GPUI_PRESENTATION_STREAM_RECOVERY_DELAYS_MS.length - 1)
+      ] ?? GPUI_PRESENTATION_STREAM_RECOVERY_DELAYS_MS[0];
+    this.presentationStreamRecoveryAttempt += 1;
+    this.presentationStreamRecoveryTimeoutId = window.setTimeout(() => {
+      this.presentationStreamRecoveryTimeoutId = undefined;
+      this.reopenPresentationStream(clientId);
+    }, delay);
+  },
+
+  reopenPresentationStream(this: GpuiSidebarRuntime, clientId: string): void {
     if (!this.client) {
       return;
     }
@@ -257,7 +321,14 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         this.openPresentationSubscription(clientId, snapshot.revision);
       })
       .catch(() => {
+        if (this.client !== client) {
+          return;
+        }
         this.publishUnavailable('stream-recovery-failed');
+        // A daemon that is still restarting fails the snapshot fetch itself.
+        // Keep escalating instead of leaving the sidebar unavailable until an
+        // unrelated bootstrap replay happens to revive it.
+        this.recoverPresentationStream(clientId);
       });
   },
 

@@ -9,6 +9,31 @@ import type { SidebarGitAction } from '@/packages/shared/sidebar-git';
 
 export const GPUI_SIDEBAR_BOOTSTRAP_RETRY_DELAY_MS = 20;
 export const GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS = 250;
+/*
+CDXC:GxserverPresentationStreamBackoff 2026-09-01:
+Presentation-stream recovery used to run with no delay at all, so a daemon that
+was restarting, or a socket the OS kept refusing, turned every `onClose` /
+`onError` into an immediate full snapshot fetch plus three more RPCs — a tight
+loop against a server that was already struggling. These are the desktop
+counterpart of the web client's `RECONNECT_DELAYS_MS`, with a deliberately fast
+first step so the ordinary single drop still reconnects in a quarter second.
+*/
+export const GPUI_PRESENTATION_STREAM_RECOVERY_DELAYS_MS = [250, 1_000, 2_000, 4_000, 8_000, 16_000] as const;
+/*
+How long a stream has to stay acknowledged before its next drop counts as a new
+incident rather than a continuation of the current one. Resetting on the socket
+merely opening would defeat the escalation, because a flapping socket does open
+every time; the daemon's subscribe acknowledgement holding for this long is the
+signal that the connection was actually usable.
+*/
+export const GPUI_PRESENTATION_STREAM_HEALTHY_MS = 30 * 1000;
+/*
+CDXC:GxserverStaleRemotePresentationRefetch 2026-09-01:
+How long one stale-revision snapshot refetch suppresses the next for the same
+remote machine. Stale deltas arrive in bursts — one per changed row — and each
+refetch is a full presentation read across the SSH tunnel.
+*/
+export const GPUI_STALE_REMOTE_PRESENTATION_REFRESH_COOLDOWN_MS = 3 * 1000;
 export const GPUI_AUTO_SLEEP_MONITOR_INTERVAL_MS = 60 * 1000;
 export const GPUI_PROJECT_DIFF_STATS_BACKGROUND_INTERVAL_MS = 15 * 1000;
 /*

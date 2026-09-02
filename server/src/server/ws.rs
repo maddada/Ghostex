@@ -301,16 +301,80 @@ pub(crate) fn send_presentation_snapshot_for_subscription(
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return true;
     };
+    /*
+    CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+    Every client fetches `/api/readPresentationSnapshot` over HTTP and *then*
+    opens this socket quoting the revision it just applied, so the snapshot
+    this handler used to build unconditionally was, in the overwhelmingly
+    common case, a second full projection of state the client already had —
+    paid for on every reconnect, including the flap-y ones.
+
+    A subscriber that names the exact revision the daemon is on has missed
+    nothing, so answer it with the revision alone. Anything else takes the
+    full-snapshot path unchanged: no `lastRevision`, a malformed one, a client
+    that is behind (it missed deltas), and a client that is somehow ahead.
+
+    The revision is read while holding the producer sequencer, for the same
+    reason the snapshot below is built while holding it: once this "you are
+    current at R" acknowledgement is in the client's FIFO, producers may
+    publish R+1 into that same FIFO, never ahead of it.
+    */
+    if let Some(last_revision) = parsed
+        .get("lastRevision")
+        .and_then(Value::as_i64)
+        .filter(|revision| *revision > 0)
+    {
+        if let Ok(_event_sequence) = lock_presentation_event_sequence(state) {
+            if crate::presentation::read_presentation_revision(&db).ok() == Some(last_revision) {
+                let mut event = Map::new();
+                if let Some(client_id) = parsed.get("clientId").and_then(Value::as_str) {
+                    event.insert("clientId".to_string(), Value::String(client_id.to_string()));
+                }
+                event.insert(
+                    "protocolVersion".to_string(),
+                    Value::Number(serde_json::Number::from(GXSERVER_PROTOCOL_VERSION)),
+                );
+                event.insert(
+                    "revision".to_string(),
+                    Value::Number(serde_json::Number::from(last_revision)),
+                );
+                event.insert(
+                    "serverId".to_string(),
+                    Value::String(state.metadata.server_id.clone()),
+                );
+                event.insert(
+                    "type".to_string(),
+                    Value::String("presentationSnapshotCurrent".to_string()),
+                );
+                return outbound_tx.try_send(Value::Object(event)).is_ok();
+            }
+        }
+    }
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let _ = sync_session_state_sidecars(state, &db, &repository, None, "presentation-subscribe");
-    let _ = sync_live_zmx_process_identities(
+    /*
+    CDXC:GxserverSessionSyncOneList 2026-09-01:
+    One `list_sessions` feeds both sync passes and the snapshot projection.
+    The passes can mutate rows, so re-read only when one of them reports an
+    actual change.
+    */
+    let sessions = repository.list_sessions(None).unwrap_or_default();
+    let sidecars_changed =
+        sync_session_state_sidecars(state, &db, &repository, &sessions, "presentation-subscribe")
+            .unwrap_or(false);
+    let identities_changed = sync_live_zmx_process_identities(
         state,
         &db,
         &repository,
-        None,
+        &sessions,
         None,
         "presentation-subscribe",
-    );
+    )
+    .unwrap_or(false);
+    let sessions = if sidecars_changed || identities_changed {
+        repository.list_sessions(None).unwrap_or(sessions)
+    } else {
+        sessions
+    };
     /*
     Own the producer sequencer at this delivery boundary rather than calling
     read_presentation_snapshot_in_sequence and dropping its guard before the
@@ -327,6 +391,7 @@ pub(crate) fn send_presentation_snapshot_for_subscription(
         &state.metadata.server_id,
         auto_settle_after_days,
         sidebar_v2_selected,
+        sessions,
     ) else {
         return true;
     };

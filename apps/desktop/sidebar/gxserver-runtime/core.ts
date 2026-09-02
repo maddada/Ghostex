@@ -322,6 +322,23 @@ export class GpuiSidebarRuntime {
   autoSleepMonitorIntervalId: number | undefined;
   autoSleepMonitorRunning = false;
   bootstrapPollTimeoutId: number | undefined;
+  /**
+   * Escalating presentation-stream recovery state. `AcknowledgedAt` is when the
+   * daemon last answered a `subscribePresentation` (with a snapshot or with
+   * "you are already current"); `Attempt` indexes
+   * `GPUI_PRESENTATION_STREAM_RECOVERY_DELAYS_MS`; `TimeoutId` both holds the
+   * pending retry and coalesces the `onClose` + `onError` pair a single socket
+   * failure produces.
+   */
+  presentationStreamAcknowledgedAt: number | undefined;
+  presentationStreamRecoveryAttempt = 0;
+  presentationStreamRecoveryTimeoutId: number | undefined;
+  /**
+   * Per-remote-machine throttle for the "this delta is stale, refetch the whole
+   * snapshot" recovery. Holds the last start time and, when a refetch is being
+   * held back, the trailing timer that will run it once the cooldown expires.
+   */
+  readonly staleRemotePresentationRefreshes = new Map<string, { lastStartedAt: number; trailingTimeoutId?: number }>();
   browserTabs: GpuiBrowserTabSummary[] = [];
   client: GpuiGxserverClient | undefined;
   closeAfterDoneCountdownTickerId: number | undefined;
@@ -900,6 +917,9 @@ export class GpuiSidebarRuntime {
           this.syncRemotePresentationAttentionTracking(remoteEvent.machineId, previousPresentation.sessions, []);
         }
         this.remotePresentations.delete(remoteEvent.machineId);
+        // A queued stale-revision refetch is for a cache this just dropped, and
+        // the machine is no longer reachable to serve it.
+        this.forgetStaleRemotePresentationRefresh(remoteEvent.machineId);
         /*
         CDXC:RemoteProjectActions 2026-08-29:
         A disconnected machine's Actions are no longer runnable, so its cached
@@ -944,12 +964,12 @@ export class GpuiSidebarRuntime {
 
     const previous = this.remotePresentations.get(remoteEvent.remoteMachineId);
     if (!previous) {
-      void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+      this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
       return;
     }
     if (remoteEvent.payload.type === 'sidebarProjectCollectionsChanged') {
       if (remoteEvent.payload.revision < previous.revision) {
-        void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+        this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
         return;
       }
       const snapshot: GxserverPresentationSnapshot = {
@@ -967,7 +987,7 @@ export class GpuiSidebarRuntime {
     }
     if (remoteEvent.payload.type === 'sidebarSpacesChanged') {
       if (remoteEvent.payload.revision < previous.revision) {
-        void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+        this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
         return;
       }
       const snapshot: GxserverPresentationSnapshot = {
@@ -982,7 +1002,7 @@ export class GpuiSidebarRuntime {
     }
     if (remoteEvent.payload.type === 'workspaceGroupsChanged') {
       if (remoteEvent.payload.revision < previous.revision) {
-        void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+        this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
         return;
       }
       this.remotePresentations.set(remoteEvent.remoteMachineId, {
@@ -994,7 +1014,7 @@ export class GpuiSidebarRuntime {
       return;
     }
     if (remoteEvent.payload.revision <= previous.revision) {
-      void this.refreshRemotePresentationFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
+      this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
       return;
     }
     const snapshot = this.projectRemotePresentationAttentionAcknowledgementGuards(

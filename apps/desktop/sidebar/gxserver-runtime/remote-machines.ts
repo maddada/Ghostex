@@ -3,7 +3,11 @@ CDXC:GxserverRuntimeSplit 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import { GPUI_REMOTE_MACHINE_RECONNECT_DELAYS_MS, GPUI_SIDEBAR_DEFAULT_CLIENT_ID } from './constants';
+import {
+  GPUI_REMOTE_MACHINE_RECONNECT_DELAYS_MS,
+  GPUI_SIDEBAR_DEFAULT_CLIENT_ID,
+  GPUI_STALE_REMOTE_PRESENTATION_REFRESH_COOLDOWN_MS,
+} from './constants';
 import type { GpuiSidebarRuntime } from './core';
 import { createGpuiSidebarSettings } from './helpers/bootstrap';
 import {
@@ -99,6 +103,8 @@ export interface GpuiSidebarRuntimeRemoteMachineMethods {
     project: GxserverPresentationProject | undefined
   ): Promise<GxserverPresentationProject>;
   refreshRemotePresentationFromGxserver(remoteMachineId: string): Promise<void>;
+  scheduleStaleRemotePresentationRefresh(remoteMachineId: string): void;
+  forgetStaleRemotePresentationRefresh(remoteMachineId: string): void;
   refreshRemoteSidebarHudFromGxserver(remoteMachineId: string): Promise<void>;
   closeRemoteProjectForGroup(remoteScope: GpuiRemoteProjectScope, groupId: string): Promise<void>;
   restoreRemoteRecentProject(remoteReference: GpuiRemoteProjectReference): Promise<void>;
@@ -582,6 +588,56 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       this.publishRemotePresentationPatch();
       await this.refreshRemoteSidebarHudFromGxserver(remoteMachineId).catch(() => undefined);
     }
+  },
+
+  /*
+  CDXC:GxserverStaleRemotePresentationRefetch 2026-09-01:
+  A remote delta that does not advance the cached revision means this app and
+  the machine disagree about where the stream is, and the repair is to refetch
+  the whole snapshot. That verdict is unchanged — but the deltas that trigger it
+  arrive in bursts (one per changed row), and every one of them used to fire its
+  own full snapshot read over the SSH hop. Collapse a burst to a single refetch
+  and, if more staleness shows up inside the cooldown, one trailing refetch
+  after it, so the repair still converges without hammering the tunnel.
+  */
+  scheduleStaleRemotePresentationRefresh(this: GpuiSidebarRuntime, remoteMachineId: string): void {
+    const now = Date.now();
+    const entry = this.staleRemotePresentationRefreshes.get(remoteMachineId);
+    const runRefresh = (startedAt: number) => {
+      this.staleRemotePresentationRefreshes.set(remoteMachineId, { lastStartedAt: startedAt });
+      void this.refreshRemotePresentationFromGxserver(remoteMachineId).catch(() => undefined);
+    };
+    if (!entry || now - entry.lastStartedAt >= GPUI_STALE_REMOTE_PRESENTATION_REFRESH_COOLDOWN_MS) {
+      if (entry?.trailingTimeoutId !== undefined) {
+        window.clearTimeout(entry.trailingTimeoutId);
+      }
+      runRefresh(now);
+      return;
+    }
+    if (entry.trailingTimeoutId !== undefined) {
+      return;
+    }
+    entry.trailingTimeoutId = window.setTimeout(
+      () => {
+        const current = this.staleRemotePresentationRefreshes.get(remoteMachineId);
+        if (!current || current.trailingTimeoutId === undefined) {
+          return;
+        }
+        runRefresh(Date.now());
+      },
+      GPUI_STALE_REMOTE_PRESENTATION_REFRESH_COOLDOWN_MS - (now - entry.lastStartedAt)
+    );
+  },
+
+  forgetStaleRemotePresentationRefresh(this: GpuiSidebarRuntime, remoteMachineId: string): void {
+    const entry = this.staleRemotePresentationRefreshes.get(remoteMachineId);
+    if (!entry) {
+      return;
+    }
+    if (entry.trailingTimeoutId !== undefined) {
+      window.clearTimeout(entry.trailingTimeoutId);
+    }
+    this.staleRemotePresentationRefreshes.delete(remoteMachineId);
   },
 
   async refreshRemoteSidebarHudFromGxserver(this: GpuiSidebarRuntime, remoteMachineId: string): Promise<void> {

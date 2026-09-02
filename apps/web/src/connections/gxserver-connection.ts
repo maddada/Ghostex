@@ -203,6 +203,20 @@ export class GxserverConnection {
             this.updateState({ presentation: snapshot });
             logPresentationSnapshot(this.machine, snapshot.revision, snapshot.projects.length);
           },
+          /*
+          CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+          `connect` fetches the snapshot over HTTP and then subscribes quoting
+          that revision, so this is the daemon confirming the state already in
+          `this.state.presentation` is current. There is nothing to apply —
+          `onOpen` above has already cleared the error and marked the machine
+          connected — so keep the presentation untouched.
+          */
+          onSnapshotCurrent: (revision) => {
+            if (generation !== this.generation) {
+              return;
+            }
+            logPresentationCurrent(this.machine, revision);
+          },
           onWorkspaceGroups: (workspaceGroups, revision) => {
             if (generation !== this.generation) {
               return;
@@ -290,5 +304,11 @@ function logPresentationSnapshot(machine: GhostexWebMachine, revision: number, p
     console.info(
       `[ghostex-web] presentation snapshot for ${machine.machineId}: revision=${revision}, projects=${projectCount}`
     );
+  }
+}
+
+function logPresentationCurrent(machine: GhostexWebMachine, revision: number): void {
+  if (window.localStorage.getItem(DEBUG_CONNECTIONS_STORAGE_KEY) === '1') {
+    console.info(`[ghostex-web] presentation already current for ${machine.machineId}: revision=${revision}`);
   }
 }

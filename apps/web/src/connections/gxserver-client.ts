@@ -57,6 +57,13 @@ type PresentationSubscriptionHandlers = {
   ): void;
   onSidebarSpaces(state: GxserverSidebarSpacesState, revision: GxserverPresentationRevision): void;
   onSnapshot(snapshot: GxserverPresentationSnapshot): void;
+  /**
+   * CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+   * The daemon's reply when `lastRevision` already names its current revision:
+   * nothing changed, so no snapshot follows and the presentation this
+   * connection is holding stays exactly as it is.
+   */
+  onSnapshotCurrent(revision: GxserverPresentationRevision): void;
   onWorkspaceGroups(state: GxserverWorkspaceSessionGroupsState, revision: GxserverPresentationRevision): void;
 };
 
@@ -170,6 +177,8 @@ export function createGxserverClient(machine: GhostexWebMachine) {
       const parsed = parseGxserverEvent(event.data);
       if (parsed?.type === 'presentationSnapshot') {
         handlers.onSnapshot(parsed.snapshot);
+      } else if (parsed?.type === 'presentationSnapshotCurrent') {
+        handlers.onSnapshotCurrent(parsed.revision);
       } else if (parsed?.type === 'presentationDelta') {
         handlers.onDelta(parsed.delta, parsed.revision);
       } else if (parsed?.type === 'sidebarProjectCollectionsChanged') {

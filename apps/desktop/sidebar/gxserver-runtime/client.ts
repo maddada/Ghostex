@@ -161,6 +161,7 @@ export class GpuiGxserverClient {
     onSidebarProjectCollections,
     onSidebarSpaces,
     onSnapshot,
+    onSnapshotCurrent,
     onWorkspaceGroups,
   }: {
     clientId: string;
@@ -174,6 +175,12 @@ export class GpuiGxserverClient {
     onSidebarProjectCollections?: (state: GxserverSidebarProjectCollectionsState) => void;
     onSidebarSpaces?: (state: GxserverSidebarSpacesState) => void;
     onSnapshot: (snapshot: GxserverPresentationSnapshot) => void;
+    /**
+     * The daemon's answer when `lastRevision` already names its current
+     * revision: no snapshot follows, because nothing changed. Carries that
+     * revision back for the caller to assert against.
+     */
+    onSnapshotCurrent?: (revision: number) => void;
     onWorkspaceGroups?: (state: unknown) => void;
   }): GpuiPresentationSubscription {
     const url = new URL(`${this.bootstrap.baseUrl}/api/events`);
@@ -200,6 +207,10 @@ export class GpuiGxserverClient {
       }
       if (message.type === 'presentationSnapshot' && isPresentationSnapshot(message.snapshot)) {
         onSnapshot(message.snapshot);
+        return;
+      }
+      if (message.type === 'presentationSnapshotCurrent' && typeof message.revision === 'number') {
+        onSnapshotCurrent?.(message.revision);
         return;
       }
       if (

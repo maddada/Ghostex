@@ -170,10 +170,7 @@ export function createGpuiRemotePresentationSidebarGroups({
         sessions: group.sessions.map((session) => ({
           ...session,
           canPopOutPane:
-            session.sessionKind === 'terminal' &&
-            Boolean(session.agentIcon) &&
-            session.isSleeping !== true &&
-            session.lifecycleState !== 'sleeping',
+            session.sessionKind === 'terminal' && Boolean(session.agentIcon) && session.lifecycleState === 'running',
           canScheduleDelayedSend: session.sessionKind === 'terminal',
           canToggleCloseAfterDone: session.sessionKind === 'terminal',
           /*

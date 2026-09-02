@@ -144,17 +144,27 @@ pub(crate) fn read_presentation_snapshot_in_sequence(
     state: &AppState,
     db: &rusqlite::Connection,
     server_id: &str,
+    sessions: Vec<Value>,
 ) -> std::result::Result<Value, DomainStateError> {
     /*
     Snapshot callers own the sequencer exactly once, after any repair pass
     that may publish deltas. Hold it across every projection read, including
     the final revision read inside read_presentation_snapshot, so a producer
     cannot label stale rows with the revision for a delta it just published.
+
+    The session list arrives from the caller's own sync passes; see
+    CDXC:GxserverSessionSyncOneList on read_presentation_snapshot.
     */
     let auto_settle_after_days = session_lifecycle::read_sweep_auto_settle_after_days(&state.paths);
     let sidebar_v2_selected = session_lifecycle::read_sidebar_v2_selected(&state.paths);
     let _event_sequence = lock_presentation_event_sequence(state)?;
-    read_presentation_snapshot(db, server_id, auto_settle_after_days, sidebar_v2_selected)
+    read_presentation_snapshot(
+        db,
+        server_id,
+        auto_settle_after_days,
+        sidebar_v2_selected,
+        sessions,
+    )
 }
 
 pub(crate) fn schedule_stale_activity_presentation_refresh(
