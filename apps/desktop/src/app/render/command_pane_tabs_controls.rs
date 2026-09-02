@@ -24,8 +24,7 @@ use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::*;
 
-const COMMAND_PANE_MINIMIZE_TOOLTIP: &str =
-    "Right click an empty spot in the tabs bar to toggle minimizing.\nAlso double click to create a new tab.";
+const COMMAND_PANE_MINIMIZE_TOOLTIP: &str = "Right click an empty spot in the tabs bar to toggle minimizing.\nAlso double click to create a new tab.";
 
 impl GhostexGpuiApp {
     pub(crate) fn render_command_pane_tab_add_button(
