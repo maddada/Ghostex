@@ -2247,6 +2247,16 @@ impl Render for GhostexGpuiApp {
                     }),
             )
             .child(self.render_gpui_status_pet_presentation(cx))
+            /*
+            gpui-component's `Root` does not draw its dialog layer; the app view
+            must render it. Without this every `open_alert_dialog` (the paste
+            protection confirmation, the terminal close confirmation) still
+            pushed an active dialog and moved keyboard focus onto it, but drew
+            nothing: the pending paste was silently held, Cmd+V and typing
+            went dead until focus moved elsewhere. Last child so it paints
+            above the workspace.
+            */
+            .children(gpui_component::Root::render_dialog_layer(window, cx))
             .into_any_element();
 
         #[cfg(target_os = "linux")]
