@@ -10,15 +10,16 @@
 // page).
 
 import { createContext, useContext, type ReactNode } from 'react';
-import type { SessionChatFilePosition } from './session-chat-file-paths';
+import { splitSessionChatFilePosition, type SessionChatFilePosition } from './session-chat-file-paths';
 
 export interface SessionChatHostLinks {
   /**
    * Opens a web URL. `external` is true when the reader asked for the OS
-   * browser explicitly (Shift+click). Hosts that omit this get plain
-   * target="_blank" anchors, which is already the right thing in a browser.
+   * browser explicitly (Shift+click). `forceEmbedded` is reserved for the
+   * transcript context menu's explicit embedded-browser row. Hosts that omit
+   * this get plain target="_blank" anchors, which is right in a browser.
    */
-  openUrl?: (url: string, options: { external: boolean }) => void;
+  openUrl?: (url: string, options: { external: boolean; forceEmbedded?: boolean }) => void;
   /**
    * Opens a file that lives on the session's machine, in whichever editor
    * surface the host has. Hosts without one omit it and file pills copy their
@@ -28,11 +29,16 @@ export interface SessionChatHostLinks {
    * arrives relative: the chat surface never learns the session's working
    * directory, and the host that owns an editor is also the one that knows the
    * project root (gpui joins it in open_session_chat_file). `position` carries
-   * the `:line:column` an agent quoted, for hosts whose editor can land on it;
-   * hosts that only know how to open a file ignore it.
+   * the line, line range, or line and column an agent quoted. Editors land on
+   * the first line of a range; hosts that only know how to open a file ignore it.
    */
   openFile?: (path: string, position?: SessionChatFilePosition) => void;
+  /** Reveals a file reference in the machine's file manager. */
+  locateFile?: (path: string) => void;
 }
+
+/** Exposes an HTTP(S) target to the transcript context menu. */
+export const SESSION_CHAT_WEB_URL_ATTRIBUTE = 'data-session-chat-web-url';
 
 export type SessionChatLinkTarget = { kind: 'url'; url: string } | { kind: 'file'; path: string } | { kind: 'inert' };
 
@@ -42,9 +48,6 @@ const WEB_SCHEME_PATTERN = /^https?:\/\//i;
 const URI_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 /** Windows drive path ("C:\repo\app.ts"), which also matches a one-letter scheme. */
 const WINDOWS_DRIVE_PATH_PATTERN = /^[a-z]:[\\/]/i;
-/** Trailing "path.ts:42" / "path.ts:42:7" editor coordinates agents like to write. */
-const LINE_COORDINATE_SUFFIX = /:(\d+)(?::(\d+))?$/;
-
 /**
  * Classifies a markdown href into what the chat can do with it. Image hrefs
  * are handled before this by the image viewer, so they arrive here only when
@@ -73,7 +76,7 @@ export function classifySessionChatLinkHref(href: string): SessionChatLinkTarget
  * coordinates an agent quoted them with; the host needs the literal path.
  */
 function filePathFromHref(href: string): string {
-  return decodedFileHref(href).replace(LINE_COORDINATE_SUFFIX, '');
+  return splitSessionChatFilePosition(decodedFileHref(href)).path;
 }
 
 function decodedFileHref(href: string): string {
@@ -87,16 +90,7 @@ function decodedFileHref(href: string): string {
 
 /** Preserves editor coordinates from a Markdown destination after path decoding. */
 export function sessionChatFilePositionFromHref(href: string): SessionChatFilePosition | undefined {
-  const match = LINE_COORDINATE_SUFFIX.exec(decodedFileHref(href));
-  const line = Number(match?.[1]);
-  const column = Number(match?.[2]);
-  if (!Number.isSafeInteger(line) || line < 1) {
-    return undefined;
-  }
-  return {
-    line,
-    ...(Number.isSafeInteger(column) && column >= 1 ? { column } : {}),
-  };
+  return splitSessionChatFilePosition(decodedFileHref(href)).position;
 }
 
 const SessionChatHostLinksContext = createContext<SessionChatHostLinks | null>(null);

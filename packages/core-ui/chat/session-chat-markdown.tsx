@@ -85,6 +85,7 @@ import {
   sessionChatFilePathChipLabel,
   sessionChatFilePathIcon,
   sessionChatFilePathTitle,
+  sessionChatFilePositionSuffix,
   type SessionChatFilePathRef,
   type SessionChatFilePosition,
 } from './session-chat-file-paths';
@@ -100,6 +101,7 @@ import {
 import { remarkSessionChatImageReferences } from './session-chat-image-reference-markdown';
 import {
   classifySessionChatLinkHref,
+  SESSION_CHAT_WEB_URL_ATTRIBUTE,
   sessionChatFilePositionFromHref,
   useSessionChatHostLinks,
   type SessionChatHostLinks,
@@ -498,7 +500,7 @@ function FileChip({
   openFile: NonNullable<SessionChatHostLinks['openFile']>;
   reference: SessionChatFilePathRef;
 }) {
-  const { detail, name, parent } = sessionChatFilePathChipLabel(reference);
+  const { name, parent } = sessionChatFilePathChipLabel(reference);
   const title = sessionChatFilePathTitle(reference);
   const Icon = sessionChatFilePathIcon(reference.basename);
   return (
@@ -516,7 +518,6 @@ function FileChip({
         <Icon aria-hidden='true' className='ghostex-chat-markdown-file-chip-icon' size={13} stroke={1.8} />
         {parent === '' ? null : <span className='ghostex-chat-markdown-file-chip-parent'>{parent}</span>}
         <span className='ghostex-chat-markdown-file-chip-name'>{name}</span>
-        {detail === '' ? null : <span className='ghostex-chat-markdown-file-chip-detail'>{detail}</span>}
       </button>
     </AppTooltip>
   );
@@ -734,10 +735,10 @@ function MarkdownReferencePill({
   path: string;
   position?: SessionChatFilePosition;
 }) {
-  const action = openFile ? `Open ${label}` : `Copy path for ${label}`;
-  const title = position
-    ? `${path}:${position.line}${position.column === undefined ? '' : `:${position.column}`}`
-    : path;
+  const positionSuffix = sessionChatFilePositionSuffix(position);
+  const displayLabel = positionSuffix !== '' && !label.endsWith(positionSuffix) ? `${label}${positionSuffix}` : label;
+  const action = openFile ? `Open ${displayLabel}` : `Copy path for ${displayLabel}`;
+  const title = `${path}${positionSuffix}`;
   return (
     <AppTooltip content={title}>
       <button
@@ -753,7 +754,7 @@ function MarkdownReferencePill({
         type='button'
         {...{ [SESSION_CHAT_FILE_PATH_ATTRIBUTE]: path }}
       >
-        {label}
+        {displayLabel}
       </button>
     </AppTooltip>
   );
@@ -891,9 +892,10 @@ function markdownComponents(
           return (
             <AppTooltip content={target.url}>
               <a
-                // Kept an anchor so the URL shows in the status bar and the
-                // context menu still offers Copy Link; the host owns the open.
+                // Kept an anchor so the URL shows in the status bar; the host
+                // owns ordinary clicks and both explicit context-menu opens.
                 href={target.url}
+                {...{ [SESSION_CHAT_WEB_URL_ATTRIBUTE]: target.url }}
                 onClick={(event) => {
                   event.preventDefault();
                   openUrl(target.url, { external: event.shiftKey });

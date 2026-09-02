@@ -228,6 +228,7 @@ impl GhostexGpuiApp {
                 pending_session_chat_composer_insert: HashMap::new(),
                 pending_session_terminal_composer_insert: HashMap::new(),
                 pending_session_chat_draft_handoffs: HashSet::new(),
+                pending_session_chat_image_saves: HashMap::new(),
                 session_chat_queued_counts: HashMap::new(),
                 session_chat_queued_count_refresh_in_flight: false,
                 local_workspace_lifecycle_requests: HashMap::new(),

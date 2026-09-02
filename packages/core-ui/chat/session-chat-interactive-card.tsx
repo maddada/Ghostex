@@ -16,8 +16,8 @@
 // wears the composer's surface (same radius, border, and dark fill) with the
 // question panel stacked on top of a composer-shaped answer row. One question
 // at a time behind a collapsible header with an "n/total" counter, options as
-// full-width rows carrying their 1-9 shortcut key, and a free-text answer in
-// the bottom row next to the send button.
+// full-width rows optionally carrying their 1-9 shortcut key, and a free-text
+// answer in the bottom row next to the send button.
 
 import { IconArrowLeft, IconChevronRight, IconTerminal2, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -60,6 +60,8 @@ export interface SessionChatInteractiveCardProps {
   onShowingChange?: (showing: boolean) => void;
   /** Host switch-back, offered by the read-only and delivery-failed notices. */
   onSwitchToTerminal?: () => void;
+  /** Whether numbered keyboard shortcut badges are rendered beside choices. */
+  showShortcutLabels?: boolean;
 }
 
 interface DraftAnswer {
@@ -206,6 +208,7 @@ export function SessionChatInteractiveCard({
   onShowingQuestionChange,
   onSwitchToTerminal,
   prompt,
+  showShortcutLabels = true,
 }: SessionChatInteractiveCardProps) {
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<DraftAnswer[]>([]);
@@ -482,7 +485,7 @@ export function SessionChatInteractiveCard({
                 options={question.options}
                 readOnly={readOnly}
                 selected={customAnswerActive ? [] : draft.indices}
-                showShortcuts
+                showShortcuts={showShortcutLabels}
               />
             </div>
           </div>

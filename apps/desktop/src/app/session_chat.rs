@@ -20,6 +20,7 @@ use gpui::Window;
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
+use crate::app::session_chat_context_menu::GpuiSessionChatFileResolutionError;
 use crate::app::window::*;
 use crate::*;
 
@@ -224,6 +225,16 @@ impl GhostexGpuiApp {
             self.handle_chat_bar_extension_bridge_request(session_id, &message, cx);
             return;
         }
+        /*
+        Composer option-pill failures post the shared app-toast request over
+        this same shim. The chat surface's handler otherwise ignores anything
+        that is not a sessionChatHostAction, so without this arm the error
+        would vanish instead of appearing in the workspace toast window.
+        */
+        if message.get("type").and_then(serde_json::Value::as_str) == Some("toast") {
+            self.receive_gpui_app_toast_bridge_message(&message, cx);
+            return;
+        }
         if message.get("type").and_then(serde_json::Value::as_str) != Some("sessionChatHostAction")
         {
             return;
@@ -415,36 +426,7 @@ impl GhostexGpuiApp {
             self.request_session_chat_attachment_picks(session_id, request_id, cx);
             return;
         }
-        /*
-        CDXC:GPUISessionChatImageSave 2026-08-19:
-        "Save image" in the chat's image overlay. A CEF page has no download
-        handler here, so the bytes ride the bridge and Rust writes them into
-        Downloads. The reply carries an error string only when the write
-        actually failed.
-        */
-        if action == "saveImage" {
-            let request_id = message
-                .get("requestId")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            let suggested_name = message
-                .get("suggestedName")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("image.png")
-                .to_string();
-            let base64_data = message
-                .get("base64Data")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            self.request_session_chat_image_save(
-                session_id,
-                request_id,
-                suggested_name,
-                base64_data,
-                cx,
-            );
+        if self.receive_session_chat_image_save_action(session_id, action, &message, cx) {
             return;
         }
         /*
@@ -464,7 +446,18 @@ impl GhostexGpuiApp {
                 .get("external")
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false);
-            self.open_session_chat_link(url, external, window, cx);
+            let force_embedded = message
+                .get("forceEmbedded")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            self.open_session_chat_link(url, external, force_embedded, window, cx);
+            return;
+        }
+        if action == "locateFile" {
+            let Some(path) = message.get("path").and_then(serde_json::Value::as_str) else {
+                return;
+            };
+            self.locate_session_chat_file(session_id, path, cx);
             return;
         }
         if action == "openFile" {
@@ -483,7 +476,7 @@ impl GhostexGpuiApp {
                     .and_then(|value| u32::try_from(value).ok())
                     .filter(|value| *value > 0)
             });
-            self.open_session_chat_file(path, line, column, window, cx);
+            self.open_session_chat_file_for_session(session_id, path, line, column, window, cx);
             return;
         }
         // The chat surface is only interactive as a rendered pane's active
@@ -992,11 +985,15 @@ impl GhostexGpuiApp {
     as Command-clicked terminal links, so a single switch decides where every
     agent-sent web link lands. With that setting off, an ordinary click leaves
     for the system default browser exactly like Shift+click already does.
+
+    The transcript context menu is explicit: its embedded row bypasses that
+    ordinary-click preference, while its external row uses the OS browser.
     */
     pub(crate) fn open_session_chat_link(
         &mut self,
         url: &str,
         external: bool,
+        force_embedded: bool,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -1005,7 +1002,7 @@ impl GhostexGpuiApp {
         }
         let open_in_app =
             shared_settings::shared_sidebar_settings_snapshot().web_links_open_in_app();
-        if external || !open_in_app {
+        if external || (!force_embedded && !open_in_app) {
             if let Some(url) = normalize_address(url) {
                 let _ = gpui_open_external_http_url(&url);
             }
@@ -1028,11 +1025,30 @@ impl GhostexGpuiApp {
     Markdown and HTML file links follow their independent Docs/Code settings,
     falling back to the other available workarea. Excalidraw prefers Docs and
     every other file prefers Code. Absolute paths and home-relative paths stay
-    machine paths, while ordinary relative paths resolve against the active
-    project.
+    machine paths, while ordinary relative paths resolve against the clicked
+    session's project and then its tracked working directory.
     */
     pub(crate) fn open_session_chat_file(
         &mut self,
+        path: &str,
+        line: Option<u32>,
+        column: Option<u32>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(session_id) = self.focused_agents_or_companion_shell_session_id() else {
+            self.report_session_chat_file_open_failure(
+                "No terminal session is focused in this window.",
+                cx,
+            );
+            return;
+        };
+        self.open_session_chat_file_for_session(session_id, path, line, column, window, cx);
+    }
+
+    pub(crate) fn open_session_chat_file_for_session(
+        &mut self,
+        session_id: TerminalSessionId,
         path: &str,
         line: Option<u32>,
         column: Option<u32>,
@@ -1043,43 +1059,28 @@ impl GhostexGpuiApp {
         if trimmed.is_empty() || trimmed.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS {
             return;
         }
-        let Some(snapshot) = self.latest_sidebar_project_snapshot.as_ref() else {
-            self.report_session_chat_file_open_failure("No project is active in this window.", cx);
-            return;
+        let resolved = match self.resolve_session_chat_file(session_id, trimmed) {
+            Ok(resolved) => resolved,
+            Err(GpuiSessionChatFileResolutionError::InvalidPath) => return,
+            Err(GpuiSessionChatFileResolutionError::ProjectUnavailable) => {
+                self.report_session_chat_file_open_failure(
+                    "That session's project folder is unavailable.",
+                    cx,
+                );
+                return;
+            }
+            Err(GpuiSessionChatFileResolutionError::NotFile) => {
+                self.report_session_chat_file_open_failure("That path is not a file.", cx);
+                return;
+            }
+            Err(GpuiSessionChatFileResolutionError::NotFound) => {
+                self.copy_unresolved_session_chat_file_path(trimmed, cx);
+                return;
+            }
         };
-        let Some(project_root) = snapshot.in_memory_project_path.clone() else {
-            self.report_session_chat_file_open_failure("No project is active in this window.", cx);
-            return;
-        };
-        let active_project_id = snapshot
-            .active_project_id
-            .as_ref()
-            .map(|project_id| project_id.0.clone());
-        // One stat of a path the reader just clicked; no directory walk, so it
-        // stays on the caller's thread like the other click handlers here.
-        let candidate = if Path::new(trimmed).is_absolute() {
-            PathBuf::from(trimmed)
-        } else if trimmed == "~" {
-            home_dir()
-        } else if let Some(relative) = trimmed
-            .strip_prefix("~/")
-            .or_else(|| trimmed.strip_prefix("~\\"))
-        {
-            home_dir().join(relative)
-        } else {
-            project_root.join(trimmed)
-        };
-        let (Ok(file_path), Ok(root)) = (
-            fs::canonicalize(&candidate),
-            fs::canonicalize(&project_root),
-        ) else {
-            self.copy_unresolved_session_chat_file_path(trimmed, cx);
-            return;
-        };
-        if !fs::metadata(&file_path).is_ok_and(|metadata| metadata.is_file()) {
-            self.report_session_chat_file_open_failure("That path is not a file.", cx);
-            return;
-        }
+        let file_path = resolved.file_path;
+        let root = resolved.project_root;
+        let session_project_id = Some(resolved.project_id);
         let project_relative_path = file_path
             .strip_prefix(&root)
             .ok()
@@ -1158,7 +1159,7 @@ impl GhostexGpuiApp {
                 }
                 relative_path
             } else {
-                let Some(project_id) = active_project_id else {
+                let Some(project_id) = session_project_id else {
                     self.copy_path_for_unavailable_project_workarea(
                         &resolved_path,
                         "Docs",
@@ -1298,16 +1299,16 @@ impl GhostexGpuiApp {
         // search: with the component uninstalled the tab is a prompt to install
         // it, so the toast stops at the copy.
         let description = if self.embedded_code_editor_unavailable_reason().is_some() {
-            "This path did not resolve in the active project.".to_string()
+            "Couldn't find this file in the session's project.".to_string()
         } else {
-            "Copied the path. Try searching for it in the code view".to_string()
+            "Couldn't find this file. Try searching in Code.".to_string()
         };
         cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
         self.upsert_gpui_app_toast(
             GpuiAppToast {
                 id: "gpui-session-chat-unresolved-file-path-copied".to_string(),
                 level: GpuiAppToastLevel::from_raw(Some("success")),
-                title: "Couldn't open this file (missing file/incomplete path)".to_string(),
+                title: "File path copied".to_string(),
                 description: Some(description),
                 loading: false,
                 persistent: false,
@@ -1448,6 +1449,76 @@ impl GhostexGpuiApp {
             }
             let _ = this.update(cx, |this, _| {
                 this.pending_docs_file_open = None;
+            });
+        })
+        .detach();
+    }
+}
+
+/*
+CDXC:SessionChatLaunchDraft 2026-09-02:
+A session that opens straight in Chat asks the daemon for the first-input
+draft it was created with (Handoff / Export stages the transcript mention this
+way) BEFORE that draft is typed into the terminal Chat parks behind it. The
+daemon flips the marker so the terminal typing then does nothing, and the text
+lands in the chat composer through the same queued insert the terminal → chat
+transfer uses, so it survives a composer that is not mounted yet. A daemon
+predating the endpoint answers not-found and nothing happens, which is exactly
+the previous behaviour.
+*/
+impl GhostexGpuiApp {
+    pub(crate) fn request_session_chat_launch_draft(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let request = if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
+            let params = serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            });
+            cx.background_executor().spawn(async move {
+                gpui_gxserver_rpc_result(
+                    "/api/claimSessionChatLaunchDraft",
+                    &params,
+                    GPUI_SESSION_CHAT_DRAFT_TRANSFER_TIMEOUT,
+                )
+            })
+        } else {
+            let Some(key) = self.agents_chat_remote_key_for_session(session_id) else {
+                return;
+            };
+            let Some(target) = self.gpui_remote_gxserver_request_target(&key.remote_machine_id)
+            else {
+                return;
+            };
+            let params = serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            });
+            cx.background_executor().spawn(async move {
+                gpui_remote_gxserver_rpc_result(
+                    &target,
+                    "/api/claimSessionChatLaunchDraft",
+                    &params,
+                    GPUI_SESSION_CHAT_DRAFT_TRANSFER_TIMEOUT,
+                )
+            })
+        };
+        cx.spawn(async move |this, cx| {
+            let Ok(result) = request.await else {
+                return;
+            };
+            let content = result
+                .get("content")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if content.is_empty() {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.deliver_session_chat_composer_insert(session_id, content, cx);
             });
         })
         .detach();

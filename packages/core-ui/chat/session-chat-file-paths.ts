@@ -48,6 +48,7 @@ import { IconFile, IconFileCode, IconMarkdown } from '@tabler/icons-react';
 
 export interface SessionChatFilePosition {
   line: number;
+  endLine?: number;
   column?: number;
 }
 
@@ -57,7 +58,7 @@ export interface SessionChatFilePathRef {
    * is the whole path, and this is the part of it that may not be truncated.
    */
   basename: string;
-  /** The path as the agent wrote it, minus the `:line[:column]` suffix. */
+  /** The path as the agent wrote it, minus its line, range, or column suffix. */
   path: string;
   /** Present only when the span carried editor coordinates. */
   position?: SessionChatFilePosition;
@@ -73,8 +74,8 @@ const DISQUALIFYING_CHARACTER = /[\s`]/;
 const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:[\\/]/;
 const WINDOWS_UNC_PREFIX = /^\\\\/;
 const RELATIVE_PATH_PREFIX = /^(?:~\/|\.{1,2}\/)/;
-/** Trailing editor coordinates: `:913` or `:42:8`. */
-const POSITION_SUFFIX = /:(\d{1,7})(?::(\d{1,7}))?$/;
+/** Trailing editor coordinates: `:913`, `:913-940`, or `:42:8`. */
+const POSITION_SUFFIX = /:(\d{1,7})(?:-(\d{1,7})|(?::(\d{1,7})))?$/;
 const PATH_SEGMENT = /^[A-Za-z0-9._+@~-]+$/;
 /**
  * A file type starts with a letter. `.ts`, `.rs`, `.zshrc` are extensions;
@@ -157,6 +158,41 @@ export function resolveSessionChatInlineCodeFilePath(text: string): SessionChatF
   return resolveFilePathReference(text, { requirePathEvidence: true });
 }
 
+/** Splits a path from a valid line, line-range, or line-and-column suffix. */
+export function splitSessionChatFilePosition(value: string): {
+  path: string;
+  position?: SessionChatFilePosition;
+} {
+  const match = POSITION_SUFFIX.exec(value);
+  const line = Number(match?.[1]);
+  const endLine = Number(match?.[2]);
+  const column = Number(match?.[3]);
+  if (
+    !match ||
+    !Number.isSafeInteger(line) ||
+    line < 1 ||
+    (match[2] !== undefined && (!Number.isSafeInteger(endLine) || endLine < line)) ||
+    (match[3] !== undefined && (!Number.isSafeInteger(column) || column < 1))
+  ) {
+    return { path: value };
+  }
+  return {
+    path: value.slice(0, value.length - match[0].length),
+    position: {
+      line,
+      ...(match[2] === undefined ? {} : { endLine }),
+      ...(match[3] === undefined ? {} : { column }),
+    },
+  };
+}
+
+/** The exact coordinate suffix shown beside a file name and in its tooltip. */
+export function sessionChatFilePositionSuffix(position?: SessionChatFilePosition): string {
+  if (!position) return '';
+  const lines = position.endLine === undefined ? `${position.line}` : `${position.line}-${position.endLine}`;
+  return `:${lines}${position.column === undefined ? '' : `:${position.column}`}`;
+}
+
 /**
  * The same decision for the title a fenced code block names
  * (```ts src/main.ts, ```json file=package.json), so a path in a fence header
@@ -182,8 +218,7 @@ function resolveFilePathReference(
   if (trimmed.length === 0 || trimmed.length > MAX_CANDIDATE_LENGTH) return null;
   if (DISQUALIFYING_CHARACTER.test(trimmed)) return null;
 
-  const positionMatch = POSITION_SUFFIX.exec(trimmed);
-  const path = positionMatch ? trimmed.slice(0, trimmed.length - positionMatch[0].length) : trimmed;
+  const { path, position } = splitSessionChatFilePosition(trimmed);
   if (path.length === 0) return null;
 
   const isWindowsPath = WINDOWS_DRIVE_PREFIX.test(path) || WINDOWS_UNC_PREFIX.test(path);
@@ -202,7 +237,7 @@ function resolveFilePathReference(
 
   const announcesItselfAsAPath = isWindowsPath || normalized.startsWith('/') || RELATIVE_PATH_PREFIX.test(normalized);
   const hasSeparator = announcesItselfAsAPath || segments.length > 1;
-  if (requirePathEvidence && !hasSeparator && positionMatch === null) return null;
+  if (requirePathEvidence && !hasSeparator && position === undefined) return null;
 
   const firstSegment = segments[0];
   if (!announcesItselfAsAPath && firstSegment !== undefined && looksLikeHostOrVersion(firstSegment)) {
@@ -213,27 +248,18 @@ function resolveFilePathReference(
     return null;
   }
 
-  const line = positionMatch?.[1];
-  const column = positionMatch?.[2];
   return {
     basename,
     path,
-    ...(line === undefined
-      ? {}
-      : {
-          position: {
-            line: Number(line),
-            ...(column === undefined ? {} : { column: Number(column) }),
-          },
-        }),
+    ...(position === undefined ? {} : { position }),
   };
 }
 
 /**
  * The chip's visible text, split where it is allowed to be cut.
  *
- * `apps/desktop/src/cef/shell.rs:42:8` becomes parent `apps/desktop/src/cef`, name
- * `/shell.rs`, and detail `L42:C8`. The chip shows the whole path, so in a
+ * `apps/desktop/src/cef/shell.rs:42:8` becomes parent `apps/desktop/src/cef` and
+ * name `/shell.rs:42:8`. The chip shows the whole path, so in a
  * narrow transcript column something has to give when it does not fit — and
  * the part that may go is the tail of the parent. The leading folder says
  * which of the repo's worlds this is, the filename says what it is, and the
@@ -245,26 +271,21 @@ function resolveFilePathReference(
  * in it, while `apps/desktop/src/c…shell.rs` reads as a typo.
  */
 export function sessionChatFilePathChipLabel(ref: SessionChatFilePathRef): {
-  detail: string;
   name: string;
   parent: string;
 } {
   // Split the path as written rather than by its normalized segments, so a
   // Windows path keeps its backslashes both on screen and in the split.
   const separatorIndex = Math.max(ref.path.lastIndexOf('/'), ref.path.lastIndexOf('\\'));
-  const { column, line } = ref.position ?? {};
   return {
-    detail: line === undefined ? '' : `L${line}${column === undefined ? '' : `:C${column}`}`,
-    name: separatorIndex < 0 ? ref.path : ref.path.slice(separatorIndex),
+    name: `${separatorIndex < 0 ? ref.path : ref.path.slice(separatorIndex)}${sessionChatFilePositionSuffix(ref.position)}`,
     parent: separatorIndex < 0 ? '' : ref.path.slice(0, separatorIndex),
   };
 }
 
 /** The path plus its coordinates, as the tooltip and the title attribute show it. */
 export function sessionChatFilePathTitle(ref: SessionChatFilePathRef): string {
-  if (!ref.position) return ref.path;
-  const { column, line } = ref.position;
-  return `${ref.path}:${line}${column === undefined ? '' : `:${column}`}`;
+  return `${ref.path}${sessionChatFilePositionSuffix(ref.position)}`;
 }
 
 /*

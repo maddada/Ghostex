@@ -30,6 +30,8 @@ import {
 import { cn } from '@/packages/components/utils';
 import { Button } from '@/packages/components/ui/button';
 import { ButtonGroup } from '@/packages/components/ui/button-group';
+import { SESSION_CHAT_FILE_PATH_ATTRIBUTE } from './session-chat-file-paths';
+import { SESSION_CHAT_WEB_URL_ATTRIBUTE } from './session-chat-links';
 
 export interface SessionChatImageTarget {
   /** Absolute path on the session's machine (loaded over the transport). */
@@ -195,7 +197,14 @@ export function SessionChatInlineImage({
     return <>{fallback ?? null}</>;
   }
   return (
-    <span className={cn('ghostex-chat-inline-image-frame', className)} ref={containerRef}>
+    <span
+      className={cn('ghostex-chat-inline-image-frame', className)}
+      ref={containerRef}
+      {...(target.path === undefined ? {} : { [SESSION_CHAT_FILE_PATH_ATTRIBUTE]: target.path })}
+      {...(target.url === undefined || !/^https?:/i.test(target.url)
+        ? {}
+        : { [SESSION_CHAT_WEB_URL_ATTRIBUTE]: target.url })}
+    >
       {source.status === 'ready' ? (
         <button
           aria-label={target.alt ? `View ${target.alt}` : 'View image'}
@@ -637,8 +646,9 @@ export function SessionChatImageViewerProvider({
     setMenuAt(null);
     void saveSessionChatImage(name, src, saveImageAsRef.current)
       .then(() => {
+        // The desktop host already raises its own "Saved to Downloads" toast
+        // with the written file name, so the viewer shows no second notice.
         setCompletedAction('save-image');
-        setMenuError('Saved to Downloads');
       })
       .catch((error: unknown) => {
         console.error('[session-chat] Saving the image failed.', error);

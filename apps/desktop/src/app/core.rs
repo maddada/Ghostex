@@ -597,6 +597,10 @@ pub struct GhostexGpuiApp {
     pub(crate) pending_session_terminal_composer_insert:
         HashMap<TerminalSessionId, crate::app::session_chat::GpuiSessionChatDraftHandoff>,
     pub(crate) pending_session_chat_draft_handoffs: HashSet<TerminalSessionId>,
+    pub(crate) pending_session_chat_image_saves: HashMap<
+        (TerminalSessionId, String),
+        crate::app::session_chat_image_save::GpuiPendingSessionChatImageSave,
+    >,
     /// Queued Ghostex prompts per on-screen terminal-view session, the input to
     /// the pane's "Queued: N" chrome row. Absent means zero.
     pub(crate) session_chat_queued_counts: HashMap<TerminalSessionId, GpuiSessionChatQueuedCounts>,
