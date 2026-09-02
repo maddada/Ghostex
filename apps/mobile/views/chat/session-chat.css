@@ -56,3 +56,24 @@
 .native-sidebar-shell.gpui-session-chat {
   height: var(--ghostex-mobile-chat-viewport-height, 100%);
 }
+
+/*
+ * The transcript selection toolbar is one compact segmented pill. The shared
+ * chat button rule otherwise rounds each child independently, while an
+ * absolutely positioned auto-width flex box can shrink to the space on the
+ * right of its anchor and wrap "Add to Chat" onto several lines.
+ */
+.native-sidebar-body .ghostex-chat-transcript-selection-toolbar {
+  width: max-content;
+  white-space: nowrap;
+}
+
+.native-sidebar-body .ghostex-chat-transcript-selection-toolbar > button {
+  border: 0;
+  border-radius: 0;
+  flex: none;
+}
+
+.native-sidebar-body .ghostex-chat-transcript-selection-toolbar > button + button {
+  border-left: 1px solid var(--border);
+}

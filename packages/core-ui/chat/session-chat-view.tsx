@@ -372,7 +372,7 @@ function TranscriptSelectionToolbar({
   // pointerdown + preventDefault acts before the tap collapses the selection.
   return (
     <div
-      className='absolute z-30 flex -translate-x-1/2 select-none items-center overflow-hidden rounded-full bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10'
+      className='ghostex-chat-transcript-selection-toolbar absolute z-30 flex -translate-x-1/2 select-none items-center overflow-hidden rounded-full bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/10'
       style={{ left: anchor.left, top: anchor.top }}
     >
       <button
