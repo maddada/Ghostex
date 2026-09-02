@@ -102,6 +102,8 @@ pub enum Parser {
     AgentPromptLaunch,
     /// session selector plus `--answer-json` for answerSessionChatPrompt.
     SessionChatAnswer,
+    /// session selector plus `--message-id` for rewindSessionChat.
+    SessionChatRewind,
     /*
     CDXC:SessionChatPromptQueue 2026-08-21:
     Queue rows are addressed by the `--prompt-id` the daemon handed out, never
@@ -345,6 +347,22 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "answerSessionChatPrompt" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/answerSessionChatPrompt", &params, flags)
+        }
+        "rewindSessionChat" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            /*
+            CDXC:SessionChatRewind 2026-09-02:
+            The daemon holds this request while it drives the agent's rewind
+            dialog and verifies every step against the screen, which is several
+            six-second waits in the worst case, so the default 15s RPC timeout
+            would cut off a slow-but-successful drive. Callers can still
+            override.
+            */
+            let mut flags = flags.clone();
+            if !flags.contains("timeout") && !flags.contains("timeoutMs") {
+                flags.insert_text("timeoutMs", "90000");
+            }
+            rpc::call_gxserver_rpc("/api/rewindSessionChat", &params, &flags)
         }
         "interruptSessionChat" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
@@ -1123,6 +1141,7 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         Parser::AgentPromptRef => parse_agent_prompt_ref(flags)?,
         Parser::AgentPromptLaunch => parse_agent_prompt_launch(flags)?,
         Parser::SessionChatAnswer => parse_session_chat_answer(rest, flags)?,
+        Parser::SessionChatRewind => parse_session_chat_rewind(rest, flags)?,
         Parser::SessionChatQueuedPrompt => parse_session_chat_queued_prompt(rest, flags)?,
         Parser::SessionChatQueueOrder => parse_session_chat_queue_order(rest, flags)?,
         Parser::SessionChatDraft => parse_session_chat_draft(rest, flags)?,
@@ -1276,6 +1295,24 @@ fn parse_session_chat_key(rest: &[String], flags: &Flags) -> CliResult<Value> {
         ));
     };
     map.insert("key".to_string(), Value::String(key));
+    Ok(Value::Object(map))
+}
+
+fn parse_session_chat_rewind(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    let mut map = parse_session_selector(rest, flags);
+    let Some(message_id) = flags
+        .text("messageId")
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Err(CliError::Other(
+            "rewind-session-chat requires --message-id <uuid> naming a user prompt of the session's active conversation."
+                .to_string(),
+        ));
+    };
+    map.insert(
+        "messageId".to_string(),
+        Value::String(message_id.trim().to_string()),
+    );
     Ok(Value::Object(map))
 }
 

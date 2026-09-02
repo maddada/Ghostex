@@ -276,6 +276,7 @@ pub fn usage() -> String {
         format_help_command("read-session-chat-files <selector> --json", "List the session project's files for @ mentions"),
         format_help_command("send-session-chat-message <selector> <text>", "Send a chat message into an agent session"),
         format_help_command("answer-session-chat-prompt <selector> --answer-json '<json>'", "Answer a pending question/approval prompt or an on-screen picker row"),
+        format_help_command("rewind-session-chat <selector> --message-id <uuid> --json", "Drive Claude Code's own rewind to the point before a user prompt"),
         format_help_command("interrupt-session-chat <selector>", "Interrupt the session's running agent turn"),
         format_help_command("handoff-session-chat-draft <selector>", "Move the agent CLI's composer draft out of the terminal and print it"),
         format_help_command("read-session-chat-queue <selector> --json", "Read the session's queued chat prompts and synced composer draft"),
@@ -372,6 +373,10 @@ pub fn usage() -> String {
 
     let server_commands = [
         format_help_command("web", "Open the Ghostex web app in the default browser"),
+        format_help_command(
+            "ports [--json]",
+            "List the TCP ports listening on this machine",
+        ),
         format_help_command("server", "Run gxserver in the foreground"),
         format_help_command("server start [--json]", "Start gxserver in the background"),
         format_help_command(
@@ -536,6 +541,26 @@ Commands:
   status                                Print the tailcat sidecar status JSON
   enable                                Serve the configured ports and print the status
   disable                               Stop the sidecar and print the status
+"
+    .to_string()
+}
+
+pub fn ports_usage() -> String {
+    "Ghostex ports - list the TCP ports listening on this machine
+
+Usage:
+  ghostex ports [--json]
+
+Output:
+  Without --json, prints a PORT/ADDRESS/PID/COMMAND table.
+  With --json, prints { \"ports\": [{ \"port\", \"address\", \"pid\", \"command\" }] },
+  one entry per port and bind address, sorted by port and then address.
+
+Notes:
+  Every listening TCP socket is listed, not only the ones Ghostex started.
+  pid and command are null when the socket belongs to another user's process.
+  Linux reads the list with ss, which sees every user's sockets (including
+  root's and Docker's); macOS reads it with lsof. Missing both is an error.
 "
     .to_string()
 }
@@ -764,8 +789,8 @@ Lifecycle:
   Closing the macOS app does not stop gxserver.
   gx server stop stops only the control plane; it does not kill zmx, tmux,
   zellij, shell, or agent sessions.
-  gx server stop-all is destructive: it kills gxserver-tracked zmx sessions,
-  marks killed sessions stopped, then stops the control plane.
+  gx server stop-all kills gxserver-tracked zmx sessions, marks killed
+  sessions sleeping so they wake on next open, then stops the control plane.
 
 Compatibility:
   The gxserver command remains available for server-only/headless installs.

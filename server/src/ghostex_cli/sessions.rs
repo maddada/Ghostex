@@ -398,7 +398,22 @@ pub fn fetch_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
 fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
     let projects_response = call_gxserver_rpc("/api/listProjects", &json!({}), flags)?;
     let recent_projects_response = call_gxserver_rpc("/api/listRecentProjects", &json!({}), flags)?;
-    let sessions_response = call_gxserver_rpc("/api/listSessions", &json!({}), flags)?;
+    /*
+     * CDXC:GxserverActiveOnlySessionList 2026-09-01:
+     * The default inventory drops stopped rows a few lines below, and mobile
+     * re-runs `ghostex sessions --json --mobile-summary` over SSH every few
+     * seconds per machine, so asking for them at all meant shipping the whole
+     * stopped agent history across the hop just to throw it away. Ask the
+     * daemon for the same set this list is going to keep. `--all` /
+     * `--include-stopped` (and every session-action resolver, which sets both)
+     * still request the full history.
+     */
+    let include_stopped = should_include_stopped_gxserver_sessions(flags);
+    let sessions_response = call_gxserver_rpc(
+        "/api/listSessions",
+        &json!({ "includeStopped": include_stopped }),
+        flags,
+    )?;
     let presentation_response =
         call_gxserver_rpc("/api/readPresentationSnapshot", &json!({}), flags)?;
     let empty = Vec::new();

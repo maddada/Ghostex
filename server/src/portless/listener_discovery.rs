@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use rusqlite::Connection;
 use serde_json::Value;
 
@@ -172,6 +172,94 @@ fi
     .to_string()
 }
 
+/// The listener half of the Portless snapshot on its own, for callers that want
+/// every listening socket rather than the ones under a session process tree.
+/// Unlike the Portless script this one reports a missing tool (exit 127) so the
+/// caller can say so instead of printing an empty list.
+///
+/// Tool order is per-platform, because the two tools see different things:
+/// on Linux `lsof` only reports sockets whose /proc entry this user can read, so
+/// a root- or Docker-owned listener on port 80 is simply missing from its
+/// output, while `ss` reads the kernel's socket table and lists every listening
+/// socket (dropping only the pid/command of the ones it may not inspect).
+/// macOS has no `ss`, and its `lsof` does report other users' sockets, so there
+/// `lsof` stays first.
+pub(crate) fn build_tcp_listener_command() -> String {
+    r#"
+if [ "$(uname -s 2>/dev/null)" = Linux ]; then
+  if [ -x /usr/sbin/ss ]; then
+    exec /usr/sbin/ss -H -ltnp
+  fi
+  if [ -x /usr/bin/ss ]; then
+    exec /usr/bin/ss -H -ltnp
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    exec ss -H -ltnp
+  fi
+fi
+if [ -x /usr/sbin/lsof ]; then
+  exec /usr/sbin/lsof -nP -iTCP -sTCP:LISTEN +c 0 -F pcn
+fi
+if [ -x /usr/bin/lsof ]; then
+  exec /usr/bin/lsof -nP -iTCP -sTCP:LISTEN +c 0 -F pcn
+fi
+if command -v lsof >/dev/null 2>&1; then
+  exec lsof -nP -iTCP -sTCP:LISTEN +c 0 -F pcn
+fi
+if [ -x /usr/sbin/ss ]; then
+  exec /usr/sbin/ss -H -ltnp
+fi
+if [ -x /usr/bin/ss ]; then
+  exec /usr/bin/ss -H -ltnp
+fi
+if command -v ss >/dev/null 2>&1; then
+  exec ss -H -ltnp
+fi
+exit 127
+"#
+    .trim()
+    .to_string()
+}
+
+pub(crate) fn read_all_tcp_listeners() -> Result<Vec<TcpListenerDetail>> {
+    let output = run_portless_listener_snapshot_command(&build_tcp_listener_command())?;
+    if output.exit_code == 127 {
+        bail!("Neither lsof nor ss is installed, so this machine cannot list listening TCP ports.");
+    }
+    if output.stdout_truncated {
+        bail!("The listening TCP port list exceeded the safety limit.");
+    }
+    /*
+    A run we had to kill produced whatever it had managed to print, which is a
+    prefix of the socket table rather than the table. Reporting it as the
+    complete list would tell the caller a port is not listening when the tool
+    simply never got to it.
+    */
+    if output.exit_code == 124 {
+        bail!(
+            "Listing listening TCP ports timed out after {} seconds.",
+            PORTLESS_LISTENER_SNAPSHOT_TIMEOUT.as_secs()
+        );
+    }
+    let listeners = parse_tcp_listener_details(&output.stdout);
+    /*
+    lsof exits 1 both for "no matching sockets" and for "some sockets were
+    unreadable", and it still prints the sockets it could read. Rows on stdout
+    therefore mean the tool worked. The silent exit 1 — no rows, no diagnostics
+    — is lsof's way of saying "you own no listening sockets", which is an empty
+    list, not a failure; only a non-zero exit that also has something to
+    complain about is a real failure.
+    */
+    if output.exit_code != 0 && listeners.is_empty() && !output.stderr.is_empty() {
+        bail!(
+            "Listing listening TCP ports failed with exit code {}. {}",
+            output.exit_code,
+            output.stderr
+        );
+    }
+    Ok(listeners)
+}
+
 pub(crate) fn parse_portless_listener_snapshot_sections(
     stdout: &str,
 ) -> PortlessListenerSnapshotSections {
@@ -251,7 +339,7 @@ pub(crate) fn run_portless_listener_snapshot_command(
             let (stdout, stdout_truncated) = stdout_thread
                 .join()
                 .map_err(|_| anyhow!("Portless listener snapshot stdout reader failed."))?;
-            let (_, stderr_truncated) = stderr_thread
+            let (stderr, stderr_truncated) = stderr_thread
                 .join()
                 .map_err(|_| anyhow!("Portless listener snapshot stderr reader failed."))?;
             let mut exit_code = status.code().unwrap_or(1);
@@ -262,6 +350,7 @@ pub(crate) fn run_portless_listener_snapshot_command(
             }
             return Ok(PortlessSnapshotCommandOutput {
                 exit_code,
+                stderr: String::from_utf8_lossy(&stderr).trim().to_string(),
                 stdout: String::from_utf8_lossy(&stdout).trim().to_string(),
                 stdout_truncated,
             });
@@ -425,11 +514,33 @@ fn collect_portless_process_tree_pids(
     collected
 }
 
+/// Portless only routes listeners it can attribute to a session process tree,
+/// so it keeps the pid-bearing subset of the full listener table.
 pub(crate) fn parse_portless_tcp_listener_rows(
     listener_output: &str,
 ) -> Vec<PortlessTcpListenerRow> {
+    parse_tcp_listener_details(listener_output)
+        .into_iter()
+        .filter_map(|listener| {
+            listener.pid.map(|pid| PortlessTcpListenerRow {
+                pid,
+                port: listener.port,
+            })
+        })
+        .collect()
+}
+
+/*
+CDXC:GhostexPorts 2026-09-02:
+`ghostex ports` lists every listening socket on the machine, including ones
+owned by another user (no pid/command visible through lsof/ss), so it reads the
+same tool output Portless parses instead of growing a second parser that could
+disagree about ports.
+*/
+pub(crate) fn parse_tcp_listener_details(listener_output: &str) -> Vec<TcpListenerDetail> {
     let mut listeners = Vec::new();
     let mut current_pid: Option<u32> = None;
+    let mut current_command: Option<String> = None;
     for raw_line in listener_output.lines() {
         let line = raw_line.trim();
         if line.is_empty() {
@@ -438,7 +549,7 @@ pub(crate) fn parse_portless_tcp_listener_rows(
         let Some(field) = line.chars().next() else {
             continue;
         };
-        if !matches!(field, 'p' | 'n') {
+        if !matches!(field, 'p' | 'c' | 'n') {
             if let Some(row) = parse_portless_ss_listener_row(line) {
                 listeners.push(row);
             }
@@ -446,15 +557,24 @@ pub(crate) fn parse_portless_tcp_listener_rows(
         }
         let value = &line[field.len_utf8()..];
         match field {
-            'p' => current_pid = parse_positive_u32(value),
+            'p' => {
+                current_pid = parse_positive_u32(value);
+                current_command = None;
+            }
+            'c' => {
+                let command = value.trim();
+                current_command = (!command.is_empty()).then(|| command.to_string());
+            }
             'n' => {
-                let Some(pid) = current_pid else {
+                let Some((address, port)) = parse_portless_tcp_listener_endpoint(value) else {
                     continue;
                 };
-                let Some(port) = parse_portless_tcp_listener_port(value) else {
-                    continue;
-                };
-                listeners.push(PortlessTcpListenerRow { pid, port });
+                listeners.push(TcpListenerDetail {
+                    address,
+                    command: current_command.clone(),
+                    pid: current_pid,
+                    port,
+                });
             }
             _ => {}
         }
@@ -462,14 +582,32 @@ pub(crate) fn parse_portless_tcp_listener_rows(
     listeners
 }
 
-fn parse_portless_ss_listener_row(line: &str) -> Option<PortlessTcpListenerRow> {
-    let pid = parse_portless_ss_listener_pid(line)?;
+fn parse_portless_ss_listener_row(line: &str) -> Option<TcpListenerDetail> {
+    /*
+    `ss -H -ltn` puts the socket state in the first column, and it is always
+    LISTEN for `-l`. Requiring it keeps banner lines, warnings, and any row from
+    a wider `ss` invocation from being read as an endpoint, which would emit an
+    address assembled out of whatever columns happened to contain a colon.
+    */
+    if line.split_whitespace().next() != Some("LISTEN") {
+        return None;
+    }
     let before_process = line.split(" users:").next().unwrap_or(line);
-    let port = before_process
+    let (address, port) = before_process
         .split_whitespace()
-        .filter_map(parse_portless_tcp_listener_port)
-        .next()?;
-    Some(PortlessTcpListenerRow { pid, port })
+        .find_map(parse_portless_tcp_listener_endpoint)?;
+    Some(TcpListenerDetail {
+        address,
+        command: parse_portless_ss_listener_command(line),
+        pid: parse_portless_ss_listener_pid(line),
+        port,
+    })
+}
+
+/// `users:(("nginx",pid=123,fd=6),("nginx",pid=124,fd=6))` → `nginx`.
+fn parse_portless_ss_listener_command(line: &str) -> Option<String> {
+    let command = line.split("users:((\"").nth(1)?.split('"').next()?.trim();
+    (!command.is_empty()).then(|| command.to_string())
 }
 
 fn parse_portless_ss_listener_pid(line: &str) -> Option<u32> {
@@ -481,7 +619,9 @@ fn parse_portless_ss_listener_pid(line: &str) -> Option<u32> {
     parse_positive_u32(&digits)
 }
 
-fn parse_portless_tcp_listener_port(endpoint: &str) -> Option<u16> {
+/// `TCP 127.0.0.1:8000 (LISTEN)` → `("127.0.0.1", 8000)`, `[::1]:9000` →
+/// `("::1", 9000)`, `*:5173` → `("*", 5173)`.
+fn parse_portless_tcp_listener_endpoint(endpoint: &str) -> Option<(String, u16)> {
     let endpoint = endpoint
         .trim()
         .strip_prefix("TCP ")
@@ -493,16 +633,27 @@ fn parse_portless_tcp_listener_port(endpoint: &str) -> Option<u16> {
     if endpoint.is_empty() {
         return None;
     }
+    /*
+    lsof writes a connected socket's `n` field as `local->peer`. Splitting that
+    on its last colon would report the peer's port bound to an address made of
+    both endpoints, so a row that is not a bare listening endpoint is skipped.
+    */
+    if endpoint.contains("->") {
+        return None;
+    }
 
-    let raw_port = if endpoint.starts_with('[') {
+    let (address, raw_port) = if endpoint.starts_with('[') {
         let host_end = endpoint.find("]:")?;
-        &endpoint[host_end + 2..]
+        (&endpoint[1..host_end], &endpoint[host_end + 2..])
     } else {
         let separator_index = endpoint.rfind(':')?;
-        &endpoint[separator_index + 1..]
+        (
+            &endpoint[..separator_index],
+            &endpoint[separator_index + 1..],
+        )
     };
     let port = raw_port.trim().parse::<u16>().ok()?;
-    (port > 0).then_some(port)
+    (port > 0).then(|| (address.trim().to_string(), port))
 }
 
 fn parse_positive_u32(value: &str) -> Option<u32> {
@@ -569,6 +720,7 @@ pub(crate) struct PortlessListenerSnapshotSections {
 
 pub(crate) struct PortlessSnapshotCommandOutput {
     pub(crate) exit_code: i32,
+    pub(crate) stderr: String,
     pub(crate) stdout: String,
     pub(crate) stdout_truncated: bool,
 }
@@ -631,5 +783,16 @@ struct PortlessProcessOwner {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct PortlessTcpListenerRow {
     pub(crate) pid: u32,
+    pub(crate) port: u16,
+}
+
+/// One listening TCP socket exactly as the platform tool reported it. `pid` and
+/// `command` are absent when the socket belongs to a process this user cannot
+/// inspect.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TcpListenerDetail {
+    pub(crate) address: String,
+    pub(crate) command: Option<String>,
+    pub(crate) pid: Option<u32>,
     pub(crate) port: u16,
 }

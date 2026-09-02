@@ -10,6 +10,7 @@ pub mod extensions;
 pub mod launchers;
 pub mod output;
 pub mod picker;
+pub mod ports;
 pub mod rpc;
 pub mod saved_prompts;
 pub mod selector;
@@ -75,6 +76,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "h",
     "history",
     "move-codex-session",
+    "ports",
     "quick-actions",
     "saved-prompts",
     "server",
@@ -237,6 +239,7 @@ fn is_known_command(name: &str) -> bool {
         "read-session-chat-files",
         "send-session-chat-message",
         "answer-session-chat-prompt",
+        "rewind-session-chat",
         "interrupt-session-chat",
         "handoff-session-chat-draft",
         "read-session-chat-queue",
@@ -263,6 +266,7 @@ fn is_known_command(name: &str) -> bool {
         "server",
         "tailcat",
         "web",
+        "ports",
         "install-browser-skill",
         "install-browser-mcp-skill",
         "install-browser-use-skill",
@@ -597,6 +601,17 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             fail_on_not_ok,
             args,
         ),
+        /*
+        CDXC:SessionChatRewind 2026-09-02:
+        The terminal-side way to exercise the rewind driver without the chat UI:
+        it takes the same transcript row id the chat surface would send.
+        */
+        "rewind-session-chat" => run_bridge_action(
+            "rewindSessionChat",
+            Parser::SessionChatRewind,
+            fail_on_not_ok,
+            args,
+        ),
         "interrupt-session-chat" => {
             run_bridge_action("interruptSessionChat", Parser::SessionSelector, plain, args)
         }
@@ -683,6 +698,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "server" => server_command(args),
         "tailcat" => tailcat::tailcat_command(args),
         "web" => web::web_command(args),
+        "ports" => ports::ports_command(args),
         "install-browser-skill" | "install-browser-mcp-skill" => {
             skills::install_browser_skill_command(args)
         }
