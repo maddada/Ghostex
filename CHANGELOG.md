@@ -1,5 +1,28 @@
 # Changelog
 
+## 8.6.0 - 2026-09-02
+
+- Major
+  - The sidebar shows one machine at a time: machine tabs sit under Search, a remote tab's cloud icon connects or retries and explains a failure in its tooltip, right-clicking a tab hides the machine or opens its settings, and Add Project, Sort & Filter, Collapse All and Edit Machine now live in the More menu.
+  - Spaces end with a built-in Other space that holds every project no Space claims, replacing the All Projects view on desktop, web and mobile.
+  - Claude conversations can be rewound from Session Chat: every prompt has a Rewind to here button that drives Claude Code's own restore flow, the transcript then shows only the active branch, and the rewound prompt lands back in the composer for editing.
+  - The Android app gains machine tabs and Spaces, a Web Preview that opens any port listening on the computer through the SSH connection with a picker of live ports, QR scanning to pair a tailcat machine from the desktop's Remote settings, and Hide from Sessions for machines you do not want polled.
+  - Model, reasoning effort and Fast mode choices in the chat composer come from a published catalog that updates without an app release, and Codex sessions gain a Fast mode pill.
+  - Sessions whose agent process dies outside Ghostex, including Quit Ghostex & BG Service, a crash or a reboot, now go to sleep instead of disappearing into history, keep their chat, and wake on the next launch.
+- Minor
+  - Native alert dialogs such as the paste-protection and close-terminal confirmations appear again instead of invisibly holding keyboard focus, thanks to banozz.
+  - Codex hooks are now marked trusted when installed, so Codex actually runs them instead of showing Installed while silently skipping them, and Settings says when a hook update is required.
+  - A session started from Handoff or Export is created as a draft, so Chat View is available immediately and, when your default agent view is Chat, it opens straight into chat with the handed-off prompt in the composer.
+  - Forked Claude and Codex sessions no longer share the parent's identity, so the fork and its parent stop showing the same chat and title.
+  - The Session Chat context menu adds Locate File on paths and Copy URL, Open in Embedded Browser and Open in External Browser on links, and Save Image now works for large images.
+  - Sleep and Wake are only offered for sessions that are actually running or sleeping, and Sleep All, Wake All and Pop Out Pane skip stopped history rows.
+  - Waking a session or opening a new terminal takes one probe instead of three, session listing no longer reloads the whole registry on every request, and long zmx operations no longer stall unrelated actions.
+  - The sidebar reconnects on its own with backoff after a gxserver restart, and remote machines stop refetching a full snapshot for every stale update over SSH.
+  - Tailcat connections from Android 11 and newer work again, connection failures show the real cause, and newly paired machines no longer need to reach the relay map before the first tunnel byte.
+  - Bundled skills install without Node or npm on the PATH, the Ghostex CLI link refuses to overwrite an unrelated ghostex or gx command, and first-launch setup waits for the daemon before reporting hook status.
+  - Claude status rows are retired against the transcript so near-duplicate lines no longer linger, a /compact typed in the terminal shows the compacting card, and a sent message no longer reappears as an unsent draft on the next start.
+  - The new `ghostex ports` command lists every listening TCP port on the machine, and `ghostex rewind-session-chat` drives a Claude rewind from the CLI.
+
 ## 8.5.0 - 2026-09-01
 
 - Major
