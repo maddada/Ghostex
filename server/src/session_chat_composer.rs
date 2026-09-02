@@ -235,7 +235,7 @@ already folded.
 Agents deliberately absent, each for a stated reason rather than because nobody
 got to them:
 
-  - **antigravity, amp, droid, kiro, codebuddy, qoder, rovodev** and every
+  - **amp, droid, kiro, codebuddy, qoder, rovodev** and every
     custom agent were not measured. An unmeasured guess would be the same
     failure as pi's, so they read Unknown until someone captures them.
 */
@@ -246,6 +246,10 @@ fn composer_signature(agent: &str) -> Option<ComposerSignature> {
         "claude" | "openclaude" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
         // Identical shape to claude's, measured independently.
         "copilot" => ComposerSignature::RuleSandwich { marker: '\u{276f}' },
+        // `>` between two full-width rules, statusline below (`? for
+        // shortcuts` idle, `esc to cancel` while working). Measured
+        // 2026-09-02, Antigravity CLI 1.1.24.
+        "antigravity" => ComposerSignature::RuleSandwich { marker: '>' },
         // `❯` (or `<profile> ❯`) between two full-width rules, statusline
         // above the top rule (measured 2026-08-29, Hermes Agent v0.20.4;
         // profile prefix confirmed against v0.20.5 source on 2026-08-30).

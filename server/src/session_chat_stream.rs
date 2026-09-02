@@ -256,6 +256,12 @@ pub struct SessionChatFollowerConfig {
     /// replaced frames carry the cached value; a periodic probe re-detects and
     /// emits a state frame only when it CHANGED.
     pub options_reader: Option<crate::session_chat_options::SessionChatOptionsReader>,
+    /// CDXC:ClaudeStatusline 2026-09-03: answers "did the stored statusline
+    /// payload for this agent session id change since I last asked?", so the
+    /// reconcile loop re-probes within a tick of a `/model`, `/effort` or
+    /// compaction instead of waiting for the idle 30s tier. Absent ⇒ the
+    /// steady cadence alone.
+    pub options_change_watch: Option<crate::session_chat_options::SessionChatOptionsChangeWatch>,
     /// Queue + draft source for snapshot / replaced / state frames. Absent ⇒
     /// the fields are omitted, which clients read as "this daemon has no queue"
     /// and answer by hiding every queue control.

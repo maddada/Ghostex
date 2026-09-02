@@ -150,6 +150,18 @@ pub(crate) fn follower_drain_once(
     if agent == SessionChatTranscriptAgent::Hermes {
         crate::session_chat_hermes::sync_hermes_transcript_mirror_for_path(file_path);
     }
+    // Cursor's mirror splices the store's thinking into the raw jsonl; same
+    // freshen-before-read contract, same rename-on-rewrite signalling.
+    if agent == SessionChatTranscriptAgent::Cursor {
+        crate::session_chat_cursor_mirror::sync_cursor_transcript_mirror_for_path(file_path);
+    }
+    // Antigravity's mirror splits the CLI's step log into chat rows; same
+    // freshen-before-read contract, same rename-on-rewrite signalling.
+    if agent == SessionChatTranscriptAgent::Antigravity {
+        crate::session_chat_antigravity_mirror::sync_antigravity_transcript_mirror_for_path(
+            file_path,
+        );
+    }
     let Ok(current) = read_transcript_file_version(file_path) else {
         return FollowerDrainOutcome::Missing;
     };
@@ -703,7 +715,8 @@ async fn detect_and_adopt_successor_transcript(
         }
         // Codex stems are `rollout-<ts>-<uuid>`; only the trailing uuid is it.
         SessionChatTranscriptAgent::Codex => codex_rollout_session_id(stem)?,
-        SessionChatTranscriptAgent::Cursor
+        SessionChatTranscriptAgent::Antigravity
+        | SessionChatTranscriptAgent::Cursor
         | SessionChatTranscriptAgent::Grok
         | SessionChatTranscriptAgent::Hermes
         | SessionChatTranscriptAgent::Pi => return None,
@@ -1463,8 +1476,20 @@ pub async fn run_session_chat_follower(
         };
         let activity_command_probe_due = activity_command_probe_ticks > 0;
         activity_command_probe_ticks = activity_command_probe_ticks.saturating_sub(1);
+        /*
+        CDXC:ClaudeStatusline 2026-09-03: Claude re-runs its statusLine command
+        within 300ms of a model, effort, compaction or permission-mode change,
+        and the Ghostex script stores the payload. A changed file is the one
+        signal that says "the pills are stale right now", so it is a probe on
+        its own, whatever tier the loop is in.
+        */
+        let statusline_changed = config
+            .options_change_watch
+            .as_ref()
+            .is_some_and(|watch| watch(identity.agent_session_id.as_deref()));
         let periodic_probe_due = became_ready
             || activity_command_probe_due
+            || statusline_changed
             || reconcile_ticks % probe_interval_ticks == 0;
         if published_state_valid
             && config.options_reader.is_some()
@@ -2080,6 +2105,16 @@ pub(crate) fn sync_session_chat_follower_for_session(
         &project_id,
         &session_id,
     );
+    // CDXC:ClaudeStatusline 2026-09-03: only Claude has a statusline payload
+    // to watch; a cheap stat per tick, no capture until it actually changes.
+    let options_change_watch =
+        (crate::session_chat_options::session_chat_option_agent(terminal_agent.as_deref())
+            == Some(crate::session_chat_options::SessionChatOptionAgent::Claude))
+        .then(|| {
+            crate::session_chat_options::claude_statusline_change_watch(
+                crate::session_chat_options::session_chat_hook_state_directory(&state.paths),
+            )
+        });
     let config = crate::session_chat::SessionChatFollowerConfig {
         project_id,
         session_id,
@@ -2091,6 +2126,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
         server_id: state.metadata.server_id.clone(),
         state_reader: Some(state_reader),
         options_reader: Some(options_reader),
+        options_change_watch,
         queue_reader: Some(queue_reader),
         successor_hooks: Some(successor_hooks),
         notice_publisher: Some(notice_publisher),

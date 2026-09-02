@@ -631,7 +631,7 @@ fn read_cursor_meta_values(db_path: &Path) -> Vec<String> {
     rows.flatten().collect()
 }
 
-fn parse_cursor_meta_value(raw: &str) -> Option<Value> {
+pub(crate) fn parse_cursor_meta_value(raw: &str) -> Option<Value> {
     let value = raw.trim();
     if value.starts_with('{') {
         return serde_json::from_str(value).ok();

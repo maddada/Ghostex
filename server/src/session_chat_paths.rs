@@ -16,11 +16,28 @@ pub fn resolve_session_chat_transcript_path(
     agent_session_id: Option<&str>,
     agent_session_path: Option<&str>,
 ) -> Option<PathBuf> {
-    if let Some(path) = agent_session_path
+    let supplied_path = agent_session_path
         .map(str::trim)
         .filter(|value| !value.is_empty())
-    {
-        let expanded = expand_home(path);
+        .map(expand_home);
+    if agent == SessionChatTranscriptAgent::Cursor {
+        // Cursor's chat is read through a mirror that splices the store's
+        // thinking into the raw jsonl, whichever way the raw file was named.
+        return crate::session_chat_cursor_mirror::resolve_cursor_chat_transcript_path(
+            agent_session_id,
+            supplied_path.as_deref(),
+        );
+    }
+    if agent == SessionChatTranscriptAgent::Antigravity {
+        // Antigravity's hooks name its raw step log, which is a .jsonl the
+        // fast path below would tail as-is; chat reads the mirror that splits
+        // each step into rows instead (`CDXC:SessionChatAntigravity`).
+        return crate::session_chat_antigravity_mirror::resolve_antigravity_chat_transcript_path(
+            agent_session_id,
+            supplied_path.as_deref(),
+        );
+    }
+    if let Some(expanded) = supplied_path {
         if expanded
             .extension()
             .and_then(|extension| extension.to_str())
@@ -34,11 +51,22 @@ pub fn resolve_session_chat_transcript_path(
         .map(str::trim)
         .filter(|value| !value.is_empty())?;
     match agent {
+        SessionChatTranscriptAgent::Antigravity => {
+            crate::session_chat_antigravity_mirror::resolve_antigravity_chat_transcript_path(
+                Some(session_id),
+                None,
+            )
+        }
         SessionChatTranscriptAgent::Claude => find_claude_chat_transcript(session_id),
         SessionChatTranscriptAgent::Codex => {
             crate::agent_transcripts::find_codex_transcript(session_id)
         }
-        SessionChatTranscriptAgent::Cursor => find_cursor_chat_transcript(session_id),
+        SessionChatTranscriptAgent::Cursor => {
+            crate::session_chat_cursor_mirror::resolve_cursor_chat_transcript_path(
+                Some(session_id),
+                None,
+            )
+        }
         SessionChatTranscriptAgent::Grok => find_grok_session_update_log(session_id),
         SessionChatTranscriptAgent::Hermes => {
             crate::session_chat_hermes::resolve_hermes_chat_transcript_path(session_id)
@@ -47,7 +75,7 @@ pub fn resolve_session_chat_transcript_path(
     }
 }
 
-fn find_cursor_chat_transcript(session_id: &str) -> Option<PathBuf> {
+pub(crate) fn find_cursor_chat_transcript(session_id: &str) -> Option<PathBuf> {
     let projects_dir = home_dir().join(".cursor/projects");
     let project_dirs = fs::read_dir(projects_dir).ok()?;
     let file_name = format!("{session_id}.jsonl");

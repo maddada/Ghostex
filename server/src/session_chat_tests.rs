@@ -1014,6 +1014,7 @@ mod tests {
             server_id: "test-server".to_string(),
             state_reader: Some(state_reader),
             options_reader: None,
+            options_change_watch: None,
             queue_reader: None,
             successor_hooks: Some(hooks),
             notice_publisher: None,

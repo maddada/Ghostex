@@ -270,6 +270,7 @@ const SLASH_COMMANDS_BY_AGENT: Record<string, readonly SessionChatSlashCommand[]
 };
 
 const SLASH_HEADING_BY_AGENT: Record<string, string> = {
+  antigravity: 'Antigravity CLI',
   claude: 'Claude Code',
   codex: 'Codex',
   cursor: 'Cursor CLI',

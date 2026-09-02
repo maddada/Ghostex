@@ -65,16 +65,30 @@ fn cursor_visible_text(text: &str) -> Option<String> {
     (!visible.is_empty()).then_some(visible)
 }
 
-fn cursor_message_blocks(role: &str, content: Option<&Value>) -> Vec<SessionChatBlock> {
+/// Blocks plus whether every one of them came from a `thinking` block, which
+/// is what turns the message into a reasoning turn. Thinking blocks are not in
+/// Cursor's raw jsonl; the chat mirror splices them in from the session store
+/// (`session_chat_cursor_mirror`).
+fn cursor_message_blocks(role: &str, content: Option<&Value>) -> (Vec<SessionChatBlock>, bool) {
     let Some(items) = content.and_then(Value::as_array) else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     let mut blocks = Vec::new();
+    let mut thinking_blocks = 0usize;
     for item in items {
         let Some(record) = item.as_object() else {
             continue;
         };
         match record.get("type").and_then(Value::as_str) {
+            Some("thinking") => {
+                let Some(text) = extract_string(record.get("text")) else {
+                    continue;
+                };
+                if !text.trim().is_empty() {
+                    blocks.push(text_block(text));
+                    thinking_blocks += 1;
+                }
+            }
             Some("text") => {
                 let Some(text) = record.get("text").and_then(Value::as_str) else {
                     continue;
@@ -95,7 +109,8 @@ fn cursor_message_blocks(role: &str, content: Option<&Value>) -> Vec<SessionChat
             _ => {}
         }
     }
-    blocks
+    let reasoning_only = thinking_blocks > 0 && thinking_blocks == blocks.len();
+    (blocks, reasoning_only)
 }
 
 pub fn decode_cursor_transcript_line(line: &str, fallback_id: &str) -> Option<SessionChatMessage> {
@@ -120,12 +135,13 @@ pub fn decode_cursor_transcript_line(line: &str, fallback_id: &str) -> Option<Se
 
     let role = record.get("role").and_then(Value::as_str)?;
     let message = as_record(record.get("message"))?;
-    let blocks = cursor_message_blocks(role, message.get("content"));
+    let (blocks, reasoning_only) = cursor_message_blocks(role, message.get("content"));
     if blocks.is_empty() {
         return None;
     }
     let role = match role {
         "user" => SessionChatRole::User,
+        "assistant" if reasoning_only => SessionChatRole::Reasoning,
         "assistant" => SessionChatRole::Assistant,
         _ => return None,
     };

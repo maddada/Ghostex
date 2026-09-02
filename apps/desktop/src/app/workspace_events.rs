@@ -1331,6 +1331,7 @@ impl GhostexGpuiApp {
     ) -> Option<&'static str> {
         let session = self.agents_workspace.session(session_id)?;
         match session.agent_icon {
+            Some("antigravity-cli") => Some("antigravity"),
             Some("claude") => Some("claude"),
             Some("openclaude") => Some("claude"),
             Some("codex") => Some("codex"),

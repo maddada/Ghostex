@@ -30,6 +30,9 @@ export type {
 import type { SessionChatDraft, SessionChatQueuedPrompt } from './session-chat-queue';
 
 export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
+  'antigravity',
+  'antigravity-cli',
+  'agy',
   'claude',
   'openclaude',
   'codex',
@@ -42,7 +45,7 @@ export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
   'omp',
 ]);
 
-export type SessionChatTranscriptAgent = 'claude' | 'codex' | 'cursor' | 'grok' | 'hermes' | 'pi';
+export type SessionChatTranscriptAgent = 'antigravity' | 'claude' | 'codex' | 'cursor' | 'grok' | 'hermes' | 'pi';
 
 export function resolveSessionChatTranscriptAgent(
   agentId: string | null | undefined,
@@ -51,6 +54,14 @@ export function resolveSessionChatTranscriptAgent(
   const candidates = [agentId, agentIcon];
   for (const candidate of candidates) {
     const normalized = candidate?.trim().toLowerCase();
+    if (
+      normalized === 'antigravity' ||
+      normalized === 'antigravity-cli' ||
+      normalized === 'antigravity cli' ||
+      normalized === 'agy'
+    ) {
+      return 'antigravity';
+    }
     if (normalized === 'claude' || normalized === 'openclaude') return 'claude';
     if (normalized === 'codex') return 'codex';
     if (normalized === 'cursor' || normalized === 'cursor-agent' || normalized === 'cursor cli') return 'cursor';
@@ -89,6 +100,7 @@ export function resolveSessionChatDisplayAgent(
  */
 export function sessionChatAgentIconId(agentLabel: string | null | undefined): string | null {
   const display = resolveSessionChatDisplayAgent(agentLabel);
+  if (display === 'antigravity') return 'antigravity-cli';
   if (display === 'hermes') return 'hermes-agent';
   if (display === 'grok') return 'grok-build';
   return display;
@@ -238,8 +250,27 @@ export interface SessionChatDetectedChoice {
   value: string;
   /** The agent-reported label (`Fable 5`), shown verbatim. */
   label: string;
-  /** Evidence source; absent only when talking to an older daemon. */
-  source?: 'terminal' | 'transcript';
+  /**
+   * Evidence source; absent only when talking to an older daemon.
+   * `statusline` is the JSON Claude Code pipes to its statusLine command,
+   * stored by the Ghostex-installed script (CDXC:ClaudeStatusline 2026-09-03).
+   */
+  source?: 'terminal' | 'transcript' | 'statusline';
+}
+
+/**
+ * CDXC:ClaudeStatusline 2026-09-03: how full Claude's context window is, from
+ * its statusLine payload. Every field is optional there too; the composer's
+ * usage ring shows tokens over window size when both exist, else the
+ * percentage.
+ */
+export interface SessionChatContextUsage {
+  /** `context_window.used_percentage`, rounded. */
+  usedPercentage?: number;
+  /** `context_window.total_input_tokens`. */
+  usedTokens?: number;
+  /** `context_window.context_window_size`. */
+  windowSize?: number;
 }
 
 export interface SessionChatDetectedOptions {
@@ -251,8 +282,10 @@ export interface SessionChatDetectedOptions {
   contextWindow?: string;
   /** The complete normalized terminal line that supplied the detected values. */
   terminalStatusLine?: string;
-  /** Cursor or Codex's terminal-reported Fast mode. */
+  /** Cursor or Codex's terminal-reported Fast mode, or Claude's statusline-reported fast mode. */
   fast?: boolean;
+  /** Claude's statusline-reported context window usage. */
+  contextUsage?: SessionChatContextUsage;
   /** ISO-8601 millis; compared against a pending dispatch's own timestamp. */
   detectedAt: string;
 }

@@ -337,6 +337,7 @@ impl std::error::Error for SessionTranscriptExportError {}
 
 fn agent_display_name(agent: SessionChatTranscriptAgent) -> &'static str {
     match agent {
+        SessionChatTranscriptAgent::Antigravity => "Antigravity CLI",
         SessionChatTranscriptAgent::Claude => "Claude",
         SessionChatTranscriptAgent::Codex => "Codex",
         SessionChatTranscriptAgent::Cursor => "Cursor CLI",
@@ -724,6 +725,9 @@ fn parse_transcript(
         };
         builder.note_started_at(text_field(&record, "timestamp"));
         match agent {
+            SessionChatTranscriptAgent::Antigravity => {
+                parse_antigravity_record(&mut builder, &record)
+            }
             SessionChatTranscriptAgent::Claude => parse_claude_record(&mut builder, &record),
             SessionChatTranscriptAgent::Codex => parse_codex_record(&mut builder, &record),
             SessionChatTranscriptAgent::Cursor => parse_cursor_record(&mut builder, &record),
@@ -1451,6 +1455,15 @@ fn parse_cursor_record(builder: &mut TranscriptBuilder, record: &Map<String, Val
                     .filter(|text| !text.trim().is_empty());
                 append_paragraph(&mut spoken, visible);
             }
+            "thinking" if role == "assistant" => {
+                flush_dialog(builder, TranscriptExportSection::AgentMessage, &mut spoken);
+                if let Some(text) = text_field(&block, "text") {
+                    builder.push(ExportEntry::new(
+                        TranscriptExportSection::AgentReasoning,
+                        text,
+                    ));
+                }
+            }
             "tool_use" if role == "assistant" => {
                 flush_dialog(builder, TranscriptExportSection::AgentMessage, &mut spoken);
                 parse_claude_tool_use(builder, &block);
@@ -2057,6 +2070,64 @@ fn parse_hermes_record(builder: &mut TranscriptBuilder, record: &Map<String, Val
                 _ => (content, false),
             };
             builder.push_output(text_field(record, "toolCallId"), output, is_error);
+        }
+        _ => {}
+    }
+}
+
+/// Antigravity mirror rows (`session_chat_decode_antigravity.rs` documents
+/// the shape): one row per rendered message, keyed by `part`.
+fn parse_antigravity_record(builder: &mut TranscriptBuilder, record: &Map<String, Value>) {
+    builder.note_started_at(text_field(record, "createdAt"));
+    match text_field(record, "part").as_deref() {
+        Some("user") => {
+            builder.push_dialog(
+                TranscriptExportSection::UserMessage,
+                flatten_text(record.get("text")),
+            );
+        }
+        Some("reasoning") => {
+            let reasoning = flatten_text(record.get("text"));
+            if !reasoning.trim().is_empty() {
+                builder.push(ExportEntry::new(
+                    TranscriptExportSection::AgentReasoning,
+                    reasoning,
+                ));
+            }
+        }
+        Some("assistant") => {
+            let text = flatten_text(record.get("text"));
+            if !text.trim().is_empty() {
+                builder.push_dialog(TranscriptExportSection::AgentMessage, text);
+            }
+            if let Some(Value::Array(tool_calls)) = record.get("toolCalls") {
+                for tool_call in tool_calls {
+                    let Some(tool_call) = tool_call.as_object() else {
+                        continue;
+                    };
+                    let name = text_field(tool_call, "name").unwrap_or_else(|| "tool".to_string());
+                    let arguments = as_arguments(tool_call.get("args"));
+                    let command = argument_text(&arguments, &["CommandLine", "command"]);
+                    let section = classify_tool(&name);
+                    match section {
+                        TranscriptExportSection::TerminalCmd => builder.push_call(
+                            ExportEntry::new(
+                                TranscriptExportSection::TerminalCmd,
+                                command.unwrap_or_else(|| pretty_arguments(&arguments)),
+                            )
+                            .with_tool(name, None),
+                        ),
+                        other => builder.push_call(
+                            ExportEntry::new(other, pretty_arguments(&arguments))
+                                .with_tool(name, None),
+                        ),
+                    }
+                }
+            }
+        }
+        Some("tool") => {
+            let is_error = record.get("isError") == Some(&Value::Bool(true));
+            builder.push_output(None, flatten_text(record.get("text")), is_error);
         }
         _ => {}
     }

@@ -20,7 +20,7 @@ import {
   type AgentModelCatalogModel,
 } from '../../shared/agent-model-catalog';
 import { currentAgentModelCatalog } from '../../shared/agent-model-catalog-store';
-import type { SessionChatSendKey } from '../../shared/session-chat';
+import type { SessionChatDetectedChoice, SessionChatSendKey } from '../../shared/session-chat';
 import type { SidebarAgentIcon } from '../../shared/sidebar-agents';
 
 export type SessionChatOptionCategory = 'model' | 'thought_level' | 'model_config' | 'mode';
@@ -369,6 +369,64 @@ function buildGrokCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogAg
 }
 
 // ---------------------------------------------------------------------------
+// Antigravity CLI
+// ---------------------------------------------------------------------------
+
+/*
+Antigravity's `/model` takes one flattened id per model and effort
+(`gemini-3.8-flash-high`; see `agy models`), and rejects the bare model id
+when the model has efforts. The catalog keys rows by the model part, so the
+model pill appends the model's default effort and the effort pill re-sends
+the current model with the chosen effort. Models without efforts (the Claude
+and GPT-OSS rows) are typed as-is.
+*/
+function antigravityModelCommand(agent: AgentModelCatalogAgent, modelValue: string, effort?: string): string {
+  const model = catalogModel(agent, modelValue);
+  const suffix = effort ?? model?.defaultEffort ?? model?.efforts[0];
+  return model !== undefined && model.efforts.length > 0 && suffix !== undefined
+    ? `/model ${modelValue}-${suffix}`
+    : `/model ${modelValue}`;
+}
+
+function buildAntigravityCatalog(
+  catalog: AgentModelCatalog,
+  agent: AgentModelCatalogAgent
+): SessionChatSessionOptionCatalog {
+  const model: SessionChatOptionDescriptor = {
+    id: 'model',
+    label: 'Model',
+    category: 'model',
+    choices: modelChoices(agent),
+    dispatch: { kind: 'command', build: (value) => antigravityModelCommand(agent, value) },
+  };
+  const effortByModel = new Map<string, SessionChatOptionDescriptor>();
+  const effortFor = (modelValue: string, efforts: readonly string[]): SessionChatOptionDescriptor => {
+    let descriptor = effortByModel.get(modelValue);
+    if (descriptor === undefined) {
+      descriptor = {
+        id: 'effort',
+        label: 'Effort',
+        category: 'thought_level',
+        choices: effortChoices(catalog, efforts),
+        dispatch: { kind: 'command', build: (effort) => antigravityModelCommand(agent, modelValue, effort) },
+      };
+      effortByModel.set(modelValue, descriptor);
+    }
+    return descriptor;
+  };
+  return {
+    model,
+    modelIcon: 'antigravity-cli',
+    optionsForModel: (modelValue) => {
+      // The effort is typed together with the model, so it is only offered
+      // once gxserver has confirmed which catalog model is running.
+      const current = catalogModel(agent, modelValue);
+      return current !== undefined && current.efforts.length > 0 ? [effortFor(current.value, current.efforts)] : [];
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Pi
 // ---------------------------------------------------------------------------
 
@@ -458,6 +516,7 @@ const CATALOG_BUILDERS: Record<
   codex: buildCodexCatalog,
   cursor: buildCursorCatalog,
   grok: buildGrokCatalog,
+  antigravity: buildAntigravityCatalog,
 };
 
 /** Built once per catalog document, so a refresh swaps every agent at once. */
@@ -480,6 +539,9 @@ function catalogsFor(catalog: AgentModelCatalog): Record<string, SessionChatSess
   }
   // Both the transcript family id (read state) and the sidebar agent id reach
   // this lookup, so the catalog answers to either spelling.
+  if (byAgent.antigravity !== undefined) {
+    byAgent['antigravity-cli'] = byAgent.antigravity;
+  }
   byAgent.hermes = HERMES_CATALOG;
   byAgent['hermes-agent'] = HERMES_CATALOG;
   byAgent.omp = OMP_CATALOG;
@@ -558,7 +620,7 @@ export interface SessionChatOptionValue {
   /** ISO time this surface typed the option command (source "dispatched"). */
   dispatchedAt?: string;
   /** Agent-owned evidence used for a detected value. */
-  detectedSource?: 'terminal' | 'transcript';
+  detectedSource?: SessionChatDetectedChoice['source'];
   /** ISO time gxserver read the value (source "detected"). */
   detectedAt?: string;
 }
@@ -736,9 +798,9 @@ repainted yet. A detection that AGREES with a pending dispatch confirms it.
 Nothing detected ⇒ nothing here runs and no current value is claimed.
 */
 export interface SessionChatDetectedOptionInput {
-  model?: { value: string; label: string; source?: 'terminal' | 'transcript' };
-  effort?: { value: string; label: string; source?: 'terminal' | 'transcript' };
-  mode?: { value: string; label: string; source?: 'terminal' | 'transcript' };
+  model?: { value: string; label: string; source?: SessionChatDetectedChoice['source'] };
+  effort?: { value: string; label: string; source?: SessionChatDetectedChoice['source'] };
+  mode?: { value: string; label: string; source?: SessionChatDetectedChoice['source'] };
   contextWindow?: string;
   terminalStatusLine?: string;
   fast?: boolean;
@@ -751,7 +813,7 @@ function applyDetectedChoice(
   detected: {
     value: string;
     label: string;
-    source?: 'terminal' | 'transcript';
+    source?: SessionChatDetectedChoice['source'];
   },
   detectedAt: string
 ): SessionChatOptionState {
@@ -942,7 +1004,7 @@ export function readStoredSessionChatOptions(sessionKey: string | null | undefin
     if (typeof detectedAt === 'string') {
       stored.detectedAt = detectedAt;
     }
-    if (detectedSource === 'terminal' || detectedSource === 'transcript') {
+    if (detectedSource === 'terminal' || detectedSource === 'transcript' || detectedSource === 'statusline') {
       stored.detectedSource = detectedSource;
     }
     next[id] = stored;

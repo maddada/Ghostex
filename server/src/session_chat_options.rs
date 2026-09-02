@@ -123,6 +123,9 @@ pub struct SessionChatDetectedChoice {
 pub enum SessionChatOptionEvidence {
     Terminal,
     Transcript,
+    /// CDXC:ClaudeStatusline 2026-09-03: the JSON Claude Code pipes to its
+    /// statusLine command, stored by the Ghostex-installed script.
+    Statusline,
 }
 
 impl SessionChatOptionEvidence {
@@ -130,7 +133,45 @@ impl SessionChatOptionEvidence {
         match self {
             Self::Terminal => "terminal",
             Self::Transcript => "transcript",
+            Self::Statusline => "statusline",
         }
+    }
+}
+
+/*
+CDXC:ClaudeStatusline 2026-09-03:
+Claude's statusLine payload reports how full the context window is. The chat
+composer renders it as a usage ring (the t3code meter): percentage when Claude
+reports one, tokens over window size when it reports those. Both are optional
+in the payload and both are carried, so the client can show whichever exists.
+*/
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SessionChatContextUsage {
+    /// `context_window.used_percentage`, rounded — Claude reports an integer.
+    pub used_percentage: Option<u32>,
+    /// `context_window.total_input_tokens`.
+    pub used_tokens: Option<u64>,
+    /// `context_window.context_window_size`.
+    pub window_size: Option<u64>,
+}
+
+impl SessionChatContextUsage {
+    fn is_empty(&self) -> bool {
+        self.used_percentage.is_none() && self.used_tokens.is_none() && self.window_size.is_none()
+    }
+
+    fn to_value(&self) -> Value {
+        let mut map = Map::new();
+        if let Some(used_percentage) = self.used_percentage {
+            map.insert("usedPercentage".to_string(), json!(used_percentage));
+        }
+        if let Some(used_tokens) = self.used_tokens {
+            map.insert("usedTokens".to_string(), json!(used_tokens));
+        }
+        if let Some(window_size) = self.window_size {
+            map.insert("windowSize".to_string(), json!(window_size));
+        }
+        Value::Object(map)
     }
 }
 
@@ -147,8 +188,11 @@ pub struct SessionChatDetectedSelection {
     /// that supplied this detection down to the bottom of the screen, newline
     /// joined. The chat surface shows it verbatim as the model pill's tooltip.
     pub terminal_status_line: Option<String>,
-    /// Cursor or Codex's terminal-reported Fast modifier.
+    /// Cursor or Codex's terminal-reported Fast modifier, or Claude's
+    /// statusline-reported fast mode.
     pub fast: Option<bool>,
+    /// Claude's statusline-reported context window usage.
+    pub context_usage: Option<SessionChatContextUsage>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -215,6 +259,9 @@ impl SessionChatDetectedOptions {
         }
         if let Some(fast) = self.selection.fast {
             map.insert("fast".to_string(), json!(fast));
+        }
+        if let Some(context_usage) = self.selection.context_usage.as_ref() {
+            map.insert("contextUsage".to_string(), context_usage.to_value());
         }
         map.insert("detectedAt".to_string(), json!(self.detected_at));
         Value::Object(map)
@@ -299,6 +346,42 @@ pub enum SessionChatOptionsReadMode {
 pub type SessionChatOptionsReader = std::sync::Arc<
     dyn Fn(SessionChatOptionsReadMode) -> SessionChatTerminalDetection + Send + Sync,
 >;
+
+/// CDXC:ClaudeStatusline 2026-09-03: given the current agent session id, true
+/// when the stored statusline payload changed since the previous call.
+pub type SessionChatOptionsChangeWatch = std::sync::Arc<dyn Fn(Option<&str>) -> bool + Send + Sync>;
+
+/// A watch over the Claude statusline payload file for one session. The first
+/// observation only seeds (the subscribe's seed probe already read the file);
+/// every later mtime change — including the file first appearing — fires once.
+pub(crate) fn claude_statusline_change_watch(
+    hook_state_directory: std::path::PathBuf,
+) -> SessionChatOptionsChangeWatch {
+    let observed: Mutex<Option<Option<std::time::SystemTime>>> = Mutex::new(None);
+    Arc::new(move |agent_session_id: Option<&str>| {
+        let modified = agent_session_id
+            .and_then(|id| {
+                crate::agent_hooks::statusline::claude_statusline_payload_path(
+                    &hook_state_directory,
+                    id,
+                )
+            })
+            .and_then(|path| {
+                std::fs::metadata(path)
+                    .and_then(|meta| meta.modified())
+                    .ok()
+            });
+        let Ok(mut observed) = observed.lock() else {
+            return false;
+        };
+        let changed = match *observed {
+            Some(previous) => modified.is_some() && previous != modified,
+            None => false,
+        };
+        *observed = Some(modified);
+        changed
+    })
+}
 
 // ---------------------------------------------------------------------------
 // Agent tables
@@ -633,6 +716,7 @@ const CURSOR_MODEL_LABELS: &[(&str, &str)] = &[
     ("Claude Fable 5.1", "claude-fable-5-1"),
     ("Claude Fable 5", "claude-fable-5"),
     ("Cursor Grok 4.5", "cursor-grok-4.5"),
+    ("Gemini 3.8 Flash", "gemini-3.8-flash"),
     ("Gemini 3.7 Flash", "gemini-3.7-flash"),
     ("GPT-5.6 Terra", "gpt-5.6-terra"),
     ("Claude Sonnet 5", "claude-sonnet-5"),
@@ -766,6 +850,7 @@ fn match_cursor_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         context_window,
         terminal_status_line: Some(line.trim().to_string()),
         fast,
+        context_usage: None,
         ..SessionChatDetectedSelection::default()
     })
 }
@@ -837,6 +922,7 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
         context_window: None,
         terminal_status_line: None,
         fast: None,
+        context_usage: None,
     })
 }
 
@@ -906,6 +992,7 @@ fn match_pi_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         context_window: None,
         terminal_status_line: None,
         fast: None,
+        context_usage: None,
     })
 }
 
@@ -951,6 +1038,7 @@ fn match_omp_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         context_window: None,
         terminal_status_line: None,
         fast: None,
+        context_usage: None,
     })
 }
 
@@ -998,6 +1086,7 @@ fn match_hermes_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         context_window: None,
         terminal_status_line: None,
         fast: None,
+        context_usage: None,
     })
 }
 
@@ -1171,8 +1260,13 @@ fn transcript_text(value: Option<&Value>) -> Option<&str> {
         .filter(|text| !text.is_empty())
 }
 
-fn claude_transcript_model_choice(model: &str) -> Option<SessionChatDetectedChoice> {
+pub(crate) fn claude_transcript_model_choice(model: &str) -> Option<SessionChatDetectedChoice> {
+    // `claude-fable-5-1[1m]` — the context-window suffix is not a version token.
     let normalized = model.trim().to_ascii_lowercase();
+    let normalized = normalized
+        .split_once('[')
+        .map_or(normalized.as_str(), |(head, _)| head)
+        .to_string();
     let tokens: Vec<&str> = normalized.split('-').collect();
     let (family_index, family) =
         tokens
@@ -1241,32 +1335,42 @@ fn transcript_effort_choice(effort: &str) -> Option<SessionChatDetectedChoice> {
     })
 }
 
+/*
+CDXC:ClaudeStatusline 2026-09-03:
+Claude's transcript records its permission mode too: a `permission-mode` row
+when the mode is set, and `permissionMode` on every user row. Reading them
+gives the mode pill a value before the first screen capture and without any
+screen at all (a sleeping session, a capped capture). The footer scrape still
+wins when present because it is the live value.
+*/
+fn claude_transcript_mode_choice(mode: &str) -> Option<SessionChatDetectedChoice> {
+    let (value, label) = match mode.trim() {
+        "auto" => ("auto", "Auto"),
+        "bypassPermissions" => ("bypass", "Bypass permissions"),
+        "plan" => ("plan", "Plan"),
+        "acceptEdits" => ("accept-edits", "Accept edits"),
+        "default" => ("manual", "Manual"),
+        _ => return None,
+    };
+    Some(SessionChatDetectedChoice {
+        value: value.to_string(),
+        label: label.to_string(),
+        source: SessionChatOptionEvidence::Transcript,
+    })
+}
+
 fn detect_session_chat_transcript_selection(
     agent: SessionChatOptionAgent,
     text: &str,
 ) -> Option<SessionChatDetectedSelection> {
+    if agent == SessionChatOptionAgent::Claude {
+        return detect_claude_transcript_selection(text);
+    }
     for line in text.lines().rev() {
         let Ok(Value::Object(record)) = serde_json::from_str::<Value>(line) else {
             continue;
         };
         let selection = match agent {
-            SessionChatOptionAgent::Claude
-                if transcript_text(record.get("type")) == Some("assistant")
-                    && record.get("isSidechain") != Some(&Value::Bool(true)) =>
-            {
-                let message = record.get("message").and_then(Value::as_object);
-                SessionChatDetectedSelection {
-                    model: message
-                        .and_then(|message| transcript_text(message.get("model")))
-                        .and_then(claude_transcript_model_choice),
-                    effort: transcript_text(record.get("effort"))
-                        .and_then(transcript_effort_choice),
-                    mode: None,
-                    context_window: None,
-                    terminal_status_line: None,
-                    fast: None,
-                }
-            }
             SessionChatOptionAgent::Codex
                 if transcript_text(record.get("type")) == Some("turn_context") =>
             {
@@ -1289,6 +1393,7 @@ fn detect_session_chat_transcript_selection(
                     context_window: None,
                     terminal_status_line: None,
                     fast: None,
+                    context_usage: None,
                 }
             }
             _ => continue,
@@ -1298,6 +1403,99 @@ fn detect_session_chat_transcript_selection(
         }
     }
     None
+}
+
+/// Newest assistant row for model/effort, newest permission row for mode;
+/// the scan stops as soon as all three are known.
+fn detect_claude_transcript_selection(text: &str) -> Option<SessionChatDetectedSelection> {
+    let mut selection = SessionChatDetectedSelection::default();
+    let mut assistant_seen = false;
+    for line in text.lines().rev() {
+        if assistant_seen && selection.mode.is_some() {
+            break;
+        }
+        let Ok(Value::Object(record)) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        if record.get("isSidechain") == Some(&Value::Bool(true)) {
+            continue;
+        }
+        match transcript_text(record.get("type")) {
+            Some("assistant") if !assistant_seen => {
+                let message = record.get("message").and_then(Value::as_object);
+                selection.model = message
+                    .and_then(|message| transcript_text(message.get("model")))
+                    .and_then(claude_transcript_model_choice);
+                selection.effort =
+                    transcript_text(record.get("effort")).and_then(transcript_effort_choice);
+                assistant_seen = true;
+            }
+            Some("permission-mode") | Some("user") if selection.mode.is_none() => {
+                selection.mode = transcript_text(record.get("permissionMode"))
+                    .and_then(claude_transcript_mode_choice);
+            }
+            _ => {}
+        }
+    }
+    (selection.model.is_some() || selection.effort.is_some() || selection.mode.is_some())
+        .then_some(selection)
+}
+
+/*
+CDXC:ClaudeStatusline 2026-09-03:
+The payload the Ghostex statusLine script stored for this Claude session id.
+Model and effort are the live session values (Claude re-runs the script on
+`/model`, `/effort`, each assistant message, compaction and mode changes),
+so they outrank the transcript, which only learns a change on the next turn.
+*/
+fn read_session_chat_statusline_selection(
+    hook_state_directory: &Path,
+    agent_session_id: Option<&str>,
+) -> Option<SessionChatDetectedSelection> {
+    let stored = crate::agent_hooks::statusline::read_claude_statusline_payload(
+        hook_state_directory,
+        agent_session_id?,
+    )?;
+    let payload = &stored.payload;
+    let choice = |value: &str, label: &str| SessionChatDetectedChoice {
+        value: value.to_string(),
+        label: label.to_string(),
+        source: SessionChatOptionEvidence::Statusline,
+    };
+    let model = payload
+        .get("model")
+        .and_then(|model| transcript_text(model.get("id")))
+        .and_then(claude_transcript_model_choice)
+        .map(|found| choice(&found.value, &found.label));
+    let effort = payload
+        .get("effort")
+        .and_then(|effort| transcript_text(effort.get("level")))
+        .and_then(transcript_effort_choice)
+        .map(|found| choice(&found.value, &found.label));
+    let fast = payload.get("fast_mode").and_then(Value::as_bool);
+    let context_window = payload.get("context_window");
+    let context_usage = SessionChatContextUsage {
+        used_percentage: context_window
+            .and_then(|window| window.get("used_percentage"))
+            .and_then(Value::as_f64)
+            .map(|value| value.round().clamp(0.0, 100.0) as u32),
+        used_tokens: context_window
+            .and_then(|window| window.get("total_input_tokens"))
+            .and_then(Value::as_u64),
+        window_size: context_window
+            .and_then(|window| window.get("context_window_size"))
+            .and_then(Value::as_u64),
+    };
+    let selection = SessionChatDetectedSelection {
+        model,
+        effort,
+        mode: None,
+        context_window: None,
+        terminal_status_line: None,
+        fast,
+        context_usage: (!context_usage.is_empty()).then_some(context_usage),
+    };
+    (selection.model.is_some() || selection.effort.is_some()).then_some(selection)
 }
 
 fn read_session_chat_transcript_selection(
@@ -1341,30 +1539,48 @@ fn read_session_chat_transcript_selection(
     detect_session_chat_transcript_selection(agent, &text)
 }
 
+/// Every `Some` in `layer` replaces the value beneath it.
+fn overlay_session_chat_option_selection(
+    merged: &mut SessionChatDetectedSelection,
+    layer: SessionChatDetectedSelection,
+) {
+    if layer.model.is_some() {
+        merged.model = layer.model;
+    }
+    if layer.effort.is_some() {
+        merged.effort = layer.effort;
+    }
+    if layer.mode.is_some() {
+        merged.mode = layer.mode;
+    }
+    if layer.context_window.is_some() {
+        merged.context_window = layer.context_window;
+    }
+    if layer.terminal_status_line.is_some() {
+        merged.terminal_status_line = layer.terminal_status_line;
+    }
+    if layer.fast.is_some() {
+        merged.fast = layer.fast;
+    }
+    if layer.context_usage.is_some() {
+        merged.context_usage = layer.context_usage;
+    }
+}
+
+/// Precedence, lowest first: transcript (a turn behind), statusline payload
+/// (live, but only what Claude puts in it), terminal screen (live, and the
+/// only source for the permission mode footer).
 fn merge_session_chat_option_selections(
     transcript: Option<SessionChatDetectedSelection>,
+    statusline: Option<SessionChatDetectedSelection>,
     terminal: Option<SessionChatDetectedSelection>,
 ) -> Option<SessionChatDetectedSelection> {
     let mut merged = transcript.unwrap_or_default();
+    if let Some(statusline) = statusline {
+        overlay_session_chat_option_selection(&mut merged, statusline);
+    }
     if let Some(terminal) = terminal {
-        if terminal.model.is_some() {
-            merged.model = terminal.model;
-        }
-        if terminal.effort.is_some() {
-            merged.effort = terminal.effort;
-        }
-        if terminal.mode.is_some() {
-            merged.mode = terminal.mode;
-        }
-        if terminal.context_window.is_some() {
-            merged.context_window = terminal.context_window;
-        }
-        if terminal.terminal_status_line.is_some() {
-            merged.terminal_status_line = terminal.terminal_status_line;
-        }
-        if terminal.fast.is_some() {
-            merged.fast = terminal.fast;
-        }
+        overlay_session_chat_option_selection(&mut merged, terminal);
     }
     (merged.model.is_some() || merged.effort.is_some() || merged.mode.is_some()).then_some(merged)
 }
@@ -1377,6 +1593,7 @@ fn merge_session_chat_option_selections(
 /// for terminal-state notices, so both readings ride one process spawn.
 pub fn detect_session_chat_terminal_state(
     repository: &DomainRepository<'_>,
+    hook_state_directory: &Path,
     project_id: &str,
     session_id: &str,
     agent_id: Option<&str>,
@@ -1399,6 +1616,25 @@ pub fn detect_session_chat_terminal_state(
     let transcript = agent.and_then(|agent| {
         read_session_chat_transcript_selection(repository, project_id, session_id, agent)
     });
+    let statusline = (agent == Some(SessionChatOptionAgent::Claude))
+        .then(|| {
+            let agent_session_id = repository
+                .get_session(project_id, session_id)
+                .ok()
+                .flatten()
+                .and_then(|session| {
+                    session
+                        .get("runtimeSettings")
+                        .and_then(|runtime| runtime.get("agentSessionId"))
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                });
+            read_session_chat_statusline_selection(
+                hook_state_directory,
+                agent_session_id.as_deref(),
+            )
+        })
+        .flatten();
     let capture =
         crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id).ok();
     let terminal = agent
@@ -1409,7 +1645,7 @@ pub fn detect_session_chat_terminal_state(
     let notice = screen.and_then(|capture| {
         crate::session_chat_notice::classify_session_chat_terminal_notice(agent_id, &capture.text)
     });
-    let options = merge_session_chat_option_selections(transcript, terminal)
+    let options = merge_session_chat_option_selections(transcript, statusline, terminal)
         .map(SessionChatDetectedOptions::new);
     let composer = match screen {
         Some(capture) => crate::session_chat_composer::detect_session_chat_composer_readiness(
@@ -1882,9 +2118,10 @@ mod tests {
             context_window: None,
             terminal_status_line: None,
             fast: None,
+            context_usage: None,
         };
         let terminal = claude("Ctx Used: 1% | Opus 4.8").unwrap();
-        let merged = merge_session_chat_option_selections(Some(transcript), Some(terminal))
+        let merged = merge_session_chat_option_selections(Some(transcript), None, Some(terminal))
             .expect("merged options");
         assert_eq!(pair(&merged), (Some("opus"), Some("high")));
         assert_eq!(
@@ -1932,6 +2169,7 @@ mod tests {
                 context_window: None,
                 terminal_status_line: None,
                 fast: Some(true),
+                context_usage: None,
             },
             detected_at: "2026-08-01T12:00:00.000Z".to_string(),
         };
@@ -2003,6 +2241,12 @@ pub(crate) struct SessionChatOptionCacheEntry {
     pub(crate) value: crate::session_chat_options::SessionChatTerminalDetection,
 }
 
+/// Where the Ghostex agent hooks (and the Claude statusline script) keep their
+/// per-session state — the same resolution the installer bakes into them.
+pub(crate) fn session_chat_hook_state_directory(paths: &GxserverPaths) -> std::path::PathBuf {
+    crate::agent_hooks::config::HookPaths::from_paths(paths).hook_state_directory
+}
+
 #[derive(Clone)]
 pub(crate) struct SessionChatOptionDetector {
     cache: Arc<Mutex<HashMap<String, SessionChatOptionCacheEntry>>>,
@@ -2071,6 +2315,7 @@ impl SessionChatOptionDetector {
                 let repository = DomainRepository::new(&db, self.server_id.as_str());
                 crate::session_chat_options::detect_session_chat_terminal_state(
                     &repository,
+                    &session_chat_hook_state_directory(&self.paths),
                     project_id,
                     session_id,
                     agent,

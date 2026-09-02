@@ -245,6 +245,7 @@ impl SessionChatStatus {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionChatTranscriptAgent {
+    Antigravity,
     Claude,
     Codex,
     Cursor,
@@ -258,6 +259,9 @@ pub fn resolve_session_chat_transcript_agent(
     agent: Option<&str>,
 ) -> Option<SessionChatTranscriptAgent> {
     match agent?.trim().to_ascii_lowercase().as_str() {
+        "antigravity" | "agy" | "antigravity cli" | "antigravity-cli" => {
+            Some(SessionChatTranscriptAgent::Antigravity)
+        }
         "claude" | "openclaude" => Some(SessionChatTranscriptAgent::Claude),
         "codex" => Some(SessionChatTranscriptAgent::Codex),
         "cursor" | "cursor-agent" | "cursor cli" => Some(SessionChatTranscriptAgent::Cursor),
@@ -270,6 +274,7 @@ pub fn resolve_session_chat_transcript_agent(
 
 pub fn session_chat_transcript_agent_id(agent: Option<&str>) -> Option<&'static str> {
     match resolve_session_chat_transcript_agent(agent)? {
+        SessionChatTranscriptAgent::Antigravity => Some("antigravity"),
         SessionChatTranscriptAgent::Claude => Some("claude"),
         SessionChatTranscriptAgent::Codex => Some("codex"),
         SessionChatTranscriptAgent::Cursor => Some("cursor"),
@@ -284,6 +289,7 @@ pub type SessionChatLifecycleDecoder = fn(&str, &str) -> Option<SessionChatTurnL
 
 pub fn session_chat_line_decoder(agent: SessionChatTranscriptAgent) -> SessionChatLineDecoder {
     match agent {
+        SessionChatTranscriptAgent::Antigravity => decode_antigravity_transcript_line,
         SessionChatTranscriptAgent::Claude => decode_claude_transcript_line,
         SessionChatTranscriptAgent::Codex => decode_codex_transcript_line,
         SessionChatTranscriptAgent::Cursor => decode_cursor_transcript_line,
@@ -297,6 +303,7 @@ pub fn session_chat_lifecycle_decoder(
     agent: SessionChatTranscriptAgent,
 ) -> Option<SessionChatLifecycleDecoder> {
     match agent {
+        SessionChatTranscriptAgent::Antigravity => Some(decode_antigravity_turn_lifecycle),
         SessionChatTranscriptAgent::Claude => Some(decode_claude_turn_lifecycle),
         SessionChatTranscriptAgent::Codex => Some(decode_codex_turn_lifecycle),
         SessionChatTranscriptAgent::Cursor => Some(decode_cursor_turn_lifecycle),
@@ -381,7 +388,8 @@ pub fn session_chat_lineage_extractor(
 ) -> Option<SessionChatLineageExtractor> {
     match agent {
         SessionChatTranscriptAgent::Claude => Some(claude_transcript_lineage),
-        SessionChatTranscriptAgent::Codex
+        SessionChatTranscriptAgent::Antigravity
+        | SessionChatTranscriptAgent::Codex
         | SessionChatTranscriptAgent::Cursor
         | SessionChatTranscriptAgent::Grok
         | SessionChatTranscriptAgent::Hermes
@@ -1042,6 +1050,7 @@ pub fn boundary_fingerprint(file_path: &Path, offset: u64) -> std::io::Result<St
 // `crate::session_chat::X` before the split into the flat session_chat_*
 // family below. Keep these so every prior call site keeps compiling.
 // ---------------------------------------------------------------------------
+pub use crate::session_chat_decode_antigravity::*;
 pub use crate::session_chat_decode_claude::*;
 pub use crate::session_chat_decode_codex::*;
 pub use crate::session_chat_decode_cursor::*;
