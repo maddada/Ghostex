@@ -143,6 +143,12 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: 'packages/core-ui/**' },
   { pathspec: 'packages/components/**' },
   { pathspec: 'components.json' },
+  /*
+   * Imported at build time by packages/shared/agent-model-catalog-store.ts, so
+   * the snapshot is baked into every CEF sidebar bundle. The runtime refresh
+   * from raw.githubusercontent.com does not remove it as a build input.
+   */
+  { pathspec: 'agent-model-catalog.json' },
   { pathspec: '.dependencies/ghostty/**' },
   { pathspec: ':(exclude).dependencies/ghostty/.zig-cache' },
   { pathspec: ':(exclude).dependencies/ghostty/zig-out' },
