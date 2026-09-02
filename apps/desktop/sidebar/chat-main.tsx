@@ -26,6 +26,7 @@ import {
   type GxserverPresentationSnapshot,
   type GxserverReadSessionAgentNoteResult,
   type GxserverReadSessionTerminalTailResult,
+  type GxserverRewindSessionChatResult,
   type GxserverSessionForkBranch,
   type GxserverSessionForkBranchesResult,
 } from '@/packages/shared/gxserver-protocol';
@@ -338,6 +339,20 @@ function createGpuiSessionChatTransport(
     */
     forkBranches() {
       return rpc<GxserverSessionForkBranchesResult>(bootstrap, '/api/sessionForkBranches', {
+        projectId,
+        sessionId,
+      });
+    },
+    /*
+    CDXC:SessionChatRewind 2026-09-02:
+    Rewinding drives the agent's own `/rewind` dialog inside the session's
+    terminal, so it lands on the daemon that owns that pane through the same
+    bootstrap as the transcript. The daemon re-snapshots the chat stream after
+    it succeeds, so this page has nothing to prune.
+    */
+    rewindSessionChat(params) {
+      return rpc<GxserverRewindSessionChatResult>(bootstrap, '/api/rewindSessionChat', {
+        messageId: params.messageId,
         projectId,
         sessionId,
       });
@@ -688,14 +703,24 @@ function postSessionChatDiagnosticLog(event: string, details?: Record<string, un
   postSessionChatHostAction('diagnosticLog', { details: details ?? {}, event });
 }
 
-function postSessionChatHostAction(action: string, fields?: Record<string, unknown>): void {
-  appModalHostMessageHandler()?.postMessage(
-    JSON.stringify({
-      action,
-      type: 'sessionChatHostAction',
-      ...fields,
-    })
-  );
+function postSessionChatHostAction(action: string, fields?: Record<string, unknown>): boolean {
+  const handler = appModalHostMessageHandler();
+  if (!handler) {
+    return false;
+  }
+  try {
+    return (
+      handler.postMessage(
+        JSON.stringify({
+          action,
+          type: 'sessionChatHostAction',
+          ...fields,
+        })
+      ) !== false
+    );
+  } catch {
+    return false;
+  }
 }
 
 function createGpuiSessionChatComposerBridge(
@@ -847,12 +872,13 @@ function installAttachmentPickCallback(): void {
 CDXC:GPUISessionChatImageSave 2026-08-19:
 "Save image" in the chat image overlay cannot be a browser download: gpui
 installs no CEF download handler, so a <a download> click is cancelled without
-a trace. The page posts a saveImage host action carrying the bytes and a
-suggested name, Rust writes the file into Downloads, then answers through the
-fixed window.ghostexGpui.onSessionChatImageSaved callback with {requestId,
-error} — no error means the file landed in Downloads.
+a trace. Image bytes can exceed the bridge's one-message limit, so the page
+transfers them in bounded chunks. Rust writes the assembled file into Downloads,
+then answers through the fixed window.ghostexGpui.onSessionChatImageSaved
+callback with {requestId, error}; no error means the file landed in Downloads.
 */
 const IMAGE_SAVE_TIMEOUT_MS = 180_000;
+const IMAGE_SAVE_CHUNK_CHARS = 256 * 1024;
 
 interface ChatImageSaveNamespace {
   onSessionChatImageSaved?: (payload: { requestId?: string; error?: unknown }) => void;
@@ -886,14 +912,41 @@ function requestNativeImageSave(base64Data: string, suggestedName: string): Prom
         reject(new Error(error));
       }
     });
-    // The panel can sit open indefinitely; the timeout only reclaims the entry
-    // if the host never answers at all (e.g. the pane was torn down).
+    // Reclaim both sides if the host never answers (for example, if the pane
+    // was torn down during the transfer). A timeout is a failure, never a
+    // successful download.
     window.setTimeout(() => {
       if (pendingImageSaves.delete(requestId)) {
-        resolve();
+        postSessionChatHostAction('saveImageCancel', { requestId });
+        reject(new Error('The image save did not complete.'));
       }
     }, IMAGE_SAVE_TIMEOUT_MS);
-    postSessionChatHostAction('saveImage', { base64Data, requestId, suggestedName });
+    const rejectBridgeTransfer = (): void => {
+      pendingImageSaves.delete(requestId);
+      postSessionChatHostAction('saveImageCancel', { requestId });
+      reject(new Error('The native image save bridge rejected the transfer.'));
+    };
+    if (!postSessionChatHostAction('saveImageStart', { requestId, suggestedName })) {
+      rejectBridgeTransfer();
+      return;
+    }
+    let chunkIndex = 0;
+    for (let offset = 0; offset < base64Data.length; offset += IMAGE_SAVE_CHUNK_CHARS) {
+      if (
+        !postSessionChatHostAction('saveImageChunk', {
+          base64Chunk: base64Data.slice(offset, offset + IMAGE_SAVE_CHUNK_CHARS),
+          chunkIndex,
+          requestId,
+        })
+      ) {
+        rejectBridgeTransfer();
+        return;
+      }
+      chunkIndex += 1;
+    }
+    if (!postSessionChatHostAction('saveImageFinish', { requestId })) {
+      rejectBridgeTransfer();
+    }
   });
 }
 
@@ -929,12 +982,14 @@ terminal links use, and hands the URL to the system default browser when that
 setting is off.
 */
 const GPUI_SESSION_CHAT_HOST_LINKS: SessionChatHostLinks = {
-  openUrl: (url, { external }) => postSessionChatHostAction('openLink', { external, url }),
+  openUrl: (url, { external, forceEmbedded }) =>
+    postSessionChatHostAction('openLink', { external, forceEmbedded: forceEmbedded === true, url }),
   openFile: (path, position) =>
     postSessionChatHostAction('openFile', {
       path,
       ...(position ? { line: position.line, ...(position.column ? { column: position.column } : {}) } : {}),
     }),
+  locateFile: (path) => postSessionChatHostAction('locateFile', { path }),
 };
 
 function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHostActions {

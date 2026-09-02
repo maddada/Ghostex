@@ -18,6 +18,7 @@ import type {
 import type {
   GxserverReadSessionAgentNoteResult,
   GxserverReadSessionTerminalTailResult,
+  GxserverRewindSessionChatResult,
   GxserverSessionForkBranchesResult,
 } from '@/packages/shared/gxserver-protocol';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
@@ -133,6 +134,20 @@ export function createSessionChatTransport(
     */
     forkBranches() {
       return rpcForMachine<GxserverSessionForkBranchesResult>(machineId, '/api/sessionForkBranches', {
+        projectId,
+        sessionId,
+      });
+    },
+    /*
+    CDXC:SessionChatRewind 2026-09-02:
+    Rewinding drives the agent's own `/rewind` dialog inside the session's
+    terminal, so it lands on the session's own machine like every other
+    mutation here. The daemon re-snapshots the chat stream after it succeeds,
+    so nothing is pruned client-side.
+    */
+    rewindSessionChat(params) {
+      return rpcForMachine<GxserverRewindSessionChatResult>(machineId, '/api/rewindSessionChat', {
+        messageId: params.messageId,
         projectId,
         sessionId,
       });

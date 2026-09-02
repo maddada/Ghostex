@@ -212,6 +212,7 @@ export type GxserverEndpointPath =
   | '/api/searchSessions'
   | '/api/listPreviousSessions'
   | '/api/sessionForkBranches'
+  | '/api/rewindSessionChat'
   | '/api/readSessionTranscriptSizes'
   | '/api/transitionSession'
   | '/api/holdSessionsAwake'
@@ -238,6 +239,7 @@ export type GxserverEndpointPath =
   | '/api/answerSessionChatPrompt'
   | '/api/interruptSessionChat'
   | '/api/handoffSessionChatDraft'
+  | '/api/claimSessionChatLaunchDraft'
   | '/api/readSessionChatQueue'
   | '/api/queueSessionChatPrompt'
   | '/api/updateSessionChatQueuedPrompt'
@@ -2189,8 +2191,10 @@ A sleep request says WHO asked. `"automatic"` marks a client's "Sleep inactive
 agents" sweep; anything else (including an absent field, which is what every
 caller sent before this existed) is a user action.
 
-Only an automatic sleep can be declined, and only by a live keep-awake lease —
-see `GxserverHoldSessionsAwakeParams`. A user who taps Sleep always gets a sleep.
+Automatic sleeps can additionally be declined by a live keep-awake lease (see
+`GxserverHoldSessionsAwakeParams`) or a never-active session. Every sleep is
+declined when the target is no longer running, because stopped history must not
+be promoted into the active sleeping lifecycle.
 */
 export type GxserverSleepTrigger = 'automatic' | 'user';
 
@@ -2203,10 +2207,11 @@ export interface GxserverSleepSessionResult {
   Present ONLY when the daemon refused the request. `"keptAwake"` means an
   automatic sweep hit a session another client is attached to; `"neverActive"`
   means it hit a session nobody has prompted yet, which has no idle time to
-  measure and no conversation to resume. Either way the session was not touched,
-  so a client must not optimistically mark the row sleeping.
+  measure and no conversation to resume; `"notRunning"` means a stale client
+  targeted sleeping or stopped history. In every case the session was not
+  touched, so a client must not optimistically mark the row sleeping.
   */
-  declined?: 'keptAwake' | 'neverActive';
+  declined?: 'keptAwake' | 'neverActive' | 'notRunning';
   kill?: Record<string, unknown>;
   session: GxserverSessionDomainState;
 }
@@ -2266,6 +2271,7 @@ export interface GxserverSessionTransitionParams extends GxserverSessionLifecycl
 
 export interface GxserverSessionTransitionResult {
   action: GxserverSessionTransitionAction;
+  declined?: 'notRunning';
   session: GxserverSessionDomainState;
   transition: Record<string, unknown> & {
     session: GxserverSessionDomainState;
@@ -2488,8 +2494,8 @@ export interface GxserverPresentationCapabilities {
    * CDXC:SidebarSpaces 2026-08-27:
    * `/api/readSidebarSpaces` + `/api/updateSidebarSpaces` are served by this
    * daemon. Absent means the machine has no Spaces at all, and its sidebar
-   * section renders the built-in All Projects view only — no Space row, no
-   * Spaces context submenu.
+   * section renders its full unfiltered project list — no Space row, no Spaces
+   * context submenu, not even the built-in Other view.
    */
   spaces?: boolean;
   /**
@@ -2703,7 +2709,8 @@ The wire state is fully normalized by gxserver:
   - An EMPTY Space is valid and kept, unlike an empty project collection.
 Member project ids for a deleted project may linger as soft references, so
 clients must tolerate member ids they cannot resolve. Worktree inheritance and
-the built-in "All Projects" view are pure client concerns and never stored.
+the built-in "Other" view (packages/shared/sidebar-spaces-other.ts) are pure
+client concerns and never stored.
 Clients write-through-sync the whole state via /api/updateSidebarSpaces and read
 it back from the same endpoint, the presentation snapshot, or the
 `sidebarSpacesChanged` event.
@@ -2933,6 +2940,30 @@ export interface GxserverSessionForkBranch {
 export interface GxserverSessionForkBranchesResult {
   /** Newest activity first. */
   branches: readonly GxserverSessionForkBranch[];
+}
+
+/**
+ * CDXC:SessionChatRewind 2026-09-02:
+ * `/api/rewindSessionChat` drives the agent's own rewind flow in its terminal
+ * (Claude: `/rewind`, pick the prompt, "Restore conversation") to the point
+ * before `messageId`, a user prompt row of the active conversation. The daemon
+ * verifies every dialog step against the screen and cancels on any mismatch.
+ * On success the chat readers hide the rewound rows immediately; the transcript
+ * confirms the branch when the next prompt is sent. Claude only for now.
+ */
+export interface GxserverRewindSessionChatParams {
+  projectId: GxserverProjectId;
+  sessionId: GxserverSessionId;
+  /** Id of the user prompt row to rewind to (the point before it was sent). */
+  messageId: string;
+}
+
+export interface GxserverRewindSessionChatResult {
+  ok: true;
+  /** Row id the conversation is now positioned before. */
+  targetMessageId: string;
+  /** `uuid` of the new active leaf; null when rewound to before the first prompt. */
+  leafId: string | null;
 }
 
 export interface GxserverTerminalTitleEventParams extends GxserverSessionLifecycleParams {
@@ -3211,6 +3242,22 @@ export type GxserverEvent =
       serverId: GxserverServerId;
       snapshot: GxserverPresentationSnapshot;
       type: 'presentationSnapshot';
+    }
+  /*
+   * CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+   * The reply to a `subscribePresentation` whose `lastRevision` already names
+   * the daemon's current revision. It carries no snapshot on purpose: the
+   * subscriber has missed nothing, so re-sending the projection it just applied
+   * over HTTP would be pure duplicate work on every reconnect. Any other
+   * `lastRevision` — missing, behind (deltas were missed), or ahead — still
+   * gets the full `presentationSnapshot`.
+   */
+  | {
+      clientId?: string;
+      protocolVersion: GxserverProtocolVersion;
+      revision: GxserverPresentationRevision;
+      serverId: GxserverServerId;
+      type: 'presentationSnapshotCurrent';
     }
   | {
       delta: GxserverPresentationDelta;

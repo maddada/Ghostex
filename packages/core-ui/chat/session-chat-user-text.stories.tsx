@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 import type { SessionChatMessage } from '../../shared/session-chat';
 import { SessionChatMessageList } from './session-chat-message-list';
 
@@ -122,4 +123,86 @@ export const TypedText: StoryObj = {
       </div>
     </div>
   ),
+};
+
+/*
+ * CDXC:SessionChatRewind 2026-09-02:
+ * The same transcript with the rewind action available: hovering a prompt row
+ * shows "Rewind to here" next to Copy, and confirming opens the dialog. The
+ * mock call always refuses so the story also shows the daemon's refusal line
+ * rendered under the note, which is the state the real dialog holds open on.
+ */
+export const RewindAction: StoryObj = {
+  render: () => (
+    <div className='chat-user-text-story'>
+      <style>{STORY_STYLES}</style>
+      <div className='ghostex-session-chat-scope chat-user-text-story__surface' data-chat-theme='dark'>
+        <SessionChatMessageList
+          hasMore={false}
+          isWorking={false}
+          loadingEarlier={false}
+          messages={MESSAGES}
+          onLoadEarlier={() => undefined}
+          rewindToMessage={async () => {
+            await new Promise((resolve) => setTimeout(resolve, 900));
+            throw new Error('Claude is working on a response right now. Stop it first, then rewind.');
+          }}
+        />
+      </div>
+    </div>
+  ),
+};
+
+/*
+ * The rewind lands. The prompt it took back goes straight into the composer,
+ * appended below anything already typed there, so the reader edits the message
+ * they just took back instead of retyping it.
+ *
+ * The box below the transcript stands in for the real composer: in the app the
+ * chat view hands the text to `SessionChatComposer.appendText`, which is what
+ * puts the text in the field, persists it as a draft and leaves the caret at
+ * the end. Type something into the box first to see the two-line separation.
+ */
+export const RewindRestoresPrompt: StoryObj = {
+  render: function RewindRestoresPromptStory() {
+    const [draft, setDraft] = useState('');
+    return (
+      <div className='chat-user-text-story'>
+        <style>{STORY_STYLES}</style>
+        <div className='ghostex-session-chat-scope chat-user-text-story__surface' data-chat-theme='dark'>
+          <SessionChatMessageList
+            hasMore={false}
+            isWorking={false}
+            loadingEarlier={false}
+            messages={MESSAGES}
+            onLoadEarlier={() => undefined}
+            onRewound={(prompt) => setDraft((current) => (current.trim() === '' ? prompt : `${current}\n\n${prompt}`))}
+            rewindToMessage={async ({ messageId }) => {
+              await new Promise((resolve) => setTimeout(resolve, 900));
+              return { leafId: null, ok: true, targetMessageId: messageId };
+            }}
+          />
+          <textarea
+            aria-label='Composer stand-in'
+            onChange={(event) => setDraft(event.currentTarget.value)}
+            style={{
+              background: 'var(--input, #111)',
+              border: '1px solid var(--border, #333)',
+              borderRadius: '0.75rem',
+              color: 'var(--foreground, #eee)',
+              flex: '0 0 auto',
+              font: 'inherit',
+              margin: '0 auto 1rem',
+              maxWidth: '48rem',
+              minHeight: '6rem',
+              padding: '0.75rem',
+              resize: 'vertical',
+              width: 'calc(100% - 2rem)',
+            }}
+            value={draft}
+          />
+        </div>
+      </div>
+    );
+  },
 };

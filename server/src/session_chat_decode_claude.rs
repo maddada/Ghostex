@@ -145,22 +145,59 @@ pub(crate) fn claude_transcript_lineage(
     line: &str,
     fallback_id: &str,
 ) -> Option<TranscriptLineage> {
-    let record = parse_json_object(line)?;
+    claude_transcript_lineage_record(&parse_json_object(line)?, fallback_id)
+}
+
+/// Same rule as `claude_transcript_lineage` for a record the caller already
+/// parsed. The branch scanner reads several fields per row and must not pay for
+/// a second parse of every line.
+pub(crate) fn claude_transcript_lineage_record(
+    record: &Map<String, Value>,
+    fallback_id: &str,
+) -> Option<TranscriptLineage> {
     if record.get("isSidechain") == Some(&Value::Bool(true)) {
         return None;
     }
-    if record.get("type").and_then(Value::as_str) == Some(CLAUDE_QUEUE_RECORD_TYPE) {
+    let record_type = record.get("type").and_then(Value::as_str);
+    if record_type == Some(CLAUDE_QUEUE_RECORD_TYPE) {
         return Some(TranscriptLineage {
             id: fallback_id.to_string(),
             parent_id: None,
-            queue: Some(claude_queue_operation(&record)?),
+            queue: Some(claude_queue_operation(record)?),
+            leaf_marker: None,
+        });
+    }
+    if record_type == Some(CLAUDE_LEAF_MARKER_RECORD_TYPE) {
+        if record.get("explicit") != Some(&Value::Bool(true)) {
+            return None;
+        }
+        let leaf_marker = match extract_string(record.get("leafUuid")) {
+            Some(leaf) => TranscriptLeafMarker::Row(leaf),
+            None => TranscriptLeafMarker::Empty,
+        };
+        return Some(TranscriptLineage {
+            id: fallback_id.to_string(),
+            parent_id: None,
+            queue: None,
+            leaf_marker: Some(leaf_marker),
         });
     }
     Some(TranscriptLineage {
         id: extract_string(record.get("uuid"))?,
         parent_id: extract_string(record.get("parentUuid")),
         queue: None,
+        leaf_marker: None,
     })
+}
+
+/// A Claude row can only decode to a `User` message when it is one of these
+/// types, so the branch scanner skips the decode for every other row instead of
+/// paying for one on assistant rows that carry whole tool payloads.
+pub(crate) fn claude_record_type_can_be_prompt(record: &Map<String, Value>) -> bool {
+    matches!(
+        record.get("type").and_then(Value::as_str),
+        Some("user" | CLAUDE_ATTACHMENT_RECORD_TYPE)
+    )
 }
 
 /*
@@ -196,6 +233,7 @@ fn claude_interrupted_message_id(record: &Map<String, Value>) -> Option<String> 
 }
 
 const CLAUDE_QUEUE_RECORD_TYPE: &str = "queue-operation";
+const CLAUDE_LEAF_MARKER_RECORD_TYPE: &str = "last-prompt";
 const CLAUDE_ATTACHMENT_RECORD_TYPE: &str = "attachment";
 const CLAUDE_QUEUED_COMMAND_ATTACHMENT: &str = "queued_command";
 

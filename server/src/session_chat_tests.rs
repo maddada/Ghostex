@@ -985,6 +985,7 @@ mod tests {
         };
         let hooks = SessionChatSuccessorHooks {
             bound_agent_session_ids: Arc::new(Vec::new),
+            pending_fork_child_since_ms: Arc::new(|_| None),
             adopt_identity: {
                 let registry = registry.clone();
                 Arc::new(move |adoption| {

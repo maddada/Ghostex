@@ -117,6 +117,8 @@ pub const SESSION_CHAT_PASTE_NOT_ACCEPTED: &str = "The terminal did not accept t
 /// Fallback for a composer wait that timed out without a per-agent reason.
 pub const SESSION_CHAT_COMPOSER_NOT_READY: &str =
     "The agent's input box is not on screen, so nothing was sent.";
+const SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED: &str =
+    "Claude Code settings did not close to reveal the input box, so nothing was sent.";
 /*
 Esc in the kitty CSI-u encoding (CSI 27 u). Ghostex agent sessions always run
 under zmx, whose VT layer answers the kitty keyboard-protocol query, so Claude
@@ -778,6 +780,12 @@ pub enum SessionChatSendStep {
         payload: String,
     },
     SleepMs(u64),
+    /// Close Claude Code's positively identified Settings screen, then require
+    /// its real composer to appear before any later input-line write can run.
+    DismissClaudeSettings {
+        agent: Option<String>,
+        timeout_ms: u64,
+    },
     /*
     CDXC:SessionChatComposerReady 2026-08-26:
     Hold the sequence until the agent CLI's input box is on screen. This runs
@@ -805,6 +813,20 @@ pub enum SessionChatSendStep {
         text: String,
         settle_ms: u64,
         timeout_ms: u64,
+    },
+    /*
+    CDXC:SessionChatRewind 2026-09-02:
+    Hand the input line to the Claude rewind driver for the whole `/rewind`
+    dialog. The driver is adaptive (it reads the screen and decides the next
+    keystroke from what it sees), so it cannot be expressed as a fixed step
+    list, but it MUST still own the pty the way a fixed list does: a queued
+    prompt landing between two Up presses would be typed into the dialog. So it
+    runs as one step of one job here, and reports through the job registry in
+    session_chat_rewind.rs rather than through this enum, which stays plain
+    data.
+    */
+    DriveClaudeRewind {
+        job_id: u64,
     },
 }
 
@@ -854,12 +876,20 @@ pub fn build_session_chat_message_steps(
     agent: Option<&str>,
     text: &str,
     image_paths: &[String],
+    dismiss_claude_settings: bool,
 ) -> Vec<SessionChatSendStep> {
-    let mut steps = vec![SessionChatSendStep::WaitForComposer {
+    let mut steps = Vec::new();
+    if dismiss_claude_settings {
+        steps.push(SessionChatSendStep::DismissClaudeSettings {
+            agent: agent.map(str::to_string),
+            timeout_ms: SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
+        });
+    }
+    steps.push(SessionChatSendStep::WaitForComposer {
         agent: agent.map(str::to_string),
         settle_ms: SESSION_CHAT_COMPOSER_WAIT_SETTLE_MS,
         timeout_ms: SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
-    }];
+    });
     steps.extend(build_agent_tui_clear_input_steps(None, text));
     for path in image_paths {
         steps.push(SessionChatSendStep::Write(
@@ -1343,6 +1373,87 @@ async fn run_session_chat_send_worker(
                         break;
                     }
                 }
+                SessionChatSendStep::DismissClaudeSettings { agent, timeout_ms } => {
+                    if let Err(error) = write_session_chat_payload(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        SESSION_CHAT_INTERRUPT,
+                    )
+                    .await
+                    {
+                        outcome = Err(SessionChatSendError::new(
+                            SessionChatSendFailure::Write,
+                            error,
+                        ));
+                        break;
+                    }
+                    let wait = crate::session_chat_composer::wait_for_session_chat_composer(
+                        &zmx_name,
+                        agent.as_deref(),
+                        crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                            settle_ms: 0,
+                            timeout_ms,
+                            // Once Escape has been sent, only positive composer
+                            // evidence may release the message writes.
+                            unknown_hold_ms: timeout_ms,
+                        },
+                        &|| job_generation != generation.load(Ordering::SeqCst),
+                    )
+                    .await;
+                    match wait {
+                        crate::session_chat_composer::SessionChatComposerWait::Ready => {}
+                        crate::session_chat_composer::SessionChatComposerWait::Cancelled => {
+                            outcome = Err(SessionChatSendError::not_attempted(
+                                SESSION_CHAT_SEND_CANCELLED.to_string(),
+                            ));
+                            break;
+                        }
+                        crate::session_chat_composer::SessionChatComposerWait::Unknown => {
+                            log_session_chat_paste_verification(
+                                LogLevel::Error,
+                                "sessionChatClaudeSettingsDismissFailed",
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                &source,
+                                0,
+                                timeout_ms,
+                                SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED,
+                            );
+                            outcome = Err(SessionChatSendError::new(
+                                SessionChatSendFailure::ComposerNotReady,
+                                SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED.to_string(),
+                            ));
+                            break;
+                        }
+                        crate::session_chat_composer::SessionChatComposerWait::NotReady(
+                            readiness,
+                        ) => {
+                            let reason = readiness
+                                .reason
+                                .clone()
+                                .unwrap_or_else(|| SESSION_CHAT_COMPOSER_NOT_READY.to_string());
+                            log_session_chat_paste_verification(
+                                LogLevel::Error,
+                                "sessionChatComposerNotReady",
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                &source,
+                                0,
+                                timeout_ms,
+                                &reason,
+                            );
+                            outcome = Err(SessionChatSendError::new(
+                                SessionChatSendFailure::ComposerNotReady,
+                                reason,
+                            ));
+                            break;
+                        }
+                    }
+                }
                 SessionChatSendStep::WaitForComposer {
                     agent,
                     settle_ms,
@@ -1460,6 +1571,24 @@ async fn run_session_chat_send_worker(
                         }
                     }
                 }
+                SessionChatSendStep::DriveClaudeRewind { job_id } => {
+                    /*
+                    The driver owns its own failure taxonomy (which dialog step
+                    disagreed with the screen) and publishes it to the waiting
+                    HTTP handler through its job registry, so nothing is mapped
+                    onto the send failures here. It is the only step of its job,
+                    so there is no later write for an error to have to abort.
+                    */
+                    crate::session_chat_rewind::run_claude_rewind_job(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        job_id,
+                        &|| job_generation != generation.load(Ordering::SeqCst),
+                    )
+                    .await;
+                }
             }
         }
         if let Some(completion) = completion.take() {
@@ -1469,7 +1598,10 @@ async fn run_session_chat_send_worker(
 }
 
 /// One `zmx send` stdin burst, logged through the shared temporary input log.
-async fn write_session_chat_payload(
+/// Shared with the Claude rewind driver (session_chat_rewind.rs), whose whole
+/// dialog runs inside one job of this worker and therefore writes through the
+/// same attributed burst every other step does.
+pub(crate) async fn write_session_chat_payload(
     project_id: &str,
     session_id: &str,
     zmx_name: &str,
@@ -1935,7 +2067,7 @@ mod tests {
 
     #[test]
     fn message_steps_verify_the_paste_before_the_separate_enter() {
-        let steps = build_session_chat_message_steps(Some("claude"), "hi", &[]);
+        let steps = build_session_chat_message_steps(Some("claude"), "hi", &[], false);
         assert_eq!(
             steps,
             vec![
@@ -1959,6 +2091,7 @@ mod tests {
             Some("claude"),
             "what is this",
             &["/tmp/ghostex-paste-1.png".to_string()],
+            false,
         );
         assert_eq!(
             with_images,
@@ -1985,8 +2118,12 @@ mod tests {
         );
         // Images without text: no body write, nothing on screen to verify, so
         // the Enter keeps the original blind settle.
-        let images_only =
-            build_session_chat_message_steps(Some("claude"), "", &["/tmp/a.png".to_string()]);
+        let images_only = build_session_chat_message_steps(
+            Some("claude"),
+            "",
+            &["/tmp/a.png".to_string()],
+            false,
+        );
         assert_eq!(
             images_only,
             vec![
@@ -2562,6 +2699,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                             agent.as_deref(),
                             &crate::session_chat_send::format_ask_answer(&questions, &selections),
                             &[],
+                            false,
                         )
                     }
                 }
@@ -2727,6 +2865,22 @@ fn session_chat_agent_command_is_user_hop(session: &Value) -> bool {
     matches!(program, "ssh" | "autossh" | "mosh" | "et")
 }
 
+fn claim_pending_first_user_input_draft_for_chat(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+) -> std::result::Result<Option<String>, DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    crate::server::claim_first_user_input_draft_for_chat(
+        &repository,
+        &target.project_id,
+        &target.session_id,
+    )
+}
+
 /// Transfer a terminal draft into Chat when the session can answer the editor handshake.
 pub(crate) async fn handle_handoff_session_chat_draft_http(
     state: &AppState,
@@ -2742,6 +2896,28 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
         Ok(target) => target,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    /*
+    CDXC:SessionChatLaunchDraft 2026-09-02:
+    A staged first-input draft that has not reached the terminal yet is handed
+    straight to Chat here, before any terminal capture: the auto-switch into
+    Chat of a freshly created handoff session lands while the terminal typing
+    is still waiting for the CLI composer, so the handshake below would find
+    an empty composer and the mention would later be typed behind Chat's back.
+    */
+    match claim_pending_first_user_input_draft_for_chat(state, &target) {
+        Ok(Some(content)) => {
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    json!({ "content": content, "transferred": true }),
+                ),
+            );
+        }
+        Ok(None) => {}
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+    }
     if session_chat_agent_command_is_user_hop(&target.session) {
         return routed_json(
             Some(endpoint_path),

@@ -1063,6 +1063,7 @@ function MobileSessionChat({
         sendOnEnter={false}
         sessionKey={sessionKey}
         showNewSessionWelcomeTitle={false}
+        showShortcutLabels={false}
         searchLayout='overlay'
         theme={theme}
         transport={transport}

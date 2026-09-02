@@ -6,27 +6,11 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::session_chat::*;
+use crate::session_chat_branch::{
+    remember_session_chat_branch_boundary, session_chat_branch_boundary, ActiveBranchScan,
+    BranchVerdict,
+};
 use crate::session_chat_decode_pi::decode_pi_transcript_line;
-
-fn superseded_prompt_id(
-    lineage: &TranscriptLineage,
-    message: Option<&SessionChatMessage>,
-    parents_of_newer_messages: &HashSet<String>,
-    parents_of_newer_prompts: &HashSet<String>,
-) -> Option<String> {
-    if message?.role != SessionChatRole::User {
-        return None;
-    }
-    let parent_id = lineage.parent_id.as_ref()?;
-    // Children are always written after their parent, so in a newest-first scan
-    // they have already been seen.
-    if parents_of_newer_messages.contains(&lineage.id) {
-        return None;
-    }
-    parents_of_newer_prompts
-        .contains(parent_id)
-        .then(|| lineage.id.clone())
-}
 
 // ---------------------------------------------------------------------------
 // Shared primitives (upstream chat spec §1)
@@ -50,6 +34,14 @@ pub struct SessionChatTailFileResult {
     to retract and the "Queued" label sticks forever.
     */
     pub outstanding_queued_prompts: Vec<(String, String)>,
+    /*
+    CDXC:SessionChatRewind 2026-09-02:
+    `uuid` of the newest ACTIVE-branch row in the window. The follower seeds its
+    append stream with it: a prompt that names something else as its parent is a
+    rewind, and the pruned window that answers it can only come from a fresh
+    snapshot. `None` for every agent whose transcript is not a tree.
+    */
+    pub newest_tree_row_id: Option<String>,
 }
 
 pub(crate) struct TailLineAccumulator {
@@ -160,6 +152,21 @@ pub fn read_session_chat_transcript_tail_file(
     let mut ignore_next_malformed_record = trailing[0] != b'\n';
     let mut cursor = consumed_to - u64::from(trailing[0] == b'\n');
 
+    /*
+    CDXC:SessionChatRewind 2026-09-02:
+    Claude's tree needs the rows ABOVE this window to decide the fate of the
+    rows inside it, so a paginated read starts from the boundary state the page
+    above established (`session_chat_branch`). The live tail of the file has
+    nothing above it and only consults the pending-rewind store.
+    */
+    let branch_enabled = lineage.is_some();
+    let version = branch_enabled
+        .then(|| read_transcript_file_version(file_path).ok())
+        .flatten();
+    let boundary =
+        session_chat_branch_boundary(file_path, version.as_ref(), end_offset.map(|_| end), decode);
+    let mut branch = ActiveBranchScan::new(file_path, branch_enabled, boundary);
+
     let mut accumulator = TailLineAccumulator::new();
     let mut newest_first: Vec<(SessionChatMessage, u64)> = Vec::new();
     // Queue enqueue rows decode to temporary bubbles, but replay below removes
@@ -172,8 +179,6 @@ pub fn read_session_chat_transcript_tail_file(
     let mut malformed_record_count = 0usize;
     let mut oversized_record_count = 0usize;
 
-    let mut parents_of_newer_messages: HashSet<String> = HashSet::new();
-    let mut parents_of_newer_prompts: HashSet<String> = HashSet::new();
     // Newest-first; replayed in file order once the window is complete.
     let mut queue_ops: Vec<(u64, TranscriptQueueOp)> = Vec::new();
 
@@ -183,8 +188,7 @@ pub fn read_session_chat_transcript_tail_file(
                        lifecycle: &mut Option<SessionChatTurnLifecycle>,
                        ignore_next_malformed_record: &mut bool,
                        malformed_record_count: &mut usize,
-                       parents_of_newer_messages: &mut HashSet<String>,
-                       parents_of_newer_prompts: &mut HashSet<String>,
+                       branch: &mut ActiveBranchScan,
                        queue_ops: &mut Vec<(u64, TranscriptQueueOp)>,
                        stable_message_count: &mut usize| {
         let Some(line) = accumulator.take_line() else {
@@ -207,9 +211,12 @@ pub fn read_session_chat_transcript_tail_file(
         }
         let decoded = decode(&line, &fallback_id);
         let row_lineage = lineage.and_then(|extract| extract(&line, &fallback_id));
-        if let Some(mut row_lineage) = row_lineage {
-            if let Some(queue_op) = row_lineage.queue.take() {
-                queue_ops.push((line_offset, queue_op));
+        if let Some(row_lineage) = row_lineage {
+            let verdict = branch.observe(line_offset, &row_lineage, decoded.as_ref());
+            if row_lineage.queue.is_some() {
+                if let Some(queue_op) = row_lineage.queue {
+                    queue_ops.push((line_offset, queue_op));
+                }
                 if let Some(mut message) = decoded {
                     message.byte_offset = Some(line_offset);
                     if !message.queued {
@@ -219,23 +226,24 @@ pub fn read_session_chat_transcript_tail_file(
                 }
                 return;
             }
-            let superseded = superseded_prompt_id(
-                &row_lineage,
-                decoded.as_ref(),
-                parents_of_newer_messages,
-                parents_of_newer_prompts,
-            )
-            .is_some();
-            if let Some(parent_id) = row_lineage.parent_id {
-                if let Some(message) = decoded.as_ref() {
-                    if message.role == SessionChatRole::User {
-                        parents_of_newer_prompts.insert(parent_id.clone());
-                    }
-                    parents_of_newer_messages.insert(parent_id);
+            match verdict {
+                BranchVerdict::Keep => {}
+                BranchVerdict::Drop => return,
+                BranchVerdict::DropSubtree { offsets } => {
+                    // The retracted prompt's descendants were scanned before it
+                    // was proven dead, so they are already in the window.
+                    let dropped: HashSet<u64> = offsets.into_iter().collect();
+                    newest_first.retain(|(message, offset)| {
+                        if !dropped.contains(offset) {
+                            return true;
+                        }
+                        if !message.queued {
+                            *stable_message_count -= 1;
+                        }
+                        false
+                    });
+                    return;
                 }
-            }
-            if superseded {
-                return;
             }
         }
         if let Some(mut message) = decoded {
@@ -248,34 +256,40 @@ pub fn read_session_chat_transcript_tail_file(
     };
 
     let mut buffer = vec![0u8; TAIL_CHUNK_BYTES];
-    while cursor > 0 && stable_message_count <= limit {
+    // A page that stops the moment its limit is met cannot decide the fate of
+    // the rows it is handing out, because the prompt that retracts a branch is
+    // OLDER than the branch. `keep_scanning` holds the scan open while the
+    // branch scanner is still waiting for a row it has to reach.
+    let mut scanning = true;
+    while cursor > 0 && scanning {
         let start = cursor.saturating_sub(TAIL_CHUNK_BYTES as u64);
         let length = (cursor - start) as usize;
         read_exact_at(&file, &mut buffer[..length], start)?;
         let mut segment_end = length;
         let mut index = length;
-        while index > 0 && stable_message_count <= limit {
+        while index > 0 && scanning {
             index -= 1;
             if buffer[index] != b'\n' {
                 continue;
             }
+            let line_offset = start + index as u64 + 1;
             accumulator.retain_part(&buffer[index + 1..segment_end], &mut oversized_record_count);
             if accumulator.oversized {
                 accumulator.reset();
             } else {
                 decode_line(
                     &mut accumulator,
-                    start + index as u64 + 1,
+                    line_offset,
                     &mut newest_first,
                     &mut lifecycle,
                     &mut ignore_next_malformed_record,
                     &mut malformed_record_count,
-                    &mut parents_of_newer_messages,
-                    &mut parents_of_newer_prompts,
+                    &mut branch,
                     &mut queue_ops,
                     &mut stable_message_count,
                 );
             }
+            scanning = stable_message_count <= limit || branch.keep_scanning(line_offset);
             segment_end = index;
         }
         if segment_end > 0 {
@@ -283,7 +297,7 @@ pub fn read_session_chat_transcript_tail_file(
         }
         cursor = start;
     }
-    if cursor == 0 && !accumulator.parts.is_empty() && stable_message_count <= limit {
+    if cursor == 0 && !accumulator.parts.is_empty() && scanning {
         decode_line(
             &mut accumulator,
             0,
@@ -291,8 +305,7 @@ pub fn read_session_chat_transcript_tail_file(
             &mut lifecycle,
             &mut ignore_next_malformed_record,
             &mut malformed_record_count,
-            &mut parents_of_newer_messages,
-            &mut parents_of_newer_prompts,
+            &mut branch,
             &mut queue_ops,
             &mut stable_message_count,
         );
@@ -319,6 +332,14 @@ pub fn read_session_chat_transcript_tail_file(
     };
     let has_more = limit > 0 && chronological.len() > limit;
     let before_offset = selected.first().map(|(_, offset)| *offset).unwrap_or(end);
+    if let Some(version) = version.as_ref() {
+        remember_session_chat_branch_boundary(
+            file_path,
+            version,
+            before_offset,
+            branch.boundary_at(before_offset),
+        );
+    }
     Ok(SessionChatTailFileResult {
         messages: selected.into_iter().map(|(message, _)| message).collect(),
         lifecycle,
@@ -328,6 +349,7 @@ pub fn read_session_chat_transcript_tail_file(
         malformed_record_count,
         oversized_record_count,
         outstanding_queued_prompts,
+        newest_tree_row_id: branch.newest_kept_row_id(),
     })
 }
 
@@ -480,6 +502,8 @@ pub(crate) fn read_pi_session_chat_transcript_tail_file(
         oversized_record_count,
         // Pi has no prompt queue.
         outstanding_queued_prompts: Vec::new(),
+        // Pi's tree is resolved by its own reader above.
+        newest_tree_row_id: None,
     })
 }
 

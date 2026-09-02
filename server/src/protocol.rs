@@ -433,6 +433,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         and lifecycle states those list rows already send.
         */
         | "/api/sessionForkBranches"
+        /*
+        CDXC:SessionChatRewind 2026-09-02:
+        Remote-allowed for the same reason `/api/sendSessionChatMessage` is: the
+        rewind is driven through the agent CLI's own dialog in the terminal, and
+        that terminal only exists on the machine running the session, so a
+        client looking at a remote daemon has to ask that machine. It carries
+        only projectId / sessionId plus a transcript row id the daemon itself
+        published, and it writes nothing but keystrokes into that one session.
+        */
+        | "/api/rewindSessionChat"
         | "/api/readSessionTranscriptSizes"
         | "/api/transitionSession"
         /*
@@ -484,6 +494,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/answerSessionChatPrompt"
         | "/api/interruptSessionChat"
         | "/api/handoffSessionChatDraft"
+        | "/api/claimSessionChatLaunchDraft"
         /*
         CDXC:SessionChatPromptQueue 2026-08-21:
         The chat prompt queue and the synced composer draft are remote-allowed

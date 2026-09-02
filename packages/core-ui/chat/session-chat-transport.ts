@@ -6,6 +6,7 @@
 
 import type {
   GxserverReadSessionTerminalTailResult,
+  GxserverRewindSessionChatResult,
   GxserverSessionForkBranchesResult,
 } from '../../shared/gxserver-protocol';
 import type {
@@ -42,6 +43,16 @@ export interface SessionChatTransport {
   whose list would 404.
   */
   forkBranches?(): Promise<GxserverSessionForkBranchesResult>;
+  /*
+  CDXC:SessionChatRewind 2026-09-02:
+  Drives the agent's own rewind flow in its terminal back to the point before
+  `messageId` (`/api/rewindSessionChat`). Optional on the same gate as
+  everything else here: a host without a route to the endpoint omits it and the
+  transcript's "Rewind to here" action is not rendered at all, rather than
+  offering a control whose call would 404. The daemon re-snapshots the chat
+  stream itself, so nothing here prunes rows.
+  */
+  rewindSessionChat?(params: { messageId: string }): Promise<GxserverRewindSessionChatResult>;
   /** Returns an unsubscribe function. Events must already be filtered to this session. */
   subscribe(handlers: {
     onEvent: (e: GxserverSessionChatEvent) => void;

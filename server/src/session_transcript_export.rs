@@ -382,7 +382,7 @@ pub fn export_session_transcript(
             path: source_path.clone(),
         }
     })?;
-    let mut transcript = parse_transcript(agent, &lines);
+    let mut transcript = parse_transcript(agent, &source_path, &lines);
     transcript.meta.agent = agent;
     transcript.meta.source_path = source_path.clone();
     if transcript.meta.agent_session_id.is_none() {
@@ -690,10 +690,30 @@ impl TranscriptBuilder {
     }
 }
 
-fn parse_transcript(agent: SessionChatTranscriptAgent, lines: &[String]) -> ParsedTranscript {
+fn parse_transcript(
+    agent: SessionChatTranscriptAgent,
+    source_path: &Path,
+    lines: &[String],
+) -> ParsedTranscript {
     let mut builder = TranscriptBuilder::new();
-    for line in lines {
-        if line.trim().is_empty() {
+    /*
+    CDXC:SessionChatRewind 2026-09-02:
+    The export is read against the terminal, so it renders the same active
+    branch chat does: a rewind leaves its abandoned turns in the file, and
+    exporting them put turns in the document that the session no longer has.
+    Claude only: every other agent's transcript is linear.
+    */
+    let off_branch = if agent == SessionChatTranscriptAgent::Claude {
+        crate::session_chat_branch::claude_off_branch_line_indices(
+            source_path,
+            lines,
+            crate::session_chat::decode_claude_transcript_line,
+        )
+    } else {
+        std::collections::HashSet::new()
+    };
+    for (index, line) in lines.iter().enumerate() {
+        if line.trim().is_empty() || off_branch.contains(&index) {
             continue;
         }
         let Some(record) = parse_json_line(line).and_then(|value| match value {

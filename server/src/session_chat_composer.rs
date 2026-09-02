@@ -108,6 +108,9 @@ pub struct SessionChatComposerReadiness {
     /// Newest `SESSION_CHAT_COMPOSER_TAIL_LINES` non-blank screen lines,
     /// ANSI-stripped, oldest first — the evidence behind the verdict.
     pub screen_tail: Vec<String>,
+    /// This exact blocking screen is navigation chrome that Escape safely
+    /// closes, rather than a question or decision the user must answer.
+    dismiss_with_escape: bool,
 }
 
 impl SessionChatComposerReadiness {
@@ -115,11 +118,16 @@ impl SessionChatComposerReadiness {
         self.state == SessionChatComposerState::NotReady
     }
 
+    pub fn should_dismiss_with_escape(&self) -> bool {
+        self.dismiss_with_escape
+    }
+
     fn unknown(screen_tail: Vec<String>) -> Self {
         Self {
             state: SessionChatComposerState::Unknown,
             reason: None,
             screen_tail,
+            dismiss_with_escape: false,
         }
     }
 
@@ -128,6 +136,7 @@ impl SessionChatComposerReadiness {
             state: SessionChatComposerState::Ready,
             reason: None,
             screen_tail,
+            dismiss_with_escape: false,
         }
     }
 
@@ -136,6 +145,16 @@ impl SessionChatComposerReadiness {
             state: SessionChatComposerState::NotReady,
             reason: Some(reason),
             screen_tail,
+            dismiss_with_escape: false,
+        }
+    }
+
+    fn not_ready_dismiss_with_escape(reason: String, screen_tail: Vec<String>) -> Self {
+        Self {
+            state: SessionChatComposerState::NotReady,
+            reason: Some(reason),
+            screen_tail,
+            dismiss_with_escape: true,
         }
     }
 }
@@ -319,6 +338,36 @@ fn composer_screen_tail(lines: &[String]) -> Vec<String> {
         .skip(lines.len().saturating_sub(SESSION_CHAT_COMPOSER_TAIL_LINES))
         .map(|line| line.trim_end().to_string())
         .collect()
+}
+
+/*
+Claude Code's `/config` screen owns the keyboard until Escape closes it. Its
+full-width upper-eighth-block rule scales with the terminal width, while the
+tab row below it is stable:
+
+    ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+       Settings  Status  Config  Usage  Stats
+
+Match the shape rather than a fixed rule length. Requiring both adjacent rows
+keeps ordinary transcript prose that names the tabs from becoming an input-
+blocking screen.
+*/
+pub fn is_claude_code_settings_screen(agent_id: Option<&str>, screen_text: &str) -> bool {
+    let Some(agent) = normalize_agent_id(agent_id) else {
+        return false;
+    };
+    if !matches!(agent.as_str(), "claude" | "openclaude") {
+        return false;
+    }
+    let lines = composer_lines(screen_text);
+    lines.windows(2).any(|pair| {
+        let rule = pair[0].trim();
+        rule.chars().count() >= SESSION_CHAT_COMPOSER_MIN_RULE_CHARS
+            && rule.chars().all(|character| character == '\u{2594}')
+            && pair[1]
+                .split_whitespace()
+                .eq(["Settings", "Status", "Config", "Usage", "Stats"])
+    })
 }
 
 /// Display rows for terminal-preview clients, OLDEST FIRST.
@@ -575,6 +624,12 @@ pub fn detect_session_chat_composer_ready(
     let Some(signature) = composer_signature(&agent) else {
         return SessionChatComposerReadiness::unknown(screen_tail);
     };
+    if is_claude_code_settings_screen(agent_id, screen_text) {
+        return SessionChatComposerReadiness::not_ready_dismiss_with_escape(
+            "Claude Code settings are open instead of the input box.".to_string(),
+            screen_tail,
+        );
+    }
     if signature_matches(signature, &lines) {
         SessionChatComposerReadiness::ready(screen_tail)
     } else {

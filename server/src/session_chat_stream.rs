@@ -223,6 +223,18 @@ pub struct SessionChatSuccessorHooks {
     /// them (running / sleeping / provider-alive — NEVER stopped history rows).
     /// Read only when a successor search actually runs.
     pub bound_agent_session_ids: Arc<dyn Fn() -> Vec<String> + Send + Sync>,
+    /*
+    CDXC:SessionForkIdentity 2026-09-02:
+    Creation time (epoch ms) of the OLDEST live session forked from this one
+    that has not yet reported its own conversation id. Between a fork's launch
+    and its first hook, the fork's transcript is a proven, unowned successor of
+    this session's id; a follower scan landing in that window would adopt the
+    child's conversation for the parent. Any candidate that began at or after
+    this instant belongs to that pending child. `None` when no such child exists.
+    The argument is the id being scanned for successors: a child that still
+    carries THAT id (seeded from its launch) has not reported its own yet either.
+    */
+    pub pending_fork_child_since_ms: Arc<dyn Fn(&str) -> Option<i64> + Send + Sync>,
     /// Persists the corrected identity; returns true when the registry changed.
     pub adopt_identity: Arc<dyn Fn(SessionChatIdentityAdoption) -> bool + Send + Sync>,
     pub log: Arc<dyn Fn(SessionChatSuccessorNotice) + Send + Sync>,

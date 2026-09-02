@@ -3,7 +3,7 @@
 // the composer while showing. Hosts inject a SessionChatTransport; everything
 // else is derived by useSessionChat.
 
-import { IconBlockquote, IconCopy, IconLoader2 } from '@tabler/icons-react';
+import { IconBlockquote, IconBrowser, IconCopy, IconExternalLink, IconFolder, IconLoader2 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, RefObject } from 'react';
 import { Button } from '../../components/ui/button';
@@ -33,7 +33,11 @@ import {
 import type { SessionChatHostAction, SessionChatHostActions } from './session-chat-host-actions';
 import { SessionChatImageViewerProvider } from './session-chat-image-viewer';
 import { SessionChatForkBranchSwitcher } from './session-chat-fork-branch-switcher';
-import { SessionChatHostLinksProvider, type SessionChatHostLinks } from './session-chat-links';
+import {
+  SESSION_CHAT_WEB_URL_ATTRIBUTE,
+  SessionChatHostLinksProvider,
+  type SessionChatHostLinks,
+} from './session-chat-links';
 import { SessionChatInteractiveCard } from './session-chat-interactive-card';
 import { SessionChatMessageList } from './session-chat-message-list';
 import { SessionChatNotePanel } from './session-chat-note-panel';
@@ -244,6 +248,8 @@ export interface SessionChatViewProps {
   showNewSessionWelcomeTitle?: boolean;
   /** Whether plain Enter sends from the composer instead of inserting a newline. */
   sendOnEnter?: boolean;
+  /** Whether shortcut chords and keyboard-choice badges are rendered. */
+  showShortcutLabels?: boolean;
   /**
    * Use the platform's own text-selection/editing menus (the React Native
    * webview host). The chat's custom menus are right-click/long-press
@@ -426,6 +432,7 @@ export function SessionChatView({
   hostSearchBridge,
   searchLayout = 'inline',
   showNewSessionWelcomeTitle = true,
+  showShortcutLabels = true,
   showVerbosePill = true,
   theme = 'dark',
   transport,
@@ -1007,6 +1014,7 @@ export function SessionChatView({
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const [transcriptSelection, setTranscriptSelection] = useState('');
   const [transcriptFilePath, setTranscriptFilePath] = useState<string | null>(null);
+  const [transcriptWebUrl, setTranscriptWebUrl] = useState<string | null>(null);
 
   const interrupt = useCallback((): void => {
     void chat.interrupt();
@@ -1055,6 +1063,49 @@ export function SessionChatView({
   const terminalChoicePending = (chat.terminalNotice?.choices?.length ?? 0) > 0 && noticeKey !== retiredNoticeKey;
   const [sessionOptionSwitching, setSessionOptionSwitching] = useState(false);
   const composerEnabled = canSend && !terminalChoicePending && !sessionOptionSwitching;
+  /*
+  CDXC:SessionChatRewind 2026-09-02:
+  The transcript's "Rewind to here" action. Three gates, all of which have to
+  hold before a prompt row offers it:
+    1. the host can reach `/api/rewindSessionChat` (bound like every other
+       optional transport call here);
+    2. the session's chat-supported family is Claude, because the rewind is
+       driven through the agent's own terminal dialog and Claude's is the only
+       one Ghostex knows how to drive today;
+    3. the composer could send right now, because the daemon has to type into
+       the same live pane a message would go to.
+  A rewind is never offered when any of them is missing, rather than offered
+  and refused. Only the first two decide whether the transcript can rewind at
+  all; the live gate rides separately so a rewind already in flight keeps its
+  dialog even when the terminal it is driving goes busy under it.
+  */
+  const rewindSessionChat = useMemo(() => {
+    const rewind = transport.rewindSessionChat?.bind(transport);
+    return rewind ? (params: { messageId: string }) => rewind(params) : undefined;
+  }, [transport]);
+  const rewindToMessage = readStateAgent === 'claude' ? rewindSessionChat : undefined;
+  /*
+  The prompt a rewind took back belongs in the composer: the reader rewound in
+  order to say it differently, so they get the text to edit instead of retyping
+  it. It goes in through `appendText`, the same handle the transcript's "Add to
+  Chat" uses, so the restored text is persisted and synced exactly like text
+  that was typed. A field holding nothing but whitespace is an empty field to
+  the reader, so it is cleared first and the prompt starts the draft rather
+  than landing under blank lines; anything real that was already typed is kept
+  and the prompt follows it as its own block. `appendText` also leaves the
+  caret at the end and the composer focused.
+  */
+  const holdRewoundPromptInComposer = useCallback((prompt: string): void => {
+    const composer = composerRef.current;
+    if (composer === null || prompt === '') {
+      return;
+    }
+    const draft = composer.getDraft();
+    if (draft !== '' && draft.trim() === '') {
+      composer.clearDraft(draft);
+    }
+    composer.appendText(prompt);
+  }, []);
 
   // A command the user types themselves reconciles the pills (§1.4), so the
   // Model pill follows a hand-typed "/model opus" without a second dispatch.
@@ -1176,10 +1227,14 @@ export function SessionChatView({
     setTranscriptSelection(readTranscriptSelection(transcriptRef.current));
     const target = event.target instanceof Element ? event.target : null;
     const fileChip = target?.closest(`[${SESSION_CHAT_FILE_PATH_ATTRIBUTE}]`);
+    const webLink = target?.closest(`[${SESSION_CHAT_WEB_URL_ATTRIBUTE}]`);
     setTranscriptFilePath(
       fileChip && event.currentTarget.contains(fileChip)
         ? fileChip.getAttribute(SESSION_CHAT_FILE_PATH_ATTRIBUTE)
         : null
+    );
+    setTranscriptWebUrl(
+      webLink && event.currentTarget.contains(webLink) ? webLink.getAttribute(SESSION_CHAT_WEB_URL_ATTRIBUTE) : null
     );
   }, []);
 
@@ -1191,6 +1246,15 @@ export function SessionChatView({
       console.error('[session-chat] file path clipboard write failed', error);
     });
   }, [transcriptFilePath]);
+
+  const copyTranscriptWebUrl = useCallback((): void => {
+    if (transcriptWebUrl === null) {
+      return;
+    }
+    void navigator.clipboard.writeText(transcriptWebUrl).catch((error: unknown) => {
+      console.error('[session-chat] URL clipboard write failed', error);
+    });
+  }, [transcriptWebUrl]);
 
   const copyTranscriptSelection = useCallback((): void => {
     if (transcriptSelection === '') {
@@ -1318,6 +1382,9 @@ export function SessionChatView({
                           messages={chat.messages}
                           onLoadEarlier={chat.loadEarlier}
                           {...(listMessageMarkdownPaths ? { listMessageMarkdownPaths } : {})}
+                          {...(rewindToMessage
+                            ? { canRewind: composerEnabled, onRewound: holdRewoundPromptInComposer, rewindToMessage }
+                            : {})}
                           {...(saveMessageMarkdown ? { saveMessageMarkdown } : {})}
                           sessionTitle={sessionTitle}
                           theme={theme}
@@ -1344,6 +1411,9 @@ export function SessionChatView({
                             messages={chat.messages}
                             onLoadEarlier={chat.loadEarlier}
                             {...(listMessageMarkdownPaths ? { listMessageMarkdownPaths } : {})}
+                            {...(rewindToMessage
+                              ? { canRewind: composerEnabled, onRewound: holdRewoundPromptInComposer, rewindToMessage }
+                              : {})}
                             {...(saveMessageMarkdown ? { saveMessageMarkdown } : {})}
                             sessionTitle={sessionTitle}
                             theme={theme}
@@ -1354,12 +1424,50 @@ export function SessionChatView({
                         <ContextMenuContent>
                           <ContextMenuGroup>
                             {transcriptFilePath !== null ? (
-                              <ContextMenuItem onClick={copyTranscriptFilePath}>
-                                <IconCopy aria-hidden='true' />
-                                Copy path
-                              </ContextMenuItem>
+                              <>
+                                <ContextMenuItem onClick={copyTranscriptFilePath}>
+                                  <IconCopy aria-hidden='true' />
+                                  Copy Path
+                                </ContextMenuItem>
+                                {hostLinks?.locateFile ? (
+                                  <ContextMenuItem onClick={() => hostLinks.locateFile?.(transcriptFilePath)}>
+                                    <IconFolder aria-hidden='true' />
+                                    Locate File
+                                  </ContextMenuItem>
+                                ) : null}
+                              </>
                             ) : null}
-                            {transcriptFilePath === null || transcriptSelection !== '' ? (
+                            {transcriptWebUrl !== null ? (
+                              <>
+                                <ContextMenuItem onClick={copyTranscriptWebUrl}>
+                                  <IconCopy aria-hidden='true' />
+                                  Copy URL
+                                </ContextMenuItem>
+                                {hostLinks?.openUrl ? (
+                                  <>
+                                    <ContextMenuItem
+                                      onClick={() =>
+                                        hostLinks.openUrl?.(transcriptWebUrl, {
+                                          external: false,
+                                          forceEmbedded: true,
+                                        })
+                                      }
+                                    >
+                                      <IconBrowser aria-hidden='true' />
+                                      Open in Embedded Browser
+                                    </ContextMenuItem>
+                                    <ContextMenuItem
+                                      onClick={() => hostLinks.openUrl?.(transcriptWebUrl, { external: true })}
+                                    >
+                                      <IconExternalLink aria-hidden='true' />
+                                      Open in External Browser
+                                    </ContextMenuItem>
+                                  </>
+                                ) : null}
+                              </>
+                            ) : null}
+                            {(transcriptFilePath === null && transcriptWebUrl === null) ||
+                            transcriptSelection !== '' ? (
                               <ContextMenuItem disabled={transcriptSelection === ''} onClick={copyTranscriptSelection}>
                                 <IconCopy aria-hidden='true' />
                                 Copy
@@ -1406,6 +1514,7 @@ export function SessionChatView({
                     onAnswerChoice={answerNoticeChoice}
                     onSendKeys={sendNoticeKeys}
                     onVisibleChange={setNoticeCardVisible}
+                    showShortcutLabels={showShortcutLabels}
                     {...(sessionKey !== undefined ? { sessionKey } : {})}
                     {...(hostActions?.onSwitchToTerminal ? { onSwitchToTerminal: hostActions.onSwitchToTerminal } : {})}
                     {...(hostActions?.switchViewShortcut
@@ -1420,6 +1529,7 @@ export function SessionChatView({
                     onShowingQuestionChange={setQuestionActive}
                     onSwitchToTerminal={hostActions?.onSwitchToTerminal}
                     prompt={chat.prompt}
+                    showShortcutLabels={showShortcutLabels}
                   />
                   {/*
                   While a question card shows, the composer hides instead of
@@ -1475,6 +1585,7 @@ export function SessionChatView({
                       {...(sessionNoteAvailable ? { onSessionNote: toggleSessionNote } : {})}
                       sessionNoteActive={noteOpen}
                       sessionNoteHasText={sessionNoteHasText}
+                      showShortcutLabels={showShortcutLabels}
                       summaryMode={summaryMode}
                       verboseMode={verbose}
                       {...(showVerbosePill ? { onToggleSummary: toggleSummary } : {})}

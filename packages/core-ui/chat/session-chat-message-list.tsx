@@ -15,6 +15,7 @@
 
 import {
   IconAlertTriangle,
+  IconArrowBackUp,
   IconCheck,
   IconChevronRight,
   IconCopy,
@@ -72,6 +73,11 @@ import {
   type ListSessionMessageMarkdownPaths,
   type SaveSessionMessageMarkdown,
 } from './session-chat-save-markdown-dialog';
+import {
+  SessionChatRewindDialog,
+  type RewindSessionChatToMessage,
+  type SessionChatRewindRequest,
+} from './session-chat-rewind-dialog';
 import { isSessionChatPendingMessageId } from './session-chat-pending';
 import {
   dropSessionChatHiddenMessages,
@@ -112,6 +118,29 @@ export interface SessionChatMessageListProps {
   saveMessageMarkdown?: SaveSessionMessageMarkdown;
   /** Reads existing project Markdown paths before generating the next file name. */
   listMessageMarkdownPaths?: ListSessionMessageMarkdownPaths;
+  /*
+  CDXC:SessionChatRewind 2026-09-02:
+  Rewinds the live conversation back to the point before a user prompt was
+  sent. Set only when the host can reach `/api/rewindSessionChat` AND the
+  session runs an agent whose rewind Ghostex drives (Claude), so the
+  transcript never offers a rewind that would be refused.
+  */
+  rewindToMessage?: RewindSessionChatToMessage;
+  /**
+   * The live gate: the same condition that lets the composer send, because the
+   * daemon types the rewind into that same pane. Only the "Rewind to here"
+   * BUTTON is hidden while false. The confirmation dialog stays mounted either
+   * way, so a rewind that is already running (which can itself take the
+   * terminal busy) keeps its progress and its refusal on screen instead of
+   * vanishing mid-call.
+   */
+  canRewind?: boolean;
+  /**
+   * A rewind landed: the prompt it rewound to, verbatim. The chat view puts it
+   * back in the composer, so the reader edits the message they just took back
+   * instead of retyping it.
+   */
+  onRewound?: (prompt: string) => void;
   /** Current session title used to prefill a useful Markdown file name. */
   sessionTitle?: string;
   /** Matches the portaled save dialog and toast to this chat surface. */
@@ -213,10 +242,13 @@ function UserImageThumbnails({ blocks }: { blocks: readonly { alt?: string; path
 function CopyFooter({
   anchoredToAssistantMarker = false,
   markdown,
+  onRewind,
   onSaveMarkdown,
 }: {
   anchoredToAssistantMarker?: boolean;
   markdown: string;
+  /** Opens the rewind confirmation for this prompt (user rows only). */
+  onRewind?: () => void;
   onSaveMarkdown?: (markdown: string) => void;
 }) {
   const canSaveMarkdown = markdown.split(/\r?\n/u).filter((line) => line.trim().length > 0).length > 1;
@@ -241,6 +273,11 @@ function CopyFooter({
       >
         <IconCopy aria-hidden='true' data-icon='inline-start' stroke={1.9} />
       </Button>
+      {onRewind ? (
+        <Button aria-label='Rewind to here' onClick={onRewind} size='icon-xs' title='Rewind to here' variant='ghost'>
+          <IconArrowBackUp aria-hidden='true' data-icon='inline-start' stroke={1.9} />
+        </Button>
+      ) : null}
       {anchoredToAssistantMarker && onSaveMarkdown && canSaveMarkdown ? (
         <Button
           aria-label='Save message to Markdown'
@@ -676,6 +713,7 @@ function userTurnCopyMarkdown(markdown: string, images: readonly { path?: string
 function MessageRow({
   isStreaming = false,
   message,
+  onRewind,
   onSaveMarkdown,
   questionPairsAsRows = false,
   showAssistantCopy,
@@ -688,6 +726,8 @@ function MessageRow({
    */
   isStreaming?: boolean;
   message: SessionChatMessage;
+  /** Set only when this transcript may be rewound; see the list's prop. */
+  onRewind?: (request: SessionChatRewindRequest) => void;
   onSaveMarkdown?: (markdown: string) => void;
   /** Set inside the expanded completed-work log, where the hoisted question
    * card already shows any answered question this message carries. */
@@ -730,6 +770,20 @@ function MessageRow({
   const showCopy = isUser
     ? userCopyMarkdown.length > 0
     : markdown.length > 0 && message.role === 'assistant' && showAssistantCopy;
+  /*
+  CDXC:SessionChatRewind 2026-09-02:
+  A rewind target is a prompt the agent has actually taken: the same "genuine
+  user prompt" test the transcript already uses for its turn boundaries (a
+  suppressed harness turn returned above, a `queued` row is still held by the
+  agent's queue) plus the optimistic local echo, which has no transcript row
+  for the daemon to rewind to yet.
+  */
+  const showRewind =
+    isUser &&
+    onRewind !== undefined &&
+    showCopy &&
+    message.queued !== true &&
+    !isSessionChatPendingMessageId(message.id);
 
   const autoNamedTitle =
     message.id.startsWith('app-command:') &&
@@ -825,7 +879,14 @@ function MessageRow({
               </BubbleContent>
             </Bubble>
           ) : null}
-          {showCopy ? <CopyFooter markdown={userCopyMarkdown} /> : null}
+          {showCopy ? (
+            <CopyFooter
+              markdown={userCopyMarkdown}
+              {...(showRewind && onRewind
+                ? { onRewind: () => onRewind({ messageId: message.id, prompt: userCopyMarkdown }) }
+                : {})}
+            />
+          ) : null}
         </MessageContent>
       </Message>
     );
@@ -1235,7 +1296,10 @@ export function SessionChatMessageList({
   loadingEarlier,
   messages,
   onLoadEarlier,
+  canRewind = true,
   listMessageMarkdownPaths,
+  onRewound,
+  rewindToMessage,
   saveMessageMarkdown,
   sessionTitle = '',
   summaryMode = false,
@@ -1251,6 +1315,7 @@ export function SessionChatMessageList({
   const shouldFollowBottomRef = useRef(true);
   const scrollbarFadeTimeoutRef = useRef<number | undefined>(undefined);
   const [markdownToSave, setMarkdownToSave] = useState<string | null>(null);
+  const [rewindRequest, setRewindRequest] = useState<SessionChatRewindRequest | null>(null);
   const anchorExpandedAreaTop = useCallback((target: HTMLElement | null): void => {
     // Opening a disclosure is explicit navigation away from the newest row.
     // Clear bottom-follow before its resize can pin the viewport to the end.
@@ -1377,7 +1442,12 @@ export function SessionChatMessageList({
             {summaryMode
               ? summaryTurns.map((turn) => (
                   <MessageScrollerItem key={`summary:${turn.user.id}`} messageId={turn.user.id}>
-                    <MessageRow message={turn.user} showAssistantCopy={false} verboseMode={verboseMode} />
+                    <MessageRow
+                      message={turn.user}
+                      {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
+                      showAssistantCopy={false}
+                      verboseMode={verboseMode}
+                    />
                     {turn.final ? (
                       <SessionChatDisclosure key='agent-reply' label='Agent reply' onExpand={anchorExpandedAreaTop}>
                         <MessageRow
@@ -1434,6 +1504,7 @@ export function SessionChatMessageList({
                          */
                         isStreaming={isWorking && index === renderItems.length - 1}
                         message={item.message}
+                        {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
                         {...(saveMessageMarkdown && listMessageMarkdownPaths
                           ? { onSaveMarkdown: setMarkdownToSave }
                           : {})}
@@ -1469,6 +1540,19 @@ export function SessionChatMessageList({
           open={markdownToSave !== null}
           save={saveMessageMarkdown}
           sessionTitle={sessionTitle}
+          theme={theme}
+        />
+      ) : null}
+      {rewindToMessage ? (
+        <SessionChatRewindDialog
+          onOpenChange={(open) => {
+            if (!open) {
+              setRewindRequest(null);
+            }
+          }}
+          {...(onRewound ? { onRewound } : {})}
+          request={rewindRequest}
+          rewind={rewindToMessage}
           theme={theme}
         />
       ) : null}

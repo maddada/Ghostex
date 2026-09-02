@@ -64,6 +64,65 @@ pub fn last_codex_record_timestamp_ms(file_path: &Path) -> Option<i64> {
     last_matching_record_timestamp_ms(file_path, codex_record_timestamp_ms)
 }
 
+/*
+CDXC:SessionForkIdentity 2026-09-02:
+A continuation and a fork carry the SAME lineage proof: Claude copies the
+predecessor id into the new file's rows for both, and Codex stamps
+`forked_from_id` for both. What separates them is time. A continuation starts
+after the predecessor's last conversation row (the old file is dead by the time
+the new one opens); a fork opens while the predecessor is still being written,
+so the predecessor's last row lands AFTER the fork's first one. The follower had
+only the lineage proof, so a running session that sat idle for 90s adopted its
+own fork's transcript and showed the fork's chat under the parent's title
+(observed live 2026-09-01). Both candidate scans now also read the candidate's
+FIRST row and reject any file that began before the predecessor's last row.
+*/
+/// Forward budget for "when did this transcript's conversation begin". A
+/// continuation opens with the compaction summary as its first row, so the
+/// answer is always near the top; the cap only bounds a pathological file.
+const FIRST_RECORD_SCAN_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Timestamp of the oldest `user`/`assistant` record, read forward from the
+/// head. `None` means "no substantive record inside the window".
+pub(crate) fn first_substantive_transcript_timestamp_ms(file_path: &Path) -> Option<i64> {
+    first_matching_record_timestamp_ms(file_path, substantive_record_timestamp_ms)
+}
+
+/// Codex writes `timestamp` on every record, `session_meta` first, so the
+/// rollout's opening line says when the conversation began.
+pub(crate) fn first_codex_record_timestamp_ms(file_path: &Path) -> Option<i64> {
+    first_matching_record_timestamp_ms(file_path, codex_record_timestamp_ms)
+}
+
+fn first_matching_record_timestamp_ms(
+    file_path: &Path,
+    record_timestamp_ms: fn(&str) -> Option<i64>,
+) -> Option<i64> {
+    use std::io::BufRead as _;
+    let file = File::open(file_path).ok()?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut consumed: u64 = 0;
+    let mut line: Vec<u8> = Vec::new();
+    while consumed < FIRST_RECORD_SCAN_BYTES {
+        line.clear();
+        let read = reader.read_until(b'\n', &mut line).ok()?;
+        if read == 0 {
+            return None;
+        }
+        consumed += read as u64;
+        if line.last() != Some(&b'\n') {
+            // A trailing partial line is still being written; it cannot be the
+            // oldest row of a file that has any complete row before it.
+            return None;
+        }
+        let text = String::from_utf8_lossy(&line);
+        if let Some(timestamp) = record_timestamp_ms(text.trim_end()) {
+            return Some(timestamp);
+        }
+    }
+    None
+}
+
 fn last_matching_record_timestamp_ms(
     file_path: &Path,
     record_timestamp_ms: fn(&str) -> Option<i64>,
@@ -360,6 +419,14 @@ fn collect_successor_candidates(
         // The successor continues the conversation, so it must carry rows newer
         // than the predecessor's last one.
         if last_substantive_ms <= predecessor_last_substantive_ms {
+            continue;
+        }
+        // ...and it must have BEGUN after that row too, or it is a fork that
+        // ran alongside the predecessor (see FIRST_RECORD_SCAN_BYTES).
+        let Some(first_substantive_ms) = first_substantive_transcript_timestamp_ms(&path) else {
+            continue;
+        };
+        if first_substantive_ms <= predecessor_last_substantive_ms {
             continue;
         }
         qualified.push(SessionChatSuccessorTranscript {
@@ -679,6 +746,14 @@ fn collect_codex_successor_candidates(
             continue;
         };
         if last_record_ms <= predecessor_last_record_ms {
+            continue;
+        }
+        // A rollout that opened while the predecessor was still being written
+        // is a sibling branch, not its continuation (see FIRST_RECORD_SCAN_BYTES).
+        let Some(first_record_ms) = first_codex_record_timestamp_ms(&path) else {
+            continue;
+        };
+        if first_record_ms <= predecessor_last_record_ms {
             continue;
         }
         qualified.push(SessionChatSuccessorTranscript {

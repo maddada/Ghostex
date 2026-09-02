@@ -17,6 +17,7 @@ use crate::session_chat_options::{forget_session_chat_options, SessionChatOption
 use crate::session_chat_paths::resolve_session_chat_transcript_path;
 use crate::session_chat_successor::{
     codex_rollout_session_id, find_claude_successor_transcript, find_codex_successor_transcript,
+    first_codex_record_timestamp_ms, first_substantive_transcript_timestamp_ms,
     is_uuid_transcript_stem, last_codex_record_timestamp_ms,
     last_substantive_transcript_timestamp_ms, SessionChatSuccessorOutcome,
 };
@@ -58,6 +59,78 @@ pub(crate) enum FollowerDrainOutcome {
         /// appended window (CDXC:SessionChatApiRefusal), for the notice card.
         api_refusal: Option<String>,
     },
+}
+
+/// Authoritative window read: the tail, plus whatever landed while it was being
+/// taken. `None` means the file could not be read at all.
+fn follower_snapshot_drain(
+    file_path: &Path,
+    limit: usize,
+    decode: SessionChatLineDecoder,
+    decode_lifecycle: Option<SessionChatLifecycleDecoder>,
+    lineage: Option<SessionChatLineageExtractor>,
+    state: &mut FollowerFileState,
+    content_replaced: bool,
+) -> Option<FollowerDrainOutcome> {
+    let mut retried = false;
+    loop {
+        let tail = read_session_chat_transcript_tail_file(
+            file_path,
+            limit,
+            decode,
+            false,
+            None,
+            decode_lifecycle,
+            lineage,
+        )
+        .ok()?;
+        state.incremental.rebase(tail.consumed_to);
+        state
+            .incremental
+            .seed_queued_prompts(tail.outstanding_queued_prompts.clone());
+        state
+            .incremental
+            .seed_leaf_row_id(tail.newest_tree_row_id.clone());
+        // Pick up anything written after consumed_to before we settle.
+        let mut appended_lifecycle: Option<SessionChatTurnLifecycle> = None;
+        let mut capture_lifecycle =
+            |next: SessionChatTurnLifecycle| appended_lifecycle = Some(next);
+        let capture_lifecycle: &mut dyn FnMut(SessionChatTurnLifecycle) = &mut capture_lifecycle;
+        let mut appended = read_incremental_transcript_messages(
+            file_path,
+            &mut state.incremental,
+            decode,
+            None,
+            decode_lifecycle,
+            Some(capture_lifecycle),
+            lineage,
+        )
+        .unwrap_or_default();
+        // The window itself is already filtered, so anything the
+        // trailing read retracts can only be inside `appended`.
+        let superseded = state.incremental.take_superseded_prompt_ids();
+        if !superseded.is_empty() {
+            appended.retain(|message| !superseded.contains(&message.id));
+        }
+        /*
+        CDXC:SessionChatRewind 2026-09-02:
+        The rewind can be exactly what landed between the tail read and this
+        trailing read, and those rows are published raw. One retry re-takes the
+        window with them inside it, where the branch rules apply; the second
+        pass consumes them, so it cannot ask for a third.
+        */
+        if state.incremental.take_active_branch_change() && !retried {
+            retried = true;
+            state.incremental.reset();
+            continue;
+        }
+        return Some(FollowerDrainOutcome::Snapshot {
+            tail,
+            appended,
+            appended_lifecycle,
+            content_replaced,
+        });
+    }
 }
 
 pub(crate) fn follower_drain_once(
@@ -120,50 +193,17 @@ pub(crate) fn follower_drain_once(
     }
 
     let outcome = if want_snapshot || content_replaced {
-        match read_session_chat_transcript_tail_file(
+        match follower_snapshot_drain(
             file_path,
             limit,
             decode,
-            false,
-            None,
             decode_lifecycle,
             lineage,
+            state,
+            content_replaced,
         ) {
-            Err(_) => return FollowerDrainOutcome::Missing,
-            Ok(tail) => {
-                state.incremental.rebase(tail.consumed_to);
-                state
-                    .incremental
-                    .seed_queued_prompts(tail.outstanding_queued_prompts.clone());
-                // Pick up anything written after consumed_to before we settle.
-                let mut appended_lifecycle: Option<SessionChatTurnLifecycle> = None;
-                let mut capture_lifecycle =
-                    |next: SessionChatTurnLifecycle| appended_lifecycle = Some(next);
-                let capture_lifecycle: &mut dyn FnMut(SessionChatTurnLifecycle) =
-                    &mut capture_lifecycle;
-                let mut appended = read_incremental_transcript_messages(
-                    file_path,
-                    &mut state.incremental,
-                    decode,
-                    None,
-                    decode_lifecycle,
-                    Some(capture_lifecycle),
-                    lineage,
-                )
-                .unwrap_or_default();
-                // The window itself is already filtered, so anything the
-                // trailing read retracts can only be inside `appended`.
-                let superseded = state.incremental.take_superseded_prompt_ids();
-                if !superseded.is_empty() {
-                    appended.retain(|message| !superseded.contains(&message.id));
-                }
-                FollowerDrainOutcome::Snapshot {
-                    tail,
-                    appended,
-                    appended_lifecycle,
-                    content_replaced,
-                }
-            }
+            None => return FollowerDrainOutcome::Missing,
+            Some(outcome) => outcome,
         }
     } else if current.size != state.incremental.offset {
         let appended_from = state.incremental.offset;
@@ -222,7 +262,31 @@ pub(crate) fn follower_drain_once(
                         scan_claude_api_refusal(file_path, appended_from, state.incremental.offset)
                     })
                     .flatten();
-                if batches.is_empty()
+                /*
+                CDXC:SessionChatRewind 2026-09-02:
+                A prompt that re-attached above the leaf (or an explicit leaf
+                marker) makes the client's whole window wrong, not just the
+                rows in this drain: the dead branch it has to lose can reach
+                back past the top of that window. The append is therefore
+                dropped in favour of a fresh generation, which is the same
+                path a resubscribe takes and leaves the page memo consistent
+                with what the client is now holding.
+                */
+                if state.incremental.take_active_branch_change() {
+                    state.incremental.reset();
+                    match follower_snapshot_drain(
+                        file_path,
+                        limit,
+                        decode,
+                        decode_lifecycle,
+                        lineage,
+                        state,
+                        true,
+                    ) {
+                        None => return FollowerDrainOutcome::Missing,
+                        Some(outcome) => outcome,
+                    }
+                } else if batches.is_empty()
                     && lifecycle.is_none()
                     && superseded.is_empty()
                     && api_refusal.is_none()
@@ -590,6 +654,12 @@ fn emit_appended_frame(
 /// transcript it tails stays substantively stale.
 pub(crate) const SUCCESSOR_SCAN_INTERVAL: Duration = Duration::from_millis(30_000);
 
+/// CDXC:SessionChatStartingDetection 2026-09-01: once a still-transcriptless
+/// session's screen has settled, re-probe it only every this many resolve
+/// polls (~30s at the max backed-off poll), mirroring the resolved loop's
+/// idle steady tier.
+const UNRESOLVED_STEADY_PROBE_INTERVAL_PASSES: u64 = 6;
+
 fn now_epoch_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -646,6 +716,7 @@ async fn detect_and_adopt_successor_transcript(
     let scan_path = stale_path.to_path_buf();
     let scan_stale_session_id = stale_session_id.clone();
     let bound_agent_session_ids = hooks.bound_agent_session_ids.clone();
+    let pending_fork_child_since_ms = hooks.pending_fork_child_since_ms.clone();
     let outcome = tokio::task::spawn_blocking(move || {
         // Claude keys staleness on the last SUBSTANTIVE row because its dead
         // files keep taking null-timestamp housekeeping appends; Codex has no
@@ -664,12 +735,32 @@ async fn detect_and_adopt_successor_transcript(
         } else {
             find_codex_successor_transcript
         };
-        Some(find(
-            &scan_stale_session_id,
-            &scan_path,
-            last_record_ms,
-            &owned,
-        ))
+        let outcome = find(&scan_stale_session_id, &scan_path, last_record_ms, &owned);
+        /*
+        CDXC:SessionForkIdentity 2026-09-02:
+        A child forked from this session owns its transcript from the moment it
+        launches, even though it cannot say so until its first hook lands. A
+        proven successor that began after that launch is the child's
+        conversation, so it is reported as owned rather than adopted; see
+        `SessionChatSuccessorHooks::pending_fork_child_since_ms`.
+        */
+        let SessionChatSuccessorOutcome::Found(successor) = outcome else {
+            return Some(outcome);
+        };
+        let Some(pending_since_ms) = pending_fork_child_since_ms(&scan_stale_session_id) else {
+            return Some(SessionChatSuccessorOutcome::Found(successor));
+        };
+        let first_record_ms = if tails_claude_transcript {
+            first_substantive_transcript_timestamp_ms(&successor.path)
+        } else {
+            first_codex_record_timestamp_ms(&successor.path)
+        };
+        if first_record_ms.is_some_and(|first_ms| first_ms >= pending_since_ms) {
+            return Some(SessionChatSuccessorOutcome::OwnedByAnotherSession {
+                candidate_session_ids: vec![successor.agent_session_id],
+            });
+        }
+        Some(SessionChatSuccessorOutcome::Found(successor))
     })
     .await
     .ok()
@@ -805,6 +896,9 @@ pub async fn run_session_chat_follower(
     let mut emitted_starting = false;
     let mut resolved: Option<PathBuf> = None;
     let mut resolve_delay = INITIAL_RESOLVE_POLL;
+    // CDXC:SessionChatStartingDetection 2026-09-01: paces the slow steady
+    // re-probe of the resolve-poll branch once the launch screen has settled.
+    let mut unresolved_passes: u64 = 0;
     let mut file_state = FollowerFileState::new();
     // Rolling AskUserQuestion state folded over everything decoded so far, plus
     // the last prompt/working pair actually published to clients.
@@ -863,6 +957,9 @@ pub async fn run_session_chat_follower(
     let mut has_fork_ancestor = false;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
+    // CDXC:SessionChatCompactingStatus 2026-09-02: reconciles left in the
+    // back-to-back probe burst a `/compact` transcript row starts.
+    let mut activity_command_probe_ticks: u64 = 0;
 
     /*
     CDXC:SessionChatSeedDetection 2026-08-22:
@@ -912,9 +1009,76 @@ pub async fn run_session_chat_follower(
             .ok()
             .flatten();
             if resolved.is_none() {
-                if !emitted_starting {
-                    let live = read_live_state();
-                    let detection = read_cached_detection();
+                /*
+                CDXC:SessionChatStartingDetection 2026-09-01:
+                A freshly launched agent has no transcript file at all until its
+                first prompt (Claude creates the session .jsonl on the first
+                message), so this resolve-poll branch is the follower's ONLY
+                state for the whole pre-first-prompt phase — including the
+                moment the TUI paints its model/effort footer, seconds after
+                the subscribe-time seed probe read a still-blank screen.
+                Emitting one Starting frame and then polling only for the path
+                left the composer's model pill under its loading skeleton until
+                something else happened to refresh detection, which nothing was
+                obliged to ever do. So this branch probes too: every pass while
+                the screen has not settled (`attempted` covers launch paint and
+                the model settle grace), then on a slow steady cadence, and it
+                re-emits the Starting state frame whenever detection actually
+                changed. The first pass keeps reading the cache — the
+                subscribe's own seed probe just captured at t=0.
+                */
+                let live = read_live_state();
+                let probe_due = config.options_reader.is_some()
+                    && emitted_starting
+                    && (!published_screen_probed
+                        || unresolved_passes % UNRESOLVED_STEADY_PROBE_INTERVAL_PASSES == 0);
+                unresolved_passes = unresolved_passes.wrapping_add(1);
+                let detection = if probe_due {
+                    let reader = config.options_reader.clone();
+                    match tokio::time::timeout(
+                        STEADY_OPTION_DETECTION_DEADLINE,
+                        tokio::task::spawn_blocking(move || {
+                            reader
+                                .map(|reader| {
+                                    reader(
+                                        crate::session_chat_options::SessionChatOptionsReadMode::Refresh,
+                                    )
+                                })
+                                .unwrap_or_default()
+                        }),
+                    )
+                    .await
+                    {
+                        Ok(Ok(detection)) => detection,
+                        _ => read_cached_detection(),
+                    }
+                } else {
+                    read_cached_detection()
+                };
+                let activity =
+                    crate::session_chat_terminal_activity::publishable_session_chat_terminal_activity(
+                        live.working,
+                        detection.activity.clone(),
+                    );
+                let options_changed = detection
+                    .options
+                    .as_ref()
+                    .is_some_and(|detected| !detected.same_selection(published_options.as_ref()));
+                let starting_changed = options_changed
+                    || !crate::session_chat_notice::same_session_chat_terminal_notice(
+                        detection.notice.as_ref(),
+                        published_notice.as_ref(),
+                    )
+                    || !crate::session_chat_terminal_activity::same_session_chat_terminal_activity(
+                        activity.as_ref(),
+                        published_activity.as_ref(),
+                    )
+                    || !crate::session_chat_agent_fleet::same_session_chat_agent_fleet(
+                        detection.fleet.as_ref(),
+                        published_fleet.as_ref(),
+                    )
+                    || (detection.attempted && !published_screen_probed);
+                if !emitted_starting || starting_changed {
                     emit_state_frame(
                         &emit,
                         &config,
@@ -927,26 +1091,33 @@ pub async fn run_session_chat_follower(
                         SessionChatScreenState {
                             prompt: detection.prompt.as_ref(),
                             notice: detection.notice.as_ref(),
-                            activity: live
-                                .working
-                                .then_some(detection.activity.as_ref())
-                                .flatten(),
+                            activity: activity.as_ref(),
                             fleet: detection.fleet.as_ref(),
                             probed: published_screen_probed || detection.attempted,
                         },
                     );
+                    if options_changed {
+                        published_options = detection.options;
+                    }
                     published_notice = detection.notice;
-                    published_activity = if live.working {
-                        detection.activity
-                    } else {
-                        None
-                    };
+                    published_activity = activity;
                     published_fleet = detection.fleet;
+                    published_screen_probed = published_screen_probed || detection.attempted;
                     emitted_starting = true;
                 }
+                /*
+                An unsettled screen is a launching agent someone is watching:
+                hold the reconcile cadence so its footer paint reaches the
+                pill on the next second, instead of a backed-off resolve poll.
+                */
+                let poll_delay = if published_screen_probed {
+                    resolve_delay
+                } else {
+                    resolve_delay.min(config.tuning.reconcile_interval)
+                };
                 heartbeat.park();
                 tokio::select! {
-                    _ = tokio::time::sleep(resolve_delay) => {}
+                    _ = tokio::time::sleep(poll_delay) => {}
                     _ = resnapshot.notified() => {
                         epoch = stream.begin_generation();
                         emitted_starting = false;
@@ -1024,6 +1195,14 @@ pub async fn run_session_chat_follower(
                 // terminal-state notice with its snapshot, so it needs no
                 // separate read.
                 let snapshot_detection = read_cached_detection();
+                // The seed capture is the FIRST look a chat opened mid-compaction
+                // gets at the screen; the compacting row it finds is live
+                // whatever the hooks last said (CDXC:SessionChatCompactingStatus).
+                let snapshot_activity =
+                    crate::session_chat_terminal_activity::publishable_session_chat_terminal_activity(
+                        live.working,
+                        snapshot_detection.activity.clone(),
+                    );
                 let prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt)
                     .or_else(|| snapshot_detection.prompt.clone());
                 let lineage_path = resolved.clone().expect("resolved transcript path");
@@ -1053,10 +1232,7 @@ pub async fn run_session_chat_follower(
                     SessionChatScreenState {
                         prompt: None,
                         notice: snapshot_detection.notice.as_ref(),
-                        activity: live
-                            .working
-                            .then_some(snapshot_detection.activity.as_ref())
-                            .flatten(),
+                        activity: snapshot_activity.as_ref(),
                         fleet: snapshot_detection.fleet.as_ref(),
                         probed: published_screen_probed || snapshot_detection.attempted,
                     },
@@ -1066,11 +1242,7 @@ pub async fn run_session_chat_follower(
                     published_options = snapshot_detection.options;
                 }
                 published_notice = snapshot_detection.notice;
-                published_activity = if live.working {
-                    snapshot_detection.activity
-                } else {
-                    None
-                };
+                published_activity = snapshot_activity;
                 published_fleet = snapshot_detection.fleet;
                 published_prompt = prompt;
                 published_working = live.working;
@@ -1127,6 +1299,23 @@ pub async fn run_session_chat_follower(
                         &superseded,
                     );
                 } else {
+                    /*
+                    CDXC:SessionChatCompactingStatus 2026-09-02:
+                    A `/compact` row is the cue to look at the screen NOW rather
+                    than at the idle 30s tier: the user who typed it — in the
+                    composer or straight into the terminal, both record the
+                    same row — is watching for the card. The burst runs through
+                    the ordinary probe below, so what it finds is published and
+                    remembered by this one loop.
+                    */
+                    if batches.iter().flatten().any(|message| {
+                        crate::session_chat_terminal_activity::transcript_message_starts_session_chat_activity(
+                            config.agent.as_deref(),
+                            message,
+                        )
+                    }) {
+                        activity_command_probe_ticks = crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_COMMAND_PROBE_TICKS;
+                    }
                     let last_index = batches.len() - 1;
                     for (index, batch) in batches.iter().enumerate() {
                         transcript_prompt.advance(batch);
@@ -1167,10 +1356,12 @@ pub async fn run_session_chat_follower(
         let effective_prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt)
             .or_else(|| read_cached_detection().prompt);
         let became_ready = published_state_valid && published_working && !live.working;
-        // A `⏺` row remains in terminal scrollback after Claude stops. Clear
-        // that stale status on the ready transition, but retain Claude's
-        // explicit background-shell activity: those shells outlive the main
-        // turn by definition and the screen row is their liveness signal.
+        // A `⏺` row remains on Claude's primary screen after it stops. Clear
+        // that stale status on the ready transition, but retain the
+        // screen-proven kinds (`remains_live_when_ready`): a background shell
+        // outlives the main turn by definition, and a compaction is retired by
+        // the next whole capture that no longer shows its row, which the
+        // 1s activity tier below takes within a second of the `Compacted` line.
         if !live.working
             && !published_activity
                 .as_ref()
@@ -1270,7 +1461,11 @@ pub async fn run_session_chat_follower(
         } else {
             crate::session_chat_options::SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS
         };
-        let periodic_probe_due = became_ready || reconcile_ticks % probe_interval_ticks == 0;
+        let activity_command_probe_due = activity_command_probe_ticks > 0;
+        activity_command_probe_ticks = activity_command_probe_ticks.saturating_sub(1);
+        let periodic_probe_due = became_ready
+            || activity_command_probe_due
+            || reconcile_ticks % probe_interval_ticks == 0;
         if published_state_valid
             && config.options_reader.is_some()
             && (startup_probe_due || periodic_probe_due)
@@ -1702,7 +1897,50 @@ pub(crate) fn sync_session_chat_follower_for_session(
         let log_server_id = state.metadata.server_id.clone();
         let log_project_id = project_id.clone();
         let log_session_id = session_id.clone();
+        let child_paths = state.paths.clone();
+        let child_server_id = state.metadata.server_id.clone();
+        let child_project_id = project_id.clone();
+        let child_session_id = session_id.clone();
         crate::session_chat::SessionChatSuccessorHooks {
+            pending_fork_child_since_ms: Arc::new(move |scanned_agent_session_id| {
+                let read = || -> Option<i64> {
+                    let db = open_gxserver_database(&child_paths).ok()?;
+                    let repository = DomainRepository::new(&db, child_server_id.as_str());
+                    // Forks are created in the parent's project, so the
+                    // project list is the whole candidate set.
+                    let sessions = repository.list_sessions(Some(&child_project_id)).ok()?;
+                    sessions
+                        .iter()
+                        .filter(|candidate| {
+                            read_session_text(candidate, "sessionId").as_deref()
+                                != Some(child_session_id.as_str())
+                        })
+                        .filter(|candidate| {
+                            let forked_from = read_runtime_text(candidate, "forkedFromSessionId")
+                                .or_else(|| {
+                                    candidate
+                                        .get("launchSettings")
+                                        .and_then(Value::as_object)
+                                        .and_then(|settings| settings.get("forkedFromSessionId"))
+                                        .and_then(Value::as_str)
+                                        .map(str::to_string)
+                                });
+                            forked_from.as_deref() == Some(child_session_id.as_str())
+                        })
+                        .filter(|candidate| crate::agents::is_active_identity_owner(candidate))
+                        .filter(|candidate| {
+                            let claimed = read_runtime_text(candidate, "agentSessionId");
+                            claimed.is_none()
+                                || claimed.as_deref() == Some(scanned_agent_session_id)
+                        })
+                        .filter_map(|candidate| {
+                            read_session_text(candidate, "createdAt")
+                                .and_then(|value| crate::session_status::parse_iso_ms(&value))
+                        })
+                        .min()
+                };
+                read()
+            }),
             bound_agent_session_ids: Arc::new(move || {
                 let read = || -> Option<Vec<String>> {
                     let db = open_gxserver_database(&bound_paths).ok()?;
@@ -1910,19 +2148,33 @@ pub(crate) fn sync_session_chat_followers_for_all_sessions(state: &AppState, rea
         return;
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let Ok(sessions) = repository.list_sessions(None) else {
-        return;
-    };
+    /*
+    CDXC:GxserverSlimSessionQueries 2026-09-01:
+    Only the handful of SUBSCRIBED sessions matter here, so each one is looked
+    up by its primary key instead of hydrating the whole registry to throw all
+    but those rows away. A key that does not resolve to a row is exactly the
+    "vanished" case the sweep already handled by not marking it seen.
+    */
     let mut seen_keys: HashSet<String> = HashSet::new();
-    for session in sessions {
-        if let (Some(project_id), Some(session_id)) = (
-            read_session_text(&session, "projectId"),
-            read_session_text(&session, "sessionId"),
-        ) {
-            let key = session_observer_key(&project_id, &session_id);
-            if subscribed_keys.contains(&key) {
-                seen_keys.insert(key);
+    for key in &subscribed_keys {
+        let Some((project_id, session_id)) = key.split_once('/') else {
+            continue;
+        };
+        match repository.get_session(project_id, session_id) {
+            Ok(Some(session)) => {
+                seen_keys.insert(key.clone());
                 sync_session_chat_follower_for_session(state, &session, reason);
+            }
+            Ok(None) => {}
+            /*
+            CDXC:SessionChatFollowerLiveness 2026-08-24:
+            Only `Ok(None)` means the session is gone. A read error is the
+            database being busy, so the row counts as seen and its follower
+            keeps running — the whole-list version could not tear anything
+            down on a read error either.
+            */
+            Err(_) => {
+                seen_keys.insert(key.clone());
             }
         }
     }
@@ -1969,6 +2221,28 @@ pub(crate) fn stop_all_session_chat_followers(state: &AppState) {
     }
     if let Ok(mut cache) = state.session_chat_option_cache.lock() {
         cache.clear();
+    }
+}
+
+/// Asks a live follower to answer its subscribers with a fresh authoritative
+/// snapshot (new generation), exactly as a new subscriber would. No-op when
+/// nobody is following the session.
+///
+/// CDXC:SessionChatRewind 2026-09-02: the rewind driver calls this after
+/// recording a pending rewind, so every open chat view drops the rewound rows
+/// at once instead of waiting for the next transcript append.
+pub(crate) fn request_session_chat_resnapshot(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
+    let Ok(followers) = state.session_chat_followers.lock() else {
+        return;
+    };
+    if let Some(entry) = followers.get(&session_observer_key(project_id, session_id)) {
+        if entry.task.as_ref().is_some_and(|task| !task.is_finished()) {
+            entry.resnapshot.notify_one();
+        }
     }
 }
 

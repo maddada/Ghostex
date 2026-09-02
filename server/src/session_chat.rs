@@ -329,17 +329,47 @@ pub enum TranscriptQueueOp {
     Cleared,
 }
 
+/*
+CDXC:SessionChatRewind 2026-09-02:
+Claude Code's own resume loader reads `last-prompt` rows to decide which leaf a
+reopened conversation continues from. Only `explicit: true` rows are leaf
+markers: the harness also writes non-explicit ones as ordinary bookkeeping
+after a turn, and treating those as markers would truncate live conversations.
+`leafUuid: null` on an explicit row means the conversation was rewound to
+before its first message. A marker is void the moment any tree row is written
+after it, because that row is the new leaf.
+*/
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TranscriptLeafMarker {
+    /// `leafUuid` names the row the conversation was rewound to.
+    Row(String),
+    /// `leafUuid: null`, i.e. rewound to before the first message.
+    Empty,
+}
+
+impl TranscriptLeafMarker {
+    pub fn leaf_id(&self) -> Option<&str> {
+        match self {
+            Self::Row(id) => Some(id.as_str()),
+            Self::Empty => None,
+        }
+    }
+}
+
 /// One row's position in a transcript that is a message TREE rather than a
 /// flat log. Only Claude writes one (`uuid` / `parentUuid`); Pi has its own
 /// tree reader, and the Codex/Grok rollouts are linear. Queue bookkeeping rows
-/// ride the same extractor because they are the only other rows whose meaning
-/// spans lines.
+/// and `last-prompt` leaf markers ride the same extractor because they are the
+/// only other rows whose meaning spans lines.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TranscriptLineage {
     pub id: String,
     pub parent_id: Option<String>,
     #[allow(clippy::struct_field_names)]
     pub queue: Option<TranscriptQueueOp>,
+    /// Set only on an explicit `last-prompt` row, which carries no `uuid` and
+    /// is never part of the tree itself.
+    pub leaf_marker: Option<TranscriptLeafMarker>,
 }
 
 /// `(line, fallback_id)` — queue rows carry no `uuid`, so they are identified
@@ -384,8 +414,18 @@ Measured over the 80 most recent local transcripts this drops 16 rows, every one
 a re-sent or revised submission; "keep only the leaf chain" dropped 9k rows and
 "keep the newest child of every parent" 9.2k.
 
-Because the superseded row has no message descendants by construction, nothing
-downstream of it needs pruning too.
+CDXC:SessionChatRewind 2026-09-02 (generalized to whole subtrees):
+The rule above only ever fired on a prompt with NO message descendants, so a
+`/rewind` → "Restore conversation" left its abandoned turns in chat: the rewind
+writes nothing at the time, and the next prompt lands as a SECOND prompt child
+of the rewound leaf while the answered rows in between stay in the file. The
+read path therefore drops the older prompt sibling AND everything descending
+from it (`session_chat_branch.rs`), which subsumes the no-descendants case
+because that subtree is empty. Still not the leaf chain: only a real prompt
+sibling can retract a branch, so compaction and resume boundaries, which break
+the chain without ever producing two prompts on one parent, are untouched.
+Re-measured over the 120 most recent local transcripts: 2,065 of 55,622 rows,
+in 12 files, every drop a rewind or a revised re-send.
 */
 pub(crate) fn parse_json_object(line: &str) -> Option<Map<String, Value>> {
     let trimmed = line.trim();
@@ -646,6 +686,16 @@ pub struct SessionChatIncrementalState {
     while the queue itself keeps waiting.
     */
     queued_prompts: VecDeque<(String, String)>,
+    /*
+    CDXC:SessionChatRewind 2026-09-02:
+    The newest tree row the stream has seen, seeded from the tail read after
+    every snapshot. An ordinary prompt names it as its parent; a prompt that
+    names anything else re-attaches further up the tree, which is a rewind and
+    is answered by a fresh generation instead of an append, because retracting
+    a whole dead subtree row by row would race the client's own ordering.
+    */
+    leaf_row_id: Option<String>,
+    active_branch_changed: bool,
 }
 
 impl SessionChatIncrementalState {
@@ -660,6 +710,8 @@ impl SessionChatIncrementalState {
             unanswered_prompt_parents: HashMap::new(),
             superseded_prompt_ids: Vec::new(),
             queued_prompts: VecDeque::new(),
+            leaf_row_id: None,
+            active_branch_changed: false,
         }
     }
 
@@ -673,6 +725,8 @@ impl SessionChatIncrementalState {
         self.unanswered_prompt_parents.clear();
         self.superseded_prompt_ids.clear();
         self.queued_prompts.clear();
+        self.leaf_row_id = None;
+        self.active_branch_changed = false;
     }
 
     /// Hands the tail read's still-waiting queue entries to the append stream
@@ -688,14 +742,34 @@ impl SessionChatIncrementalState {
         std::mem::take(&mut self.superseded_prompt_ids)
     }
 
+    /// Hands the tail read's active leaf to the append stream. Call AFTER
+    /// `rebase`, like `seed_queued_prompts`.
+    pub fn seed_leaf_row_id(&mut self, leaf_row_id: Option<String>) {
+        self.leaf_row_id = leaf_row_id;
+    }
+
+    /// `true` once this stream has seen a row that moved the conversation onto
+    /// another branch. Drained by the follower, which answers with a snapshot.
+    pub fn take_active_branch_change(&mut self) -> bool {
+        std::mem::take(&mut self.active_branch_changed)
+    }
+
     fn observe_lineage(&mut self, row: &TranscriptLineage, message: Option<&SessionChatMessage>) {
         if let Some(queue_op) = row.queue.as_ref() {
             self.observe_queue_operation(queue_op, &row.id);
             return;
         }
+        if row.leaf_marker.is_some() {
+            // An explicit leaf marker appended live IS the rewind.
+            self.active_branch_changed = true;
+            return;
+        }
+        // Every tree row is the leaf until the next one lands, including the
+        // hook `attachment` and `system` rows that decode to nothing.
+        let previous_leaf = self.leaf_row_id.replace(row.id.clone());
         let Some(message) = message else {
             // Hook `attachment` and bookkeeping rows are neither an answer nor
-            // a re-taken branch (see `superseded_prompt_id`).
+            // a re-taken branch (see `session_chat_branch`).
             return;
         };
         let Some(parent_id) = row.parent_id.clone() else {
@@ -706,7 +780,7 @@ impl SessionChatIncrementalState {
             self.unanswered_prompt_by_parent
                 .remove(&settled_prompt_parent);
         }
-        if message.role != SessionChatRole::User {
+        if !crate::session_chat_branch::transcript_message_is_branch_prompt(Some(message)) {
             return;
         }
         // A second PROMPT on the same parent means the branch was re-taken, so
@@ -716,6 +790,15 @@ impl SessionChatIncrementalState {
                 self.unanswered_prompt_parents.remove(&abandoned);
                 self.superseded_prompt_ids.push(abandoned);
             }
+        } else if previous_leaf.is_some_and(|leaf| leaf != parent_id) {
+            /*
+            The prompt skipped the leaf and re-attached further up: everything
+            between its parent and the old leaf is a dead branch now. The
+            retraction channel only carries ids the client already has, and the
+            dead rows can be older than its window, so this is answered with a
+            fresh generation instead.
+            */
+            self.active_branch_changed = true;
         }
         self.unanswered_prompt_by_parent
             .insert(parent_id.clone(), row.id.clone());
