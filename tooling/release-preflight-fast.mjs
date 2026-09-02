@@ -9,6 +9,8 @@ import {
   releaseBuildVersion,
   validateMajorMinorReleaseNotes,
 } from './release-ghostex.mjs';
+import { RELEASE_BUILD_SCRIPTS, runReleaseBuildScripts } from './release-preflight-build-scripts.mjs';
+import { formatToolingImportViolation, scanToolingImports } from './release-preflight-tooling-imports.mjs';
 import {
   SPARKLE_KEY_SOURCE,
   evaluatePreflightLiteralProbes,
@@ -92,6 +94,7 @@ Options:
   --cargo                    Also run cargo check for server and gpui.
   --skip-tests               Skip bun run release:test.
   --skip-typecheck           Skip bun run typecheck.
+  --skip-build-scripts       Skip running the release JS build scripts locally.
   --skip-credentials         Skip gh/signing/notary credential probes.
   --allow-concurrent-sessions
                              Release even though another agent session is
@@ -112,6 +115,7 @@ function parseArgs(argv) {
     cargo: false,
     freezeSeconds: 45,
     releaseBranch: 'main',
+    skipBuildScripts: false,
     skipCredentials: false,
     skipFreeze: false,
     skipTests: false,
@@ -129,6 +133,8 @@ function parseArgs(argv) {
       options.skipTests = true;
     } else if (arg === '--skip-typecheck') {
       options.skipTypecheck = true;
+    } else if (arg === '--skip-build-scripts') {
+      options.skipBuildScripts = true;
     } else if (arg === '--skip-credentials') {
       options.skipCredentials = true;
     } else if (arg === '--allow-concurrent-sessions') {
@@ -489,12 +495,48 @@ async function checkSparkleKey() {
   return pass('EdDSA key matches the shipped SUPublicEDKey');
 }
 
+/*
+ CDXC:ReleaseAutomation 2026-09-02-12:40:
+ 8.5.0's first run died in the Android job on `Cannot find package 'esbuild'`:
+ tooling/build-mobile-chat.mjs imported it, nothing declared it, and it only
+ resolved through hoisting luck. Two stages close that gap. This one is instant
+ and structural - every bare import under tooling/ must be declared in the root
+ package.json - so it runs with the fast checks.
+*/
+async function checkToolingImports() {
+  const { files, violations } = await scanToolingImports();
+  if (violations.length > 0) {
+    return fail(
+      `${violations.length} undeclared package import(s); declare them in package.json and run bun install: ${violations.map(formatToolingImportViolation).join('; ')}`
+    );
+  }
+  return pass(`${files.length} tooling files import only declared packages`);
+}
+
 async function checkTypecheck() {
   const result = await runCommand('bun run typecheck', { timeoutMs: 8 * 60 * 1000 });
   if (result.code !== 0) {
     return fail(shortOutput(result.stderr || result.stdout, 10));
   }
   return pass('tsc clean');
+}
+
+/*
+ The second half of the esbuild lesson: actually run every JS build script the
+ release workflows execute (mobile chat page, sidebar CSS, desktop CEF bundle),
+ so a script that cannot load or cannot build fails here in seconds rather than
+ minutes into a runner. The list, its CI callers, and the tracked-output
+ safeguards live in tooling/release-preflight-build-scripts.mjs.
+*/
+async function checkBuildScripts() {
+  const { failure, results } = await runReleaseBuildScripts();
+  if (failure) {
+    return fail(`${failure.command} (${failure.caller}): ${shortOutput(failure.detail, 12)}`);
+  }
+  const timings = results.map(
+    (result) => `${result.command.replace(/^bun(?:x)? (?:run )?/, '')} ${formatDuration(result.durationMs)}`
+  );
+  return pass(`${RELEASE_BUILD_SCRIPTS.length} release build scripts ran clean (${timings.join(', ')})`);
 }
 
 async function checkReleaseTests() {
@@ -638,6 +680,7 @@ async function main() {
   const fastChecks = [
     { fn: () => checkBranch(options), name: 'branch' },
     { fn: () => checkWorktreeClean(), name: 'worktree-clean' },
+    { fn: () => checkToolingImports(), name: 'tooling-imports' },
     { fn: () => checkSyncedWithOrigin(options), name: 'synced-with-origin' },
     { fn: () => checkTagMissing(options), name: 'tag-missing' },
     { fn: () => checkReleaseMissing(options), name: 'github-release-missing' },
@@ -661,6 +704,9 @@ async function main() {
   const heavyChecks = [];
   if (!options.skipTypecheck) {
     heavyChecks.push({ fn: () => checkTypecheck(), name: 'typecheck' });
+  }
+  if (!options.skipBuildScripts) {
+    heavyChecks.push({ fn: () => checkBuildScripts(), name: 'build-scripts' });
   }
   if (!options.skipTests) {
     heavyChecks.push({ fn: () => checkReleaseTests(), name: 'release-tests' });
