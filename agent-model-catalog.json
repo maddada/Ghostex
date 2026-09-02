@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-09-02",
+  "updatedAt": "2026-09-03",
   "effortLabels": {
     "none": "None",
     "minimal": "Minimal",
@@ -228,6 +228,14 @@
           "fastMode": true
         },
         {
+          "value": "gemini-3.8-flash",
+          "label": "Gemini 3.8 Flash",
+          "pickerLabel": "Gemini 3.8 Flash",
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "high",
+          "fastMode": false
+        },
+        {
           "value": "gemini-3.7-flash",
           "label": "Gemini 3.7 Flash",
           "pickerLabel": "Gemini 3.7 Flash",
@@ -418,7 +426,7 @@
           "fastMode": false
         }
       ],
-      "notes": "Labels drop the 'Claude' and 'Cursor' words the TUI shows; pickerLabel is the exact row text the /model filter needs."
+      "notes": "Labels drop the 'Claude' and 'Cursor' words the TUI shows; pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash)."
     },
     "grok": {
       "name": "Grok Build",
@@ -447,6 +455,79 @@
           "label": "Grok 4.5",
           "pickerLabel": "Grok 4.5",
           "efforts": ["low", "medium", "high"],
+          "fastMode": false
+        }
+      ]
+    },
+    "antigravity": {
+      "name": "Antigravity CLI",
+      "cliVersion": "1.1.24",
+      "modelCommand": "/model <value>-<effort> for models with efforts, /model <value> otherwise; ids from `agy models`",
+      "effortCommand": null,
+      "efforts": ["low", "medium", "high"],
+      "fastMode": {
+        "available": false,
+        "command": null,
+        "scope": null,
+        "notes": "No /fast entry in the slash-command list; no Fast toggle in /model."
+      },
+      "notes": "The /model picker is a list with an Effort slider under models that have one (←/→). `agy models` flattens model and effort into one id (gemini-3.8-flash-high); Ghostex keys rows by the model part and appends the effort when it types the command. Labels drop the parenthetical the TUI shows; pickerLabel keeps it.",
+      "models": [
+        {
+          "value": "gemini-3.8-flash",
+          "label": "Gemini 3.8 Flash",
+          "pickerLabel": "Gemini 3.8 Flash",
+          "default": true,
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "high",
+          "fastMode": false
+        },
+        {
+          "value": "gemini-3.7-flash",
+          "label": "Gemini 3.7 Flash",
+          "pickerLabel": "Gemini 3.7 Flash",
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "low",
+          "fastMode": false
+        },
+        {
+          "value": "gemini-3.6-flash",
+          "label": "Gemini 3.6 Flash",
+          "pickerLabel": "Gemini 3.6 Flash",
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "low",
+          "fastMode": false
+        },
+        {
+          "value": "gemini-3.1-pro",
+          "label": "Gemini 3.1 Pro",
+          "pickerLabel": "Gemini 3.1 Pro",
+          "efforts": ["low", "high"],
+          "defaultEffort": "low",
+          "fastMode": false
+        },
+        {
+          "value": "claude-sonnet-4-6",
+          "label": "Claude Sonnet 4.6",
+          "pickerLabel": "Claude Sonnet 4.6 (Thinking)",
+          "description": "Thinking",
+          "efforts": [],
+          "fastMode": false
+        },
+        {
+          "value": "claude-opus-4-6-thinking",
+          "label": "Claude Opus 4.6",
+          "pickerLabel": "Claude Opus 4.6 (Thinking)",
+          "description": "Thinking",
+          "efforts": [],
+          "fastMode": false
+        },
+        {
+          "value": "gpt-oss-120b-medium",
+          "label": "GPT-OSS 120B",
+          "pickerLabel": "GPT-OSS 120B (Medium)",
+          "description": "Medium reasoning",
+          "efforts": [],
           "fastMode": false
         }
       ]

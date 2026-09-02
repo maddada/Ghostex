@@ -1,7 +1,8 @@
 # Agent model catalog: how to update it and how to re-collect it
 
 `agent-model-catalog.json` at the repository root lists, for every agent CLI
-Ghostex drives (Claude Code, Codex, Cursor CLI, Grok Build), the models its
+Ghostex drives (Claude Code, Codex, Cursor CLI, Grok Build, Antigravity CLI),
+the models its
 `/model` picker offers, the effort levels each model accepts, and whether the
 CLI has a fast mode. It is published from `main` at
 
@@ -39,7 +40,7 @@ Top level:
 | `schemaVersion` | Must be `1`. A document with another version is rejected by every client, so never bump it casually.    |
 | `updatedAt`     | ISO date. Bump it on every edit; it decides between the bundled and cached copies.                       |
 | `effortLabels`  | Effort id to display label (`xhigh` to "Extra high"). Add an entry for every effort id used below.       |
-| `agents`        | Keyed by Ghostex agent id: `claude`, `codex`, `cursor`, `grok`. Other keys are ignored.                  |
+| `agents`        | Keyed by Ghostex agent id: `claude`, `codex`, `cursor`, `grok`, `antigravity`. Other keys are ignored.   |
 
 Per agent (`agents.<id>`):
 
@@ -75,6 +76,11 @@ Label conventions already applied, keep them:
 - Claude's "Default (recommended)" row is Opus 5 with 1M context, the same
   model as the `opus` row, so it is not listed twice. Haiku 4.5 is given
   `efforts: []`.
+- Antigravity's `value` is the MODEL part of the ids `agy models` prints
+  (`gemini-3.8-flash`, not `gemini-3.8-flash-high`); the client appends
+  `-<effort>` when it types `/model`. Rows without efforts (`claude-sonnet-4-6`,
+  `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`) use the full id and drop
+  the TUI's parenthetical from `label`, keeping it in `pickerLabel`.
 
 ## Editing the file
 
@@ -85,7 +91,8 @@ Label conventions already applied, keep them:
    does not parse).
 4. If a `value` was added or renamed, update the matching detection table in
    `server/src/session_chat_options.rs` (`CLAUDE_MODEL_FAMILIES`,
-   `CLAUDE_EFFORTS`, `CODEX_EFFORTS`, `CURSOR_MODEL_LABELS`, `GROK_EFFORTS`)
+   `CLAUDE_EFFORTS`, `CODEX_EFFORTS`, `CURSOR_MODEL_LABELS`, `GROK_EFFORTS`;
+   Antigravity has no detection table yet)
    so gxserver keeps mapping what the TUI prints onto the new value, then run
    `cargo check` from inside `server/`.
 5. Commit and push to `main`. Clients pick the change up on their next page
@@ -97,7 +104,8 @@ Do this whenever a CLI update changes its picker. Everything is read from the
 real TUIs and driven through the Ghostex CLI, so it is reproducible and leaves
 the shared checkout alone. The 2026-09-02 run, with raw transcripts and the
 walk scripts, is in `docs/2026-09-02/agent-model-catalog/` (local, `docs/` is
-gitignored).
+gitignored). The 2026-09-03 refresh added Cursor's Gemini 3.8 Flash and the
+Antigravity CLI (1.1.24).
 
 ### 1. Scratch sessions
 
@@ -110,11 +118,26 @@ mkdir -p /tmp/model-inventory && git -C /tmp/model-inventory init -q
 gx terminal --cwd /tmp/model-inventory --title seed -- true   # registers the project; note its projectId
 gx create-session inv-claude --start --project-id <projectId>
 gx send-message inv-claude "claude"
-# same for inv-codex ("codex"), inv-cursor ("cursor-agent"), inv-grok ("grok")
+# same for inv-codex ("codex"), inv-cursor ("cursor-agent"), inv-grok ("grok"), inv-agy ("agy")
 ```
 
 Answer the first-run trust prompts: Claude `send-key arrow-down` then
-`send-enter`; Codex `send-enter`; Cursor `send-text a`; Grok has none.
+`send-enter`; Codex `send-enter`; Cursor `send-text a`; Antigravity
+`send-enter` ("Yes, I trust this folder"); Grok has none.
+
+If the scratch project is not in the sidebar space the CLI lists (the
+`sessions` output never shows it), drive the TUIs through tmux instead, which
+is what the 2026-09-03 run did:
+
+```sh
+tmux -L inv new-session -d -s agy -x 140 -y 45 -c /tmp/model-inventory 'agy'
+tmux -L inv send-keys -t agy -l "/model"; tmux -L inv send-keys -t agy Enter
+tmux -L inv capture-pane -p -t agy
+tmux -L inv kill-server
+```
+
+`send-keys -l` types literal text; `Down`, `Up`, `Tab`, `Escape`, `Enter` are
+the key names.
 
 ### 2. Model list
 
@@ -138,6 +161,13 @@ gx read-text inv-claude --visible
   with `cursor-agent --list-models`.
 - Grok: `Enter` on a model shows its effort rows; the composer placeholder
   documents the direct form `/model <model> [effort]`. `grok models` lists ids.
+- Antigravity: `/model` lists every model with an Effort slider (`arrow-left`
+  / `arrow-right`, stops are the model's efforts) under the highlighted row;
+  rows without a slider have no efforts. `agy models` prints the flattened
+  `<model>-<effort>` ids the direct form `/model <id>` accepts; the bare model
+  id is rejected with "requires effort (available: ...)", which is a second way
+  to read a model's efforts. Selecting a row persists it, so finish with
+  `/model <the id the footer showed at launch>`.
 
 ### 3. Fast mode
 
@@ -149,6 +179,7 @@ Type `/` and read the command list, then run the command on a scratch session:
 - Cursor: the "Fast" checkbox in the Tab panel; `--list-models` mirrors it as
   `-fast` ids.
 - Grok: no fast entry.
+- Antigravity: no fast entry (`/fast` shows "No matches").
 
 ### 4. Gotchas
 
