@@ -1445,15 +1445,22 @@ impl GhostexGpuiApp {
         };
         let ready_timeout_open_message = open_message.clone();
         let ready_timeout_sidebar_state_message = sidebar_state_message.clone();
+        let sidebar_has_projects = sidebar_state_message
+            .get("hud")
+            .and_then(|hud| hud.get("projectSettingsProjects"))
+            .and_then(serde_json::Value::as_array)
+            .is_some_and(|projects| !projects.is_empty());
         self.app_modal_window = cx
             .open_window(options, |modal_window, cx| {
                 modal_window.activate_window();
-                if modal == GpuiAppModalKind::FirstLaunchSetup {
+                if modal == GpuiAppModalKind::FirstLaunchSetup && !sidebar_has_projects {
                     /*
-                    First-launch setup is completed only by its successful
-                    first-project action. Reject native close controls and
-                    Cmd-W while it is open; the completion bridge removes the
-                    window programmatically after persisting completion.
+                    First-launch setup is required until the sidebar has a
+                    project. Reject native close controls and Cmd-W while it
+                    is open; the completion bridge removes the window
+                    programmatically after persisting completion. Once any
+                    project exists the user may leave through the window
+                    chrome, and the close handler records completion.
                     */
                     modal_window.on_window_should_close(cx, |_window, _cx| false);
                 }
@@ -1607,6 +1614,11 @@ impl GhostexGpuiApp {
         let closed_modal = handle
             .update(cx, |host, _window, _cx| host.current_modal)
             .ok();
+        if closed_modal == Some(GpuiAppModalKind::FirstLaunchSetup) {
+            // Native close is only allowed once the sidebar has a project, so
+            // leaving through the window chrome counts as finishing setup.
+            self.complete_first_launch_setup();
+        }
 
         self.app_modal_window = None;
         self.app_modal_window_id.set(None);

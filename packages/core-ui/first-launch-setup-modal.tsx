@@ -96,6 +96,10 @@ export type FirstLaunchSetupModalProps = {
   initialPage?: FirstLaunchSetupPage;
   isOpen: boolean;
   onClose: () => void;
+  /** True when the sidebar already lists at least one project, which makes the
+   * setup flow optional: the dialog can be dismissed and the last step ends
+   * with Finish instead of adding a first project. */
+  hasProjects?: boolean;
   onChange: (settings: ghostexSettings) => void;
   onInstallAgentHooks?: (agentIds?: readonly string[]) => void;
   onInstallCliSkill?: () => void;
@@ -772,6 +776,7 @@ export function FirstLaunchSetupModal({
   ghostexCliStatusLoading = false,
   initialPage = FIRST_LAUNCH_SETUP_PAGES[0],
   isOpen,
+  hasProjects = false,
   onClose,
   onFinishFirstLaunch,
   onInstallAgentHooks,
@@ -916,6 +921,13 @@ export function FirstLaunchSetupModal({
 
   const handleContinue = () => {
     if (isLastPage) {
+      if (hasProjects) {
+        if (activePage === 'extensions') {
+          commitPluginsDraft(pluginsDraft);
+        }
+        onClose();
+        return;
+      }
       if (onPickProjectFolder) {
         setFinishError(undefined);
         onPickProjectFolder();
@@ -1024,11 +1036,17 @@ export function FirstLaunchSetupModal({
   return (
     <Dialog
       /*
-       * First-launch setup is a required flow. Escape and dialog dismissal
-       * requests must leave this controlled dialog open; the successful
-       * first-project path below is its only completion boundary.
+       * First-launch setup is a required flow until the sidebar has a project.
+       * Without one, Escape and dialog dismissal requests must leave this
+       * controlled dialog open; the successful first-project path below is its
+       * only completion boundary. With a project already present the flow is
+       * optional, so dismissal simply closes it.
        */
-      onOpenChange={() => undefined}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && hasProjects) {
+          onClose();
+        }
+      }}
       open={isOpen}
     >
       <DialogContent
@@ -1037,7 +1055,11 @@ export function FirstLaunchSetupModal({
           getSidebarThemeVariant(theme) === 'dark' && 'dark'
         )}
         data-sidebar-theme={theme}
-        onEscapeKeyDown={(event) => event.preventDefault()}
+        onEscapeKeyDown={(event) => {
+          if (!hasProjects) {
+            event.preventDefault();
+          }
+        }}
       >
         <DialogHeader className='first-launch-setup-header'>
           <DialogTitle className='first-launch-setup-dialog-title'>Welcome to Ghostex</DialogTitle>
@@ -1273,7 +1295,7 @@ export function FirstLaunchSetupModal({
                   Join our Discord!
                 </Button>
                 <Button disabled={isFinishing} onClick={handleContinue} type='button'>
-                  {isFinishing ? 'Adding Project…' : 'Add 1st project'}
+                  {hasProjects ? 'Finish' : isFinishing ? 'Adding Project…' : 'Add 1st project'}
                   <IconArrowRight aria-hidden='true' data-icon='inline-end' />
                 </Button>
               </>

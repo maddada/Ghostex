@@ -2384,6 +2384,7 @@ function AppModalHost() {
         agentHookStatusLoading={agentHookStatusLoading}
         ghostexCliStatus={ghostexCliStatus}
         ghostexCliStatusLoading={ghostexCliStatusLoading}
+        hasProjects={projectSettingsProjects.length > 0}
         isOpen={isFirstLaunchSetupRenderable}
         onChange={(nextSettings) => {
           vscode.postMessage({
