@@ -1,19 +1,10 @@
 use std::{
     collections::{BTreeMap, HashSet},
-    env, fs, io,
+    env, fs,
     path::{Component, Path, PathBuf},
-    process::{ExitStatus, Output, Stdio},
-    sync::{Arc, Mutex},
 };
 
 use serde_json::{json, Map, Value};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    process::Command,
-    sync::mpsc,
-    task::JoinHandle,
-    time::{sleep, Duration},
-};
 
 use crate::{domain::DomainStateError, paths::GxserverPaths};
 
@@ -58,22 +49,22 @@ pub const GHOSTEX_SKILLS_CLI_AGENT_IDS: &[&str] = &[
     "hermes-agent",
 ];
 
-const AGENT_SKILL_INSTALL_ENV_OVERRIDES: &[&str] = &[
-    "CLAUDE_CONFIG_DIR",
-    "CLAUDE_PROFILE",
-    "CODEX_HOME",
-    "CODEX_PROFILE",
-];
 const AGENT_SKILL_DISCOVERY_MAX_DEPTH: usize = 8;
-const AGENT_SKILL_INSTALL_EXITED_READER_DRAIN_MS: u64 = 1_000;
 /*
-CDXC:AgentSkills 2026-06-22-07:21:
-The TypeScript daemon used execFile maxBuffer=10 MiB for agent-skill installs. Keep server at the same stdout/stderr byte ceiling while retaining the Rust runner's explicit process termination and captured-output reporting.
+CDXC:NativeAgentSkillInstall 2026-09-02:
+Bundled skill installs used to shell out to `npx --yes skills add … --global
+--copy`, which made first-launch setup depend on a Node runtime being on the
+app's PATH (nvm/fnm installs are not) and on the npm registry being reachable,
+and the desktop side killed the whole install after 120 seconds. Users saw this
+as "Ghostex CLI install failed" because `$ghostex-cli` is the first skill the
+first-launch flow installs. gxserver now copies the bundled skill folders itself
+into exactly the global skill directories that `skills add --global --copy`
+would have written, so an install needs nothing but the app bundle on disk.
+Directory names below mirror the `skills` CLI agent table (universal agents
+resolve to the canonical `~/.agents/skills`).
 */
-const AGENT_SKILL_INSTALL_OUTPUT_LIMIT_BYTES: usize = 10 * 1024 * 1024;
-const AGENT_SKILL_INSTALL_POLL_MS: u64 = 25;
-const AGENT_SKILL_INSTALL_TERMINATED_READER_DRAIN_MS: u64 = 250;
-const AGENT_SKILL_INSTALL_TIMEOUT_MS: u64 = 5 * 60 * 1000;
+const CANONICAL_AGENT_SKILLS_DIR: &str = ".agents/skills";
+const AGENT_SKILL_COPY_EXCLUDED_NAMES: &[&str] = &[".git", "node_modules", ".DS_Store"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AgentSkillDiscoveryRoot {
@@ -116,62 +107,276 @@ pub async fn install_agent_skills(
             "Agent skill installs require at least one Ghostex agent skill.",
         ));
     }
-    let install_command = build_gxserver_agent_skill_install_command(
-        &package_source,
-        &skill_names,
-        read_string_array(params, "agentIds")?,
-    );
-    let output = run_agent_skill_install_command(paths, &package_source, &install_command).await?;
+    if is_uri_like(&package_source) {
+        return Err(DomainStateError::bad_request(
+            "Agent skill installs copy from a local skills directory; remote package sources are not supported.",
+        ));
+    }
+    let agent_ids = normalize_agent_skill_agent_ids(read_string_array(params, "agentIds")?);
+    let target_roots = agent_skill_install_target_roots(&paths.home_dir, &agent_ids)?;
+    let mut installed_paths = Vec::new();
+    let mut summary_lines = Vec::new();
+    for skill_name in &skill_names {
+        let source_dir = resolve_bundled_skill_source_dir(&package_source, skill_name)?;
+        let mut installed_count = 0_usize;
+        for target_root in &target_roots {
+            let destination = target_root.join(skill_name);
+            if copy_skill_directory_into_place(&source_dir, &destination)? {
+                installed_paths.push(path_string(&destination));
+                installed_count += 1;
+            }
+        }
+        summary_lines.push(format!(
+            "Installed {skill_name} into {installed_count} global skill folder(s)."
+        ));
+    }
+    let install_command =
+        describe_agent_skill_install_command(&package_source, &skill_names, &agent_ids);
     let mut status = read_agent_skill_status_for_names(paths, params, skill_names)?
         .as_object()
         .cloned()
         .unwrap_or_default();
     status.insert("installCommand".to_string(), json!(install_command));
+    status.insert("installedPaths".to_string(), json!(installed_paths));
     status.insert("packageSource".to_string(), json!(package_source));
-    status.insert(
-        "stderr".to_string(),
-        json!(String::from_utf8_lossy(&output.stderr).to_string()),
-    );
+    status.insert("stderr".to_string(), json!(""));
     status.insert(
         "stdout".to_string(),
-        json!(String::from_utf8_lossy(&output.stdout).to_string()),
+        json!(format!("{}\n", summary_lines.join("\n"))),
     );
     Ok(Value::Object(status))
 }
 
-pub fn build_gxserver_agent_skill_install_command(
+/// The equivalent CLI invocation, kept in the install result so clients that
+/// display what ran keep working after the move away from `npx skills add`.
+fn describe_agent_skill_install_command(
     package_source: &str,
     skill_names: &[String],
-    agent_ids: Option<Vec<String>>,
+    agent_ids: &[String],
 ) -> Vec<String> {
-    let agent_ids = normalize_agent_skill_agent_ids(agent_ids);
     let mut command = vec![
-        "npx".to_string(),
-        "--yes".to_string(),
-        "skills".to_string(),
-        "add".to_string(),
-        package_source.to_string(),
-        "--skill".to_string(),
+        "gxserver".to_string(),
+        "agent-skills".to_string(),
+        "install".to_string(),
     ];
     command.extend(skill_names.iter().cloned());
-    command.push("--global".to_string());
+    command.push("--source".to_string());
+    command.push(package_source.to_string());
     command.push("--agent".to_string());
-    command.extend(agent_ids);
-    command.push("--copy".to_string());
-    command.push("-y".to_string());
+    command.extend(agent_ids.iter().cloned());
     command
 }
 
-pub fn create_gxserver_agent_skill_install_environment(
-    paths: &GxserverPaths,
-    environment: &BTreeMap<String, String>,
-) -> BTreeMap<String, String> {
-    let mut install_environment = environment.clone();
-    install_environment.insert("HOME".to_string(), path_string(&paths.home_dir));
-    for key in AGENT_SKILL_INSTALL_ENV_OVERRIDES {
-        install_environment.remove(*key);
+/// Global skill directory for one `skills`-CLI agent id, relative to the
+/// selected HOME. Universal agents share the canonical `~/.agents/skills`.
+/// Profile overrides such as CLAUDE_CONFIG_DIR and CODEX_HOME are deliberately
+/// ignored, matching the environment the old `npx` runner stripped before
+/// spawning, so installs always land in the default global locations that the
+/// status reader inspects.
+pub fn agent_skill_global_dir(home_dir: &Path, agent_id: &str) -> Option<PathBuf> {
+    let relative = match agent_id {
+        "universal" | "agent-skills" | "amp" | "cursor" | "opencode" => {
+            return Some(home_dir.join(CANONICAL_AGENT_SKILLS_DIR));
+        }
+        "claude-code" => ".claude/skills",
+        "codex" => ".codex/skills",
+        "gemini-cli" => ".gemini/skills",
+        "pi" => ".pi/agent/skills",
+        "antigravity" => ".gemini/antigravity/skills",
+        "antigravity-cli" => ".gemini/antigravity-cli/skills",
+        "kiro-cli" => ".kiro/skills",
+        "droid" => ".factory/skills",
+        "github-copilot" => ".copilot/skills",
+        "qoder" => ".qoder/skills",
+        "codebuddy" => ".codebuddy/skills",
+        "rovodev" => ".rovodev/skills",
+        "hermes-agent" => {
+            return Some(
+                env::var_os("HERMES_HOME")
+                    .map(PathBuf::from)
+                    .filter(|path| path.is_absolute())
+                    .unwrap_or_else(|| home_dir.join(".hermes"))
+                    .join("skills"),
+            );
+        }
+        _ => return None,
+    };
+    Some(home_dir.join(relative))
+}
+
+/// Every global skill root an install writes to: the canonical universal
+/// directory first (it is what Ghostex's own status probe and Codex read), then
+/// one root per requested agent, deduplicated in request order.
+fn agent_skill_install_target_roots(
+    home_dir: &Path,
+    agent_ids: &[String],
+) -> Result<Vec<PathBuf>, DomainStateError> {
+    let mut roots = vec![home_dir.join(CANONICAL_AGENT_SKILLS_DIR)];
+    let mut unknown = Vec::new();
+    for agent_id in agent_ids {
+        match agent_skill_global_dir(home_dir, agent_id) {
+            Some(root) => {
+                if !roots.contains(&root) {
+                    roots.push(root);
+                }
+            }
+            None => unknown.push(agent_id.clone()),
+        }
     }
-    install_environment
+    if unknown.is_empty() {
+        Ok(roots)
+    } else {
+        Err(DomainStateError::bad_request(format!(
+            "Unknown agent skill target: {}. Supported agents: {}.",
+            unknown.join(", "),
+            GHOSTEX_SKILLS_CLI_AGENT_IDS.join(", ")
+        )))
+    }
+}
+
+/// The bundled skill folder for `skill_name` inside the package source, which
+/// is either the skills root itself (`<source>/<skill>`) or a package root that
+/// carries a `skills/` folder (`<source>/skills/<skill>`).
+fn resolve_bundled_skill_source_dir(
+    package_source: &str,
+    skill_name: &str,
+) -> Result<PathBuf, DomainStateError> {
+    let package_root = Path::new(package_source);
+    for candidate in [
+        package_root.join(skill_name),
+        package_root.join("skills").join(skill_name),
+    ] {
+        if is_existing_file(&candidate.join("SKILL.md")) {
+            return Ok(candidate);
+        }
+    }
+    Err(DomainStateError::bad_request(format!(
+        "Bundled skill {skill_name} was not found under {package_source}. Reinstall Ghostex so its skills folder is present."
+    )))
+}
+
+/// Replace `destination` with a fresh copy of `source_dir`. The copy is staged
+/// next to the destination and renamed into place so a failure half-way never
+/// leaves a truncated skill behind, and an existing symlink (a user's own
+/// `skills add` symlink-mode install) is unlinked rather than followed so the
+/// directory it points at is never deleted. Returns false when the source and
+/// destination are the same folder, which must not be cleaned.
+fn copy_skill_directory_into_place(
+    source_dir: &Path,
+    destination: &Path,
+) -> Result<bool, DomainStateError> {
+    let Some(parent) = destination.parent() else {
+        return Err(DomainStateError {
+            code: "internalError",
+            message: format!(
+                "Skill destination {} has no parent folder.",
+                destination.display()
+            ),
+        });
+    };
+    let Some(destination_name) = destination.file_name().and_then(|name| name.to_str()) else {
+        return Err(DomainStateError {
+            code: "internalError",
+            message: format!(
+                "Skill destination {} has no folder name.",
+                destination.display()
+            ),
+        });
+    };
+    if let (Ok(source_real), Ok(destination_real)) =
+        (fs::canonicalize(source_dir), fs::canonicalize(destination))
+    {
+        if source_real == destination_real || source_real.starts_with(&destination_real) {
+            return Ok(false);
+        }
+    }
+    fs::create_dir_all(parent).map_err(|error| skill_install_io_error("create", parent, error))?;
+    let staging = parent.join(format!(
+        ".{destination_name}.ghostex-install-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
+    let _ = remove_path_of_any_kind(&staging);
+    if let Err(error) = copy_skill_tree(source_dir, &staging) {
+        let _ = remove_path_of_any_kind(&staging);
+        return Err(error);
+    }
+    if let Err(error) = remove_path_of_any_kind(destination) {
+        let _ = remove_path_of_any_kind(&staging);
+        return Err(skill_install_io_error("replace", destination, error));
+    }
+    if let Err(error) = fs::rename(&staging, destination) {
+        let _ = remove_path_of_any_kind(&staging);
+        return Err(skill_install_io_error("activate", destination, error));
+    }
+    Ok(true)
+}
+
+/// Recursive copy that dereferences symlinks (so a bundled skill that links to
+/// a shared file ships the file), skips broken links instead of aborting, keeps
+/// file permission bits, and leaves out VCS and dependency folders.
+fn copy_skill_tree(source_dir: &Path, destination: &Path) -> Result<(), DomainStateError> {
+    fs::create_dir_all(destination)
+        .map_err(|error| skill_install_io_error("create", destination, error))?;
+    let mut entries = fs::read_dir(source_dir)
+        .map_err(|error| skill_install_io_error("read", source_dir, error))?
+        .filter_map(Result::ok)
+        .collect::<Vec<_>>();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let name = entry.file_name();
+        if AGENT_SKILL_COPY_EXCLUDED_NAMES
+            .iter()
+            .any(|excluded| name == *excluded)
+        {
+            continue;
+        }
+        let source_path = entry.path();
+        let destination_path = destination.join(&name);
+        // Follows symlinks; a broken link fails here and is skipped on purpose.
+        let Ok(metadata) = fs::metadata(&source_path) else {
+            continue;
+        };
+        if metadata.is_dir() {
+            copy_skill_tree(&source_path, &destination_path)?;
+            continue;
+        }
+        if !metadata.is_file() {
+            continue;
+        }
+        fs::copy(&source_path, &destination_path)
+            .map_err(|error| skill_install_io_error("copy", &destination_path, error))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = metadata.permissions().mode() & 0o777;
+            let _ = fs::set_permissions(&destination_path, fs::Permissions::from_mode(mode));
+        }
+    }
+    Ok(())
+}
+
+fn remove_path_of_any_kind(path: &Path) -> std::io::Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    if metadata.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    }
+}
+
+fn skill_install_io_error(action: &str, path: &Path, error: std::io::Error) -> DomainStateError {
+    DomainStateError {
+        code: "internalError",
+        message: format!(
+            "Agent skill install could not {action} {}: {error}",
+            path.display()
+        ),
+    }
 }
 
 pub fn create_gxserver_agent_skill_discovery_sources(
@@ -314,345 +519,6 @@ fn read_agent_skill_status_for_names(
         "type": "agentSkillStatus",
     }))
 }
-
-async fn run_agent_skill_install_command(
-    paths: &GxserverPaths,
-    package_source: &str,
-    install_command: &[String],
-) -> Result<Output, DomainStateError> {
-    run_agent_skill_install_command_with_limits(
-        paths,
-        package_source,
-        install_command,
-        Duration::from_millis(AGENT_SKILL_INSTALL_TIMEOUT_MS),
-        AGENT_SKILL_INSTALL_OUTPUT_LIMIT_BYTES,
-    )
-    .await
-}
-
-/*
-CDXC:AgentSkills 2026-06-19-18:45:
-Agent skill installs run third-party CLI code through a local RPC. Reject a normalized-empty skill list before command construction, and collect bounded stdout/stderr with a timeout so a stalled or noisy installer cannot hang gxserver or allocate unbounded memory. Return captured output to the caller only; persistent logs must not receive command text or raw output.
-Package and repository sources accept the same leading-tilde shorthand users type elsewhere; expand `~` before absolutizing so bundled skill installs and status checks resolve against the user home instead of the process cwd.
-*/
-async fn run_agent_skill_install_command_with_limits(
-    paths: &GxserverPaths,
-    package_source: &str,
-    install_command: &[String],
-    timeout_duration: Duration,
-    output_limit_bytes: usize,
-) -> Result<Output, DomainStateError> {
-    let Some((executable, args)) = install_command.split_first() else {
-        return Err(DomainStateError::bad_request(
-            "Agent skill install command is empty.",
-        ));
-    };
-    let mut command = Command::new(executable);
-    command.args(args);
-    if !is_uri_like(package_source) {
-        if let Some(parent) = Path::new(package_source).parent() {
-            command.current_dir(parent);
-        }
-    }
-    let current_environment: BTreeMap<String, String> = env::vars().collect();
-    let install_environment =
-        create_gxserver_agent_skill_install_environment(paths, &current_environment);
-    command.env_clear();
-    command.envs(install_environment);
-    configure_agent_skill_install_command_process_group(&mut command);
-    command
-        .kill_on_drop(true)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn().map_err(|error| DomainStateError {
-        code: "internalError",
-        message: format!("Agent skill install command could not start: {error}"),
-    })?;
-    let stdout = child.stdout.take().ok_or_else(|| DomainStateError {
-        code: "internalError",
-        message: "Agent skill install command stdout pipe was unavailable.".to_string(),
-    })?;
-    let stderr = child.stderr.take().ok_or_else(|| DomainStateError {
-        code: "internalError",
-        message: "Agent skill install command stderr pipe was unavailable.".to_string(),
-    })?;
-    let (limit_sender, mut limit_receiver) = mpsc::unbounded_channel();
-    let stdout_output = SharedCappedChildOutput::new();
-    let stderr_output = SharedCappedChildOutput::new();
-    let stdout_reader = tokio::spawn(read_capped_child_output(
-        stdout,
-        "stdout",
-        output_limit_bytes,
-        limit_sender.clone(),
-        stdout_output.clone(),
-    ));
-    let stderr_reader = tokio::spawn(read_capped_child_output(
-        stderr,
-        "stderr",
-        output_limit_bytes,
-        limit_sender,
-        stderr_output.clone(),
-    ));
-    let mut timeout_sleep = Box::pin(sleep(timeout_duration));
-    let mut termination = None;
-    let status = loop {
-        if let Some(status) = child.try_wait().map_err(|error| DomainStateError {
-            code: "internalError",
-            message: format!("Agent skill install command wait failed: {error}"),
-        })? {
-            break status;
-        }
-        tokio::select! {
-            _ = &mut timeout_sleep => {
-                termination = Some(AgentSkillInstallTermination::Timeout);
-                break terminate_agent_skill_install_child(&mut child).await?;
-            }
-            stream_name = limit_receiver.recv() => {
-                if let Some(stream_name) = stream_name {
-                    termination = Some(AgentSkillInstallTermination::OutputLimit { stream_name });
-                    break terminate_agent_skill_install_child(&mut child).await?;
-                }
-            }
-            _ = sleep(Duration::from_millis(AGENT_SKILL_INSTALL_POLL_MS)) => {}
-        }
-    };
-    let reader_drain_timeout = Some(Duration::from_millis(if termination.is_some() {
-        AGENT_SKILL_INSTALL_TERMINATED_READER_DRAIN_MS
-    } else {
-        AGENT_SKILL_INSTALL_EXITED_READER_DRAIN_MS
-    }));
-    finish_capped_child_output_reader(stdout_reader, "stdout", reader_drain_timeout).await?;
-    finish_capped_child_output_reader(stderr_reader, "stderr", reader_drain_timeout).await?;
-    let stdout = stdout_output.snapshot();
-    let stderr = stderr_output.snapshot();
-    let output_limit_termination = termination.or({
-        if stdout.limit_exceeded {
-            Some(AgentSkillInstallTermination::OutputLimit {
-                stream_name: "stdout",
-            })
-        } else if stderr.limit_exceeded {
-            Some(AgentSkillInstallTermination::OutputLimit {
-                stream_name: "stderr",
-            })
-        } else {
-            None
-        }
-    });
-    let output = Output {
-        status,
-        stdout: stdout.bytes,
-        stderr: stderr.bytes,
-    };
-    if let Some(termination) = output_limit_termination {
-        return Err(agent_skill_install_termination_error(
-            termination,
-            timeout_duration,
-            output_limit_bytes,
-            &output,
-        ));
-    }
-    if output.status.success() {
-        Ok(output)
-    } else {
-        Err(DomainStateError {
-            code: "internalError",
-            message: append_agent_skill_install_output(
-                format!(
-                    "Agent skill install command failed with exit code {}.",
-                    output
-                        .status
-                        .code()
-                        .map(|code| code.to_string())
-                        .unwrap_or_else(|| "unknown".to_string())
-                ),
-                &output,
-            ),
-        })
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AgentSkillInstallTermination {
-    OutputLimit { stream_name: &'static str },
-    Timeout,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct CappedChildOutput {
-    bytes: Vec<u8>,
-    limit_exceeded: bool,
-}
-
-#[derive(Clone, Debug)]
-struct SharedCappedChildOutput {
-    state: Arc<Mutex<CappedChildOutput>>,
-}
-
-impl SharedCappedChildOutput {
-    fn new() -> Self {
-        Self {
-            state: Arc::new(Mutex::new(CappedChildOutput {
-                bytes: Vec::new(),
-                limit_exceeded: false,
-            })),
-        }
-    }
-
-    fn append(&self, bytes: &[u8], limit_bytes: usize) -> bool {
-        let mut state = self
-            .state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let remaining = limit_bytes.saturating_sub(state.bytes.len());
-        if remaining > 0 {
-            state
-                .bytes
-                .extend_from_slice(&bytes[..bytes.len().min(remaining)]);
-        }
-        if bytes.len() > remaining {
-            state.limit_exceeded = true;
-        }
-        state.limit_exceeded
-    }
-
-    fn snapshot(&self) -> CappedChildOutput {
-        self.state
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .clone()
-    }
-}
-
-async fn read_capped_child_output<R>(
-    mut stream: R,
-    stream_name: &'static str,
-    limit_bytes: usize,
-    limit_sender: mpsc::UnboundedSender<&'static str>,
-    output: SharedCappedChildOutput,
-) -> io::Result<()>
-where
-    R: AsyncRead + Unpin,
-{
-    let mut chunk = [0_u8; 8192];
-    loop {
-        let read = stream.read(&mut chunk).await?;
-        if read == 0 {
-            return Ok(());
-        }
-        if output.append(&chunk[..read], limit_bytes) {
-            let _ = limit_sender.send(stream_name);
-            return Ok(());
-        }
-    }
-}
-
-async fn finish_capped_child_output_reader(
-    mut reader: JoinHandle<io::Result<()>>,
-    stream_name: &str,
-    drain_timeout: Option<Duration>,
-) -> Result<(), DomainStateError> {
-    let result = if let Some(drain_timeout) = drain_timeout {
-        tokio::select! {
-            result = &mut reader => result,
-            _ = sleep(drain_timeout) => {
-                reader.abort();
-                return Ok(());
-            }
-        }
-    } else {
-        reader.await
-    };
-    match result {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(error)) => Err(DomainStateError {
-            code: "internalError",
-            message: format!("Agent skill install command {stream_name} read failed: {error}"),
-        }),
-        Err(error) => Err(DomainStateError {
-            code: "internalError",
-            message: format!("Agent skill install command {stream_name} reader failed: {error}"),
-        }),
-    }
-}
-
-async fn terminate_agent_skill_install_child(
-    child: &mut tokio::process::Child,
-) -> Result<ExitStatus, DomainStateError> {
-    kill_agent_skill_install_process_group(child);
-    let _ = child.start_kill();
-    child.wait().await.map_err(|error| DomainStateError {
-        code: "internalError",
-        message: format!("Agent skill install command termination failed: {error}"),
-    })
-}
-
-fn agent_skill_install_termination_error(
-    termination: AgentSkillInstallTermination,
-    timeout_duration: Duration,
-    output_limit_bytes: usize,
-    output: &Output,
-) -> DomainStateError {
-    let message = match termination {
-        AgentSkillInstallTermination::Timeout => format!(
-            "Agent skill install command timed out after {}ms.",
-            timeout_duration.as_millis()
-        ),
-        AgentSkillInstallTermination::OutputLimit { stream_name } => format!(
-            "Agent skill install command {stream_name} exceeded {output_limit_bytes} bytes and was terminated."
-        ),
-    };
-    DomainStateError {
-        code: "internalError",
-        message: append_agent_skill_install_output(message, output),
-    }
-}
-
-fn append_agent_skill_install_output(message: String, output: &Output) -> String {
-    let mut parts = vec![message];
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if !stderr.is_empty() {
-        parts.push(format!("stderr:\n{stderr}"));
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if !stdout.is_empty() {
-        parts.push(format!("stdout:\n{stdout}"));
-    }
-    parts.join("\n")
-}
-
-fn configure_agent_skill_install_command_process_group(command: &mut Command) {
-    #[cfg(unix)]
-    unsafe {
-        command.pre_exec(|| {
-            if libc::setsid() == -1 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(())
-            }
-        });
-    }
-
-    #[cfg(not(unix))]
-    let _ = command;
-}
-
-#[cfg(unix)]
-fn kill_agent_skill_install_process_group(child: &tokio::process::Child) {
-    let Some(process_id) = child.id() else {
-        return;
-    };
-    let process_group_id = process_id as libc::pid_t;
-    if process_group_id <= 0 {
-        return;
-    }
-    unsafe {
-        libc::kill(-process_group_id, libc::SIGKILL);
-    }
-}
-
-#[cfg(not(unix))]
-fn kill_agent_skill_install_process_group(_child: &tokio::process::Child) {}
 
 fn discover_skill_locations(
     root: &AgentSkillDiscoveryRoot,
@@ -1110,63 +976,6 @@ mod tests {
     use crate::paths::get_gxserver_paths;
     use std::io;
 
-    #[test]
-    fn install_command_delegates_to_skills_cli_for_default_agents() {
-        let command = build_gxserver_agent_skill_install_command(
-            "/Applications/Ghostex.app/Contents/Resources/CLI/skills",
-            &["ghostex-browser-use".to_string()],
-            None,
-        );
-        assert_eq!(
-            &command[0..8],
-            [
-                "npx",
-                "--yes",
-                "skills",
-                "add",
-                "/Applications/Ghostex.app/Contents/Resources/CLI/skills",
-                "--skill",
-                "ghostex-browser-use",
-                "--global",
-            ]
-        );
-        assert!(command.iter().any(|item| item == "--copy"));
-        assert!(command.iter().any(|item| item == "-y"));
-        assert!(command.iter().any(|item| item == "claude-code"));
-        assert!(command.iter().any(|item| item == "codex"));
-        assert!(command.iter().any(|item| item == "cursor"));
-        assert!(command.iter().any(|item| item == "gemini-cli"));
-        assert!(command.iter().any(|item| item == "opencode"));
-        assert!(command.iter().any(|item| item == "pi"));
-    }
-
-    #[test]
-    fn install_environment_removes_profile_overrides() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-        let environment = BTreeMap::from([
-            ("CLAUDE_CONFIG_DIR".to_string(), "/tmp/profile".to_string()),
-            ("CLAUDE_PROFILE".to_string(), "personal".to_string()),
-            ("CODEX_HOME".to_string(), "/tmp/codex-profile".to_string()),
-            ("CODEX_PROFILE".to_string(), "personal".to_string()),
-            ("PATH".to_string(), "/usr/bin".to_string()),
-        ]);
-        let install_environment =
-            create_gxserver_agent_skill_install_environment(&paths, &environment);
-        assert_eq!(
-            install_environment.get("HOME"),
-            Some(&path_string(temp.path()))
-        );
-        assert_eq!(
-            install_environment.get("PATH"),
-            Some(&"/usr/bin".to_string())
-        );
-        assert_eq!(install_environment.get("CLAUDE_CONFIG_DIR"), None);
-        assert_eq!(install_environment.get("CLAUDE_PROFILE"), None);
-        assert_eq!(install_environment.get("CODEX_HOME"), None);
-        assert_eq!(install_environment.get("CODEX_PROFILE"), None);
-    }
-
     #[tokio::test]
     async fn install_agent_skills_rejects_explicit_empty_skill_names() {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -1198,88 +1007,6 @@ mod tests {
             normalize_existing_absolute_path("~/repo"),
             home.join("repo")
         );
-    }
-
-    #[test]
-    fn install_output_limit_matches_typescript_execfile_max_buffer() {
-        assert_eq!(AGENT_SKILL_INSTALL_OUTPUT_LIMIT_BYTES, 10 * 1024 * 1024);
-    }
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn install_command_success_returns_bounded_stdout_and_stderr() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-        let output = run_agent_skill_install_command_with_limits(
-            &paths,
-            &path_string(temp.path()),
-            &shell_command("printf success; printf diagnostic >&2"),
-            Duration::from_secs(2),
-            1024,
-        )
-        .await
-        .expect("command output");
-        assert!(output.status.success());
-        assert_eq!(String::from_utf8_lossy(&output.stdout), "success");
-        assert_eq!(String::from_utf8_lossy(&output.stderr), "diagnostic");
-    }
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn install_command_error_preserves_bounded_stdout_and_stderr() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-        let error = run_agent_skill_install_command_with_limits(
-            &paths,
-            &path_string(temp.path()),
-            &shell_command("printf before-fail; printf install-error >&2; exit 7"),
-            Duration::from_secs(2),
-            1024,
-        )
-        .await
-        .expect_err("command should fail");
-        assert_eq!(error.code, "internalError");
-        assert!(error.message.contains("exit code 7"));
-        assert!(error.message.contains("stdout:\nbefore-fail"));
-        assert!(error.message.contains("stderr:\ninstall-error"));
-    }
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn install_command_times_out_and_returns_captured_output() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-        let error = run_agent_skill_install_command_with_limits(
-            &paths,
-            &path_string(temp.path()),
-            &shell_command("printf started; sleep 2"),
-            Duration::from_millis(150),
-            1024,
-        )
-        .await
-        .expect_err("command should time out");
-        assert_eq!(error.code, "internalError");
-        assert!(error.message.contains("timed out"));
-        assert!(error.message.contains("stdout:\nstarted"));
-    }
-
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn install_command_kills_process_on_output_limit() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
-        let error = run_agent_skill_install_command_with_limits(
-            &paths,
-            &path_string(temp.path()),
-            &shell_command("yes agent-skill-output-limit"),
-            Duration::from_secs(5),
-            128,
-        )
-        .await
-        .expect_err("command should exceed output cap");
-        assert_eq!(error.code, "internalError");
-        assert!(error.message.contains("stdout exceeded 128 bytes"));
-        assert!(error.message.contains("stdout:\nagent-skill"));
     }
 
     #[test]
@@ -1430,11 +1157,6 @@ mod tests {
             .find(|skill| skill.get("skillName").and_then(Value::as_str) == Some(skill_name))
             .and_then(|skill| skill.get("installed"))
             .and_then(Value::as_bool)
-    }
-
-    #[cfg(unix)]
-    fn shell_command(script: &str) -> Vec<String> {
-        vec!["sh".to_string(), "-c".to_string(), script.to_string()]
     }
 
     #[cfg(unix)]
