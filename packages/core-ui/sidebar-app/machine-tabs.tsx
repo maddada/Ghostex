@@ -16,8 +16,9 @@ import type { SidebarSectionSessionSummary } from './types';
  * narrow.
  *
  * Each tab keeps the attention signal its old section header showed while
- * collapsed — the working/attention/awake counts — compressed to small dots so
- * an unselected machine still reports that something needs the user.
+ * collapsed: working and attention counts remain visible so an unselected
+ * machine still reports that something needs the user. Awake idle sessions do
+ * not produce a tab count.
  *
  * CDXC:SidebarProjectMenu 2026-09-02:
  * The remote machine header is gone, so its connection control lives here: a
@@ -89,7 +90,7 @@ function SidebarMachineTabStatus({ sessionSummary }: { sessionSummary?: SidebarS
   }
 
   const hasActionStatus = sessionSummary.workingCount > 0 || sessionSummary.attentionCount > 0;
-  if (!hasActionStatus && sessionSummary.awakeCount === 0) {
+  if (!hasActionStatus) {
     return null;
   }
 
@@ -98,9 +99,6 @@ function SidebarMachineTabStatus({ sessionSummary }: { sessionSummary?: SidebarS
       aria-label={[
         sessionSummary.workingCount > 0 ? `${sessionSummary.workingCount} working` : '',
         sessionSummary.attentionCount > 0 ? `${sessionSummary.attentionCount} done` : '',
-        !hasActionStatus && sessionSummary.awakeCount > 0
-          ? `${sessionSummary.awakeCount} awake terminals and browsers`
-          : '',
       ]
         .filter(Boolean)
         .join(', ')}
@@ -114,11 +112,6 @@ function SidebarMachineTabStatus({ sessionSummary }: { sessionSummary?: SidebarS
       {sessionSummary.attentionCount > 0 ? (
         <span className='group-collapsed-status-count' data-activity='attention'>
           {sessionSummary.attentionCount}
-        </span>
-      ) : null}
-      {!hasActionStatus && sessionSummary.awakeCount > 0 ? (
-        <span className='group-collapsed-status-count' data-activity='awake'>
-          {sessionSummary.awakeCount}
         </span>
       ) : null}
     </span>
