@@ -389,9 +389,29 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 if let Some(startup_text) = attach.get("startupText").and_then(Value::as_str) {
                     provider_params.insert("startupText".to_string(), json!(startup_text));
                 }
-                start_session_provider(repository, &provider_params, context, agent_settings)?;
-                attach =
-                    create_attach_session_metadata(repository, params, context, agent_settings)?;
+                /*
+                CDXC:ZmxWakeProbeReuse 2026-09-01:
+                `create_attach_session_metadata` probed this exact session
+                milliseconds ago and got `missing` — that IS the condition that
+                brought us here — so the provider start does not re-probe it,
+                and if the start itself watched the session appear in `zmx list`
+                the attach re-run reuses that observation too. Both hand-offs
+                are scoped to this one request; nothing else skips a probe.
+                */
+                let (_, observed_after_start) = start_session_provider_with_observed_state(
+                    repository,
+                    &provider_params,
+                    context,
+                    agent_settings,
+                    ObservedProviderState::Missing,
+                )?;
+                attach = create_attach_session_metadata_with_observed_state(
+                    repository,
+                    params,
+                    context,
+                    agent_settings,
+                    observed_after_start,
+                )?;
             }
             if endpoint_path == "/api/wakeSession" && !restore_blocked {
                 let attach_session = attach
@@ -447,6 +467,21 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                     .into())
                 }
             };
+            if action == "sleep" {
+                let session = require_session(repository, &lifecycle)?;
+                if crate::presentation::effective_lifecycle_state(&session) != "running" {
+                    return Ok(ZmxEndpointOutput {
+                        created_workspace_terminal: None,
+                        result: json!({
+                            "action": action,
+                            "declined": "notRunning",
+                            "session": session,
+                            "transition": { "session": session },
+                        }),
+                        presentation_session: None,
+                    });
+                }
+            }
             let target_lifecycle = if action == "sleep" {
                 "sleeping"
             } else {
@@ -465,6 +500,16 @@ pub fn dispatch_zmx_lifecycle_endpoint(
         }
         "/api/sleepSession" | "/api/killSession" => {
             let lifecycle = read_lifecycle_params(params)?;
+            if endpoint_path == "/api/sleepSession" {
+                let session = require_session(repository, &lifecycle)?;
+                if crate::presentation::effective_lifecycle_state(&session) != "running" {
+                    return Ok(ZmxEndpointOutput {
+                        created_workspace_terminal: None,
+                        result: json!({ "declined": "notRunning", "session": session }),
+                        presentation_session: None,
+                    });
+                }
+            }
             /*
             CDXC:MobileKeepAwake 2026-08-19:
             An AUTOMATIC sleep (a client's "Sleep inactive agents" sweep) loses to
@@ -473,7 +518,9 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             than in each client's sweep: gxserver owns the lease, so every client's
             sweep gets the same answer without learning a new presentation field.
 
-            A user-triggered Sleep is never declined — the caller asked for it.
+            A user-triggered Sleep bypasses these automatic-policy declines.
+            The lifecycle guard above still rejects a stale request whose
+            target is no longer running.
 
             CDXC:SessionChatPromptQueue 2026-08-21: a session holding queued chat
             prompts declines the same way. The scheduler can only deliver into a
@@ -513,8 +560,8 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 transcript until the first prompt, so waking one resumes a
                 conversation that was never recorded and the terminal is lost.
                 The decision lives here, next to the keep-awake decline, so every
-                client's sweep gets the same answer. A user-triggered Sleep is
-                never declined.
+                client's sweep gets the same answer. A user-triggered Sleep
+                bypasses this inactivity-only decline.
 
                 CDXC:DraftSessions 2026-08-28:
                 A DRAFT is the one never-active session that IS safe to sleep,

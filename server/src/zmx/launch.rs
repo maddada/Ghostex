@@ -43,8 +43,19 @@ pub(crate) fn run_zmx_start_command(
     _session_name: &str,
     _zmx_executable_path: &str,
     script: String,
-) -> ZmxEndpointResult<ZmxCommandResult> {
-    run_zmx_interaction_command(script, ZmxCommandOptions::default())
+) -> ZmxEndpointResult<ZmxStartOutcome> {
+    /*
+    CDXC:ZmxWakeProbeReuse 2026-09-01:
+    This platform's start is a plain detached `zmx run`, so a zero exit means
+    the command was accepted, NOT that the session is registered. Report no
+    observation; the caller keeps its authoritative probe.
+    */
+    run_zmx_interaction_command(script, ZmxCommandOptions::default()).map(|result| {
+        ZmxStartOutcome {
+            observed_alive: false,
+            result,
+        }
+    })
 }
 
 /*
@@ -68,7 +79,7 @@ pub(crate) fn run_zmx_start_command(
     session_name: &str,
     zmx_executable_path: &str,
     script: String,
-) -> ZmxEndpointResult<ZmxCommandResult> {
+) -> ZmxEndpointResult<ZmxStartOutcome> {
     let job = MacosZmxLaunchdJob::new(session_name)?;
     job.prepare(&script)?;
 
@@ -76,7 +87,7 @@ pub(crate) fn run_zmx_start_command(
     if !bootstrap.success {
         if macos_zmx_session_exists(session_name, zmx_executable_path) {
             job.remove_private_launch_script();
-            return Ok(zmx_start_success_result());
+            return Ok(zmx_start_observed_success());
         }
         let _ = job.launchctl(&["bootout", &job.job_target]);
         let retry = job.launchctl(&["bootstrap", &job.domain_target, &job.plist_path_string]);
@@ -98,12 +109,25 @@ pub(crate) fn run_zmx_start_command(
         )));
     }
 
+    /*
+    CDXC:ZmxStartPollGranularity 2026-09-01:
+    The zmx daemon needs roughly 100ms to register after `launchctl kickstart`,
+    so the first existence check nearly always misses and a flat 100ms sleep
+    then paid the whole interval before the check that would have succeeded
+    much earlier. Back off in 10ms steps up to the old 100ms ceiling instead:
+    a session that appears at ~100ms is now seen within ~10ms of appearing,
+    while a genuinely slow start still settles onto the same coarse cadence and
+    the overall deadline is unchanged.
+    */
+    let mut poll_backoff_ms: u64 = ZMX_START_POLL_BACKOFF_STEP_MS;
     let deadline = Instant::now() + Duration::from_millis(ZMX_LIFECYCLE_COMMAND_TIMEOUT_MS);
     while Instant::now() < deadline {
         if macos_zmx_session_exists(session_name, zmx_executable_path) {
-            return Ok(zmx_start_success_result());
+            return Ok(zmx_start_observed_success());
         }
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(poll_backoff_ms));
+        poll_backoff_ms =
+            (poll_backoff_ms + ZMX_START_POLL_BACKOFF_STEP_MS).min(ZMX_START_POLL_BACKOFF_MAX_MS);
     }
 
     let launch_log = fs::read_to_string(&job.log_path)
@@ -118,9 +142,17 @@ pub(crate) fn run_zmx_start_command(
     )))
 }
 
+/// First readiness re-check delay, and the amount each further wait grows by.
+#[cfg(target_os = "macos")]
+const ZMX_START_POLL_BACKOFF_STEP_MS: u64 = 10;
+/// The ceiling the readiness backoff settles on, matching the previous fixed
+/// poll interval.
+#[cfg(target_os = "macos")]
+const ZMX_START_POLL_BACKOFF_MAX_MS: u64 = 100;
+
 #[cfg(target_os = "macos")]
 fn macos_zmx_session_exists(session_name: &str, zmx_executable_path: &str) -> bool {
-    run_zsh_script(
+    run_zmx_probe_script(
         build_zmx_exists_command(session_name, zmx_executable_path),
         ZmxCommandOptions {
             timeout_ms: Some(1_000),
@@ -131,13 +163,18 @@ fn macos_zmx_session_exists(session_name: &str, zmx_executable_path: &str) -> bo
     .unwrap_or(false)
 }
 
+/// A successful start whose session this call SAW in `zmx list`, so the caller
+/// may reuse that observation instead of probing again.
 #[cfg(target_os = "macos")]
-fn zmx_start_success_result() -> ZmxCommandResult {
-    ZmxCommandResult {
-        exit_code: 0,
-        stderr: String::new(),
-        stdout: String::new(),
-        stdout_truncated: false,
+fn zmx_start_observed_success() -> ZmxStartOutcome {
+    ZmxStartOutcome {
+        observed_alive: true,
+        result: ZmxCommandResult {
+            exit_code: 0,
+            stderr: String::new(),
+            stdout: String::new(),
+            stdout_truncated: false,
+        },
     }
 }
 
@@ -369,20 +406,73 @@ pub(crate) fn cleanup_macos_zmx_launchd_job(session_name: &str) {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ZmxShellProfileMode {
+    /// Sources the user's login profile. Required whenever the script hands the
+    /// user their own shell or runs user-authored terminal content.
+    Login,
+    /// Skips the login profile. Only for probe/snapshot pipelines that run the
+    /// bundled zmx binary, `ps`, and shell builtins.
+    Profileless,
+}
+
 pub(crate) fn run_zsh_script(
     script: String,
     options: ZmxCommandOptions,
 ) -> Result<ZmxCommandResult, String> {
-    run_zsh_script_blocking(&script, options)
+    run_zsh_script_blocking(&script, options, ZmxShellProfileMode::Login)
+}
+
+/*
+CDXC:GxserverZmxProbeShell 2026-09-01:
+The probe/snapshot pipelines (`zmx list`, `zmx kill`, `ps -axo`) never need the
+user's login profile, but they run on every presentation poll. Give them a
+profile-free spawn instead.
+*/
+pub(crate) fn run_zmx_probe_script(
+    script: String,
+    options: ZmxCommandOptions,
+) -> Result<ZmxCommandResult, String> {
+    run_zsh_script_blocking(&script, options, ZmxShellProfileMode::Profileless)
+}
+
+/// `run_zmx_interaction_command`'s error contract on a profile-free spawn, for
+/// probe reads that only run the bundled zmx binary.
+pub(crate) fn run_zmx_probe_command(
+    script: String,
+    options: ZmxCommandOptions,
+) -> ZmxEndpointResult<ZmxCommandResult> {
+    let allow_stdout_truncation = options.allow_stdout_truncation;
+    let result =
+        run_zmx_probe_script(script, options).map_err(ZmxEndpointError::DependencyUnavailable)?;
+    if result.exit_code != 0 && !(allow_stdout_truncation && result.stdout_truncated) {
+        let message = if !result.stderr.is_empty() {
+            result.stderr.clone()
+        } else if !result.stdout.is_empty() {
+            result.stdout.clone()
+        } else {
+            format!(
+                "zmx session interaction command exited {}",
+                result.exit_code
+            )
+        };
+        return Err(ZmxEndpointError::DependencyUnavailable(message));
+    }
+    Ok(result)
 }
 
 fn run_zsh_script_blocking(
     script: &str,
     options: ZmxCommandOptions,
+    profile_mode: ZmxShellProfileMode,
 ) -> Result<ZmxCommandResult, String> {
     let shell = command_shell();
+    let shell_args = match profile_mode {
+        ZmxShellProfileMode::Login => shell.script_args(script),
+        ZmxShellProfileMode::Profileless => shell.profileless_script_args(script),
+    };
     let mut child = Command::new(&shell.executable)
-        .args(shell.script_args(script))
+        .args(shell_args)
         /*
         CDXC:GxserverTerminalColorEnvironment 2026-07-18:
         Command::envs does not remove inherited variables that are absent from

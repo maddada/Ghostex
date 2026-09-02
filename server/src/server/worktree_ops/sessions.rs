@@ -33,6 +33,7 @@ client through this endpoint.
 */
 pub(crate) const WORKTREE_SESSION_DIRTY_WARNING: &str = "This worktree has uncommitted changes.";
 
+#[derive(Clone)]
 pub(crate) struct WorktreeSessionCreateRequest {
     agent_id: Option<String>,
     base_branch: Option<String>,
@@ -41,6 +42,7 @@ pub(crate) struct WorktreeSessionCreateRequest {
     start_from_origin: bool,
 }
 
+#[derive(Clone)]
 pub(crate) struct PreparedWorktreeCheckout {
     pub(crate) branch: String,
     /// False when an existing worktree was adopted: rollback must never remove a
@@ -488,8 +490,36 @@ pub(crate) async fn start_worktree_session(
     request: &WorktreeSessionCreateRequest,
     prepared: &PreparedWorktreeCheckout,
 ) -> std::result::Result<String, ProjectWorktreeOperationError> {
-    let (project_id, session_id) =
-        create_and_start_worktree_session(state, context, request, prepared)?;
+    /*
+    CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+    `create_and_start_worktree_session` runs SQLite and a full zmx provider
+    start (subprocess spawns plus the launchd readiness poll's `thread::sleep`)
+    with no await in it, so it goes to the blocking pool instead of parking an
+    executor worker for the whole materialization.
+    */
+    let blocking_state = state.clone();
+    let blocking_context = context.clone();
+    let blocking_request = request.clone();
+    let blocking_prepared = prepared.clone();
+    let created = tokio::task::spawn_blocking(move || {
+        create_and_start_worktree_session(
+            &blocking_state,
+            &blocking_context,
+            &blocking_request,
+            &blocking_prepared,
+        )
+    })
+    .await;
+    let (project_id, session_id) = match created {
+        Ok(created) => created?,
+        Err(error) => {
+            return Err(DomainStateError {
+                code: "internalError",
+                message: format!("Worktree session task failed: {error}"),
+            }
+            .into())
+        }
+    };
     if let Some(prompt) = request.first_prompt.as_deref() {
         /*
         Text and Enter are two separate zmx sends with a settle window between

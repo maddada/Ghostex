@@ -152,6 +152,26 @@ impl PlatformShell {
         vec![self.command_flag(true).to_string(), script.to_string()]
     }
 
+    /*
+    CDXC:GxserverZmxProbeShell 2026-09-01:
+    Probe and snapshot pipelines only invoke the bundled zmx binary, `ps`, and
+    shell builtins; they run on every ~2s presentation poll and never present
+    shell output to a user. Sourcing the login profile there costs tens of
+    milliseconds per spawn and buys nothing, so those call sites use these
+    profile-free args. Attach/run scripts and the launchd supervisor keep
+    `command_flag`, because they hand the user their own shell.
+    */
+    pub fn profileless_script_args(&self, script: &str) -> Vec<String> {
+        vec![
+            self.profileless_command_flag().to_string(),
+            script.to_string(),
+        ]
+    }
+
+    pub fn profileless_command_flag(&self) -> &'static str {
+        "-c"
+    }
+
     pub fn command_flag(&self, interactive: bool) -> &'static str {
         match (&self.kind, interactive) {
             (PlatformShellKind::Bash | PlatformShellKind::Zsh, true) => "-lic",

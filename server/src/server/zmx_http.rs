@@ -14,6 +14,47 @@ pub(crate) async fn handle_zmx_lifecycle_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    /*
+    CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+    Every lifecycle endpoint here is fully blocking: SQLite on the calling
+    thread, `zmx` and `launchctl` subprocess spawns, and the launchd readiness
+    poll's `thread::sleep`. Running that directly in the async handler parked an
+    executor worker for the whole wake — which is why clients measured 60-120ms
+    MORE than the handler's own span on unrelated RPCs at the same time. Hand
+    the whole synchronous region to the blocking pool; the JoinError arm below
+    keeps a panicking dispatch answering with an error instead of hanging.
+    */
+    let blocking_state = state.clone();
+    let blocking_endpoint_path = endpoint_path.clone();
+    let blocking_request_id = request_id.clone();
+    match tokio::task::spawn_blocking(move || {
+        dispatch_zmx_lifecycle_http_blocking(
+            &blocking_state,
+            blocking_endpoint_path,
+            blocking_request_id,
+            params,
+        )
+    })
+    .await
+    {
+        Ok(response) => response,
+        Err(error) => domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "internalError",
+                message: format!("zmx lifecycle task failed: {error}"),
+            },
+        ),
+    }
+}
+
+fn dispatch_zmx_lifecycle_http_blocking(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    params: Map<String, Value>,
+) -> RoutedResponse {
     let db_result = if endpoint_path == "/api/createWorkspaceTerminal" {
         /*
         Concurrent Windows terminal clicks use independent gxserver SQLite
@@ -175,6 +216,16 @@ BG Service menu item depends on the promise being real: quitting must leave no
 Ghostex-spawned zmx daemon running. Sleeping and stopped sessions are skipped
 because their zmx process is already gone — sleep kills the provider too and
 only keeps the transcript resumable.
+
+CDXC:StopAllSleepsSessions 2026-09-01:
+Killed sessions are marked "sleeping", not "stopped". "stopped" is the
+terminal close state: the sidebar drops it and `effective_lifecycle_state`
+refuses to ever promote it back, so Quit Ghostex & BG Service silently swept
+every live session out of the user's sidebar into Quick Access history.
+Quitting only needs the daemons dead; the intent is "resume my board later",
+which is exactly a sleep — the same kill this endpoint already performs, and
+the same state `cycle_wire_incompatible_zmx_session_daemons` writes for the
+identical physical operation. The ordinary wake-on-open path restores them.
 */
 pub(crate) fn kill_all_tracked_zmx_sessions(state: &AppState) -> ZmxStopAllCounts {
     let mut counts = ZmxStopAllCounts {
@@ -211,7 +262,7 @@ pub(crate) fn kill_all_tracked_zmx_sessions(state: &AppState) -> ZmxStopAllCount
             project_id: project_id.to_string(),
             session_id: session_id.to_string(),
         };
-        match crate::zmx::kill_and_cache_session_provider(&repository, &lifecycle, "stopped") {
+        match crate::zmx::kill_and_cache_session_provider(&repository, &lifecycle, "sleeping") {
             Ok((kill, _)) if kill.killed => counts.killed += 1,
             _ => counts.failed += 1,
         }
@@ -357,14 +408,42 @@ pub(crate) async fn handle_zmx_session_interaction_http(
             Err(error) => zmx_error_response(endpoint_path, request_id, error),
         };
     }
-    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    match dispatch_zmx_session_interaction_endpoint(&repository, &endpoint_path, &params) {
-        Ok(result) => routed_json(
-            Some(endpoint_path),
-            StatusCode::OK,
-            rpc_success(request_id, result),
+    /*
+    CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+    What is left here is `/api/readSessionText`, which spawns `zmx history` and
+    reads up to 256KiB back from it. Same reason as the lifecycle handler: it
+    runs on the blocking pool rather than on an executor worker. The rusqlite
+    connection moves into the closure (it is `Send`) and is dropped there.
+    */
+    let blocking_state = state.clone();
+    let blocking_endpoint_path = endpoint_path.clone();
+    let blocking_request_id = request_id.clone();
+    match tokio::task::spawn_blocking(move || {
+        let repository = DomainRepository::new(&db, blocking_state.metadata.server_id.as_str());
+        match dispatch_zmx_session_interaction_endpoint(
+            &repository,
+            &blocking_endpoint_path,
+            &params,
+        ) {
+            Ok(result) => routed_json(
+                Some(blocking_endpoint_path),
+                StatusCode::OK,
+                rpc_success(blocking_request_id, result),
+            ),
+            Err(error) => zmx_error_response(blocking_endpoint_path, blocking_request_id, error),
+        }
+    })
+    .await
+    {
+        Ok(response) => response,
+        Err(error) => domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "internalError",
+                message: format!("zmx session interaction task failed: {error}"),
+            },
         ),
-        Err(error) => zmx_error_response(endpoint_path, request_id, error),
     }
 }
 

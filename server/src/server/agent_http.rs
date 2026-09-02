@@ -15,6 +15,47 @@ pub(crate) async fn handle_agent_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    /*
+    CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+    `/api/forkSession` and `/api/switchDraftAgent` reach
+    `dispatch_zmx_lifecycle_endpoint`, and the rename path below reaches
+    `dispatch_zmx_session_interaction_endpoint`, so this handler spawns zmx and
+    launchd processes on whatever thread calls it. It is synchronous end to
+    end, so the whole body goes to the blocking pool rather than parking an
+    executor worker. The `schedule_*` helpers still `tokio::spawn` from there:
+    blocking-pool threads run inside the runtime context.
+    */
+    let blocking_state = state.clone();
+    let blocking_endpoint_path = endpoint_path.clone();
+    let blocking_request_id = request_id.clone();
+    match tokio::task::spawn_blocking(move || {
+        dispatch_agent_http_blocking(
+            &blocking_state,
+            blocking_endpoint_path,
+            blocking_request_id,
+            params,
+        )
+    })
+    .await
+    {
+        Ok(response) => response,
+        Err(error) => domain_error_response(
+            endpoint_path,
+            request_id,
+            DomainStateError {
+                code: "internalError",
+                message: format!("Agent endpoint task failed: {error}"),
+            },
+        ),
+    }
+}
+
+fn dispatch_agent_http_blocking(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    params: Map<String, Value>,
+) -> RoutedResponse {
     let db = match open_gxserver_database(&state.paths) {
         Ok(db) => db,
         Err(error) => {

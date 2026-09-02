@@ -41,12 +41,16 @@ pub(crate) fn run_agent_metadata_title_sync_once(
         message: format!("SQLite gxserver state error: {error}"),
     })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let sessions = repository.list_sessions(None)?;
+    /*
+    CDXC:GxserverSlimSessionQueries 2026-09-01:
+    This pass runs once a second and only ever looks at running rows, so the
+    "running" filter belongs in SQL. On a registry with thousands of stopped
+    rows the old full list hydrated every one of them — including six JSON
+    columns each — to throw all but a dozen away.
+    */
+    let sessions = repository.list_sessions_with_lifecycle_state("running")?;
     let mut live_keys = HashSet::new();
     for session in sessions {
-        if read_session_text(&session, "lifecycleState").as_deref() != Some("running") {
-            continue;
-        }
         let Some(project_id) = read_session_text(&session, "projectId") else {
             continue;
         };

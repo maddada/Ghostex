@@ -1,6 +1,7 @@
 pub mod endpoint;
 pub mod env;
 pub mod launch;
+pub mod probe_cache;
 pub mod process_identity;
 pub mod provider;
 pub mod screen_capture;
@@ -14,6 +15,7 @@ pub mod wire_cycle;
 pub use endpoint::*;
 pub(crate) use env::*;
 pub(crate) use launch::*;
+pub use probe_cache::*;
 pub(crate) use process_identity::*;
 pub use provider::*;
 pub(crate) use screen_capture::*;

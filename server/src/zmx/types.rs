@@ -89,6 +89,33 @@ pub(crate) struct ZmxCommandResult {
     pub(crate) stdout_truncated: bool,
 }
 
+/*
+CDXC:ZmxWakeProbeReuse 2026-09-01:
+One `/api/wakeSession` used to spawn three separate `zmx list` probes for the
+same session: the attach-metadata probe, `start_session_provider`'s immediate
+re-probe of the state its caller had just read, and a third probe after the
+launchd start loop had itself just watched the session appear. Provider state
+stays authoritative — this only lets ONE request hand the next step the state it
+observed milliseconds earlier, and only for the two outcomes it actually saw.
+Anything that did not observe the session passes `Unobserved` and probes.
+*/
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ObservedProviderState {
+    /// Nothing was observed in this request; probe the provider.
+    Unobserved,
+    /// This request just saw the session alive (a `zmx list` that listed it).
+    Exists,
+    /// This request's own probe returned `missing` milliseconds ago.
+    Missing,
+}
+
+/// The result of a provider start, plus whether the start path itself saw the
+/// session registered rather than merely accepting the launch command.
+pub(crate) struct ZmxStartOutcome {
+    pub(crate) observed_alive: bool,
+    pub(crate) result: ZmxCommandResult,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ProviderProbe {
     pub(crate) error: Option<String>,

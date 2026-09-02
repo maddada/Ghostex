@@ -132,28 +132,48 @@ pub(crate) fn resolve_process_tree_agent_identity(
         .map(|process_row| (process_row.pid, process_row))
         .collect::<HashMap<_, _>>();
     let mut candidates = Vec::<ProcessIdentityCandidate>::new();
-    let mut queue = VecDeque::from([(0_i64, root_pid)]);
+    /*
+    CDXC:ZmxProcessIdentityOwner 2026-09-02:
+    The first agent process found on a path down from the zmx root owns the
+    terminal; every process below it was spawned BY that agent. A different
+    agent CLI down there is one of its tool invocations (`grok models`,
+    `cursor-agent --list-models` run from Claude's Bash tool, observed live
+    2026-09-02), not the session's agent, and the deepest-wins ordering below
+    let it replace the real identity: the row flipped to that agent, the
+    transcript was then decoded with the wrong reader, and the chat view sat on
+    "Loading conversation…" for good. Only same-agent descendants stay
+    candidates, which keeps the launcher → binary wrapper chains (node codex →
+    lib/codex) that deepest-wins exists for.
+    */
+    let mut queue = VecDeque::from([(0_i64, root_pid, None::<String>)]);
     let mut seen = HashSet::<i64>::new();
-    while let Some((depth, pid)) = queue.pop_front() {
+    while let Some((depth, pid, owner_agent_id)) = queue.pop_front() {
         if !seen.insert(pid) {
             continue;
         }
+        let mut owner_agent_id = owner_agent_id;
         if let Some(row) = rows_by_pid.get(&pid) {
             if let Some(mut observation) = resolve_process_command_agent_identity(&row.command) {
-                if observation.identity.agent_id.is_some() {
-                    observation.identity.process_id = Some(row.pid);
-                    observation.identity.terminal_name = row.terminal_name.clone();
-                    candidates.push(ProcessIdentityCandidate {
-                        confidence: observation.confidence,
-                        depth,
-                        identity: observation.identity,
-                    });
+                if let Some(agent_id) = observation.identity.agent_id.clone() {
+                    let spawned_by_other_agent = owner_agent_id
+                        .as_deref()
+                        .is_some_and(|owner| owner != agent_id);
+                    if !spawned_by_other_agent {
+                        owner_agent_id = Some(agent_id);
+                        observation.identity.process_id = Some(row.pid);
+                        observation.identity.terminal_name = row.terminal_name.clone();
+                        candidates.push(ProcessIdentityCandidate {
+                            confidence: observation.confidence,
+                            depth,
+                            identity: observation.identity,
+                        });
+                    }
                 }
             }
         }
         if let Some(children) = children_by_parent_pid.get(&pid) {
             for child in children {
-                queue.push_back((depth + 1, child.pid));
+                queue.push_back((depth + 1, child.pid, owner_agent_id.clone()));
             }
         }
     }
@@ -466,10 +486,24 @@ fn extract_agent_process_session_id(
     executable_index: usize,
 ) -> Option<String> {
     let args = tokens.get(executable_index + 1..).unwrap_or(&[]);
+    /*
+    CDXC:SessionForkIdentity 2026-09-02:
+    A fork launch (`codex fork <id>`, `claude --resume <id> --fork-session`)
+    names the PARENT conversation in argv; the forked conversation gets a brand
+    new id that only the agent's hook or transcript can report. Reading the
+    parent id as this terminal's own identity made every list/snapshot poll
+    overwrite the hook-reported fork id with the parent's, so the fork and its
+    parent shared one id: the parent's chat follower then adopted the fork's
+    transcript as its own "successor" and both rows showed the same chat and
+    title (observed live 2026-09-01). A fork argv therefore yields no id at all.
+    */
     if agent_id == "codex" {
         for index in 0..args.len().saturating_sub(1) {
             let token = normalize_process_token(args.get(index).map(String::as_str));
-            if matches!(token.as_deref(), Some("resume" | "fork")) {
+            if token.as_deref() == Some("fork") {
+                return None;
+            }
+            if token.as_deref() == Some("resume") {
                 return normalize_agent_process_session_id(
                     agent_id,
                     args.get(index + 1).map(String::as_str),
@@ -479,6 +513,12 @@ fn extract_agent_process_session_id(
         return None;
     }
     if matches!(agent_id, "claude" | "cursor") {
+        if args.iter().any(|arg| {
+            let token = arg.trim_matches(['"', '\'']);
+            token == "--fork-session" || token.starts_with("--fork-session=")
+        }) {
+            return None;
+        }
         return read_agent_process_flag_value(agent_id, args, "--resume");
     }
     if agent_id == "opencode" {

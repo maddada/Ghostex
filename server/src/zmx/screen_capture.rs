@@ -137,8 +137,13 @@ pub(crate) fn remove_zmx_session_socket(session_name: &str) {
 #[cfg(not(unix))]
 pub(crate) fn remove_zmx_session_socket(_session_name: &str) {}
 
-/// The live screen plus the tail of the scrollback, read straight off the
-/// daemon's IPC socket. See `CDXC:SessionChatScreenCapture`.
+/// The session's ACTIVE screen, read straight off the daemon's IPC socket. zmx
+/// answers `History` through Ghostty's `TerminalFormatter`, which serializes
+/// only the screen currently in use: the primary screen together with the tail
+/// of its scrollback, or — while a full-screen TUI such as Claude Code holds
+/// the alternate screen — that grid alone, since Ghostty gives the alternate
+/// screen no scrollback. Primary-screen history is never mixed into an
+/// alternate-screen capture. See `CDXC:SessionChatScreenCapture`.
 #[cfg(unix)]
 pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
     let socket_path = zmx_session_socket_path(zmx_name);

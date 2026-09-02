@@ -383,85 +383,117 @@ pub(crate) async fn handle_board_start_work_http(
             )
         }
     };
-    let db = match open_gxserver_database(&state.paths) {
-        Ok(db) => db,
-        Err(error) => {
-            return domain_error_response(
-                endpoint_path,
-                request_id,
-                DomainStateError {
-                    code: "internalError",
-                    message: format!("SQLite gxserver state error: {error}"),
-                },
-            )
-        }
-    };
-    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     if let Some((project_id, session_id)) = outcome.created_session.clone() {
-        if let Err(error) =
-            schedule_presentation_session_delta(state, &db, &repository, &project_id, &session_id)
-        {
-            return domain_error_response(endpoint_path, request_id, error);
-        }
-        // Materialize the zmx provider like `ghostex create-agent`, so the
-        // staged bead prompt reaches a live agent instead of an inert row.
-        let context = ZmxServerContext {
-            auth_token_file: state.paths.auth_token_file.to_string_lossy().to_string(),
-            base_url: format!(
-                "http://{}:{}",
-                state.config.listeners.local.host, state.config.listeners.local.port
-            ),
-        };
-        let agent_settings = match read_agent_settings(&db) {
-            Ok(settings) => settings,
-            Err(error) => return domain_error_response(endpoint_path, request_id, error),
-        };
-        let mut provider_params = Map::new();
-        provider_params.insert("projectId".to_string(), json!(&project_id));
-        provider_params.insert("sessionId".to_string(), json!(&session_id));
-        let provider_start = dispatch_zmx_lifecycle_endpoint(
-            &repository,
-            "/api/startSessionProvider",
-            &provider_params,
-            &context,
-            &agent_settings,
-        );
-        if let Some(result) = outcome.result.as_object_mut() {
-            match provider_start {
-                Ok(_) => {
-                    result.insert("providerStarted".to_string(), Value::Bool(true));
-                }
-                Err(error) => {
-                    let message = match error {
-                        ZmxEndpointError::DependencyUnavailable(message) => message,
-                        ZmxEndpointError::Domain(error) => error.message,
-                    };
-                    let _ = state.logger.log(GxserverLogInput {
-                        level: LogLevel::Warn,
-                        event: "boardStartWork.providerStartFailed".to_string(),
-                        server_id: Some(state.metadata.server_id.clone()),
-                        request_id: Some(request_id.clone()),
-                        client: None,
-                        duration_ms: None,
-                        error: Some(message.clone()),
-                        details: Some(json!({
-                            "projectId": project_id,
-                            "sessionId": session_id,
-                        })),
-                    });
-                    result.insert("providerStarted".to_string(), Value::Bool(false));
-                    result.insert("providerStartError".to_string(), Value::String(message));
-                }
+        /*
+        CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+        The provider start below is a full zmx/launchd materialization, so it
+        belongs on the blocking pool like every other lifecycle dispatch rather
+        than on an executor worker.
+        */
+        let blocking_state = state.clone();
+        let blocking_request_id = request_id.clone();
+        let mut result = std::mem::take(&mut outcome.result);
+        let started = tokio::task::spawn_blocking(move || {
+            let status = start_board_work_session_provider(
+                &blocking_state,
+                &blocking_request_id,
+                &project_id,
+                &session_id,
+                &mut result,
+            );
+            (result, status)
+        })
+        .await;
+        match started {
+            Ok((result, Ok(()))) => outcome.result = result,
+            Ok((_, Err(error))) => return domain_error_response(endpoint_path, request_id, error),
+            Err(error) => {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    DomainStateError {
+                        code: "internalError",
+                        message: format!("Board start-work provider task failed: {error}"),
+                    },
+                )
             }
         }
-        let _ =
-            schedule_presentation_session_delta(state, &db, &repository, &project_id, &session_id);
     }
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
         rpc_success(request_id, outcome.result),
     )
+}
+
+/// Materializes the zmx provider for a freshly linked board worker session and
+/// records the outcome on `result`. Errors are the ones that used to answer the
+/// request directly: opening state, projecting the session, and reading agent
+/// settings. A failed provider start is reported on `result` instead, exactly as
+/// before.
+fn start_board_work_session_provider(
+    state: &AppState,
+    request_id: &str,
+    project_id: &str,
+    session_id: &str,
+    result: &mut Value,
+) -> std::result::Result<(), DomainStateError> {
+    let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
+        code: "internalError",
+        message: format!("SQLite gxserver state error: {error}"),
+    })?;
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    schedule_presentation_session_delta(state, &db, &repository, project_id, session_id)?;
+    // Materialize the zmx provider like `ghostex create-agent`, so the
+    // staged bead prompt reaches a live agent instead of an inert row.
+    let context = ZmxServerContext {
+        auth_token_file: state.paths.auth_token_file.to_string_lossy().to_string(),
+        base_url: format!(
+            "http://{}:{}",
+            state.config.listeners.local.host, state.config.listeners.local.port
+        ),
+    };
+    let agent_settings = read_agent_settings(&db)?;
+    let mut provider_params = Map::new();
+    provider_params.insert("projectId".to_string(), json!(project_id));
+    provider_params.insert("sessionId".to_string(), json!(session_id));
+    let provider_start = dispatch_zmx_lifecycle_endpoint(
+        &repository,
+        "/api/startSessionProvider",
+        &provider_params,
+        &context,
+        &agent_settings,
+    );
+    if let Some(result) = result.as_object_mut() {
+        match provider_start {
+            Ok(_) => {
+                result.insert("providerStarted".to_string(), Value::Bool(true));
+            }
+            Err(error) => {
+                let message = match error {
+                    ZmxEndpointError::DependencyUnavailable(message) => message,
+                    ZmxEndpointError::Domain(error) => error.message,
+                };
+                let _ = state.logger.log(GxserverLogInput {
+                    level: LogLevel::Warn,
+                    event: "boardStartWork.providerStartFailed".to_string(),
+                    server_id: Some(state.metadata.server_id.clone()),
+                    request_id: Some(request_id.to_string()),
+                    client: None,
+                    duration_ms: None,
+                    error: Some(message.clone()),
+                    details: Some(json!({
+                        "projectId": project_id,
+                        "sessionId": session_id,
+                    })),
+                });
+                result.insert("providerStarted".to_string(), Value::Bool(false));
+                result.insert("providerStartError".to_string(), Value::String(message));
+            }
+        }
+    }
+    let _ = schedule_presentation_session_delta(state, &db, &repository, project_id, session_id);
+    Ok(())
 }
 
 pub(crate) fn create_quick_project_params(

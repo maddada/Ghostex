@@ -20,6 +20,24 @@ pub(crate) fn create_attach_session_metadata(
     context: &ZmxServerContext,
     agent_settings: &Map<String, Value>,
 ) -> ZmxEndpointResult<Value> {
+    create_attach_session_metadata_with_observed_state(
+        repository,
+        params,
+        context,
+        agent_settings,
+        ObservedProviderState::Unobserved,
+    )
+}
+
+/// `create_attach_session_metadata`, told what this same request already
+/// observed about the provider. See `ObservedProviderState`.
+pub(crate) fn create_attach_session_metadata_with_observed_state(
+    repository: &DomainRepository<'_>,
+    params: &Map<String, Value>,
+    context: &ZmxServerContext,
+    agent_settings: &Map<String, Value>,
+    observed: ObservedProviderState,
+) -> ZmxEndpointResult<Value> {
     let lifecycle = read_lifecycle_params(params)?;
     let project = repository
         .get_project(&lifecycle.project_id)?
@@ -29,7 +47,7 @@ pub(crate) fn create_attach_session_metadata(
     let existing_session = require_session(repository, &lifecycle)?;
     let cwd = string_field(&existing_session, "cwd").or_else(|| string_field(&project, "path"));
     let (probe, probed_session, zmx, zmx_name) =
-        probe_and_cache_session_provider(repository, &lifecycle)?;
+        probe_and_cache_session_provider_with_observed_state(repository, &lifecycle, observed)?;
     let explicit_startup_text = normalize_optional_startup_text(params.get("startupText"));
     let queued_launch_startup_text = if explicit_startup_text.is_none() {
         get_queued_agent_launch_startup_text_for_session(&probed_session)
@@ -75,7 +93,7 @@ pub(crate) fn create_attach_session_metadata(
         return Ok(Value::Object(attach));
     }
 
-    let attach_command = build_zmx_attach_command(ZmxAttachCommandInput {
+    let attach_command_input = ZmxAttachCommandInput {
         cwd: cwd.clone().unwrap_or_default(),
         global_session_ref: string_field(&probed_session, "globalRef"),
         gxserver_auth_token_file: Some(context.auth_token_file.clone()),
@@ -85,7 +103,21 @@ pub(crate) fn create_attach_session_metadata(
         session_name: zmx_name.clone(),
         title: string_field(&session_for_attach, "title"),
         zmx_executable_path: zmx.executable_path,
-    });
+    };
+    /*
+    This request just confirmed the provider is alive (real probe or a
+    same-request observation), so the attach script's own `zmx list`
+    existence pre-check is redundant: use the leaner started-variant, which
+    is the normal script's exists-branch (title notice + require-existing
+    attach) without the extra subprocess round trip inside the PTY. A probe
+    that reported `missing` keeps the canonical script with its persistence
+    notice and cwd fallback.
+    */
+    let attach_command = if probe.lifecycle_state == "exists" {
+        build_started_zmx_attach_command(attach_command_input)
+    } else {
+        build_zmx_attach_command(attach_command_input)
+    };
     let mut attach = Map::new();
     attach.insert("attachCommand".to_string(), Value::String(attach_command));
     if let Some(cwd) = cwd {
@@ -126,6 +158,26 @@ pub(crate) fn start_session_provider(
     context: &ZmxServerContext,
     agent_settings: &Map<String, Value>,
 ) -> ZmxEndpointResult<Value> {
+    start_session_provider_with_observed_state(
+        repository,
+        params,
+        context,
+        agent_settings,
+        ObservedProviderState::Unobserved,
+    )
+    .map(|(result, _)| result)
+}
+
+/// `start_session_provider`, told what this same request already observed about
+/// the provider, and reporting back what the start itself observed so the
+/// caller can skip a redundant probe of its own. See `ObservedProviderState`.
+pub(crate) fn start_session_provider_with_observed_state(
+    repository: &DomainRepository<'_>,
+    params: &Map<String, Value>,
+    context: &ZmxServerContext,
+    agent_settings: &Map<String, Value>,
+    observed: ObservedProviderState,
+) -> ZmxEndpointResult<(Value, ObservedProviderState)> {
     let lifecycle = read_lifecycle_params(params)?;
     let project = repository
         .get_project(&lifecycle.project_id)?
@@ -133,7 +185,7 @@ pub(crate) fn start_session_provider(
             DomainStateError::not_found(format!("Project {} does not exist.", lifecycle.project_id))
         })?;
     let (probe, probed_session, zmx, zmx_name) =
-        probe_and_cache_session_provider(repository, &lifecycle)?;
+        probe_and_cache_session_provider_with_observed_state(repository, &lifecycle, observed)?;
     let explicit_startup_text = normalize_optional_startup_text(params.get("startupText"));
     let queued_launch_startup_text = if explicit_startup_text.is_none() {
         get_queued_agent_launch_startup_text_for_session(&probed_session)
@@ -154,18 +206,25 @@ pub(crate) fn start_session_provider(
         && startup_text_disposition == "none"
         && string_field(&probed_session, "kind").as_deref() == Some("terminal");
     if !should_start_with_startup_text && !should_start_plain_terminal {
-        return Ok(json!({
-            "provider": "zmx",
-            "providerState": probe_to_value(&probe),
-            "session": if explicit_startup_text.is_none() && has_queued_agent_launch_startup_text(&probed_session) {
-                consume_queued_agent_launch_startup_text(repository, &probed_session)?
-            } else {
-                probed_session
-            },
-            "started": false,
-            "startupTextDisposition": startup_text_disposition,
-            "zmxName": zmx_name,
-        }));
+        /*
+        Nothing was launched, so this call observed nothing beyond the probe it
+        was handed: the caller keeps its own authoritative probe.
+        */
+        return Ok((
+            json!({
+                "provider": "zmx",
+                "providerState": probe_to_value(&probe),
+                "session": if explicit_startup_text.is_none() && has_queued_agent_launch_startup_text(&probed_session) {
+                    consume_queued_agent_launch_startup_text(repository, &probed_session)?
+                } else {
+                    probed_session
+                },
+                "started": false,
+                "startupTextDisposition": startup_text_disposition,
+                "zmxName": zmx_name,
+            }),
+            ObservedProviderState::Unobserved,
+        ));
     }
     let cwd = string_field(&probed_session, "cwd").or_else(|| string_field(&project, "path"));
     let Some(cwd) = cwd.filter(|path| cwd_exists(path)) else {
@@ -197,7 +256,7 @@ pub(crate) fn start_session_provider(
             zmx_executable_path: zmx.executable_path.clone(),
         })
     };
-    let result = run_zmx_start_command(&zmx_name, &zmx.executable_path, command)?;
+    let start = run_zmx_start_command(&zmx_name, &zmx.executable_path, command)?;
     let provider_state = ProviderProbe {
         error: None,
         lifecycle_state: "exists".to_string(),
@@ -238,25 +297,52 @@ pub(crate) fn start_session_provider(
     before.
     */
     let session = crate::agents::arm_draft_launch_activity_suppression(repository, &session)?;
-    Ok(json!({
-        "exitCode": result.exit_code,
-        "provider": "zmx",
-        "providerState": probe_to_value(&provider_state),
-        "session": session,
-        "started": true,
-        "startupTextDisposition": startup_text_disposition,
-        "zmxName": zmx_name,
-    }))
+    Ok((
+        json!({
+            "exitCode": start.result.exit_code,
+            "provider": "zmx",
+            "providerState": probe_to_value(&provider_state),
+            "session": session,
+            "started": true,
+            "startupTextDisposition": startup_text_disposition,
+            "zmxName": zmx_name,
+        }),
+        if start.observed_alive {
+            ObservedProviderState::Exists
+        } else {
+            ObservedProviderState::Unobserved
+        },
+    ))
 }
 
 pub(crate) fn probe_and_cache_session_provider(
     repository: &DomainRepository<'_>,
     lifecycle: &LifecycleParams,
 ) -> ZmxEndpointResult<(ProviderProbe, Value, GxserverResolvedTool, String)> {
+    probe_and_cache_session_provider_with_observed_state(
+        repository,
+        lifecycle,
+        ObservedProviderState::Unobserved,
+    )
+}
+
+/// `probe_and_cache_session_provider`, reusing a provider state this same
+/// request observed milliseconds ago instead of spawning another `zmx list`.
+/// The cached row is written exactly as the equivalent real probe would have
+/// written it. See `ObservedProviderState`.
+pub(crate) fn probe_and_cache_session_provider_with_observed_state(
+    repository: &DomainRepository<'_>,
+    lifecycle: &LifecycleParams,
+    observed: ObservedProviderState,
+) -> ZmxEndpointResult<(ProviderProbe, Value, GxserverResolvedTool, String)> {
     let session = require_session(repository, lifecycle)?;
     let zmx = require_zmx()?;
     let zmx_name = provider_zmx_session_name(&session)?;
-    let probe = probe_zmx_session(&zmx_name, &zmx.executable_path);
+    let probe = match observed {
+        ObservedProviderState::Unobserved => probe_zmx_session(&zmx_name, &zmx.executable_path),
+        ObservedProviderState::Exists => observed_provider_probe(&zmx_name, "exists"),
+        ObservedProviderState::Missing => observed_provider_probe(&zmx_name, "missing"),
+    };
     let lifecycle_state = reconcile_domain_lifecycle_from_provider_probe(
         string_field(&session, "lifecycleState")
             .as_deref()
@@ -293,12 +379,23 @@ pub(crate) fn kill_and_cache_session_provider(
     let mut update = Map::new();
     update.insert("projectId".to_string(), json!(lifecycle.project_id));
     update.insert("sessionId".to_string(), json!(lifecycle.session_id));
+    /*
+    CDXC:FailedKillKeepsLifecycle 2026-09-01:
+    A failed kill used to write lifecycleState "unknown", which no surface
+    shows: the sidebar requires running/sleeping and the Sessions history
+    requires "stopped", so one zmx hiccup made the session invisible
+    everywhere. The transition did not happen, so the durable state keeps what
+    it was; the failure itself stays recorded in providerState
+    (killError/probeError via `failed_kill_provider_state_patch`).
+    */
+    let preserved_lifecycle_state =
+        string_field(&session, "lifecycleState").unwrap_or_else(|| "unknown".to_string());
     update.insert(
         "lifecycleState".to_string(),
         json!(if kill.killed {
             lifecycle_state
         } else {
-            "unknown"
+            preserved_lifecycle_state.as_str()
         }),
     );
     update.insert("providerState".to_string(), Value::Object(provider_state));
@@ -352,9 +449,22 @@ fn should_persist_activity_update(
             != Some(activity)
 }
 
+/// The exact `ProviderProbe` a real probe would have produced for a state this
+/// request already observed: `exists` and `missing` are both clean outcomes, so
+/// they carry no probe error, and `probedAt` is stamped now because that is when
+/// the observation is being recorded.
+fn observed_provider_probe(session_name: &str, lifecycle_state: &str) -> ProviderProbe {
+    ProviderProbe {
+        error: None,
+        lifecycle_state: lifecycle_state.to_string(),
+        probed_at: now_iso(),
+        zmx_name: session_name.to_string(),
+    }
+}
+
 fn probe_zmx_session(session_name: &str, zmx_executable_path: &str) -> ProviderProbe {
     let probed_at = now_iso();
-    let result = run_zsh_script(
+    let result = run_zmx_probe_script(
         build_zmx_exists_command(session_name, zmx_executable_path),
         ZmxCommandOptions::default(),
     );
@@ -366,7 +476,7 @@ fn probe_zmx_session(session_name: &str, zmx_executable_path: &str) -> ProviderP
                 lifecycle_state: "unknown".to_string(),
                 probed_at,
                 zmx_name: session_name.to_string(),
-            }
+            };
         }
     };
     let lifecycle_state = if result.exit_code == 0 {
@@ -385,7 +495,7 @@ fn probe_zmx_session(session_name: &str, zmx_executable_path: &str) -> ProviderP
 }
 
 pub(crate) fn kill_zmx_session(session_name: &str, zmx_executable_path: &str) -> ProviderKill {
-    let result = run_zsh_script(
+    let result = run_zmx_probe_script(
         build_zmx_kill_command(session_name, zmx_executable_path),
         ZmxCommandOptions::default(),
     );
@@ -430,7 +540,7 @@ pub fn read_zmx_session_process_identities(
         return Ok(HashMap::new());
     }
     let zmx = require_zmx()?;
-    let result = run_zsh_script(
+    let result = run_zmx_probe_script(
         build_zmx_process_snapshot_command(&zmx.executable_path),
         ZmxCommandOptions {
             stdout_limit_bytes: Some(GXSERVER_ZMX_PROCESS_SNAPSHOT_STDOUT_LIMIT_BYTES),
@@ -486,7 +596,7 @@ pub fn read_zmx_session_process_identities(
 
 pub fn read_zmx_existing_session_names() -> Result<HashSet<String>, ZmxEndpointError> {
     let zmx = require_zmx()?;
-    let result = run_zmx_interaction_command(
+    let result = run_zmx_probe_command(
         format!(
             "unset ZMX_SESSION ZMX_SESSION_PREFIX\nexec {} list --short",
             shell_quote(&zmx.executable_path),
