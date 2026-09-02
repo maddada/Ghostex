@@ -7,6 +7,10 @@ use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 
+use super::codex_trust::{
+    ghostex_codex_hook_trust_entries, remove_codex_hook_trust_entries, trust_ghostex_codex_hooks,
+    CodexTrustWriteMode,
+};
 use super::config::{
     all_hook_events, command_agent, hook_format, hook_marker, nested_event_timeout, nested_timeout,
     pi_extension_path_is_loader_visible, HookDefinition, HookFormat, HookPaths,
@@ -45,8 +49,23 @@ pub(crate) fn uninstall_agent_hook(
         | HookFormat::NestedJson => {
             let mut removed_paths = Vec::new();
             for config_path in config_paths {
+                // CDXC:CodexHookTrust 2026-09-02: state keys are positional, so
+                // they must be read before the hooks leave the file.
+                let codex_trust_keys = (definition.agent_id == "codex")
+                    .then(|| {
+                        ghostex_codex_hook_trust_entries(&config_path, hook_paths, &command)
+                            .into_iter()
+                            .map(|entry| entry.key)
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
                 if remove_json_hook(&config_path, definition, &command)? {
                     removed_paths.push(path_string(&config_path));
+                    if remove_codex_hook_trust_entries(&config_path, &codex_trust_keys)? {
+                        let config_toml =
+                            super::codex_trust::codex_config_path_for_hooks(&config_path);
+                        removed_paths.push(path_string(&config_toml));
+                    }
                 }
             }
             Ok(removed_paths)
@@ -648,6 +667,20 @@ pub(crate) fn install_agent_hook(
             for config_path in config_paths {
                 merge_json_hook(&config_path, definition, &command)?;
                 installed_paths.push(path_string(&config_path));
+                // CDXC:CodexHookTrust 2026-09-02: an explicit install is the
+                // user's approval of the Ghostex hooks, so record it where Codex
+                // reads it or Codex never runs them.
+                if definition.agent_id == "codex"
+                    && trust_ghostex_codex_hooks(
+                        &config_path,
+                        hook_paths,
+                        &command,
+                        CodexTrustWriteMode::Explicit,
+                    )?
+                {
+                    let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
+                    installed_paths.push(path_string(&config_toml));
+                }
             }
             Ok(installed_paths)
         }
@@ -711,6 +744,21 @@ pub(crate) fn repair_agent_hook_paths(
             for config_path in config_paths {
                 merge_json_hook(&config_path, definition, &command)?;
                 repaired_paths.push(path_string(&config_path));
+                // CDXC:CodexHookTrust 2026-09-02: a repaired command changes the
+                // hash Codex checks, so a slot the user already approved is
+                // re-approved; a slot Codex never saw approved stays untrusted
+                // until the user presses Update Hooks.
+                if definition.agent_id == "codex"
+                    && trust_ghostex_codex_hooks(
+                        &config_path,
+                        hook_paths,
+                        &command,
+                        CodexTrustWriteMode::RefreshExisting,
+                    )?
+                {
+                    let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
+                    repaired_paths.push(path_string(&config_toml));
+                }
             }
             Ok(repaired_paths)
         }

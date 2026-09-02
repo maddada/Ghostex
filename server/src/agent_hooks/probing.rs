@@ -17,6 +17,9 @@ use crate::{
 
 use super::config::{GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS, SHELL_PATH_SENTINEL};
 use super::plugin_sources::shell_quote;
+use super::probe_cache::{
+    cached_resolve_command_path, login_shell_path_entries, refresh_resolved_command_path,
+};
 
 pub(crate) fn parse_global_session_ref(value: &str) -> (Option<String>, Option<String>) {
     let parts = value.trim().split(':').collect::<Vec<_>>();
@@ -126,11 +129,21 @@ pub(crate) fn list_profile_hook_paths(
     paths
 }
 
+/// Status-freshness check for a provider CLI. Served from the 60 second probe
+/// cache in `probe_cache`, because the subprocess probes underneath cost more
+/// than every other part of a hook status read combined.
 pub(crate) fn command_exists(command: &str, home_dir: &Path) -> bool {
-    resolve_command_path(command, home_dir).is_some()
+    cached_resolve_command_path(command, home_dir).is_some()
 }
 
-fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
+/// Same check, but re-probed now and written back to the cache. Install acts on
+/// the answer, so it must not skip a provider whose CLI appeared inside the
+/// cache window.
+pub(crate) fn command_exists_uncached(command: &str, home_dir: &Path) -> bool {
+    refresh_resolved_command_path(command, home_dir).is_some()
+}
+
+pub(super) fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
     /*
     CDXC:AgentHooks 2026-06-23-07:52:
     Hook status must discover the same agent CLIs on macOS and Ubuntu before reporting cliMissing. Merge login-shell PATH entries, GUI/default tool directories, and user PATH, then run the final command-v probe in the platform shell so startup files cannot overwrite the normalized PATH and Linux does not require zsh.
@@ -154,7 +167,7 @@ fn resolve_command_path(command: &str, home_dir: &Path) -> Option<String> {
 
 fn normalize_gxserver_process_path(current_path: Option<&str>, home_dir: &Path) -> String {
     let mut entries = Vec::new();
-    entries.extend(discover_login_shell_path_entries(home_dir));
+    entries.extend(login_shell_path_entries(home_dir));
     entries.extend(split_path(current_path));
     entries.extend([
         path_string(&home_dir.join(".opencode").join("bin")),
@@ -179,7 +192,10 @@ fn normalize_gxserver_process_path(current_path: Option<&str>, home_dir: &Path) 
     unique_path_entries(entries).join(":")
 }
 
-fn discover_login_shell_path_entries(home_dir: &Path) -> Vec<String> {
+/// Raw login-shell PATH probe. Every caller goes through
+/// `probe_cache::login_shell_path_entries`, which keeps the interactive shell
+/// spawn to once per process.
+pub(super) fn probe_login_shell_path_entries(home_dir: &Path) -> Vec<String> {
     for candidate in login_shell_candidates() {
         let candidate_path = PathBuf::from(&candidate);
         if !is_executable(&candidate_path) {

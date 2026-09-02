@@ -1,9 +1,11 @@
 pub mod api;
+pub(crate) mod codex_trust;
 pub mod config;
 pub mod event_mapping;
 pub mod install;
 pub mod notify_runtime;
 pub mod plugin_sources;
+mod probe_cache;
 pub mod probing;
 pub mod resolution;
 #[cfg(test)]

@@ -4,14 +4,17 @@ use serde_json::{json, Map, Value};
 
 use crate::{domain::DomainStateError, paths::GxserverPaths};
 
+use super::codex_trust::{codex_hook_trust_status_for_paths, CodexHookTrustStatus};
 use super::config::{hook_format, HookDefinition, HookFormat, HookPaths, HOOK_DEFINITIONS};
 use super::install::{
     inspect_agent_hook_installation, install_agent_hook, install_notify_hook,
     is_notify_hook_current, migrate_hook_session_sidecars, notify_hook_state_directory,
     repair_agent_hook_paths, uninstall_agent_hook,
 };
+use super::plugin_sources::command_for_agent;
 use super::probing::{
-    command_exists, display_path, io_error, now_iso, path_string, push_unique_path, read_file_text,
+    command_exists, command_exists_uncached, display_path, io_error, now_iso, path_string,
+    push_unique_path, read_file_text,
 };
 use super::resolution::{normalize_agent_ids, provider_hook_paths};
 
@@ -74,12 +77,28 @@ pub fn install_agent_hooks(
         else {
             continue;
         };
-        if !command_exists(definition.cli_command, &hook_paths.home_dir) {
+        /*
+        CDXC:GxserverAgentHookProbeCache 2026-09-01:
+        Status reads accept a 60 second CLI-presence cache, but install skips a
+        provider outright when its CLI is missing. A user who installs the CLI
+        and immediately presses Install Hooks must not be told the provider is
+        absent, so this call re-probes and refreshes the cache entry.
+        */
+        if !command_exists_uncached(definition.cli_command, &hook_paths.home_dir) {
             continue;
         }
         installed_paths.extend(install_agent_hook(definition, &hook_paths)?);
     }
-    let mut status = read_agent_hook_status(paths, params)?
+    /*
+    CDXC:AgentHookInstallSnapshot 2026-09-02:
+    Settings replaces its whole hook-status snapshot with this response, so a
+    scoped install (one row's Install/Update hook button) must still report
+    the complete catalog. Answering with only the requested agents made every
+    other row fall back to "not checked" until the user pressed Refresh.
+    */
+    let mut status_params = params.clone();
+    status_params.remove("agentIds");
+    let mut status = read_agent_hook_status(paths, &status_params)?
         .as_object()
         .cloned()
         .unwrap_or_default();
@@ -242,7 +261,22 @@ fn read_hook_status(
     let inspection = inspect_agent_hook_installation(definition, hook_paths, &provider_paths);
     let provider_current = inspection.current_hook_installed;
     let ghostex_hook_present = inspection.ghostex_hook_present;
-    let hook_installed = notify_current && provider_current;
+    /*
+    CDXC:CodexHookTrust 2026-09-02:
+    A Codex hook is only "installed" once Codex will actually RUN it, which
+    needs its trust record next to the file. Missing trust reads as
+    updateRequired so the Update Hooks button repairs it, and the detail says
+    why instead of the generic "repair" wording.
+    */
+    let codex_trust = (definition.agent_id == "codex" && ghostex_hook_present).then(|| {
+        codex_hook_trust_status_for_paths(
+            &provider_paths,
+            hook_paths,
+            &command_for_agent(definition, &hook_paths.notify_hook_path),
+        )
+    });
+    let codex_trusted = codex_trust.map_or(true, |trust| trust == CodexHookTrustStatus::Trusted);
+    let hook_installed = notify_current && provider_current && codex_trusted;
     let status = if !cli_installed {
         "cliMissing"
     } else if hook_installed {
@@ -256,7 +290,14 @@ fn read_hook_status(
         "agentId": definition.agent_id,
         "cliCommand": definition.cli_command,
         "cliInstalled": cli_installed,
-        "detail": hook_detail(definition, hook_paths, status, notify_current, paths.first().map(String::as_str)),
+        "detail": hook_detail(
+            definition,
+            hook_paths,
+            status,
+            notify_current,
+            codex_trust,
+            paths.first().map(String::as_str),
+        ),
         "hookInstalled": hook_installed,
         "paths": paths,
         "status": status,
@@ -268,6 +309,7 @@ fn hook_detail(
     hook_paths: &HookPaths,
     status: &str,
     notify_current: bool,
+    codex_trust: Option<CodexHookTrustStatus>,
     first_path: Option<&str>,
 ) -> String {
     let display = display_path(
@@ -282,6 +324,14 @@ fn hook_detail(
     match status {
         "cliMissing" => format!("{} was not found on PATH.", definition.cli_command),
         "installed" => format!("Installed in {display}"),
+        "updateRequired" if codex_trust == Some(CodexHookTrustStatus::Untrusted) => {
+            "Codex has not trusted the Ghostex hooks yet, so it skips them. Run Update Hooks to approve them."
+                .to_string()
+        }
+        "updateRequired" if codex_trust == Some(CodexHookTrustStatus::Disabled) => {
+            "The Ghostex hooks are disabled in Codex (/hooks). Run Update Hooks to enable them."
+                .to_string()
+        }
         "updateRequired" if notify_current => format!("Run Update Hooks to repair {display}"),
         "updateRequired" => format!(
             "Run Update Hooks to update {}",
