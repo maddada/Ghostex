@@ -304,6 +304,12 @@ fn spawn_tailcat_serve(spec: &TailcatServeSpec) -> std::io::Result<Child> {
     let mut command = Command::new(&spec.binary_path);
     command
         .arg("serve")
+        // Emit a self-contained address blob with the DERP relay details
+        // embedded. Without it the blob only references a DERP map region id,
+        // so every phone has to fetch https://tailcat.dev/derpmap.json before
+        // it can move a single tunnel byte — a hard-timeout network dependency
+        // that fails on cellular links and filtered DNS.
+        .arg("--full-address")
         .arg(format!("--key={}", spec.key_file.display()));
     if !spec.allowed_client_keys.is_empty() {
         command.arg(format!("--allow={}", spec.allowed_client_keys.join(",")));
