@@ -1,5 +1,23 @@
 # Changelog
 
+## 8.7.0 - 2026-09-03
+
+- Major
+  - Pair a phone with Easy Connect: the new Mobile & Remote setup shows a code the Android app scans, Settings → Remote gains SSH access, Tailscale and paired-device cards in place of the tailcat panel, and saved machines are reached over an Easy Connect forwarder instead of a raw SSH host.
+  - The Android app gets the matching setup flow (Welcome, connect, scan code, connected), a Can't reach checklist that names the cause of a failed connection, Tailscale SSH without a password, machine tabs with a cloud connect glyph and counts, and Delayed Send countdowns that tick from the phone clock.
+  - Switch Account: a Claude or Codex session can be resumed under another account of the same agent family from the terminal action bar, the chat composer menu, or the sidebar card.
+  - Antigravity CLI is a Chat View agent: its transcripts are followed, model and effort are read from the terminal footer, thinking stays visible as narration, its hooks are installed, and its own conversation names become session titles.
+  - Only a terminal you are looking at sizes a session: hidden chat views and background clients rest at 200 columns, so agent CLIs stop truncating lines in Chat View and a hidden pane no longer pins the daemon narrow. Installing this release restarts every live zmx session once; agents resume from their saved commands.
+- Minor
+  - Claude Code questions now stay in Chat View while background subagents work in the same session; previously a subagent's tool traffic retired the card within a second.
+  - Claude's task list shows above the composer, context window usage appears in the composer, and a Claude statusLine command keeps the model and effort pills live.
+  - Chat View retires terminal status rows by their first paragraph and transcript recency, approval cards no longer repeat the tool name, the context meter Compact button is simpler, option pill menus stay anchored while a choice loads, and the transcript selection toolbar stays one pill on mobile.
+  - Cursor's Ready title ends the working spinner, custom agents built on Claude keep a stable identity, and disabled Antigravity or Claude hooks count as not installed.
+  - Ghostex no longer bundles, downloads or symlinks the Beads `bd` CLI; install Beads on the machine and the Kanban board uses that copy.
+  - Machine tabs count every session on the machine regardless of filters and hide idle awake counts, and Space swipe works across the whole sidebar page.
+  - Tips & Tricks is refreshed for the current product surfaces, first-launch setup can finish when a project already exists and hands phone setup to Mobile & Remote, and product copy says computer instead of Mac.
+  - The model catalog adds Cursor's Gemini 3.8 Flash and the Antigravity CLI lineup, the `ghostex sessions` mobile summary carries delayed-send deadlines and automation flags, and the Linux app syncs the X server before CEF parents into the embed host.
+
 ## 8.6.0 - 2026-09-02
 
 - Major
