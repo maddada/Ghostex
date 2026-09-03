@@ -2,7 +2,7 @@ use super::*;
 use crate::session_chat_interactive::emit_session_chat_prompt_state_frame;
 
 /*
-CDXC:GxserverRustPort 2026-06-16-10:00:
+CDXC:RepoStructure 2026-06-16-10:00:
 Phase 6 agent endpoints share the durable domain repository and authenticated RPC envelope with earlier Rust milestones. Keep zmx fork startup explicit through the selected listener port and schedule presentation deltas only after the session row has been updated.
 */
 pub(crate) async fn handle_agent_http(
@@ -16,7 +16,7 @@ pub(crate) async fn handle_agent_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     /*
-    CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+    CDXC:Zmx 2026-09-01:
     `/api/forkSession` and `/api/switchDraftAgent` reach
     `dispatch_zmx_lifecycle_endpoint`, and the rename path below reaches
     `dispatch_zmx_session_interaction_endpoint`, so this handler spawns zmx and
@@ -107,7 +107,7 @@ fn dispatch_agent_http_blocking(
                 result.get("reason").and_then(Value::as_str)
                     == Some("first-prompt-auto-title-claimed");
             /*
-            CDXC:DraftSessions 2026-08-28 (live-pane switching):
+            CDXC:Drafts 2026-08-28 (live-pane switching):
             Everything the daemon has detected off this session's screen belongs
             to the agent that just got interrupted — its model/effort pills, its
             statusline, its terminal notice, and its composer-readiness verdict.
@@ -124,7 +124,9 @@ fn dispatch_agent_http_blocking(
             actually changed agent (a switch to the agent already in use is a
             no-op and must not blank a valid detection).
             */
-            if endpoint_path == "/api/switchDraftAgent" {
+            if endpoint_path == "/api/switchDraftAgent"
+                || endpoint_path == "/api/switchSessionAgent"
+            {
                 if let Some((project_id, session_id)) = presentation_session.as_ref() {
                     crate::session_chat_options::forget_session_chat_options(
                         state, project_id, session_id,
@@ -200,7 +202,7 @@ fn dispatch_agent_http_blocking(
                 requested_agent_title_command_submission(&endpoint_path, &params, &result)
             {
                 /*
-                CDXC:GPUIRemoteSessionRename 2026-08-12:
+                CDXC:RemoteMachines 2026-08-12:
                 A remote GPUI has no local Ghostty surface for this session.
                 When its bounded native bridge opts in, submit the rename from
                 the owning gxserver through zmx's separate text/Enter path.
@@ -217,7 +219,7 @@ fn dispatch_agent_http_blocking(
                 send_params.insert("submit".to_string(), Value::Bool(true));
                 send_params.insert("text".to_string(), Value::String(command));
                 /*
-                CDXC:DraftSessions 2026-08-28:
+                CDXC:Drafts 2026-08-28:
                 `request_session_rename` already armed the draft's suppression
                 window when it accepted this rename, but the bytes go out HERE,
                 a round trip later. Re-arm from the moment they are actually
@@ -431,7 +433,7 @@ pub(crate) fn log_agent_hook_passive_identity_conflict(
 }
 
 /*
-CDXC:SessionChatLoadingDiagnostics 2026-08-28:
+CDXC:Diagnostics 2026-08-28:
 Every agent-activity flip (working/idle/attention) with its trigger, the
 event that carried it, its working source (explicit hook vs terminal title),
 and whether the initial passive-signal suppression window was still armed.

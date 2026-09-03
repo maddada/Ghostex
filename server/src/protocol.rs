@@ -110,7 +110,7 @@ pub struct MigrationStateImports {
 #[serde(rename_all = "camelCase")]
 pub struct LegacyMacosStateImportStatus {
     /*
-    CDXC:GxserverStorage 2026-06-22-05:10:
+    CDXC:ServerDaemon 2026-06-22-05:10:
     Migration status is a storage wire contract, not only an internal Rust shape. Keep legacy import detail fields optional so `notRun`, skipped, completed, and TypeScript-created state.db metadata can serialize with the same field presence as the TypeScript daemon.
     */
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -283,7 +283,7 @@ pub fn protocol_mismatch_error(
 }
 
 /*
-CDXC:GxserverProtocol 2026-06-22-04:10:
+CDXC:ServerApi 2026-06-22-04:10:
 Protocol-mismatch messages are part of the client contract. TypeScript reports `String(actualProtocolVersion)`, so Rust must preserve JavaScript-like stringification for non-scalar JSON values instead of leaking serde JSON syntax into update guidance.
 */
 fn js_string_for_protocol_version(value: Value) -> String {
@@ -311,7 +311,7 @@ fn js_string_for_protocol_version(value: Value) -> String {
 }
 
 /*
-CDXC:GxserverProtocol 2026-06-14-20:37:
+CDXC:ServerApi 2026-06-14-20:37:
 Phase 1 mirrors the TypeScript endpoint catalog so auth, method, protocol, and remote-listener gates run before any Rust milestone-specific handler decides whether an endpoint is implemented.
 */
 pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
@@ -356,7 +356,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/ingestAgentHookEvent"
         | "/api/createSession"
         /*
-        CDXC:GPUIRemoteNewTerminal 2026-08-16:
+        CDXC:RemoteMachines 2026-08-16:
         Remote GPUI project-header terminal creation uses the daemon-owned
         atomic workspace-terminal endpoint so the new session, provider, and
         attach plan are created as one operation. It carries only a trusted
@@ -370,7 +370,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/relocateProject"
         | "/api/forkSession"
         /*
-        CDXC:DraftSessions 2026-08-28:
+        CDXC:Drafts 2026-08-28:
         Switching a draft's agent is remote-allowed for the same reason
         createAgentSession and startSessionProvider above are: the agent CLI
         runs on the machine that owns the project, so a client looking at a
@@ -378,6 +378,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         / session / agent ids the daemon itself published.
         */
         | "/api/switchDraftAgent"
+        // CDXC:AgentProviders 2026-09-03: same reasoning as switchDraftAgent
+        // above; the resume command is built by the daemon that owns the row.
+        | "/api/switchSessionAgent"
         | "/api/readAgentLaunchPlan"
         | "/api/readAgentResumePlan"
         | "/api/requestSessionRename"
@@ -392,7 +395,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readWorkspaceSessionGroups"
         | "/api/updateWorkspaceSessionGroups"
         /*
-        CDXC:NavigationHistory 2026-08-19:
+        CDXC:Navigation 2026-08-19:
         Titlebar Back/Forward walks a daemon-owned trail of previously active
         sessions and projects. It carries only the same bounded routing ids and
         display titles the sidebar projection already sends, so it is remote
@@ -405,7 +408,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/updateSidebarProjectCollections"
         | "/api/assignProjectToSidebarCollection"
         /*
-        CDXC:SidebarSpaces 2026-08-27:
+        CDXC:Spaces 2026-08-27:
         Spaces are a saved sidebar filter owned by the daemon that owns the
         projects, so a remote gxserver section must be able to read and edit its
         own Space set. The document carries only the same bounded ids, names,
@@ -426,7 +429,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/searchSessions"
         | "/api/listPreviousSessions"
         /*
-        CDXC:SessionForkFamilies 2026-08-28:
+        CDXC:SessionFork 2026-08-28:
         Remote-allowed for the same reason `/api/listPreviousSessions` above it
         is: the fork family is derived from the registry on the machine that ran
         the sessions. It carries only the bounded project/session ids, titles,
@@ -434,7 +437,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         | "/api/sessionForkBranches"
         /*
-        CDXC:SessionChatRewind 2026-09-02:
+        CDXC:SessionChat 2026-09-02:
         Remote-allowed for the same reason `/api/sendSessionChatMessage` is: the
         rewind is driven through the agent CLI's own dialog in the terminal, and
         that terminal only exists on the machine running the session, so a
@@ -446,7 +449,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readSessionTranscriptSizes"
         | "/api/transitionSession"
         /*
-        CDXC:MobileKeepAwake 2026-08-19:
+        CDXC:KeepAwake 2026-08-19:
         Ghostex mobile attaches over SSH and renews a keep-awake lease so the
         machine's Auto Sleep sweep cannot retire a terminal the phone is looking
         at. It carries only bounded project/session ids plus a TTL, exactly like
@@ -462,7 +465,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/removeSession"
         | "/api/readSessionText"
         /*
-        CDXC:AgentHistorySearch 2026-08-20:
+        CDXC:PromptSearch 2026-08-20:
         The Find surface is remote-allowed for the same reason chat is: an
         agent's prompt history lives on the machine that ran the agent, so a
         client looking at a remote machine has to ask that machine. These calls
@@ -476,7 +479,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/resolveAgentPromptLaunch"
         | "/api/readSessionChat"
         /*
-        CDXC:SessionChatComposerReady 2026-08-26:
+        CDXC:SessionChat 2026-08-26:
         Remote-allowed for the same reason `/api/readSessionText` next to it is:
         the screen only exists on the machine running the session, and this
         carries a bounded thirty-line tail of it plus the composer verdict. A
@@ -496,7 +499,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/handoffSessionChatDraft"
         | "/api/claimSessionChatLaunchDraft"
         /*
-        CDXC:SessionChatPromptQueue 2026-08-21:
+        CDXC:SessionChat 2026-08-21:
         The chat prompt queue and the synced composer draft are remote-allowed
         for the same reason chat itself is: the queue is owned by the daemon
         that runs the session, so a client looking at a remote machine (or a
@@ -513,7 +516,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/setSessionChatDraft"
         | "/api/listSessionChatDrafts"
         /*
-        CDXC:ExportTranscript 2026-08-20:
+        CDXC:TranscriptExport 2026-08-20:
         Exporting a transcript is remote-allowed for the same reason reading a
         chat is: the transcript file only exists on the machine that runs the
         agent, so a client looking at a remote session has to ask that machine.
@@ -545,7 +548,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/removeProject"
         | "/api/deleteWorktreeProject"
         /*
-        CDXC:WorktreeRename 2026-08-09-18:40:
+        CDXC:Worktrees 2026-08-09-18:40:
         Renaming a worktree is remote-allowed for the same reason deleting one
         is: a GPUI sidebar showing a remote machine's projects has to be able to
         rename a worktree there. `projectId` is an opaque selector and `name` is
@@ -554,7 +557,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         | "/api/renameWorktreeProject"
         /*
-        CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+        CDXC:Worktrees 2026-07-29-00:00:
         Worktree sessions are remote-allowed for the same reason the other
         worktree RPCs are: a GPUI sidebar showing a remote machine's projects has
         to be able to start work in a worktree there. The `existingWorktree.path`
@@ -568,7 +571,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/updateSession"
         | "/api/updateSessionOrder"
         /*
-        CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+        CDXC:StateSync 2026-07-29-00:00:
         Settle/snooze is sidebar inventory state, so the remote listener must
         expose it exactly like the other session-metadata RPCs: a GPUI sidebar
         showing a remote machine's sessions has to be able to settle and snooze
@@ -585,14 +588,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/runBeadsAction"
         | "/api/runProjectDocsAction"
         /*
-        CDXC:BoardStartWorkRemote 2026-08-08:
+        CDXC:ProjectBoard 2026-08-08:
         Remote board dispatch is allowed because it creates and starts the
         worker on the selected daemon. beadId, projectId, and agent are opaque
         selectors only; none is interpreted as a path or command.
         */
         | "/api/startBoardWork"
         /*
-        CDXC:BoardAssociateSession 2026-08-24:
+        CDXC:ProjectBoard 2026-08-24:
         Associating is remote-allowed for the same reason dispatching is: the
         board being worked can live on another daemon, and the call carries only
         opaque beadId/projectId/sessionId selectors. It links a session that
@@ -605,7 +608,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/cancelRepositoryCloneJob"
         | "/api/browseProjectDirectories"
         /*
-        CDXC:AddProjectNewFolder 2026-08-18:
+        CDXC:AddProject 2026-08-18:
         Creating the destination folder is remote-allowed for the same reason
         browsing is: the Add Project dialog runs against a chosen machine and
         has to be able to make a folder there before adding or cloning into it.
@@ -615,7 +618,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         | "/api/createProjectDirectory"
         /*
-        CDXC:AddProjectDialog 2026-07-30:
+        CDXC:AddProject 2026-07-30:
         The Add Project dialog runs against a chosen machine, so a GPUI sidebar
         adding a project on a remote daemon must be able to ask THAT daemon
         which hosting CLIs it has and to resolve `owner/repo` there. Discovery
@@ -637,7 +640,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/extensionBadge" => remote_allowed(path),
         "/api/createQuickProject" => full_local(path),
         /*
-        CDXC:AnonymousAnalytics 2026-08-26:
+        CDXC:Telemetry 2026-08-26:
         The desktop app's loopback analytics ping. Authenticated like every other
         local endpoint, but deliberately NOT protocol-version gated: the caller
         is fire-and-forget, never reads the response, and has no way to react to
@@ -662,7 +665,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readAgentSkillStatus"
         | "/api/installAgentSkills"
         /*
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
+        CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompts can carry user-authored bodies, so their shared gxserver
         RPCs are local-only authenticated endpoints rather than remote-listener
         APIs.
@@ -670,7 +673,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readAppUserData"
         | "/api/savePinnedPrompt"
         /*
-        CDXC:StashedPrompts 2026-07-29-00:00:
+        CDXC:SavedPrompts 2026-07-29-00:00:
         Stashed prompts carry user-authored prompt bodies captured from the
         prompt editor, so like Pinned Prompts they stay local-only
         authenticated endpoints.
@@ -679,7 +682,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/listStashedPrompts"
         | "/api/deleteStashedPrompt"
         /*
-        CDXC:StashedPromptTags 2026-08-23:
+        CDXC:SavedPrompts 2026-08-23:
         Tag names are user-authored labels for those same prompt bodies, so the
         tag catalogue and its assignments stay on the same local-only
         authenticated listener as the prompts they describe.
@@ -689,7 +692,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/deleteStashedPromptTag"
         | "/api/setStashedPromptTags"
         /*
-        CDXC:SessionAgentNotes 2026-08-24:
+        CDXC:SessionNotes 2026-08-24:
         A session note is user-authored prose about a conversation, so it stays
         in the same class as Pinned and Stashed prompts: local-only
         authenticated endpoints, and the body is never logged.
@@ -697,14 +700,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/saveSessionAgentNote"
         | "/api/readSessionAgentNote"
         /*
-        CDXC:GPUISidebarGit 2026-06-24-16:11:
+        CDXC:Git 2026-06-24-16:11:
         Commit-message generation carries staged diff content and generated
         commit text through the authenticated response. Keep this endpoint on
         the local listener, but allow GPUI saved-machine SSH tunnels to reach
         the remote daemon's localhost API after the Rust bridge validates the
         machine id, endpoint, timeout, and response shape.
 
-        CDXC:GPUISidebarGit 2026-06-24-16:28:
+        CDXC:Git 2026-06-24-16:28:
         Background PR creation confirms `gh pr create --fill` through a
         sanitized gxserver result before GPUI can open the PR or delete a
         worktree. Remote GPUI may use the same local-listener endpoint only
@@ -715,7 +718,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createPullRequest"
         | "/api/updatePortlessState"
         /*
-        CDXC:Tailcat 2026-09-01:
+        CDXC:RemotePairing 2026-09-01:
         The tailcat status response carries the address blob that dials this
         machine, so both endpoints stay on the authenticated local listener and
         are never reachable from the remote listener.
