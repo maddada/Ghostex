@@ -458,7 +458,15 @@ fn create_embed_host_window(parent: X11Window, bounds: &cef::Rect) -> X11Window 
     // NSView starts visible; the shared shell hides collapsed surfaces
     // through set_native_view_visible.
     let _ = connection.map_window(host);
-    let _ = connection.flush();
+    // CEF creates its browser window on a separate X connection with this
+    // host as the parent. A flush only hands the requests to the socket, so
+    // the server can still process CEF's CreateWindow first and fail it with
+    // BadWindow (observed under XWayland: the browser then has no X window at
+    // all and stays at a 1x1 viewport). A round-trip guarantees the host
+    // exists before CEF's request is issued.
+    if let Ok(cookie) = connection.get_input_focus() {
+        let _ = cookie.reply();
+    }
     host
 }
 
