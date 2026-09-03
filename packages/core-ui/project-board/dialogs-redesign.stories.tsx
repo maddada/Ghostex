@@ -1,5 +1,5 @@
 /**
- * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+ * CDXC:ProjectBoard 2026-08-24:
  * Live canvas for the Codex-style Kanban dialogs. Renders the REAL
  * NewTicketDialog, EditTicketDialog, AutomationDialog, and BoardColumnsDialog
  * from apps/desktop/views/project-board with mock props, and injects the same

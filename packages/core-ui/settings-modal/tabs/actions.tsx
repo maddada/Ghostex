@@ -62,7 +62,7 @@ export type SettingsCommandDraft = {
 };
 
 /*
-CDXC:GlobalActions 2026-08-01:
+CDXC:AgentLauncher 2026-08-01:
 Settings > Actions holds two lists that behave identically and differ only in
 who owns them: Global Actions apply to every project and live in gxserver,
 Project Actions belong to one project (and its worktrees) and live in project
@@ -128,7 +128,7 @@ export function ActionsSettingsTab({
   const { orderedCommands: orderedGlobalCommands, setDraftCommandIds: setDraftGlobalCommandIds } =
     useSettingsCommandOrder(globalCommands ?? emptyGlobalCommands);
   /*
-  CDXC:ProjectActions 2026-06-15-15:29:
+  CDXC:Projects 2026-06-15-15:29:
   When no Actions have a saved terminal command or browser URL, the top of Settings > Actions should explain that frequently used commands can be set here for one-click or hotkey execution.
   */
   const hasConfiguredActions = useMemo(
@@ -258,7 +258,7 @@ export function ActionsSettingsTab({
         <ActionsSettingsSection
           commands={orderedCommands}
           /*
-           * CDXC:ActionsSettings 2026-06-15-14:00:
+           * CDXC:AgentLauncher 2026-06-15-14:00:
            * The Actions section header needs explanatory copy because users may
            * not know that terminal actions run in quick command terminals,
            * browser actions open panes, project actions are shared with
@@ -286,7 +286,7 @@ export function ActionsSettingsTab({
           vscode={vscode}
         />
         {/*
-         * CDXC:GlobalActions 2026-08-01:
+         * CDXC:AgentLauncher 2026-08-01:
          * The built-in tab strip buttons are toggled here, next to the Global
          * Actions that share the strip with them, because that is where a user
          * goes when the strip is too crowded. The pane actions menu has no
@@ -538,7 +538,7 @@ export function ActionSettingsEditor({
   const trimmedName = name.trim();
   const commandTitle = getSettingsCommandDraftTitle({ actionType, command, name, url });
   /**
-   * CDXC:CommandPanes 2026-05-16-15:08:
+   * CDXC:CommandPane 2026-05-16-15:08:
    * Settings must enforce one action title per project because command-pane
    * reuse uses that title as the pane identifier. Blocking duplicates here
    * prevents saving an action that could target another action's command tab.
@@ -672,7 +672,7 @@ export function ActionSettingsEditor({
             <Switch checked={playCompletionSound} id={soundId} onCheckedChange={setPlayCompletionSound} />
           </Field>
           {/*
-           * CDXC:ProjectActions 2026-07-31-12:00:
+           * CDXC:Projects 2026-07-31-12:00:
            * Terminal actions can open saved links whenever they run, so a dev
            * action can start the server and bring up its localhost URL in the
            * same click. Each link picks the project's integrated browser or the
@@ -747,7 +747,7 @@ export function ActionSettingsEditor({
         </>
       )}
       {/*
-       * CDXC:ProjectActions 2026-08-01:
+       * CDXC:Projects 2026-08-01:
        * Both terminal and browser actions can opt into the project's sidebar
        * row, so this toggle lives outside the action-type branch above.
        */}
@@ -760,7 +760,7 @@ export function ActionSettingsEditor({
         <Switch checked={showOnProjectRow} id={showOnProjectRowId} onCheckedChange={setShowOnProjectRow} />
       </Field>
       {/*
-       * CDXC:ActionsSettings 2026-06-18-10:11:
+       * CDXC:AgentLauncher 2026-06-18-10:11:
        * Settings > Actions must let users delete any selected action from the edit surface itself, including default Build/Test actions whose deletion is represented by deletedDefaultCommandIds. Keep this wired to the same deleteSidebarCommand path as the row trash button so default and custom actions share one behavior.
        */}
       <div className='flex items-center justify-between gap-3'>

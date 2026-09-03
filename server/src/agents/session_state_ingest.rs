@@ -129,7 +129,7 @@ pub(crate) fn apply_live_process_session_identity(
 }
 
 /*
-CDXC:SessionChatIdentity 2026-08-02:
+CDXC:SessionIdentity 2026-08-02:
 Transcript-proven identity repair. Claude Code writes a NEW transcript on
 compaction/resume and only an agent hook tells the daemon about it — background
 job continuations never fire hooks, so the stored `agentSessionId` can point at
@@ -192,7 +192,7 @@ pub(crate) fn apply_transcript_successor_session_identity(
     .as_deref()
         == Some(agent_session_id);
     /*
-    CDXC:SessionAgentNotes 2026-08-24:
+    CDXC:SessionNotes 2026-08-24:
     The session-note re-key for the adopted successor id happens inside
     `apply_session_state_update` itself, together with every other identity
     source (agent hooks, live-process scan) — nothing extra to do here.
@@ -206,7 +206,7 @@ pub(crate) fn apply_transcript_successor_session_identity(
 }
 
 /*
-CDXC:SessionForkFamilies 2026-08-28:
+CDXC:SessionFork 2026-08-28:
 An adoption is the only durable trace an out-of-band `codex fork` / `codex
 resume` leaves in the registry: the new rollout's `forked_from_id` lives in the
 transcript, and the id it names is exactly the one this row was carrying a moment
@@ -409,13 +409,13 @@ pub(crate) fn ingest_terminal_title_event_with_home(
                 != Some(session_id.as_str())
         });
     /*
-    CDXC:GxserverSessionIdentity 2026-06-21-18:25:
+    CDXC:SessionIdentity 2026-06-21-18:25:
     Terminal-title agent/session-id observations must flow through the shared identity reducer, matching TypeScript gxserver. This keeps launch-agent mismatch protection and Codex thread conflict rules identical while still allowing zmx title streams to promote recognized CLI rows for every client.
 
-    CDXC:GxserverSessionIdentity 2026-06-22-07:42:
+    CDXC:SessionIdentity 2026-06-22-07:42:
     TypeScript returns the terminal-title reducer's decision reason for `/api/ingestTerminalTitleEvent`; the follow-up identity reducer only mutates the session and changed flag unless metadata reconciliation later wins. Preserve reasons such as `captured-agent-session-id` even when identity promotion reports `current-title-already-trusted`.
 
-    CDXC:GxserverSessionTitles 2026-06-22-07:59:
+    CDXC:SessionTitles 2026-06-22-07:59:
     Match TypeScript terminal-title ingestion gates exactly: session kind, visible-title normalization, ellipsized rejection, protected trusted titles, zmx/agent-title trust, and previous title-source reasons all belong in server before status or identity promotion runs.
     */
     if let Some(agent_session_id) = captured_agent_session_id.clone() {
@@ -534,7 +534,7 @@ pub(crate) fn ingest_terminal_title_event_with_home(
         session = repository.update_session(&update)?;
     }
     /*
-    CDXC:GxserverAgentTitles 2026-08-04:
+    CDXC:SessionTitles 2026-08-04:
     zmx terminal-title observation is the cross-platform notification source
     for Agent CLI `/rename`. WSL Codex may replace the renamed title almost
     immediately with a generic repository/spinner title, which is correctly

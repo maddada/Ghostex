@@ -45,7 +45,7 @@ const expected = new Set(
 if (expected.size === 0) throw new Error('GHOSTEX_RELEASE_EXPECTED_PLATFORMS is empty');
 
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The resolved plan decides what this release contains. It arrives inline from
  * the parent workflow and, for a publish-only recovery, also as the source run's
  * `release-plan` artifact; when both are present they must agree exactly.
@@ -100,7 +100,7 @@ function resolveRemoteMain() {
 }
 
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-30:
+ * CDXC:Release 2026-08-30:
  * `origin/main` moves while a multi-hour build runs, because several agents
  * share this checkout. 8.3.0 lost an entire dispatch to that: all eleven
  * products had built and publication was refused because an unrelated mobile

@@ -59,7 +59,7 @@ end
 describe('Ghostex release automation helpers', () => {
   test('renders a deterministic arm64-only Homebrew cask from the live cask shape', () => {
     /*
-     * CDXC:ReleaseAutomation 2026-06-14-09:07:
+     * CDXC:Release 2026-06-14-09:07:
      * The release script must accept the live cask's old Web/cli compatibility
      * guard while rendering a canonical arm64-only wrapper cask. The guard is
      * compatibility text, not a legacy distribution stanza.
@@ -156,7 +156,7 @@ describe('Ghostex release automation helpers', () => {
 
   test('detects Homebrew host toolchain version diagnostics narrowly', () => {
     /*
-     * CDXC:ReleaseAutomation 2026-06-16-20:32:
+     * CDXC:Release 2026-06-16-20:32:
      * Release automation may skip only local Homebrew validation commands that
      * are blocked by the host's Xcode/CLT minimum-version diagnostic. Other
      * Homebrew failures must still fail so cask mistakes do not ship.
@@ -247,7 +247,7 @@ describe('Ghostex release automation helpers', () => {
 
   test('requires complete remote Ubuntu gxserver package resources for release', () => {
     /*
-     * CDXC:RemoteUbuntuPackaging 2026-06-29-19:45:
+     * CDXC:RemotePairing 2026-06-29-19:45:
      * Release automation must prove the prebuilt Ubuntu remote gxserver package
      * contains every runtime resource that macOS app packaging will stage for
      * remote first-run installs, including the x64 path added after arm64.

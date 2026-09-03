@@ -16,7 +16,7 @@ use crate::{
 
 pub fn create_source_build_identity(version: &str) -> String {
     /*
-    CDXC:GxserverRustPort 2026-06-14-21:09:
+    CDXC:RepoStructure 2026-06-14-21:09:
     Phase 2 app/CLI opt-in must not mistake a TypeScript source daemon for the Rust daemon. Keep the shared gxserver product/version shape while marking Rust source builds explicitly in health and runtime metadata.
     */
     format!("gxserver:{version}:rust-source")
@@ -31,7 +31,7 @@ struct GxserverBuildIdentityFile {
 }
 
 /*
-CDXC:GxserverRustPackaging 2026-06-16-01:30:
+CDXC:Release 2026-06-16-01:30:
 Phase 8 packages Rust gxserver as Web/gxserver/bin/gxserver while the macOS app still compares daemon health with Web/gxserver/build-identity.json. Read the same package-root identity file as the TypeScript CLI, and use the explicit Rust source identity only when that package file is absent.
 */
 pub fn read_current_build_identity(version: &str) -> Result<String> {
@@ -87,10 +87,10 @@ pub fn is_build_identity_reusable(running: Option<&str>, expected: Option<&str>)
 }
 
 /*
-CDXC:GxserverRuntimeIdentity 2026-06-14-20:37:
+CDXC:SessionIdentity 2026-06-14-20:37:
 Rust Phase 1 writes the same runtime metadata shape as TypeScript so status checks and compatibility fixtures can distinguish healthy, stale, and unreachable fixed-port daemons without probing arbitrary process state.
 
-CDXC:GxserverRuntimeIdentity 2026-06-22-04:38:
+CDXC:SessionIdentity 2026-06-22-04:38:
 Runtime metadata is an advisory status file. Match TypeScript by treating JSON with missing or wrongly typed metadata fields as absent stale metadata, while still surfacing unreadable files and malformed JSON as real errors.
 Create new runtime metadata files with 0600 at the writer boundary so status files stay private without adding shutdown-time cleanup fallbacks.
 */

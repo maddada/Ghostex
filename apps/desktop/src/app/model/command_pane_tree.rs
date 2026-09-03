@@ -197,7 +197,7 @@ pub(crate) fn insert_command_leaf_at_same_axis_split(
     split_id: CommandPaneSplitId,
 ) {
     /*
-    CDXC:GPUICommandPaneSplits 2026-06-25-16:18:
+    CDXC:CommandPane 2026-06-25-16:18:
     Native same-direction command split insertion happens beside the matching child of the existing split, not inside that child. Preserve that boundary in GPUI's binary model so explicit first-child ratios keep native meaning when the user later inserts before or after a command pane in a resized split.
     */
     let existing_first = take_command_node(&mut split.first);
@@ -313,7 +313,7 @@ pub(crate) fn rebalance_command_split_axis_chain_containing_group(
 
             if split.axis == axis {
                 /*
-                CDXC:GPUICommandPaneSplits 2026-06-25-16:14:
+                CDXC:CommandPane 2026-06-25-16:14:
                 Native command pane layouts flatten repeated same-direction split insertion into one split node whose children default to equal ratios until the user resizes. GPUI still stores binary splits, so rebalance only untouched same-axis chains by visible leaf count after insertion; explicit user-resized ratios stay unchanged instead of being hidden by fallback geometry.
                 */
                 rebalance_command_split_axis_to_native_default_ratios(node, axis);

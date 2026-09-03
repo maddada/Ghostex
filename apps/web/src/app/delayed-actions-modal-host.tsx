@@ -7,7 +7,7 @@ import { parseSidebarSessionId } from '../sidebar-runtime/sidebar-ids';
 import type { OpenDelayedActionsModalDetail } from './action-events';
 
 /*
-CDXC:GxserverDelayedSends 2026-08-19:
+CDXC:DelayedSend 2026-08-19:
 Delayed Send is a first-class daemon endpoint: gxserver owns the clock, the
 activity watcher, and the eventual Enter, so it no longer accepts
 `scheduleDelayedSend`/`cancelDelayedSend` as renderer commands. Close After

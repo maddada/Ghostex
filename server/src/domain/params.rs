@@ -67,7 +67,7 @@ pub fn read_project_id(params: &Map<String, Value>) -> DomainResult<String> {
 }
 
 /*
-CDXC:GxserverCrudParity 2026-06-22-05:39:
+CDXC:ServerApi 2026-06-22-05:39:
 TypeScript CRUD update/remove paths for projects and sessions call repository lookup methods before ID validators. Preserve that not-found behavior for stale or client-local IDs while keeping explicit readers strict for list filters, create-session project resolution, removeProject, and lifecycle APIs.
 */
 pub(crate) fn read_unvalidated_project_lookup_id(params: &Map<String, Value>) -> String {

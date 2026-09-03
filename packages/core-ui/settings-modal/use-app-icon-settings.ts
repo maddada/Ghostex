@@ -1,5 +1,5 @@
 /*
- * CDXC:SettingsModalSplit 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * The prop-driven App Icon confirm-before-persist effect and its wire-contract
  * commands, plus the adjacent native Background Image picker round trip. The
  * two effects keep their original relative order inside this hook.
@@ -33,7 +33,7 @@ export function useAppIconSettings({
   vscode: WebviewApi | undefined;
 }) {
   /**
-   * CDXC:AppIconPicker 2026-06-25-21:50:
+   * CDXC:Icons 2026-06-25-21:50:
    * Confirm-before-persist is prop-driven: native relays appIconState into this
    * component through the modal-state plumbing (exactly like osIntegrationStatus),
    * so react to each new prop value. On an ok state, persist the in-flight
@@ -41,7 +41,7 @@ export function useAppIconSettings({
    * on a failed state, drop the pending id and surface the error without writing
    * appIconSourceId.
    *
-   * CDXC:SettingsPerformance 2026-06-29-00:40:
+   * CDXC:Settings 2026-06-29-00:40:
    * Process each native appIconState once inside this effect instead of updating
    * a closure ref during render, because SettingsModal needs React Compiler
    * coverage to reduce large settings-page rerenders during scroll navigation.
@@ -73,7 +73,7 @@ export function useAppIconSettings({
     );
   }, [appIconState, draft]);
   /**
-   * CDXC:AppIconPicker 2026-06-25-21:50:
+   * CDXC:Icons 2026-06-25-21:50:
    * Selecting, choosing a file, revealing the folder, and resetting all post the
    * exact wire-contract messages to native. The selection messages record the
    * pending source id and clear any prior error; the sidebar persists nothing
@@ -95,7 +95,7 @@ export function useAppIconSettings({
     vscode.postMessage({ type: 'pickAppIconFile' });
   };
   /**
-   * CDXC:TerminalBackgroundImage 2026-08-01:
+   * CDXC:Terminal 2026-08-01:
    * The Browse button next to Settings -> Terminal -> Background Image opens a
    * native file dialog host-side; the picked absolute path comes back as a
    * terminalBackgroundImageFilePicked host message and lands in the draft like

@@ -177,7 +177,7 @@ pub(crate) fn activity_for_hook_event(
             return payload_compact_trigger_is_manual(payload).then(|| "idle".to_string());
         }
         /*
-        CDXC:SessionChatPromptQueue 2026-08-24:
+        CDXC:SessionChat 2026-08-24:
         SessionStart is the ONLY hook Claude Code fires when /compact or /clear
         finishes — the UserPromptSubmit that submitted the command marked the
         session "working" and no Stop ever follows, which left sessions (and the
@@ -330,7 +330,7 @@ fn payload_compact_trigger_is_manual(payload: &Value) -> bool {
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-24:
+CDXC:SessionChat 2026-08-24:
 Claude Code sends two very different things through the same Notification hook:
 permission requests ("Claude needs your permission to use …"), which are real
 attention — a prompt delivered now would be swallowed as the ANSWER — and the

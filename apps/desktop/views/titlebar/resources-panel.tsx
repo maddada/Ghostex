@@ -49,7 +49,7 @@ import type {
 } from './types';
 
 /*
- * CDXC:TitlebarTooltips 2026-06-15-13:34:
+ * CDXC:Tooltips 2026-06-15-13:34:
  * Titlebar hover labels should close when the pointer leaves the trigger.
  * Hovering the floating label itself must not keep it open, so titlebar-owned
  * AppTooltip roots disable Base UI's hoverable popup behavior instead of adding
@@ -109,7 +109,7 @@ export function TitlebarResourcesMenu({
     ? [...visibleGroupViews.flatMap((view) => view.bundles), ...codeIdeBundles, ...browserBundles, ...orphanBundles]
     : [];
   /*
-   * CDXC:TitlebarResources 2026-06-22-00:30:
+   * CDXC:Resources 2026-06-22-00:30:
    * Dev-server rows intentionally duplicate process ownership for discovery,
    * so bundle lists used for row controls avoid folding those duplicates into
    * Sleep/Close targets while row and section metrics still show each listener's
@@ -117,28 +117,28 @@ export function TitlebarResourcesMenu({
    */
   const allBundles = processSnapshotReady ? [...serverBundles, ...metricBundles] : [];
   /**
-   * CDXC:TitlebarResources 2026-05-23-10:52:
+   * CDXC:Resources 2026-05-23-10:52:
    * Header actions should be two matching resource controls: one for sleeping
    * only inactive terminal sessions, and one for sleeping all terminal session
    * resources without targeting the app runtime.
    *
-   * CDXC:TitlebarResources 2026-06-12-23:37:
+   * CDXC:Resources 2026-06-12-23:37:
    * Header Sleep actions should rely on visible labels and normal button hover
    * instead of tooltip wrappers. Sleep releases live CPU/RAM while preserving
    * the sidebar card, but clickability is more important than hover copy here.
    *
-   * CDXC:TitlebarResources 2026-05-25-16:53:
+   * CDXC:Resources 2026-05-25-16:53:
    * The Resources dropdown should manage user-owned work resources, not expose
    * Ghostex's own app-runtime process rows. Keep app process matching available
    * for internal PID ownership, but exclude App Runtime bundles from visible
    * sections and bulk resource actions.
    *
-   * CDXC:TitlebarResources 2026-06-30-23:17:
+   * CDXC:Resources 2026-06-30-23:17:
    * The header total is different from row actions: it reports Ghostex's full
    * owned process footprint so it matches external app monitors, while Sleep
    * and Close stay scoped to visible user-resource bundles.
    *
-   * CDXC:TitlebarResources 2026-05-25-16:59:
+   * CDXC:Resources 2026-05-25-16:59:
    * The old yellow zmx warning duplicated the action wording and made the menu
    * noisier than the controls themselves. Remove that note and expose the bulk
    * terminal action as Sleep All.
@@ -147,26 +147,26 @@ export function TitlebarResourcesMenu({
     .flatMap((view) => view.bundles)
     .filter((bundle) => bundle.type === 'session' && bundle.session?.sessionKind === 'terminal');
   /**
-   * CDXC:TitlebarResources 2026-05-24-20:58:
+   * CDXC:Resources 2026-05-24-20:58:
    * Resource summary and row-action tooltips must stay compact enough for the titlebar area.
    * Keep explanatory copy short and apply the width cap inline because the
    * shared TooltipContent sets its viewport cap with inline styles.
    *
-   * CDXC:TitlebarResources 2026-05-25-09:37:
+   * CDXC:Resources 2026-05-25-09:37:
    * Resource summary tooltips need the same compact width cap as action
    * tooltips so Live CPU and Live memory do not stretch across the toolbar.
    *
-   * CDXC:TitlebarResources 2026-06-11-18:13:
+   * CDXC:Resources 2026-06-11-18:13:
    * Keep the fixed-size native Resources dropdown stable while the first process table loads.
    * The native child window stays hidden until this view commits with real snapshot data; the loading copy is only an internal fallback.
    *
-   * CDXC:TitlebarResources 2026-06-12-23:33:
+   * CDXC:Resources 2026-06-12-23:33:
    * The header bulk control targets individual expandable resource rows, not
    * the top-level Projects, Browser Tabs, or Orphaned / Detached sections.
    * Keep section containers expanded while the button toggles the same row
    * disclosure state as the per-item chevrons.
    *
-   * CDXC:TitlebarResources 2026-06-12-23:37:
+   * CDXC:Resources 2026-06-12-23:37:
    * Header Sleep actions should behave like normal buttons: always visible,
    * always hit-testable, and styled by ordinary CSS :hover/:disabled states.
    * Avoid React hover gates and native-pointer body flags because they made the
@@ -200,19 +200,19 @@ export function TitlebarResourcesMenu({
               type='button'
             >
               {/*
-               * CDXC:TitlebarResources 2026-06-16-01:08:
+               * CDXC:Resources 2026-06-16-01:08:
                * Resources explanatory copy belongs behind a click-only info
                * affordance beside the bulk expand/collapse control. Keep the
                * dropdown 400px wide and separate each note line with whitespace
                * so the header stays compact while the copy remains available.
                *
-               * CDXC:TitlebarResources 2026-06-16-01:54:
+               * CDXC:Resources 2026-06-16-01:54:
                * The info dropdown must fit inside the Resources panel and draw
                * only one background/border surface. Position it from the full
                * header instead of the small icon wrapper so the 400px text area
                * is not clipped.
                *
-               * CDXC:TitlebarResources 2026-06-16-02:02:
+               * CDXC:Resources 2026-06-16-02:02:
                * Make the info dropdown wider and lighter than the Resources
                * panel so the explanatory sentences can fit without looking
                * like the same dark layer as the modal behind it.
@@ -240,13 +240,13 @@ export function TitlebarResourcesMenu({
             type='button'
           >
             {/*
-             * CDXC:TitlebarResources 2026-06-12-23:33:
+             * CDXC:Resources 2026-06-12-23:33:
              * The header expand/collapse control belongs to Resources itself:
              * it sits immediately before Sleep Inactive and toggles individual
              * expandable resource items inside each group. It must not collapse
              * Projects, Browser Tabs, or Orphaned / Detached as sections.
              *
-             * CDXC:TitlebarResources 2026-06-13-01:54:
+             * CDXC:Resources 2026-06-13-01:54:
              * Match the sidebar Projects bulk-control icon language: the
              * collapse action uses IconArrowsDiagonalMinimize, while the expand
              * action uses IconArrowsDiagonal2.
@@ -327,7 +327,7 @@ export function TitlebarResourcesMenu({
         {processSnapshotReady ? (
           <>
             {/*
-             * CDXC:TitlebarResources 2026-06-22-00:30:
+             * CDXC:Resources 2026-06-22-00:30:
              * Running dev servers should be the first Resources body section,
              * above project session resource groups, so localhost ports are
              * discoverable before users scan terminal/session rows.
@@ -359,7 +359,7 @@ export function TitlebarResourcesMenu({
               <div className='titlebar-resources-empty'>No grouped sessions matched running processes.</div>
             )}
             {/*
-             * CDXC:TitlebarResources 2026-06-22-13:50:
+             * CDXC:Resources 2026-06-22-13:50:
              * The shared embedded Code runtime belongs after project-owned session groups and before Browser Tabs, where users expect app-wide IDE infrastructure rather than a specific project process.
              */}
             <TitlebarResourceSection
@@ -429,7 +429,7 @@ export function TitlebarGxserverDaemonSection({
       </div>
       <div className='titlebar-gxserver-daemon-controls'>
         {/*
-         * CDXC:TitlebarDaemonControls 2026-06-12-11:51:
+         * CDXC:Resources 2026-06-12-11:51:
          * The Resources dropdown should expose Restart as the primary daemon action. Hide manual Start/Stop controls so users do not manage daemon lifecycle from this compact status row.
          */}
         <AppTooltip
@@ -466,11 +466,11 @@ export function TitlebarGxserverDaemonSection({
           </AppTooltip>
         ) : null}
         {/*
-         * CDXC:TitlebarDaemonControls 2026-06-12-11:51:
+         * CDXC:Resources 2026-06-12-11:51:
          * If gxserver is off unexpectedly, show Reload App as the recovery action so the webview can rehydrate and reconnect instead of asking users to manually start the daemon here.
          */}
         {/*
-         * CDXC:TitlebarDaemonControls 2026-06-12-11:56:
+         * CDXC:Resources 2026-06-12-11:56:
          * Hide the Always start checkbox from the compact Resources daemon row; this status surface should only offer Restart, plus Reload App when gxserver is off.
          */}
         {/* <label className="titlebar-gxserver-daemon-checkbox">
@@ -531,34 +531,34 @@ export function TitlebarResourceSection({
       ? 'Stops the listener-backed server processes without sleeping the owning terminal sessions.'
       : 'Stops user-owned live processes and closes related surfaces.';
   /**
-   * CDXC:TitlebarResources 2026-05-25-14:21:
+   * CDXC:Resources 2026-05-25-14:21:
    * Resource action tooltips share the compact width cap used by header and
    * summary tooltips, including Quit group, so long process-management copy
    * wraps near the hovered control instead of spanning the window.
    *
-   * CDXC:TitlebarResources 2026-05-26-13:11:
+   * CDXC:Resources 2026-05-26-13:11:
    * Project resource groups that include terminal sessions should expose the
    * group action as Sleep Project, not Quit. Limit that action to terminal
    * session bundles so browser/code resources are not closed by a sleep-labeled
    * control.
    *
-   * CDXC:TitlebarResources 2026-06-11-18:30:
+   * CDXC:Resources 2026-06-11-18:30:
    * Resource section headers are static labels now: no per-section chevron and
    * no click target, so the fixed native dropdown avoids visually noisy
    * competing collapse controls.
    *
-   * CDXC:TitlebarResources 2026-06-12-23:33:
+   * CDXC:Resources 2026-06-12-23:33:
    * The single header button controls the individual resource rows in bulk,
    * not this section container. Always render section bodies so Projects,
    * Browser Tabs, and Orphaned / Detached remain visible grouping labels.
    *
-   * CDXC:TitlebarResources 2026-06-15-13:45:
+   * CDXC:Resources 2026-06-15-13:45:
    * Section-level Quit must target the same action-eligible resources as row
    * Close. Keep shared browser helper bundles visible for diagnostics, but do
    * not let a bulk action close infrastructure that embedded browser panes need
    * to keep working.
    *
-   * CDXC:TitlebarResources 2026-06-22-00:30:
+   * CDXC:Resources 2026-06-22-00:30:
    * Dev Servers rows use Stop language because the action targets only the
    * listener process tree. Do not route those rows through session sleep or
    * project close semantics.
@@ -641,13 +641,13 @@ export function TitlebarResourceBundle({
 }) {
   const hasChildren = bundle.childProcesses.length > 0;
   /**
-   * CDXC:TitlebarResources 2026-05-16-18:28:
+   * CDXC:Resources 2026-05-16-18:28:
    * Sessions often own several agent/runtime child processes, so their rows
    * should start collapsed to keep the Resources menu scannable. Store only
    * explicit user expansions for session bundles while section rows and other
    * bundle types keep the existing collapsed-key behavior.
    *
-   * CDXC:TitlebarResources 2026-06-12-23:33:
+   * CDXC:Resources 2026-06-12-23:33:
    * The Resources header bulk toggle uses the same target helper as row
    * chevrons so it collapses individual items inside groups, not the group
    * sections themselves.
@@ -656,7 +656,7 @@ export function TitlebarResourceBundle({
   const bundleToggleKey = bundleCollapseTarget?.key ?? bundle.key;
   const isCollapsed = bundleCollapseTarget ? isResourceItemCollapsed(bundleCollapseTarget, collapsedKeys) : false;
   /**
-   * CDXC:TitlebarResources 2026-05-23-10:52:
+   * CDXC:Resources 2026-05-23-10:52:
    * Terminal-session Quit from Resources terminates the live process tree but
    * intentionally keeps the session card in the sidebar as sleeping. Use the
    * sleep affordance for those rows; keep the quit affordance for browser,
@@ -676,24 +676,24 @@ export function TitlebarResourceBundle({
       ? `Stop server ${bundle.label}`
       : `Close ${bundle.label}`;
   /**
-   * CDXC:TitlebarResources 2026-05-28-10:39:
+   * CDXC:Resources 2026-05-28-10:39:
    * Session resource rows expose Focus beside Sleep/Close. Focus uses the same
    * sidebar session id as Sleep so cross-project Resources rows activate the
    * exact owning session.
    *
-   * CDXC:TitlebarResources 2026-06-13-00:56:
+   * CDXC:Resources 2026-06-13-00:56:
    * Per-item resource action buttons should behave like normal visible controls,
    * not hover-revealed overlays. Keep metrics visible, keep actions in stable
    * grid columns, and avoid tooltip trigger wrappers or native-pointer hover
    * gates that can make visible row buttons reject clicks.
    *
-   * CDXC:TitlebarResources 2026-06-15-13:45:
+   * CDXC:Resources 2026-06-15-13:45:
    * Row-level Close should disappear for app-critical shared browser helper
    * bundles instead of disabling the button or letting the click reach process
    * termination. Users should only be able to close resource rows that map to a
    * restorable terminal session or an owned browser/code/orphan surface.
    *
-   * CDXC:TitlebarResources 2026-06-22-00:30:
+   * CDXC:Resources 2026-06-22-00:30:
    * Dev-server Focus may jump to the owning terminal, but Stop must only signal
    * the listener process tree and must not sleep the terminal session.
    */
@@ -849,7 +849,7 @@ export function getResourceBundleAvatar(bundle: ResourceProcessBundle): ReactNod
   const agentIcon = bundle.session?.agentIcon;
   if (isSidebarAgentIcon(agentIcon)) {
     /**
-     * CDXC:TitlebarResources 2026-05-26-13:24:
+     * CDXC:Resources 2026-05-26-13:24:
      * Resource rows should use the same shared agent-logo mask assets as Agents
      * Hub profile chips instead of two-letter text abbreviations. This keeps
      * Codex, Claude, browser, and other agent identities visually aligned
@@ -913,10 +913,10 @@ export function openResourceBundleMainUrl(
   linkOpenTarget: WebLinkOpenTarget | undefined
 ): void {
   /*
-   * CDXC:TerminalDevServers 2026-06-23-19:22:
+   * CDXC:Resources 2026-06-23-19:22:
    * Resources dev-server links should open either in the user's system default browser or the internal browser. Do not expose a per-browser target list here; only server bundles should read this setting so future resource links keep their existing route.
    *
-   * CDXC:WebLinkOpenTarget 2026-08-19:
+   * CDXC:Navigation 2026-08-19:
    * That choice is now the app-wide webLinkOpenTarget shared with terminal and session chat links, so these rows stop disagreeing with the Browser setting.
    */
   if (bundle.type === 'server' && linkOpenTarget === 'system-default-browser') {

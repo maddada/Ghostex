@@ -215,7 +215,7 @@ export function GitCommitModal({
   }, [allDiffLoadingFilePath, changedFiles, diffDraftCache, draft.requestId, inlineDiffMode, isOpen, onOpenFileDiff]);
 
   /**
-   * CDXC:TitlebarGit 2026-05-28-07:47:
+   * CDXC:Git 2026-05-28-07:47:
    * Commit messages should not carry trailing spaces at line ends. Normalize
    * pasted text in the textarea and normalize again before confirm, while a
    * fully blank message still reaches native as empty so auto-generation works.
@@ -289,57 +289,57 @@ export function GitCommitModal({
    * CDXC:Worktrees 2026-05-18-23:07:
    * The git review modal must support three worktree-specific choices: file selection, skipping the commit-message field when only push/PR is needed, and deleting the temporary worktree after a successful action.
    *
-   * CDXC:TitlebarGit 2026-05-24-17:41:
+   * CDXC:Git 2026-05-24-17:41:
    * Titlebar-launched commits allow the message box to be left blank; confirmation then generates the commit subject/body from the staged selected files.
    *
-   * CDXC:TitlebarGit 2026-05-25-07:40:
+   * CDXC:Git 2026-05-25-07:40:
    * The commit review dialog should use the same shadcn Settings modal surface, typography scale, button style, checkbox treatment, and neutral dark background. User-facing copy must call the destination a branch instead of lower-level Git reference terminology.
    *
-   * CDXC:TitlebarGit 2026-05-25-09:41:
+   * CDXC:Git 2026-05-25-09:41:
    * Multiple Commits hands the current repository to an agent prompt that splits commits by file/topic. Keep it in the same footer row as the normal commit actions so the Settings-style modal never shows stacked button rows.
    *
-   * CDXC:TitlebarGit 2026-05-25-10:16:
+   * CDXC:Git 2026-05-25-10:16:
    * Changed-file rows in the commit review modal should preview the exact patch before users choose a commit action instead of jumping straight to the IDE.
    *
-   * CDXC:WorktreeMerge 2026-05-27-06:25:
+   * CDXC:Worktrees 2026-05-27-06:25:
    * Worktree PR review keeps the commit/push/PR flow as the primary action, but the same review modal also offers an explicit merge-to-main action. Direct merge uses the same prompt-agent selector as PR creation so the modal has one clear agent choice.
    *
-   * CDXC:PromptAgents 2026-05-29-10:53:
+   * CDXC:AgentLauncher 2026-05-29-10:53:
    * Commit review exposes a plain prompt-agent dropdown for generated commit
    * messages and Multiple Commits. The modal host remembers this modal-specific
    * selection until Settings -> Default Prompt Agent changes.
    *
-   * CDXC:PromptAgents 2026-05-29-18:29:
+   * CDXC:AgentLauncher 2026-05-29-18:29:
    * The commit review prompt-agent selector should be a compact footer control
    * without a visible "Generate with" label, so the message editor keeps focus
    * on the commit text while generated actions still share the chosen agent.
    *
-   * CDXC:AppModals 2026-05-29-19:44:
+   * CDXC:AppModal 2026-05-29-19:44:
    * Session attention/activity can refresh app-modal props while commit review
    * is open. Commit drafts are reinitialized only for a new request id; later
    * agent-list updates may repair an invalid prompt agent without replacing the
    * user's edited commit message or file selection.
    *
-   * CDXC:TitlebarGit 2026-06-05-20:59:
+   * CDXC:Git 2026-06-05-20:59:
    * The commit review modal is a wider, taller two-pane workspace: the full
    * existing commit flow stays on the left, and selected file diffs render on
    * the right with display controls inside the diff overflow menu instead of a
    * second modal stacked above the review.
    *
-   * CDXC:TitlebarGit 2026-06-08-04:07:
+   * CDXC:Git 2026-06-08-04:07:
    * The commit review modal uses compact source-control review
    * controls: remove the Files and Diff headings, keep the branch summary
    * compact, place three icon-only tooltip diff controls in the diff header, and
    * use hover-only 5px transparent-gutter scrollbars on the file tree and diff
    * body without scroll-mask overflow fades.
    *
-   * CDXC:TitlebarGit 2026-06-08-09:41:
+   * CDXC:Git 2026-06-08-09:41:
    * Commit review should open directly into the review workspace without a
    * visible title/subtitle row. Let Show All concatenate every changed-file
    * patch in the diff pane, and persist diff display options globally across
    * projects and app restarts.
    *
-   * CDXC:TitlebarGit 2026-06-19-15:43:
+   * CDXC:Git 2026-06-19-15:43:
    * The commit review branch header should read as plain branch text without a
    * visible "Branch" label or pill background. Select and Show All belong below
    * the changed-files tree so they do not compete with the branch name.
@@ -623,7 +623,7 @@ function buildDraftMessage(draft: GitCommitModalDraft): string {
 
 function getSidebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
   /**
-   * CDXC:SidebarTheme 2026-06-15-01:43:
+   * CDXC:Theming 2026-06-15-01:43:
    * Commit review modals follow the app modal theme: Dark 1/Dark 2 keep dark
    * shadcn mode, while Light removes the dark class and uses light tokens.
    */
@@ -679,7 +679,7 @@ function readGitCommitDiffPreferences(): GitCommitDiffPreferences {
 }
 
 /*
- * CDXC:TitlebarGit 2026-06-08-09:41:
+ * CDXC:Git 2026-06-08-09:41:
  * Commit review display preferences are global UI preferences, not project
  * data. Store only the diff mode toggles in localStorage so unified/split,
  * wrapping, and whitespace visibility survive app restarts without logging or

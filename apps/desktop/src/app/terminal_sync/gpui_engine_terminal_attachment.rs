@@ -592,7 +592,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn agents_terminal_native_views_may_be_visible(&self) -> bool {
         /*
-        CDXC:GPUIWorkspaceTabDragVisibility 2026-07-03:
+        CDXC:Workarea 2026-07-03:
         Workspace/Agents tab drags treat mounted Agents terminals like a mode switch away from Agents: Running host reconciliation, parked-owner reattach, and ready-startup handoff promotion all wait until the drag ends. This hides the native Ghostty child views for the whole drag so the GPUI drag ghost and pane-body drop-edge bands stay visible, while parked owners keep every runtime surface alive for hide/show-only restore on drop or cancel. Startup candidates, launch plans, and hidden startup hosts intentionally keep running during a drag; only promotion to a visible Running host is deferred.
         */
         self.active_mode == TitlebarMode::Agents && !self.workspace_tab_drag_active

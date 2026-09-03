@@ -12,7 +12,7 @@ export type AppToastRequest = {
   description?: string;
   durationMs?: number;
   /**
-   * CDXC:AppToasts 2026-06-11-21:04:
+   * CDXC:AppModal 2026-06-11-21:04:
    * App toasts are a product-level intent, not a renderer contract. Keep the
    * request serializable so macOS can render native NSPanel toasts while
    * Electron renders the same request through shadcn/Sonner without sharing UI

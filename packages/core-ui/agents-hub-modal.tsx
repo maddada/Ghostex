@@ -62,7 +62,7 @@ declare global {
 }
 
 /*
- * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+ * CDXC:AgentLauncher 2026-08-24 (round 3):
  * Tab order is Skills first, then MDs, Hooks, Configs & MCPs — most-edited
  * first. Object key order IS the rendered order, and the Cmd+N hints below
  * follow it.
@@ -75,7 +75,7 @@ const tabLabels: Record<AgentsHubTab, string> = {
 };
 
 /*
- * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+ * CDXC:AgentLauncher 2026-08-24 (round 2):
  * The tab rail carries the same Cmd+1..Cmd+4 hint chips as Ghostex Quick
  * Access, and the shortcuts switch tabs from anywhere in the Hub window.
  */
@@ -124,7 +124,7 @@ export function AgentsHubModal({
         <DialogContent className='agents-hub-dialog ghostex-settings-shadcn' showCloseButton={false}>
           <DialogHeader className='sr-only'>
             {/*
-             * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+             * CDXC:AgentLauncher 2026-08-24 (round 3):
              * The native window already names the Hub in its own title bar, so
              * the in-surface heading was duplicate chrome and is hidden. The
              * dialog still needs an accessible name, so the title stays in the
@@ -176,7 +176,7 @@ function AgentsHubSurface({
   const [query, setQuery] = useState('');
 
   /*
-   * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+   * CDXC:AgentLauncher 2026-08-24 (round 2):
    * Cmd+1..Cmd+4 select a tab while the Hub window is open, matching Quick
    * Access. The listener runs in the capture phase so the Monaco editor pane
    * cannot swallow the shortcut once it has focus.
@@ -213,7 +213,7 @@ function AgentsHubSurface({
     }
 
     /**
-     * CDXC:AgentsHub 2026-05-14-08:29:
+     * CDXC:AgentLauncher 2026-05-14-08:29:
      * The Hub catalog is filesystem-owned data. Request it from native on each open so profile-specific files, installed skills, and config files reflect the current machine without baking private file contents into the web bundle.
      */
     vscode.postMessage({ type: 'requestAgentsHubCatalog' });
@@ -221,7 +221,7 @@ function AgentsHubSurface({
 
   useEffect(() => {
     /*
-     * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+     * CDXC:AgentLauncher 2026-08-24 (round 3):
      * Every tab opens collapsed: the catalog lists are long enough that
      * pre-expanded groups bury the rest of the list. Only an explicit click
      * expands a group, and reopening the Hub collapses everything again.
@@ -240,7 +240,7 @@ function AgentsHubSurface({
 
   useEffect(() => {
     /*
-     * CDXC:AgentsHub 2026-06-12-02:53:
+     * CDXC:AgentLauncher 2026-06-12-02:53:
      * The Hub catalog is metadata-only so opening the modal does not bridge
      * every local agent file buffer. Clear per-file editor caches whenever
      * native returns a new catalog generation, then fetch only the selected
@@ -350,7 +350,7 @@ function AgentsHubSurface({
           <section className='agents-hub-layout'>
             <aside className='agents-hub-list-pane'>
               {/*
-               * CDXC:AgentsHub 2026-06-12-02:53:
+               * CDXC:AgentLauncher 2026-06-12-02:53:
                * Agents Hub should not render search icons in the search field,
                * empty list, or editor loading states. Repeated magnifiers make
                * the modal look broken when the catalog is still loading.
@@ -396,7 +396,7 @@ function AgentsHubSurface({
                 file={{ ...activeFile, content: activeFileContent }}
                 onRefreshCatalog={() => {
                   /**
-                   * CDXC:AgentsHub 2026-06-04-20:08:
+                   * CDXC:AgentLauncher 2026-06-04-20:08:
                    * External file edits need a user-triggered refresh inside the open editor because Agents Hub catalogs file contents on demand instead of watching every local profile folder.
                    * Clear the saved-content overlay before requesting a new native scan so stale in-modal buffers cannot mask the latest disk contents.
                    */
@@ -405,7 +405,7 @@ function AgentsHubSurface({
                 }}
                 onSaveContent={(filePath, content) => {
                   /**
-                   * CDXC:AgentsHub 2026-05-16-07:19:
+                   * CDXC:AgentLauncher 2026-05-16-07:19:
                    * Saving a Hub file must immediately update the open modal's file catalog because users can select another file and return before native sends a fresh filesystem scan.
                    * Keep the persisted editor text as the selected file content only for the catalog generation it was saved from, so reselecting a saved file cannot rehydrate the pre-save buffer and a later native scan stays authoritative.
                    */
@@ -479,7 +479,7 @@ function GroupList({
         const isExpanded = expandedIds.has(group.id);
         const isActiveGroup = group.files.some((file) => file.id === activeFileId);
         /*
-         * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+         * CDXC:AgentLauncher 2026-08-24 (round 3):
          * A collapsed group is one compact row in every expandable tab, not
          * just Skills — otherwise "collapsed" Configs and Hooks rows still
          * carry their path, description, and profile icons and the list stays
@@ -549,10 +549,10 @@ function GroupList({
 
 function ProfileRow({ profiles, vscode }: { profiles: AgentsHubProfile[]; vscode: WebviewApi }) {
   /**
-   * CDXC:AgentsHub 2026-05-15-15:41:
+   * CDXC:AgentLauncher 2026-05-15-15:41:
    * Profile icon tooltips must keep the same profile label, instruction file path, optional resolved target path, and folder-opening action as the original tooltip, but render them as organized sections instead of a loose preformatted text block so dense path content remains scannable.
    *
-   * CDXC:AgentsHub 2026-06-04-13:39:
+   * CDXC:AgentLauncher 2026-06-04-13:39:
    * Filesystem actions in Agents Hub should use OS-agnostic "Open Folder" language so the shared modal does not expose Finder-specific copy outside macOS implementation details.
    */
   return (
@@ -612,7 +612,7 @@ function ProfileRow({ profiles, vscode }: { profiles: AgentsHubProfile[]; vscode
 
 function getAgentProfileBadge(profilePath: string): string | undefined {
   /**
-   * CDXC:AgentsHub 2026-05-13-08:16
+   * CDXC:AgentLauncher 2026-05-13-08:16
    * Main agent profiles should show only the agent logo. Non-main profile chips
    * derive their corner badge from the first alphanumeric character of the
    * profile folder name, so `personal` maps to P and `work` maps to W without
@@ -698,10 +698,10 @@ function EditorPane({
           padding: { bottom: 16, top: 16 },
           scrollBeyondLastLine: false,
           /*
-           * CDXC:AgentsHub 2026-06-04-19:29:
+           * CDXC:AgentLauncher 2026-06-04-19:29:
            * Agents Hub's inline Monaco editor must use the same thin rail as the Hub file-list sidebar so editor scrollbars do not look heavier than adjacent modal chrome.
            *
-           * CDXC:AgentsHub 2026-06-04-19:48:
+           * CDXC:AgentLauncher 2026-06-04-19:48:
            * The inline editor scrollbar should be 7px wide so the code editor matches the requested lighter macOS treatment.
            */
           scrollbar: {
@@ -753,7 +753,7 @@ function EditorPane({
       return;
     }
     /**
-     * CDXC:AgentsHub 2026-05-14-08:27:
+     * CDXC:AgentLauncher 2026-05-14-08:27:
      * Users edit agent instruction/config files directly in the Hub modal, so the top-right Save action should stay disabled until the current editor text differs from the last saved file contents.
      * Saving posts the active file path and editor value through the native sidebar bridge because the modal host cannot write local files itself.
      */
@@ -778,11 +778,11 @@ function EditorPane({
         </div>
         <div className='agents-hub-editor-actions'>
           {/*
-           * CDXC:AgentsHub 2026-06-04-13:39:
+           * CDXC:AgentLauncher 2026-06-04-13:39:
            * The selected file header keeps Open Folder beside the built-in
            * Source action so users can choose filesystem or in-app navigation.
            *
-           * CDXC:AgentsHub 2026-06-04-20:08:
+           * CDXC:AgentLauncher 2026-06-04-20:08:
            * Editor toolbar actions should be compact icon-only controls with descriptive hover tooltips, and Refresh should sit immediately before Save so disk changes can be reloaded without closing Agents Hub.
            */}
           <CopyFilePathButton path={file.path} />
@@ -839,7 +839,7 @@ function EditorPane({
 }
 
 /*
- * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+ * CDXC:AgentLauncher 2026-08-24 (round 3):
  * The open file's full path is the thing users most often want out of the Hub
  * (to paste into a prompt or a terminal), so the toolbar copies it directly and
  * confirms with a check for a moment instead of only showing the path as text.
@@ -931,7 +931,7 @@ function useFilteredGroups(
 }
 
 /*
- * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+ * CDXC:AgentLauncher 2026-08-24 (round 2):
  * This is a plain lookup. It used to fall back to the tab's first file when the
  * id was unknown, which made the selection-sync effect below a no-op (its
  * `findFile(...) ? keep : firstFileId(...)` guard could never take the second

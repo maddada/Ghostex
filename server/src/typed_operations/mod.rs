@@ -21,7 +21,7 @@ pub(crate) use values::*;
 pub(crate) use worktree::*;
 
 /*
-CDXC:GxserverRustPort 2026-06-16-00:49:
+CDXC:RepoStructure 2026-06-16-00:49:
 Phase 7 typed operations are shared backend command surfaces, not arbitrary remote shell access. Rust mirrors the TypeScript allowlists, registered-project scope checks, redacted command metadata, bounded subprocess output, and pinned Beads resolution so clients can opt into Rust without receiving broader filesystem or command execution power.
 */
 pub async fn dispatch_typed_operation_endpoint(
@@ -43,7 +43,7 @@ pub async fn dispatch_typed_operation_endpoint(
 }
 
 /*
-CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+CDXC:Worktrees 2026-07-29-00:00:
 Sidebar V2 worktree sessions live in a checkout that is deliberately NOT a
 registered project, so the ordinary scope resolution ("cwd is a registered
 project path") cannot reach them. Scope still comes from a registered project:
@@ -76,7 +76,7 @@ pub async fn dispatch_worktree_path_operation(
 }
 
 /*
-CDXC:GPUISidebarGit 2026-06-24-16:28:
+CDXC:Git 2026-06-24-16:28:
 GPUI direct PR creation needs gxserver to own `gh pr create --fill` completion
 and return only a verified open PR record. Do not expose command output, branch
 names, titles, commit messages, argv text, or daemon stderr/stdout through this
@@ -135,7 +135,7 @@ pub fn typed_operation_log_level(action: &str, exit_code: i32, has_error: bool) 
 }
 
 /*
-CDXC:GxserverCommandRedaction 2026-06-22-09:38:
+CDXC:Cli 2026-06-22-09:38:
 Typed operation persistent logs must expose enum and shape facts only: action, command presence, argument count, executable, expected-nonzero state, exit code, and structured operation error. Do not copy argv, cwd, stdout, stderr, branch names, paths, Beads text fields, or setup command text into log details; the RPC result remains TypeScript-compatible for the caller.
 */
 pub fn typed_operation_log_details(result: &Value) -> Value {
@@ -184,7 +184,7 @@ pub(crate) fn resolve_project_operation_context(
         && params.get("projectBoardScope").and_then(Value::as_bool) == Some(true)
     {
         /*
-        CDXC:GlobalProjectDefaults 2026-08-02:
+        CDXC:Projects 2026-08-02:
         The project's own Beads directory still wins. Only an unset one consults
         the Global Default, and an unset global still yields None so the board
         keeps launching from the project root exactly as it did before.

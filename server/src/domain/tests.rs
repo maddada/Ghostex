@@ -703,7 +703,7 @@ fn update_and_remove_crud_paths_report_not_found_for_unvalidated_ids() {
 #[test]
 fn add_project_path_repairs_visibility_metadata_for_existing_path() {
     /*
-    CDXC:ProjectVisibility 2026-06-30-21:23:
+    CDXC:Projects 2026-06-30-21:23:
     Remote Attach carrier registration may reuse an existing gxserver path row. Repair hidden/system project metadata on `/api/addProjectPath` so every inventory client hides that carrier through daemon-owned state instead of macOS-only project filters.
     */
     let (temp, db) = open_test_database();

@@ -21,7 +21,7 @@ export type ConfirmationModalProps = {
 };
 
 /**
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * The shared yes/no prompt. It used to hand-roll its own portal, backdrop, and
  * primary/secondary button row; it now composes AppModalShell so it inherits
  * the one app-modal design language (and Radix's Escape/backdrop handling)

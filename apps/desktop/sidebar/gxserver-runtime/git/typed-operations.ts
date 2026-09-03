@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines) into git/. This
 slice covers the typed-operation dispatchers for Git/worktree/GitHub/Beads
 actions, pull request creation, and the shared Git toast helper. See
@@ -32,7 +32,7 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
       throw new Error('gxserver is unavailable.');
     }
     /*
-    CDXC:SidebarGitMemo 2026-07-29:
+    CDXC:Git 2026-07-29:
     Invalidate at the single chokepoint every Git write goes through, so no
     caller can commit, push, or switch branches and then have a switch back to
     that project republish the pre-mutation state. Deleting before the RPC also
@@ -45,7 +45,7 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
         projectId: project.projectId,
       });
       /*
-      CDXC:SidebarDiffStatsChurn 2026-08-16:
+      CDXC:Git 2026-08-16:
       The background diff-stats cycle stretches with sidebar size, so a commit
       or checkout could otherwise leave the project header's +/- counts stale
       for the better part of a minute. Re-probe this one project right after
@@ -72,7 +72,7 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
   },
 
   /*
-  CDXC:WorktreeRename 2026-08-09-18:40:
+  CDXC:Worktrees 2026-08-09-18:40:
   Worktree actions scope to the PARENT project, not the worktree's own row: the
   typed operation derives the worktree family root from the parent of its cwd and
   then refuses a path equal to that cwd, so passing the worktree's id makes the
@@ -126,13 +126,13 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
       throw new Error('gxserver is unavailable.');
     }
     /*
-    CDXC:GPUISidebarGit 2026-06-24-16:28:
+    CDXC:Git 2026-06-24-16:28:
     Direct GPUI PR creation must use a gxserver completion result before opening
     the PR or deleting a worktree. The renderer sends only the trusted project
     id; gxserver owns `gh pr create --fill`, current-branch PR lookup, and
     validated state/URL return data.
 
-    CDXC:SidebarGitMemo 2026-07-29:
+    CDXC:Git 2026-07-29:
     This is the sidebar's only pull-request write, so it is the one place the
     long GitHub lease must be torn down: otherwise the badge could keep saying
     "no pull request" for minutes after the user just created one.
@@ -231,7 +231,7 @@ export const gpuiSidebarRuntimeGitTypedOperationsMethods = {
       );
     } catch {
       /*
-      CDXC:GPUISidebarGit 2026-06-24-15:22:
+      CDXC:Git 2026-06-24-15:22:
       Git mutations and agent workflows must not depend on toast-host availability. Missing toast presentation is not a reason to fake success or skip gxserver-owned Git state changes.
       */
     }

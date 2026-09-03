@@ -35,7 +35,7 @@ export function createSidebarSessionSearchResults({
   const results: SidebarSessionSearchResult[] = [];
 
   /**
-   * CDXC:ProjectBrowserTabs 2026-05-16-12:59:
+   * CDXC:Browser 2026-05-16-12:59:
    * The standalone Browsers group is no longer part of the sidebar. Browser
    * pane sessions participate in search through their owning project group,
    * so keyboard navigation should follow the project session list only.

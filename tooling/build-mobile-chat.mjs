@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /*
-CDXC:SessionChatMobileWebview 2026-07-31:
+CDXC:Mobile 2026-07-31:
 Builds apps/mobile/views/chat/session-chat-main.tsx (the shared Session Chat page the
 React Native app hosts in a webview) into a real asset directory that ships
 inside the app bundle.
 
-CDXC:SessionChatMobileOrigin 2026-08-21:
+CDXC:Mobile 2026-08-21:
 This used to emit ONE self-contained HTML string as a generated TypeScript
 module, handed to react-native-webview as `source={{ html }}`. That sidestepped
 platform differences around bundled assets, but it also left the page with no

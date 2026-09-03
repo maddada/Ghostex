@@ -123,7 +123,7 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
     );
     if token_result.exit_code != 0 {
         /*
-        CDXC:GPUIRemoteWindowsWsl 2026-07-26:
+        CDXC:RemoteMachines 2026-07-26:
         Keep the established Unix SSH command byte-for-byte as the first
         attempt. When that cannot run, identify the SSH host boundary and, for
         Windows OpenSSH, move every Linux runtime operation into the selected
@@ -173,7 +173,7 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
     if (token_result.exit_code == 127 && install_approved) || installed_managed_package_needs_update
     {
         /*
-        CDXC:GPUIRemoteMachines 2026-06-24-20:08:
+        CDXC:RemoteMachines 2026-06-24-20:08:
         Approved GPUI Remote installs must be native-owned and packaged-only: after SSH reports gxserver missing, Rust probes the remote OS/CPU, selects a matching app-bundled gxserver package, uploads it over the saved SSH configuration, installs/starts it, and then reuses the existing token/Keychain/tunnel path. Development checkout paths and renderer-provided SSH details are not runtime fallbacks.
 
         An existing Ghostex-managed package is updated without another install

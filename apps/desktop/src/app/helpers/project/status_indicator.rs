@@ -35,7 +35,7 @@ pub(crate) fn gpui_add_project_dialog_restore_recent_project(
     timeout: Duration,
 ) -> Result<serde_json::Value, String> {
     /*
-    CDXC:AddProjectRestoreRecent 2026-08-12:
+    CDXC:AddProject 2026-08-12:
     `/api/addProjectPath` is intentionally idempotent and returns an existing
     path registration unchanged. When that registration is parked in Recent
     Projects, Add Project must perform the same authoritative restore mutation
@@ -112,7 +112,7 @@ pub(crate) struct GpuiStatusIndicatorProjectState {
 }
 
 /*
-CDXC:GlobalActions 2026-08-01-16:00:
+CDXC:AgentLauncher 2026-08-01-16:00:
 What the tab strip needs to draw one Global Action button and to ask the sidebar
 runtime to run it: a bounded id, a display name for the tooltip, and an optional
 icon slug. Deliberately no command text, URL, cwd, or run state — the click
@@ -224,7 +224,7 @@ pub(crate) fn gpui_workspace_terminal_rename_command_input(
     title: &str,
 ) -> String {
     /*
-    CDXC:GPUIWorkspaceRenameCommand 2026-06-27-02:27:
+    CDXC:SessionTitles 2026-06-27-02:27:
     This is the only rename path that turns the validated title into terminal input. It must remain a fixed `/rename <title>`, Pi `/name <title>`, or Hermes Agent `/title <title>` command chosen by the validated enum selector for the already-resolved Agents surface and must not add shell escaping, logging, persistence, fallback commands, or renderer-selected text.
     */
     match command {

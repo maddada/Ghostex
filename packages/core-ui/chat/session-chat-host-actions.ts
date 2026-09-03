@@ -21,7 +21,7 @@ export interface SessionChatHostAction {
   /** Formatted effective shortcut shown beside the label in the tooltip. */
   shortcut?: string;
   /**
-   * CDXC:SwitchAccount 2026-09-03:
+   * CDXC:AgentProviders 2026-09-03:
    * When set, the action renders as a submenu of these rows and picking one
    * calls `onAction(action.id, item.id)`. An empty list hides the action, so a
    * host can always list "Switch Account" and let the rows decide.

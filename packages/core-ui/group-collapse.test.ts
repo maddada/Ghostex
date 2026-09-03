@@ -4,7 +4,7 @@ import { getAutoCollapseGroupIds, reconcileCollapsedGroupsById } from './group-c
 describe('getAutoCollapseGroupIds', () => {
   test('keeps empty project groups out of auto-collapse', () => {
     /**
-     * CDXC:ProjectGroups 2026-05-21-11:07:
+     * CDXC:Projects 2026-05-21-11:07:
      * Global browser groups are no longer rendered in the reference sidebar.
      * Auto-collapse applies only to visible non-project workspace sections.
      */
@@ -41,7 +41,7 @@ describe('reconcileCollapsedGroupsById', () => {
 
   test('preserves collapse state for temporarily missing startup groups', () => {
     /**
-     * CDXC:SidebarGroups 2026-06-02-22:18:
+     * CDXC:Projects 2026-06-02-22:18:
      * The gxserver-unavailable startup placeholder is not a real project list.
      * Reconcile must keep unknown collapsed project IDs until the authoritative
      * project hydrate arrives, otherwise restart rewrites them as expanded.
@@ -108,7 +108,7 @@ describe('reconcileCollapsedGroupsById', () => {
 
   test('keeps collapsed project groups collapsed while seeding the startup baseline', () => {
     /**
-     * CDXC:SidebarGroups 2026-05-20-12:00:
+     * CDXC:Projects 2026-05-20-12:00:
      * Restart hydration replays restored session counts from zero. The first
      * post-hydrate reconcile must not treat that replay as a newly created
      * session.
@@ -135,7 +135,7 @@ describe('reconcileCollapsedGroupsById', () => {
 
   test('expands a collapsed project group when a session is created without auto-collapsing empty projects', () => {
     /**
-     * CDXC:SidebarGroups 2026-05-08-11:09:
+     * CDXC:Projects 2026-05-08-11:09:
      * Project groups do not use empty auto-collapse, but a newly added
      * terminal/browser/agent session inside a collapsed project must still
      * expand that project.

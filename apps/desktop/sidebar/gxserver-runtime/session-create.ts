@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -52,7 +52,7 @@ import { getDefaultSidebarAgentByIcon, type SidebarAgentButton } from '@/package
 import { DEFAULT_BROWSER_LAUNCH_URL } from '@/packages/shared/sidebar-commands';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeSessionCreateMethods` — because deriving them would make
@@ -136,7 +136,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     firstUserInputDraft?: string
   ): GpuiFirstPromptTitleRuntimeSettings {
     /*
-    CDXC:GPUIFirstPromptTitle 2026-07-04-21:52:
+    CDXC:SessionTitles 2026-07-04-21:52:
     GPUI agent sessions must carry the same gxserver-owned first-prompt title
     settings as macOS before hooks claim the prompt. The daemon still owns
     eligibility, title generation, and command submission; GPUI only supplies
@@ -156,7 +156,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       runtimeSettings.firstUserMessage = prompt;
     }
     /*
-    CDXC:ExportTranscript 2026-08-20:
+    CDXC:TranscriptExport 2026-08-20:
     A draft is the opposite of `firstUserMessage`: gxserver types it into the
     new agent's composer once and never submits it. It travels to the daemon
     byte for byte — the trailing space of `@<path> ` is what closes the file
@@ -207,7 +207,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
 
   async createQuickTerminal(this: GpuiSidebarRuntime): Promise<void> {
     /*
-    CDXC:GPUIQuickActions 2026-07-11:
+    CDXC:AgentLauncher 2026-07-11:
     Match macOS createNativeChat: create and focus a new projectless chat
     workspace first, then create its initial running terminal through the
     ordinary gxserver session path.
@@ -240,7 +240,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       return;
     }
     /*
-    CDXC:GPUIRemoteBrowserTabs 2026-07-12:
+    CDXC:Browser 2026-07-12:
     Browser tabs are project-keyed local CEF panes, so remote projects reuse
     the same workarea through their machine-scoped project ids. The payload
     carries the explicit target project id so Rust swaps the browser project
@@ -252,7 +252,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       this.activeGroupId = groupId;
       this.publishRemotePresentationPatch();
       /*
-      CDXC:GPUIRemotePortsBrowser 2026-07-30:
+      CDXC:RemoteMachines 2026-07-30:
       A remote project's Browser pane defaults to the machine's listening-ports
       page instead of the generic launch URL, so the tab lands on the remote's
       address with its running apps one click away. Rust owns SSH port
@@ -354,7 +354,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       return;
     }
     /*
-    CDXC:GPUISidebarGxserverRuntime 2026-07-07:
+    CDXC:StateSync 2026-07-07:
     gxserver defaults an omitted lifecycleState to "unknown", which the
     presentation layer treats as inactive, so the created terminal never gets a
     sidebar row even though the workspace pane opens. Declare the session
@@ -402,7 +402,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     message: Extract<SidebarToExtensionMessage, { type: 'createProjectTerminal' }>
   ): Promise<void> {
     /*
-    CDXC:GPUIWindowsProjectTerminal 2026-07-26:
+    CDXC:PlatformSupport 2026-07-26:
     The project-heading terminal button is an explicit project-scoped create
     request. On Windows, keep the WSL gxserver create and attach sequence in
     the Rust host by posting only the clicked local project id. The native host
@@ -652,7 +652,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
         return;
       }
       /*
-      CDXC:GPUIRemoteSessions 2026-06-24-17:19:
+      CDXC:RemoteMachines 2026-06-24-17:19:
       Remote agent launches must let the owning remote gxserver resolve default and project-custom agent commands from remote project metadata. GPUI sends only the selected agent id, project id, surface, and a require-command guard through Rust's authenticated tunnel, never a renderer-provided command string.
       */
       const remoteAgent = this.resolveSidebarAgent(normalizedAgentId);
@@ -663,7 +663,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
         {
           agentId: normalizedAgentId,
           /*
-          CDXC:DraftSessions 2026-08-28:
+          CDXC:Drafts 2026-08-28:
           Sidebar agent launches carry no prompt, so the remote gxserver creates
           a draft row: the CLI still starts in the background below (the
           promptless `startRemoteAgentSessionAndSendPrompt` call only starts the
@@ -730,7 +730,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     const isWindowsHost = typeof navigator !== 'undefined' && /Windows/iu.test(navigator.userAgent);
     if (isWindowsHost) {
       /*
-      CDXC:GPUIWindowsProjectAgent 2026-08-11:
+      CDXC:PlatformSupport 2026-08-11:
       Windows agent creation and attachment must stay in the Rust-owned WSL
       gxserver path. Splitting creation across CEF fetch and native attach can
       address different backend state during WSL bootstrap and leaves the
@@ -778,7 +778,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       response = await this.client.rpc<GpuiGxserverCreatedSessionResult>('/api/createAgentSession', {
         agentId: agent.agentId,
         /*
-        CDXC:DraftSessions 2026-08-28:
+        CDXC:Drafts 2026-08-28:
         A sidebar agent launch has no prompt, so the row is created as a draft.
         The agent CLI is NOT started here: `focusLocalWorkspaceSession` below
         hands the session to the Rust attach path, whose
@@ -822,7 +822,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
   },
 
   /*
-  CDXC:AgentHistorySearch 2026-08-20:
+  CDXC:PromptSearch 2026-08-20:
   Search by Text used to create a terminal and type `gx f` into it. The same
   search is now a first-class modal, so this forwards the native Find action
   and both entry points — the Previous Sessions search row and the command
@@ -845,7 +845,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
   path/command/title strings); unknown actions surface an honest toast instead
   of dropping silently.
 
-  CDXC:GxserverRuntimeSplit 2026-08-22:
+  CDXC:RepoStructure 2026-08-22:
   This method was deleted by accident on 2026-08-20 (the Search-by-Text change
   overwrote its body with `searchPreviousSessionsByText`) while both bridge call
   sites in `core.ts` stayed, so every `ghostex://` URL, Finder Open-With, and
@@ -980,7 +980,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     const defaultTitle = createAgentSessionDefaultTitle(agent.name);
     const renameTitle = title.trim() !== defaultTitle ? title.trim() : undefined;
     /*
-    CDXC:GPUIGitAgentWorkflows 2026-07-11-06:14:
+    CDXC:Git 2026-07-11-06:14:
     Match macOS `runSidebarGitPromptAction` + `stageNativeAgentPrompt`: create
     Git helpers as fresh neutral agent sessions, start the provider, then submit
     the provider-specific title command, wait for that command to settle, and
@@ -1024,7 +1024,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     }>('/api/createAgentSession', {
       agentId: agent.agentId,
       /*
-      CDXC:DraftSessions 2026-09-02:
+      CDXC:Drafts 2026-09-02:
       A promptless launch (Handoff / Export) is a draft exactly like a sidebar
       launch: chat-eligible from the first frame instead of only once the
       agent's hooks report a conversation id. Never combined with a prompt —
@@ -1086,7 +1086,7 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       '/api/createAgentSession',
       {
         agentId,
-        // CDXC:DraftSessions 2026-09-02: same draft rule as the local helper.
+        // CDXC:Drafts 2026-09-02: same draft rule as the local helper.
         ...(options.draft && !normalizeNonEmptyString(prompt) ? { draft: true } : {}),
         projectId: remoteScope.projectId,
         requireLaunchCommand: true,

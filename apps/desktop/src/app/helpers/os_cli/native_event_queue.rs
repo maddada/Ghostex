@@ -145,7 +145,7 @@ pub(crate) fn queue_gpui_app_shot_capture(capture: GpuiAppShotCapture) {
     foreground
         .spawn(async move {
             /*
-            CDXC:GPUIAppShots 2026-06-26-04:18:
+            CDXC:AppShots 2026-06-26-04:18:
             Native App Shots callbacks must copy capture metadata at the FFI boundary and then enqueue a foreground GPUI update without borrowing `AsyncApp` across the returned future. This keeps the C callback non-blocking while preserving the existing Rust/sidebar capture contract.
             */
             let _ = app.update_in(&mut async_app, |this, window, cx| {

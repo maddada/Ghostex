@@ -1,7 +1,7 @@
 # GPUI Settings Parity Progress
 
 <!--
-CDXC:GPUISettingsParity 2026-06-24-10:41:
+CDXC:Settings 2026-06-24-10:41:
 The GPUI settings parity effort must port the current macOS Settings UI/UX by reusing the same React settings components, sharing cross-platform code where appropriate, and coordinating implementation through one L-sized worker agent at a time. This file is the source-of-truth progress ledger for requirements, assigned slices, implemented behavior, remaining gaps, and validation deferrals for this goal.
 -->
 
@@ -223,14 +223,14 @@ Hard constraints:
 ### 2026-06-24-12:56 Worker 12 - GPUI CLI And Bundled Skill Actions
 
 - User-facing behavior delivered: GPUI Settings now performs real bounded Ghostex CLI repair from packaged `Contents/Resources/CLI` resources when available, reports explicit unavailable status for unpackaged/development runs without bundled CLI resources, installs the four bundled Ghostex skills through fixed `ghostex <namespace> install-skill` commands, and uninstalls only the four known bundled skill directories under `~/agents/skills`.
-- High-level technical approach: replaced the six Settings placeholders with one background action runner that dispatches refreshed `ghostexCliStatus`, action status, and toast payloads through the existing app-modal bridge. CLI repair writes wrapper files outside the app, includes the `CDXC:CliInstall 2026-06-12-09:31` marker, replaces only marked Ghostex wrappers, app-owned CLI symlinks, or broken symlinks, treats `ghostex` as required while allowing `gx` to be blocked, suppresses child stdout/stderr, and clears macOS execution-policy xattrs opportunistically. The GPUI macOS packager now stages the CLI module, public launchers, and bundled skill folders under `Contents/Resources/CLI`.
+- High-level technical approach: replaced the six Settings placeholders with one background action runner that dispatches refreshed `ghostexCliStatus`, action status, and toast payloads through the existing app-modal bridge. CLI repair writes wrapper files outside the app, includes the `CDXC:Cli 2026-06-12-09:31` marker, replaces only marked Ghostex wrappers, app-owned CLI symlinks, or broken symlinks, treats `ghostex` as required while allowing `gx` to be blocked, suppresses child stdout/stderr, and clears macOS execution-policy xattrs opportunistically. The GPUI macOS packager now stages the CLI module, public launchers, and bundled skill folders under `Contents/Resources/CLI`.
 - Files touched: `gpui/src/main.rs`, `gpui/scripts/build-macos-app.sh`, `gpui/SETTINGS_PARITY_PROGRESS.md`.
 - Remaining gaps: this slice did not implement Cua Driver install, Homebrew/gte install, Portless admin, Keep Awake, AppShots, code-server, Ghostty, notification, hook, or OS-default action work. Runtime validation from a packaged `.app` is still needed to prove the CLI wrappers and skill installer end-to-end on a real user PATH.
 - Validation: ran `bash -n gpui/scripts/build-macos-app.sh` and a scoped CLI resource existence check successfully. `cargo check --manifest-path gpui/Cargo.toml --bin ghostex-gpui` did not reach the GPUI crate because the local Zed `gpui_util` dependency currently fails on unstable `slice_as_array` with this toolchain. `rustfmt --check --edition 2024 gpui/src/main.rs` parsed the touched Rust but exited with formatting diffs across existing GPUI module files. No app launch/restart, package build, broad test run, browser automation, or `bun run start` command was run.
 
 ### 2026-06-24-13:08 Worker 12 Follow-up - Strict CLI Execution Ownership
 
-- Correction: tightened the Ghostex CLI ownership predicate used before bundled skill installs. Settings now accepts only marked wrappers containing `CDXC:CliInstall 2026-06-12-09:31` plus `ghostex-cli.mjs`, or app-owned command realpaths recognized by the CLI repair ownership helper; broad file text such as `Ghostex CLI` no longer authorizes execution.
+- Correction: tightened the Ghostex CLI ownership predicate used before bundled skill installs. Settings now accepts only marked wrappers containing `CDXC:Cli 2026-06-12-09:31` plus `ghostex-cli.mjs`, or app-owned command realpaths recognized by the CLI repair ownership helper; broad file text such as `Ghostex CLI` no longer authorizes execution.
 
 ### 2026-06-24-13:19 Worker 13 - Desktop Control / Cua Driver Settings Parity
 

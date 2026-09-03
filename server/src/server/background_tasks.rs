@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:GxserverAgentTitles 2026-08-11:
+CDXC:SessionTitles 2026-08-11:
 Codex writes canonical thread names to session_index.jsonl, both for `/rename`
 and for its automatic first-turn title generation, but does not update its OSC
 terminal title or emit a provider hook. Track the index revision for each live,
@@ -42,7 +42,7 @@ pub(crate) fn run_agent_metadata_title_sync_once(
     })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     /*
-    CDXC:GxserverSlimSessionQueries 2026-09-01:
+    CDXC:StateSync 2026-09-01:
     This pass runs once a second and only ever looks at running rows, so the
     "running" filter belongs in SQL. On a registry with thousands of stopped
     rows the old full list hydrated every one of them — including six JSON
@@ -95,7 +95,7 @@ pub(crate) fn spawn_portless_background_sync_task(
     state: &Arc<AppState>,
 ) -> tokio::task::JoinHandle<()> {
     /*
-    CDXC:PortlessBackgroundSync 2026-06-22-23:40:
+    CDXC:Portless 2026-06-22-23:40:
     Phase 9 route sync must run inside server without depending on Resources/sidebar polling, while staying lightweight for startup and shutdown. Run each sync pass off the async worker, retry on a conservative interval, and listen to gxserver's existing shutdown broadcast instead of adding a separate lifecycle channel.
     */
     let paths = state.paths.clone();
@@ -142,7 +142,7 @@ pub(crate) fn spawn_portless_background_sync_task(
 }
 
 /*
-CDXC:SessionChatFollowerLiveness 2026-08-24:
+CDXC:AgentScreenDetection 2026-08-24:
 Follower health used to be reconciled ONLY when a presentation session delta
 happened to arrive for that session. A follower that died or wedged while the
 session produced no delta (which is exactly what a frozen chat looks like) then
@@ -175,7 +175,7 @@ pub(crate) fn spawn_session_chat_follower_sync_task(
 }
 
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 Sidebar V2's auto-settle window and spent-snooze collection are server rules, so
 they run on gxserver's own clock instead of whichever client happens to be open.
 The pass is deliberately cheap (one SQLite read, at most
@@ -237,12 +237,12 @@ pub(crate) fn run_session_lifecycle_sweep_once(
         now_iso: now_iso(),
     };
     /*
-    CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+    CDXC:Git 2026-07-29-00:00:
     The sweep reads the git-status cache the refresh pass below maintains; it
     never probes. A cwd that has not been probed yet resolves to "unknown", which
     settles nothing, so a cold daemon simply waits for its first refresh pass.
 
-    CDXC:SidebarV2GitStatus 2026-07-30 (effective cwd):
+    CDXC:Git 2026-07-30 (effective cwd):
     The disposition is resolved through the session's project, exactly like the
     probe pass and presentation, so PR-driven auto-settle can fire for a cwd-less
     agent session instead of silently reading "unknown" forever. The lookup map is
@@ -277,7 +277,7 @@ pub(crate) fn run_session_lifecycle_sweep_once(
 }
 
 /*
-CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+CDXC:Git 2026-07-29-00:00:
 Sidebar V2's card row (branch, +n −n, PR badge) is server-owned, so the probing
 happens here on gxserver's own clock instead of in whichever client is open.
 The pass shape mirrors the lifecycle sweep: blocking work off the async worker,
@@ -300,7 +300,7 @@ pub(crate) fn spawn_session_git_status_refresh_task(
             let pass_state = refresh_state.clone();
             let pass_result = tokio::task::spawn_blocking(move || {
                 /*
-                CDXC:SidebarV2DataGate 2026-07-29:
+                CDXC:StateSync 2026-07-29:
                 Session git status remains Sidebar V2-only, so read the current
                 setting for that pass. Project origin URLs are now also shown by
                 the classic project's Copy Remote URL menu item, so their pass
@@ -314,7 +314,7 @@ pub(crate) fn spawn_session_git_status_refresh_task(
                     log_session_git_status_refresh_failure(&pass_state, &error.message);
                 }
                 /*
-                CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
+                CDXC:StateSync 2026-07-29-00:00:
                 The per-project `origin` remote probe rides this same blocking
                 worker and this same 60s wake-up instead of adding a fifth
                 background task: it is the same kind of work (time-boxed git
@@ -327,7 +327,7 @@ pub(crate) fn spawn_session_git_status_refresh_task(
                     log_project_git_remote_refresh_failure(&pass_state, &error.message);
                 }
                 /*
-                CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+                CDXC:Icons 2026-07-29 (discovered icons):
                 The project-icon discovery pass rides the same worker and the
                 same wake-up as the two git passes above, for the same reasons:
                 it is bounded filesystem work feeding a TTL cache presentation
@@ -374,7 +374,7 @@ pub(crate) fn run_session_git_status_refresh_once(
     sidebar_v2_selected: bool,
 ) -> std::result::Result<(), DomainStateError> {
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     `refresh_session_git_status_cache` enforces the gate itself, so this early
     return is about the rest of the pass: on a V1 machine there is no reason to
     open SQLite and walk every session row to build a cwd set nobody will probe.
@@ -398,7 +398,7 @@ pub(crate) fn run_session_git_status_refresh_once(
     if nothing live ever pointed there) rather than costing a git spawn a minute
     for a checkout nobody is working in.
 
-    CDXC:SidebarV2GitStatus 2026-07-30 (effective cwd):
+    CDXC:Git 2026-07-30 (effective cwd):
     The set is built from each session's EFFECTIVE cwd (`session.cwd` else
     `project.path`, see `session_git_status::effective_session_git_cwd`), so the
     project ROOT of a cwd-less agent session actually gets probed. One project
@@ -471,7 +471,7 @@ pub(crate) fn run_session_git_status_refresh_once(
 }
 
 /*
-CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 Sidebar V2 groups the same repository across machines by its `origin` remote, so
 gxserver resolves that remote for its own projects and ships it in presentation.
 
@@ -538,7 +538,7 @@ pub(crate) fn run_project_git_remote_refresh_once(
 }
 
 /*
-CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+CDXC:Icons 2026-07-29 (discovered icons):
 Sidebar V2 shows each project the icon its own repository ships, so gxserver
 discovers that icon for its own projects and ships it in presentation.
 
@@ -685,7 +685,7 @@ pub(crate) fn log_session_lifecycle_sweep_failure(state: &Arc<AppState>, message
 }
 
 /*
-CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+CDXC:Worktrees 2026-07-29-00:00:
 A worktree session starts on `ghostex/<8hex>` because nothing yet knows what the
 work is. Once the session has a REAL title — from the auto-rename skill, from
 first-prompt title generation, or from the user typing one — that name is the
@@ -790,7 +790,7 @@ pub(crate) fn run_worktree_branch_rename_once(
             repository.update_session(&update)?;
         }
         /*
-        CDXC:SidebarV2DataGate 2026-07-29:
+        CDXC:StateSync 2026-07-29:
         Re-probing the renamed checkout is Sidebar V2 card data, so it answers to
         the same `sidebarVersion` gate as the background passes; on a V1 machine
         the rename still lands, it just does not warm a cache nothing reads. The

@@ -8,7 +8,7 @@ pub(crate) const AGENT_SETTINGS_METADATA_KEY: &str = "agents.settings.v1";
 pub(crate) const DEFAULT_PROMPT_AGENT_ID: &str = "codex";
 pub(crate) const MAX_DEFAULT_PROMPT_AGENT_ID_LENGTH: usize = 120;
 /*
-CDXC:GxserverFirstUserInputDraft 2026-08-20:
+CDXC:Drafts 2026-08-20:
 `firstUserMessage` is a prompt gxserver submits for the user. A draft is the
 opposite contract: text staged into the new agent's composer and never sent, so
 the user writes their own prompt around it (the "Export transcript" result

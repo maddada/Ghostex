@@ -203,10 +203,10 @@ pub(crate) fn gpui_sidebar_session_status_indicators_from_json(
     text: &str,
 ) -> Result<GpuiSidebarSessionStatusIndicatorsState, ()> {
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+    CDXC:StatusPet 2026-06-26-04:38:
     Status indicator parser coverage must keep the GPUI bridge fixed and privacy-safe: accept only version/type, enum counts, menu-bar visibility, bounded project/session rows with ids/order/titles, and optional bounded image data URLs for project notification icons. Reject generic action names, paths, external URLs, command text, stdout/stderr, tokens, terminal content, oversized arrays, and unknown keys before app state is updated.
 
-    CDXC:GPUIStatusPetOverlay 2026-06-27-20:11:
+    CDXC:StatusPet 2026-06-27-20:11:
     The standalone GPUI floating session indicator was removed. The status
     bridge still feeds the menu bar item, pet badges, and attention
     notifications, but it no longer accepts floating visibility or size fields.
@@ -250,7 +250,7 @@ pub(crate) fn gpui_sidebar_session_status_indicators_from_json(
 }
 
 /*
-CDXC:GlobalActions 2026-08-01-16:00:
+CDXC:AgentLauncher 2026-08-01-16:00:
 The Global Actions bridge accepts only version/type plus a bounded action list of
 id, display name, and optional icon slug. Reject command text, URLs, paths, run
 state, project ids, and unknown keys before app state is updated, matching the
@@ -320,10 +320,10 @@ pub(crate) fn gpui_sidebar_pet_overlay_state_from_json(
     text: &str,
 ) -> Result<GpuiSidebarPetOverlayState, ()> {
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+    CDXC:StatusPet 2026-06-26-04:38:
     Pet overlay parser accepts only the saved enabled flag, bounded selected pet id, status items, and explicit project/session activity ids from the fixed sidebar bridge. It must not accept renderer paths, URLs, generic activation payloads, command text, stdout/stderr, tokens, terminal content, or menu-bar status-item data.
 
-    CDXC:GPUIStatusPetOverlay 2026-06-26-05:30:
+    CDXC:StatusPet 2026-06-26-05:30:
     The selected pet id must match a bundled GPUI pet spritesheet. Reject unknown ids instead of silently substituting a default asset so broken pet settings or bridge regressions remain visible during validation.
     */
     let value = serde_json::from_str::<serde_json::Value>(text).map_err(|_| ())?;

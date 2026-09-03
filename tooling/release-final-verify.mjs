@@ -25,7 +25,7 @@ import {
 } from './release-gpui/publish-provenance.mjs';
 
 /*
- CDXC:ReleaseAutomation 2026-07-02-14:10:
+ CDXC:Release 2026-07-02-14:10:
  Final live verification previously lived as a long manual checklist in the
  release skill and re-downloaded the ~800 MB DMG it had already fetched twice.
  This script codifies the whole checklist as one command with a PASS/FAIL
@@ -296,7 +296,7 @@ async function main() {
   });
 
   /*
-   CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+   CDXC:Release 2026-08-13:
    The release records, per product, whether its bytes were built here or reused
    from an earlier verified origin. This check re-derives every one of those
    claims from public data only: the live asset digests, and — for a

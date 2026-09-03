@@ -1,5 +1,5 @@
 /**
- * CDXC:SidebarGitMemo 2026-07-29:
+ * CDXC:Git 2026-07-29:
  * Switching projects in the sidebar used to re-run the whole Git fan-out
  * (~10 gxserver RPCs, each spawning a subprocess, one of them a networked
  * `gh pr view`) every single time, because the runtime only remembered the

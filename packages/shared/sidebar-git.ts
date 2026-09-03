@@ -95,7 +95,7 @@ export function hasSidebarGitDiffStat(state: Pick<SidebarGitState, 'additions' |
 
 export function hasSidebarGitRemoteCommitDelta(state: Pick<SidebarGitState, 'aheadCount' | 'behindCount'>): boolean {
   /**
-   * CDXC:TitlebarGit 2026-06-16-18:41:
+   * CDXC:Git 2026-06-16-18:41:
    * Remote sync availability and titlebar copy share one normalized ahead/behind
    * check so a synced branch cannot run the sync action while the Commits row
    * shows ↑0 ↓0.
@@ -109,7 +109,7 @@ export function normalizeSidebarGitAction(candidate: string | undefined): Sideba
 
 export function buildSidebarGitMenuItems(state: SidebarGitState): SidebarGitMenuItem[] {
   /**
-   * CDXC:WorktreeSync 2026-05-30-05:13:
+   * CDXC:Worktrees 2026-05-30-05:13:
    * Sync with Main is a worktree-only Git workflow. Show it beside Create PR in
    * the Git dropdown only when the active project is a worktree, because main
    * projects do not need to pull main into themselves before worktree merge.
@@ -129,7 +129,7 @@ export function getSidebarGitActionCategory(
   action: SidebarGitAction
 ): SidebarGitActionCategory {
   /**
-   * CDXC:GitActionModel 2026-06-02-13:41:
+   * CDXC:Git 2026-06-02-13:41:
    * The Git dropdown separates direct gxserver-backed Git operations from
    * agent-run workflows. Create PR belongs with agent workflows, while View PR
    * stays direct because it only opens the existing pull request.
@@ -202,7 +202,7 @@ export function getSidebarGitDisabledReason(state: SidebarGitState, action: Side
 
   if (action === 'syncRemote') {
     /**
-     * CDXC:TitlebarGit 2026-06-16-07:31:
+     * CDXC:Git 2026-06-16-07:31:
      * The macOS titlebar sync row is a direct remote branch sync, not the
      * worktree-only Sync with Main agent workflow. Enable it for any checked-out
      * branch with an upstream or an origin remote so normal projects can pull

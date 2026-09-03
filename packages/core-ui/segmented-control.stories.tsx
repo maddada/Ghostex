@@ -1,5 +1,5 @@
 /**
- * CDXC:SegmentedControl 2026-08-24:
+ * CDXC:DesignSystem 2026-08-24:
  * Reference story for the one segmented single-select control used across the
  * app (Settings, Add Worktree, Automate). It shows the stock shadcn
  * ButtonGroup shape — one bordered container, flat segments sharing a hairline,

@@ -35,7 +35,7 @@
 
 .group[data-project-group='true'][data-collapsed='false'] {
   /*
-   * CDXC:ProjectGroups 2026-05-15-14:33:
+   * CDXC:Projects 2026-05-15-14:33:
    * Project groups no longer render sidebar Code editor rows or project-header
    * Code reveal buttons, but expanded projects still use tighter
    * header-to-session spacing.
@@ -49,7 +49,7 @@
 
 .group[data-project-group='true'][data-dragging='true'] {
   /*
-   * CDXC:ProjectDragPreview 2026-05-21-11:45:
+   * CDXC:Projects 2026-05-21-11:45:
    * During project reorder, the original project row should remain visible at
    * its starting location as a faint placeholder so the list never opens a
    * blank hole where the header was grabbed.
@@ -59,28 +59,28 @@
 
 .project-drag-ghost {
   /*
-   * CDXC:ProjectDragPreview 2026-05-21-11:45:
+   * CDXC:Projects 2026-05-21-11:45:
    * The moving project ghost is a cursor-following header only, not a clone of
    * the expanded project body. Center it vertically on the pointer so the
    * preview tracks the user's hand instead of floating above it.
    *
-   * CDXC:ProjectDragPreview 2026-05-21-11:57:
+   * CDXC:Projects 2026-05-21-11:57:
    * The custom ghost should sit slightly below the pointer and reuse the same
    * title layout as a real project header. Keep the card shell, but let the
    * nested group-title classes own spacing and font sizing.
    *
-   * CDXC:ProjectDragPreview 2026-05-28-12:35:
+   * CDXC:Projects 2026-05-28-12:35:
    * Sidebar project-header drag feedback must match the grabbed header button's
    * width and stay horizontally locked to that row. The React drag state owns
    * fixed left/width values, so this shell should look like the native header
    * hover surface instead of a narrow floating card.
    *
-   * CDXC:ProjectHeaders 2026-06-29-21:04:
+   * CDXC:Projects 2026-06-29-21:04:
    * Project and worktree rows no longer show a leading folder or branch glyph,
    * so the drag ghost must also be title-first instead of reserving an icon slot.
    */
   /*
-   * CDXC:ProjectDragPreview 2026-07-02-13:05:
+   * CDXC:Projects 2026-07-02-13:05:
    * The ghost now reuses the real header DOM structure and classes, so its
    * title styling comes from the same rules as the grabbed header (minus the
    * trailing action buttons, which are not rendered). This shell only owns
@@ -114,7 +114,7 @@
 }
 
 /*
- * CDXC:ProjectDragPreview 2026-07-22:
+ * CDXC:Projects 2026-07-22:
  * The reference project-card rule (hierarchy-panels.css) outscores the
  * .project-drag-ghost reset above and re-applied its flow margin-left plus a
  * 1px card border to the fixed ghost shell, so the ghost rendered a few px to
@@ -130,15 +130,15 @@
 .group[data-project-group='true']::before,
 .group[data-project-group='true']::after {
   /*
-   * CDXC:ProjectReorder 2026-05-18-20:39:
+   * CDXC:Projects 2026-05-18-20:39:
    * Project drag reorder needs a dim drop line that marks the exact insertion
    * point without turning the target project into a loud highlighted card.
    *
-   * CDXC:ProjectReorder 2026-05-22-20:49:
+   * CDXC:Projects 2026-05-22-20:49:
    * The project drag insertion line should use the requested fixed neutral
    * color #c8cdd5 so the drop target stays legible across sidebar themes.
    *
-   * CDXC:ProjectReorder 2026-07-02-13:05:
+   * CDXC:Projects 2026-07-02-13:05:
    * No opacity transition: fading between the per-group pseudo-elements read
    * as the line flickering while it moved between boundaries. The line now
    * appears and moves instantly.
@@ -183,7 +183,7 @@
 .group-head {
   border-radius: 0;
   /*
-   * CDXC:SidebarHover 2026-05-04-07:00
+   * CDXC:Sidebar 2026-05-04-07:00
    * Group headers share the same surface style as Agents and Actions: keep the
    * header box in normal flow, add only left content padding, and keep the
    * right side flush for trailing controls.
@@ -208,7 +208,7 @@
 
 .native-sidebar-shell[data-sidebar-mode='combined'] .group-head {
   /*
-   * CDXC:SidebarHover 2026-05-04-09:12
+   * CDXC:Sidebar 2026-05-04-09:12
    * Combined group headers should keep compact left padding before the project
    * title, and trailing controls must touch the hover surface's right edge. The
    * last inset made the hover surface too narrow; show one more pixel on the
@@ -231,7 +231,7 @@
   background: color-mix(in srgb, var(--app-foreground) 6%, transparent);
 }
 
-/* CDXC:SidebarGroups 2026-05-05-04:48: The active project or active Chats
+/* CDXC:Projects 2026-05-05-04:48: The active project or active Chats
    collection must be obvious because top-level actions target that active
    project context. Draw the highlight around the header itself, including
    collapsed empty project selectors. */
@@ -243,7 +243,7 @@
 }
 
 /*
- * CDXC:SidebarTitlebarColors 2026-06-19-12:56:
+ * CDXC:Theming 2026-06-19-12:56:
  * Custom-gradient sidebars should not show solid active project/chat header
  * fills while idle. Preserve hover/focus affordances, but let the gradient
  * remain visible behind active headers when the pointer is not on them.
@@ -257,7 +257,7 @@
   box-shadow: none;
 }
 
-/* CDXC:WorkspaceTheme 2026-05-05-02:58: Custom workspace theme colors tint
+/* CDXC:Theming 2026-05-05-02:58: Custom workspace theme colors tint
    Combined-mode project headers only. The synthetic Chats group keeps its
    normal chat styling because it has no project theme color. */
 .group[data-workspace-custom-theme='true'] .group-head:hover::before,
@@ -295,7 +295,7 @@
 }
 
 /*
- * CDXC:ProjectHeaders 2026-05-16-13:39:
+ * CDXC:Projects 2026-05-16-13:39:
  * Project headers still support left-click activation/collapse and a custom
  * right-click project menu, but hovering the header or its parent wrappers
  * should keep the default cursor. Visual row hover states carry affordance
@@ -399,7 +399,7 @@
   flex: 1 1 auto;
   min-width: 0;
   /*
-   * CDXC:ProjectHeaders 2026-05-10-15:52
+   * CDXC:Projects 2026-05-10-15:52
    * Project header titles need 30px more horizontal room before
    * hover-revealed controls force ellipsis, so the title handle cap is 250px.
    */
@@ -417,7 +417,7 @@
 .group[data-project-group='true'] .group-title-handle[data-draggable='true'],
 .group[data-project-group='true'] .group-title-handle[data-draggable='true']:active {
   /*
-   * CDXC:ProjectDragPreview 2026-05-21-11:57:
+   * CDXC:Projects 2026-05-21-11:57:
    * Project headers are still draggable, but dragging should not replace the
    * default pointer with a grab/grabbing cursor.
    */
@@ -474,7 +474,7 @@
 
 .group[data-project-group='true'] .group-title-handle {
   /*
-   * CDXC:ProjectHeaders 2026-05-21-01:08:
+   * CDXC:Projects 2026-05-21-01:08:
    * Project header actions should align to the right edge of the header surface.
    * Keep the title cell shrink-wrapped so the right-aligned action cluster owns
    * the trailing slot without making the title drift during expand/collapse.
@@ -486,7 +486,7 @@
 
 .group[data-project-group='true'] .group-title-row[data-project-leading-icon='false'] .group-title-handle {
   /*
-   * CDXC:ProjectHeaders 2026-06-29-21:04:
+   * CDXC:Projects 2026-06-29-21:04:
    * Project and worktree rows no longer show a leading folder or branch glyph,
    * so their titles should reclaim the old icon gutter instead of preserving an
    * empty indent.
@@ -522,17 +522,17 @@
 
 .group-project-diff-stats {
   /*
-   * CDXC:ProjectDiffStats 2026-05-15-13:58:
+   * CDXC:Git 2026-05-15-13:58:
    * Project git line deltas moved from the former sidebar Code launcher to the
    * project row.
    * Keep them low-opacity so project names remain the primary scan target.
    *
-   * CDXC:ProjectDiffStats 2026-05-15-14:26:
+   * CDXC:Git 2026-05-15-14:26:
    * Project git stats should sit in the same right-side visual slot as session
    * Last Active timestamps. Match that timestamp scale and fully collapse the
    * hidden project action cluster so no empty gap remains at the row edge.
    *
-   * CDXC:ProjectDiffStats 2026-05-15-14:45:
+   * CDXC:Git 2026-05-15-14:45:
    * When project header controls appear on hover/focus, git stats must leave
    * layout entirely instead of only fading out. Otherwise their invisible width
    * can overlap the revealed browser/terminal/agent buttons.
@@ -561,7 +561,7 @@
 
 .group[data-project-group='true'][data-active='true'] .group-project-diff-stats {
   /*
-   * CDXC:ProjectDiffStats 2026-06-09-17:10:
+   * CDXC:Git 2026-06-09-17:10:
    * The active project's header git stats must read brighter than non-active
    * project stats, because active project names are brighter and the git
    * numbers should not become the dimmest part of the active row.
@@ -744,7 +744,7 @@
 .group-agent-split-button[data-open='true'] .group-agent-main-button,
 .group-agent-split-button[data-open='true'] .group-agent-toggle-button {
   /*
-   * CDXC:ProjectAgents 2026-05-10-14:18
+   * CDXC:AgentLauncher 2026-05-10-14:18
    * The agent launcher and chevron are one split button. Hover, focus, and
    * open states highlight both halves together so the touching edge reads as a
    * shared control instead of two unrelated adjacent buttons.
@@ -795,7 +795,7 @@
 .group-agent-menu-item:hover,
 .group-agent-menu-item:focus-visible {
   /*
-   * CDXC:ProjectAgents 2026-06-16-16:42:
+   * CDXC:AgentLauncher 2026-06-16-16:42:
    * The macOS sidebar agent selector menu should use an unsaturated gray row
    * surface on hover, focus, and selected states instead of tinting rows with
    * the active theme accent.
@@ -805,7 +805,7 @@
 
 .group-agent-menu-item[data-selected='true'] {
   /*
-   * CDXC:ProjectAgents 2026-05-10-14:18
+   * CDXC:AgentLauncher 2026-05-10-14:18
    * Keep the selected row neutral; its brighter semibold label communicates
    * selection without competing with the right-aligned chat capability icon.
    */
@@ -838,12 +838,12 @@
 
 .group-agent-launcher-icon {
   /*
-   * CDXC:ProjectHeaders 2026-05-10-15:56
+   * CDXC:Projects 2026-05-10-15:56
    * Project header agent launch icons must stay monochrome in compact hover,
    * focus, and open states; brand color appears too loud in the project action
    * row.
    *
-   * CDXC:ProjectAgents 2026-05-16-18:21:
+   * CDXC:AgentLauncher 2026-05-16-18:21:
    * The portaled sidebar project-agent dropdown opts into provider colors from
    * the icon component itself, so this base class remains safe for non-menu
    * sidebar placements.
@@ -897,11 +897,11 @@
 
 .group-collapsed-status-counts {
   /*
-   * CDXC:ProjectStatusIndicators 2026-05-08-09:33
+   * CDXC:SessionStatus 2026-05-08-09:33
    * Collapsed project rows show hidden attention/done and working session
    * counts in the title row. Hover and focus reveal project actions, so this
    * trailing indicator slot collapses before those controls animate in.
-   * CDXC:ProjectStatusIndicators 2026-05-08-10:48
+   * CDXC:SessionStatus 2026-05-08-10:48
    * Project-header indicators sit at the far right of the title row and list
    * working before attention so the active-work count is seen first. When the
    * count cluster is visible, hidden header actions leave layout entirely so
@@ -1060,7 +1060,7 @@
 
 .group[data-empty-project='true'] {
   /*
-   * CDXC:SidebarMode 2026-05-04-06:52
+   * CDXC:Sidebar 2026-05-04-06:52
    * Empty Combined-mode project groups act like collapsed project selectors:
    * they keep compact spacing and hide the empty-session body while staying
    * clickable so actions/agents target that project.
@@ -1105,7 +1105,7 @@
   gap: calc(6px * var(--sidebar-density-scale));
   margin-left: calc(6px * var(--sidebar-density-scale));
   /*
-   * CDXC:SidebarHover 2026-05-19-15:50:
+   * CDXC:Sidebar 2026-05-19-15:50:
    * Hover-revealed group controls should size to their rendered buttons instead
    * of a fixed pixel cap. The action cluster can include worktree, browser,
    * terminal, and agent controls, but it must not reserve phantom width that
@@ -1114,7 +1114,7 @@
   max-width: max-content;
   opacity: 1;
   /*
-   * CDXC:SidebarHover 2026-05-04-08:28
+   * CDXC:Sidebar 2026-05-04-08:28
    * The create button sits flush with the header edge. Keep the collapsed
    * actions clipped, but stop clipping once visible so the antialiased circular
    * button border is not cut off on the right side.
@@ -1145,7 +1145,7 @@
 .group-sessions {
   display: grid;
   /*
-   * CDXC:SidebarSessions 2026-05-08-14:16
+   * CDXC:Sessions 2026-05-08-14:16
    * Sidebar session and chat buttons need a 1px row gap so adjacent rows remain
    * visually separated without adding per-card margins that would interfere
    * with drag/drop hit areas.
@@ -1257,7 +1257,7 @@
   opacity: 1;
 }
 /*
- * CDXC:PinnedSessions 2026-06-02-20:35:
+ * CDXC:Sessions 2026-06-02-20:35:
  * Project pinned-session reorder uses fixed gap slots instead of row
  * pseudo-elements so the insertion line stays stable while dragging over a
  * session and can appear above the first pinned row.
@@ -1378,7 +1378,7 @@
 
 .group-empty-drop-target[data-drop-target='true'] .group-empty-state {
   /*
-   * CDXC:SidebarDragDrop 2026-06-19-11:12:
+   * CDXC:Sidebar 2026-06-19-11:12:
    * Session drag/drop should communicate the destination with insertion lines
    * only. Do not color the project body or empty-state panel while a session is
    * dragged over a project.
@@ -1481,16 +1481,16 @@
   color: inherit;
 }
 
-/* CDXC:SidebarReference 2026-05-08-01:10: Reference-mode groups should read
+/* CDXC:Sidebar 2026-05-08-01:10: Reference-mode groups should read
    like the provided sidebar: muted section labels, normal-case project names,
    no connector rail, and no visible legacy header action cluster.
-   CDXC:SidebarReference 2026-05-08-01:28: Use Codex.app-sized CSS pixels for
+   CDXC:Sidebar 2026-05-08-01:28: Use Codex.app-sized CSS pixels for
    group labels and rows; the previous screenshot-pixel scale made every
    sidebar element visually massive in the real app.
-   CDXC:SidebarReference 2026-05-08-01:41: Reference section headers now own
+   CDXC:Sidebar 2026-05-08-01:41: Reference section headers now own
    Chats/Projects collapse, while project rows keep their normal title-first
    layout during hover.
-   CDXC:ProjectHeaders 2026-06-29-21:04: Reference project rows should match
+   CDXC:Projects 2026-06-29-21:04: Reference project rows should match
    combined project rows by omitting the leading folder/worktree glyph. */
 .sidebar-reference-layout[data-reference-sidebar='true'] .group-list {
   --sidebar-session-column-offset: 0px;
@@ -1502,7 +1502,7 @@
 .sidebar-reference-layout[data-reference-sidebar='true'] .reference-chat-group-list,
 .sidebar-reference-layout[data-reference-sidebar='true'] .reference-project-group-list {
   /*
-   * CDXC:SidebarReferenceBounds 2026-05-26-22:59:
+   * CDXC:Sidebar 2026-05-26-22:59:
    * Project and session buttons should align with the sidebar content edge
    * instead of extending into the left padding. Keep the list at the parent
    * content width so Storybook matches the real sidebar row bounds.
@@ -1530,7 +1530,7 @@
 }
 
 /*
- * CDXC:CollectionDragPreview 2026-07-22:
+ * CDXC:Projects 2026-07-22:
  * Cursor-following ghost for collection reordering: a collapsed panel header
  * clone that keeps the normal section skin (border, radius, tinted fill) while
  * this shell only owns fixed positioning and elevation. React supplies
@@ -1727,11 +1727,11 @@ section.project-collection.project-collection-drag-ghost {
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .reference-project-group-list {
   /*
-   * CDXC:ReferenceSidebar 2026-05-08-09:13
+   * CDXC:Sidebar 2026-05-08-09:13
    * Project rows in the reference sidebar need an 11px visual gap between
    * different projects while preserving the compact spacing inside each group.
    *
-   * CDXC:ReferenceSidebar 2026-06-19-10:52:
+   * CDXC:Sidebar 2026-06-19-10:52:
    * Project headers should not be separated by empty list gaps. Keep the same
    * breathing room inside the clickable header rows instead so right-click,
    * hover, and drag ownership remains row-local.
@@ -1765,44 +1765,44 @@ section.project-collection.project-collection-drag-ghost {
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head {
   /*
-   * CDXC:SidebarStickyHeaders 2026-05-20-08:08:
+   * CDXC:Sidebar 2026-05-20-08:08:
    * Project headers originally acted as the only sticky context row in the
    * sidebar.
    *
-   * CDXC:SidebarStickyHeaders 2026-05-20-10:03:
+   * CDXC:Sidebar 2026-05-20-10:03:
    * Project headers stick to the top of the scroll area itself. The scroll
    * viewport owns the top breathing room below Search, while Quick and Projects
    * labels remain normal scrolling content.
    *
-   * CDXC:ProjectHeaders 2026-05-31-15:38:
+   * CDXC:Projects 2026-05-31-15:38:
    * Project header buttons must start at the sidebar's left edge in the native
    * reference layout. Use the shared main-row over-bleed and compensate with
    * equal padding so titles, git summaries, and header actions do not shift
    * while the button surface reaches both edges.
    *
-   * CDXC:ProjectHeaders 2026-05-31-17:31:
+   * CDXC:Projects 2026-05-31-17:31:
    * The reference scroll viewport now owns the content-column over-bleed, so
    * project headers use the smaller scroll-row bleed. This keeps the header
    * surface flush without shifting project titles farther left.
    *
-   * CDXC:ProjectHeaders 2026-05-31-18:16:
+   * CDXC:Projects 2026-05-31-18:16:
    * Project header rows stay full-width, but every leading header element
    * should sit 6px farther inward from the left edge.
    *
-   * CDXC:ProjectHeaders 2026-05-31-18:24:
+   * CDXC:Projects 2026-05-31-18:24:
    * Project header contents need another 2px left inset without changing the
    * right inset or the full-width header bounds.
    *
-   * CDXC:ProjectHeaders 2026-06-29-21:19:
+   * CDXC:Projects 2026-06-29-21:19:
    * After removing the project/worktree leading glyph, reduce the reference
    * project header left inset by 12px so titles do not keep the old icon gutter.
    *
-   * CDXC:ProjectHeaders 2026-06-19-10:52:
+   * CDXC:Projects 2026-06-19-10:52:
    * The project list no longer uses outside row gaps. Add vertical padding to
    * each project header so adjacent headers keep their scan spacing without
    * leaving blank context-menu space between buttons.
    *
-   * CDXC:SidebarScroll 2026-06-30-01:59:
+   * CDXC:Sidebar 2026-06-30-01:59:
    * The sidebar must favor scroll throughput over sticky project context. Keep
    * project headers in normal document flow and do not paint a fixed or matched
    * gradient background on each row, because sticky headers plus scroll masks
@@ -1894,7 +1894,7 @@ section.project-collection.project-collection-drag-ghost {
 
 .project-title-tooltip-content {
   /*
-   * CDXC:ProjectTitleTooltips 2026-05-30-07:33:
+   * CDXC:Tooltips 2026-05-30-07:33:
    * Project-name hover uses a richer metadata tooltip than action buttons. Keep
    * the shared square bordered tooltip chrome, but give the project name a
    * brighter medium-weight heading and keep path/git/session metadata muted and
@@ -1934,12 +1934,12 @@ section.project-collection.project-collection-drag-ghost {
 }
 
 /*
- * CDXC:ProjectHeaders 2026-06-12-06:22:
+ * CDXC:Projects 2026-06-12-06:22:
  * Project rows should not dim when another project is active, and the active
  * project should not keep a persistent header background. Keep project header
  * backgrounds hover/focus-only.
  *
- * CDXC:ProjectHeaders 2026-06-12-20:21:
+ * CDXC:Projects 2026-06-12-20:21:
  * Active project rows should not add a bullet marker. Make the active project
  * title the active state by rendering it full white and one font-weight step
  * above the normal 500-weight project title.
@@ -1971,7 +1971,7 @@ section.project-collection.project-collection-drag-ghost {
 }
 
 /*
- * CDXC:RecentProjects 2026-05-27-07:04:
+ * CDXC:Projects 2026-05-27-07:04:
  * Recent Projects rows should use the same hover-only surface as reference
  * sidebar project headers. The reference layout hides generic group-head
  * pseudo-surfaces, so opt parked project rows back into that project-header
@@ -1996,7 +1996,7 @@ section.project-collection.project-collection-drag-ghost {
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .group-header-actions {
   /*
-   * CDXC:ProjectGroups 2026-05-08-12:31
+   * CDXC:Projects 2026-05-08-12:31
    * Combined project-header action buttons must reveal instantly instead of
    * animating in beside the project title, so hover/focus state changes do not
    * draw attention away from scanning project rows.
@@ -2095,7 +2095,7 @@ section.project-collection.project-collection-drag-ghost {
 }
 
 /*
- * CDXC:SidebarSearch 2026-05-08-11:26
+ * CDXC:Sidebar 2026-05-08-11:26
  * The no-match search placeholder should be visually identical to the
  * reference sidebar's empty Chats placeholder, because both represent an empty
  * section body rather than a standalone alert or card.
@@ -2113,7 +2113,7 @@ section.project-collection.project-collection-drag-ghost {
   line-height: 1.15;
   min-height: 0;
   /*
-   * CDXC:QuickSessions 2026-06-11-21:00:
+   * CDXC:AgentLauncher 2026-06-11-21:00:
    * The empty Quick copy must sit 8px farther right so "No Quick Sessions" aligns under the Quick section label in the same text column as the Projects empty placeholder.
    */
   padding-left: 18px;
@@ -2128,7 +2128,7 @@ section.project-collection.project-collection-drag-ghost {
   line-height: 1.15;
   margin-top: 8px;
   /*
-   * CDXC:SidebarReference 2026-06-05-14:19:
+   * CDXC:Sidebar 2026-06-05-14:19:
    * The empty Projects copy must align under the Projects section label in the reference sidebar. Keep the placeholder 8px farther right than the previous inset so "No projects" starts in the same text column as the header.
    */
   padding-left: 18px;
@@ -2154,7 +2154,7 @@ section.project-collection.project-collection-drag-ghost {
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .group-sessions {
   /*
-   * CDXC:SidebarSessions 2026-06-19-10:52:
+   * CDXC:Sessions 2026-06-19-10:52:
    * Reference-sidebar session rows should touch directly. Drag insertion lines
    * are row-owned pseudo-elements, so the list does not need an empty gap for
    * drag/drop visibility or hit testing.
@@ -2165,7 +2165,7 @@ section.project-collection.project-collection-drag-ghost {
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .group[data-session-connector='true'] .session-frame {
   /*
-   * CDXC:SidebarSessions 2026-05-31-15:43:
+   * CDXC:Sessions 2026-05-31-15:43:
    * Connector groups use the same visible session buttons as project groups,
    * so their rows must keep the shared full-width sidebar bleed instead of
    * resetting back to the padded content column.

@@ -21,7 +21,7 @@ import { DEFAULT_SIDEBAR_SPACE_ICON, type SidebarSpace, type SidebarSpacesState 
 import type { WebviewApi } from './webview-api';
 
 /*
-CDXC:SidebarSpaces 2026-08-27:
+CDXC:Spaces 2026-08-27:
 One gxserver section's horizontal Space switcher. The user's Spaces come first
 in their manual order, and whatever does not fit moves into the More menu.
 "Other" is a built-in LAST button that is always visible and never overflows.
@@ -69,9 +69,9 @@ type ContextMenuPosition = {
 };
 
 /*
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * Pointer-only, for the same reason the collection header reorder is (see the
- * CDXC:CollectionReorder note in project-collection-section.tsx): dnd-kit's
+ * CDXC:Projects note in project-collection-section.tsx): dnd-kit's
  * KeyboardSensor starts a drag from Space/Enter on any focused draggable, and a
  * stranded keyboard drag keeps the shared sidebar manager out of its idle state,
  * which silently kills every other drag in the sidebar. Space buttons are
@@ -84,7 +84,7 @@ const spaceSensors = [
 ];
 
 /*
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * dnd-kit sortable ids are global to the app, and the same Space row renders
  * once per gxserver section, so ids are section-scoped exactly like the remote
  * project-collection instances are.
@@ -94,7 +94,7 @@ export function createSidebarSpaceSortableId(sectionKey: string, spaceId: string
 }
 
 /*
- * CDXC:SidebarSpaces 2026-08-28:
+ * CDXC:Spaces 2026-08-28:
  * The row is icon-only, so the built-in view needs a glyph of its own. It comes
  * from the same icon set the Space icon picker offers, which keeps the built-in
  * button visually part of the row instead of a differently-drawn special case.
@@ -102,7 +102,7 @@ export function createSidebarSpaceSortableId(sectionKey: string, spaceId: string
 const OTHER_SPACE_ICON: SidebarCommandIcon = OTHER_SIDEBAR_SPACE_ICON;
 
 /*
- * CDXC:SidebarSpaceSwipe 2026-08-28:
+ * CDXC:Spaces 2026-08-28:
  * Trackpad swipes navigate one Space per physical gesture. Horizontal delta
  * must dominate vertical delta before the sidebar prevents default scrolling,
  * and momentum stays locked so one input stream cannot skip several Spaces.
@@ -316,7 +316,7 @@ export function SpaceFilterRow({
   const [editMenu, setEditMenu] = useState<{ position: ContextMenuPosition; spaceId: string }>();
 
   /*
-   * CDXC:SidebarSpaces 2026-09-02:
+   * CDXC:Spaces 2026-09-02:
    * The section's stored selection resolved through the one shared default
    * rule, so the highlighted button and the filtered list below it can never
    * disagree: nothing stored means the first Space, and a section with no
@@ -334,7 +334,7 @@ export function SpaceFilterRow({
   );
 
   /*
-   * CDXC:SidebarSpaces 2026-08-29:
+   * CDXC:Spaces 2026-08-29:
    * Only the filtered CONTENT animates on a Space switch. The switcher row
    * itself is pinned chrome (it sticks with the Projects header while the
    * list scrolls) and must hold perfectly still through swipe and click
@@ -470,7 +470,7 @@ export function SpaceFilterRow({
      * scroll viewport, so headers, the empty area below the last session, and
      * every row are equally swipeable.
      *
-     * CDXC:SidebarSpaceSwipe 2026-09-03:
+     * CDXC:Spaces 2026-09-03:
      * The previous bound was the `.session-groups-content` scroll viewport,
      * which left the sidebar space outside it — the region under a short
      * list — inert to the gesture. The sidebar shell is the page's root for
@@ -488,7 +488,7 @@ export function SpaceFilterRow({
         return;
       }
       /*
-       * CDXC:SidebarSpaceSwipe 2026-08-28:
+       * CDXC:Spaces 2026-08-28:
        * A Space switch can unmount the project row that was under a stationary
        * cursor. CEF may keep the next wheel gesture targeted at that detached
        * node until pointer movement forces a hit test, which made the second
@@ -668,7 +668,7 @@ export function SpaceFilterRow({
   orderRef.current = spaces.order;
 
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The drop is committed from the shared sidebar drag manager rather than from
    * a nested provider, and only for this section's own Space drags. dnd-kit's
    * `move` resolves the new position from the drop target it reported, which
@@ -750,7 +750,7 @@ export function SpaceFilterRow({
           />
         ))}
         {/*
-         * CDXC:SidebarSpaces 2026-09-02:
+         * CDXC:Spaces 2026-09-02:
          * Other is built-in chrome, not a Space: it sits after every user Space,
          * is never draggable, never overflows into More, and has no edit/delete
          * context menu because there is nothing about it to edit.
@@ -874,7 +874,7 @@ function SpaceFilterButton({
   space: SidebarSpace;
 }) {
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The button is both the drag handle and the sortable element, and the
    * accepted type is section-scoped so a Space can only ever be dropped among
    * its own gxserver's Spaces. Other and More render outside this component, so

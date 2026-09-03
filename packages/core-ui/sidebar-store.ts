@@ -95,7 +95,7 @@ export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
     groupsById: {},
     hud: {
       /**
-       * CDXC:SidebarSessions 2026-04-28-05:18
+       * CDXC:Sessions 2026-04-28-05:18
        * The client store must match the shared/native default so sidebar
        * sessions start sorted by last activity before the first hydrate message.
        */
@@ -237,7 +237,7 @@ export const useSidebarStore = create<SidebarStoreState>((set, get) => ({
   },
   suppressNextFocusedSessionScroll: (reason, nowMs = Date.now()) => {
     /*
-     * CDXC:SidebarSessionClose 2026-06-21-18:02:
+     * CDXC:Sessions 2026-06-21-18:02:
      * Closing the focused terminal session can remove the clicked row before native publishes the replacement focus. Keep a short one-shot marker so close-driven focus retargeting does not scroll the session list away from the user's current position.
      */
     set({
@@ -271,7 +271,7 @@ function getInitialSidebarTheme(): SidebarHudState['theme'] {
 }
 
 /*
-CDXC:SettingsModalBlankUnnormalizedHydrate 2026-07-29:
+CDXC:Settings 2026-07-29:
 A hydrate carries whatever the shared settings file happens to hold. The GPUI
 writer parses that JSON with no defaults (`read_settings_object_from_path`), so a
 file only ever written by titlebar code paths arrives missing entire nested
@@ -402,7 +402,7 @@ function applyGroupsChangedMessageState(
   };
 
   /*
-  CDXC:SidebarHydration 2026-06-09-23:01:
+  CDXC:StateSync 2026-06-09-23:01:
   gxserver live deltas should mutate only the affected sidebar groups. Preserve unchanged group/session object references and local-first close/sleep overlays so add/remove/reorder/project patches behave like full hydrates without replacing the whole React store.
   */
   for (const groupId of removedGroupIds) {
@@ -494,7 +494,7 @@ function applyGroupsChangedMessageState(
 }
 
 /**
- * CDXC:AppModals 2026-05-29-19:44:
+ * CDXC:AppModal 2026-05-29-19:44:
  * App-level modals keep user drafts in local React state while the sidebar
  * store still receives full session snapshots for attention/activity updates.
  * Preserve unchanged HUD slice references so unrelated session changes do not
@@ -609,7 +609,7 @@ function hideSessionLocallyState(
   }
 
   /*
-  CDXC:LocalFirstSidebar 2026-06-01-19:34:
+  CDXC:StateSync 2026-06-01-19:34:
   Closing a session must remove the card in the same React event as the click. Native still owns the durable close, but the sidebar store keeps a local hidden-id overlay so no hydrate can briefly reinsert the card while gxserver catches up.
   */
   const nextSessionsById = { ...state.sessionsById };
@@ -653,7 +653,7 @@ function hideSessionsLocallyState(
   }
 
   /*
-  CDXC:SidebarContextMenu 2026-06-07-13:34:
+  CDXC:ContextMenus 2026-06-07-13:34:
   Bulk context-menu actions such as Close below must update sidebar chrome once before native fan-out starts. Avoid one Zustand write per target because each write can re-render the session list and keep the menu/sidebar busy until every native close has been queued.
   */
   const targetIdSet = new Set(existingTargetIds);
@@ -799,7 +799,7 @@ function setSessionSleepingLocallyState(
   }
 
   /*
-  CDXC:LocalFirstSidebar 2026-06-01-19:34:
+  CDXC:StateSync 2026-06-01-19:34:
   Wake from the session context menu and explicit local parking flows should dismiss the menu and flip the card state before native disposes or recreates the terminal surface. Keep a local override until the host snapshot confirms the same sleeping state.
 
   CDXC:SessionSleep 2026-06-15-20:14:
@@ -1063,7 +1063,7 @@ function toSidebarGroupRecord(group: SidebarSessionGroup): SidebarGroupRecord {
     groupId: group.groupId,
     isActive: group.isActive,
     /**
-     * CDXC:Chats 2026-05-05-18:37
+     * CDXC:Projects 2026-05-05-18:37
      * The synthetic Chats group must keep its explicit collection marker after
      * store normalization. Without this flag, the header icon falls through to
      * project folder icons when Chats is expanded or collapsed.
@@ -1117,12 +1117,12 @@ function haveSameSidebarProjectContext(
   }
 
   /**
-   * CDXC:EditorPanes 2026-05-06-14:21
+   * CDXC:CodeEditor 2026-05-06-14:21
    * Project editor buttons update from native diff-stat refreshes and open
    * state changes. Include editor context in group equality so the store does
    * not suppress those project-card updates as duplicate hydration payloads.
    *
-   * CDXC:EditorPanes 2026-05-09-17:24
+   * CDXC:CodeEditor 2026-05-09-17:24
    * Project editor load status and error text are sidebar-visible state. They
    * must participate in equality so opening, timeout, and crash diagnostics are
    * not dropped when the focused workspace switches to a terminal session.
@@ -1149,7 +1149,7 @@ function haveSameSidebarProjectContext(
 }
 
 /**
- * CDXC:SidebarV2Git 2026-07-29:
+ * CDXC:Git 2026-07-29:
  * Git/PR state is the one row field that changes with NOTHING else changing: a
  * probe refresh lands a new branch, diff, or PR state on an otherwise identical
  * session. Structural comparison here is what lets the store hand React a new
@@ -1178,20 +1178,20 @@ function haveSameSidebarSessionGitStatus(
 
 function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSessionItem): boolean {
   /*
-   * CDXC:RemoteAttach 2026-06-30-15:24:
+   * CDXC:RemoteMachines 2026-06-30-15:24:
    * Remote Pop Out Pane visibility and Restore Pane labeling are projected from a live local attach carrier. Include those fields in sidebar equality so opening, closing, or detaching the carrier updates an already-rendered remote row.
    *
-   * CDXC:RemoteSessionMenus 2026-06-30-15:32:
+   * CDXC:RemoteMachines 2026-06-30-15:32:
    * Remote Delayed Send and Close After Done menu visibility also comes from explicit row capability fields. Include them in row equality so native capability changes refresh the shared context menu instead of leaving stale local-only gates in React state.
    *
-   * CDXC:SidebarV2Lifecycle 2026-07-29:
+   * CDXC:StateSync 2026-07-29:
    * Settle/snooze is server-owned and lands as a lone field change: settling a
    * quiet session or picking a snooze preset touches nothing else on the row.
    * The hydrate path (`normalizeSidebarGroups`) has no revision escape hatch, so
    * leaving these out here reuses the pre-settle object and the V2 shelves never
    * move.
    *
-   * CDXC:SessionAgentNotes 2026-08-24:
+   * CDXC:SessionNotes 2026-08-24:
    * `sessionNote` and `agentSessionId` are two more lone-field changes of that
    * same class: saving/clearing a note, or the provider minting/rewriting its
    * conversation id (agent boot, Claude compaction), touches nothing else on
@@ -1241,14 +1241,14 @@ function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSess
     left.lastInteractionAt === right.lastInteractionAt &&
     left.primaryTitle === right.primaryTitle &&
     /*
-     * CDXC:SessionChatPromptQueue 2026-08-21:
+     * CDXC:SessionChat 2026-08-21:
      * Queueing or draining a chat prompt lands as a lone field change on an
      * otherwise identical row. Leaving it out here reuses the previous object
      * and the agent-icon badge never moves off its stale count.
      */
     left.queuedPromptCount === right.queuedPromptCount &&
     /*
-     * CDXC:SessionChatPromptQueue 2026-08-21-b:
+     * CDXC:SessionChat 2026-08-21-b:
      * The failed tally moves on its own — a delivery failure or a Retry changes
      * only the badge's colour, not its number — so it needs its own comparison
      * for exactly the reason the count above does.

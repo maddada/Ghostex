@@ -447,7 +447,7 @@ pub(crate) fn route_gpui_native_keyboard_event(
             return None;
         };
         /*
-        CDXC:GPUICompositedTerminalBulkUnicode 2026-07-27:
+        CDXC:Terminal 2026-07-27:
         Dictation and automation tools can post one CGEvent whose Unicode
         payload contains the whole committed string. GPUI derives Keystroke
         text from that event's physical keycode, reducing a keycode-zero bulk

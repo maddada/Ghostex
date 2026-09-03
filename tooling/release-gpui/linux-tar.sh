@@ -19,7 +19,7 @@ case "$TAR_VERSION" in
 esac
 release_gpui_prepare_output "$REPO_ROOT" "$OUTPUT"
 
-# CDXC:ReleaseChangeAwarePlanning 2026-08-13: shared staged root, see linux-deb.sh.
+# CDXC:Release 2026-08-13: shared staged root, see linux-deb.sh.
 PACKAGE_ROOT="${GHOSTEX_LINUX_PACKAGE_ROOT:-$REPO_ROOT/build/release-gpui/linux-tar-package-root}"
 if [[ "${GHOSTEX_LINUX_PACKAGE_ROOT_READY:-0}" != "1" ]]; then
 	"$SCRIPT_DIR/linux-stage.sh" "$VERSION" "$PACKAGE_ROOT"

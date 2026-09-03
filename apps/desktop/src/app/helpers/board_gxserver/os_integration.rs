@@ -29,10 +29,10 @@ pub(crate) fn gpui_set_os_integration_defaults_status_message(
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_set_os_integration_defaults(target: Option<&str>) -> Vec<serde_json::Value> {
     /*
-    CDXC:GPUIOSIntegration 2026-06-24-15:02:
+    CDXC:OsIntegration 2026-06-24-15:02:
     GPUI Settings may mutate Launch Services defaults only from explicit OS Integration button clicks. Status refreshes and startup must stay read-only, while this path targets only the requested editor, ghostex:// terminal-link, script-runner, or all roles.
 
-    CDXC:GPUIOSIntegration 2026-06-24-15:10:
+    CDXC:OsIntegration 2026-06-24-15:10:
     Default mutations must return privacy-safe status items for the reused Settings UI. Capture per-extension and per-scheme Launch Services failures as enum reasons only; never expose bundle paths, file paths, URLs, command text, environment values, stdout/stderr, daemon bodies, or raw OSStatus values.
     */
     let mut status_items = Vec::new();
@@ -287,7 +287,7 @@ pub(crate) fn gpui_os_integration_status_item(
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn gpui_os_integration_status_payload() -> serde_json::Value {
     /*
-    CDXC:GPUIOSIntegration 2026-06-24-15:02:
+    CDXC:OsIntegration 2026-06-24-15:02:
     Non-macOS builds cannot inspect or mutate macOS Launch Services. Keep the shared status payload honest with unavailable registrations and no default handlers instead of inventing platform parity.
     */
     serde_json::json!({
@@ -316,7 +316,7 @@ pub(crate) fn gpui_os_integration_status_payload() -> serde_json::Value {
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_os_integration_status_payload() -> serde_json::Value {
     /*
-    CDXC:GPUIOSIntegration 2026-06-24-15:02:
+    CDXC:OsIntegration 2026-06-24-15:02:
     Settings OS integration status should mirror the Swift host payload: app bundle id, Launch Services defaults for representative editor/script extensions, ghostex:// default handler, and Info.plist registration booleans. This function is read-only and must not set defaults or register the app on status requests.
     */
     let bundle = gpui_macos_os_integration_bundle_info();

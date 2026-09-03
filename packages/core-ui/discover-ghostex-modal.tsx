@@ -24,82 +24,82 @@ type DiscoverGhostexFeature = {
 };
 
 /*
- * CDXC:DiscoverGhostex 2026-06-16-00:26:
+ * CDXC:Onboarding 2026-06-16-00:26:
  * The discoverGhostex modal is a replayable feature tour, not first-run setup.
  * It intentionally copies the first-launch modal shell while using a replayable
  * feature-tour layout with README screenshots.
  *
- * CDXC:DiscoverGhostex 2026-06-16-02:01:
+ * CDXC:Onboarding 2026-06-16-02:01:
  * Superseded by the 2026-06-17 bottom-strip removal. The tour still uses real
  * README.md product screenshots and fitting README copy, but no longer renders
  * thumbnail labels or the five-tile strip.
  *
- * CDXC:HighlightedFeatures 2026-06-16-08:17:
+ * CDXC:Onboarding 2026-06-16-08:17:
  * The replayable feature-tour modal is user-facing as Highlighted Features.
  * Keep the internal discoverGhostex component name and modal id so existing
  * first-run sequencing and native close handling stay stable.
  *
- * CDXC:HighlightedFeatures 2026-06-16-08:41:
+ * CDXC:Onboarding 2026-06-16-08:41:
  * The modal must load visible README screenshot assets, not the earlier tiny
  * skeleton placeholder PNGs, because the feature tour reads as broken when the
  * picture strip resolves but only shows abstract color blocks.
  *
- * CDXC:HighlightedFeatures 2026-06-16-08:54:
+ * CDXC:Onboarding 2026-06-16-08:54:
  * Put the feature title and description side by side above the screenshot so
  * the image can span the modal width. Fit the screenshot inside a thin frame so
  * users can inspect the complete README image without cropped edges.
  *
- * CDXC:HighlightedFeatures 2026-06-16-11:24:
+ * CDXC:Onboarding 2026-06-16-11:24:
  * The five highlighted-feature pages use the product-order and copy provided
  * by the content revamp: Rich Prompt Editor, Browser & Design Mode, Full
  * Embedded Editor, Kanban Board & Beads, and Full Layout Freedom.
  *
- * CDXC:HighlightedFeatures 2026-06-16-12:15:
+ * CDXC:Onboarding 2026-06-16-12:15:
  * Earlier Highlighted Features closed through outside-click/Escape/native
  * modal handling and did not show an in-modal X button.
  *
- * CDXC:HighlightedFeatures 2026-06-16-12:35:
+ * CDXC:Onboarding 2026-06-16-12:35:
  * The title should no longer be width-limited. Put the subtitle directly under
  * the title in the same text stack.
  *
- * CDXC:HighlightedFeatures 2026-06-16-12:45:
+ * CDXC:Onboarding 2026-06-16-12:45:
  * Superseded by the 2026-06-17 bottom-strip removal. Image outlines should stay
  * quiet so screenshots, not frames, dominate the tour.
  *
- * CDXC:HighlightedFeatures 2026-06-16-13:45:
+ * CDXC:Onboarding 2026-06-16-13:45:
  * Superseded by the 2026-06-17 bottom-strip removal. Keep left/right image
  * navigation buttons that loop across the five feature pages.
  *
- * CDXC:HighlightedFeatures 2026-06-16-14:08:
+ * CDXC:Onboarding 2026-06-16-14:08:
  * Keep carousel arrows beside the main screenshot instead of over it. The main
  * screenshot should render with an even quiet outline.
  *
- * CDXC:HighlightedFeatures 2026-06-16-18:27:
+ * CDXC:Onboarding 2026-06-16-18:27:
  * Some authored screenshots have transparent rounded window corners. Do not
  * put feature-tile backgrounds behind screenshots, because those backgrounds
  * bleed through the image alpha at the corners.
  *
- * CDXC:HighlightedFeatures 2026-06-16-18:48:
+ * CDXC:Onboarding 2026-06-16-18:48:
  * Do not show a feature icon beside the Highlighted Features title. The modal
  * header should be title/subtitle text only so the screenshots are the primary
  * visual signal.
  *
- * CDXC:HighlightedFeatures 2026-06-16-19:50:
+ * CDXC:Onboarding 2026-06-16-19:50:
  * Highlighted Features should not dismiss from outside clicks. Close it from
  * the top-right X button, Escape, or native close paths while keeping the X
  * aligned with the First Time Setup modal close button.
  *
- * CDXC:HighlightedFeatures 2026-06-16-21:26:
+ * CDXC:Onboarding 2026-06-16-21:26:
  * Use the exact supplied PNG screenshots copied into media/readme for the five
  * feature images. Do not generate replacement imagery or substitute derived
  * variants, because the modal is meant to show those specific product captures.
  *
- * CDXC:HighlightedFeatures 2026-06-17-12:45:
+ * CDXC:Onboarding 2026-06-17-12:45:
  * Remove the bottom thumbnail strip from Highlighted Features. The modal should
  * navigate only with the main image arrow buttons so the bottom of the dialog
  * stays focused on the active screenshot.
  *
- * CDXC:HighlightedFeatures 2026-06-18-02:02:
+ * CDXC:Onboarding 2026-06-18-02:02:
  * Highlighted Features keyboard and arrow-button navigation should stop at the
  * first and last authored feature instead of wrapping back to the opposite end.
  */

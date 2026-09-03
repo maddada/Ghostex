@@ -108,7 +108,7 @@ export function WorktreeCreateModal({
    * CDXC:Worktrees 2026-05-18-23:07:
    * New worktrees need an agent plus a first prompt. Image paste and native file picking insert Markdown links into that prompt so visual context travels with the first agent instruction.
    *
-   * CDXC:PromptAgents 2026-05-28-07:15:
+   * CDXC:AgentLauncher 2026-05-28-07:15:
    * The first selectable worktree agent should start from Settings' default
    * prompt agent when that agent is visible and configured, while preserving
    * any valid in-modal selection during the current modal session.
@@ -118,53 +118,53 @@ export function WorktreeCreateModal({
    * remove spaces at line ends before the prompt is sent to the selected agent,
    * while image paste keeps inserting durable Markdown links.
    *
-   * CDXC:AppModals 2026-05-29-19:44:
+   * CDXC:AppModal 2026-05-29-19:44:
    * Session attention/activity can refresh app-modal props while a user is
    * typing. The Add Worktree draft is initialized only when the modal opens;
    * later agent-list updates may repair an invalid selection but must not clear
    * the prompt, images, or a still-valid selected agent.
    *
-   * CDXC:WorktreeProjectRegistration 2026-06-01-20:59:
+   * CDXC:Worktrees 2026-06-01-20:59:
    * Add Worktree supports creating a fresh checkout or opening an existing Git
    * worktree from the same machine. The existing-worktree list is requested when
    * the modal opens and submit carries the selected path so native registers and
    * opens it through gxserver.
    *
-   * CDXC:GPUIWorktrees 2026-06-24-14:06:
+   * CDXC:Worktrees 2026-06-24-14:06:
    * Open Existing remains valid as a project-open-only flow when the first
    * prompt is blank. When the user enters a prompt, the reused modal must carry
    * that prompt plus the visible selected agent with the trusted worktree path
    * so macOS and GPUI can start the real agent session without inventing a
    * default prompt or accepting arbitrary renderer paths.
    *
-   * CDXC:WorktreeModal 2026-06-13-18:39:
+   * CDXC:Worktrees 2026-06-13-18:39:
    * Add Worktree should close from the same top-right shadcn X used by Rename
    * Session. Do not keep a footer Cancel row; the bottom of the modal should
    * be reserved for the primary worktree action and shared prompt image picker.
    *
-   * CDXC:WorktreeModal 2026-06-15-11:30:
+   * CDXC:Worktrees 2026-06-15-11:30:
    * Add Worktree opens in the same hidden native child-window host as Rename
    * Session, so the first-prompt textarea must retry focus across native
    * window activation and stop retrying after any user click or key input.
    *
-   * CDXC:WorktreeBaseBranch 2026-06-24-11:32:
+   * CDXC:Worktrees 2026-06-24-11:32:
    * Creating a new Git worktree must expose the source branch explicitly. The
    * modal loads branch options with the existing worktree request, requires one
    * selected base branch for create mode, and sends that branch through submit
    * so backend creation does not silently default to HEAD.
    *
-   * CDXC:RemoteWorktrees 2026-06-24-18:40:
+   * CDXC:RemoteMachines 2026-06-24-18:40:
    * Remote Open Existing selections may carry an opaque gxserver worktree key in
    * addition to the display path. Submit both fields so remote GPUI can send
    * only the list-derived key back to the owning daemon while local/native
    * receivers continue to use the selected path.
    *
-   * CDXC:WorktreeModal 2026-06-30-16:05:
+   * CDXC:Worktrees 2026-06-30-16:05:
    * Add Worktree should use a title-only header in the macOS child-window modal.
    * Mode is the first explanatory row, so omit the project subtitle and preserve
    * vertical room for the image picker plus primary worktree action.
    *
-   * CDXC:WorktreeModal 2026-06-30-23:58:
+   * CDXC:Worktrees 2026-06-30-23:58:
    * Open Existing already shows the selected worktree in the select trigger, so
    * helper text under the selector should be reserved for load, error, and empty
    * states instead of echoing the selected path.
@@ -464,7 +464,7 @@ export function WorktreeCreateModal({
             <Field>
               <FieldLabel>Mode</FieldLabel>
               {/*
-               * CDXC:SegmentedControl 2026-08-24:
+               * CDXC:DesignSystem 2026-08-24:
                * The mode picker is a single-select strip, so it uses the shared
                * SegmentedControl instead of two outline buttons that read as
                * unrelated controls.

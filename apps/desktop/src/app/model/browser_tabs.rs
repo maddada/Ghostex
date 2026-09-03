@@ -63,7 +63,7 @@ pub(crate) struct CommandPaneDropFeedback {
 }
 
 /*
-CDXC:GPUIWorkspaceTabs 2026-06-26-06:34:
+CDXC:Workarea 2026-06-26-06:34:
 Native Agents pane tabs select on same-gesture mouse-up, not on mouse-down. Keep this pending tab click as runtime-only pane/session identity so drag start, mouse-up-out, and double-click Focus can share AppKit's gesture ownership without adding overlays, broad hit-test routing, persistence, terminal lifecycle changes, or synthetic input paths.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,7 +73,7 @@ pub(crate) struct WorkspacePendingTabClick {
 }
 
 /*
-CDXC:GPUICommandTabSelection 2026-06-25-19:14:
+CDXC:CommandPane 2026-06-25-19:14:
 Native AppKit command tabs arm a potential tab selection on left mouse-down, but commit selection only on the matching mouse-up while the gesture stayed a click. Keep GPUI's pending state as a runtime-only tab id token so a command-tab drag start can cancel selection without overlays, root hit-test routing, synthetic coordinates, persistence, or logging.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,7 +115,7 @@ pub(crate) enum BrowserTabChromeStatus {
 
 impl BrowserTabChromeStatus {
     /*
-    CDXC:GPUIBrowserTabs 2026-06-22-16:48:
+    CDXC:Browser 2026-06-22-16:48:
     Browser tab chrome must distinguish a loaded tab backed by a live CEF surface from a restored loaded placeholder that has no materialized surface. Derive this render-only status from BrowserTabState plus runtime browser_surfaces membership so shell-state persistence and favicon privacy stay unchanged.
     */
     pub(crate) fn from_state(state: BrowserTabState, has_cef_surface: bool) -> Self {
@@ -132,7 +132,7 @@ impl BrowserTabChromeStatus {
 }
 
 /*
-CDXC:GPUIBrowserTabs 2026-06-22-17:13:
+CDXC:Browser 2026-06-22-17:13:
 Browser tab chrome is focus-invariant: pane focus may drive toolbar ownership and CEF surface sync, but tab-bar brightness derives only from a tab's shell state, runtime surface presence, and active membership inside its own Browser tab group. BrowserTabModel.focused_pane is intentionally excluded.
 */
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -166,7 +166,7 @@ pub(crate) struct BrowserRuntimeLifecycleInput {
 
 impl BrowserRuntimeLifecycleInput {
     /*
-    CDXC:GPUIWorkspaceTabDragVisibility 2026-07-03:
+    CDXC:Workarea 2026-07-03:
     Workspace/Agents tab drags join the same hide-during-drag gate as Browser and command tab drags so the GPUI drag ghost and drop feedback can never sit under a native CEF child view. Hide-and-hold only; no CEF teardown, recreation, or overlay layering.
     */
     pub(crate) fn allows_cef_child_views(self) -> bool {
@@ -187,10 +187,10 @@ pub(crate) enum BrowserRuntimeSurfacePolicy {
 
 impl BrowserRuntimeSurfacePolicy {
     /*
-    CDXC:GPUIBrowserLifecycle 2026-06-23-11:32:
+    CDXC:Browser 2026-06-23-11:32:
     Phase 8 Browser runtime lifecycle is hide-and-hold at the native CEF child-view boundary. Browser sleep, non-Browser modes, Browser tab drags, and command-tab drags hide existing CEF views while retaining tab-owned CEF entities and shell tab metadata; visibility must not teardown, recreate, or materialize restored loaded tabs.
 
-    CDXC:GPUIBrowserLifecycle 2026-06-23-14:30:
+    CDXC:Browser 2026-06-23-14:30:
     Hide-and-hold is the only current Browser runtime lifecycle decision. HiddenHold means an existing tab-owned CEF child view is not shown; it must not be expanded into CEF teardown, CEF suspend, CEF recreation, restored-tab materialization, shell-state writes, or popup content transfer.
     */
     pub(crate) fn for_tab(
@@ -223,10 +223,10 @@ pub(crate) enum BrowserPopupTargetPolicy {
 
 impl BrowserPopupTargetPolicy {
     /*
-    CDXC:GPUIBrowserRuntimePolicy 2026-06-23-12:48:
+    CDXC:Browser 2026-06-23-12:48:
     Phase 8 popup handling is intentionally source-only until a compatible blank-popup content-transfer contract exists. Only non-empty CEF target URLs may create loaded Browser tabs; empty script-created popups are handled as no-ops with no address-only tab, CEF surface, persistence, notification, page-content copy, or fallback transfer path.
 
-    CDXC:GPUIBrowserRuntimePolicy 2026-06-23-14:30:
+    CDXC:Browser 2026-06-23-14:30:
     Blank or whitespace script-created popup targets remain blocked at the shell boundary. Empty targets must no-op without address-only fallback, Browser notification, CEF surface creation, shell-state write, page-content copy, or any synthetic content-transfer path; non-empty targets are trimmed only as target identifiers for loaded-tab creation.
     */
     pub(crate) fn for_target_url(target_url: &str) -> Self {
@@ -254,7 +254,7 @@ pub(crate) fn browser_runtime_visible_surface_tab_ids(
     surface_tab_ids: impl IntoIterator<Item = BrowserTabId>,
 ) -> HashSet<BrowserTabId> {
     /*
-    CDXC:GPUIBrowserLifecycle 2026-06-23-14:30:
+    CDXC:Browser 2026-06-23-14:30:
     The visibility pass is a pure hide-and-hold filter over already-owned CEF surfaces. It must not create missing restored-tab surfaces, suspend or tear down hidden CEF entities, infer popup content transfer, or mutate Browser shell state.
     */
     let rendered_active_loaded_tab_ids = browser_tabs.rendered_active_loaded_tab_ids();
@@ -319,28 +319,28 @@ pub(crate) struct BrowserTabDragPreview {
 #[derive(Clone)]
 pub(crate) struct BrowserTab {
     /*
-    CDXC:GPUIBrowserMetadata 2026-06-22-07:23:
+    CDXC:Browser 2026-06-22-07:23:
     Browser tab titles have two tiers: `title` is the URL-derived fallback that can be regenerated from sanitized shell state, while `runtime_page_title` comes from CEF DisplayHandler callbacks.
 
-    CDXC:GPUIBrowserTabTitleCache 2026-07-12:
+    CDXC:Browser 2026-07-12:
     The last displayed title is persisted into shell state as a bounded `cachedTitle` and restored into `runtime_page_title`, so the sidebar and tab strip keep the pre-restart label until the page reports a fresh document title.
 
-    CDXC:GPUIBrowserFavicons 2026-06-22-09:11:
+    CDXC:Browser 2026-06-22-09:11:
     Browser favicon metadata is runtime-only like page titles, but even stricter for persistence: keep only a safe HTTP(S) origin marker or capped decoded data:image bytes for visible tab chrome, clear favicon state on navigation/address-only transitions, and never serialize raw favicon URLs or image cache data into shell state.
 
-    CDXC:GPUIBrowserFavicons 2026-06-22-10:41:
+    CDXC:Browser 2026-06-22-10:41:
     Browser tab icons can render capped runtime favicon image bytes from safe data:image URLs without persisting favicon bytes or raw URLs. Clear decoded images and HTTP(S) fetch sources wherever favicon URL metadata clears, and use the URL-only shell marker as fallback.
 
-    CDXC:GPUIBrowserFavicons 2026-06-22-11:05:
+    CDXC:Browser 2026-06-22-11:05:
     Browser tab icons may fetch safe HTTP(S) favicons only through a favicon-specific runtime asset source. Keep raw CEF favicon URLs out of shell state and logging, store only a scheme+authority marker on BrowserTab, cap URL length, redirects, body bytes, formats, and decode dimensions, and fall back to the marker or generic icon on every failure.
 
-    CDXC:GPUIBrowserHistory 2026-06-22-10:09:
+    CDXC:Browser 2026-06-22-10:09:
     GPUI Browser tabs need their own compact navigation history so the toolbar History menu can show rows for the focused tab without borrowing another tab's CEF internals. Keep history keyed by BrowserTabId and show history through OS-owned NativeMenus, not Back/Forward dropdown toggles, in-layout panels, or overlay hit regions.
 
-    CDXC:GPUIBrowserHistoryPrivacy 2026-06-22-10:09:
+    CDXC:Telemetry 2026-06-22-10:09:
     Browser history persistence is limited to sanitized loaded URLs and a current index. Do not store page titles, labels, favicon URLs, query strings, fragments, credentials, cookies, tokens, local paths, command text, stdout/stderr, or user-owned content; rebuild invalid or missing history from the tab's sanitized loaded URL.
 
-    CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+    CDXC:Browser 2026-06-23-11:14:
     Each GPUI Browser tab carries its selected generated profile id. Changing a tab's profile recreates only that tab's CEF surface with the selected request context, and shell-state persistence stores only this safe numeric id so different tabs keep different profiles across restart without persisting profile names, paths, cookies, credentials, history, or user-entered browser data.
     */
     pub(crate) id: BrowserTabId,
@@ -585,31 +585,31 @@ impl BrowserTabModel {
 
     pub(crate) fn shell_default_with_profile(profile_id: BrowserProfileId) -> Self {
         /*
-        CDXC:GPUIBrowserTabs 2026-06-22-05:56:
+        CDXC:Browser 2026-06-22-05:56:
         Browser project-editor mode needs native shell-level tab identity before durable browser behavior exists. Keep tab ids, active tab, title/url, and address-only placeholder state in memory, while runtime CEF entities are owned separately by loaded tab id.
 
-        CDXC:GPUIBrowserTabs 2026-06-22-11:05:
+        CDXC:Browser 2026-06-22-11:05:
         Runtime favicon images and HTTP(S) fetch sources belong to tab records but remain transient metadata alongside CEF entities, so shell defaults and restoration must initialize them empty and persistence must keep only sanitized tab URL/history state.
 
-        CDXC:GPUIBrowserTabs 2026-06-22-06:59:
+        CDXC:Browser 2026-06-22-06:59:
         Browser tabs now own runtime CEF entities by tab id, while this persisted shell model remains limited to sanitized tab metadata. Address-only tabs keep no URL and should render an empty GPUI body rather than borrowing stale page content from another tab.
 
-        CDXC:GPUIBrowserDefault 2026-06-22-19:52:
+        CDXC:Browser 2026-06-22-19:52:
         Fresh Browser shell state must use only the static default URL until a real sidebar/project snapshot contract carries an explicit browser start URL. GPUI must not infer Browser project start URLs from .git, paths, workspace names, fixture names, or sidebar titles.
 
-        CDXC:GPUIBrowserPopups 2026-06-22-07:14:
+        CDXC:Browser 2026-06-22-07:14:
         Page-initiated target=_blank and window.open requests should become selected GPUI Browser shell tabs for the requested URL, reusing the same per-tab CEF surface creation path as address-bar navigation. The shell model can keep the raw runtime URL in memory, but persistence must continue using the existing Browser metadata sanitizer.
 
-        CDXC:GPUIBrowserPopups 2026-06-23-11:43:
+        CDXC:Browser 2026-06-23-11:43:
         Popup parity is explicit: only non-empty target URLs create Browser tabs. Empty CEF targets, including script-created blank popups with no transferable URL/content, are handled as no-ops without address-only tab creation, CEF surface creation, shell-state persistence, notification, import, or content-transfer fallback.
 
-        CDXC:GPUIBrowserSplits 2026-06-22-09:02:
+        CDXC:Browser 2026-06-22-09:02:
         Browser tabs now need shell-owned pane groups and left/right/top/bottom split order before full multi-CEF rendering exists. Keep BrowserTabId metadata and per-tab CEF ownership in one registry, while split leaves store only tab ids plus active selection so drag grouping and splitting never recreate Browser surfaces or persist raw page titles/query strings.
 
-        CDXC:GPUIBrowserSplits 2026-06-22-09:55:
+        CDXC:Browser 2026-06-22-09:55:
         Browser split panes should show the existing loaded CEF surface for each rendered leaf's active tab when Browser is awake and drags are not hiding native views. Restored or inactive loaded tabs without an existing CEF entity render restored/sleeping placeholder bodies until normal selection or wake materializes them, and address-only tabs never borrow another tab's surface.
 
-        CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+        CDXC:Browser 2026-06-23-11:14:
         Fresh and restored GPUI Browser tabs are assigned a generated shell profile id at model construction. That id is runtime-safe profile plumbing for future CEF surface creation and is intentionally separate from sanitized URL/history persistence.
         */
         let default_url = browser_shell_default_url(None);
@@ -729,10 +729,10 @@ impl BrowserTabModel {
         profile_id: BrowserProfileId,
     ) -> BrowserTabId {
         /*
-        CDXC:GPUIFocusedNewTabs 2026-06-22-12:51:
+        CDXC:FocusMode 2026-06-22-12:51:
         Browser new-tab commands, including Cmd+N and the clicked pane control, must insert the address-only placeholder immediately after the focused pane's active tab so creation stays adjacent to the user's current Browser work instead of appending to a long tab group.
 
-        CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+        CDXC:Browser 2026-06-23-11:14:
         New address-only Browser tabs inherit the currently selected generated Browser profile at creation time. Later profile selection changes affect future tabs/surfaces only and must not mutate existing tab profile ownership.
         */
         let tab_id = BrowserTabId(self.next_tab_id);
@@ -979,16 +979,16 @@ impl BrowserTabModel {
         placement: cef::BrowserPopupPlacement,
     ) -> Option<BrowserTabId> {
         /*
-        CDXC:GPUIBrowserPopups 2026-06-23-11:43:
+        CDXC:Browser 2026-06-23-11:43:
         Empty popup targets are a shell-boundary no-op, not a request for an address-only Browser tab. Admit only trimmed non-empty target URLs here so blank script popups cannot mutate selection, create CEF surfaces, persist shell state, or start any content-transfer fallback.
 
-        CDXC:GPUIBrowserPopups 2026-06-23-14:30:
+        CDXC:Browser 2026-06-23-14:30:
         The popup target string is accepted only as the loaded-tab target identifier after leading/trailing whitespace is removed. Do not reinterpret an empty target as address-bar text, restored page content, an import request, a notification-worthy event, or a fallback tab.
         */
         let requested_url = browser_loaded_popup_target_url(&requested_url)?;
 
         /*
-        CDXC:GPUIBrowserLinkNewTab 2026-08-18:
+        CDXC:Browser 2026-08-18:
         Background placement is the middle-click/Cmd-click contract: append the
         loaded tab to the focused pane's strip and leave selection where it is,
         so the tab materializes its CEF surface later through the normal
@@ -1047,10 +1047,10 @@ impl BrowserTabModel {
         active_profile_id: BrowserProfileId,
     ) -> bool {
         /*
-        CDXC:GPUIBrowserTabs 2026-06-22-05:56:
+        CDXC:Browser 2026-06-22-05:56:
         Closing Browser tabs must be modest but visible in the parity shell. Multi-tab closes remove the target and keep or select a neighboring tab in memory; closing the last tab resets it to an address-only placeholder so Browser mode never drops to an empty workspace while multiple CEF views and persisted tab lifecycles remain deferred.
 
-        CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+        CDXC:Browser 2026-06-23-11:14:
         Resetting the final Browser tab creates a new address-only placeholder in place, so it adopts the currently selected generated profile for any future load instead of retaining the closed page's profile ownership.
         */
         if !self.has_tab(tab_id) {
@@ -1131,10 +1131,10 @@ impl BrowserTabModel {
         insertion_index: usize,
     ) -> bool {
         /*
-        CDXC:GPUIBrowserDragDrop 2026-06-22-07:41:
+        CDXC:Browser 2026-06-22-07:41:
         Browser tab-strip drops are same-strip reorder only for this slice. Reorder the existing BrowserTab records in place, preserve the active BrowserTabId, and leave runtime titles, current URLs, address-only state, and the tab-owned CEF surface map untouched so dragging a tab never reloads or recreates a page surface.
 
-        CDXC:GPUIBrowserSplits 2026-06-22-09:02:
+        CDXC:Browser 2026-06-22-09:02:
         Same-strip Browser reorders are scoped to the dragged tab's source Browser pane. The metadata registry and CEF map stay keyed by BrowserTabId, while only that pane's tab-id order changes and persists through sanitized shell state.
         */
         let Some(leaf) = self.find_leaf_mut(pane_id) else {
@@ -1193,7 +1193,7 @@ impl BrowserTabModel {
         zone: WorkspaceDropZone,
     ) -> bool {
         /*
-        CDXC:GPUIBrowserSplits 2026-06-22-09:02:
+        CDXC:Browser 2026-06-22-09:02:
         Browser pane-body drops mirror Agents behavior in the placeholder shell: center groups the dragged tab into the target Browser tab group, while left/right/top/bottom edge drops split that same BrowserTabId into a new pane. This is layout/state only; CEF surface identity stays keyed by BrowserTabId and split rendering decides visibility without recreating page state.
         */
         if matches!(zone, WorkspaceDropZone::Center) {
@@ -1258,7 +1258,7 @@ impl BrowserTabModel {
         url: String,
     ) -> Option<BrowserTabId> {
         /*
-        CDXC:GPUIBrowserPaneActions 2026-06-22-13:46:
+        CDXC:Browser 2026-06-22-13:46:
         Browser pane-menu split actions create a selected address-only tab in a new split pane by focusing the clicked pane, using the normal address-only tab creation path, then moving that new tab through the existing Browser split helper. This preserves Browser split ordering, tab metadata persistence, and CEF ownership because address-only tabs do not create or load browser surfaces.
         */
         if matches!(zone, WorkspaceDropZone::Center) || !self.focus_pane(target_pane_id) {
@@ -1323,7 +1323,7 @@ impl BrowserTabModel {
 
     pub(crate) fn rendered_active_loaded_tab_ids(&self) -> HashSet<BrowserTabId> {
         /*
-        CDXC:GPUIBrowserSplits 2026-06-22-09:55:
+        CDXC:Browser 2026-06-22-09:55:
         Visible Browser CEF bodies are derived from rendered split leaves, not from the focused/global active Browser tab alone. This helper intentionally returns loaded tab ids only; it does not create CEF entities, so restored active tabs without existing surfaces and address-only tabs keep black placeholder bodies.
         */
         self.rendered_leaf_order()
@@ -1558,7 +1558,7 @@ pub(crate) fn browser_placeholder_safe_origin_url(sanitized_url: &str) -> Option
 }
 
 /*
-CDXC:SidebarBrowserTabReveal 2026-08-18:
+CDXC:Browser 2026-08-18:
 One pending sidebar reveal for a Browser tab the user just opened, held until
 that tab reaches the sidebar in a published tab snapshot.
 */

@@ -1,5 +1,5 @@
 /*
-CDXC:NavigationHistory 2026-08-19:
+CDXC:Navigation 2026-08-19:
 Back/Forward in the titlebar walks ONE chronological trail of everything the
 user has had active — sessions and projects, across machines — not a per-project
 stack. The trail lives here, in the daemon, because two clients render it (the

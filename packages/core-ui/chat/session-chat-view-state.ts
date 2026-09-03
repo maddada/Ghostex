@@ -18,7 +18,7 @@ export function selectSessionChatViewState(input: {
   /** Provider conversation id is known (agentSessionId resolved). */
   hasKnownAgentSession: boolean;
   /*
-  CDXC:DraftAgentSwitch 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   The session is a draft: a real row whose agent CLI is running but which has
   never been given a prompt. A draft has no transcript to protect, so it never
   takes the blank "hold loading" below — see the branch for why that matters.
@@ -48,7 +48,7 @@ export function selectSessionChatViewState(input: {
     // yet; hold loading rather than flashing empty. Status stays 'working',
     // so the composer keeps Stop the moment a bubble lands.
     /*
-    CDXC:DraftAgentSwitch 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     Never for a draft. 'loading' is the one kind the view answers with an early
     return that unmounts the whole pane body, composer included — and a draft
     hits this branch on exactly the wrong edge: switching its agent CLI makes

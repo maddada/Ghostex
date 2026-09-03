@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatWorkingStrip 2026-08-30:
+CDXC:SessionChat 2026-08-30:
 Always-visible "agent is working" indicator, pinned directly above the composer
 and OUTSIDE the transcript scroller so the working state stays visible at any
 scroll position.

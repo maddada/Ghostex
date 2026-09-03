@@ -1,52 +1,52 @@
 # GPUI Workspace Parity Progress
 
 <!--
-CDXC:GPUIWorkspaceParity 2026-06-22-05:07:
+CDXC:RepoStructure 2026-06-22-05:07:
 GPUI workspace parity is being ported from the current macOS app in small sequential agent slices. Keep this file as the coordination log so each agent records the exact user-facing behavior it changed, the files it touched, and the remaining gaps without editing the regular macOS app.
 
-CDXC:GPUIWorkspaceParity 2026-06-23-14:19:
+CDXC:RepoStructure 2026-06-23-14:19:
 The orchestration log must now queue exactly one worker at a time, with no parallel planning workers. Future workers should receive larger bounded bundles when dependencies allow, while preserving phase order, privacy, no fallback/project-detection, non-overlap layout, and the current no-validation instruction.
 
-CDXC:GPUIWorkspaceParity 2026-06-23-15:25:
+CDXC:RepoStructure 2026-06-23-15:25:
 Slice 203 is docs/progress reconciliation only. It moves Phase 1 to source-side handoff status after slices 200-202 and updates Phase 2 terminal handoff language without claiming app validation or resolving terminal runtime clipboard and physical-key blockers.
 
-CDXC:GPUIRuntimeTransfer 2026-06-23-16:02:
+CDXC:Workarea 2026-06-23-16:02:
 Slice 211 keeps cross-surface runtime transfer out of completed parity. Source may represent visible-title, identity, tab, card, and placeholder movement among Agents, command, Browser, Source, Kanban, and Manage, but real runtime/process/content transfer needs an explicit product decision, mount/runtime contracts, privacy proof, and external running evidence.
 
-CDXC:GPUIPhase10BlockerLedger 2026-06-23-16:06:
+CDXC:RepoStructure 2026-06-23-16:06:
 Slice 212 aligns the source-level Phase 10 blocker ledger with the docs table for Terminal lifecycle activation/reattach and cross-surface runtime/process/content transfer. This records blockers only and must not be read as runtime wake, reattach, process/content transfer, validation, persistence, or logging work.
 
-CDXC:GPUIRuntimeTransfer 2026-06-23-17:25:
+CDXC:Workarea 2026-06-23-17:25:
 Slice 223 splits cross-surface transfer progress into source-only movement evidence and missing gates. Shell movement categories remain Agents/command visible-title placeholders, tab/group/card layout, project-editor identity-only Source/Kanban/gated Manage, Browser profile/tab shell identity preservation, and no-runtime-transfer privacy boundaries; real transfer still needs product, mount/runtime, family-specific, privacy, and running-evidence gates.
 
-CDXC:GPUIProjectWorkareaReadiness 2026-06-23-16:17:
+CDXC:Workarea 2026-06-23-16:17:
 Slice 214 adds strict source-only Kanban/Manage readiness parser/store evidence. It accepts only the exact current active project plus exact Kanban/Manage surface identity and mounting/ready/loadFailed state, and it must not mount CEF web surfaces, perform file I/O, log/persist private details, accept URLs/paths/file names/file contents/failure details, probe fallbacks, replace placeholders, or run validation.
 
-CDXC:GPUIBrowserWorkareaReadiness 2026-06-23-16:24:
+CDXC:Browser 2026-06-23-16:24:
 Slice 215 adds strict source-only Browser active-project/readiness parser/store evidence outside Phase 1. It accepts only the exact current active project plus exact Browser workarea identity and loading/ready/loadFailed state, keeps browserWorkareaId rejected in the active-project snapshot, and must not mount/materialize CEF, create Browser tabs/profiles/popups, log/persist private details, accept URLs/paths/titles/profile/cookie/history/content/failure details, probe fallbacks, replace placeholders, or run validation.
 
-CDXC:GPUIManageFileWorkareaBridge 2026-06-23-16:35:
+CDXC:Workarea 2026-06-23-16:35:
 Slice 216 adds strict source-only Manage file/workarea operation request parser/store evidence separate from readiness. It accepts only the exact current Manage active-project/workarea identity plus operation-name string, stores only the privacy-safe allowlist decision category, and must not run file I/O, mount CEF/file bridges, log/persist private details, accept args/paths/file names/file contents/URLs/tokens/cookies/credentials/env/stdout/stderr/failure details/raw payloads/CEF state/bridge payloads, probe fallbacks, replace placeholders, or run validation.
 
-CDXC:GPUIProjectSidebarBridge 2026-06-23-18:29:
+CDXC:CefRuntime 2026-06-23-18:29:
 Slice 231 adds the source-only sidebar-scoped safe external bridge into strict Source, Browser, Kanban/Manage readiness stores and the Manage operation-request store. It does not implement real Source CEF/code-server mount, Kanban/Manage CEF or file-bridge mounts, Browser workarea identity, placeholder replacement, privacy proof, validation, or external running evidence.
 
-CDXC:GPUITerminalCloseConfirm 2026-06-23-18:48:
+CDXC:CommandPane 2026-06-23-18:48:
 Slice 232 adds the source-side close-confirm UI surface contract for pending Agents and command terminals. The surface is generic, family-scoped, normal-layout only, and wires Keep Open to the existing cancel path; slice 237 supersedes the ABI gap with source-side `needs_confirm_quit` evidence, and slice 239 accepts close-confirm for the source-ledger purpose.
 
-CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+CDXC:CommandPane 2026-06-23-20:04:
 Slice 237 adds source-side GhosttyKit `ghostty_surface_needs_confirm_quit` ABI evidence and exact confirmed shell/session removal for GPUI close-confirm prompts. Slice 239 accepts this terminal evidence for the source-ledger purpose while validation remains globally blocked.
 
-CDXC:GPUIWorkspaceParity 2026-06-23-17:30:
+CDXC:RepoStructure 2026-06-23-17:30:
 Slice 224 is a handoff/status consolidation only. It refreshes the docs queue after slices 218-223 so future work targets real product, bridge, mount, runtime, privacy, or external-evidence gates instead of more source-only ledger splitting, unless a concrete mismatch is found.
 
-CDXC:GPUIWorkspaceParity 2026-06-23-20:44:
+CDXC:RepoStructure 2026-06-23-20:44:
 Slice 239 records new product decisions for the GPUI parity ledger: source-only runtime parity evidence may count for source-ledger acceptance, terminal source/runtime evidence is accepted as current parity for that ledger, and Kanban/Manage future web surfaces must use CEF while Manage keeps a separate file-bridge contract.
 
-CDXC:GPUIPhase10BlockerLedger 2026-06-23-21:50:
+CDXC:RepoStructure 2026-06-23-21:50:
 This reconciliation records the newest source-ledger rule: source-only runtime parity is accepted for this effort, the user will runtime-check later, validation/app commands stay outside this agent workflow, and future web panes must target CEF only with Manage file bridge as a separate contract.
 
-CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+CDXC:Workarea 2026-06-24-10:12:
 Real Source, Kanban, and Manage runtime surfaces are now the active implementation target for GPUI and must use CEF only. App-level wiring may own CefSurface entities and render them in normal layout only when a real runtime URL value plus the existing replacement gates exist; do not add WKWebView/WebKit, fake about:blank/localhost/app-resource-label URLs, temporary pages, hidden/offscreen mounts, fallback probes, private URL persistence/logging, validation commands, app launch/restart, or browser/visual automation.
 -->
 
@@ -2754,7 +2754,7 @@ Hard constraints:
 ### 2026-06-23-20:22 Task slice 238
 
 <!--
-CDXC:GPUIWorkspaceParityHandoff 2026-06-23-20:22:
+CDXC:RepoStructure 2026-06-23-20:22:
 This continuation re-audits Phase 1 and the current Phase 10 blocker ledger under the persistent no-validation workflow. Phase 1 active-project/sidebar state is source-complete enough to hand off; remaining meaningful work requires explicit product decisions, mount/runtime contracts, app/runtime acceptance evidence, privacy proof, or external running evidence, not more source-only ledger splitting.
 -->
 
@@ -2770,7 +2770,7 @@ This continuation re-audits Phase 1 and the current Phase 10 blocker ledger unde
 ### 2026-06-23-20:44 Task slice 239
 
 <!--
-CDXC:GPUIWorkspaceParity 2026-06-23-20:44:
+CDXC:RepoStructure 2026-06-23-20:44:
 This slice updates the GPUI parity source ledger and docs for the user's product decisions: accepted source/runtime evidence may satisfy source-ledger parity, terminal is accepted as working for that ledger, and Kanban/Manage must target CEF web-surface contracts.
 -->
 
@@ -2784,7 +2784,7 @@ This slice updates the GPUI parity source ledger and docs for the user's product
 ### 2026-06-23-21:28 Task slice 240
 
 <!--
-CDXC:GPUIProjectWorkareaParity 2026-06-23-21:28:
+CDXC:Workarea 2026-06-23-21:28:
 This review follow-up removes stale platform-specific web-surface wording from current GPUI Kanban/Manage source-ledger contracts. Kanban and Manage web panes target CEF, while Manage file bridging stays a separate contract and no real CEF mount implementation is claimed by this source-only slice.
 -->
 
@@ -2799,7 +2799,7 @@ This review follow-up removes stale platform-specific web-surface wording from c
 ### 2026-06-23-21:32 Task slice 241
 
 <!--
-CDXC:GPUIKanbanCefMount 2026-06-23-21:32:
+CDXC:Workarea 2026-06-23-21:32:
 This source-only Phase 6 slice adds the Kanban CEF mount-request boundary keyed to the exact current Kanban runtime identity, while keeping real CEF materialization blocked because no explicit first-party bundled Kanban entrypoint exists in GPUI-owned source.
 -->
 
@@ -2815,7 +2815,7 @@ This source-only Phase 6 slice adds the Kanban CEF mount-request boundary keyed 
 ### 2026-06-23-21:36 Task slice 242
 
 <!--
-CDXC:GPUIManageCefMount 2026-06-23-21:36:
+CDXC:Workarea 2026-06-23-21:36:
 This source-only Phase 7 slice adds the Manage CEF mount-request boundary keyed to the exact current Manage runtime identity, while keeping real CEF and file-bridge materialization blocked because no explicit first-party bundled Manage entrypoint or file-bridge mount contract exists in GPUI-owned source.
 -->
 
@@ -2831,7 +2831,7 @@ This source-only Phase 7 slice adds the Manage CEF mount-request boundary keyed 
 ### 2026-06-23-21:43 Task slice 243
 
 <!--
-CDXC:GPUISourceCefCodeServerMount 2026-06-23-21:43:
+CDXC:CodeEditor 2026-06-23-21:43:
 This source-only Phase 5 slice adds the Source CEF/code-server mount-request boundary keyed to the exact current Source runtime identity, while keeping real CEF/code-server materialization blocked because no explicit first-party code-server entrypoint, process contract, URL contract, or CEF materialization contract exists in GPUI-owned source.
 -->
 
@@ -2847,7 +2847,7 @@ This source-only Phase 5 slice adds the Source CEF/code-server mount-request bou
 ### 2026-06-23-21:50 Task slice 244
 
 <!--
-CDXC:GPUIPhase10BlockerLedger 2026-06-23-21:50:
+CDXC:RepoStructure 2026-06-23-21:50:
 Source-only runtime parity is accepted for the current GPUI source-ledger effort, terminal is accepted as working for that ledger, and the user will runtime-check later. Validation/app commands remain not run and outside this agent workflow, while future web panes must target CEF only and Manage file bridge remains separate.
 -->
 
@@ -2862,7 +2862,7 @@ Source-only runtime parity is accepted for the current GPUI source-ledger effort
 ### 2026-06-24-02:53 Task slice 245
 
 <!--
-CDXC:GPUISourceCefCodeServerMount 2026-06-24-02:53:
+CDXC:CodeEditor 2026-06-24-02:53:
 Source requests can now rely on the fixed app-resource code-server entrypoint and Node runtime resource labels for the source-ledger contract. This does not start code-server, issue a URL, mount CEF, create hidden surfaces, or replace the Source placeholder; those remain explicit contracts.
 -->
 
@@ -2878,7 +2878,7 @@ Source requests can now rely on the fixed app-resource code-server entrypoint an
 ### 2026-06-24-02:59 Task slice 246
 
 <!--
-CDXC:GPUISourceCefCodeServerMount 2026-06-24-02:59:
+CDXC:CodeEditor 2026-06-24-02:59:
 This source-only Phase 5 slice adds the Source code-server app-resource process launch-plan contract behind the existing exact-runtime CEF/code-server mount request. It does not spawn code-server, allocate ports, issue URLs, probe localhost, create CEF, mount hidden surfaces, persist/log process details, carry cwd/args/env/pid/stdout/stderr/path payloads, or replace the Source placeholder.
 -->
 
@@ -2894,7 +2894,7 @@ This source-only Phase 5 slice adds the Source code-server app-resource process 
 ### 2026-06-24-03:06 Task slice 247
 
 <!--
-CDXC:GPUISourceCefCodeServerMount 2026-06-24-03:06:
+CDXC:CodeEditor 2026-06-24-03:06:
 This source-only Phase 5 slice adds the Source code-server URL-boundary contract as source-ledger evidence only after exact ready Source runtime identity, fixed app-resource entrypoint, and non-spawning launch-plan evidence exist. It does not issue or store a runtime URL, allocate ports, expose hostname/query/fragment/token/path/project/process data, create CEF, mount hidden surfaces, log or persist private details, or replace the Source placeholder.
 -->
 
@@ -2910,7 +2910,7 @@ This source-only Phase 5 slice adds the Source code-server URL-boundary contract
 ### 2026-06-24-03:12 Task slice 248
 
 <!--
-CDXC:GPUISourceCefCodeServerMount 2026-06-24-03:12:
+CDXC:CodeEditor 2026-06-24-03:12:
 This source-only Phase 5 slice adds the Source CEF-only materialization contract as source-ledger evidence after exact ready Source identity, fixed app-resource entrypoint, non-spawning launch plan, and source-ledger URL-boundary evidence exist. It does not instantiate a runtime CEF browser, issue or store a runtime URL, start code-server, allocate ports, mount hidden surfaces, persist/log private details, carry hostnames/query/fragment/tokens/paths/project/process/page-title/payload/file-content data, or replace the Source placeholder.
 -->
 
@@ -2927,7 +2927,7 @@ This source-only Phase 5 slice adds the Source CEF-only materialization contract
 ### 2026-06-24-03:32 Task slice 249
 
 <!--
-CDXC:GPUIKanbanCefMount 2026-06-24-03:32:
+CDXC:Workarea 2026-06-24-03:32:
 This source-only Phase 6 slice adds a first-party CEF app-resource entrypoint contract for exact-identity Kanban mount requests. It does not create CEF, issue or store URLs, use non-CEF web engines, mount hidden surfaces, persist/log private details, carry paths/board names/page titles/CEF payloads, or replace the Kanban placeholder; the separate CEF materialization contract remains the Kanban gate.
 -->
 
@@ -2942,7 +2942,7 @@ This source-only Phase 6 slice adds a first-party CEF app-resource entrypoint co
 ### 2026-06-24-03:41 Task slice 250
 
 <!--
-CDXC:GPUIKanbanCefMount 2026-06-24-03:41:
+CDXC:Workarea 2026-06-24-03:41:
 This source-only slice adds a CEF-only source-ledger materialization contract for exact-identity Kanban requests after the fixed first-party CEF app-resource entrypoint exists, and adds a source-only first-party CEF app-resource entrypoint contract for exact-identity Manage requests. It does not instantiate runtime CEF, issue or store URLs, create file bridges, run file I/O, mount hidden surfaces, persist/log private details, carry paths/board names/page titles/file contents/operation args/CEF or file-bridge payloads, or replace placeholders.
 -->
 
@@ -2959,7 +2959,7 @@ This source-only slice adds a CEF-only source-ledger materialization contract fo
 ### 2026-06-24-03:58 Task slice 251
 
 <!--
-CDXC:GPUIManageCefMount 2026-06-24-03:58:
+CDXC:Workarea 2026-06-24-03:58:
 This source-only Phase 7 slice retires the remaining Manage source-ledger gates with CEF-only materialization, source-only file-bridge mount, and project-scoped file-operation proof contracts after exact ready Manage identity and the fixed first-party CEF app-resource entrypoint exist. It does not instantiate runtime CEF, issue or store URLs, mount a runtime file bridge, run file I/O, create bridge payloads, use WKWebView, mount hidden surfaces, persist/log private details, carry paths/file names/file contents/operation args/page titles/CEF or file-bridge payloads, or replace the placeholder.
 -->
 
@@ -2975,7 +2975,7 @@ This source-only Phase 7 slice retires the remaining Manage source-ledger gates 
 ### 2026-06-24-04:10 Task slice 252
 
 <!--
-CDXC:GPUIBrowserRuntimeParity 2026-06-24-04:10:
+CDXC:Browser 2026-06-24-04:10:
 This source-only Phase 10 slice retires the Browser source-ledger gates with explicit contracts. Phase 1 continues to reject browserWorkareaId, Browser identity remains owned by the strict readiness boundary, blank/script-created popups remain no-transfer, and lifecycle remains CEF-only hide-and-hold/restored-placeholder evidence without runtime CEF creation, URL issuance, suspend/teardown, hidden surfaces, fallback probes, private logging/persistence, opener data serialization, or placeholder replacement.
 -->
 
@@ -2991,7 +2991,7 @@ This source-only Phase 10 slice retires the Browser source-ledger gates with exp
 ### 2026-06-24-04:15 Task slice 253
 
 <!--
-CDXC:GPUIPhase10BlockerLedger 2026-06-24-04:15:
+CDXC:RepoStructure 2026-06-24-04:15:
 This source-only Phase 10 slice retires the remaining source-ledger blockers by accepting current terminal physical-key/product behavior and cross-surface shell-only transfer behavior without changing runtime code. No native physical-key identity, runtime key forwarding, live transfer family, CEF/file/editor/process/content transfer, fallback, logging, persistence, validation, app launch, or browser automation was added.
 -->
 
@@ -3007,7 +3007,7 @@ This source-only Phase 10 slice retires the remaining source-ledger blockers by 
 ### 2026-06-24-04:29 Task slice 254
 
 <!--
-CDXC:GPUIPhase10BlockerLedger 2026-06-24-04:29:
+CDXC:RepoStructure 2026-06-24-04:29:
 This docs-only source-ledger wording reconciliation updates current Phase 10 guidance after slices 250, 252, and 253. No source-ledger blockers remain; Source, Kanban, Manage, and Browser runtime instantiation/checking remains deferred to the user/outside workflow, Browser Phase 1 still rejects browserWorkareaId by contract, blank/script-created popup transfer remains no-transfer, Browser lifecycle remains CEF-only hide-and-hold/restored-placeholder evidence, terminal physical-key/product behavior is accepted without runtime key-forwarding changes, cross-surface transfer is accepted as shell-only/no-live-runtime-transfer, and validation/app commands are not queued.
 -->
 
@@ -3022,7 +3022,7 @@ This docs-only source-ledger wording reconciliation updates current Phase 10 gui
 ### 2026-06-24-04:34 Task slice 255
 
 <!--
-CDXC:GPUISourceCefCodeServerMount 2026-06-24-04:34:
+CDXC:CodeEditor 2026-06-24-04:34:
 This source-only Phase 5 slice adds a Source CEF/code-server runtime-parity plan after exact ready Source identity, the fixed app-resource entrypoint, non-spawning launch-plan evidence, source-ledger URL-boundary evidence, and CEF-only materialization evidence exist. The plan accepts only CEF as the web-pane engine and rejects non-CEF labels by source contract, while still not instantiating CEF, starting code-server, issuing runtime URLs, mounting hidden surfaces, logging or persisting private details, running validation, or replacing the placeholder.
 -->
 
@@ -3039,7 +3039,7 @@ This source-only Phase 5 slice adds a Source CEF/code-server runtime-parity plan
 ### 2026-06-24-04:49 Task slice 256
 
 <!--
-CDXC:GPUIKanbanCefMount 2026-06-24-04:49:
+CDXC:Workarea 2026-06-24-04:49:
 This source-only Phase 6 slice adds a Kanban CEF runtime-parity plan after exact ready Kanban identity, the fixed first-party CEF app-resource entrypoint, and CEF-only source-ledger materialization evidence exist. The plan accepts only CEF as the web-pane engine and rejects non-CEF labels by source contract, while still not instantiating CEF, issuing or storing runtime URLs, mounting hidden surfaces, logging or persisting private details, running validation, or replacing the placeholder.
 -->
 
@@ -3056,7 +3056,7 @@ This source-only Phase 6 slice adds a Kanban CEF runtime-parity plan after exact
 ### 2026-06-24-04:55 Task slice 257
 
 <!--
-CDXC:GPUIManageCefMount 2026-06-24-04:55:
+CDXC:Workarea 2026-06-24-04:55:
 This source-only Phase 7 slice adds a Manage CEF/file-bridge runtime-parity plan after exact ready Manage identity, the fixed first-party CEF app-resource entrypoint, CEF-only materialization evidence, source-only file-bridge mount evidence, and project-scoped file-operation proof evidence exist. The plan accepts only CEF as the web-pane engine and rejects non-CEF labels by source contract, while still not instantiating CEF, issuing or storing runtime URLs, mounting a runtime file bridge, running file operations, creating CEF/file-bridge payloads, mounting hidden surfaces, logging or persisting private details, running validation, or replacing the placeholder.
 -->
 
@@ -3073,7 +3073,7 @@ This source-only Phase 7 slice adds a Manage CEF/file-bridge runtime-parity plan
 ### 2026-06-24-05:06 Task slice 258
 
 <!--
-CDXC:GPUIBrowserRuntimeParity 2026-06-24-05:06:
+CDXC:Browser 2026-06-24-05:06:
 This source-only Phase 8/10 slice adds Browser source-only runtime-parity acceptance with CEF as the only web-pane engine. It counts existing tab-owned CEF visibility plus Phase 1 Browser identity rejection, strict readiness, blank-popup no-transfer, and restored-placeholder contracts for the source ledger while rejecting WKWebView/WebKit/non-CEF labels and still not creating extra CEF surfaces, issuing runtime URLs, transferring popup content, suspending/tearing down CEF, mounting hidden surfaces, logging or persisting private details, running validation, or replacing restored placeholders.
 -->
 
@@ -3089,7 +3089,7 @@ This source-only Phase 8/10 slice adds Browser source-only runtime-parity accept
 ### 2026-06-24-05:20 Task slice 259
 
 <!--
-CDXC:GPUISourcePlaceholderReplacement 2026-06-24-05:20:
+CDXC:Workarea 2026-06-24-05:20:
 This source-only Phase 5/10 slice adds a centralized Source placeholder-replacement preflight gate formed from existing Source CEF/code-server request/runtime-parity evidence. The gate is CEF-only and rejects WKWebView/WebKit/non-CEF labels, but current behavior still denies replacement because there is no runtime code-server process, issued runtime URL, instantiated CEF browser, normal-layout CEF surface, hidden mount, private payload, or explicit replacement permission.
 -->
 
@@ -3105,7 +3105,7 @@ This source-only Phase 5/10 slice adds a centralized Source placeholder-replacem
 ### 2026-06-24-05:22 Task slice 260
 
 <!--
-CDXC:GPUIKanbanPlaceholderReplacement 2026-06-24-05:22:
+CDXC:Workarea 2026-06-24-05:22:
 This source-only Phase 6/10 slice adds a centralized Kanban placeholder-replacement preflight gate formed from existing Kanban CEF mount request/runtime-parity evidence. The gate is CEF-only and rejects WKWebView/WebKit/non-CEF labels, but current behavior still denies replacement because there is no issued runtime URL, instantiated CEF browser, normal-layout CEF surface, hidden mount, private runtime data, or explicit replacement permission.
 -->
 
@@ -3121,7 +3121,7 @@ This source-only Phase 6/10 slice adds a centralized Kanban placeholder-replacem
 ### 2026-06-24-05:27 Task slice 261
 
 <!--
-CDXC:GPUIManagePlaceholderReplacement 2026-06-24-05:27:
+CDXC:Workarea 2026-06-24-05:27:
 This source-only Phase 7/10 slice adds a centralized Manage placeholder-replacement preflight gate formed only from `ManageCefRuntimeParityState::SourceOnlyRuntimeParityPlan`. The gate is CEF-only and rejects WKWebView/WebKit/non-CEF labels, but current behavior still denies replacement because there is no issued runtime URL, instantiated CEF browser, normal-layout CEF surface, runtime file bridge, runtime file operation, CEF/file-bridge payload, hidden mount, private runtime data/logging/persistence, or explicit replacement permission.
 -->
 
@@ -3137,7 +3137,7 @@ This source-only Phase 7/10 slice adds a centralized Manage placeholder-replacem
 ### 2026-06-24-05:45 Task slice 262
 
 <!--
-CDXC:GPUIProjectWorkareaPaneEngine 2026-06-24-05:45:
+CDXC:Workarea 2026-06-24-05:45:
 This source-only Phase 10 slice adds a central GPUI project-workarea pane-engine policy for Source, Browser, Kanban, and Manage. The policy counts panes for this source-ledger runtime parity only when existing evidence exposes CEF as the web-pane engine, rejects WKWebView/WebKit/non-CEF/candidate labels without retaining rejected labels in safe JSON, and leaves runtime checking to the user without CEF instantiation, code-server startup, file-bridge mounting, file I/O, hidden surfaces, private logging/persistence, or placeholder replacement.
 -->
 
@@ -3154,7 +3154,7 @@ This source-only Phase 10 slice adds a central GPUI project-workarea pane-engine
 ### 2026-06-24-05:58 Task slice 263
 
 <!--
-CDXC:GPUIProjectWorkareaCefSlots 2026-06-24-05:58:
+CDXC:Workarea 2026-06-24-05:58:
 This source-side runtime scaffold adds GPUI-owned Source/Kanban/Manage CEF surface ownership slots after the existing ready runtime-parity and placeholder-preflight evidence. The slots are CEF-only and normal-layout only, require a future issued runtime URL before any CefSurface can be created, keep Browser excluded because Browser owns tab-scoped CEF surfaces, and do not create URLs, CEF surfaces, hidden mounts, private runtime data, logging/persistence, file bridges, file I/O, or placeholder replacement.
 -->
 
@@ -3171,7 +3171,7 @@ This source-side runtime scaffold adds GPUI-owned Source/Kanban/Manage CEF surfa
 ### 2026-06-24-06:13 Task slice 264
 
 <!--
-CDXC:GPUIProjectWorkareaRuntimeUrlIssuance 2026-06-24-06:13:
+CDXC:Workarea 2026-06-24-06:13:
 This source-side runtime URL issuance boundary adds typed Source/Kanban/Manage decisions after ready runtime-parity, placeholder-preflight, and ownership-slot evidence. The decisions are CEF-only and normal-layout-only, keep Browser excluded because Browser already owns tab-scoped CEF, require future real URL authority before issuing any runtime URL, and currently record no authority, no issued URL, no retained URL value, no CefSurface creation, no code-server/file-bridge/file-I/O payload, no hidden/offscreen mount, no private runtime data/logging/persistence, and no placeholder replacement.
 -->
 
@@ -3189,7 +3189,7 @@ This source-side runtime URL issuance boundary adds typed Source/Kanban/Manage d
 ### 2026-06-24-06:24 Task slice 265
 
 <!--
-CDXC:GPUIProjectWorkareaSourceStartupNavigationReadiness 2026-06-24-06:24:
+CDXC:Workarea 2026-06-24-06:24:
 This source-side Source startup navigation readiness boundary derives only from the Source runtime URL issuance decision. It mirrors macOS source truth as evidence only: Source/code-mode panes are CEF-backed and normal-layout-only, first code-server navigation remains deferred until a future runtime readiness gate succeeds and an issued runtime URL exists, Browser/Kanban/Manage do not use this Source startup wait, and current source records no direct Source navigation, URL value, URL scheme/host payload, code-server startup, CefSurface creation, hidden/offscreen mount, fallback probe, private payload, logging/persistence, placeholder replacement, validation, or app check.
 -->
 
@@ -3207,7 +3207,7 @@ This source-side Source startup navigation readiness boundary derives only from 
 ### 2026-06-24-06:37 Task slice 266
 
 <!--
-CDXC:GPUIProjectWorkareaSourceRuntimeCefSurfaceOwnerGate 2026-06-24-06:37:
+CDXC:Workarea 2026-06-24-06:37:
 This Source-only runtime CEF surface owner/creation gate is implementation prep after Source startup navigation readiness. It keeps Source CEF-only and normal-layout-only, wires refresh/render bookkeeping to the future owner slot, and keeps placeholder replacement blocked until runtime readiness, real URL authority, issued runtime URL, code-server process availability, CEF surface creation, and explicit replacement permission exist without storing URL values, project identity, private payloads, hidden mounts, logs, persistence, or a CefSurface entity.
 -->
 
@@ -3225,7 +3225,7 @@ This Source-only runtime CEF surface owner/creation gate is implementation prep 
 ### 2026-06-24-06:49 Task slice 267
 
 <!--
-CDXC:GPUIProjectWorkareaKanbanRuntimeCefSurfaceOwnerGate 2026-06-24-06:49:
+CDXC:Workarea 2026-06-24-06:49:
 This Kanban-only runtime CEF surface owner/creation gate is implementation prep after the Kanban runtime URL issuance decision. It keeps Kanban CEF-only and normal-layout-only, wires refresh/render bookkeeping to the future owner slot, and keeps placeholder replacement blocked until real URL authority, issued runtime URL, CEF surface creation, and explicit replacement permission exist without storing URL values, project identity, private payloads, hidden mounts, logs, persistence, or a CefSurface entity.
 -->
 
@@ -3243,7 +3243,7 @@ This Kanban-only runtime CEF surface owner/creation gate is implementation prep 
 ### 2026-06-24-07:00 Task slice 268
 
 <!--
-CDXC:GPUIProjectWorkareaManageRuntimeCefSurfaceOwnerGate 2026-06-24-07:00:
+CDXC:Workarea 2026-06-24-07:00:
 This Manage-only runtime CEF/file-bridge owner/creation gate is implementation prep after the Manage runtime URL issuance decision. It keeps Manage CEF-only and normal-layout-only, wires refresh/render bookkeeping to the future owner slot, and keeps placeholder replacement blocked until real URL authority, issued runtime URL, CEF surface creation, runtime file-bridge mounting, runtime file-operation execution, and explicit replacement permission exist without storing URL values, project identity, private file/runtime payloads, hidden mounts, logs, persistence, or a CefSurface entity.
 -->
 
@@ -3262,7 +3262,7 @@ This Manage-only runtime CEF/file-bridge owner/creation gate is implementation p
 ### 2026-06-24-07:10 Task slice 269
 
 <!--
-CDXC:GPUIWorkspaceParityHandoff 2026-06-24-07:10:
+CDXC:RepoStructure 2026-06-24-07:10:
 Slice 269 cleans up a current-state wording mismatch after slice 268. Source, Kanban, and Manage owner gates remain accepted source-ledger guardrails against premature replacement, not current source-ledger blockers or runtime CEF/file-bridge surfaces.
 -->
 
@@ -3276,7 +3276,7 @@ Slice 269 cleans up a current-state wording mismatch after slice 268. Source, Ka
 ### 2026-06-24-07:18 Task slice 270
 
 <!--
-CDXC:GPUIWorkspaceParityHandoff 2026-06-24-07:18:
+CDXC:RepoStructure 2026-06-24-07:18:
 Slice 270 records the latest requirement change: source-only CEF contracts are runtime parity for this pass, terminal is accepted as working, and runtime checks are user-side. Future web-pane work must stay CEF-only and must not add WKWebView/WebKit/non-CEF paths or fallback runtime probes.
 -->
 
@@ -3291,7 +3291,7 @@ Slice 270 records the latest requirement change: source-only CEF contracts are r
 ### 2026-06-24-07:23 Task slice 271
 
 <!--
-CDXC:GPUIWorkspaceParityHandoff 2026-06-24-07:23:
+CDXC:RepoStructure 2026-06-24-07:23:
 This bounded docs-only audit removes active handoff wording that still treated source-only CEF parity as insufficient for this pass. Source, Browser, Kanban, and Manage CEF-only source contracts remain the accepted runtime parity target, terminal remains accepted, runtime checks are user-side, and future web panes must stay CEF-only with WKWebView/WebKit/non-CEF paths rejected.
 -->
 
@@ -3305,7 +3305,7 @@ This bounded docs-only audit removes active handoff wording that still treated s
 ### 2026-06-24-07:25 Task slice 272
 
 <!--
-CDXC:GPUIProjectEditorPlaceholders 2026-06-24-07:25:
+CDXC:CodeEditor 2026-06-24-07:25:
 This source-only UI-copy slice removes stale visible placeholder wording that said Source, Kanban, or Manage parity was deferred. The placeholders now describe current GPUI shell representation for the source-only/CEF-only parity pass without mounting CEF, replacing placeholders, exposing private details, or adding WKWebView/WebKit/non-CEF paths.
 -->
 
@@ -3319,7 +3319,7 @@ This source-only UI-copy slice removes stale visible placeholder wording that sa
 ### 2026-06-24-07:27 Task slice 273
 
 <!--
-CDXC:GPUIProjectEditorPlaceholders 2026-06-24-07:27:
+CDXC:CodeEditor 2026-06-24-07:27:
 This source-only UI-copy slice aligns Source, Kanban, and Manage placeholder titles with the accepted source-only/CEF-only parity direction. Titles must be user-facing mode names while remaining non-mounting, private-detail-free, and free of WKWebView/WebKit/non-CEF runtime paths.
 -->
 
@@ -3332,7 +3332,7 @@ This source-only UI-copy slice aligns Source, Kanban, and Manage placeholder tit
 ### 2026-06-24-07:30 Task slice 274
 
 <!--
-CDXC:GPUIProjectEditorSleepingPlaceholder 2026-06-24-07:30:
+CDXC:CodeEditor 2026-06-24-07:30:
 This source-only UI-copy slice makes sleeping/restored Source, Browser, Kanban, and Manage card messages surface-oriented instead of placeholder-oriented. The copy must stay private-detail-free, non-mounting, and aligned with the current source-only/CEF-only parity pass without WKWebView/WebKit/non-CEF paths.
 -->
 
@@ -3346,7 +3346,7 @@ This source-only UI-copy slice makes sleeping/restored Source, Browser, Kanban, 
 ### 2026-06-24-07:33 Task slice 275
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-24-07:33:
+CDXC:CommandPane 2026-06-24-07:33:
 This source-only UI-copy slice keeps command-pane control chrome command-oriented instead of placeholder-oriented. The new-command control remains non-launching and private-detail-free, creating only the existing source shell state without terminal/CEF runtime work.
 -->
 
@@ -3359,7 +3359,7 @@ This source-only UI-copy slice keeps command-pane control chrome command-oriente
 ### 2026-06-24-07:35 Task slice 276
 
 <!--
-CDXC:GPUITerminalPresentationState 2026-06-24-07:35:
+CDXC:Terminal 2026-06-24-07:35:
 This source-only UI-copy slice keeps terminal presentation-state messages terminal-oriented instead of placeholder-oriented. Sleeping and mounting copy must honestly describe pending wake/materialization state while remaining non-launching, private-detail-free, and runtime-check deferred to the user.
 -->
 
@@ -3373,7 +3373,7 @@ This source-only UI-copy slice keeps terminal presentation-state messages termin
 ### 2026-06-24-07:38 Task slice 277
 
 <!--
-CDXC:GPUITerminalMissingSessionCopy 2026-06-24-07:38:
+CDXC:Terminal 2026-06-24-07:38:
 This source-only UI-copy slice keeps selected-terminal missing-session body copy terminal/surface-oriented and private-detail-free. Runtime checks remain user-side, validation/app commands stay deferred, and future web-pane work remains CEF-only with WKWebView/WebKit/non-CEF paths rejected.
 -->
 
@@ -3387,7 +3387,7 @@ This source-only UI-copy slice keeps selected-terminal missing-session body copy
 ### 2026-06-24-07:41 Task slice 278
 
 <!--
-CDXC:GPUIWorkspaceParityHandoff 2026-06-24-07:41:
+CDXC:RepoStructure 2026-06-24-07:41:
 Slice 278 aligns GPUI source comments with the current source-only/CEF-only parity requirement. Source, Kanban, and Manage source-ledger contracts are accepted for this pass, future web-pane runtime replacement must be explicit and CEF-only, and runtime checks remain user-side with no WKWebView/WebKit/non-CEF path.
 -->
 
@@ -3399,7 +3399,7 @@ Slice 278 aligns GPUI source comments with the current source-only/CEF-only pari
 ### 2026-06-24-07:46 Task slice 279
 
 <!--
-CDXC:GPUIWorkspaceParityCommentCleanup 2026-06-24-07:46:
+CDXC:RepoStructure 2026-06-24-07:46:
 Slice 279 is source-only comment cleanup for GPUI Phase 10 ledger/test comments. Source, Browser, Kanban, and Manage source-ledger CEF contracts are accepted for this pass, terminal is accepted as working, runtime checks are user-side, and future web-pane runtime work must be explicit, CEF-only, normal-layout-only, privacy-safe, and reject WKWebView/WebKit/non-CEF paths.
 -->
 
@@ -3412,7 +3412,7 @@ Slice 279 is source-only comment cleanup for GPUI Phase 10 ledger/test comments.
 ### 2026-06-24-07:49 Task slice 280
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-07:49:
+CDXC:RepoStructure 2026-06-24-07:49:
 Slice 280 is docs-only alignment after the source-comment cleanup. Source, Browser, Kanban, and Manage source-ledger CEF contracts are accepted for this pass, terminal is accepted as working, runtime checks are user-side, and future web-pane runtime work must be explicit, CEF-only, normal-layout-only, privacy-safe, and reject WKWebView/WebKit/non-CEF paths.
 -->
 
@@ -3425,7 +3425,7 @@ Slice 280 is docs-only alignment after the source-comment cleanup. Source, Brows
 ### 2026-06-24-07:55 Task slice 281
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-07:55:
+CDXC:RepoStructure 2026-06-24-07:55:
 Slice 281 is docs-only active Phase 5-7 handoff alignment. Source CEF/code-server, Kanban CEF, and Manage CEF/file-bridge source-ledger contracts are accepted after the 07:18 source-only/CEF-only requirement; active docs must not reopen those blockers while runtime instantiation, runtime URL issuance, file I/O, placeholder replacement, and runtime checks remain user-side or future explicit CEF-only work with no WKWebView/WebKit/non-CEF path.
 -->
 
@@ -3437,7 +3437,7 @@ Slice 281 is docs-only active Phase 5-7 handoff alignment. Source CEF/code-serve
 ### 2026-06-24-08:02 Task slice 282
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:02:
+CDXC:RepoStructure 2026-06-24-08:02:
 Slice 282 is docs-only Phase 6 Kanban small-slice wording cleanup. Kanban source-ledger CEF contracts are accepted for this pass; readiness remains source-only and must not be widened into runtime CEF instantiation, runtime URL issuance, hidden mounts, placeholder replacement, fallback probes, logging/persistence/private payloads, or WKWebView/WebKit/non-CEF paths.
 -->
 
@@ -3449,7 +3449,7 @@ Slice 282 is docs-only Phase 6 Kanban small-slice wording cleanup. Kanban source
 ### 2026-06-24-08:04 Task slice 283
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:04:
+CDXC:RepoStructure 2026-06-24-08:04:
 Slice 283 is docs-only active Phase 1/2/4 acceptance wording cleanup. Phase 1 bridge contracts and Phase 2/4 terminal source evidence are accepted for the source-ledger pass, terminal is accepted as working, runtime proof remains user-side, validation/app/check commands stay banned, and future web panes remain CEF-only with no WKWebView/WebKit/non-CEF path.
 -->
 
@@ -3462,7 +3462,7 @@ Slice 283 is docs-only active Phase 1/2/4 acceptance wording cleanup. Phase 1 br
 ### 2026-06-24-08:07 Task slice 284
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:07:
+CDXC:RepoStructure 2026-06-24-08:07:
 Slice 284 is docs-only Phase 2 heading cleanup. Active Phase 2 headings must reflect accepted terminal source evidence for this pass, with runtime proof remaining user-side, validation/app/check commands banned, and future web panes CEF-only with no WKWebView/WebKit/non-CEF path.
 -->
 
@@ -3475,7 +3475,7 @@ Slice 284 is docs-only Phase 2 heading cleanup. Active Phase 2 headings must ref
 ### 2026-06-24-08:09 Task slice 285
 
 <!--
-CDXC:GPUIKanbanLifecycle 2026-06-24-08:09:
+CDXC:ProjectBoard 2026-06-24-08:09:
 Slice 285 is source-comment cleanup for Kanban lifecycle. Kanban source-ledger CEF contracts are accepted for this pass; source-only work counts as runtime parity here, terminal is accepted as working, runtime checks remain user-side, and sleep/wake/lifecycle remains separate from runtime CEF instantiation, runtime URL issuance, hidden mounts, placeholder replacement, real hide/suspend/wake proof, fallback probes, logging/persistence/private payloads, and WKWebView/WebKit/non-CEF paths.
 -->
 
@@ -3488,7 +3488,7 @@ Slice 285 is source-comment cleanup for Kanban lifecycle. Kanban source-ledger C
 ### 2026-06-24-08:13 Task slice 286
 
 <!--
-CDXC:GPUIProjectWorkareaLifecycle 2026-06-24-08:13:
+CDXC:Workarea 2026-06-24-08:13:
 Slice 286 is source-only Kanban/Manage lifecycle placeholder wording cleanup. Source-ledger CEF/file-bridge contracts are accepted for this pass; no source-ledger blockers remain, while runtime CEF/file-bridge instantiation, runtime URLs, placeholder replacement, runtime checks, and future web-pane work remain user-side or future explicit CEF-only work.
 -->
 
@@ -3501,7 +3501,7 @@ Slice 286 is source-only Kanban/Manage lifecycle placeholder wording cleanup. So
 ### 2026-06-24-08:16 Task slice 287
 
 <!--
-CDXC:GPUIWorkspaceParityCommentCleanup 2026-06-24-08:16:
+CDXC:RepoStructure 2026-06-24-08:16:
 Slice 287 is source-only GPUI comment cleanup. Kanban source-ledger CEF contracts and Manage source-ledger CEF/file-bridge contracts are accepted for this pass; runtime CEF/file-bridge instantiation, runtime URL issuance, file I/O, explicit placeholder replacement permission, and runtime checks remain user-side/future explicit CEF-only work.
 -->
 
@@ -3516,7 +3516,7 @@ Slice 287 is source-only GPUI comment cleanup. Kanban source-ledger CEF contract
 ### 2026-06-24-08:19 Task slice 288
 
 <!--
-CDXC:GPUIWorkspaceParityCommentCleanup 2026-06-24-08:19:
+CDXC:RepoStructure 2026-06-24-08:19:
 Slice 288 is source/docs wording cleanup for remaining Kanban accepted-contract and sleep/wake phrasing. Kanban source-ledger CEF entrypoint, materialization, runtime-parity, lifecycle, and placeholder-preflight contracts are accepted for this pass; runtime checks plus runtime CEF/file-bridge/URL issuance/placeholder replacement remain user-side or future explicit CEF-only work.
 -->
 
@@ -3530,10 +3530,10 @@ Slice 288 is source/docs wording cleanup for remaining Kanban accepted-contract 
 ### 2026-06-24-08:21 Task slice 289
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:21:
+CDXC:RepoStructure 2026-06-24-08:21:
 Slice 289 is docs/progress wording cleanup for Source Phase 5 accepted lifecycle state. Source loading/load-failed lifecycle visibility and static copy are accepted source-ledger evidence for this pass; runtime Source CEF/code-server instantiation, runtime URL issuance, first navigation, hide/suspend/wake proof, and placeholder replacement remain user-side or future explicit CEF-only work, and copy must not be promoted into runtime UI replacement or running-app evidence.
 
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:21:
+CDXC:RepoStructure 2026-06-24-08:21:
 Review cleanup also reclassifies the remaining Phase 6 Kanban sleep/wake status sentence as accepted source-only lifecycle bridge state and copy instead of active bridge blockers. Runtime Kanban hide/suspend/wake proof, CEF instantiation, runtime URL issuance, and placeholder replacement remain user-side or future explicit CEF-only work.
 -->
 
@@ -3548,7 +3548,7 @@ Review cleanup also reclassifies the remaining Phase 6 Kanban sleep/wake status 
 ### 2026-06-24-08:24 Task slice 290
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:24:
+CDXC:RepoStructure 2026-06-24-08:24:
 Slice 290 is docs/progress wording cleanup for Phase 7 Manage small-slice status. Manage feature gating, project/workarea identity, availability/coercion, project-context routing, identity reset, lifecycle bridge states/copy, and shell sleep/wake identity preservation are accepted source-ledger evidence; runtime Manage CEF/file-bridge surface update/instantiation, runtime URL issuance, file I/O, placeholder replacement, hide/suspend/wake proof, and runtime checks remain user-side or future explicit CEF-only work.
 -->
 
@@ -3562,7 +3562,7 @@ Slice 290 is docs/progress wording cleanup for Phase 7 Manage small-slice status
 ### 2026-06-24-08:27 Task slice 291
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:27:
+CDXC:RepoStructure 2026-06-24-08:27:
 Slice 291 is docs/progress wording cleanup for Phase 5 Source and Phase 6 Kanban small-slice and acceptance headings. Source CEF/code-server contracts and Kanban CEF contracts are accepted source-ledger state for this pass; runtime Source/Kanban CEF instantiation, runtime URL issuance, first Source navigation, hide/suspend/wake proof, placeholder replacement, and runtime checks remain user-side or future explicit CEF-only work.
 -->
 
@@ -3577,7 +3577,7 @@ Slice 291 is docs/progress wording cleanup for Phase 5 Source and Phase 6 Kanban
 ### 2026-06-24-08:32 Task slice 292
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:32:
+CDXC:RepoStructure 2026-06-24-08:32:
 Slice 292 is docs/progress wording cleanup for Phase 7 Manage small-slice and acceptance headings. Manage CEF/file-bridge source-ledger contracts are accepted for this pass; runtime Manage CEF/file-bridge instantiation, runtime URL issuance, file-operation execution, hide/suspend/wake proof, placeholder replacement, and runtime checks remain user-side or future explicit CEF-only work.
 -->
 
@@ -3591,7 +3591,7 @@ Slice 292 is docs/progress wording cleanup for Phase 7 Manage small-slice and ac
 ### 2026-06-24-08:36 Task slice 293
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:36:
+CDXC:RepoStructure 2026-06-24-08:36:
 Slice 293 is docs/progress wording cleanup for Phase 8 Browser small-slice and acceptance wording. Browser generated profiles, active profile persistence, profile-owned tabs/surfaces, beta-only Profile visibility, Settings-selected feedback injection boundaries, tab-owned CEF identity, CEF-only hide-and-hold/restored-placeholder lifecycle, popup no-transfer behavior, shell sleep/wake preservation, sanitized persistence, strict readiness outside Phase 1, Phase 1 browserWorkareaId rejection, and existing tab-owned CEF visibility are accepted source-ledger state; runtime Browser checks and future content-transfer/CEF lifecycle changes remain user-side or future explicit CEF-only work.
 -->
 
@@ -3605,7 +3605,7 @@ Slice 293 is docs/progress wording cleanup for Phase 8 Browser small-slice and a
 ### 2026-06-24-08:40 Task slice 294
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:40:
+CDXC:RepoStructure 2026-06-24-08:40:
 Slice 294 is docs/progress wording cleanup for Phase 3 terminal lifecycle and Phase 4 command terminal source-ledger labels. Terminal and command terminal source/runtime evidence remains accepted for this pass; runtime proof remains user-side, validation/app/check commands remain outside this workflow, slice 488 supersedes the old command-launch producer gap with exact-slot Action/plain-cwd producers, and slice 489 supersedes the old Action status gap with run ids, status-file polling, completion feedback, and exit cleanup.
 -->
 
@@ -3619,7 +3619,7 @@ Slice 294 is docs/progress wording cleanup for Phase 3 terminal lifecycle and Ph
 ### 2026-06-24-08:39 Task slice 295
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:39:
+CDXC:RepoStructure 2026-06-24-08:39:
 Slice 295 aligns the remaining Source persistence label with the source-only runtime-parity rule. Source persistence privacy-boundary evidence is accepted for this source-ledger pass; runtime Source CEF/code-server instantiation, URL issuance, first navigation, hide/suspend/wake proof, placeholder replacement, runtime checks, and validation/app/check commands remain user-side or future explicit CEF-only work.
 -->
 
@@ -3631,7 +3631,7 @@ Slice 295 aligns the remaining Source persistence label with the source-only run
 ### 2026-06-24-08:41 Task slice 296
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:41:
+CDXC:RepoStructure 2026-06-24-08:41:
 Slice 296 is docs/progress cleanup for the Phase 3 popped-out parked-owner/reattach wording. The no-duplicate parked-owner/reattach contract remains accepted source-ledger evidence for this pass; running/app proof remains user-side outside the current no-validation workflow and is not a source-ledger blocker.
 -->
 
@@ -3644,7 +3644,7 @@ Slice 296 is docs/progress cleanup for the Phase 3 popped-out parked-owner/reatt
 ### 2026-06-24-08:44 Task slice 297
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:44:
+CDXC:RepoStructure 2026-06-24-08:44:
 Slice 297 is docs-only Phase 10 guardrail wording cleanup. The Phase 10 table is source-ledger guardrail evidence with accepted evidence and runtime/user-side caveats, not current signoff blockers; Source, Browser, Kanban, and Manage remain CEF-only for this pass, terminal remains accepted as working, and runtime checks stay user-side.
 -->
 
@@ -3657,7 +3657,7 @@ Slice 297 is docs-only Phase 10 guardrail wording cleanup. The Phase 10 table is
 ### 2026-06-24-08:46 Task slice 298
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:46:
+CDXC:RepoStructure 2026-06-24-08:46:
 Slice 298 is source/docs/comment cleanup for current Phase 10 guardrail-ledger terminology. The mirrored source ledger/table is a source-level guardrail ledger/table with accepted evidence and runtime/user-side caveats, not current signoff blockers; source-only assumptions without explicit contracts still do not clear guardrails or authorize placeholder replacement, runtime signoff, or validation.
 -->
 
@@ -3670,7 +3670,7 @@ Slice 298 is source/docs/comment cleanup for current Phase 10 guardrail-ledger t
 ### 2026-06-24-08:51 Task slice 299
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:51:
+CDXC:RepoStructure 2026-06-24-08:51:
 Slice 299 narrows Phase 10 acceptance from final/runtime parity wording to source-ledger acceptance for this pass. Terminal and command pane evidence, Source/Browser/Kanban/Manage CEF-only source-ledger parity, and layout/focus/sleep/wake/persistence guardrails are accepted for the source ledger; runtime checks stay user-side, and future real web-pane work must be explicit, CEF-only, privacy-safe, normal-layout-only, and avoid fallback paths, private payloads, non-CEF paths, hidden overlap, and accidental placeholder replacement.
 -->
 
@@ -3684,7 +3684,7 @@ Slice 299 narrows Phase 10 acceptance from final/runtime parity wording to sourc
 ### 2026-06-24-08:54 Task slice 300
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:54:
+CDXC:RepoStructure 2026-06-24-08:54:
 Slice 300 is docs-only placeholder-retirement wording cleanup for Phase 10. Placeholder-only paths remain until future runtime facts exist: the matching real runtime CEF/code-server, CEF, or CEF/file-bridge surface as applicable, a normal-layout child surface, issued runtime URL/authority where applicable, explicit placeholder replacement permission, and user/runtime proof; accepted source-ledger materialization contracts alone do not authorize removal.
 -->
 
@@ -3697,7 +3697,7 @@ Slice 300 is docs-only placeholder-retirement wording cleanup for Phase 10. Plac
 ### 2026-06-24-08:56 Task slice 301
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:56:
+CDXC:RepoStructure 2026-06-24-08:56:
 Slice 301 is docs-only Suggested Orchestrator Order cleanup. User-side runtime-check wording must list only Source, Browser, Kanban, and Manage for this source-ledger pass because terminal is already accepted as working/source-ledger state; future web-pane runtime work remains CEF-only and must reject WKWebView/WebKit/non-CEF paths.
 -->
 
@@ -3711,7 +3711,7 @@ Slice 301 is docs-only Suggested Orchestrator Order cleanup. User-side runtime-c
 ### 2026-06-24-08:59 Task slice 302
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-08:59:
+CDXC:RepoStructure 2026-06-24-08:59:
 Slice 302 is docs-only Phase 10 current-status lifecycle wording cleanup. Source loading/ready/load-failed state and Manage lifecycle state/copy are accepted source-only lifecycle bridge evidence for this pass, not source-ledger blockers; runtime checks remain user-side and future Source/Browser/Kanban/Manage runtime work must be explicit, CEF-only, privacy-safe, normal-layout-only, and reject WKWebView/WebKit/non-CEF paths.
 -->
 
@@ -3725,7 +3725,7 @@ Slice 302 is docs-only Phase 10 current-status lifecycle wording cleanup. Source
 ### 2026-06-24-09:03 Task slice 303
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:03:
+CDXC:RepoStructure 2026-06-24-09:03:
 Slice 303 records the latest source-only parity requirement. Source-only implementation evidence is the runtime-parity unit for this pass, terminal is accepted as working, Source/Browser/Kanban/Manage panes must stay CEF-only for cross-platform parity, and WKWebView/WebKit/non-CEF names may appear only as rejected labels or guardrail evidence, never implementation targets or fallback paths.
 -->
 
@@ -3740,7 +3740,7 @@ Slice 303 records the latest source-only parity requirement. Source-only impleme
 ### 2026-06-24-09:07 Task slice 304
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:07:
+CDXC:RepoStructure 2026-06-24-09:07:
 Slice 304 is a source-only docs/progress alignment for the Browser privacy JSON tightening. Browser runtime-parity evidence should expose only the accepted `cef` engine label plus generic unsupported-engine rejection; WKWebView/WebKit-specific capability fields must stay absent, and WKWebView/WebKit/non-CEF names remain rejected-label or guardrail evidence only.
 -->
 
@@ -3753,7 +3753,7 @@ Slice 304 is a source-only docs/progress alignment for the Browser privacy JSON 
 ### 2026-06-24-09:09 Task slice 305
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:09:
+CDXC:RepoStructure 2026-06-24-09:09:
 Slice 305 is a source-only docs/progress alignment for the active Browser handoff after slice 304. Browser runtime-parity privacy JSON exposes only the accepted `cef` engine label plus generic unsupported-engine rejection, with no WKWebView/WebKit-specific capability fields; runtime checks remain user-side.
 -->
 
@@ -3767,7 +3767,7 @@ Slice 305 is a source-only docs/progress alignment for the active Browser handof
 ### 2026-06-24-09:12 Task slice 306
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:12:
+CDXC:RepoStructure 2026-06-24-09:12:
 Slice 306 is source-only Phase 10 status alignment for the Browser shell/runtime row. Browser runtime parity now records existing tab-owned CEF visibility, accepted `cef` engine evidence, generic unsupported-engine rejection, and no WKWebView/WebKit-specific capability fields; no runtime CEF creation, content transfer, suspend/teardown, hidden surface, private persistence/logging, restored-placeholder replacement, or agent-side runtime check was added.
 -->
 
@@ -3780,7 +3780,7 @@ Slice 306 is source-only Phase 10 status alignment for the Browser shell/runtime
 ### 2026-06-24-09:15 Task slice 307
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:15:
+CDXC:RepoStructure 2026-06-24-09:15:
 Slice 307 is source-only Phase 10 pane-engine policy alignment. The shared Source/Browser/Kanban/Manage CEF-only policy now carries Browser privacy JSON evidence as accepted `cef` plus generic unsupported-engine rejection, with no WKWebView/WebKit-specific capability fields and no runtime CEF, URL, code-server, file-bridge, file I/O, hidden/private surface, placeholder replacement, or non-CEF path.
 -->
 
@@ -3793,7 +3793,7 @@ Slice 307 is source-only Phase 10 pane-engine policy alignment. The shared Sourc
 ### 2026-06-24-09:19 Task slice 308
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:19:
+CDXC:RepoStructure 2026-06-24-09:19:
 Slice 308 keeps the active progress ledger itself grepable for the latest CEF-only/source-only requirement. Slices 306 and 307 now carry CDXC comments that source-only runtime parity accepts CEF evidence only, Browser privacy JSON exposes accepted `cef` plus generic unsupported-engine rejection, terminal is accepted as working, and runtime checks stay user-side with no WKWebView/WebKit/non-CEF path.
 -->
 
@@ -3807,7 +3807,7 @@ Slice 308 keeps the active progress ledger itself grepable for the latest CEF-on
 ### 2026-06-24-09:22 Task slice 309
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:22:
+CDXC:RepoStructure 2026-06-24-09:22:
 Slice 309 aligns the Phase 1 active handoff with the latest source-only runtime-parity requirement. Phase 1 source-side bridge evidence counts as the source-only runtime-parity unit for this pass, while validation, app launch/restart, visual automation, and running-app proof remain user-side checks and Browser identity remains excluded from the active-project snapshot.
 -->
 
@@ -3820,7 +3820,7 @@ Slice 309 aligns the Phase 1 active handoff with the latest source-only runtime-
 ### 2026-06-24-09:24 Task slice 310
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:24:
+CDXC:RepoStructure 2026-06-24-09:24:
 Slice 310 is a source-only Phase 2 handoff wording fix. Terminal source/runtime evidence remains accepted as working for this pass, so Phase 2 keeps historical/runtime proof caveats without listing terminal as remaining user-side runtime-check work; Source/Browser/Kanban/Manage runtime checks remain user-side, future web panes stay CEF-only with WKWebView/WebKit/non-CEF paths rejected, and validation/app/check commands remain outside this workflow.
 -->
 
@@ -3833,7 +3833,7 @@ Slice 310 is a source-only Phase 2 handoff wording fix. Terminal source/runtime 
 ### 2026-06-24-09:27 Task slice 311
 
 <!--
-CDXC:GPUITerminalLifecycle 2026-06-24-09:27:
+CDXC:Terminal 2026-06-24-09:27:
 Slice 311 is a source-only Phase 3 terminal lifecycle handoff wording fix. Terminal is accepted as working for this pass, so Phase 3 preserves accepted source/runtime evidence, validation-forbidden caveats, clipboard/physical-key limits, explicit future launch-payload contracts, and no fallback startup/duplicate-owner rules without queuing terminal runtime proof/checks; Source/Browser/Kanban/Manage runtime checks remain user-side.
 -->
 
@@ -3846,7 +3846,7 @@ Slice 311 is a source-only Phase 3 terminal lifecycle handoff wording fix. Termi
 ### 2026-06-24-09:29 Task slice 312
 
 <!--
-CDXC:GPUICommandTerminalRuntime 2026-06-24-09:29:
+CDXC:Terminal 2026-06-24-09:29:
 Slice 312 is a source-only Phase 4 command terminal handoff wording fix. Terminal and command terminal are accepted as working for this pass, so Phase 4 preserves exact-slot command launch producer limits, Action status-file lifecycle limits, future generalized non-Action status product decisions, exact clipboard handoff limits, physical-key product acceptance, and shell-only cross-surface transfer caveats without queuing command terminal runtime proof/checks; Source/Browser/Kanban/Manage runtime checks remain user-side.
 -->
 
@@ -3859,7 +3859,7 @@ Slice 312 is a source-only Phase 4 command terminal handoff wording fix. Termina
 ### 2026-06-24-09:37 Task slice 313
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-24-09:37:
+CDXC:RepoStructure 2026-06-24-09:37:
 Slice 313 records a progress-only source audit of the active Phase 8-10 handoff, requirements, and progress ledger. Source/Browser/Kanban/Manage source-only CEF parity counts for this pass, terminal and command terminal are accepted as working, runtime checks remain user-side, Phase 9 validation stays outside the agent workflow, and no concrete new source-ledger mismatch was found to patch.
 -->
 
@@ -3871,7 +3871,7 @@ Slice 313 records a progress-only source audit of the active Phase 8-10 handoff,
 ### 2026-06-24-10:12 Task slice 314
 
 <!--
-CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+CDXC:Workarea 2026-06-24-10:12:
 Slice 314 starts the permanent app-level Source/Kanban/Manage CEF runtime-surface wiring. GPUI now owns typed CefSurface storage for those slots and render/visibility helpers, but creation still requires a caller-provided real runtime URL value and existing replacement gates; absent URL authority keeps the placeholders without fake pages, WKWebView/WebKit, hidden mounts, fallback URLs, validation, app launch/restart, or visual automation.
 -->
 
@@ -3885,7 +3885,7 @@ Slice 314 starts the permanent app-level Source/Kanban/Manage CEF runtime-surfac
 ### 2026-06-24-11:03 Task slice 315
 
 <!--
-CDXC:GPUIProjectWorkareaCefBridge 2026-06-24-11:03:
+CDXC:CefRuntime 2026-06-24-11:03:
 Slice 315 implements real GPUI Kanban and Manage CEF runtime surfaces instead of WKWebView/WebKit panes or placeholder pages. Kanban and Manage now have bundled first-party CEF HTML entries, a fixed-function CEF renderer bridge, real active-project URL issuance for their workarea slots, gxserver-backed Kanban Beads execution, path/reference-based Project Board image handling, and a scoped Manage file bridge. This remains source-only by request: agents did not run validation, checks, app launch/restart, browser automation, visual proof, `bun run start`, or whitespace checks.
 -->
 
@@ -3902,7 +3902,7 @@ Slice 315 implements real GPUI Kanban and Manage CEF runtime surfaces instead of
 ### 2026-06-24-23:17 Task slice 316
 
 <!--
-CDXC:GPUICommandPane 2026-06-24-23:17:
+CDXC:CommandPane 2026-06-24-23:17:
 Slice 316 wires shared SidebarApp `runSidebarCommand` into the GPUI app action path so project terminal Actions create command-pane terminals like titlebar Actions instead of no-oping. The sidebar sends only live gxserver HUD action metadata through a fixed CEF bridge; Rust strictly parses that payload, reuses the existing Browser/action runner, and launches terminal Actions through the command-pane Ghostty launch-command payload instead of visible initial input.
 -->
 
@@ -3917,7 +3917,7 @@ Slice 316 wires shared SidebarApp `runSidebarCommand` into the GPUI app action p
 ### 2026-06-24-23:33 Task slice 317
 
 <!--
-CDXC:GPUISourceRuntime 2026-06-24-23:33:
+CDXC:CodeEditor 2026-06-24-23:33:
 Slice 317 gives the GPUI Source workarea the same shared code-server runtime shape as the macOS app. Source now derives the folder URL only from the strict sidebar snapshot, starts the app-owned Web/code-server runtime on 127.0.0.1:3775 in the background, waits for /healthz before creating the Source CEF child, and keeps process/URL/path state runtime-only instead of logging or persisting it.
 -->
 
@@ -3931,7 +3931,7 @@ Slice 317 gives the GPUI Source workarea the same shared code-server runtime sha
 ### 2026-06-24-23:36 Task slice 318
 
 <!--
-CDXC:GPUICommandPane 2026-06-24-23:36:
+CDXC:CommandPane 2026-06-24-23:36:
 Slice 318 closes the next macOS command-pane parity gap for GPUI Actions: repeated terminal Actions now reuse a matching idle command-pane tab, mark that tab Working while the hidden wrapper runs, and clear it back to Idle from the same session-state file contract the wrapper writes. Action ids, run ids, status paths, command text, cwd/env, stdout/stderr, and terminal content remain live-only and out of shell-state JSON.
 -->
 
@@ -3944,7 +3944,7 @@ Slice 318 closes the next macOS command-pane parity gap for GPUI Actions: repeat
 ### 2026-06-24-23:49 Task slice 319
 
 <!--
-CDXC:GPUICommandPane 2026-06-24-23:49:
+CDXC:CommandPane 2026-06-24-23:49:
 Slice 319 adds the macOS-style command Action feedback loop to GPUI: the sidebar runtime accepts Rust-owned host messages, terminal Actions carry their per-action completion-sound preference, GPUI posts running/success/error button state by command id/run id, and command exits play the configured action completion sound on failure or when the action opted in. Feedback remains live-only and excludes command text, cwd/env, terminal output, status-file paths, project names, tokens, logs, and shell-state persistence.
 -->
 
@@ -3958,7 +3958,7 @@ Slice 319 adds the macOS-style command Action feedback loop to GPUI: the sidebar
 ### 2026-06-25-10:29 Task slice 320
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-10:29:
+CDXC:CommandPane 2026-06-25-10:29:
 Slice 320 adds the macOS Debug Action branch to GPUI command Actions. The sidebar bridge now forwards terminal-only `runMode:"debug"`, Rust strictly parses it, and debug runs create a normal visible Agents workspace terminal titled `Debug: <Action>` with visible Atuin-ignored initial input instead of using command-pane reuse, status files, hidden wrappers, or sidebar run-state feedback.
 -->
 
@@ -3972,7 +3972,7 @@ Slice 320 adds the macOS Debug Action branch to GPUI command Actions. The sideba
 ### 2026-06-25-10:34 Task slice 321
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-10:34:
+CDXC:CommandPane 2026-06-25-10:34:
 Slice 321 wires shared SidebarApp `endSidebarCommandRun` into GPUI command-pane ownership. The sidebar bridge now emits a command-id-only close payload, Rust strictly parses only that shape, clears sidebar button feedback, and closes the mapped live command-pane Action session through existing command-terminal close ownership without title, command text, path, output, run-id, status-file, or persisted-shell inference.
 -->
 
@@ -3986,7 +3986,7 @@ Slice 321 wires shared SidebarApp `endSidebarCommandRun` into GPUI command-pane 
 ### 2026-06-25-11:18 Task slice 322
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-11:18:
+CDXC:CommandPane 2026-06-25-11:18:
 Slice 322 brings GPUI command Action tab reuse closer to macOS restore behavior. Re-running a terminal Action now reclaims an idle command-pane tab by normalized Action title when the live command-id mapping is missing or stale, then rewrites the live mapping at run-start; it still refuses running tabs and does not infer from command text, terminal output, paths, status files, persisted shell JSON, or filesystem probes.
 -->
 
@@ -3999,7 +3999,7 @@ Slice 322 brings GPUI command Action tab reuse closer to macOS restore behavior.
 ### 2026-06-25-11:42 Task slice 323
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-11:42:
+CDXC:CommandPane 2026-06-25-11:42:
 Slice 323 aligns GPUI unnamed Action titles with macOS command-pane behavior. Sidebar and titlebar Action paths now preserve blank names until the title boundary, then derive visible menu/tab titles from normalized command text or URL text truncated to 20 characters; command ids remain only the final fallback and are not used for title-owned command-pane reuse when command text exists.
 -->
 
@@ -4014,7 +4014,7 @@ Slice 323 aligns GPUI unnamed Action titles with macOS command-pane behavior. Si
 ### 2026-06-25-10:50 Task slice 324
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-10:50:
+CDXC:CommandPane 2026-06-25-10:50:
 Slice 324 adds macOS-style command-session indicators to the GPUI sidebar HUD. Rust publishes sanitized command-pane session summaries through a dedicated sidebar bridge, and the SidebarApp runtime matches current terminal Actions by command id first and normalized title second so restored title-owned command tabs show the same running/idle/error affordance without exposing command text, cwd/env, status-file paths, terminal output, project paths, or shell-state JSON.
 -->
 
@@ -4028,7 +4028,7 @@ Slice 324 adds macOS-style command-session indicators to the GPUI sidebar HUD. R
 ### 2026-06-25-11:11 Task slice 325
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-11:11:
+CDXC:CommandPane 2026-06-25-11:11:
 Slice 325 closes the GPUI command-pane Action feedback gap when a mapped Ghostty command surface exits before the status-file poller clears the run. Process-exit cleanup now finishes sidebar button feedback before removing the command tab, trusts only a matching idle status-file stamp for the exit code, and reports missing or non-idle status as error so the reused SidebarApp cannot keep an orphaned running state. It does not read terminal output, command text, cwd/env, project paths, logs, or shell-state JSON.
 -->
 
@@ -4041,7 +4041,7 @@ Slice 325 closes the GPUI command-pane Action feedback gap when a mapped Ghostty
 ### 2026-06-25-11:20 Task slice 326
 
 <!--
-CDXC:GPUICommandPaneTabs 2026-06-25-11:20:
+CDXC:CommandPane 2026-06-25-11:20:
 Slice 326 adds macOS-style scoped command-tab close commands to the GPUI command-pane tab menu. Close Left, Close Other Tabs, and Close Right resolve the clicked tab's sibling list before mutation, stay inside the clicked command group, and reuse the same mounted Ghostty close-request path as single-tab close without carrying command text, paths, terminal output, or cross-pane identifiers.
 -->
 
@@ -4055,7 +4055,7 @@ Slice 326 adds macOS-style scoped command-tab close commands to the GPUI command
 ### 2026-06-25-11:24 Task slice 327
 
 <!--
-CDXC:GPUICommandPaneTabs 2026-06-25-11:24:
+CDXC:CommandPane 2026-06-25-11:24:
 Slice 327 aligns GPUI command-tab status dots with macOS command-pane tab chrome. Idle remains a semantic command session state for persistence and sidebar indicators, but the command tab and drag preview now render no idle dot; only working, attention, and delayed-send states draw status dots.
 -->
 
@@ -4068,7 +4068,7 @@ Slice 327 aligns GPUI command-tab status dots with macOS command-pane tab chrome
 ### 2026-06-25-11:37 Task slice 328
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-11:37:
+CDXC:CommandPane 2026-06-25-11:37:
 Slice 328 aligns GPUI command-pane default/reset height with the macOS Workspace setting. GPUI now reads the shared `commandsPanelDefaultHeightPx` value for app startup defaults, missing persisted command-pane height, and double-click resize-rail reset, while preserving explicit persisted ratios and the shared 125px default with the 40px-600px clamp.
 -->
 
@@ -4083,7 +4083,7 @@ Slice 328 aligns GPUI command-pane default/reset height with the macOS Workspace
 ### 2026-06-25-11:44 Task slice 329
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-11:44:
+CDXC:CommandPane 2026-06-25-11:44:
 Slice 329 removes GPUI's startup-only fake Command/Shell command tabs so the command pane starts like macOS: hidden and empty. Opening an empty command pane now creates exactly one selected `Command Terminal` placeholder, while existing command tabs, Action titles, and transferred workspace titles remain preserved.
 -->
 
@@ -4097,7 +4097,7 @@ Slice 329 removes GPUI's startup-only fake Command/Shell command tabs so the com
 ### 2026-06-25-11:50 Task slice 330
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-11:50:
+CDXC:CommandPane 2026-06-25-11:50:
 Slice 330 aligns GPUI hidden-open height behavior with macOS `createCommandsPanelOpenStatePatch`. F12/open controls and terminal Actions now reset the command-pane height from the current Workspace default only when the pane was hidden; already-visible command panes preserve the user's live resize while adding, reusing, or focusing command tabs.
 -->
 
@@ -4111,7 +4111,7 @@ Slice 330 aligns GPUI hidden-open height behavior with macOS `createCommandsPane
 ### 2026-06-25-11:56 Task slice 331
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-11:56:
+CDXC:CommandPane 2026-06-25-11:56:
 Slice 331 repairs the command-pane shell-state test drift after the macOS `Command Terminal` title fallback change. Restored GPUI command placeholders now assert the same generic fallback as newly created command-pane terminals while still proving private command titles, command text, paths, stdout/stderr hints, delayed-send deadlines, and command content stay out of shell-state JSON.
 -->
 
@@ -4123,7 +4123,7 @@ Slice 331 repairs the command-pane shell-state test drift after the macOS `Comma
 ### 2026-06-25-12:00 Task slice 332
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-12:00:
+CDXC:ContextMenus 2026-06-25-12:00:
 Slice 332 adds the missing macOS command-panel action block to GPUI command-tab context menus. Expanded command-pane tab menus now expose Pin/Float Command Pane and Close Command Pane before tab-specific rows, while collapsed-strip menus keep the expand/select path and omit panel mutation rows because hidden macOS command panels publish expand-only tab chrome actions.
 -->
 
@@ -4136,7 +4136,7 @@ Slice 332 adds the missing macOS command-panel action block to GPUI command-tab 
 ### 2026-06-25-12:05 Task slice 333
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-12:05:
+CDXC:CommandPane 2026-06-25-12:05:
 Slice 333 removes the GPUI collapsed-strip Pin/Float control to match macOS hidden command-panel chrome. Collapsed command strips keep New Command and Expand, but panel mode mutation remains a visible-titlebar action so clicking hidden chrome can no longer flip pinned/floating state while claiming to open the panel.
 -->
 
@@ -4149,7 +4149,7 @@ Slice 333 removes the GPUI collapsed-strip Pin/Float control to match macOS hidd
 ### 2026-06-25-12:10 Task slice 334
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-12:10:
+CDXC:CommandPane 2026-06-25-12:10:
 Slice 334 routes collapsed-strip command-tab selection through the same hidden-open height rule as macOS `openCommandsPanelForActiveProject`. Clicking a hidden command tab or choosing Select from its menu now selects that tab, restores the last pinned/floating mode, and resets height from the current Workspace default only while hidden; already-visible tab selection preserves the user's live resize.
 -->
 
@@ -4162,7 +4162,7 @@ Slice 334 routes collapsed-strip command-tab selection through the same hidden-o
 ### 2026-06-25-12:13 Task slice 335
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-12:13:
+CDXC:CommandPane 2026-06-25-12:13:
 Slice 335 moves GPUI New Command chrome out of the fixed command-pane action cluster and into the command tab run, matching macOS command titlebar layout. The fixed cluster stays panel-scoped: collapsed command chrome shows only Expand there, while expanded command titlebars show Pin/Float, Expand/Collapse, and Close Command Pane.
 -->
 
@@ -4176,7 +4176,7 @@ Slice 335 moves GPUI New Command chrome out of the fixed command-pane action clu
 ### 2026-06-25-12:19 Task slice 336
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-12:19:
+CDXC:CommandPane 2026-06-25-12:19:
 Slice 336 aligns GPUI command-panel action copy with macOS native chrome. The mode toggle now reads Pin/Unpin Commands Panel, and the hide action reads Minimize Commands Panel because it preserves command sessions instead of closing them.
 -->
 
@@ -4189,7 +4189,7 @@ Slice 336 aligns GPUI command-panel action copy with macOS native chrome. The mo
 ### 2026-06-25-12:23 Task slice 337
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-12:23:
+CDXC:CommandPane 2026-06-25-12:23:
 Slice 337 aligns the remaining GPUI command-panel creation/open copy with native command chrome. The inline plus action now presents as New Terminal, and collapsed-strip open actions use Expand Commands Panel, matching macOS `.newTerminal` and `.expandCommandsPanel` titles while preserving the existing command-placeholder model.
 -->
 
@@ -4202,7 +4202,7 @@ Slice 337 aligns the remaining GPUI command-panel creation/open copy with native
 ### 2026-06-25-12:26 Task slice 338
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-12:26:
+CDXC:CommandPane 2026-06-25-12:26:
 Slice 338 removes GPUI's redundant expanded command-panel `x` minimize control. Native visible command panels publish exactly Pin/Unpin Commands Panel plus closeCommandsPanel, rendered as the Minimize chevron; collapsed strips publish only Expand Commands Panel.
 -->
 
@@ -4215,7 +4215,7 @@ Slice 338 removes GPUI's redundant expanded command-panel `x` minimize control. 
 ### 2026-06-25-12:29 Task slice 339
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-12:29:
+CDXC:CommandPane 2026-06-25-12:29:
 Slice 339 aligns GPUI fixed command-panel control sizing with native command chrome. Native Pin/Unpin and Minimize/Expand buttons use the full 26px command titlebar height, so GPUI controls now use the command tab-bar height instead of smaller inset 22px buttons.
 -->
 
@@ -4227,7 +4227,7 @@ Slice 339 aligns GPUI fixed command-panel control sizing with native command chr
 ### 2026-06-25-12:32 Task slice 340
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-12:32:
+CDXC:CommandPane 2026-06-25-12:32:
 Slice 340 aligns the GPUI minimized command strip with native collapsed command-panel geometry. Native minimized command panels start with command tab chrome inside 4px/8px side margins and do not render a separate leading "Command" label block.
 -->
 
@@ -4240,7 +4240,7 @@ Slice 340 aligns the GPUI minimized command strip with native collapsed command-
 ### 2026-06-25-13:11 Task slice 341
 
 <!--
-CDXC:GPUICommandTabChrome 2026-06-25-13:11:
+CDXC:CommandPane 2026-06-25-13:11:
 Slice 341 aligns GPUI command-tab close chrome with native command tabs. Native command tabs draw the inline close control only while the owning tab is hovered, use a 20px close frame with 4px trailing padding, and position it over the tab trailing edge instead of inserting it into the title layout.
 -->
 
@@ -4253,7 +4253,7 @@ Slice 341 aligns GPUI command-tab close chrome with native command tabs. Native 
 ### 2026-06-25-13:18 Task slice 342
 
 <!--
-CDXC:GPUICommandTabStatus 2026-06-25-13:18:
+CDXC:SessionStatus 2026-06-25-13:18:
 Slice 342 aligns GPUI command-tab status chrome with native command tabs. Visible command status now lives in the native trailing slot: working/attention render as 8px square fills 9px from the trailing edge, Delayed Send renders as a 14px clock centered on that slot, and status chrome hides while hover close chrome is visible while the title reservation remains stable.
 -->
 
@@ -4267,7 +4267,7 @@ Slice 342 aligns GPUI command-tab status chrome with native command tabs. Visibl
 ### 2026-06-25-13:25 Task slice 343
 
 <!--
-CDXC:GPUICommandTabTypography 2026-06-25-13:25:
+CDXC:CommandPane 2026-06-25-13:25:
 Slice 343 aligns GPUI command-tab title typography with native command-role tabs. Command titles now use stable 11pt semibold light text for active and inactive tabs; selection changes the tab fill, not title weight, size, or inactive label opacity.
 -->
 
@@ -4281,7 +4281,7 @@ Slice 343 aligns GPUI command-tab title typography with native command-role tabs
 ### 2026-06-25-13:32 Task slice 344
 
 <!--
-CDXC:GPUICommandTabSizing 2026-06-25-13:32:
+CDXC:CommandPane 2026-06-25-13:32:
 Slice 344 aligns GPUI command-tab sizing with native command-role tab strips. Command tabs now use equal responsive flex sizing clamped between 72px and 160px in both expanded and collapsed command chrome, and the tab-strip end drop target stays fixed so it cannot steal width from the tab fit calculation.
 -->
 
@@ -4295,7 +4295,7 @@ Slice 344 aligns GPUI command-tab sizing with native command-role tab strips. Co
 ### 2026-06-25-13:40 Task slice 345
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-13:40:
+CDXC:CommandPane 2026-06-25-13:40:
 Slice 345 aligns GPUI command-pane action chrome with native command-role buttons. New Terminal now uses terminal symbol chrome, Pin/Unpin uses pin/pin-slash symbols, and Minimize/Expand uses chevron-down/chevron-up symbols instead of visible fallback text labels.
 -->
 
@@ -4309,7 +4309,7 @@ Slice 345 aligns GPUI command-pane action chrome with native command-role button
 ### 2026-06-25-13:47 Task slice 346
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-13:47:
+CDXC:CommandPane 2026-06-25-13:47:
 Slice 346 aligns GPUI command-pane action button frames and colors with native command titlebar layout. Command action buttons are now contiguous flat 26px frames with stable #0e0e0e backgrounds, #cfcfcf icon tint, no hover color change, no wrapper left border, and an 8px trailing inset only in expanded command titlebars.
 -->
 
@@ -4323,7 +4323,7 @@ Slice 346 aligns GPUI command-pane action button frames and colors with native c
 ### 2026-06-25-13:54 Task slice 347
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-13:54:
+CDXC:CommandPane 2026-06-25-13:54:
 Slice 347 corrects the inline command-tab New Terminal icon to match the native tab-add button path. The generic `.newTerminal` action button uses a terminal symbol, but command-pane tab chrome keeps New Terminal inline through `tabAddButton`, whose normal image is plus with the New Terminal tooltip.
 -->
 
@@ -4335,7 +4335,7 @@ Slice 347 corrects the inline command-tab New Terminal icon to match the native 
 ### 2026-06-25-14:01 Task slice 348
 
 <!--
-CDXC:GPUICommandTabChrome 2026-06-25-14:01:
+CDXC:CommandPane 2026-06-25-14:01:
 Slice 348 aligns GPUI command-tab inline close chrome with native command tabs. The hover-only close affordance now uses a stable #0e0e0e command icon-button background and #cfcfcf X symbol inside the 20px frame instead of a lowercase text x with hover-only fill.
 -->
 
@@ -4349,7 +4349,7 @@ Slice 348 aligns GPUI command-tab inline close chrome with native command tabs. 
 ### 2026-06-25-14:17 Task slice 349
 
 <!--
-CDXC:GPUICommandTabSeparators 2026-06-25-14:17:
+CDXC:CommandPane 2026-06-25-14:17:
 Slice 349 aligns GPUI command-tab separators with native command tab buttons. Separators are now explicit 1px white/10% trailing fills only on tabs that have a following command tab, so the final command tab no longer gets a heavier panel-border separator.
 -->
 
@@ -4362,7 +4362,7 @@ Slice 349 aligns GPUI command-tab separators with native command tab buttons. Se
 ### 2026-06-25-14:36 Task slice 350
 
 <!--
-CDXC:GPUICommandTabBackground 2026-06-25-14:36:
+CDXC:CommandPane 2026-06-25-14:36:
 Slice 350 aligns GPUI command-tab background fills with native AppKit command tabs. Active and inactive command tabs now use the native #050608 base plus 13%/6% white overlay compositing, and hover reveals close chrome without brightening the tab fill.
 -->
 
@@ -4377,7 +4377,7 @@ Slice 350 aligns GPUI command-tab background fills with native AppKit command ta
 ### 2026-06-25-14:44 Task slice 351
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-14:44:
+CDXC:CommandPane 2026-06-25-14:44:
 Slice 351 aligns the GPUI inline command-tab New Terminal button with native tab-add icon chrome. The plus button now has the same stable #0e0e0e background and #cfcfcf tint before hover as the native `setTabBarIconChrome` path, instead of appearing transparent until hover.
 -->
 
@@ -4390,7 +4390,7 @@ Slice 351 aligns the GPUI inline command-tab New Terminal button with native tab
 ### 2026-06-25-13:19 Task slice 352
 
 <!--
-CDXC:GPUICommandPaneChrome 2026-06-25-13:19:
+CDXC:CommandPane 2026-06-25-13:19:
 Slice 352 splits GPUI command-pane chrome colors by native role. Command backgrounds are black, panel-edge separators use #1e1e1e, command titlebar separators use the native translucent white separator, inactive command pane outlines use #111111, and focused command pane outlines use neutral #737373 instead of blue.
 -->
 
@@ -4404,7 +4404,7 @@ Slice 352 splits GPUI command-pane chrome colors by native role. Command backgro
 ### 2026-06-25-13:19 Task slice 353
 
 <!--
-CDXC:GPUICommandPaneResize 2026-06-25-13:19:
+CDXC:CommandPane 2026-06-25-13:19:
 Slice 353 aligns GPUI command-pane resize rail chrome with native resize handles. The command-panel rail is now a 12px transparent hit region with 3px hover-line geometry, and command split rails no longer draw permanent dark bars or center separators in normal state.
 -->
 
@@ -4418,7 +4418,7 @@ Slice 353 aligns GPUI command-pane resize rail chrome with native resize handles
 ### 2026-06-25-13:19 Task slice 354
 
 <!--
-CDXC:GPUICommandPaneResize 2026-06-25-13:19:
+CDXC:CommandPane 2026-06-25-13:19:
 Slice 354 adds native delayed resize-hover feedback to GPUI command resize rails. The command-panel rail and each command split rail now own runtime-only hover state, reveal a white 3px line after the native 50ms delay, and fade it in over 180ms without changing resize hit geometry or persisted command layout.
 -->
 
@@ -4432,7 +4432,7 @@ Slice 354 adds native delayed resize-hover feedback to GPUI command resize rails
 ### 2026-06-25-13:30 Task slice 355
 
 <!--
-CDXC:GPUICommandTabOverflow 2026-06-25-13:30:
+CDXC:CommandPane 2026-06-25-13:30:
 Slice 355 removes GPUI's permanent decorative command-tab edge reveal so normal command tab strips match native. Native command overflow chrome is the conditional 30px Show Active Tab proxy when the active tab is clipped below 60px visible, using a 12px reveal scroll margin; GPUI now records those constants and no longer burns a permanent 10px non-interactive reveal slot in expanded or collapsed command chrome.
 -->
 
@@ -4446,7 +4446,7 @@ Slice 355 removes GPUI's permanent decorative command-tab edge reveal so normal 
 ### 2026-06-25-13:34 Task slice 356
 
 <!--
-CDXC:GPUICommandTabOverflow 2026-06-25-13:34:
+CDXC:CommandPane 2026-06-25-13:34:
 Slice 356 implements GPUI's command Show Active Tab overflow proxy from native scroll geometry. Expanded command titlebars and the collapsed command strip now render a real 30px command-role button only when the active tab is clipped below 60px visible; activation reveal uses the native 12px margin, and clicking the proxy centers the active tab with clamped runtime scroll offsets.
 -->
 
@@ -4461,7 +4461,7 @@ Slice 356 implements GPUI's command Show Active Tab overflow proxy from native s
 ### 2026-06-25-13:45 Task slice 357
 
 <!--
-CDXC:GPUICommandTabScrolling 2026-06-25-13:45:
+CDXC:CommandPane 2026-06-25-13:45:
 Slice 357 aligns GPUI command tab-strip wheel scrolling with native pane tabs. Expanded command titlebars and the collapsed command strip now own command-specific wheel routing: horizontal wheel deltas move tabs directly, precise vertical trackpad deltas are not remapped into horizontal tab movement, and non-precision vertical wheel ticks are amplified by 18x with a 96px minimum before applying clamped runtime scroll offsets.
 -->
 
@@ -4476,7 +4476,7 @@ Slice 357 aligns GPUI command tab-strip wheel scrolling with native pane tabs. E
 ### 2026-06-25-13:50 Task slice 358
 
 <!--
-CDXC:GPUICommandTabDoubleClick 2026-06-25-13:50:
+CDXC:CommandPane 2026-06-25-13:50:
 Slice 358 adds the native empty-command-titlebar double-click New Terminal gesture to GPUI. The command tab-strip end target now uses the native 34px preferred empty target width, ignores single clicks, and double-clicks create a new command placeholder in the owning command group through the same New Terminal action path as the inline plus button.
 -->
 
@@ -4491,7 +4491,7 @@ Slice 358 adds the native empty-command-titlebar double-click New Terminal gestu
 ### 2026-06-25-13:58 Task slice 359
 
 <!--
-CDXC:GPUICommandTabDoubleClick 2026-06-25-13:58:
+CDXC:CommandPane 2026-06-25-13:58:
 Slice 359 broadens GPUI command titlebar double-click handling to match native `isEmptyTitleBarDoubleClickPoint`. Expanded command tabstrips and the collapsed command strip now create New Terminal from empty tabstrip background double-clicks after child tabs and controls decline the hit, while single clicks keep bubbling to normal focus behavior.
 -->
 
@@ -4505,7 +4505,7 @@ Slice 359 broadens GPUI command titlebar double-click handling to match native `
 ### 2026-06-25-14:01 Task slice 360
 
 <!--
-CDXC:GPUICommandTabClose 2026-06-25-14:01:
+CDXC:CommandPane 2026-06-25-14:01:
 Slice 360 aligns GPUI command-tab button-2 handling with native AppKit tab buttons. Middle-click on a command tab is consumed by the clicked tab, closes on mouse-up through the same command close request path as the visible close affordance, and does not first select the tab or enter empty-titlebar behavior.
 -->
 
@@ -4519,7 +4519,7 @@ Slice 360 aligns GPUI command-tab button-2 handling with native AppKit tab butto
 ### 2026-06-25-14:04 Task slice 361
 
 <!--
-CDXC:GPUICommandTabClose 2026-06-25-14:04:
+CDXC:CommandPane 2026-06-25-14:04:
 Slice 361 aligns GPUI visible command-tab Close timing with native inline tab actions. The hover close affordance now consumes mouse-down, then invokes the existing command close request path on mouse-up, matching native's pending inline action instead of tearing down the command tab on down.
 -->
 
@@ -4533,7 +4533,7 @@ Slice 361 aligns GPUI visible command-tab Close timing with native inline tab ac
 ### 2026-06-25-14:07 Task slice 362
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-14:07:
+CDXC:ContextMenus 2026-06-25-14:07:
 Slice 362 aligns GPUI command-tab scoped close menu labels and ordering with native tab-button menus. Command tab context menus now present Close Right, Close Left, then Close Other Tabs, while keeping the same clicked-group close-scope resolution and close request lifecycle.
 -->
 
@@ -4547,7 +4547,7 @@ Slice 362 aligns GPUI command-tab scoped close menu labels and ordering with nat
 ### 2026-06-25-14:13 Task slice 363
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-14:13:
+CDXC:ContextMenus 2026-06-25-14:13:
 Slice 363 removes GPUI command-panel Pin/Unpin and Minimize rows from command-tab right-click menus. AppKit assigns those panel actions to command titlebar buttons, but `primaryTabContextMenuActions` filters tab context menus to clicked-tab actions before Sleep/Close scopes, so GPUI command tab menus must stay tab-scoped.
 -->
 
@@ -4561,7 +4561,7 @@ Slice 363 removes GPUI command-panel Pin/Unpin and Minimize rows from command-ta
 ### 2026-06-25-14:19 Task slice 364
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-14:19:
+CDXC:ContextMenus 2026-06-25-14:19:
 Slice 364 removes the direct Close Tab row from GPUI command-tab right-click menus. Native tab context menus keep direct tab close on hover and middle-click chrome, while right-click close commands begin at Close Right, Close Left, and Close Other Tabs.
 -->
 
@@ -4575,7 +4575,7 @@ Slice 364 removes the direct Close Tab row from GPUI command-tab right-click men
 ### 2026-06-25-14:22 Task slice 365
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-14:22:
+CDXC:ContextMenus 2026-06-25-14:22:
 Slice 365 removes GPUI's Select Tab / Expand Commands Panel activation row from command-tab right-click menus. Native tab context menus do not select, focus, or expand the clicked tab from right-click; command-tab activation remains a left-click gesture.
 -->
 
@@ -4589,7 +4589,7 @@ Slice 365 removes GPUI's Select Tab / Expand Commands Panel activation row from 
 ### 2026-06-25-14:27 Task slice 366
 
 <!--
-CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+CDXC:SessionSleep 2026-06-25-14:27:
 Slice 366 adds native command-tab Sleep scope behavior to GPUI. Sleep marks command sessions as parked lifecycle state inside the clicked command group, keeps tabs/layout visible, removes sleeping active command sessions from terminal body mount slots, persists only the safe sleeping boolean, and wakes only from explicit sleeping body activation.
 -->
 
@@ -4603,7 +4603,7 @@ Slice 366 adds native command-tab Sleep scope behavior to GPUI. Sleep marks comm
 ### 2026-06-25-14:39 Task slice 367
 
 <!--
-CDXC:GPUICommandTabSleepVisuals 2026-06-25-14:39:
+CDXC:SessionSleep 2026-06-25-14:39:
 Slice 367 aligns GPUI sleeping command-tab visuals with native AppKit command-role tabs. Selected sleeping command tabs keep selected fill/title treatment, while inactive sleeping command tabs use the native parked 3.2% white overlay and 48% title alpha multiplier.
 -->
 
@@ -4617,7 +4617,7 @@ Slice 367 aligns GPUI sleeping command-tab visuals with native AppKit command-ro
 ### 2026-06-25-14:42 Task slice 368
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-14:42:
+CDXC:ContextMenus 2026-06-25-14:42:
 Slice 368 aligns GPUI scoped command-tab menu row enablement with native AppKit. Sleep Right/Left/Others and Close Right/Left/Others remain enabled even when a clicked command tab has no matching sibling targets; selecting an empty scope safely no-ops through the clicked-group resolver.
 -->
 
@@ -4630,7 +4630,7 @@ Slice 368 aligns GPUI scoped command-tab menu row enablement with native AppKit.
 ### 2026-06-25-14:46 Task slice 369
 
 <!--
-CDXC:GPUICommandTabWake 2026-06-25-14:46:
+CDXC:SessionSleep 2026-06-25-14:46:
 Slice 369 aligns GPUI command-tab wake policy with the shared macOS clickToWakeSleepingSessions setting. The default keeps sleeping command-tab selection as a cold placeholder selection; strict false wakes the selected sleeping command tab immediately.
 -->
 
@@ -4644,7 +4644,7 @@ Slice 369 aligns GPUI command-tab wake policy with the shared macOS clickToWakeS
 ### 2026-06-25-14:49 Task slice 370
 
 <!--
-CDXC:GPUICommandSleepingPlaceholder 2026-06-25-14:49:
+CDXC:SessionSleep 2026-06-25-14:49:
 Slice 370 aligns GPUI sleeping command body placeholders with native AppKit. The active sleeping command body paints the centered "Press Any Key to Wake" affordance only when click-to-wake placeholders are enabled, and focused sleeping command placeholders wake on plain alphanumeric key-down before terminal text delivery.
 -->
 
@@ -4658,7 +4658,7 @@ Slice 370 aligns GPUI sleeping command body placeholders with native AppKit. The
 ### 2026-06-25-14:56 Task slice 371
 
 <!--
-CDXC:GPUICommandFocusedSessionActions 2026-06-25-14:56:
+CDXC:FocusMode 2026-06-25-14:56:
 Slice 371 adds GPUI command-pane support for the native Sleep Focused Session shortcut. Option+Shift+S now resolves the expanded shell-focused command pane's active command tab and parks it through the existing command-tab sleep lifecycle instead of ignoring command-pane terminal focus.
 -->
 
@@ -4672,7 +4672,7 @@ Slice 371 adds GPUI command-pane support for the native Sleep Focused Session sh
 ### 2026-06-25-15:01 Task slice 372
 
 <!--
-CDXC:GPUICommandFocusedSessionActions 2026-06-25-15:01:
+CDXC:FocusMode 2026-06-25-15:01:
 Slice 372 wires GPUI command-palette focused-session Wake behavior for command panes. The shared `runGhostexHotkeyAction` bridge now recognizes Sleep/Wake focused-session ids and wakes only the expanded shell-focused command pane's active sleeping tab through the existing command-pane wake lifecycle.
 -->
 
@@ -4686,7 +4686,7 @@ Slice 372 wires GPUI command-palette focused-session Wake behavior for command p
 ### 2026-06-25-15:05 Task slice 373
 
 <!--
-CDXC:GPUICommandFocusedSessionActions 2026-06-25-15:05:
+CDXC:FocusMode 2026-06-25-15:05:
 Slice 373 adds GPUI command-palette Close Focused Session parity for command panes. The shared `closeFocusedSession` hotkey action id now resolves only while the command pane owns shell focus and then delegates to the existing focused close path for the active command terminal.
 -->
 
@@ -4700,7 +4700,7 @@ Slice 373 adds GPUI command-palette Close Focused Session parity for command pan
 ### 2026-06-25-15:11 Task slice 374
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-15:11:
+CDXC:DelayedSend 2026-06-25-15:11:
 Slice 374 wires GPUI command-pane Delayed Send through the shared compact React modal and a runtime-only command-session timer. Timers validate whole-minute native bounds, show command tab clock chrome while armed, submit Return through Ghostty's key path for the exact mounted command surface, and do not persist live timer deadlines or stale timer-owned delayed-send state.
 -->
 
@@ -4714,7 +4714,7 @@ Slice 374 wires GPUI command-pane Delayed Send through the shared compact React 
 ### 2026-06-25-15:24 Task slice 375
 
 <!--
-CDXC:GPUICommandCloseAfterDone 2026-06-25-15:24:
+CDXC:Sessions 2026-06-25-15:24:
 Slice 375 wires GPUI command-pane Close After Done through the shared focused command-palette bridge and a command-session runtime watcher. The armed flag persists as safe lifecycle metadata, countdown deadlines stay process-local, and tabs close only after an armed Action-owned or Attention command session remains done for the native three-minute window.
 -->
 
@@ -4729,7 +4729,7 @@ Slice 375 wires GPUI command-pane Close After Done through the shared focused co
 ### 2026-06-25-15:42 Task slice 376
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-15:42:
+CDXC:DelayedSend 2026-06-25-15:42:
 Slice 376 adds the native centered Delayed Send body badge to GPUI command terminals. Active command Delayed Send timers now paint a non-interactive countdown badge in the existing command body and tick once per second while runtime timers exist, without persisting deadlines or introducing overlay hit-test ownership.
 -->
 
@@ -4744,7 +4744,7 @@ Slice 376 adds the native centered Delayed Send body badge to GPUI command termi
 ### 2026-06-25-15:46 Task slice 377
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-15:46:
+CDXC:DelayedSend 2026-06-25-15:46:
 Slice 377 aligns command-tab Sleep with native timer ownership. Sleeping a GPUI command tab now preserves Delayed Send and Close After Done intent instead of canceling it; Delayed Send submits only if the tab is awake again at the deadline, and Close After Done countdown evaluation resumes after wake.
 -->
 
@@ -4758,7 +4758,7 @@ Slice 377 aligns command-tab Sleep with native timer ownership. Sleeping a GPUI 
 ### 2026-06-25-16:05 Task slice 378
 
 <!--
-CDXC:GPUIFocusedSplits 2026-06-25-16:05:
+CDXC:FocusMode 2026-06-25-16:05:
 Slice 378 aligns command-pane focused split hotkeys with native direction handling. GPUI command panes now intentionally coerce both Cmd+D and Cmd+Shift+D to horizontal command splits like macOS, persist the command split axis as safe shell layout metadata, and render/resize command splits from the stored orientation.
 -->
 
@@ -4772,10 +4772,10 @@ Slice 378 aligns command-pane focused split hotkeys with native direction handli
 ### 2026-06-25-16:14 Task slice 379
 
 <!--
-CDXC:GPUICommandPaneSplits 2026-06-25-16:14:
+CDXC:CommandPane 2026-06-25-16:14:
 Slice 379 aligns repeated GPUI command-pane split insertion with native default geometry. Native command panes flatten same-direction split children and give untouched children equal space; GPUI keeps binary storage but rebalances only default same-axis command split chains by visible command group count while preserving explicit user-resized ratios.
 
-CDXC:GPUICommandPaneSplits 2026-06-25-16:18:
+CDXC:CommandPane 2026-06-25-16:18:
 Same-direction command split insertion must happen beside the matching child of the existing split, matching native flattened-child semantics. GPUI preserves that boundary in binary form so explicit first-child ratios retain native meaning even when inserting before or after the first command pane.
 -->
 
@@ -4789,7 +4789,7 @@ Same-direction command split insertion must happen beside the matching child of 
 ### 2026-06-25-16:22 Task slice 380
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-25-16:22:
+CDXC:CommandPane 2026-06-25-16:22:
 Slice 380 aligns GPUI command Action reuse with native running-terminal requirements. Sleeping command-pane tabs are not reusable Action runners because they have no mounted command body; run-start also clears any stale sleeping flag before marking the session Working so Action wrappers cannot target an unmounted pane.
 -->
 
@@ -4803,7 +4803,7 @@ Slice 380 aligns GPUI command Action reuse with native running-terminal requirem
 ### 2026-06-25-16:33 Task slice 381
 
 <!--
-CDXC:GPUICommandPaneRename 2026-06-25-16:33:
+CDXC:CommandPane 2026-06-25-16:33:
 Slice 381 aligns GPUI command-pane Rename Active Session hotkey handling with native focused-session routing. When the expanded command pane owns shell focus, GPUI opens the shared Rename Session modal for the active command tab, accepts only local command-session rename submissions, and updates the live tab title without persisting user-entered titles into shell-state JSON.
 -->
 
@@ -4817,7 +4817,7 @@ Slice 381 aligns GPUI command-pane Rename Active Session hotkey handling with na
 ### 2026-06-25-16:41 Task slice 382
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-16:41:
+CDXC:DelayedSend 2026-06-25-16:41:
 Slice 382 aligns GPUI command-pane Delayed Send restart behavior with native command-panel local persistence. Live timer-owned command tabs now persist only a bounded UTC deadline plus remaining-duration checkpoint, restore that checkpoint as a fresh runtime timer with the native 2s fire grace on startup, and still exclude command text, titles, terminal content, paths, runtime ids, stdout/stderr, and countdown labels from shell-state JSON.
 -->
 
@@ -4833,7 +4833,7 @@ Slice 382 aligns GPUI command-pane Delayed Send restart behavior with native com
 ### 2026-06-25-16:52 Task slice 383
 
 <!--
-CDXC:GPUICommandCloseAfterDone 2026-06-25-16:52:
+CDXC:Sessions 2026-06-25-16:52:
 Slice 383 aligns GPUI command-pane Close After Done focused-session routing with native. Native toggles Close After Done by command session id, so GPUI now resolves the expanded shell-focused command tab even when it is sleeping, persists only the armed intent, and starts no countdown until the tab wakes and is actually Done.
 -->
 
@@ -4847,7 +4847,7 @@ Slice 383 aligns GPUI command-pane Close After Done focused-session routing with
 ### 2026-06-25-16:56 Task slice 384
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-16:56:
+CDXC:DelayedSend 2026-06-25-16:56:
 Slice 384 aligns GPUI command-pane Delayed Send startup wake behavior with native command-panel restore. A persisted delayed-send checkpoint now wakes the command tab when GPUI re-arms the timer at startup so the pending Return can target a live command body, while manual in-process Sleep still parks active timers until the user wakes the tab.
 -->
 
@@ -4860,7 +4860,7 @@ Slice 384 aligns GPUI command-pane Delayed Send startup wake behavior with nativ
 ### 2026-06-25-17:09 Task slice 385
 
 <!--
-CDXC:GPUICommandPaneTimers 2026-06-25-17:09:
+CDXC:DelayedSend 2026-06-25-17:09:
 Slice 385 aligns GPUI command-pane sidebar/titlebar timer projection with native command-panel rows. Command-pane session indicators now include Delayed Send countdown fields and Close After Done armed/deadline fields from runtime timers, while keeping command text, terminal output, paths, run ids, status-file paths, and shell-state JSON out of the bridge.
 -->
 
@@ -4874,7 +4874,7 @@ Slice 385 aligns GPUI command-pane sidebar/titlebar timer projection with native
 ### 2026-06-25-17:19 Task slice 386
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-17:19:
+CDXC:DelayedSend 2026-06-25-17:19:
 Slice 386 closes the restored Delayed Send stranded-timer gap in GPUI command panes. Because GPUI command terminals are mounted only through visible normal layout, a persisted timer restore now expands the command pane and selects the restored command tab so the timer has an executable command body instead of staying hidden behind collapsed or inactive tab state.
 -->
 
@@ -4887,7 +4887,7 @@ Slice 386 closes the restored Delayed Send stranded-timer gap in GPUI command pa
 ### 2026-06-25-17:25 Task slice 387
 
 <!--
-CDXC:GPUICommandStartupRestore 2026-06-25-17:25:
+CDXC:Workarea 2026-06-25-17:25:
 Slice 387 aligns GPUI command-pane startup activity restore with native restoreActivity. Persisted Working activity is now treated as a one-shot wake hint and cleared to Idle after startup, while persisted Attention wakes the command tab and remains visually attention; both paths expand/select through normal command-pane layout so GPUI creates a visible command body mount instead of relying on hidden terminal surfaces.
 -->
 
@@ -4900,7 +4900,7 @@ Slice 387 aligns GPUI command-pane startup activity restore with native restoreA
 ### 2026-06-25-17:32 Task slice 388
 
 <!--
-CDXC:GPUICommandPalette 2026-06-25-17:32:
+CDXC:CommandPalette 2026-06-25-17:32:
 Slice 388 aligns GPUI command-pane command-palette focused-pane routing with native hotkey dispatch. The shared `runGhostexHotkeyAction` bridge now sends supported pane actions to the same GPUI shell helpers as direct keybindings, so command-pane focus can create command splits and Browser opens from the palette while Agents-only Merge All Tabs remains scoped; fork, reload, and pop-out stay unimplemented instead of using placeholder fallbacks until GPUI owns real terminal runtime semantics.
 -->
 
@@ -4913,7 +4913,7 @@ Slice 388 aligns GPUI command-pane command-palette focused-pane routing with nat
 ### 2026-06-25-17:37 Task slice 389
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-17:37:
+CDXC:ContextMenus 2026-06-25-17:37:
 Slice 389 aligns GPUI clicked command-tab context menus with the implemented native per-session rows. Rename, Delayed Send, and Close After Done are shown before Sleep/Close scopes and target the clicked command session id; runtime-only Fork, Reload, and Pop Out stay absent until GPUI can execute those real terminal operations.
 -->
 
@@ -4927,7 +4927,7 @@ Slice 389 aligns GPUI clicked command-tab context menus with the implemented nat
 ### 2026-06-25-17:37 Task slice 390
 
 <!--
-CDXC:GPUICommandPane 2026-06-25-17:37:
+CDXC:CommandPane 2026-06-25-17:37:
 Slice 390 aligns GPUI final command-tab close persistence with native empty Commands panel state. Empty command-pane shell state no longer writes or restores the last user-resized height, while non-empty collapsed command panes still preserve their live height.
 -->
 
@@ -4941,7 +4941,7 @@ Slice 390 aligns GPUI final command-tab close persistence with native empty Comm
 ### 2026-06-25-17:37 Task slice 391
 
 <!--
-CDXC:GPUICommandClose 2026-06-25-17:37:
+CDXC:CommandPane 2026-06-25-17:37:
 Slice 391 aligns GPUI focused command close with the normal command-tab close path. Cmd-W and command-palette Close Focused Session now resolve only an expanded focused command tab and then use the shared close helper that owns mounted close requests, timer cleanup, final-panel focus restore, persistence, and sidebar refresh.
 -->
 
@@ -4955,7 +4955,7 @@ Slice 391 aligns GPUI focused command close with the normal command-tab close pa
 ### 2026-06-25-17:57 Task slice 392
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-25-17:57:
+CDXC:FocusRouting 2026-06-25-17:57:
 Slice 392 aligns GPUI command-pane focused borders with native first-responder chrome. A command group now shows the focused border only while the command pane owns shell focus; remembered command selection no longer leaves a focused outline after focus returns to Agents, Browser, Source, Kanban, or Manage.
 -->
 
@@ -4968,7 +4968,7 @@ Slice 392 aligns GPUI command-pane focused borders with native first-responder c
 ### 2026-06-25-17:57 Task slice 393
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-17:57:
+CDXC:DelayedSend 2026-06-25-17:57:
 Slice 393 aligns GPUI command-tab Delayed Send tooltips with native tab chrome. Command tabs now keep the title tooltip and append the live runtime countdown only when a Delayed Send remaining label exists, without deriving countdown copy from persisted placeholders or command content.
 -->
 
@@ -4981,7 +4981,7 @@ Slice 393 aligns GPUI command-tab Delayed Send tooltips with native tab chrome. 
 ### 2026-06-25-18:02 Task slice 394
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-25-18:02:
+CDXC:FocusRouting 2026-06-25-18:02:
 Slice 394 aligns GPUI pinned command-pane inactive borders with native `hidesInactiveCommandBorder`. Pinned command panels now hide inactive command group outlines while floating command panels keep the inactive outline and focused command groups still show focused chrome.
 -->
 
@@ -4994,7 +4994,7 @@ Slice 394 aligns GPUI pinned command-pane inactive borders with native `hidesIna
 ### 2026-06-25-18:07 Task slice 395
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-18:07:
+CDXC:DelayedSend 2026-06-25-18:07:
 Slice 395 aligns GPUI sleeping command-tab Delayed Send chrome with native tab sync. Native publishes Delayed Send countdown labels before skipping sleeping sessions for working/attention activity, so sleeping command tabs with active timers keep the clock status while sleeping command tabs without timers remain idle.
 -->
 
@@ -5006,7 +5006,7 @@ Slice 395 aligns GPUI sleeping command-tab Delayed Send chrome with native tab s
 ### 2026-06-25-18:11 Task slice 396
 
 <!--
-CDXC:GPUICommandPaneFloating 2026-06-25-18:07:
+CDXC:CommandPane 2026-06-25-18:07:
 Slice 396 aligns GPUI floating command-panel geometry with native layout. Floating command panels now keep the reserved collapsed strip, inset the expanded panel by the native 25px margin, and cap expanded height to leave top/bottom breathing room instead of rendering full-width like a pinned panel.
 -->
 
@@ -5019,7 +5019,7 @@ Slice 396 aligns GPUI floating command-panel geometry with native layout. Floati
 ### 2026-06-25-18:14 Task slice 397
 
 <!--
-CDXC:GPUICommandPaneLayout 2026-06-25-18:14:
+CDXC:CommandPane 2026-06-25-18:14:
 Slice 397 aligns GPUI expanded command-panel content insets with native `layoutCommandsPanel`. Command-panel chrome and resize rails stay full-width, while command owner content is inset horizontally by one logical pixel like native AppKit command owner frames.
 -->
 
@@ -5032,7 +5032,7 @@ Slice 397 aligns GPUI expanded command-panel content insets with native `layoutC
 ### 2026-06-25-18:19 Task slice 398
 
 <!--
-CDXC:GPUICommandPaneFloating 2026-06-25-18:19:
+CDXC:CommandPane 2026-06-25-18:19:
 Slice 398 aligns GPUI expanded floating command-panel bottom reservation with native `syncCommandsPanelReservedBottomBar`. Floating mode now reserves a plain black bottom bar while the expanded floating panel owns the only interactive tabs and controls; collapsed mode remains the only state that renders the interactive bottom tab strip.
 -->
 
@@ -5045,7 +5045,7 @@ Slice 398 aligns GPUI expanded floating command-panel bottom reservation with na
 ### 2026-06-25-18:24 Task slice 399
 
 <!--
-CDXC:GPUICommandClose 2026-06-25-18:24:
+CDXC:CommandPane 2026-06-25-18:24:
 Slice 399 aligns GPUI focused command close with native `commandPanelFocusedResponderSessionId`. Cmd-W and Close Focused Session now skip sleeping command tabs because sleeping placeholders are not active command-terminal responders; explicit tab close buttons, middle-click, and context-menu close scopes still close sleeping tabs.
 -->
 
@@ -5058,7 +5058,7 @@ Slice 399 aligns GPUI focused command close with native `commandPanelFocusedResp
 ### 2026-06-25-18:27 Task slice 400
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-25-18:27:
+CDXC:FocusRouting 2026-06-25-18:27:
 Slice 400 aligns GPUI command-pane titlebar action focus with native. Pin/Unpin control clicks now focus the active command pane even when the panel was already expanded, matching native `nativeTitleBarAction` focus-before-dispatch while preserving Minimize collapse return-focus behavior.
 -->
 
@@ -5072,7 +5072,7 @@ Slice 400 aligns GPUI command-pane titlebar action focus with native. Pin/Unpin 
 ### 2026-06-25-18:33 Task slice 401
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-18:33:
+CDXC:ContextMenus 2026-06-25-18:33:
 Slice 401 aligns GPUI clicked command-tab primary context actions with native `nativeTabContextMenuAction`. Rename and Close After Done now select/focus the clicked command tab before dispatch without expanding collapsed command chrome; Delayed Send keeps its visible expand-and-wake route because the later Return requires a mounted command body.
 -->
 
@@ -5086,7 +5086,7 @@ Slice 401 aligns GPUI clicked command-tab primary context actions with native `n
 ### 2026-06-25-18:38 Task slice 402
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-18:38:
+CDXC:ContextMenus 2026-06-25-18:38:
 Slice 402 aligns GPUI scoped command-tab Sleep/Close context rows with native dispatch. Scoped lifecycle rows now preserve the current shell focus instead of focusing the clicked command pane, because native only focuses before primary tab context actions and sends scoped sleep/close requests directly.
 -->
 
@@ -5100,7 +5100,7 @@ Slice 402 aligns GPUI scoped command-tab Sleep/Close context rows with native di
 ### 2026-06-25-18:46 Task slice 403
 
 <!--
-CDXC:GPUICommandPaneControls 2026-06-25-18:46:
+CDXC:CommandPane 2026-06-25-18:46:
 Slice 403 aligns GPUI command-pane inline New Terminal visibility with native titlebar sizing. The inline plus now hides when fixed command-panel actions leave less than the native 56px compact tab/double-click viewport plus the 26px add button, preserving narrow command tab chrome instead of forcing the add control to stay visible.
 -->
 
@@ -5113,7 +5113,7 @@ Slice 403 aligns GPUI command-pane inline New Terminal visibility with native ti
 ### 2026-06-25-18:51 Task slice 404
 
 <!--
-CDXC:GPUICommandTabOverflow 2026-06-25-18:51:
+CDXC:CommandPane 2026-06-25-18:51:
 Slice 404 aligns GPUI Show Active Tab chrome with native tab viewport layout. The sticky active-tab proxy is now absolute overlay chrome at the tab viewport edge instead of a flex sibling, so it no longer steals 30px from the command tab run.
 -->
 
@@ -5126,7 +5126,7 @@ Slice 404 aligns GPUI Show Active Tab chrome with native tab viewport layout. Th
 ### 2026-06-25-18:56 Task slice 405
 
 <!--
-CDXC:GPUICommandTabOverflow 2026-06-25-18:56:
+CDXC:CommandPane 2026-06-25-18:56:
 Slice 405 aligns GPUI Show Active Tab click behavior with native `performStickyActiveTabButton`. The sticky active-tab proxy now only centers the active tab in its current scroll strip and no longer focuses the command pane or mutates the focused command group.
 -->
 
@@ -5139,7 +5139,7 @@ Slice 405 aligns GPUI Show Active Tab click behavior with native `performStickyA
 ### 2026-06-25-19:02 Task slice 406
 
 <!--
-CDXC:GPUICommandSleepingPlaceholder 2026-06-25-19:02:
+CDXC:SessionSleep 2026-06-25-19:02:
 Slice 406 aligns GPUI sleeping command-placeholder keyboard wake with native AppKit modifier filtering. Function-modified alphanumeric key-downs now stay inert like native `.function` events, while plain and Shift-only letters/digits continue to wake.
 -->
 
@@ -5151,7 +5151,7 @@ Slice 406 aligns GPUI sleeping command-placeholder keyboard wake with native App
 ### 2026-06-25-19:07 Task slice 407
 
 <!--
-CDXC:GPUICommandSleepingPlaceholder 2026-06-25-19:07:
+CDXC:SessionSleep 2026-06-25-19:07:
 Slice 407 aligns GPUI sleeping command-placeholder keyboard wake with native visible-placeholder responder ownership. Alphanumeric keys now wake only when the command pane is expanded, so a collapsed strip that still remembers command focus cannot wake a parked command tab without a visible placeholder body.
 -->
 
@@ -5163,7 +5163,7 @@ Slice 407 aligns GPUI sleeping command-placeholder keyboard wake with native vis
 ### 2026-06-25-19:13 Task slice 409
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-19:13:
+CDXC:DelayedSend 2026-06-25-19:13:
 Slice 409 aligns GPUI command-terminal body Delayed Send badge evidence with native `delayedSendLabelFrame` and `TerminalPaneDelayedSendLabelLayer`. Badge parity now has a test-scoped pure exact-body geometry helper for native tiny-body hiding, centered fitting, 60px horizontal padding, 58px fitted height, body-width-minus-32 and body-height-minus-24 clamps, and monospaced bold 23px timer styling without using stale command-group bounds.
 -->
 
@@ -5177,7 +5177,7 @@ Slice 409 aligns GPUI command-terminal body Delayed Send badge evidence with nat
 ### 2026-06-25-19:14 Task slice 410
 
 <!--
-CDXC:GPUICommandTabSelection 2026-06-25-19:14:
+CDXC:CommandPane 2026-06-25-19:14:
 Slice 410 aligns GPUI command-tab left-click selection with native AppKit tab buttons. Left mouse-down now arms only a runtime pending tab token, matching mouse-up commits selection, and command-tab drag start cancels the pending token so a drag never selects the tab.
 -->
 
@@ -5191,7 +5191,7 @@ Slice 410 aligns GPUI command-tab left-click selection with native AppKit tab bu
 ### 2026-06-25-19:17 Task slice 411
 
 <!--
-CDXC:GPUICommandPaneResize 2026-06-25-19:17:
+CDXC:CommandPane 2026-06-25-19:17:
 Slice 411 makes command-panel resize parity explicit in GPUI. Drag state now matches native `beginCommandsPanelResize` by storing absolute start height plus start Y, drag continuation centralizes the top-origin GPUI sign conversion so visual upward motion increases panel height, and finish keeps the single persistence point matching native end/reset behavior.
 -->
 
@@ -5205,7 +5205,7 @@ Slice 411 makes command-panel resize parity explicit in GPUI. Drag state now mat
 ### 2026-06-25-19:21 Task slice 412
 
 <!--
-CDXC:GPUICommandTabSelection 2026-06-25-19:21:
+CDXC:CommandPane 2026-06-25-19:21:
 Slice 412 integrates the parallel command-tab selection work by keeping drag cleanup on tab-owned left mouse-up. The tab handler consumes the event after deciding whether a pending click may select, so it must also clear active command-tab drag state instead of relying only on the root mouse-up cleanup path.
 -->
 
@@ -5217,7 +5217,7 @@ Slice 412 integrates the parallel command-tab selection work by keeping drag cle
 ### 2026-06-25-19:27 Task slice 413
 
 <!--
-CDXC:GPUIKeyboardFocus 2026-06-25-19:27:
+CDXC:FocusRouting 2026-06-25-19:27:
 Slice 413 makes GPUI command-pane F12 parity explicit with the native three-state command-panel rule. Hidden panels open and focus, visible panels with non-command focus only transfer focus into the command pane, and visible command-focused panels collapse while restoring the previous valid workspace/editor focus.
 -->
 
@@ -5230,7 +5230,7 @@ Slice 413 makes GPUI command-pane F12 parity explicit with the native three-stat
 ### 2026-06-25-19:27 Task slice 414
 
 <!--
-CDXC:GPUICommandPaneInsertion 2026-06-25-19:27:
+CDXC:CommandPane 2026-06-25-19:27:
 Slice 414 preserves native command-panel New Terminal insertion semantics. Native `targetSessionId` locates the command tab group, then appends the new command session to that group; explicit tab-strip transfer remains the only command path that honors a requested insertion index.
 -->
 
@@ -5242,7 +5242,7 @@ Slice 414 preserves native command-panel New Terminal insertion semantics. Nativ
 ### 2026-06-25-19:28 Task slice 415
 
 <!--
-CDXC:GPUICommandWorkspaceTransfer 2026-06-25-19:28:
+CDXC:Workarea 2026-06-25-19:28:
 Slice 415 hardens command-to-Agents placeholder transfer transactions. If command-source removal fails after an Agents placeholder insert, GPUI now rolls back only the inserted Mounting Agents placeholder, restores previous Agents focus/active tab state, and preserves the command source without moving command text, output, paths, process state, libghostty state, or terminal content.
 -->
 
@@ -5254,7 +5254,7 @@ Slice 415 hardens command-to-Agents placeholder transfer transactions. If comman
 ### 2026-06-25-19:44 Task slice 416
 
 <!--
-CDXC:GPUICommandPaneDragDrop 2026-06-25-19:44:
+CDXC:CommandPane 2026-06-25-19:44:
 Slice 416 aligns GPUI command-pane body drop-zone math with native `commandPaneDropPlacement`. Command body drops now use only the native horizontal 24%/76% bands, return center for widths at or below one pixel or invalid widths, and never inherit workspace min/max edge clamps or top/bottom split competition.
 -->
 
@@ -5267,7 +5267,7 @@ Slice 416 aligns GPUI command-pane body drop-zone math with native `commandPaneD
 ### 2026-06-25-19:45 Task slice 417
 
 <!--
-CDXC:GPUICommandPaneDragDrop 2026-06-25-19:45:
+CDXC:CommandPane 2026-06-25-19:45:
 Slice 417 hardens Agents-to-command placeholder transfer rollback. If Agents source removal fails after command placeholder insertion, GPUI removes only the inserted command placeholder, restores prior command-pane mode/focused group/active tabs, and preserves the Agents source without moving command text, terminal content, paths, process state, libghostty state, stdout/stderr, or Agents runtime content.
 -->
 
@@ -5280,7 +5280,7 @@ Slice 417 hardens Agents-to-command placeholder transfer rollback. If Agents sou
 ### 2026-06-25-19:57 Worker A command-pane reorder parity
 
 <!--
-CDXC:GPUICommandPaneDragDrop 2026-06-25-19:57:
+CDXC:CommandPane 2026-06-25-19:57:
 Worker A aligns same-group GPUI command tab-strip reorder with native AppKit behavior. Forward marker drops now adjust the final insertion index after source removal, same-index and adjacent same-slot drops are no-ops, and no-op tab-strip drag feedback is suppressed so persisted layout changes only reflect visible tab order changes.
 -->
 
@@ -5293,7 +5293,7 @@ Worker A aligns same-group GPUI command tab-strip reorder with native AppKit beh
 ### 2026-06-25-19:58 Worker B command-pane attention acknowledgement
 
 <!--
-CDXC:GPUICommandAttention 2026-06-25-19:58:
+CDXC:Notifications 2026-06-25-19:58:
 Worker B aligns GPUI command-pane direct activation with native attention acknowledgement. Clicking or explicitly focusing command content, tabs, titlebar chrome, or primary clicked-tab actions clears only the activated command session's Attention state to Idle, while Working, Delayed Send, sleeping placeholders, and Agents workspace activity remain untouched.
 -->
 
@@ -5305,7 +5305,7 @@ Worker B aligns GPUI command-pane direct activation with native attention acknow
 ### 2026-06-25-21:12 Task slice 418
 
 <!--
-CDXC:GPUITerminalCloseConfirm 2026-06-25-21:12:
+CDXC:CommandPane 2026-06-25-21:12:
 Slice 418 keeps direct command close-confirm consent on the same side-effect path as confirmed runtime callbacks and normal tab close. After an exact command confirmation removes a session, GPUI prunes command-owned Delayed Send and Close After Done timers, refreshes the sidebar command projection, persists shell layout, and repaints without touching Agents/startup state or terminal content.
 -->
 
@@ -5317,7 +5317,7 @@ Slice 418 keeps direct command close-confirm consent on the same side-effect pat
 ### 2026-06-25-21:24 Worker C command-pane New Terminal targeting
 
 <!--
-CDXC:GPUICommandPaneInsertion 2026-06-25-21:24:
+CDXC:CommandPane 2026-06-25-21:24:
 Worker C aligns GPUI command-panel New Terminal targeting with native titlebar action dispatch. Clicked command chrome now passes the clicked group into creation, keyboard/untargeted creation still uses the focused command group, and stale clicked targets no-op instead of falling back into the wrong pane.
 -->
 
@@ -5329,7 +5329,7 @@ Worker C aligns GPUI command-panel New Terminal targeting with native titlebar a
 ### 2026-06-25-21:24 Worker D command-pane responder focus targeting
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-25-21:24:
+CDXC:FocusRouting 2026-06-25-21:24:
 Worker D aligns GPUI command focused-session helpers with native first-responder targeting. Responder-style command actions now require the stored focused command group to still exist, so stale command focus no longer falls back to the first visible command group and acts on the wrong terminal.
 -->
 
@@ -5341,7 +5341,7 @@ Worker D aligns GPUI command focused-session helpers with native first-responder
 ### 2026-06-25-21:29 Task slice 419
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-25-21:29:
+CDXC:ContextMenus 2026-06-25-21:29:
 Slice 419 aligns GPUI command-tab primary context-menu wording with native `TerminalSessionTitleBarView.actionMenuTitle`. The command-tab Rename row now says "Rename Session", while Delayed Send, Close After Done, scoped Sleep/Close rows, and command-panel control labels keep their existing native wording.
 -->
 
@@ -5353,10 +5353,10 @@ Slice 419 aligns GPUI command-tab primary context-menu wording with native `Term
 ### 2026-06-25-21:40 Task slice 420
 
 <!--
-CDXC:GPUICommandFocusMode 2026-06-25-21:40:
+CDXC:FocusMode 2026-06-25-21:40:
 Slice 420 makes GPUI command-tab Focus a real command-panel split-owner mode. The row appears only for split command groups with more than one visible awake owner, stores only the focused command group id, renders/mounts only that group while preserving the full command split tree for exit, and validates persisted Focus ids before hiding peers.
 
-CDXC:GPUICommandTabContextMenu 2026-06-25-21:40:
+CDXC:ContextMenus 2026-06-25-21:40:
 Fork Session, Reload Session, and Pop Out Pane remain absent from GPUI command-tab context menus because the runtime-action worker confirmed there is still no real command-pane implementation for those operations. Do not add fake rows, placeholder actions, or fallback toasts for those native labels.
 -->
 
@@ -5369,10 +5369,10 @@ Fork Session, Reload Session, and Pop Out Pane remain absent from GPUI command-t
 ### 2026-06-25-21:50 Task slice 421
 
 <!--
-CDXC:GPUICommandFocusMode 2026-06-25-21:50:
+CDXC:FocusMode 2026-06-25-21:50:
 Slice 421 adds native command-tab double-click Focus parity. A matching left mouse-up double-click on an eligible split command tab toggles command Focus through the existing command-pane Focus state and skips the ordinary selection path, while single clicks, stale mouse-up tokens, drag-active gestures, collapsed hidden-open tabs, and non-eligible command groups keep their existing behavior.
 
-CDXC:GPUICommandTabOverflow 2026-06-25-21:50:
+CDXC:CommandPane 2026-06-25-21:50:
 Slice 421 makes the conditional Show Active Tab proxy a runtime command-pane navigation control. Clicking the real proxy focuses the owning command group/pane and centers the already-selected active tab with the native sticky-button scroll math, without changing tab order, command session identity, drag/drop state, command text, logs, overlays, or hit-test routing.
 -->
 
@@ -5385,10 +5385,10 @@ Slice 421 makes the conditional Show Active Tab proxy a runtime command-pane nav
 ### 2026-06-25-22:03 Task slice 422
 
 <!--
-CDXC:GPUICommandTabRuntimeActions 2026-06-25-21:59:
+CDXC:CommandPane 2026-06-25-21:59:
 Slice 422 makes the command-tab runtime-action boundary explicit instead of implicit. Fork Session, Reload Session, and Pop Out Pane stay absent from GPUI command-tab context menus until real command-pane runtime semantics exist for command-session cloning, live embedded reload, and popped-out command-owner transfer; do not add disabled rows, placeholder rows, fallback toasts, shell-only duplicates, or surface-drop behavior.
 
-CDXC:GPUICommandPaneControls 2026-06-25-22:01:
+CDXC:CommandPane 2026-06-25-22:01:
 Slice 422 aligns fixed command-panel action targeting with native owner titlebars. Pin/Unpin and Minimize retarget the clicked command group before dispatch so split command panels do not mutate or focus the previously focused group; invalid clicked groups no-op instead of falling back, while New Terminal remains on its existing explicit insertion target.
 -->
 
@@ -5401,7 +5401,7 @@ Slice 422 aligns fixed command-panel action targeting with native owner titlebar
 ### 2026-06-25-22:13 Task slice 423
 
 <!--
-CDXC:GPUIAppModalReturnFocus 2026-06-25-22:13:
+CDXC:FocusRouting 2026-06-25-22:13:
 Slice 423 aligns GPUI command-pane app-modal dismissal with native child-window return focus. Rename Session and Delayed Send remember only the clicked command group/session id, non-command modals opened from expanded command-pane focus may remember the focused command tab, and close/toast dismissal restores only that exact live command tab without falling back to another group or storing modal payloads, titles, command text, paths, URLs, stdout/stderr, or terminal content.
 -->
 
@@ -5414,7 +5414,7 @@ Slice 423 aligns GPUI command-pane app-modal dismissal with native child-window 
 ### 2026-06-25-22:29 Task slice 424
 
 <!--
-CDXC:GPUIAppModalCommandBridge 2026-06-25-22:29:
+CDXC:AppModal 2026-06-25-22:29:
 Slice 424 tightens GPUI command app-modal lifecycle parity. Rename Session and Delayed Send bridge opens must carry a live string command-session id that still resolves to a command group, and failed GPUI app-modal window updates must clear their paired command return-focus target with the stale window handle so later modal closes cannot focus an unrelated command tab.
 -->
 
@@ -5427,10 +5427,10 @@ Slice 424 tightens GPUI command app-modal lifecycle parity. Rename Session and D
 ### 2026-06-25-22:35 Task slice 425
 
 <!--
-CDXC:GPUIAppModalReturnFocus 2026-06-25-22:35:
+CDXC:FocusRouting 2026-06-25-22:35:
 Slice 425 preserves the first command return-focus target for an active GPUI app-modal host, matching native's early return after a modal already captured focus. Duplicate or nested modal opens must not retarget dismissal focus away from the command tab that opened the original modal.
 
-CDXC:GPUICommandPaneRename 2026-06-25-22:35:
+CDXC:CommandPane 2026-06-25-22:35:
 Slice 425 also keeps Rename Session as a live command-tab title edit. A requested command session must still resolve to a command group before renaming; stale stored sessions no-op without falling back to the focused group or mutating another tab.
 -->
 
@@ -5443,7 +5443,7 @@ Slice 425 also keeps Rename Session as a live command-tab title edit. A requeste
 ### 2026-06-25-22:46 Task slice 426
 
 <!--
-CDXC:GPUICommandTimers 2026-06-25-22:46:
+CDXC:DelayedSend 2026-06-25-22:46:
 Slice 426 makes GPUI command timer runtime ownership depend on live command-tab group membership instead of stored command-session rows. Delayed Send restart checkpoints and Close After Done countdowns may attach only to sessions that still resolve to a command group; orphaned rows keep only safe semantic booleans and cannot re-arm, refresh, fire, or fall back to another command tab.
 -->
 
@@ -5456,10 +5456,10 @@ Slice 426 makes GPUI command timer runtime ownership depend on live command-tab 
 ### 2026-06-25-23:00 Task slice 427
 
 <!--
-CDXC:GPUIAppModalCommandBridge 2026-06-25-22:54:
+CDXC:AppModal 2026-06-25-22:54:
 Slice 427 wires the shared `toggleCloseAfterDone` sidebar command into GPUI with the same live string command-session gate used by command app-modal lifecycle work. Direct sidebar commands may mutate only a session id that still resolves to a command tab group; malformed, numeric, stale, missing, or orphan ids no-op without falling back to the focused command group.
 
-CDXC:GPUICommandCloseAfterDone 2026-06-25-22:54:
+CDXC:Sessions 2026-06-25-22:54:
 Slice 427 also hardens the inner Close After Done toggle boundary. Newly arming Close After Done requires live command-tab membership, while already-armed stored sessions can still clear stale booleans without reattaching, starting timers, or redirecting to another command tab.
 -->
 
@@ -5473,7 +5473,7 @@ Slice 427 also hardens the inner Close After Done toggle boundary. Newly arming 
 ### 2026-06-25-23:09 Task slice 428
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-25-23:04:
+CDXC:DelayedSend 2026-06-25-23:04:
 Slice 428 makes GPUI Delayed Send app-modal submit/cancel use the same direct command-session bridge boundary as Close After Done. `scheduleDelayedSend` and `cancelDelayedSend` must resolve a string sessionId to a live command tab group before duration parsing, timer arming, or timer clearing; malformed, numeric, stale, missing, and orphan ids no-op without falling back to the focused command group or mutating stored orphan rows.
 -->
 
@@ -5487,7 +5487,7 @@ Slice 428 makes GPUI Delayed Send app-modal submit/cancel use the same direct co
 ### 2026-06-25-23:20 Task slice 429
 
 <!--
-CDXC:GPUICommandTabKeyboardParity 2026-06-25-23:20:
+CDXC:CommandPane 2026-06-25-23:20:
 Slice 429 tightens GPUI command-pane Ctrl-Tab parity. Keyboard command-tab cycling must be a live expanded command-panel route: stale focused groups and collapsed command strips no-op without first-group fallback, and successful cycling acknowledges only the newly selected Attention command tab.
 -->
 
@@ -5500,10 +5500,10 @@ Slice 429 tightens GPUI command-pane Ctrl-Tab parity. Keyboard command-tab cycli
 ### 2026-06-25-23:41 Task slice 430
 
 <!--
-CDXC:GPUICommandKeyboardFocus 2026-06-25-23:35:
+CDXC:FocusRouting 2026-06-25-23:35:
 Slice 430 aligns GPUI Cmd-Opt directional command-pane focus with native command-panel first-responder routing. Directional focus into Commands must resolve a live expanded command group/session, reject collapsed, empty, stale, or orphan command targets without fallback, and acknowledge Attention on the newly focused command session.
 
-CDXC:GPUICommandTabKeyboardParity 2026-06-25-23:35:
+CDXC:CommandPane 2026-06-25-23:35:
 Render-order keyboard fallback must append concrete live command groups, not a generic command-pane target, so workspace and project-editor focus traversal enters split command panels deterministically and skips hidden strips or stored sessions that are no longer rendered command tabs.
 -->
 
@@ -5517,7 +5517,7 @@ Render-order keyboard fallback must append concrete live command groups, not a g
 ### 2026-06-25-23:55 Task slice 431
 
 <!--
-CDXC:GPUICommandKeyboardFocus 2026-06-25-23:55:
+CDXC:FocusRouting 2026-06-25-23:55:
 Slice 431 completes the command-pane keyboard focus activation pass. Cmd-Opt/spatial/render-order focus into a live command group must reveal the active command tab after focus, and F12 hidden-open or visible-focus transfer must acknowledge only the active tab in the live focused command group while collapse/restore and stale focused groups leave Attention untouched.
 -->
 
@@ -5531,7 +5531,7 @@ Slice 431 completes the command-pane keyboard focus activation pass. Cmd-Opt/spa
 ### 2026-06-26-00:05 Task slice 432
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-26-00:05:
+CDXC:FocusRouting 2026-06-26-00:05:
 Slice 432 completes the command-pane mouse-focus reveal pass. Expanded titlebar chrome clicks, mounted command body clicks, and non-mounted command body clicks must focus the activated command group/session and reveal that active command tab in both expanded and collapsed command strips, matching native `focusTerminal(...)->revealActivePaneTab` without adding overlays, fallback focus, or hidden hit-test routing.
 -->
 
@@ -5544,7 +5544,7 @@ Slice 432 completes the command-pane mouse-focus reveal pass. Expanded titlebar 
 ### 2026-06-26-00:31 Task slice 433
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-26-00:31:
+CDXC:CommandPane 2026-06-26-00:31:
 Slice 433 aligns GPUI terminal Action `closeTerminalOnExit` with macOS command-pane behavior. The fixed sidebar command-action bridge may carry only the saved terminal close-on-exit boolean plus existing terminal run metadata; Browser Actions must omit that field, Rust must reject mismatched/non-boolean payloads, and completion may close only the exact idle Action-owned command tab after sidebar success/error feedback. Do not infer close-on-exit from command text, URLs, cwd/env, paths, terminal output, status-file paths, logs, shell-state JSON, or renderer fallback state.
 -->
 
@@ -5558,7 +5558,7 @@ Slice 433 aligns GPUI terminal Action `closeTerminalOnExit` with macOS command-p
 ### 2026-06-26-00:42 Task slice 434
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-26-00:42:
+CDXC:FocusRouting 2026-06-26-00:42:
 Slice 434 tightens GPUI command-pane focused activation and reveal to the live focused command group. Responder/titlebar Attention acknowledgement and focused active-tab scrolling must no-op when `focused_group` is stale instead of falling back to the first command group, so GPUI does not clear or reveal an unrelated command terminal.
 -->
 
@@ -5572,10 +5572,10 @@ Slice 434 tightens GPUI command-pane focused activation and reveal to the live f
 ### 2026-06-26-04:20 Task slice 435
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-26-04:20:
+CDXC:FocusRouting 2026-06-26-04:20:
 Slice 435 tightens GPUI sidebar and app-modal command-session indicators to responder-exact command focus. Indicator active state must require shell focus in the command pane plus a live `focused_group`; stale command focus and non-command focus export all indicators as inactive instead of falling back to the first command group.
 
-CDXC:GPUICommandPaneActions 2026-06-26-04:20:
+CDXC:CommandPane 2026-06-26-04:20:
 Slice 435 tightens GPUI sidebar Action run-end matching to the live focused command group. `endSidebarCommandRun` may prefer the selected Action tab only when the selected tab comes from a live focused group; stale command focus must fall through to an active matching run before any idle Action-owned tab.
 -->
 
@@ -5589,10 +5589,10 @@ Slice 435 tightens GPUI sidebar Action run-end matching to the live focused comm
 ### 2026-06-26-04:34 Task slice 436
 
 <!--
-CDXC:GPUICommandPaneInsertion 2026-06-26-04:34:
+CDXC:CommandPane 2026-06-26-04:34:
 Slice 436 aligns GPUI untargeted command creation with native command-panel layout ownership. New Terminal and terminal Action creation must recover from stale stored command focus by appending to the first live command group, selecting the new tab, and preserving the existing split tree; explicit clicked-group creation still rejects missing targets without fallback.
 
-CDXC:GPUICommandStartupRestore 2026-06-26-04:34:
+CDXC:Workarea 2026-06-26-04:34:
 Slice 436 aligns GPUI command startup restore with native mounted-command focus. Startup activity and Delayed Send restore must compare the target against the live focused command group, not first-group active fallback, so restoring a command tab also normalizes command focus and rejects orphan stored sessions.
 -->
 
@@ -5606,7 +5606,7 @@ Slice 436 aligns GPUI command startup restore with native mounted-command focus.
 ### 2026-06-26-04:53 Task slice 437
 
 <!--
-CDXC:GPUICommandFocusMode 2026-06-26-04:43:
+CDXC:FocusMode 2026-06-26-04:43:
 Slice 437 keeps GPUI command Focus visible after command ownership moves. Insertions, reorders, grouping, and Agents-to-command transfers that select a command group outside the current Focus filter must clear command Focus so the newly active native-equivalent command owner is rendered; failed transfer rollback restores the previous valid Focus state.
 -->
 
@@ -5620,7 +5620,7 @@ Slice 437 keeps GPUI command Focus visible after command ownership moves. Insert
 ### 2026-06-26-05:06 Task slice 438
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-26-05:06:
+CDXC:CommandPane 2026-06-26-05:06:
 Slice 438 supersedes slice 433's command-pane close-on-exit cleanup behavior to match current native `runNativeSidebarCommand`: saved terminal Actions may still carry legacy `closeTerminalOnExit` metadata, but default command-pane Action runtime must force close-on-exit off so completed Action tabs remain in Commands and can be reused. Runtime bridges, run state, status-file completions, process-exit completions, and stale completion cleanup must not close the Action-owned command tab or infer close behavior from command text, URLs, cwd/env, paths, terminal output, status-file paths, logs, shell-state JSON, or renderer fallback state.
 -->
 
@@ -5634,7 +5634,7 @@ Slice 438 supersedes slice 433's command-pane close-on-exit cleanup behavior to 
 ### 2026-06-26-05:16 Task slice 439
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-26-05:16:
+CDXC:CommandPane 2026-06-26-05:16:
 Slice 439 narrows command-palette Action launch authority after slice 438's native close-on-exit parity correction. `runSidebarCommand` may carry only the saved command id and optional runMode selected from trusted palette state; React/renderer messages must not forward close-on-exit, worktree paths, command text, URLs, cwd/env, terminal output, logs, or other launch metadata because native and GPUI resolve those from trusted command/HUD state.
 -->
 
@@ -5647,10 +5647,10 @@ Slice 439 narrows command-palette Action launch authority after slice 438's nati
 ### 2026-06-26-05:28 Task slice 440
 
 <!--
-CDXC:GPUICommandTabSelection 2026-06-26-05:28:
+CDXC:CommandPane 2026-06-26-05:28:
 Slice 440 tightens GPUI command-tab left-click ownership to native same-gesture selection. A left mouse-up outside the tab must cancel the exact armed command-tab click token so a later stale mouse-up cannot select the tab or enter command Focus without a fresh mouse-down.
 
-CDXC:GPUICommandPaneActions 2026-06-26-05:28:
+CDXC:CommandPane 2026-06-26-05:28:
 Slice 440 validates command-pane Action selectors at the GPUI runtime boundary. `runSidebarCommand` and `endSidebarCommandRun` must reject missing, non-string, or blank command ids before Action lookup or run-end bridge construction, even when malformed renderer objects carry close-on-exit, command text, URLs, cwd/env, paths, logs, or terminal output.
 -->
 
@@ -5663,10 +5663,10 @@ Slice 440 validates command-pane Action selectors at the GPUI runtime boundary. 
 ### 2026-06-26-06:11 Task slice 441
 
 <!--
-CDXC:GPUICommandClose 2026-06-26-06:11:
+CDXC:CommandPane 2026-06-26-06:11:
 Slice 441 aligns GPUI Cmd-W routing with native command-panel responder ownership. Live expanded awake command focus closes the focused command tab, live expanded sleeping placeholders intentionally consume Cmd-W without closing, and stale or collapsed command focus falls through to the active workspace or Browser close path instead of swallowing the shortcut.
 
-CDXC:GPUICommandPalette 2026-06-26-06:11:
+CDXC:CommandPalette 2026-06-26-06:11:
 Focused-pane command-palette hotkeys remain authority-only actions. The renderer may post only the selected action id and fixed runGhostexHotkeyAction type; session ids, command text, cwd/env, paths, URLs, close-on-exit, output, logs, and launch metadata stay out of this bridge.
 -->
 
@@ -5679,10 +5679,10 @@ Focused-pane command-palette hotkeys remain authority-only actions. The renderer
 ### 2026-06-26-06:23 Task slice 442
 
 <!--
-CDXC:GPUICommandPaneTabs 2026-06-26-06:23:
+CDXC:CommandPane 2026-06-26-06:23:
 Slice 442 aligns direct GPUI command-tab close with native command titlebar close. A single direct close must first select the clicked command session so native right-then-left neighbor selection is resolved from the close target, while scoped Close Left, Close Right, and Close Others stay non-focusing because their native menu rows do not focus the clicked terminal first.
 
-CDXC:GPUICommandPaneActions 2026-06-26-06:23:
+CDXC:CommandPane 2026-06-26-06:23:
 Slice 442 proves command Action status stamps keep macOS parity by writing only safe completion fields through a session-state-derived, process-unique `.command.tmp` path before atomically moving it into place. Shared fixed temp paths are forbidden because concurrent command/status writers can clobber the idle stamp that drives completion sound.
 -->
 
@@ -5696,10 +5696,10 @@ Slice 442 proves command Action status stamps keep macOS parity by writing only 
 ### 2026-06-26-06:31 Task slice 443
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-26-06:31:
+CDXC:CommandPane 2026-06-26-06:31:
 Slice 443 proves command-pane Action run-start parity with native `setNativeSidebarCommandPaneTitle`: a restored idle Action tab reused by normalized title must become the selected live Action tab, rewrite its visible title and command id to the current Action, clear stale Delayed Send chrome, mark Working, attach run metadata, and avoid allocating a duplicate tab.
 
-CDXC:GPUICommandTerminalProcessExit 2026-06-26-06:31:
+CDXC:Terminal 2026-06-26-06:31:
 Slice 443 tightens command-pane Action process-exit parity with native terminal-exit cleanup. An exited Action command surface must remove only the exact command tab, emit safe completion metadata from the matching idle status file or error fallback, and leave stale Delayed Send and Close After Done runtime timer cleanup to the existing command-model prune paths without touching sibling command tabs.
 -->
 
@@ -5712,10 +5712,10 @@ Slice 443 tightens command-pane Action process-exit parity with native terminal-
 ### 2026-06-26-06:43 Task slice 444
 
 <!--
-CDXC:GPUICommandPaneDragDrop 2026-06-26-06:43:
+CDXC:CommandPane 2026-06-26-06:43:
 Slice 444 proves native command-panel same-session side-drop parity in GPUI. A command tab dragged to the left or right edge of its own command owner must split out beside the remaining sibling group, reject single-tab self side drops before id allocation, preserve peer command groups, and select/focus the new dragged split owner.
 
-CDXC:GPUICommandFocusMode 2026-06-26-06:43:
+CDXC:FocusMode 2026-06-26-06:43:
 Slice 444 proves command Focus stays tied to visible command ownership during drag/drop. Same-owner command selection and tab-strip reorder preserve Focus, while a left/right side-drop that creates a new command owner clears Focus so the dragged tab remains visible and selected.
 -->
 
@@ -5729,10 +5729,10 @@ Slice 444 proves command Focus stays tied to visible command ownership during dr
 ### 2026-06-26-06:53 Task slice 445
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-06:53:
+CDXC:CommandPalette 2026-06-26-06:53:
 Slice 445 aligns focused-pane Browser-open parity with the native command terminal titlebar branch. `openBrowserPane` stays a recognized command-palette id, but live CommandPane shell focus must no-op at execution time because native command terminals default-return Browser titlebar actions; Agents, Browser, and project-editor focus still open and focus Browser.
 
-CDXC:GPUIFocusedCommandHotkeys 2026-06-26-06:53:
+CDXC:FocusMode 2026-06-26-06:53:
 Slice 445 aligns focused command-pane create/split hotkeys with native `commandsPanel.isVisible` source-session routing. Cmd+T, Cmd+D, and Cmd+Shift+D may allocate command placeholders only from an expanded visible command pane with a live focused source tab; collapsed, stale, or non-command focus must not open hidden command tabs or hidden command split groups.
 -->
 
@@ -5746,10 +5746,10 @@ Slice 445 aligns focused command-pane create/split hotkeys with native `commands
 ### 2026-06-26-07:04 Task slice 446
 
 <!--
-CDXC:GPUIFocusedPaneRotation 2026-06-26-07:04:
+CDXC:FocusMode 2026-06-26-07:04:
 Slice 446 aligns GPUI `rotatePanesClockwise` with the native focused-pane dispatcher. The action must be recognized by the shared command-palette hotkey bridge, default-return for live CommandPane focus like native command terminal titlebar actions, no-op for Browser and project-editor focus, and rotate only an active Agents workspace pane.
 
-CDXC:GPUIAgentsRotatePanes 2026-06-26-07:04:
+CDXC:CommandPane 2026-06-26-07:04:
 Slice 446 adds the Agents workspace rotate model used by the focused-pane route. Rotation is a pure split-tree transform that swaps horizontal/vertical axes recursively, reverses vertical branches while inverting their ratios, preserves pane ids, tab order, active tabs, focused pane, and terminal presentation rows, clears Focus mode so the rotated tree is visible, and leaves command-pane state untouched.
 -->
 
@@ -5763,7 +5763,7 @@ Slice 446 adds the Agents workspace rotate model used by the focused-pane route.
 ### 2026-06-26-07:10 Task slice 447
 
 <!--
-CDXC:GPUICommandPaneHotkeyBridge 2026-06-26-07:10:
+CDXC:Hotkeys 2026-06-26-07:10:
 Slice 447 aligns Rename Active Session hotkey dispatch between the native command palette and the sidebar DOM bridge. `renameActiveSession` must use the shared native-owned `runGhostexHotkeyAction` authority path with only action id and message type in the renderer payload, so native resolves the focused session without leaking renderer session ids, titles, paths, command text, URLs, or launch metadata.
 -->
 
@@ -5776,10 +5776,10 @@ Slice 447 aligns Rename Active Session hotkey dispatch between the native comman
 ### 2026-06-26-07:21 Task slice 448
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-07:21:
+CDXC:CommandPalette 2026-06-26-07:21:
 Slice 448 aligns the command-palette Open Commands Panel row with macOS DOM dispatch. The shared `runGhostexHotkeyAction("openCommandsPanel")` route must open hidden command panels through shared default height, focus already-visible panels, acknowledge only the live focused Attention command tab, reveal the active command tab, persist shell layout, refresh sidebar command sessions, and never collapse an already-focused visible command pane like the F12 toggle does.
 
-CDXC:HotkeyRouting 2026-06-26-07:21:
+CDXC:Hotkeys 2026-06-26-07:21:
 Sidebar DOM hotkey dispatch must forward Open Commands Panel through the native-owned authority bridge with only action id and message type, matching command-palette selection and avoiding renderer-owned session ids, titles, paths, command text, URLs, or launch metadata.
 -->
 
@@ -5792,10 +5792,10 @@ Sidebar DOM hotkey dispatch must forward Open Commands Panel through the native-
 ### 2026-06-26-07:29 Task slice 449
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-07:29:
+CDXC:CommandPalette 2026-06-26-07:29:
 Slice 449 aligns ordinary command-palette hotkey rows that are not modal commands. `createSession` must use the same Cmd+T shell helper as focused-pane dispatch so command-pane focus respects the visible command-source gate, while app focus creates normal terminal placeholders before modal routing can no-op the shared row.
 
-CDXC:GPUIWorkareaHotkeys 2026-06-26-07:29:
+CDXC:Hotkeys 2026-06-26-07:29:
 Shared command-palette workarea rows must translate only the existing Option+1..5 action ids to GPUI titlebar modes and then execute through the same titlebar availability/focus helper. Unsupported project-jump ids remain unmapped until their GPUI model behavior exists.
 -->
 
@@ -5808,10 +5808,10 @@ Shared command-palette workarea rows must translate only the existing Option+1..
 ### 2026-06-26-07:36 Task slice 450
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-07:36:
+CDXC:CommandPalette 2026-06-26-07:36:
 Slice 450 aligns command-palette focus-navigation rows with GPUI keyboard routes. `focusPreviousSession` and `focusNextSession` must call the same focused-tab cycling helper as direct tab-cycle hotkeys, while `focusUp`, `focusRight`, `focusDown`, and `focusLeft` must call the same workspace directional-focus helper as Cmd-Opt-Arrow.
 
-CDXC:GPUICommandPalette 2026-06-26-07:36:
+CDXC:CommandPalette 2026-06-26-07:36:
 Numbered session-slot and project-jump command-palette rows remain intentionally unmapped in GPUI until the host owns real sidebar row/project slot-order models. Do not add fallback focus behavior that guesses from shell ids or current project state.
 -->
 
@@ -5824,7 +5824,7 @@ Numbered session-slot and project-jump command-palette rows remain intentionally
 ### 2026-06-26-07:39 Task slice 451
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-07:39:
+CDXC:CommandPalette 2026-06-26-07:39:
 Slice 451 aligns the two shared command-palette open hotkeys. `openCommandPalette` keeps the command-mode `>` initial query, while `openSessionSearchPalette` opens the same modal with an empty initial query so current and previous sessions are searched immediately.
 -->
 
@@ -5836,7 +5836,7 @@ Slice 451 aligns the two shared command-palette open hotkeys. `openCommandPalett
 ### 2026-06-26-10:04 Task slice 452
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-10:04:
+CDXC:CommandPalette 2026-06-26-10:04:
 Slice 452 aligns shared Start Action 1-5 command-palette rows with GPUI titlebar Actions. `runActionSlot1..5` must execute the same configured positional action slots as the titlebar menu and action hotkeys, while renderer/native bridge payloads remain authority-only and never include command text, URLs, paths, session ids, or launch metadata.
 -->
 
@@ -5850,7 +5850,7 @@ Slice 452 aligns shared Start Action 1-5 command-palette rows with GPUI titlebar
 ### 2026-06-26-10:04 Task slice 453
 
 <!--
-CDXC:GPUISidebarCollapse 2026-06-26-10:04:
+CDXC:Sidebar 2026-06-26-10:04:
 Slice 453 aligns the shared `toggleSidebarCollapsed` command-palette row and default Cmd+B shortcut with GPUI shell chrome. Collapse must remove the sidebar CEF child and divider as normal layout siblings while preserving the expanded `sidebar_width`, canceling stale divider interaction state, and avoiding overlap, hidden hit regions, zero-width persistence, or fallback sidebar movement.
 -->
 
@@ -5865,7 +5865,7 @@ Slice 453 aligns the shared `toggleSidebarCollapsed` command-palette row and def
 ### 2026-06-26-23:04 Task slice 454
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-23:04:
+CDXC:CommandPalette 2026-06-26-23:04:
 Slice 454 aligns shared Focus Previous Group and Focus Next Group command-palette rows with GPUI render-order focus. `focusPreviousGroup` and `focusNextGroup` must route through the same previous/next group traversal shape as native `focusAdjacentGroup`, scoped to Agents-pane and command-pane focus, without guessing numbered group slots, project jumps, Browser/project-editor targets, or fallback shell ids.
 -->
 
@@ -5879,10 +5879,10 @@ Slice 454 aligns shared Focus Previous Group and Focus Next Group command-palett
 ### 2026-06-26-23:14 Task slice 455
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-23:14:
+CDXC:CommandPalette 2026-06-26-23:14:
 Slice 455 makes GPUI app-modal hotkey routing an explicit allowlist after shell, pane, sidebar, focus, and action-slot routes have had first chance to handle `runGhostexHotkeyAction`. Settings, Hotkeys, command search, session search, and legacy sidebar modal ids remain mapped, while non-modal hotkeys such as sidebar movement, focus, split, action-slot, and adjacent-group rows must not be swallowed by modal fallback.
 
-CDXC:HotkeyRouting 2026-06-26-23:14:
+CDXC:Hotkeys 2026-06-26-23:14:
 SidebarApp DOM hotkey dispatch must forward Directional Focus and Split Sideways/Downwards through the same native-owned authority bridge as command-palette selection. The renderer payload stays limited to action id plus `runGhostexHotkeyAction`, so native resolves direction, split axis, focus, session, project, and command authority without renderer-owned private data.
 -->
 
@@ -5896,7 +5896,7 @@ SidebarApp DOM hotkey dispatch must forward Directional Focus and Split Sideways
 ### 2026-06-26-23:20 Task slice 456
 
 <!--
-CDXC:GPUICommandPalette 2026-06-26-23:20:
+CDXC:CommandPalette 2026-06-26-23:20:
 Slice 456 aligns numbered Focus Session Slot command-palette rows in GPUI without giving Rust a fake sidebar ordering model. `focusSessionSlot1..9` must bounce to SidebarApp as typed `nativeHotkey` messages so the renderer resolves the currently rendered session slot, while previous/next session, malformed slot ids, and project-jump ids stay on their separate native-owned routes.
 -->
 
@@ -5910,7 +5910,7 @@ Slice 456 aligns numbered Focus Session Slot command-palette rows in GPUI withou
 ### 2026-06-26-23:35 Task slice 457
 
 <!--
-CDXC:GPUISidebarSide 2026-06-26-23:35:
+CDXC:Sidebar 2026-06-26-23:35:
 Slice 457 aligns GPUI Move Sidebar behavior with macOS shared Settings and normal layout ownership. The shared `moveSidebar` command-palette row must flip `sidebarSide`, persist it through the same native-sidebar settings object, render expanded left as sidebar/divider/workspace and expanded right as workspace/divider/sidebar, remove sidebar chrome while collapsed without mutating width, and reverse right-side divider drag math without overlays or hit-test routing.
 -->
 
@@ -5925,7 +5925,7 @@ Slice 457 aligns GPUI Move Sidebar behavior with macOS shared Settings and norma
 ### 2026-06-26-23:52 Task slice 458
 
 <!--
-CDXC:GPUIProjectHotkeys 2026-06-26-23:52:
+CDXC:Hotkeys 2026-06-26-23:52:
 Slice 458 aligns Jump to Project command-palette rows in GPUI without adding a Rust project-order model. `jumpToProject1..9` must send a dedicated SidebarApp project-slot host message so React resolves visible local Projects row order, while `nativeHotkey` remains reserved for session-slot bounce and cannot reflect project jumps back into GPUI; after resolution, GPUI must receive the existing bounded WorkspaceTerminalFocus session bridge rather than an unsupported focusGroup message.
 -->
 
@@ -5939,7 +5939,7 @@ Slice 458 aligns Jump to Project command-palette rows in GPUI without adding a R
 ### 2026-06-26-23:59 Task slice 459
 
 <!--
-CDXC:HotkeyRouting 2026-06-26-23:59:
+CDXC:Hotkeys 2026-06-26-23:59:
 Slice 459 keeps SidebarApp's native-owned hotkey forwarding exhaustive for the existing shared action union without inventing View Mode hotkey ids. `setViewMode` is forwarded only as an action-id bridge when present, while GPUI Rust must not implement a speculative view-mode route because the current shared hotkey definitions contain no concrete grid/horizontal/vertical action ids.
 -->
 
@@ -5953,7 +5953,7 @@ Slice 459 keeps SidebarApp's native-owned hotkey forwarding exhaustive for the e
 ### 2026-06-27-00:07 Task slice 460
 
 <!--
-CDXC:GPUICommandPane 2026-06-27-00:07:
+CDXC:CommandPane 2026-06-27-00:07:
 Slice 460 fixes Delayed Send body-badge rendering in the GPUI command pane. The badge must derive from the exact current command body geometry, hide when body width is <= 48 or body height is <= 32, center and clamp with native insets, and remain paint-only/non-interactive inside the normal command body so private command data stays within the command-pane boundary and no overlay, hit-test routing, fallback geometry, or guessed layout is introduced.
 -->
 
@@ -5968,7 +5968,7 @@ Slice 460 fixes Delayed Send body-badge rendering in the GPUI command pane. The 
 ### 2026-06-27-00:22 Task slice 461
 
 <!--
-CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+CDXC:SessionSleep 2026-06-27-00:22:
 Slice 461 aligns GPUI sleeping command body wake-label rendering with native AppKit geometry. The sleeping command body wake label must derive from exact current command body geometry, constrain to body width minus 8 and body height minus 16, center and char-wrap the label, hide when body constraints are non-positive, and remain paint-only/non-interactive inside the command body while preserving existing mouse/key wake behavior and avoiding overlays, hit-test routing, fallback geometry, logging, persistence, command text, paths, URLs, or terminal content.
 -->
 
@@ -5982,7 +5982,7 @@ Slice 461 aligns GPUI sleeping command body wake-label rendering with native App
 ### 2026-06-27-00:40 Task slice 462
 
 <!--
-CDXC:GPUITitlebarKeepAwake 2026-06-27-00:40:
+CDXC:KeepAwake 2026-06-27-00:40:
 Slice 462 aligns GPUI titlebar keep-awake automation with native `createTitlebarKeepAwakeSessionState`. Non-sleeping command sessions with projected/runtime Delayed Send timer intent must count as a power-hold input, while sleeping or parked semantic Delayed Send sessions stay out of the hold and all privacy boundaries remain intact: no command text, paths, titles beyond safe labels, status files, logs, terminal output, or private content are read, written, logged, or persisted for this keep-awake decision.
 -->
 
@@ -5996,7 +5996,7 @@ Slice 462 aligns GPUI titlebar keep-awake automation with native `createTitlebar
 ### 2026-06-27-01:05 Task slice 463
 
 <!--
-CDXC:GPUITitlebarKeepAwake 2026-06-27-01:05:
+CDXC:KeepAwake 2026-06-27-01:05:
 Slice 463 guards GPUI titlebar keep-awake semantics for Agents tab chrome. Semantic Agents delayed_send_active dots are privacy-safe shell metadata only and must not become a power-hold input, because GPUI has no Agents-side runtime Delayed Send timer projection. Command timer-owned Delayed Send remains the keep-awake input.
 -->
 
@@ -6010,7 +6010,7 @@ Slice 463 guards GPUI titlebar keep-awake semantics for Agents tab chrome. Seman
 ### 2026-06-27-01:25 Task slice 464
 
 <!--
-CDXC:GPUICommandTerminalLaunchPayload 2026-06-27-01:25:
+CDXC:Terminal 2026-06-27-01:25:
 Slice 464 aligns GPUI plain command-pane terminal creation with macOS `createCommandTerminal`. Plain command terminals created from Open Commands Panel/F12 first-open, command tab plus/double-click, Cmd+T, and command split hotkeys must pass the active project path as a process-local command-terminal launch payload `working_directory`, only for the exact target slot, without title parsing, command text, terminal content, stdout/stderr, persisted paths/logs, or fallback cwd inference. Action command payloads remain separate because they already carry their own command payload.
 -->
 
@@ -6023,7 +6023,7 @@ Slice 464 aligns GPUI plain command-pane terminal creation with macOS `createCom
 ### 2026-06-27-01:45 Task slice 465
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-01:45:
+CDXC:CommandPane 2026-06-27-01:45:
 Slice 465 aligns GPUI default terminal Actions with native `runNativeSidebarCommand` / `createCommandTerminal(..., { focusAfterCreate: false })`. Running a titlebar/sidebar terminal Action must open or select the Action command tab and post running state while preserving the user's current shell or typing focus instead of stealing focus into the command pane. Debug Actions remain intentionally different and still create and focus a visible Agents workspace terminal. The focus decision must use only existing action lifecycle state, must not inspect command text, terminal content, paths, stdout/stderr, logs, status files beyond existing action lifecycle, or persisted shell JSON, and must not synthesize fallback focus.
 -->
 
@@ -6036,7 +6036,7 @@ Slice 465 aligns GPUI default terminal Actions with native `runNativeSidebarComm
 ### 2026-06-27-02:05 Task slice 466
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-02:05:
+CDXC:CommandPane 2026-06-27-02:05:
 Slice 466 aligns GPUI Action run-start publishing with native `runNativeSidebarCommand`. After an Action command tab is selected or created, marked Working, and sidebar run-state feedback is posted, GPUI must immediately refresh the sanitized `commandPaneSessions` bridge so SidebarApp sees the running Action tab without waiting for the status poller. This refresh must preserve default Action focus parity and must not carry command text, cwd/env, run ids, status-file paths, terminal output, project paths, logs, persisted shell data, tokens, or fallback-derived content.
 -->
 
@@ -6049,7 +6049,7 @@ Slice 466 aligns GPUI Action run-start publishing with native `runNativeSidebarC
 ### 2026-06-27-02:05 Task slice 467
 
 <!--
-CDXC:GPUICommandPaneTimers 2026-06-27-02:05:
+CDXC:DelayedSend 2026-06-27-02:05:
 Slice 467 carries GPUI command-pane Delayed Send and Close After Done projection through the SidebarApp command-session bridge. Rust already emits safe command-pane timer summaries; the TypeScript bridge and shared HUD contract must preserve only bounded deadline strings, countdown labels, remaining milliseconds, and a true-only Close After Done flag so command indicators can match native timer chrome without forwarding command text, cwd/env, URLs, paths, terminal output, run ids, status-file paths, tokens, unknown fields, or private content.
 -->
 
@@ -6062,7 +6062,7 @@ Slice 467 carries GPUI command-pane Delayed Send and Close After Done projection
 ### 2026-06-27-01:31 Task slice 468
 
 <!--
-CDXC:GPUISidebarAutoSleep 2026-06-27-01:31:
+CDXC:SessionSleep 2026-06-27-01:31:
 Slice 468 adds GPUI SidebarApp/gxserver agent Auto Sleep parity for command-pane-adjacent runtime ownership. The GPUI runtime may sleep only local gxserver presentation agent terminals that are running, idle, sleepable, and older than the saved agent idle threshold after protecting focused/visible projected owners, active command-pane owners, and popped-out rows. The policy must route through existing gxserver sleep lifecycle calls and must not inspect or log paths, command text, terminal output, titles, URLs, tokens, Browser/project-editor surfaces, or private content.
 -->
 
@@ -6076,10 +6076,10 @@ Slice 468 adds GPUI SidebarApp/gxserver agent Auto Sleep parity for command-pane
 ### 2026-06-27-01:42 Task slice 469
 
 <!--
-CDXC:GPUICommandPane 2026-06-27-01:42:
+CDXC:CommandPane 2026-06-27-01:42:
 Slice 469 tightens GPUI command-pane local-state parity at the live bridge boundary. Runtime command summaries may preserve timer and tab fields only for gxserver-backed `G...` command tabs; legacy non-G command rows must be dropped before they can win Action indicator matching, protect auto-sleep, or forward stale timer/private state.
 
-CDXC:GPUICommandCloseAfterDone 2026-06-27-01:42:
+CDXC:Sessions 2026-06-27-01:42:
 Slice 469 also aligns Close After Done with native sleep semantics. An armed command tab may preserve user intent while sleeping or no longer Done, but any runtime three-minute countdown must be pruned immediately and restarted only after a later awake Done refresh; the timer must not spend time while the tab is parked.
 -->
 
@@ -6092,7 +6092,7 @@ Slice 469 also aligns Close After Done with native sleep semantics. An armed com
 ### 2026-06-27-01:58 Task slice 470
 
 <!--
-CDXC:GPUICommandTabContextMenu 2026-06-27-01:58:
+CDXC:ContextMenus 2026-06-27-01:58:
 Slice 470 aligns GPUI command-tab right-click menus with the native command-panel action payload. Native command-panel sessions publish only panel actions, so Swift primary tab filtering yields no Rename Session, Delayed Send, Close After Done, Fork, Reload, or Pop Out primary block for command tabs; GPUI must omit those rows, keep eligible Focus before Sleep without an extra primary separator, and preserve scoped Sleep/Close rows plus the separate focused command-palette/sidebar/modal action routes.
 -->
 
@@ -6106,10 +6106,10 @@ Slice 470 aligns GPUI command-tab right-click menus with the native command-pane
 ### 2026-06-27-02:05 Task slice 471
 
 <!--
-CDXC:GPUICommandFocusRestore 2026-06-27-02:05:
+CDXC:FocusRouting 2026-06-27-02:05:
 Slice 471 pins source-backed command-panel focus restoration parity. Final command-tab close must leave the Commands panel collapsed and empty, invalidate command-pane shell focus, and restore only a valid non-command target for the active Source, Browser, Kanban, or Manage mode; invalid remembered CommandPane or cross-mode Agents focus falls back to that active mode instead of switching the workspace to Agents.
 
-CDXC:GPUICommandFocusedSessionActions 2026-06-27-02:05:
+CDXC:FocusMode 2026-06-27-02:05:
 Slice 471 also pins native command-pane live-focus hotkey routing in GPUI helper coverage. Focused command actions require an expanded command pane with a current focused command session, reject collapsed, stale, and non-command focus, keep sleeping command placeholders out of focused close/sleep while allowing wake, and preserve native horizontal command split geometry for both focused split directions.
 -->
 
@@ -6122,7 +6122,7 @@ Slice 471 also pins native command-pane live-focus hotkey routing in GPUI helper
 ### 2026-06-27-02:05 Task slice 472
 
 <!--
-CDXC:GPUIBulkSleep 2026-06-27-02:05:
+CDXC:SessionSleep 2026-06-27-02:05:
 Slice 472 aligns GPUI SidebarApp bulk sleep with native `native-sidebar-bulk-sleep-source.test.ts` pacing. Multi-session sleep, group sleep, and Auto Sleep must start gxserver sleep requests one target at a time with the native 350 ms interval, continue after per-session failures, and expose only aggregate counts so pacing state cannot leak session ids, titles, paths, commands, URLs, terminal output, tokens, or user text.
 -->
 
@@ -6135,10 +6135,10 @@ Slice 472 aligns GPUI SidebarApp bulk sleep with native `native-sidebar-bulk-sle
 ### 2026-06-27-02:27 Task slice 473
 
 <!--
-CDXC:GxserverRendererCommands 2026-06-27-02:27:
+CDXC:CefRuntime 2026-06-27-02:27:
 Slice 473 aligns GPUI SidebarApp renderer-command routing with native raw target resolution. gxserver CLI renderer commands may send raw `{ projectId, sessionId }` in `sessionTarget`, while GPUI renders combined presentation ids; the runtime must opt into renderer commands, resolve raw local targets to combined ids, focus through the existing local SidebarApp/Agents bridge, and reply with only bounded ids/status.
 
-CDXC:GPUITitlebarFocusExit 2026-06-27-02:27:
+CDXC:FocusRouting 2026-06-27-02:27:
 Slice 473 also aligns the GPUI titlebar Exit focus affordance with native titlebar focus-exit styling. The control appears only while Agents pane Focus mode is active, uses active mode-tab chrome, and clears only Agents focus mode through the existing workspace model route.
 -->
 
@@ -6151,7 +6151,7 @@ Slice 473 also aligns the GPUI titlebar Exit focus affordance with native titleb
 ### 2026-06-27-02:45 Task slice 474
 
 <!--
-CDXC:GxserverRendererCommands 2026-06-27-02:45:
+CDXC:CefRuntime 2026-06-27-02:45:
 Slice 474 completes GPUI gxserver renderer-command rename parity with native CLI routing. `renameCommand` must resolve raw local `{ projectId, sessionId }` targets to the exact GPUI workspace session, post one fixed Rust bridge payload, parse only version/type/raw ids/title, write `/rename <title>` into the already-mounted mapped Agents Ghostty surface, and submit with a real Return key. It must not attach, wake, create, type into focused fallback terminals, echo titles in renderer results, or accept paths, commands, URLs, tokens, terminal output, raw renderer envelopes, remote ids, combined ids, or private fields.
 -->
 
@@ -6165,10 +6165,10 @@ Slice 474 completes GPUI gxserver renderer-command rename parity with native CLI
 ### 2026-06-27-02:58 Task slice 475
 
 <!--
-CDXC:GPUIFocusedClose 2026-06-27-02:58:
+CDXC:FocusMode 2026-06-27-02:58:
 Slice 475 aligns GPUI focused-close routing with native `native-hotkey-source.test.ts` command-pane ownership. Focused command tabs close before active-surface fallback, sleeping command placeholders intercept focused close without mutating the workspace, project-editor companions hide only for the matching active mode, project-editor main surfaces no-op, and stale or collapsed command focus falls through to the active Agents or Browser close policy only.
 
-CDXC:GPUIProjectEditorCompanion 2026-06-27-02:58:
+CDXC:CodeEditor 2026-06-27-02:58:
 Slice 475 also aligns project-editor companion restore with native `project-editor-companion-retarget-source.test.ts`. Re-expanding a project-editor companion after command-pane collapse must wake and focus the rendered companion session for the active project-editor mode, preserve command-pane state, and avoid fallback to Agents or the main project-editor surface.
 -->
 
@@ -6181,10 +6181,10 @@ Slice 475 also aligns project-editor companion restore with native `project-edit
 ### 2026-06-27-03:03 Task slice 476
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-27-03:03:
+CDXC:FocusRouting 2026-06-27-03:03:
 Slice 476 pins GPUI command-pane border focus to the native `native-command-panel-focus-source.test.ts` first-responder repaint rule. Programmatic command-terminal focus must make command-pane shell focus plus the focused command group the only source of focused border chrome; selected command groups without command shell focus keep inactive pinned or floating border treatment.
 
-CDXC:GPUICommandPaneActions 2026-06-27-03:03:
+CDXC:CommandPane 2026-06-27-03:03:
 Slice 476 also pins command-pane Action completion feedback to native `session-attention-event-source.test.ts`. Command completions use Action completion sound semantics, not session-attention bell semantics: successful Actions play only when the saved per-action flag is true, failed Actions play regardless, and status-file or exit-cleanup completion records omit command text, paths, output, URLs, env, titles, secrets, and status-file paths.
 -->
 
@@ -6197,7 +6197,7 @@ Slice 476 also pins command-pane Action completion feedback to native `session-a
 ### 2026-06-27-03:16 Task slice 477
 
 <!--
-CDXC:GPUICommandPaneResize 2026-06-27-03:16:
+CDXC:CommandPane 2026-06-27-03:16:
 Slice 477 aligns GPUI command-pane resize hover cleanup with native `native-pane-tabs-hit-test-source.test.ts` cursor release behavior. Top command-panel rail and command split rails must clear runtime hover/cursor chrome when resize ownership ends, when double-click reset runs, or when the command pane hides, while layout persistence stays tied only to actual height, ratio, or consumed-drag state changes.
 -->
 
@@ -6210,7 +6210,7 @@ Slice 477 aligns GPUI command-pane resize hover cleanup with native `native-pane
 ### 2026-06-27-03:26 Task slice 478
 
 <!--
-CDXC:GPUICommandPaneResize 2026-06-27-03:26:
+CDXC:CommandPane 2026-06-27-03:26:
 Slice 478 completes GPUI command-pane resize hover cleanup for final-tab removal parity. Direct tab close, scoped close, command Action close, confirmed Ghostty close, and process-exit cleanup can hide the command panel without passing through explicit resize/end/minimize handlers, so each successful model mutation must clear runtime resize hover chrome only after the command pane becomes empty and must preserve hover state while any command session remains visible.
 -->
 
@@ -6223,7 +6223,7 @@ Slice 478 completes GPUI command-pane resize hover cleanup for final-tab removal
 ### 2026-06-27-03:35 Task slice 479
 
 <!--
-CDXC:GPUITerminalFileDrop 2026-06-27-03:35:
+CDXC:Clipboard 2026-06-27-03:35:
 Slice 479 aligns GPUI mounted terminal host views, including command-pane terminals, with native terminal file-drop behavior. Real AppKit host views accept file URL, legacy filename, and private string path drops, format image paths as Markdown image references, insert transient text into the exact registered Ghostty surface, and do not add overlays, hit-test routing, focused-surface fallback, logs, persistence, or terminal-content capture.
 -->
 
@@ -6236,7 +6236,7 @@ Slice 479 aligns GPUI mounted terminal host views, including command-pane termin
 ### 2026-06-27-03:47 Task slice 480
 
 <!--
-CDXC:GPUITerminalIME 2026-06-27-03:47:
+CDXC:Terminal 2026-06-27-03:47:
 Slice 480 aligns GPUI mounted terminal host views, including command-pane terminals, with native terminal IME routing. Printable keys, Space, dead keys, and CJK composition go through AppKit `NSTextInputClient`; command/control shortcuts stay on the raw Ghostty key path only when no marked text exists; committed text, preedit, and candidate geometry route through the exact registered host-view surface without overlays, hit-test routing, focused-surface fallback, logs, persistence, command-text storage, or terminal-content capture.
 -->
 
@@ -6249,7 +6249,7 @@ Slice 480 aligns GPUI mounted terminal host views, including command-pane termin
 ### 2026-06-27-04:10 Task slice 481
 
 <!--
-CDXC:GPUICommandTerminalClipboard 2026-06-27-04:10:
+CDXC:Clipboard 2026-06-27-04:10:
 Slice 481 adds coordinator-facing app-level regression evidence for mounted command-terminal runtime clipboard handoff. Command drains must re-authorize only exact still-mounted owners from the command surface map, avoid focused-shell fallback as requester identity, read standard clipboard data through explicit string entries only, and write only runtime-provided text.
 -->
 
@@ -6261,10 +6261,10 @@ Slice 481 adds coordinator-facing app-level regression evidence for mounted comm
 ### 2026-06-27-04:25 Task slice 482
 
 <!--
-CDXC:GPUITerminalClipboard 2026-06-27-04:25:
+CDXC:Clipboard 2026-06-27-04:25:
 Slice 482 wires the low-level GPUI Ghostty runtime clipboard callbacks to the existing owner-local app-thread drain. Clipboard and close callbacks accept only registered surface userdata tokens with mounted surfaces; app-level runtime userdata, stale pointers, selection clipboard requests, null read state, missing `text/plain` writes, focused-surface inference, logs, persistence, and raw clipboard retention stay rejected.
 
-CDXC:GPUITerminalClipboard 2026-06-27-04:25:
+CDXC:Clipboard 2026-06-27-04:25:
 Runtime read confirmation must match the native Ghostex host: initial read completions are unconfirmed so Ghostty paste protection can request confirmation, and `confirm_read_clipboard_cb` synchronously completes the same borrowed content pointer as confirmed without storing or inspecting it. Standard `text/plain` writes are accepted from the surface callback path and drained on the app thread as runtime-provided text only.
 -->
 
@@ -6277,7 +6277,7 @@ Runtime read confirmation must match the native Ghostex host: initial read compl
 ### 2026-06-27-04:35 Task slice 483
 
 <!--
-CDXC:GPUICommandPaneFocus 2026-06-27-04:35:
+CDXC:FocusRouting 2026-06-27-04:35:
 Slice 483 aligns GPUI command-pane group border widths with native `native-pane-focused-border-source.test.ts`. Focused first-responder command groups use the thinner 1px border, inactive visible command groups use the native 2px command border, and pinned inactive groups keep that inactive width with transparent color so hidden-border chrome remains stable without touching workspace pane borders.
 -->
 
@@ -6290,7 +6290,7 @@ Slice 483 aligns GPUI command-pane group border widths with native `native-pane-
 ### 2026-06-27-04:15 Task slice 484
 
 <!--
-CDXC:GPUICommandPaneRestore 2026-06-27-04:15:
+CDXC:CommandPane 2026-06-27-04:15:
 Slice 484 aligns GPUI command-pane shell restore with native `native-command-panel-local-state.ts` layout repair. Restored command leaves must drop stale tab ids, keep the first occurrence of duplicate tab ids, normalize stale active tabs to the first valid tab, and prune split children that normalize to no valid tabs so one stale command-panel branch cannot discard a still-valid sibling.
 -->
 
@@ -6302,10 +6302,10 @@ Slice 484 aligns GPUI command-pane shell restore with native `native-command-pan
 ### 2026-06-27-04:30 Task slice 485
 
 <!--
-CDXC:GPUICommandTerminalSurface 2026-06-27-04:30:
+CDXC:Terminal 2026-06-27-04:30:
 Slice 485 makes command-pane body ownership explicit for native pending-surface parity. A selected non-sleeping command tab, including one whose AppKit/Ghostty surface is still being created, owns a blank command body mount slot; selected sleeping tabs, collapsed panels, stale groups, missing sessions, and inactive tabs must not borrow that slot or receive focused terminal input.
 
-CDXC:GPUICommandTabWake 2026-06-27-04:30:
+CDXC:SessionSleep 2026-06-27-04:30:
 Slice 485 also makes sleeping command-tab selection and wake policy explicit. Default click-to-wake selects a sleeping tab without waking it so the visible body placeholder owns the later alphanumeric wake affordance; strict `clickToWakeSleepingSessions:false` is the only tab-selection path that wakes immediately, and stale ids must not fall back to focused command state.
 -->
 
@@ -6318,10 +6318,10 @@ Slice 485 also makes sleeping command-tab selection and wake policy explicit. De
 ### 2026-06-27-04:41 Task slice 486
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-04:41:
+CDXC:CommandPane 2026-06-27-04:41:
 Slice 486 aligns newly-created non-reused GPUI terminal Actions with native command-panel insertion. A single command owner still receives the Action as a selected tab, while an existing split gets a new selected rightmost command owner; stale command focus must not redirect Action creation into the first live command group, and Cmd+T/New Terminal keeps the focused-group insertion rule.
 
-CDXC:GPUICommandTerminalSurface 2026-06-27-04:41:
+CDXC:Terminal 2026-06-27-04:41:
 Slice 486 tightens command body ownership around native visible owner semantics. The command body renderer, keyboard wake target, and Ghostty mount-slot reconciliation must all resolve through the stored selected tab only, so sleeping selected tabs own visible placeholders, non-sleeping selected tabs own mount slots, and stale active ids or missing sessions cannot borrow inactive siblings.
 -->
 
@@ -6334,10 +6334,10 @@ Slice 486 tightens command body ownership around native visible owner semantics.
 ### 2026-06-27-04:47 Task slice 487
 
 <!--
-CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:47:
+CDXC:Terminal 2026-06-27-04:47:
 Slice 487 makes GPUI command-terminal launch payloads one-shot like native startup input. Action commands and plain command cwd payloads must be consumed at Ghostty config preparation for the exact command body slot/runtime key, so a later native-view remount cannot replay stale command text, cwd, env, initial input, or wait policy.
 
-CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:47:
+CDXC:Terminal 2026-06-27-04:47:
 Invalid explicit launch payloads are also drained at the writer boundary and prune the request without fallback. Failed conversion must not leave private payload data queued for another remount attempt or replace it with inferred launch data from titles, shell state, paths, logs, stdout/stderr, terminal content, or helper detection.
 -->
 
@@ -6351,10 +6351,10 @@ Invalid explicit launch payloads are also drained at the writer boundary and pru
 ### 2026-06-27-04:59 Task slice 488
 
 <!--
-CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:59:
+CDXC:Terminal 2026-06-27-04:59:
 Slice 488 updates command-terminal handoff wording after explicit launch producers landed. Terminal Actions and plain command-terminal project cwd now produce runtime-only launch payloads consumed exactly once by the matching command body slot/runtime key; docs must not describe command launch payloads as future-only.
 
-CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:59:
+CDXC:Terminal 2026-06-27-04:59:
 Remaining command-terminal caveats are user/runtime validation, non-Action/generalized command status product decisions, and the privacy boundary: no title/status/path/project inference, no fallback launch data, no replay after invalid conversion or remount, and no persistence/logging of command text, cwd/env, stdout/stderr, terminal content, status-file paths, or private payloads.
 -->
 
@@ -6367,10 +6367,10 @@ Remaining command-terminal caveats are user/runtime validation, non-Action/gener
 ### 2026-06-27-05:07 Task slice 489
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-05:07:
+CDXC:CommandPane 2026-06-27-05:07:
 Slice 489 updates the command-status handoff after Action status plumbing is current source evidence. GPUI Action tabs own live run ids, env-provided session-state files, status-file stamping/polling, run-start Working, idle completion, completion feedback, and exit cleanup; docs must not describe Action status as future-only.
 
-CDXC:GPUICommandPaneActions 2026-06-27-05:07:
+CDXC:CommandPane 2026-06-27-05:07:
 Non-Action/restored command status remains safe enum/boolean metadata, and command status must not be inferred from shell titles, command text, cwd/env, stdout/stderr, terminal content, paths, logs, status-file paths, or shell JSON. Runtime validation and any generalized non-Action status product work remain outside this slice.
 -->
 
@@ -6383,7 +6383,7 @@ Non-Action/restored command status remains safe enum/boolean metadata, and comma
 ### 2026-06-27-05:24 Docs parity wording audit
 
 <!--
-CDXC:GPUIWorkspaceParityDocsAlignment 2026-06-27-05:24:
+CDXC:RepoStructure 2026-06-27-05:24:
 After slices 488 and 489, progress wording must not leave current command launch producers or Action status-file lifecycle described as future-only. Historical wording may name the old gap only when it also points to the later terminal Action/plain-cwd launch producers and current Action run-id/status-file lifecycle evidence.
 -->
 
@@ -6393,7 +6393,7 @@ After slices 488 and 489, progress wording must not leave current command launch
 ### 2026-06-27-05:30 Task slice 490
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-05:30:
+CDXC:CommandPane 2026-06-27-05:30:
 Slice 490 aligns focused-pane command-palette handling for runtime-dependent command-session actions with native command-panel titlebar behavior. `forkSession`, `reloadSession`, and `popOutPane` are recognized and consumed as explicit GPUI runtime no-ops for command sessions, preserving parity without adding fake fork, reload, or pop-out runtime support.
 -->
 
@@ -6404,7 +6404,7 @@ Slice 490 aligns focused-pane command-palette handling for runtime-dependent com
 ### 2026-06-27-05:43 Task slice 491
 
 <!--
-CDXC:GPUICommandTabKeyboardParity 2026-06-27-05:43:
+CDXC:CommandPane 2026-06-27-05:43:
 Slice 491 fixes the broad command-regression fixture for directional focus parity. Orphan stored command sessions must not fabricate rendered command groups or become keyboard focus targets; the orphan-only coverage now starts from the empty production command-pane constructor instead of the seeded test sample.
 -->
 
@@ -6415,10 +6415,10 @@ Slice 491 fixes the broad command-regression fixture for directional focus parit
 ### 2026-06-27-05:53 Task slice 492
 
 <!--
-CDXC:GPUICommandDelayedSend 2026-06-27-05:53:
+CDXC:DelayedSend 2026-06-27-05:53:
 Slice 492 tightens command Delayed Send runtime timer pruning after the broad command filter exposed another stale-membership edge. A timer is live only when its session id still has both a command-group tab reference and a stored command session row; stale root tab ids whose stored rows disappeared must prune without falling back to another command terminal.
 
-CDXC:GxserverRendererCommands 2026-06-27-05:53:
+CDXC:CefRuntime 2026-06-27-05:53:
 Slice 492 also aligns GPUI gxserver renderer command-button actions with native CLI behavior. `runCommand` and `clickButton(kind:"command")` are selector-only requests that must resolve the saved HUD Action and use the existing Rust command-action bridge; renderer-owned command text, URLs, close-on-exit flags, cwd/env, paths, output, logs, tokens, and private payloads must not enter bridge payloads or renderer results.
 -->
 
@@ -6431,10 +6431,10 @@ Slice 492 also aligns GPUI gxserver renderer command-button actions with native 
 ### 2026-06-27-06:06 Task slice 493
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-06:06:
+CDXC:CommandPane 2026-06-27-06:06:
 Slice 493 aligns GPUI command-run-end ownership with native's single current command-button mapping. Starting a newer same-command Action invalidates older tabs' command id ownership while preserving their local run id/status-file poller state, so stale selected tabs cannot receive `endSidebarCommandRun` cleanup and old idle stamps clear only local Working state.
 
-CDXC:GPUICommandPane 2026-06-27-06:06:
+CDXC:CommandPane 2026-06-27-06:06:
 Slice 493 also pins the TypeScript run-end bridge as command-id-only. Valid `endSidebarCommandRun` messages may carry unsafe renderer fields, but the Rust bridge payload must contain only version, fixed message type, and trimmed command id; command text, URLs, close-on-exit flags, cwd/env, paths, logs, output, status-file paths, run ids, tokens, and private payloads must not cross.
 -->
 
@@ -6447,7 +6447,7 @@ Slice 493 also pins the TypeScript run-end bridge as command-id-only. Valid `end
 ### 2026-06-27-06:10 Task slice 494
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-06:10:
+CDXC:CommandPane 2026-06-27-06:10:
 Slice 494 matches native `runNativeSidebarCommand` stale mapped-session cleanup for terminal Actions. If the existing mapped same-command GPUI tab is sleeping or orphaned, prune it before creating the replacement Action tab; keep running non-idle tabs alive, continue reusing idle running tabs, and leave title-only restored candidates for other command ids parked.
 -->
 
@@ -6459,7 +6459,7 @@ Slice 494 matches native `runNativeSidebarCommand` stale mapped-session cleanup 
 ### 2026-06-27-06:21 Task slice 495
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-06:21:
+CDXC:CommandPane 2026-06-27-06:21:
 Slice 495 mirrors native Settings Action deletion cleanup. Deleting a saved Action clears the current command-to-session mapping before closing the mapped command tab, so mounted close-confirm survivors cannot keep command-button feedback, status-file polling, completion sound ownership, timers, or HUD command-session mapping for a deleted Action.
 -->
 
@@ -6471,10 +6471,10 @@ Slice 495 mirrors native Settings Action deletion cleanup. Deleting a saved Acti
 ### 2026-06-27-06:30 Task slice 496
 
 <!--
-CDXC:GPUICommandSessionHud 2026-06-27-06:30:
+CDXC:SessionStatus 2026-06-27-06:30:
 Slice 496 aligns GPUI command-session HUD indicator status with native lifecycle semantics. Awake local command tabs export running, sleeping tabs export idle, and Action Attention no longer becomes HUD error; command-button success/error feedback remains separate from command-session indicator status.
 
-CDXC:GPUICommandPane 2026-06-27-06:30:
+CDXC:CommandPane 2026-06-27-06:30:
 The TypeScript bridge may forward command-session status only from sanitized local `G...` command-pane summaries whose status is already a valid Sidebar HUD status. It must not infer status from renderer activity, command text, paths, URLs, output, logs, titles, status files, or private status-adjacent fields.
 -->
 
@@ -6487,7 +6487,7 @@ The TypeScript bridge may forward command-session status only from sanitized loc
 ### 2026-06-27-06:41 Task slice 497
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-06:41:
+CDXC:CommandPane 2026-06-27-06:41:
 Slice 497 mirrors native endSidebarCommandRun ownership cleanup. Ending a SidebarApp command run clears Action ownership and timers before requesting the mapped command tab close, so mounted close-confirm survivors cannot remain the current command id owner, keep private run/status-file state alive, or continue projecting HUD command-session mapping.
 -->
 
@@ -6499,7 +6499,7 @@ Slice 497 mirrors native endSidebarCommandRun ownership cleanup. Ending a Sideba
 ### 2026-06-27-06:43 Task slice 498
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-06:43:
+CDXC:CommandPane 2026-06-27-06:43:
 Slice 498 aligns two focused command-pane Action dispatch edges with native. Focused-pane Delayed Send over a command terminal is a native command-panel titlebar no-op, so GPUI consumes the hotkey/palette id without opening the timer modal; explicit clicked-tab and direct session-id Delayed Send routes remain available. Stale `runSidebarCommand` selectors also no-op like native, while existing unconfigured Actions still open Settings for repair.
 -->
 
@@ -6512,7 +6512,7 @@ Slice 498 aligns two focused command-pane Action dispatch edges with native. Foc
 ### 2026-06-27-06:51 Task slice 499
 
 <!--
-CDXC:GPUISidebarAutoSleep 2026-06-27-06:51:
+CDXC:SessionSleep 2026-06-27-06:51:
 Slice 499 aligns GPUI Agent Auto Sleep command-pane owner protection with the sanitized local command-session boundary used by HUD projection. Only active local `G...` command-pane summaries with valid HUD statuses can keep an idle agent awake; stale legacy rows may still be slept and must not carry timer, command text, path, URL, output, token, or private status fields into policy ownership.
 -->
 
@@ -6525,7 +6525,7 @@ Slice 499 aligns GPUI Agent Auto Sleep command-pane owner protection with the sa
 ### 2026-06-27-06:59 Task slice 500
 
 <!--
-CDXC:GPUISidebarAutoSleep 2026-06-27-06:59:
+CDXC:SessionSleep 2026-06-27-06:59:
 Slice 500 completes command-pane split-owner Auto Sleep parity. Native protects the selected owner of every visible command-panel split leaf, while HUD `isActive` remains first-responder focus; GPUI now exports a true-only sanitized `isPaneOwner` bit for those command-pane body owners and protects it only after local `G...` id and valid-status filtering.
 -->
 
@@ -6539,7 +6539,7 @@ Slice 500 completes command-pane split-owner Auto Sleep parity. Native protects 
 ### 2026-06-27-07:01 Task slice 501
 
 <!--
-CDXC:GPUISidebarAutoSleep 2026-06-27-07:01:
+CDXC:SessionSleep 2026-06-27-07:01:
 Slice 501 removes the old HUD-focus fallback from GPUI command-pane Auto Sleep protection. Native protects visible command-panel pane-layout owners, not responder-focused tab metadata, so a local command-pane row with `isActive:true` but no `isPaneOwner:true` remains eligible to sleep.
 -->
 
@@ -6551,7 +6551,7 @@ Slice 501 removes the old HUD-focus fallback from GPUI command-pane Auto Sleep p
 ### 2026-06-27-07:14 Task slice 502
 
 <!--
-CDXC:GPUICommandPaneBridge 2026-06-27-07:14:
+CDXC:CommandPane 2026-06-27-07:14:
 Slice 502 aligns the Rust-to-SidebarApp command-pane bridge with native external command-session identity. Rust-owned command tabs keep numeric internal shell ids, but every SidebarApp/app-modal boundary must use `G{u64}` so the TypeScript bridge can reject legacy raw numeric, lowercase, malformed, or non-string rows before HUD matching and Auto Sleep policy.
 -->
 
@@ -6564,10 +6564,10 @@ Slice 502 aligns the Rust-to-SidebarApp command-pane bridge with native external
 ### 2026-06-27-07:20 Task slice 503
 
 <!--
-CDXC:GPUICommandPaneFocusRestore 2026-06-27-07:20:
+CDXC:FocusRouting 2026-06-27-07:20:
 Slice 503 investigated the command-pane focus-restore edge from `native/sidebar/local-first-close-source.test.ts`: native can restore a browser pane that lives inside the Agents workspace, but current GPUI `BrowserSurface` is the separate Browser workarea surface and is hidden outside Browser mode.
 
-CDXC:GPUICommandPaneFocusRestore 2026-06-27-07:23:
+CDXC:FocusRouting 2026-06-27-07:23:
 Do not accept `BrowserSurface` as Agents-mode command-collapse focus until GPUI has an explicit rendered Browser-pane workspace target. A simple focus-enum restore would leave keyboard focus on an invisible Browser workarea surface instead of the visible Agents workspace.
 -->
 
@@ -6579,7 +6579,7 @@ Do not accept `BrowserSurface` as Agents-mode command-collapse focus until GPUI 
 ### 2026-06-27-07:28 Task slice 504
 
 <!--
-CDXC:GPUISidebarAutoSleep 2026-06-27-07:28:
+CDXC:SessionSleep 2026-06-27-07:28:
 Slice 504 scopes GPUI command-pane Auto Sleep owner protection to the active project. Native command-panel layout is project-local, so a sanitized `G...` command-pane `isPaneOwner:true` row must protect only the active project's matching session and must not keep unrelated same-id sessions in other projects awake.
 -->
 
@@ -6592,7 +6592,7 @@ Slice 504 scopes GPUI command-pane Auto Sleep owner protection to the active pro
 ### 2026-06-27-07:37 Task slice 505
 
 <!--
-CDXC:GPUICommandPaneVerification 2026-06-27-07:37:
+CDXC:CommandPane 2026-06-27-07:37:
 Slice 505 verifies two native-backed command-pane parity areas before reopening implementation: selected sleeping/mounting command placeholders already own visible command bodies without fallback, and the TypeScript command Action/HUD/Auto Sleep bridge already keeps command-pane completions on the Action path while filtering command surfaces out of sidebar attention/status groups.
 -->
 
@@ -6605,7 +6605,7 @@ Slice 505 verifies two native-backed command-pane parity areas before reopening 
 ### 2026-06-27-07:42 Task slice 506
 
 <!--
-CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-07:42:
+CDXC:Terminal 2026-06-27-07:42:
 Slice 506 aligns GPUI command-terminal Sleep/Wake ownership with the native command panel and the existing Agents parked-owner path. A sleeping command tab parks the exact command AppKit host and Ghostty surface owner before host detach, then wakes by moving those same owners back to the current command body slot without freeing/recreating Ghostty, retargeting across command groups/sessions, persisting runtime state, logging private command data, or falling back to titles/focus/launch-payload replay.
 -->
 
@@ -6620,7 +6620,7 @@ Slice 506 aligns GPUI command-terminal Sleep/Wake ownership with the native comm
 ### 2026-06-27-08:03 Task slice 507
 
 <!--
-CDXC:GPUICommandPaneActions 2026-06-27-08:03:
+CDXC:CommandPane 2026-06-27-08:03:
 Slice 507 closes the mounted-reuse command Action execution gap against native `runNativeSidebarCommand`. Mounted idle Action reuse writes a staged wrapper to the exact current command surface and submits Return without startup payloads, while created or unmounted Action tabs receive an exact-slot launch payload for first mount. `runSidebarCommand` remains a selector-only bridge, so renderer-owned command text, cwd/env, paths, URLs, output, run ids, status paths, and close flags cannot be sanitized into trusted Action launches.
 -->
 
@@ -6633,10 +6633,10 @@ Slice 507 closes the mounted-reuse command Action execution gap against native `
 ### 2026-06-27-08:22 Task slice 508
 
 <!--
-CDXC:GPUICommandPalette 2026-06-27-08:22:
+CDXC:CommandPalette 2026-06-27-08:22:
 Slice 508 wires shared command-palette `runGhostexHotkeyAction` rows through the GPUI sidebar runtime and CEF bridge as selector-only authority. Open Commands Panel must reach the existing Rust hotkey dispatcher as an open/focus route, not a modal fallback or F12 collapse toggle, and the bridge must reject renderer-owned sessions, paths, commands, URLs, launch metadata, cwd/env, raw payloads, and versioned command-action shapes.
 
-CDXC:GPUICommandPaneFocusRestore 2026-06-27-08:22:
+CDXC:FocusRouting 2026-06-27-08:22:
 This slice also pins the hidden Commands restore edge from native Source/Browser/Kanban/Manage behavior. When project-editor companion focus is hidden, stale command focus or wrong-mode Agents focus must fall back to the active project-editor surface/companion target instead of switching to Agents; native Agents-mode Browser-pane restore remains blocked until GPUI has a rendered Browser-pane workspace focus target.
 -->
 
@@ -6649,10 +6649,10 @@ This slice also pins the hidden Commands restore edge from native Source/Browser
 ### 2026-06-27-08:42 Task slice 509
 
 <!--
-CDXC:GPUICommandPaneLayout 2026-06-27-08:42:
+CDXC:CommandPane 2026-06-27-08:42:
 Slice 509 makes the GPUI command-pane workspace reservation rules explicit against native TerminalWorkspaceView: no command sessions render only the main workspace, pinned reserves the full command-panel height, floating overlays the expanded panel while reserving only the plain collapsed strip footprint, and collapsed renders only the interactive collapsed strip.
 
-CDXC:GPUISidebarAutoSleep 2026-06-27-08:42:
+CDXC:SessionSleep 2026-06-27-08:42:
 Command-pane pane-owner protection must share the HUD summary validity boundary. A malformed native-shaped `G...` command-pane row with `isPaneOwner:true` but invalid status remains eligible for Auto Sleep instead of keeping an old agent session awake.
 -->
 
@@ -6665,10 +6665,10 @@ Command-pane pane-owner protection must share the HUD summary validity boundary.
 ### 2026-06-27-08:53 Task slice 510
 
 <!--
-CDXC:GPUICommandPane 2026-06-27-08:53:
+CDXC:CommandPane 2026-06-27-08:53:
 Slice 510 extends native stale gxserver local-session cleanup to GPUI command-pane HUD projection. Command-pane `G...` summaries may drive the active project's Action indicators only while gxserver presentation still contains that session for the active project; authoritative snapshots and explicit removal deltas remove stale indicators without using command text, paths, titles, URLs, output, status files, or fallback inference.
 
-CDXC:GPUICommandSessionHud 2026-06-27-08:53:
+CDXC:SessionStatus 2026-06-27-08:53:
 App-modal command-session hydration shares the same external boundary: legacy numeric, lowercase, malformed, non-string, and invalid-status command-pane rows are filtered before commandId/title matching so stale rows cannot shadow a valid canonical `G{u64}` row.
 -->
 
@@ -6682,7 +6682,7 @@ App-modal command-session hydration shares the same external boundary: legacy nu
 ### 2026-06-27-09:05 Task slice 511
 
 <!--
-CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-09:05:
+CDXC:Terminal 2026-06-27-09:05:
 Slice 511 extends command parked-owner parity from Sleep/Wake to native command-panel owner selection and collapse. Command HideAndDetach now parks exact host/Ghostty owners whenever the session still belongs to its command group, so inactive tabs, collapsed command panels, and Focus-hidden command tabs can reattach without freeing or recreating Ghostty, while close/removal/stale-group/session and mounted-owner collisions still drop.
 -->
 
@@ -6696,10 +6696,10 @@ Slice 511 extends command parked-owner parity from Sleep/Wake to native command-
 ### 2026-06-27-09:13 Task slice 512
 
 <!--
-CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-09:13:
+CDXC:Terminal 2026-06-27-09:13:
 Slice 512 pins the close/removal half of command parked-owner parity. Parked command owners survive owner-selection and collapse detaches only while the command session remains in the group; a real session close/removal must prune and drop the parked host/surface before any later reattach plan can reuse it.
 
-CDXC:GPUITitlebarActions 2026-06-27-09:13:
+CDXC:Titlebar 2026-06-27-09:13:
 Slice 512 also updates the titlebar Actions parity ledger because workspace slices 489, 507, and 510 superseded the older Worker 12 note about missing command Action run-state/reuse/write-into-existing-terminal behavior.
 -->
 
@@ -6712,7 +6712,7 @@ Slice 512 also updates the titlebar Actions parity ledger because workspace slic
 ### 2026-06-27-09:26 Task slice 513
 
 <!--
-CDXC:GPUITitlebarActions 2026-06-27-09:26:
+CDXC:Titlebar 2026-06-27-09:26:
 Slice 513 gives GPUI's native Rust titlebar Actions button the same click-time Debug rerun rule as the shared command palette. Close-on-exit terminal Actions rerun in Debug only after sanitized local run feedback says the previous run ended in error and no active run remains; sidebar bridge payloads with explicit `runMode` remain authoritative and bypass the titlebar-click resolver.
 -->
 
@@ -6726,7 +6726,7 @@ Slice 513 gives GPUI's native Rust titlebar Actions button the same click-time D
 ### 2026-06-27-09:42 Task slice 514
 
 <!--
-CDXC:GPUICommandPaneFocusRestore 2026-06-27-09:42:
+CDXC:FocusRouting 2026-06-27-09:42:
 Slice 514 integrates Browser-pane command restore parity. Command-pane collapse must restore the exact Browser workarea pane remembered before Commands took focus, reject stale pane ids, and keep legacy BrowserSurface shell state valid for older persisted layouts.
 -->
 
@@ -6740,7 +6740,7 @@ Slice 514 integrates Browser-pane command restore parity. Command-pane collapse 
 ### 2026-06-27-09:57 Task slice 515
 
 <!--
-CDXC:GPUICommandAppModalSize 2026-06-27-09:57:
+CDXC:AppModal 2026-06-27-09:57:
 Slice 515 locks GPUI command-pane compact app modals to native child-window sizing. Delayed Send must open fixed at 472x336 and Rename Session fixed at 570x480; the generic resizable app-modal minimum remains 520x360 only for ordinary resizable modals such as Settings.
 -->
 
@@ -6754,7 +6754,7 @@ Slice 515 locks GPUI command-pane compact app modals to native child-window sizi
 ### 2026-06-27-10:14 Task slice 516
 
 <!--
-CDXC:GPUICommandTerminalSettings 2026-06-27-10:14:
+CDXC:Terminal 2026-06-27-10:14:
 Slice 516 pins command-terminal Ghostty settings parity to the current GhosttyKit boundary. Command-pane Ghostty surface requests apply the shared `terminalFontSize` as the only direct `ghostty_surface_config_s` field, while font family, theme, cursor, scrollback, clipboard, paste-preview, and mouse settings remain config-file-backed or runtime-only without fake live reload fallbacks.
 -->
 
@@ -6768,7 +6768,7 @@ Slice 516 pins command-terminal Ghostty settings parity to the current GhosttyKi
 ### 2026-06-27-10:31 Task slice 517
 
 <!--
-CDXC:GPUITerminalImagePaste 2026-06-27-10:31:
+CDXC:Clipboard 2026-06-27-10:31:
 Slice 517 integrates GPUI terminal paste-preview parity for command-pane and Agents Ghostty surfaces. Direct paste and runtime clipboard reads must honor the shared `terminalPastePreviewableImages` setting: disabled preserves explicit-string-only behavior, enabled converts only validated local image file references or raw clipboard image bytes into numbered Markdown references without logging clipboard content or synthesizing non-image paths.
 -->
 

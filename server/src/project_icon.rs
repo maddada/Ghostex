@@ -10,7 +10,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::Value;
 
 /*
-CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+CDXC:Icons 2026-07-29 (discovered icons):
 A project's icon should be the icon the PROJECT itself ships — the favicon or app
 icon in its repository — not a folder glyph and not only the icon somebody
 manually attached in Ghostex. This is the server half of that: gxserver discovers

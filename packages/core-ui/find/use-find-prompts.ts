@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 All Find-surface state in one hook, so gpui, web, and the mobile WebView render
 the same behaviour from the same reducer and only differ in how they mount it.
 

@@ -85,7 +85,7 @@ pub(crate) fn insert_optional_trimmed_string(
 }
 
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 `settledOverride` is the explicit user pin: "settled" forces the settled shelf,
 "active" pins a session into the inbox and suppresses auto-settle. Any other
 stored value is corrupt or retired state and hydrates as "no override", the same

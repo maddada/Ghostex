@@ -21,7 +21,7 @@ import {
 } from './release-workflow-assertions.mjs';
 
 /*
- CDXC:ReleaseAutomation 2026-07-02-14:10:
+ CDXC:Release 2026-07-02-14:10:
  The 5.4.0 release spent minutes on a root `bun run test` that discovers
  bundled code-server trees, and it discovered late source edits only after
  expensive package builds had started. This remains an optional deep local
@@ -412,7 +412,7 @@ async function checkRemoteLinuxPackages() {
 }
 
 /*
- CDXC:ReleaseAutomation 2026-09-01-11:52:
+ CDXC:Release 2026-09-01-11:52:
  The meta-check. `GHOSTEX_REQUIRE_BEADS_SMOKE: "1"` became `: '1'` in a prettier
  pass and the old substring assertion started failing for a reason that did not
  exist, indistinguishable from the gate actually being gone. This check exists
@@ -496,7 +496,7 @@ async function checkSparkleKey() {
 }
 
 /*
- CDXC:ReleaseAutomation 2026-09-02-12:40:
+ CDXC:Release 2026-09-02-12:40:
  8.5.0's first run died in the Android job on `Cannot find package 'esbuild'`:
  tooling/build-mobile-chat.mjs imported it, nothing declared it, and it only
  resolved through hoisting luck. Two stages close that gap. This one is instant
@@ -562,7 +562,7 @@ This still cannot see `#[cfg(windows)]` / `#[cfg(linux)]` code on macOS. That
 gap is covered inside the release run by the Windows and Linux packaging jobs,
 which compile their own target natively and are their own validation. It is not
 covered before dispatch: release-gpui-validate.yml no longer gates anything and
-is opt-in only (CDXC:WindowsValidationIsNotAGate).
+is opt-in only (CDXC:Release).
 */
 async function checkCargo() {
   for (const crate of ['server', 'apps/desktop']) {

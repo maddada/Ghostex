@@ -6,7 +6,7 @@ use std::{
 };
 
 /*
-CDXC:Tailcat 2026-09-01:
+CDXC:RemotePairing 2026-09-01:
 The tailcat binary is never vendored or downloaded by Ghostex. gxserver only
 LOCATES an existing install, in the order a user would expect: an explicit
 override, the PATH the daemon was launched with, then the two install

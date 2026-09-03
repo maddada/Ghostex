@@ -87,7 +87,7 @@ impl GpuiCommandCloseAfterDoneTimer {
 
 pub(crate) fn gpui_command_delayed_send_duration_from_millis(delay_ms: u64) -> Option<Duration> {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-25-15:11:
+    CDXC:DelayedSend 2026-06-25-15:11:
     The shared Delayed Send modal posts only a session id and delay duration. GPUI must keep the same whole-minute, one-minute-minimum, 24-day JavaScript-timer-compatible bounds as native before arming a command-pane timer.
     */
     if !(COMMAND_PANE_DELAYED_SEND_MIN_DELAY_MS..=COMMAND_PANE_DELAYED_SEND_MAX_DELAY_MS)
@@ -137,7 +137,7 @@ pub(crate) fn gpui_command_delayed_send_body_badge_label(
     now: SystemTime,
 ) -> Option<String> {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-25-15:42:
+    CDXC:DelayedSend 2026-06-25-15:42:
     The command body badge projects only a countdown string from a runtime timer. It must not inspect command text, titles, terminal content, paths, shell-state JSON, or persisted delayed-send placeholders.
     */
     timer.map(|timer| gpui_command_delayed_send_countdown_label(timer.remaining_ms(now)))
@@ -165,7 +165,7 @@ pub(crate) fn gpui_command_delayed_send_restore_remaining_ms(
     value: &serde_json::Value,
 ) -> Option<u64> {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-25-16:41:
+    CDXC:DelayedSend 2026-06-25-16:41:
     Restored GPUI command Delayed Send timers should match macOS by resuming from a saved remaining-duration checkpoint, not by spending countdown time while the app is closed. Accept only bounded numeric milliseconds and keep command text, titles, terminal content, paths, runtime ids, and stdout/stderr out of the restart contract.
     */
     let remaining_ms = value.as_u64()?;
@@ -175,7 +175,7 @@ pub(crate) fn gpui_command_delayed_send_restore_remaining_ms(
 
 pub(crate) fn gpui_command_delayed_send_restore_duration(remaining_ms: u64) -> Duration {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-25-16:41:
+    CDXC:DelayedSend 2026-06-25-16:41:
     macOS gives restored Delayed Send timers a 2s fire grace even when the saved checkpoint is nearly expired. GPUI should use the same startup grace so a restored command tab has time to mount before the pending Return key can fire.
     */
     Duration::from_millis(remaining_ms.max(COMMAND_PANE_DELAYED_SEND_RESTORE_FIRE_GRACE_MS))
@@ -191,7 +191,7 @@ pub(crate) fn gpui_command_session_rename_title_from_modal_value(
     value: &serde_json::Value,
 ) -> Option<String> {
     /*
-    CDXC:GPUICommandPaneRename 2026-06-25-16:33:
+    CDXC:CommandPane 2026-06-25-16:33:
     The shared Rename Session modal already applies the normal sidebar rename normalization before posting. Revalidate the GPUI boundary by accepting only non-empty, non-control text and collapsing whitespace so direct bridge messages cannot store multiline terminal content as command-tab chrome.
     */
     let title = value

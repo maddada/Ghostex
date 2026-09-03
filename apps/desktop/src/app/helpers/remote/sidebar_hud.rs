@@ -12,7 +12,7 @@ use crate::app::helpers::*;
 use crate::*;
 
 /*
-CDXC:RemoteProjectActions 2026-08-29:
+CDXC:RemoteMachines 2026-08-29:
 `/api/readSidebarHud` is a pure read on the machine that owns the project, so
 the bridge reduces its params to one validated project id and pins the
 per-project command block on. CEF cannot use this route to ask a remote daemon
@@ -46,7 +46,7 @@ pub(crate) fn gpui_remote_sidebar_hud_response_payload(
     result: serde_json::Value,
 ) -> serde_json::Value {
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     Only the Action button lists cross this boundary. The remote daemon also
     projects agents, project settings rows, and project paths through the same
     endpoint; those stay on that machine because remote project rows and the
@@ -175,7 +175,7 @@ pub(crate) fn gpui_remote_titlebar_actions_for_project(
     project_id: &str,
 ) -> Vec<GpuiTitlebarAction> {
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     When the active project is remote, the titlebar Actions control reads the
     owning machine's HUD projection through the same Rust-owned tunnel every
     other remote gxserver read uses. There is no local fallback: the local
@@ -211,7 +211,7 @@ pub(crate) fn gpui_run_remote_project_action_terminal(
     String,
 > {
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     A terminal Action on a remote project has to run on the machine that owns
     the project, so it materializes as an ordinary gxserver session there: the
     daemon creates the row, starts the zmx provider with the Action command as
@@ -220,7 +220,7 @@ pub(crate) fn gpui_run_remote_project_action_terminal(
     project's command on the wrong machine, against a path that does not exist
     here.
 
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     The row is created on the `commands` surface, exactly like the local
     command-pane Action session in `gpui_command_terminal_create_session_params`.
     That is what makes gxserver mark it `visibleInSidebarByDefault: false`, so
@@ -272,7 +272,7 @@ pub(crate) fn gpui_run_remote_project_action_terminal(
         Duration::from_secs(30),
     )?;
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     The provider was just started with the Action command as its startup text,
     so this plan reads attach metadata instead of waking the session (a wake
     would restart the command). It is still an interactive attach: the command
@@ -289,7 +289,7 @@ pub(crate) fn gpui_update_remote_command_action_session_surface(
     surface: &str,
 ) -> Result<(), String> {
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     Dragging a remote Action's command tab into the Agents workspace keeps the
     same live SSH attach, so the remote row has to change surfaces with it for
     the same reason the local one does: the sidebar projects only `workspace`
@@ -318,7 +318,7 @@ pub(crate) fn gpui_close_remote_command_action_session(
     reference: &GpuiRemoteAttachSessionReference,
 ) {
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     A remote Action's command tab owns the gxserver session it created on the
     owning machine, so closing the tab has to close that session — the same
     ownership `gpui_close_command_terminal_gxserver_session` implements for a

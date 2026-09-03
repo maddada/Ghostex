@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatTerminalActivity 2026-09-03:
+CDXC:AgentScreenDetection 2026-09-03:
 Claude's `⏺` status rows as transient chat history, and how the transcript
 retires them. The rows exist because the same text can take a while to reach
 the JSONL transcript, so the terminal is the earliest place the chat can read

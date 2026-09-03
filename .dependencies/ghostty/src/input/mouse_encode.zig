@@ -116,7 +116,7 @@ pub fn encode(
                     if (last_mods.*) |mods| mods.equal(event.mods.binding()) else false
                 else
                     true;
-                // CDXC:TerminalMouse 2026-05-23-00:59:
+                // CDXC:Terminal 2026-05-23-00:59:
                 // gte shows path/link hover affordances when Cmd or Ctrl is held inside terminal mouse reporting. Same-cell motion dedupe must include modifiers so pressing Cmd over an existing path still reaches the TUI.
                 if (last_cell.eql(cell) and same_mods) return;
             }
@@ -241,7 +241,7 @@ fn buttonCode(event: Event, opts: Options) ?u8 {
     if (opts.event != .x10) {
         if (event.mods.shift) acc += 4;
         if (event.mods.alt) acc += 8;
-        // CDXC:TerminalMouse 2026-05-22-23:53:
+        // CDXC:Terminal 2026-05-22-23:53:
         // gte opens editor file paths and markdown links through modified mouse clicks. Terminal mouse protocols do not have a Super/Command bit, so encode Command-click as the Ctrl mouse modifier to preserve the macOS Cmd-click UX inside TUIs.
         if (event.mods.ctrl or event.mods.super) acc += 16;
     }

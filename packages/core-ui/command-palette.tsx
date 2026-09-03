@@ -289,7 +289,7 @@ const SIDEBAR_MESSAGE_PALETTE_COMMANDS = [
   },
   {
     /*
-     * CDXC:AgentHistorySearch 2026-08-20:
+     * CDXC:PromptSearch 2026-08-20:
      * Search by Text used to spawn a terminal running `gx f`. It now opens the
      * Find surface in the focused pane through the native hotkey dispatcher, so
      * the palette row, Alt+F, and the Hotkeys screen all reach one action.
@@ -330,11 +330,11 @@ const SIDEBAR_MESSAGE_PALETTE_COMMANDS = [
     kind: 'sidebarMessage',
     message: { type: 'openGhostexTutorialVideo' },
     /*
-     * CDXC:GhostexTutorialVideo 2026-06-18-05:31:
+     * CDXC:Onboarding 2026-06-18-05:31:
      * The command-palette Features row should open the tutorial video modal so
      * the old Highlighted Features modal remains unused.
      *
-     * CDXC:GhostexTutorialVideo 2026-06-18-05:49:
+     * CDXC:Onboarding 2026-06-18-05:49:
      * The tutorial video now uses Loom and the Ghostty-focused title, so search
      * metadata should match the current walkthrough terms.
      */
@@ -442,7 +442,7 @@ export function CommandPalette({
   const commandListRef = useRef<HTMLDivElement>(null);
   const commandRunStates = useSidebarStore((state) => state.commandRunStates);
   /*
-   * CDXC:DisabledPluginRouting 2026-08-23:
+   * CDXC:Extensions 2026-08-23:
    * A view turned off in Settings → Extensions is gone from the titlebar, and
    * the host refuses to switch to it, so its palette rows would be commands
    * that cannot run. Filter them here — the switchers for the hidden views,
@@ -773,7 +773,7 @@ export function CommandPalette({
       onBrowserCommandRun?.();
     }
     /*
-    CDXC:GPUICommandPane 2026-06-26-05:11:
+    CDXC:CommandPane 2026-06-26-05:11:
     Command Palette Action launches may read saved command metadata to derive the click runMode, including debug reruns for close-on-exit terminal Actions. The runSidebarCommand payload stays an authority selector: commandId plus non-default runMode only. Native and GPUI hosts resolve command text, URLs, close-on-exit, cwd/env, paths, output, and other launch details from trusted saved/HUD state.
     */
     const runMode = getSidebarCommandRunModeForClick(command, commandRunStates[command.commandId]);
@@ -811,7 +811,7 @@ export function CommandPalette({
           blank instead of showing "No hotkey" placeholder text so the palette
           only surfaces concrete accelerators.
 
-          CDXC:ActionsHotkeys 2026-05-17-01:18:
+          CDXC:Hotkeys 2026-05-17-01:18:
           Project actions must stay in the same order as the Actions settings
           list. The first five rows display and execute positional action-slot
           hotkeys, so reordering actions changes which command Ctrl+Shift+N
@@ -822,7 +822,7 @@ export function CommandPalette({
           palette, matching the pane menu order shown in native chrome while
           still using shared configurable hotkey definitions.
 
-          CDXC:FocusedSessionActions 2026-06-19-15:43:
+          CDXC:FocusMode 2026-06-19-15:43:
           Sleep, Wake, Close, and Close After Done are focused-session commands
           even when only Sleep has a default shortcut. Keep them in the Pane
           Actions group so users can run them from the palette and bind them in

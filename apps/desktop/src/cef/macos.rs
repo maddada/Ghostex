@@ -1,5 +1,5 @@
 /*
-CDXC:GPUICefPlatformSeam 2026-07-04:
+CDXC:CefRuntime 2026-07-04:
 macOS platform adapter for the shared windowed-CEF backend (cef/shell.rs).
 This module owns only the truly per-OS pieces: loading the CEF framework
 from the app bundle, the AppKit CefAppProtocol/message-pump shim glue, and
@@ -332,7 +332,7 @@ pub(super) fn order_native_view_front(native_view: *mut c_void) {
 
 pub(super) fn release_native_view(native_view: *mut c_void) {
     /*
-    CDXC:GPUICefCloseContract 2026-08-24:
+    CDXC:CefRuntime 2026-08-24:
     GhostexGpuiLifeSpanHandler::do_close returns handled so CEF never sends a
     native close to the host GPUI window. Per cef_life_span_handler.h's DoClose
     docs, the app is then still required to complete the close by proceeding
@@ -372,7 +372,7 @@ pub extern "C" fn GhostexGpuiCEFDoMessageLoopWork() {
 #[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiCEFHandleSelectAllForNativeView(native_view: *mut c_void) -> c_int {
     /*
-    CDXC:GPUICefEditCommands 2026-06-14-17:25:
+    CDXC:Hotkeys 2026-06-14-17:25:
     Native AppKit command dispatch can reach CEF's NSView even when GPUI still remembers the address input as its focused element. Keep a main-thread native-view to cef-rs browser registry so the standard selectAll: command can call Chromium's Frame::select_all for the focused page field instead of selecting GPUI chrome.
     */
     super::shell::select_all_for_native_view(native_view)
@@ -389,7 +389,7 @@ pub extern "C" fn GhostexGpuiCEFHandleEditCommandForNativeView(
     command: c_int,
 ) -> c_int {
     /*
-    CDXC:GPUICefEditCommands 2026-07-09:
+    CDXC:Hotkeys 2026-07-09:
     Cut/Copy/Paste use the same native-view-to-browser registry as Select
     All so the AppKit responder-chain shim can route standard clipboard
     commands to Chromium's Frame edit actions for whichever CEF surface

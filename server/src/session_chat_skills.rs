@@ -38,7 +38,7 @@ struct SessionChatSkill {
 }
 
 /*
-CDXC:SessionChatSkills 2026-08-15:
+CDXC:AgentSkills 2026-08-15:
 Chat skill mentions are discovered by gxserver on the session's machine. Grok
 Build owns a resolved catalog that includes bundled skills and collision-safe
 invocation names, so its own `inspect` output is authoritative. Other agents

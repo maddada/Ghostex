@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatResumePrompt 2026-08-18 (picker rewrite 2026-08-21):
+CDXC:AgentScreenDetection 2026-08-18 (picker rewrite 2026-08-21):
 Claude Code's resume-usage chooser. When a session is resumed after it has
 grown old/large, the CLI paints a blocking picker before it will accept any
 input:
@@ -82,7 +82,7 @@ const CONFIRM_FOOTER: &str = "Enter to confirm";
 pub const SESSION_CHAT_RESUME_PROMPT_KIND: &str = "resumePrompt";
 
 /*
-CDXC:SessionChatSwitchConfirm 2026-08-29:
+CDXC:SessionChat 2026-08-29:
 Claude Code's model/effort switch confirmation (one component paints both,
 verified in the 2.1.251 bundle):
 
@@ -116,7 +116,7 @@ const SWITCH_EFFORT_HEADING: &str = "Change effort level?";
 const SESSION_CHAT_SWITCH_CONFIRM_TAIL_LINES: usize = 5;
 
 /*
-CDXC:SessionChatSessionPaused 2026-08-29:
+CDXC:AgentScreenDetection 2026-08-29:
 Claude Code's safeguards pause (labels verified in the 2.1.251 bundle):
 
     Session paused

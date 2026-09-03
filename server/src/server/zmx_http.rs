@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:GxserverRustPort 2026-06-15-18:06:
+CDXC:RepoStructure 2026-06-15-18:06:
 Phase 5 lifecycle and session-I/O endpoints run through the same authenticated RPC envelope as the TypeScript daemon while zmx process work stays behind explicit endpoint handlers. Presentation deltas are still scheduled from durable state after lifecycle mutations so clients never infer sidebar state from subprocess output.
 */
 pub(crate) async fn handle_zmx_lifecycle_http(
@@ -15,7 +15,7 @@ pub(crate) async fn handle_zmx_lifecycle_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     /*
-    CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+    CDXC:Zmx 2026-09-01:
     Every lifecycle endpoint here is fully blocking: SQLite on the calling
     thread, `zmx` and `launchctl` subprocess spawns, and the launchd readiness
     poll's `thread::sleep`. Running that directly in the async handler parked an
@@ -208,7 +208,7 @@ pub(crate) struct ZmxStopAllCounts {
 }
 
 /*
-CDXC:StopAllKillsSessions 2026-08-28:
+CDXC:SessionSleep 2026-08-28:
 `/api/control/stopAll` promised "kill tracked zmx sessions, mark them stopped,
 then stop the control plane" (gx server stop-all), but the Rust port only ever
 stopped the control plane and reported zero counts. The app's Quit Ghostex &
@@ -217,7 +217,7 @@ Ghostex-spawned zmx daemon running. Sleeping and stopped sessions are skipped
 because their zmx process is already gone — sleep kills the provider too and
 only keeps the transcript resumable.
 
-CDXC:StopAllSleepsSessions 2026-09-01:
+CDXC:SessionSleep 2026-09-01:
 Killed sessions are marked "sleeping", not "stopped". "stopped" is the
 terminal close state: the sidebar drops it and `effective_lifecycle_state`
 refuses to ever promote it back, so Quit Ghostex & BG Service silently swept
@@ -354,7 +354,7 @@ pub(crate) async fn handle_zmx_session_interaction_http(
         }
     };
     /*
-    CDXC:SessionChatSerializedWriters 2026-08-24:
+    CDXC:SessionChat 2026-08-24:
     The raw input-line writers ride the per-session send queue, so their
     delivery is awaited here rather than performed inside the synchronous
     dispatch. The repository is scoped and the connection dropped before the
@@ -383,7 +383,7 @@ pub(crate) async fn handle_zmx_session_interaction_http(
         };
     }
     /*
-    CDXC:SessionChatSerializedWriters 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     Same shape for `/api/sendSessionMessage` (clear burst → text → settle →
     Enter, as one queued job): awaiting it here is what keeps the HTTP answer
     telling the caller whether the terminal actually took the message, now that
@@ -409,7 +409,7 @@ pub(crate) async fn handle_zmx_session_interaction_http(
         };
     }
     /*
-    CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+    CDXC:Zmx 2026-09-01:
     What is left here is `/api/readSessionText`, which spawns `zmx history` and
     reads up to 256KiB back from it. Same reason as the lifecycle handler: it
     runs on the blocking pool rather than on an executor worker. The rusqlite
@@ -563,7 +563,7 @@ pub(crate) fn with_renderer_session_target(mut payload: Map<String, Value>) -> M
         return payload;
     };
     /*
-    CDXC:GxserverRendererCommands 2026-06-21-19:22:
+    CDXC:CefRuntime 2026-06-21-19:22:
     gxserver renderer commands target durable project/session ids, but macOS may
     render sessions with combined presentation ids. Add a structured target at
     the daemon boundary so every CLI or API caller gets the same renderer lookup

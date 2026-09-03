@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -21,7 +21,7 @@ import type {
 import type { SidebarSessionGroup } from '@/packages/shared/session-grid-contract';
 
 /*
-CDXC:MobileKeepAwake 2026-08-19:
+CDXC:KeepAwake 2026-08-19:
 gxserver answers a declined automatic sleep with an untouched session and a
 reason, which is NOT a failure: `keptAwake` means another client is attached to
 that terminal, `neverActive` means nobody has prompted it yet. The sweep treats
@@ -56,7 +56,7 @@ export function createGpuiAutoSleepAgentSessionIds({
   >;
 }): string[] {
   /*
-  CDXC:GPUISidebarAutoSleep 2026-06-27-01:24:
+  CDXC:SessionSleep 2026-06-27-01:24:
   GPUI Agent Auto Sleep must choose only local gxserver presentation agent terminals after protecting selected/visible sidebar owners, focused sessions, active command-pane owners, and popped-out rows. Return bounded project/session routing ids for the existing setSessionSleeping path; do not inspect Browser/project-editor surfaces, titles, paths, commands, terminal output, URLs, tokens, or remote-machine rows.
   */
   if (settings.autoSleepAgentIdleMinutes === 0) {
@@ -102,7 +102,7 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
 }): Set<string> {
   const protectedProjectSessionKeys = new Set<string>();
   /*
-  CDXC:AutoSleepDisplayedSessions 2026-08-20:
+  CDXC:SessionSleep 2026-08-20:
   The shell's rendered sessions come first, because they are the only input here
   that reports what the user is actually looking at. Sidebar rows carry
   `isVisible`/`isFocused` from this runtime's own focus bookkeeping, which does
@@ -114,7 +114,7 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
     addGpuiAutoSleepProtectedSessionId(protectedProjectSessionKeys, presentation, displayedSessionId);
   }
   /*
-  CDXC:AutoSleepDelayedSend 2026-08-20:
+  CDXC:DelayedSend 2026-08-20:
   A session with Delayed Send armed has work waiting on its own timer. Sleeping
   it kills the provider the send would have been typed into, so the prompt the
   user scheduled simply never happens. Shell-owned timers (the gpui countdown
@@ -159,10 +159,10 @@ export function collectGpuiAutoSleepProtectedProjectSessionKeys({
   }
   addGpuiAutoSleepProtectedSessionId(protectedProjectSessionKeys, presentation, focusedSessionId);
   /*
-  CDXC:GPUISidebarAutoSleep 2026-06-27-06:54:
+  CDXC:SessionSleep 2026-06-27-06:54:
   Native Auto Sleep protects the active owner of every visible command-panel split leaf from the command-pane layout, not the HUD-focused tab. GPUI Rust sends that split ownership as sanitized `isPaneOwner:true` on external native-shaped `G...` ids; TypeScript protects only that field after the same local id and valid-status filtering used by command indicators, so internal numeric Rust ids, stale legacy rows, collapsed HUD focus, and malformed statuses cannot keep sessions awake.
 
-  CDXC:GPUISidebarAutoSleep 2026-06-27-07:28:
+  CDXC:SessionSleep 2026-06-27-07:28:
   Native command-panel layout is scoped to the active project, so a GPUI command-pane owner summary must protect only the active project's matching external `G...` session. Do not treat a bare command-pane id as globally owned across projects because that can keep unrelated same-id agent sessions awake.
   */
   const localCommandPaneSessions = filterGpuiGxserverLocalCommandPaneSessions(commandPaneSessions);
@@ -200,7 +200,7 @@ export function shouldAutoSleepGpuiPresentationAgentSession({
     return false;
   }
   /*
-  CDXC:AutoSleepNeverActive 2026-08-22:
+  CDXC:SessionSleep 2026-08-22:
   A session nobody has prompted yet is not "idle for 15 minutes", it has no idle
   clock at all: `lastActiveAt` below is the daemon's `createdAt` fallback, so an
   untouched terminal looks stale the moment it ages past the threshold. Sleeping
@@ -236,7 +236,7 @@ export function shouldAutoSleepGpuiPresentationAgentSession({
 
 export function gpuiAutoSleepSessionHasArmedDelayedSend(session: GxserverPresentationSession): boolean {
   /*
-  CDXC:AutoSleepDelayedSend 2026-08-20:
+  CDXC:DelayedSend 2026-08-20:
   Daemon-owned Delayed Send state: a deadline/countdown for a timed send, or a
   send-when-stopped watcher waiting on this agent or the whole project. Any of
   them means a prompt is queued for this terminal, so it is not idle in the
@@ -252,14 +252,14 @@ export function gpuiAutoSleepSessionHasArmedDelayedSend(session: GxserverPresent
 
 export function gpuiAutoSleepSessionHasQueuedChatPrompts(session: GxserverPresentationSession): boolean {
   /*
-  CDXC:SessionChatPromptQueue 2026-08-21:
+  CDXC:SessionChat 2026-08-21:
   A session with Ghostex-owned chat prompts still waiting is not idle in the
   sense Auto Sleep means: the daemon's queue scheduler is about to hand the
   agent more work. Automatic sleeps decline here for the same reason they
   decline for an armed Delayed Send. An explicit user Sleep never reaches this
   path and stays untouched.
 
-  CDXC:SessionChatPromptQueue 2026-08-21-b:
+  CDXC:SessionChat 2026-08-21-b:
   `queuedPromptCount` now includes `failed` rows so the badge can show a stalled
   queue, but a failed row is waiting on the USER, not on the agent — nothing is
   about to be delivered because of it. Subtract them so this stays byte-for-byte

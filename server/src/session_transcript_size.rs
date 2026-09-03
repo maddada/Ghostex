@@ -19,7 +19,7 @@ struct TranscriptSizeTarget {
 }
 
 /*
-CDXC:QuickAccessSessionSizes 2026-08-27:
+CDXC:Sessions 2026-08-27:
 Quick Access asks for transcript sizes only after session rows enter the visible
 scroll window. This endpoint keeps that deferred read cheap and private: one
 SQLite connection resolves a bounded batch of stable ids, and the response

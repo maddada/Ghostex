@@ -49,7 +49,7 @@ function handleAppModalHostMessage(message: unknown): void {
   }
 
   /*
-   * CDXC:SessionAgentNotes 2026-08-24:
+   * CDXC:SessionNotes 2026-08-24:
    * The session-note editor is opened by the SHARED sidebar (both versions),
    * so the web shell has to answer the same `openAppModal` call gpui's native
    * host does. The payload is forwarded unchanged to the one mounted note host.
@@ -64,7 +64,7 @@ function handleAppModalHostMessage(message: unknown): void {
   }
 
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The New/Edit Space dialog is opened by the SHARED sidebar's Space row, so
    * the web shell answers the same `openAppModal` call gpui's native host does
    * and forwards the payload unchanged to the one mounted Space editor host.
@@ -95,7 +95,7 @@ function handleAppModalHostMessage(message: unknown): void {
   }
 
   /*
-   * CDXC:RemoteSetup 2026-09-03:
+   * CDXC:RemotePairing 2026-09-03:
    * The sidebar menu's Mobile & Remote entry opens the shared Remote Setup
    * modal; the web shell mounts it in its own host like Settings.
    */

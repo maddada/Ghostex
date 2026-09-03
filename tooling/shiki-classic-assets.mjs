@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatCodeHighlighting 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 Shiki assets for the two Ghostex chat surfaces that cannot load ES modules.
 
 Session Chat highlights fenced code with Shiki and loads the engine plus one

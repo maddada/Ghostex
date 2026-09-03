@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatAgentTasks 2026-09-03:
+CDXC:SessionChat 2026-09-03:
 Claude Code's task list, the block its TUI pins under the transcript:
 
       ◼ ⟳ MNS-40: dedupe start_adapter across four test suites

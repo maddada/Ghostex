@@ -50,7 +50,7 @@ pub(crate) fn sidebar_url() -> Result<String> {
     }
 
     /*
-    CDXC:GPUIWindowsBringup 2026-07-04:
+    CDXC:PlatformSupport 2026-07-04:
     Packaged Windows and Linux layouts have no .app bundle: the packaging
     scripts (build-windows-app.ps1 / build-linux-app.sh) stage the sidebar at
     dist/sidebar beside the executable. That directory name is load-bearing —
@@ -111,7 +111,7 @@ pub(crate) fn gpui_sidebar_native_pointer_inside_script(inside: bool) -> String 
 }
 
 /*
-CDXC:GPUISidebarPointerTracking 2026-08-02:
+CDXC:Sidebar 2026-08-02:
 Dismissal needs page code — the open menus live in a module-scoped registry
 inside the sidebar bundle — so it goes through the sidebar's own bridge. If the
 bridge is not installed the page cannot have an open menu either, so there is
@@ -121,7 +121,7 @@ nothing to queue.
 pub(crate) const GPUI_SIDEBAR_DISMISS_CONTEXT_MENUS_SCRIPT: &str = "(function(){const bridge=window.ghostexGpui;if(bridge&&typeof bridge.dismissSidebarContextMenus==='function'){bridge.dismissSidebarContextMenus();}})(); undefined;";
 
 /*
-CDXC:GPUISidebarPointerTracking 2026-08-20:
+CDXC:Sidebar 2026-08-20:
 Pointer-leave tooltip dismissal, the event-driven half of the same contract.
 The sidebar deliberately has no `data-native-pointer-inside` tooltip CSS rule:
 a persistent flag would also block the next hover from opening a tooltip.
@@ -130,7 +130,7 @@ a persistent flag would also block the next hover from opening a tooltip.
 pub(crate) const GPUI_SIDEBAR_DISMISS_TOOLTIPS_SCRIPT: &str = "(function(){const bridge=window.ghostexGpui;if(bridge&&typeof bridge.dismissSidebarTooltips==='function'){bridge.dismissSidebarTooltips();}})(); undefined;";
 
 /*
-CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+CDXC:Spaces 2026-08-29:
 A finger scroll gesture began inside the sidebar's native frame. The page's
 Space-swipe handler resets its gesture lock on this — DOM wheel events carry no
 momentum phase, so only AppKit can mark where one physical swipe ends and the
@@ -201,7 +201,7 @@ pub(crate) fn register_gpui_menu_bar_status_callback_target(
     async_app: gpui::AsyncApp,
 ) {
     /*
-    CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+    CDXC:StatusPet 2026-06-26-06:05:
     The AppKit Running Agents dropdown is process-global, but project/session row actions must target only the live GPUI root. Register this callback target with the app lifecycle and keep row payloads to copied bounded ids that are later routed through fixed sidebar callbacks.
     */
     GPUI_MENU_BAR_STATUS_CALLBACK_TARGET.with(|target| {
@@ -322,7 +322,7 @@ pub(crate) fn gpui_sidebar_portless_state_from_update_result(
 
 pub(crate) fn gpui_sidebar_portless_state() -> Option<serde_json::Value> {
     /*
-    CDXC:GPUIPortlessAdminBridge 2026-06-24-14:28:
+    CDXC:Portless 2026-06-24-14:28:
     GPUI Settings hydration exposes privileged Portless admin actions only when this local macOS app bundle has the reviewed Web/code-server Node and Web/portless CLI runtime. Non-macOS, development binaries, incomplete bundles, and non-recommended actions stay unavailable rather than presenting fake setup capability.
     */
     let health = gpui_gxserver_server_health(Duration::from_millis(500)).ok()?;

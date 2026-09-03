@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 use super::*;
 
 /*
-CDXC:SessionForkFamilies 2026-08-28:
+CDXC:SessionFork 2026-08-28:
 One conversation family can own several registry session rows. `codex fork` and
 `codex resume` both write a NEW rollout file with a NEW agent session uuid, so
 the row that was tailing the old rollout keeps pointing at a dead file while the
@@ -195,7 +195,7 @@ fn parent_claims(session: &Value) -> ParentClaims {
     push_registry(read_hidden_metadata_text(session, "restoredFromSessionId"));
 
     /*
-    CDXC:SessionForkIdentity 2026-09-02:
+    CDXC:SessionFork 2026-09-02:
     A row can carry its OWN current id in `previousAgentSessionIds`: an adoption
     that was later reverted (the live-process scan re-asserting the resumed id)
     leaves the id it moved away from, which is the id it is back on. A self

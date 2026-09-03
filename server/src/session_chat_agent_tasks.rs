@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatAgentTasks 2026-09-03:
+CDXC:SessionChat 2026-09-03:
 The task list Claude Code keeps for a session (its TaskCreate / TaskUpdate
 tools, the block the CLI pins under its transcript and folds with `ctrl+t`):
 

@@ -7,7 +7,7 @@ use crate::*;
 
 /// One account a session can be resumed under, as published by the owning
 /// gxserver on the presentation session and forwarded verbatim by the sidebar
-/// runtime (CDXC:SwitchAccount 2026-09-03). `icon` is the sidebar agent icon id.
+/// runtime (CDXC:AgentProviders 2026-09-03). `icon` is the sidebar agent icon id.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSwitchableSessionAgent {
     pub(crate) agent_id: String,
@@ -24,7 +24,7 @@ pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) key: GpuiWorkspaceTerminalSessionKey,
     pub(crate) kind: AgentsWorkspaceSessionKind,
     /*
-    CDXC:DraftAgentSwitch 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     The session is a draft: created from the sidebar, its agent CLI running,
     but no first prompt sent. It is the one session shape that is chat-eligible
     without an `agent_session_id`.
@@ -127,7 +127,7 @@ pub(crate) struct GpuiSidebarBrowserTabFocusMessage {
 }
 
 /*
-CDXC:GPUISidebarRename 2026-07-28:
+CDXC:Sessions 2026-07-28:
 `command` is a fixed selector, not renderer-provided command text: it may only
 be the literal "rename" (default), "name" (Pi), or "title" (Hermes Agent), and
 Rust alone turns it into terminal input.
@@ -148,7 +148,7 @@ pub(crate) struct GpuiSidebarWorkspaceTerminalRenameCommandMessage {
 }
 
 /*
-CDXC:GPUIWorkspaceRenameCommand 2026-07-29:
+CDXC:SessionTitles 2026-07-29:
 Rename delivery selects the target tab first, so its Ghostty surface may still
 be mounting when the command arrives. The bounded timer below re-validates the
 same exact target until the surface mounts; it never retargets or falls back.
@@ -180,7 +180,7 @@ pub(crate) fn gpui_workspace_terminal_rename_command_target_from_model(
     key: &GpuiLocalWorkspaceSessionKey,
 ) -> Option<GpuiWorkspaceTerminalRenameCommandTarget> {
     /*
-    CDXC:GPUIWorkspaceRenameCommand 2026-06-27-02:27:
+    CDXC:SessionTitles 2026-06-27-02:27:
     Rename-command target selection is model-only until the final Ghostty owner check: require an existing local gxserver mapping, a Running Agents shell session, and a pane that owns that tab. Sleeping, mounting, restored, popped-out, stale, unmapped, command-pane, and fallback-focused terminals must not become rename targets.
     */
     let shell_session_id = local_workspace_session_mappings.get(key).copied()?;

@@ -270,7 +270,7 @@ pub(crate) async fn prepare_registered_worktree_project(
         })
         .cloned();
     /*
-    CDXC:GlobalProjectDefaults 2026-08-02:
+    CDXC:Projects 2026-08-02:
     This gate skips the setup call entirely when nothing is configured, so it has
     to consult the Global Default too. Otherwise a project relying on the global
     would return here and never reach the executor that would have run it.

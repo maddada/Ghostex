@@ -32,7 +32,7 @@ pub(crate) async fn handle_extensions_http(
         }
     };
     /*
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     Store-vs-local is only knowable from the REQUEST — `install_local`,
     `install_from_catalog`, and `install_zip` converge on one `activate_install`
     that has already lost the provenance — so it is resolved here, before the

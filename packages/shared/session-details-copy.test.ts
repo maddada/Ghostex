@@ -16,7 +16,7 @@ const BASE_SESSION: SidebarSessionItem = {
 
 test('builds copyable sidebar session details without prompt text', () => {
   /**
-   * CDXC:SidebarContextMenu 2026-06-11-23:08:
+   * CDXC:ContextMenus 2026-06-11-23:08:
    * Copy details includes session/project metadata needed for handoffs, but it
    * must not include the first user message because that is prompt content, not
    * a stable session identifier.
@@ -66,7 +66,7 @@ test('builds copyable sidebar session details without prompt text', () => {
 
 test('keeps remote machine and project fields in session details', () => {
   /**
-   * CDXC:RemoteContextMenu 2026-06-30-15:22:
+   * CDXC:ContextMenus 2026-06-30-15:22:
    * Remote Copy details must preserve the remote machine, project, and remote
    * project path from the rendered sidebar group. Those fields are the user's
    * stable handoff context for remote gxserver sessions.

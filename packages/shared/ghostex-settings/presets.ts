@@ -7,31 +7,31 @@ import {
 } from './types';
 
 /**
- * CDXC:SidebarSettingsPresets 2026-05-16-10:11:
+ * CDXC:Settings 2026-05-16-10:11:
  * The Settings top row exposes Codex, Minimal, Detailed, and Recommended sidebar UI presets as toggle buttons.
  * Preset state is derived from the controlled sidebar settings instead of persisted separately, so manual deviations show Custom without adding another source of truth.
  *
- * CDXC:SidebarSettingsPresets 2026-06-12-07:10:
- * Superseded by CDXC:SidebarSettingsPresets 2026-06-30-22:29.
+ * CDXC:Settings 2026-06-12-07:10:
+ * Superseded by CDXC:Settings 2026-06-30-22:29.
  *
- * CDXC:SidebarSettingsPresets 2026-06-13-01:06:
- * Superseded by CDXC:SidebarSettingsPresets 2026-06-30-22:29.
+ * CDXC:Settings 2026-06-13-01:06:
+ * Superseded by CDXC:Settings 2026-06-30-22:29.
  *
- * CDXC:SidebarSettingsPresets 2026-06-13-15:42:
+ * CDXC:Settings 2026-06-13-15:42:
  * Recommended should keep the sidebar quieter by hiding session-card Last Active timestamps while preserving the rest of the detailed status chrome.
  *
- * CDXC:SessionStatusIndicators 2026-06-15-14:00:
+ * CDXC:SessionStatus 2026-06-15-14:00:
  * Sidebar presets did not control the legacy macOS floating status indicator.
  *
- * CDXC:SessionStatusIndicators 2026-06-27-20:11:
+ * CDXC:SessionStatus 2026-06-27-20:11:
  * The standalone floating status indicator was removed from macOS and GPUI.
  * Presets now tune only sidebar density and the menu-bar indicator; legacy
  * floating keys are normalized separately for old settings files only.
  *
- * CDXC:SidebarSettingsPresets 2026-06-23-08:20:
+ * CDXC:Settings 2026-06-23-08:20:
  * Every sidebar preset must show session-card close buttons on hover. Presets may still tune density, icons, timestamps, project stats, and menu-bar indicators, but they should not remove the primary per-session close affordance.
  *
- * CDXC:SidebarSettingsPresets 2026-06-30-22:29:
+ * CDXC:Settings 2026-06-30-22:29:
  * Recommended should match the user's current preset-controlled sidebar configuration: visible session agent icons, visible browser favicons, close button on hover, hidden Last Active timestamps, visible project git stats, hidden changed-file counts, and visible menu-bar session indicators.
  */
 export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {

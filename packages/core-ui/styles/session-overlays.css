@@ -1,19 +1,19 @@
 /*
- * CDXC:SidebarContextMenu 2026-05-20-12:30:
+ * CDXC:ContextMenus 2026-05-20-12:30:
  * Context-menu backdrops sit above sidebar rows/cards and below the menu itself
  * so in-sidebar outside clicks dismiss without focusing the underlying target.
  *
- * CDXC:SidebarContextMenu 2026-05-20-13:05:
+ * CDXC:ContextMenus 2026-05-20-13:05:
  * Clicks on terminal/titlebar and other native surfaces dismiss through a native
  * monitor; this backdrop only covers the sidebar webview.
  *
- * CDXC:SidebarContextMenu 2026-06-09-14:22:
+ * CDXC:ContextMenus 2026-06-09-14:22:
  * Right-click menus for project and session rows must paint above sticky
  * project headers, including remote machine project headers. Keep the backdrop
  * above those headers too so outside clicks dismiss the open menu instead of
  * activating header buttons through it.
  *
- * CDXC:SidebarContextMenu 2026-06-15-03:07:
+ * CDXC:ContextMenus 2026-06-15-03:07:
  * Dark Gray sidebar context-menu item hover should be the neutral #202020 menu
  * row surface, not a blue accent wash from --app-button-background.
  */
@@ -39,7 +39,7 @@
   z-index: var(--sidebar-context-menu-z-index);
   min-width: 156px;
   /*
-   * CDXC:SidebarContextMenu 2026-05-27-06:19:
+   * CDXC:ContextMenus 2026-05-27-06:19:
    * Right-click menus near the bottom of the sidebar must remain fully usable
    * inside the webview. Pair the portal's rendered-size coordinate clamp with
    * an internal scroll cap for menus taller than the available viewport.
@@ -66,7 +66,7 @@
 
 .session-context-menu-item {
   /*
-   * CDXC:WorkspaceActions 2026-05-04-08:22
+   * CDXC:Workarea 2026-05-04-08:22
    * Project context menus include selected-IDE labels such as "VS Code
    * Insiders"; keep command labels on one line so menu sizing and pointer
    * targeting remain predictable.
@@ -90,7 +90,7 @@
 
 .sidebar-session-context-menu {
   /*
-   * CDXC:SidebarContextMenu 2026-06-05-21:23:
+   * CDXC:ContextMenus 2026-06-05-21:23:
    * Session context menus are centered by JS within the sidebar viewport. Keep
    * the rendered width deterministic and cap it to the sidebar webview width so
    * the post-render clamp and the visible menu agree in narrow sidebars.
@@ -101,7 +101,7 @@
 
 .session-tag-submenu {
   /*
-   * CDXC:SessionTags 2026-06-05-21:23:
+   * CDXC:Sessions 2026-06-05-21:23:
    * The Tag as submenu opens only after the Tag as row is clicked and shares
    * the same sidebar-centered placement as the parent session context menu.
    */
@@ -118,7 +118,7 @@
 
 .session-tag-menu-section + .session-tag-menu-section {
   /*
-   * CDXC:SessionTagFilters 2026-06-16-00:05:
+   * CDXC:Sessions 2026-06-16-00:05:
    * Tag context menus keep section dividers for Priority/Progress/Type grouping
    * but no longer render text heading rows, so the menus stay compact while
    * preserving the established tag order.
@@ -152,7 +152,7 @@
 }
 
 /*
- * CDXC:SessionMenuGroupLabels 2026-08-26:
+ * CDXC:ContextMenus 2026-08-26:
  * Session context menus name their separated groups the way the chat dots menu
  * names its "Agent" block: quiet muted sentence-case text, aligned with the
  * 10px item inset above it rather than the panel's 6px padding, so a label and
@@ -238,7 +238,7 @@
 }
 
 /*
- * CDXC:SessionTooltips 2026-05-20-11:05:
+ * CDXC:Tooltips 2026-05-20-11:05:
  * Session-card tooltips render below the hovered row with a custom measured
  * popup so they do not overlap the trigger or mis-anchor through the Radix
  * layer in the native sidebar webview. The popup is portaled out of the row so

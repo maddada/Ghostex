@@ -24,7 +24,7 @@ export type SidebarActionsOptions = {
 };
 
 /*
- * CDXC:SidebarHookDecomposition 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * The sidebar's command surface: sort/version/layout preferences, tag filter
  * toggles, the native chrome requests, agent launches, and the remaining
  * top-chrome entry points. All of them are plain closures over render values,
@@ -79,7 +79,7 @@ export function useSidebarActions({
   const toggleSidebarCollapsed = () => {
     dismissAppModalForSidebarNavigation('SettingsDismissal:toggleSidebar');
     /**
-     * CDXC:SidebarCollapse 2026-06-12-02:23:
+     * CDXC:Sidebar 2026-06-12-02:23:
      * Sidebar collapse is native chrome state. React requests the toggle, while
      * AppKit owns hiding the sidebar WebView, divider, and workspace border.
      */
@@ -107,7 +107,7 @@ export function useSidebarActions({
 
     dismissAppModalForSidebarNavigation('SettingsDismissal:createQuickAgent');
     /**
-     * CDXC:QuickAgents 2026-06-08-18:25:
+     * CDXC:AgentLauncher 2026-06-08-18:25:
      * The Quick section header should expose the same selected-agent split picker as project headers. Launch through runSidebarAgent with the synthetic Quick group id so native creates a new projectless agent chat instead of targeting the active code project.
      */
     setPrimaryAgentLauncherId(agent.agentId);

@@ -1,4 +1,4 @@
-/* CDXC:ScrollContainers 2026-04-27-03:41: Scroll containers need composable
+/* CDXC:DesignSystem 2026-04-27-03:41: Scroll containers need composable
    edge fades without bespoke per-component gradients. These Tailwind v4
    utilities intentionally own the scroll-mask class API used across sidebar,
    shadcn, and workspace surfaces so CSS generation does not depend on package
@@ -100,7 +100,7 @@
 }
 
 /*
- * CDXC:SidebarScroll 2026-06-19-13:28:
+ * CDXC:Sidebar 2026-06-19-13:28:
  * Match Codex Desktop's sidebar scroll-edge implementation for the macOS sidebar:
  * put the fade on the scroll container with scroll-linked CSS masks instead of
  * painting a separate gray gradient or inset shadow overlay. This keeps the
@@ -138,7 +138,7 @@
 
 @keyframes edge-fade {
   /*
-   * CDXC:ScrollFades 2026-06-19-14:41:
+   * CDXC:DesignSystem 2026-06-19-14:41:
    * Short scroll ranges need the top fade to reach full strength immediately
    * after leaving scrollTop 0 instead of interpolating across the whole list.
    * Keep both edges visible through the middle of the
@@ -222,13 +222,13 @@
 .vertical-scroll-fade-mask,
 .vertical-scroll-fade-mask-top {
   /*
-   * CDXC:SidebarScroll 2026-06-19-13:55:
+   * CDXC:Sidebar 2026-06-19-13:55:
    * The sidebar must show the Codex-style blur mask at both scroll edges.
    * Apply the mask outside the scroll-animation feature query so Ghostex still
    * gets the top and bottom fade when the embedded browser skips scroll-linked
    * animation support.
    *
-   * CDXC:SidebarScroll 2026-06-19-13:55:
+   * CDXC:Sidebar 2026-06-19-13:55:
    * Bun's native web CSS bundler drops Codex's mask shorthand gradients to
    * `mask: none`. Use the alpha-equivalent black/transparent mask-image stops
    * so the generated macOS Web assets preserve the top and bottom fade.
@@ -255,14 +255,14 @@
 }
 
 /*
- * CDXC:ScrollFades 2026-06-19-14:16:
+ * CDXC:DesignSystem 2026-06-19-14:16:
  * Apply the Codex-style scroll-linked fade anywhere the app opts into the
  * reusable mask class. Use the same `scroll()` support query as Ghostex's
  * existing scroll-mask utilities so command palettes, Kanban lanes, Recent
  * Projects, dropdowns, and ScrollArea viewports all animate their edge fades
  * in the native macOS web bundle.
  *
- * CDXC:ProjectBoardDropdowns 2026-06-20-04:38:
+ * CDXC:ProjectBoard 2026-06-20-04:38:
  * Kanban dropdowns must close immediately after a user selects an option.
  * Base UI waits for popup animations before unmounting, so scroll-linked
  * fade animations must not run on elements that also carry Base UI's

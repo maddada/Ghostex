@@ -32,7 +32,7 @@ pub(crate) fn browser_tab_model_to_shell_state_json(model: &BrowserTabModel) -> 
                     None
                 };
                 /*
-                CDXC:GPUIBrowserTabTitleCache 2026-07-12:
+                CDXC:Browser 2026-07-12:
                 Persist the tab's last displayed title so restart shows the
                 same sidebar/tab-strip label instead of regressing to the
                 URL-host fallback (e.g. "Google.com" for a tab that showed
@@ -62,7 +62,7 @@ pub(crate) fn browser_navigation_history_to_shell_state_json(
     sanitized_tab_url: Option<&str>,
 ) -> Option<serde_json::Value> {
     /*
-    CDXC:GPUIBrowserHistoryPrivacy 2026-06-22-10:09:
+    CDXC:Telemetry 2026-06-22-10:09:
     Serialize Browser history at the writer boundary with the same strict tab URL sanitizer used for Browser shell state. If the current entry cannot be represented as the tab's sanitized loaded URL, omit the history object so restore rebuilds from the safe loaded URL instead of persisting raw navigation details.
     */
     let current_index = history
@@ -138,7 +138,7 @@ pub(crate) fn browser_tab_model_from_shell_state(
         browser_node_from_shell_state(root_value, &tab_ids)?
     } else {
         /*
-        CDXC:GPUIBrowserSplits 2026-06-22-09:02:
+        CDXC:Browser 2026-06-22-09:02:
         Pre-split shell state stored Browser tabs as a flat strip. Restore that older private-data-safe shape as one Browser pane so users keep sanitized tab ids/URLs while the new split tree becomes the durable layout representation after the next save.
         */
         BrowserNode::Leaf(BrowserLeaf {
@@ -367,7 +367,7 @@ pub(crate) fn browser_tab_from_shell_state(
     };
 
     /*
-    CDXC:GPUIBrowserTabTitleCache 2026-07-12:
+    CDXC:Browser 2026-07-12:
     Restore the persisted last-displayed title into the runtime title slot so
     the sidebar and tab strip show the pre-restart label until the page loads
     and reports a fresh document title.

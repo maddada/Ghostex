@@ -33,7 +33,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUILibghosttyMountBounds 2026-06-22-22:45:
+        CDXC:Terminal 2026-06-22-22:45:
         Store exact terminal body bounds only after validating the pane/session is still one of the current rendered running mount slots. This record is runtime-only and must not be serialized, logged, or represented by a hidden hitbox; the existing body div remains the click/drop owner.
         */
         let current_slot_ids = self.agents_workspace.rendered_terminal_body_mount_slots();
@@ -45,7 +45,7 @@ impl GhostexGpuiApp {
         // always empty at first record of a frame, which made every frame
         // look freshly surfaced (one zmx subprocess per slot per frame) and
         // left the resize-debounce arm unreachable
-        // (CDXC:GPUIZmxPersistenceRefresh 2026-07-11).
+        // (CDXC:Zmx 2026-07-11).
         let previous_bounds = self
             .agents_terminal_zmx_refresh_recorded_bounds
             .get(&slot_id)
@@ -64,7 +64,7 @@ impl GhostexGpuiApp {
         }
         self.sync_agents_terminal_surface_host(scale_factor, cx);
         /*
-        CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
+        CDXC:Zmx 2026-07-06:
         A slot recording bounds for the first time was just surfaced (tab
         switch, mode switch, wake, restore) and may face a zmx daemon grid
         another client resized while it was hidden — refresh it conditionally
@@ -91,7 +91,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITerminalStartupGeometry 2026-06-23-00:10:
+        CDXC:Terminal 2026-06-23-00:10:
         Record Mounting startup body geometry only for the current visible selected Mounting slot and keep it keyed by `AgentsTerminalStartupBodySlotId`, not the Running mount slot. The existing placeholder body remains the click/drop owner, and this runtime map is cleared or pruned before it can become stale, persisted, logged, or used to create a Ghostty surface.
         */
         record_agents_terminal_startup_body_slot_geometry(
@@ -113,7 +113,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+        CDXC:Terminal 2026-06-23-19:41:
         Non-startup Mounting wake/reattach bodies may record only runtime geometry for exact parked-owner transfer. The record is accepted from the normal placeholder body, stays out of shell-state JSON/logs, does not create startup candidates or launch payloads, and cannot mark Running without an exact parked owner move.
         */
         record_agents_terminal_parked_owner_body_slot_geometry(
@@ -135,7 +135,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+        CDXC:Terminal 2026-06-23-05:03:
         Command terminal bounds are recorded from the command body element itself, never from the enclosing group or titlebar. The record is accepted only for a current expanded visible active command session and stays runtime-only so shell-state JSON, command titles, paths, commands, env, output, and terminal content cannot leak into launch payload or persistence.
         */
         let current_slot_ids = self.command_pane.rendered_terminal_body_mount_slots();
@@ -144,7 +144,7 @@ impl GhostexGpuiApp {
             .is_current_terminal_body_mount_slot(slot_id);
         // Render-persistent refresh map, not the per-render-cleared geometry
         // map — see the Agents bounds hook
-        // (CDXC:GPUIZmxPersistenceRefresh 2026-07-11).
+        // (CDXC:Zmx 2026-07-11).
         let previous_bounds = self
             .command_terminal_zmx_refresh_recorded_bounds
             .get(&slot_id)
@@ -163,7 +163,7 @@ impl GhostexGpuiApp {
         }
         self.sync_command_terminal_surface_host(scale_factor, cx);
         // See the Agents bounds hook: first-record = surfaced refresh, body
-        // size change = trailing-edge resize debounce (CDXC:GPUIZmxPersistenceRefresh).
+        // size change = trailing-edge resize debounce (CDXC:Zmx).
         if slot_is_current {
             match previous_bounds {
                 None => self.refresh_zmx_persistence_command_terminal_if_stale(slot_id, cx),
@@ -187,7 +187,7 @@ impl GhostexGpuiApp {
             self.is_current_project_editor_companion_terminal_body_mount_slot(slot_id);
         // Render-persistent refresh map, not the per-render-cleared geometry
         // map — see the Agents bounds hook
-        // (CDXC:GPUIZmxPersistenceRefresh 2026-07-11).
+        // (CDXC:Zmx 2026-07-11).
         let previous_bounds = self
             .project_editor_companion_zmx_refresh_recorded_bounds
             .get(&slot_id)
@@ -207,7 +207,7 @@ impl GhostexGpuiApp {
         }
         self.sync_project_editor_companion_terminal_surface_host(scale_factor, cx);
         // See the Agents bounds hook: first-record = surfaced refresh, body
-        // size change = trailing-edge resize debounce (CDXC:GPUIZmxPersistenceRefresh).
+        // size change = trailing-edge resize debounce (CDXC:Zmx).
         if slot_is_current {
             match previous_bounds {
                 None => {
@@ -230,31 +230,31 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+        CDXC:Terminal 2026-06-23-05:03:
         Command terminal host sync is a command-pane-only runtime pipeline. It reconciles only expanded visible active command body slots plus exact body bounds, creates App-owned NSView/Ghostty surfaces through the shared terminal host stack with a source-only launch request boundary, and never touches Agents workspace maps, Agents runtime registries, startup launch payloads, shell-state JSON, logs, overlays, or hidden hit regions.
 
-        CDXC:GPUICommandTerminalSurface 2026-06-23-05:18:
+        CDXC:Terminal 2026-06-23-05:18:
         Command terminal native sync must be driven from render-start and body-canvas bounds records because Ghostty content scale and pixel size require the current window scale factor. Command model mutations should schedule render with `cx.notify()` and avoid eager sync calls with placeholder scale values or previous-frame body bounds.
 
-        CDXC:GPUICommandTerminalGhosttyClose 2026-06-23-05:21:
+        CDXC:Terminal 2026-06-23-05:21:
         Confirmed command Ghostty close callbacks are consumed before command host reconciliation computes current slots. Shell removal goes through the command model first, then the existing render/bounds-driven host cleanup drops stale command Ghostty surfaces and AppKit hosts without eager sync calls, Agents map mutation, startup map mutation, shell-state runtime fields, logs, overlays, or hit-test routing.
 
-        CDXC:GPUICommandTerminalProcessExit 2026-06-23-05:30:
+        CDXC:Terminal 2026-06-23-05:30:
         Command process-exited polling runs after confirmed-close callback consumption and before command host reconciliation. The command model removes exited sessions first, and stale command hosts/surfaces then detach through the existing render/bounds-driven cleanup path without requesting Ghostty close or forcing an eager placeholder-scale sync.
 
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-05:39:
+        CDXC:CommandPane 2026-06-23-05:39:
         Command close-confirm sync is separate from Agents runtime/startup sync. Confirmation-needed callbacks create only command pending state before confirmed-close consumption, and stale command pending entries prune through command model/surface ownership without mutating Agents maps.
 
-        CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-23-16:46:
+        CDXC:Terminal 2026-06-23-16:46:
         Command config preparation may attach launch data only from `CommandTerminalLaunchPayloadSource` for the exact current command body mount slot and derived command runtime id. Invalid explicit payloads suppress/prune the request instead of falling back to command titles, shell status, delayed-send state, project/workspace data, paths, cwd, command args, env, initial input, wait policy, stdout/stderr, terminal content, or helper detection.
 
-        CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:47:
+        CDXC:Terminal 2026-06-27-04:47:
         Config preparation owns the one-shot drain point for Action and plain command startup payloads. Consume the exact slot payload while building the Ghostty request so native-view remounts can recreate surfaces without replaying old command text or cwd payloads.
 
-        CDXC:GPUICommandPaneResize 2026-06-27-03:21:
+        CDXC:CommandPane 2026-06-27-03:21:
         Mounted command runtime close confirmation and process-exit cleanup can remove the final command tab without using direct tab-close handlers. After those model mutations, clear runtime resize hover chrome only if the command pane is now empty so stale panel cursors cannot survive hidden/collapsed command-panel state.
 
-        CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-07:42:
+        CDXC:Terminal 2026-06-27-07:42:
         Command Sleep/Wake preserves runtime ownership by parking exact command host/surface owners before a sleep-driven detach and moving them back before the wake mount can create a replacement. Collapse, close, stale slots, invalid payloads, and mismatches keep the normal detach/drop path.
         */
         #[cfg(target_os = "macos")]
@@ -315,7 +315,7 @@ impl GhostexGpuiApp {
         self.command_terminal_mount_slot_bounds
             .retain(|slot_id, _| current_slot_ids.contains(slot_id));
         /*
-        CDXC:GPUIWorkspaceTabDragVisibility 2026-07-03:
+        CDXC:Workarea 2026-07-03:
         Workspace/Agents tab drags can drop into expanded command groups, so mounted command terminals hide-and-park for the whole drag exactly like a command-panel collapse. The reattach pass must pause with the same gate; otherwise the body canvas keeps recording bounds during the drag and parked command owners would reattach and detach every frame.
         */
         let command_terminal_native_views_may_be_visible =
@@ -568,7 +568,7 @@ impl GhostexGpuiApp {
                     continue;
                 }
                 /*
-                CDXC:GPUIProjectEditorCompanionAttach 2026-07-06:
+                CDXC:CodeEditor 2026-07-06:
                 A companion slot without a live surface may only mount with the
                 daemon-built zmx attach payload for its session; otherwise the
                 slot stays unmounted while the attach plan is fetched, instead

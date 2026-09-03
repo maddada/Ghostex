@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatTerminalActivity 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 The transcript's progress row: what the agent CLI is doing right now when it is
 doing something long, on-screen only, and consequential. Claude Code's
 compaction is the case this exists for — for a minute or more the chat could say

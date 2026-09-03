@@ -40,16 +40,16 @@ pub(crate) fn gxserver_post_typed_operation(
     timeout: Duration,
 ) -> Result<(u16, String), String> {
     /*
-    CDXC:GPUIProjectBoardGxserverBridge 2026-06-24-11:03:
+    CDXC:ProjectBoard 2026-06-24-11:03:
     GPUI Kanban CEF parity must use the existing gxserver typed-operation boundary for Beads work. Send the same protocol-version envelope and bearer token as the native bridge to localhost only, with no bd subprocess execution, remote fallback, raw request logging, response logging, URL/title inspection, or persisted board payloads.
 
-    CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-11:39:
+    CDXC:AgentProviders 2026-06-24-11:39:
     Settings fan-out also uses this narrow local gxserver RPC helper so agent-policy saves share the existing bearer-token path and response-body parser. Keep callers endpoint-specific and privacy-safe; this helper must not log tokens, URLs, settings payloads, project paths, command text, stdout/stderr, or daemon responses.
 
-    CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-12:14:
+    CDXC:AgentProviders 2026-06-24-12:14:
     Startup/open-time agent-policy hydration also uses this helper for `/api/readAgentSettings` so GPUI does not invent a second daemon client or bypass the same token, localhost, timeout, protocol-header, and response-sanitization boundary.
 
-    CDXC:GPUISettingsStatusBridge 2026-06-24-11:40:
+    CDXC:StatusPet 2026-06-24-11:40:
     Settings status/action parity reuses this helper for hook status/install/uninstall and Portless state updates. Keep the helper transport-only: callers own endpoint allowlists, result validation, explicit UI error messages, and no persistent logging.
     */
     if !path.starts_with("/api/") {
@@ -100,7 +100,7 @@ pub(crate) fn gxserver_get_typed_operation(
     timeout: Duration,
 ) -> Result<(u16, String), String> {
     /*
-    CDXC:GPUISettingsStatusBridge 2026-06-24-11:40:
+    CDXC:StatusPet 2026-06-24-11:40:
     GPUI Settings reads gxserver health through the same localhost/token/protocol boundary as typed POST operations. Health reads must stay GET-only, short-timeout, response-unlogged, and limited to `/api/` paths so Portless HUD hydration does not introduce a second daemon client.
     */
     if !path.starts_with("/api/") {
@@ -205,7 +205,7 @@ pub(crate) fn reconcile_gpui_gxserver_agent_settings_with_daemon()
 pub(crate) fn read_gpui_gxserver_agent_settings()
 -> Result<GpuiGxserverReadAgentSettingsResult, String> {
     /*
-    CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-12:14:
+    CDXC:AgentProviders 2026-06-24-12:14:
     Startup/open-time reconciliation reads the daemon's canonical agent-settings row through the same typed localhost RPC envelope as save-time sync. Parse only `isPersisted`, `agentAcceptAllEnabled`, and `defaultPromptAgentId`; failures remain local `Result` values and never create fallback daemon state or leak raw gxserver responses.
     */
     let (status_code, body) = gxserver_post_typed_operation(
@@ -223,7 +223,7 @@ pub(crate) fn update_gpui_gxserver_agent_settings(
     settings: &shared_settings::SharedGxserverAgentSettings,
 ) -> Result<shared_settings::SharedGxserverAgentSettings, String> {
     /*
-    CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-11:39:
+    CDXC:AgentProviders 2026-06-24-11:39:
     GPUI Settings saves use the same local gxserver HTTP/token path as other GPUI gxserver calls. The request is the macOS-compatible `/api/updateAgentSettings` RPC envelope with only Accept All and Default Prompt Agent values; failures stay as local `Result` values so callers can silently preserve the render cache without private logs or fake daemon state.
     */
     let mut params = serde_json::Map::new();
@@ -309,16 +309,16 @@ pub(crate) fn gpui_sidebar_gxserver_bootstrap(
     local_focus_key: Option<&GpuiLocalWorkspaceSessionKey>,
 ) -> Option<cef::SidebarGxserverBootstrap> {
     /*
-    CDXC:GPUISidebarGxserverBootstrap 2026-06-24-11:17:
+    CDXC:ServerDaemon 2026-06-24-11:17:
     Build the GPUI sidebar bootstrap only from real local gxserver facts: the selected loopback API port, the existing auth-token helper, protocol version 1, a stable GPUI sidebar client id, and the explicit active project id already stored from the live sidebar snapshot. Do not infer optional session ids from project paths, titles, shell terminal ids, Browser tabs, fixtures, or fallback state.
 
-    CDXC:GPUISidebarGxserverBootstrap 2026-06-24-13:34 (revised 2026-08-07):
+    CDXC:ServerDaemon 2026-06-24-13:34 (revised 2026-08-07):
     `initialActiveProjectId` may be supplied only from the validated latest sidebar active-project snapshot, the exact local workspace-focus key whose raw session matches `focusedSessionId`, or the contract-validated persisted focus state's own `activeProjectId` (cold-start replay of the last active workspace project). This helper must not query gxserver project lists or log project identity.
 
-    CDXC:GPUISidebarGxserverFocusState 2026-06-24-21:07:
+    CDXC:FocusRouting 2026-06-24-21:07:
     `focusedSessionId` and `visibleSessionIds` may be supplied only from the separate GPUI focus state that has already accepted real gxserver presentation ids. Local ids remain raw daemon session ids; remote ids remain machine-scoped sidebar ids so bootstrap replay is collision-safe.
 
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-27-13:25:
+    CDXC:FocusRouting 2026-06-27-13:25:
     A GPUI sidebar local-session click carries the authoritative project/session pair through the fixed workspace-focus bridge. If that project matches the stored focused session exactly, prefer it over the latest active-project snapshot so a second click cannot bootstrap the current session under a stale project and render an empty selection.
     */
     let initial_active_project_id = local_focus_key

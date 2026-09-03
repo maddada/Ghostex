@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:GxserverRustPort 2026-06-16-00:49:
+CDXC:RepoStructure 2026-06-16-00:49:
 Phase 7 typed operation endpoints reuse the durable project registry before building allowlisted subprocesses. Keep returned command metadata redacted and persistent logs metadata-only, because argv, cwd, stdout, stderr, branch names, file paths, and setup commands can contain user-owned content.
 */
 pub(crate) async fn handle_typed_operation_http(
@@ -70,7 +70,7 @@ pub(crate) async fn handle_typed_operation_http(
         Err(error) => {
             if error.scope_rejection {
                 /*
-                CDXC:ProjectBoardRouting 2026-06-22-10:22:
+                CDXC:Navigation 2026-06-22-10:22:
                 Project Board and typed-operation scope misses are support-relevant but private. Match TypeScript by logging only endpoint/action/error identity and presence booleans, never raw project paths, command text, URLs, or user-owned board content.
                 */
                 let _ = state.logger.log(GxserverLogInput {

@@ -1,5 +1,5 @@
 /*
- * CDXC:SettingsModalSplit 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * Immediate-save settings writes, the trailing debounce used by numeric
  * controls, and Settings navigation persistence. Plain render-time factory (no
  * React hooks) whose returned closures are bound in the component at the same
@@ -108,7 +108,7 @@ export function createSettingsPersistence({
         nextSettings.settingsModalNavigation
       );
     /*
-     * CDXC:SettingsNavigation 2026-06-30-04:47:
+     * CDXC:Settings 2026-06-30-04:47:
      * Native Settings is an AppKit child window, so closing it with native
      * chrome can bypass the React Dialog close callback. Persist page changes
      * immediately and scroll changes after they settle; close remains a final
@@ -221,7 +221,7 @@ export function createSettingsPersistence({
   };
   const updateShowAdvancedSettings = (checked: boolean) => {
     /*
-     * CDXC:SettingsAdvanced 2026-06-28-08:01:
+     * CDXC:Settings 2026-06-28-08:01:
      * Show Advanced is settings chrome, but it still needs immediate durable
      * persistence so restart hydration reopens Settings with the same advanced
      * row visibility the user explicitly chose.

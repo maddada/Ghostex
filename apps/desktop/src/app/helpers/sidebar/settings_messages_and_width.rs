@@ -74,33 +74,33 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
     active_project_id: Option<&str>,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUISettingsModalHost 2026-06-24-11:14:
+    CDXC:Settings 2026-06-24-11:14:
     The GPUI Settings modal host hydrates from the shared settings service snapshot, not a second ad hoc file read. The payload remains intentionally minimal for current GPUI parity, but it carries the saved settings object and service revision for both open-time hydration and post-save `sidebarState` refreshes.
 
-    CDXC:GPUISettingsStatusBridge 2026-06-24-11:40:
+    CDXC:StatusPet 2026-06-24-11:40:
     Settings hydration must no longer send empty launcher/action chrome. Mirror the shared SidebarApp agent and command button contract from real gxserver project metadata, include gxserver Portless health when a short localhost health read is available, and hydrate project settings rows only from real gxserver project/presentation metadata; do not invent project paths or custom buttons for the modal.
 
-    CDXC:GPUISettingsPortlessBridge 2026-06-24-11:48:
+    CDXC:Portless 2026-06-24-11:48:
     After a Portless Settings RPC succeeds, prefer the canonical gxserver update result for `hud.portless` so status, setup state, and assigned-domain presentation refresh in the open Settings modal without a second daemon read. Generic hydration may still use the short health probe and keeps native admin unavailable in GPUI.
 
-    CDXC:GPUIRecentProjects 2026-06-24-12:27:
+    CDXC:Projects 2026-06-24-12:27:
     The Rust app-modal hydrate reads Recent Projects from gxserver's
     `/api/listRecentProjects` contract. Keep the drawer empty when gxserver has
     no explicit parked rows; do not derive recent projects from inactive
     sessions, presentation labels, local paths, command text, or filesystem
     guesses.
 
-    CDXC:GxserverAppUserData 2026-06-24-13:30:
+    CDXC:ServerDaemon 2026-06-24-13:30:
     Hydrate Pinned Prompts from gxserver app-user-data every time the app-modal
     host opens or refreshes. Settings, Previous Sessions, Running Sessions, and
     Portless data keep their existing stored-vs-transient behavior; this
     user-data modal field must not read or write the old GPUI-only
     product-state file.
 
-    CDXC:GPUISettingsActiveProjectActions 2026-06-24-13:34:
+    CDXC:AgentLauncher 2026-06-24-13:34:
     App-modal Settings action hydration uses the explicit active project id from the latest live sidebar snapshot when one exists, matching the SidebarApp gxserver runtime's project-scoped command owner selection. Quick/projectless, no-snapshot, and no-active-id hydrates keep the existing no-active-project behavior; an unknown explicit id returns default actions instead of silently using another project's custom commands.
 
-    CDXC:SidebarHudContract 2026-06-24-20:34:
+    CDXC:AgentLauncher 2026-06-24-20:34:
     Agent/action HUD rows are read through gxserver's `/api/readSidebarHud` production projection. The app-modal host still reads project settings and Recent Projects from their existing gxserver contracts, but it no longer hand-normalizes custom agent/action metadata from `/api/listProjects`.
     */
     let settings_object = settings_snapshot.object().clone();
@@ -293,7 +293,7 @@ pub(crate) fn current_sidebar_max_width(window: &Window) -> f32 {
 
 pub(crate) fn clamp_sidebar_width(width: f32, max_width: f32) -> f32 {
     /*
-    CDXC:GPUISidebarDividerColor 2026-07-22:
+    CDXC:Theming 2026-07-22:
     Sidebar and divider are separately painted normal-layout siblings. Keep
     their shared boundary on a whole logical point so 1x and Retina backing
     stores cannot expose a half-covered workspace-colored seam between them.
@@ -317,7 +317,7 @@ pub(crate) fn gpui_sidebar_side_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> GpuiSidebarSide {
     /*
-    CDXC:GPUISidebarSide 2026-06-26-23:35:
+    CDXC:Sidebar 2026-06-26-23:35:
     GPUI reads the typed shared `sidebarSide` snapshot as the startup placement source. Missing or malformed values are normalized by the shared settings boundary to native's left-side default without adding a second durable setting.
     */
     match settings.sidebar_side() {
@@ -328,7 +328,7 @@ pub(crate) fn gpui_sidebar_side_from_shared_settings(
 
 pub(crate) fn write_gpui_sidebar_side_to_shared_settings(side: GpuiSidebarSide) {
     /*
-    CDXC:GPUISidebarSide 2026-06-26-23:35:
+    CDXC:Sidebar 2026-06-26-23:35:
     GPUI persists Move Sidebar through the typed shared settings writer so only `sidebarSide` changes and sidebar width, collapsed state, and unrelated settings remain untouched.
     */
     let shared_side = match side {
@@ -340,7 +340,7 @@ pub(crate) fn write_gpui_sidebar_side_to_shared_settings(side: GpuiSidebarSide) 
 
 pub(crate) fn persist_sidebar_width_setting(width: f32) {
     /*
-    CDXC:GPUIPrivacyAudit 2026-06-23-13:18:
+    CDXC:Telemetry 2026-06-23-13:18:
     The GPUI settings write is limited to merging the finite numeric sidebarWidth into the existing native settings JSON object. Do not add project/session/browser/runtime fields here, and do not persist paths, names, command text, URLs, page titles, terminal content, tokens, cookies, secrets, stdout/stderr, or raw CEF/sidebar payloads from GPUI state.
     */
     let path = native_chrome_settings_path();

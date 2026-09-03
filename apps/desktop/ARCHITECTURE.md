@@ -1,7 +1,7 @@
 # Ghostex GPUI Architecture Overview
 
 <!--
-CDXC:GPUIArchitectureDocs 2026-06-24-21:16:
+CDXC:RepoStructure 2026-06-24-21:16:
 This document explains the technology used by each GPUI prototype surface so future work can preserve the intended split: GPUI owns native shell layout, chrome, and composited terminal rendering, CEF owns React/web surfaces, and AppKit shims bridge platform services plus the retained inactive GhosttyKit implementation.
 -->
 

@@ -9,7 +9,7 @@
 //! | cursor   | `~/.cursor/projects/*/agent-transcripts/*/*.jsonl`                    |
 //! | grok     | `~/.grok/sessions/*/*/chat_history.jsonl` plus sibling `summary.json` |
 //!
-//! CDXC:AgentHistorySearch 2026-08-20:
+//! CDXC:PromptSearch 2026-08-20:
 //! opencode history used to be read by shelling out to the `sqlite3` CLI, so a
 //! machine without it silently lost opencode results. The Rust port links
 //! SQLite directly, which removes that external dependency instead of papering
@@ -106,7 +106,7 @@ pub fn project_display_name(project: &str) -> &str {
     }
 }
 
-// CDXC:AgentHistorySearch 2026-06-28-07:49:
+// CDXC:PromptSearch 2026-06-28-07:49:
 // Codex session transcripts emit current user prompt blocks as `input_text` as
 // well as the older `text` shape. Accept both and keep the derived cache at v5
 // so sessions previously cached as zero-record parses are rebuilt.
@@ -365,7 +365,7 @@ impl Scanner {
             .or_insert_with(|| project.to_string());
     }
 
-    // CDXC:AgentHistorySearch 2026-06-11-10:02:
+    // CDXC:PromptSearch 2026-06-11-10:02:
     // Project-filtered browsing must include Codex history rows for the selected
     // project even when legacy ~/.codex/history.jsonl records omit cwd. Backfill
     // missing Codex projects by session id instead of guessing.
@@ -498,7 +498,7 @@ impl Scanner {
         }
     }
 
-    // CDXC:AgentHistorySearch 2026-06-28-07:49:
+    // CDXC:PromptSearch 2026-06-28-07:49:
     // Large Codex transcripts must still be indexed instead of disappearing at
     // the bounded whole-file read limit. Stream them so prompt extraction stays
     // proportional to the retained prompt text, not the full transcript size.
@@ -1067,7 +1067,7 @@ impl Scanner {
         }
     }
 
-    // CDXC:AgentHistorySearch 2026-06-11-10:25:
+    // CDXC:PromptSearch 2026-06-11-10:25:
     // Cursor Agent transcripts can exist without ACP meta.json cwd. Resolve
     // Cursor's encoded project directory name back to a verified filesystem path
     // so result rows show the real project name without inventing a bad cwd.
@@ -1759,7 +1759,7 @@ fn title_from_object(v: &Value) -> Option<String> {
     )
 }
 
-// CDXC:AgentHistorySearch 2026-06-07-14:59:
+// CDXC:PromptSearch 2026-06-07-14:59:
 // Sanitize display titles at ingestion so corrupt or control-bearing metadata
 // cannot render mojibake in the result list.
 fn clean_title(title: &str) -> Option<String> {

@@ -17,7 +17,7 @@ pub(crate) fn command_pane_default_height_px_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> f32 {
     /*
-    CDXC:GPUICommandPane 2026-06-25-11:29:
+    CDXC:CommandPane 2026-06-25-11:29:
     The GPUI command-pane default-height reader mirrors shared Settings normalization: accept only JSON numbers, round to whole pixels, clamp to 40px-600px, and use the 125px product default for missing or malformed values. This keeps app startup, missing shell-state restore, and resize-rail reset aligned with the macOS command pane without persisting a second setting.
     */
     settings
@@ -37,7 +37,7 @@ pub(crate) fn gpui_click_to_wake_sleeping_sessions_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> bool {
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-23:24:
+    CDXC:FocusRouting 2026-06-26-23:24:
     GPUI Agents and command tab selection must honor the shared macOS `clickToWakeSleepingSessions` setting. Missing or malformed settings default to true, where tab selection keeps a sleeping placeholder cold; strict false makes selecting a sleeping tab wake it immediately.
     */
     settings
@@ -60,7 +60,7 @@ pub(crate) fn command_pane_sleeping_tab_selection_wake_target(
     click_to_wake_enabled: bool,
 ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
     /*
-    CDXC:GPUICommandTabWake 2026-06-27-04:25:
+    CDXC:SessionSleep 2026-06-27-04:25:
     Command-tab selection has exactly one eager wake case: strict `clickToWakeSleepingSessions: false` on a live sleeping tab in the clicked command group. Default click-to-wake keeps the selected sleeping tab parked so the visible body placeholder owns the later wake affordance; stale group/session ids must not fall back to focused command state.
     */
     if click_to_wake_enabled {
@@ -88,7 +88,7 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_is_private_data_safe(
     label: &str,
 ) -> bool {
     /*
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+    CDXC:SessionSleep 2026-06-27-00:22:
     The paint path may render only the fixed native wake affordance. Keep this guard at the writer boundary so future canvas callers cannot paint command text, session titles, paths, URLs, tokens, or terminal content into the sleeping command body.
     */
     label == COMMAND_PANE_SLEEPING_PLACEHOLDER_WAKE_LABEL
@@ -118,7 +118,7 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_max_size(
     body_height: f32,
 ) -> Option<(f32, f32)> {
     /*
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+    CDXC:SessionSleep 2026-06-27-00:22:
     Match native body-bound visibility exactly: the sleeping wake label has no geometry when the body cannot provide positive `body.width - 8` and `body.height - 16` label limits.
     */
     if !body_width.is_finite() || !body_height.is_finite() {
@@ -139,7 +139,7 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_frame(
     measured_height: f32,
 ) -> Option<CommandPaneSleepingPlaceholderWakeLabelFrame> {
     /*
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+    CDXC:SessionSleep 2026-06-27-00:22:
     Native centers a measured label frame inside the command body after applying the exact AppKit clamps: width is ceil(measured width)+8 with a 1px floor, height is ceil(measured height) with an 18px floor, and both are clamped to the body-derived max label size.
     */
     if !measured_width.is_finite()
@@ -175,7 +175,7 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_char_wrap_lines(
     mut measure: impl FnMut(&str) -> Option<f32>,
 ) -> Option<Vec<CommandPaneSleepingPlaceholderWakeLabelLine>> {
     /*
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+    CDXC:SessionSleep 2026-06-27-00:22:
     AppKit uses character wrapping for the wake label, not word wrapping. Split the fixed label by measured character fit so narrow command bodies break within words exactly because the body bounds require it.
     */
     if !command_pane_sleeping_placeholder_wake_label_is_private_data_safe(label)
@@ -256,7 +256,7 @@ pub(crate) fn command_pane_sleeping_placeholder_wake_label_prepaint(
     window: &mut Window,
 ) -> Option<CommandPaneSleepingPlaceholderWakeLabelPaintState> {
     /*
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+    CDXC:SessionSleep 2026-06-27-00:22:
     Runtime wake-label layout must come from this paint pass's exact command-body bounds. Measure the fixed label with 13px medium system text, character-wrap within `body.width - 8`, clamp the centered frame to native limits, and produce no paint state when native would hide it.
     */
     if !command_pane_sleeping_placeholder_wake_label_is_private_data_safe(label) {
@@ -354,7 +354,7 @@ pub(crate) struct CommandPaneDelayedSendBadgePaintState {
 
 pub(crate) fn command_pane_delayed_send_badge_label_is_private_data_safe(label: &str) -> bool {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-27-00:07:
+    CDXC:DelayedSend 2026-06-27-00:07:
     The body badge label is generated from a runtime countdown only. Keep the canvas writer bounded to the countdown grammar so future callers cannot accidentally paint command text, titles, paths, URLs, or terminal content into the terminal body.
     */
     let mut parts = label.split(':');
@@ -401,7 +401,7 @@ pub(crate) fn command_pane_delayed_send_badge_frame(
     label_text_width: f32,
 ) -> Option<CommandPaneDelayedSendBadgeFrame> {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-25-19:13:
+    CDXC:DelayedSend 2026-06-25-19:13:
     Keep GPUI's Delayed Send body-badge geometry tied to native's exact terminal body contract: no badge for tiny bodies, 60px total horizontal fitting padding, centered placement, and width/height clamps based only on the current body rectangle. Do not substitute command-group bounds or retained layout maps when same-pass body bounds are unavailable.
     */
     if !body_width.is_finite()
@@ -439,7 +439,7 @@ pub(crate) fn command_pane_delayed_send_badge_prepaint(
     window: &mut Window,
 ) -> Option<CommandPaneDelayedSendBadgePaintState> {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-27-00:07:
+    CDXC:DelayedSend 2026-06-27-00:07:
     Runtime badge layout must come from this paint pass's command-body bounds. Shape the private countdown first, derive the native badge frame from the shaped width and exact body size, and return no paint state when native would hide the badge.
     */
     if !command_pane_delayed_send_badge_label_is_private_data_safe(&label) {
@@ -530,7 +530,7 @@ pub(crate) fn command_pane_workspace_width(
     sidebar_collapsed: bool,
 ) -> f32 {
     /*
-    CDXC:GPUICommandPaneSide 2026-08-16:
+    CDXC:CommandPane 2026-08-16:
     Collapsing the sidebar removes both the sidebar and its divider from the
     body row without mutating the saved width, so the workspace really does
     own the whole window width there. The right dock sizes its column from
@@ -571,7 +571,7 @@ pub(crate) fn command_pane_resize_drag_height_ratio(
     content_height: f32,
 ) -> f32 {
     /*
-    CDXC:GPUICommandPaneResize 2026-06-25-19:13:
+    CDXC:CommandPane 2026-06-25-19:13:
     Native `beginCommandsPanelResize` stores the command panel's absolute start height and start Y, then `continueCommandsPanelResize` applies one signed pointer delta and clamps the resulting ratio to 5%-90%.
     GPUI pointer Y is top-origin, so visual upward motion is `start_y - current_y`; keep that conversion in one helper so drag handling cannot regress the AppKit sign/clamp contract.
     */
@@ -595,7 +595,7 @@ pub(crate) fn command_pane_resize_drag_width_ratio(
 
 pub(crate) fn command_pane_floating_height_for_ratio(ratio: f32, content_height: f32) -> f32 {
     /*
-    CDXC:GPUICommandPaneFloating 2026-06-25-18:07:
+    CDXC:CommandPane 2026-06-25-18:07:
     Native resolves floating command-panel height by first applying the normal command-panel ratio clamp, then capping the frame to workspace height minus the reserved collapsed strip and two floating margins. Match that cap so the floating panel keeps visible top/bottom breathing room instead of clipping like a pinned panel.
     */
     let requested_height = command_pane_height_for_ratio(ratio, content_height);

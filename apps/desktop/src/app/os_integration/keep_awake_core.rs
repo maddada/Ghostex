@@ -37,7 +37,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarKeepAwake 2026-06-24-13:16:
+        CDXC:KeepAwake 2026-06-24-13:16:
         The GPUI Keep Awake titlebar control is a menu launcher on both left-click and right-click, matching macOS titlebar semantics. The OS-owned NativeMenu exposes only the shared duration choices, the running-only stop action, and Power Settings; it must not become a direct toggle, React overlay, hidden hit region, persistent runtime store, or broad process killer.
         */
         let settings =
@@ -84,7 +84,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarKeepAwake 2026-06-24-13:16:
+        CDXC:KeepAwake 2026-06-24-13:16:
         Power Settings from the Keep Awake menu must deep-link into the shared Settings modal with `{ modal: "settings", initialSection: "power" }`. Reuse the GPUI app-modal CEF host and sidebar hydrate instead of adding a GPUI-local settings surface or placeholder route.
         */
         let modal = GpuiAppModalKind::Settings;
@@ -111,10 +111,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarKeepAwake 2026-06-24-13:16:
+        CDXC:KeepAwake 2026-06-24-13:16:
         Manual Keep Awake starts from the titlebar menu with the same duration choices and allow-display-sleep flag as macOS. The runtime owner below still starts only fixed `/usr/bin/caffeinate` argv and never accepts shell text, command output, paths, or private Settings payloads from React.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-25-23:49:
+        CDXC:KeepAwake 2026-06-25-23:49:
         Manual starts clear autostart suppression and replace any previous GPUI-owned runtime. Delayed Send may start an automatic hold only when no manual/launch/display hold is running, so user-chosen titlebar periods take precedence.
         */
         let settings =
@@ -192,7 +192,7 @@ impl GhostexGpuiApp {
                 return false;
             };
             /*
-            CDXC:GPUIKeepAwakeStop 2026-07-11:
+            CDXC:KeepAwake 2026-07-11:
             Teardown must not run on the main thread: the lid-sleep disable
             goes through the privileged XPC helper with a 20-second semaphore
             wait (GpuiLidSleepHelperClient.m), so a hung or uninstalled
@@ -240,7 +240,7 @@ impl GhostexGpuiApp {
                     // The child already exited (try_wait above), so this wait
                     // only reaps. The lid-sleep disable is the 20s-capable
                     // XPC call and runs detached — see
-                    // CDXC:GPUIKeepAwakeStop 2026-07-11 in the stop path.
+                    // CDXC:KeepAwake 2026-07-11 in the stop path.
                     let _ = runtime.child.wait();
                     if runtime.lid_sleep_prevention_enabled {
                         let _ = std::thread::Builder::new()

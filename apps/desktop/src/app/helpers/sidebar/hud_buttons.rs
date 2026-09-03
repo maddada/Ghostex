@@ -20,7 +20,7 @@ pub(crate) struct GpuiSidebarHudButtons {
     pub(crate) agents: serde_json::Value,
     pub(crate) commands: serde_json::Value,
     /*
-    CDXC:GlobalActions 2026-08-01-19:00:
+    CDXC:AgentLauncher 2026-08-01-19:00:
     The Settings app modal reads its Actions lists from this Rust-side HUD fetch,
     not from the sidebar TypeScript runtime, so Global Actions have to be carried
     here too or the new section renders empty no matter what is stored.

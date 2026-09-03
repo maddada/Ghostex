@@ -1,5 +1,5 @@
 /**
- * CDXC:ProjectBoardRedesign 2026-08-23:
+ * CDXC:ProjectBoard 2026-08-23:
  * Live canvas for the Codex-style Kanban redesign. Renders the REAL BoardLane
  * and TicketCard components from apps/desktop/views/project-board with mock
  * tickets, plus the proposed page chrome (title row + h-8 filter row) that
@@ -198,7 +198,7 @@ function KanbanPage() {
   return (
     <RedesignCanvas>
       {/*
-       * CDXC:ProjectBoardRedesign 2026-08-24:
+       * CDXC:ProjectBoard 2026-08-24:
        * The real page injects PROJECT_BOARD_STYLES, which forces the lanes'
        * classic 8px scrollbar rail. Load it here too so the story shows the
        * same card insets and scrollbar behavior as the app.
@@ -225,7 +225,7 @@ function KanbanPage() {
           />
         </div>
         {/*
-         * CDXC:ProjectBoardFiltersPopover 2026-08-24:
+         * CDXC:ProjectBoard 2026-08-24:
          * Mirrors the real toolbar: one Filters button with an active-count
          * badge, selects inside its popover.
          */}

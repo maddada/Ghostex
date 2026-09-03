@@ -9,7 +9,7 @@ use crate::*;
 pub(crate) struct TerminalSessionId(pub(crate) u64);
 
 /*
-CDXC:GPUITerminalRuntimeIdentity 2026-06-22-23:24:
+CDXC:SessionIdentity 2026-06-22-23:24:
 Phase 3 separates process-lifetime Agents terminal runtime identity from durable shell `TerminalSessionId` and pane/body mount slots. Runtime ids bind Ghostty owners to the current app process only; they are not user-facing titles, not logs, not shell-state fields, and restored shell sessions intentionally receive fresh runtime ids.
 */
 pub(crate) struct AgentsTerminalRuntimeSessionRegistry {
@@ -19,7 +19,7 @@ pub(crate) struct AgentsTerminalRuntimeSessionRegistry {
 }
 
 /*
-CDXC:GPUIAgentsTerminalRuntimePerProject 2026-08-05:
+CDXC:Workarea 2026-08-05:
 Inactive project workspaces keep their live composited terminal owners beside
 their parked shell models. The entities own the local shell/SSH attach clients,
 so dropping them during a project or machine switch forces a fresh zmx attach
@@ -88,7 +88,7 @@ impl AgentsTerminalRuntimeSessionRegistry {
         session_id: TerminalSessionId,
     ) -> AgentsTerminalRuntimeSessionId {
         /*
-        CDXC:GPUITerminalStartupRetryIdentity 2026-06-23-18:19:
+        CDXC:Terminal 2026-06-23-18:19:
         Explicit failed-startup retry is a new process-local runtime attempt for the same durable shell session. Rotate only the runtime id so the retry startup candidate, launch plan, and completion intent cannot reuse stale attempt identity while the shell `TerminalSessionId`, tab, title, and persisted state remain unchanged.
         */
         let runtime_session_id = self.allocate_runtime_session_id();
@@ -273,31 +273,31 @@ impl AgentsTerminalStartupResult {
 }
 
 /*
-CDXC:GPUITerminalStartupBoundary 2026-06-22-23:50:
+CDXC:Terminal 2026-06-22-23:50:
 Agents terminal startup is a runtime-only boundary keyed by process-local runtime session id, not by durable shell session id or body mount slot id. Visible selected Mounting tabs may become pending startup records, but this layer does not launch a process, infer success, persist runtime ids, log commands, store cwd/env/stdout/stderr, or create fallback surfaces.
 
-CDXC:GPUITerminalStartupBoundary 2026-06-22-23:50:
+CDXC:Terminal 2026-06-22-23:50:
 Startup results are intentionally enum-only. Ready may promote the same current Mounting shell session to Running; Failed preserves the tab as a safe failed-startup placeholder with no raw error string, command text, path, environment, terminal content, or process details in shell state.
 
-CDXC:GPUITerminalStartupGeometry 2026-06-23-00:10:
+CDXC:Terminal 2026-06-23-00:10:
 Visible selected Mounting Agents bodies need runtime-only startup geometry for future launch preparation, but the startup slot id stays separate from the Running-only libghostty body mount slot so geometry alone never creates Running host state, a Ghostty surface, process, or Running transition.
 
-CDXC:GPUITerminalStartupLaunchPlan 2026-06-23-00:22:
+CDXC:Terminal 2026-06-23-00:22:
 Phase 3 startup launch plans are a runtime-only readiness boundary for visible selected Mounting Agents bodies after exact body geometry exists. Plans may carry only runtime id, shell id, pane id, startup body slot id, bounds, and scale; they must not carry cwd, command, env, terminal content, stdout/stderr, process ids, logs, persisted fields, Ghostty hosts, Ghostty surfaces, Running mount slots, or Ready/Failed transitions by themselves.
 
-CDXC:GPUITerminalStartupHostLifetime 2026-06-23-03:23:
+CDXC:Terminal 2026-06-23-03:23:
 A render-start geometry reset must not churn an already-created hidden startup host/config while the same pending Mounting tab remains current. Preserve only hosts previously created from a launch plan and only by matching runtime id plus `AgentsTerminalStartupBodySlotId`; pending records without prior geometry must not create hosts.
 
-CDXC:GPUITerminalStartupCompletion 2026-06-23-03:51:
+CDXC:Terminal 2026-06-23-03:51:
 GPUI has no exposed GhosttyKit tty/pid or terminalReady-equivalent signal yet, so startup completion is a runtime-only intent plus explicit signal boundary. A current Mounting tab may advertise an exact runtime/session/startup-slot intent, but the producer returns no Ready/Failed result without a real signal and must never infer success from hidden startup host or Ghostty surface creation.
 
-CDXC:GPUITerminalStartupLaunchPayloadSource 2026-06-23-04:00:
+CDXC:Terminal 2026-06-23-04:00:
 Startup config preparation now has a runtime-only launch-payload source boundary, but GPUI does not currently populate it because no explicit app startup state carries cwd, command, env vars, initial input, or wait-after-command. The empty source keeps startup requests inert until a future explicit producer is wired, and invalid future payloads must prune the startup boundary instead of falling back to inferred values.
 
-CDXC:GPUITerminalStartupReadiness 2026-06-23-04:13:
+CDXC:Terminal 2026-06-23-04:13:
 Ghostty startup surface metadata is now a real runtime-only readiness input, but it may only create a handoff plan for the exact current startup completion intent when Ghostty reports a tty name and foreground process while the process has not exited. Promotion may proceed only when startup host/surface ownership can be moved into the Running path without dropping or recreating the process, and this layer must not create Failed, persist ids, log metadata, or expose raw tty names/process ids.
 
-CDXC:GPUITerminalStartupRuntimeFailure 2026-06-23-04:38:
+CDXC:Terminal 2026-06-23-04:38:
 Startup-owned Ghostty metadata is also the real runtime failure input. A process-exited snapshot may produce only the existing Failed result for the exact current runtime/session/startup-slot intent while the shell tab is still the visible selected Mounting body and the startup surface owner identity still matches; cleanup must drop the startup Ghostty surface before the hidden host and must not create Running maps, fallback success, logs, raw process details, paths, commands, env, or terminal content.
 */
 pub(crate) struct AgentsTerminalStartupCoordinator {
@@ -521,7 +521,7 @@ impl AgentsTerminalStartupCoordinator {
         runtime_session_id: AgentsTerminalRuntimeSessionId,
     ) -> Option<AgentsTerminalStartupReadinessHandoffPlan> {
         /*
-        CDXC:GPUITerminalStartupHandoff 2026-06-23-04:25:
+        CDXC:Terminal 2026-06-23-04:25:
         A ready metadata snapshot may promote only the exact current Mounting body it was prepared for. Match runtime id, shell session id, startup body slot id, visible selected Mounting state, current launch plan, and the future Running mount slot before any owner map can move.
         */
         if !agents_workspace_visible {
@@ -953,10 +953,10 @@ pub(crate) fn gpui_terminal_ghostty_surface_config_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> terminal_ghostty_surface::GhosttySurfaceTerminalConfig {
     /*
-    CDXC:GPUITerminalSettings 2026-06-24-11:27:
+    CDXC:Terminal 2026-06-24-11:27:
     GPUI embedded terminal surfaces consume the shared Settings service directly for supported `ghostty_surface_config_s` fields. Only `terminalFontSize` maps to the current FFI request as `font_size`; other Ghostty settings remain unthreaded here because GPUI has no safe direct runtime field or reload contract for them yet.
 
-    CDXC:GPUICommandTerminalSettings 2026-06-27-10:10:
+    CDXC:Terminal 2026-06-27-10:10:
     Command-pane Ghostty surfaces share this bounded GPUI terminal-settings mapper with Agents surfaces. Apply the FFI-supported `terminalFontSize` to recreated/prepared surface requests, and keep font family, theme, cursor, scrollback, clipboard, paste-preview, and mouse settings on the Ghostty config-file path until GhosttyKit exposes a safe live request field or reload contract.
     */
     let terminal_config = settings.terminal_ghostty_surface_config();
@@ -1003,10 +1003,10 @@ pub(crate) fn reconcile_agents_terminal_startup_host_config_requests<F>(
     >,
 {
     /*
-    CDXC:GPUITerminalStartupNativeHost 2026-06-23-03:23:
+    CDXC:Terminal 2026-06-23-03:23:
     Startup host/config request reconciliation creates hidden host views only from current Mounting launch plans with exact geometry. If render-start clears geometry before the next body canvas records, preserve an already-owned startup host/config only when the current pending record still matches the same runtime id and `AgentsTerminalStartupBodySlotId`; stale pending state, invalid parent/bounds/config, or missing current records must drop the runtime-only state.
 
-    CDXC:GPUITerminalStartupLaunchPayloadSource 2026-06-23-04:00:
+    CDXC:Terminal 2026-06-23-04:00:
     Startup config requests may receive a launch payload only from the runtime-only explicit source for the same launch plan identity. If a future explicit payload fails validation, skip the config request so the hidden startup host/surface is pruned without falling back to terminal titles, status text, project paths, sidebar labels, delayed-send state, or inferred cwd/command/env values.
     */
     terminal_native_view::reconcile_app_owned_terminal_startup_host_native_view(
@@ -1127,7 +1127,7 @@ pub(crate) fn reconcile_agents_terminal_startup_ghostty_surface_owners<F>(
     >,
 {
     /*
-    CDXC:GPUITerminalStartupGhosttySurface 2026-06-23-03:33:
+    CDXC:Terminal 2026-06-23-03:33:
     Startup Ghostty surface owners are runtime-only consumers of prepared startup config requests and launch-created geometry. Create only when a matching config request and launch plan exist, preserve same-slot/same-runtime owners across geometry-gap preservation, and drop stale or invalid owners without showing/focusing hosts, applying startup results, logging, persisting, or touching Running mount-slot maps.
     */
     let startup_launch_plans_by_slot = startup_launch_plans
@@ -1237,10 +1237,10 @@ pub(crate) fn agents_terminal_startup_surface_metadata_snapshots(
     terminal_ghostty_surface::GhosttySurfaceMetadataSnapshot,
 )> {
     /*
-    CDXC:GPUITerminalStartupReadiness 2026-06-23-04:13:
+    CDXC:Terminal 2026-06-23-04:13:
     Reading startup surface metadata prepares only a runtime handoff fact for an exact current startup intent. The caller may promote Ready only through the startup-to-Running owner transfer path, so metadata alone still cannot fake Running, create Failed, persist ids, log tty/process facts, or expose raw terminal data.
 
-    CDXC:GPUITerminalStartupRuntimeFailure 2026-06-23-04:38:
+    CDXC:Terminal 2026-06-23-04:38:
     Surface metadata is sampled only from the current startup-owned surface map entry whose key matches the owner's startup body slot. The snapshot carries redacted booleans only, so runtime failure handling can distinguish process-exited from ready metadata without exposing raw pid, tty, command, cwd/path, env, output, terminal content, or runtime ids outside runtime memory.
     */
     startup_surface_owners
@@ -1324,7 +1324,7 @@ pub(crate) fn prune_agents_terminal_startup_runtime_state_for_completion_intent(
     completion_intent: AgentsTerminalStartupCompletionIntent,
 ) {
     /*
-    CDXC:GPUITerminalStartupRuntimeFailure 2026-06-23-04:38:
+    CDXC:Terminal 2026-06-23-04:38:
     Failed startup cleanup retires startup-only runtime state for the exact completion intent. Remove the startup Ghostty surface before its hidden AppKit host, remove prepared config/geometry/payload state, and leave the shell session as the retryable StartupFailed placeholder without creating Running ownership.
     */
     startup_body_geometries.remove(&completion_intent.startup_body_slot_id);
@@ -1397,7 +1397,7 @@ pub(crate) fn transfer_ready_agents_terminal_startup_handoff(
     handoff_plan: AgentsTerminalStartupReadinessHandoffPlan,
 ) -> bool {
     /*
-    CDXC:GPUITerminalStartupHandoff 2026-06-23-04:25:
+    CDXC:Terminal 2026-06-23-04:25:
     Ready startup promotion is a single ownership move, not a new launch. Require exact current startup readiness plus empty target Running owner maps, remove the startup host/surface only into local ownership, promote the same shell session to Running, and then insert the same AppKit host and Ghostty surface under the resulting `AgentsTerminalBodyMountSlotId`.
     */
     if startup_coordinator.startup_readiness_handoff_plan_for_runtime_session(
@@ -1481,10 +1481,10 @@ pub(crate) fn activate_agents_terminal_placeholder_with_runtime_attempt_identity
     session_id: TerminalSessionId,
 ) -> bool {
     /*
-    CDXC:GPUITerminalStartupRetryIdentity 2026-06-23-18:19:
+    CDXC:Terminal 2026-06-23-18:19:
     Placeholder activation may change durable shell presentation, but retry attempt identity is process-local app/runtime state. Detect the explicit `StartupFailed` edge before shell activation, then rotate the runtime id only after that same shell session becomes startup-eligible `Mounting` so wake/materialize/reattach placeholders keep their existing runtime identity and cannot enter a retry startup attempt.
 
-    CDXC:GPUITerminalRestoredMaterialization 2026-06-23-19:26:
+    CDXC:Terminal 2026-06-23-19:26:
     Restored-unmounted materialization now enters the startup pipeline, but it is not a retry. Keep the process-local runtime id already associated with the durable shell session; sleeping wake and popped-out reattach remain blocked from startup maps and use the separate slice 236 parked-owner contract.
     */
     let retry_activation = workspace.session(session_id).is_some_and(|session| {

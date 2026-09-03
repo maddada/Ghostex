@@ -4,7 +4,7 @@ const DIGITS: &[u8] = b"0123456789";
 const LOWERCASE_OR_DIGIT: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
 
 /*
-CDXC:GxserverIds 2026-06-14-20:37:
+CDXC:ServerApi 2026-06-14-20:37:
 Server identity is stable daemon identity, not per-process runtime metadata. Match the TypeScript S[0-9][a-z0-9] shape so client refs stay compatible when Rust owns the control plane.
 */
 pub fn create_server_id() -> String {

@@ -40,7 +40,7 @@ const config = {
 };
 
 /*
- CDXC:ReleaseAutomation 2026-05-29-19:12:
+ CDXC:Release 2026-05-29-19:12:
  Public releases can spend many minutes in Xcode builds and Apple notarization.
  Use explicit step timeouts and heartbeat logs so release operators see progress
  instead of waiting on a silent shell for twenty-plus minutes.
@@ -57,7 +57,7 @@ const releaseTimeouts = {
 };
 
 /*
- CDXC:MacRelease 2026-06-10-09:47:
+ CDXC:Release 2026-06-10-09:47:
  Future Ghostex macOS releases are Apple Silicon only. Keep the arm64 build,
  signing, notarization, Sparkle, GitHub, and Homebrew path intact, but stop
  generating new Intel DMGs or appcast entries. Existing v4.1.0 and older Intel
@@ -89,7 +89,7 @@ function gpuiReleaseEntry(version) {
 }
 
 /*
- CDXC:RemoteUbuntuPackaging 2026-06-29-19:45:
+ CDXC:RemotePairing 2026-06-29-19:45:
  Public Ghostex releases must bundle first-run server packages for Ubuntu
  x64 and arm64. Validate the deterministic Linux CI outputs before mutating
  release metadata and force native app packaging to stage both resources so the
@@ -111,7 +111,7 @@ const remoteGxserverLinuxPackageConfigs = [
 ];
 
 /*
- CDXC:RemoteMinimalDeps 2026-07-13:
+ CDXC:RemotePairing 2026-07-13:
  The Linux remote package no longer ships portless (macOS launchd-only), the
  npm-style package.json manifest, or dist/protocol exports; nothing on the
  remote host consumes them and version identity lives in build-identity.json.
@@ -119,7 +119,7 @@ const remoteGxserverLinuxPackageConfigs = [
 const remoteGxserverLinuxRequiredPackageResources = ['bin/gxserver', 'bin/zmx', 'bin/ghostex', 'build-identity.json'];
 
 /*
- CDXC:OnDemandAssets 2026-07-02-14:10:
+ CDXC:Release 2026-07-02-14:10:
  Public releases stop embedding the two Ubuntu remote gxserver payloads inside
  the DMG. The app build stages a sealed checksum manifest instead, and the
  release publishes the two tarballs as version-pinned GitHub release assets the
@@ -128,7 +128,7 @@ const remoteGxserverLinuxRequiredPackageResources = ['bin/gxserver', 'bin/zmx', 
 const onDemandAssetNames = ['gxserver-linux-x64.tar.gz', 'gxserver-linux-arm64.tar.gz'];
 
 /*
- CDXC:ReleaseAutomation 2026-07-02-14:10:
+ CDXC:Release 2026-07-02-14:10:
  The release runs as named, individually resumable phases. Each phase records
  its outputs and duration in build/release-state/v<version>.json so a failed
  release can continue with --from <phase> instead of improvised recovery, and
@@ -193,14 +193,14 @@ Timeouts and progress:
 }
 
 /*
-CDXC:LocalDocs 2026-08-09:
+CDXC:Release 2026-08-09:
 Product and review documentation is local-only under docs/ (gitignored) and is
 no longer a release-branch requirement. CHANGELOG.md remains the tracked release
 notes surface in the public repository.
 */
 
 /*
-CDXC:BetaDistribution 2026-06-05-22:26:
+CDXC:Release 2026-06-05-22:26:
 Nightly beta releases must be installable from GitHub Releases and Homebrew without
 advancing the Sparkle feeds that production users poll for automatic updates.
 Keep beta controls explicit so the public release path still updates appcasts by
@@ -628,7 +628,7 @@ function isHomebrewHostToolchainVersionError(error) {
 
 async function runOptionalHomebrewHostValidation(command, options = {}) {
   /*
-   * CDXC:ReleaseAutomation 2026-06-16-20:32:
+   * CDXC:Release 2026-06-16-20:32:
    * Homebrew can reject local audit/style/fetch commands on macOS beta hosts
    * when Xcode/CLT lags Homebrew's newest minimum, even though the Ghostex cask
    * can still be rendered, syntax-checked, pushed, and validated from the tap.
@@ -636,7 +636,7 @@ async function runOptionalHomebrewHostValidation(command, options = {}) {
    * gap; cask syntax, canonical cask validation, git push, GitHub assets, and
    * raw live-cask validation remain mandatory.
    *
-   * CDXC:ReleaseAutomation 2026-06-16-20:39:
+   * CDXC:Release 2026-06-16-20:39:
    * Homebrew host-toolchain diagnostics are written to child stderr. Capture
    * optional Homebrew validation output so the classifier can distinguish that
    * local host issue from real cask failures before rethrowing.
@@ -675,7 +675,7 @@ async function readGitHubHttpsCredentials() {
 }
 
 /**
- * CDXC:Distribution 2026-05-23-12:55:
+ * CDXC:Release 2026-05-23-12:55:
  * Some release environments resolve github.com for curl but not for git's libcurl.
  * Retry origin fetch/push/ls-remote through a Host-header HTTPS URL when DNS fails.
  */
@@ -726,7 +726,7 @@ async function ensureGhAuth() {
 }
 
 /**
- * CDXC:Distribution 2026-05-23-13:25:
+ * CDXC:Release 2026-05-23-13:25:
  * Agent shells often inject stale GH_TOKEN values. Prefer the user's real gh
  * login-session auth before falling back to git credential fill for git push.
  */
@@ -785,14 +785,14 @@ function gpuiReleaseSigningIdentity() {
 }
 
 /**
- * CDXC:Distribution 2026-05-23-13:10:
+ * CDXC:Release 2026-05-23-13:10:
  * Release builds must use the Developer ID identity from ghostex-release-to-brew,
  * not ad-hoc detection, and preflight should fail with actionable keychain guidance
  * when the login keychain is locked or the certificate is missing.
  */
 async function listCodeSigningIdentities() {
   /*
-   CDXC:Distribution 2026-05-23-16:01:
+   CDXC:Release 2026-05-23-16:01:
    Developer ID certificates are not guaranteed to live only in login.keychain-db.
    Release preflight must inspect the aggregate keychain view and configured user keychains before deciding signing is unavailable.
    */
@@ -840,7 +840,7 @@ async function ensureSigningIdentity() {
 }
 
 /**
- * CDXC:Distribution 2026-05-25-18:22:
+ * CDXC:Release 2026-05-25-18:22:
  * `security find-identity` can see a Developer ID certificate even when the
  * embedded agent shell cannot use the private key. Probe `codesign` directly so
  * the release delegates to Terminal.app before a long build fails on CEF files
@@ -962,7 +962,7 @@ exit "$release_status"
 async function launchTerminalReleaseRunner(runnerPath) {
   logStep('Launch release through login-session Terminal');
   /**
-   * CDXC:Distribution 2026-05-23-14:05:
+   * CDXC:Release 2026-05-23-14:05:
    * AppleScript's `do script` breaks when generated through osascript -e because
    * `script` is reserved. Opening the .command file in Terminal.app is the
    * reliable login-session handoff for release builds.
@@ -1175,7 +1175,7 @@ async function verifyHomebrewReleaseReadiness(version) {
     await writeFile(caskFile, renderedCask);
     await run(`ruby -c ${shellQuote(config.caskPath)}`, { cwd: tapDir });
     /*
-     * CDXC:ReleaseAutomation 2026-06-14-09:07:
+     * CDXC:Release 2026-06-14-09:07:
      * Homebrew readiness must run before GitHub/Sparkle publication so a host
      * with an unusable Homebrew/Xcode/CLT setup fails while the release is still
      * reversible. Use a rendered placeholder cask and syntax/audit probes that
@@ -1231,7 +1231,7 @@ android_tool_found apksigner
 android_tool_found aapt
 `;
   /*
-   * CDXC:AndroidRelease 2026-06-14-09:07:
+   * CDXC:Release 2026-06-14-09:07:
    * Android upload is now part of the standard release flow. Validate signing
    * material and build-tool availability before macOS publication so a missing
    * keystore or SDK tool does not leave the release needing manual APK repair.
@@ -1314,7 +1314,7 @@ async function latestSparkleVersion() {
 
 async function findSparkleBinDir() {
   /*
-   CDXC:ReleaseAutomation 2026-06-10-09:47:
+   CDXC:Release 2026-06-10-09:47:
    New macOS releases are arm64-only, so Sparkle appcast generation should first
    use the arm64 SwiftPM artifact directory. Keep older fallback paths only so
    already-cached local tooling can still be found without rebuilding.
@@ -1373,7 +1373,7 @@ async function preflight(version, buildVersion, options) {
       );
     }
     /*
-     * CDXC:ReleaseAutomation 2026-08-23:
+     * CDXC:Release 2026-08-23:
      * --gpui used to merge into repository-root appcast-gpui.xml, a separate
      * Sparkle feed for the GPUI app's own bundle id. That feed was retired
      * (deleted with appcast-x86_64.xml); the current pipeline publishes the
@@ -1428,7 +1428,7 @@ async function bumpReleaseMetadata(version, buildVersion, options) {
 }
 
 /*
- * CDXC:ReleaseAutomation 2026-08-22:
+ * CDXC:Release 2026-08-22:
  * buildArch used to invoke native/macos/ghostexHost/build-ghostex-host.sh, the
  * Xcode build for the Swift/AppKit macOS app. That app (and its ghostexHost
  * Xcode project) was removed on 2026-08-20; this legacy pipeline has no
@@ -1724,7 +1724,7 @@ async function packageReleaseDmg(version, artifactDir, entry) {
   const stagedApp = path.join(stagingDir, entry.stagedAppName ?? config.stagedAppName);
 
   /*
-   CDXC:ReleaseAutomation 2026-06-17-09:54:
+   CDXC:Release 2026-06-17-09:54:
    Release DMG staging copies the signed app bundle after code-server and nested
    native payloads have been materialized. Use ditto for the bundle copy so a
    transient filesystem entry under a large packaged runtime cannot make cp -R
@@ -1757,7 +1757,7 @@ async function notarizeReleaseDmg(version, artifactDir, entry) {
   );
   const submissionId = notaryOutput.match(/id:\s*([0-9a-f-]+)/)?.[1] ?? 'unknown';
   /*
-   CDXC:ReleaseAutomation 2026-05-23-13:58:
+   CDXC:Release 2026-05-23-13:58:
    `notarytool --wait` prints repeated `Current status: In Progress` lines
    before the final `status: Accepted`; parse the last status-like token so
    accepted submissions are not rejected after a long notarization wait.
@@ -1803,7 +1803,7 @@ async function validateMountedDmg(version, buildVersion, entry) {
         throw error;
       }
       /*
-       CDXC:MacRelease 2026-06-12-12:35:
+       CDXC:Release 2026-06-12-12:35:
        Apple's spctl can fail with "Too many open files" while walking the
        mounted Ghostex app bundle even after notarytool accepts the DMG and
        stapler validates its ticket. Treat only that descriptor-exhaustion case
@@ -1841,7 +1841,7 @@ async function validateMountedDmg(version, buildVersion, entry) {
 async function buildAndPackage(version, buildVersion, options = {}) {
   logStep('Build arm64 release app');
   /*
-   CDXC:MacRelease 2026-06-10-09:47:
+   CDXC:Release 2026-06-10-09:47:
    Release automation intentionally builds only the Apple Silicon app. Do not
    add Intel release legs back here; old Intel artifacts remain available from
    their existing GitHub releases. The historical appcast-x86_64.xml feed that
@@ -1875,7 +1875,7 @@ async function buildAndPackage(version, buildVersion, options = {}) {
   console.log(`Artifact directory: ${artifactDir}`);
 
   /*
-   CDXC:ReleaseAutomation 2026-06-10-09:47:
+   CDXC:Release 2026-06-10-09:47:
    The public macOS release artifact set contains one arm64 DMG. Keep the same
    signing, packaging, notarization, stapling, and mounted-DMG validation steps
    for that artifact so Apple Silicon update safety stays unchanged.
@@ -1931,7 +1931,7 @@ async function generateAppcast(version, buildVersion, sparkleBinDir, artifact) {
   await run(`xmllint --noout ${shellQuote(appcastPath)}`);
   await run(`${shellQuote(path.join(sparkleBinDir, 'sign_update'))} ${shellQuote(appcastPath)}`);
   /*
-   CDXC:ReleaseAutomation 2026-06-03-20:28:
+   CDXC:Release 2026-06-03-20:28:
    Sparkle verification must prove the appcast enclosure signature validates
    the generated DMG artifact, not merely that the XML feed can be signed.
    Use namespace-agnostic XPath because appcast namespace prefixes can vary
@@ -1973,7 +1973,7 @@ async function writeSparkleReleaseNotes(version, workDmg, releaseNotesTitle = 'G
   const parsedDmg = path.parse(workDmg);
   const releaseNotesPath = path.join(parsedDmg.dir, `${parsedDmg.name}.md`);
   /*
-   CDXC:AutoUpdate 2026-06-08-10:07:
+   CDXC:Release 2026-06-08-10:07:
    Sparkle's update dialog does not render `sparkle:fullReleaseNotesLink`; it
    shows changelog text only from a per-item description or releaseNotesLink.
    Write same-basename markdown beside each DMG and force embedding so the
@@ -2026,7 +2026,7 @@ async function extractChangelogSection(version) {
 
 function extractChangelogSectionFromText(changelog, version) {
   /*
-   CDXC:ReleaseAutomation 2026-05-23-14:03:
+   CDXC:Release 2026-05-23-14:03:
    Do not use a multiline regex with `$` here: in JS multiline mode it can stop
    at the blank line after the heading and make valid release notes look empty.
    */
@@ -2052,7 +2052,7 @@ function extractChangelogSectionFromText(changelog, version) {
 
 function validateMajorMinorReleaseNotes(notes, version) {
   /*
-   * CDXC:ReleaseNotes 2026-06-14-09:18:
+   * CDXC:Release 2026-06-14-09:18:
    * Public changelog sections must keep release notes scannable by using
    * Major and Minor top-level bullets, with an optional GPUI section after
    * Minor for cross-platform app work.
@@ -2199,7 +2199,7 @@ async function updateGithubReleaseNotes(version, artifacts, releaseAssets) {
 async function validateLiveSparkleAndAssets(version, buildVersion, sparkleBinDir, artifacts) {
   logStep('Validate live Sparkle feed and GitHub asset');
   /*
-   CDXC:ReleaseAutomation 2026-07-02-14:10:
+   CDXC:Release 2026-07-02-14:10:
    The 5.4.0 release downloaded the same ~800 MB DMG three times (here, brew
    fetch, final verification). This validation now proves the same facts
    without a download: the live appcast signature must verify against the
@@ -2355,7 +2355,7 @@ async function buildAndUploadAndroidRelease(version, buildVersion) {
   const sha256 = await capture(`shasum -a 256 ${shellQuote(apk)} | awk '{print $1}'`);
   const stableApk = path.join(tmpdir(), config.androidApkAssetName);
   /*
-   * CDXC:AndroidRelease 2026-06-14-09:07:
+   * CDXC:Release 2026-06-14-09:07:
    * GitHub CLI upload labels were not reliable for the Android APK asset name
    * during the 4.12.0 release. Copy the signed universal APK to the stable
    * filename first, then upload that file directly so the public URL remains
@@ -2552,18 +2552,18 @@ async function updateHomebrew(version, artifacts, options) {
   await writeFile(caskFile, cask);
   await run(`ruby -c ${shellQuote(config.caskPath)}`, { cwd: tapDir });
   /*
-   CDXC:ReleaseAutomation 2026-05-29-19:30:
+   CDXC:Release 2026-05-29-19:30:
    Homebrew style can fail on autocorrectable blank-line offenses after the cask
    generator inserts the gx preflight block. Auto-fix those before the strict
    style check so a successful GitHub release is not blocked by formatting.
 
-   CDXC:HomebrewRelease 2026-06-10-09:47:
+   CDXC:Release 2026-06-10-09:47:
    Homebrew's API install path can fail on macOS beta host identifiers before it
    reads the freshly pushed tap cask. Disable install-from-API for style/info/fetch
    validation and treat unrelated brew update failures as non-blocking once the
    Ghostex cask validates directly.
 
-   CDXC:HomebrewRelease 2026-06-21-13:20:
+   CDXC:Release 2026-06-21-13:20:
    GitHub issue #49 showed current Homebrew treats `depends_on macos: :ventura`
    as the Ventura-or-newer floor and warns on the old comparison string, so the
    release renderer should use normal style validation and keep the symbol form.
@@ -2638,7 +2638,7 @@ async function updateHomebrew(version, artifacts, options) {
       shouldValidateLiveCaskFromTap = !localFetchValidationAvailable;
       if (localFetchValidationAvailable) {
         /*
-         CDXC:ReleaseAutomation 2026-07-02-14:10:
+         CDXC:Release 2026-07-02-14:10:
          brew fetch is the release's single full live download. Reuse its
          cached artifact to prove the published bytes equal the local DMG and
          hand the path to final verification so nothing downloads the DMG
@@ -2684,20 +2684,20 @@ async function updateHomebrew(version, artifacts, options) {
 }
 
 /**
- * CDXC:CliBranding 2026-05-26-15:11:
+ * CDXC:Cli 2026-05-26-15:11:
  * Homebrew releases should install `ghostex` and the new `gx` short alias, not
  * the older `gtx` alias. Check for an existing non-Ghostex `gx` binary before
  * installing wrappers so setup does not silently claim a command name another
  * tool owns.
  *
- * CDXC:CliInstall 2026-06-12-09:31:
+ * CDXC:Cli 2026-06-12-09:31:
  * Homebrew must install ghostex/gx as wrapper files in HOMEBREW_PREFIX/bin,
  * not binary symlinks into Ghostex.app. Direct execution of app-bundled scripts
  * can be killed during macOS policy assessment before Node starts. Best-effort
  * clear provenance/quarantine xattrs from the wrappers because replaced
  * symlinks can carry policy metadata into the new files on some macOS builds.
  *
- * CDXC:ReleaseAutomation 2026-06-14-09:07:
+ * CDXC:Release 2026-06-14-09:07:
  * The Ghostex tap cask is owned release output, so render it from this canonical
  * template instead of regex-normalizing whatever shape is currently in the tap.
  * This keeps arm64-only distribution, the explicit Ventura floor, and wrapper
@@ -2728,7 +2728,7 @@ function renderGhostexCask({ version, sha256 }) {
   homepage "https://github.com/maddada/Ghostex"
 
   conflicts_with cask: "zmux"
-  # CDXC:MacRelease 2026-06-21-13:20: GitHub issue #49 showed current
+  # CDXC:Release 2026-06-21-13:20: GitHub issue #49 showed current
   # Homebrew treats the symbol form as the Ventura-or-newer floor, so keep this
   # syntax to avoid a warning on every brew invocation.
   depends_on arch: :arm64
@@ -2736,11 +2736,11 @@ function renderGhostexCask({ version, sha256 }) {
 
   app "ghostex.app"
 
-  # CDXC:CliBranding 2026-05-26-15:11: Install gx only when another tool does not already own that command name.
-  # CDXC:CliInstall 2026-06-12-09:31: Homebrew writes wrapper files in
+  # CDXC:Cli 2026-05-26-15:11: Install gx only when another tool does not already own that command name.
+  # CDXC:Cli 2026-06-12-09:31: Homebrew writes wrapper files in
   # HOMEBREW_PREFIX/bin instead of binary symlinks into Ghostex.app because
   # macOS can kill direct app-bundled script execution during policy assessment.
-  # CDXC:HomebrewRelease 2026-06-16-20:54: Keep preflight errors wrapped so
+  # CDXC:Release 2026-06-16-20:54: Keep preflight errors wrapped so
   # automated tap pushes pass brew style after publication.
   preflight do
     commands = ["ghostex", "gx"]
@@ -2755,7 +2755,7 @@ function renderGhostexCask({ version, sha256 }) {
 
         command_target = command_path.symlink? ? command_path.readlink.to_s : command_path.to_s
         command_content = command_path.file? ? command_path.read : ""
-        if command_content.include?("CDXC:CliInstall 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
+        if command_content.include?("CDXC:Cli 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
           next
         end
         next if command_target.include?("ghostex.app/Contents/Resources/CLI/#{command}")
@@ -2782,7 +2782,7 @@ function renderGhostexCask({ version, sha256 }) {
         command_path.delete
       elsif command_path.exist?
         command_content = command_path.file? ? command_path.read : ""
-        if command_content.include?("CDXC:CliInstall 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
+        if command_content.include?("CDXC:Cli 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
           command_path.delete
         end
       end
@@ -2790,7 +2790,7 @@ function renderGhostexCask({ version, sha256 }) {
       command_path.write <<~EOS
         #!/bin/bash
         set -euo pipefail
-        # CDXC:CliInstall 2026-06-12-09:31: Public PATH commands live outside Ghostex.app so macOS does not directly execute app-bundled shell scripts during policy assessment.
+        # CDXC:Cli 2026-06-12-09:31: Public PATH commands live outside Ghostex.app so macOS does not directly execute app-bundled shell scripts during policy assessment.
         exec "#{cli_binary}" "$@"
       EOS
       command_path.chmod 0755
@@ -2806,7 +2806,7 @@ function renderGhostexCask({ version, sha256 }) {
       next if !command_path.exist? || !command_path.file?
 
       command_content = command_path.read
-      if command_content.include?("CDXC:CliInstall 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
+      if command_content.include?("CDXC:Cli 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
         command_path.delete
       end
     end
@@ -2833,7 +2833,7 @@ function validateGhostexCask(cask, { version, sha256 }) {
     'preflight do',
     'postflight do',
     'uninstall_preflight do',
-    'CDXC:CliInstall 2026-06-12-09:31',
+    'CDXC:Cli 2026-06-12-09:31',
     'exec "#{cli_binary}" "$@"',
   ]) {
     if (!cask.includes(required)) {
@@ -2891,7 +2891,7 @@ async function main() {
     assertReleaseWithinOverallBudget(releaseStartedAt, 'prepare-remote-linux');
     await runReleasePhase(state, 'prepare-remote-linux', options, async () => {
       /*
-       CDXC:ReleaseAutomation 2026-07-02-14:10:
+       CDXC:Release 2026-07-02-14:10:
        The builder script exits quickly when both Ubuntu packages already match
        HEAD; when they are stale it runs the checked-in Zig cross-build recipe
        instead of failing with a rebuild-by-hand hint.
@@ -2900,7 +2900,7 @@ async function main() {
         label: 'remote Linux package build',
         timeoutMs: 30 * 60 * 1000,
         /*
-         CDXC:AnonymousAnalytics 2026-08-26:
+         CDXC:Telemetry 2026-08-26:
          The remote packages bake this into gxserver (server/build.rs), exactly
          like the GPUI leg does for the desktop crate. The gxserver crate's own
          Cargo version is a 0.1.0 placeholder, so without it every shipped remote

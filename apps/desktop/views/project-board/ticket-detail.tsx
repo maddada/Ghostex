@@ -140,7 +140,7 @@ export function TicketMetaFields({
         </Select>
       </label>
       {/*
-        CDXC:ProjectBoardTicketMetadata 2026-05-30-08:31:
+        CDXC:ProjectBoard 2026-05-30-08:31:
         Ticket metadata should put Labels where Blocked by was, keep every metadata control's label-to-element spacing consistent, and show T-shirt select values as friendly labels.
       */}
       <div className='project-ticket-field project-ticket-field-inline project-ticket-labels-field'>
@@ -465,7 +465,7 @@ export function ConversationSection({
             ))}
           </SelectContent>
         </Select>
-        {/* CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2): raised secondary,
+        {/* CDXC:ProjectBoard 2026-08-24 (round 2): raised secondary,
             not outline — outline paints the #0e0e0e window tone on the #161616
             dialog and reads as a black hole. */}
         <Button
@@ -546,10 +546,10 @@ export function projectBoardCommentMetadataFromLink(
   link: ProjectBoardConversationLinkView | undefined
 ): ProjectBoardCommentMetadata {
   /*
-   * CDXC:ProjectBoardComments 2026-06-05-06:43:
+   * CDXC:ProjectBoard 2026-06-05-06:43:
    * UI-added comments should use the linked agent conversation as their metadata source so the rendered author line can show the agent beside the Beads user and the footer can show the resumable agent CLI session id instead of the truncated status preview.
    *
-   * CDXC:ProjectBoardComments 2026-06-05-06:55:
+   * CDXC:ProjectBoard 2026-06-05-06:55:
    * The comment Session footer must be the saved session id from the agent CLI, not the Ghostex pane id. If the linked conversation has not reported an agent session id yet, omit the footer rather than displaying the wrong id as resumable.
    */
   if (!link) {

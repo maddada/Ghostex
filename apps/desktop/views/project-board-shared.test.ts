@@ -156,7 +156,7 @@ describe('project board filters', () => {
 
   test('filters by tag alongside the other toolbar selections', () => {
     /*
-     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * CDXC:ProjectBoard 2026-08-21:
      * The tag control only ever includes, so a selected tag narrows the board to the tickets that
      * carry it and stacks with priority and estimate instead of replacing them. Tickets with no
      * labels are simply not in that set rather than being treated as a selectable state of their
@@ -185,7 +185,7 @@ describe('project board filters', () => {
 
   test('resolves a tag the loaded board does not offer back to all', () => {
     /*
-     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * CDXC:ProjectBoard 2026-08-21:
      * A stored tag outlives the board that produced it, so opening a project that never used it
      * must show the whole board rather than an empty one under a tag nothing carries.
      */
@@ -262,7 +262,7 @@ describe('project board sorting', () => {
 
   test('keeps the newest closed beads visible under the lane limit', () => {
     /*
-     * CDXC:ProjectBoardSort 2026-08-07:
+     * CDXC:ProjectBoard 2026-08-07:
      * Lanes slice their ticket list before rendering, so Done ordering only helps if it happens
      * ahead of that cap.
      */
@@ -524,7 +524,7 @@ describe('project board statuses', () => {
 describe('project board view preferences', () => {
   test('stores toolbar selections under one app-wide key', () => {
     /*
-     * CDXC:ProjectBoardViewPreferences 2026-08-07:
+     * CDXC:ProjectBoard 2026-08-07:
      * Priority, estimate, and sort describe how the user reads a board rather than anything about
      * a project, so the key carries no project id and every board restores the same selections.
      */
@@ -550,7 +550,7 @@ describe('project board view preferences', () => {
 
   test('falls back to defaults for missing or unusable stored values', () => {
     /*
-     * CDXC:ProjectBoardViewPreferences 2026-08-07:
+     * CDXC:ProjectBoard 2026-08-07:
      * Stored preferences outlive the option lists that produced them, and localStorage is editable
      * from outside the board, so anything that is not a current option must land on its default
      * instead of leaving the toolbar on a value the board cannot filter or sort by.
@@ -570,7 +570,7 @@ describe('project board view preferences', () => {
 
   test('keeps a stored tag the current board may no longer offer', () => {
     /*
-     * CDXC:ProjectBoardTagFilter 2026-08-21:
+     * CDXC:ProjectBoard 2026-08-21:
      * Tag options are the labels the loaded tickets carry, so nothing at storage-read time can say
      * whether a tag is still real. Normalisation therefore rejects only values that could never be
      * a tag and leaves a stale-looking one intact, so a board that still has it restores the
@@ -593,7 +593,7 @@ describe('project board view preferences', () => {
 describe('project board routing', () => {
   test('normalizes old editor ids to raw project ids', () => {
     /*
-     * CDXC:ProjectBoardRouting 2026-06-04-23:51:
+     * CDXC:Navigation 2026-06-04-23:51:
      * Open Project panes from older builds can keep `project-editor:<projectId>:tasks` in the URL. The board must strip the editor wrapper before calling gxserver so stale paths do not decide the Beads project.
      */
     expect(projectBoardRawProjectIdFromUrlParam('project-editor:P3lv0:tasks')).toBe('P3lv0');
@@ -607,7 +607,7 @@ describe('project board routing', () => {
 describe('project board issue prefix', () => {
   test('updates Beads issue_prefix when it differs from the project prefix', async () => {
     /*
-     * CDXC:ProjectBoardBeads 2026-06-10-20:27:
+     * CDXC:ProjectBoard 2026-06-10-20:27:
      * The Project board's visible ticket key is separate from Beads' durable issue_prefix, so prefix reconciliation must write the real project prefix before ticket creation when stale config still says gxserver.
      */
     const requests: Array<{ action: string; value?: string }> = [];
@@ -644,7 +644,7 @@ describe('project board issue prefix', () => {
 
   test('keeps an established issue_prefix that differs from the project prefix', async () => {
     /*
-     * CDXC:ProjectBoardBeads 2026-07-31:
+     * CDXC:ProjectBoard 2026-07-31:
      * A shared beadsDirectory serves several projects; an established prefix is durable data, not
      * stale bootstrap config, so focusing a differently named project must not rename the board.
      */
@@ -672,7 +672,7 @@ describe('project board issue prefix', () => {
 });
 describe('project board assigned agent resolution', () => {
   /*
-   * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
+   * CDXC:ProjectBoard 2026-08-07-07:01:
    * Start work should open with the agent the bead is assigned to, matched by the
    * configured agent label or agent id, and fall back to the board default when
    * the assignee is empty or names someone who is not a configured agent.

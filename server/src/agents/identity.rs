@@ -14,7 +14,7 @@ pub(crate) enum SessionIdentityUpdateSource {
 }
 
 /*
-CDXC:GxserverIdentityLazySessions 2026-09-01:
+CDXC:SessionIdentity 2026-09-01:
 `apply_session_state_update` used to hydrate the project's WHOLE session list up
 front, for every identity observation. On a registry with a few thousand rows in
 one project that is ~70ms of JSON hydration, and the live zmx process scan calls
@@ -246,7 +246,7 @@ pub(crate) fn apply_session_state_update(
         current_with_identity
     };
     /*
-    CDXC:SessionAgentNotes 2026-08-24:
+    CDXC:SessionNotes 2026-08-24:
     Session notes are keyed by the agent session id, so whenever the stored id
     transitions old→new the note must follow or it strands on the dead id and
     silently disappears from every surface. EVERY identity source funnels
@@ -258,7 +258,7 @@ pub(crate) fn apply_session_state_update(
     against the new id. An agent change removes the stored id instead of
     replacing it, so no re-key fires and the old conversation keeps its note.
 
-    CDXC:StashedPromptAgentSession 2026-08-24:
+    CDXC:SavedPrompts 2026-08-24:
     Stashed prompts are keyed by the same conversation id (0026) and ride the
     same choke point for the same reason: a compaction would otherwise strand
     every prompt stashed from this thread on the dead id, dropping them out of
@@ -293,7 +293,7 @@ pub(crate) fn apply_session_state_update(
 }
 
 /*
-CDXC:GxserverLiveProcessIdentityNoop 2026-09-01:
+CDXC:SessionIdentity 2026-09-01:
 The live zmx process scan re-observes the SAME identity on every poll, and a
 poll happens on every listSessions / readPresentationSnapshot / readProjectStatus
 / WS-subscribe request. Steady state is therefore "everything this observation
@@ -511,7 +511,7 @@ pub(crate) fn resolve_stored_session_identity(session: &Value) -> ResolvedIdenti
         startup_text: None,
     });
     /*
-    CDXC:CustomAgentIdentityFlap 2026-09-03:
+    CDXC:SessionIdentity 2026-09-03:
     The transcript path only names the CLI FAMILY (`~/.claude/…jsonl` →
     "claude"), while the stored id may be a sidebar CONFIGURATION of that
     family (`custom-claude-…`). Merging the raw family over the stored id made
@@ -1026,7 +1026,7 @@ pub(crate) fn parse_agent_resume_identity(text: Option<&str>) -> ResolvedIdentit
             continue;
         }
         /*
-        CDXC:SessionForkIdentity 2026-09-02:
+        CDXC:SessionFork 2026-09-02:
         A fork launch names the PARENT conversation (`codex fork <id>`,
         `claude --resume <id> --fork-session`); the forked conversation's own id
         is only known once the agent's hook or transcript reports it. Seeding
@@ -1161,7 +1161,7 @@ pub(crate) fn infer_agent_id_from_path(path: Option<&str>) -> Option<String> {
 }
 
 /*
-CDXC:GxserverSessionIdentity 2026-06-24-04:49:
+CDXC:SessionIdentity 2026-06-24-04:49:
 Passive hook and sidecar events must not let stale Droid metadata replace a row gxserver already owns as Pi or another agent.
 Treat stored agentId/runtime agentName as an identity lock when older rows do not yet have launchAgentId, while still allowing unowned terminal rows to be promoted by first matching observations.
 */
@@ -1222,7 +1222,7 @@ pub(crate) fn align_observed_identity_with_launch_profile(
     if observed_agent_id.is_some() && observed_agent_id == session_launch_agent_provider_id(session)
     {
         /*
-        CDXC:ZmxProcessIdentityOwner 2026-09-02:
+        CDXC:SessionIdentity 2026-09-02:
         The substitution maps the observed CLI family onto the sidebar
         CONFIGURATION of that family (`custom-…` built on Claude), which is the
         only case where the locked id is a different spelling of the same

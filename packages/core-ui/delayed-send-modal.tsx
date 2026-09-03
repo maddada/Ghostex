@@ -96,7 +96,7 @@ export type DelayedSendModalProps = {
  * retry minutes focus over the first few animation frames/timeouts. Pressing
  * Enter while editing the duration must schedule the timer immediately.
  *
- * CDXC:SessionAutomations 2026-08-02:
+ * CDXC:Automations 2026-08-02:
  * Delayed Send and Close After Done share one automation editor. The send
  * trigger is a mutually-exclusive Select, both automations expose their real
  * enabled state through switches, and disabling an active send cancels it when
@@ -258,7 +258,7 @@ export function DelayedSendModal({
           ? `Active. Enter sends in ${delayedSendRemainingLabel}.`
           : 'Press Enter later using the selected trigger.';
   /*
-   * CDXC:CodexModalRestyle 2026-08-24:
+   * CDXC:AppModal 2026-08-24:
    * The Codex-style language reserves the accent color for live status text, so
    * the Send Enter summary only takes the accent class while an automation is
    * actually armed.

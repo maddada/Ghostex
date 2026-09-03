@@ -13,7 +13,7 @@ use crate::ghostex_cli::rpc::{
 };
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI evidence and readiness commands: screenshot,
 logs (gxserver API first, local file fallback), bundle, and android-check.
 Output strings and exit-code behavior match scripts/ghostex-cli.mjs.

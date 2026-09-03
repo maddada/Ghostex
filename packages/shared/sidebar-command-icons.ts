@@ -1,5 +1,5 @@
 /**
- * CDXC:CommandIcons 2026-04-28-05:23:
+ * CDXC:Icons 2026-04-28-05:23:
  * Command icon pickers use this explicit Tabler allowlist so users get app-relevant action, agent, project, code, git, and runtime glyphs without exposing the full icon pack.
  */
 export const SIDEBAR_COMMAND_ICON_IDS = [
@@ -67,7 +67,7 @@ export const SIDEBAR_COMMAND_ICON_IDS = [
 export type SidebarCommandIcon = (typeof SIDEBAR_COMMAND_ICON_IDS)[number];
 
 /**
- * CDXC:SidebarActions 2026-05-15-04:46:
+ * CDXC:AgentLauncher 2026-05-15-04:46:
  * Action configuration no longer exposes a "No icon" choice because action
  * rows always render a glyph. Use Play as the canonical default so new and
  * legacy actions have an explicit user-facing icon instead of type-derived

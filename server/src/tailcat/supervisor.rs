@@ -81,7 +81,7 @@ impl TailcatRuntime {
     }
 
     /*
-    CDXC:Tailcat 2026-09-01:
+    CDXC:RemotePairing 2026-09-01:
     One reconcile entry point for every trigger — enable/disable, a port or
     allow-list edit, and daemon start — so the sidecar's command line is always
     a pure function of persisted state. Restart only when the resolved spec

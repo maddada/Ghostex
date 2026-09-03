@@ -1,7 +1,7 @@
 #import <AppKit/AppKit.h>
 
 /*
-CDXC:GPUITerminalMouseCursor 2026-07-12:
+CDXC:Terminal 2026-07-12:
 Hide-while-typing cursor concealment for the GPUI-composited terminal
 element. This lives apart from GpuiTerminalAppKitAdapter.m because the
 composited element (used by every terminal-rendering binary, including the

@@ -33,7 +33,7 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         if let Some(session_id) = leaf.tab_group.active_session_id() {
             /*
-            CDXC:GPUISessionChatSurface 2026-07-31:
+            CDXC:SessionChat 2026-07-31:
             Chat mode swaps this tab's body for the per-session chat CEF
             surface in the same slot. The terminal mount is not
             destroyed: skipping the mount-slot render parks the Ghostty
@@ -62,7 +62,7 @@ impl GhostexGpuiApp {
         };
         let mount_slot_id = mount_candidate.mount_slot_id();
         /*
-        CDXC:GPUITerminalGpuiEngine 2026-07-04:
+        CDXC:Terminal 2026-07-04:
         A mount slot claimed by the GPUI terminal engine renders the
         composited TerminalView as a normal child of the same body div
         instead of recording bounds for a native host view. The body keeps
@@ -120,49 +120,49 @@ impl GhostexGpuiApp {
         let remote_connect_status = self.agents_remote_connect_status_for_session(session_id);
 
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-22-05:23:
+        CDXC:Workarea 2026-06-22-05:23:
         Selecting a sleeping, restored/unmounted, mounting, failed-startup, or popped-out Agents tab is a presentation action only in this slice. The selected placeholder focuses the pane and stays active, but it must not mutate the session to running or imply that wake, mount, materialize, retry, or reattach behavior has been implemented.
 
-        CDXC:GPUIAgentsTerminalActivation 2026-06-22-23:33:
+        CDXC:SessionSleep 2026-06-22-23:33:
         Placeholder body activation is the explicit GPUI wake/materialize/reattach/retry path for sleeping, restored/unmounted, popped-out, and failed-startup Agents sessions. The activation stays shell-only by changing presentation state to Mounting so pending startup/materialization remains selectable and focusable without fabricating a Running terminal or process.
 
-        CDXC:GPUILibghosttyMountBoundary 2026-06-22-20:14:
+        CDXC:Terminal 2026-06-22-20:14:
         Render the active running Agents body as the future libghostty mount slot only after the pure mount candidate says the selected session is eligible. Ineligible selected states keep the placeholder card and drop behavior, while missing sessions render an honest missing-session placeholder instead of a black fake terminal surface.
 
-        CDXC:GPUILibghosttyMountBoundary 2026-06-22-22:45:
+        CDXC:Terminal 2026-06-22-22:45:
         Every rendered visible selected running Agents leaf is a real libghostty mount slot. Non-running and missing selected states keep placeholder cards, inactive tabs stay hidden, and hidden-by-Focus leaves never record body bounds or own surfaces.
 
-        CDXC:GPUILibghosttyMountBounds 2026-06-22-20:29:
+        CDXC:Terminal 2026-06-22-20:29:
         The future libghostty native view must attach to the exact terminal body slot below the Agents tab bar, not to the pane border or tab chrome. A non-interactive canvas probe records that body rectangle for the current mount identity while the body div keeps click/drop ownership and no hidden hit region is introduced.
 
-        CDXC:GPUITerminalStartupGeometry 2026-06-23-00:10:
+        CDXC:Terminal 2026-06-23-00:10:
         Visible selected Mounting bodies render a blank terminal body and use the same body click/drop owner, plus a paint-only canvas probe for exact startup body bounds. The probe records only runtime geometry through `AgentsTerminalStartupBodySlotId`; it does not create a Running mount slot, host view, Ghostty surface, overlay, or hit-test route.
 
-        CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+        CDXC:Terminal 2026-06-23-19:41:
         Visible selected non-startup Mounting placeholders also get a paint-only geometry probe for the parked-owner reattach path. The placeholder body remains the only click/drop owner, and geometry alone never creates startup launch state, new Ghostty surfaces, fallback Running state, overlays, hidden hit regions, or persisted data.
 
-        CDXC:GPUITerminalMouseForwarding 2026-06-23-08:32:
+        CDXC:Terminal 2026-06-23-08:32:
         Mounted Running body events forward left/right/middle down/up plus body-level pointer movement to the same current Ghostty mount slot after the existing focus path. Mouse down/up/move pass GPUI modifiers through the Ghostty input.Mods mapper while missing or stale bounds/surfaces no-op, placeholders keep their activation semantics, and mouse forwarding remains separate from capture policy, text/key/IME delivery, the Cmd+V paste action, logging, persistence, overlays, hidden hit regions, and root/window routing.
 
-        CDXC:GPUITerminalScrollForwarding 2026-06-23-09:32:
+        CDXC:Terminal 2026-06-23-09:32:
         Mounted Running body wheel events forward only from the existing body div for exact current mount slots. Successful forwarding consumes the GPUI scroll event after updating Ghostty's body-relative pointer position with mapped keyboard modifiers; placeholders and stale surfaces still fall through without scroll routing, overlays, hidden hit regions, logging, persistence, or momentum mapping.
 
-        CDXC:GPUITerminalPressureForwarding 2026-06-23-09:51:
+        CDXC:Terminal 2026-06-23-09:51:
         Mounted Running body pressure events forward only inside the existing mounted-slot body branch. Forward pressure without default-stop so placeholder activation and body drag/drop ownership stay unchanged while exact current surfaces receive force-click data.
 
-        CDXC:GPUITerminalMouseCapture 2026-06-23-10:05:
+        CDXC:Terminal 2026-06-23-10:05:
         Mounted Running Agents bodies use GPUI element-level mouse-up-out only to release an already captured Ghostty mouse. The outside event passes modifiers but never updates terminal mouse_pos, clamps coordinates, adds overlays, or routes input through the window.
 
-        CDXC:GPUITerminalMouseButtons 2026-06-23-10:23:
+        CDXC:Terminal 2026-06-23-10:23:
         Mounted Running Agents bodies must forward right and middle down/up/up-out through the same body element as left. Right and middle down focus the mounted Agents terminal surface before forwarding the press, while placeholders keep their existing activation behavior and no tab/chrome right-click menus are changed.
 
-        CDXC:GPUITerminalSelectionDrag 2026-06-23-12:43:
+        CDXC:Terminal 2026-06-23-12:43:
         Mounted Agents selection drag is not separate GPUI behavior beyond the body-scoped Ghostty event stream. The existing body div owns placeholder activation, mounted terminal focus handoff, body-relative move forwarding during a press, in-body release, capture-gated up-out, and typed tab drag-over/drop handlers without overlap; keep any future expansion inside this normal body boundary instead of storing selection text, storing raw coordinates, adding global capture, or routing mouse input through root/window pre-dispatch.
 
-        CDXC:GPUITerminalNativeKeyBridge 2026-07-10:
+        CDXC:Terminal 2026-07-10:
         Mounted libghostty terminals keep keyboard and IME ownership on their exact AppKit host NSView. The existing body remains the normal mouse/layout owner, but it must not focus GPUI's legacy text service after the native handoff because doing so strips Tab, Option/Alt, arrows, and terminal bindings down to committed-text-only input.
 
-        CDXC:GPUIAgentsSleepingPlaceholder 2026-07-05:
+        CDXC:SessionSleep 2026-07-05:
         Sleeping Agents bodies mirror native AppKit sleeping pane placeholders: black body, no diagnostic card, and the same centered paint-only "Press Any Key to Wake" affordance controlled by click-to-wake settings. The existing body click and focused key handlers remain the only wake behavior.
         */
         div()

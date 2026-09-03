@@ -1,5 +1,5 @@
 /*
-CDXC:GPUILibghosttyVt 2026-07-03:
+CDXC:Terminal 2026-07-03:
 Phase 1 GPUI-composited terminals are driven by libghostty-vt (vendored under
 .dependencies/ghostty/, MIT), whose C API is functionally stable but explicitly NOT
 API-stable. This module is the single choke point over that C API: every
@@ -7,7 +7,7 @@ libghostty-vt symbol, struct layout, and enum value used by Rust lives here so
 a vendored API bump touches one file. Do not declare ghostty_vt symbols in
 other modules, and do not expose raw handles outside this module.
 
-CDXC:GPUILibghosttyVt 2026-07-03 (dirty-tracking contract):
+CDXC:Terminal 2026-07-03 (dirty-tracking contract):
 render.h keeps two INDEPENDENT dirty layers: a global render-state dirty value
 (false/partial/full) and a per-row dirty flag. ghostty_render_state_update()
 only ever raises dirty state; it never clears either layer, and clearing one

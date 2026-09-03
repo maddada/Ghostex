@@ -62,7 +62,7 @@ function collectFunctionalUpdaterCalls(source: string, setterCallStart: string):
 describe('Project Board form event handling', () => {
   test('renders Kanban swimlanes as rounded panels with a gutter', () => {
     /*
-     * CDXC:ProjectBoardRedesign 2026-08-23:
+     * CDXC:ProjectBoard 2026-08-23:
      * The Codex-style board separates swimlanes with a gutter and gives each
      * lane its own rounded panel, replacing the old zero-gap shared-border
      * strip. Layout lives in Tailwind on the components, not styles.ts.
@@ -77,7 +77,7 @@ describe('Project Board form event handling', () => {
 
   test('keeps the Kanban board scrollbars grabbable with the mouse', () => {
     /*
-     * CDXC:BoardScrollbars 2026-08-07:
+     * CDXC:ProjectBoard 2026-08-07:
      * The board strip and the lane bodies must keep a real scrollbar box, or the
      * board is wheel-only: Chromium measured a 0px scroll gutter (nothing to
      * click or drag) whenever the scroller carried scrollbar-width: none, a
@@ -99,7 +99,7 @@ describe('Project Board form event handling', () => {
 
   test('keeps the ticket dialog body scrollbar grabbable with the mouse', () => {
     /*
-     * CDXC:DialogScrollbar 2026-08-07:
+     * CDXC:AppModal 2026-08-07:
      * The ticket dialog body shared the comment list's hidden-scrollbar rules,
      * so Chromium measured a 0px scroll gutter on it and neither a track click
      * nor a thumb drag anywhere along its right edge moved it — wheel-only. It
@@ -120,7 +120,7 @@ describe('Project Board form event handling', () => {
       '.project-automation-dialog {'
     );
     /*
-     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * CDXC:ProjectBoard 2026-08-24:
      * The dialog body thumb reveals on :hover only; :focus-within kept the bar
      * permanently visible because a form dialog always has a focused field.
      */
@@ -140,7 +140,7 @@ describe('Project Board form event handling', () => {
 
   test('shows the first-open Kanban loading overlay until initial load finishes', () => {
     /*
-     * CDXC:ProjectBoardLoading 2026-06-20-18:21:
+     * CDXC:ProjectBoard 2026-06-20-18:21:
      * The first macOS Kanban open should cover the mounted lanes with a spinner until initial Beads loading finishes, while later refreshes should not replay that mask.
      */
     const projectBoardSource = sourceFrom(projectBoardAppSource, 'function ProjectBoardApp()');
@@ -170,7 +170,7 @@ describe('Project Board form event handling', () => {
 
   test('gives every Kanban dialog control one height and one text size', () => {
     /*
-     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * CDXC:ProjectBoard 2026-08-24:
      * The dialogs used to opt individual classes into the Project Board control
      * height, so anything the list missed rendered at shadcn's own size: select
      * triggers came out taller than the buttons beside them and dropdowns
@@ -181,8 +181,8 @@ describe('Project Board form event handling', () => {
      */
     const dialogControlSource = sourceBetweenIn(
       stylesSource,
-      'CDXC:ProjectBoardDialogRedesign 2026-08-24:',
-      'CDXC:ProjectBoardRoundness 2026-06-29-20:55:'
+      'CDXC:ProjectBoard 2026-08-24:',
+      'CDXC:ProjectBoard 2026-06-29-20:55:'
     );
 
     expect(dialogControlSource).toContain('.project-ticket-dialog [data-slot="input"]');
@@ -206,7 +206,7 @@ describe('Project Board form event handling', () => {
 
   test('keeps the Kanban dialogs on the raised panel surface without bold chrome', () => {
     /*
-     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * CDXC:ProjectBoard 2026-08-24:
      * Dialogs sit on the board's #161616 panel token with the 12px section
      * radius, and their titles, labels, and section headers stay at regular or
      * 500 weight so no dialog text reads bolder than the page behind it.
@@ -229,7 +229,7 @@ describe('Project Board form event handling', () => {
 
   test('uses brighter Kanban bead card surfaces than lane panels', () => {
     /*
-     * CDXC:ProjectBoardCards 2026-06-19-09:14:
+     * CDXC:ProjectBoard 2026-06-19-09:14:
      * Kanban cards should stand out from the macOS Project board lanes before hover, so the card background token must stay visibly brighter than the lane panel token.
      */
     const variableSource = sourceBetweenIn(stylesSource, ':root {', '* { box-sizing: border-box; }');
@@ -241,7 +241,7 @@ describe('Project Board form event handling', () => {
 
   test('prevents accidental text selection inside Kanban bead cards', () => {
     /*
-     * CDXC:ProjectBoardCards 2026-06-13-13:55:
+     * CDXC:ProjectBoard 2026-06-13-13:55:
      * Kanban bead cards are draggable and right-clickable, so card text should not be user-selectable by accidental pointer movement.
      */
     const ticketCardSource = sourceBetweenIn(
@@ -276,7 +276,7 @@ describe('Project Board form event handling', () => {
 
   test('shows the Beads creator distinctly from the assignee', () => {
     /*
-     * CDXC:ProjectBoardCreator 2026-08-07-07:52:
+     * CDXC:ProjectBoard 2026-08-07-07:52:
      * Cards and Edit ticket show who created a bead next to who works it, so the two must read
      * differently: the creator is muted "by <name>" text with no person icon, the assignee keeps its
      * icon chip. Both resolve the creator through ticketCreatorName so it disappears when it is unset
@@ -304,7 +304,7 @@ describe('Project Board form event handling', () => {
 
   test('reports sanitized focus-owner events for native Kanban focus arbitration', () => {
     /*
-     * CDXC:ProjectBoardFocus 2026-06-12-08:44:
+     * CDXC:ProjectBoard 2026-06-12-08:44:
      * Kanban typing focus must notify native with event categories only so focus arbitration can protect board input without recording user text, paths, URLs, ticket titles, or command content.
      */
     const focusOwnerSource = sourceBetweenIn(
@@ -334,7 +334,7 @@ describe('Project Board form event handling', () => {
 
   test('logs Kanban title-generation diagnostics without raw prompt-agent output', () => {
     /*
-     * CDXC:ProjectBoardDiagnostics 2026-06-21-03:56:
+     * CDXC:Diagnostics 2026-06-21-03:56:
      * Empty-title Kanban ticket diagnostics should join webview and native
      * title-generation attempts by ids, counts, lengths, and failure classes,
      * not by persisting prompt text, command text, stdout, stderr, or raw error
@@ -362,7 +362,7 @@ describe('Project Board form event handling', () => {
 
   test('keeps generated Kanban titles background-only after deterministic draft creation', () => {
     /*
-     * CDXC:ProjectBoardTitleGeneration 2026-06-21-16:56:
+     * CDXC:ProjectBoard 2026-06-21-16:56:
      * Empty-title Kanban ticket creation should use a deterministic draft title immediately, schedule prompt-agent title generation as detached background work, and patch only that card when the generated title lands.
      */
     const draftTitleSource = sourceBetweenIn(
@@ -398,7 +398,7 @@ describe('Project Board form event handling', () => {
 
   test('closes edit-ticket Save before background persistence finishes', () => {
     /*
-     * CDXC:ProjectBoardLocalFirst 2026-06-27-18:02:
+     * CDXC:ProjectBoard 2026-06-27-18:02:
      * Edit-ticket Save should dismiss the Kanban modal immediately, update the visible card optimistically, and use a native error toast plus the saved draft if detached Beads persistence fails.
      */
     const saveSource = sourceBetweenIn(
@@ -427,7 +427,7 @@ describe('Project Board form event handling', () => {
 
   test('starts ticket work with the agent the bead is assigned to', () => {
     /*
-     * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
+     * CDXC:ProjectBoard 2026-08-07-07:01:
      * Opening a ticket assigned to a configured agent should show that agent in the
      * Start work select and start that agent from the card context menu too, while
      * an agent the user picked for that ticket this session stays selected.
@@ -454,7 +454,7 @@ describe('Project Board form event handling', () => {
 
   test('sorts lanes in the board toolbar before the visible ticket limit', () => {
     /*
-     * CDXC:ProjectBoardSort 2026-08-07:
+     * CDXC:ProjectBoard 2026-08-07:
      * The Kanban toolbar owns ticket order alongside the existing filters, and lane grouping must
      * sort before BoardLane slices to PROJECT_BOARD_MAX_VISIBLE_TICKETS_PER_COLUMN so the newest
      * closed beads stay visible in Done.
@@ -482,7 +482,7 @@ describe('Project Board form event handling', () => {
 
   test('restores and stores the board toolbar selections across projects', () => {
     /*
-     * CDXC:ProjectBoardViewPreferences 2026-08-07:
+     * CDXC:ProjectBoard 2026-08-07:
      * Switching away from the Kanban tab unmounts the board surface, so the toolbar must seed its
      * priority, estimate, sort, and tag state from the stored preferences and write every later
      * selection back. The key and the write are project-independent so the selections follow the
@@ -512,7 +512,7 @@ describe('Project Board form event handling', () => {
 
   test('snapshots form values before functional state updaters', () => {
     /*
-     * CDXC:ProjectBoardForms 2026-06-09-15:36:
+     * CDXC:ProjectBoard 2026-06-09-15:36:
      * New automation and ticket text entry should keep the Kanban page mounted even when React defers functional state updaters.
      * Updater closures must use already-captured primitives instead of reading value or checked from the React event object.
      */

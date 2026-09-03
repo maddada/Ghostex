@@ -1,8 +1,8 @@
 <!--
-CDXC:GxserverRustPort 2026-06-14-22:58:
+CDXC:RepoStructure 2026-06-14-22:58:
 Phase 3 validation uses an explicit development port, normally 127.0.0.1:58746, because the packaged Ghostex daemon may keep owning the product default 58744. Do not add automatic port fallback or stop the packaged daemon for compatibility runs.
 
-CDXC:GxserverRustPort 2026-06-14-22:58:
+CDXC:RepoStructure 2026-06-14-22:58:
 Rust now owns durable project/session state and read-only sidebar inventory for the Phase 3 surface. TypeScript remains the protocol source of truth, and compatibility fixtures intentionally normalize random IDs, timestamps, transport headers, local tool availability, and runtime-only observer fields.
 -->
 

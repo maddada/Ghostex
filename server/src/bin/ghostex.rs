@@ -1,5 +1,5 @@
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 The `ghostex`/`gx` user CLI, ported from scripts/ghostex-cli.mjs into the
 gxserver workspace so macOS, Windows, Linux desktops and remote hosts ship one
 implementation with no Node runtime. All logic lives in

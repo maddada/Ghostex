@@ -207,7 +207,7 @@ pub(crate) enum TerminalAgentBarAction {
     Sleep,
     Fork,
     FullReload,
-    /// CDXC:SwitchAccount 2026-09-03: opens the same-family account flyout
+    /// CDXC:AgentProviders 2026-09-03: opens the same-family account flyout
     /// instead of emitting a terminal event; the pick is dispatched to the
     /// sidebar runtime with the agent id. Hidden when the session has no
     /// compatible account.
@@ -574,7 +574,7 @@ impl GhostexGpuiApp {
                         "{agent_name} isn't supported by Ghostex Chat View yet\nOnly Claude, Codex, Cursor, Antigravity, Pi, Omp, Grok, and Hermes are supported\nPlease request other agents on X or the Discord"
                     ));
                 } else if !self.agents_session_chat_eligible(session_id) {
-                    // CDXC:AgentHookRunGates 2026-09-03: the session id Chat
+                    // CDXC:AgentHooks 2026-09-03: the session id Chat
                     // View needs arrives through the agent's Ghostex hook, so
                     // "not eligible" means that hook has not reported — either
                     // it is not installed or the CLI is not running it. Say

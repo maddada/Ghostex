@@ -38,7 +38,7 @@ import { getPrimaryUsableConversationLink, ConversationLinkName } from './ticket
 export const PROJECT_BOARD_CONTEXT_MENU_VIEWPORT_MARGIN_PX = 12;
 
 /*
- * CDXC:ProjectBoardRedesign 2026-08-23:
+ * CDXC:ProjectBoard 2026-08-23:
  * Kanban shares the Codex-style Automate language: flat rounded panels, quiet
  * regular-weight text on one scale, default shadcn tokens, all styling in
  * Tailwind instead of the bespoke `.project-board-*` CSS. Lane tone dots keep
@@ -57,7 +57,7 @@ function laneToneColor(tone: string): string {
 }
 
 /*
- * CDXC:ProjectBoardRedesign 2026-08-24:
+ * CDXC:ProjectBoard 2026-08-24:
  * Linear-style card accents: labels and assignee avatars get a stable color
  * derived from their text so the same tag looks the same on every card.
  */
@@ -167,14 +167,14 @@ export function BoardLane({
         </div>
       </header>
       {/*
-       * CDXC:ProjectBoardRedesign 2026-08-24:
+       * CDXC:ProjectBoard 2026-08-24:
        * Fade only the bottom edge. The scroll-linked top fade kicked in at the
        * first scrolled pixel and visibly cut off the top border of the first
        * card, so scrolled-under cards now get a clean hard edge at the lane
        * header instead.
        */}
       {/*
-       * CDXC:ProjectBoardRedesign 2026-08-24:
+       * CDXC:ProjectBoard 2026-08-24:
        * pt-0.5 keeps the first card's top border off the scroller's clip
        * boundary (it rendered half-clipped at the exact edge), and pr-0.5
        * plus the reserved scrollbar gutter (styles.ts) adds up to the same

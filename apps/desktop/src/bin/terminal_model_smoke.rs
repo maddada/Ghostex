@@ -1,5 +1,5 @@
 /*
-CDXC:GPUITerminalModel 2026-07-03:
+CDXC:Terminal 2026-07-03:
 Smoke/demo binary for the P1b terminal model — the deliverable proving
 PTY spawn → vt feed → coalesced wakeups → owned snapshots end to end against
 a real shell, including PTY auto-replies (DSR via write_pty), bell/title

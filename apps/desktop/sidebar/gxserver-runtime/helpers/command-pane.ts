@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -127,7 +127,7 @@ export function normalizeGpuiCommandPaneSessions(
       {
         ...(commandId ? { commandId } : {}),
         /*
-        CDXC:GPUICommandPaneTimers 2026-06-27-02:05:
+        CDXC:DelayedSend 2026-06-27-02:05:
         Native Rust emits command-pane timer summaries with only Delayed Send and Close After Done display fields. Keep the TypeScript bridge at the same privacy boundary by normalizing and forwarding just bounded timer strings, non-negative remaining milliseconds, and a true-only Close After Done flag; never pass command text, cwd/env, URLs, paths, output, run ids, status-file paths, tokens, or unknown native fields into the Sidebar HUD.
         */
         ...(record.closeAfterDone === true ? { closeAfterDone: true } : {}),
@@ -246,7 +246,7 @@ export function hasSameGpuiCommandPaneSessions(
 
 export function isGpuiGxserverLocalCommandPaneSessionId(sessionId: unknown): sessionId is string {
   /*
-  CDXC:GPUICommandPane 2026-06-27-01:37:
+  CDXC:CommandPane 2026-06-27-01:37:
   GPUI command-pane summaries are live local tab state for gxserver-backed native-shaped `G...` command sessions only. Rust shell internals may still carry numeric ids, so drop raw numeric strings, lowercase `g...`, malformed strings, and non-string rows at the bridge boundary before stale native-local command tabs can drive HUD indicators, active-tab state, timer projection, or auto-sleep protection.
   */
   return typeof sessionId === 'string' && GPUI_GXSERVER_LOCAL_COMMAND_PANE_SESSION_ID_PATTERN.test(sessionId);
@@ -257,10 +257,10 @@ export function filterGpuiGxserverLocalCommandPaneSessions(
   scope: GpuiSidebarCommandSessionIndicatorScope = {}
 ): GpuiCommandPaneSessionSummary[] {
   /*
-  CDXC:GPUICommandPane 2026-06-27-08:32:
+  CDXC:CommandPane 2026-06-27-08:32:
   Command-pane ownership consumers require both an external native-shaped local `G...` id and a valid Sidebar HUD status. Reuse this filter for HUD indicators and Auto Sleep owner protection so malformed native rows, including `isPaneOwner:true` rows with invalid status, cannot keep sessions awake.
 
-  CDXC:GPUICommandPane 2026-06-27-08:45:
+  CDXC:CommandPane 2026-06-27-08:45:
   Native presentation cleanup removes stale command-panel rows after authoritative gxserver snapshots and explicit removal deltas. When the live HUD is built with an active project and presentation, require the command-pane summary id to still exist in that active project so deleted local `G...` tabs cannot keep Action indicators, timers, or active states visible.
   */
   const presentedSessionIds =
@@ -288,10 +288,10 @@ export function createGpuiSidebarCommandSessionIndicators(
   scope: GpuiSidebarCommandSessionIndicatorScope = {}
 ): SidebarCommandSessionIndicator[] {
   /*
-  CDXC:GPUICommandPane 2026-06-27-06:30:
+  CDXC:CommandPane 2026-06-27-06:30:
   Command-session HUD status is owned by Rust's sanitized command-pane summary. The TypeScript bridge may forward only external native-shaped local `G...` command-pane rows whose status is already a Sidebar HUD status; internal Rust numeric shell ids and malformed bridge rows must not match HUD Actions or infer status from renderer activity, command text, paths, URLs, output, logs, titles, status files, or other private fields.
 
-  CDXC:GPUICommandPane 2026-06-27-08:45:
+  CDXC:CommandPane 2026-06-27-08:45:
   Keep the exported helper backward-compatible for direct two-argument tests and callers. Live HUD construction passes the optional active-project presentation scope so stale command-pane summaries are pruned against the full current presentation, not against whichever ids happen to appear in a non-removal delta.
   */
   const localCommandPaneSessions = filterGpuiGxserverLocalCommandPaneSessions(commandPaneSessions, scope);
@@ -396,12 +396,12 @@ export function createGpuiSidebarHudState({
 } = {}): SidebarHudState {
   const settings = createGpuiSidebarSettings(runtimeSettings);
   /*
-   * CDXC:SidebarHudContract 2026-06-24-20:34:
+   * CDXC:AgentLauncher 2026-06-24-20:34:
    * GPUI SidebarApp uses gxserver's `/api/readSidebarHud` projection for read-side agent/action buttons so live sidebar and app-modal Settings share one production contract. The local shared defaults are only for pre-bootstrap or unavailable gxserver state; project metadata is not re-normalized here.
    */
   const agents = sidebarHud ? ([...sidebarHud.agents] as SidebarAgentButton[]) : createSidebarAgentButtons([], []);
   /*
-   * CDXC:ProjectActions 2026-08-01:
+   * CDXC:Projects 2026-08-01:
    * `showOnProjectRow` is optional on the gxserver contract because a daemon
    * older than the app drops fields it does not know, so a legacy response
    * yields `undefined` where SidebarCommandButton promises a boolean. Normalize
@@ -417,7 +417,7 @@ export function createGpuiSidebarHudState({
     })) as ReturnType<typeof createSidebarCommandButtons>;
   const commands = sidebarHud ? normalizeHudCommands(sidebarHud.commands) : createSidebarCommandButtons([], [], []);
   /*
-   * CDXC:GlobalActions 2026-08-01:
+   * CDXC:AgentLauncher 2026-08-01:
    * `globalCommands` is optional on the gxserver contract because a daemon
    * older than the app drops fields it does not know. Normalize the gap to an
    * empty list here, at the surface boundary, so Settings renders an empty
@@ -427,7 +427,7 @@ export function createGpuiSidebarHudState({
     sidebarHud?.globalCommands ? normalizeHudCommands(sidebarHud.globalCommands) : []
   ) as ReturnType<typeof createSidebarCommandButtons>;
   /*
-   * CDXC:RemoteProjectActions 2026-08-29:
+   * CDXC:RemoteMachines 2026-08-29:
    * A remote machine's per-project Actions arrive keyed by that machine's own
    * project ids, which mean nothing to this app on their own — two machines can
    * hand out the same `P1…` id. Re-key them under the machine-scoped project id
@@ -490,7 +490,7 @@ export function createGpuiSidebarHudState({
     pendingAgentIds: [],
     projectSettingsProjects: createGpuiProjectSettingsProjects(domainProjects, presentation),
     /*
-    CDXC:GPUIRecentProjects 2026-06-24-12:27:
+    CDXC:Projects 2026-06-24-12:27:
     GPUI Recent Projects hydrate from `/api/listRecentProjects`, a
     gxserver-owned parked-project contract. Keep an empty drawer when the
     endpoint has no explicit rows; never derive recent projects from labels,

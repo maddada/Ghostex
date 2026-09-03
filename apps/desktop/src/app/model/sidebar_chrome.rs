@@ -29,7 +29,7 @@ impl GpuiSidebarSide {
 }
 
 /*
-CDXC:GPUICommandPaneSide 2026-08-16:
+CDXC:CommandPane 2026-08-16:
 Command pane placement is placement-only shell state sourced from shared
 Settings (`commandsPanelSide`). Bottom keeps the historical pinned/collapsed
 layout; Right renders the pinned pane as a workspace column with a vertical
@@ -59,7 +59,7 @@ pub(crate) fn gpui_sidebar_chrome_visible(sidebar_collapsed: bool) -> bool {
 
 pub(crate) fn gpui_next_sidebar_side(side: GpuiSidebarSide) -> GpuiSidebarSide {
     /*
-    CDXC:GPUISidebarSide 2026-06-26-23:35:
+    CDXC:Sidebar 2026-06-26-23:35:
     GPUI sidebar placement is a two-state shell model that mirrors native `sidebarSide`. Moving the sidebar flips only left/right placement; width and collapsed state remain separate user preferences.
     */
     match side {
@@ -68,13 +68,13 @@ pub(crate) fn gpui_next_sidebar_side(side: GpuiSidebarSide) -> GpuiSidebarSide {
     }
 }
 
-#[allow(dead_code)] // no caller: the body row is laid out inline in the root render() in app/core.rs; kept as the CDXC:GPUISidebarSide ordering contract
+#[allow(dead_code)] // no caller: the body row is laid out inline in the root render() in app/core.rs; kept as the CDXC:Sidebar ordering contract
 pub(crate) fn gpui_sidebar_body_chrome_order(
     side: GpuiSidebarSide,
     sidebar_collapsed: bool,
 ) -> Vec<GpuiSidebarBodyChromePart> {
     /*
-    CDXC:GPUISidebarSide 2026-06-26-23:35:
+    CDXC:Sidebar 2026-06-26-23:35:
     The GPUI body row uses normal non-overlapping siblings for sidebar placement parity. Expanded left renders sidebar/divider/workspace, expanded right renders workspace/divider/sidebar, and collapsed mode removes sidebar chrome without mutating the saved width.
     */
     if !gpui_sidebar_chrome_visible(sidebar_collapsed) {
@@ -100,7 +100,7 @@ pub(crate) fn gpui_sidebar_resize_delta(
     start_x: f32,
 ) -> f32 {
     /*
-    CDXC:GPUISidebarSide 2026-06-26-23:35:
+    CDXC:Sidebar 2026-06-26-23:35:
     Right-side sidebar resizing reverses the horizontal delta because the visible divider sits on the workspace edge. Dragging that divider left grows the sidebar, matching native AppKit layout math.
     */
     match side {

@@ -14,7 +14,7 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('Ghostex CLI command wrappers', () => {
   test('Homebrew cask generation installs wrappers instead of CLI binary aliases', () => {
     /*
-     * CDXC:CliInstall 2026-06-12-09:31:
+     * CDXC:Cli 2026-06-12-09:31:
      * Release automation must not reintroduce Homebrew binary stanzas for
      * ghostex/gx, because those stanzas create symlinks back into Ghostex.app.
      */

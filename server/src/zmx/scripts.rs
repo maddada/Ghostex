@@ -39,7 +39,7 @@ pub(crate) struct ZmxShellProviderCommandInput {
 
 pub(crate) fn build_zmx_attach_command(input: ZmxAttachCommandInput) -> String {
     /*
-    CDXC:GhostexZmxProviderOwnership 2026-07-15:
+    CDXC:Zmx 2026-07-15:
     gxserver-generated attach commands may only connect to providers already
     initialized through startSessionProvider. --require-existing closes the
     probe/attach race without changing direct zmx CLI create-if-missing
@@ -394,7 +394,7 @@ printf '%s\n' "$zmx_sessions" | grep -F -x -- "$zmx_session" >/dev/null 2>&1
 
 fn zmx_provider_prompt_editor_setup_shell_command(prompt_editor: Option<&str>) -> String {
     /*
-    CDXC:PromptEditorBackend 2026-06-30-03:11:
+    CDXC:PromptEditor 2026-06-30-03:11:
     zmx providers still need a stable EDITOR wrapper so Ctrl+G can block through
     Ghostex when Monaco is available, but the non-Monaco path must run the
     remote shell's own editor instead of gte. Capture VISUAL/EDITOR before

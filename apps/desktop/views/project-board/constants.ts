@@ -30,7 +30,7 @@ export const NATIVE_SETTINGS_STORAGE_KEY = 'ghostex-native-settings';
  * here so disabled pages render only the coming-soon overlay and do not fetch
  * automation state.
  *
- * CDXC:GPUIAutomateStable 2026-07-26:
+ * CDXC:Automations 2026-07-26:
  * GPUI's project-scoped Automate workarea is a released surface. Its
  * first-party URL explicitly opts out of the experimental gate, while macOS
  * Automate and the Quick Automations Overview keep their existing policy.

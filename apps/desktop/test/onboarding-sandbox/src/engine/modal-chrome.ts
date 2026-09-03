@@ -70,7 +70,7 @@ const REQUIRES_SIDEBAR_STATE: ReadonlySet<SandboxModalKind> = new Set<SandboxMod
  * `GHOSTEX_TUTORIAL_VIDEO_URL` (apps/desktop/src/app/consts.rs:665) is
  * `https://www.youtube.com/watch?v=APdP-j5n4Mw` — the real watch page, NOT the
  * embed player: YouTube refuses the embed when it is framed from the file://
- * modal-host document (CDXC:GPUITutorialVideo). The sandbox serves that exact
+ * modal-host document (CDXC:Onboarding). The sandbox serves that exact
  * page back through the dev server's `/yt` reverse proxy (yt-proxy.ts), which
  * strips `x-frame-options`/CSP so the same document can render inside the fake
  * native window and stay same-origin for the simulated `f` key press.

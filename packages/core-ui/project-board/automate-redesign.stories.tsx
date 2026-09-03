@@ -1,5 +1,5 @@
 /**
- * CDXC:AutomationsRedesign 2026-08-23:
+ * CDXC:Automations 2026-08-23:
  * Live canvas for the Codex-style Automate surface redesign. Renders the REAL
  * automation components from apps/desktop/views/project-board/automations.tsx
  * with mock data, plus the proposed page chrome (title, quiet section tabs,

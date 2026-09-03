@@ -1,5 +1,5 @@
 /*
-CDXC:StashedPromptSessionAssociation 2026-08-24:
+CDXC:SavedPrompts 2026-08-24:
 Payload normalizer for the Saved Prompts "Go to session" jump. Same shape rule
 as every other first-party GPUI bridge payload: a fixed key set, an exact
 type/version match, and bounded strings — anything else is dropped rather than

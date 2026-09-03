@@ -1,5 +1,5 @@
 /*
-CDXC:AgentModelCatalog 2026-09-02:
+CDXC:AgentProviders 2026-09-02:
 The list of models, effort levels and fast-mode support each agent CLI offers
 is published OUTSIDE the app, at `agent-model-catalog.json` on the repo's main
 branch, so a CLI shipping a new model only needs that file edited and pushed.

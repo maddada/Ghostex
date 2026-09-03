@@ -8,7 +8,7 @@ export function shouldShowSessionGroupConnector({
   sessions: readonly ConnectorEligibleSession[];
 }): boolean {
   /**
-   * CDXC:ProjectGroups 2026-05-15-14:33:
+   * CDXC:Projects 2026-05-15-14:33:
    * The sidebar no longer renders a project editor row, so the left connector
    * appears only when there are real session rows to connect.
    */

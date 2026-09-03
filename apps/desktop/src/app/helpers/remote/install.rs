@@ -339,7 +339,7 @@ pub(crate) fn gpui_bundled_remote_gxserver_package_is_compatible(
     if target.normalized_os() != "linux" {
         return true;
     }
-    // CDXC:GhostexRustCli 2026-07-13: the public CLI is the native bin/ghostex
+    // CDXC:Cli 2026-07-13: the public CLI is the native bin/ghostex
     // built from server; packages with only the old CLI/ghostex-cli.mjs
     // Node entrypoint are stale. Linux remote packages no longer ship a Node
     // runtime at all.
@@ -432,7 +432,7 @@ pub(crate) fn gpui_upload_install_bundled_remote_gxserver_and_read_token_inner(
 pub(crate) fn gpui_remote_gxserver_install_command(release_id: &str) -> String {
     let token_read = gpui_remote_token_read_command();
     /*
-    CDXC:RemoteMinimalDeps 2026-07-13:
+    CDXC:RemotePairing 2026-07-13:
     Package activation (stale-listener stop, package symlink swap, tool links
     into ~/.local/bin, ghostex CLI wrapper) moved into the uploaded package's
     own `gxserver setup` subcommand so every installer shares one Rust
@@ -441,7 +441,7 @@ pub(crate) fn gpui_remote_gxserver_install_command(release_id: &str) -> String {
     remote packages are version-paired through the sealed asset manifest, so
     the uploaded gxserver always understands `setup`.
 
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     `--analytics-role remote` is what makes an SSH helper permanently silent.
     Every remote install and every remote upgrade runs this one command, and
     setup persists the role in the remote gxserver's state dir, so the opt-out

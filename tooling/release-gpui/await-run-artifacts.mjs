@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Just-in-time wait for artifacts produced by *this* workflow run.
  *
  * This is what replaces the artificial `needs: gxserver_*` edges (§Q5). macOS,

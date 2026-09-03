@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The planner CLI. It gathers the three inputs `computePlan()` cannot gather
  * itself — the provenance of recent releases, an optional nominated source run,
  * and the live component tag state — and then calls the same pure planner the

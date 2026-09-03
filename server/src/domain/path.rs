@@ -31,7 +31,7 @@ pub(crate) fn path_file_name(path: &str) -> Option<String> {
 }
 
 /*
-CDXC:GxserverProjectPaths 2026-06-22-06:07:
+CDXC:Projects 2026-06-22-06:07:
 Add Project and session cwd/projectPath resolution must match TypeScript's `normalizeExistingDirectoryPath`: accept absolute paths plus `~` shortcuts, reject non-string/blank/relative inputs with path-specific messages, and store the `path.resolve`-style normalized string so duplicate adds with `..`, `.`, or trailing separators return the existing project.
 JSON `null` follows the TypeScript nullish fallback contract (`path ?? projectPath`, `projectPath ?? cwd`); blank strings and non-strings stay selected and fail validation instead of falling through.
 */
@@ -43,7 +43,7 @@ pub(crate) fn normalize_existing_directory_path(
 }
 
 /*
-CDXC:AddProjectDialog 2026-07-30:
+CDXC:AddProject 2026-07-30:
 The Add Project dialog submits a typed path that may not exist yet
 ("Create & Add"), so `/api/addProjectPath` accepts `createIfMissing` and creates
 the workspace root before registering it. The path syntax, absolute/`~` rules,

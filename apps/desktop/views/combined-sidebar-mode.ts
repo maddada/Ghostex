@@ -8,7 +8,7 @@ export type CombinedSidebarSessionReference = {
 };
 
 /**
- * CDXC:SidebarMode 2026-05-03-10:42
+ * CDXC:Sidebar 2026-05-03-10:42
  * Combined mode renders sessions from every native project in one React store.
  * Encode project identity into presentation IDs so common per-project session
  * IDs such as session-00 cannot collide, while native handlers can still route

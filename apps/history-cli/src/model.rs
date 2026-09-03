@@ -2,10 +2,10 @@ use std::fmt;
 use std::path::PathBuf;
 
 /*
-CDXC:GhostexHistory 2026-06-25-19:49:
+CDXC:PromptSearch 2026-06-25-19:49:
 Keep the shared model limited to the transcript blocks requested for v1: user prompts, agent thinking, simple tool-call lines without tool output, and final agent response text.
 
-CDXC:GhostexHistory 2026-06-25-21:54:
+CDXC:PromptSearch 2026-06-25-21:54:
 ghostex-history now remains a transcript-first browser while also allowing explicit Ctrl+R resume into the selected agent session.
 Keep session identity and project cwd in the shared model because resume commands need the same agent/session/project tuple that Zehn uses.
 */

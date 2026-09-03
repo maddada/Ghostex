@@ -11,7 +11,7 @@ pub(crate) fn schedule_presentation_project_delta(
     delta_type: &str,
 ) -> std::result::Result<(), DomainStateError> {
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29-00:00 (warm widened in the P5 fix
+    CDXC:StateSync 2026-07-29-00:00 (warm widened in the P5 fix
     round):
     A project should reach Sidebar V2 already carrying its `origin` remote, so
     the very delta that announces it lands in the right cross-machine group
@@ -26,7 +26,7 @@ pub(crate) fn schedule_presentation_project_delta(
     every later delta for the same project is a pure cache read.
     */
     /*
-    CDXC:ProjectRemoteCopy 2026-08-26:
+    CDXC:Git 2026-08-26:
     Both sidebar versions expose the project's Git origin now: V2 uses it for
     repository grouping and the classic sidebar offers Copy Remote URL. Warm it
     before publishing either version so the menu does not appear a pass later.
@@ -34,7 +34,7 @@ pub(crate) fn schedule_presentation_project_delta(
     if let Some(project) = repository.get_project(project_id)? {
         project_git_remote::ensure_published_project_git_remote_probed(&project, true);
         /*
-        CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+        CDXC:Icons 2026-07-29 (discovered icons):
         The project's own icon rides the same first-sighting warm, for the same
         reason and under the same gate: a project should reach the sidebar with
         its repository's icon already on it instead of showing a folder glyph
@@ -85,7 +85,7 @@ pub(crate) fn schedule_presentation_session_delta(
             stop_session_chat_follower(state, project_id, session_id, "session-removed");
         }
         /*
-        CDXC:SessionChatFollowerLiveness 2026-08-24:
+        CDXC:AgentScreenDetection 2026-08-24:
         Only `Ok(None)` means the session is gone. A read error is the database
         being busy, not a removal, and tearing the observers down for it killed
         a healthy chat follower whose respawn then had to wait for some later
@@ -112,7 +112,7 @@ pub(crate) fn lock_presentation_event_sequence(
 }
 
 /*
-CDXC:SidebarSpaces 2026-08-27:
+CDXC:Spaces 2026-08-27:
 Every collections mutation can invalidate the Space document: grouping a
 project strips that project's direct Space memberships, and a collection that
 just emptied stops existing, so every Space referencing it must let it go. The
@@ -153,7 +153,7 @@ pub(crate) fn read_presentation_snapshot_in_sequence(
     cannot label stale rows with the revision for a delta it just published.
 
     The session list arrives from the caller's own sync passes; see
-    CDXC:GxserverSessionSyncOneList on read_presentation_snapshot.
+    CDXC:StateSync on read_presentation_snapshot.
     */
     let auto_settle_after_days = session_lifecycle::read_sweep_auto_settle_after_days(&state.paths);
     let sidebar_v2_selected = session_lifecycle::read_sidebar_v2_selected(&state.paths);
@@ -199,7 +199,7 @@ pub(crate) fn schedule_stale_activity_presentation_refresh(
     CDXC:SessionStatus 2026-06-21-19:26:
     Rust event streams must match TypeScript gxserver's stale title-derived working refresh. zmx may not emit another terminal-title event after a spinner freezes, so schedule one presentation delta at the projection boundary without rewriting durable activity state or re-scheduling from the timer callback.
 
-    CDXC:ActivitySuppressionPolicy 2026-07-29-12:00:
+    CDXC:AgentScreenDetection 2026-07-29-12:00:
     The same timer also fires when an ongoing working stint crosses the
     meaningful-activity threshold, so recency sorting can promote a genuinely
     busy session even when no further hook or title event arrives; the
@@ -281,7 +281,7 @@ pub(crate) fn sync_zmx_title_observer_for_session(state: &AppState, session: &Va
         existing.handle.abort();
     }
     /*
-    CDXC:ZmxTitleObservations 2026-06-21-22:23:
+    CDXC:SessionStatus 2026-06-21-22:23:
     Rust gxserver must own the same zmx title-observation loop as TypeScript gxserver. Native deliberately avoids forwarding every zmx title frame, so without `zmx watch-title` the Rust daemon can keep Codex sessions stuck in working after hooks miss Stop or title-derived spinner state needs to expire.
     */
     let state = state.clone();
@@ -374,7 +374,7 @@ pub(crate) async fn run_zmx_title_observer(
                             ingest_zmx_title_observation(&state, &project_id, &session_id, &title);
                         if should_probe_identity {
                             /*
-                            CDXC:GxserverSessionIdentity 2026-08-16:
+                            CDXC:SessionIdentity 2026-08-16:
                             A terminal-button row starts without agent identity.
                             Supported CLIs announce themselves through the zmx
                             title stream that gxserver already watches; use that

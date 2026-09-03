@@ -4,7 +4,7 @@ export const PROJECT_DOCS_RESOURCE_ACTION = 'readResource' as const;
 export type ProjectDocsFileEntry = {
   depth: number;
   /**
-   * CDXC:DocsRootAdditive 2026-08-10:
+   * CDXC:Docs 2026-08-10:
    * The same entry named the way the Docs tree names it, so anything that puts
    * a path in front of a human — Copy Path, feedback pasted into a terminal —
    * reads as `<mount name>/...` instead of the reserved routing segment. Only
@@ -34,7 +34,7 @@ export type ProjectDocsGitBaseline = {
 export type ProjectDocsFilePreview = {
   content?: string;
   /**
-   * CDXC:DocsRootAdditive 2026-08-09:
+   * CDXC:Docs 2026-08-09:
    * `path` is the routing address a request must send back; `displayPath` is
    * the same file named the way the Docs tree names it, so a file under a
    * mounted Docs directory reads as `<mount name>/...` instead of the reserved
@@ -235,7 +235,7 @@ export async function saveProjectMarkdownDocument(
 }
 
 /*
- * CDXC:RemoteProjectDocs 2026-08-06:
+ * CDXC:Docs 2026-08-06:
  * The Docs page owns one request/response contract independent of its host.
  * GPUI supplies the CEF event bridge today; a web client can use the exported
  * gxserver endpoint and the same request/response types without importing the

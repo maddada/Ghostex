@@ -69,7 +69,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRegisteredQuickTerminals 2026-07-24:
+        CDXC:CommandPane 2026-07-24:
         Every Agents-workspace quick-create surface (Cmd+T, tab-strip "+", split
         right/below, full-width bottom row) must create a real gxserver session
         and attach to it like sidebar-created sessions do. Local Mounting
@@ -280,16 +280,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIFocusedNewTabs 2026-06-22-23:33:
+        CDXC:FocusMode 2026-06-22-23:33:
         Cmd+T follows the shell surface that owns keyboard focus. Command-pane focus adds a command-only placeholder to the focused command group and never creates an Agents workspace tab; Agents-pane focus in Agents mode creates a selected Mounting terminal session in that focused Agents pane because no real process has started yet. Source, Kanban, Automate, and Manage main-surface focus remains out of scope for terminal creation.
 
-        CDXC:GPUIFocusedCommandHotkeys 2026-06-26-06:47:
+        CDXC:FocusMode 2026-06-26-06:47:
         Command-pane Cmd+T requires an expanded visible command pane with a live focused source tab before allocating a placeholder. Collapsed or stale command focus must no-op like native `commandsPanel.isVisible` gating instead of expanding the hidden strip or using model-level stale-focus recovery.
 
-        CDXC:GPUIFocusedNewTabs 2026-07-29-05:03:
+        CDXC:FocusMode 2026-07-29-05:03:
         A focused project-editor companion owns Cmd+T as New Terminal for the active project; the existing gxserver-backed creation path keeps the editor open, retargets the companion to the created session, and focuses it. A focused Browser main pane owns the same chord as New Browser Tab in its current project Browser pane. Source CEF focus still propagates Cmd+T to code-server.
 
-        CDXC:GPUIFocusedNewTabs 2026-07-29-05:24:
+        CDXC:FocusMode 2026-07-29-05:24:
         Kanban, Automate, and Docs main surfaces own Cmd+T as New Companion Terminal even when the companion is not focused. Restore a collapsed companion first (preserving its width), focus it, then use the same project-scoped gxserver creation path so completion retargets the companion to the new terminal. Source and Browser retain their distinct passthrough/new-browser-tab behavior.
         */
         match self.shell_focus {
@@ -369,10 +369,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIFocusedSplits 2026-06-22-23:33:
+        CDXC:FocusMode 2026-06-22-23:33:
         Cmd+D/Cmd+Shift+D use live shell focus instead of remembered workspace focus. Agents-pane focus in Agents mode reuses the right/below mounting split helpers because a new terminal runtime has not launched yet; expanded command-pane focus follows native by coercing both directions to a command-only horizontal split, focuses the command pane, persists, and scrolls active command tabs.
 
-        CDXC:GPUIFocusedCommandHotkeys 2026-06-26-06:47:
+        CDXC:FocusMode 2026-06-26-06:47:
         Command-pane split hotkeys may allocate only from an already-expanded visible command pane. Stale or collapsed command focus must no-op at the command branch while Agents-pane focus keeps its existing placeholder split behavior.
         */
         match self.shell_focus {
@@ -499,7 +499,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn merge_all_agents_tabs_from_hotkey(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUIAgentsMergeAllTabs 2026-06-22-13:17:
+        CDXC:CommandPane 2026-06-22-13:17:
         Ctrl+Shift+M is scoped to an active Agents pane focus. Command-pane, Browser, Source, Kanban, Manage, and project-editor focus no-op so their tabs, placeholders, and command sessions cannot be folded into the Agents workspace merge path.
         */
         if self.active_mode != TitlebarMode::Agents {
@@ -513,7 +513,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn rotate_agents_panes_from_hotkey(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUIFocusedPaneRotation 2026-06-26-06:56:
+        CDXC:FocusMode 2026-06-26-06:56:
         Command-palette `rotatePanesClockwise` uses the same focused-pane policy as native `handleNativeTerminalTitleBarAction`: command focus default-returns, Browser/project-editor focus no-ops, and only active Agents pane focus may rotate the Agents workspace. Successful rotation restores shell focus to the focused Agents pane, clears stale workspace drag/resize state, persists shell layout, and notifies.
         */
         let Some(pane_id) = apply_rotate_agents_panes_hotkey_model(
@@ -603,7 +603,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIBrowserPaneActions 2026-06-22-13:46:
+        CDXC:Browser 2026-06-22-13:46:
         The Browser pane overflow menu is separate from per-tab context menus and toolbar/history/profile/devtools actions. It is scoped only by BrowserPaneId and dispatches its external-open and pane/layout actions through the root GPUI action tree so menu open uses OS-owned NativeMenu behavior instead of GPUI overlays or hidden hit regions.
         */
         if self.browser_tabs.find_leaf(pane_id).is_none() {
@@ -647,10 +647,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIAgentsTabContextMenu 2026-06-22-11:19:
+        CDXC:ContextMenus 2026-06-22-11:19:
         Individual Agents workspace tabs need an OS-owned NativeMenu at the right-click position. The menu is scoped to the clicked pane id and session id, contains only tab-level commands, and must not duplicate far-right pane/layout actions such as new terminal, splits, or bottom row.
 
-        CDXC:GPUIAgentsTabContextMenu 2026-06-26-06:57:
+        CDXC:ContextMenus 2026-06-26-06:57:
         Agents right-click tab menus now mirror native pane tabs instead of Browser-style tab menus: no Select Tab row, no direct Close Tab row, optional Focus when real Focus mode can run, Sleep scopes before Close scopes, and scope resolution confined to the clicked pane tab group.
         */
         let tab_exists = self
@@ -765,7 +765,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIBrowserTabContextMenu 2026-06-22-11:27:
+        CDXC:ContextMenus 2026-06-22-11:27:
         Individual Browser tabs need an OS-owned NativeMenu at the right-click position. The menu is scoped to the clicked Browser pane and tab ids, contains only tab-level Select Tab and Close Tab commands, and relies on the existing Browser selection/close helpers so address sync, CEF visibility, split/reorder state, favicon runtime state, history, and last-tab address-only placeholder behavior stay unchanged.
         */
         let tab_exists = self
@@ -804,37 +804,37 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandTabContextMenu 2026-06-22-11:31:
+        CDXC:ContextMenus 2026-06-22-11:31:
         Individual command-pane tabs, including collapsed-strip tabs, need an OS-owned NativeMenu at the right-click position. The menu is scoped to the clicked command group id and session id and contains macOS-style Close Left/Right/Others commands. Tab selection and collapsed-strip expansion stay on left-click activation, not right-click menu rows.
 
-            CDXC:GPUICommandPaneTabs 2026-06-25-11:20:
+            CDXC:CommandPane 2026-06-25-11:20:
             Scoped command tab rows carry only group id, session id, and a fixed scope enum; they do not carry command text, paths, terminal output, or cross-pane identifiers.
 
-            CDXC:GPUICommandTabContextMenu 2026-06-25-14:13:
+            CDXC:ContextMenus 2026-06-25-14:13:
             Native command tab right-click menus filter out command-panel controls such as Pin/Unpin, Minimize, and Expand, and retain only per-session tab actions that are actually present in the native action payload before scoped Sleep/Close rows.
 
-            CDXC:GPUICommandTabContextMenu 2026-06-27-01:49:
+            CDXC:ContextMenus 2026-06-27-01:49:
             Native command-panel tabs receive only fixed panel action payloads, and Swift keeps primary tab context rows only when per-session actions are present in that payload. GPUI command-tab right-click menus therefore omit Rename Session, Delayed Send, and Close After Done rows here while preserving focused Rename/Close After Done dispatch and explicit Delayed Send modal/session-id routes.
 
-            CDXC:GPUICommandTabContextMenu 2026-06-25-14:19:
+            CDXC:ContextMenus 2026-06-25-14:19:
             Native tab context menus do not add a direct Close Tab row; direct close is hover/middle-click chrome, while right-click close commands start at Close Right, Close Left, and Close Other Tabs.
 
-            CDXC:GPUICommandTabContextMenu 2026-06-25-14:22:
+            CDXC:ContextMenus 2026-06-25-14:22:
             Native tab context menus do not add Select Tab or Expand Commands Panel rows. Opening a context menu must not select the clicked tab or expand a hidden command panel; those remain left-click tab activation behavior.
 
-            CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+            CDXC:SessionSleep 2026-06-25-14:27:
             Native command-tab context menus offer Sleep scopes before Close scopes. GPUI resolves those rows against the clicked command group and marks command sessions sleeping without removing their tabs, content-derived titles, or group layout.
 
-            CDXC:GPUICommandTabContextMenu 2026-06-25-14:42:
+            CDXC:ContextMenus 2026-06-25-14:42:
             Native AppKit command-tab menus leave Sleep Right/Left/Others and Close Right/Left/Others enabled even when the clicked tab has no targets in that scope. Keep GPUI rows action-backed and let the scope resolver no-op on empty target lists instead of disabling rows.
 
-            CDXC:GPUICommandTabContextMenu 2026-06-27-01:49:
+            CDXC:ContextMenus 2026-06-27-01:49:
             Command-tab context menus have no primary per-session action block under native command-panel payloads. Do not add placeholder Fork, Reload, Pop Out, Rename, Delayed Send, or Close After Done rows to fill that gap.
 
-            CDXC:GPUICommandFocusMode 2026-06-25-21:40:
+            CDXC:FocusMode 2026-06-25-21:40:
             Command-tab Focus is now action-backed only for split command-pane groups with more than one visible awake owner. Place it before Sleep when eligible, matching native's Focus placement without adding fake Fork, Reload, or Pop Out behavior.
 
-            CDXC:GPUICommandTabContextMenu 2026-06-27-01:55:
+            CDXC:ContextMenus 2026-06-27-01:55:
             Native inserts the separator before Sleep only when `primaryTabContextMenuActions()` is non-empty. Command-panel payloads produce no primary actions, so GPUI must not insert an extra separator between eligible Focus and Sleep.
             */
         let tab_exists = self
@@ -899,13 +899,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandPane 2026-06-25-12:10:
+        CDXC:CommandPane 2026-06-25-12:10:
         Collapsed-strip command-tab selection must match native hidden-open behavior: select the clicked command tab, restore the last pinned/floating mode, and reset height from the current Workspace default only while hidden. Expanded titlebar tab selection stays a pure tab focus change.
 
-        CDXC:GPUICommandTabWake 2026-06-25-14:46:
+        CDXC:SessionSleep 2026-06-25-14:46:
         Native command-tab clicks wake sleeping command sessions immediately only when click-to-wake placeholders are disabled. With the default click-to-wake setting, tab selection stays layout-only and the sleeping body click performs wake.
 
-        CDXC:GPUICommandAttention 2026-06-25-19:58:
+        CDXC:Notifications 2026-06-25-19:58:
         Direct command-tab activation should also acknowledge an Attention command session like native tab/titlebar focus. Clear only the selected command session's Attention state; Working, Delayed Send, sleeping placeholders, and Agents activity keep their existing semantics.
         */
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
@@ -978,7 +978,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+        CDXC:SessionSleep 2026-06-25-14:27:
         With the default click-to-wake setting, selecting a sleeping command tab only makes that tab active; activating the sleeping command body wakes it. This mirrors native placeholder behavior and prevents right-click tab menus from recreating a command terminal surface early.
         */
         if !self.command_pane.set_session_sleeping(session_id, false) {
@@ -1110,13 +1110,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandTabClose 2026-07-10:
+        CDXC:CommandPane 2026-07-10:
         macOS command-tab close parity is immediate: native closeTerminal
         removes the tab, tears down the surface, and kills the gxserver zmx
         session without a confirm prompt or surface close-request round trip.
         Close mutates the command model first; the render/bounds-driven host
         reconciliation then drops the stale engine record or Ghostty surface
-        (CDXC:GPUICommandTerminalGhosttyClose 2026-06-23-05:21 cleanup path).
+        (CDXC:Terminal 2026-06-23-05:21 cleanup path).
         */
         if !self
             .command_pane
@@ -1151,10 +1151,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandPaneTabs 2026-06-25-11:20:
+        CDXC:CommandPane 2026-06-25-11:20:
         Bulk command-tab closes must reuse the same close ownership as single command tabs. Every resolved sibling tab is removed from the command model immediately (macOS command close parity, no close-request deferral); the target list is resolved before mutation so Close Left/Right/Others cannot drift while tabs are removed.
 
-        CDXC:GPUICommandTabContextMenu 2026-06-25-18:38:
+        CDXC:ContextMenus 2026-06-25-18:38:
         Scoped Close menu rows are lifecycle requests, not native tab-context primary actions. Do not transfer shell focus just because a NativeMenu scoped close removed sibling tabs; direct tab close and focused-session close still use the focus-restoring single-tab close path.
         */
         if scope == CommandPaneTabCloseScope::Close {
@@ -1206,16 +1206,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+        CDXC:SessionSleep 2026-06-25-14:27:
         Sleeping command tabs is a lifecycle mutation, not a close. Mark the resolved clicked-group command sessions sleeping so tabs and layout remain intact, the body mount-slot list drops sleeping active sessions, and persistence records only safe enum/boolean state without command text, output, paths, process ids, status-file paths, or terminal content.
 
-        CDXC:GPUICommandDelayedSend 2026-06-25-15:46:
+        CDXC:DelayedSend 2026-06-25-15:46:
         Scoped command-tab Sleep must not cancel Delayed Send or Close After Done. Preserve native's parked-session contract: Delayed Send remains session-owned and submits only if the tab is awake by the deadline, while Close After Done keeps only its armed intent until wake/Done refresh restarts countdown evaluation.
 
-        CDXC:GPUICommandCloseAfterDone 2026-06-27-01:37:
+        CDXC:Sessions 2026-06-27-01:37:
         Sleeping a command tab preserves the Close After Done armed flag but clears any active runtime deadline immediately. The three-minute Done watcher must not keep counting down while the tab is sleeping; wake/Done refresh starts a fresh countdown.
 
-        CDXC:GPUICommandTabContextMenu 2026-06-25-18:38:
+        CDXC:ContextMenus 2026-06-25-18:38:
         Scoped Sleep menu rows dispatch through `paneTabSleepRequested` in native without first focusing the clicked terminal. Preserve GPUI shell focus for NativeMenu scoped sleep while focused command Sleep keeps command-pane focus ownership.
         */
         let session_ids = self
@@ -1321,7 +1321,7 @@ impl GhostexGpuiApp {
         target_group_id: Option<CommandPaneGroupId>,
     ) -> Option<CommandSessionId> {
         /*
-        CDXC:GPUICommandKeyboardFocus 2026-06-25-23:35:
+        CDXC:FocusRouting 2026-06-25-23:35:
         Cmd-Opt directional focus into command panes must use a live expanded command-panel route. Specific command-group targets validate and focus that group; generic command-pane targets require the current focused group to still resolve, so stale shell focus never falls back to another command session.
         */
         if !command_pane.is_expanded() || !command_pane.has_sessions() {
@@ -1362,7 +1362,7 @@ impl GhostexGpuiApp {
         self.request_focused_command_terminal_text_focus_handoff();
 
         /*
-        CDXC:GPUICommandKeyboardFocus 2026-06-25-23:55:
+        CDXC:FocusRouting 2026-06-25-23:55:
         Cmd-Opt spatial and render-order focus into a live expanded command pane must reveal the focused active command tab in both the target command group and collapsed strip, matching other command activation paths. Collapsed, stale, or orphan command targets return before scrolling, persistence, sidebar refresh, or Attention acknowledgement.
         */
         self.scroll_focused_command_active_tab();
@@ -1424,7 +1424,7 @@ impl GhostexGpuiApp {
         }
         if self.project_editor_shell.is_mode_awake(mode) {
             /*
-            CDXC:GPUIProjectEditorKeyboardFocus 2026-07-29-05:03:
+            CDXC:FocusRouting 2026-07-29-05:03:
             Left/right focus and companion collapse must transfer real keyboard ownership to the main pane, not only update shell border state. Browser focuses the current page surface; Source, Kanban, Automate, and Docs focus their exact project-workarea CEF surface after the ordinary shell/lifecycle transition.
             */
             if mode == TitlebarMode::Browser {
@@ -1449,7 +1449,7 @@ impl GhostexGpuiApp {
         }
 
         /*
-        CDXC:GPUIProjectEditorKeyboardFocus 2026-06-22-09:44:
+        CDXC:FocusRouting 2026-06-22-09:44:
         Directional keyboard focus onto a selected sleeping project-editor main surface only updates shell focus and Browser visibility. It must not mark the lifecycle awake, refresh recency, create or sync a Browser CEF surface, or bypass the explicit click-to-wake body activation path.
         */
         let focus = match mode {
@@ -1725,7 +1725,7 @@ impl GhostexGpuiApp {
         project_editor_shell: &mut ProjectEditorShellModel,
     ) -> Option<ShellFocusTarget> {
         /*
-        CDXC:GPUIProjectEditorCompanion 2026-06-27-02:58:
+        CDXC:CodeEditor 2026-06-27-02:58:
         native/sidebar/project-editor-companion-retarget-source.test.ts requires companion expansion to focus the rendered companion session, including after the Commands panel was focused and collapsed without switching back to Agents. Restore only the matching active project-editor mode, wake that mode, and return ProjectEditorCompanion(mode) directly so command-pane state stays outside the transition and focus cannot fall back to Agents or the main editor surface.
         */
         if active_mode != mode || !mode.is_project_editor_mode() {
@@ -1746,7 +1746,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIProjectEditor 2026-06-22-08:15:
+        CDXC:CodeEditor 2026-06-22-08:15:
         Companion hide is a shell-layout action, not surface teardown. The active project-editor mode stays awake, focus returns to that mode's main surface, Browser CEF visibility is recalculated through the normal gate, and the stored companion width ratio remains unchanged for later restore.
         */
         if self.active_mode != mode || !mode.is_project_editor_mode() {
@@ -1777,7 +1777,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIFocusedClose 2026-07-29-04:29:
+        CDXC:FocusMode 2026-07-29-04:29:
         Cmd-W in a focused companion closes the exact terminal rendered there,
         then reuses the ordinary Agents tab lifecycle so provider cleanup and
         local model removal remain owned by one path.
@@ -1814,7 +1814,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIProjectEditor 2026-06-22-08:15:
+        CDXC:CodeEditor 2026-06-22-08:15:
         Companion restore uses the previous persisted width ratio and focuses the restored companion as a real layout pane. It wakes only the active project-editor mode and leaves Browser tabs, placeholder identities, command-pane state, and terminal placeholder state intact.
         */
         let Some(focus) = Self::restore_project_editor_companion_shell_state(
@@ -1840,7 +1840,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIProjectEditorCompanion 2026-07-29-05:03:
+        CDXC:CodeEditor 2026-07-29-05:03:
         The configurable companion hotkey owns the same visible layout state as the titlebar control. Collapse focuses the active main project pane; expand restores and focuses the companion without changing its saved width, split state, or selected session.
         */
         let mode = self.active_mode;
@@ -1859,10 +1859,10 @@ impl GhostexGpuiApp {
         command_pane: &CommandPaneModel,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandTabKeyboardParity 2026-06-25-23:20:
+        CDXC:CommandPane 2026-06-25-23:20:
         Ctrl-Tab and Ctrl-Shift-Tab over command focus are live command-panel routes. Cycle only while the command pane is expanded and the stored focused command group still resolves, so collapsed command strips and stale command focus no-op instead of mutating hidden or fallback tabs.
 
-        CDXC:GPUICommandTabKeyboardParity 2026-06-25-23:20:
+        CDXC:CommandPane 2026-06-25-23:20:
         Keyboard cycling shares direct command-tab activation semantics: after a successful cycle, acknowledge only the selected Attention command session through the existing command attention path.
         */
         if shell_focus != ShellFocusTarget::CommandPane || !command_pane.is_expanded() {
@@ -1933,7 +1933,7 @@ impl GhostexGpuiApp {
             )
         {
             /*
-            CDXC:GPUIBrowserKeyboardFocus 2026-06-22-09:18:
+            CDXC:FocusRouting 2026-06-22-09:18:
             Ctrl-Tab in Browser mode is pane-local while split panes are shell-owned placeholders. Cycle only the focused Browser pane's loaded and address-only tab ids, then reuse Browser tab selection sync so the mode wakes, the shared address toolbar follows the selected tab, the focused loaded tab materializes if needed, already-created active loaded surfaces in other rendered Browser leaves stay visible, shell focus remains Browser, and shell state persists.
             */
             if self
@@ -1956,7 +1956,7 @@ impl GhostexGpuiApp {
         };
 
         if changed {
-            // CDXC:GPUITerminalGpuiEngineFocus 2026-07-04-09:10: keyboard
+            // CDXC:FocusRouting 2026-07-04-09:10: keyboard
             // cycling must end in the same focus state as clicking the
             // terminal body when the newly active slot is engine-claimed.
             self.focus_gpui_engine_terminal_for_focused_mount_slot(window, cx);
@@ -1972,25 +1972,25 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIKeyboardFocus 2026-06-22-06:02:
+        CDXC:FocusRouting 2026-06-22-06:02:
         Cmd-W is surface-aware in the GPUI placeholder shell. Command focus closes the active command placeholder, Browser surface focus closes the active browser tab, Agents mode closes the active workspace tab, and Source/Kanban/Automate/Docs never close the project-editor surface itself.
 
-        CDXC:GPUITerminalGhosttyClose 2026-06-26-23:59:
+        CDXC:Terminal 2026-06-26-23:59:
         Cmd-W in Agents delegates to the same close helper as pane-tab close. Mapped workspace sessions bypass Ghostty close-confirm and go through SidebarApp lifecycle, while unmapped exact mounted Running surfaces can still request `ghostty_surface_request_close` before shell removal.
 
-        CDXC:GPUICommandTerminalGhosttyClose 2026-06-23-05:21:
+        CDXC:Terminal 2026-06-23-05:21:
         Cmd-W with command-pane focus must match command tab close parity: an exact current mounted command surface gets a Ghostty close request and stays in the command model until a confirmed close callback is consumed. Non-mounted command placeholders continue to close through the existing command shell model.
 
-        CDXC:GPUIProjectEditor 2026-06-22-08:15:
+        CDXC:CodeEditor 2026-06-22-08:15:
         The focused project-editor companion owns Cmd-W before mode-specific close behavior runs, while Browser surface focus still closes Browser tabs.
 
-        CDXC:GPUICommandClose 2026-06-25-17:37:
+        CDXC:CommandPane 2026-06-25-17:37:
         Cmd-W over command-pane focus must use the same clicked command-tab close path as hover, middle-click, scoped menus, and Close After Done. That shared helper owns mounted close requests, timer cleanup, final-panel focus restore, shell persistence, and sidebar refresh.
 
-        CDXC:GPUIFocusedClose 2026-06-27-02:58:
+        CDXC:FocusMode 2026-06-27-02:58:
         Keep the executable Cmd-W route aligned with the pure focused-close decision helper so native parity stays testable without a GPUI window: command focus wins first, BrowserSurface or exact BrowserPane focus closes Browser tabs, and main project-editor surface focus no-ops.
 
-        CDXC:GPUIFocusedClose 2026-07-29-04:29:
+        CDXC:FocusMode 2026-07-29-04:29:
         Companion focus closes the exact rendered companion session. Hiding the companion is a separate layout action owned only by its titlebar collapse button.
         */
         match focused_surface_close_decision(self.shell_focus, self.active_mode, &self.command_pane)
@@ -2057,19 +2057,19 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIKeyboardFocus 2026-06-22-08:47:
+        CDXC:FocusRouting 2026-06-22-08:47:
         Cmd-Alt directional focus in the GPUI placeholder shell follows the rendered native layout instead of a flat tab order. Use recorded normal-layout bounds for visible Agents leaf panes and expanded command-pane groups, include sleeping/restored/mounting/failed-startup/popped-out Agents placeholders because their panes still render, and fall back to the previous rendered-order traversal only before first-frame bounds are available. Geometry is runtime-only; focus persistence still goes through the existing shell focus helpers.
 
-        CDXC:GPUIBrowserKeyboardFocus 2026-06-22-09:24:
+        CDXC:FocusRouting 2026-06-22-09:24:
         Browser split panes use the same Cmd-Alt directional intent while Browser mode owns shell focus. Rank only rendered Browser leaf panes by runtime normal-layout bounds, keep inactive Browser placeholders focusable, and fall back to Browser-pane render order before first-frame geometry exists without crossing into Agents or command-pane focus.
 
-        CDXC:GPUIProjectEditorKeyboardFocus 2026-06-22-09:32:
+        CDXC:FocusRouting 2026-06-22-09:32:
         Project-editor Cmd-Alt focus must use runtime normal-layout geometry for visible companions, Source/Kanban/Automate/Docs placeholder surfaces, Browser split panes, selected sleeping project-editor placeholders, and the expanded command pane. No raw geometry is persisted, and focus changes still route through the shell focus helpers that own Browser visibility and project-editor wake behavior.
 
-        CDXC:GPUIProjectEditorKeyboardFocus 2026-06-22-09:44:
+        CDXC:FocusRouting 2026-06-22-09:44:
         Keyboard directional focus and placeholder body activation are separate intents. Cmd-Alt focus may select a sleeping project-editor main placeholder without waking Source, Browser, Kanban, Automate, or Docs, while explicit body activation remains the path that wakes the selected surface.
 
-        CDXC:GPUIProjectEditorKeyboardFocus 2026-07-29-05:03:
+        CDXC:FocusRouting 2026-07-29-05:03:
         Left focus from a project-editor main pane treats the collapsed companion restore rail as a navigation target: restore the companion in normal layout and focus its selected session. Visible companions continue through geometry-based left/right focus, while collapsing explicitly transfers focus back to the main pane.
         */
         let active_mode = self.active_mode;
@@ -2616,10 +2616,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUILibghosttyMountBounds 2026-06-22-20:29:
+        CDXC:Terminal 2026-06-22-20:29:
         Agents terminal mount-slot bounds are App-owned runtime geometry only. Clear them with the other per-render focus/layout bounds so future libghostty native views attach to the current body rectangle below the tab bar without persisting, logging, or retaining stale pane/session geometry.
 
-        CDXC:GPUTerminalSurfaceHost 2026-06-22-21:27:
+        CDXC:Terminal 2026-06-22-21:27:
         This per-render bounds clear is a pre-layout measurement reset, not a terminal slot removal. Host sync must preserve the focused running Agents slot while awaiting the body canvas record, and only the runtime bounds map should be empty during that interval.
         */
         self.workspace_leaf_layout_bounds.clear();
@@ -2639,7 +2639,7 @@ impl GhostexGpuiApp {
         // that stops being rendered loses its entry here, so its next body
         // record counts as a fresh surfacing and triggers the conditional
         // refresh; a continuously rendered slot keeps its entry, so per-frame
-        // records stay refresh-free (CDXC:GPUIZmxPersistenceRefresh 2026-07-11).
+        // records stay refresh-free (CDXC:Zmx 2026-07-11).
         if self.active_mode == TitlebarMode::Agents {
             let rendered = self.agents_workspace.rendered_terminal_body_mount_slots();
             self.agents_terminal_zmx_refresh_recorded_bounds

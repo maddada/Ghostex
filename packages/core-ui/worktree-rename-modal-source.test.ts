@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 
 /**
- * CDXC:WorktreeRename 2026-08-09-18:40:
+ * CDXC:Worktrees 2026-08-09-18:40:
  * The rename modal renders inside the native app-modal child window, which this
  * repo has no DOM harness for, so its contract is asserted against source text
  * the way `apps/desktop/views/tasks-placeholder-source.test.ts` does. What matters
@@ -56,7 +56,7 @@ describe('worktree rename modal submit', () => {
 
   test('prefills the branch when the folder is only its slugged form', () => {
     /*
-     * CDXC:WorktreeRename 2026-08-10:
+     * CDXC:Worktrees 2026-08-10:
      * The bug this exists to stop, caught in manual testing: a worktree on
      * `feat/kanban-assignee` lives in `<Parent>-feat-kanban-assignee`, so
      * prefilling from the folder handed back `feat-kanban-assignee`. Reopening
@@ -73,7 +73,7 @@ describe('worktree rename modal submit', () => {
 
   test('previews the folder slug and the verbatim branch separately', () => {
     /*
-     * CDXC:WorktreeRename 2026-08-09-18:40:
+     * CDXC:Worktrees 2026-08-09-18:40:
      * The folder and the branch are deliberately different strings for the same
      * typed name, so the preview must not collapse them into one line.
      */

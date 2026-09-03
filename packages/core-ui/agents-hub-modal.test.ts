@@ -61,7 +61,7 @@ describe('applySavedAgentsHubContents', () => {
 
   test('applies saved editor contents to every matching file path', () => {
     /**
-     * CDXC:AgentsHub 2026-05-16-07:19:
+     * CDXC:AgentLauncher 2026-05-16-07:19:
      * Returning to a saved Hub file should show the just-persisted editor buffer even when multiple catalog entries point at the same path.
      * The overlay helper updates every matching file path so profile-linked files cannot display the stale native scan content after a Save and file reselect.
      */
@@ -77,7 +77,7 @@ describe('applySavedAgentsHubContents', () => {
 
   test('adds saved editor contents to metadata-only catalog rows', () => {
     /*
-     * CDXC:AgentsHub 2026-06-12-02:53:
+     * CDXC:AgentLauncher 2026-06-12-02:53:
      * Native catalog rows no longer include full file buffers on open. A saved
      * in-modal edit should still hydrate matching metadata-only rows so
      * reselecting the file shows the persisted editor text immediately.

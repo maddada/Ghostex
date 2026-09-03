@@ -39,7 +39,7 @@ export function normalizeSessionGridSnapshot(snapshot: SessionGridSnapshot | und
       visibleCount
     ),
     /**
-     * CDXC:PaneFocus 2026-05-15-13:31:
+     * CDXC:FocusRouting 2026-05-15-13:31:
      * Generic snapshot normalization must preserve the persisted paneLayout tree.
      * Directional focus hotkeys and other legacy snapshot helpers normalize before focusing; dropping paneLayout there makes native sync rebuild grouped tabs as separate leaves.
      */

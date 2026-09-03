@@ -142,34 +142,34 @@ static SHARED_SIDEBAR_SETTINGS_SERVICE: OnceLock<Mutex<SharedSidebarSettingsServ
 static GHOSTEX_STORAGE_PATHS: OnceLock<ghostex_paths::GhostexPaths> = OnceLock::new();
 
 /*
-CDXC:GPUISettingsService 2026-06-24-10:50:
+CDXC:Settings 2026-06-24-10:50:
 GPUI must read and persist the shared sidebar settings JSON through the central XDG/GHOSTEX_HOME path resolver. Keep this module as the single GPUI path/read/write contract so Settings UI parity handles `updateSettings` and `sidebarSide` without introducing a second settings store.
 
-CDXC:GPUISettingsService 2026-06-24-10:50:
+CDXC:Settings 2026-06-24-10:50:
 Rust should parse only the GPUI runtime fields it consumes today: debuggingMode, showBetaFeatures, sidebarDefaultWidthPx, sidebarSide, project-editor auto-sleep fields, legacy external-IDE command fields, and the supported embedded Ghostty surface font-size field. The raw JSON object is preserved for whole-object writes, but this service intentionally does not duplicate the full TypeScript `ghostexSettings` schema.
 
-CDXC:GPUISettingsService 2026-06-24-10:50:
+CDXC:Settings 2026-06-24-10:50:
 GPUI `updateSettings` handling needs a production write path: accept only JSON object payloads, create the shared state directory, write through an adjacent temp file then rename, skip byte-identical writes, and maintain a monotonic in-memory revision/hash/snapshot signal without logging paths, project names, URLs, commands, environment values, tokens, stdout/stderr, or user-owned content.
 
-CDXC:GPUISettingsService 2026-06-24-11:14:
+CDXC:Settings 2026-06-24-11:14:
 The real React app-modal host now saves through GPUI, so the service exposes immutable snapshot object reads and a central object write entrypoint. Keep validation at this boundary: only object-shaped Settings payloads may persist, and callers must use the returned snapshot for post-save hydration instead of re-reading the settings file ad hoc.
 
-CDXC:GPUITerminalSettings 2026-06-27-10:10:
+CDXC:Terminal 2026-06-27-10:10:
 The GPUI surface FFI contract only accepts `terminalFontSize` through `ghostty_surface_config_s`; normalize it into `font_size` and keep every other terminal Settings key out of the surface request.
 
-CDXC:GPUITerminalSettings 2026-06-27-10:10:
+CDXC:Terminal 2026-06-27-10:10:
 Font family, theme, cursor, scrollback, clipboard, and mouse settings are Ghostty config-file-backed for future or recreated surfaces. `terminalPastePreviewableImages` is runtime-only and must not be included in config-file change detection or config writes.
 
-CDXC:GPUITerminalSettings 2026-06-27-10:22:
+CDXC:Terminal 2026-06-27-10:22:
 GPUI image paste preview is runtime-only app behavior and defaults on for parity with `ghostex-settings.ts`. Snapshot access must accept only strict JSON booleans for `terminalPastePreviewableImages`, with missing or malformed values resolving to true.
 
-CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-11:39:
+CDXC:AgentProviders 2026-06-24-11:39:
 GPUI Settings matches macOS for gxserver-owned agent launch policy: `agentAcceptAllEnabled` and `defaultPromptAgentId` remain in shared Settings only as a synchronous render cache. Parse them with the same default/normalization semantics as the TypeScript settings schema so GPUI can compare saves and reconcile gxserver canonical responses without duplicating the full settings model.
 
-CDXC:GPUISettingsGhosttyConfig 2026-06-24-12:24:
+CDXC:Terminal 2026-06-24-12:24:
 GPUI Settings owns a bounded Ghostty config-file writer, not an arbitrary path bridge. Select only the same Application Support config candidates used by macOS, create the preferred `com.mitchellh.ghostty/config.ghostty` file when none exist, replace only Ghostex's marked managed block, and never accept config paths from React or shared Settings JSON.
 
-CDXC:GPUISettingsGhosttyConfig 2026-06-24-12:24:
+CDXC:Terminal 2026-06-24-12:24:
 GPUI can write Ghostty's config file for external Ghostty reloads and future/recreated embedded surfaces, but the current GPUI GhosttyKit wrapper exposes no safe app config reload/update FFI. Do not claim live embedded terminal reload, do not drop running surfaces as a fallback, and surface file write/open failures explicitly without creating a second config file.
 */
 
@@ -181,10 +181,10 @@ pub enum SharedSettingsAutoSleepTarget {
 }
 
 /*
-CDXC:GPUISettingsSidebarSide 2026-06-26-23:35:
+CDXC:Sidebar 2026-06-26-23:35:
 GPUI sidebar layout must use the same persisted `sidebarSide` value as macOS and SidebarApp `moveSidebar`: only `left` and `right` are accepted, and missing or malformed values render as left.
 
-CDXC:GPUISettingsSidebarSide 2026-06-26-23:35:
+CDXC:Sidebar 2026-06-26-23:35:
 Keep sidebar side in the shared native-sidebar settings object instead of creating a GPUI-only store. Writer helpers must update only `sidebarSide` through the shared object write path so unrelated Settings fields survive native side changes.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -232,7 +232,7 @@ impl SharedSidebarSide {
 }
 
 /*
-CDXC:GPUISettingsCommandPaneSide 2026-08-16:
+CDXC:CommandPane 2026-08-16:
 The command pane docks below the workspace by default; `commandsPanelSide` may
 move it to a right-hand column. Only `bottom` and `right` are accepted, and
 missing or malformed values render as bottom. Read-only here: the Settings
@@ -287,7 +287,7 @@ impl SharedTerminalConfirmCloseSurface {
 }
 
 /*
-CDXC:GPUITerminalGpuiEngine 2026-07-04:
+CDXC:Terminal 2026-07-04:
 The GPUI-composited terminal engine (libghostty-vt + TerminalElement) is the
 single terminal pipeline on every OS for Agents, command-pane, companion,
 restored, and newly launched terminals. The macOS GhosttyKit implementation
@@ -586,14 +586,14 @@ impl SharedSidebarSettingsSnapshot {
     }
 
     /*
-    CDXC:GlobalActions 2026-08-01-16:00:
+    CDXC:AgentLauncher 2026-08-01-16:00:
     Which built-in buttons the Agents tab strip draws. Hiding is opt-in per
     button, so a settings file written before this feature keeps every control.
     The pane overflow button has no toggle: it is the only route to the
     remaining pane actions, and hiding it would strand them.
     */
     /*
-    CDXC:DisabledPluginRouting 2026-08-23:
+    CDXC:Extensions 2026-08-23:
     Turning Browser off in Settings → Customize also retires New Browser Tab
     from the tab strip. The per-button hide toggle stays independent — it is
     the user's own layout choice — but a button whose only outcome is a
@@ -615,10 +615,10 @@ impl SharedSidebarSettingsSnapshot {
 
     pub fn keep_awake_titlebar_settings(&self) -> SharedKeepAwakeTitlebarSettings {
         /*
-        CDXC:GPUITitlebarKeepAwake 2026-06-24-13:16:
+        CDXC:KeepAwake 2026-06-24-13:16:
         GPUI consumes only the shared Keep Awake fields needed for the titlebar runtime. Match the TypeScript Settings defaults exactly: beta is strict boolean true only, hide and allow-display-sleep are strict booleans with false defaults, and duration normalizes only to 0, 120, or 300 minutes with 0 as the default.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-25-23:49:
+        CDXC:KeepAwake 2026-06-25-23:49:
         GPUI Keep Awake automation consumes the advanced shared Settings fields with the same strict boolean defaults and battery-threshold clamp as `ghostex-settings.ts`. Keep the parsed snapshot narrow and runtime-owned: renderer payloads do not supply commands, paths, shell text, probe output, or persisted Keep Awake state.
         */
         SharedKeepAwakeTitlebarSettings {
@@ -677,10 +677,10 @@ impl SharedSidebarSettingsSnapshot {
 
     pub fn app_shots_settings(&self) -> SharedAppShotsSettings {
         /*
-        CDXC:GPUIAppShots 2026-06-25-23:07:
+        CDXC:AppShots 2026-06-25-23:07:
         GPUI App Shots is disabled unless the shared Settings toggle is explicitly true, and the native hotkey monitor must normalize unsupported saved values back to the macOS default `both-command`. Rust consumes only these two fields so screenshot capture and modifier handling stay native-owned while the React modal remains reused.
 
-        CDXC:GPUIAppShots 2026-06-29-01:29:
+        CDXC:AppShots 2026-06-29-01:29:
         Shared App Shots hotkey parsing must forward both-Shift and both-Option values to the macOS monitor so GPUI honors the same expanded modifier-only capture choices as the reused Settings modal.
         */
         SharedAppShotsSettings {
@@ -769,7 +769,7 @@ impl SharedSidebarSettingsSnapshot {
             MAX_GHOSTTY_SCROLLBACK_LIMIT_MB,
         );
         SharedGpuiTerminalEngineSettings {
-            // CDXC:GPUITerminalGpuiEngine 2026-07-11: the composited
+            // CDXC:Terminal 2026-07-11: the composited
             // libghostty-vt + TerminalElement pipeline is the single terminal
             // renderer on every OS and in every lifecycle state. Keep the
             // GhosttyKit implementation compiled on macOS for now, but do not
@@ -908,7 +908,7 @@ impl SharedSidebarSettingsSnapshot {
     }
 
     /*
-    CDXC:WebLinkOpenTarget 2026-08-19:
+    CDXC:Navigation 2026-08-19:
     Command-clicked terminal links, session chat links, and detected dev-server
     rows share one destination. The settings file is written by the sidebar, so
     an install that has not saved settings since the merge still carries the two
@@ -1419,7 +1419,7 @@ impl SharedSidebarSettingsService {
         }
         let read = read_settings_object_from_path(&self.path);
         /*
-        CDXC:GPUISettingsRevisionZeroHydrate 2026-07-26:
+        CDXC:Settings 2026-07-26:
         Revision is the "GPUI has observed real settings state" signal the React
         app-modal host gates on (`hasNativeSettingsHydrated = revision > 0`). A
         missing, empty, or unreadable settings file reads as empty bytes, whose
@@ -1576,7 +1576,7 @@ fn shared_sidebar_settings_service() -> &'static Mutex<SharedSidebarSettingsServ
 #[cfg(target_os = "macos")]
 fn maybe_import_legacy_macos_sidebar_settings(settings_path: &Path) {
     /*
-    CDXC:GPUISettingsMigration 2026-07-12:
+    CDXC:Settings 2026-07-12:
     Production Swift builds historically stored Settings only in WKWebView
     localStorage. Match GhostexAppStorage's one-time upgrade behavior when the
     canonical resolved sidebar settings file does not exist:

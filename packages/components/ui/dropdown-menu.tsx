@@ -39,7 +39,7 @@ function DropdownMenuContent({
           data-slot='dropdown-menu-content'
           className={cn(
             /*
-             * CDXC:ScrollFades 2026-06-19-14:16:
+             * CDXC:DesignSystem 2026-06-19-14:16:
              * Dropdown menus can become scroll containers in the sidebar and
              * settings. Use the shared Codex-style fade so long menus do not
              * show a hard clipped edge on custom dark or tinted surfaces.

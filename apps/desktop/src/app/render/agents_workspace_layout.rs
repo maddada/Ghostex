@@ -33,10 +33,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIWorkspaceLayout 2026-06-22-05:11:
+        CDXC:Workarea 2026-06-22-05:11:
         Agents mode renders the workspace as GPUI native layout chrome: tab groups and split nodes own normal non-overlapping regions, every leaf keeps a tab bar even when it is the only pane, and Ghostty content is represented by black placeholder surfaces until libghostty integration lands.
 
-        CDXC:GPUIWorkspaceLayout 2026-06-22-14:40:
+        CDXC:Workarea 2026-06-22-14:40:
         The Agents workspace root must be a vertical flex container, not only a flex-sized child of the command-pane wrapper. The rendered split or leaf tree uses flex_1 sizing, so it needs this parent layout context to fill the available height above the command pane instead of leaving a black shell gap below the terminal pane.
         */
         v_flex()
@@ -106,10 +106,10 @@ impl GhostexGpuiApp {
             .child(self.render_workspace_node(&split.second, window, cx));
 
         /*
-        CDXC:GPUIWorkspaceLayout 2026-06-22-05:11:
+        CDXC:Workarea 2026-06-22-05:11:
         Split handles are explicit layout siblings between split children. This keeps future resize hit regions in the normal tree while the current visual separator remains a non-interactive child, avoiding transparent overlays or overlapping terminal/web surfaces.
 
-        CDXC:GPUIWorkspaceResize 2026-06-22-06:45:
+        CDXC:Workarea 2026-06-22-06:45:
         Workspace split containers report their first/handle/second child bounds from normal GPUI layout so resize drags can update the persisted split ratio for the exact rendered branch. The handle remains the only hit target; there is no invisible resize overlay or root-level hit-test redirection.
         */
         match split.axis {

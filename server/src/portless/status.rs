@@ -334,7 +334,7 @@ pub fn read_portless_presentation_payload(db: &Connection) -> PortlessPresentati
 
 fn read_portless_assigned_domains(db: &Connection) -> Result<Vec<PortlessAssignedDomain>> {
     /*
-    CDXC:PortlessSettings 2026-06-23-04:02:
+    CDXC:Portless 2026-06-23-04:02:
     Settings -> Projects must show assigned project/worktree domains even when
     no dev server is currently listening. Derive hostnames from persisted
     Portless slugs and expose only stable ids plus hostnames, never paths,
@@ -398,7 +398,7 @@ fn read_portless_state_or_default(repository: &PortlessRepository<'_>) -> Result
 
 fn default_portless_state() -> PortlessState {
     PortlessState {
-        // CDXC:PortlessSettingsDisabled 2026-07-25: Portless remains
+        // CDXC:Portless 2026-07-25: Portless remains
         // implemented for later use, but gxserver must not create routes before
         // an app explicitly re-enables the currently hidden integration.
         enabled: false,

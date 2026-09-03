@@ -10,7 +10,7 @@ import type { ProjectBoardConversationLinkView } from '@/packages/shared/bead-co
 export type BoardBuiltinStatusKey = 'backlog' | 'todo' | 'in_progress' | 'test' | 'review' | 'done';
 
 /*
-  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   A board's lanes are whatever statuses bd is configured with, not a fixed six, so a bead parked in
   a project's own status (for example needs_input) is drawn where it actually is instead of being
   folded into Todo and read as fresh work.
@@ -97,7 +97,7 @@ export type BeadsBridgeAction =
 
 export type BeadsBridgeRequest = {
   /*
-   * CDXC:PromptAgents 2026-05-29-10:53:
+   * CDXC:AgentLauncher 2026-05-29-10:53:
    * Project-board generated ticket titles should use the board's selected/default
    * prompt agent instead of hardcoding Codex in the board bridge request.
    *
@@ -159,7 +159,7 @@ const BUILTIN_BOARD_COLUMNS: ReadonlyArray<BoardColumn> = [
 const BUILTIN_BOARD_STATUS_NAMES = new Set(BUILTIN_BOARD_COLUMNS.flatMap((column) => [column.key, column.beadsStatus]));
 
 /*
-  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   Columns are derived from the board's `status.custom` config (the same comma list ensureWorkflowStatuses reconciles, entries optionally suffixed with `:<bd category>`) rather than being a constant, so every surface that renders, drags, or edits a status works from the lanes the board actually has.
   The six built-in lanes always come first and unchanged; each additional configured status becomes one muted lane whose key and Beads value are the raw status name, so no mapping table has to be kept in sync with a user's board.
   Creating, renaming, and reordering columns stays a bd concern: this only draws what bd already knows.
@@ -192,7 +192,7 @@ function boardStatusNameToLabel(name: string): string {
 }
 
 /*
-  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   Column management edits the same `status.custom` comma list that buildBoardColumns reads, so both directions share one parse.
   An entry's optional `:<bd category>` suffix is bd's own concern: this module never sets one, and every write preserves whatever bd already put there, because dropping a category silently changes how bd treats that status.
   Only entries that are not built-in lanes are manageable. The required entries (backlog, test, review) back real Ghostex lanes and are reconciled by ensureWorkflowStatuses, so offering them for rename or delete would just fight that reconciliation on the next load.
@@ -236,7 +236,7 @@ export function managedBoardColumnNames(config: string): string[] {
 }
 
 /*
-  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   The name rule matches what gxserver accepts for a status value, so a name that passes here can never be rejected later by the transport that has to carry it.
 */
 export function boardColumnNameError(name: string, config: string): string {
@@ -266,7 +266,7 @@ export function addBoardColumn(config: string, name: string): string {
 }
 
 /*
-  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   Renaming cannot be one config write. A bead may not hold a status the config does not list, so the
   new name has to exist alongside the old one while the beads move across, and only then can the old
   entry go. This builds that intermediate config, carrying the old entry's bd category onto the new
@@ -290,7 +290,7 @@ export function removeBoardColumn(config: string, name: string): string {
 }
 
 /*
-  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   Reordering swaps a column with its neighbour among the managed entries only, then writes the whole list back in place.
   Built-in entries keep their positions in the config because they are not part of the swap, which matters because the six built-in lanes always render first regardless of config order and moving them would change nothing on screen while still churning the stored value.
 */
@@ -339,7 +339,7 @@ export type BoardSortKey = 'created' | 'priority' | 'updated';
 export type BoardSortOption = 'default' | `${BoardSortKey}-${BoardSortDirection}`;
 
 /*
-  CDXC:ProjectBoardSort 2026-08-07:
+  CDXC:ProjectBoard 2026-08-07:
   Each sort key is offered in both directions as its own option instead of a separate direction toggle, because the toolbar's other controls are single dropdowns and a direction control would have nothing to act on while Default order is selected.
   Direction values describe the underlying field, so `asc` means oldest first for timestamps and urgent first for priority; the visible labels carry that meaning for users.
 */
@@ -361,12 +361,12 @@ export type ProjectBoardViewPreferences = {
 };
 
 /*
-  CDXC:ProjectBoardViewPreferences 2026-08-07:
+  CDXC:ProjectBoard 2026-08-07:
   The Kanban is its own web surface, so leaving the board tears it down and every toolbar selection dies with it. Priority, estimate, and sort are durable view settings and are restored on the next mount; ticket search stays ephemeral because a restored query would hide most of the board without an obvious cause.
   The three selections describe how the user wants to read a board rather than anything about a particular project, so one app-wide set follows them into every project instead of each board keeping its own.
   Stored values outlive the option lists that produced them, so a preference that no longer matches a current option falls back to its default instead of leaving the toolbar showing a value the board cannot filter or sort by.
 
-  CDXC:ProjectBoardTagFilter 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   Tags are the only ticket metadata the board could write but never read back, so a board of mixed work had to be scrolled rather than narrowed. The tag selection joins the other three under the same storage key and the same app-wide scope.
   Unlike priority, estimate, and sort, the tag options are not a fixed list: they are the labels the loaded tickets actually carry, so validity is only knowable once a board has loaded. Normalisation therefore only rejects values that could never be a tag, and a stored tag that the loaded board does not offer is resolved to "all" at read time by resolveBoardTagFilter rather than being written over, so returning to the board that has the tag restores the selection.
   The tag filter only ever includes: there is no hide-by-tag mode, because a board silently omitting cards the user never asked to hide is the failure this control exists to fix.
@@ -396,7 +396,7 @@ const PROJECT_BOARD_COMMENT_AGENT_PREFIX = 'Agent:';
 const PROJECT_BOARD_COMMENT_SESSION_PREFIX = 'Session:';
 
 /*
-  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   Status resolution reads the caller's column list instead of a fixed table so a bead sitting in one of the board's own statuses lands in that lane. Todo remains the home for a status with no lane at all — a bead whose status was removed from the board config still has to be visible somewhere.
 */
 export function beadsStatusToBoardStatus(status: string, columns: ReadonlyArray<BoardColumn>): BoardStatusKey {
@@ -424,7 +424,7 @@ export function normalizeIssuePrefix(value: string | undefined): string {
 }
 
 /*
- * CDXC:ProjectBoardBeads 2026-07-31:
+ * CDXC:ProjectBoard 2026-07-31:
  * Prefix reconciliation exists to replace stale bootstrap defaults (for example gxserver, or an
  * unset value that normalizes to zmux) with the active project's prefix. A board that already has
  * any other established prefix must keep it: projectBoardConfig.beadsDirectory can point several
@@ -493,7 +493,7 @@ export function toBoardTickets(
 }
 
 /*
-  CDXC:ProjectBoardCreator 2026-08-07-07:52:
+  CDXC:ProjectBoard 2026-08-07-07:52:
   Cards and Edit ticket show who created a bead next to who is assigned to it. The creator is
   redundant noise when it is the same person as the assignee, so display surfaces resolve the
   creator through here instead of each deciding when to hide it.
@@ -589,7 +589,7 @@ function beadsEnvelopeError(payload: Record<string, unknown>): string {
 
 function beadsReportableLines(trimmed: string): string[] {
   /*
-   * CDXC:ProjectBoardBeadsEnvelope 2026-08-20:
+   * CDXC:ProjectBoard 2026-08-20:
    * Beads writes advisory `warning:` lines to the same stderr as the failure
    * (unconfigured beads.role, auto-import notes, ungated workspace), each
    * optionally followed by indented "Fix:"/"Or:" continuations. They describe
@@ -626,7 +626,7 @@ export function beadsErrorMessage(message: string): string {
     return trimmed;
   }
   /*
-   * CDXC:ProjectBoardBeadsEnvelope 2026-08-20:
+   * CDXC:ProjectBoard 2026-08-20:
    * A failing `bd` writes its human sentence first and its JSON result envelope
    * after it, so the combined payload never parses as JSON and the raw envelope
    * used to be pasted into the notice behind the sentence. Split at the start of
@@ -639,7 +639,7 @@ export function beadsErrorMessage(message: string): string {
   const envelopeText = envelopeStart === -1 ? '' : lines.slice(envelopeStart).join('\n');
   const envelope = envelopeText ? beadsJsonEnvelope(envelopeText) : undefined;
   /*
-   * CDXC:ProjectBoardBeadsMigration 2026-08-12:
+   * CDXC:ProjectBoard 2026-08-12:
    * Preserve Beads' structured remote-migration gate for the Project Board
    * notice to render as an operator decision. Other JSON-envelope failures
    * should expose their nested human error instead of dumping the envelope.
@@ -654,7 +654,7 @@ export function beadsErrorMessage(message: string): string {
 }
 
 /*
- * CDXC:ProjectBoardBeadsRejection 2026-08-20:
+ * CDXC:ProjectBoard 2026-08-20:
  * Beads refuses some board operations for domain reasons: a close guarded by
  * open blockers or open children, a dependency edge that cannot exist, an id
  * that names no issue. Every one of those used to reach the generic
@@ -742,7 +742,7 @@ export function parseBeadsRejection(message: string): BeadsRejection | undefined
 
 export function projectBoardRawProjectIdFromUrlParam(projectId: string): string {
   /*
-   * CDXC:ProjectBoardRouting 2026-06-04-23:51:
+   * CDXC:Navigation 2026-06-04-23:51:
    * Project Board URLs created before the raw-id/editor-id split stored the native editor id in projectId. Normalize those old URLs at the web surface boundary so Beads requests use the canonical gxserver/native project id.
    */
   const match = /^project-editor:(?<projectId>.+):(?<mode>code|git|tasks)$/u.exec(projectId);
@@ -791,7 +791,7 @@ function normalizeBoardViewPreference<TValue extends string>(
 }
 
 /*
-  CDXC:ProjectBoardCustomColumns 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   Status reads return the board's full list, extra statuses included, for buildBoardColumns.
   Background refreshes use this read-only helper so polling cannot overwrite a concurrent config edit;
   initial and manual loads call ensureWorkflowStatuses to reconcile Ghostex's required lanes.
@@ -832,7 +832,7 @@ export async function ensureWorkflowStatuses(
 }
 
 /*
-  CDXC:ProjectBoardTagFilter 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   The tag dropdown offers the labels the loaded tickets actually carry rather than every label the project has ever defined, so selecting one can never produce an empty board and the list shrinks as retired tags stop being used.
 */
 export function boardTagFilterOptions(tickets: BoardTicket[]): BoardTagFilter[] {
@@ -861,7 +861,7 @@ export function filterBoardTickets(
 ): BoardTicket[] {
   const normalizedQuery = query.trim();
   /*
-    CDXC:ProjectBoardFilters 2026-05-30-08:31:
+    CDXC:ProjectBoard 2026-05-30-08:31:
     The Project board toolbar should filter by planning metadata instead of lane status so the visible swimlanes remain the workflow source of truth.
     Priority matching uses the same normalized visible tier as ticket controls, and estimate matching treats missing estimates as their own selectable state.
   */
@@ -888,7 +888,7 @@ export function filterBoardTickets(
 }
 
 /*
-  CDXC:ProjectBoardSort 2026-08-07:
+  CDXC:ProjectBoard 2026-08-07:
   Lanes only render their first PROJECT_BOARD_MAX_VISIBLE_TICKETS_PER_COLUMN cards, so ticket order is a board-level concern rather than a lane-render detail.
   Beads returns no meaningful order for `list --all`, which leaves a Done lane of hundreds of closed beads hiding the work that just finished behind that cap.
   Done therefore defaults to newest-closed-first while the other lanes keep the Beads order they have always shown, and an explicit sort selection applies to every lane in its chosen direction.
@@ -939,7 +939,7 @@ function compareBoardTicketTimes(left: number, right: number, direction: BoardSo
     return 0;
   }
   /*
-    CDXC:ProjectBoardSort 2026-08-07:
+    CDXC:ProjectBoard 2026-08-07:
     A bead whose timestamp is missing or unparseable is unknown rather than oldest, so it stays at the bottom of the lane in both directions instead of leading the oldest-first views.
   */
   if (left === Number.NEGATIVE_INFINITY) {
@@ -963,7 +963,7 @@ export function appendImageMarkdownToDescription(
 ): string {
   const snippet = `[Image #${getNextDescriptionImageIndex(description)}](${imagePath})`;
   /**
-   * CDXC:ProjectBoardImagePaste 2026-05-28-08:48:
+   * CDXC:Clipboard 2026-05-28-08:48:
    * Project Board image references are editable prompt text, not hidden metadata.
    * Paste images as visible [Image #N](path) references at the caret so users can
    * write prose around them and refer to each image explicitly in the prompt.
@@ -1034,7 +1034,7 @@ export function extractDescriptionImageReferences(description: string): Descript
 
 export function extractDescriptionImagePreviews(description: string): string[] {
   /**
-   * CDXC:ProjectBoardImagePaste 2026-05-28-08:50:
+   * CDXC:Clipboard 2026-05-28-08:50:
    * The preview strip must update from the image paths users type or paste in
    * the prompt text, including visible [Image #N](path) references and plain
    * standalone image-path lines.
@@ -1127,13 +1127,13 @@ function isLegacyDataImageSource(source: string): boolean {
  * Start Work must tell agents to leave bead comments after each turn so humans can follow ticket progress without reading the full agent transcript.
  * Comments should capture user-facing outcomes and high-level technical decisions, not per-file diffs.
  *
- * CDXC:ProjectBoardComments 2026-06-05-06:43:
+ * CDXC:ProjectBoard 2026-06-05-06:43:
  * Agent-authored bead comments should carry a parseable agent label and a resumable agent CLI session id at the bottom of the comment. Keep the stored Beads comment as plain text while letting the ticket editor render `madda (Cursor CLI)`-style attribution and a dedicated session footer.
  *
- * CDXC:ProjectBoardComments 2026-06-05-06:55:
+ * CDXC:ProjectBoard 2026-06-05-06:55:
  * The Session footer is the saved session identity from the agent CLI that authored the comment, such as a Codex thread id or Cursor chat id, not the Ghostex pane/provider session id. Users need this id to resume the actual agent session that made the comment.
  *
- * CDXC:ProjectBoardBeads 2026-06-10-09:31:
+ * CDXC:ProjectBoard 2026-06-10-09:31:
  * Start Work prompts use the machine-installed `bd`, matching the Project/Kanban runtime and avoiding a second Ghostex-owned Beads binary.
  */
 export function buildAgentWorkPrompt(ticket: BoardTicket): string {
@@ -1163,7 +1163,7 @@ export function buildAgentWorkPrompt(ticket: BoardTicket): string {
 }
 
 /*
- * CDXC:ProjectBoardComments 2026-06-05-06:43:
+ * CDXC:ProjectBoard 2026-06-05-06:43:
  * The ticket editor stores agent/session attribution in a bd-compatible plain-text footer because Beads comments only expose author, timestamp, and text. Parse that footer at the display boundary so old comments still render, while new comments get structured UI treatment without changing Beads storage.
  */
 export function formatProjectBoardCommentText(body: string, metadata: ProjectBoardCommentMetadata = {}): string {
@@ -1237,7 +1237,7 @@ function normalizeCommentMetadataValue(value: string | undefined): string | unde
 }
 
 /*
- * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
+ * CDXC:ProjectBoard 2026-08-07-07:01:
  * A bead's assignee names who should do the work, so opening a ticket must
  * preselect the configured agent that assignee refers to instead of always
  * showing the board default agent.
@@ -1247,7 +1247,7 @@ function normalizeCommentMetadataValue(value: string | undefined): string | unde
  * human-assigned beads keep the existing default.
  */
 /*
- * CDXC:ProjectBoardStartWorkToolSuffix 2026-08-08-15:22:
+ * CDXC:ProjectBoard 2026-08-08-15:22:
  * Boards name an assignee after the tool a worker runs, and that name usually
  * carries the suffix the product ships with — "claude-code" for Claude Code,
  * "gemini-cli" for Gemini CLI — while the configured agent is the bare "claude"
@@ -1318,7 +1318,7 @@ export function conversationLinkActionKind(
   link: ProjectBoardConversationLinkView | undefined
 ): ProjectBoardConversationLinkActionKind {
   /*
-   * CDXC:ProjectBoardBeads 2026-08-07:
+   * CDXC:ProjectBoard 2026-08-07:
    * Ghostex can open a live or restorable session directly. When the session
    * row is gone from restorable history the agent conversation it worked can
    * still be resumed into a fresh session, which is a different promise to the
@@ -1336,7 +1336,7 @@ export function isUsableConversationLink(link: ProjectBoardConversationLinkView 
 
 export function conversationLinkStatusText(link: ProjectBoardConversationLinkView): string {
   /*
-   * CDXC:ProjectBoardBeads 2026-08-07:
+   * CDXC:ProjectBoard 2026-08-07:
    * A closed agent session is the normal end state of bead work, not a broken
    * link, so the card keeps the worker as history ("Last worked 6 Aug")
    * instead of showing a dangling "Unavailable".

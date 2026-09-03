@@ -32,10 +32,10 @@ pub fn fetch_server_health(
 }
 
 /*
-CDXC:GxserverCli 2026-06-22-04:47:
+CDXC:Cli 2026-06-22-04:47:
 CLI lifecycle probes must match TypeScript before deserializing health. Ignore other products on the selected port, and surface same-product protocol mismatches as command errors instead of reporting a misleading running status.
 
-CDXC:GxserverCli 2026-06-22-05:01:
+CDXC:Cli 2026-06-22-05:01:
 Startup and status probes must parse both Rust content-length responses and TypeScript chunked responses. Otherwise a selected-port TypeScript gxserver looks like a non-gxserver conflict, which blocks Rust replacement instead of stopping the compatible old control plane.
 */
 fn is_gxserver_health_payload(value: &Value) -> Result<bool> {
@@ -92,7 +92,7 @@ pub fn request_server_stop_all(token: Option<&str>, timeout_ms: u64) -> Result<O
 }
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 The Rust ghostex CLI bridges arbitrary local gxserver API endpoints the same
 way the bundled Node CLI does. Callers pass a params object; the protocol
 version is merged in here so every bridge request carries the contract the

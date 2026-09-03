@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 
 /**
- * CDXC:WorktreeRename 2026-08-09-18:40:
+ * CDXC:Worktrees 2026-08-09-18:40:
  * `tsconfig.json` covers `packages/core-ui/assets/`, `packages/shared/`,
  * `packages/core-ui/`, `apps/desktop/views/` and `apps/mobile/views/chat/` — NOT
  * `apps/desktop/`, and there is no `apps/desktop/tsconfig.json` either. So
@@ -18,7 +18,7 @@ import { describe, expect, test } from 'vitest';
  * asserts the hops exist, following the precedent set by
  * `packages/shared/gpui-hotkey-defaults-parity.test.ts`.
  *
- * CDXC:GxserverRuntimeSplit 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * `gxserver-runtime.ts` is now a folder. The three hops this file used to find
  * in one text blob live in three different modules, so each read is aimed at the
  * module that owns its hop: the sidebar-message dispatch in `core.ts`, the two
@@ -33,7 +33,7 @@ import { describe, expect, test } from 'vitest';
  * it cannot see the Rust bridge or the modal host, and a missing dispatch arm is
  * still valid TypeScript.
  *
- * CDXC:DesktopRustSplit 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * `apps/desktop/src/main.rs` was cut down to a 756-line crate root; the three
  * Rust hops below moved into `apps/desktop/src/app/**` (docs/2026-08-22/repo-
  * restructure/SPLITS.md C1 and the app-modal-kind split). The allowlist +
@@ -44,7 +44,7 @@ import { describe, expect, test } from 'vitest';
  * assumption between them (three independent `toContain`s), moved to
  * `app/model/types1.rs`. What each test verifies is unchanged.
  *
- * CDXC:ModelTypesRecluster 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * `app/model/types1.rs..types6.rs` (the C1 wave-3 chunk split) were
  * re-clustered into descriptively named domain modules per their
  * FOLLOW-UPS.md note. `GpuiAppModalKind` (and so the three `Self::

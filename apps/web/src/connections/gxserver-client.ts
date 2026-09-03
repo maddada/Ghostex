@@ -44,7 +44,7 @@ type PresentationSubscriptionHandlers = {
   onDelta(delta: GxserverPresentationDelta, revision: GxserverPresentationRevision): void;
   onError(): void;
   /**
-   * CDXC:GlobalActions 2026-08-29:
+   * CDXC:AgentLauncher 2026-08-29:
    * A Global Action write produces no presentation delta, so the daemon
    * announces it separately. The event carries no commands — only the bumped
    * revision — because `/api/readSidebarHud` stays the single projection.
@@ -58,7 +58,7 @@ type PresentationSubscriptionHandlers = {
   onSidebarSpaces(state: GxserverSidebarSpacesState, revision: GxserverPresentationRevision): void;
   onSnapshot(snapshot: GxserverPresentationSnapshot): void;
   /**
-   * CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+   * CDXC:StateSync 2026-09-01:
    * The daemon's reply when `lastRevision` already names its current revision:
    * nothing changed, so no snapshot follows and the presentation this
    * connection is holding stays exactly as it is.
@@ -100,7 +100,7 @@ export function createGxserverClient(machine: GhostexWebMachine) {
     const body = await readJson(response);
     if (!response.ok || !isRpcResponse(body)) {
       /*
-      CDXC:SessionChatComposerReady 2026-08-26:
+      CDXC:SessionChat 2026-08-26:
       A daemon refusal carries its own code (`{ ok: false, error, message }`),
       and the shared chat composer branches on it — `composerNotReady` gets its
       own notice instead of "message could not be sent". Bodies that are not a

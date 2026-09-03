@@ -19,7 +19,7 @@ describe('shouldShowSessionGroupConnector', () => {
 
   test('should not show the connector for empty project groups without sidebar editor rows', () => {
     /**
-     * CDXC:ProjectGroups 2026-05-15-14:33:
+     * CDXC:Projects 2026-05-15-14:33:
      * Empty project groups no longer have a sidebar Code editor row, so they
      * should not keep a connector rail only for hidden editor content.
      */

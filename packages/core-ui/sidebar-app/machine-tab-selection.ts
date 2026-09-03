@@ -1,5 +1,5 @@
 /*
- * CDXC:SidebarMachineTabs 2026-08-28:
+ * CDXC:RemoteMachines 2026-08-28:
  * Remote machines are top-level sidebar tabs, not sections stacked under the
  * local project list, so the sidebar shows exactly one machine at a time. Which
  * one is pure per-window UI state, persisted next to the collapse state under

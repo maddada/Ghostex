@@ -1,5 +1,5 @@
 /*
-CDXC:GPUITerminalModel 2026-07-03:
+CDXC:Terminal 2026-07-03:
 P1b portable terminal model: PTY (portable-pty: openpty on Unix, ConPTY on
 Windows) → libghostty-vt → owned per-frame snapshots. Pure model layer with
 no gpui types; consumers (P1c element, P1e integration) observe it through

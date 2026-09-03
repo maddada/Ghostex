@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The publisher side of the change-aware release: plan <-> manifest <->
  * provenance cross-checks, the `release-provenance-<version>.json` asset, the
  * internal build-provenance operator summary, and the scope of the update feeds.

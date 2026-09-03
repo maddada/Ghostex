@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Test-only fixtures for the release planner.
  *
  * The fingerprint reads the git index, so the fixtures build a real throwaway
@@ -35,7 +35,7 @@ const FIXTURE_FILES = {
    * code-server workflows) and must not reappear here.
    *
    * release-gpui-validate.yml is the one entry that is present but declared by
-   * no product (CDXC:WindowsValidationIsNotAGate 2026-09-01 — it is an opt-in
+   * no product (CDXC:Release 2026-09-01 — it is an opt-in
    * check outside every release run, so it cannot affect a product's bytes).
    * It stays so the fixture keeps mirroring the real workflow directory, and so
    * that re-declaring it as an input would have to be a deliberate act rather

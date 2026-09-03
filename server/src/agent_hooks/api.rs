@@ -81,7 +81,7 @@ pub fn install_agent_hooks(
             continue;
         };
         /*
-        CDXC:GxserverAgentHookProbeCache 2026-09-01:
+        CDXC:AgentHooks 2026-09-01:
         Status reads accept a 60 second CLI-presence cache, but install skips a
         provider outright when its CLI is missing. A user who installs the CLI
         and immediately presses Install Hooks must not be told the provider is
@@ -93,7 +93,7 @@ pub fn install_agent_hooks(
         installed_paths.extend(install_agent_hook(definition, &hook_paths)?);
     }
     /*
-    CDXC:AgentHookInstallSnapshot 2026-09-02:
+    CDXC:AgentHooks 2026-09-02:
     Settings replaces its whole hook-status snapshot with this response, so a
     scoped install (one row's Install/Update hook button) must still report
     the complete catalog. Answering with only the requested agents made every
@@ -110,7 +110,7 @@ pub fn install_agent_hooks(
 }
 
 /*
-CDXC:AgentHookRepair 2026-08-05-03:35:
+CDXC:AgentHooks 2026-08-05-03:35:
 Platform-native storage moved the shared notify executable out of ~/.ghostex,
 and older installers could write a current path without the shell quoting it
 needs. Provider configuration files live outside Ghostex storage, so repair
@@ -274,7 +274,7 @@ fn read_hook_status(
         .collect::<Vec<_>>();
     let notify_hook_contents = read_file_text(&hook_paths.notify_hook_path);
     let notify_current = is_notify_hook_current(hook_paths, &notify_hook_contents)
-        // CDXC:ClaudeStatusline 2026-09-03: Claude also depends on the shared
+        // CDXC:AgentHooks 2026-09-03 WHY: Claude also depends on the shared
         // statusline script being current; every other provider ignores it.
         && (definition.agent_id != "claude"
             || is_statusline_hook_current(
@@ -285,7 +285,7 @@ fn read_hook_status(
     let provider_current = inspection.current_hook_installed;
     let ghostex_hook_present = inspection.ghostex_hook_present;
     /*
-    CDXC:CodexHookTrust 2026-09-02 / CDXC:AgentHookRunGates 2026-09-03:
+    CDXC:AgentHooks 2026-09-02 / CDXC:AgentHooks 2026-09-03:
     A hook is only "installed" once its CLI will actually RUN it. Codex needs
     its trust record next to the file, Antigravity and Claude carry an off
     switch outside the hook entries. Any closed gate reads as updateRequired

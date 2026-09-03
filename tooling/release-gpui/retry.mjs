@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseTransientFailureClassification 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Bounded retries around external dependency fetches only.
  *
  * Never wrap a compile, package, sign, or notarize step in this helper, and

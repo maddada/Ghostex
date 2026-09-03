@@ -301,7 +301,7 @@ export type WorkspacePanelToExtensionMessage =
   | WorkspacePanelAdjustTerminalFontSizeMessage
   | WorkspacePanelResetTerminalFontSizeMessage
   /*
-   * CDXC:WorkspaceActions 2026-05-27-07:32:
+   * CDXC:Workarea 2026-05-27-07:32:
    * Workspace panels no longer emit the removed IDE-attachment message. Project
    * IDE opening is routed through explicit titlebar/native open-target commands.
    */

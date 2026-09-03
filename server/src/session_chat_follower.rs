@@ -56,7 +56,7 @@ pub(crate) enum FollowerDrainOutcome {
         /// abandoned (see `superseded_prompt_id`).
         superseded: Vec<String>,
         /// The recorded text of an API refusal row inside this drain's
-        /// appended window (CDXC:SessionChatApiRefusal), for the notice card.
+        /// appended window (CDXC:AgentScreenDetection), for the notice card.
         api_refusal: Option<String>,
     },
 }
@@ -113,7 +113,7 @@ fn follower_snapshot_drain(
             appended.retain(|message| !superseded.contains(&message.id));
         }
         /*
-        CDXC:SessionChatRewind 2026-09-02:
+        CDXC:SessionChat 2026-09-02:
         The rewind can be exactly what landed between the tail read and this
         trailing read, and those rows are published raw. One retry re-takes the
         window with them inside it, where the branch rules apply; the second
@@ -261,7 +261,7 @@ pub(crate) fn follower_drain_once(
                     superseded.retain(|id| !removed_before_publishing.contains(id));
                 }
                 /*
-                CDXC:SessionChatApiRefusal 2026-08-28:
+                CDXC:AgentScreenDetection 2026-08-28:
                 The decoded batch renders the refusal row as ordinary assistant
                 text; the structured fields that PROVE it is a refusal never
                 survive decoding, so the freshly appended window is re-read
@@ -275,7 +275,7 @@ pub(crate) fn follower_drain_once(
                     })
                     .flatten();
                 /*
-                CDXC:SessionChatRewind 2026-09-02:
+                CDXC:SessionChat 2026-09-02:
                 A prompt that re-attached above the leaf (or an explicit leaf
                 marker) makes the client's whole window wrong, not just the
                 rows in this drain: the dead branch it has to lose can reach
@@ -426,7 +426,7 @@ pub(crate) fn insert_optional_selected_options(
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Terminal-state notice (login expired, trust dialog, usage limit, undelivered
 send). Absent ⇒ the field is omitted ⇒ clients CLEAR the card, exactly like
 `prompt` and unlike `selectedOptions`. Every frame that can carry it must
@@ -442,7 +442,7 @@ fn insert_optional_terminal_notice(
 }
 
 /*
-CDXC:SessionChatTerminalActivity 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 Everything one terminal capture tells a client, travelling as ONE value. The
 notice card and the transcript's activity row are read from the same screen and
 are always restated together — carrying them as two parallel parameters through
@@ -457,21 +457,21 @@ pub struct SessionChatScreenState<'a> {
     pub notice: Option<&'a crate::session_chat_notice::SessionChatTerminalNotice>,
     pub activity: Option<&'a crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     /*
-    CDXC:SessionChatAgentFleet 2026-08-23: the sub-agents the screen is
+    CDXC:AgentScreenDetection 2026-08-23: the sub-agents the screen is
     painting right now. Rides here for the same reason the activity row does —
     one capture, one value, so the fleet strip can never survive a frame that
     cleared the progress row it was read beside.
     */
     pub fleet: Option<&'a crate::session_chat_agent_fleet::SessionChatAgentFleet>,
     /*
-    CDXC:SessionChatAgentTasks 2026-09-03: Claude's task list from its on-disk
+    CDXC:SessionChat 2026-09-03: Claude's task list from its on-disk
     store. Not a screen reading, but it travels with them because every
     producer of a state frame restates this whole value, and the panel needs
     the same omitted ⇒ CLEARED rule (the store is deleted with the session).
     */
     pub tasks: Option<&'a crate::session_chat_agent_tasks::SessionChatAgentTasks>,
     /*
-    CDXC:SessionChatScreenProbed 2026-08-22:
+    CDXC:AgentScreenDetection 2026-08-22:
     True once a WHOLE screen capture has actually been read for this session.
 
     Every other screen-derived field omits itself when it has nothing to say,
@@ -507,14 +507,14 @@ pub(crate) fn insert_screen_state(
 }
 
 /*
-CDXC:SessionChatQueueCarriage 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 Queue + draft ride snapshot / replaced / state frames only. `queue` is written
 even when empty — present is the daemon capability probe — while `draft` is
 written only when the server actually holds one, because an omitted draft means
 UNCHANGED and never "cleared". Read only when a frame that carries it is
 actually being emitted, never on the reconcile tick.
 
-CDXC:SessionChatFollowerLiveness 2026-08-24: the READ moved out of the frame
+CDXC:AgentScreenDetection 2026-08-24: the READ moved out of the frame
 builders. `emit_sequenced`'s build closure runs under the stream's emit-order
 mutex and must not block, but the reader opens the state database — SQLite busy
 contention there held the mutex every other publisher (hook ingest, options
@@ -539,7 +539,7 @@ fn read_optional_queue(
 }
 
 /*
-CDXC:SessionChatAppCommands 2026-08-23:
+CDXC:SessionChat 2026-08-23:
 Rides on `config` rather than on a new parameter through four frame builders:
 the rows live in a process-global store keyed by exactly the ids the config
 already carries, and unlike the screen state they are not read from a capture
@@ -598,7 +598,7 @@ fn emit_snapshot_frame(
     epoch: i64,
     frame_type: &str,
     tail: &SessionChatTailFileResult,
-    // CDXC:SessionChatForkStitch 2026-08-28: the tailed rollout was opened by
+    // CDXC:SessionFork 2026-08-28: the tailed rollout was opened by
     // `codex fork`, so older rows live in an ancestor file the read path can
     // stitch in. Keeps the client's scroll-up gate open past this file's top.
     has_fork_ancestor: bool,
@@ -676,7 +676,7 @@ fn emit_appended_frame(
 /// transcript it tails stays substantively stale.
 pub(crate) const SUCCESSOR_SCAN_INTERVAL: Duration = Duration::from_millis(30_000);
 
-/// CDXC:SessionChatStartingDetection 2026-09-01: once a still-transcriptless
+/// CDXC:AgentScreenDetection 2026-09-01: once a still-transcriptless
 /// session's screen has settled, re-probe it only every this many resolve
 /// polls (~30s at the max backed-off poll), mirroring the resolved loop's
 /// idle steady tier.
@@ -690,7 +690,7 @@ fn now_epoch_ms() -> i64 {
 }
 
 /*
-CDXC:SessionChatIdentity 2026-08-02:
+CDXC:SessionIdentity 2026-08-02:
 Runs when the tailed transcript has had no `user`/`assistant` record for
 SUCCESSOR_STALE_SUBSTANTIVE_IDLE_MS and re-resolving the stored identity landed
 back on that same file. Adoption is persisted through the registry FIRST: if the
@@ -708,7 +708,7 @@ async fn detect_and_adopt_successor_transcript(
     let hooks = config.successor_hooks.clone()?;
     let stem = stale_path.file_stem()?.to_str()?;
     /*
-    CDXC:SessionChatIdentity 2026-08-24:
+    CDXC:SessionIdentity 2026-08-24:
     Codex joined Claude here because `codex fork` DOES change the session id (a
     new rollout whose opening `session_meta` carries `forked_from_id`). The two
     agents differ only in how the tailed file names its session and in what
@@ -760,7 +760,7 @@ async fn detect_and_adopt_successor_transcript(
         };
         let outcome = find(&scan_stale_session_id, &scan_path, last_record_ms, &owned);
         /*
-        CDXC:SessionForkIdentity 2026-09-02:
+        CDXC:SessionFork 2026-09-02:
         A child forked from this session owns its transcript from the moment it
         launches, even though it cannot say so until its first hook lands. A
         proven successor that began after that launch is the child's
@@ -873,7 +873,7 @@ pub async fn run_session_chat_follower(
     mut config: SessionChatFollowerConfig,
     stream: Arc<SessionChatStream>,
     resnapshot: Arc<tokio::sync::Notify>,
-    // CDXC:SessionChatFollowerLiveness 2026-08-24: the task's own progress
+    // CDXC:AgentScreenDetection 2026-08-24: the task's own progress
     // signal, read by `sync_session_chat_follower_for_session`.
     heartbeat: Arc<SessionChatFollowerHeartbeat>,
     emit: SessionChatFrameEmitter,
@@ -919,7 +919,7 @@ pub async fn run_session_chat_follower(
     let mut emitted_starting = false;
     let mut resolved: Option<PathBuf> = None;
     let mut resolve_delay = INITIAL_RESOLVE_POLL;
-    // CDXC:SessionChatStartingDetection 2026-09-01: paces the slow steady
+    // CDXC:AgentScreenDetection 2026-09-01: paces the slow steady
     // re-probe of the resolve-poll branch once the launch screen has settled.
     let mut unresolved_passes: u64 = 0;
     let mut file_state = FollowerFileState::new();
@@ -947,7 +947,7 @@ pub async fn run_session_chat_follower(
     // MUST be published as an omitted field.
     let mut published_notice: Option<crate::session_chat_notice::SessionChatTerminalNotice> = None;
     /*
-    CDXC:SessionChatTerminalActivity 2026-08-22: the progress row the follower
+    CDXC:AgentScreenDetection 2026-08-22: the progress row the follower
     has published. Tracked like the notice (it can legitimately go back to
     `None` when the work finishes) but compared on its NUMBERS too, because a
     moving percentage is the whole point of publishing it again.
@@ -956,24 +956,24 @@ pub async fn run_session_chat_follower(
         crate::session_chat_terminal_activity::SessionChatTerminalActivity,
     > = None;
     /*
-    CDXC:SessionChatAgentFleet 2026-08-23: deliberately NOT cleared when the
+    CDXC:AgentScreenDetection 2026-08-23: deliberately NOT cleared when the
     main agent goes idle, unlike the activity row above. A `⏺` status line is
     stale scrollback the moment Claude stops, but sub-agents outlive the
     turn that spawned them — clearing on idle would blank the strip exactly when
     it is the only thing telling the user work is still running.
     */
     let mut published_fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet> = None;
-    // CDXC:SessionChatAgentTasks 2026-09-03: the task list last published.
+    // CDXC:SessionChat 2026-09-03: the task list last published.
     // Compared whole; a task flipping to completed is exactly the change the
     // panel exists to show.
     let mut published_tasks: Option<crate::session_chat_agent_tasks::SessionChatAgentTasks> = None;
-    // CDXC:SessionChatScreenProbed 2026-08-22: latched, not sampled. It answers
+    // CDXC:AgentScreenDetection 2026-08-22: latched, not sampled. It answers
     // "has detection run for this session yet", so a later capture failure (the
     // session stopped, the daemon went away) must not put the composer back
     // under a loading skeleton.
     let mut published_screen_probed = false;
     /*
-    CDXC:SessionChatForkStitch 2026-08-28:
+    CDXC:SessionFork 2026-08-28:
     A `codex fork` rollout carries no pre-fork rows, so a snapshot that included
     the whole file would report `hasMore: false` and close the client's scroll-up
     gate on history that /api/readSessionChat can still stitch in. The flag says
@@ -984,12 +984,12 @@ pub async fn run_session_chat_follower(
     let mut has_fork_ancestor = false;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
-    // CDXC:SessionChatCompactingStatus 2026-09-02: reconciles left in the
+    // CDXC:AgentScreenDetection 2026-09-02: reconciles left in the
     // back-to-back probe burst a `/compact` transcript row starts.
     let mut activity_command_probe_ticks: u64 = 0;
 
     /*
-    CDXC:SessionChatSeedDetection 2026-08-22:
+    CDXC:AgentScreenDetection 2026-08-22:
     Probe once, here, before the first frame goes out.
 
     The snapshot frame reads detection from the shared cache and never spawns,
@@ -1002,7 +1002,7 @@ pub async fn run_session_chat_follower(
     and only then snapped to the real model. That flash of "Model"/"Options"
     turning into "Opus 5"/"High" is what this removes.
 
-    A capture is now a direct socket read (CDXC:SessionChatScreenCapture),
+    A capture is now a direct socket read (CDXC:AppShots),
     ~0.1ms typical and ~6ms against a very large scrollback, so paying for one
     before the snapshot is cheaper than the frame it rides on. The deadline
     exists only for a wedged daemon that accepts the connection and never
@@ -1037,7 +1037,7 @@ pub async fn run_session_chat_follower(
             .flatten();
             if resolved.is_none() {
                 /*
-                CDXC:SessionChatStartingDetection 2026-09-01:
+                CDXC:AgentScreenDetection 2026-09-01:
                 A freshly launched agent has no transcript file at all until its
                 first prompt (Claude creates the session .jsonl on the first
                 message), so this resolve-poll branch is the follower's ONLY
@@ -1230,7 +1230,7 @@ pub async fn run_session_chat_follower(
                 let snapshot_detection = read_cached_detection();
                 // The seed capture is the FIRST look a chat opened mid-compaction
                 // gets at the screen; the compacting row it finds is live
-                // whatever the hooks last said (CDXC:SessionChatCompactingStatus).
+                // whatever the hooks last said (CDXC:AgentScreenDetection).
                 let snapshot_activity =
                     crate::session_chat_terminal_activity::publishable_session_chat_terminal_activity(
                         live.working,
@@ -1304,7 +1304,7 @@ pub async fn run_session_chat_follower(
             } => {
                 last_transcript_change = std::time::Instant::now();
                 /*
-                CDXC:SessionChatApiRefusal 2026-08-28:
+                CDXC:AgentScreenDetection 2026-08-28:
                 Stored in the watchdog store on purpose: it inherits the
                 store's dismissal identity, its 10-minute expiry, and its
                 retirement by the next send (the send watchdog clears the
@@ -1335,7 +1335,7 @@ pub async fn run_session_chat_follower(
                     );
                 } else {
                     /*
-                    CDXC:SessionChatCompactingStatus 2026-09-02:
+                    CDXC:AgentScreenDetection 2026-09-02:
                     A `/compact` row is the cue to look at the screen NOW rather
                     than at the idle 30s tier: the user who typed it — in the
                     composer or straight into the terminal, both record the
@@ -1379,7 +1379,7 @@ pub async fn run_session_chat_follower(
         }
 
         /*
-        CDXC:SessionChatCore 2026-08-01:
+        CDXC:SessionChat 2026-08-01:
         Interactive cards used to depend entirely on agent hooks. When the
         installed hook script does not forward toolName/toolInput the card never
         appeared, and when it never reports PostToolUse a card answered in the
@@ -1438,7 +1438,7 @@ pub async fn run_session_chat_follower(
         }
 
         /*
-        CDXC:SessionChatDetectedOptions 2026-08-01:
+        CDXC:AgentScreenDetection 2026-08-01:
         Model/effort probe: a newly launched agent can paint its footer just
         after the seed probe read an empty screen. Probe each 1s reconcile for
         up to ten seconds until both values arrive, then retain the ~30s
@@ -1447,11 +1447,11 @@ pub async fn run_session_chat_follower(
         value actually changed.
 
         `reconcile_ticks > 1` skips the first pass on purpose: the subscribe's
-        own probe (CDXC:SessionChatSeedDetection) already captured at t=0 and
+        own probe (CDXC:AgentScreenDetection) already captured at t=0 and
         the snapshot frame published it, so probing again immediately would
         capture the same unchanged screen twice.
 
-        CDXC:SessionChatTerminalNotices 2026-08-19:
+        CDXC:AgentScreenDetection 2026-08-19:
         The same probe classifies the captured screen, so a trust dialog or an
         expired login reaches chat on this cadence for free. A notice may also
         legitimately CLEAR, which the options half can never do — but only a
@@ -1471,7 +1471,7 @@ pub async fn run_session_chat_follower(
             startup_option_reconcile_ticks += 1;
         }
         /*
-        CDXC:SessionChatTerminalActivity 2026-08-22:
+        CDXC:AgentScreenDetection 2026-08-22:
         The steady 30s cadence is right for state that either holds or does not
         (a login screen, a model pill), and useless for a progress bar: a
         compaction can be over before the second sample lands. So the interval
@@ -1500,7 +1500,7 @@ pub async fn run_session_chat_follower(
         let activity_command_probe_due = activity_command_probe_ticks > 0;
         activity_command_probe_ticks = activity_command_probe_ticks.saturating_sub(1);
         /*
-        CDXC:ClaudeStatusline 2026-09-03: Claude re-runs its statusLine command
+        CDXC:AgentScreenDetection 2026-09-03 WHY: Claude re-runs its statusLine command
         within 300ms of a model, effort, compaction or permission-mode change,
         and the Ghostex script stores the payload. A changed file is the one
         signal that says "the pills are stale right now", so it is a probe on
@@ -1520,7 +1520,7 @@ pub async fn run_session_chat_follower(
         {
             let reader = config.options_reader.clone();
             /*
-            CDXC:SessionChatFollowerLiveness 2026-08-24:
+            CDXC:AgentScreenDetection 2026-08-24:
             Awaited inline on the reconcile loop, so a capture that never
             answers used to stall the follower forever while the transcript
             grew. Missing the deadline means this pass simply publishes
@@ -1565,7 +1565,7 @@ pub async fn run_session_chat_follower(
                         published_activity.as_ref(),
                     );
                 /*
-                CDXC:SessionChatScreenProbed 2026-08-22: the first successful
+                CDXC:AgentScreenDetection 2026-08-22: the first successful
                 capture is publishable on its own, even when it changed
                 nothing. An agent whose screen names no model detects nothing
                 forever, and without this the composer would never hear that
@@ -1580,7 +1580,7 @@ pub async fn run_session_chat_follower(
                         detection.fleet.as_ref(),
                         published_fleet.as_ref(),
                     );
-                // CDXC:SessionChatAgentTasks 2026-09-03: no capture gate, the
+                // CDXC:SessionChat 2026-09-03: no capture gate, the
                 // store on disk is authoritative whether or not the screen read.
                 let tasks_changed = !crate::session_chat_agent_tasks::same_session_chat_agent_tasks(
                     detection.tasks.as_ref(),
@@ -1645,7 +1645,7 @@ pub async fn run_session_chat_follower(
         }
 
         /*
-        CDXC:SessionChatCore 2026-08-01:
+        CDXC:SessionChat 2026-08-01:
         Stale-identity guard. `/clear` and `resume` make the agent start a NEW
         transcript file while the old one stays on disk, so the follower keeps
         tailing a file that will never grow again and the chat freezes at the
@@ -1654,7 +1654,7 @@ pub async fn run_session_chat_follower(
         identity; a different file is treated exactly like a content
         replacement.
 
-        CDXC:SessionChatIdentity 2026-08-02:
+        CDXC:SessionIdentity 2026-08-02:
         The hook-driven re-resolution above only runs while hooks report the
         session as `working`. The case successor detection must recover from is
         precisely the one where hooks never fire at all (a background-job
@@ -1663,7 +1663,7 @@ pub async fn run_session_chat_follower(
         every SUCCESSOR_SCAN_INTERVAL while the tailed file stays silent.
         */
         // Codex is in scope too: `codex fork` changes the session id
-        // (CDXC:SessionChatIdentity 2026-08-24).
+        // (CDXC:SessionIdentity 2026-08-24).
         let successor_scan_due = matches!(
             transcript_agent,
             SessionChatTranscriptAgent::Claude | SessionChatTranscriptAgent::Codex
@@ -1700,7 +1700,7 @@ pub async fn run_session_chat_follower(
                     continue;
                 }
                 /*
-                CDXC:SessionChatIdentity 2026-08-02:
+                CDXC:SessionIdentity 2026-08-02:
                 Re-resolution landed on the SAME file, so the registry identity
                 itself is stale. Look for a transcript that proves it continues
                 this one and re-bind the session to it.
@@ -1769,7 +1769,7 @@ impl SessionChatFollowerIdentity {
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatCore 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Session Chat follower registry. Lifecycle mirrors zmx_title_observers (synced
 from schedule_presentation_session_delta, boot sync, shutdown stop-all) with
 one addition: followers are refcounted by /api/events `subscribeSessionChat`
@@ -1819,7 +1819,7 @@ pub(crate) fn session_agent_activity(session: &Value) -> Option<&str> {
 }
 
 /*
-CDXC:SessionChatCore 2026-08-01:
+CDXC:SessionChat 2026-08-01:
 The chat channel's own working truth. Agent hooks are the only source that knows
 a turn started before the transcript flushes its first row, so every chat surface
 (gpui, web, mobile) reads it here instead of each host wiring its own session
@@ -1856,7 +1856,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
     }
     let fingerprint = session_chat_identity_fingerprint(session);
     /*
-    CDXC:SessionChatFollowerLiveness 2026-08-24:
+    CDXC:AgentScreenDetection 2026-08-24:
     `is_finished()` alone only catches a task that RETURNED. A task wedged in an
     inline await (a blocking read against a daemon that never answers, a path
     resolution on a stalled filesystem) stays "unfinished" forever, so this
@@ -1911,7 +1911,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
         .or_else(|| agent.clone());
     // Detection source for snapshot/replaced frames (cached) and the follower's
     // ~30s probe (refresh). Both run through the shared 5s-TTL cache.
-    // CDXC:SessionChatTerminalNotices 2026-08-19: the reader also answers with
+    // CDXC:AgentScreenDetection 2026-08-19: the reader also answers with
     // the session's terminal notice, watchdog-first, so the follower never
     // learns about the watchdog store.
     let options_reader: crate::session_chat_options::SessionChatOptionsReader = {
@@ -1936,7 +1936,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
         })
     };
     /*
-    CDXC:SessionChatIdentity 2026-08-02:
+    CDXC:SessionIdentity 2026-08-02:
     Registry access the follower needs to re-bind a session whose Claude
     conversation was continued in a new transcript (compaction / background-job
     resume, where no agent hook ever reports the new id): the ids other sessions
@@ -2015,7 +2015,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
                                         != Some(bound_session_id.as_str())
                             })
                             /*
-                            CDXC:SessionChatIdentity 2026-08-02:
+                            CDXC:SessionIdentity 2026-08-02:
                             ONLY sessions that could actually be tailing the id.
                             The registry keeps every session ever created (3487
                             stopped rows on the machine this was debugged on),
@@ -2116,7 +2116,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
         }
     };
     /*
-    CDXC:SessionChatQueueCarriage 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     Snapshot / replaced / state frames carry the session's prompt queue and
     synced draft, so a client that subscribes mid-session sees the same rows the
     device that queued them sees. Read lazily inside the frame builders, never
@@ -2139,7 +2139,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
         &project_id,
         &session_id,
     );
-    // CDXC:ClaudeStatusline 2026-09-03: only Claude has a statusline payload
+    // CDXC:AgentScreenDetection 2026-09-03 WHY: only Claude has a statusline payload
     // to watch; a cheap stat per tick, no capture until it actually changes.
     let options_change_watch =
         (crate::session_chat_options::session_chat_option_agent(terminal_agent.as_deref())
@@ -2169,7 +2169,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
     let event_hub = state.event_hub.clone();
     let emit: crate::session_chat::SessionChatFrameEmitter =
         Arc::new(move |event| event_hub.broadcast(event));
-    // CDXC:SessionChatFollowerLiveness 2026-08-24: a fresh heartbeat per task, so
+    // CDXC:AgentScreenDetection 2026-08-24: a fresh heartbeat per task, so
     // the aborted one's last stamp can never be read as the new task's progress.
     let heartbeat = Arc::new(crate::session_chat::SessionChatFollowerHeartbeat::new());
     entry.heartbeat = heartbeat.clone();
@@ -2219,7 +2219,7 @@ pub(crate) fn sync_session_chat_followers_for_all_sessions(state: &AppState, rea
     };
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     /*
-    CDXC:GxserverSlimSessionQueries 2026-09-01:
+    CDXC:StateSync 2026-09-01:
     Only the handful of SUBSCRIBED sessions matter here, so each one is looked
     up by its primary key instead of hydrating the whole registry to throw all
     but those rows away. A key that does not resolve to a row is exactly the
@@ -2237,7 +2237,7 @@ pub(crate) fn sync_session_chat_followers_for_all_sessions(state: &AppState, rea
             }
             Ok(None) => {}
             /*
-            CDXC:SessionChatFollowerLiveness 2026-08-24:
+            CDXC:AgentScreenDetection 2026-08-24:
             Only `Ok(None)` means the session is gone. A read error is the
             database being busy, so the row counts as seen and its follower
             keeps running — the whole-list version could not tear anything
@@ -2298,7 +2298,7 @@ pub(crate) fn stop_all_session_chat_followers(state: &AppState) {
 /// snapshot (new generation), exactly as a new subscriber would. No-op when
 /// nobody is following the session.
 ///
-/// CDXC:SessionChatRewind 2026-09-02: the rewind driver calls this after
+/// CDXC:SessionChat 2026-09-02: the rewind driver calls this after
 /// recording a pending rewind, so every open chat view drops the rewound rows
 /// at once instead of waiting for the next transcript append.
 pub(crate) fn request_session_chat_resnapshot(

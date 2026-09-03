@@ -1,5 +1,5 @@
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 Renaming a worktree types ONE name that becomes two different things: the git
 branch (verbatim, so `feat/kanban-assignee` survives) and the sibling folder
 suffix (slugged, because `/` cannot appear in a directory name). Both rules live
@@ -32,7 +32,7 @@ export function worktreeRenameNameError(value: string): string | undefined {
     return WORKTREE_RENAME_NAME_TOO_LONG_ERROR;
   }
   /*
-   * CDXC:WorktreeRename 2026-08-09-18:40:
+   * CDXC:Worktrees 2026-08-09-18:40:
    * An empty name is an error here, unlike the create flow's optional branch
    * field where empty means "let gxserver pick". There is nothing to rename to.
    */

@@ -191,7 +191,7 @@ describe('getProjectSessionListCollapsedHeight', () => {
 describe('getExpandedProjectSessionListScrollHeight', () => {
   test('calculates expanded scroll bounds from fixed reference row-stack geometry', () => {
     /*
-     * CDXC:ProjectSessionLists 2026-06-30-12:55:
+     * CDXC:Projects 2026-06-30-12:55:
      * Expanded Show more lists use fixed row-stack math instead of DOM
      * measurement, and the setting value must fit that many complete session
      * rows. A value of 10 should not clip the tenth row at the top or bottom

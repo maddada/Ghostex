@@ -84,7 +84,7 @@ export function TitlebarTipsMenu({
           </TitlebarTipsSection>
         ) : null}
         {/*
-         CDXC:TipsAndTricks 2026-06-12-10:56:
+         CDXC:Onboarding 2026-06-12-10:56:
          Hide the Unread section when every tip is read so the panel does not show an empty "All caught up." block.
         */}
         {unreadTips.length > 0 ? (
@@ -111,11 +111,11 @@ export function TitlebarTipsMenu({
 }
 
 /**
- * CDXC:TipsAndTricks 2026-06-12-08:20:
+ * CDXC:Onboarding 2026-06-12-08:20:
  * Tips & Tricks section headers must stay expanded. Collapsible Notices, Unread,
  * and Read groups hid content behind extra clicks without improving scanability.
  *
- * CDXC:TipsAndTricks 2026-06-12-23:28:
+ * CDXC:Onboarding 2026-06-12-23:28:
  * The macOS Tips & Tricks panel should not show right-aligned section counts.
  * Keep the item count internal for empty-state rendering, but make section
  * headers read as labels only.

@@ -1,5 +1,5 @@
 /*
- * CDXC:GPUIWorkspaceGroups 2026-07-02-03:49:
+ * CDXC:Workarea 2026-07-02-03:49:
  * GPUI needs the sidebar's named session-group controls before gxserver has durable group storage.
  * Persist a per-project client overlay so users can create, rename, move, reorder, and prune groups without changing server session records.
  *

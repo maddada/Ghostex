@@ -10,7 +10,7 @@ release_gpui_require_version "$VERSION"
 release_gpui_require_command dpkg-deb
 release_gpui_prepare_output "$REPO_ROOT" "$OUTPUT"
 
-# CDXC:ReleaseChangeAwarePlanning 2026-08-13: the release workflow stages the
+# CDXC:Release 2026-08-13: the release workflow stages the
 # Linux payload once and produces both packages from that identical tree, so a
 # caller that already ran linux-stage.sh passes the staged root in instead of
 # paying for a second full cargo build.

@@ -37,7 +37,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkspaceRenameCommand 2026-06-27-02:27:
+        CDXC:SessionTitles 2026-06-27-02:27:
         The sidebar rename bridge may request only the fixed agent rename command for the exact local gxserver project/session pair it already owns. Rust parses the fixed payload, resolves the process-local mapped Agents shell tab, surfaces that exact tab through the shared focus/attach pipeline, then stages the command text and presses a real Return key with no fallback attach, wake, creation, focused-terminal typing, logging, persistence of the title, or raw renderer JSON.
         */
         let Ok(message) = gpui_sidebar_workspace_terminal_rename_command_from_json(payload) else {
@@ -58,7 +58,7 @@ impl GhostexGpuiApp {
                 return false;
             }
             /*
-            CDXC:GPUIWorkspaceRenameCommand 2026-07-29:
+            CDXC:SessionTitles 2026-07-29:
             Renaming a session that is not the visible mounted tab must first
             surface it the same way a sidebar click does: raw tab selection
             never mounts the slot's Ghostty surface (attach payloads are
@@ -128,7 +128,7 @@ impl GhostexGpuiApp {
             return GpuiWorkspaceRenameCommandDelivery::TargetInvalid;
         };
         /*
-        CDXC:GPUIWorkspaceRenameCommand 2026-07-29:
+        CDXC:SessionTitles 2026-07-29:
         Agents terminals run one of two pipelines. The default GPUI engine
         pipeline never registers a Ghostty surface, so a Ghostty-only owner
         check classified every engine tab as unmounted and silently dropped
@@ -153,7 +153,7 @@ impl GhostexGpuiApp {
         let terminal_input =
             gpui_workspace_terminal_rename_command_input(message.command, &message.title);
         /*
-        CDXC:GPUIWorkspaceRenameCommand 2026-08-26:
+        CDXC:SessionTitles 2026-08-26:
         The composer may already hold user-typed draft text, and the rename is
         written onto that same line, so BOTH pipelines open with the measured
         clear burst (WORKSPACE_RENAME_COMMAND_CLEAR_REPETITIONS) as its own pty
@@ -197,7 +197,7 @@ impl GhostexGpuiApp {
             return GpuiWorkspaceRenameCommandDelivery::TargetInvalid;
         }
         /*
-        CDXC:GPUIWorkspaceRenameCommand 2026-07-29:
+        CDXC:SessionTitles 2026-07-29:
         macOS parity (AUTO_SUBMIT_STAGED_RENAME_DELAY_MS): agent CLIs treat
         command text and Enter arriving in one stdin chunk as a paste and
         insert a newline instead of submitting. Stage the command now, then
@@ -279,7 +279,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
+        CDXC:Navigation 2026-07-29:
         This snapshot is the authoritative project switch for sidebar clicks
         and remote attach focus, so it is the leading edge of the coalescer.
         A snapshot for the already-active project is an intra-project session
@@ -355,7 +355,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIWindowsCompanionSessionFocus 2026-07-26:
+        CDXC:PlatformSupport 2026-07-26:
         Windows CEF sidebar selection publishes both an imperative terminal
         focus request and the authoritative presentation focus snapshot. The
         companion used to follow only the imperative request, so a focus-state
@@ -444,7 +444,7 @@ impl GhostexGpuiApp {
             return false;
         }
         /*
-        CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+        CDXC:Workarea 2026-08-01:
         A tab just dragged out of the command pane is live locally but its
         gxserver row is still on the `commands` surface, so it is absent from
         this projection by definition. Reconciling against that projection
@@ -488,7 +488,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkspaceSessionReattach 2026-07-24 (revised 2026-08-07):
+        CDXC:Workarea 2026-07-24 (revised 2026-08-07):
         Every terminal the restored split layout currently surfaces — not only
         the focused pane — needs its own process-local gxserver attach payload
         after restart. "Surfaced" is read from the live workspace model (a
@@ -561,7 +561,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkspaceSessionReattach 2026-08-07:
+        CDXC:Workarea 2026-08-07:
         A restored workspace keeps the sessions its panes surfaced at quit, but
         their daemon providers may have gone to sleep (auto-sleep, or the
         machine rebooted) while the app was closed. Attach alone cannot show
@@ -620,7 +620,7 @@ impl GhostexGpuiApp {
         &self,
     ) -> HashMap<String, GpuiProjectViewState> {
         /*
-        CDXC:GPUIProjectViewMemory 2026-08-07:
+        CDXC:Navigation 2026-08-07:
         The live project's view is only in the app fields, never in the map, so
         the writer folds it in at serialization time. Without this, quitting
         while on a project would persist that project's view as of the last
@@ -646,7 +646,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectViewMemory 2026-08-07:
+        CDXC:Navigation 2026-08-07:
         Restore the incoming project's own workarea and companion arrangement.
         Companion occupants are validated against the workspace model that was
         just swapped in — a session the reconcile has since removed simply
@@ -688,14 +688,14 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
     ) -> Option<(&'static str, Option<&'static str>)> {
         /*
-        CDXC:GPUIRemoteConnectOverlay 2026-08-07:
+        CDXC:RemoteMachines 2026-08-07:
         A remote tab can only show content once its machine's tunnel is up, so
         while that machine has no live connection the body states why instead
         of rendering an empty rectangle. Local sessions never qualify, and a
         connected machine returns nothing so the overlay disappears the moment
         the attach can proceed.
 
-        CDXC:GPUIRemoteAttachReconnect 2026-08-14:
+        CDXC:RemoteMachines 2026-08-14:
         The launch wrapper now keeps a remote-attach terminal's process alive
         and reconnects its own SSH session after drops, so a Running tab can
         have live, typeable content while the machine-level tunnel is still
@@ -739,7 +739,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRemoteWorkspaceRestore 2026-08-07:
+        CDXC:RemoteMachines 2026-08-07:
         The remote counterpart of `attach_surfaced_local_workspace_terminals`.
         Parking a workspace always kills its SSH clients, so every restored
         remote tab is dead by definition and used to need a tab-strip or
@@ -992,7 +992,7 @@ impl GhostexGpuiApp {
             .as_ref()
             .and_then(|key| self.local_workspace_session_mappings.get(key).copied());
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-08:01:
+        CDXC:Workarea 2026-06-26-08:01:
         Direct pane-tab close/sleep must carry Rust's pane-local replacement decision to the sidebar. If there is no mapped pane-local replacement, send an explicit no-fallback flag so the sidebar does not substitute project-list focus and diverge from the GPUI tab group.
         */
         let request = GpuiLocalWorkspaceLifecycleRequest {
@@ -1056,7 +1056,7 @@ impl GhostexGpuiApp {
 
         if action == GpuiLocalWorkspaceLifecycleAction::Close {
             /*
-            CDXC:GPUIWorkspaceLifecycle 2026-07-10:
+            CDXC:Workarea 2026-07-10:
             A tab-bar Close is a local shell mutation first, matching the
             native sidebar and workspace. Do not leave a visible GPUI tab
             waiting for the sidebar CEF bridge or a gxserver RPC: either can
@@ -1195,10 +1195,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-07:25:
+        CDXC:Workarea 2026-06-26-07:25:
         The sidebar may acknowledge only a pending native Sleep/Wake request by request id and success boolean. Apply the matching local shell transition after a successful result, drop failed or stale results without mutation, and never trust project/session/title/path/command data from the result payload. Local-first Close notifications are not registered as pending, so their cleanup acknowledgements are intentionally ignored here.
 
-        CDXC:GPUITerminalCloseConfirm 2026-06-26-23:59:
+        CDXC:CommandPane 2026-06-26-23:59:
         Mapped close requests no longer wait here: Rust consumes valid close confirmation and commits the shell close before notifying SidebarApp for best-effort gxserver transition.
         */
         let Ok(message) = gpui_sidebar_workspace_terminal_lifecycle_result_from_json(payload)
@@ -1223,7 +1223,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-27-00:33:
+        CDXC:Workarea 2026-06-27-00:33:
         Local-first Close invokes this reducer directly, while acknowledged Sleep/Wake invokes it from the result bridge. If a close request carries native confirmation state, clear that exact slot as part of the same committed local mutation.
         */
         // Close-confirm bookkeeping belongs to the macOS-only native Ghostty
@@ -1289,7 +1289,7 @@ impl GhostexGpuiApp {
             }
             GpuiLocalWorkspaceLifecycleMutationKind::DirectWake => {
                 /*
-                CDXC:GPUIWorkspaceSessionFocus 2026-06-26-23:24:
+                CDXC:FocusRouting 2026-06-26-23:24:
                 A mapped sleeping Agents wake result means gxserver has accepted `/api/wakeSession`; only now may Rust move the reused native tab into Mounting. This keeps sidebar session clicks, placeholder body clicks, and click-to-wake-disabled tab selection aligned with macOS and avoids local shell-only wake state.
                 */
                 let changed = activate_agents_terminal_placeholder_with_runtime_attempt_identity(
@@ -1299,7 +1299,7 @@ impl GhostexGpuiApp {
                     request.shell_session_id,
                 );
                 /*
-                CDXC:GPUIFullReload 2026-07-12:
+                CDXC:CefRuntime 2026-07-12:
                 A zmx sleep kills the daemon and drops the local engine record,
                 so a woken placeholder usually has no parked owner, live record,
                 or pending payload to finish the Mounting transition — it would
@@ -1368,7 +1368,7 @@ impl GhostexGpuiApp {
             );
         }
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-26-23:24:
+        CDXC:FocusRouting 2026-06-26-23:24:
         Mapped sleeping Agents sessions must wake through SidebarApp/gxserver before local placeholder materialization. The request carries only pane/session ids plus the fixed Wake action, reuses the existing mapped native tab, and deliberately has no replacement fallback because wake keeps the selected tab.
         */
         self.request_local_workspace_terminal_lifecycle(
@@ -1425,7 +1425,7 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceSessionReattach 2026-08-07:
+        CDXC:Workarea 2026-08-07:
         "Mapped" means the tab carries a canonical gxserver identity that wake
         can address, which a remote attach tab does through
         `remote_attach_sessions` just as a local tab does through the local
@@ -1525,7 +1525,7 @@ impl GhostexGpuiApp {
         shell_session_id: TerminalSessionId,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-07-11:
+        CDXC:FocusRouting 2026-07-11:
         A restored-after-restart mapped tab keeps Running presentation while nothing local can render it: no live terminal owner, no pending mount-slot attach payload, and no parked owner waiting for same-slot reattach. Only that fully-empty Running combination reports `localRuntimeMissing`; sleeping, mounting, popped-out, parked-inactive, and attach-in-flight tabs keep the ordinary one-way selection path.
         */
         let Some(session) = self.agents_workspace.session(shell_session_id) else {
@@ -1651,7 +1651,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUIProjectEditorCompanionAttach 2026-07-06:
+        CDXC:CodeEditor 2026-07-06:
         When a sidebar click keeps a project-editor mode open, the companion
         pane mounts the session first, so it owns the daemon-built attach
         payload including any queued startup text. The agents slot keeps a
@@ -1699,7 +1699,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectEditorCompanionAttach 2026-07-06:
+        CDXC:CodeEditor 2026-07-06:
         A current companion slot with no live surface and no stored payload
         asks localhost gxserver for the session's attach metadata, exactly like
         a sidebar click, then stores the attach command for the exact companion
@@ -1969,7 +1969,7 @@ impl GhostexGpuiApp {
             self.active_mode = TitlebarMode::Agents;
         }
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:34:
+        CDXC:FocusRouting 2026-06-26-06:34:
         Focusing an already-mapped local gxserver session reuses the existing GPUI tab only after the session has a live terminal owner or an inserted attach payload for the exact mount slot. Reconciled sidebar placeholders without attach state intentionally fall through to the gxserver attach pipeline so they cannot mount a default shell.
         */
         focus_existing_local_workspace_terminal_tab_model(
@@ -2051,10 +2051,10 @@ impl GhostexGpuiApp {
         let focused_project_id = key.project_id.clone();
         let focused_session_id = key.session_id.clone();
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:08:
+        CDXC:FocusRouting 2026-06-26-06:08:
         Local sidebar clicks create or focus Agents workspace tabs like macOS session attach: existing mapped tabs are reused, while new local gxserver attaches start as selected Running mount slots and receive the daemon-built attach command through a one-shot process-local launch payload. Shell persistence keeps layout/lifecycle metadata and must not store commands, paths, daemon bodies, renderer labels, titles from CEF, tokens, stdout/stderr, or terminal content.
 
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:18:
+        CDXC:FocusRouting 2026-06-26-06:18:
         MacOS decides the workspace tab group at sidebar activation time, then lets async wake/attach complete against that focus intent. GPUI must pass the captured Agents pane through attach completion so focusing another pane while gxserver prepares metadata cannot move the restored session into the wrong tab group.
         */
         let keep_editor_mode =
@@ -2135,7 +2135,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIRegisteredQuickTerminals 2026-07-24:
+        CDXC:CommandPane 2026-07-24:
         Split-right/split-below/bottom-row quick creation opens the freshly
         created gxserver session in a new workspace leaf instead of a tab in the
         requested pane. The session is otherwise identical to a sidebar attach:

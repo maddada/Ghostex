@@ -11,7 +11,7 @@ export function useCollapsibleHeight<T extends HTMLElement>() {
 
   const setContentElement = useCallback((element: T | null) => {
     /*
-     * CDXC:SidebarPerformance 2026-06-28-08:28:
+     * CDXC:Sidebar 2026-06-28-08:28:
      * Collapsed project bodies are now unmounted so hidden session rows do not
      * keep row observers and dnd hooks alive. Re-measure when the body ref
      * appears again, otherwise expanding a previously collapsed project can

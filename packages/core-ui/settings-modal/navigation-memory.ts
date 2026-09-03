@@ -8,7 +8,7 @@ export let rememberedSettingsModalTab: SettingsModalTab | undefined;
 export const rememberedSettingsModalScrollTopByTab: Partial<Record<SettingsModalTab, number>> = {};
 
 /*
- * CDXC:SettingsPerformance 2026-06-29-00:40:
+ * CDXC:Settings 2026-06-29-00:40:
  * Settings must keep app-session tab and scroll memory, but the main SettingsModal render needs React Compiler coverage so scroll-section highlight updates do not re-render the whole long settings page.
  * Keep the mutable session memory behind helpers so SettingsModal does not directly reassign module variables and the compiler can memoize the large render tree.
  */

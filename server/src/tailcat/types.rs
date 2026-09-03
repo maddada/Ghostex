@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 /*
-CDXC:Tailcat 2026-09-01:
+CDXC:RemotePairing 2026-09-01:
 tailcat is a control-plane-free remote-access sidecar: gxserver owns the
 persistent server key and supervises `tailcat serve`, and the address blob
 ("token") is DERIVED from that key file at runtime. Persist only the user's

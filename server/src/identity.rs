@@ -15,10 +15,10 @@ pub struct GxserverIdentityFile {
 }
 
 /*
-CDXC:GxserverIdentity 2026-06-14-20:37:
+CDXC:SessionIdentity 2026-06-14-20:37:
 identity.json carries the stable serverId across Rust daemon restarts. Runtime metadata stays separate so stale pid/port files can be removed without changing server-scoped refs.
 
-CDXC:GxserverIdentity 2026-06-22-04:38:
+CDXC:SessionIdentity 2026-06-22-04:38:
 Existing identity files only need a valid serverId to remain reusable. If createdAt is missing or not a string, preserve the serverId and report the Unix epoch timestamp exactly like TypeScript.
 */
 pub fn ensure_gxserver_identity(paths: &GxserverPaths) -> Result<GxserverIdentityFile> {

@@ -55,7 +55,7 @@ fn emit_cef_component_version() {
 }
 
 /*
-CDXC:GPUILibghosttyVt 2026-07-03:
+CDXC:Terminal 2026-07-03:
 Phase 1 GPUI-composited terminals parse VT bytes through libghostty-vt, so
 cargo builds must produce that static archive from the vendored ghostty tree
 instead of assuming a manually built artifact. The build script owns Zig
@@ -114,7 +114,7 @@ fn emit_libghostty_vt_rerun_hints(ghostty_dir: &Path) {
 }
 
 /*
-CDXC:GPUIWindowsBringup 2026-07-04:
+CDXC:PlatformSupport 2026-07-04:
 Windows and Linux builds need only libghostty-vt (the GPUI terminal engine);
 the GhosttyKit archive, ObjC shims, and Apple frameworks are macOS-only by
 design. Zig cross-compiles natively and the vendored ghostty build already
@@ -289,7 +289,7 @@ fn ghostty_app_version(ghostty_dir: &Path) -> String {
 
 fn gpui_macos_objc_build() -> cc::Build {
     /*
-    CDXC:GPUIAppShots 2026-06-26-04:18:
+    CDXC:AppShots 2026-06-26-04:18:
     GPUI Objective-C shims must compile against Ghostex's supported macOS 13.0 deployment target, matching the native Xcode project and GPUI package metadata. Do not inherit the current host OS as the minimum target because newer SDKs mark App Shots' real WindowServer capture API unavailable for future deployment targets.
     */
     let mut build = cc::Build::new();
@@ -324,7 +324,7 @@ fn image_alpha_bounds(image: &image::RgbaImage) -> (u32, u32, u32, u32) {
 
 fn build_windows_app_resource(manifest_dir: &Path) {
     /*
-    CDXC:GPUIWindowsAppIcon 2026-07-25:
+    CDXC:Icons 2026-07-25:
     gpui_windows loads the application icon from Win32 resource id 1 before it
     registers the window class. Build one multi-size ICO from the canonical
     artwork, removing the macOS icon-mask safe area before resizing. Windows
@@ -510,7 +510,7 @@ fn main() {
         generate_embedded_ghostty_themes(&libghostty_vt.themes_dir);
         println!("cargo:rustc-link-arg={}", libghostty_vt.archive.display());
         /*
-        CDXC:GPUILinuxX11Backend 2026-07-04:
+        CDXC:PlatformSupport 2026-07-04:
         cef-dll-sys links libcef.so dynamically (`rustc-link-lib=dylib=cef`).
         Development layouts keep the CEF payload beside the executable, so
         $ORIGIN retains the direct dev-run contract. Release layouts enter
@@ -586,7 +586,7 @@ fn main() {
     );
 
     /*
-    CDXC:GPUICefAppKitShim 2026-06-14-15:25:
+    CDXC:CefRuntime 2026-06-14-15:25:
     CEF browser creation now comes from tauri-apps/cef-rs instead of GhostexCEFBridge.mm. Keep this build script limited to the AppKit protocol/message-pump shim required because GPUI owns NSApplication and the main run loop.
     */
     gpui_macos_objc_build()
@@ -594,10 +594,10 @@ fn main() {
         .compile("ghostex_gpui_cef_appkit_hooks");
 
     /*
-    CDXC:GPUTerminalAppKitAdapter 2026-06-22-20:58:
+    CDXC:Terminal 2026-06-22-20:58:
     Compile the GPUI-local terminal AppKit adapter as a separate shim from CEF so real terminal host views can be positioned and shown or hidden through the owner path without fake views, logging, overlays, hit-test routing, or process behavior.
 
-    CDXC:GPUTerminalAppKitAdapter 2026-06-22-22:42:
+    CDXC:Terminal 2026-06-22-22:42:
     GhosttyKit link flags are now declared separately below because Rust owns the real focused one-pane surface lifecycle; keep this Objective-C shim limited to AppKit view frame and visibility operations.
     */
     gpui_macos_objc_build()
@@ -605,7 +605,7 @@ fn main() {
         .compile("ghostex_gpui_terminal_appkit_adapter");
 
     /*
-    CDXC:GPUITerminalMouseCursor 2026-07-12:
+    CDXC:Terminal 2026-07-12:
     Compile hide-while-typing cursor concealment separately from the terminal
     host-view adapter. The composited terminal element calls only this
     function, and binaries without the app's Rust key/IME callback exports
@@ -617,7 +617,7 @@ fn main() {
         .compile("ghostex_gpui_terminal_mouse_cursor");
 
     /*
-    CDXC:GPUISettingsNotifications 2026-06-24-12:44:
+    CDXC:Notifications 2026-06-24-12:44:
     Compile the GPUI Settings notification shim separately from CEF and terminal AppKit adapters. It owns only UserNotifications permission/status/test-banner calls, requests alert authorization, emits no notification sound, and must not grow into session attention routing or persistent logging.
     */
     gpui_macos_objc_build()
@@ -625,7 +625,7 @@ fn main() {
         .compile("ghostex_gpui_settings_notifications");
 
     /*
-    CDXC:GPUIAppShots 2026-06-25-23:07:
+    CDXC:AppShots 2026-06-25-23:07:
     Compile App Shots as a dedicated macOS shim because it owns only shared-settings hotkey monitoring, WindowServer capture, and the `~/.ghostex/i` PNG write path. Keep it separate from CEF, terminal AppKit, and notification shims so the feature does not add overlays, hit-test routing, persistent logging, or renderer-provided screenshot authority.
     */
     gpui_macos_objc_build()
@@ -633,7 +633,7 @@ fn main() {
         .compile("ghostex_gpui_app_shots");
 
     /*
-    CDXC:GPUIAppIcon 2026-07-12:
+    CDXC:Icons 2026-07-12:
     GPUI reuses the shared Settings App Icon picker and ~/.ghostex/icons
     storage, while this dedicated AppKit shim owns only image masking,
     thumbnails, Dock/app-switcher application, bundle file-icon updates, and
@@ -645,7 +645,7 @@ fn main() {
         .compile("ghostex_gpui_app_icon");
 
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-07:31:
+    CDXC:StatusPet 2026-06-26-07:31:
     Compile the GPUI accessibility display-options shim separately because Pet Overlay Reduce Motion is a read-only macOS runtime source. It must not share renderer IPC, hidden views, logging, paths, settings JSON, or notification payloads with unrelated settings bridges.
     */
     gpui_macos_objc_build()
@@ -653,7 +653,7 @@ fn main() {
         .compile("ghostex_gpui_accessibility_display_options");
 
     /*
-    CDXC:GPUIRemoteWakeReconnect 2026-08-12:
+    CDXC:RemoteMachines 2026-08-12:
     Compile the NSWorkspace wake observer separately from connection logic.
     It forwards only the wake edge; Rust owns tunnel validation and status.
     */
@@ -662,7 +662,7 @@ fn main() {
         .compile("ghostex_gpui_workspace_power_events");
 
     /*
-    CDXC:GPUITitlebarKeepAwake 2026-06-26-00:09:
+    CDXC:KeepAwake 2026-06-26-00:09:
     Compile the GPUI lid-sleep helper client as its own macOS shim. Rust owns only start/heartbeat/disable decisions; this Objective-C boundary mirrors the Swift XPC installer/client and returns generic status without exposing helper paths, signing text, installer output, or privileged command details.
     */
     gpui_macos_objc_build()
@@ -670,10 +670,10 @@ fn main() {
         .compile("ghostex_gpui_lid_sleep_helper_client");
 
     /*
-    CDXC:GPUIMenuBarStatusItem 2026-06-26-05:42:
+    CDXC:StatusPet 2026-06-26-05:42:
     Compile the GPUI menu-bar status item as its own AppKit shim so badge rendering stays outside CEF, renderer IPC, terminal host views, hidden hit regions, broad event routing, logging, paths, URLs, command text, and terminal content.
 
-    CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+    CDXC:StatusPet 2026-06-26-06:05:
     The same shim now owns the native Running Agents dropdown fed by Rust-owned sanitized rows, while CEF/sidebar routing still owns project/session focus callbacks.
     */
     gpui_macos_objc_build()
@@ -692,7 +692,7 @@ fn main() {
         .compile("ghostex_gpui_standard_about_panel");
 
     /*
-    CDXC:GPUIAppToastWindowChrome 2026-07-04:
+    CDXC:AppModal 2026-07-04:
     Compile the toast popup chrome shim separately because it only strips AppKit
     frame chrome from GPUI's transparent toast popup host. It must not grow into
     hit-test routing, overlays, modal behavior, CEF ownership, terminal focus,
@@ -703,10 +703,10 @@ fn main() {
         .compile("ghostex_gpui_app_toast_window_chrome");
 
     /*
-    CDXC:GPUIGhosttyKitAdapter 2026-06-22-22:29:
+    CDXC:Terminal 2026-06-22-22:29:
     GPUI now references real GhosttyKit/libghostty runtime and surface symbols from Rust, so macOS builds intentionally link the repo-local static archive plus the system libraries used by the native GhosttyKit embedding path. This build-time path output is allowed, but runtime code must still avoid logging private paths, terminal content, command text, URLs, tokens, or fallback surface state.
 
-    CDXC:GPUIGhosttyKitAdapter 2026-06-23-03:27:
+    CDXC:Terminal 2026-06-23-03:27:
     The Ghostty Metal renderer now pulls IOSurface symbols from the static GhosttyKit archive, so local GPUI builds must link IOSurface explicitly instead of relying on transitive framework flags from other crates.
     */
     let libghostty_vt = build_libghostty_vt(&manifest_dir);

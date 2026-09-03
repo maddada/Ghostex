@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * A reused product must be indistinguishable from a built one downstream. These
  * tests pin the reconstructed manifest/metadata shape against the publisher's
  * hard requirements (`assemble.mjs`) and against `release_gpui_write_manifest`,

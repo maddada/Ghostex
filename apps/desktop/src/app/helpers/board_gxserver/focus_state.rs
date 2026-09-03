@@ -151,7 +151,7 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             "agentIcon",
             "agentName",
             "agentSessionId",
-            // CDXC:DraftAgentSwitch 2026-08-28: present-only draft marker; a
+            // CDXC:Drafts 2026-08-28: present-only draft marker; a
             // daemon/sidebar that predates drafts simply omits it.
             "isDraft",
             "isGeneratingFirstPromptTitle",
@@ -159,7 +159,7 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             "kind",
             "lifecycleState",
             "projectId",
-            // CDXC:SessionChatPromptQueue 2026-08-21: gxserver publishes a
+            // CDXC:SessionChat 2026-08-21: gxserver publishes a
             // session's queued-prompt count on the presentation snapshot the
             // sidebar runtime already reads. Accepted here (unused for now, the
             // pane chip reads the count itself) so that the day the runtime
@@ -169,7 +169,7 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             "hasSessionNote",
             "sessionId",
             "stashedPromptCount",
-            // CDXC:SwitchAccount 2026-09-03: present-only, daemon-resolved rows.
+            // CDXC:AgentProviders 2026-09-03: present-only, daemon-resolved rows.
             "switchableAgents",
             "title",
         ],
@@ -451,7 +451,7 @@ pub(crate) fn persist_gpui_gxserver_presentation_focus_state(
         let _ = fs::create_dir_all(parent);
     }
     /*
-    CDXC:GPUIWorkspaceSessionReattach 2026-08-07:
+    CDXC:Workarea 2026-08-07:
     `activeProjectId` persists alongside the focus ids so a cold start can
     replay the last active workspace project (local or machine-scoped remote)
     through the sidebar bootstrap instead of re-deriving it from the focused
@@ -483,7 +483,7 @@ pub(crate) fn load_gpui_gxserver_presentation_focus_state() -> GpuiGxserverPrese
 // keep them in sync when the shared revisions bump so both apps replay the
 // refreshed onboarding exactly once.
 /*
-CDXC:FirstLaunchSetup 2026-08-24:
+CDXC:Onboarding 2026-08-24:
 The onboarding flow was rebuilt (Welcome/Plugins/Agents/Connect/Skills/Get
 started). Bumping the revision shows the new tour once to installs that saw an
 older first-launch setup.

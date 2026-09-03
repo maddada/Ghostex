@@ -16,7 +16,7 @@ use crate::{
 use super::*;
 
 /*
-CDXC:ZmxWireCycle 2026-08-23:
+CDXC:ZmxWireGeneration 2026-08-23:
 zmx's IPC tags are a wire contract between the bundled binary and the daemons
 it spawned, and that contract is deliberately broken from time to time — the
 Ghostex fork's five tags moved from 14-18 to 19-23 when upstream claimed 14-18

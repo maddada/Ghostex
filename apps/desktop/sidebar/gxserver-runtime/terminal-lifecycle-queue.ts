@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -43,7 +43,7 @@ import type {
 import { getVisibleTerminalTitle } from '@/packages/shared/session-grid-contract';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeTerminalLifecycleMethods` — because deriving them would make
@@ -100,13 +100,13 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       return;
     }
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-08:01:
+    CDXC:FocusRouting 2026-06-26-08:01:
     A GPUI workspace tab click has already selected the native tab in Rust. Match macOS `paneTabSelected` by updating the sidebar's local or machine-scoped remote presentation focus and publishing only the corresponding sidebar patch; do not post `workspaceTerminalFocus` back to Rust or call gxserver `/api/focusSession`.
 
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-27-00:33:
+    CDXC:FocusRouting 2026-06-27-00:33:
     MacOS reconciles stale native sleeping pane tabs when gxserver presentation already reports the canonical P/G session running. Preserve the one-way tab-selection path for ordinary clicks, but if Rust marks the selected mapped tab as locally sleeping and the current presentation row is running, post one bounded WorkspaceTerminalFocus so Rust reuses and attaches that existing tab instead of leaving an inert sleeping placeholder.
 
-    CDXC:GPUIWorkspaceSessionFocus 2026-07-11:
+    CDXC:FocusRouting 2026-07-11:
     A restored-after-restart Running tab can carry no local terminal runtime at all (no live owner, parked owner, or pending attach payload); Rust reports that as `localRuntimeMissing`. Reconcile it exactly like the stale sleeping case: when gxserver presentation still reports the canonical P/G session running, post one bounded WorkspaceTerminalFocus so Rust materializes the tab through the ordinary gxserver attach pipeline instead of leaving an empty body behind the selected tab.
     */
     const shouldReconcileRunningPresentation =
@@ -131,7 +131,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
 
   async handleGpuiWorkspaceFirstPromptTitleGenerationCancel(this: GpuiSidebarRuntime, payload: unknown): Promise<void> {
     /*
-    CDXC:GPUISessionTitleOverlay 2026-07-26:
+    CDXC:SessionTitles 2026-07-26:
     Escape inside the blocking "Generating title" pane overlay cancels the
     gxserver-owned first-prompt title job, matching the managed macOS pane.
     Rust only reports the suppressed-pane Escape; the sidebar runtime owns the
@@ -334,10 +334,10 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     title: string
   ): void {
     /*
-    CDXC:GxserverRendererCommands 2026-06-27-02:27:
+    CDXC:CefRuntime 2026-06-27-02:27:
     GPUI `renameCommand` is accepted when TypeScript resolves gxserver's raw sessionTarget to the local workspace session and posts one fixed fire-and-forget Rust bridge payload. Keep the result and errors id-only, and pass the normalized title only through `postWorkspaceTerminalRenameCommand` so logs/results do not expose user title text, command text, paths, URLs, tokens, or terminal output.
 
-    CDXC:GPUISidebarRename 2026-07-28:
+    CDXC:Sessions 2026-07-28:
     Pi names its session with `/name <title>` and Hermes Agent uses
     `/title <title>` instead of `/rename <title>`, so the payload carries a
     fixed command selector resolved from the session's own agent identity.
@@ -348,7 +348,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       throw new Error('Renderer command bridge unavailable.');
     }
     /*
-    CDXC:GPUISidebarRename 2026-07-29:
+    CDXC:Sessions 2026-07-29:
     Rust may only type the rename command into a mounted Ghostty surface, and
     it accepts a sidebar-focus attach for this session only while gxserver
     presentation focus agrees. Activate the session exactly like a session-card
@@ -380,7 +380,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     fallbackReplacementSessionId: string | undefined
   ): boolean {
     /*
-    CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:59:
+    CDXC:Workarea 2026-06-26-23:59:
     Rust-origin mapped Agents close matches macOS local-first behavior: hide/remove the SidebarApp row and focus the Rust-provided or project-list replacement locally, then attempt gxserver `/api/transitionSession` best-effort. Provider transition failure must not keep a retryable Ghostty close-confirm prompt or block the native tab close.
     */
     this.removePresentationSession(request.projectId, request.sessionId);
@@ -498,7 +498,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
         : undefined;
     if (request.action === 'close') {
       /*
-      CDXC:GPUIWorkspaceLifecycle 2026-07-10:
+      CDXC:Workarea 2026-07-10:
       Close is local-first and must hide the sidebar row even when gxserver is
       disconnected. The provider transition is best-effort cleanup owned by
       transitionWorkspaceTerminalLifecycleClose; unlike Sleep and Wake, it is
@@ -511,7 +511,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
     }
     if (request.action === 'wake') {
       /*
-      CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:24:
+      CDXC:Workarea 2026-06-26-23:24:
       Rust-origin mapped sleeping placeholder activation must mirror macOS wake ownership: SidebarApp/gxserver commits `/api/wakeSession`, the sidebar marks the row running, and only the result ack lets Rust move the native tab into Mounting. Do not post WorkspaceTerminalFocus from this branch or the wake request would re-enter Rust before its pending lifecycle mutation applies.
       */
       await this.client.rpc('/api/wakeSession', {
@@ -572,7 +572,7 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
           sessionId: request.replacementSessionId,
         };
         /*
-        CDXC:GPUIRemoteWorkspaceLifecycle 2026-08-08:
+        CDXC:RemoteMachines 2026-08-08:
         A remote direct close must focus its surviving terminal through the
         same native open/focus bridge as a remote sidebar session click. A
         presentation-only focus update selects the replacement row but never

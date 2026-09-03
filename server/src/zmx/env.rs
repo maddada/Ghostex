@@ -32,7 +32,7 @@ pub(crate) fn remove_gxserver_zmx_color_disabling_environment_values(
     environment: &mut HashMap<String, String>,
 ) {
     /*
-    CDXC:FactoryDroidColorEnv 2026-06-30-22:56:
+    CDXC:ServerDaemon 2026-06-30-22:56:
     Factory-created Droid sessions run inside gxserver-owned zmx provider children and may honor FORCE_COLOR=0 from the Ghostex launch environment. Strip only disabling FORCE_COLOR values here so interactive Ghostty sessions keep color while positive FORCE_COLOR overrides remain intact.
     */
     if environment

@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The just-in-time artifact wait is what replaced the artificial `needs:` edges,
  * so the two behaviours that matter are: it returns as soon as every named
  * artifact exists, and it fails with a bounded, named error instead of hanging a

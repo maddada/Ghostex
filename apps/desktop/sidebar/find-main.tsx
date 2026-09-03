@@ -15,7 +15,7 @@ import { FindPromptsView } from '@/packages/core-ui/find/find-prompts-view';
 import type { FindPromptsTransport } from '@/packages/core-ui/find/find-prompts-transport';
 
 /*
-CDXC:AgentHistorySearchModal 2026-08-23:
+CDXC:PromptSearch 2026-08-23:
 find.html is the Search by Prompt child-window page — the GUI for `gx f`. The
 gxserver bootstrap (baseUrl/token/protocolVersion) is installed by Rust on
 window.ghostexGpui.gxserverBootstrap, the page owns its own RPCs, and workspace

@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -47,7 +47,7 @@ import type {
 import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeRemoteMachineMethods` — because deriving them would make
@@ -143,7 +143,7 @@ export interface GpuiSidebarRuntimeRemoteMachineMethods {
 export const gpuiSidebarRuntimeRemoteMachineMethods = {
   connectSavedRemoteMachinesOnStartup(this: GpuiSidebarRuntime): void {
     /*
-    CDXC:GPUIRemoteStartupReconnect 2026-07-21:
+    CDXC:RemoteMachines 2026-07-21:
     Rust-owned SSH tunnels are process-local and therefore never survive an
     app restart. Reconnect every saved machine after React has mounted its
     message-source listener so cached last-seen rows become live again and the
@@ -334,7 +334,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       });
       try {
         /*
-        CDXC:GPUIRemoteMachines 2026-06-24-17:19:
+        CDXC:RemoteMachines 2026-06-24-17:19:
         Response-capable remote sidebar RPCs still carry only a bounded request id plus the allowlisted endpoint params into Rust. Rust owns the live tunnel, token, endpoint allowlist, response sanitization, and presentation refresh; renderer code must not receive tokens, SSH details, command text, URLs, or raw daemon bodies.
         */
         postAppModalHostMessage(
@@ -421,7 +421,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
       );
     } catch {
       /*
-      CDXC:GPUIRemoteMachines 2026-06-24-16:48:
+      CDXC:RemoteMachines 2026-06-24-16:48:
       Remote-machine operations must never depend on toast-host availability. If the shared app-modal toast bridge is missing, keep the native-owned request/status path honest and avoid logging payloads, SSH details, tokens, paths, daemon responses, or renderer contents.
       */
     }
@@ -591,7 +591,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
   },
 
   /*
-  CDXC:GxserverStaleRemotePresentationRefetch 2026-09-01:
+  CDXC:StateSync 2026-09-01:
   A remote delta that does not advance the cached revision means this app and
   the machine disagree about where the stream is, and the repair is to refetch
   the whole snapshot. That verdict is unchanged — but the deltas that trigger it
@@ -642,7 +642,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
 
   async refreshRemoteSidebarHudFromGxserver(this: GpuiSidebarRuntime, remoteMachineId: string): Promise<void> {
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     A remote project's Actions are stored by the daemon that owns the project,
     so the only place they can come from is that machine's own HUD projection.
     Ask for the per-project command block, exactly like the local HUD read, so
@@ -665,7 +665,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     groupId: string
   ): Promise<void> {
     /*
-    CDXC:GPUIRemoteProjects 2026-06-27-19:37:
+    CDXC:RemoteMachines 2026-06-27-19:37:
     Remote Recent Projects are client-app state, not local Mac gxserver state
     and not the remote daemon's shared project state. GPUI parks a
     machine-scoped row in its own CEF storage so macOS and GPUI can connect to

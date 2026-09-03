@@ -52,7 +52,7 @@ export function filterPreviousSessionsModalItems(
   previousSessions: readonly SidebarPreviousSessionItem[]
 ): SidebarPreviousSessionItem[] {
   /**
-   * CDXC:PreviousSessions 2026-05-15-09:57
+   * CDXC:Sessions 2026-05-15-09:57
    * The Previous Sessions modal is an agent-session restore surface. Browser
    * page history can still exist in shared storage for compatibility, but the
    * modal must hide web pages so the list only presents agent sessions.
@@ -65,7 +65,7 @@ export function removePreviousSessionByHistoryId(
   historyId: string
 ): SidebarPreviousSessionItem[] {
   /*
-  CDXC:PreviousSessions 2026-06-04-22:52:
+  CDXC:Sessions 2026-06-04-22:52:
   The full Previous Sessions modal keeps gxserver query results in component state. Delete must remove the clicked row from that modal-owned result page immediately, because native/gxserver deletion is asynchronous and does not send a matching previousSessionsResult request id back to the open modal.
   */
   return previousSessions.filter((session) => session.historyId !== historyId);
@@ -81,7 +81,7 @@ export function getNextPreviousSessionsModalSelection({
   sessions: readonly SidebarPreviousSessionItem[];
 }): string | undefined {
   /*
-  CDXC:PreviousSessions 2026-06-15-11:26:
+  CDXC:Sessions 2026-06-15-11:26:
   Previous Sessions keyboard navigation is a search-owned selection model. Up/Down wraps through the currently visible result rows while DOM focus stays in the search input, so held arrows repeat and typing continues in the field.
   */
   if (sessions.length === 0) {
@@ -101,7 +101,7 @@ export function groupPreviousSessionsByDay(
   previousSessions: readonly SidebarPreviousSessionItem[]
 ): PreviousSessionsModalDayGroup[] {
   /*
-  CDXC:PreviousSessions 2026-06-17-17:06:
+  CDXC:Sessions 2026-06-17-17:06:
   The modal's date groups represent when sessions were closed, not when they were last active. Sort by closedAt before grouping so newly closed sessions appear first even when their lastInteractionAt is older than other history rows.
   */
   const formatter = new Intl.DateTimeFormat(undefined, {
@@ -154,7 +154,7 @@ export function filterSidebarSessionItems<T extends SidebarSearchableSession>(
   const shouldUseAbbreviationMatching = queryTokens.length > 0 && queryTokens.every((token) => token.length <= 3);
 
   /*
-   * CDXC:SidebarSearch 2026-06-28-06:29:
+   * CDXC:Sidebar 2026-06-28-06:29:
    * Sidebar session search should stay fuzzy enough for short abbreviations
    * and one-character typos, but long terms such as "sidebar" must not match
    * scattered letters across unrelated titles. Match normalized tokens
@@ -182,7 +182,7 @@ export function matchesSidebarSessionSearchQuery(session: SidebarSearchableSessi
 
 export function filterDefaultNamedSessionSearchItems<T extends SidebarSearchableSession>(sessions: readonly T[]): T[] {
   /*
-   * CDXC:SessionSearch 2026-06-18-00:01:
+   * CDXC:PromptSearch 2026-06-18-00:01:
    * Sidebar and command-palette session search should not surface placeholder
    * names from supported agent CLIs. Filter at the search helper boundary so
    * current sessions, local previous-session results, and remote previous
@@ -231,12 +231,12 @@ function dedupePreviousSessionsByProjectAndTitle(
   sessions: readonly SidebarPreviousSessionItem[]
 ): SidebarPreviousSessionItem[] {
   /**
-   * CDXC:PreviousSessions 2026-05-11-09:04
+   * CDXC:Sessions 2026-05-11-09:04
    * Previous Sessions must not show duplicate historical cards for the same
    * project and session name. Keep only the latest closed item before
    * search so both the modal and sidebar search share the same unique list.
    *
-   * CDXC:PreviousSessions 2026-06-17-17:06:
+   * CDXC:Sessions 2026-06-17-17:06:
    * Duplicate pruning follows closedAt rather than lastInteractionAt because a
    * just-closed session must remain the restorable row even if an older
    * duplicate had more recent terminal activity.
@@ -280,7 +280,7 @@ function createPreviousSessionDedupeKey(session: SidebarPreviousSessionItem): st
   const titleKey = normalizeSessionSearchValue(getSessionHistoryCardTitle(session));
 
   /**
-   * CDXC:SessionForkFamilies 2026-08-28:
+   * CDXC:SessionFork 2026-08-28:
    * Two branches of one forked conversation start from the same history, so
    * they very often carry the same title in the same project. That is exactly
    * the shape this dedupe was built to collapse, and collapsing it here would

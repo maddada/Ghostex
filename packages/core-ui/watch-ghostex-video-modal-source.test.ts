@@ -15,12 +15,12 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('watch ghostex video modal source', () => {
   test('copies the highlighted-feature shell but renders one filling walkthrough video', () => {
     /*
-     * CDXC:GhostexTutorialVideo 2026-06-18-04:49:
+     * CDXC:Onboarding 2026-06-18-04:49:
      * The tutorial video modal should be a one-page copy of the Highlighted
      * Features shell. It must show the supplied video walkthrough, fill the
      * modal below the required title, and remove screenshot carousel behavior.
      *
-     * CDXC:GhostexTutorialVideo 2026-08-08:
+     * CDXC:Onboarding 2026-08-08:
      * YouTube owns the encoded walkthrough so the app bundle does not carry a
      * large duplicate video asset.
      */

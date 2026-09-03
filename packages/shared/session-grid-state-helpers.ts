@@ -209,7 +209,7 @@ export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
   const displayId = formatSessionDisplayId(session.displayId ?? sessionNumber - 1);
   const titleSource = normalizeSessionTitleSource(session, title);
   /**
-   * CDXC:PanePopOut 2026-05-11-09:35
+   * CDXC:Workarea 2026-05-11-09:35
    * Popped-out presentation survives snapshot normalization, but sleeping wins
    * because slept terminals dispose their native surface and cannot remain in a
    * live detached window.
@@ -278,7 +278,7 @@ export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
 
 function normalizeSessionLifecycleTimestamp(value: string | undefined): string | undefined {
   /**
-   * CDXC:AutoSleep 2026-05-28-08:32:
+   * CDXC:SessionSleep 2026-05-28-08:32:
    * Started/accessed timestamps are persisted sleep-policy inputs. Drop malformed
    * values during snapshot normalization so auto-sleep never compares invalid
    * dates against real activity.
@@ -292,7 +292,7 @@ function normalizeSessionLifecycleTimestamp(value: string | undefined): string |
 
 function normalizeTerminalSessionLastActivityAt(value: string | undefined): string | undefined {
   /**
-   * CDXC:SessionLastActive 2026-05-17-02:45:
+   * CDXC:SessionStatus 2026-05-17-02:45:
    * Stored terminal Last Active values must be real timestamps because the
    * sidebar uses them for both visible relative time and deterministic sorting
    * before a terminal runtime has been restored.

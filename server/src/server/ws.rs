@@ -29,10 +29,10 @@ pub(crate) async fn handle_events(
         return response;
     };
     /*
-    CDXC:GxserverPresentationEvents 2026-06-14-20:37:
+    CDXC:StateSync 2026-06-14-20:37:
     Browser WebSocket clients cannot set Authorization headers, so Rust keeps the TypeScript authToken query option and protocolVersion query/header gate for /api/events.
 
-    CDXC:GxserverProtocol 2026-06-22-04:10:
+    CDXC:ServerApi 2026-06-22-04:10:
     Plain HTTP requests to the WebSocket-only event path must keep the TypeScript JSON `notFound` envelope. Do not expose Axum WebSocket extractor rejection bodies because clients rely on gxserver's product/protocol/requestId error shape.
     */
     let query_token = query_value(&uri, "authToken");
@@ -302,7 +302,7 @@ pub(crate) fn send_presentation_snapshot_for_subscription(
         return true;
     };
     /*
-    CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+    CDXC:StateSync 2026-09-01:
     Every client fetches `/api/readPresentationSnapshot` over HTTP and *then*
     opens this socket quoting the revision it just applied, so the snapshot
     this handler used to build unconditionally was, in the overwhelmingly
@@ -352,7 +352,7 @@ pub(crate) fn send_presentation_snapshot_for_subscription(
     }
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     /*
-    CDXC:GxserverSessionSyncOneList 2026-09-01:
+    CDXC:StateSync 2026-09-01:
     One `list_sessions` feeds both sync passes and the snapshot projection.
     The passes can mutate rows, so re-read only when one of them reports an
     actual change.

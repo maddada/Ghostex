@@ -1,5 +1,5 @@
 /**
- * CDXC:NavigationHistory 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * Keyboard access to the Back/Forward trail for hosts that resolve hotkeys in
  * the page — the web app today.
  *

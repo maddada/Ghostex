@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -10,7 +10,7 @@ import type { SidebarGitAction } from '@/packages/shared/sidebar-git';
 export const GPUI_SIDEBAR_BOOTSTRAP_RETRY_DELAY_MS = 20;
 export const GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS = 250;
 /*
-CDXC:GxserverPresentationStreamBackoff 2026-09-01:
+CDXC:StateSync 2026-09-01:
 Presentation-stream recovery used to run with no delay at all, so a daemon that
 was restarting, or a socket the OS kept refusing, turned every `onClose` /
 `onError` into an immediate full snapshot fetch plus three more RPCs — a tight
@@ -28,7 +28,7 @@ signal that the connection was actually usable.
 */
 export const GPUI_PRESENTATION_STREAM_HEALTHY_MS = 30 * 1000;
 /*
-CDXC:GxserverStaleRemotePresentationRefetch 2026-09-01:
+CDXC:StateSync 2026-09-01:
 How long one stale-revision snapshot refetch suppresses the next for the same
 remote machine. Stale deltas arrive in bursts — one per changed row — and each
 refetch is a full presentation read across the SSH tunnel.
@@ -37,7 +37,7 @@ export const GPUI_STALE_REMOTE_PRESENTATION_REFRESH_COOLDOWN_MS = 3 * 1000;
 export const GPUI_AUTO_SLEEP_MONITOR_INTERVAL_MS = 60 * 1000;
 export const GPUI_PROJECT_DIFF_STATS_BACKGROUND_INTERVAL_MS = 15 * 1000;
 /*
-CDXC:SidebarDiffStatsChurn 2026-08-16:
+CDXC:Git 2026-08-16:
 Large sidebars (100+ project rows across local and remote machines) previously
 kept the 15s cycle fixed, which meant the stagger compressed to ~100ms and the
 runtime shelled out Git probes 8-16 times per second forever. Each background
@@ -47,14 +47,14 @@ stretches so consecutive probes are never closer than this spacing.
 */
 export const GPUI_PROJECT_DIFF_STATS_MIN_PROBE_SPACING_MS = 1000;
 /*
-CDXC:SidebarDiffStatsChurn 2026-08-16:
+CDXC:Git 2026-08-16:
 `countFileLines` sums every requested path server-side in one RPC. Batch the
 untracked-file fan-out instead of issuing one RPC per file, chunked only to
 keep a single request body bounded for repos with thousands of untracked files.
 */
 export const GPUI_UNTRACKED_LINE_COUNT_BATCH_SIZE = 200;
 /*
-CDXC:SidebarGitMemo 2026-07-29:
+CDXC:Git 2026-07-29:
 GitHub CLI probes (`gh --version`, `gh pr view`) are the only networked calls in
 the sidebar Git fan-out, and `gh pr view` can hold a gxserver worker for many
 seconds. Background/switch-driven Git refreshes therefore publish local Git
@@ -63,7 +63,7 @@ switch instant never competes with terminal attach traffic.
 */
 export const GPUI_SIDEBAR_GIT_HUB_DEFERRED_PROBE_DELAY_MS = 1500;
 /*
-CDXC:SidebarGitMemo 2026-07-29:
+CDXC:Git 2026-07-29:
 `GxserverGitAction` members that change the working tree, the index, or a ref.
 Running any of them invalidates that project's memoized Git state, so the memo
 can only ever serve a repository the sidebar itself has not touched since.
@@ -95,7 +95,7 @@ export const GPUI_GXSERVER_UNAVAILABLE_GROUP_ID = 'gxserver-unavailable';
 export const GPUI_GXSERVER_CHATS_GROUP_ID = 'combined-chats';
 export const GPUI_DEFAULT_VISIBLE_COUNT = 1;
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29:
+CDXC:StateSync 2026-07-29:
 Toast titles for a refused settle/snooze. Named per endpoint so the user learns
 which action failed without the toast ever repeating a session title, project
 path, or the daemon's response body.
@@ -136,7 +136,7 @@ export const GPUI_PROJECT_BOARD_RESTORABLE_LINK_CHECK_TTL_MS = 60_000;
 export const GPUI_PROJECT_BOARD_RESTORABLE_LINK_CHECK_CACHE_MAX = 512;
 export const GPUI_PROJECT_BOARD_LINK_AVAILABILITY_CONCURRENCY = 4;
 /*
-CDXC:ProjectBoardBeads 2026-08-07:
+CDXC:ProjectBoard 2026-08-07:
 Resuming a bead's closed conversation runs through the daemon's fork plan,
 which only knows how to continue Codex, Claude, and Pi conversations. gxserver
 stays the authority and rejects anything else, so this set exists to keep the
@@ -176,7 +176,7 @@ export const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_TYPE = 'ghostex.gpui.
 export const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_VERSION = 1;
 export const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE = 'ghostex.gpui.sidebar.globalActions';
 /*
- * CDXC:GlobalActions 2026-08-01:
+ * CDXC:AgentLauncher 2026-08-01:
  * The tab strip is gpui-drawn, so it cannot read the HUD store the React
  * surfaces use. Cap what crosses the bridge at the number of buttons the strip
  * will actually draw; gpui rejects a longer list outright rather than
@@ -212,7 +212,7 @@ export const GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_VERSION = 1;
 export const GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_TYPE = 'ghostex.gpui.sidebar.nativeAppShotPromptResult';
 export const GPUI_SIDEBAR_REMOTE_EVENT_NAME = 'ghostex-gpui-sidebar-remote-event';
 /*
-CDXC:NavigationHistory 2026-08-19:
+CDXC:Navigation 2026-08-19:
 The native titlebar owns the Back/Forward buttons but not the trail: Rust
 dispatches the click here and this runtime performs the same gxserver walk and
 sidebar activation the web app does, so both apps share one implementation.

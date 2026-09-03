@@ -45,13 +45,13 @@ const DEFAULT_CORS_ALLOWED_ORIGINS: &[&str] = &[
 ];
 
 /*
-CDXC:GxserverApi 2026-06-14-20:37:
+CDXC:ServerApi 2026-06-14-20:37:
 The local Rust listener defaults to 127.0.0.1:58744 and the remote listener remains disabled by default. This preserves the TypeScript CLI/native/sidebar assumptions while the port runs side by side.
 
-CDXC:GxserverRustPort 2026-06-14-21:58:
+CDXC:RepoStructure 2026-06-14-21:58:
 Compatibility runs may explicitly select a different loopback port with GHOSTEX_GXSERVER_DEV_PORT while the packaged daemon owns 58744. The alternate port is a dev/compat opt-in for the selected process, not a config fallback or a product default change.
 
-CDXC:GxserverApi 2026-06-22-04:38:
+CDXC:ServerApi 2026-06-22-04:38:
 Config files may not move the local gxserver API. Reject local host or port overrides before startup writes runtime metadata so Rust reports the same fixed-listener config error as TypeScript instead of silently starting on the default port.
 */
 pub fn create_default_gxserver_config() -> Result<GxserverConfig> {

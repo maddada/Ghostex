@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatTerminalPicker 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 The option rows shared by the two answer pickers: the AskUserQuestion card
 (agent-asked questions) and the terminal-notice card (a picker the agent CLI
 painted on screen, such as Claude Code's resume-usage chooser).

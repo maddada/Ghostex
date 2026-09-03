@@ -7,7 +7,7 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::ghostex_cli::{launchers, picker, selector, sessions};
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI attach flow (scripts/ghostex-cli.mjs lines
 4823-4933 and 5482-5570). `gx a <selector>` resolves the session, applies
 gxserver attach metadata (start-missing-provider + restore-block checks live in

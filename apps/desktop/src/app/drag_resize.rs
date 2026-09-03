@@ -67,7 +67,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIBrowserTabs 2026-07-08:
+        CDXC:Browser 2026-07-08:
         Browser tab close controls are hover-only chrome derived from runtime pointer state. Track the hovered Browser tab separately from BrowserTabModel so hover can reveal the real inline close button without changing tab selection, focus, persistence, drag/drop, or favicon status rendering.
         */
         if hovered {
@@ -341,7 +341,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn begin_workspace_tab_drag(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUIWorkspaceTabDragVisibility 2026-07-03:
+        CDXC:Workarea 2026-07-03:
         Workspace tab drag begin/finish only flips the runtime drag flag and lets the existing gated sync passes do the hiding: CEF child views re-evaluate through the shared allows-cef-child-views gate, and mounted Agents/command terminals hide-and-park on the next render-driven host sync. No native view is created, destroyed, or overlaid here; drop and cancel restore through the same parked-owner reattach machinery.
         */
         self.pending_workspace_tab_click = None;
@@ -668,7 +668,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<(WorkspacePaneId, TerminalSessionId)> {
         /*
-        CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+        CDXC:Workarea 2026-08-01:
         Dragging a command tab into the Agents workspace moves the running
         terminal instead of re-creating it. The previous placeholder boundary
         carried only the title, so the dragged tab became a fresh shell while
@@ -840,7 +840,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandWorkspaceTransfer 2026-06-22-15:55:
+        CDXC:Workarea 2026-06-22-15:55:
         Dropping a command tab on an Agents pane body switches to Agents and focuses the inserted placeholder pane so the result is immediately visible. The source command session is removed only after the Agents placeholder insert succeeds; the transfer carries only the visible title and never captures command text, stdout/stderr, terminal content, process state, libghostty state, CEF/code bridges, overlays, or hidden hit routing.
         */
         window.prevent_default();
@@ -891,7 +891,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandWorkspaceTransfer 2026-06-22-16:04:
+        CDXC:Workarea 2026-06-22-16:04:
         Dropping a command tab on an Agents tab strip uses the visible tab boundary/end marker as the exact insertion point, switches to Agents, and focuses the target Agents pane so the selected placeholder is visible. This path must not reorder existing Agents tabs for command drags and must not transfer command text, stdout/stderr, terminal content, real process state, libghostty state, Source/Kanban/Automate/Manage surfaces, overlays, hidden hit regions, or native/root hit-test routing.
         */
         window.prevent_default();
@@ -1299,7 +1299,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPaneDragDrop 2026-06-22-16:18:
+        CDXC:CommandPane 2026-06-22-16:18:
         Dropping an Agents tab on a command-pane tab strip uses the active command insertion marker as the exact grouping index, expands/focuses the command pane, and scrolls both the source Agents strip and inserted command strip. It is not a split/reorder path and transfers only the visible Agents title into a command placeholder.
         */
         window.prevent_default();
@@ -1389,10 +1389,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPaneDragDrop 2026-06-22-13:05:
+        CDXC:CommandPane 2026-06-22-13:05:
         Dropping an Agents tab into the command pane must preserve the placeholder boundary: preflight the Agents final-root transfer guard, create only a command-pane placeholder with the visible title, then remove the Agents shell tab/session and persist layout state. Real process transfer, libghostty remounting, terminal content, command text, stdout/stderr, overlays, and hit-test routing remain deferred.
 
-        CDXC:GPUICommandPaneDragDrop 2026-06-25-19:45:
+        CDXC:CommandPane 2026-06-25-19:45:
         Body drops share the rollback-capable Agents-to-command transfer helper with tab-strip drops so failed Agents source close restores prior command-pane mode, focus group, and active tabs after removing only the inserted command placeholder.
         */
         window.prevent_default();
@@ -1451,7 +1451,7 @@ impl GhostexGpuiApp {
         command_title: Option<String>,
     ) -> Result<GpuiCommandTerminalCreateInputResolution, String> {
         /*
-        CDXC:GPUICommandPaneGxserverRestore 2026-07-04:
+        CDXC:Workarea 2026-07-04:
         Restored legacy command tabs can render before the first sidebar project
         snapshot hydrates. Treat only that missing snapshot as not-ready so the
         sync pass retries later; invalid hydrated project metadata and daemon/RPC
@@ -1534,7 +1534,7 @@ impl GhostexGpuiApp {
             }
         }
         /*
-        CDXC:GPUICommandPaneGxserverRestore 2026-08-13:
+        CDXC:Workarea 2026-08-13:
         Action tabs are first persisted before their asynchronous gxserver
         create/attach finishes. Persist again at the successful attach boundary
         after installing the canonical daemon key, otherwise a rebuild can
@@ -1570,7 +1570,7 @@ impl GhostexGpuiApp {
         title: Option<String>,
     ) {
         /*
-        CDXC:GPUICommandPaneGxserverRestore 2026-07-04:
+        CDXC:Workarea 2026-07-04:
         Keep the runtime attach map and persisted command-session metadata synchronized at the successful daemon attach boundary. This stores only the gxserver key, bounded display title, and validated bounded Action selector; attach commands and process details stay one-shot launch payload data.
         */
         self.command_gxserver_session_mappings
@@ -1656,7 +1656,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+        CDXC:Workarea 2026-08-01:
         The moved tab is already live locally, so this update runs off the UI
         thread. Until it lands the session is held out of sidebar-driven
         reconciliation by `agents_sessions_pending_surface_transfer`, because a
@@ -1827,7 +1827,7 @@ impl GhostexGpuiApp {
             .keys()
             .copied()
             /*
-            CDXC:RemoteProjectActions 2026-08-29:
+            CDXC:RemoteMachines 2026-08-29:
             Remote Action tabs are pruned by the same sweep as local ones. A tab
             removed straight from the command model (Action pruning of stale
             same-command tabs, layout repair) never reaches the tab-close path,
@@ -1909,7 +1909,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         A remote Action's command tab owns a session on another machine, so it
         reattaches over SSH instead of creating or reclaiming a local one. This
         branch is what keeps a restored remote Action tab from asking the local
@@ -1923,7 +1923,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         An Action tab in a remote project's command pane that has neither a
         remote nor a local identity is unmountable by construction: its Action
         runs on the remote machine, and the local daemon has no session and no
@@ -2025,7 +2025,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWindowsPowerShellCommandPane 2026-07-15:
+        CDXC:PlatformSupport 2026-07-15:
         PowerShell mode intentionally has no gxserver/zmx persistence, so a
         command tab must launch its own ConPTY process from an exact-slot,
         one-shot payload. This path covers new, restored, and woken tabs and
@@ -2280,7 +2280,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandTabDoubleClick 2026-06-25-13:58:
+        CDXC:CommandPane 2026-06-25-13:58:
         Native accepts double-click on empty pane-titlebar chrome after real tabs and controls decline the hit. GPUI command tab-strip backgrounds use this shared handler so expanded command chrome creates a New Terminal without affecting child tab/control clicks. A single click on collapsed empty chrome expands and focuses the existing active command tab.
         */
         if !self.command_pane.is_expanded() {
@@ -2400,7 +2400,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkspaceResize 2026-06-22-06:45:
+        CDXC:Workarea 2026-06-22-06:45:
         Agents workspace split handles are real five-pixel layout siblings with one-pixel visual separators. Dragging a horizontal handle updates the left/right split ratio, dragging a vertical handle updates the top/bottom ratio, and double-click resets that split to the shell default 0.5 ratio while persisting only placeholder shell layout state.
         */
         window.prevent_default();
@@ -2567,10 +2567,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPaneResize 2026-06-22-06:45:
+        CDXC:CommandPane 2026-06-22-06:45:
         Command-pane split handles use the same real-layout resize contract as Agents splits. Dragging updates horizontal split ratios from x movement and vertical split ratios from y movement, double-click resets to 0.5, and finished mutations persist with the placeholder shell state without starting real command processes.
 
-        CDXC:GPUICommandPaneResize 2026-06-27-03:38:
+        CDXC:CommandPane 2026-06-27-03:38:
         Command split resize hover chrome is gesture-owned runtime state. Double-click reset must clear the split rail cursor/hover affordance and invalidate delayed hover timers even when the split ratio was already at the default, while layout persistence remains tied to an actual ratio reset.
         */
         window.prevent_default();
@@ -2675,7 +2675,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIBrowserSplitResize 2026-06-22-09:05:
+        CDXC:Browser 2026-06-22-09:05:
         Browser split handles use the same normal-layout resize contract as Agents workspace and command-pane splits. The visible five-pixel divider is the only grab target; dragging updates the targeted Browser split ratio from that branch's rendered first/handle/second child metrics, double-click resets to 0.5, and finished mutations persist through sanitized GPUI shell state while Browser leaf bodies keep existing tab-owned CEF surfaces keyed by BrowserTabId.
         */
         window.prevent_default();
@@ -2772,7 +2772,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectEditorResize 2026-06-22-06:53:
+        CDXC:CodeEditor 2026-06-22-06:53:
         Source, Browser, Kanban, and Manage companion panes use the visible five-pixel divider as the real resize control. Dragging adjusts the stored companion width ratio, double-click resets toward the 0.32 default within practical width clamps, and shell-state persistence happens after reset or finished drag without hidden overlays or root hit-test routing.
         */
         window.prevent_default();
@@ -3125,7 +3125,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPaneSide 2026-08-16:
+        CDXC:CommandPane 2026-08-16:
         The right-dock divider mirrors the bottom rail contract on the X axis:
         double-click resets the width ratio to the constant default, a single
         press stores the absolute start width and pointer X, and the root
@@ -3223,11 +3223,11 @@ impl GhostexGpuiApp {
 
     pub(crate) fn finish_command_pane_resize_drag(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUICommandPaneResize 2026-06-25-19:13:
+        CDXC:CommandPane 2026-06-25-19:13:
         Native command-panel drag continuations update layout during pointer movement, but the durable height-ratio notification is emitted once from `endCommandsPanelResize`.
         GPUI mirrors that by mutating the ratio during drag and persisting only when the stored resize state is consumed here.
 
-        CDXC:GPUICommandPaneResize 2026-06-27-03:13:
+        CDXC:CommandPane 2026-06-27-03:13:
         Ending top-rail resize ownership must also remove runtime hover/cursor chrome and invalidate delayed hover timers. Persist layout only for a consumed drag, but still repaint when clearing hover state is the only visible change.
         */
         let consumed_drag = self.command_pane.resize_drag.take().is_some();

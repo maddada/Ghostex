@@ -23,7 +23,7 @@ export function dismissSidebarTooltips() {
 }
 
 /*
- * CDXC:TooltipLifecycle 2026-07-23:
+ * CDXC:Tooltips 2026-07-23:
  * Scrolling any sidebar scroll area must dismiss visible tooltips immediately:
  * a session row can scroll out from under an open tooltip, leaving the tooltip
  * floating over unrelated rows. Scroll events do not bubble, so a capture-phase
@@ -64,10 +64,10 @@ export function setSidebarTooltipsSuppressedForDrag(suppressed: boolean) {
   }
   sidebarTooltipSuppressedForDrag = suppressed;
   /*
-   * CDXC:SidebarDragTooltips 2026-06-02-20:22:
+   * CDXC:Tooltips 2026-06-02-20:22:
    * Sidebar project/session drag should not spawn hover tooltips under the pointer. Suppress both Radix and local session title tooltips for the duration of sidebar drag operations, and close any tooltip that was already open when the drag started.
    *
-   * CDXC:TooltipLifecycle 2026-06-13-02:30:
+   * CDXC:Tooltips 2026-06-13-02:30:
    * Drag is the only flow that should block tooltip creation. Keep the CSS body
    * flag in this helper so native pointer-leave can dismiss visible tooltips
    * without leaving pseudo-tooltips disabled after hover returns.
@@ -148,19 +148,19 @@ export function AppTooltip({
   }
 
   /*
-   * CDXC:SidebarTooltips 2026-05-25-07:16:
+   * CDXC:Tooltips 2026-05-25-07:16:
    * Native sidebar tooltips must disappear when the sidebar stops owning pointer
    * hover because WKWebView can miss normal trigger leave events during app
    * switching, external clicks, or fast exits into another native surface. Keep
    * AppTooltip controllable through a shared dismiss event so all Radix tooltip
    * instances close immediately and stay closed until the trigger opens again.
    *
-   * CDXC:TitlebarTooltips 2026-06-13-02:59:
+   * CDXC:Tooltips 2026-06-13-02:59:
    * The macOS titlebar uses the same AppTooltip wrapper as the sidebar, but its
    * compact chrome sometimes needs side-positioned labels. Forward side to
    * TooltipContent without changing the sidebar's default bottom placement.
    *
-   * CDXC:TitlebarTooltips 2026-06-15-16:40:
+   * CDXC:Tooltips 2026-06-15-16:40:
    * Titlebar button hover labels need a small vertical alignment nudge while
    * preserving the shared tooltip primitive. Forward alignOffset so the
    * titlebar wrapper can adjust placement through Base UI's positioner instead

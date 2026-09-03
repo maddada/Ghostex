@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 The three overlays take over the bottom pane exactly where the terminal picker
 puts them, so `^g`, `^j`, and `^o` land in the same place they always did.
 */

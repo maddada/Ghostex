@@ -59,17 +59,17 @@ export const DEFAULT_WORKSPACE_OPEN_TARGET_AVAILABILITY: WorkspaceOpenTargetAvai
 };
 
 /**
- * CDXC:TitlebarOpenIn 2026-05-11-00:22
+ * CDXC:Titlebar 2026-05-11-00:22
  * The titlebar Open In menu uses the shared editor command catalog so
  * installed local IDEs appear without maintaining a second, smaller
  * ghostex-only list.
  *
- * CDXC:TitlebarOpenIn 2026-05-16-23:02
+ * CDXC:Titlebar 2026-05-16-23:02
  * Embedded Editor is a first-party Code surface reached from the titlebar Code
  * mode, not an external Open In selection. Keep the Open In catalog focused on
  * installed editors and the first-party folder opener so the dropdown does not duplicate Code mode.
  *
- * CDXC:TitlebarOpenIn 2026-06-04-13:39:
+ * CDXC:Titlebar 2026-06-04-13:39:
  * The built-in filesystem target remains internally keyed as finder for protocol compatibility, but user-facing labels must say Open Folder so the macOS app copy is OS-agnostic.
  */
 export const BUILT_IN_WORKSPACE_OPEN_TARGETS: readonly WorkspaceOpenTargetDefinition[] = [
@@ -283,7 +283,7 @@ export function getBuiltInWorkspaceOpenTargetById(targetId: string): WorkspaceOp
 
 export function normalizeAvailableWorkspaceOpenTargetIds(candidate: unknown): BuiltInWorkspaceOpenTargetId[] {
   /**
-   * CDXC:TitlebarOpenIn 2026-05-11-02:03
+   * CDXC:Titlebar 2026-05-11-02:03
    * The Open In menu defaults to only locally installed built-ins. Persist the
    * detected available ids separately from user-hidden ids so detection can
    * refresh once at startup without re-enabling targets the user disabled.

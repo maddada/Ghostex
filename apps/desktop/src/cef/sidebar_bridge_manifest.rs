@@ -174,7 +174,7 @@ const PROJECT_WORKAREA_PROJECT_BOARD_IMAGE_REQUEST_JS_FUNCTION: &str =
 const PROJECT_WORKAREA_MANAGE_FILES_REQUEST_JS_FUNCTION: &str = "postManageFilesRequest";
 pub(crate) const PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS: usize = 3 * 1024 * 1024;
 /*
-CDXC:RemoteProjectDocs 2026-08-07:
+CDXC:Docs 2026-08-07:
 The Manage Docs synthetic resource origin and its JS field live in this shared
 manifest so the browser process (cef/shell.rs) and the helper renderer install
 the same `manageDocsResourceBaseUrl`. When the helper drifted and dropped the
@@ -218,7 +218,7 @@ pub(crate) const WEBKIT_NATIVE_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghostexNa
 pub(crate) const WEBKIT_POST_MESSAGE_JS_FUNCTION: &str = "postMessage";
 
 /*
-CDXC:GPUIExtensionRemoteUrlSurface 2026-08-28:
+CDXC:Extensions 2026-08-28:
 An extension surface spec pins the one origin+path prefix a given extension's
 CEF surface is allowed to be, and whether that surface gets the extension
 bridge. `new` builds the first-party case: gxserver's static `/ext/{id}/`
@@ -399,10 +399,10 @@ pub(crate) fn extension_bridge_context_changed_message(
 }
 
 /*
-CDXC:GPUISidebarBridgeOwnership 2026-06-28-23:24:
+CDXC:CefRuntime 2026-06-28-23:24:
 The sidebar CEF post-function allowlist must have one Rust manifest shared by main-process macOS CEF and the helper renderer, so packaged helper-backed sidebars cannot lose supported calls such as workspace terminal rename.
 
-CDXC:GPUICefBridgeOwnership 2026-06-29-14:45:
+CDXC:CefRuntime 2026-06-29-14:45:
 GPUI CEF bridge names, payload budgets, and allowed app-modal/project-workarea surfaces live in this Rust manifest so the macOS browser process and helper renderer consume one ownership point. Keep sidebar, project-workarea, and app-modal handlers surface-specific; this manifest is an allowlist, not a generic IPC bus.
 */
 pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 26] = [
@@ -581,7 +581,7 @@ pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_SPECS: [AppModalHostBridgeSurface
         exposes_native_window_identity: false,
     },
     /*
-    CDXC:GPUISessionChatSurface 2026-07-31:
+    CDXC:SessionChat 2026-07-31:
     chat.html is the first-party per-session Session Chat pane surface. It is
     registered here so the renderer installs the bounded ghostexAppModalHost
     shim for the bundled entry only; it never receives the native-window
@@ -595,7 +595,7 @@ pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_SPECS: [AppModalHostBridgeSurface
         exposes_native_window_identity: false,
     },
     /*
-    CDXC:AgentHistorySearch 2026-08-20:
+    CDXC:PromptSearch 2026-08-20:
     find.html is the Search by Prompt child-window page — the GUI for `gx f`.
     The renderer installs the bounded ghostexAppModalHost shim for this bundled
     entry so the page can post its focus/launch/close requests to Rust, and

@@ -157,7 +157,7 @@ export function ManageSidebarActions({
         <IconPlus aria-hidden='true' size={15} stroke={1.9} />
       </ManageTooltipButton>
       {/*
-        CDXC:DocsSidebar 2026-06-30-21:26:
+        CDXC:Docs 2026-06-30-21:26:
         The Docs sidebar header should place the overflow menu before the Hide sidebar control so the two rightmost buttons match the requested visual order while keeping their existing actions unchanged.
       */}
       <button
@@ -246,7 +246,7 @@ export function ManageSidebarActions({
             Switch sidebar side
           </button>
           {/*
-            CDXC:DocsSidebarSettings 2026-06-30-11:42:
+            CDXC:Docs 2026-06-30-11:42:
             The Docs overflow menu should deep-link to Settings -> Projects -> Global Settings so users can configure the project-relative folders that Docs scans for files without leaving the Docs context.
           */}
           <button
@@ -576,7 +576,7 @@ export function ManageFileContextMenu({
 }
 
 /**
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * Docs used to hand-roll this dialog as a portaled backdrop button plus a
  * square `.manage-rename-dialog` card with its own primary/secondary buttons,
  * so it was the one app modal that did not speak the shared modal language.

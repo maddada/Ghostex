@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 One result row: the matched prompt on the first line, and the last-active time
 plus session title and project underneath — the same two-line shape the terminal
 picker draws, wearing the chat surface's type and color tokens.

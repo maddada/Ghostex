@@ -15,7 +15,7 @@ use crate::*;
 
 pub(crate) fn gpui_ghostex_folder_stats_message() -> serde_json::Value {
     /*
-    CDXC:GPUISettingsStatusBridge 2026-06-24-11:36:
+    CDXC:StatusPet 2026-06-24-11:36:
     Settings storage stats may inspect only the GPUI-resolved Ghostex home and its immediate child directories. Do not trust React-provided paths, follow symlink directories, write logs, or scan unrelated project/workspace trees.
     */
     let folder_path = shared_settings::ghostex_storage_paths().data_dir.clone();
@@ -279,7 +279,7 @@ pub(crate) fn gpui_current_bundle_cli_dir_for_ownership_probe() -> Option<PathBu
 
 pub(crate) fn gpui_marked_ghostex_wrapper_content(content: &str) -> bool {
     /*
-    CDXC:GhostexRustCli 2026-07-13:
+    CDXC:Cli 2026-07-13:
     New wrappers exec the bundled native `Resources/CLI/ghostex` binary; the
     legacy `ghostex-cli.mjs` form stays recognized so repair can replace
     wrappers written by pre-cutover app builds.

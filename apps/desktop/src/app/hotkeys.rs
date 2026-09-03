@@ -52,7 +52,7 @@ pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
     {
         return default_key;
     }
-    // CDXC:AgentHistorySearch 2026-08-24: retired Alt+F default, mirroring
+    // CDXC:PromptSearch 2026-08-24: retired Alt+F default, mirroring
     // retiredDefaultKeys in packages/shared/ghostex-hotkeys.ts.
     if action_id == "openFindPrompts" && key.trim().eq_ignore_ascii_case("alt+f") {
         return default_key;
@@ -78,7 +78,7 @@ pub(crate) fn gpui_platform_hotkey_for_action<'a>(action_id: &str, key: &'a str)
             "forkSession" => Some(("ctrl+shift+f", "cmd+alt+f")),
             "reloadSession" => Some(("ctrl+shift+r", "cmd+alt+r")),
             "popOutPane" => Some(("ctrl+shift+o", "cmd+alt+o")),
-            // CDXC:NavigationHistory 2026-08-19: same Mac-Control substitution
+            // CDXC:Navigation 2026-08-19: same Mac-Control substitution
             // as the Jump to Project entries below, mirroring the
             // windowsLinuxDefaultKey values in packages/shared/ghostex-hotkeys.ts.
             "navigateHistoryBack" => Some(("cmd+ctrl+[", "cmd+alt+[")),
@@ -248,7 +248,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("exportTranscript", "cmd+alt+e"),
     ("toggleAgentActions", "cmd+alt+a"),
     ("toggleChatView", "alt+g"),
-    // CDXC:AgentHistorySearch 2026-08-24: mirrors packages/shared/ghostex-hotkeys.ts.
+    // CDXC:PromptSearch 2026-08-24: mirrors packages/shared/ghostex-hotkeys.ts.
     ("openFindPrompts", "cmd+shift+f"),
     ("scrollTerminalToTop", ""),
     ("scrollTerminalToBottom", ""),
@@ -260,7 +260,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("popOutPane", "ctrl+shift+o"),
     ("focusPreviousGroup", "cmd+["),
     ("focusNextGroup", "cmd+]"),
-    // CDXC:NavigationHistory 2026-08-19: mirrors packages/shared/ghostex-hotkeys.ts.
+    // CDXC:Navigation 2026-08-19: mirrors packages/shared/ghostex-hotkeys.ts.
     ("navigateHistoryBack", "cmd+ctrl+["),
     ("navigateHistoryForward", "cmd+ctrl+]"),
     ("focusPreviousSession", "cmd+shift+tab"),
@@ -481,7 +481,7 @@ pub(crate) fn gpui_workarea_switch_hotkey_action_id(action_id: &str) -> bool {
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action_id: &str) -> bool {
     /*
-    CDXC:GPUIWorkareaHotkeys 2026-08-23:
+    CDXC:Hotkeys 2026-08-23:
     Workarea switching is shell chrome, so it is owner-independent. Only the
     Source workarea listed the switch ids before, which meant every other
     CEF-backed surface (Browser, Kanban, Automate, Docs, Session Chat, the

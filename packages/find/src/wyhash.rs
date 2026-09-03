@@ -1,6 +1,6 @@
 //! Byte-exact port of Zig 0.16's `std.hash.Wyhash`.
 //!
-//! CDXC:AgentHistorySearch 2026-08-20:
+//! CDXC:PromptSearch 2026-08-20:
 //! The favorites file stores one 64-bit key per starred prompt, and the Codex
 //! derived-cache filenames are hashes of the source path. Both were produced by
 //! Zig's Wyhash. Porting the hash byte-for-byte is what lets the Rust build keep

@@ -1,5 +1,5 @@
 /*
- * CDXC:SettingsModalSplit 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * The SettingsModal effects that run after the sidebar page list is derived:
  * deep-link section scrolling, active-section tracking, settings-prop draft
  * sync, lazy storage stats, the one-shot app-icon list request, and pending
@@ -107,7 +107,7 @@ export function useSettingsModalEffects({
       return;
     }
     /**
-     * CDXC:SettingsNavigation 2026-05-27-07:32:
+     * CDXC:Settings 2026-05-27-07:32:
      * Titlebar entry points such as Power Settings should land on the matching
      * Settings section, not only open the modal at the previously remembered
      * scroll position.
@@ -137,7 +137,7 @@ export function useSettingsModalEffects({
       terminalScrolling: ghosttyScrollingSectionRef,
       terminalDevServers: terminalDevServersSectionRef,
       theming: themingSectionRef,
-      // CDXC:AppIconPicker 2026-06-25-21:50: Allow titlebar/deep-link navigation to scroll to App Icon.
+      // CDXC:Icons 2026-06-25-21:50: Allow titlebar/deep-link navigation to scroll to App Icon.
       appIcon: appIconSectionRef,
       agents: agentsOnboardingSectionRef,
     });
@@ -178,12 +178,12 @@ export function useSettingsModalEffects({
       setActiveTabState('settings');
     }
     /**
-     * CDXC:SettingsTabs 2026-05-13-16:05
+     * CDXC:Settings 2026-05-13-16:05
      * Saving a control in Hotkeys, Agents, Actions, or Open In updates
      * the incoming settings prop. That prop sync must not reset the selected
      * tab; tab changes are owned by explicit navigation and initial open state.
      *
-     * CDXC:SettingsNavigation 2026-06-12-04:13:
+     * CDXC:Settings 2026-06-12-04:13:
      * Ghostty terminal controls now save from the main Settings tab, so the tab
      * sync rule no longer treats Ghostty as a separate navigation target.
      */
@@ -212,7 +212,7 @@ export function useSettingsModalEffects({
     };
 
     /**
-     * CDXC:SettingsStorage 2026-05-09-15:25
+     * CDXC:Settings 2026-05-09-15:25
      * Folder-size scans can touch many files, so Settings waits until the
      * bottom storage card is near the viewport before asking native for stats.
      */
@@ -237,7 +237,7 @@ export function useSettingsModalEffects({
   ]);
 
   /**
-   * CDXC:AppIconPicker 2026-06-25-21:50:
+   * CDXC:Icons 2026-06-25-21:50:
    * Request the current icon list once whenever the App Icon settings surface
    * opens, mirroring the lazy native-data requests used elsewhere in Settings.
    * Native answers through the appIconState prop (relayed via the modal host).

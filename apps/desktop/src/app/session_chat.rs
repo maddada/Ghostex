@@ -25,7 +25,7 @@ use crate::app::window::*;
 use crate::*;
 
 /*
-CDXC:SessionChatDraftHandoff 2026-08-24:
+CDXC:Drafts 2026-08-24:
 A draft moving from the chat composer to the terminal is never held in memory
 alone. The page saves it to Saved Prompts BEFORE it clears the composer, and
 this record carries that row's id next to the text, so the row is deleted only
@@ -108,7 +108,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+    CDXC:Onboarding 2026-08-18:
     The tutorial video should play fullscreen inside its own modal window. The
     page is a third-party document, so the app cannot call `requestFullscreen()`
     for it (Chromium requires a transient user activation that app-owned
@@ -174,7 +174,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUISessionChatHostActions 2026-07-31:
+    CDXC:SessionChat 2026-07-31:
     The chat CEF surface renders its own top-right [Terminal View][Agent
     Actions] cluster because a gpui-drawn overlay cannot paint above the
     native CEF view. Button clicks arrive over the already-installed
@@ -243,7 +243,7 @@ impl GhostexGpuiApp {
             return;
         };
         /*
-        CDXC:SessionChatFocusDiagnostics 2026-08-24:
+        CDXC:Diagnostics 2026-08-24:
         Typing-focus-loss repro breadcrumbs from the chat page (composer
         mount/unmount, focus enter/leave, prompt-kind flips). The page cannot
         write disk logs itself, so they land in the same terminal-focus log as
@@ -269,7 +269,7 @@ impl GhostexGpuiApp {
                 }),
             );
             /*
-            CDXC:SessionChatLoadingDiagnostics 2026-08-28:
+            CDXC:Diagnostics 2026-08-28:
             The same page breadcrumbs, duplicated into a dedicated chat log
             behind their own scenario, so the "Loading conversation…" flash can
             be reproduced without turning on the whole focus firehose. Each
@@ -296,7 +296,7 @@ impl GhostexGpuiApp {
             }
             self.complete_session_chat_composer_focus_handoff(session_id, window, cx);
             /*
-            CDXC:SessionChatDraftHandoff 2026-08-18:
+            CDXC:Drafts 2026-08-18:
             A transferred draft also has to reach a chat surface the user is
             not looking at — the automatic switch runs over every newly
             eligible session, not just the focused one, and the focus handoff
@@ -311,7 +311,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+        CDXC:SessionChat 2026-08-24:
         Whether this page's composer currently holds anything unsent. Posted on
         composer mount, on every empty↔non-empty transition, and re-asserted on
         composer blur — never per keystroke, and never with the draft itself,
@@ -345,7 +345,7 @@ impl GhostexGpuiApp {
                 .map(str::to_string);
             if !content.is_empty() {
                 /*
-                CDXC:SessionChatDraftHandoff 2026-08-24:
+                CDXC:Drafts 2026-08-24:
                 This answer always arrives AFTER the terminal's remount focus
                 drain: the page does a gxserver round trip (save to Saved
                 Prompts, clear the composer) before posting it, while the
@@ -383,7 +383,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUISessionChatContextMenuPaste 2026-08-28:
+        CDXC:Clipboard 2026-08-28:
         Chromium rejects navigator.clipboard.read() in a windowed CEF chat
         page when GPUI owns the surrounding window focus, even though Monaco
         is accepting routed keyboard input. Execute CEF's own Paste command
@@ -409,7 +409,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUISessionChatAttachPicker 2026-08-02:
+        CDXC:SessionChat 2026-08-02:
         The chat composer's attach button opens the same native open panel the
         terminal's Attach File or Folder action uses (files AND folders — a
         browser file input cannot offer folders or absolute paths). The answer
@@ -430,7 +430,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUISessionChatLinks 2026-08-03:
+        CDXC:SessionChat 2026-08-03:
         Conversation links open in the app's own surfaces: a web URL goes to
         the integrated Browser while "Open links in embedded browser" is on
         (Shift+click, or that setting off, asks for the system default browser
@@ -540,7 +540,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:SwitchAccount 2026-09-03:
+        CDXC:AgentProviders 2026-09-03:
         Switch Account carries the picked agent id, so it is not a plain
         `TerminalAgentActionRequest`; it takes the same sidebar-runtime route
         the terminal bar's submenu takes, and the runtime does the daemon call
@@ -811,7 +811,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:SessionChatViewSwitch 2026-08-21:
+        CDXC:SessionChat 2026-08-21:
         A view switch is unconditional UI state, not the success result of a
         draft-copy handshake. Ask a ready chat composer to copy its draft in
         the background, retain that hidden CEF surface until it answers, and
@@ -834,7 +834,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:SessionChatDraftHandoff 2026-08-24:
+    CDXC:Drafts 2026-08-24:
     The single point where a handed-off draft stops being recoverable, reached
     only from a terminal drain that has confirmed the text reached the pty.
     Nothing else may delete the row: an unconfirmed paste keeps the pending
@@ -861,7 +861,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:SessionChatDraftHandoff 2026-08-24:
+    CDXC:Drafts 2026-08-24:
     Delivery of a handed-off draft, decoupled from the focus-handoff drains:
     those run once per remount and always before the chat page's async
     save-then-clear answers, so a record parked after the drain used to wait,
@@ -992,14 +992,14 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUISessionChatLinks 2026-08-03:
+    CDXC:SessionChat 2026-08-03:
     A web link in the conversation opens where the reader already is: the
     integrated Browser workarea, through the same renderer-open path as
     `ghostex browser open` (same-origin reuse, so re-clicking a dev-server URL
     does not multiply tabs). Shift+click is the explicit escape hatch to the OS
     browser and takes the http/https-only external opener.
 
-    CDXC:GPUISessionChatLinks 2026-08-18:
+    CDXC:SessionChat 2026-08-18:
     Chat web links answer to the same "Open links in embedded browser" setting
     as Command-clicked terminal links, so a single switch decides where every
     agent-sent web link lands. With that setting off, an ordinary click leaves
@@ -1040,7 +1040,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUISessionChatLinks 2026-08-03:
+    CDXC:SessionChat 2026-08-03:
     Markdown and HTML file links follow their independent Docs/Code settings,
     falling back to the other available workarea. Excalidraw prefers Docs and
     every other file prefers Code. Absolute paths and home-relative paths stay
@@ -1293,7 +1293,7 @@ impl GhostexGpuiApp {
     }
 
     /**
-    CDXC:GPUISessionChatLinks 2026-08-23:
+    CDXC:SessionChat 2026-08-23:
     A path that does not resolve here is still the answer to "which file was
     that?": an agent quotes partial paths, paths relative to a subdirectory it
     was working in, and paths on a remote checkout, any of which can name a
@@ -1475,7 +1475,7 @@ impl GhostexGpuiApp {
 }
 
 /*
-CDXC:SessionChatLaunchDraft 2026-09-02:
+CDXC:Drafts 2026-09-02:
 A session that opens straight in Chat asks the daemon for the first-input
 draft it was created with (Handoff / Export stages the transcript mention this
 way) BEFORE that draft is typed into the terminal Chat parks behind it. The

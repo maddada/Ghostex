@@ -34,7 +34,7 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
 
     let root_cache_path = cef_root_cache_path()?;
     /*
-    CDXC:GPUIPrivacyAudit 2026-06-23-13:18:
+    CDXC:Telemetry 2026-06-23-13:18:
     The built-in Default Browser profile and first-party app UI use the app-owned persistent global CEF store, while generated Browser profiles remain memory-backed. Keep CEF file logging disabled and Chromium runtime data out of support-bundle logs.
     */
     let mut settings = cef::Settings {
@@ -50,13 +50,13 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
     platform::apply_platform_settings(&mut settings);
 
     /*
-    CDXC:GPUICefRuntime 2026-06-14-15:25:
+    CDXC:CefRuntime 2026-06-14-15:25:
     The GPUI shell must use Tauri's cef-rs binding path instead of the earlier GhostexCEFBridge.mm browser wrapper. Initialize CEF through cef-rs, keep GPUI as the AppKit loop owner, and scope profile data to the GPUI app so the React sidebar and main browser share a stable Chromium runtime without production-host coupling.
 
-    CDXC:GPUICefMessagePump 2026-06-14-16:29:
+    CDXC:CefRuntime 2026-06-14-16:29:
     GPUI runs a blocking NSApplication loop, so the cef-rs port must use CEF's external_message_pump together with BrowserProcessHandler::on_schedule_message_pump_work. CEF schedules each pump step and the AppKit shim executes it on the main queue, avoiding the Chromium run-loop observer trap caused by an unconditional timer.
 
-    CDXC:GPUICefMessagePump 2026-06-14-16:54:
+    CDXC:CefRuntime 2026-06-14-16:54:
     CEF can call on_schedule_message_pump_work during cef::initialize before the first browser is created. Install the GPUI pump gate before initialization so those startup callbacks reach the main queue instead of leaving Chromium partially initialized with only helper processes alive.
     */
     platform::install_message_pump(cx);
@@ -104,7 +104,7 @@ wrap_app! {
             command_line: Option<&mut CommandLine>,
         ) {
             /*
-            CDXC:GPUICefCommandLine 2026-06-14-17:00:
+            CDXC:CefRuntime 2026-06-14-17:00:
             The GPUI shell is a local app and must not block CEF startup on macOS Keychain prompts or locks. Match production Ghostex's CEF switch set by using Chromium's mock keychain and keeping browser subprocesses foreground-capable for embedded child views.
             */
             if let Some(command_line) = command_line {
@@ -155,7 +155,7 @@ wrap_browser_process_handler! {
 }
 
 /*
-CDXC:GPUICefNativeFocus 2026-07-09:
+CDXC:FocusRouting 2026-07-09:
 Renderer-initiated focus requests (page JS focus()/re-render focus recovery)
 must never move AppKit first-responder to a CEF child view: the shared
 sidebar re-renders on every gxserver presentation delta, and without this
@@ -177,7 +177,7 @@ wrap_focus_handler! {
             source: FocusSource,
         ) -> c_int {
             /*
-            CDXC:GPUICefNativeFocus 2026-07-10:
+            CDXC:FocusRouting 2026-07-10:
             NAVIGATION-source cancellation alone proved insufficient: a hidden
             titlebar-host page (Tips stays alive after close) requested native
             focus every ~30s through its keep-awake poll, and Chromium
@@ -186,7 +186,7 @@ wrap_focus_handler! {
             terminal click. A surface the app has hidden has no focus claim
             from any source, so cancel those requests outright.
 
-            CDXC:GPUICefNativeFocus 2026-07-10-14:30:
+            CDXC:FocusRouting 2026-07-10-14:30:
             The hidden-only SYSTEM guard was still insufficient: visible
             background surfaces (a non-active project-workarea page plus the
             sidebar, each running the shared app's blur-recovery focus())
@@ -216,7 +216,7 @@ wrap_focus_handler! {
             let responder_outside = native_view
                 .is_some_and(|native_view| !platform::native_view_owns_first_responder(native_view));
             /*
-            CDXC:GPUICefExplicitNativeFocusOwnership 2026-07-15:
+            CDXC:FocusRouting 2026-07-15:
             `native_view_owns_first_responder` cannot prove a SYSTEM request is
             app-owned: Chromium moves its NSView into first-responder position
             before invoking OnSetFocus, so a renderer `focus()` call satisfies
@@ -271,7 +271,7 @@ wrap_focus_handler! {
 }
 
 /*
-CDXC:GPUICefPaneZoomShortcutsWindows 2026-08-12:
+CDXC:Hotkeys 2026-08-12:
 Windowed CEF owns keyboard focus in its Chromium child HWND on Windows, so
 GPUI's Ctrl+=, Ctrl+-, and Ctrl+0 bindings cannot observe those keystrokes.
 Install this handler only on Browser, main project-workarea, and Session Chat

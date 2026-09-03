@@ -127,7 +127,7 @@ export function createAddProjectStoryMocks(options: AddProjectStoryMockOptions =
   const cloneJobDestinations = new Map<string, string>();
   const cancelledCloneJobs = new Set<string>();
   /*
-   * CDXC:AddProjectNewFolder 2026-08-18:
+   * CDXC:AddProject 2026-08-18:
    * A created folder has to be browsable right after it is made, because the
    * dialog steps into it. The fixture tree is immutable, so the mock keeps an
    * overlay of created children per parent and layers it over every browse.

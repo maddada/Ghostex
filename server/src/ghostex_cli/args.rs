@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashSet};
 use serde_json::Value;
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's parseArgs/multiValueFlag. Flag values keep the
 JS shape: a flag with no following value (or followed by another --flag) is
 boolean true; otherwise it captures the next argument as a string. Short flag

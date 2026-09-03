@@ -19,7 +19,7 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
     cx: &mut App,
 ) {
     /*
-    CDXC:GPUIMainMenuActions 2026-07-10:
+    CDXC:OsIntegration 2026-07-10:
     GPUI validates native menu items against the active window dispatch tree
     plus app-global action listeners. Menu validation can run without that
     GPUI dispatch tree while native CEF/Ghostty responders or child panels own
@@ -37,7 +37,7 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
         let app = app.clone();
         move |_: &CheckForGhostexGpuiUpdates, cx| {
             /*
-            CDXC:GPUIMainMenuUpdater 2026-07-24:
+            CDXC:OsIntegration 2026-07-24:
             App-menu update checks dispatch while GPUI already owns the active
             window update. Defer the Sparkle handoff until that action cycle
             returns so the main window can be borrowed and Sparkle can present
@@ -55,7 +55,7 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
         let app = app.clone();
         move |_: &OpenGpuiSettingsModal, cx| {
             /*
-            CDXC:GPUIMainMenuSettings 2026-07-24:
+            CDXC:OsIntegration 2026-07-24:
             Native app-menu actions dispatch while GPUI already owns the active
             window update. Defer the Settings window mutation until that action
             cycle returns so the main window can be borrowed normally instead
@@ -97,7 +97,7 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
     });
     cx.on_action(|_: &QuitGhostexGpuiAndBackgroundServices, cx| {
         /*
-        CDXC:QuitWithBackgroundServices 2026-08-28:
+        CDXC:OsIntegration 2026-08-28:
         Plain Quit deliberately leaves gxserver, the zmx session daemons, and
         the GhostexEditor daemon running so agents survive app restarts. This
         item is the opposite promise: nothing Ghostex started stays behind. The
@@ -135,7 +135,7 @@ pub(crate) fn ghostex_gpui_main_menus_for_source_focus(
 ) -> Vec<gpui::Menu> {
     use gpui::{Menu, MenuItem, OsAction};
     /*
-    CDXC:GPUISourceViewHotkeyPassthrough 2026-07-05:
+    CDXC:Hotkeys 2026-07-05:
     GPUI macOS derives menu item key equivalents from the keymap when
     `cx.set_menus` builds NSMenuItems. While Source CEF owns native focus,
     replace File > Close Pane with a menu-only action that has no keybinding,

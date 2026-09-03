@@ -99,7 +99,7 @@ impl GpuiSidebarAgentMetadataWrite {
 }
 
 /*
-CDXC:GlobalActions 2026-08-01-19:00:
+CDXC:AgentLauncher 2026-08-01-19:00:
 Settings > Actions writes reach gxserver through this Rust path, not through the
 sidebar TypeScript runtime, so Global Actions need their own scope here or the
 message is parsed as a project write. Scope only selects the mutation target;

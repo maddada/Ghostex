@@ -932,7 +932,7 @@ mod tests {
     }
 
     /*
-    CDXC:SessionChatIdentity 2026-08-02:
+    CDXC:SessionIdentity 2026-08-02:
     End-to-end runtime path, not just the detector: the real follower loop, a
     fake registry behind the state reader / adopt hook, real transcript files.
     The first cut passed every detector test and still never fired in the live

@@ -142,10 +142,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRemoteMachines 2026-06-24-16:48:
+        CDXC:RemoteMachines 2026-06-24-16:48:
         GPUI remote-machine status and presentation events are Rust-owned sidebar-only messages. Send only sanitized state enums, machine ids, and gxserver presentation snapshots/deltas into SidebarApp; remote auth tokens, SSH host/user/key data, paths from Settings commands, URLs, daemon response bodies, stdout/stderr, and command text must stay out of CEF globals and logs.
 
-        CDXC:GPUIRemoteSessions 2026-06-24-17:19:
+        CDXC:RemoteMachines 2026-06-24-17:19:
         Response-capable remote session requests may dispatch only request ids, success state, generic errors, and explicit safe metadata results such as previous-session search rows. Mutating remote session responses must be sanitized before this event boundary so renderer code never receives launch commands, tokens, SSH details, raw daemon bodies, or provider internals.
         */
         let Some(sidebar) = self.sidebar.clone() else {
@@ -170,7 +170,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIRemoteConnectFeedback 2026-07-12:
+    CDXC:RemoteMachines 2026-07-12:
     Failure states may carry the already-sanitized connect failure summary
     (the same text shown in the toast) so the sidebar can explain why the
     connect failed inline. Only Rust-authored sanitized messages may pass
@@ -188,7 +188,7 @@ impl GhostexGpuiApp {
             self.stop_gpui_remote_gxserver_connection(remote_machine_id);
         }
         /*
-        CDXC:GPUIRemoteConnectOverlay 2026-08-07:
+        CDXC:RemoteMachines 2026-08-07:
         Every connect transition funnels through here, so this is where the
         render tree learns a machine's reachability. The terminal body draws a
         status overlay for remote sessions whose machine is not connected, and
@@ -329,7 +329,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsCliInstall 2026-06-24-12:56:
+        CDXC:Cli 2026-06-24-12:56:
         Settings integration actions in GPUI must mutate only bounded local install targets and then refresh the shared `ghostexCliStatus` contract. CLI repair uses packaged app resources only; skill install/uninstall actions use fixed Ghostex-owned command or directory targets and never accept React-provided shell text, paths, stdout, stderr, URLs, tokens, or environment data.
         */
         let background = cx.background_executor().clone();
@@ -337,7 +337,7 @@ impl GhostexGpuiApp {
             // The status message probe runs `cua-driver check_permissions`
             // (5s timeout plus an unbounded pipe-reader join) — it must run
             // in the same background task as the action, never inside the
-            // main-thread completion update (CDXC:GPUISettingsCliInstall
+            // main-thread completion update (CDXC:Cli
             // 2026-07-11: previously stalled the UI up to 5s per action).
             let (result, status_message) = background
                 .spawn(async move {

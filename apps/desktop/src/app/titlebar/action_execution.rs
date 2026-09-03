@@ -30,7 +30,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:ProjectActions 2026-07-31-12:00:
+        CDXC:Projects 2026-07-31-12:00:
         Terminal Actions open their saved links right after the command-pane
         launch. Integrated links reuse the same Browser tab path as renderer
         `openBrowserUrl` commands (same-origin reuse, otherwise a new loaded
@@ -68,11 +68,11 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarActions 2026-06-24-14:24:
+        CDXC:Titlebar 2026-06-24-14:24:
         Browser Actions must enter the existing GPUI Browser tab/CEF path: switch to Browser, wake the Browser shell, load the saved URL into the active Browser tab, and let Browser surface machinery own navigation. Do not call OS open, shell commands, external browsers, persistent logs, or duplicate CEF surfaces from the titlebar action.
         */
         /*
-        CDXC:DisabledPluginRouting 2026-08-23:
+        CDXC:Extensions 2026-08-23:
         Running a saved Browser Action is a deliberate click, so a Browser
         turned off in Settings → Customize owes the user the URL and a reason
         instead of an Action that appears to do nothing.
@@ -101,7 +101,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPane 2026-06-25-10:29:
+        CDXC:CommandPane 2026-06-25-10:29:
         `runMode:"debug"` must match macOS Debug Action behavior: create a normal visible Agents workspace terminal titled `Debug: <Action>` and send the saved command as visible initial input with the Atuin-ignore prefix. Do not reuse command-pane tabs, post command-button run state, write command status files, or hide the wrapper process for debug runs.
         */
         let working_directory = self
@@ -180,31 +180,31 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarActions 2026-06-24-14:24:
+        CDXC:Titlebar 2026-06-24-14:24:
         Terminal Actions must create a real command-pane terminal startup path, not run a process from the titlebar. Insert command text only as an explicit launch payload for the newly selected command-pane body slot, use the active project snapshot path only when the sidebar supplied it, and keep run-state success/error feedback tied to the command Action lifecycle rather than titlebar-side command execution.
 
-        CDXC:GPUICommandPane 2026-06-24-23:17:
+        CDXC:CommandPane 2026-06-24-23:17:
         Sidebar/titlebar terminal Actions should mirror macOS command-pane startup by using Ghostty's launch command field for the wrapped zsh action process instead of pasting command text as visible initial input. The payload remains process-local and exact-slot keyed; command text is not logged, persisted, inferred from labels, or stored in shell-state JSON.
 
-        CDXC:GPUICommandPane 2026-06-24-23:36:
+        CDXC:CommandPane 2026-06-24-23:36:
         Re-running an action should reuse a matching idle command-pane tab instead of multiplying tabs. New or inactive reused tabs receive the wrapped command through the launch-payload boundary; an already mounted reused tab receives the same wrapper through the exact mounted command surface, with status reset driven by the session-state file.
 
-        CDXC:GPUICommandPane 2026-06-24-23:49:
+        CDXC:CommandPane 2026-06-24-23:49:
         GPUI command Actions now mirror macOS sidebar button feedback: post `running` for the selected run id immediately, then let the status-file poller post success/error and play the configured action completion sound when the wrapped command exits. The feedback path carries only command id, run id, state, exit code, and sound preference.
 
-        CDXC:GPUICommandPane 2026-06-25-11:47:
+        CDXC:CommandPane 2026-06-25-11:47:
         Command Actions open the hidden command pane through the same default-height rule as macOS sidebar Actions. Reset height only when the pane was hidden before selecting or creating the Action-owned tab; visible panes keep their live resize while the run metadata and launch payload update.
 
-        CDXC:GPUICommandPaneActions 2026-06-26-04:59:
+        CDXC:CommandPane 2026-06-26-04:59:
         Command-pane Action runs ignore the saved/requested close-on-exit flag at run start so the selected Action tab remains reusable after completion, matching native `runNativeSidebarCommand`. The parsed flag must not enter launch payloads, status files, shell-state JSON, logs, command text, cwd/env, terminal output, or project paths.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-01:45:
+        CDXC:CommandPane 2026-06-27-01:45:
         Default terminal Actions select and reveal their command tab but keep the current shell first responder, matching native `focusAfterCreate: false`. Only explicit command-pane focus routes and Debug Actions may transfer typing focus.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-02:05:
+        CDXC:CommandPane 2026-06-27-02:05:
         After Action run-start metadata is installed and sidebar run-state feedback is posted, GPUI must immediately refresh the cached sanitized `commandPaneSessions` bridge like native `runNativeSidebarCommand.publish()`. The bridge may carry only session ids, active/focus booleans, sanitized titles, semantic statuses, sleeping/timer fields, and sanitized action command ids; command text, cwd/env, run ids, status-file paths, terminal output, persisted shell data, and project paths must stay out.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-07:54:
+        CDXC:CommandPane 2026-06-27-07:54:
         Default terminal Action execution is mutually exclusive like native: mounted idle reuse writes the staged wrapper to the exact current command surface and submits Return without enqueueing startup data, while created or unmounted Action tabs receive an exact-slot launch payload for first mount. Do not use a launch payload as fallback for a mounted reused shell.
         */
         self.prepare_hidden_command_pane_open_height_from_shared_settings(window);
@@ -216,7 +216,7 @@ impl GhostexGpuiApp {
             CommandPaneActionSessionSelectionKind::ReusedActive
         ) {
             /*
-            CDXC:GPUICommandPaneActions 2026-08-27:
+            CDXC:CommandPane 2026-08-27:
             Re-running an Action whose owner tab is still working restarts it:
             close that tab through the direct tab-close path (which kills the
             gxserver zmx session and the running command with it), then launch
@@ -238,7 +238,7 @@ impl GhostexGpuiApp {
             CommandPaneActionSessionSelectionKind::ReusedActive
         ) {
             /*
-            CDXC:GPUICommandPaneActions 2026-08-09:
+            CDXC:CommandPane 2026-08-09:
             The still-running owner tab could not be closed (or a second live
             owner claimed the same command id). Never write a second command
             into a process that is still running: select and reveal only.

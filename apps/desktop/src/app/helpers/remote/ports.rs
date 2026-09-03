@@ -10,7 +10,7 @@ use crate::app::helpers::*;
 use crate::*;
 
 /*
-CDXC:GPUIRemotePortsBrowser 2026-07-30:
+CDXC:RemoteMachines 2026-07-30:
 The remote Browser default page lists the machine's listening TCP sockets so a
 locally running app there is one click away. Discovery runs over the saved SSH
 configuration (`ss` on Linux/WSL remotes, `netstat` elsewhere) — no gxserver

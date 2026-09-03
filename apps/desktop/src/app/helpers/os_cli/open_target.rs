@@ -43,7 +43,7 @@ pub(crate) fn gpui_spawn_keep_awake_caffeinate(
     allow_display_sleep: bool,
 ) -> Result<std::process::Child, String> {
     /*
-    CDXC:GPUITitlebarKeepAwake 2026-06-24-13:16:
+    CDXC:KeepAwake 2026-06-24-13:16:
     GPUI Keep Awake must start macOS caffeinate directly with fixed argv and suppressed stdio. Use `-dis` for normal display+idle sleep prevention, `-is` when Settings allows display sleep, and add bounded `-t` seconds only for the 2-hour and 5-hour shared durations.
     */
     let mut command = std::process::Command::new("/usr/bin/caffeinate");

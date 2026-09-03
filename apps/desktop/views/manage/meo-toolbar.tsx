@@ -225,7 +225,7 @@ export function ManageMeoTopToolbar({
       return undefined;
     }
     /*
-     * CDXC:ManageMarkdownLayout 2026-06-30-13:45:
+     * CDXC:Docs 2026-06-30-13:45:
      * The three secondary right-side Markdown toolbar buttons should stay visible until the rendered toolbar actually overflows. Measure the full toolbar while those buttons are visible, then restore them only after the available width can fit that measured full row again.
      */
     let animationFrame: number | undefined;

@@ -92,7 +92,7 @@ export function TitlebarActions() {
       return;
     }
     /*
-     * CDXC:ProjectActions 2026-07-31-12:00:
+     * CDXC:Projects 2026-07-31-12:00:
      * Terminal actions can carry saved links that open alongside the command
      * run. The web app has no integrated browser pane, so both link targets
      * open as regular browser tabs here.

@@ -1,5 +1,5 @@
 /*
- CDXC:ReleaseAutomation 2026-09-01-11:20:
+ CDXC:Release 2026-09-01-11:20:
  Release preflight used to assert on literal substrings of the Actions workflow
  YAML. The "chore: Formatting" pass in 49831862 ran prettier, which normalises
  YAML scalars to single quotes, so `GHOSTEX_REQUIRE_BEADS_SMOKE: "1"` became

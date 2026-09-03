@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -26,7 +26,7 @@ import type { GxserverPresentationSession } from '@/packages/shared/gxserver-pro
 import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeCloseAfterDoneMethods` — because deriving them would make
@@ -60,7 +60,7 @@ export const gpuiSidebarRuntimeCloseAfterDoneMethods = {
     message: Extract<SidebarToExtensionMessage, { type: 'scheduleDelayedSend' }>
   ): Promise<void> {
     /*
-    CDXC:GPUIRemoteDelayedSend 2026-08-17:
+    CDXC:DelayedSend 2026-08-17:
     Remote delayed sends are owned by the gxserver hosting the target session.
     The renderer submits only the canonical trigger and ids; the daemon stores,
     projects, and eventually fires the send even if this app disappears.

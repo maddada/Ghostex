@@ -65,18 +65,18 @@ export type TitlebarResourceSession = {
   delayedSendRemainingLabel?: string;
   delayedSendRemainingMs?: number;
   /**
-   * CDXC:SessionLifecycle 2026-05-29-09:20:
+   * CDXC:Sessions 2026-05-29-09:20:
    * Titlebar resources consume the same explicit lifecycle resources as the
    * sidebar: native pane mount state, provider session existence, and derived
    * live state. Keep legacy booleans for older hosts while new code avoids
    * conflating pane sleep with zmx/tmux/zellij liveness.
    *
-   * CDXC:SessionLifecycle 2026-05-29-06:29:
+   * CDXC:Sessions 2026-05-29-06:29:
    * Persistence-disabled terminal sessions use `providerSessionState:
    * "persistence-disabled"` so resource panels do not present a providerless
    * backend as an unknown one.
    *
-   * CDXC:SessionLifecycle 2026-05-29-07:19:
+   * CDXC:Sessions 2026-05-29-07:19:
    * Use `persistence-disabled` instead of a generic `disabled` value so
    * titlebar/resource payloads state exactly which provider capability is off.
    */
@@ -101,7 +101,7 @@ export type NativePortlessAdminAction = NativePortlessAdminInstallAction | 'remo
 
 export type NativeTitlebarPortlessState = {
   /*
-  CDXC:PortlessResources 2026-06-23-15:18:
+  CDXC:Portless 2026-06-23-15:18:
   The native titlebar Resources panel receives the existing sanitized Portless HUD metadata so it can decorate owned dev-server rows without reading Portless files or adding names, paths, commands, stdout/stderr, env, tokens, or full URL payloads.
   */
   health: GxserverPortlessStatus;
@@ -182,7 +182,7 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /*
-       * CDXC:SidebarSessionFocus 2026-06-29-02:04:
+       * CDXC:FocusRouting 2026-06-29-02:04:
        * The macOS host needs a pre-dispatch session-row hit hint because the focused border can be invalidated before the later focusTerminal/focusWebPane command arrives. The hint contains only a boolean and lets Swift keep the handoff scoped to actual sidebar session rows.
        */
       isSessionCard: boolean;
@@ -190,7 +190,7 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /*
-       * CDXC:SidebarSessionFocus 2026-06-29-02:04:
+       * CDXC:FocusRouting 2026-06-29-02:04:
        * Child controls and modified clicks inside a session row must cancel the candidate border handoff so non-focus interactions still remove terminal focus immediately.
        */
       type: 'cancelSidebarSessionFocusBorderHandoff';
@@ -205,18 +205,18 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /**
-       * CDXC:EditorPanes 2026-05-06-14:21
+       * CDXC:CodeEditor 2026-05-06-14:21
        * Project editor buttons launch a shared embedded code-server runtime,
        * then native AppKit creates one persistent Chromium editor surface per
        * project. These commands stay separate from terminal/web-pane sessions
        * because editor panes must not participate in split layout.
        *
-       * CDXC:EditorPanes 2026-05-06-15:00
+       * CDXC:CodeEditor 2026-05-06-15:00
        * The runtime command carries the VS Code user-config link setting so the
        * native launcher can pass code-server's CLI flags before the editor
        * process starts instead of mutating the embedded VS Code UI later.
        *
-       * CDXC:EditorPanes 2026-06-06-23:50:
+       * CDXC:CodeEditor 2026-06-06-23:50:
        * VS Code server startup failures must be tied back to the project editor
        * row so the sidebar can show the real launch error and toast immediately.
        */
@@ -231,12 +231,12 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /**
-       * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       * CDXC:Browser 2026-06-13-00:12:
        * Browser mode needs visible project-scoped browser chrome: reuse the native
        * browser address toolbar and the main work-area tab strip for each open
        * project's Browser view while leaving Code and Project editor panes plain.
        *
-       * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       * CDXC:Browser 2026-06-13-00:12:
        * Browser mode restores the project's saved tab list only when surfaced.
        * Startup keeps those tabs sleeping in sidebar metadata, then sends them
        * in this command when the user opens Browser mode.
@@ -245,7 +245,7 @@ export type NativeGhosttyHostCommand =
       browserTabs?: Array<{
         id: string;
         /**
-         * CDXC:ProjectBrowserTabs 2026-06-15-20:48:
+         * CDXC:Browser 2026-06-15-20:48:
          * Closing the last Browser top-mode tab should release Chromium memory while keeping one address-bar placeholder in the tab strip. Mark that placeholder explicitly instead of persisting about:blank as a real browser page.
          */
         isPlaceholder?: boolean;
@@ -254,7 +254,7 @@ export type NativeGhosttyHostCommand =
       }>;
       browserFeedbackTool?: 'agentation';
       /**
-       * CDXC:BrowserHistory 2026-06-15-10:25:
+       * CDXC:Browser 2026-06-15-10:25:
        * Browser toolbar history is project-family state shared by the main project and its worktrees. The sidebar owns that family scope, then sends de-duplicated URL history snapshots to native so AppKit can render the address-bar menu without learning worktree relationships.
        */
       browserHistory?: Array<{
@@ -268,13 +268,13 @@ export type NativeGhosttyHostCommand =
       mode?: 'code' | 'git' | 'automate' | 'tasks' | 'manage';
       companionPaneHidden?: boolean;
       /**
-       * CDXC:ProjectBrowserTabs 2026-06-16-12:02:
+       * CDXC:Browser 2026-06-16-12:02:
        * Browser + tabs need a project-scoped non-blank URL separate from the active tab URL. Sidebar resolves this to the project's GitHub remote URL or Google before native creates the tab.
        */
       newBrowserTabUrl?: string;
       projectId: string;
       /**
-       * CDXC:Manage 2026-06-20-04:36:
+       * CDXC:Docs 2026-06-20-04:36:
        * Manage file browsing is scoped by native to the owning project-editor session, so the project root travels as a typed host command field instead of a WK page URL query string that native diagnostics could record.
        */
       projectPath?: string;
@@ -287,7 +287,7 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /**
-       * CDXC:BrowserHistory 2026-06-15-10:25:
+       * CDXC:Browser 2026-06-15-10:25:
        * Native Browser history updates are scoped by the sidebar-provided project-family id, not by individual browser pane ids, so every open Browser toolbar in a main project or worktree can show the same recent links.
        */
       browserHistory: Array<{
@@ -305,7 +305,7 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /**
-       * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
+       * CDXC:Navigation 2026-07-02-13:05:
        * The sidebar routes Command-clicked terminal web links into the source
        * project's Browser view; native owns Browser-view tab creation, so the
        * sidebar requests the tab with the native project-editor id and URL.
@@ -360,7 +360,7 @@ export type NativeGhosttyHostCommand =
       commandsPanelLayout?: NativeTerminalLayout;
       commandsPanelMode?: 'floating' | 'pinned';
       /**
-       * CDXC:NativeWindowChrome 2026-05-10-14:19
+       * CDXC:Titlebar 2026-05-10-14:19
        * Native host commands carry the outer app title separately from pane
        * titles so project switches can update macOS chrome without changing
        * individual terminal/browser title bars.
@@ -371,7 +371,7 @@ export type NativeGhosttyHostCommand =
       debuggingMode?: boolean;
       diagnosticLoggingJson?: string;
       /**
-       * CDXC:BetaFeatures 2026-06-16-13:08:
+       * CDXC:Settings 2026-06-16-13:08:
        * Native AppKit browser chrome is outside the React settings tree. Carry
        * the persisted beta gate in layout sync so existing browser panes hide or
        * show beta address-bar buttons immediately when Settings changes.
@@ -380,21 +380,21 @@ export type NativeGhosttyHostCommand =
       focusRequestId?: number;
       focusedSessionId?: string;
       /**
-       * CDXC:SessionFocusMode 2026-05-23-14:35:
+       * CDXC:FocusMode 2026-05-23-14:35:
        * The React titlebar needs to know when reversible pane-tab Focus mode is active so it can expose an explicit exit control beside the mode switcher.
        */
       isFocusModeActive?: boolean;
       /**
-       * CDXC:SessionFocusMode 2026-05-28-12:52:
+       * CDXC:FocusMode 2026-05-28-12:52:
        * Native tab context menus need a per-session Focus availability list because AppKit cannot infer whether a tab belongs to a split pane or a single tabbed pane from tab count alone.
        *
-       * CDXC:SessionFocusMode 2026-05-28-15:35:
+       * CDXC:FocusMode 2026-05-28-15:35:
        * Availability follows rendered awake pane owners, so a persisted split whose other owner is sleeping does not show Focus in the native tab context menu.
        */
       sessionFocusModeAvailableSessionIds?: string[];
       sleepingSessionIds?: string[];
       /**
-       * CDXC:TerminalCreationFocus 2026-06-14-18:48:
+       * CDXC:FocusRouting 2026-06-14-18:48:
        * Pending native creates are selected tab owners before their Ghostty
        * surface exists. AppKit renders these as non-wake placeholders so New
        * Terminal switches tabs immediately, then terminalReady replaces the
@@ -402,12 +402,12 @@ export type NativeGhosttyHostCommand =
        */
       mountingSessionIds?: string[];
       /**
-       * CDXC:NativeGpu 2026-05-08-16:45
+       * CDXC:CommandPane 2026-05-08-16:45
        * Sidebar status/title/icon updates must still reach native pane chrome,
        * but they must not be treated as geometry changes. This flag lets the
        * native host skip AppKit surface relayout when only metadata changed.
        *
-       * CDXC:PaneTabs 2026-06-04-12:54:
+       * CDXC:CommandPane 2026-06-04-12:54:
        * Tab owner selection is not full split geometry. The host needs a
        * separate signal so it can surface the selected tab without reframing
        * adjacent CEF/editor panes.
@@ -417,7 +417,7 @@ export type NativeGhosttyHostCommand =
       layout?: NativeTerminalLayout;
       paneGap?: number;
       /**
-       * CDXC:TerminalPanePadding 2026-06-25-21:27:
+       * CDXC:Terminal 2026-06-25-21:27:
        * AppKit owns terminal surface frames, so Settings sends terminal content
        * padding through layout sync as geometry. These insets apply only inside
        * terminal pane bodies and must not create spacing between sibling panes.
@@ -425,7 +425,7 @@ export type NativeGhosttyHostCommand =
       terminalPaneHorizontalPaddingPx?: number;
       terminalPaneVerticalPaddingPx?: number;
       /**
-       * CDXC:PanePopOut 2026-05-11-09:35
+       * CDXC:Workarea 2026-05-11-09:35
        * Layout sync keeps popped-out sessions in the split/tab tree while
        * telling AppKit to render a placeholder in-app and move the live native
        * surface into a ghostex-owned window.
@@ -435,7 +435,7 @@ export type NativeGhosttyHostCommand =
       sessionAgentIconColors?: Record<string, string>;
       sessionAgentIconDataUrls?: Record<string, string>;
       /**
-       * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+       * CDXC:SessionSleep 2026-06-13-01:44:
        * Native split panes are stable visual slots. When click-to-wake is on,
        * a selected sleeping tab renders a black placeholder with an explicit
        * pane-body wake affordance instead of auto-starting Ghostty on tab click.
@@ -452,14 +452,14 @@ export type NativeGhosttyHostCommand =
       sessionTitleBarActions?: Record<string, NativeTerminalTitleBarAction[]>;
       sessionTitles?: Record<string, string>;
       /**
-       * CDXC:SessionPersistence 2026-05-23-00:50:
+       * CDXC:Workarea 2026-05-23-00:50:
        * Native pane overlays are outside React, so Settings must send the
        * top-right provider/session visibility preference with layout sync.
        */
       showSessionIdInTerminalPanes?: boolean;
       showProjectEditorDiffFileCount?: boolean;
       /**
-       * CDXC:SidebarTheme 2026-06-15-01:43:
+       * CDXC:Theming 2026-06-15-01:43:
        * Native titlebar and child-window dropdown backing surfaces are outside
        * the sidebar DOM. Carry the resolved app theme through layout sync so
        * Dark 1, Dark 2, and Light repaint native-owned chrome with the same
@@ -467,21 +467,21 @@ export type NativeGhosttyHostCommand =
        */
       sidebarTheme?: string;
       /**
-       * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
+       * CDXC:Theming 2026-06-15-11:24:
        * Custom chrome colors are scoped to the sidebar and native titlebar.
        * Carry them beside the preset theme without changing modal/dropdown
        * surfaces that still resolve from sidebarTheme.
        *
-       * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
+       * CDXC:Theming 2026-06-15-13:22:
        * Foreground remains in the protocol for compatibility, but senders
        * should derive it from the background instead of exposing a separate
        * user-editable foreground choice.
        *
-       * CDXC:SidebarTitlebarColors 2026-06-15-13:45:
+       * CDXC:Theming 2026-06-15-13:45:
        * Background remains a hex payload for native/titlebar compatibility, but
        * Settings now computes it from a grayscale contrast slider.
        *
-       * CDXC:SidebarTitlebarColors 2026-06-15-15:15:
+       * CDXC:Theming 2026-06-15-15:15:
        * The protocol field stays hex-only while Settings presents the source
        * control as Background Contrast.
        */
@@ -506,7 +506,7 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /**
-       * CDXC:SessionAttentionNotifications 2026-05-11-01:14
+       * CDXC:Notifications 2026-05-11-01:14
        * Settings must be able to show the native notification permission prompt
        * and open macOS Notification Settings without faking an attention event.
        */
@@ -514,7 +514,7 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /**
-       * CDXC:SessionAttentionNotifications 2026-05-10-16:46
+       * CDXC:Notifications 2026-05-10-16:46
        * The sidebar owns attention transitions and rate limits; the native host
        * only presents the macOS banner and reports a click for exact-session
        * focus routing.
@@ -527,7 +527,7 @@ export type NativeGhosttyHostCommand =
     }
   | {
       /**
-       * CDXC:PortlessIntegration 2026-06-23-00:15:
+       * CDXC:Portless 2026-06-23-00:15:
        * Portless service install, reconfigure, retry, and removal are explicit
        * native admin actions. The command carries only the requested action,
        * request id, and HTTP/HTTPS mode so React cannot pass arbitrary
@@ -597,7 +597,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:BrowserTabs 2026-06-13-00:00:
+       * CDXC:Browser 2026-06-13-00:00:
        * CEF popup and link-open-new-tab intents in Agents browser panes are
        * sidebar-owned workspace mutations, not native window creation.
        */
@@ -607,7 +607,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
+       * CDXC:Navigation 2026-07-02-13:05:
        * Command-clicked http/https terminal links are a sidebar-owned routing
        * decision: open in the source project's Browser view by default, or in
        * the system browser when the user disabled in-app terminal links.
@@ -647,7 +647,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:SessionTitleSync 2026-05-30-05:44:
+       * CDXC:SessionTitles 2026-05-30-05:44:
        * Native Ghostty panes own keyboard input while the title-generation
        * overlay is visible, so Escape cancellation is reported through the
        * host event stream instead of React DOM key handling.
@@ -657,7 +657,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:SessionSurfaceRecovery 2026-05-23-09:05:
+       * CDXC:SessionSleep 2026-05-23-09:05:
        * AppKit reports this when an active/focused layout id has no native
        * terminal or web surface. The sidebar owns recovery because it can full
        * reload restorable agent sessions or replace non-restorable records with
@@ -668,7 +668,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:SessionRestore 2026-05-28-16:13:
+       * CDXC:SessionSleep 2026-05-28-16:13:
        * Native blocks provider-backed terminal restore before launch when the
        * saved cwd was deleted and the backend session must be recreated there.
        * The sidebar confirms removal instead of showing a pane that exits.
@@ -703,7 +703,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+       * CDXC:SessionSleep 2026-06-13-01:44:
        * Clicking a sleeping pane's placeholder body is the explicit wake intent
        * when tab selection itself is configured to preserve the cold renderer.
        */
@@ -712,7 +712,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:SessionFocusMode 2026-05-23-09:28:
+       * CDXC:FocusMode 2026-05-23-09:28:
        * Native tab Focus is separate from selection because it enters the
        * reversible session-focus mode and may temporarily switch the project
        * workarea back to Agents before restoring Code/Browser/Project/Manage on unfocus.
@@ -722,7 +722,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:PaneTabs 2026-05-11-01:43
+       * CDXC:CommandPane 2026-05-11-01:43
        * Native tab-bar drags report before/after target placement so the
        * sidebar can reorder the containing paneLayout tab group without
        * interpreting the gesture as a pane split/drop.
@@ -734,7 +734,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:PaneTabs 2026-05-11-00:45
+       * CDXC:CommandPane 2026-05-11-00:45
        * Native tab context menus report a clicked tab plus a scoped close
        * command. The sidebar resolves the tab group from paneLayout so bulk
        * close actions never apply to every visible tab or another group.
@@ -745,7 +745,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:PaneTabs 2026-05-11-02:16
+       * CDXC:CommandPane 2026-05-11-02:16
        * Native tab sleep context-menu actions use tab-group scoped targets and
        * keep sessions restorable through the normal wake path.
        */
@@ -755,7 +755,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:ProjectEditorCompanion 2026-05-14-09:19:
+       * CDXC:CodeEditor 2026-05-14-09:19:
        * The native embedded-editor companion Back button returns to the normal
        * agents workarea and reports that mode change to the sidebar so later
        * layout syncs do not reopen the project editor.
@@ -765,7 +765,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:ProjectEditorCompanion 2026-05-16-14:42:
+       * CDXC:CodeEditor 2026-05-16-14:42:
        * Closing the agent side pane is project state shared by Code, Browser,
        * Project, and Manage surfaces. Native reports the close so the sidebar
        * can persist the hidden preference across mode switches and app restarts.
@@ -776,14 +776,14 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       * CDXC:Browser 2026-06-13-00:12:
        * Native Browser project tabs and toolbar buttons report the selected
        * project-editor id plus active tab URL so React can make Browser mode
        * the authoritative active surface before the next layout sync. This
        * prevents browser toolbar actions like Back from resurrecting the same
        * project's Code CEF pane.
        *
-       * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+       * CDXC:Browser 2026-06-13-00:12:
        * Browser mode persists the whole project Browser tab list, not only the
        * selected URL, so app restart can restore the user's prior tabs as
        * sleeping metadata until Browser mode is surfaced.
@@ -793,7 +793,7 @@ export type NativeGhosttyHostEvent =
       tabs?: Array<{
         id: string;
         /**
-         * CDXC:ProjectBrowserTabs 2026-06-15-20:48:
+         * CDXC:Browser 2026-06-15-20:48:
          * Native reports a placeholder tab after the final Browser tab is closed so React can persist an address-only empty state without treating it as a loaded Chromium page.
          */
         isPlaceholder?: boolean;
@@ -805,7 +805,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:EditorPanes 2026-05-09-17:24
+       * CDXC:CodeEditor 2026-05-09-17:24
        * Native reports project editor load state separately from terminal
        * sessions so the sidebar can keep the VS Code row visible through
        * startup, success, and error states.
@@ -817,7 +817,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:EditorPanes 2026-06-06-23:50:
+       * CDXC:CodeEditor 2026-06-06-23:50:
        * Native reports code-server startup failures before browser navigation so
        * the app can show a toast instead of waiting for the generic open timeout.
        */
@@ -827,7 +827,7 @@ export type NativeGhosttyHostEvent =
     }
   | {
       /**
-       * CDXC:PortlessIntegration 2026-06-23-00:15:
+       * CDXC:Portless 2026-06-23-00:15:
        * Native Portless admin results are structured and sanitized. React gets
        * only stable result fields, never raw process streams, resource paths,
        * state paths, command text, hostnames, URLs, or environment values from
@@ -848,7 +848,7 @@ export type NativeGhosttyHostEvent =
     };
 
 /*
-CDXC:PortlessProtocol 2026-06-23-00:25:
+CDXC:Portless 2026-06-23-00:25:
 Native-sidebar should consume the shared sanitized Portless admin command/result contracts instead of carrying a second copy. These aliases keep Phase 11 privileged action fields aligned while Phase 12 passes the latest result through React metadata without stdout, stderr, paths, URLs, command text, or env values.
 */
 export type NativePortlessAdminCommand = Extract<NativeGhosttyHostCommand, { type: 'portlessAdminAction' }>;

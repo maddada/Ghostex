@@ -75,7 +75,7 @@ pub(crate) fn gpui_collect_git_numstat_paths(stdout: &str, files: &mut HashSet<S
 
 pub(crate) fn gpui_collect_git_status_porcelain_paths(stdout: &str, files: &mut HashSet<String>) {
     /*
-    CDXC:GPUISidebarGit 2026-06-24-18:19:
+    CDXC:Git 2026-06-24-18:19:
     Git porcelain rename parsing must stay compatible with Rust toolchains where `split(&str)` is forward-only. Select the rename destination path without requiring DoubleEndedIterator, then pass it through the shared relative-path sanitizer before the IDE-open allowlist uses it.
     */
     for line in stdout.lines().filter(|line| line.chars().count() >= 4) {
@@ -163,7 +163,7 @@ pub(crate) fn gpui_gxserver_workspace_project_path_from_rows_by_id(
     project_id: &str,
 ) -> Option<PathBuf> {
     /*
-    CDXC:GPUIRecentProjects 2026-06-25-19:54:
+    CDXC:Projects 2026-06-25-19:54:
     Normal workspace project actions must not resolve explicit parked Recent Project rows even if the Rust action entry point is called directly. Skip only boolean `isRecentProject: true` rows here; recent actions continue to resolve trusted recent ids through `/api/listRecentProjects`, and false or non-boolean flags remain normal workspace rows.
     */
     projects

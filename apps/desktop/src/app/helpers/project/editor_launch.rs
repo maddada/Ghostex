@@ -81,10 +81,10 @@ pub(crate) fn gpui_open_project_path_for_native_ide_action(
 
 pub(crate) fn gpui_open_project_path_in_default_editor(project_path: &Path) -> Result<(), String> {
     /*
-    CDXC:GPUISidebarProjectPathActions 2026-06-24-13:49:
+    CDXC:Projects 2026-06-24-13:49:
     Generic GPUI project IDE opens are native-owned Settings behavior. The sidebar action supplies only a gxserver project id; this launcher supports the normalized built-in default editor commands with fixed argv or fixed macOS app names, suppresses stdio, and reports only generic failure text.
 
-    CDXC:GPUISidebarProjectPathActions 2026-06-24-13:57:
+    CDXC:Projects 2026-06-24-13:57:
     Custom default editor command support is intentionally narrower than a shell: parse Settings-owned text into literal argv, reject shell syntax/placeholders, require an executable found by PATH or absolute executable path, append the gxserver-resolved project path as argv, suppress child stdio, and return generic UI failures without exposing command text or paths.
     */
     let settings = shared_settings::shared_sidebar_settings_snapshot().external_editor_settings();
@@ -180,7 +180,7 @@ pub(crate) fn gpui_parse_custom_workspace_editor_command(
     editor_command: &str,
 ) -> Result<GpuiCustomWorkspaceEditorCommand, String> {
     /*
-    CDXC:GPUISidebarProjectPathActions 2026-06-24-13:57:
+    CDXC:Projects 2026-06-24-13:57:
     This parser is not a shell compatibility layer. It accepts only Settings-owned argv text, uses quotes/backslashes only to form literal tokens, and rejects shell control or expansion syntax so GPUI project opens never execute arbitrary custom command snippets.
     */
     let trimmed = editor_command.trim();

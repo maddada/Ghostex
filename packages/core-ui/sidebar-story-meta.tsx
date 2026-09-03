@@ -125,7 +125,7 @@ function NativeSidebarStoryShell({ children }: { children: JSX.Element }) {
   return (
     <div className='native-sidebar-shell' data-sidebar-mode='combined'>
       {/*
-       * CDXC:StorybookSidebarReality 2026-05-26-22:52:
+       * CDXC:DesignSystem 2026-05-26-22:52:
        * Sidebar stories must render under the same native shell as the app.
        * Otherwise Storybook can show different button widths, edge padding,
        * and project folder icon clipping than the real sidebar webview.
@@ -149,7 +149,7 @@ function SidebarStoryFrame({ children }: { children: JSX.Element }) {
 
   useEffect(() => {
     /*
-     * CDXC:StorybookSidebarReality 2026-05-26-22:52:
+     * CDXC:DesignSystem 2026-05-26-22:52:
      * Storybook uses its own body classes, but native sidebar CSS relies on
      * native-sidebar-body for the root viewport contract. Apply it while a
      * sidebar story is mounted so Storybook and the app share the same chrome.
@@ -185,7 +185,7 @@ function useCurrentSidebarSettings(): SidebarStoryCurrentSettings | undefined {
       .then((payload: unknown) => {
         if (isMounted && payload && typeof payload === 'object' && !Array.isArray(payload)) {
           /**
-           * CDXC:StorybookSettings 2026-05-08-16:45
+           * CDXC:DesignSystem 2026-05-08-16:45
            * Storybook must render sidebar scenarios with the same persisted
            * native settings snapshot as the running ghostex app. This keeps local
            * visual checks honest for width, combined-mode visibility, theme,

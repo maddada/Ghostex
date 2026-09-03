@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Executable documentation of every release product's fingerprint inputs.
  *
  * This module is data only: no I/O, no git, no network. `fingerprint.mjs` turns
@@ -259,7 +259,7 @@ function windowsProduct(arch) {
       { pathspec: 'tooling/release-gpui/verify-code-server-archive.mjs' },
       { pathspec: '.github/workflows/release-gpui-windows.yml' },
       /*
-       * CDXC:WindowsValidationIsNotAGate 2026-09-01:
+       * CDXC:Release 2026-09-01:
        * `.github/workflows/release-gpui-validate.yml` is deliberately NOT an input.
        * It was one while it gated the Windows packaging jobs; now that it is an
        * opt-in workflow_dispatch check outside every release run, it cannot affect

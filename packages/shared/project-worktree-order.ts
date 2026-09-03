@@ -14,7 +14,7 @@ export type ProjectWorktreeDropTarget = {
 };
 
 /*
- * CDXC:WorktreeProjectOrder 2026-05-25-12:38:
+ * CDXC:Worktrees 2026-05-25-12:38:
  * Worktree projects are children of their main project in the sidebar. A main
  * project drag carries its worktrees underneath it in their existing order, and
  * a worktree can only be reordered inside that same main-project family.

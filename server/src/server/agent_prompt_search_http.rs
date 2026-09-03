@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 The Find surface's four RPCs. All of them go through the one warm
 `ghostex_find::SearchIndex` in `agent_prompt_search`, which is the same index, favorites
 file, and ranking `gx f` uses, so the GUI and the terminal picker can never

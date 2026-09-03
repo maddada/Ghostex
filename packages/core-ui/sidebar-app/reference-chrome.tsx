@@ -70,7 +70,7 @@ export const REFERENCE_SECTION_AGENT_MENU_WIDTH_PX = 220;
 export type SidebarReferencePrimaryMenuKind = 'keepAwake' | 'settings' | 'sortFilter';
 
 /*
- * CDXC:SidebarProjectMenu 2026-09-02:
+ * CDXC:ContextMenus 2026-09-02:
  * The Projects header and the remote machine headers are gone; the actions
  * they carried now live at the top of the More dropdown and always target the
  * machine selected in the tab strip. The sidebar app resolves that machine and
@@ -115,7 +115,7 @@ export function SidebarReferenceTopChrome({
 }: {
   keepAwakeRuntime?: SidebarKeepAwakeRuntimeState;
   /*
-   * CDXC:SidebarMachineTabsEdge 2026-09-02:
+   * CDXC:RemoteMachines 2026-09-02:
    * The machine tab strip renders here, under Search, rather than inside the
    * scrolling panel: that panel clips its children to the 5px sidebar gutters,
    * while this header is unclipped, so only from here can the strip span the
@@ -189,16 +189,16 @@ export function SidebarReferenceTopChrome({
   };
 
   /**
-   * CDXC:SidebarReference 2026-05-08-09:11
+   * CDXC:Sidebar 2026-05-08-09:11
    * Combined mode should visually match the provided app sidebar: native-style
    * window dots, disabled back/forward chrome, and primary sidebar navigation.
    *
-   * CDXC:TitlebarActions 2026-05-11-02:46
+   * CDXC:Titlebar 2026-05-11-02:46
    * Actions moved out of the sidebar header into the native titlebar beside
    * Open In. Keep this top chrome focused on navigation/search so the action
    * menu has one home and one split-button UX.
    *
-   * CDXC:AgentsHub 2026-05-12-09:59
+   * CDXC:AgentLauncher 2026-05-12-09:59
    * Agents Hub should remain the first primary sidebar destination so agent
    * configuration content is reached before secondary reference surfaces.
    *
@@ -221,34 +221,34 @@ export function SidebarReferenceTopChrome({
    * CDXC:Automations 2026-06-30-12:51:
    * The sidebar shortcut tooltip should use the full page name, Automations Overview, so users can distinguish it from the per-project Automate titlebar view.
    *
-   * CDXC:SidebarReference 2026-06-16-01:23:
+   * CDXC:Sidebar 2026-06-16-01:23:
    * Plugins should no longer consume a primary sidebar row.
    *
-   * CDXC:Plugins 2026-06-16-01:29:
+   * CDXC:Extensions 2026-06-16-01:29:
    * Hide the Plugins sidebar affordance for now instead of keeping it as an
    * Agents Hub secondary action.
    *
-   * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+   * CDXC:Settings 2026-06-28-07:41:
    * Agents Hub is no longer gated by Enable Experimental Features. Keep it
    * visible as the first primary sidebar destination even when experimental
    * features are disabled.
    *
-   * CDXC:SidebarReference 2026-06-28-15:04:
+   * CDXC:Sidebar 2026-06-28-15:04:
    * Agents Hub, Automations, and Mobile should be icon-only shortcuts sharing one full-width row at the top of the sidebar, with hover tooltips providing their labels. Search remains a separate full-width row below them.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-01:43:
+   * CDXC:Sidebar 2026-06-29-01:43:
    * Settings and Keep Awake moved out of the macOS titlebar into the same full-width sidebar shortcut row. They remain icon-only with hover tooltips, and normal clicks open local sidebar dropdowns instead of native titlebar child-window menus.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-03:39:
+   * CDXC:Sidebar 2026-06-29-03:39:
    * The overflow menu trigger should present itself as "More" in the sidebar
    * tooltip while the dropdown still contains the Settings destination.
    *
-   * CDXC:SidebarTopChrome 2026-07-04-17:26:
+   * CDXC:Sidebar 2026-07-04-17:26:
    * The visible top chrome is now Search plus More. Agents Hub, Automations,
    * Mobile, Keep Awake, Search by Prompt, and Previous Sessions all live under
    * More so the sidebar only spends one row on primary navigation.
    *
-   * CDXC:SidebarFooter 2026-08-29:
+   * CDXC:Sidebar 2026-08-29:
    * Settings lives at the bottom of More, with the open-settings hotkey, so the
    * footer can stay a single Commands row.
    */
@@ -486,7 +486,7 @@ export function SidebarReferenceSettingsDropdown({
   showKeepAwakeButton: boolean;
 }) {
   /*
-   * CDXC:SidebarProjectMenu 2026-09-02:
+   * CDXC:ContextMenus 2026-09-02:
    * The project actions open the menu, in the order Add Project, Sort & Filter,
    * Collapse All (or Expand Previous), then a separator. Add Project is absent
    * for a remote machine that is not connected, and the bulk toggle is absent
@@ -636,7 +636,7 @@ export function SidebarReferenceKeepAwakeDropdown({
 }
 
 /*
- * CDXC:SidebarProjectMenu 2026-09-02:
+ * CDXC:ContextMenus 2026-09-02:
  * Sort & Filter is a second page of the More dropdown, like Keep awake: a Back
  * row, then the same rows the old section-header filter popup offered — Show
  * hidden (local only), the sort mode radios, and the session tag filters.
@@ -844,7 +844,7 @@ export function SidebarReferenceSectionHeader({
   onToggleShowHidden?: () => void;
   onToggleSessionTagFilter?: (tag: SidebarSessionTagFilter) => void;
   /*
-   * CDXC:SidebarSectionCollapse 2026-09-02:
+   * CDXC:Sidebar 2026-09-02:
    * Only sections that can actually collapse pass this. Projects and remote
    * machine sections are always expanded, so they omit it and the header
    * renders a plain, non-interactive label with no chevron and no
@@ -862,7 +862,7 @@ export function SidebarReferenceSectionHeader({
   useColoredAgentIcons?: boolean;
 }) {
   /**
-   * CDXC:SidebarReference 2026-05-08-01:41
+   * CDXC:Sidebar 2026-05-08-01:41
    * Reference-mode Chats is a collapsible section header; Projects and remote
    * machine sections are always expanded (see the 2026-09-02 note on
    * onToggleCollapsed). Chats
@@ -871,12 +871,12 @@ export function SidebarReferenceSectionHeader({
    * Codex.app-style list keeps management actions nearby. Add Project owns both
    * folder selection and repository cloning through its source picker.
    *
-   * CDXC:SidebarReference 2026-05-08-02:21
+   * CDXC:Sidebar 2026-05-08-02:21
    * The project bulk control is one stateful text button: "Collapse All" while
    * any project is expanded, then "Expand Previous" after it collapses the
    * previously expanded projects.
    *
-   * CDXC:SidebarReference 2026-05-08-02:56
+   * CDXC:Sidebar 2026-05-08-02:56
    * The bulk project button stays icon-only in the visible UI: use
    * IconArrowsDiagonal2 for Collapse All and IconArrowsDiagonalMinimize for
    * Expand Previous, while preserving the text labels for tooltips and
@@ -888,18 +888,18 @@ export function SidebarReferenceSectionHeader({
    * Radix tooltips mis-anchor in the native sidebar webview. Quick exposes
    * filter, browser, terminal, and agent-picker actions beside the section label.
    *
-   * CDXC:SidebarStickyHeaders 2026-05-20-09:55:
+   * CDXC:Sidebar 2026-05-20-09:55:
    * Section headers need a stable section key in the DOM so spacing can be
    * tuned for Projects and Quick independently without depending on visible
    * label text or adjacent markup shape.
    *
-   * CDXC:ManualSessionSorting 2026-06-05-12:30:
+   * CDXC:Sessions 2026-06-05-12:30:
    * Quick and Projects expose the same filter-shaped sort control in their
    * section headers. Last Active Sorting remains the default, while Manual
    * Sorting preserves the first visible last-active snapshot and later
    * user-defined row order.
    *
-   * CDXC:QuickAgents 2026-06-08-18:25:
+   * CDXC:AgentLauncher 2026-06-08-18:25:
    * Quick exposes the same selected-agent split picker as project headers, with
    * Browser and Terminal as separate section-header actions to its left. Keep
    * the agent picker at the far right of the Quick header cluster so it aligns
@@ -911,7 +911,7 @@ export function SidebarReferenceSectionHeader({
    * jump to that machine's Settings -> Remote fields, while the always-visible
    * connection-state control remains beside the machine title.
    *
-   * CDXC:SidebarSortFilter 2026-06-15-21:24:
+   * CDXC:Sessions 2026-06-15-21:24:
    * The section-header filter icon should use the stable hover label "Sort & Filter" even when the accessible label continues to expose the current sort mode and selected tag-filter count.
    */
   const [sortMenuPosition, setSortMenuPosition] = useState<HeaderSortMenuPosition>();

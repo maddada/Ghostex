@@ -20,7 +20,7 @@ import {
 } from '../project-board-shared';
 
 /*
-  CDXC:ProjectBoardColumnManagement 2026-08-21:
+  CDXC:ProjectBoard 2026-08-21:
   The dialog only ever offers the board's own extra statuses. The six built-in lanes are listed but
   locked, because they are reconciled into the config by ensureWorkflowStatuses on every load and
   renaming or removing one here would simply be undone on the next refresh.

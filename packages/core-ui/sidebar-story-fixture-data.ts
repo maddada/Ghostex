@@ -15,12 +15,12 @@ function createStoryProjectContext(projectId: string): NonNullable<SidebarStoryG
     canRemoveProject: true,
     path: `/Users/story/dev/${projectId}`,
     /**
-     * CDXC:ProjectDiffStats 2026-05-15-14:33:
+     * CDXC:Git 2026-05-15-14:33:
      * Sidebar stories keep project editor state in project context because the
      * project header still renders git diff stats from that shared editor
      * contract even though the sidebar Code row is no longer visible.
      *
-     * CDXC:EditorPanes 2026-05-09-17:24
+     * CDXC:CodeEditor 2026-05-09-17:24
      * Project editor fixture state includes load status because Storybook must
      * exercise the same host state the titlebar and native editor page consume.
      */
@@ -40,7 +40,7 @@ function createStoryOpenProjectEditorContext(projectId: string): NonNullable<Sid
   return {
     ...projectContext,
     /**
-     * CDXC:EditorPanes 2026-05-15-13:58:
+     * CDXC:CodeEditor 2026-05-15-13:58:
      * The Combined header-alignment Storybook fixture keeps the project editor
      * row visible with nonzero diff stats so the project-header placement can
      * be verified while the Code row remains a stable label.
@@ -160,7 +160,7 @@ const COMMAND_INDICATOR_ACTIVE_GROUPS: SidebarStoryGroup[] = [
 ];
 
 /*
- * CDXC:AgentDetection 2026-04-27-06:47
+ * CDXC:AgentProviders 2026-04-27-06:47
  * Keep a narrow Storybook fixture for verifying that sidebar cards render the
  * agent identity already present in session data before changing production CSS.
  */
@@ -387,7 +387,7 @@ const OVERFLOW_STRESS_GROUPS: SidebarStoryGroup[] = [
 ];
 
 /*
- * CDXC:SidebarScroll 2026-05-08-10:53
+ * CDXC:Sidebar 2026-05-08-10:53
  * Keep a long, stable sidebar fixture for bottom-scroll retention checks. The
  * session list must remain overflowed after the user reaches the end instead
  * of being reclassified as sparse content and snapped back to the top.
@@ -442,7 +442,7 @@ const EMPTY_GROUPS: SidebarStoryGroup[] = [
 ];
 
 /*
- * CDXC:SidebarHover 2026-05-04-08:11
+ * CDXC:Sidebar 2026-05-04-08:11
  * Reproduce the native Combined sidebar header-alignment surface. Project
  * groups carry projectContext, Actions are hidden by combined settings, and
  * the active project group exposes split/create controls on hover.
@@ -534,7 +534,7 @@ const COMBINED_SPARSE_REFERENCE_GROUPS: SidebarStoryGroup[] = [
       createStorySession({
         alias: 'Terminal Session',
         /**
-         * CDXC:SidebarStories 2026-05-09-18:52
+         * CDXC:DesignSystem 2026-05-09-18:52
          * The sparse reference story is used to validate session title, Last
          * Active, close button, and agent-icon alignment. Keep this row on the
          * explicit agent-icon path instead of the agentless terminal fallback.
@@ -563,7 +563,7 @@ const COMBINED_SPARSE_REFERENCE_GROUPS: SidebarStoryGroup[] = [
         shortcutLabel: '⌘⌥2',
       }),
       /**
-       * CDXC:SidebarSearch 2026-05-08-12:02
+       * CDXC:Sidebar 2026-05-08-12:02
        * Combined-reference search stories need multiple matching project rows
        * before Previous Sessions so regressions in current-result height
        * measurement reproduce in Storybook.

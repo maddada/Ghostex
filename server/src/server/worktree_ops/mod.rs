@@ -63,7 +63,7 @@ impl From<TypedOperationError> for ProjectWorktreeOperationError {
 }
 
 /*
-CDXC:RemoteWorktrees 2026-06-24-18:40:
+CDXC:RemoteMachines 2026-06-24-18:40:
 GPUI remote Add Worktree, Open Existing, direct merge, and commit-on-new-branch
 must be id-scoped gxserver operations. The daemon resolves registered
 project/worktree ids to paths, derives target branch/path names from bounded

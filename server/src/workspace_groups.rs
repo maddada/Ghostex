@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 use crate::domain::DomainStateError;
 
 /*
-CDXC:WorkspaceSessionGroups 2026-07-12-00:00:
+CDXC:Sessions 2026-07-12-00:00:
 Named session sub-groups and the sidebar project order used to live only in
 GPUI's localStorage overlay, so React Native Android could not render the same
 grouped, ordered session list. gxserver now owns a durable copy of that

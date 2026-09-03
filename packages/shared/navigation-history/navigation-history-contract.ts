@@ -1,5 +1,5 @@
 /**
- * CDXC:NavigationHistory 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * Titlebar Back/Forward walks ONE chronological trail of everything the user has
  * had active — sessions and projects, across machines — not a per-project stack.
  * gxserver owns that trail (see `server/src/navigation_history`); this file

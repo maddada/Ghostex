@@ -40,7 +40,7 @@ import { StashedPromptsModal } from '@/packages/core-ui/stashed-prompts-modal';
 import type { WebviewApi } from '@/packages/core-ui/webview-api';
 
 /*
-CDXC:SessionChatMobileWebview 2026-07-31:
+CDXC:Mobile 2026-07-31:
 Session Chat page for the React Native app, bundled by
 tooling/build-mobile-chat.mjs into one self-contained HTML string the app
 loads in a react-native-webview. It mounts the same shared SessionChatView as
@@ -205,7 +205,7 @@ function readHostState(): MobileChatHostState {
 }
 
 /*
-CDXC:SessionChatDraftHandoff 2026-08-18:
+CDXC:Drafts 2026-08-18:
 Text the user typed into the agent CLI follows them into this composer when
 they switch views. RN owns the capture (it is a slow SSH round trip through the
 daemon's Ctrl+G handshake) and pushes the result here. The hook is installed at
@@ -440,7 +440,7 @@ function applyDocumentPresentation(presentation: MobileChatPresentation): void {
   const background = presentation.theme === 'light' ? '#fdfdfd' : '#0d0d0d';
   document.documentElement.style.colorScheme = presentation.theme;
   document.documentElement.style.backgroundColor = background;
-  // CDXC:SessionChatTypeScale 2026-08-22: unset, not a written-out fallback —
+  // CDXC:SessionChat 2026-08-22: unset, not a written-out fallback —
   // the shared sheet owns the default face (see chat-main.tsx).
   if (presentation.fontFamily) {
     document.documentElement.style.setProperty('--ghostex-session-chat-font-family', presentation.fontFamily);
@@ -537,7 +537,7 @@ function savedPromptsPayload(message: Record<string, unknown>): Record<string, u
 }
 
 /*
-CDXC:MobileSavedPrompts 2026-08-26:
+CDXC:SavedPrompts 2026-08-26:
 The desktop modal speaks the VS Code sidebar message contract. This adapter
 translates only the host transport: requests become an allowlisted mobile
 bridge call, then the daemon's answer is re-emitted as the same window message
@@ -676,7 +676,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 The app's terminal view carries a "Queued: N" button, and this page is the
 only thing on the phone already watching that queue: every read — including
 each long-poll iteration — and every queue mutation answers with the
@@ -735,33 +735,33 @@ function snapshotEventFromRead(result: GxserverReadSessionChatResult): GxserverS
     // Detected model/effort: this host's only live channel is the synthesized
     // snapshot, so dropping it here would hide the pills' real values.
     ...(result.selectedOptions !== undefined ? { selectedOptions: result.selectedOptions } : {}),
-    // CDXC:SessionChatTerminalNotices 2026-08-19: terminal-screen state the
+    // CDXC:AgentScreenDetection 2026-08-19: terminal-screen state the
     // transcript can never show. Omitted means cleared, and this synthesized
     // snapshot is the host's only frame, so the omission has to survive too.
     ...(result.terminalNotice !== undefined ? { terminalNotice: result.terminalNotice } : {}),
     /*
-    CDXC:SessionChatTerminalActivity 2026-08-22: the transcript's progress row,
+    CDXC:AgentScreenDetection 2026-08-22: the transcript's progress row,
     same carriage rule. The phone's long poll re-reads whenever the bar moves
     (the fingerprint hashes its numbers), so this is what makes a compaction
     tick on a device with no event socket at all.
     */
     ...(result.terminalActivity !== undefined ? { terminalActivity: result.terminalActivity } : {}),
     /*
-    CDXC:SessionChatAgentFleet 2026-08-23: sub-agents, same carriage
+    CDXC:AgentScreenDetection 2026-08-23: sub-agents, same carriage
     rule again. The read's fingerprint hashes the roster, so the phone's long
     poll wakes when an agent starts, finishes, or changes task.
     */
     ...(result.agentFleet !== undefined ? { agentFleet: result.agentFleet } : {}),
-    // CDXC:SessionChatAgentTasks 2026-09-03: Claude's task list, same rule.
+    // CDXC:SessionChat 2026-09-03: Claude's task list, same rule.
     ...(result.agentTasks !== undefined ? { agentTasks: result.agentTasks } : {}),
     /*
-    CDXC:SessionChatAppCommands 2026-08-23: commands Ghostex typed into the
+    CDXC:SessionChat 2026-08-23: commands Ghostex typed into the
     agent. Same pass-through, and the phone needs it most — it is the client
     least likely to be watching the terminal when the session renames itself.
     */
     ...(result.appCommands !== undefined ? { appCommands: result.appCommands } : {}),
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21: the queue and the synced draft.
+    CDXC:SessionChat 2026-08-21: the queue and the synced draft.
     Both keep the READ's semantics here, and both matter: an absent queue is
     the daemon capability probe that hides every queue control, and an absent
     draft means "unchanged", never "cleared". This synthesized snapshot is the
@@ -872,7 +872,7 @@ function createMobileSessionChatTransport(): SessionChatTransport {
       }).then(withQueueReport);
     },
     /*
-    CDXC:SessionAgentNotes 2026-08-24:
+    CDXC:SessionNotes 2026-08-24:
     The session note is one more SSH-exec'd verb (`ghostex session-note
     read|save`), so it reaches the same store the desktop and web hosts write.
     The machine resolves the provider conversation id the note is filed under
@@ -975,7 +975,7 @@ fallbacks — notably the desktop's 75% transcript width — in charge.
 applyDocumentPresentation(presentationState);
 
 /*
-CDXC:SessionChatMobileKeyboard 2026-08-21:
+CDXC:Mobile 2026-08-21:
 The page sizes itself off `height: 100%`, i.e. the LAYOUT viewport. A software
 keyboard does not shrink that: iOS/WKWebView contracts only the VISUAL viewport,
 so the page keeps its full height and the keyboard covers whatever is at the

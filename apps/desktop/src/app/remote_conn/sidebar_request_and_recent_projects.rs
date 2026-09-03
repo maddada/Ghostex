@@ -11,10 +11,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRemoteMachines 2026-06-24-16:48:
+        CDXC:RemoteMachines 2026-06-24-16:48:
         Sidebar-origin remote gxserver actions are allowlisted Rust-owned RPCs through the selected live SSH tunnel. Renderer commands may identify only a saved remote machine id, an allowed endpoint, and endpoint params; Rust must not accept tokens, hosts, SSH users, key paths, command text, URLs, or raw response handling authority from CEF.
 
-        CDXC:GPUIRemoteGit 2026-06-24-17:47:
+        CDXC:Git 2026-06-24-17:47:
         Remote Git/GitHub/worktree parity expands this bridge to gxserver-owned project actions. Responses must be shaped at this boundary before CEF sees them: no command summaries, no PR URL launch authority, no raw delete-project bodies, and no remote tokens, hostnames, SSH details, stdout/stderr logging, or daemon body persistence.
         */
         let Some(remote_machine_id) = command

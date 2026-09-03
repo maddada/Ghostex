@@ -465,13 +465,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectEditorLifecycle 2026-06-22-08:29:
+        CDXC:CodeEditor 2026-06-22-08:29:
         GPUI project-editor auto-sleep is shell lifecycle behavior, not placeholder teardown. Source, Browser, Kanban, and Manage each get independent runtime timers that are rescheduled on local mode and wake mutations; only inactive awake modes can sleep, and Browser sleep only hides CEF through the existing visibility gate instead of deleting tabs or surfaces.
 
-        CDXC:GPUIProjectEditorLifecycle 2026-06-22-09:49:
+        CDXC:CodeEditor 2026-06-22-09:49:
         GPUI must notice effective project-editor auto-sleep policy changes while running without native settings subscriptions or filesystem watchers. Keep a runtime-only per-mode duration snapshot derived from shared settings, poll it at a fixed shell interval, and reschedule only when the effective enabled/duration policy changes so unchanged timers can still fire.
 
-        CDXC:GPUIProjectEditorLifecycle 2026-06-22-09:49:
+        CDXC:CodeEditor 2026-06-22-09:49:
         Policy rescheduling is shell lifecycle behavior only: it invalidates pending Source, Browser, Kanban, and Manage auto-sleep epochs, restarts timers for inactive awake modes using the new effective duration, leaves active and sleeping modes in their current state, keeps Browser CEF and placeholder surfaces intact, defaults missing or malformed settings to enabled with five idle minutes, and never logs or persists raw settings values, paths, project names, browser titles, command text, tokens, or user content.
         */
         for mode in project_editor_modes() {
@@ -577,7 +577,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn start_command_action_status_polling(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUICommandPane 2026-06-24-23:36:
+        CDXC:CommandPane 2026-06-24-23:36:
         Command-pane Action status polling is bounded to GPUI-owned session-state files while live action runs exist. It updates only safe tab activity metadata and never reads command output, terminal content, paths from renderer payloads, logs, shell-state JSON, or persisted command text.
         */
         cx.spawn(async move |this, cx| {

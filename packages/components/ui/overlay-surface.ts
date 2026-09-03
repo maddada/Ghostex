@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 /**
- * CDXC:ReactDropdowns 2026-05-30-08:58:
+ * CDXC:DesignSystem 2026-05-30-08:58:
  * Expanded React dropdown surfaces should show the same visible border as
  * sidebar tooltips, so menus, selects, popovers, and tooltips share the
  * tooltip border token instead of each primitive inventing its own outline.

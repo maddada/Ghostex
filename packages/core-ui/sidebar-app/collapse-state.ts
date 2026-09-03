@@ -44,13 +44,13 @@ export type SidebarUiCollapseState = {
   collapsedProjectSessionListsById: ProjectSessionListCollapsedState;
   isReferenceChatsCollapsed: boolean;
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The Space each gxserver section is filtered by, keyed by section key
    * ("local" / "remote:<machineId>", see sidebar-app/space-filtering.ts). A
    * value is either a real Space id owned by that section's daemon or the
    * reserved built-in id `other`.
    *
-   * CDXC:SidebarSpaces 2026-09-02:
+   * CDXC:Spaces 2026-09-02:
    * The ABSENCE of a key means "never switched", not a view of its own: it
    * resolves at render time to the section's first Space, or to Other when it
    * has none. A stored id whose Space no longer exists resolves the same way
@@ -68,7 +68,7 @@ export type SidebarUiCollapseState = {
  * for the same reason: an absent key was that view and now resolves through
  * the same rule.
  *
- * CDXC:SidebarSectionCollapse 2026-09-02:
+ * CDXC:Sidebar 2026-09-02:
  * `isReferenceProjectsCollapsed` and `collapsedRemoteMachineSectionsById` were
  * dropped when the Projects area and the remote machine sections stopped being
  * collapsible. Stored payloads that still carry them need no version bump:

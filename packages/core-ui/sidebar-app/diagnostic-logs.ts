@@ -26,7 +26,7 @@ export type SidebarDiagnosticLogsOptions = {
 };
 
 /*
- * CDXC:SidebarHookDecomposition 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * The sidebar's five diagnostic log posters are one concern and were one
  * contiguous block of `useEffectEvent`s inside SidebarApp. They stay effect
  * events (not callbacks) so every caller keeps reading the latest render's
@@ -62,7 +62,7 @@ export function useSidebarDiagnosticLogs({
   const postSidebarCollapseStateLog = useEffectEvent(
     (event: string, details: Record<string, unknown>, options: { enabled?: boolean } = {}) => {
       /*
-       * CDXC:SidebarCollapseDiagnostics 2026-06-02-23:52:
+       * CDXC:Diagnostics 2026-06-02-23:52:
        * Sidebar restart repros need a dedicated low-volume trace for localStorage
        * collapse-state reads, writes, hydrate timing, and user toggles. Keep the
        * payload privacy-safe by recording counts, booleans, revisions, elapsed
@@ -91,7 +91,7 @@ export function useSidebarDiagnosticLogs({
 
   const postPinnedSessionReorderLog = useEffectEvent((event: string, details: unknown) => {
     /*
-     * CDXC:PinnedSessions 2026-05-28-15:33:
+     * CDXC:Sessions 2026-05-28-15:33:
      * Pinned reorder failures need click-scoped repro breadcrumbs even when
      * broad Debugging Mode is off. Keep these events low-volume and explicit
      * so a user drag can reveal which guard prevented syncSessionOrder.

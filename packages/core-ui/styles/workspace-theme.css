@@ -1,5 +1,5 @@
 /*
-CDXC:ProjectListRemoval 2026-06-03-15:12:
+CDXC:Projects 2026-06-03-15:12:
 The far-left project list is removed from the shared native sidebar and Electron shell. Keep this stylesheet focused on the surviving native sidebar shell layout and project-header theme menu so the old list button classes cannot be reintroduced by stale CSS.
 */
 body.native-sidebar-body {
@@ -11,7 +11,7 @@ body.native-sidebar-body #root {
 }
 
 /*
-CDXC:TooltipLifecycle 2026-06-13-02:30:
+CDXC:Tooltips 2026-06-13-02:30:
 Native pointer-leave only dismisses open sidebar tooltips and clears stale row
 hover visuals. Do not disable #root hit testing from that state; doing so blocks
 the pointer movement that needs to restore hover tooltips without a click.
@@ -37,7 +37,7 @@ the pointer movement that needs to restore hover tooltips without a click.
 
 .native-sidebar-shell[data-sidebar-mode='combined'] .native-sidebar-main {
   /*
-  CDXC:SidebarHover 2026-05-04-07:00:
+  CDXC:Sidebar 2026-05-04-07:00:
   Combined mode uses one column, so Agents, Actions, and project group headers share the same 8px edge inset from the native sidebar viewport.
   */
   padding-left: 8px;
@@ -45,7 +45,7 @@ the pointer movement that needs to restore hover tooltips without a click.
 }
 
 /*
-CDXC:NativeSidebarChrome 2026-05-05-05:29:
+CDXC:Sidebar 2026-05-05-05:29:
 The native sidebar webview must keep long session/action content scrollable without clipping the right-side edge controls. Project and Recent Projects sections share the main bounded scroll viewport.
 */
 body.native-sidebar-body .stack,
@@ -129,7 +129,7 @@ body.native-sidebar-body .stack,
 }
 
 /*
-CDXC:WorkspaceTheme 2026-05-05-02:58:
+CDXC:Theming 2026-05-05-02:58:
 Custom workspace colors live in the project header Theme context menu, with a picker and recent-color palette shared by native and Electron project groups.
 */
 .workspace-theme-custom-picker {

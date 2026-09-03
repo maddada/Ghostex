@@ -11,7 +11,7 @@ use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 
 /*
-CDXC:RemoteMinimalDeps 2026-07-13:
+CDXC:RemotePairing 2026-07-13:
 Agent resume commands used to embed `node -e <script>` lookups that parsed
 provider transcript/index files, which forced every host (including remote
 Linux) to carry a Node runtime for session restore. The same lookups now run

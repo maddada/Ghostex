@@ -22,7 +22,7 @@ const cefHtmlEntries = [
   'titlebar-host.html',
 ] as const;
 /*
- * CDXC:GPUISidebarEntrypoints 2026-06-28-16:18:
+ * CDXC:CefRuntime 2026-06-28-16:18:
  * GPUI CEF entry modules should describe the stable surface they mount, not the historical porting phase. Keep this explicit entry map as the source of truth for the sidebar, Kanban, and Manage bundle inputs so HTML wrappers, Vite output, and packaged resources stay aligned.
  */
 const cefHtmlEntryScripts = {
@@ -41,25 +41,25 @@ function inlineCefHtmlAssets(): Plugin {
     async writeBundle(options, bundle) {
       const outDir = options.dir ?? sidebarOutDir;
       /*
-       * CDXC:GPUICefFileUrlBundle 2026-06-14-14:37:
+       * CDXC:CefRuntime 2026-06-14-14:37:
        * The packaged GPUI sidebar is loaded by CEF from a file:// app resource URL. Chromium blocks external module scripts and stylesheets from that opaque origin, so the app bundle must ship a self-contained HTML entry that mounts React without relaxing file-origin security switches.
        *
-       * CDXC:GPUIProjectWorkareaCefBundles 2026-06-24-11:03:
+       * CDXC:CefRuntime 2026-06-24-11:03:
        * Source-independent Kanban and Manage GPUI workarea pages are first-party CEF HTML entries beside the sidebar entry. Inline every emitted CEF entry so real runtime surfaces can navigate to bundled file URLs without a dev server, WKWebView/WebKit, temporary pages, or relaxed file-origin switches.
        *
-       * CDXC:GPUITitlebarAppModalHost 2026-06-24-10:42:
+       * CDXC:AppModal 2026-06-24-10:42:
        * The GPUI app-modal window loads the same React modal host entry as macOS through a first-party CEF HTML file. Keep modal-host.html in the inlined CEF entry set so Settings, Hotkeys, and Command Palette can open without WebKit, duplicated modal UI, temporary pages, or dev-server-only assets.
        *
-       * CDXC:GPUITitlebarTips 2026-06-24-23:17:
+       * CDXC:Onboarding 2026-06-24-23:17:
        * The GPUI info dropdown loads the shared React titlebar-host Tips panel through a first-party CEF HTML entry. Keep titlebar-host.html in the same single-file inlining path as modal-host.html so the gpui-component Popover can show production Tips content without AppKit/Swift dropdowns, duplicate GPUI tips data, or dev-server-only module loading.
        *
-       * CDXC:GPUICefBundleInlining 2026-06-24-22:01:
+       * CDXC:CefRuntime 2026-06-24-22:01:
        * Inlining only Vite's entry chunks leaves `import "./chunk.js"` specifiers inside the HTML-root module, even though emitted chunks live under assets/. CEF then loads a blank file:// sidebar before React can mount. Keep Vite as the CSS/HTML producer, but replace each CEF entry script with a single esbuild browser bundle so sidebar, Kanban, Manage, app-modal, and titlebar-panel hosts do not depend on file-url module graph loading or relaxed Chromium switches.
        *
-       * CDXC:GPUICefBundleInlining 2026-06-24-22:07:
+       * CDXC:CefRuntime 2026-06-24-22:07:
        * Rebuild the final file from the source HTML instead of regex-editing Vite's transformed inline JavaScript. Generated React code can contain script-tag-shaped strings, so final HTML assembly must extract only emitted style tags from Vite output, then inject the esbuild single-file module into the original CEF wrapper.
        *
-       * CDXC:GPUICefDynamicChunkCss 2026-07-08:
+       * CDXC:CefRuntime 2026-07-08:
        * Entries that load their page module through a dynamic import (Manage's shared Docs app, Kanban's tasks placeholder) get their CSS attached to the dynamic chunk instead of a <link> in the entry HTML, and Vite's runtime CSS loader is removed with the replaced module script while the esbuild bundle drops .css imports. Walk each entry's full chunk graph, including dynamic imports, and inline every reachable CSS asset so pages like Docs keep their editor styles without shipping unrelated entries' CSS.
        */
       for (const htmlEntry of cefHtmlEntries) {
@@ -99,7 +99,7 @@ function inlineCefHtmlAssets(): Plugin {
 }
 
 /*
- * CDXC:SessionChatMonaco 2026-08-01:
+ * CDXC:PromptEditor 2026-08-01:
  * chat.html's composer (and the Agents Hub modal in modal-host.html) load
  * Monaco at runtime through its AMD loader from ./monaco/vs — the only
  * Monaco route that works from CEF's file:// origin, since the ESM build
@@ -123,7 +123,7 @@ function stageMonacoVs(): Plugin {
 }
 
 /*
- * CDXC:SessionChatCodeHighlighting 2026-08-21:
+ * CDXC:SessionChat 2026-08-21:
  * Session Chat highlights fenced code with Shiki, loading the engine and one
  * grammar per language on demand. Those loaders are dynamic imports, which the
  * single-file CEF bundler above cannot code-split: esbuild inlines every
@@ -322,7 +322,7 @@ export default defineConfig({
     outDir: sidebarOutDir,
     rolldownOptions: {
       /*
-       * CDXC:GPUICefHtmlEntries 2026-06-14-12:50:
+       * CDXC:CefRuntime 2026-06-14-12:50:
        * The GPUI shell resolves the bundled sidebar through Contents/Resources/sidebar/index.html. Keep the Vite HTML entry at the package root so production-style packaging and local development share that single entry URL.
        */
       input: {
@@ -340,7 +340,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
     alias: {
       /*
-       * CDXC:GPUISidebarReactImports 2026-06-14-12:06:
+       * CDXC:Build 2026-06-14-12:06:
        * The GPUI CEF sidebar bundle imports app-owned sidebar and shadcn modules from the repository root. Keep the same @ alias as Storybook and Electron so this app exercises the production React component graph.
        */
       '@': repoRoot,

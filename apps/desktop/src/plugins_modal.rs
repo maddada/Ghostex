@@ -746,7 +746,7 @@ fn plugins_modal_snapshot(app: &GhostexGpuiApp) -> PluginsModalSnapshot {
         &mut warning,
     ));
     /*
-    CDXC:SystemBeadsOnly 2026-09-03:
+    CDXC:ProjectBoard 2026-09-03:
     Ghostex no longer ships or downloads Beads; the board resolves the `bd`
     installed on the machine. This row only owns the Kanban view tab toggle.
     */
@@ -867,7 +867,7 @@ fn code_server_row(
 
 fn source_code_server_checkout_version(repo_root: &Path) -> Option<String> {
     /*
-    CDXC:GPUICodeServerVersion 2026-08-13:
+    CDXC:CodeEditor 2026-08-13:
     The source checkout's top-level code-server package intentionally reports
     0.0.0, so it is not useful runtime identity. Surface the version of the
     VS Code payload that Code actually runs instead of the generic

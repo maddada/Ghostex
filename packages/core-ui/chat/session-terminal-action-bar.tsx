@@ -156,7 +156,7 @@ export function SessionTerminalActionBar({
   };
   const hostActionMenuItem = (action: SessionChatHostAction) =>
     action.items ? (
-      // CDXC:SwitchAccount 2026-09-03: same submenu shape as the chat composer's.
+      // CDXC:AgentProviders 2026-09-03: same submenu shape as the chat composer's.
       <DropdownMenuSub key={action.id}>
         <DropdownMenuSubTrigger>
           {hostActionIcon(action.id)}

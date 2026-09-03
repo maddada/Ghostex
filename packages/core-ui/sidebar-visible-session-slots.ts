@@ -124,7 +124,7 @@ export type RenderedSidebarSessionSlot = {
 
 export type RenderedSidebarSessionSlotOptions = {
   /*
-   * CDXC:SidebarMultiSelect 2026-07-02-08:12:
+   * CDXC:Sessions 2026-07-02-08:12:
    * data-visible on sidebar session rows mirrors workspace pane visibility
    * (the session is a currently surfaced pane), not whether the row is
    * rendered in the sidebar. Hotkey slot navigation keeps skipping
@@ -214,7 +214,7 @@ export function resolveRenderedSidebarSessionRangeSelection({
   visibleSessionIds: readonly string[];
 }): string[] {
   /*
-   * CDXC:SidebarMultiSelect 2026-07-01-18:33:
+   * CDXC:Sessions 2026-07-01-18:33:
    * Shift-click multi-selection is anchored on the currently active session and
    * uses rendered sidebar row order, so collapsed projects, filters, remote
    * sections, and visible sorting define the exact inclusive selected range.
@@ -244,7 +244,7 @@ export function resolveRenderedSidebarSessionAdditiveSelection({
   visibleSessionIds: readonly string[];
 }): string[] {
   /*
-   * CDXC:SidebarMultiSelect 2026-07-02-08:25:
+   * CDXC:Sessions 2026-07-02-08:25:
    * Cmd-click adds exactly the clicked visible session to the existing selected
    * set. The currently active session is never seeded in implicitly; it becomes
    * part of the selection only when it is itself cmd-clicked.

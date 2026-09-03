@@ -142,7 +142,7 @@ pub(crate) fn gpui_cua_driver_permission_status(
     };
 
     /*
-    CDXC:GPUIDesktopControlSettings 2026-06-24-13:14:
+    CDXC:Extensions 2026-06-24-13:14:
     The Cua permission probe is a status refresh, not a repair action. Run only `cua-driver check_permissions {"prompt":false}` with a short timeout, parse Accessibility and Screen Recording, and discard stdout/stderr before producing user-facing copy.
     */
     match gpui_run_command_with_captured_output_timeout(
@@ -182,7 +182,7 @@ pub(crate) fn gpui_cua_driver_permission_status_from_output(
 }
 
 /*
-CDXC:GPUIDesktopControlSettings 2026-08-20-11:05:
+CDXC:Extensions 2026-08-20-11:05:
 `cua-driver check_permissions` answers with a JSON object whose `accessibility`
 and `screen_recording` members are booleans, so read those members instead of
 scanning for prose lines that the CLI never prints.

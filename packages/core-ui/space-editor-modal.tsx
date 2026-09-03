@@ -16,7 +16,7 @@ import { DEFAULT_SIDEBAR_SPACE_ICON } from './spaces';
 import { isSidebarCommandIcon, type SidebarCommandIcon } from '../shared/sidebar-command-icons';
 
 /*
-CDXC:SidebarSpaces 2026-08-27:
+CDXC:Spaces 2026-08-27:
 The whole New Space / Edit Space surface, per the Spaces decision that editing is
 one small popup with name, icon, and color — and no central management screen.
 
@@ -76,8 +76,8 @@ export function SpaceEditorModal({
   }, [initialName, isOpen, resolvedInitialColor, resolvedInitialIcon]);
 
   /**
-   * CDXC:SidebarSpaces 2026-08-27:
-   * Same initial-focus contract as Rename Session (see CDXC:SidebarRename in
+   * CDXC:Spaces 2026-08-27:
+   * Same initial-focus contract as Rename Session (see CDXC:Sessions in
    * session-rename-modal.tsx): the dialog opens in a hidden native child window
    * that becomes key only after React has already reported `presented`, so the
    * focus request has to survive that boundary — and has to stop as soon as the

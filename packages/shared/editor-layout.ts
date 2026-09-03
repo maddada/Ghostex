@@ -66,7 +66,7 @@ export function createEditorLayoutPlan(visibleCount: number, viewMode: TerminalV
 
 function clampVisibleCount(value: number): number {
   /**
-   * CDXC:EditorLayout 2026-05-11-17:14
+   * CDXC:PromptEditor 2026-05-11-17:14
    * Editor/workspace layout planning must accept every visible session count.
    * The old fixed pane cap was removed from workspace panes, so this helper only
    * normalizes invalid counts to a positive integer.

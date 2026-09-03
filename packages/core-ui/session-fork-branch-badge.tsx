@@ -1,7 +1,7 @@
 import { IconGitBranch } from '@tabler/icons-react';
 
 /**
- * CDXC:SessionForkFamilies 2026-08-28:
+ * CDXC:SessionFork 2026-08-28:
  * The one branch marker for session rows. gxserver collapses a closed ancestor
  * once something continues from it, so any row that still says it has branches
  * is telling the truth about LIVING siblings the user can switch between. The

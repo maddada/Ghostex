@@ -30,7 +30,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarActions 2026-06-24-14:24:
+        CDXC:Titlebar 2026-06-24-14:24:
         Empty, missing, or unconfigured titlebar Actions paths must deep-link to the shared Settings modal Actions tab with `{ modal: "settings", initialTab: "actions" }`. Do not reopen the old configureActions modal id or a GPUI placeholder surface from this titlebar path.
         */
         let modal = GpuiAppModalKind::Settings;
@@ -56,7 +56,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:SettingsExtensionsTab 2026-08-30:
+        CDXC:Extensions 2026-08-30:
         The standalone Extensions browser modal and the Settings "Customize"
         page are one Settings tab now, so every extensions entry point (app
         menu, titlebar Settings menu, titlebar right-click, the puzzle popup's
@@ -223,7 +223,7 @@ impl GhostexGpuiApp {
                 .map(str::to_string);
         let request_project_id = fetched_project_id.clone();
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         A remote project's Actions live on the machine that owns it, so a remote
         active project reads that machine's HUD through its live tunnel. The
         local daemon does not know a `remote:` project id and would answer with
@@ -342,7 +342,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIQuickActionCooldown 2026-08-27:
+        CDXC:AgentLauncher 2026-08-27:
         Every command-Action terminal launch arms a 2-second cooldown on the
         titlebar Quick Actions button, because clicking it while the Action is
         still running now kills and relaunches that terminal — without the
@@ -412,7 +412,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarActions 2026-06-27-09:26:
+        CDXC:Titlebar 2026-06-27-09:26:
         Titlebar left-clicks, right-click menu rows, and positional Action hotkeys are click sources, so GPUI derives Debug reruns from sanitized local feedback just like the React command palette. Sidebar bridge payloads call `run_gpui_titlebar_action` directly and keep their explicit `runMode` authority.
         */
         action.run_mode = gpui_titlebar_action_run_mode_for_click(
@@ -470,7 +470,7 @@ impl GhostexGpuiApp {
                 );
                 self.active_action_command_id = Some(command_id.clone());
                 /*
-                CDXC:RemoteProjectActions 2026-08-29:
+                CDXC:RemoteMachines 2026-08-29:
                 The Action belongs to a remote project, so its command has to run
                 on the machine that owns that project — the local command pane
                 would run the project's command here, against a path that only

@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseTransientFailureClassification 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Closed allow-list of transient transport/availability signatures, plus a
  * fatal list that always wins.
  *
@@ -67,7 +67,7 @@ export const RETRYABLE_RULES = Object.freeze([
   { id: 'notary-transient', pattern: /Unable to (?:reach|contact) (?:the )?Apple notary|HTTP status code: 5\d\d/i },
   { id: 'runner-net', pattern: /The remote (?:name|server) could not be resolved|TLS handshake timeout/i },
   /*
-   * CDXC:ReleaseHdiutilResourceBusy 2026-08-22:
+   * CDXC:Release 2026-08-22:
    * `hdiutil create` attaches a device to read the staging folder, and on a
    * GitHub macOS runner another process (Spotlight indexing the fresh stage,
    * or a leftover attachment) can hold it. It says nothing about the app,
@@ -78,7 +78,7 @@ export const RETRYABLE_RULES = Object.freeze([
 ]);
 
 /*
- * CDXC:ReleaseWedgedRunnerClassification 2026-08-19:
+ * CDXC:Release 2026-08-19:
  * A job killed by its own `timeout-minutes` carries no error signature at all —
  * just GitHub's cancellation line — so it lands in `unclassified`/FATAL and
  * reads like deterministic breakage. During 7.11.0 that misread cost a wrong

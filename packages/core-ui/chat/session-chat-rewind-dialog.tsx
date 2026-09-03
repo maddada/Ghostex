@@ -1,4 +1,4 @@
-// CDXC:SessionChatRewind 2026-09-02:
+// CDXC:SessionChat 2026-09-02:
 // The confirmation in front of `/api/rewindSessionChat`. Rewinding drives the
 // agent's own terminal dialog (Claude: `/rewind`, pick the prompt, "Restore
 // conversation"), so it is not undoable from here and it is not cancellable

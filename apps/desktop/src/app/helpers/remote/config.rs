@@ -12,7 +12,7 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
     remote_machine_id: &str,
 ) -> Option<GpuiRemoteMachineConfig> {
     /*
-    CDXC:GPUIRemoteMachinesSettings 2026-06-24-14:34:
+    CDXC:RemoteMachines 2026-06-24-14:34:
     Remote reconnect must source SSH host/user/port/identity/password marker from the normalized shared Settings snapshot, not from the React command. This keeps the modal command bounded to an id/approval flag and prevents injected hostnames, paths, passwords, tokens, or shell text from crossing the app-modal bridge.
     */
     let machines = object.get("remoteMachines")?.as_array()?;
@@ -306,7 +306,7 @@ pub(crate) fn gpui_remote_repository_clone_job_id_allowed(value: &str) -> bool {
 
 pub(crate) fn gpui_remote_repository_clone_toast_id(request_id: &str) -> String {
     /*
-    CDXC:RemoteClone 2026-06-24-19:35:
+    CDXC:AddProject 2026-06-24-19:35:
     Remote clone toast identifiers may be derived from modal request ids for UI replacement, but the id must be bounded and ASCII-sanitized before it crosses back to CEF so renderer-controlled text is never used verbatim as app-modal chrome identity.
     */
     let suffix: String = request_id

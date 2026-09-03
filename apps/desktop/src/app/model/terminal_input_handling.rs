@@ -36,19 +36,19 @@ pub(crate) fn terminal_body_relative_mouse_position_for_slot<
 }
 
 /*
-CDXC:GPUITerminalTextInput 2026-06-23-10:13:
+CDXC:Terminal 2026-06-23-10:13:
 Phase 2 terminal input parity forwards only committed GPUI `key_char` text. Do not synthesize from `key`, do not map physical keys without a native keycode, reject Cmd/Super and Control modified events so shortcuts and control-key terminal bindings can use a later Ghostty key-event bridge, and keep Option-generated characters when GPUI has already committed them as text.
 
-CDXC:GPUITerminalTextInput 2026-06-23-10:18:
+CDXC:Terminal 2026-06-23-10:18:
 Focused text delivery must choose an explicit terminal target before touching a surface: Agents requires Agents mode plus an Agents-pane focus target, command requires command-pane focus, and Browser/project-editor focus must no-op instead of falling through to a terminal helper.
 
-CDXC:GPUITerminalTextInput 2026-06-23-10:45:
+CDXC:Terminal 2026-06-23-10:45:
 Terminal IME/preedit delivery is a text-service path, not a keyboard fallback. GPUI may register input handling only for the exact focused mounted terminal body, then send committed text/preedit bytes to the matching Ghostty owner while retaining only sanitized UTF-16 marked ranges and no raw typed or terminal content.
 
-CDXC:GPUITerminalKeyInput 2026-06-23-11:50:
+CDXC:Terminal 2026-06-23-11:50:
 The local GPUI app event API exposes `KeyDownEvent { keystroke, is_held, prefer_character_input }`; `Keystroke` exposes only modifiers, layout-derived `key`, and committed `key_char`. The macOS backend uses `NSEvent.keyCode()` while constructing `Keystroke` but drops that native keycode before app listeners run, so Ghostty physical-key forwarding must remain blocked until GPUI exposes a stable native keycode or UIEvents-code physical key identity.
 
-CDXC:GPUITerminalKeyInput 2026-06-23-14:23:
+CDXC:Terminal 2026-06-23-14:23:
 Committed `key_char` text is a text-input signal, not evidence for physical-key or key-binding parity. Layout `key` values, Control shortcuts, and Cmd/Super shortcuts must stay rejected by this helper until GPUI can pass a stable native keycode or UIEvents-code identity to Ghostty without guessing.
 */
 pub(crate) fn committed_terminal_text_from_key_down_event(event: &KeyDownEvent) -> Option<&str> {
@@ -69,10 +69,10 @@ pub(crate) fn command_pane_sleeping_placeholder_keystroke_requests_wake(
     keystroke: &Keystroke,
 ) -> bool {
     /*
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-25-14:49:
+    CDXC:SessionSleep 2026-06-25-14:49:
     Sleeping command placeholders wake on plain alphanumeric key-downs like native AppKit. Reject Cmd, Control, and Option/Alt modified keys, and use GPUI's layout key only as a wake-affordance identity for shifted digits rather than as terminal input.
 
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-25-19:02:
+    CDXC:SessionSleep 2026-06-25-19:02:
     Native AppKit rejects Function-modified wake keys before inspecting alphanumeric text. GPUI must keep Function inert too, while still allowing plain and Shift-only letters/digits that AppKit treats as `charactersIgnoringModifiers`.
     */
     let modifiers = keystroke.modifiers;
@@ -178,7 +178,7 @@ pub(crate) fn terminal_ime_bounds_from_ghostty_point(
 }
 
 /*
-CDXC:GPUITerminalMouseModifiers 2026-06-23-09:45:
+CDXC:Terminal 2026-06-23-09:45:
 Mounted Agents and command terminal bodies must translate GPUI mouse-event keyboard modifiers into Ghostty input.Mods bits for pointer position and button events. Map shift, control, alt, and platform to Ghostty shift, ctrl, alt, and super while intentionally ignoring function; scroll events keep Ghostty ScrollMods precision-only and forward keyboard modifiers only through the preceding pointer position update.
 */
 pub(crate) fn ghostty_mouse_mods_from_gpui_modifiers(
@@ -203,10 +203,10 @@ pub(crate) fn ghostty_mouse_mods_from_gpui_modifiers(
 }
 
 /*
-CDXC:GPUITerminalMouseButtons 2026-06-23-10:23:
+CDXC:Terminal 2026-06-23-10:23:
 Mounted Agents and command terminal bodies must forward Ghostty's exact left, right, and middle mouse button values while rejecting GPUI navigation buttons. Keep the mapper pure so button parity does not store raw input state, coordinates, modifiers, terminal content, command text, paths, URLs, or titles.
 
-CDXC:GPUITerminalMouseButtons 2026-06-23-12:42:
+CDXC:Terminal 2026-06-23-12:42:
 The bounded non-left parity audit keeps the existing implementation: mounted Agents and command terminal bodies use this shared mapper for right/middle press, in-body release, and capture-gated body-level mouse-up-out while preserving current-slot, recorded-bounds, exact-surface/runtime, and mapped-modifier gates.
 */
 pub(crate) fn ghostty_mouse_button_from_gpui_button(
@@ -221,7 +221,7 @@ pub(crate) fn ghostty_mouse_button_from_gpui_button(
 }
 
 /*
-CDXC:GPUITerminalPressureForwarding 2026-06-23-09:51:
+CDXC:Terminal 2026-06-23-09:51:
 Mounted Agents and command terminal pressure events must preserve the GPUI stage contract when crossing into Ghostty. Map Zero to none, Normal to normal, and Force to deep without clamping, fallback stages, logging, persistence, or raw input storage.
 */
 pub(crate) fn ghostty_mouse_pressure_stage_from_gpui_stage(stage: PressureStage) -> u32 {
@@ -233,10 +233,10 @@ pub(crate) fn ghostty_mouse_pressure_stage_from_gpui_stage(stage: PressureStage)
 }
 
 /*
-CDXC:GPUITerminalScrollForwarding 2026-06-23-09:32:
+CDXC:Terminal 2026-06-23-09:32:
 Mounted Running Agents terminal bodies must forward wheel deltas to Ghostty without inventing fallback behavior.
 
-CDXC:GPUICommandTerminalInputForwarding 2026-06-23-09:41:
+CDXC:Terminal 2026-06-23-09:41:
 Agents and command terminal bodies share the same wheel-delta conversion: pixel deltas use raw GPUI pixels and set Ghostty ScrollMods precision bit 0, line deltas use raw GPUI lines with zero scroll mods, and keyboard modifiers are forwarded through mouse position input instead of encoded into ScrollMods.
 */
 pub(crate) fn terminal_ghostty_scroll_delta(

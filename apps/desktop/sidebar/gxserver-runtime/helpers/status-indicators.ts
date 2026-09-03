@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -51,7 +51,7 @@ export function createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
   groups: readonly SidebarSessionGroup[]
 ): GpuiSessionStatusIndicatorCandidate[] {
   /*
-  CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+  CDXC:StatusPet 2026-06-26-04:38:
   GPUI derives status/pet candidates from the live gxserver SidebarApp groups because the GPUI sidebar entry mounts SidebarApp directly and never runs native-sidebar.tsx. Preserve the same project/session order semantics as macOS by reusing shared display layout, but keep the bridge payload bounded and route with ids only rather than paths, commands, terminal text, external URLs, or daemon bodies. Project icon parity may carry only an already-normalized image data URL for notification attachments.
   */
   const candidates: GpuiSessionStatusIndicatorCandidate[] = [];

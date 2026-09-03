@@ -2,17 +2,17 @@
   color-scheme: light dark;
   --sidebar-density-scale: 0.9;
   /*
-   * CDXC:SidebarTheme 2026-06-15-01:43:
+   * CDXC:Theming 2026-06-15-01:43:
    * Dark 1 keeps the newer #191919 chrome, while Dark 2 is the old #0e0e0e
    * snapshot.
    *
-   * CDXC:SidebarTheme 2026-06-15-03:07:
+   * CDXC:Theming 2026-06-15-03:07:
    * Theme selection is disabled while themes are coming soon, so the CSS root
    * must paint Dark Gray/Dark 2 before the sidebar settings hydrate. This keeps
    * the pre-load sidebar backing at #0e0e0e instead of the temporary Dark 1 or
    * blue-accent defaults.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
+   * CDXC:Theming 2026-06-15-11:24:
    * Sidebar/titlebar custom colors publish dedicated variables so modal,
    * dropdown, and shadcn theme tokens keep their normal preset values.
    */
@@ -40,7 +40,7 @@
   --app-tooltip-background: #202020;
   --app-tooltip-foreground: #f0f0f0;
   /*
-   * CDXC:AccentColor 2026-08-24:
+   * CDXC:Theming 2026-08-24:
    * Fallback accent so surfaces paint the shipped sky tone before the
    * accentColor setting hydrates onto <body>.
    */
@@ -408,7 +408,7 @@ body[data-sidebar-theme='light-orange'],
 }
 
 /*
- * CDXC:WorkspaceTheme 2026-05-05-02:58
+ * CDXC:Theming 2026-05-05-02:58
  * A workspace Custom theme color should affect the sidebar theme, not only the
  * project label. Keep the selected preset as the light/dark fallback, then
  * derive the app-level accent, surfaces, and activity colors from the active
@@ -501,7 +501,7 @@ body {
     color 180ms ease;
 }
 
-/* CDXC:SettingsControls 2026-05-07-18:57: shadcn/Radix controls render
+/* CDXC:DesignSystem 2026-05-07-18:57: shadcn/Radix controls render
    button elements with data-slot attributes, and invisible connector buttons
    own explicit component styles. Keep the legacy sidebar button base low
    specificity so component classes can remove borders while Select triggers
@@ -575,7 +575,7 @@ button:where(:not([data-slot])):disabled {
   pointer-events: none;
   position: fixed;
   /*
-   * CDXC:Sidebar-overflow-menu 2026-05-04-08:27
+   * CDXC:Sidebar 2026-05-04-08:27
    * Keep the overflow trigger inset 5px from the sidebar's top-right corner.
    * The menu reads this button's live bounds, so its right edge stays aligned
    * when the trigger moves.
@@ -590,7 +590,7 @@ button:where(:not([data-slot])):disabled {
 }
 
 /*
- * CDXC:Sidebar-controls 2026-04-25-10:01
+ * CDXC:Sidebar 2026-04-25-10:01
  * The floating overflow menu is a global sidebar control, but it should stay
  * visually quiet until the user is interacting with the sidebar or its menu.
  */
@@ -599,7 +599,7 @@ body:has(:focus-visible) .sidebar-floating-overflow-trigger,
 body.storybook-force-sidebar-hover .sidebar-floating-overflow-trigger,
 .sidebar-floating-overflow-trigger[data-selected='true'] {
   /*
-   * CDXC:StorybookInteractions 2026-05-08-18:05
+   * CDXC:DesignSystem 2026-05-08-18:05
    * Storybook play functions cannot reliably create CSS :hover on a trigger
    * that starts with pointer-events disabled. The test-only body class lets
    * interaction stories exercise the same overflow menu without weakening the
@@ -632,7 +632,7 @@ body.storybook-force-sidebar-hover .sidebar-floating-overflow-trigger,
 }
 
 /*
- * CDXC:SessionStatusIndicators 2026-06-12-02:32:
+ * CDXC:SessionStatus 2026-06-12-02:32:
  * Done and attention states must use #95d7f6 across macOS, React Native Android, and TUI instead of bright green. Keep the sidebar token explicit and theme-independent so project themes cannot reintroduce the old status color.
  */
 :root,

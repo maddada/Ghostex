@@ -48,7 +48,7 @@ const quietLogDisplayLineMaxChars = 1200;
 const quietLogDisplayLineHeadChars = 760;
 const quietLogDisplayLineTailChars = 260;
 /*
-CDXC:GPUIStartCommand 2026-07-08-04:55:
+CDXC:Build 2026-07-08-04:55:
 `bun run start` builds the staged GPUI package and installs it to a stable,
 platform-appropriate location before launch. macOS refreshes shared resources,
 then installs to /Applications and opens through LaunchServices. Windows installs
@@ -94,7 +94,7 @@ const windowsCodeServerNames = windowsCodeServerIdentity
   ? codeServerComponentNames(windowsCodeServerIdentity.componentVersion, `linux-${windowsArch}`)
   : undefined;
 /*
-CDXC:WindowsWslRuntimeCache 2026-08-09:
+CDXC:PlatformSupport 2026-08-09:
 The gxserver release asset keeps the same filename across Ghostex releases, so
 an architecture-only cache could reuse a stale runtime from an earlier release.
 Scope the cache to the immutable Ghostex release tag so a version can only
@@ -194,7 +194,7 @@ if (isDarwin) {
 }
 if (!isDarwin && !targetsWindows) {
   /*
-  CDXC:LinuxRuntimePackaging 2026-07-18:
+  CDXC:PlatformSupport 2026-07-18:
   gxserver and zmx are one protocol-coupled runtime. The Linux app packager
   previously reused whichever build/remote-gxserver-linux package happened to
   exist, so a freshly compiled gxserver could emit flags unsupported by the
@@ -492,10 +492,10 @@ function formatDuration(durationMs) {
 
 function reexecUnderLocalStartLock() {
   /*
-  CDXC:GPUIStartCommand 2026-06-21-18:43:
+  CDXC:Build 2026-06-21-18:43:
   `bun run start` is the canonical local desktop command: it builds the local CEF/GPUI bundle, prevents overlapping rebuilds, closes only the matching GPUI bundle before replacing it, and launches the rebuilt app without using Cua Driver.
 
-  CDXC:GPUIDependencies 2026-08-02:
+  CDXC:Build 2026-08-02:
   Zed, cef-rs, and gpui-component are pinned submodules under the repository's
   `.dependencies` tree. Initialize an absent checkout, but never replace a
   present incomplete directory because it may contain user or agent work.
@@ -615,10 +615,10 @@ function pathExistsWithoutFollowingFinalSymlink(candidatePath) {
 
 async function closeRunningGpuiBundle(bundlePath, { action, includeBundleId }) {
   /*
-  CDXC:GPUIStartCommand 2026-06-25-13:56:
+  CDXC:Build 2026-06-25-13:56:
   The local GPUI rebuild command must fully close the exact dev bundle before replacing it. If AppleScript quit and SIGTERM leave a stale or slow GPUI process alive, escalate to SIGKILL and still verify the bundle has exited before building.
 
-  CDXC:GPUIStartCommand 2026-07-08-04:55:
+  CDXC:Build 2026-07-08-04:55:
   macOS GPUI starts now build before closing the stable installed app. Only the
   old staged build bundle is closed before packaging, because build-macos-app.sh
   replaces that directory; the installed /Applications copy is closed only after
@@ -708,7 +708,7 @@ function findRunningGpuiPidsByBundleId() {
 function findRunningGpuiPidsByBundlePath(bundlePath) {
   if (targetsWindows) {
     /*
-    CDXC:GPUIWindowsWslStart 2026-08-02:
+    CDXC:PlatformSupport 2026-08-02:
     Local Windows development can be driven entirely by the WSL bash launcher.
     Query the two product-specific image names with tasklist instead of using a
     PowerShell CIM pipeline; no other application ships either executable name,
@@ -802,7 +802,7 @@ function windowsPathForHostPath(hostPath) {
 function commandLineBelongsToGpuiBundle(commandLine, bundlePath) {
   if (isDarwin) {
     /*
-    CDXC:GPUIStartCommand 2026-07-10:
+    CDXC:Build 2026-07-10:
     A macOS app bundle also contains long-lived gxserver and zmx executables
     under Contents/Resources. Those processes deliberately survive a GPUI app
     restart, so bundle-path ownership must include only the main UI executable
@@ -904,7 +904,7 @@ function syncInstalledAppBundle(stagedAppPath) {
 
 function ensureMacosInstalledAppBundleBit(appBundlePath) {
   /*
-  CDXC:GPUIStartCommand 2026-08-25:
+  CDXC:Build 2026-08-25:
   rsync copies staged bundle contents into the existing /Applications wrapper
   and does not copy Finder package flags. Without the bundle bit, Launch
   Services reports kLSNoExecutableErr even though the Mach-O exists. Set the
@@ -1474,7 +1474,7 @@ function preferredLocalStartCodeSignIdentities(identities) {
 
 function identityCanSign(identityName, environment) {
   /*
-  CDXC:GPUIStartCommand 2026-08-25:
+  CDXC:Build 2026-08-25:
   `security find-identity -v -p codesigning` can list Apple Development certs
   that `codesign --sign` then rejects with "no identity found" (missing private
   key, locked keychain, or a stale listing). Probe with a throwaway file so

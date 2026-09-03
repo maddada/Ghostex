@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -40,7 +40,7 @@ import {
 } from '@/packages/shared/sidebar-commands';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeProjectAndCommandMethods` — because deriving them would make
@@ -141,7 +141,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   },
 
   /*
-  CDXC:DocsRootDirectory 2026-08-09:
+  CDXC:Docs 2026-08-09:
   The Docs root override rides in the same per-project config object the Beads
   directory already uses, so Settings -> Projects keeps one storage seam and
   needs no new domain field, column, or migration. A blank value clears the
@@ -320,7 +320,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   },
 
   /*
-  CDXC:GlobalActions 2026-08-01:
+  CDXC:AgentLauncher 2026-08-01:
   Global Action writes are not project writes: they carry no activeProjectId,
   and they do not require an active project to exist. A user with every project
   closed can still edit the actions that apply to all of them. Validation
@@ -357,7 +357,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       playCompletionSound: message.actionType === 'terminal' ? message.playCompletionSound : false,
       operation: 'save',
       /*
-      CDXC:GlobalActions 2026-08-07:
+      CDXC:AgentLauncher 2026-08-07:
       gxserver stores showOnProjectRow for both lists, so a global save that
       omits it writes the flag back as false and the Settings toggle never
       sticks. Forward it exactly like the project save above.
@@ -452,7 +452,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       });
       if (pick.firstLaunchAgentId) {
         /*
-        CDXC:FirstLaunchSetup 2026-08-24:
+        CDXC:Onboarding 2026-08-24:
         Onboarding Finish lands the user in a working workspace: the project it
         just registered gets its first session immediately, using the default
         agent chosen on the Get Started page ('terminal' means a plain shell).
@@ -606,7 +606,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       projectId,
     });
     /*
-    CDXC:GPUIRecentProjects 2026-06-25-19:22:
+    CDXC:Projects 2026-06-25-19:22:
     Local Recent Project restore must mirror macOS by treating `/api/restoreRecentProject` as the authoritative recent-row mutation, activating the restored local project id, and applying a fresh gxserver presentation so the normal group returns promptly without synthesized drawer rows.
     */
     if (response.project) {
@@ -658,7 +658,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       return;
     }
     /*
-    CDXC:GPUIRecentProjects 2026-06-24-12:38:
+    CDXC:Projects 2026-06-24-12:38:
     GPUI reuses SidebarApp's macOS close/remove split. Close must call the gxserver park endpoint with the project id resolved from the live presentation group, then consume gxserver's authoritative parked row; never synthesize a Recent Project row or map Close to hard delete when resolution or the daemon mutation fails.
     */
     const response = await this.client.rpc<{
@@ -758,7 +758,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   },
 
   /*
-   * CDXC:GlobalActions 2026-08-01:
+   * CDXC:AgentLauncher 2026-08-01:
    * Scope selects the list exclusively rather than falling through from one to
    * the other. A tab strip click names a Global Action, so resolving it against
    * project commands — which a shared id would allow — would run something the
@@ -785,7 +785,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
   },
 
   /*
-  CDXC:ProjectActions 2026-08-01:
+  CDXC:Projects 2026-08-01:
   Project-row Action clicks resolve against the clicked project's own command
   list from the HUD's commandsByProject block, never the active project's list,
   so two projects with different Actions cannot cross-launch. A project id with
@@ -805,7 +805,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       return undefined;
     }
     /*
-     * CDXC:RemoteProjectActions 2026-08-29:
+     * CDXC:RemoteMachines 2026-08-29:
      * A remote project's Actions were read from the machine that owns it, so
      * they are keyed by that machine's own project id inside that machine's HUD
      * — never in the local daemon's `commandsByProject`, which has no row for a
@@ -838,7 +838,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     originalMessage: SidebarToExtensionMessage
   ): Extract<SidebarToExtensionMessage, { type: 'runSidebarCommand' }> | undefined {
     /*
-    CDXC:GPUICommandPane 2026-06-27-07:54:
+    CDXC:CommandPane 2026-06-27-07:54:
     The GPUI SidebarApp/Command Palette Action launch boundary accepts only selector-shaped `runSidebarCommand` objects: type, command id, and an own optional runMode. Renderer-supplied command text, URLs, cwd/env, paths, output, logs, run ids, and status fields are unsupported instead of being stripped into a launch.
     */
     if (Object.keys(originalMessage).some((key) => !GPUI_SIDEBAR_COMMAND_SELECTOR_MESSAGE_KEYS.has(key))) {
@@ -868,7 +868,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     scope: SidebarCommandScope = 'project'
   ): void {
     /*
-     * CDXC:GPUICommandPane 2026-06-26-05:11:
+     * CDXC:CommandPane 2026-06-26-05:11:
      * The shared SidebarApp and Command Palette emit `runSidebarCommand` as an
      * Action-selection message: command id plus optional runMode. In GPUI,
      * resolve the selected Action from the live gxserver HUD projection and hand
@@ -876,13 +876,13 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
      * command text, URLs, saved close-on-exit metadata, paths, output, and logs
      * never come from the renderer message.
      *
-     * CDXC:GPUICommandPane 2026-06-27-06:37:
+     * CDXC:CommandPane 2026-06-27-06:37:
      * Match native sidebar dispatch for stale Action selectors: an unknown command id is an unsupported no-op, while an existing but unconfigured Action still opens Settings so the user can supply the missing command or URL.
      *
-     * CDXC:GPUICommandPane 2026-06-27-07:54:
+     * CDXC:CommandPane 2026-06-27-07:54:
      * Treat selector shape as part of the Action contract before looking up the HUD command. Extra launch/run-state fields are unsupported no-ops, not sanitized launches, while valid configured-but-empty selectors still reach Settings like macOS.
      *
-     * CDXC:ProjectActions 2026-08-01:
+     * CDXC:Projects 2026-08-01:
      * Project-row Action buttons pass the row's group id. Resolve the Action
      * from that project's own command list and activate the project through
      * the existing focus flow before dispatching, so the launch bridge payload
@@ -896,13 +896,13 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       return;
     }
     /*
-     * CDXC:GlobalActions 2026-08-01:
+     * CDXC:AgentLauncher 2026-08-01:
      * A global-scoped selector names an action that belongs to no project, so
      * it resolves against the global list. Project selectors keep the
      * per-project resolution above: the two scopes pick different lists rather
      * than falling through to each other.
      *
-     * CDXC:GlobalActions 2026-08-07:
+     * CDXC:AgentLauncher 2026-08-07:
      * Scope and group id answer different questions, so a global selector may
      * carry one: the scope picks the list, the group id picks the project to
      * activate before dispatching. That is what makes a Global Action on a
@@ -913,7 +913,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const groupId =
       originalMessage.type !== 'runSidebarCommand' ? undefined : normalizeNonEmptyString(originalMessage.groupId ?? '');
     /*
-     * CDXC:RemoteProjectActions 2026-08-29:
+     * CDXC:RemoteMachines 2026-08-29:
      * A remote project row carries a machine-scoped group id, which the local
      * group-id parser does not recognize. Resolve it to the same machine-scoped
      * project id the merged HUD keys its Actions under, so a remote row picks
@@ -939,7 +939,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       return;
     }
     /*
-     * CDXC:RemoteProjectActions 2026-08-29:
+     * CDXC:RemoteMachines 2026-08-29:
      * A remote selection lives in `activeGroupId`, not `activeProjectId`, so it
      * activates through the remote focus path. Rust reads the machine-scoped
      * active project back out of the context this publishes and routes the
@@ -990,7 +990,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
       return undefined;
     }
     /*
-     * CDXC:SidebarHudSettingsMutation 2026-06-24-20:54:
+     * CDXC:AgentLauncher 2026-06-24-20:54:
      * GPUI SidebarApp forwards Settings agent/action save, delete, and order
      * intents to gxserver instead of normalizing custom project metadata in the
      * renderer. Apply the returned canonical project rows and HUD projection so
@@ -999,7 +999,7 @@ export const gpuiSidebarRuntimeProjectAndCommandMethods = {
     const response = await client.mutateSidebarHudSettings({
       ...params,
       /*
-       * CDXC:ProjectActions 2026-08-01:
+       * CDXC:Projects 2026-08-01:
        * The mutation result replaces the whole HUD snapshot, so every settings
        * mutation must carry the per-project command block the sidebar rows
        * render from — otherwise an agent or action save would blank them

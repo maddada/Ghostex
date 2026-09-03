@@ -107,7 +107,7 @@ function domainProject(overrides: Partial<GxserverProjectDomainState> = {}): Gxs
 describe('gxserver presentation cache reducer', () => {
   test('updates gxserver-owned group membership from session deltas', () => {
     /*
-    CDXC:GxserverPresentationGroups 2026-06-02-11:18:
+    CDXC:StateSync 2026-06-02-11:18:
     Native must not rebuild shared presentation group membership independently. Session deltas update the gxserver presentation cache and then reconcile group sessionIds from gxserver session rows.
     */
     const first = reduceGxserverPresentationDelta(

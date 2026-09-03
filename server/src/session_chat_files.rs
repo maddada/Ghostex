@@ -14,7 +14,7 @@ use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
 
 /*
-CDXC:SessionChatFileMentions 2026-08-18:
+CDXC:SessionChat 2026-08-18:
 The chat composer's "@" picker lists the session project's files. Like chat
 skills, the walk happens on the session's machine and the client never submits
 a scan path: it names a session, gxserver resolves that session's project, and
@@ -153,7 +153,7 @@ fn is_ignored_entry(name: &str) -> bool {
 }
 
 /*
-CDXC:SessionChatFileMentions 2026-08-18:
+CDXC:SessionChat 2026-08-18:
 The composer's "@" picker names a session; gxserver resolves that session's
 project and walks it on this machine, so the client never chooses a scan root.
 The walk itself is blocking work (a git probe or a directory sweep), so it runs
@@ -245,7 +245,7 @@ pub(crate) async fn handle_read_session_chat_files_http(
 }
 
 /*
-CDXC:SessionChatImagePaste 2026-08-01:
+CDXC:Clipboard 2026-08-01:
 Chat-composer image paste mirrors the gpui terminal paste contract: bytes
 land in the resolved Ghostex image directory on THIS machine (the machine the
 session runs on — remote clients reach here via their per-machine RPC), and
@@ -406,7 +406,7 @@ pub(crate) fn handle_save_session_chat_image_http(
 }
 
 /*
-CDXC:SessionChatAttachments 2026-08-02:
+CDXC:SessionChat 2026-08-02:
 Non-image sibling of the image paste: any attached file's bytes land in
 the resolved Ghostex attachment directory on THIS machine and the returned
 absolute path becomes the composer's "[File #N](path)" reference. Ordinary

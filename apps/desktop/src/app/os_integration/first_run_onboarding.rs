@@ -46,7 +46,7 @@ impl GhostexGpuiApp {
     /// Discover→firstLaunchSetup auto chain was superseded 2026-06-18), opens
     /// the tutorial video modal once per first-launch-setup revision, and shows
     /// a once-forever OS Integration toast.
-    /// CDXC:GPUIFirstRunOnboardingOnce 2026-08-18: writes one first-run marker
+    /// CDXC:Onboarding 2026-08-18: writes one first-run marker
     /// off the foreground thread, re-reading the file first so a concurrent
     /// writer of a different field is not clobbered by this pass's snapshot.
     pub(crate) fn persist_gpui_first_run_onboarding_marker(
@@ -88,7 +88,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUIFirstRunOnboardingOnce 2026-08-18:
+        CDXC:Onboarding 2026-08-18:
         The first-launch-setup and OS-integration markers are persisted only
         after their surface is really shown (below), so the persisted flags no
         longer dedupe the callers that start onboarding. Latch the pass in
@@ -120,7 +120,7 @@ impl GhostexGpuiApp {
                         changed = true;
                     }
                     /*
-                    CDXC:GPUIFirstRunOnboardingOnce 2026-08-18:
+                    CDXC:Onboarding 2026-08-18:
                     The first-launch-setup and OS-integration markers describe
                     surfaces the user is supposed to see, so they are persisted
                     from the foreground block below once the toast is really
@@ -131,7 +131,7 @@ impl GhostexGpuiApp {
                     legacy markers above show nothing at all, so they stay
                     consumed on this pass.
 
-                    CDXC:GPUIFirstLaunchTutorialVideo 2026-08-19:
+                    CDXC:Onboarding 2026-08-19:
                     First run raises exactly ONE modal. The tutorial video used
                     to be its own window opened before (Windows) or instead of
                     (everywhere else) the setup modal; it is the setup modal's

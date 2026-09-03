@@ -29,7 +29,7 @@ function collectActivePaneOwnerSessionIdsFromNode(
       return isValidPaneOwnerSession(node.sessionId, validSessionIds) ? [node.sessionId] : [];
     case 'tabs': {
       /*
-       * CDXC:AutoSleep 2026-06-09-20:33:
+       * CDXC:SessionSleep 2026-06-09-20:33:
        * Auto Sleep protects the selected owner of every persisted split pane,
        * even when Focus Mode or Source/Browser/Kanban/Manage hides the Agents workarea.
        * If a tab group's stored active id is stale, protect the first valid tab

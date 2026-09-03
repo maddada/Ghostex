@@ -35,7 +35,7 @@ pub extern "C" fn GhostexGpuiTerminalNativeViewKeyTranslationMods(
     mods: std::ffi::c_int,
 ) -> std::ffi::c_int {
     /*
-    CDXC:GPUITerminalNativeKeyBridge 2026-06-24-20:58:
+    CDXC:Terminal 2026-06-24-20:58:
     The terminal host NSView asks Rust for Ghostty's modifier translation before constructing a key event, because option-as-alt and layout behavior belongs to the exact mounted surface config. This callback is synchronous, pointer-scoped, and returns the original modifiers when no real surface is registered.
     */
     terminal_ghostty_surface::native_key_translation_mods_for_view(native_view, mods)
@@ -177,7 +177,7 @@ pub extern "C" fn GhostexGpuiTerminalHandleNativeKeyEvent(
     composing: std::ffi::c_int,
 ) -> std::ffi::c_int {
     /*
-    CDXC:GPUITerminalNativeKeyBridge 2026-06-24-20:58:
+    CDXC:Terminal 2026-06-24-20:58:
     Native key events may cross from the exact AppKit host view to Ghostty only as transient primitives. The C string pointer is borrowed for this call only, and Rust resolves the host pointer through the runtime registry instead of using focused-surface fallback routing.
     */
     let event = ghostty_kit::ffi::ghostty_input_key_s {
@@ -256,7 +256,7 @@ pub extern "C" fn GhostexGpuiTerminalNativeKeyEventIsBinding(
     composing: std::ffi::c_int,
 ) -> std::ffi::c_int {
     /*
-    CDXC:GPUITerminalNativeKeyBridge 2026-07-11:
+    CDXC:Terminal 2026-07-11:
     AppKit offers Command/Control key equivalents before keyDown. Let the exact
     mounted libghostty surface decide whether the native event is a binding so
     the host view can claim only terminal-owned chords and leave all other app
@@ -290,7 +290,7 @@ pub extern "C" fn GhostexGpuiTerminalInsertDroppedText(
     len: usize,
 ) -> std::ffi::c_int {
     /*
-    CDXC:GPUITerminalFileDropInsertion 2026-06-27-03:35:
+    CDXC:Clipboard 2026-06-27-03:35:
     AppKit terminal file drops cross into Rust only as a borrowed byte slice for this synchronous call. Insert into the Ghostty surface registered for the exact mounted host view, return failure for null or empty input, and never store, log, persist, or reroute dropped text through focused-surface fallback, overlays, or hit-test routing.
     */
     let Some(text) = std::ptr::NonNull::new(text.cast_mut()) else {
@@ -315,7 +315,7 @@ pub extern "C" fn GhostexGpuiTerminalInsertCommittedText(
     len: usize,
 ) -> std::ffi::c_int {
     /*
-    CDXC:GPUITerminalNativeImeBridge 2026-06-27-03:46:
+    CDXC:Terminal 2026-06-27-03:46:
     AppKit committed IME text crosses into Rust only as borrowed bytes for this synchronous callback. Insert only into the Ghostty surface registered for the exact mounted host view, reject null or empty committed text, and never store, log, persist, or reroute typed text through focused-surface fallback.
     */
     let target_registered =
@@ -385,7 +385,7 @@ pub extern "C" fn GhostexGpuiTerminalSetPreeditText(
     len: usize,
 ) -> std::ffi::c_int {
     /*
-    CDXC:GPUITerminalNativeImeBridge 2026-06-27-03:46:
+    CDXC:Terminal 2026-06-27-03:46:
     AppKit marked-text preedit crosses into Rust only as borrowed bytes for this synchronous callback. Route by exact mounted host view, allow zero-length preedit to clear through Ghostty's null/zero preedit convention, and never store, log, persist, or reroute marked text through focused-surface fallback.
     */
     let bytes = if len == 0 {
@@ -430,7 +430,7 @@ pub extern "C" fn GhostexGpuiTerminalGetImePoint(
     height: *mut f64,
 ) -> std::ffi::c_int {
     /*
-    CDXC:GPUITerminalNativeImeBridge 2026-06-27-03:46:
+    CDXC:Terminal 2026-06-27-03:46:
     AppKit candidate-window placement may read only Ghostty's current IME point for the exact mounted host view. Return failure for missing output pointers or unregistered views instead of inventing cursor geometry or using focused-surface fallback.
     */
     if x.is_null() || y.is_null() || width.is_null() || height.is_null() {

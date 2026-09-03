@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Provenance records for release products, and the four independent checks that
  * must all pass before any bytes are reused.
  *

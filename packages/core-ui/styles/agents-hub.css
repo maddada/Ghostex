@@ -1,5 +1,5 @@
 /*
- * CDXC:AgentsHubRedesign 2026-08-24:
+ * CDXC:AgentLauncher 2026-08-24:
  * Agents Hub adopts the Codex-style control language already shipped on the
  * Kanban and Automate surfaces: #0e0e0e window, #161616 panels, #1d1d1d raised
  * rows (hover #232323), rgba(255,255,255,0.08) hairlines, 8px controls / 12px
@@ -10,7 +10,7 @@
  */
 .agents-hub-dialog {
   /*
-   * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+   * CDXC:AgentLauncher 2026-08-24 (round 2):
    * Darker steps so the group cards read as deliberate cards instead of light
    * blobs: near-window #101010 pane, #171717 cards with a real hairline border
    * and an 8px gap between them (the first pass's #161616/#1d1d1d pairing was
@@ -28,13 +28,13 @@
 
 .agents-hub-dialog[data-slot='dialog-content'] {
   /*
-   * CDXC:AgentsHub 2026-06-12-03:25:
+   * CDXC:AgentLauncher 2026-06-12-03:25:
    * The Agents Hub native window should feel like one dense tool surface, not
    * a centered modal floating inside a large empty frame. Keep only a small
    * edge buffer around the React surface so the catalog and editor gain room
    * on every side without touching the window edge.
    *
-   * CDXC:AgentsHub 2026-06-12-03:29:
+   * CDXC:AgentLauncher 2026-06-12-03:29:
    * The native modal host already provides the window frame. Agents Hub should
    * not keep shadcn's centered-dialog sizing or large vertical gap inside that
    * frame; pin it to the modal window so the main React component fills the
@@ -56,13 +56,13 @@
 
 .app-modal-host-native-window-body .agents-hub-dialog {
   /*
-   * CDXC:AgentsHub 2026-06-12-03:58:
+   * CDXC:AgentLauncher 2026-06-12-03:58:
    * Keep shadcn's 50% dialog centering in the native child window and size the
    * Hub to the viewport instead of pinning top/left. This preserves the reduced
    * gutter without depending on overriding Tailwind's translate utility, which
    * can shift the title and controls out of view in WKWebView.
    *
-   * CDXC:AgentsHub 2026-06-12-04:08:
+   * CDXC:AgentLauncher 2026-06-12-04:08:
    * The shared app-modal backdrop and shadcn dialog content both default to z-50.
    * Agents Hub must explicitly sit above the backdrop in the native child window
    * so users see the title and tabs instead of the plain dark modal background.
@@ -78,10 +78,10 @@
 
 .ghostex-modal-heading-bar {
   /*
-   * CDXC:AppModals 2026-06-12-03:43:
+   * CDXC:AppModal 2026-06-12-03:43:
    * Agents Hub's top title bar should match Settings with a 20px title inset.
    *
-   * CDXC:AppModals 2026-06-12-04:42:
+   * CDXC:AppModal 2026-06-12-04:42:
    * Settings and Agents Hub should use the same compact heading height.
    */
   flex: 0 0 auto;
@@ -115,7 +115,7 @@
 
 .agents-hub-dialog .agents-hub-tabs-list[data-slot='tabs-list'] {
   /*
-   * CDXC:AgentsHubRedesign 2026-08-24:
+   * CDXC:AgentLauncher 2026-08-24:
    * The Hub keeps the shared .app-modal-tab-rail class for the modal tab
    * contract, but the Codex look replaces the boxed 4-up rail with ONE joined
    * strip, the same shape as the shared SegmentedControl and Quick Access:
@@ -185,7 +185,7 @@
 }
 
 /*
- * CDXC:AgentsHubRedesign 2026-08-24 (round 3):
+ * CDXC:AgentLauncher 2026-08-24 (round 3):
  * No focus ring on the tab strip. shadcn's trigger ships
  * `focus-visible:ring-[3px]` plus a 1px outline, which drew a detached rounded
  * box around whichever tab was last clicked; the raised fill already shows
@@ -284,7 +284,7 @@
 
 .agents-hub-scroll [data-slot='scroll-area-viewport'] > div {
   /*
-   * CDXC:AgentsHub 2026-05-13-08:08
+   * CDXC:AgentLauncher 2026-05-13-08:08
    * Radix ScrollArea wraps content in a display:table sizing div. In the Hub
    * sidebar that wrapper must be pinned to the viewport width so cards are not
    * clipped by hidden overflow on the right edge.
@@ -296,7 +296,7 @@
 }
 
 /*
- * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+ * CDXC:AgentLauncher 2026-08-24 (round 2):
  * The catalog sidebar is a quiet list, not a stack of cards. Bordered raised
  * cards with a gap between them read as blocks stuck together once a tab holds
  * dozens of entries (the Skills tab), so rows are now transparent with a 6px
@@ -440,7 +440,7 @@
 
 .agents-hub-agent-logo {
   /*
-   * CDXC:AgentsHub 2026-05-13-08:08
+   * CDXC:AgentLauncher 2026-05-13-08:08
    * Profile chips use the shared colored agent SVG masks instead of letter
    * abbreviations so Hub profile identity matches the rest of the sidebar UI.
    */
@@ -534,7 +534,7 @@
 
 .agents-hub-file-list {
   /*
-   * CDXC:AgentsHub 2026-05-13-02:33
+   * CDXC:AgentLauncher 2026-05-13-02:33
    * Nested file rows in left-side Hub cards must stay inside the card edge;
    * the tree indent is subtracted from width instead of overflowing under the divider.
    */
@@ -582,7 +582,7 @@
 }
 
 /*
- * CDXC:AgentsHubRedesign 2026-08-24 (round 2):
+ * CDXC:AgentLauncher 2026-08-24 (round 2):
  * Selection is neutral everywhere in the Hub — a raised white wash and full
  * foreground text. The accent tint that used to fill this row read as a bright
  * blue block inside an otherwise monochrome sidebar.
@@ -664,7 +664,7 @@
 }
 
 /*
- * CDXC:AgentsHub 2026-06-04-20:08:
+ * CDXC:AgentLauncher 2026-06-04-20:08:
  * Editor toolbar actions are icon-only with hover tooltips, including disabled Save, so the disabled visual state must not block pointer hover from reaching the tooltip trigger.
  */
 .agents-hub-editor-action-button.is-disabled {

@@ -67,7 +67,7 @@ pub fn install_first_responder_observer(native_view: *mut c_void) {
 #[cfg(target_os = "macos")]
 pub fn set_sidebar_pointer_tracking_view(native_view: *mut c_void) {
     /*
-    CDXC:GPUISidebarPointerTracking 2026-08-02:
+    CDXC:Sidebar 2026-08-02:
     Registers the sidebar CEF child view with the AppKit sendEvent observer so
     Rust learns when the pointer crosses the sidebar's frame and when a
     mouse-down lands outside it (sticky-hover reset + context-menu dismissal).
@@ -76,7 +76,7 @@ pub fn set_sidebar_pointer_tracking_view(native_view: *mut c_void) {
 }
 
 /*
-CDXC:GPUISidebarPointerTracking 2026-08-20:
+CDXC:Sidebar 2026-08-20:
 `data-native-pointer-inside` is only cheap because the AppKit observer keeps a
 cache of what the page was last told and skips redundant writes on the
 mouse-moved path. Window activation changes have to move through that same
@@ -101,7 +101,7 @@ pub fn native_view_contains_responder(
     platform::native_view_contains_responder(root_native_view, responder)
 }
 /*
-CDXC:GPUICefEditCommands 2026-07-09:
+CDXC:Hotkeys 2026-07-09:
 Cut/Copy/Paste join Select All as bridged edit commands because GPUI's
 window-level key dispatch consumes Cmd-chords before AppKit can deliver
 them to CEF child views, so settings, modal-host, sidebar, and browser
@@ -128,7 +128,7 @@ impl CefEditCommand {
 }
 
 /*
-CDXC:GPUICefPaneZoomShortcuts 2026-07-14:
+CDXC:Hotkeys 2026-07-14:
 The AppKit CEF responder subclass forwards only the standard page-zoom
 commands for Browser, main project-workarea, and Session Chat native views.
 The raw values are the narrow ABI contract with GpuiCefAppKitHooks.m. Sidebar,
@@ -167,7 +167,7 @@ pub(crate) fn edit_command_in_browser(browser: &cef::Browser, command: CefEditCo
 }
 
 /*
-CDXC:GPUICefPlatformSeam 2026-07-04:
+CDXC:CefRuntime 2026-07-04:
 The select-all/active-view helpers stay in shared code because the registry
 they consult is shared, but the entry points that reach them are per-OS:
 macOS exports them to the AppKit responder-chain shim (cef/macos.rs), while
@@ -188,7 +188,7 @@ pub(crate) fn select_all_for_native_view(native_view: *mut c_void) -> c_int {
     set_active_cef_native_view(native_view as usize);
 
     /*
-    CDXC:GPUICefEditCommands 2026-08-18:
+    CDXC:Hotkeys 2026-08-18:
     Taking native focus here is only for the case where GPUI chrome still owns
     the first responder while the page holds the caret. When Chromium already
     owns the keyboard, re-running the focus handoff walks the responder out of
@@ -221,7 +221,7 @@ pub(crate) fn select_all_for_active_native_view() -> c_int {
 }
 
 /*
-CDXC:GPUICefEditCommands 2026-07-09:
+CDXC:Hotkeys 2026-07-09:
 Unlike Select All, clipboard commands are destructive to shared clipboard
 state, so the AppKit shim resolves the target by walking the key window's
 actual first responder instead of the last-active CEF view registry; a
@@ -303,7 +303,7 @@ pub(crate) fn zoom_command_for_native_view(
 }
 
 /*
-CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+CDXC:FocusRouting 2026-07-22:
 App-owned focus grant/release for the mouse-focus-passive sidebar surface.
 "focused" repeats the exact sequence every sanctioned grant already uses
 (mark the explicit active view, then native first responder, then Chromium

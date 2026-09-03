@@ -136,7 +136,7 @@ pub(crate) fn gpui_agent_hook_status_message(
     error_message: &str,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUISettingsStatusBridge 2026-06-24-11:40:
+    CDXC:StatusPet 2026-06-24-11:40:
     Agent hook status/install/uninstall in GPUI is gxserver-owned, matching macOS Settings. Call the real hook endpoints and pass the daemon's `agentHookStatus` payload through; on transport/API failure, return an explicit empty error payload instead of local fixture rows or fake installed hooks.
     */
     let mut params = serde_json::Map::new();
@@ -153,7 +153,7 @@ pub(crate) fn gpui_agent_hook_status_message(
     }
 
     /*
-    CDXC:AgentHookStatusWaitsForDaemon 2026-09-02:
+    CDXC:AgentHooks 2026-09-02:
     First-run onboarding opens the setup modal as soon as CEF is ready, which
     on a first launch is usually before the freshly staged gxserver daemon is
     listening or has written its auth token. The modal asks for hook status
@@ -290,7 +290,7 @@ pub(crate) fn gpui_which_command(command: &str) -> Option<PathBuf> {
 
 pub(crate) fn gpui_is_probably_ghostex_command(path: &Path, command: &str) -> bool {
     /*
-    CDXC:GPUISettingsAgentSkills 2026-06-24-13:08:
+    CDXC:AgentSkills 2026-06-24-13:08:
     This predicate feeds both read-only CLI status and Settings skill execution. Keep it strict enough for execution: only marked wrappers or app-owned command realpaths count as Ghostex-owned, not broad file text such as "Ghostex CLI".
     */
     if gpui_is_marked_ghostex_wrapper_file(path) {

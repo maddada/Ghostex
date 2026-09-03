@@ -8,7 +8,7 @@
 }
 
 /*
- * CDXC:ProjectSessionLists 2026-06-13-20:17:
+ * CDXC:Projects 2026-06-13-20:17:
  * The collapsed-list "Show N more" reveal row should be the regular
  * session-card component, with session-only chrome disabled in React. Dim the
  * whole row by 20% at rest, then ease off that dimming on hover or keyboard
@@ -54,7 +54,7 @@
   opacity: 0;
   pointer-events: none;
   /*
-   * CDXC:SidebarDragDrop 2026-07-02-13:05:
+   * CDXC:Sidebar 2026-07-02-13:05:
    * No opacity transition: the insertion line is drawn by per-row
    * pseudo-elements, so fading between them read as flicker while dragging
    * across rows. The line now appears and moves instantly.
@@ -73,7 +73,7 @@
 }
 
 /*
- * CDXC:SidebarDragDrop 2026-06-02-20:22:
+ * CDXC:Sidebar 2026-06-02-20:22:
  * A pointer between two session rows can make adjacent droppable halves both
  * resolve the same gap. Keep only one visual insertion line for that boundary
  * so dragging never shows stacked/double separators between two sessions.
@@ -121,7 +121,7 @@
   text-align: left;
   display: grid;
   /*
-   * CDXC:SidebarSessions 2026-05-14-08:45:
+   * CDXC:Sessions 2026-05-14-08:45:
    * Sidebar session buttons should keep the platform default cursor on hover.
    * They remain clickable, but the card-level hover affordance is the row
    * highlight and focused state instead of the hand pointer.
@@ -234,7 +234,7 @@
 }
 
 /*
- * CDXC:SidebarDragDrop 2026-07-02-13:05:
+ * CDXC:Sidebar 2026-07-02-13:05:
  * With clone feedback, the row that follows the pointer is the original
  * .session-frame promoted to a popover with data-dnd-dragging, while the faint
  * data-dragging clone stays in the list as the placeholder. The moving ghost
@@ -352,12 +352,12 @@
 .session[data-multi-selected='true'],
 .session[data-visible='true'][data-multi-selected='true'] {
   /*
-   * CDXC:SidebarMultiSelect 2026-07-01-18:33:
+   * CDXC:Sessions 2026-07-01-18:33:
    * Shift/Cmd-selected sidebar sessions need persistent selection chrome that is
    * distinct from active focus but uses existing card bounds, avoiding overlays or
    * hit-test changes while users right-click a selected row for bulk actions.
    *
-   * CDXC:SidebarMultiSelect 2026-07-02-13:40:
+   * CDXC:Sessions 2026-07-02-13:40:
    * Multi-selection must be easy to distinguish from focus, hover, and search
    * selection. Use a 1px blue inset outline and match visible-session selector
    * specificity so the selection ring stays clear on active sidebar rows.
@@ -379,12 +379,12 @@
 }
 
 /**
- * CDXC:PreviousSessions 2026-05-09-17:44
+ * CDXC:Sessions 2026-05-09-17:44
  * The full Previous Sessions modal copies reference-sidebar session row chrome:
  * active-row fill is suppressed, row height stays compact, and metadata uses
  * the same right-side title row as Last Active.
  *
- * CDXC:PreviousSessions 2026-05-13-16:11:
+ * CDXC:Sessions 2026-05-13-16:11:
  * Project labels live in the row's right-side metadata, directly before Last
  * Active. Keep the row at normal sidebar height while using the modal width
  * and trailing slot to fit title, project, and timestamp on one line.
@@ -435,7 +435,7 @@
 }
 
 /*
- * CDXC:PreviousSessions 2026-06-06-04:17:
+ * CDXC:Sessions 2026-06-06-04:17:
  * Inline Previous Sessions search rows must match normal project-session row
  * spacing in the macOS and Electron reference sidebars. The terminal glyph is
  * visually wider than the agent-logo slot, so use the same expanded title
@@ -478,13 +478,13 @@
 .previous-sessions-modal .session-history-card .session-head,
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-history-card .session-head {
   /*
-   * CDXC:PreviousSessions 2026-05-15-04:34
+   * CDXC:Sessions 2026-05-15-04:34
    * Previous-session restore rows need the title, project label, Last Active
    * timestamp, and hover X control vertically centered in the whole button.
    * Center the shared title row inside the fixed-height button instead of
    * depending on top/bottom padding offsets that drift visually.
    *
-   * CDXC:PreviousSessions 2026-05-15-09:57
+   * CDXC:Sessions 2026-05-15-09:57
    * The project label must stay anchored at a consistent distance from the
    * right edge regardless of whether Last Active renders as 3m, 14h, or wider
    * text. Give Last Active a fixed grid column and right-align the timestamp
@@ -566,7 +566,7 @@
 }
 
 /*
- * CDXC:SessionForkFamilies 2026-08-28:
+ * CDXC:SessionFork 2026-08-28:
  * The branch badge rides in the project-label column so the trailing grid keeps
  * its three fixed slots. The label becomes a right-aligned flex row: the badge
  * holds its intrinsic width and the project name is the only part that
@@ -615,7 +615,7 @@
 .session-history-frame .session-floating-agent-icon,
 .session-history-frame .session-floating-agent-tabler-icon {
   /*
-   * CDXC:PreviousSessions 2026-05-31-20:55:
+   * CDXC:Sessions 2026-05-31-20:55:
    * Agentless Terminal history rows must keep the Tabler terminal glyph in the same left identity slot as agent-logo rows. The active-card terminal glyph nudge is scoped away from history frames so previous-session modal buttons do not pull terminal icons off the left edge.
    */
   left: calc(10px * var(--sidebar-density-scale));
@@ -633,7 +633,7 @@
   ):not(:has(.session:focus-within))
   .session-floating-agent-tabler-icon[data-agent-icon] {
   /*
-   * CDXC:PreviousSessions 2026-06-09-09:41:
+   * CDXC:Sessions 2026-06-09-09:41:
    * Previous Sessions uses the same tagged-session identity slot as the live
    * macOS sidebar. Keep the tag/pin glyph clean at rest by hiding the
    * underlying agent decoration, then let the normal hover/focus rules reveal
@@ -718,12 +718,12 @@
 }
 
 /*
- * CDXC:RemotePresentation 2026-06-30-00:11:
+ * CDXC:RemoteMachines 2026-06-30-00:11:
  * Remote terminal rows carry the remote marker through the same card and group
  * chrome as local gxserver rows so neutral lifecycle state can be styled without
  * changing working, attention, or error precedence.
  *
- * CDXC:RemotePresentation 2026-06-30-11:15:
+ * CDXC:RemoteMachines 2026-06-30-11:15:
  * Remote running-idle rows should no longer show a separate status dot because
  * the bright running title treatment is already the state cue. Keep neutral
  * lifecycle dots only for remote sleeping/done rows, where the status is not
@@ -812,7 +812,7 @@
 }
 
 /*
- * CDXC:SidebarSessions 2026-05-15-09:22
+ * CDXC:Sessions 2026-05-15-09:22
  * Hiding Last Active makes active session-card titles the primary scan target.
  * Let those titles use the full card width; the close button can still appear
  * as a hover overlay, while Previous Sessions keep their own right-side
@@ -831,7 +831,7 @@
 }
 
 /*
- * CDXC:SidebarSessions 2026-05-15-10:02
+ * CDXC:Sessions 2026-05-15-10:02
  * Full-width hidden-time titles still need to yield the right edge when a
  * status dot or hover close button is visible. Add state-scoped padding so
  * titles truncate before those controls instead of painting underneath them.
@@ -865,7 +865,7 @@
 }
 
 /*
- * CDXC:SidebarSessions 2026-05-09-18:20
+ * CDXC:Sessions 2026-05-09-18:20
  * Normal session-card title text, Last Active, and the hover close button must
  * be vertically centered in the same title row. Do not adjust agent/browser
  * icon placement here; those icons already use their own centered grid cell.
@@ -878,7 +878,7 @@
   .session-frame:not(.project-editor-session-frame)
   .session-head {
   /*
-   * CDXC:SidebarSessions 2026-05-09-18:42
+   * CDXC:Sessions 2026-05-09-18:42
    * Reference sidebar rows are 34px tall with an existing 20px title line and
    * 7px vertical padding. Do not inherit the normal 26px close-button row here,
    * or title/Last Active/close shifts below the row center.
@@ -899,7 +899,7 @@
 }
 
 /*
- * CDXC:DraftSessions 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * A draft's title is unsent composer text, so it reads quieter than a real
  * session's title — the dimming IS the "nothing has been sent here yet" signal.
  * It stays dimmed while the row is focused, because that is exactly when the
@@ -914,7 +914,7 @@
 
 .session-frame:not(.project-editor-session-frame) .session-alias-heading {
   /*
-   * CDXC:SidebarSessions 2026-05-10-13:49
+   * CDXC:Sessions 2026-05-10-13:49
    * Terminal and browser session card titles must render ellipsis
    * truncation instead of hard clipping. Keep the title as a normal text box;
    * flex layout prevents text-overflow from painting the visible dots.
@@ -950,7 +950,7 @@
   --session-pinned-icon-glyph-size: calc(var(--session-leading-icon-size) - 2px);
   --session-pinned-icon-left-shift: 3px;
   /*
-   * CDXC:SessionChatPromptQueue 2026-08-21:
+   * CDXC:SessionChat 2026-08-21:
    * The queued-prompt badge's own geometry, derived from the leading icon box
    * so it tracks sidebar density without ever being measured against the row.
    * The overhang lets the circle sit on the icon's top-right corner.
@@ -959,7 +959,7 @@
   --session-queued-prompt-badge-font-size: calc(7px * var(--sidebar-density-scale));
   --session-queued-prompt-badge-overhang: calc(3px * var(--sidebar-density-scale));
   /*
-   * CDXC:SessionAgentNotes 2026-08-24:
+   * CDXC:SessionNotes 2026-08-24:
    * The "this session has a note" dot, parked just left of the leading icon.
    *
    * That resting spot is INSIDE the pin hitbox, which starts a full icon-width
@@ -988,24 +988,24 @@
 
 .session-pinned-floating-button {
   /*
-   * CDXC:PinnedSessions 2026-06-30-00:34:
+   * CDXC:Sessions 2026-06-30-00:34:
    * Pinned state is separate from agent/tag identity. Render a real IconPin
    * button in a one-icon hitbox anchored immediately left of the leading
    * agent/tag slot so clicking the icon can pin or unpin without stacking on
    * top of the agent/tag glyph.
    *
-   * CDXC:PinnedSessions 2026-06-30-10:40:
+   * CDXC:Sessions 2026-06-30-10:40:
    * Anchor positioning must place a fixed-size IconPin box from the leading
    * icon's left/top coordinates. Do not use an opposite-edge anchor such as
    * `right: anchor(left)`, because that lets browsers stretch the button into a
    * row-wide rectangle and exposes native button chrome.
    *
-   * CDXC:PinnedSessions 2026-06-30-10:43:
+   * CDXC:Sessions 2026-06-30-10:43:
    * The floating pin should sit three physical pixels farther left than the
    * leading identity slot and the IconPin glyph should be mirrored
    * left-to-right, while preserving the same square hitbox.
    *
-   * CDXC:PinnedSessions 2026-06-30-11:06:
+   * CDXC:Sessions 2026-06-30-11:06:
    * The pinned IconPin glyph should be inset one pixel on every side within
    * the fixed hitbox. Pinned rows show the affordance at 50% opacity until the
    * icon itself is hovered or focused; unpinned rows remain invisible at rest.
@@ -1079,7 +1079,7 @@
 }
 
 /*
- * CDXC:SessionAgentNotes 2026-08-24:
+ * CDXC:SessionNotes 2026-08-24:
  * A session that carries a note shows a small white dot immediately left of the
  * leading agent icon, vertically centered on it.
  *
@@ -1138,7 +1138,7 @@
 }
 
 /*
- * CDXC:SessionChatPromptQueue 2026-08-21:
+ * CDXC:SessionChat 2026-08-21:
  * The queued-prompt count badge. It sits on the top-right corner of the leading
  * agent icon and, unlike the Delayed Send clock, never replaces that icon — the
  * agent logo (or clock) keeps rendering underneath.
@@ -1182,7 +1182,7 @@
 }
 
 /*
- * CDXC:SessionChatPromptQueue 2026-08-21-b:
+ * CDXC:SessionChat 2026-08-21-b:
  * A `failed` row holds the queue until the user retries or deletes it, so the
  * badge stops meaning "waiting" and starts meaning "stopped, act on me". #ff6b6b
  * is the sidebar's existing error red — the same value
@@ -1245,7 +1245,7 @@
 .sidebar-reference-layout[data-session-agent-icon-color-mode='colored'] .session-floating-agent-icon,
 .sidebar-reference-layout[data-session-agent-icon-color-mode='colored'] .session-header-agent-icon {
   /*
-   * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
+   * CDXC:Icons 2026-06-29-23:58:
    * The Session Cards color toggle switches agent-logo spans from mask tinting
    * to image backgrounds. Keep the same element box and opacity rules so the
    * setting changes only logo color treatment, not layout or hover behavior.
@@ -1313,7 +1313,7 @@
 
 .session-close-after-done-agent-icon {
   /*
-   * CDXC:CloseAfterDone 2026-06-15-21:00:
+   * CDXC:Sessions 2026-06-15-21:00:
    * Close After Done uses the same leading clock affordance as Delayed Send,
    * but pastel red communicates that the armed timer will close the session
    * after it remains Done for three minutes.
@@ -1469,7 +1469,7 @@
 .session-header-agent-tabler-icon[data-agent-icon='terminal'] {
   --session-agent-icon-color: #ffffff;
   /*
-   * CDXC:SidebarSessions 2026-05-07-15:18
+   * CDXC:Sessions 2026-05-07-15:18
    * The agentless terminal glyph should read slightly stronger than the
    * browser Tabler glyph. Grow only the terminal icon by 1px on every side.
    */
@@ -1527,7 +1527,7 @@
 .session-tag-colored-icon,
 .session-tag-agent-icon {
   /*
-   * CDXC:SessionTags 2026-06-05-14:45:
+   * CDXC:Sessions 2026-06-05-14:45:
    * Tag picker and filter menu icons must use the same color mapping as the
    * sidebar row tag icons so a tag reads as one visual state across menus,
    * active sessions, and Previous Sessions.
@@ -1542,7 +1542,7 @@
 .session-tag-colored-icon[data-session-tag='favorite'],
 .session-tag-agent-icon[data-session-tag='favorite'] {
   /*
-   * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
+   * CDXC:Icons 2026-06-29-23:58:
    * Favorite should not tint the underlying agent icon gold, but Favorite is
    * still a selected session tag. The tag star itself stays colored like every
    * other tag while agent-logo color follows the Session Cards icon setting.
@@ -1598,7 +1598,7 @@
 .session-tag-colored-icon[data-session-tag='bug'],
 .session-tag-agent-icon[data-session-tag='bug'] {
   /*
-   * CDXC:SessionTags 2026-06-05-20:17:
+   * CDXC:Sessions 2026-06-05-20:17:
    * Bug uses a muted red, not the brighter pink-red tag color, so it reads as
    * issue severity without competing with higher-priority status colors.
    */
@@ -1629,7 +1629,7 @@
 
 .session-frame[data-tagged='true']:is(:hover, :has(.session:hover)) .session-tag-agent-icon {
   /*
-   * CDXC:SidebarSessionAgentIcons 2026-06-30-00:12:
+   * CDXC:Icons 2026-06-30-00:12:
    * Tagged rows swap their tag for the agent icon on pointer hover. Active
    * Delayed Send timers are not part of this swap: the clock owns the leading
    * slot continuously, including while its pinned session is hovered or focused.
@@ -1679,12 +1679,12 @@
 }
 
 /*
- * CDXC:PreviousSessions 2026-05-08-16:07
+ * CDXC:Sessions 2026-05-08-16:07
  * Previous-session restore cards reveal a top-right delete button on hover and
  * keyboard focus. Hide Last Active in those states so the timestamp cannot
  * overlap the delete affordance in compact search results.
  *
- * CDXC:PreviousSessions 2026-05-09-17:55
+ * CDXC:Sessions 2026-05-09-17:55
  * The full Previous Sessions modal follows the same rule: when the delete
  * button appears on hover, Last Active must hide instead of sharing the
  * trailing slot.
@@ -1851,7 +1851,7 @@
 }
 
 /*
- * CDXC:SidebarSessions 2026-05-16-08:46:
+ * CDXC:Sessions 2026-05-16-08:46:
  * The hover-only agent icon preference should suppress the passive header
  * agent/persistence chrome, but keep hover and keyboard focus reveal behavior
  * on the existing row so the setting does not change session layout.
@@ -1876,12 +1876,12 @@
 }
 
 /*
- * CDXC:SidebarSessions 2026-05-09-16:55
+ * CDXC:Sessions 2026-05-09-16:55
  * Every visible project/chat session card has a hover-only close action. When
  * it appears, it takes precedence over Last Active, agent, activity, and
  * persistence header indicators so the right edge has one clear affordance.
  *
- * CDXC:SidebarSessions 2026-05-09-18:09
+ * CDXC:Sessions 2026-05-09-18:09
  * The close action must occupy the same trailing title slot as Last Active.
  * Showing it also hides the inline status dot, otherwise loading/error dots sit
  * beside the X and create two competing right-edge controls.
@@ -1916,7 +1916,7 @@
 }
 
 /*
- * CDXC:SidebarHover 2026-08-02:
+ * CDXC:Sidebar 2026-08-02:
  * Keyboard focus reveals Close; mouse-click focus must not. `.session` is a
  * tabIndex=0 article, so a plain click leaves DOM focus on the row whenever the
  * pointer-down focus path does not preventDefault (drag-activation or
@@ -1954,7 +1954,7 @@ body.native-sidebar-body[data-native-pointer-inside='false']
   .session:has(.session-card-close-button):hover:not(:focus-visible):not(:has(:focus-visible))
   .session-card-close-button {
   /*
-   * CDXC:SidebarHover 2026-06-11-09:23:
+   * CDXC:Sidebar 2026-06-11-09:23:
    * The native-outside state must also hide hover-only session row actions; the
    * browser can keep :hover active long enough to reveal Close after the pointer
    * has already left the sidebar.
@@ -1969,7 +1969,7 @@ body.native-sidebar-body[data-native-pointer-inside='false']
 }
 
 /*
- * CDXC:SidebarSessions 2026-04-28-05:18
+ * CDXC:Sessions 2026-04-28-05:18
  * Active session cards default to Agent Icon and reveal Last Active on hover.
  * Hovering anywhere on a session card frame must reveal the alternate detail,
  * not only when the pointer is exactly over the inner button element.
@@ -1985,83 +1985,83 @@ body.native-sidebar-body[data-native-pointer-inside='false']
   }
 }
 
-/* CDXC:SidebarReference 2026-05-08-01:10: The reference screenshots require
+/* CDXC:Sidebar 2026-05-08-01:10: The reference screenshots require
    flat rounded active rows, always-visible last-active times, a compact
    attention dot, and a ring spinner for working sessions.
-   CDXC:SidebarReference 2026-05-08-01:28: Session row typography and controls
+   CDXC:Sidebar 2026-05-08-01:28: Session row typography and controls
    must use app CSS-pixel scale rather than screenshot pixels, keeping cards
    similar to Codex.app sidebar density on Retina displays.
-   CDXC:SidebarReference 2026-05-08-01:41: Match the smaller Codex.app sidebar
+   CDXC:Sidebar 2026-05-08-01:41: Match the smaller Codex.app sidebar
    text scale across session rows and timestamps while preserving the compact
    attention dot and working spinner affordances.
-   CDXC:SidebarReference 2026-05-08-02:52: Time labels and activity indicators
+   CDXC:Sidebar 2026-05-08-02:52: Time labels and activity indicators
    must occupy the same fixed trailing slot so rows do not shift when a session
    changes between idle, attention, and working states.
-   CDXC:SidebarReference 2026-05-08-13:34: Hover and active session rows use a
+   CDXC:Sidebar 2026-05-08-13:34: Hover and active session rows use a
    neutral gray surface instead of the app accent's blue-tinted active color.
-   CDXC:SessionStatusIndicators 2026-05-08-09:09: Working and attention status
+   CDXC:SessionStatus 2026-05-08-09:09: Working and attention status
    indicators belong against the session button's right edge; attention uses
    #95d7f6, and working uses a subtly orange spinner.
-   CDXC:SessionStatusIndicators 2026-05-08-09:14: The smaller attention dot
+   CDXC:SessionStatus 2026-05-08-09:14: The smaller attention dot
    shifts 3px left from the shared right edge so its visual center aligns with
    the wider working spinner.
-   CDXC:SessionStatusIndicators 2026-05-30-06:08: Working and attention
+   CDXC:SessionStatus 2026-05-30-06:08: Working and attention
    indicators should sit 4px farther left than the prior right-edge placement
    so they read as attached to the row instead of hanging off the edge.
-   CDXC:SessionStatusIndicators 2026-05-30-06:39: The working loading
+   CDXC:SessionStatus 2026-05-30-06:39: The working loading
    indicator should use the May 28 transparent-border spinner again instead of
    the masked SVG arc. Keep the done/attention indicator styling unchanged, and
    move both active indicators 1px right from the earlier May 30 placement.
-   CDXC:SessionStatusIndicators 2026-05-30-06:54: The old border spinner must
+   CDXC:SessionStatus 2026-05-30-06:54: The old border spinner must
    explicitly override the base square status-dot radius so the working
    indicator renders as a rounded ring.
 
-   CDXC:SidebarSessions 2026-05-31-15:38:
+   CDXC:Sessions 2026-05-31-15:38:
    Session button surfaces must also reach the native sidebar's left edge.
    Expand the frame with the shared main-row bleed while increasing the
    session's left padding by the same amount so session titles keep their
    existing scan position.
 
-   CDXC:SidebarSessions 2026-05-31-16:31:
+   CDXC:Sessions 2026-05-31-16:31:
    Session buttons need 13px more left padding after becoming fully flush with
    the sidebar edge, so titles retain a comfortable inset inside the expanded
    row surface.
 
-   CDXC:SidebarSessions 2026-05-31-17:31:
+   CDXC:Sessions 2026-05-31-17:31:
    The reference scroll viewport now expands to the sidebar edge, so session
    rows use the scroll-row bleed instead of the main navigation bleed. This
    keeps row surfaces visible from the left edge without pushing leading icons
    or titles into the wrong columns.
 
-   CDXC:SidebarSessions 2026-05-31-17:36:
+   CDXC:Sessions 2026-05-31-17:36:
    Scroll-area session rows should stop at the right edge instead of relying on
    clipping, so trailing agent/status chrome never appears to overflow.
 
-   CDXC:SidebarSessions 2026-05-31-17:43:
+   CDXC:Sessions 2026-05-31-17:43:
    The additional 6px should move the leading agent icon, not the session title.
    Keep the title padding at the previous 13px offset and move only the
    leading icon inset right.
 
-   CDXC:SidebarSessions 2026-05-31-18:02:
+   CDXC:Sessions 2026-05-31-18:02:
    Session titles should sit 6px further left while the leading session icons
    move 2px right, so adjust the reference-only title padding and icon inset
    independently without changing the full-width row surface.
 
-   CDXC:SidebarSessions 2026-05-31-18:08:
+   CDXC:Sessions 2026-05-31-18:08:
    Session title text needs another 2px left shift while preserving the icon
    position and full-width button bounds.
 
-   CDXC:SidebarSessions 2026-05-31-18:16:
+   CDXC:Sessions 2026-05-31-18:16:
    Session rows stay full-width, but all internal content should move 6px
    inward from both edges. Increase the leading icon/title offsets and trailing
    inset without changing the row bleed.
 
-   CDXC:SidebarSessions 2026-05-31-18:24:
+   CDXC:Sessions 2026-05-31-18:24:
    Session row contents need another 2px left inset only. Move the leading icon
    and title padding together while preserving the right inset and full-width
    button surface.
 
-   CDXC:SidebarSessions 2026-05-31-18:31:
+   CDXC:Sessions 2026-05-31-18:31:
    Session title text needs a 2px left correction without moving the leading
    icons, trailing chrome, or full-width button surface.
  */
@@ -2073,7 +2073,7 @@ body.native-sidebar-body[data-native-pointer-inside='false']
   --reference-session-full-width-left-padding: 11px;
   --reference-session-trailing-inset: 6px;
   /*
-   * CDXC:SidebarSessions 2026-05-10-13:49
+   * CDXC:Sessions 2026-05-10-13:49
    * Terminal and browser session titles need 15px more readable
    * width before the right-side status/close slot starts.
   */
@@ -2120,7 +2120,7 @@ body.native-sidebar-body[data-native-pointer-inside='false']
 }
 
 /*
- * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
+ * CDXC:Theming 2026-06-15-11:24:
  * Custom sidebar/titlebar colors must own the sidebar row hover surface too.
  * Keep this scoped to the reference sidebar so modal and dropdown rows retain
  * the selected theme's normal hover color.
@@ -2168,7 +2168,7 @@ body[data-custom-sidebar-titlebar-colors='true']
 }
 
 /*
- * CDXC:SidebarMultiSelect 2026-07-02-06:52:
+ * CDXC:Sessions 2026-07-02-06:52:
  * Reference-layout session rows bleed --reference-sidebar-scroll-row-bleed-left
  * past the panel's overflow clip so hover surfaces reach the sidebar edge. A
  * box-shadow ring on the row box therefore loses its left segment inside that
@@ -2199,17 +2199,17 @@ body[data-custom-sidebar-titlebar-colors='true']
   color: #b4b8c0;
   font-size: 15.55px;
   /*
-   * CDXC:SidebarReference 2026-05-08-10:31
+   * CDXC:Sidebar 2026-05-08-10:31
    * Project and Chats session rows must match the lightweight project header
    * typography instead of becoming visually heavier than their group labels.
    *
-   * CDXC:SidebarReference 2026-05-08-11:01
+   * CDXC:Sidebar 2026-05-08-11:01
    * Session availability is encoded with color rather than font weight:
    * sleeping is dimmed further, awake-not-surfaced is readable, and
    * surfaced/active share the same brighter title color because active already
    * has row chrome.
    *
-   * CDXC:SidebarReference 2026-05-08-12:05
+   * CDXC:Sidebar 2026-05-08-12:05
    * Session titles need a line box taller than the 15.55px text so descenders
    * in labels such as google.com are not clipped by the fixed-height button's
    * overflow boundary. Keep the 34px row height and center the 20px text line
@@ -2235,7 +2235,7 @@ body[data-custom-sidebar-titlebar-colors='true']
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session[data-sleeping='true'] .session-alias-heading {
   /*
-   * CDXC:SidebarTitlebarColors 2026-06-15-15:01:
+   * CDXC:Theming 2026-06-15-15:01:
    * Custom sidebar contrast should not add a faint row surface or special
    * sleeping-session treatment. Keep sleeping rows on the legacy dimmed title
    * style so they do not gain extra background chrome.
@@ -2246,7 +2246,7 @@ body[data-custom-sidebar-titlebar-colors='true']
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-last-interaction-time {
   /*
-   * CDXC:SidebarSessions 2026-05-08-11:01
+   * CDXC:Sessions 2026-05-08-11:01
    * Last Active should stay visually stable: fixed #4f5359 color, no elapsed
    * age color shifts, and 2px smaller than the session title text.
    */
@@ -2264,7 +2264,7 @@ body[data-custom-sidebar-titlebar-colors='true']
 }
 
 /*
- * CDXC:SidebarTitlebarColors 2026-06-15-15:15:
+ * CDXC:Theming 2026-06-15-15:15:
  * The custom sidebar/titlebar Contrast slider can lighten the sidebar
  * background to #2a2a2a. Derive sleeping titles and Last Active timestamps from
  * the current custom foreground/background so they remain legible without
@@ -2342,17 +2342,17 @@ body[data-custom-sidebar-titlebar-colors='true']
   height: var(--reference-session-icon-size);
   left: var(--reference-session-leading-inset);
   /*
-   * CDXC:SidebarReference 2026-05-08-11:51
+   * CDXC:Sidebar 2026-05-08-11:51
    * Agent-icon visibility is state-based only: non-surfaced sessions stay
    * hidden, surfaced-but-not-active sessions show a low-opacity icon, and the
    * active session shows the icon at 80% opacity.
    *
-   * CDXC:SidebarReference 2026-05-08-16:11
+   * CDXC:Sidebar 2026-05-08-16:11
    * Hovered session buttons reveal the agent icon at the same low opacity as
    * surfaced-but-not-active sessions. The low-opacity value is 20% stronger
    * than the previous 0.22 value so the icon reads without acting active.
    *
-   * CDXC:SidebarReference 2026-05-15-07:12
+   * CDXC:Sidebar 2026-05-15-07:12
    * Hover must not dim the active session's agent icon. Limit the low-opacity
    * hover reveal to non-focused rows so the focused row keeps its active icon
    * emphasis while the pointer crosses it.
@@ -2390,7 +2390,7 @@ body[data-custom-sidebar-titlebar-colors='true']
 .sidebar-reference-layout[data-reference-sidebar='true']
   .session-pinned-floating-button[data-pinned='false']:not(:hover):not(:focus-visible) {
   /*
-   * CDXC:PinnedSessions 2026-06-30-00:34:
+   * CDXC:Sessions 2026-06-30-00:34:
    * Unpinned rows keep the exact one-icon hitbox so hovering the pin slot can
    * reveal the affordance, but row hover alone must not show it.
    */
@@ -2398,7 +2398,7 @@ body[data-custom-sidebar-titlebar-colors='true']
 }
 
 /*
- * CDXC:SidebarReference 2026-05-15-09:13
+ * CDXC:Sidebar 2026-05-15-09:13
  * The sidebar session dropdown/list needs every row with an agent identity to
  * show its leading icon while scanning sessions. Keep active, visible, and
  * hover states stronger, but let the Session Cards color-mode setting decide
@@ -2474,11 +2474,11 @@ body[data-custom-sidebar-titlebar-colors='true']
 }
 
 /*
- * CDXC:SidebarReference 2026-05-16-08:46:
+ * CDXC:Sidebar 2026-05-16-08:46:
  * Hover-only agent icons in the reference sidebar must hide even for visible
  * or focused sessions until the user points at or keyboard-focuses the row.
  *
- * CDXC:BrowserPanes 2026-05-28-07:38:
+ * CDXC:Browser 2026-05-28-07:38:
  * Browser page favicons have their own hover-only setting because page identity
  * should stay visible in the default Codex preset even when agent logos are
  * quiet. Exclude favicon image icons here and let the browser-specific rule
@@ -2516,7 +2516,7 @@ body[data-custom-sidebar-titlebar-colors='true']
 }
 
 /*
- * CDXC:PreviousSessions 2026-05-08-16:07
+ * CDXC:Sessions 2026-05-08-16:07
  * Filtered Previous Sessions in reference search are historical restore rows,
  * not currently visible panes, but they still need persistent agent identity.
  * Override the reference sidebar's visible/focused-only icon rule for them.
@@ -2671,7 +2671,7 @@ body[data-custom-sidebar-titlebar-colors='true']
   .session-frame[data-tagged='true']:not(:hover):not(:has(.session:hover))
   .session-persistence-provider-badge[data-slot='floating'] {
   /*
-   * CDXC:SidebarSessionAgentIcons 2026-06-30-00:12:
+   * CDXC:Icons 2026-06-30-00:12:
    * Tagged session rows have one leading slot. At rest, including when the row
    * is the focused/active session, the selected tag icon owns that slot. Only
    * pointer hover may swap the slot to the hidden agent icon. Mouse or keyboard
@@ -2717,7 +2717,7 @@ body[data-custom-sidebar-titlebar-colors='true']
 }
 
 /*
- * CDXC:SidebarSessions 2026-05-29-19:03:
+ * CDXC:Sessions 2026-05-29-19:03:
  * macOS sidebar session buttons should not show the right-edge working timer
  * spinner. Keep left-side Delayed Send clocks and other card identity chrome
  * intact, but remove the passive trailing spinner from the reference sidebar
@@ -2742,13 +2742,13 @@ body[data-custom-sidebar-titlebar-colors='true']
 }
 
 /*
- * CDXC:SidebarHover 2026-06-11-09:23:
+ * CDXC:Sidebar 2026-06-11-09:23:
  * WKWebView can keep the last session row in CSS :hover after AppKit has moved
  * the pointer outside the sidebar. Native owns the real pointer boundary; when
  * it reports outside, remove only hover-derived session visuals while preserving
  * actual focused, keyboard-focused, and search-selected state.
  *
- * CDXC:SidebarHover 2026-06-11-09:34:
+ * CDXC:Sidebar 2026-06-11-09:34:
  * Keep this native-outside hover reset after reference-sidebar styling. The
  * macOS sidebar paints row hover through a later ::after surface, so the stale
  * WebKit hover state must be neutralized at the end of the session-card cascade

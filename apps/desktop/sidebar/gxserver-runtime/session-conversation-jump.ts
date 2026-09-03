@@ -1,5 +1,5 @@
 /*
-CDXC:StashedPromptSessionAssociation 2026-08-24:
+CDXC:SavedPrompts 2026-08-24:
 Refactor-by-extraction of the Project Board's jump-to-linked-conversation core.
 The bodies below moved out of `project-board.ts`
 (`jumpToGpuiProjectBoardConversation` / `resumeGpuiProjectBoardConversation`)
@@ -49,7 +49,7 @@ export type GpuiConversationJumpOptions = {
 export type GpuiConversationJumpOutcome = 'focused' | 'restored' | 'resumed';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Same declaration-merge contract as every other runtime slice: the interface is
 written out by hand rather than derived from the method object, and
 `gpuiSidebarRuntimeConversationJumpMethodsShapeCheck` at the bottom keeps the
@@ -138,7 +138,7 @@ export const gpuiSidebarRuntimeConversationJumpMethods = {
     options: GpuiConversationJumpOptions
   ): Promise<GpuiConversationJumpOutcome> {
     /*
-    CDXC:ProjectBoardBeads 2026-08-07:
+    CDXC:ProjectBoard 2026-08-07:
     A bead's session usually closes without leaving a restorable history row,
     but the agent conversation it worked is still resumable from the session
     row's agent identity. `/api/forkSession` is the daemon-owned path for that:

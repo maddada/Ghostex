@@ -68,7 +68,7 @@ pub(crate) struct CommitMessageGenerationAgent {
 }
 
 /*
-CDXC:GPUISidebarGit 2026-06-24-16:11:
+CDXC:Git 2026-06-24-16:11:
 GPUI blank commit-message generation is a local gxserver operation over a
 registered project, not renderer shell execution. The endpoint stages only the
 review-approved project-relative paths, derives branch/diff text from fixed Git
@@ -100,7 +100,7 @@ pub(crate) async fn generate_commit_message_for_project(
         let projects = repository.list_projects()?;
         let settings = read_agent_settings(&db)?;
         /*
-        CDXC:GxserverRustBuild 2026-06-24-20:22:
+        CDXC:Build 2026-06-24-20:22:
         Axum requires the HTTP fallback future to be Send. Read commit-message
         generation metadata from SQLite up front and leave the rusqlite-backed
         repository inside this block before awaiting Git actions or agent output.
@@ -336,7 +336,7 @@ pub(crate) fn typed_result_stdout_raw(result: &Value) -> &str {
 }
 
 /*
-CDXC:GPUISidebarGit 2026-06-24-16:11:
+CDXC:Git 2026-06-24-16:11:
 The generation endpoint must re-derive the current changed-file set from
 gxserver-owned Git status before staging. The renderer's review request chooses
 from that set, but Rust rejects stale or arbitrary file paths at the writer
@@ -347,7 +347,7 @@ pub(crate) fn retain_current_commit_message_generation_paths(
     status_stdout: &str,
 ) -> std::result::Result<Vec<String>, DomainStateError> {
     /*
-    CDXC:GPUISidebarGit 2026-07-11-06:23:
+    CDXC:Git 2026-07-11-06:23:
     A commit review is path-trusted when the modal opens, but other agents can
     finish or replace one of those files before the user confirms. Keep only
     reviewed paths that are still changed at the authoritative gxserver check;

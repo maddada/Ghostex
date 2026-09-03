@@ -1,5 +1,5 @@
 /**
- * CDXC:NavigationHistory 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * The client half of titlebar Back/Forward. gxserver owns the trail and the
  * cursor; this controller is the transport, the local mirror the titlebar reads
  * without ever blocking on a round trip, and the retry loop for trail stops that

@@ -30,7 +30,7 @@ export function createSidebarHudState(
   theme: SidebarTheme = 'dark-blue',
   agentManagerZoomPercent = DEFAULT_AGENT_MANAGER_ZOOM_PERCENT,
   /**
-   * CDXC:SidebarSessions 2026-05-09-17:00
+   * CDXC:Sessions 2026-05-09-17:00
    * Fresh sidebar HUD snapshots default close-on-hover to enabled so normal
    * project and chat session cards match the Settings default.
    */
@@ -43,7 +43,7 @@ export function createSidebarHudState(
   pendingAgentIds: string[] = [],
   git: SidebarGitState = createDefaultSidebarGitState(),
   /**
-   * CDXC:SidebarSessions 2026-04-28-05:18
+   * CDXC:Sessions 2026-04-28-05:18
    * New sidebar HUD state must default to the reference behavior: active
    * sessions are ordered by last activity unless a caller explicitly requests
    * manual ordering.
@@ -74,7 +74,7 @@ export function createSidebarHudState(
     isFocusModeActive: isSessionGridFocusModeActive(snapshot),
     pendingAgentIds,
     /**
-     * CDXC:SidebarLayout 2026-05-22-22:24:
+     * CDXC:Sidebar 2026-05-22-22:24:
      * The current sidebar no longer renders legacy Actions/Agents/Browsers
      * sections, so HUD snapshots omit section visibility and section collapse
      * state instead of preserving dead chrome controls.
@@ -110,12 +110,12 @@ export function createSidebarSessionItems(
     lifecycleState: session.kind === 'browser' ? 'running' : session.isSleeping === true ? 'sleeping' : 'done',
     firstUserMessage: session.firstUserMessage,
     /**
-     * CDXC:SessionFavorites 2026-05-15-12:43
+     * CDXC:Sessions 2026-05-15-12:43
      * Favorite state is stored on the canonical session record but rendered by
      * sidebar cards and Previous Sessions. Project it into SidebarSessionItem so
      * context menus can toggle back to Unfavorite after publish.
      *
-     * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
+     * CDXC:Icons 2026-06-29-23:58:
      * Favorite projection must not gold-tint the session's agent icon; Favorite
      * remains a session tag/state, while icon color follows the Session Cards
      * monochrome/colored setting.
@@ -124,7 +124,7 @@ export function createSidebarSessionItems(
     sessionTag: getEffectiveSidebarSessionTag(session),
     isParked: session.isParked === true,
     /**
-     * CDXC:PinnedSessions 2026-05-28-12:04:
+     * CDXC:Sessions 2026-05-28-12:04:
      * Project the canonical pinned flag into sidebar items separately from
      * favorite state so live pinned ordering and favorite history behavior stay
      * independent.
@@ -136,7 +136,7 @@ export function createSidebarSessionItems(
     isRunning: session.kind === 'browser',
     isVisible: visibleIds.has(session.sessionId),
     /**
-     * CDXC:BrowserPanes 2026-05-28-05:30:
+     * CDXC:Browser 2026-05-28-05:30:
      * Browser panes must project their browser identity in both the legacy
      * `kind` field and the canonical `sessionKind` field. Some sidebar card
      * paths still check `kind`, so omitting it can let browser rows inherit

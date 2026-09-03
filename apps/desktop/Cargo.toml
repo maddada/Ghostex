@@ -1,5 +1,5 @@
-# CDXC:GPUITestingPolicy 2026-06-27-12:06: GPUI app tests are intentionally absent while product behavior is still moving. Lock GPUI behavior down with tests later, and keep test suites for other Ghostex projects intact.
-# CDXC:GPUITestingPolicy 2026-06-28-15:12: GPUI source should not retain test-only scaffolding while the project policy excludes GPUI tests. Keep behavioral notes in production comments and verify cleanup with compile/check paths instead of hidden #[cfg(test)] helpers.
+# CDXC:RepoStructure 2026-06-27-12:06: GPUI app tests are intentionally absent while product behavior is still moving. Lock GPUI behavior down with tests later, and keep test suites for other Ghostex projects intact.
+# CDXC:RepoStructure 2026-06-28-15:12: GPUI source should not retain test-only scaffolding while the project policy excludes GPUI tests. Keep behavioral notes in production comments and verify cleanup with compile/check paths instead of hidden #[cfg(test)] helpers.
 [package]
 name = "ghostex-gpui"
 version = "0.1.0"
@@ -23,17 +23,17 @@ path = "src/bin/ghostex_gpui_cef_bootstrap.rs"
 name = "ghostex-windows-installer"
 path = "src/bin/ghostex_windows_installer.rs"
 
-# CDXC:GPUILibghosttyVt 2026-07-03: smoke/demo walkthrough for the libghostty-vt wrapper (see src/bin/ghostty_vt_smoke.rs), a deliverable demo path rather than a test harness.
+# CDXC:Terminal 2026-07-03: smoke/demo walkthrough for the libghostty-vt wrapper (see src/bin/ghostty_vt_smoke.rs), a deliverable demo path rather than a test harness.
 [[bin]]
 name = "ghostty-vt-smoke"
 path = "src/bin/ghostty_vt_smoke.rs"
 
-# CDXC:GPUITerminalModel 2026-07-03: smoke/demo walkthrough for the PTY → vt → snapshot model (see src/bin/terminal_model_smoke.rs), a deliverable demo path rather than a test harness.
+# CDXC:Terminal 2026-07-03: smoke/demo walkthrough for the PTY → vt → snapshot model (see src/bin/terminal_model_smoke.rs), a deliverable demo path rather than a test harness.
 [[bin]]
 name = "terminal-model-smoke"
 path = "src/bin/terminal_model_smoke.rs"
 
-# CDXC:GPUITerminalElement 2026-07-03: TEMPORARY windowed demo for the P1c GPUI-composited terminal element (see src/bin/terminal_element_demo.rs); delete once P1e integrates the element into real panes.
+# CDXC:Terminal 2026-07-03: TEMPORARY windowed demo for the P1c GPUI-composited terminal element (see src/bin/terminal_element_demo.rs); delete once P1e integrates the element into real panes.
 [[bin]]
 name = "terminal-element-demo"
 path = "src/bin/terminal_element_demo.rs"
@@ -58,7 +58,7 @@ serde_json = "1"
 sha2 = "0.10"
 tar = "0.4"
 
-# CDXC:GPUICefPlatformSeam 2026-07-04: the Linux CEF adapter (src/cef/linux_x11.rs)
+# CDXC:CefRuntime 2026-07-04: the Linux CEF adapter (src/cef/linux_x11.rs)
 # positions/maps/focuses CEF child X11 windows through x11rb, pinned to the same
 # major as gpui's own X11 backend dependency so both speak the protocol from one
 # crate lineage; x11rb needs no libX11/libxcb at link time.
@@ -66,7 +66,7 @@ tar = "0.4"
 ureq = { version = "3.3.0", default-features = false, features = ["platform-verifier", "rustls"] }
 x11rb = "0.13"
 
-# CDXC:GPUICefPlatformSeam 2026-07-04: the Windows CEF adapter (src/cef/windows.rs)
+# CDXC:CefRuntime 2026-07-04: the Windows CEF adapter (src/cef/windows.rs)
 # drives a message-only pump HWND and child-HWND frame/visibility/focus through
 # windows-sys, pinned to the same major as the cef crate's own Windows dependency.
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -1,5 +1,5 @@
 /**
- * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+ * CDXC:ProjectBoard 2026-08-24:
  * The New Ticket and Edit ticket dialogs moved out of project-board-app.tsx so
  * the Codex-style redesign can be rendered from Storybook with mock props. The
  * components are pure presentation over the board's existing state and
@@ -58,7 +58,7 @@ export function handleCmdEnter(event: KeyboardEvent, action: () => void) {
 }
 
 /*
- * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+ * CDXC:ProjectBoard 2026-08-24 (round 2):
  * The ticket dialogs group their fields under the same quiet section headers
  * the Automate dialog uses (see AutomationSection), so the form reads as
  * titled blocks instead of a flat run of unrelated fields.
@@ -177,7 +177,7 @@ export function EditTicketDialog({
           onKeyDown={(event) => handleCmdEnter(event, () => onSaveTicketDetail())}
         >
           {/*
-           * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+           * CDXC:ProjectBoard 2026-08-24 (round 2):
            * The main content (title + prompt) leads like the Automate dialog's
            * name-first layout; the metadata selectors follow as one titled
            * Properties section instead of opening the dialog with a wall of
@@ -340,7 +340,7 @@ export function EditTicketDialog({
           </Button>
           <div className='ml-auto flex flex-wrap items-center justify-end gap-2'>
             {/*
-             * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+             * CDXC:ProjectBoard 2026-08-24 (round 2):
              * Secondary actions are raised #1f1f1f cards with a hairline, not
              * outline buttons — outline paints --background (#0e0e0e), which
              * read as black holes on the #161616 dialog.
@@ -433,7 +433,7 @@ export function NewTicketDialog({
           onKeyDown={(event) => handleCmdEnter(event, () => onCreateTicket())}
         >
           {/*
-           * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+           * CDXC:ProjectBoard 2026-08-24 (round 2):
            * Same order as Edit ticket: the prompt is the point of this dialog,
            * so it leads; the metadata dropdowns follow under one Properties
            * section header.

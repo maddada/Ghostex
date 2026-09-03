@@ -14,7 +14,7 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('sidebar search source', () => {
   test('opens Quick Access Search from a stable nav-row button', () => {
     /*
-     * CDXC:SidebarSearch 2026-06-19-13:52:
+     * CDXC:Sidebar 2026-06-19-13:52:
      * The top Search entry remains a stable nav-row button and opens the shared
      * Quick Access search surface. Search input ownership belongs to that
      * surface instead of being duplicated inside the sidebar row.

@@ -1,5 +1,5 @@
 /*
-CDXC:GPUICefPlatformSeam 2026-07-04:
+CDXC:CefRuntime 2026-07-04:
 Linux (X11) platform adapter for the shared windowed-CEF backend
 (cef/shell.rs). This module owns only the truly per-OS pieces: turning CEF's
 on_schedule_message_pump_work callbacks into main-thread
@@ -29,7 +29,7 @@ machine mirrors apps/desktop/native/macos/GpuiCefAppKitHooks.m semantics 1:1 exc
 that a gpui foreground task with a cancellable deadline replaces the
 uncancellable dispatch_after generation counter.
 
-CDXC:GPUILinuxX11Backend 2026-07-05: device-verified on Ubuntu 26.04
+CDXC:PlatformSupport 2026-07-05: device-verified on Ubuntu 26.04
 (XWayland/KDE). Two Linux-only requirements surfaced and live in this file:
 CEF child browsers need a depth-matched intermediate embed-host window under
 gpui's 32-bit ARGB window (see child_window_info), and the external message
@@ -275,7 +275,7 @@ fn perform_message_loop_work() -> bool {
 }
 
 /*
-CDXC:GPUILinuxX11Backend 2026-07-05 (device-verified root cause):
+CDXC:PlatformSupport 2026-07-05 (device-verified root cause):
 CEF's external message pump (MessagePumpExternal, libcef browser_message_loop)
 only drains Chromium task queues; on Linux Chromium's UI-thread event
 machinery — the X11 event source, fd watchers, and everything else registered
@@ -385,7 +385,7 @@ pub(super) fn append_platform_command_line_switches(command_line: &mut cef::Comm
 }
 
 /*
-CDXC:GPUILinuxX11Backend 2026-07-05 (device-verified root cause):
+CDXC:PlatformSupport 2026-07-05 (device-verified root cause):
 gpui's X11 windows use a 32-bit ARGB visual, but CEF's CefWindowX11 creates
 its child at the server default depth (24) with the default visual and no
 colormap. X11 requires an explicit colormap (and border pixel) whenever a

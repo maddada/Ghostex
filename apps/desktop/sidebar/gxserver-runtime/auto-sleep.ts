@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -26,7 +26,7 @@ import {
 import type { GxserverSleepSessionResult } from '@/packages/shared/gxserver-protocol';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeAutoSleepMethods` — because deriving them would make
@@ -58,7 +58,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
       return;
     }
     /*
-    CDXC:GPUISidebarAutoSleep 2026-06-27-01:24:
+    CDXC:SessionSleep 2026-06-27-01:24:
     GPUI owns only the SidebarApp/gxserver runtime policy loop for agent terminal Auto Sleep. Run a small idempotent monitor from the runtime lifecycle, use the normalized shared settings snapshot, and route every sleep through the existing gxserver session lifecycle path instead of adding Browser, project-editor, native-pane, or renderer-local sleep behavior.
     */
     this.autoSleepMonitorIntervalId = window.setInterval(() => {
@@ -95,12 +95,12 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
     this.autoSleepMonitorRunning = true;
     try {
       /*
-      CDXC:GPUISidebarAutoSleep 2026-06-27-02:05:
+      CDXC:SessionSleep 2026-06-27-02:05:
       Auto Sleep must match native bulk sleep pacing: eligible agent sessions sleep one at a time with a 350 ms gap so gxserver and terminal teardown are not hit concurrently. Use the shared aggregate-count helper and ignore its private-data-free result because monitor progress is already reflected by gxserver presentation updates.
       */
       await runGpuiSidebarBulkSleepPaced(sessionIdsToSleep, async (sessionId) => {
         /*
-        CDXC:MobileKeepAwake 2026-08-19:
+        CDXC:KeepAwake 2026-08-19:
         The sweep marks itself automatic so gxserver can decline it for a session
         another client (Ghostex mobile) is attached to. This client cannot see
         those attachments, and the daemon can.
@@ -215,7 +215,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
             )
         );
       /*
-      CDXC:GPUISidebarBulkSleep 2026-06-27-02:05:
+      CDXC:SessionSleep 2026-06-27-02:05:
       Group sleep shares the same native-parity pacing as explicit multi-select sleep, while Wake remains concurrent because restoring sessions does not need terminal teardown throttling.
       */
       await this.setSessionsSleeping(sessionIds, sleeping);
@@ -237,7 +237,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
           .map((session) => createGxserverPresentationProjectSessionId(projectId, session.sessionId))
       );
     /*
-    CDXC:GPUISidebarBulkSleep 2026-06-27-02:05:
+    CDXC:SessionSleep 2026-06-27-02:05:
     Local project group sleep uses the shared private-data-free pacing helper through setSessionsSleeping, preserving the existing per-session focus replacement behavior inside setSessionSleeping.
     */
     await this.setSessionsSleeping(sessionIds, sleeping);
@@ -249,7 +249,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
       return;
     }
     /*
-    CDXC:GPUISidebarBulkSleep 2026-06-27-02:05:
+    CDXC:SessionSleep 2026-06-27-02:05:
     GPUI sleep bulk actions must mirror native pacing by starting one sleep request at a time with a 350 ms interval. Use the shared aggregate-count helper so per-operation failures continue without exposing ids, titles, paths, commands, URLs, or user text.
     */
     await runGpuiSidebarBulkSleepPaced(sessionIds, async (sessionId) => {
@@ -307,7 +307,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
       }
     );
     /*
-    CDXC:MobileKeepAwake 2026-08-19:
+    CDXC:KeepAwake 2026-08-19:
     A declined automatic sleep left the session running, so the optimistic
     "sleeping" patch below would publish a row state the daemon never entered.
     */
@@ -325,7 +325,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
       return;
     }
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:34:
+    CDXC:FocusRouting 2026-06-26-06:34:
     A local sidebar Wake action is also a workspace activation in the macOS app: the row becomes running and the corresponding workspace terminal is selected/restored through the same focus path as a direct session click. GPUI must use the local focus bridge here, not gxserver `/api/focusSession`.
     */
     this.patchPresentationSession(reference.projectId, reference.sessionId, {

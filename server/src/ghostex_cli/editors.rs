@@ -14,7 +14,7 @@ use crate::ghostex_cli::rpc::{
 use crate::logging::read_routine_diagnostic_enabled;
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the prompt-editor / floating-editor / GhostexEditor daemon
 surface of scripts/ghostex-cli.mjs (lines 3231-4360). The standalone
 GhostexEditor daemon is an existing separate app; this CLI is a client that
@@ -276,7 +276,7 @@ pub fn floating_editor_command(args: &[String]) -> CliResult<()> {
 
 pub fn prompt_editor_command(args: &[String]) -> CliResult<()> {
     /*
-    CDXC:PromptEditorBackend 2026-06-30-03:11 (ported):
+    CDXC:PromptEditor 2026-06-30-03:11 (ported):
     Ctrl+G fallback is the machine's editor, not gte. Preserve Monaco only for
     macOS app clients or zmx leaders that explicitly advertise Monaco; every
     other context runs the first non-Ghostex editor from the preserved
@@ -316,7 +316,7 @@ pub fn prompt_editor_command(args: &[String]) -> CliResult<()> {
     }));
 
     /*
-    CDXC:StashedPrompts 2026-07-29:
+    CDXC:SavedPrompts 2026-07-29:
     The GPUI "Stash Prompt" agent action writes a one-shot marker for the
     session and sends Ctrl+G. When this invocation finds a fresh marker, the
     file already holds the composer text the agent CLI wrote for $EDITOR, so
@@ -641,7 +641,7 @@ pub fn floating_monaco_editor_command(args: &[String]) -> CliResult<()> {
 
 fn floating_monaco_editor_command_with_trace(args: &[String], trace: &Value) -> CliResult<()> {
     /*
-    CDXC:EditorDaemon 2026-07-05 (ported): Monaco prompt editing is served by
+    CDXC:PromptEditor 2026-07-05 (ported): Monaco prompt editing is served by
     the resident GhostexEditor daemon. Keep the EDITOR-facing status-file
     crash semantics and timeline breadcrumbs, while opening each prompt
     through the pinned JSON-line socket protocol.
@@ -818,7 +818,7 @@ fn stash_saved_prompt_editor_content(
     request_id: &str,
 ) {
     /*
-    CDXC:StashedPrompts 2026-07-29-00:00:
+    CDXC:SavedPrompts 2026-07-29-00:00:
     Every prompt-editor save-and-close stashes the composed text in gxserver so
     it can be recalled from the Prompts modal later. Best-effort: an
     unreachable gxserver must not change the editor's exit status, and the
@@ -1001,7 +1001,7 @@ fn schedule_prompt_editor_tab_retitle(
     originating_session_id: Option<&str>,
 ) {
     /*
-    CDXC:EditorDaemon 2026-07-06 (ported): the gxserver lookup starts after
+    CDXC:PromptEditor 2026-07-06 (ported): the gxserver lookup starts after
     `open` is already sent so tab naming never delays window presentation, and
     `retitle` is a no-reply notification the daemon applies silently.
     */
@@ -1061,7 +1061,7 @@ fn cli_session_key(project_id: Option<&Value>, session_id: Option<&Value>) -> St
 
 fn focus_prompt_editor_originating_session(originating_session_id: Option<&str>, request_id: &str) {
     /*
-    CDXC:EditorDaemon 2026-07-05 (ported): best-effort — a missing ref or
+    CDXC:PromptEditor 2026-07-05 (ported): best-effort — a missing ref or
     unreachable gxserver must not change the editor's exit status.
     */
     let parts: Vec<&str> = originating_session_id.unwrap_or("").split(':').collect();
@@ -2025,7 +2025,7 @@ mod floating_editor_bridge_parity {
     /// readBridgeAuthToken.
     pub(super) fn read_bridge_auth_token(flags: &Flags) -> CliResult<String> {
         /*
-        CDXC:CliBridgeSecurity 2026-05-15-18:25 (ported): CLI commands read
+        CDXC:ServerApi 2026-05-15-18:25 (ported): CLI commands read
         the per-launch token that the app writes under resolved Ghostex state storage.
         */
         let explicit_token = flags

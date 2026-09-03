@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatGrokBlockingScreens 2026-08-31:
+CDXC:AgentScreenDetection 2026-08-31:
 Grok Build audit against xai-org/grok-build bc7f02ed. The pager has several
 independent input owners which can coexist with, replace, or visually cover the
 ordinary boxed `❯` composer:

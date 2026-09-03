@@ -1,5 +1,5 @@
 /*
- * CDXC:SettingsModalSplit 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * Scroll-target helpers shared by the SettingsModal component and the extracted
  * settings-modal modules. They live here so a module can resolve a section
  * anchor without importing settings-modal.tsx back.

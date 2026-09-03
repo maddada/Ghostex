@@ -1,5 +1,5 @@
 /*
-CDXC:ComposerTerminalReadiness 2026-08-28:
+CDXC:SessionChat 2026-08-28:
 The composer footer's Terminal View button tells the user whether the agent's
 CLI is actually sitting at an input box, and shows the bottom of that screen on
 hover. Both come from the same session-scoped /api/readSessionTerminalTail read

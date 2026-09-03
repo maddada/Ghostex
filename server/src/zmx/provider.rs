@@ -284,9 +284,9 @@ pub(crate) fn start_session_provider_with_observed_state(
     }
     let session = repository.update_session_for_lifecycle(&update)?;
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     An agent CLI has just been launched into this pane, so re-arm layer 1 of
-    CDXC:ActivitySuppressionPolicy for a DRAFT. `/api/wakeSession` already does
+    CDXC:AgentScreenDetection for a DRAFT. `/api/wakeSession` already does
     this for itself further up the lifecycle dispatch, but a cold desktop attach
     and the provider restart inside `/api/switchDraftAgent` both land HERE and
     never touch the wake path — which left the CLI's startup spinner free to
@@ -380,7 +380,7 @@ pub(crate) fn kill_and_cache_session_provider(
     update.insert("projectId".to_string(), json!(lifecycle.project_id));
     update.insert("sessionId".to_string(), json!(lifecycle.session_id));
     /*
-    CDXC:FailedKillKeepsLifecycle 2026-09-01:
+    CDXC:SessionSleep 2026-09-01:
     A failed kill used to write lifecycleState "unknown", which no surface
     shows: the sidebar requires running/sleeping and the Sessions history
     requires "stopped", so one zmx hiccup made the session invisible
@@ -408,7 +408,7 @@ pub(crate) fn apply_wake_session_activity_suppression(
     session: &Value,
 ) -> Result<Value, DomainStateError> {
     /*
-    CDXC:GxserverZmxLifecycle 2026-06-22-07:16:
+    CDXC:Zmx 2026-06-22-07:16:
     Waking a session must clear stale working/attention state before title observation can replay an old zmx title. Keep Rust wake aligned with TypeScript by forcing the shared `wake` activity transition inside the lifecycle endpoint result rather than waiting for a later renderer or title event.
     */
     let params = Map::new();
@@ -559,7 +559,7 @@ pub fn read_zmx_session_process_identities(
             && (identity.agent_session_id.is_none() || identity.agent_session_path.is_none())
         {
             /*
-            CDXC:GxserverAgentTitles 2026-08-11:
+            CDXC:SessionTitles 2026-08-11:
             A live Codex process started as plain `codex` can resume or switch
             threads inside the TUI, so argv contains no conversation id. Codex
             keeps the exact active rollout open for append; resolve that
@@ -642,7 +642,7 @@ pub fn parse_zmx_session_process_identities(
 
 fn build_zmx_process_snapshot_command(zmx_executable_path: &str) -> String {
     /*
-    CDXC:GxserverSessionIdentity 2026-06-21-18:25:
+    CDXC:SessionIdentity 2026-06-21-18:25:
     Rust must copy TypeScript gxserver's live zmx process identity scan so sidebar rows are repaired from actual agent executables after cutover. Capture only bounded process metadata in memory, never persistent logs, and keep parsing centralized in server instead of client fallbacks.
     */
     format!(

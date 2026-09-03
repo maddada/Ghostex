@@ -48,7 +48,7 @@ extern int GhostexGpuiTerminalGetImePoint(void *nativeView, double *x,
                                           double *height);
 
 /*
- CDXC:GPUTerminalAppKitAdapter 2026-06-22-20:58:
+ CDXC:Terminal 2026-06-22-20:58:
  Future real terminal adapters must supply the existing AppKit terminal NSView.
  This GPUI-local boundary may only position, show, hide, or focus that non-null
  view using exact terminal body bounds and the parent view's flipped-coordinate
@@ -56,7 +56,7 @@ extern int GhostexGpuiTerminalGetImePoint(void *nativeView, double *x,
  routing, synthetic input routing, terminal processes, GhosttyKit calls, or
  persistent logs.
 
- CDXC:GPUTerminalAppKitAdapter 2026-06-22-21:42:
+ CDXC:Terminal 2026-06-22-21:42:
  Slice 108 creates only the terminal host NSView ownership boundary: an explicit
  parent NSView receives one normal hidden black child inside GPUI's measured
  terminal body bounds. The child view must remain ordinary AppKit layout, with
@@ -64,14 +64,14 @@ extern int GhostexGpuiTerminalGetImePoint(void *nativeView, double *x,
  hidden hit regions, Ghostty/libghostty calls, process lifecycle, logging, or
  app wiring.
 
- CDXC:GPUTerminalAppKitAdapter 2026-06-22-23:11:
+ CDXC:Terminal 2026-06-22-23:11:
  Slice 115 first-responder handoff may call `makeFirstResponder` only for the
  exact App-owned terminal host NSView supplied by Rust after a real focused
  Agents Ghostty surface is mounted. Do not expand this shim into hit-test
  overrides, pre-dispatch routing, synthetic input, transparent overlays,
  terminal lifecycle, logging, or fallback view creation.
 
- CDXC:GPUITerminalNativeKeyBridge 2026-06-24-20:58:
+ CDXC:Terminal 2026-06-24-20:58:
  The GPUI host view is the exact AppKit responder for mounted Ghostty terminals
  because GPUI key events do not expose the native macOS keycode required for
  Return, Backspace, arrows, modifiers, and bindings. Forward only synchronous
@@ -79,14 +79,14 @@ extern int GhostexGpuiTerminalGetImePoint(void *nativeView, double *x,
  transparent overlays, hit-test overrides, command text logging,
  terminal-content capture, or persistent state.
 
- CDXC:GPUITerminalFileDrop 2026-06-27-03:32:
+ CDXC:Clipboard 2026-06-27-03:32:
  Direct terminal file and image drops for Agents and command-pane terminals must
  use the real mounted host view as the drag destination and insert only
  transient formatted text through Rust. Keep this path free of overlays,
  hit-test routing, persistent logging, and file persistence so drag/drop matches
  native Swift terminal pane behavior.
 
- CDXC:GPUITerminalIME 2026-06-27-03:46:
+ CDXC:Terminal 2026-06-27-03:46:
  Agents and command-pane Ghostty host views must use AppKit NSTextInputClient
  for printable, Space, dead-key, and CJK composition while command/control
  shortcuts remain raw only when no marked text exists. Keep marked text and
@@ -276,7 +276,7 @@ GhostexGpuiTerminalShouldSuppressComposingControlInput(NSString *text,
 
 static NSString *GhostexGpuiTerminalTextInputString(id string) {
   /*
-   CDXC:GPUITerminalNativeImeBridge 2026-07-03-00:58:
+   CDXC:Terminal 2026-07-03-00:58:
    AppKit's hardware text-input pipeline can pass insertText:/setMarkedText: a
    mutable string it reuses and empties after the callback returns. Accumulated
    key text and marked text must own their characters, so copy here; otherwise
@@ -645,7 +645,7 @@ GhostexGpuiTerminalDropInsertionText(NSArray<NSString *> *paths) {
                                : GhostexGpuiGhosttyActionPress;
 
   /*
-   CDXC:GPUITerminalBulkCommittedText 2026-08-26:
+   CDXC:Terminal 2026-08-26:
    Dictation and automation can post one key event whose Unicode payload is
    the complete committed string while its placeholder physical keycode is
    zero. Passing that event through interpretKeyEvents makes AppKit translate
@@ -721,7 +721,7 @@ GhostexGpuiTerminalDropInsertionText(NSArray<NSString *> *paths) {
 
 - (BOOL)performKeyEquivalent:(NSEvent *)event {
   /*
-   CDXC:GPUITerminalNativeKeyBridge 2026-07-11:
+   CDXC:Terminal 2026-07-11:
    AppKit dispatches Command/Control key equivalents before keyDown and may
    turn standard text-navigation chords into responder commands instead. Ask
    the exact mounted libghostty surface whether the original native event is a
@@ -733,7 +733,7 @@ GhostexGpuiTerminalDropInsertionText(NSArray<NSString *> *paths) {
   }
 
   /*
-   CDXC:GPUITerminalNativeTab 2026-07-13:
+   CDXC:Terminal 2026-07-13:
    An AppKit key window offers plain Tab to key-view traversal before the
    terminal host can receive keyDown. Since this exact mounted host is already
    first responder, claim plain Tab and Shift-Tab here and feed them through

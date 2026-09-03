@@ -118,7 +118,7 @@ pub struct PortlessStatusPayload {
 }
 
 /*
-CDXC:PortlessFailureUX 2026-06-23-04:28:
+CDXC:Portless 2026-06-23-04:28:
 Phase 16 makes Portless recovery state daemon-owned: protocol changes, admin
 success/failure, retry, disable, and explicit service removal are persisted as
 enum metadata so React can recover without reading Portless files or inventing

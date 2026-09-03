@@ -55,7 +55,7 @@ impl GhostexGpuiApp {
             #[cfg(target_os = "windows")]
             {
                 /*
-                CDXC:GPUIWindowsWslPersistence 2026-07-15:
+                CDXC:PlatformSupport 2026-07-15:
                 Windows resolves an initialized WSL2 distribution before it
                 probes localhost. The optional exact-name setting overrides
                 automatic discovery. A missing or invalid distro surfaces setup
@@ -167,7 +167,7 @@ impl GhostexGpuiApp {
                         this.start_gpui_portless_setup_prompt_check(cx);
                         this.start_gpui_first_run_onboarding(cx);
                         /*
-                        CDXC:AnonymousAnalytics 2026-08-26:
+                        CDXC:Telemetry 2026-08-26:
                         `app.launched` is a loopback ping to the daemon we just
                         confirmed healthy, so it can only fire once the token
                         and listener exist. The helper latches per process, so
@@ -332,7 +332,7 @@ impl GhostexGpuiApp {
                             this.replay_sidebar_gxserver_bootstrap(cx);
                             this.start_gpui_portless_setup_prompt_check(cx);
                             /*
-                            CDXC:GPUIFirstRunOnboardingOnce 2026-08-18:
+                            CDXC:Onboarding 2026-08-18:
                             A launch that had to respawn the daemon reaches
                             "gxserver healthy" here instead of through the
                             bootstrap branch, so first-run onboarding has to be

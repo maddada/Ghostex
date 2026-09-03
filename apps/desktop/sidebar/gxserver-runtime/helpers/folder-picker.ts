@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -26,7 +26,7 @@ export function normalizeGpuiWorkspaceFolderPick(
     return undefined;
   }
   /*
-  CDXC:FirstLaunchSetup 2026-08-24:
+  CDXC:Onboarding 2026-08-24:
   The onboarding Finish step rides this same message: `firstLaunchAgentId` is a
   sidebar agent id (or 'terminal') asking the runtime to start the first
   session in the freshly registered project.

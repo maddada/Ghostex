@@ -12,7 +12,7 @@ use gpui_component::input::InputState;
 use crate::*;
 
 /*
-CDXC:GPUIBrowserProjectParking 2026-08-26:
+CDXC:Browser 2026-08-26:
 Switching the active project must not sleep or destroy the outgoing project's
 browser pages. BrowserTabId/BrowserPaneId are project-local counters, so the
 live `browser_surfaces`/`browser_address_inputs`/`browser_find_states` maps can

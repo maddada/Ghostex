@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatRewind 2026-09-02:
+CDXC:SessionChat 2026-09-02:
 `/api/rewindSessionChat` drives Claude Code's OWN rewind flow, in the session's
 terminal, exactly the way a human drives it: type `/rewind`, walk the prompt
 list up to the chosen prompt, press Enter, pick the option whose label is
@@ -19,7 +19,7 @@ the terminal) is refused rather than silently rewinding to the wrong turn.
 
 The whole sequence runs as ONE job on the per-session send worker
 (`SessionChatSendStep::DriveClaudeRewind`), for the reason
-CDXC:SessionChatSerializedWriters states: a queued prompt landing between the
+CDXC:SessionChat states: a queued prompt landing between the
 Up presses would type into the rewind dialog. It also means an interrupt that
 bumps the session's send generation aborts the drive at its next step.
 
@@ -575,7 +575,7 @@ fn take_rewind_job_outcome(job_id: u64) -> Option<std::result::Result<(), Domain
 }
 
 /*
-CDXC:SessionChatRewind 2026-09-02:
+CDXC:SessionChat 2026-09-02:
 What Claude Code leaves in the composer after it accepts a rewind. Measured
 live on 2026-09-02 (Claude Code 2.1.258, session `S90-P3lv0-G8fxj`): choosing
 `Restore conversation` closes the dialog and PRE-FILLS the composer with the

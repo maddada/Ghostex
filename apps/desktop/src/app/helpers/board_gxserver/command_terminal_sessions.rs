@@ -71,7 +71,7 @@ pub(crate) fn gpui_close_command_terminal_gxserver_session(
         return true;
     }
     /*
-    CDXC:GxserverActiveOnlySessionList 2026-09-01:
+    CDXC:StateSync 2026-09-01:
     This is only asking whether the closed row is still live, after the
     `close` transition already ran, so it wants the project's active rows —
     not the project's entire stopped agent history, which on a working
@@ -109,7 +109,7 @@ pub(crate) fn gpui_update_command_terminal_gxserver_session_title(
     title: &str,
 ) -> Result<(), String> {
     /*
-    CDXC:GPUICommandPaneGxserverRestore 2026-07-04:
+    CDXC:Workarea 2026-07-04:
     Command-pane renames update the gxserver session row directly so restart
     and sidebar projections use the same title as the local tab. Send only the
     validated title plus gxserver ids; no terminal input, command text, cwd,
@@ -148,7 +148,7 @@ pub(crate) fn gpui_update_command_terminal_gxserver_session_surface(
     surface: &str,
 ) -> Result<(), String> {
     /*
-    CDXC:GPUICommandWorkspaceTransfer 2026-08-01:
+    CDXC:Workarea 2026-08-01:
     A command tab dragged into the Agents workspace keeps its live daemon
     session, so the gxserver row has to change surfaces with it. This is not
     cosmetic: the sidebar only projects `workspace` sessions, and an Agents tab
@@ -209,7 +209,7 @@ pub(crate) fn gpui_reusable_command_terminal_gxserver_session_key(
         return Ok(None);
     };
     /*
-    CDXC:GPUICommandPaneActions 2026-08-09:
+    CDXC:CommandPane 2026-08-09:
     Command-pane layout is client state, but the zmx-backed command session is
     daemon state and survives a GPUI rebuild/relaunch. When the local tab was
     not restored, reclaim the live command-surface session with the same stable
@@ -254,7 +254,7 @@ pub(crate) fn gpui_prepare_existing_command_terminal_attach_plan(
     initial_input: Option<String>,
 ) -> Result<GpuiCommandTerminalAttachPlan, String> {
     /*
-    CDXC:GPUICommandPaneGxserverRestore 2026-08-13:
+    CDXC:Workarea 2026-08-13:
     A local rebuild restarts gxserver before opening the replacement app. Shell
     restoration can reach this worker before the daemon has rebound its port or
     republished its token; that is startup readiness, not evidence that the

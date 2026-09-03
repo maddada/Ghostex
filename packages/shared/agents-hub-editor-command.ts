@@ -18,7 +18,7 @@ export function createAgentsHubExternalEditorCommand({
 
   if (isEditorCommandMatch(defaultEditorCommand, editorCliName, vscodeCompatibleEditorCommands)) {
     /**
-     * CDXC:AgentsHub 2026-05-16-07:23:
+     * CDXC:AgentLauncher 2026-05-16-07:23:
      * The Hub's editor button should open the selected file's containing folder as the VS Code-style workspace and focus the selected file when the CLI supports it.
      * Pass both the folder and --goto file target so the file tree is rooted at the instructions/config folder instead of opening only a single loose file window.
      */
@@ -33,7 +33,7 @@ export function createAgentsHubExternalEditorCommand({
 
   if (isEditorCommandMatch(defaultEditorCommand, editorCliName, zedCompatibleEditorCommands)) {
     /**
-     * CDXC:AgentsHub 2026-05-16-07:26:
+     * CDXC:AgentLauncher 2026-05-16-07:26:
      * The Hub's editor button must respect the default IDE selected in Settings, including Zed and its zeditor alias.
      * Zed focuses files via path:line:column arguments, so open the containing folder as the workspace path and the selected file as a positioned path in the existing Zed window when possible.
      */

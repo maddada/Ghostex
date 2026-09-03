@@ -18,10 +18,10 @@ pub struct GxserverAuthState {
 }
 
 /*
-CDXC:GxserverAuth 2026-06-14-20:37:
+CDXC:ServerApi 2026-06-14-20:37:
 The gxserver auth contract stores a 32-byte base64url token in the resolved Ghostex state directory; the directory is 0700, the token file is 0600, and comparisons are constant-time.
 
-CDXC:GxserverAuth 2026-06-22-04:10:
+CDXC:ServerApi 2026-06-22-04:10:
 Authorization parsing must mirror Node's `authorization.split(" ")` behavior in TypeScript gxserver: use the first space-delimited token after `Bearer`, ignore later segments, and treat an empty second segment as missing auth.
 */
 pub fn ensure_gxserver_auth_token(paths: &GxserverPaths) -> Result<GxserverAuthState> {

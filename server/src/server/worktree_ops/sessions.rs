@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+CDXC:Worktrees 2026-07-29-00:00:
 `createWorktreeSession` is one atomic server operation: optional `git fetch
 origin`, `git worktree add -b ghostex/<8hex>`, the project's own worktree setup
 command, then an ORDINARY gxserver session created through the same
@@ -19,7 +19,7 @@ The settle window between starting an agent session's provider and submitting
 its first prompt: the agent CLI has to draw its composer before typed text means
 anything.
 
-CDXC:SessionChatComposerReady 2026-08-26: this is no longer the wait itself, only
+CDXC:SessionChat 2026-08-26: this is no longer the wait itself, only
 the fallback the wait uses when the agent has no measured composer signature.
 An agent that does have one releases the prompt the moment its box appears.
 */
@@ -491,7 +491,7 @@ pub(crate) async fn start_worktree_session(
     prepared: &PreparedWorktreeCheckout,
 ) -> std::result::Result<String, ProjectWorktreeOperationError> {
     /*
-    CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+    CDXC:Zmx 2026-09-01:
     `create_and_start_worktree_session` runs SQLite and a full zmx provider
     start (subprocess spawns plus the launchd readiness poll's `thread::sleep`)
     with no await in it, so it goes to the blocking pool instead of parking an
@@ -803,7 +803,7 @@ pub(crate) fn log_worktree_session_failure(
 }
 
 /*
-CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+CDXC:Worktrees 2026-07-29-00:00:
 `removeSessionWorktree` backs the client's "last session in this worktree closed
 — remove the worktree?" prompt. It answers the dirty question BEFORE destroying
 anything, so the client can re-ask with `force`, and it only ever deletes a
@@ -832,7 +832,7 @@ pub(crate) async fn remove_session_worktree(
             DomainStateError::bad_request("worktreePath is not a worktree of this project.")
         })?;
     /*
-    CDXC:SidebarV2Worktrees 2026-07-29:
+    CDXC:Worktrees 2026-07-29:
     A checkout that is ALSO a registered project belongs to the V1 worktree
     project flow: deleting it here would remove the folder while the project row,
     its sessions and its own delete/merge affordances kept pointing at it. V2

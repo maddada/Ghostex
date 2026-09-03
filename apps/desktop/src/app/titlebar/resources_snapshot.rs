@@ -59,7 +59,7 @@ impl GhostexGpuiApp {
             HashSet::new()
         };
         /*
-        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        CDXC:Browser 2026-08-26:
         The sleep counts are accounting for every page this shell keeps loaded,
         not just the mounted project's. Inactive projects now park their browser
         pages instead of losing them on a project switch, so those pages are
@@ -217,7 +217,7 @@ impl GhostexGpuiApp {
         }
 
         /*
-        CDXC:GPUITitlebarResources 2026-08-19-12:10:
+        CDXC:Resources 2026-08-19-12:10:
         Dev Servers rows describe one listening *process*, not one listening
         socket, and never root at the app's own executables. The Ghostex shell
         listens on the CEF remote-debugging port, so rooting a row there walked
@@ -233,7 +233,7 @@ impl GhostexGpuiApp {
             .map(|server| server.pid)
             .collect::<HashSet<_>>();
         /*
-        CDXC:GPUITitlebarResources 2026-08-24:
+        CDXC:Resources 2026-08-24:
         A dev server the user started for this project keeps listening after
         the shell that launched it is gone — `bun run storybook &`, a bundler
         that daemonises itself, a session that was slept or killed — so the

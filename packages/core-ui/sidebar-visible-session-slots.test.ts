@@ -98,7 +98,7 @@ describe('createRenderedSidebarSessionSlotIds', () => {
 
   test('keeps pane-hidden rendered rows for selection readers', () => {
     /*
-     * CDXC:SidebarMultiSelect 2026-07-02-08:12:
+     * CDXC:Sessions 2026-07-02-08:12:
      * data-visible mirrors surfaced workspace panes. Shift/cmd selection reads
      * every rendered row, so pane-hidden rows must stay in rendered order while
      * collapsed rows remain excluded.
@@ -167,7 +167,7 @@ describe('resolveAdjacentRenderedSidebarSessionSlotId', () => {
 describe('resolveRenderedSidebarSessionRangeSelection', () => {
   test('selects the inclusive rendered range between active and clicked sessions', () => {
     /*
-     * CDXC:SidebarMultiSelect 2026-07-01-18:33:
+     * CDXC:Sessions 2026-07-01-18:33:
      * Shift-click range selection must follow rendered sidebar order, not raw
      * group inventory order, because collapsed projects and filters can hide rows.
      */
@@ -194,7 +194,7 @@ describe('resolveRenderedSidebarSessionRangeSelection', () => {
 describe('resolveRenderedSidebarSessionAdditiveSelection', () => {
   test('selects only the clicked session when starting a cmd-click selection', () => {
     /*
-     * CDXC:SidebarMultiSelect 2026-07-02-08:25:
+     * CDXC:Sessions 2026-07-02-08:25:
      * Cmd-click must not pull the currently active session into a fresh
      * selection; the active row is selected only when it is the clicked row.
      */

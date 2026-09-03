@@ -60,7 +60,7 @@ pub fn project_session_title_projection(session: &Value) -> Value {
 
 pub(crate) fn presentation_actions(session: &Value, activity: &str) -> Value {
     /*
-    CDXC:GxserverRustPort 2026-06-15-18:06:
+    CDXC:RepoStructure 2026-06-15-18:06:
     Phase 5 adds real zmx session I/O endpoints, so sidebar read/send/focus/sleep actions must require a confirmed provider route. A running domain row with providerState=unknown stays attachable but must not advertise live I/O until probe/start proves zmx exists.
     */
     let lifecycle = effective_lifecycle_state(session);

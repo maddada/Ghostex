@@ -145,7 +145,7 @@ static BOOL GhostexGpuiAppShotsShouldTrigger(NSEvent *event,
 
 static void GhostexGpuiAppShotsBringGhostexToFront(void) {
   /*
-  CDXC:GPUIAppShots 2026-06-29-01:29:
+  CDXC:AppShots 2026-06-29-01:29:
   App Shots capture the previously frontmost window first, then activate Ghostex
   with all app windows so the user lands back in the agent session that receives
   the staged screenshot prompt.
@@ -192,7 +192,7 @@ static NSDictionary *GhostexGpuiAppShotsFrontWindowInfo(pid_t pid) {
 
 static void GhostexGpuiAppShotsCapture(NSString *trigger) {
   /*
-  CDXC:GPUIAppShots 2026-06-25-23:07:
+  CDXC:AppShots 2026-06-25-23:07:
   GPUI App Shots mirrors macOS by taking an instant WindowServer screenshot of
   the frontmost app window and collecting only cheap CGWindow metadata. Do not
   add Accessibility tree reads, OCR, DOM scraping, terminal text inspection,
@@ -317,7 +317,7 @@ static void GhostexGpuiAppShotsHandleModifierEvent(NSEvent *event) {
   GhostexGpuiAppShotsLastCapture = timestamp;
 
   /*
-  CDXC:GPUIAppShots 2026-06-25-23:07:
+  CDXC:AppShots 2026-06-25-23:07:
   The App Shots hotkey reads shared Settings for every flagsChanged event so
   toggles and hotkey changes apply without restarting GPUI. The trigger labels
   are fixed enum-like values only; never include raw key text, app names,

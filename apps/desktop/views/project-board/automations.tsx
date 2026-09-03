@@ -74,7 +74,7 @@ export function automationTriageStatusWeight(status: AutomationRun['status']): n
 }
 
 /*
- * CDXC:AutomationsRedesign 2026-08-23:
+ * CDXC:Automations 2026-08-23:
  * The Automate surface follows the Codex scheduled-tasks look: flat list rows
  * on the left, quiet grouped label/value cards on the right, one text scale,
  * regular font weights, and default shadcn controls. All styling is Tailwind
@@ -501,7 +501,7 @@ export function AutomationDefinitionDetail({
               <IconPlayerPlay />
             </Button>
             {/*
-             * CDXC:ProjectBoardRedesign 2026-08-24:
+             * CDXC:ProjectBoard 2026-08-24:
              * Enable/pause lives only on the list rows; the detail pane keeps
              * just run/edit/delete so the same control is not shown twice.
              */}

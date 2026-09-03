@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
-CDXC:MobileSidebarIcons 2026-08-21:
+CDXC:Mobile 2026-08-21:
 The React Native sessions list needs the same glyphs the gpui sidebar draws
 from `@tabler/icons-react`: the thirteen session tag icons that replace a
 tagged row's agent icon, and the project identity glyphs a user can pick from

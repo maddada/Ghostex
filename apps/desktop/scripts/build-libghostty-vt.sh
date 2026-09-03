@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CDXC:GPUILibghosttyVt 2026-07-03:
+# CDXC:Terminal 2026-07-03:
 # Phase 1 of the GPUI cross-platform plan renders terminals as GPUI elements
 # driven by libghostty-vt, so cargo builds must produce the static archive
 # from the vendored Ghostty tree instead of depending on a manually built
@@ -16,7 +16,7 @@ set -euo pipefail
 # build with a mismatched Zig; requireZig would fail anyway, so fail with a
 # clear message instead.
 #
-# CDXC:iOSNativeTerminals 2026-05-22-11:17 (workaround retained from the
+# CDXC:Terminal 2026-05-22-11:17 (workaround retained from the
 # now-archived iOS terminal build):
 # Xcode 26's macOS SDK exposes libSystem as arm64e-only in the TBD stub,
 # which Zig 0.15.x cannot use for native aarch64 links (the libghostty-vt
@@ -24,7 +24,7 @@ set -euo pipefail
 # macosx SDK discovery to the newest Command Line Tools SDK that still
 # exports arm64 while leaving other xcrun queries on the default toolchain.
 #
-# CDXC:GPUILibghosttyVt 2026-07-11:
+# CDXC:Terminal 2026-07-11:
 # The redirect exists only for SDKs whose libSystem TBD lacks plain arm64
 # exports. Newer toolchains (Xcode 27 beta) export arm64-macos again, and
 # machines without Command Line Tools have no redirect target at all, so
@@ -106,7 +106,7 @@ sdk_exports_arm64() {
 	sed -n '/^targets:/{p;q;}' "$tbd" | grep -Eq '(^|[ \[,])arm64-macos[] ,]'
 }
 
-# CDXC:GPUILibghosttyVt 2026-07-11:
+# CDXC:Terminal 2026-07-11:
 # When no SDK on the machine can link plain arm64 (Xcode 26+/27 SDKs are
 # arm64e-only in the main libSystem document and Command Line Tools may be
 # absent), synthesize an overlay SDK next to the install prefix: symlink the

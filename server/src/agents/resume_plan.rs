@@ -31,10 +31,10 @@ pub(crate) fn build_agent_resume_plan(
     insert_optional_string(&mut plan, "runtimeCommand", input.agent_command.clone());
     if let Some(command) = primary_command {
         /*
-        CDXC:GxserverZmxLifecycle 2026-06-22-06:58:
+        CDXC:Zmx 2026-06-22-06:58:
         Provider startup must feed zmx the same restored-session startup script shape as TypeScript gxserver. Wrap daemon-owned resume commands before they reach attach metadata or `startSessionProvider` so wake/start paths print restore context and keep the command in the initial provider startup text instead of changing zmx lifecycle decisions.
 
-        CDXC:AgentResume 2026-06-22-07:47:
+        CDXC:AgentProviders 2026-06-22-07:47:
         Resume planning must keep TypeScript's separate primary/display/copy/fallback command roles. Exact Codex restores validate the stored id first, then the startup wrapper can try a trusted-title fallback without making Copy Resume include lookup shell code.
         */
         let startup_text = wrap_restored_terminal_resume_command(
@@ -65,7 +65,7 @@ pub(crate) fn get_agent_startup_text_for_session(
     settings: &Map<String, Value>,
 ) -> Option<String> {
     /*
-    CDXC:GxserverSessionIO 2026-06-22-06:53:
+    CDXC:ServerApi 2026-06-22-06:53:
     zmx attach metadata must preserve TypeScript's startup-text precedence: explicit renderer text, then queued fresh-launch text, then the daemon-owned agent resume plan shaped by current agent settings. This keeps missing-provider reattach/wake metadata from dropping restorable agent commands after the Rust cutover.
     */
     build_agent_resume_plan(project, session, settings)
@@ -108,7 +108,7 @@ pub(crate) fn to_agent_resume_input(
         Some(&launch_settings),
     );
     /*
-    CDXC:AgentResume 2026-08-29:
+    CDXC:AgentProviders 2026-08-29:
     A `custom-…` agent id names a sidebar CONFIGURATION; the CLI family it runs
     is declared by its icon — the same contract available_draft_agents,
     session_chat_composer_agent_id, and launch_agent_mismatch read. Resume
@@ -177,7 +177,7 @@ pub(crate) fn to_agent_resume_input(
 
 fn is_one_time_agent_session_command(agent_id: Option<&str>, command: &str) -> bool {
     /*
-    CDXC:AgentResume 2026-08-28:
+    CDXC:AgentProviders 2026-08-28:
     Find can create a terminal from an exact Codex history launch such as
     `codex --yolo resume <session>`. Once passive identity detection promotes that
     terminal to a Codex session, the one-time launch command remains in
@@ -904,7 +904,7 @@ pub(crate) fn build_codex_resume_lookup_command(agent_command: &str, resume_titl
 
 pub(crate) fn build_resume_lookup_command() -> String {
     /*
-    CDXC:RemoteMinimalDeps 2026-07-13:
+    CDXC:RemotePairing 2026-07-13:
     Resume lookups used to run as `node -e <script>` against the bundled
     code-server Node, which forced every host (including remote Linux
     packages) to carry a Node runtime for session restore. The lookups are

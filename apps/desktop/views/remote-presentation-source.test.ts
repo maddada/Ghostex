@@ -30,12 +30,12 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('remote presentation sidebar source', () => {
   test('marks remote cards and neutral lifecycle dots without duplicating running state', () => {
     /*
-     * CDXC:RemotePresentation 2026-06-30-00:11:
+     * CDXC:RemoteMachines 2026-06-30-00:11:
      * Remote sessions need the same card and group marker in both render paths
      * so their lifecycle chrome stays scoped to remote rows without forking the
      * shared gxserver sidebar projection.
      *
-     * CDXC:RemotePresentation 2026-06-30-11:15:
+     * CDXC:RemoteMachines 2026-06-30-11:15:
      * Remote running-idle rows use the bright running title treatment instead of a
      * redundant dot. Keep always-on neutral dots for remote sleeping/done states
      * while working, attention, and error continue to own their existing dots.
@@ -57,7 +57,7 @@ describe('remote presentation sidebar source', () => {
 
   test('keeps remote rows on the shared context menu with explicit parity affordances', () => {
     /*
-     * CDXC:RemoteContextMenu 2026-06-30-15:22:
+     * CDXC:ContextMenus 2026-06-30-15:22:
      * Remote session rows should keep using the shared session-card context menu
      * while making parity affordances intentional: basic metadata actions,
      * remote lifecycle actions, timers, fork, full reload, and below-scoped bulk

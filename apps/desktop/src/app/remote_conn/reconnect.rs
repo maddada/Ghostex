@@ -12,10 +12,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRemoteMachinesSettings 2026-06-24-14:34:
+        CDXC:RemoteMachines 2026-06-24-14:34:
         Settings `reconnectRemoteMachine` must mirror the macOS app's Remote gxserver connect button: read the saved remote machine from shared Settings, start/read the remote daemon token over SSH, store only the token in Keychain, then open a checked localhost tunnel. The command may carry only the bounded machine id, install approval flag, and automatic-attempt flag; it must not carry host/user/path/token/password/command/output data from React.
 
-        CDXC:GPUIRemoteMachines 2026-06-24-20:08:
+        CDXC:RemoteMachines 2026-06-24-20:08:
         Approved install retries should surface the existing `installing` remote-machine state while Rust uploads/installs the bundled package, but React still provides no SSH details, package paths, commands, tokens, stdout/stderr, or daemon response authority.
         */
         let Some(remote_machine_id) = command
@@ -228,7 +228,7 @@ impl GhostexGpuiApp {
                     }
                     if reconnects_active_remote_docs {
                         /*
-                        CDXC:RemoteProjectActions 2026-08-29:
+                        CDXC:RemoteMachines 2026-08-29:
                         The titlebar Actions snapshot for a remote project is
                         read from the machine that owns it, so any refresh that
                         ran while the tunnel was down came back empty. The

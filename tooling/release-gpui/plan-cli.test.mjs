@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The planner CLI's pure surface: argument parsing, scope precedence, component
  * identity inference, and the outputs the workflow graph reads. The network
  * collectors are intentionally not covered here — they are thin `gh` wrappers,

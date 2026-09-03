@@ -6,7 +6,7 @@ use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 use crate::ghostex_cli::selector;
 
 /*
-CDXC:BoardStartWork 2026-08-07:
+CDXC:ProjectBoard 2026-08-07:
 `ghostex board start-work <bead-id>` is the CLI face of gxserver's
 `/api/startBoardWork`: a thin wrapper like `run-action` and `create-agent`,
 so external orchestrators dispatch a Project Board card through the daemon
@@ -107,7 +107,7 @@ fn absolute_project_path(path: &str) -> String {
 }
 
 /*
-CDXC:BoardAssociateSession 2026-08-24:
+CDXC:ProjectBoard 2026-08-24:
 `ghostex board associate <bead-id>` is how an agent that was prompted by hand —
 "tackle bead 12345" — puts itself on the card instead of leaving it looking
 unworked. With no --session-id it links the session it is running in, read from

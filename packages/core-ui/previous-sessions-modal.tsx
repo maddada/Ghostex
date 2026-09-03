@@ -83,7 +83,7 @@ function getPreviousSessionsTagFilterMenuStyle(buttonElement: HTMLButtonElement 
   }
 
   /*
-  CDXC:PreviousSessions 2026-06-05-19:25:
+  CDXC:Sessions 2026-06-05-19:25:
   The tag filter dropdown should open directly below the filter button with its
   right edge aligned to the button. Anchor with `right` instead of a fixed-width
   `left` calculation because the grouped menu can grow wider than its minimum.
@@ -345,7 +345,7 @@ export function PreviousSessionsModal({
         setRemotePreviousSessionsCursor(undefined);
       }
       /*
-      CDXC:GxserverPresentationSearch 2026-07-07-16:15:
+      CDXC:Sessions 2026-07-07-16:15:
       The modal uses gxserver's cursor-backed history API as a paged restore
       surface. Keep the cursor opaque in React; native owns merging local and
       remote daemon pages by close time.
@@ -482,7 +482,7 @@ export function PreviousSessionsModal({
 
   useEffect(() => {
     /*
-     * CDXC:SessionTagFilters 2026-06-15-22:33:
+     * CDXC:Sessions 2026-06-15-22:33:
      * Previous Sessions tag filters mirror the Settings-managed sidebar tag
      * list. If Reset to Default or another settings change disables a selected
      * tag, clear that stale filter before the next local or gxserver query.
@@ -528,7 +528,7 @@ export function PreviousSessionsModal({
         (event.key === 'ArrowDown' || event.key === 'ArrowUp')
       ) {
         /*
-        CDXC:PreviousSessions 2026-06-15-11:26:
+        CDXC:Sessions 2026-06-15-11:26:
         The modal search field remains the focused text owner while Up/Down walks the visible previous-session rows. Keep selection in React state instead of focusing row buttons so held arrows repeat normally and the next typed character still lands in search.
         */
         if (!selectSessionByKeyboard(event.key === 'ArrowUp' ? -1 : 1)) {
@@ -806,7 +806,7 @@ export function PreviousSessionsModal({
     const requestDelay = hasRequestedInitialLoadRef.current ? PREVIOUS_SESSIONS_QUERY_DEBOUNCE_MS : 0;
     const timeoutId = window.setTimeout(() => {
       /*
-      CDXC:GxserverPresentationSearch 2026-06-01-15:08:
+      CDXC:Sessions 2026-06-01-15:08:
       Previous Sessions no longer depends on a startup-hydrated history array. Request recent/history metadata from gxserver on open and debounce typed search at 200ms so the modal remains bounded by current query results.
       */
       requestPreviousSessionsPage({ mode: 'replace' });
@@ -935,7 +935,7 @@ export function PreviousSessionsModal({
               setQuery={setSearchQuery}
             />
             {/*
-             * CDXC:PreviousSessions 2026-08-26:
+             * CDXC:Sessions 2026-08-26:
              * Sessions now uses the Saved Prompts shape: a plain search field
              * with only the search icon, and the scope and tag filters below it
              * in the shared Quick Access filter row.
@@ -994,16 +994,16 @@ export function PreviousSessionsModal({
                     style={getPreviousSessionsTagFilterMenuStyle(tagFilterButtonRef.current)}
                   >
                     {/*
-                     * CDXC:SessionTags 2026-06-05-12:30:
+                     * CDXC:Sessions 2026-06-05-12:30:
                      * Previous Sessions supports selecting one or more session
                      * tags, matching the active sidebar filter semantics. Empty
                      * selection means all tags and untagged sessions are shown.
                      *
-                     * CDXC:SessionTagFilters 2026-06-16-00:05:
+                     * CDXC:Sessions 2026-06-16-00:05:
                      * Shared tag context menus omit Priority, Progress, and Type
                      * heading rows while preserving section order and dividers.
                      *
-                     * CDXC:SessionTagFilters 2026-08-18-02:49:
+                     * CDXC:Sessions 2026-08-18-02:49:
                      * The filter list is the Settings-managed row set, including
                      * No tag, so Previous Sessions stays aligned with the sidebar.
                      */}
@@ -1127,7 +1127,7 @@ export function PreviousSessionsModal({
             ) : null}
           </div>
           {/*
-           * CDXC:PreviousSessions 2026-06-13-01:09:
+           * CDXC:Sessions 2026-06-13-01:09:
            * Previous Sessions is now a browse, filter, restore, and delete modal only. Do not render footer launch buttons here, and do not expose the removed agent-prompt search workflow from this surface.
            */}
         </div>

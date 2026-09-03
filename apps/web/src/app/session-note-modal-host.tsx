@@ -5,7 +5,7 @@ import type { OpenSessionNoteModalDetail } from './action-events';
 import type { WebSidebarRuntime } from '../sidebar-runtime/sidebar-runtime';
 
 /*
- * CDXC:SessionAgentNotes 2026-08-24:
+ * CDXC:SessionNotes 2026-08-24:
  * The web half of the session-note editor. The shared sidebar opens it through
  * the app-modal bridge, exactly as it does in the desktop app; the web shim
  * turns that into the window event this host listens for.

@@ -285,7 +285,7 @@ pub(crate) fn gpui_terminal_attachment_sanitized_filename(path: &Path) -> Result
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_remote_ssh_client_options(has_saved_password: bool) -> Vec<String> {
     /*
-    CDXC:GPUIRemoteMachinesSettings 2026-06-24-14:34:
+    CDXC:RemoteMachines 2026-06-24-14:34:
     Password-backed GPUI Remote machines use the same SSH askpass boundary as Swift: disable BatchMode, allow exactly one password prompt, and have the helper read the saved credential from Keychain. Key-only machines keep BatchMode so SSH cannot hang waiting for interactive input.
     */
     let mut arguments = vec![

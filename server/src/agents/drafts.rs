@@ -1,5 +1,5 @@
 /*
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 A DRAFT is a real, durable gxserver session row whose agent CLI is running in
 the background but which has never received a user prompt. Every new agent
 session created from the sidebar starts this way, so trust / login / upgrade
@@ -17,7 +17,7 @@ display title, the agent list the composer's "Agents" section renders, and the
 agent switch itself. Everything else in the daemon asks here rather than
 testing the key.
 
-CDXC:DraftSessions 2026-08-29 (drafts are durable):
+CDXC:Drafts 2026-08-29 (drafts are durable):
 A draft is never thrown away on its own. It survives navigating to another
 session, sleeping, and daemon restarts, whether or not anything has been typed
 into it, and leaves the sidebar by exactly two routes: the user deletes it, or
@@ -83,7 +83,7 @@ much they actually prove.
    is. A title cannot distinguish "the user prompted me" from "I am booting":
    Codex's startup spinner paints exactly the same working title (see
    `default_activity`). The daemon already has a policy for that — layer 1 of
-   CDXC:ActivitySuppressionPolicy — and drafts lean on it rather than inventing
+   CDXC:AgentScreenDetection — and drafts lean on it rather than inventing
    a second one: `arm_draft_launch_activity_suppression` re-arms the launch
    window on EVERY draft provider start, so a boot spinner is folded back to
    idle and never reaches this function with a timestamp.
@@ -130,7 +130,7 @@ pub(crate) fn promote_draft_on_prompt_evidence(
 }
 
 /*
-Re-arms layer 1 of CDXC:ActivitySuppressionPolicy on a draft — the same reset a
+Re-arms layer 1 of CDXC:AgentScreenDetection on a draft — the same reset a
 launch, resume or wake performs — so passive title signals are folded back to
 idle for the window instead of stamping `lastActiveAt`.
 
@@ -201,7 +201,7 @@ pub(crate) fn kill_draft_session_provider(session: &Value) {
 }
 
 /*
-CDXC:DraftSessions 2026-08-28 (stranded quick projects):
+CDXC:Drafts 2026-08-28 (stranded quick projects):
 `/api/createQuickAgentSession` creates a throwaway workspace before it creates
 the draft that lives in it: a project row marked `launchSettings.isQuick`, whose
 `path` is a real directory `create_quick_project_params` made under
@@ -408,7 +408,7 @@ pub(crate) fn draft_display_title(content: &str) -> Option<String> {
 }
 
 /*
-CDXC:DraftSessions 2026-08-28 (agent switching):
+CDXC:Drafts 2026-08-28 (agent switching):
 Only chat-supported agents can be switched to, because the composer that offers
 the switch can only read a transcript it has a decoder for. `openclaude` and
 `grok-build` are alternate ids for the Claude and Grok families, so they map
@@ -523,14 +523,14 @@ pub(crate) fn available_draft_agents(project: &Value) -> Value {
 }
 
 /*
-CDXC:DraftSessions 2026-08-28 (agent switching):
+CDXC:Drafts 2026-08-28 (agent switching):
 `/api/switchDraftAgent`. A draft holds no conversation, so this needs no
 confirmation and destroys nothing: forget the agent identity the old CLI
 published, rebuild the launch plan through the SAME resolution
 `/api/createAgentSession` uses (so a switched draft is indistinguishable from
 one created with the new agent), and get the new CLI running.
 
-CDXC:DraftSessions 2026-08-28 (live-pane switching):
+CDXC:Drafts 2026-08-28 (live-pane switching):
 "Get the new CLI running" has two shapes, and which one runs is decided by the
 provider probe — never by a failure.
 
@@ -636,7 +636,7 @@ pub(crate) fn switch_draft_agent(
     agent's `agentName`, which would keep naming a CLI that is no longer running
     until the new one's first event; and dropping it makes the rebuild below
     mint a fresh `default_activity`, which arms layer 1 of
-    CDXC:ActivitySuppressionPolicy — so the new CLI's startup spinner is folded
+    CDXC:AgentScreenDetection — so the new CLI's startup spinner is folded
     back to idle instead of stamping `lastActiveAt` and promoting the very draft
     the user just switched.
     */
@@ -700,7 +700,7 @@ pub(crate) fn switch_draft_agent(
     draft, which is being relaunched with nothing to do — and it would hand the
     new CLI's startup spinner an already-expired suppression stamp to promote
     the draft through. Seed the idle default instead: it names the NEW agent and
-    arms layer 1 of CDXC:ActivitySuppressionPolicy from this instant, so the
+    arms layer 1 of CDXC:AgentScreenDetection from this instant, so the
     window is already open before the CLI below is typed or started.
     */
     let mut next_runtime_settings = resolved
@@ -744,7 +744,7 @@ pub(crate) fn switch_draft_agent(
         Cancel first so a send the user queued against the OLD agent cannot land
         between the interrupts and the new CLI, exactly as `interruptSessionChat`
         does; then enqueue the whole reuse as ONE job on the per-session worker.
-        One job because CDXC:SessionChatSerializedWriters: separate jobs may be
+        One job because CDXC:SessionChat: separate jobs may be
         separated by somebody else's, and every byte below has to reach this pty
         in order.
         */

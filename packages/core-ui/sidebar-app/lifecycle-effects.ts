@@ -42,7 +42,7 @@ export type SidebarStartupDiagnosticEffectsOptions = {
 };
 
 /*
- * CDXC:SidebarHookDecomposition 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * SidebarApp's three startup/refresh diagnostic effects, kept together and in
  * their original relative order: app mount/unmount lifetime, the one-shot
  * initial collapse-state read, and the deduplicated render-state trace.
@@ -70,7 +70,7 @@ export function useSidebarStartupDiagnosticEffects({
 }: SidebarStartupDiagnosticEffectsOptions) {
   useEffect(() => {
     /*
-    CDXC:SidebarRefreshDiagnostics 2026-06-06-23:18:
+    CDXC:Diagnostics 2026-06-06-23:18:
     The mount/unmount diagnostic must describe the React app lifetime only. Including effect-event callbacks in this dependency list made every hydrate render look like an app remount in persistent logs, hiding the real refresh cadence and adding avoidable Debugging Mode noise.
     */
     const instanceId = refreshDebugInstanceIdRef.current;
@@ -169,7 +169,7 @@ export type SidebarHostMessageListenersOptions = {
 };
 
 /*
- * CDXC:SidebarHookDecomposition 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * Both inbound host channels — extension-style postMessage and the Ghostex
  * native host custom event — feed the SAME handler, so they stay one hook.
  */
@@ -275,7 +275,7 @@ export type SidebarDocumentChromeEffectsOptions = {
 };
 
 /*
- * CDXC:SidebarHookDecomposition 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * The two effects that publish sidebar chrome onto <body>: the workspace theme
  * / custom titlebar color variables, and the Agent Manager zoom variable.
  */
@@ -296,7 +296,7 @@ export function useSidebarDocumentChromeEffects({
     );
     if (normalizedThemeColor) {
       /**
-       * CDXC:WorkspaceTheme 2026-05-05-02:58
+       * CDXC:Theming 2026-05-05-02:58
        * Custom workspace colors are active-project sidebar theme overrides:
        * keep the preset data-sidebar-theme as fallback, but publish validated
        * CSS variables so the app-level theme surfaces derive from the color.
@@ -314,7 +314,7 @@ export function useSidebarDocumentChromeEffects({
     }
 
     /**
-     * CDXC:AccentColor 2026-08-24:
+     * CDXC:Theming 2026-08-24:
      * The accent color is a plain always-on chrome token, so publish it next to
      * the theme variables instead of gating it behind the custom chrome toggle.
      */

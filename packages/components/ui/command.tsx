@@ -76,10 +76,10 @@ function CommandInput({
     <div data-slot='command-input-wrapper' className='p-1 pb-0'>
       <InputGroup className='h-9 bg-input/30'>
         {/*
-         * CDXC:SearchInputs 2026-06-04-02:59:
+         * CDXC:DesignSystem 2026-06-04-02:59:
          * Command-backed search boxes, including Settings icon search, should match the sidebar search affordance by keeping the search icon on the right while empty and replacing it with a focused clear button after typing.
          *
-         * CDXC:SearchInputs 2026-06-04-03:11:
+         * CDXC:DesignSystem 2026-06-04-03:11:
          * Escape on a focused non-empty command search clears the query by default the same way as the X button instead of closing the surrounding popover first.
          *
          * CDXC:CommandPalette 2026-06-15-16:21:
@@ -132,7 +132,7 @@ function CommandList({ className, ...props }: React.ComponentProps<typeof Comman
       data-slot='command-list'
       className={cn(
         /*
-         * CDXC:ScrollFades 2026-06-19-14:16:
+         * CDXC:DesignSystem 2026-06-19-14:16:
          * Command palettes and command-backed pickers should use the same
          * Codex-style scroll-container fade as the macOS sidebar instead of
          * bespoke gray shadows or unfaded clipped edges.

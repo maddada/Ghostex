@@ -22,7 +22,7 @@ type BunSpawnSync = (options: { cmd: string[]; env?: Record<string, string>; std
 
 function runNodeScript(script: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): string {
   /*
-  CDXC:CursorCLI 2026-06-10-18:17:
+  CDXC:AgentProviders 2026-06-10-18:17:
   The Cursor chat lookup uses Node's built-in sqlite module in production through Ghostex's bundled code-server Node. Tests run under Bun, so invoke Node as a subprocess instead of importing `node:sqlite` into the test runner.
   */
   const childEnv = Object.fromEntries(

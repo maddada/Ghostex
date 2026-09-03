@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GPUI_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$GPUI_DIR/../.." && pwd)"
 APP_NAME="${GHOSTEX_GPUI_APP_NAME:-Ghostex}"
-# CDXC:GPUIBundleIdentity 2026-06-28-16:18:
+# CDXC:Release 2026-06-28-16:18:
 # GPUI source and packaged helper identity should no longer carry the historical phase label. Use one stable GPUI bundle id so CEF helper bundle ids and the lid-sleep helper label match the app's current product identity.
 GPUI_BUNDLE_ID="${GHOSTEX_GPUI_BUNDLE_ID:-com.madda.ghostex.gpui}"
 GPUI_LID_SLEEP_HELPER_LABEL="$GPUI_BUNDLE_ID.LidSleepHelper"
@@ -101,7 +101,7 @@ case "$(printf '%s' "$GHOSTEX_GPUI_NOTARIZE" | tr '[:upper:]' '[:lower:]')" in
 esac
 GHOSTEX_NOTARY_PROFILE="${GHOSTEX_NOTARY_PROFILE:-notarytool-profile}"
 
-# CDXC:GPUISettingsSounds 2026-06-24-12:10:
+# CDXC:Notifications 2026-06-24-12:10:
 # Packaged GPUI Settings must preview completion sounds and run test-agent-completion from the same trusted bundle path used by the runtime lookup. Keep the packaged asset set explicit and copy only repository-owned MP3s into Contents/Resources/sidebar/sounds so React-provided values cannot expand playback to arbitrary paths.
 completion_sound_assets=(
 	arcade.mp3
@@ -177,7 +177,7 @@ validate_cli_resources() {
 	local missing=0
 	local skill_name
 
-	# CDXC:GhostexRustCli 2026-07-13: the public CLI is the native `ghostex`
+	# CDXC:Cli 2026-07-13: the public CLI is the native `ghostex`
 	# binary staged inside the app-owned gxserver package (no Node module or
 	# shell launcher sources are needed anymore).
 	if [[ ! -x "$GXSERVER_SOURCE_DIR/bin/ghostex" ]]; then
@@ -206,7 +206,7 @@ validate_portless_admin_runtime_resources() {
 			missing=1
 		fi
 	elif [[ "${GHOSTEX_LOCAL_START:-0}" == "1" && ! -f "$WEB_SOURCE_DIR/code-server/out/node/entry.js" ]]; then
-		# CDXC:LocalStartSourceOptional 2026-08-09:
+		# CDXC:Build 2026-08-09:
 		# prepare-macos-runtime.sh already treats a missing code-server checkout
 		# as an optional skip for local starts ("Skipping optional Source
 		# editor"), so failing here on the runtime it deliberately did not stage
@@ -245,7 +245,7 @@ validate_local_gxserver_runtime_resources() {
 	local missing=0
 	local required_path executable_path
 
-	# CDXC:GPUIStartCommand 2026-07-08-04:55:
+	# CDXC:Build 2026-07-08-04:55:
 	# `bun run start` refreshes apps/desktop/runtime/macos/Web through the GPUI-owned
 	# shared-resource build, then this packager seals the
 	# app-owned gxserver package into the GPUI bundle. Runtime should resolve
@@ -280,7 +280,7 @@ validate_local_gxserver_runtime_resources() {
 	fi
 }
 
-# CDXC:GPUILocalToolchainValidation 2026-08-10:
+# CDXC:Build 2026-08-10:
 # Local cargo builds invoke cef-dll-sys, whose CMake setup selects the Ninja
 # generator unconditionally but reports a generic "build program not found"
 # error that is easy to misread as a compiler or CEF issue. Fail up front with
@@ -314,7 +314,7 @@ validate_build_toolchain_dependencies() {
 	fi
 }
 
-# CDXC:GPUIGhosttyKitLocalPrereq 2026-08-10:
+# CDXC:Build 2026-08-10:
 # apps/desktop/build.rs links the repo-local GhosttyKit static archive by exact path
 # (apps/desktop/build.rs links .dependencies/ghostty/macos/GhosttyKit.xcframework/.../ghostty-internal.a).
 # The dev path never builds it; the release pipeline does. Detecting the absence
@@ -440,7 +440,7 @@ build_gpui_lid_sleep_helper() {
 	local helper_swift_developer_dir
 	local helper_sdk_path
 
-	# CDXC:GPUITitlebarKeepAwake 2026-06-26-00:09:
+	# CDXC:KeepAwake 2026-06-26-00:09:
 	# Packaged GPUI closed-lid Keep Awake must ship the real Swift privileged helper under the GPUI helper label. Build from the native app's reviewed helper/protocol sources with an embedded helper bundle id so GPUI installs the same narrow XPC daemon instead of a stub or direct pmset path.
 	rm -rf "$helper_build_dir"
 	mkdir -p "$helper_build_dir"
@@ -643,7 +643,7 @@ stage_remote_gxserver_linux_package_if_available() {
 		printf '%s\n' "$validation_output" >&2
 		exit 1
 	fi
-	# CDXC:GPUIRemoteMachines 2026-06-24-20:08:
+	# CDXC:RemoteMachines 2026-06-24-20:08:
 	# GPUI remote gxserver install parity may stage only explicit prebuilt Linux packages into Contents/Resources/Web. Validate required gxserver/zmx/bd/Node/Portless/CLI resources and reject Mach-O or wrong-architecture payloads before copying, so runtime install never falls back to source checkout paths or uploads a host macOS package to Linux.
 	rm -rf "$target_dir"
 	mkdir -p "$target_dir"
@@ -839,7 +839,7 @@ prepare_gpui_app_bundle_path() {
 		return
 	fi
 
-	# CDXC:GPUIPackaging 2026-06-26-05:23:
+	# CDXC:Release 2026-06-26-05:23:
 	# Rebuilding GPUI must replace the app bundle even when the previous CEF framework leaves a partially removable directory tree. Move the old bundle off the canonical path first, then best-effort clean the stale bundle so packaging can create a fresh app without launching, restarting, or relying on in-place framework deletion.
 	local stale_app_path="$APP_PATH.stale.$$"
 	rm -rf "$stale_app_path"
@@ -1052,10 +1052,10 @@ for asset in "${completion_sound_assets[@]}"; do
 	install -m 0644 "$SOUND_SRC_DIR/$asset" "$SOUND_DEST_DIR/$asset"
 done
 
-# CDXC:GPUISettingsCliInstall 2026-06-24-12:56:
+# CDXC:Cli 2026-06-24-12:56:
 # GPUI Settings CLI repair may only link public wrappers to app-owned bundled resources. Stage the public ghostex/gx commands and bundled Ghostex skills under Contents/Resources/CLI so packaged repairs and fixed `ghostex ... install-skill` actions do not depend on a source checkout.
-# CDXC:CodexSessionMove 2026-06-26-13:47: The GPUI app bundle must carry `$ghostex-move-codex-session` with the other CLI skills so `ghostex move-codex-session install-skill` works from installed builds.
-# CDXC:GhostexRustCli 2026-07-13: `ghostex` is the native Rust CLI from the
+# CDXC:AgentSkills 2026-06-26-13:47: The GPUI app bundle must carry `$ghostex-move-codex-session` with the other CLI skills so `ghostex move-codex-session install-skill` works from installed builds.
+# CDXC:Cli 2026-07-13: `ghostex` is the native Rust CLI from the
 # app-owned gxserver package; `gx` is a bundle-internal symlink to it.
 rm -rf "$CLI_DIR"
 mkdir -p "$CLI_DIR/skills"
@@ -1070,9 +1070,9 @@ for skill_name in "${bundled_cli_skill_assets[@]}"; do
 	copy_cli_skill "$skill_name"
 done
 
-# CDXC:GPUISourceRuntime 2026-06-24-23:17:
+# CDXC:CodeEditor 2026-06-24-23:17:
 # Stage the full native-reviewed Web/code-server runtime beside the GPUI app resources so Source opens from the packaged app exactly like macOS. Portless still reuses Web/code-server/lib/node and must not carry a second Node runtime.
-# CDXC:GPUIStartCommand 2026-07-08-04:55:
+# CDXC:Build 2026-07-08-04:55:
 # GPUI local starts seal the freshly built app-owned gxserver package and shared
 # Web/bin tools into Contents/Resources/Web, matching the native start command's
 # daemon ownership instead of launching against the main Ghostex.app bundle.
@@ -1106,7 +1106,7 @@ cat >"$APP_PATH/Contents/Info.plist" <<EOF_PLIST
 	<string>$GPUI_BUNDLE_ID</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
-	<!-- CDXC:GPUIOSIntegration 2026-06-24-13:15:
+	<!-- CDXC:OsIntegration 2026-06-24-13:15:
 	GPUI packaging must mirror the Swift app Launch Services declarations so Settings can report the packaged app as an available editor, script handler, and ghostex:// target.
 	Use LSHandlerRank Alternate here because app installation should only register GPUI as a candidate handler; explicit Settings actions own default-setting mutations.
 	Helper app plists intentionally omit these declarations because only the main app bundle should register document and URL handling.
@@ -1250,7 +1250,7 @@ stage_gpui_lid_sleep_helper
 stage_gpui_ghostex_editor_app
 stage_gpui_sparkle_framework_if_available
 
-# CDXC:GPUICefDistribution 2026-08-03:
+# CDXC:Release 2026-08-03:
 # The GPUI shell consumes the CEF distribution pinned by cef-rs. Development
 # bundles keep the framework in Contents/Frameworks. Release bundles keep only
 # the small helper apps and seal the separately signed framework component into
@@ -1268,7 +1268,7 @@ notarize_and_staple_gpui_app_if_requested
 # bundle bit as kLSNoExecutableErr.
 /usr/bin/SetFile -a B "$APP_PATH"
 
-# CDXC:GPUIMacBundlePackaging 2026-08-03:
+# CDXC:Release 2026-08-03:
 # The GPUI macOS app retains CEF helper apps in every bundle. Development apps
 # also embed the framework; release apps resolve the verified shared component.
 printf 'Built %s for %s (%s)\n' "$APP_PATH" "$GHOSTEX_MACOS_ARCH" "$RUST_TARGET_ARCH"

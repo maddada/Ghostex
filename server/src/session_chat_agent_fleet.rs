@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatAgentFleet 2026-08-23:
+CDXC:AgentScreenDetection 2026-08-23:
 The sub-agents Claude Code is running, which exist ONLY on its terminal
 screen. It paints them as a block pinned below the statusline:
 

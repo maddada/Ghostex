@@ -1,5 +1,5 @@
 /**
- * CDXC:TerminalThemeSettings 2026-04-29-09:32
+ * CDXC:Theming 2026-04-29-09:32
  * Ghostty themes are selected by exact string name. Keep the bundled theme
  * names in source so the settings modal can offer the same built-in choices
  * that Ghostty exposes through its documented `theme` configuration.

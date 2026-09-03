@@ -78,7 +78,7 @@ impl GpuiSidebarCommandRunFeedbackState {
         action: &GpuiTitlebarAction,
     ) -> GpuiTitlebarActionRunMode {
         /*
-        CDXC:GPUITitlebarActions 2026-06-27-09:26:
+        CDXC:Titlebar 2026-06-27-09:26:
         GPUI Rust titlebar Actions do not run through the React command-palette click handler, so they need the same sanitized feedback rule locally: a close-on-exit terminal Action reruns in Debug only after its previous run ended in error and no newer run is active. Store only run ids plus coarse state; never derive Debug from command text, URLs, paths, env, output, status files, terminal content, or logs.
         */
         if action.run_mode != GpuiTitlebarActionRunMode::Default {
@@ -136,7 +136,7 @@ pub(crate) fn gpui_command_pane_action_runtime_close_terminal_on_exit(
     _requested_close_terminal_on_exit: bool,
 ) -> bool {
     /*
-    CDXC:GPUICommandPaneActions 2026-06-26-04:59:
+    CDXC:CommandPane 2026-06-26-04:59:
     Native `runNativeSidebarCommand` forces command-pane Action close-on-exit off so each Action keeps a reusable command tab after completion. GPUI may still parse and save legacy `closeTerminalOnExit` fields, but every command-pane Action runtime boundary must normalize the requested value to false and must not close the completed Action tab.
     */
     false
@@ -144,10 +144,10 @@ pub(crate) fn gpui_command_pane_action_runtime_close_terminal_on_exit(
 
 pub(crate) fn gpui_command_pane_default_action_should_focus_command_pane() -> bool {
     /*
-    CDXC:GPUICommandPaneActions 2026-06-27-01:45:
+    CDXC:CommandPane 2026-06-27-01:45:
     Default terminal Actions mirror native `runNativeSidebarCommand` with `createCommandTerminal(..., { focusAfterCreate: false })`: select/open the Action command tab and publish running state without moving shell typing focus into CommandPane. Do not add fallback focus behavior here; focus remains explicit through command-pane controls, tab clicks, direct context actions, F12/open-panel routes, command hotkeys, and Debug Actions.
 
-    CDXC:GPUICommandPaneActions 2026-06-27-01:45:
+    CDXC:CommandPane 2026-06-27-01:45:
     The default Action focus policy is privacy-neutral and state-only: it must not inspect command text, cwd, project paths, terminal output, URLs, titles, env vars, or user content to decide focus. Native parity is unconditional for default terminal Actions.
     */
     false
@@ -176,7 +176,7 @@ pub(crate) fn command_pane_control_action_selects_clicked_group_before_dispatch(
     action: CommandPaneControlAction,
 ) -> bool {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-22:01:
+    CDXC:CommandPane 2026-06-25-22:01:
     Native command titlebar actions call through the clicked owner titlebar and focus that command session before dispatch. GPUI fixed command-panel controls must retarget the clicked command group for Pin/Unpin and Minimize instead of falling back to the previously focused group; New Terminal already carries explicit insertion targeting.
     */
     matches!(
@@ -207,10 +207,10 @@ pub(crate) fn command_pane_control_action_focuses_command_pane(
     is_expanded_after: bool,
 ) -> bool {
     /*
-    CDXC:GPUICommandPaneFocus 2026-06-25-18:27:
+    CDXC:FocusRouting 2026-06-25-18:27:
     Native command titlebar actions focus the command terminal before dispatch, including Pin/Unpin on already-expanded panels. GPUI command-pane controls use the same focus policy so action clicks update command-pane focus without clearing project-editor workspace mode.
 
-    CDXC:GPUICommandAttention 2026-06-25-19:58:
+    CDXC:Notifications 2026-06-25-19:58:
     Any titlebar control that focuses an existing command session should also acknowledge that session's Attention state, matching native command titlebar focus while leaving non-focusing Minimize and new idle command creation out of the acknowledgement path.
     */
     match action {

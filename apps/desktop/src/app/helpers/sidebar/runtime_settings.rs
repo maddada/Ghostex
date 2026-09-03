@@ -23,7 +23,7 @@ pub(crate) fn gpui_sidebar_open_browser_url_from_json(
     toolbar path as typed input, so renderer payloads cannot smuggle project
     ids, paths, commands, tokens, or raw renderer envelopes into Browser state.
 
-    CDXC:GPUIRemoteBrowserTabs 2026-07-12:
+    CDXC:Browser 2026-07-12:
     The one exception is the optional first-party sidebar `projectId`, which
     must be a known browser project key shape — a local `P…` workspace id or a
     machine-scoped `remote:<machine>:project:<id>` reference — so project
@@ -160,10 +160,10 @@ pub(crate) fn sidebar_runtime_settings_snapshot_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> cef::SidebarRuntimeSettingsSnapshot {
     /*
-    CDXC:GPUIProjectSidebarBridge 2026-06-23-06:36:
+    CDXC:CefRuntime 2026-06-23-06:36:
     The sidebar CEF runtime settings handoff must use the same shared sidebar settings file and strict boolean interpretation as SidebarApp. These booleans seed TS-side payload and workarea behavior only; Docs titlebar visibility stays governed by project context, not debuggingMode/showBetaFeatures.
 
-    CDXC:GPUISettingsSidebarHandoff 2026-06-24-11:22:
+    CDXC:Settings 2026-06-24-11:22:
     The GPUI sidebar runtime snapshot now also carries the saved shared Settings object as serialized first-party payload so the mounted SidebarApp can normalize real user preferences immediately on initial CEF install and after Settings saves. This is not a generic settings bus and must not write logs, persist another copy, or expose settings to Browser/workarea/modal CEF clients.
     */
     cef::SidebarRuntimeSettingsSnapshot {

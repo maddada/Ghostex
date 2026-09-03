@@ -17,7 +17,7 @@ import type {
 import type { WebviewApi } from './webview-api';
 
 /**
- * CDXC:SidebarContextMenu 2026-07-30:
+ * CDXC:ContextMenus 2026-07-30:
  * The one margin every sidebar context menu and submenu panel keeps from the
  * webview edges. Exported so stacked submenu portals clamp against the same
  * number this portal does.
@@ -78,7 +78,7 @@ declare global {
 }
 
 /**
- * CDXC:SidebarContextMenu 2026-05-20-13:05:
+ * CDXC:ContextMenus 2026-05-20-13:05:
  * Native AppKit surfaces dismiss open sidebar context menus through this hook
  * while leaving the user's original click intact.
  */
@@ -125,7 +125,7 @@ function getCssPixelValue(value: CSSProperties[keyof CSSProperties]): number | u
 }
 
 /**
- * CDXC:SidebarContextMenu 2026-07-30:
+ * CDXC:ContextMenus 2026-07-30:
  * Exported so submenu panels — which are separate portals stacked above this
  * one, not children of it — clamp against the viewport with the SAME margin the
  * parent menu uses. A second copy of this arithmetic is how the parent menu and
@@ -163,7 +163,7 @@ function getViewportClampedMenuStyle(menuStyle: CSSProperties | undefined, menuE
   return {
     ...menuStyle,
     /*
-     * CDXC:SidebarContextMenu 2026-05-27-06:19:
+     * CDXC:ContextMenus 2026-05-27-06:19:
      * Session and project context menus must use their rendered size, not a
      * pre-render row-count estimate, when opened near the bottom of the sidebar.
      * Clamp the fixed portal surface inside the viewport so optional rows,
@@ -225,24 +225,24 @@ function dispatchBackdropContextMenuToRetarget(event: ReactMouseEvent<HTMLButton
 }
 
 /**
- * CDXC:SidebarContextMenu 2026-05-20-12:30:
+ * CDXC:ContextMenus 2026-05-20-12:30:
  * Session and project context menus use a transparent backdrop above sidebar
  * rows/cards and below the menu so in-sidebar clicks dismiss without activating
  * the target underneath. Native listens for clicks outside the sidebar webview
  * and calls dismissAllSidebarContextMenus() so workspace/titlebar clicks both
  * close the menu and reach their original target.
  *
- * CDXC:SidebarContextMenu 2026-05-21-04:35:
+ * CDXC:ContextMenus 2026-05-21-04:35:
  * Native open/close notifications must run in useLayoutEffect so the AppKit
  * outside-click monitor is armed before the user can click a terminal pane.
  *
- * CDXC:SidebarContextMenu 2026-06-02-21:07:
+ * CDXC:ContextMenus 2026-06-02-21:07:
  * A second right-click on a sidebar session while another context menu is open
  * must dismiss the old menu and open the menu owned by the session under the
  * pointer. Retarget backdrop contextmenu events to the underlying element so
  * session rows keep priority over the surrounding project/group menu.
  *
- * CDXC:ScrollFades 2026-06-19-14:16:
+ * CDXC:DesignSystem 2026-06-19-14:16:
  * Viewport-clamped sidebar context menus can become internal scroll areas.
  * Apply the shared Codex-style edge fade at this portal boundary so session,
  * project, reference, and filter menus stay visually consistent when they

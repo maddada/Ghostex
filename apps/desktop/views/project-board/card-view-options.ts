@@ -1,5 +1,5 @@
 /*
- * CDXC:ProjectBoardRedesign 2026-08-24:
+ * CDXC:ProjectBoard 2026-08-24:
  * The Kanban "View" menu lets the user hide every card detail except the
  * title. The preference is app-wide (one look for every project's board) and
  * survives restarts, so it lives in the CEF app-UI profile's localStorage

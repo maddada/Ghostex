@@ -5,7 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /*
- CDXC:ReleaseAutomation 2026-09-02-12:40:
+ CDXC:Release 2026-09-02-12:40:
  Release 8.5.0's first Actions run (33462783752) failed only in the Android job:
  `bun run build:mobile-chat` died with ERR_MODULE_NOT_FOUND for `esbuild`, which
  tooling/build-mobile-chat.mjs imports directly but nothing declared in the root

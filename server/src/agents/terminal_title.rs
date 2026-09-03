@@ -204,7 +204,7 @@ pub(crate) fn normalize_spaces(value: &str) -> String {
 
 pub(crate) fn is_leading_title_marker(ch: char) -> bool {
     /*
-    CDXC:GxserverSessionTitles 2026-06-29-01:21:
+    CDXC:SessionTitles 2026-06-29-01:21:
     Factory Droid terminal titles can prefix visible session names with the U+26EC status marker.
     Strip it at the same boundary as Claude, Codex, Cursor, Gemini, and Copilot title chrome so copied details and sidebar rows show the semantic title instead of provider decoration.
     */

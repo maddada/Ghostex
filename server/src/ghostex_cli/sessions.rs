@@ -12,7 +12,7 @@ use crate::ghostex_cli::rpc::{
 use crate::ghostex_cli::{actions, selector, set_exit_code};
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's gxserver session inventory surface:
 sessionsCommand (--json / --mobile-summary / grouped human list),
 fetchGxserverSessionList with the persisted-state SQLite fallback, toCliSession,
@@ -143,7 +143,7 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
     let flags = &parsed.flags;
     /*
-     * CDXC:MobileSidebarHud 2026-07-12-00:00:
+     * CDXC:AgentLauncher 2026-07-12-00:00:
      * The mobile summary is the one poll React Native Android makes, so it also carries
      * the gxserver-owned agent launcher rows and per-project quick actions.
      * HUD fetch failures must never break the session list; mobile simply
@@ -245,7 +245,7 @@ fn is_configured_mobile_quick_action(command: &Value) -> bool {
 
 pub fn run_quick_action_command(args: &[String]) -> CliResult<()> {
     /*
-     * CDXC:MobileQuickActions 2026-07-12-00:00:
+     * CDXC:Mobile 2026-07-12-00:00:
      * Mobile quick actions cannot reuse `run-command`: that routes through
      * gxserver renderer commands into the desktop app's command pane, which
      * the phone cannot see. `run-action` resolves the trusted HUD command on
@@ -399,7 +399,7 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
     let projects_response = call_gxserver_rpc("/api/listProjects", &json!({}), flags)?;
     let recent_projects_response = call_gxserver_rpc("/api/listRecentProjects", &json!({}), flags)?;
     /*
-     * CDXC:GxserverActiveOnlySessionList 2026-09-01:
+     * CDXC:StateSync 2026-09-01:
      * The default inventory drops stopped rows a few lines below, and mobile
      * re-runs `ghostex sessions --json --mobile-summary` over SSH every few
      * seconds per machine, so asking for them at all meant shipping the whole
@@ -438,7 +438,7 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         project_by_id.insert(value_key(project.get("projectId")), *project);
     }
     /*
-     * CDXC:GxserverSessionInventory 2026-05-31-08:45 / 2026-06-04-03:33:
+     * CDXC:StateSync 2026-05-31-08:45 / 2026-06-04-03:33:
      * Default lists include running and sleeping sessions and hide stopped
      * rows; diagnostic callers may opt into stopped rows with
      * --all/--include-stopped. Presentation activity is overlaid onto the CLI
@@ -476,7 +476,7 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
     result.insert("ok".to_string(), json!(true));
     result.insert("product".to_string(), json!(GXSERVER_PRODUCT));
     /*
-     * CDXC:MobileProjectIcons 2026-08-21:
+     * CDXC:Icons 2026-08-21:
      * A project's DISCOVERED icon (the favicon its own repository ships) lives
      * only in the daemon's project_icon cache, so the CLI cannot read it: it is
      * a separate process with an empty cache. The presentation snapshot already
@@ -514,7 +514,7 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
     insert_present(&mut result, "revision", sessions_response.get("requestId"));
     result.insert("sessions".to_string(), Value::Array(cli_sessions));
     /*
-     * CDXC:WorkspaceSessionGroups 2026-07-12-00:00:
+     * CDXC:Sessions 2026-07-12-00:00:
      * gxserver's presentation snapshot carries the GPUI-authored named session
      * groups and sidebar project order; pass them through for mobile.
      */
@@ -524,7 +524,7 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         snapshot.and_then(|snapshot| snapshot.get("workspaceGroups")),
     );
     /*
-     * CDXC:SidebarProjectCollections 2026-07-18-00:00:
+     * CDXC:Projects 2026-07-18-00:00:
      * The presentation snapshot also carries the colored project-collection
      * overlay ("Group N" wrappers) so phones can render and edit the same
      * grouped project list as the desktop sidebar.
@@ -535,7 +535,7 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         snapshot.and_then(|snapshot| snapshot.get("sidebarProjectCollections")),
     );
     /*
-     * CDXC:SidebarSpaces 2026-08-27:
+     * CDXC:Spaces 2026-08-27:
      * The snapshot also carries the daemon-owned saved sidebar filters so
      * phones render and edit the same Space row as the desktop sidebar.
      */
@@ -545,7 +545,7 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         snapshot.and_then(|snapshot| snapshot.get("sidebarSpaces")),
     );
     /*
-     * CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+     * CDXC:StateSync 2026-07-29-00:00:
      * Machine-scoped capability flags travel with the inventory so a client
      * talking to an older daemon hides settle/snooze affordances instead of
      * issuing RPCs that endpoint does not have.
@@ -614,7 +614,7 @@ fn cli_session_key(project_id: Option<&Value>, session_id: Option<&Value>) -> St
 
 fn is_active_gxserver_inventory_project(project: &Value) -> bool {
     /*
-     * CDXC:ProjectVisibility 2026-06-30-21:23:
+     * CDXC:Projects 2026-06-30-21:23:
      * Filter shared inventory from gxserver domain visibility fields so parked
      * Recent Projects and hidden Remote Attach carrier projects do not reach
      * mobile summaries or full session lists.
@@ -790,7 +790,7 @@ fn build_persisted_gxserver_session_list(
             .collect()
     };
     /*
-     * CDXC:CliSessions 2026-06-03-20:28:
+     * CDXC:Cli 2026-06-03-20:28:
      * Bridge-down session inventory degrades from gxserver's own durable state.
      * Keep the fallback read-only and visibly marked so humans and Android can
      * distinguish stale persisted rows from live daemon data.
@@ -938,7 +938,7 @@ fn to_cli_session(
     ]);
     let title = js_coalesce(&[p("title"), s("title")]);
     /*
-     * CDXC:GxserverSessionInventory 2026-06-22-00:47:
+     * CDXC:StateSync 2026-06-22-00:47:
      * Prefer presentation identity for the agent provider session id because
      * it is already the UI contract; fall back to listSessions runtime
      * metadata when a snapshot row is unavailable.
@@ -952,7 +952,7 @@ fn to_cli_session(
         s("runtimeSettings").and_then(|value| value.get("agentSessionPath")),
     ]));
     /*
-     * CDXC:GxserverSessionTitles 2026-06-07-09:33:
+     * CDXC:SessionTitles 2026-06-07-09:33:
      * Expose gxserver's rendered display title separately from the raw durable
      * title so clients can show unsynced/placeholder chrome without leaking
      * display glyphs into rename or restore payloads.
@@ -985,7 +985,7 @@ fn to_cli_session(
     insert_js(&mut map, "isPinned", &[p("isPinned"), s("isPinned")]);
     insert_js(&mut map, "sessionTag", &[p("sessionTag"), s("sessionTag")]);
     /*
-     * CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+     * CDXC:StateSync 2026-07-29-00:00:
      * Settle/snooze is server-owned inbox state, so the CLI inventory carries
      * it alongside pins and tags. Absent keys mean "never settled / never
      * snoozed", which is also what an older daemon and a pre-migration
@@ -1004,7 +1004,7 @@ fn to_cli_session(
         &[p("snoozedUntil"), s("snoozedUntil")],
     );
     /*
-     * CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+     * CDXC:Git 2026-07-29-00:00:
      * Branch / +n −n / PR badge is resolved once per session cwd by the daemon,
      * so the CLI inventory forwards it verbatim rather than shelling out to git
      * per row. Presentation is the only source: a session row in state.db has no
@@ -1020,7 +1020,7 @@ fn to_cli_session(
         &[p("delayedSendRemainingLabel")],
     );
     /*
-     * CDXC:MobileDelayedSendCountdown 2026-09-03:
+     * CDXC:DelayedSend 2026-09-03:
      * The remaining label above is a snapshot from the moment of the poll. A
      * client that only polls every few seconds needs the absolute deadline to
      * tick the countdown from its own clock between polls, exactly like the
@@ -1034,7 +1034,7 @@ fn to_cli_session(
         &[p("delayedSendDeadlineAt")],
     );
     /*
-     * CDXC:SessionChatPromptQueue 2026-08-21-b:
+     * CDXC:SessionChat 2026-08-21-b:
      * The phone's session-list badge reads these two off the mobile summary, so
      * the inventory has to forward them from the presentation snapshot the same
      * way it forwards the Delayed Send countdown above. Without this the badge
@@ -1049,7 +1049,7 @@ fn to_cli_session(
         &[p("queuedPromptFailedCount")],
     );
     /*
-     * CDXC:SessionAgentNotes 2026-08-24:
+     * CDXC:SessionNotes 2026-08-24:
      * The phone's session row renders the note dot and the note text from this
      * field, so the inventory forwards the presentation value verbatim.
      * Presentation is the only source: a session row in state.db has no note of
@@ -1213,7 +1213,7 @@ fn start_missing_provider_for_cli_attach(
         return Ok(attach);
     }
     /*
-     * CDXC:GxserverCliAttach 2026-06-09-09:53:
+     * CDXC:Cli 2026-06-09-09:53:
      * CLI, TUI, Android, and SSH attach commands can create a zmx provider
      * before macOS ever sees the row. Start missing providers through gxserver
      * before launching the blocking interactive attach so gxserver persists
@@ -1444,7 +1444,7 @@ pub fn fetch_session_list(flags: &Flags, write_cache: bool) -> CliResult<Vec<Val
 fn fetch_session_list_result(flags: &Flags, write_cache: bool) -> CliResult<Value> {
     let result = fetch_gxserver_session_list(flags)?;
     /*
-     * CDXC:AndroidRemoteSessions 2026-06-11-23:52:
+     * CDXC:Mobile 2026-06-11-23:52:
      * `ghostex sessions --json` is the React Native Android reconnect/status
      * contract. The inventory must come from gxserver list/snapshot APIs and
      * must not read the retired macOS sidebar persistence file when the daemon
@@ -1479,12 +1479,12 @@ fn fetch_session_list_result(flags: &Flags, write_cache: bool) -> CliResult<Valu
 
 fn to_mobile_session_list(result: &Value) -> Value {
     /*
-     * CDXC:iOSRemoteSessions 2026-06-30-04:37:
+     * CDXC:Mobile 2026-06-30-04:37:
      * The mobile summary JSON keeps only row/action identity fields so the
      * phone does less network transfer, JSON parsing, and SwiftUI diff work
      * than the full diagnostic `sessions --json` contract.
      *
-     * CDXC:ProjectVisibility 2026-06-30-21:23:
+     * CDXC:Projects 2026-06-30-21:23:
      * Mobile summaries must preserve gxserver's active-project filter even if
      * a future caller passes unfiltered inventory into this compactor.
      */
@@ -1521,7 +1521,7 @@ fn to_mobile_session_list(result: &Value) -> Value {
         })
         .unwrap_or_default();
     /*
-     * CDXC:WorkspaceSessionGroups 2026-07-12-00:00:
+     * CDXC:Sessions 2026-07-12-00:00:
      * Mobile rows must render in the same order as the GPUI sidebar: pre-sort
      * by gxserver's presentation snapshot order (`sortOrder`) and forward the
      * named-group overlay (`workspaceGroups`).
@@ -1552,7 +1552,7 @@ fn to_mobile_session_list(result: &Value) -> Value {
                         insert_present(&mut project_map, "path", project.get("path"));
                         insert_present(&mut project_map, "projectId", project.get("projectId"));
                         /*
-                         * CDXC:MobileProjectIcons 2026-08-21:
+                         * CDXC:Icons 2026-08-21:
                          * The phone's sessions list ranks project icons exactly
                          * like SidebarV2ProjectIcon does — user image, then the
                          * icon the repository ships, then a typed glyph — so it
@@ -1711,7 +1711,7 @@ fn to_mobile_workspace_groups(workspace_groups: Option<&Value>) -> Option<Value>
 
 fn to_mobile_sidebar_project_collections(collections_state: Option<&Value>) -> Option<Value> {
     /*
-     * CDXC:SidebarProjectCollections 2026-07-18-00:00:
+     * CDXC:Projects 2026-07-18-00:00:
      * Mobile keeps the server-normalized {order, collections} contract but
      * re-sanitizes rows because fallback caches may carry stale shapes. Empty
      * overlays collapse to an absent key so phones can cheaply skip rendering.
@@ -1787,7 +1787,7 @@ fn to_mobile_sidebar_project_collections(collections_state: Option<&Value>) -> O
 
 fn to_mobile_sidebar_spaces(spaces_state: Option<&Value>) -> Option<Value> {
     /*
-     * CDXC:SidebarSpaces 2026-08-27:
+     * CDXC:Spaces 2026-08-27:
      * Mobile keeps the server-normalized {order, spaces} contract but
      * re-sanitizes rows because fallback caches may carry stale shapes. A Space
      * with no members is kept — it is a real, selectable, still-empty filter —
@@ -1907,7 +1907,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         &[s("shouldSubmitStagedFirstPromptTitleCommand")],
     );
     /*
-     * CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+     * CDXC:StateSync 2026-07-29-00:00:
      * The settle/snooze lifecycle rides the one poll mobile already makes, so
      * the phone can render the same settled/snoozed shelves as the desktop
      * inbox without a second round trip. Absent keys mean "no lifecycle state".
@@ -1917,14 +1917,14 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     insert_js(&mut map, "snoozedAt", &[s("snoozedAt")]);
     insert_js(&mut map, "snoozedUntil", &[s("snoozedUntil")]);
     /*
-     * CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+     * CDXC:Git 2026-07-29-00:00:
      * The card row's git/PR state rides the same poll mobile already makes, so
      * the phone can render branch, +n −n, and the PR badge without a second
      * round trip or a git binary of its own.
      */
     insert_js(&mut map, "gitStatus", &[s("gitStatus")]);
     /*
-     * CDXC:SessionChatPromptQueue 2026-08-21-b:
+     * CDXC:SessionChat 2026-08-21-b:
      * The phone's session-row queue badge reads these two. This compactor is a
      * SECOND whitelist after `to_cli_session`'s: forwarding them there only is
      * not enough, because everything not named here is dropped again before the
@@ -1938,7 +1938,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         &[s("queuedPromptFailedCount")],
     );
     /*
-     * CDXC:SessionAgentNotes 2026-08-24:
+     * CDXC:SessionNotes 2026-08-24:
      * Same SECOND-whitelist trap as the queue counts above: forwarding these in
      * `to_cli_session` only is not enough, because everything not named here is
      * dropped again before the summary reaches the phone. `sessionNote` draws
@@ -1949,7 +1949,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     insert_js(&mut map, "sessionNote", &[s("sessionNote")]);
     insert_js(&mut map, "agentSessionId", &[s("agentSessionId")]);
     /*
-     * CDXC:MobileDelayedSendCountdown 2026-09-03:
+     * CDXC:DelayedSend 2026-09-03:
      * Same SECOND-whitelist trap once more: `to_cli_session` forwarded the
      * Delayed Send and Close After Done projections for a long time, but this
      * compactor never named them, so a timer armed from the desktop sidebar
@@ -2005,7 +2005,7 @@ fn print_session_list(sessions: &[Value], grouped: bool) {
         return;
     }
     /*
-     * CDXC:CliSessions 2026-05-20-12:20:
+     * CDXC:Cli 2026-05-20-12:20:
      * Group by project with the project path as the section header, print each
      * session as a short two-line block without field labels, and preserve the
      * sidebar order returned by the native inventory.

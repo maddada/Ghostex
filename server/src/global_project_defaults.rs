@@ -1,5 +1,5 @@
 /*
-CDXC:GlobalProjectDefaults 2026-08-02:
+CDXC:Projects 2026-08-02:
 Global Defaults back the three per-project fields on the Projects settings page.
 A project keeps winning whenever its own stored value is non-empty; only an empty
 project value consults the global. Every global therefore defaults to empty, which
@@ -20,7 +20,7 @@ pub struct GlobalProjectDefaults {
     pub beads_directory: String,
     pub beads_display_key: String,
     /*
-    CDXC:DocsRootDirectory 2026-08-09:
+    CDXC:Docs 2026-08-09:
     Absolute folder the Docs surface reads from when a project stores no Docs
     directory of its own. Empty keeps Docs on each project's own root.
     */

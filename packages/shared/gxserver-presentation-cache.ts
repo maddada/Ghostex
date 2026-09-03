@@ -9,7 +9,7 @@ import type {
 } from './gxserver-protocol';
 
 /*
-CDXC:GxserverPresentationParity 2026-06-24-10:45:
+CDXC:StateSync 2026-06-24-10:45:
 GPUI and macOS sidebar clients must apply gxserver presentation deltas through the same platform-neutral reducer. Keep ordering, membership reconciliation, and project-cache updates in packages/shared/ so cross-platform sidebars do not fork session presentation behavior.
 */
 export function reduceGxserverPresentationDelta(
@@ -110,10 +110,10 @@ export function reorderPresentationProjectSessions(
   });
   let didChange = false;
   /*
-  CDXC:PinnedSessions 2026-06-02-20:11:
+  CDXC:Sessions 2026-06-02-20:11:
   Dragging pinned sessions posts an order against the synthetic project group while the visible sidebar renders from gxserver presentation. Apply the same explicit sidebar order to the local presentation cache first so the row moves immediately and then persists through gxserver.
 
-  CDXC:ManualSessionSorting 2026-06-05-12:30:
+  CDXC:Sessions 2026-06-05-12:30:
   Manual session snapshots use the same local-first path for every project row.
   Start saved rows at 1000 so future new sessions with sidebar order 0 appear
   at the top of the manual list.
@@ -305,7 +305,7 @@ function createPresentationSessionSortKeyWithSidebarOrder(
         : '2';
   const timestamp = session.lastActiveAt ?? session.updatedAt;
   /*
-  CDXC:ManualSessionSorting 2026-06-05-12:30:
+  CDXC:Sessions 2026-06-05-12:30:
   Local-first presentation reorders must update the same sidebar-order segment
   for pinned and non-pinned sessions. gxserver owns the durable value, while
   the sidebar cache mirrors it immediately so switching to Manual Sorting or

@@ -44,7 +44,7 @@ struct GhostexGpuiApp {
 }
 
 /*
-CDXC:WindowsCefBootstrapLifetime 2026-08-09:
+CDXC:PlatformSupport 2026-08-09:
 Context::spawn deliberately gives asynchronous work only a WeakEntity. Keep
 the bootstrap controller strongly owned by GPUI global state until the process
 quits; otherwise the local Entity created in main is released after the run
@@ -111,7 +111,7 @@ impl GhostexGpuiApp {
             .filter(|path| path.is_dir())
         {
             /*
-            CDXC:WindowsInstalledCwd 2026-08-09:
+            CDXC:PlatformSupport 2026-08-09:
             Velopack starts Ghostex with its installed `current` directory as
             the working directory. The real runtime launches long-lived WSL
             processes, so inheriting that directory keeps it open after the UI

@@ -41,7 +41,7 @@ function expectSourceOrder(source: string, orderedNeedles: readonly string[]): v
 describe('discover ghostex modal source', () => {
   test('uses the authored highlighted-feature order, screenshots, and copy', () => {
     /*
-    CDXC:HighlightedFeatures 2026-06-16-11:24:
+    CDXC:Onboarding 2026-06-16-11:24:
     The Highlighted Features tour should follow the authored content order:
     page title, subtitle, and image for Rich Prompt Editor, Browser & Design
     Mode, Full Embedded Editor, Kanban Board & Beads, and Full Layout Freedom.
@@ -69,12 +69,12 @@ describe('discover ghostex modal source', () => {
 
   test('keeps featured README screenshot assets visible', () => {
     /*
-    CDXC:HighlightedFeatures 2026-06-16-08:41:
+    CDXC:Onboarding 2026-06-16-08:41:
     The Highlighted Features modal should keep real screenshot files behind the
     imported README image paths. A tiny placeholder asset makes the native modal
     look like images failed to load even when the bundler resolves the import.
 
-    CDXC:HighlightedFeatures 2026-06-16-14:33:
+    CDXC:Onboarding 2026-06-16-14:33:
     Checked-in README media is sanitized before release so repository images do
     not expose private workspace content. Verify PNG identity, full visual
     dimensions, and enough encoded detail to reject abstract skeleton PNGs that
@@ -92,24 +92,24 @@ describe('discover ghostex modal source', () => {
 
   test('keeps feature copy above a full-width contained image', () => {
     /*
-    CDXC:HighlightedFeatures 2026-06-16-12:35:
+    CDXC:Onboarding 2026-06-16-12:35:
     The modal should put title and subtitle in one unrestricted text stack, fit
     the complete screenshot, use quiet outlines inside the modal, and use the
     same slight roundness tokens as Settings.
 
-    CDXC:HighlightedFeatures 2026-06-16-14:08:
+    CDXC:Onboarding 2026-06-16-14:08:
     Carousel arrows should sit beside the screenshot, not on top of it, and the
     screenshot outline should render evenly around rounded corners.
 
-    CDXC:HighlightedFeatures 2026-06-16-18:27:
+    CDXC:Onboarding 2026-06-16-18:27:
     Feature screenshot frames must stay transparent so PNG alpha corners do not
     reveal an artificial background behind the authored screenshot.
 
-    CDXC:HighlightedFeatures 2026-06-16-18:48:
+    CDXC:Onboarding 2026-06-16-18:48:
     The header should not render a feature icon; title and subtitle own the full
     copy row.
 
-    CDXC:HighlightedFeatures 2026-07-29-05:09:
+    CDXC:Onboarding 2026-07-29-05:09:
     GPUI child-window chrome owns the close control, so this surface should not
     render a second in-content X button.
     */
@@ -237,7 +237,7 @@ describe('discover ghostex modal source', () => {
 
   test('does not render the removed bottom thumbnail strip', () => {
     /*
-    CDXC:HighlightedFeatures 2026-06-17-12:45:
+    CDXC:Onboarding 2026-06-17-12:45:
     Highlighted Features should not render the old bottom thumbnail strip. Keep
     the feature pages reachable through the main image arrow buttons only.
     */

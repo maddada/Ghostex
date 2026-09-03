@@ -9,7 +9,7 @@ use crate::domain::{DomainRepository, DomainStateError};
 use super::*;
 
 /*
-CDXC:GxserverSessionSyncOneList 2026-09-01:
+CDXC:StateSync 2026-09-01:
 The snapshot is projected from a session list its callers have ALREADY read for
 their sync passes, so it takes that list instead of paying for a second full
 hydration of the registry. A caller whose sync passes actually wrote rows
@@ -133,13 +133,13 @@ pub fn build_presentation_session_delta(
     insert_session_agent_note_session_projection(&mut presentation_session, db);
     insert_stashed_prompt_count_session_projection(&mut presentation_session, db);
     /*
-    CDXC:SessionForkFamilies 2026-08-28:
+    CDXC:SessionFork 2026-08-28:
     A delta must carry the branch shape too, or the first update after a fork
     would silently strip the badge the snapshot had just published. The family
     derivation needs the whole registry, which is one indexed read of the same
     table the snapshot pass already walks.
 
-    CDXC:GxserverSlimSessionQueries 2026-09-01:
+    CDXC:StateSync 2026-09-01:
     Every createSession/updateSession pays for that read while holding the
     presentation event sequencer, so it uses the narrow fork-row statement
     rather than a full `list_sessions` hydration. The projected fields are
@@ -212,7 +212,7 @@ pub(crate) fn project_snapshot(
 ) -> Value {
     let generated_at = now_iso();
     /*
-    CDXC:SessionForkFamilies 2026-08-28:
+    CDXC:SessionFork 2026-08-28:
     Derived once over every registry row, then stamped onto each projected
     session, so live sidebar cards carry the same branch shape the Previous
     Sessions list publishes instead of learning about forks only after a row
@@ -226,7 +226,7 @@ pub(crate) fn project_snapshot(
     let mut presentation_sessions = Vec::new();
     for project in projects_sorted {
         /*
-        CDXC:GPUIRecentProjects 2026-06-24-12:27:
+        CDXC:Projects 2026-06-24-12:27:
         Parked Recent Projects remain durable gxserver projects but are not
         active sidebar presentation groups. The only sidebar drawer source for
         them is `/api/listRecentProjects`, which returns explicit path-bearing
@@ -284,7 +284,7 @@ pub(crate) fn project_snapshot(
 }
 
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 Capabilities are machine-scoped: a GPUI sidebar merges snapshots from several
 gxservers, and an older remote daemon simply omits this object. Sidebar V2 hides
 settle/snooze affordances and classifies nothing as settled for those machines
@@ -293,13 +293,13 @@ instead of inventing lifecycle out of derived data.
 pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
     json!({
         /*
-        CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+        CDXC:Git 2026-07-29-00:00:
         `sessionGitStatus` promises the `gitStatus` FIELD exists on this
         machine's sessions when their cwd is a git checkout, not that any
         particular session has one. Sidebar V2 uses it to decide whether an
         empty card row means "no git state" or "this daemon is too old to know".
 
-        CDXC:SidebarV2DataGate 2026-07-29:
+        CDXC:StateSync 2026-07-29:
         That promise is exactly what the version gate takes away, so the flag
         follows the gate rather than the build: a daemon configured for Sidebar
         V1 runs no git/`gh` probe, so it has no git data to give and says so.
@@ -323,7 +323,7 @@ pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
         "sessionSettlement": true,
         "sessionSnooze": true,
         /*
-        CDXC:SidebarSpaces 2026-08-27:
+        CDXC:Spaces 2026-08-27:
         `spaces` promises `/api/readSidebarSpaces` and `/api/updateSidebarSpaces`
         exist on this machine, so a client can render this daemon's Space row and
         its Spaces context submenu instead of failing those calls on an older
@@ -332,7 +332,7 @@ pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
         */
         "spaces": true,
         /*
-        CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+        CDXC:Worktrees 2026-07-29-00:00:
         `worktreeSessions` promises `/api/createWorktreeSession` and
         `/api/removeSessionWorktree` exist on this machine, so Sidebar V2 can
         offer "New worktree session…" and the worktree cleanup prompt for its
@@ -344,7 +344,7 @@ pub fn presentation_capabilities(sidebar_v2_selected: bool) -> Value {
 
 pub fn should_include_presentation_project(project: &Value) -> bool {
     /*
-    CDXC:ProjectVisibility 2026-06-30-21:23:
+    CDXC:Projects 2026-06-30-21:23:
     Active sidebar/project inventory is gxserver-owned. Parked Recent Projects and hidden system carrier projects stay durable for domain/session ownership, but presentation snapshots and deltas must remove them so macOS, GPUI, CLI, and React Native Android do not independently invent visibility filters.
     */
     project.get("isRecentProject").and_then(Value::as_bool) != Some(true)

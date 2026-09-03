@@ -1,5 +1,5 @@
 /*
- CDXC:ReleaseAutomation 2026-09-01-11:35:
+ CDXC:Release 2026-09-01-11:35:
  Release preflight asserted on literal substrings of the Actions workflow YAML.
  Prettier normalised `GHOSTEX_REQUIRE_BEADS_SMOKE: "1"` to single quotes in the
  49831862 formatting pass, the substring stopped matching, and the gate check
@@ -48,7 +48,7 @@ const STAGE_ADVANCE_COMMAND = 'stage-package-and-advance';
 const ARM64_NATIVE_RUNNER = 'ubuntu-24.04-arm';
 
 /*
- CDXC:ReleaseAutomation 2026-09-02:
+ CDXC:Release 2026-09-02:
  Measured on the 8.5.0 release run: the macOS job took 31 minutes and was the
  critical path, and a cold `cargo build --release` was roughly half of it
  (Linux desktop: 663 s inside "Stage the Linux desktop payload once";
@@ -320,7 +320,7 @@ export function sccacheWorkflowAssertions({ compileNeedles, contract, file, plat
 }
 
 /*
- CDXC:ReleaseSccacheWarming 2026-09-02:
+ CDXC:Release 2026-09-02:
  The sccache cache is only useful when it is warm at release dispatch time, so
  .github/workflows/warm-rust-build-cache.yml recompiles each release target
  after every cargo-relevant push. An sccache key covers the rustc version and

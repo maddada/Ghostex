@@ -144,7 +144,7 @@ describe('empty project new-session row', () => {
 
   test('renders as a sleeping session-shaped button without a last-active timestamp', () => {
     /*
-     * CDXC:ProjectGroups 2026-06-15-20:14:
+     * CDXC:Projects 2026-06-15-20:14:
      * Closing the last terminal leaves an empty project row. Source coverage
      * keeps that row session-shaped, timestamp-free, and wired to create a new
      * terminal instead of restoring the closed session.
@@ -282,7 +282,7 @@ describe('shouldShowProjectEditorDiffStats', () => {
 describe('project row Actions', () => {
   test('renders Global Actions flagged for the project row, not only project ones', () => {
     /*
-     * CDXC:GlobalActions 2026-08-07:
+     * CDXC:AgentLauncher 2026-08-07:
      * Global Actions live in their own HUD list, so a row that reads only
      * commandsByProject leaves the "Show on the project's sidebar row" toggle
      * dead for every global. Merge both lists, globals first like Settings.
@@ -307,7 +307,7 @@ describe('project row Actions', () => {
 
   test('keys and runs row Actions by scope so the two id spaces cannot collide', () => {
     /*
-     * CDXC:GlobalActions 2026-08-07:
+     * CDXC:AgentLauncher 2026-08-07:
      * Global and project Action ids are separate spaces, so the click must name
      * the list to resolve against and the React key must stay unique when both
      * lists hold the same id. The group id keeps naming the project to run in.
@@ -330,7 +330,7 @@ describe('project row Actions', () => {
 describe('project diff stats refresh triggers', () => {
   test('does not refresh project git stats from header hover', () => {
     /*
-     * CDXC:ProjectDiffStats 2026-06-30-19:13:
+     * CDXC:Git 2026-06-30-19:13:
      * Project-header Git stats are background data. Hovering the project header
      * must not post refreshWorkspaceProjectDiffForGroup or otherwise tie Git
      * probes to pointer movement.
@@ -358,7 +358,7 @@ describe('getGroupContextMenuItemCount', () => {
 
   test('worktree rows offer Rename Worktree and not the dead label-only Rename', () => {
     /*
-     * CDXC:WorktreeRename 2026-08-10:
+     * CDXC:Worktrees 2026-08-10:
      * Two invariants in one place, because they are the same mistake.
      *
      * The label-only Rename posts `renameWorkspaceProjectForGroup`, which the
@@ -371,7 +371,7 @@ describe('getGroupContextMenuItemCount', () => {
      * presence is the point: a test that only checked the item exists would pass
      * while the count drifted and the last menu item opened off-screen.
      */
-    const menuStart = sessionGroupSectionSource.indexOf('CDXC:WorktreeDelete 2026-05-28-07:46');
+    const menuStart = sessionGroupSectionSource.indexOf('CDXC:Worktrees 2026-05-28-07:46');
     // The slice has to reach the END of the worktree branch, not its first
     // shared item: anchored on "Add to project group" it stopped short of Delete
     // Worktree and Remove Worktree, so a reintroduced label-only Rename placed
@@ -411,7 +411,7 @@ describe('getGroupContextMenuItemCount', () => {
 
   test('counts the Hide item both project menus render', () => {
     /*
-     * CDXC:SidebarContextMenu 2026-08-10:
+     * CDXC:ContextMenus 2026-08-10:
      * Hide/Unhide is rendered by the worktree AND the repository project menu
      * whenever onHideGroup is supplied, and the sidebar always supplies it, so
      * leaving it out measured every project menu one row short. The group menu
@@ -490,7 +490,7 @@ describe('getSidebarSessionGapContextMenuTarget', () => {
 
   test('keeps the project context menu attached to the header instead of the group body', () => {
     /*
-     * CDXC:SidebarContextMenu 2026-06-19-10:46:
+     * CDXC:ContextMenus 2026-06-19-10:46:
      * Right-clicking project body gaps must not open the project context menu.
      * The group body owns only session-gap retargeting, while the header owns
      * the project menu.
@@ -518,7 +518,7 @@ describe('getSidebarSessionGapContextMenuTarget', () => {
 describe('reference sidebar group spacing styles', () => {
   test('keeps project headers normal-flow for fast sidebar scrolling', () => {
     /*
-     * CDXC:SidebarScroll 2026-06-30-01:59:
+     * CDXC:Sidebar 2026-06-30-01:59:
      * Sidebar scrolling must prioritize throughput over sticky project context.
      * Keep project headers in normal flow and do not keep the fixed-gradient
      * geometry observer or sticky background contract that made scroll paint
@@ -550,7 +550,7 @@ describe('reference sidebar group spacing styles', () => {
 
   test('does not force the project to the top when Show less is selected', () => {
     /*
-     * CDXC:ProjectSessionLists 2026-06-25-22:28:
+     * CDXC:Projects 2026-06-25-22:28:
      * The project session-list toggle should preserve the outer sidebar scroll
      * viewport. A local Show less state change must not call scrollIntoView and
      * snap the project header to the top of the sidebar.
@@ -565,16 +565,16 @@ describe('reference sidebar group spacing styles', () => {
 
   test('keeps expanded project session lists as plain bounded scroll surfaces', () => {
     /*
-     * CDXC:ProjectSessionLists 2026-06-25-12:20:
+     * CDXC:Projects 2026-06-25-12:20:
      * The Show more state should keep rendering all project sessions, but the
      * expanded body must become a bounded inner scroll area using plain vertical
      * overflow instead of scroll masks.
      *
-     * CDXC:ProjectSessionLists 2026-06-29-17:53:
+     * CDXC:Projects 2026-06-29-17:53:
      * Inner project scrolling should chain to the main sidebar when the nested
      * list reaches an edge, so this rule must not contain overscroll.
      *
-     * CDXC:SidebarScroll 2026-06-30-01:59:
+     * CDXC:Sidebar 2026-06-30-01:59:
      * The fast sidebar path removes scroll masks and per-scroll glow state from
      * expanded project bodies.
      */
@@ -592,7 +592,7 @@ describe('reference sidebar group spacing styles', () => {
     );
 
     /*
-     * CDXC:SidebarCollapseAnimation 2026-08-19:
+     * CDXC:Sidebar 2026-08-19:
      * The bounded inner scroll surface is scoped to the expanded body, so the
      * collapsed rule's max-height is not overridden by a later rule at the same
      * specificity. Match that exact selector; the unscoped prefix also appears
@@ -616,7 +616,7 @@ describe('reference sidebar group spacing styles', () => {
 
   test('does not slice below-session arrays in the project row render loop', () => {
     /*
-     * CDXC:SidebarContextMenu 2026-06-30-02:45:
+     * CDXC:ContextMenus 2026-06-30-02:45:
      * Large project lists should keep manual drag ordering mounted, but row
      * rendering must not build a per-card below-session slice. Pass a shared
      * visible-id source and the row's next index so context-menu actions can
@@ -636,7 +636,7 @@ describe('reference sidebar group spacing styles', () => {
 
   test('uses row-owned padding instead of blank gaps between project headers and sessions', () => {
     /*
-     * CDXC:ReferenceSidebar 2026-06-19-10:52:
+     * CDXC:Sidebar 2026-06-19-10:52:
      * Sidebar project headers and session rows should not have empty visual
      * gaps between buttons. Keep project-header breathing room inside the
      * clickable row and leave session drag indicators row-owned.
@@ -667,7 +667,7 @@ describe('reference sidebar group spacing styles', () => {
 
   test('keeps session drag feedback to insertion lines instead of project highlights', () => {
     /*
-     * CDXC:SidebarDragDrop 2026-06-19-11:12:
+     * CDXC:Sidebar 2026-06-19-11:12:
      * Dropping sessions onto projects should not tint the project body. The
      * only visible destination cue should be the insertion line.
      */

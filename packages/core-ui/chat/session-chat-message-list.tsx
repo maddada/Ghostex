@@ -119,7 +119,7 @@ export interface SessionChatMessageListProps {
   /** Reads existing project Markdown paths before generating the next file name. */
   listMessageMarkdownPaths?: ListSessionMessageMarkdownPaths;
   /*
-  CDXC:SessionChatRewind 2026-09-02:
+  CDXC:SessionChat 2026-09-02:
   Rewinds the live conversation back to the point before a user prompt was
   sent. Set only when the host can reach `/api/rewindSessionChat` AND the
   session runs an agent whose rewind Ghostex drives (Claude), so the
@@ -771,7 +771,7 @@ function MessageRow({
     ? userCopyMarkdown.length > 0
     : markdown.length > 0 && message.role === 'assistant' && showAssistantCopy;
   /*
-  CDXC:SessionChatRewind 2026-09-02:
+  CDXC:SessionChat 2026-09-02:
   A rewind target is a prompt the agent has actually taken: the same "genuine
   user prompt" test the transcript already uses for its turn boundaries (a
   suppressed harness turn returned above, a `queued` row is still held by the
@@ -809,7 +809,7 @@ function MessageRow({
   }
 
   /*
-  CDXC:SessionForkFamilies 2026-08-28:
+  CDXC:SessionFork 2026-08-28:
   The seam where stitched scroll-back crosses from one fork ancestor into the
   next. gxserver synthesizes it as a system row, but it is not a note about the
   session: it is the boundary between two threads, so it reads as a labeled

@@ -6,13 +6,13 @@ export async function waitForReadyMessage() {
   await waitForRenderedSidebar();
 
   /**
-   * CDXC:StorybookInteractions 2026-05-08-17:46
+   * CDXC:DesignSystem 2026-05-08-17:46
    * Interaction stories verify sidebar behavior, not the synthetic Storybook
    * bridge's ready-message timing. The current React harness can render the
    * sidebar before the captured ready message is observable, so rendered,
    * undimmed sidebar chrome is the reliable readiness contract.
    *
-   * CDXC:StorybookInteractions 2026-05-08-18:49
+   * CDXC:DesignSystem 2026-05-08-18:49
    * Storybook stories now hydrate against the user's current ghostex settings.
    * Local settings can make first render slower, so readiness waits must allow
    * the iframe to finish the real app render instead of failing on loader UI.

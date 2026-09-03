@@ -1,7 +1,7 @@
 # GPUI Titlebar App Modal Parity Progress
 
 <!--
-CDXC:GPUITitlebarAppModalParity 2026-06-24-10:41:
+CDXC:AppModal 2026-06-24-10:41:
 GPUI titlebar modal parity must reuse the macOS React modal components and route gxserver-backed behavior through production-style bridges instead of placeholder UI. Keep this file as the orchestration ledger while one worker sub-agent at a time ports production behavior into GPUI, with no app restart, no per-slice verification commands, no temporary/stub implementations, and no broad fallback paths.
 -->
 
@@ -133,7 +133,7 @@ Bring the GPUI app titlebar and related modal UI/UX to production parity with th
 - Exact files touched: `gpui/src/main.rs` and `gpui/TITLEBAR_APP_MODAL_PARITY_PROGRESS.md`.
 
 <!--
-CDXC:GPUITitlebarActions 2026-06-27-09:10:
+CDXC:Titlebar 2026-06-27-09:10:
 Workspace parity slices 489, 507, and 510 superseded Worker 12's terminal Action limitation by adding Action run id/status-file lifecycle, mounted idle Action reuse/write into the exact command surface, and stale command-pane HUD filtering.
 -->
 
@@ -144,7 +144,7 @@ Workspace parity slices 489, 507, and 510 superseded Worker 12's terminal Action
 ### 2026-06-27-09:26 Task Slice - Titlebar Action Debug Rerun Parity
 
 <!--
-CDXC:GPUITitlebarActions 2026-06-27-09:26:
+CDXC:Titlebar 2026-06-27-09:26:
 GPUI's Rust-owned titlebar Actions button now mirrors the shared command-palette click rule for close-on-exit terminal Actions. Use only process-local sanitized run feedback to decide Debug reruns, and keep sidebar bridge `runMode` payloads authoritative so renderer selectors cannot be reinterpreted by stale titlebar state.
 -->
 

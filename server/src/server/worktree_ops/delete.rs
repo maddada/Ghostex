@@ -48,7 +48,7 @@ impl From<TypedOperationError> for DeleteWorktreeProjectError {
 }
 
 /*
-CDXC:WorktreeDelete 2026-06-22-08:47:
+CDXC:Worktrees 2026-06-22-08:47:
 Rust gxserver must own the same shared Delete Worktree workflow as TypeScript: validate the selected worktree project, remove the Git checkout from the registered parent, delete the durable project row before optional branch cleanup, return cleanup failures as warnings, and publish the presentation delta after the canonical row is gone.
 */
 pub(crate) async fn handle_delete_worktree_project_http(

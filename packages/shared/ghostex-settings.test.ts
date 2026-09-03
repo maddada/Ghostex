@@ -62,10 +62,10 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes terminal dev-server discovery settings', () => {
     /*
-     * CDXC:TerminalDevServers 2026-06-23-19:22:
+     * CDXC:Resources 2026-06-23-19:22:
      * Terminal dev-server preferences should persist as app settings with detection enabled by default and ignored ports stored as canonical port or range strings.
      *
-     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * CDXC:Navigation 2026-08-19:
      * Where a detected URL opens is no longer a dev-server setting; it lives in webLinkOpenTarget with every other web link.
      */
     expect(DEFAULT_ghostex_SETTINGS.terminalDevServerDetectionEnabled).toBe(true);
@@ -91,7 +91,7 @@ describe('normalizeghostexSettings', () => {
 
   test('merges the legacy link-destination settings into one web-link target', () => {
     /*
-     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * CDXC:Navigation 2026-08-19:
      * The Browser toggle and the Dev Servers dropdown answered the same question with opposite defaults. They merge into one target, so the toggle has to win migration: it is the switch users actually flipped, while nearly every install carries a dev-server default it never chose.
      */
     expect(DEFAULT_ghostex_SETTINGS.webLinkOpenTarget).toBe('internal-browser');
@@ -127,7 +127,7 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes global Portless settings', () => {
     /*
-     * CDXC:PortlessSettingsDisabled 2026-07-25:
+     * CDXC:Portless 2026-07-25:
      * Portless settings remain global, but missing or invalid values default
      * off while the app integration is hidden. Explicit stored booleans remain
      * readable so the implementation can return later without a schema reset.
@@ -224,7 +224,7 @@ describe('normalizeghostexSettings', () => {
 
   test('defaults experimental features off and normalizes the persisted gate', () => {
     /*
-     * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+     * CDXC:Settings 2026-06-28-07:41:
      * Enable Experimental Features should be disabled for new installs and
      * missing settings, with only an explicit boolean true exposing
      * experimental surfaces.
@@ -243,7 +243,7 @@ describe('normalizeghostexSettings', () => {
 
   test('persists Show Advanced settings density', () => {
     /*
-     * CDXC:SettingsAdvanced 2026-06-28-08:01:
+     * CDXC:Settings 2026-06-28-08:01:
      * Show Advanced is a durable Settings preference so advanced rows remain
      * visible after restarting the app until the switch is turned off.
      */
@@ -261,7 +261,7 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes the persisted Settings modal location', () => {
     /*
-     * CDXC:SettingsNavigation 2026-06-29-17:54:
+     * CDXC:Settings 2026-06-29-17:54:
      * macOS Settings restart restore should persist only safe tab ids and
      * bounded scroll offsets so app relaunch can return to the last closed
      * Settings spot without accepting malformed storage.
@@ -312,7 +312,7 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes the default prompt agent setting', () => {
     /**
-     * CDXC:PromptAgents 2026-05-28-07:15:
+     * CDXC:AgentLauncher 2026-05-28-07:15:
      * Automated prompt launchers share one Settings-selected agent id. Missing
      * values default to Codex, while custom agent ids stay valid because the
      * runtime agent registry resolves whether the selected id is configured.
@@ -331,7 +331,7 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes the session title generation agent settings', () => {
     /*
-    CDXC:GxserverSessionTitle 2026-06-04-08:24:
+    CDXC:SessionTitles 2026-06-04-08:24:
     Settings exposes a separate first-prompt title generator choice so users can switch Codex, Cursor, Claude, Grok Build, or a custom command without changing the broader default prompt agent used by Git, board, or worktree prompts.
     */
     expect(DEFAULT_ghostex_SETTINGS.sessionTitleGenerationAgent).toBe('codex');
@@ -358,7 +358,7 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes the app icon source id', () => {
     /*
-     * CDXC:AppIconPicker 2026-06-25-21:50:
+     * CDXC:Icons 2026-06-25-21:50:
      * The app icon source id is a trimmed filename, or "" for the default
      * bundled icon. Missing or non-string values fall back to the default.
      */
@@ -385,7 +385,7 @@ describe('normalizeghostexSettings', () => {
 
   test('previews session title generation commands', () => {
     /*
-    CDXC:GxserverSessionTitle 2026-06-04-22:44:
+    CDXC:SessionTitles 2026-06-04-22:44:
     The Settings and first-time modal title-agent dropdowns must show the exact command template Ghostex sends, including model ids from each installed CLI's local model catalog.
     */
     expect(getSessionTitleGenerationCommandPreview('codex')).toBe(
@@ -407,7 +407,7 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes the sidebar handle reset default width', () => {
     /*
-    CDXC:SidebarChrome 2026-06-05-04:40:
+    CDXC:Sidebar 2026-06-05-04:40:
     Settings owns the sidebar handle double-click reset width, while app restart continues restoring the separately persisted last sidebar width.
     */
     expect(DEFAULT_ghostex_SETTINGS.sidebarDefaultWidthPx).toBe(DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX);
@@ -427,7 +427,7 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes the project session Show less count', () => {
     /*
-    CDXC:ProjectSessionLists 2026-06-13-01:06:
+    CDXC:Projects 2026-06-13-01:06:
     Settings owns how many project sessions remain visible after Show less. Use ten as the current default while continuing to clamp explicit user counts.
     */
     expect(DEFAULT_ghostex_SETTINGS.projectSessionListCollapsedCount).toBe(
@@ -450,7 +450,7 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes project jump expansion settings', () => {
     /*
-    CDXC:ProjectHotkeys 2026-06-15-11:12:
+    CDXC:Hotkeys 2026-06-15-11:12:
     Project jumps should reveal collapsed Projects rows by default, while the
     narrower Show less side effect remains opt-in and hidden behind that setting
     in the Hotkeys tab.
@@ -472,17 +472,17 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes sidebar tag filter list presentation', () => {
     /*
-    CDXC:SessionTagFilters 2026-06-13-17:50:
+    CDXC:Sessions 2026-06-13-17:50:
     The sidebar tag filter list is configurable presentation chrome. Defaults
     keep every supported tag row recoverable, while persisted custom order,
     hidden-state, and disabled-state normalize without changing tag values.
 
-    CDXC:SessionTagFilters 2026-06-15-18:32:
+    CDXC:Sessions 2026-06-15-18:32:
     First-run defaults reduce visible sidebar tag filters by hiding High
     Priority, Low Priority, Todo, Bug, and Feature while keeping Testing,
     Research, and Design visible.
 
-    CDXC:SessionTagFilters 2026-06-15-22:10:
+    CDXC:Sessions 2026-06-15-22:10:
     Default-hidden tags are fully off: both disabled and hidden. The Settings
     management list still carries those rows so users can turn them back on.
     */
@@ -564,7 +564,7 @@ describe('normalizeghostexSettings', () => {
 
   test('hides project-header git file counts by default', () => {
     /**
-     * CDXC:ProjectDiffStats 2026-05-15-14:33:
+     * CDXC:Git 2026-05-15-14:33:
      * When project-header git stats are visible, they should omit the
      * changed-file number by default. The file count stays off in every
      * sidebar preset and is only enabled by an explicit setting change.
@@ -580,28 +580,28 @@ describe('normalizeghostexSettings', () => {
 
   test('defaults sidebar UI settings to the Recommended preset', () => {
     /**
-     * CDXC:SidebarSettingsPresets 2026-06-13-01:06:
-     * Superseded by CDXC:SidebarSettingsPresets 2026-06-30-22:29.
+     * CDXC:Settings 2026-06-13-01:06:
+     * Superseded by CDXC:Settings 2026-06-30-22:29.
      *
-     * CDXC:SidebarSettingsPresets 2026-06-13-15:42:
+     * CDXC:Settings 2026-06-13-15:42:
      * Recommended also hides session-card Last Active timestamps so the default
      * sidebar stays compact without switching to the Minimal preset.
      *
-     * CDXC:SessionStatusIndicators 2026-06-15-14:00:
+     * CDXC:SessionStatus 2026-06-15-14:00:
      * Sidebar presets intentionally omitted the legacy macOS floating badge
      * toggle. This preset test should cover preset-owned sidebar chrome and
      * menu bar indicator state without coupling the retired desktop surface.
      *
-     * CDXC:SessionStatusIndicators 2026-06-27-20:11:
+     * CDXC:SessionStatus 2026-06-27-20:11:
      * The floating badge is no longer exposed, but presets must still omit the
      * legacy compatibility key so old settings JSON never changes preset state.
      *
-     * CDXC:SidebarSettingsPresets 2026-06-23-08:20:
+     * CDXC:Settings 2026-06-23-08:20:
      * All preset buttons should leave session-card close buttons enabled on
      * hover so switching sidebar density or detail mode does not hide the
      * primary per-session close affordance.
      *
-     * CDXC:SidebarSettingsPresets 2026-06-30-22:29:
+     * CDXC:Settings 2026-06-30-22:29:
      * Recommended is the default sidebar preset and matches the user's current
      * preset-controlled sidebar configuration, including visible session agent
      * icons.
@@ -663,7 +663,7 @@ describe('normalizeghostexSettings', () => {
       })
     ).toBeUndefined();
     /*
-     * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
+     * CDXC:Icons 2026-06-29-23:58:
      * Colored agent icons are an independent Session Cards preference, not a
      * sidebar density preset. Toggling color mode must not make the current
      * preset become Custom.
@@ -682,7 +682,7 @@ describe('normalizeghostexSettings', () => {
 
   test('hides session-card last active timestamps by default unless explicitly shown', () => {
     /**
-     * CDXC:SidebarSessions 2026-06-13-15:42
+     * CDXC:Sessions 2026-06-13-15:42
      * Recommended hides Last Active timestamps on session cards by default.
      * Users can show that timestamp without affecting the project header's
      * independent git additions/deletions stats.
@@ -698,7 +698,7 @@ describe('normalizeghostexSettings', () => {
 
   test('hides session command-copy context actions unless explicitly enabled', () => {
     /**
-     * CDXC:SidebarContextMenu 2026-06-09-23:17:
+     * CDXC:ContextMenus 2026-06-09-23:17:
      * Copy resume and Copy attach command are advanced context-menu utilities.
      * Missing settings must keep both hidden by default, while an explicit
      * Settings opt-in should persist and reveal both actions.
@@ -714,7 +714,7 @@ describe('normalizeghostexSettings', () => {
 
   test('hides the session close context-menu option unless explicitly enabled', () => {
     /**
-     * CDXC:SidebarContextMenu 2026-06-10-13:58:
+     * CDXC:ContextMenus 2026-06-10-13:58:
      * The single-session Close context-menu item should be absent by default.
      * Users can opt into it separately from the hover close button.
      */
@@ -729,7 +729,7 @@ describe('normalizeghostexSettings', () => {
 
   test('hides the session details copy context-menu option unless explicitly enabled', () => {
     /**
-     * CDXC:SidebarContextMenu 2026-06-11-23:08:
+     * CDXC:ContextMenus 2026-06-11-23:08:
      * Copy details writes session metadata to the clipboard. Missing settings
      * must keep the action hidden by default while an explicit opt-in persists.
      */
@@ -779,7 +779,7 @@ describe('normalizeghostexSettings', () => {
 
   test('pins removed macOS pane gap setting to zero', () => {
     /**
-     * CDXC:WorkspaceLayout 2026-05-30-07:24:
+     * CDXC:Workarea 2026-05-30-07:24:
      * Pane Gap is no longer a macOS app setting. Persisted legacy values should
      * normalize to zero so existing installations lose pane spacing immediately.
      */
@@ -804,20 +804,20 @@ describe('normalizeghostexSettings', () => {
 
   test('normalizes auto sleep settings separately for editors, Git, and agents', () => {
     /**
-     * CDXC:AutoSleep 2026-05-28-08:06:
+     * CDXC:SessionSleep 2026-05-28-08:06:
      * Settings must normalize editor/Git sleep defaults while making agent
      * auto-sleep opt-in and bounded to visible idle-duration choices.
      *
-     * CDXC:AutoSleep 2026-06-15-18:31:
+     * CDXC:SessionSleep 2026-06-15-18:31:
      * Performance defaults should retire heavy editor, Project, Git/Browser,
      * and browser-session surfaces after five idle minutes, with browser-session
      * Auto Sleep enabled by default and agent terminal Auto Sleep still opt-in.
      *
-     * CDXC:AutoSleep 2026-06-07-00:53:
+     * CDXC:SessionSleep 2026-06-07-00:53:
      * Agent auto-sleep defaults to fifteen idle minutes once enabled, matching
      * editor auto-sleep while keeping the opt-in gate.
      *
-     * CDXC:AutoSleep 2026-06-07-00:56:
+     * CDXC:SessionSleep 2026-06-07-00:56:
      * Focused agent sessions are always excluded from auto-sleep, so the old
      * focused-agent override is no longer normalized as a setting.
      */
@@ -862,7 +862,7 @@ describe('normalizeghostexSettings', () => {
 
   test('supports built-in and custom default editor commands', () => {
     /**
-     * CDXC:AgentsHub 2026-05-12-09:22
+     * CDXC:AgentLauncher 2026-05-12-09:22
      * Agents Hub edit actions should have one normalized editor command
      * setting, with common editor CLIs available without custom text.
      */
@@ -906,7 +906,7 @@ describe('normalizeghostexSettings', () => {
 
   test('defaults bundled code-server panes to Ghostex-owned settings', () => {
     /**
-     * CDXC:EditorPanes 2026-06-08-20:12:
+     * CDXC:CodeEditor 2026-06-08-20:12:
      * The bundled macOS code-server runtime should start with Ghostex-owned
      * editor settings so new installs use Dark 2026 unless users explicitly
      * opt into local VS Code settings.
@@ -930,7 +930,7 @@ describe('normalizeghostexSettings', () => {
 
   test('keeps sidebar side as a selectable left or right setting', () => {
     /**
-     * CDXC:SidebarPlacement 2026-05-06-17:32
+     * CDXC:Sidebar 2026-05-06-17:32
      * Sidebar placement is persisted with the rest of Settings so users can
      * choose right-side chrome from the top Sidebar setting or an explicit
      * move-sidebar command, while invalid
@@ -995,7 +995,7 @@ describe('normalizeghostexSettings', () => {
 
   test('defaults sidebar theme to Dark Gray and keeps the theme option disabled', () => {
     /**
-     * CDXC:SidebarTheme 2026-06-15-02:29:
+     * CDXC:Theming 2026-06-15-02:29:
      * Theme selection is disabled while themes are coming soon. New installs,
      * legacy Auto, old plain, and temporarily exposed theme values all resolve
      * to Dark 2, whose disabled Settings label is Dark Gray.
@@ -1021,47 +1021,47 @@ describe('normalizeghostexSettings', () => {
 
   test('derives custom sidebar and titlebar background from the theming contrast slider', () => {
     /**
-     * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
+     * CDXC:Theming 2026-06-15-11:24:
      * Custom chrome colors default to Dark Gray-compatible values and persist
      * only as six-digit hex strings.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
+     * CDXC:Theming 2026-06-15-13:22:
      * Settings no longer expose a foreground picker. Normalize legacy saved
      * foreground values away and derive foreground from the custom background's
      * luminance so light custom chrome stays readable.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-15-13:45:
+     * CDXC:Theming 2026-06-15-13:45:
      * The background is no longer a freeform color picker. Settings exposes a
      * contrast slider and stores a computed dark hex color for native
      * protocol compatibility.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-15-15:01:
+     * CDXC:Theming 2026-06-15-15:01:
      * The contrast slider is now limited to 85-100 so lower saved values clamp
      * to the lightest allowed dark gray instead of a mid-gray sidebar.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-15-15:15:
+     * CDXC:Theming 2026-06-15-15:15:
      * The persisted key still says darkness for compatibility, but Settings
      * presents this control as background contrast.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-15-15:28:
+     * CDXC:Theming 2026-06-15-15:28:
      * Background tint is chosen with a web picker and then folded into the
      * computed background hex as a calibrated dark tint. Neutral #808080 must keep
      * existing Dark Gray output unchanged.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-16-14:28:
+     * CDXC:Theming 2026-06-16-14:28:
      * The custom chrome default is 95 contrast with white #FFFFFF tint. Missing
      * settings must use that explicit slider default, while valid legacy saved
      * background colors still seed the slider during migration.
      *
-     * CDXC:SidebarTitlebarColors 2026-07-22:
+     * CDXC:Theming 2026-07-22:
      * New app defaults used neutral #808080 at 93 Background Contrast,
      * resolving to #141414.
      *
-     * CDXC:SidebarTitlebarColors 2026-08-30:
+     * CDXC:Theming 2026-08-30:
      * New app defaults use ice #88d7ff at 98 Background Contrast, resolving
      * to #040607.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-19-14:20:
+     * CDXC:Theming 2026-06-19-14:20:
      * Preset tint previews stay brighter than the applied chrome. The default
      * applied backgrounds should be very dark, including #0d0005 for red and
      * #0c0e11 for blue, while white and black remain neutral instead of
@@ -1130,16 +1130,16 @@ describe('normalizeghostexSettings', () => {
 
   test('derives fixed-strength sidebar and titlebar gradient stops from custom chrome color', () => {
     /*
-     * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
+     * CDXC:Theming 2026-06-19-12:33:
      * Custom sidebar chrome should use a deterministic gradient with the same
      * endpoint distance for neutral and tinted backgrounds. The titlebar starts
      * from the sidebar top stop and moves to the sidebar bottom stop.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-19-14:20:
+     * CDXC:Theming 2026-06-19-14:20:
      * White, black, and gray custom chrome must stay neutral. The old cool
      * fallback direction should not add blue to same-channel backgrounds.
      *
-     * CDXC:SidebarTitlebarColors 2026-08-30:
+     * CDXC:Theming 2026-08-30:
      * Invalid gradient input falls back to the ice #88d7ff/98 default (#040607).
      */
     expect(getSidebarTitlebarGradientColors('#0e0e0e')).toEqual({
@@ -1186,7 +1186,7 @@ describe('normalizeghostexSettings', () => {
 
   test('enables macOS attention notifications by default', () => {
     /**
-     * CDXC:SessionAttentionNotifications 2026-05-10-16:46
+     * CDXC:Notifications 2026-05-10-16:46
      * Attention banners are a first-install behavior so finished background
      * sessions can surface themselves. Persisted false remains authoritative
      * because users need a Settings switch to disable system notifications.
@@ -1202,7 +1202,7 @@ describe('normalizeghostexSettings', () => {
 
   test('keeps terminal bell attention notifications opt-in', () => {
     /*
-     * CDXC:TerminalBellAttention 2026-07-01-01:13:
+     * CDXC:Notifications 2026-07-01-01:13:
      * A terminal BEL can be normal shell feedback, so missing settings must not
      * turn zsh completion misses into Ghostex attention notifications. Persisted
      * true remains available for users who explicitly want bell-driven attention.
@@ -1228,7 +1228,7 @@ describe('normalizeghostexSettings', () => {
 
   test('keeps Ghostty mouse scroll multipliers in the settings slider range', () => {
     /**
-     * CDXC:TerminalScrollSettings 2026-04-29-08:56
+     * CDXC:Terminal 2026-04-29-08:56
      * The settings modal exposes Ghostty's precision and discrete scroll
      * multipliers as 0.25-step sliders, so normalization preserves valid
      * tuning values and clamps saved values to the same practical range before
@@ -1258,7 +1258,7 @@ describe('normalizeghostexSettings', () => {
 
   test('keeps common Ghostty terminal behavior settings', () => {
     /**
-     * CDXC:TerminalBehaviorSettings 2026-04-29-09:32
+     * CDXC:Terminal 2026-04-29-09:32
      * The settings modal owns common Ghostty behavior controls and writes the
      * documented enum/range values into the shared Ghostty config.
      */
@@ -1311,13 +1311,13 @@ describe('normalizeghostexSettings', () => {
 
   test('defaults Ctrl+G prompt editing to Monaco and only exposes machine default as the alternative', () => {
     /**
-     * CDXC:PromptEditorBackend 2026-05-11-14:38
+     * CDXC:PromptEditor 2026-05-11-14:38
      * Monaco is the default floating editor backend.
      *
-     * CDXC:PromptEditorBackend 2026-05-25-11:31:
+     * CDXC:PromptEditor 2026-05-25-11:31:
      * Monaco is the built-in default again. New settings normalize to Monaco unless a backend is explicitly selected.
      *
-     * CDXC:PromptEditorBackend 2026-06-30-00:08:
+     * CDXC:PromptEditor 2026-06-30-00:08:
      * Settings must offer only Monaco and the user's machine default editor. Removed gte/custom persisted choices and legacy gte booleans normalize to inherit so the app stops advertising or installing gte from Ctrl+G Settings.
      */
     expect(DEFAULT_ghostex_SETTINGS.promptEditorBackend).toBe('monaco');
@@ -1369,13 +1369,13 @@ describe('normalizeghostexSettings', () => {
 
   test('keeps Ghostty typography settings in documented practical ranges', () => {
     /**
-     * CDXC:TerminalTypographySettings 2026-04-29-09:32
-     * CDXC:GhosttyDefaults 2026-05-22-12:29:
+     * CDXC:Terminal 2026-04-29-09:32
+     * CDXC:Terminal 2026-05-22-12:29:
      * Typography settings default to the requested Ghostex terminal profile:
      * JetBrains Mono, 13pt, wght=300, no cell-width adjustment, and a 20%
      * cell-height expansion.
      *
-     * CDXC:TerminalPanePadding 2026-06-25-21:27:
+     * CDXC:Terminal 2026-06-25-21:27:
      * New terminal pane padding settings default to zero, persist as separate
      * horizontal and vertical integer pixels, and clamp to the Settings slider
      * range so native layout receives bounded content insets.
@@ -1431,11 +1431,11 @@ describe('normalizeghostexSettings', () => {
 
   test('keeps bundled Ghostty theme settings', () => {
     /**
-     * CDXC:TerminalThemeSettings 2026-04-29-09:32
+     * CDXC:Theming 2026-04-29-09:32
      * Ghostty theme names are exact strings from the bundled theme list. The
      * empty value means ghostex should leave the user's Ghostty theme unmanaged.
      *
-     * CDXC:GhosttyDefaults 2026-05-22-12:29:
+     * CDXC:Terminal 2026-05-22-12:29:
      * New installs default to GitHub Dark rather than leaving the theme
      * unmanaged.
      */

@@ -53,7 +53,7 @@ pub(crate) fn create_authenticated_health(state: &AppState) -> ServerHealthRespo
 }
 
 /*
-CDXC:SessionChatImagePaste 2026-08-01:
+CDXC:Clipboard 2026-08-01:
 saveSessionChatImage is the one endpoint whose JSON body legitimately
 exceeds the general RPC limit (a pasted screenshot as base64), so the body
 limit is per-endpoint instead of a single global constant.

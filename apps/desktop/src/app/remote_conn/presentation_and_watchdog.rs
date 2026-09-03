@@ -180,7 +180,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRemotePresentationStreaming 2026-06-24-19:54:
+        CDXC:RemoteMachines 2026-06-24-19:54:
         A connected remote machine needs the same live gxserver presentation contract as local GPUI, but CEF must not receive remote base URLs or bearer tokens. Rust opens `/api/events` through the localhost SSH tunnel, subscribes with the shared sidebar client id, and forwards only sanitized snapshot/delta payloads. A terminal stream failure enters the shared broken-status funnel, which tears down the stale tunnel before the sidebar schedules a full reconnect.
         */
         let (tx, mut rx) = mpsc::unbounded::<GpuiRemoteGxserverPresentationStreamMessage>();

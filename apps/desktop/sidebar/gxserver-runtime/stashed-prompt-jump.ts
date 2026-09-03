@@ -1,5 +1,5 @@
 /*
-CDXC:StashedPromptSessionAssociation 2026-08-24:
+CDXC:SavedPrompts 2026-08-24:
 "Go to session" on a Saved Prompts row. A stash row remembers the raw gxserver
 ids it was written from AND the provider conversation id (`agentSessionId`)
 that outlives them, so the target is resolved in that order of durability:
@@ -19,7 +19,7 @@ import { createGxserverPresentationProjectSessionId } from '@/packages/shared/gx
 const STASHED_PROMPT_JUMP_FAILURE_TITLE = "Couldn't open the session for this prompt";
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Hand-written interface plus the shape check at the bottom, like every other
 runtime slice; see `core.ts` for how these are attached to the prototype.
 */

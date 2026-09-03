@@ -1,5 +1,5 @@
 /*
-CDXC:DraftCrashSafety 2026-08-28:
+CDXC:Drafts 2026-08-28:
 The web half of the boot-time draft-cache heal (see the desktop's
 `reconcileSessionChatDraftCache`): each machine's daemon holds the durable copy
 of that machine's composer drafts, and this browser's per-keystroke cache keys

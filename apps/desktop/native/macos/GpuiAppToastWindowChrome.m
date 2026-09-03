@@ -13,7 +13,7 @@ void GhostexGpuiRemoveToastPopupWindowChrome(void *nativeView) {
     }
 
     /*
-     CDXC:GPUIAppToastWindowChrome 2026-07-04:
+     CDXC:AppModal 2026-07-04:
      App toasts render inside a transparent GPUI popup because native CEF and
      Ghostty child views draw above in-window GPUI layers. Strip all AppKit
      frame chrome from the popup host so macOS cannot draw a titlebar edge,
@@ -37,7 +37,7 @@ void GhostexGpuiRemoveToastPopupWindowChrome(void *nativeView) {
 }
 
 /*
- CDXC:GPUIMainWindowToasts 2026-08-18:
+ CDXC:AppModal 2026-08-18:
  gpui gives every WindowKind::PopUp window NSPopUpWindowLevel, which floats the
  toast panel above every other application. Toasts belong to the Ghostex main
  window, so attach the panel as a real AppKit child window at the parent's own

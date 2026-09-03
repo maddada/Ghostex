@@ -45,7 +45,7 @@ export function FirstUserMessageModal({ isOpen, message, onClose, title }: First
           {title ? <AppModalDescription>{title}</AppModalDescription> : null}
         </AppModalHeader>
         {/*
-         * CDXC:FirstMessage 2026-04-28-05:48
+         * CDXC:Sessions 2026-04-28-05:48
          * The first-message viewer must use a textarea, not a styled paragraph,
          * so users can read the saved prompt and select/copy the exact text
          * from both active sessions and previous-session modal cards.

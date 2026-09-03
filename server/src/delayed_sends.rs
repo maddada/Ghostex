@@ -66,7 +66,7 @@ impl DelayedSendRuntime {
         chat_publisher_factory: SessionChatQueuePublisherFactory,
     ) {
         /*
-        CDXC:GxserverDelayedSends 2026-08-17:
+        CDXC:DelayedSend 2026-08-17:
         The session-hosting daemon owns the clock and activity watcher. On a
         daemon restart, absolute timers keep elapsed wall time while conditional
         triggers restart their ten-second observation window. A row left in
@@ -397,7 +397,7 @@ impl DelayedSendRuntime {
             );
         };
         /*
-        CDXC:GxserverDelayedSends 2026-08-24:
+        CDXC:DelayedSend 2026-08-24:
         Chat clients hand the terminal composer's text off into the synced chat
         draft, so by the time a Delayed Send fires the message the user staged
         often no longer sits on the input line — a bare Enter would submit an
@@ -446,7 +446,7 @@ impl DelayedSendRuntime {
             }
         };
         /*
-        CDXC:SessionChatSerializedWriters 2026-08-24:
+        CDXC:SessionChat 2026-08-24:
         A Delayed Send is a bare `\r` into a session's input line, and its idle
         condition ("the agent stopped working") says nothing about whether a
         chat send is mid-sequence — the send queue can be paced across seconds

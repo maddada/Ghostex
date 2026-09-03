@@ -49,7 +49,7 @@ describe('getGhosttyTerminalConfigValues', () => {
 
   test('leaves Ghostty font weight unmanaged at the normal slider value', () => {
     /**
-     * CDXC:TerminalTypographySettings 2026-04-29-09:32
+     * CDXC:Terminal 2026-04-29-09:32
      * A 400 weight is the UI's normal-weight value, so ghostex does not write a
      * font-variation wght value unless the user moves the slider away from it.
      */

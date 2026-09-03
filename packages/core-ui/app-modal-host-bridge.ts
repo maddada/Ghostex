@@ -71,7 +71,7 @@ export type OpenAppModalMessage =
     }
   | {
       /**
-       * CDXC:SidebarSpaces 2026-08-27:
+       * CDXC:Spaces 2026-08-27:
        * The small New Space / Edit Space popup. A Space belongs to exactly one
        * gxserver, so the launcher names the sidebar section it was opened from:
        * `sectionKey` is the sidebar's own key ("local" or "remote:<machineId>")
@@ -106,14 +106,14 @@ export type OpenAppModalMessage =
     }
   | {
       /**
-       * CDXC:StashedPrompts 2026-07-29:
+       * CDXC:SavedPrompts 2026-07-29:
        * The session Prompts modal lists gxserver-stashed prompt-editor saves.
        * projectId scopes the default "this project and its worktrees" view and
        * sessionId names the terminal session the selected prompt is inserted
        * back into. Both are optional so the modal can still open (in
        * all-projects browse mode) when the launcher has no session mapping.
        *
-       * CDXC:StashedPromptSessionAssociation 2026-08-24:
+       * CDXC:SavedPrompts 2026-08-24:
        * `initialScope` lets a launcher pin the scope filter the modal opens on.
        * It is optional; when absent the modal picks its own default (session
        * scope when it has session context with matching prompts, else all).
@@ -126,7 +126,7 @@ export type OpenAppModalMessage =
     }
   | {
       /**
-       * CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
+       * CDXC:TranscriptExport 2026-08-20 / CDXC:TranscriptExport 2026-08-24:
        * The Export Transcript dialog. Opened without `path` it starts on its
        * include-toggle options stage and the sidebar runtime later answers the
        * dialog's export request with an `exportSessionTranscriptResult`
@@ -144,7 +144,7 @@ export type OpenAppModalMessage =
     }
   | {
       /*
-       * CDXC:FirstLaunchSetup 2026-06-16-07:58:
+       * CDXC:Onboarding 2026-06-16-07:58:
        * Automatic first-run onboarding should open the replayable Discover
        * Ghostex tour before firstLaunchSetup. Keep the follow-up flag scoped
        * to this modal open so manual overflow-menu Discover launches stay a
@@ -167,7 +167,7 @@ export type OpenAppModalMessage =
     }
   | {
       /*
-       * CDXC:PortlessSetupModal 2026-06-23-13:42:
+       * CDXC:Portless 2026-06-23-13:42:
        * Portless setup prompts render in the native app-modal child-window host
        * and carry only enum state needed to choose the exact handoff copy and
        * native admin protocol. Do not send settings or project/session data
@@ -221,7 +221,7 @@ export type OpenAppModalMessage =
       initialSearchQuery?: string;
       initialRemoteMachineId?: string;
       /**
-       * CDXC:RemoteSetup 2026-09-03:
+       * CDXC:RemotePairing 2026-09-03:
        * The Remote Setup modal hands off to Settings → Remote scrolled to one
        * of its two cards (`[data-settings-remote-section=…]`), the same way
        * `initialRemoteMachineId` scrolls to a machine card.
@@ -263,7 +263,7 @@ export type OpenAppModalMessage =
       initialTitle: string;
       modal: 'renameSession';
       /**
-       * CDXC:SessionHistoryTitleSource 2026-07-29:
+       * CDXC:SessionTitles 2026-07-29:
        * The rename modal enables empty-title Generate Name only for sessions
        * whose agent transcript gxserver can summarize, so the launcher passes
        * the session's agent icon identity through the modal bridge.
@@ -274,7 +274,7 @@ export type OpenAppModalMessage =
     }
   | {
       /**
-       * CDXC:SessionAgentNotes 2026-08-24:
+       * CDXC:SessionNotes 2026-08-24:
        * The session-note editor. `initialNote` is the row's current note text
        * so the dialog opens on it without a round trip; `projectId` is an
        * optional scope hint for hosts that route the write per project, and
@@ -319,7 +319,7 @@ declare global {
 }
 
 /**
- * CDXC:AppModals 2026-04-27-14:25
+ * CDXC:AppModal 2026-04-27-14:25
  * Modal launchers must never fall back to sidebar-local dialogs. If the native
  * full-window modal host is unavailable, persist the error and throw so the
  * broken bridge is visible instead of silently showing a squeezed modal.
@@ -375,7 +375,7 @@ export function postAppModalHostMessage(message: unknown, area: string): void {
 
   try {
     /*
-     * CDXC:AppModals 2026-06-11-19:46:
+     * CDXC:AppModal 2026-06-11-19:46:
      * Settings, Agents Hub, Previous Sessions, and the other non-prompt app modals now render in native child windows that reuse this web bridge. Mark messages with the modal-host surface when native injected one, so AppKit can route close/presented/result messages to the window host without guessing from modal kind.
      */
     modalHost.postMessage(withModalHostSurface(message));

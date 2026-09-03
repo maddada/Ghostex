@@ -339,7 +339,7 @@ export function ManagePreview({
       return;
     }
     /*
-     * CDXC:DocsRootAdditive 2026-08-10:
+     * CDXC:Docs 2026-08-10:
      * This markdown is read by a human and by the agent it is pasted to, so it
      * names the file the way the tree does rather than by routing address.
      */
@@ -461,7 +461,7 @@ export function ManagePreview({
   const isHtml = isHtmlPath(preview.path);
   const usesCompactArtifactHeader = isMarkdown || isDrawing || isHtml;
   /*
-   * CDXC:DocsRootAdditive 2026-08-09:
+   * CDXC:Docs 2026-08-09:
    * Show the file the way the tree names it. `preview.path` is a routing
    * address that starts with the reserved mount segment for anything under a
    * configured Docs directory, which is not a name any human asked for.
@@ -529,7 +529,7 @@ export function ManagePreview({
               type='button'
             >
               {/*
-                CDXC:DocsAnnotationToolbar 2026-06-30-04:55:
+                CDXC:Docs 2026-06-30-04:55:
                 The Markdown feedback toolbar's Clear action should use an X icon instead of a trash can because it clears review annotations rather than deleting a file.
               */}
               <IconX aria-hidden='true' size={14} />

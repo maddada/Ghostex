@@ -42,7 +42,7 @@ export interface WorkspaceSession {
   /** Saved prompts associated with this provider conversation. */
   stashedPromptCount?: number;
   /**
-   * CDXC:SwitchAccount 2026-09-03:
+   * CDXC:AgentProviders 2026-09-03:
    * Daemon-resolved same-family accounts this session can be resumed under;
    * the terminal bar's "Switch Account" rows. Absent when none.
    */

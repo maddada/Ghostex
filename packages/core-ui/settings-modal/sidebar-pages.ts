@@ -1,5 +1,5 @@
 /*
- * CDXC:SettingsModalSplit 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * The Settings left-rail page list: which top-level pages exist, which of them
  * still match the active search query, and the section rows each expandable
  * page contributes. Plain render-time helper, no React hooks.
@@ -71,12 +71,12 @@ export function createSettingsSidebarPages({
   visibleMainSettingsSectionNavigation: VisibleMainSettingsSectionNavigation;
 }) {
   /*
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
+   * CDXC:Settings 2026-06-24-22:16:
    * Settings no longer has a top tab bar. Keep top-level Settings pages in the
    * left sidebar and let section-rich pages expand there so navigation, section
    * jumps, search results, and the Show Advanced footer share one rail.
    *
-   * CDXC:SettingsNavigation 2026-06-25-17:12:
+   * CDXC:Settings 2026-06-25-17:12:
    * Top-level Settings categories need Tabler icons in the left sidebar, while
    * nested section rows stay text-only so expandable sections do not read as
    * separate main categories.
@@ -94,7 +94,7 @@ export function createSettingsSidebarPages({
     return settingsTabSearchHasMatches(extraSettingsTabSearches[pageId as SearchableExtraSettingsTabId]);
   };
   /*
-   * CDXC:SettingsSearch 2026-07-22-00:00:
+   * CDXC:Settings 2026-07-22-00:00:
    * While searching, the sidebar rail keeps only the Settings pages that have
    * matches so one query locates settings across every page, not just the
    * page currently open.
@@ -112,7 +112,7 @@ export function createSettingsSidebarPages({
           requestAnimationFrame(() => scrollMainSettingsSectionIntoView(section.id));
         },
         /*
-         * CDXC:SettingsNavigation 2026-08-19:
+         * CDXC:Settings 2026-08-19:
          * A group whose first anchor carries the group's own name (Sidebar,
          * Terminal) would otherwise render "Sidebar > Sidebar". Drop that row
          * from the rail only: scroll tracking still measures the anchor, so

@@ -6,7 +6,7 @@
 use crate::*;
 
 /*
-CDXC:GPUIProjectEditorPlaceholders 2026-06-28-17:09:
+CDXC:CodeEditor 2026-06-28-17:09:
 Source, Kanban, Automate, and Docs neutral placeholders are unavailable/loading/error surfaces only. Real Source/Kanban/Automate/Docs replacement is owned by the direct runtime URL plus normal-layout CefSurface gate, so placeholder rendering must not create CEF views, start code-server, run file operations, synthesize fallback URLs, persist private details, or add WKWebView/WebKit paths.
 */
 #[derive(Clone, PartialEq, Eq)]
@@ -69,7 +69,7 @@ impl ProjectEditorPlaceholderSignature {
 }
 
 /*
-CDXC:GPUIProjectEditorSleepingPlaceholders 2026-06-28-17:09:
+CDXC:CodeEditor 2026-06-28-17:09:
 Selected sleeping/restored project-editor modes remain real layout participants with neutral text-only shell surfaces. Surface activation expresses wake intent for shell state; Browser hides existing CEF while sleeping, and Source/Kanban/Automate/Docs must not mount or replace runtime surfaces until their awake direct CEF gates permit it.
 */
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -82,7 +82,7 @@ pub(crate) struct ProjectEditorSleepingPlaceholderSignature {
 impl ProjectEditorSleepingPlaceholderSignature {
     pub(crate) fn for_mode(mode: TitlebarMode) -> Option<Self> {
         /*
-        CDXC:GPUIProjectEditorSleepingPlaceholder 2026-06-28-17:09:
+        CDXC:CodeEditor 2026-06-28-17:09:
         Sleeping/restored Source, Browser, Kanban, Automate, and Docs visible copy is private-detail-free shell state. It must not include project/session/URL details, create CEF views, mount bridges, replace placeholders, or introduce WKWebView/WebKit paths.
         */
         let (title, message) = match mode {

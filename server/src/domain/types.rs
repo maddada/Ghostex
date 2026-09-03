@@ -58,7 +58,7 @@ impl DomainStateError {
 }
 
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 The durable settle/snooze state of one session. `settled_override_at` stamps
 when the current override was recorded and is server-internal: the lifecycle
 sweep compares it against gxserver's meaningful-activity clock so real activity
@@ -121,7 +121,7 @@ impl fmt::Display for DomainStateError {
 impl std::error::Error for DomainStateError {}
 
 /*
-CDXC:GxserverRustPort 2026-06-14-22:12:
+CDXC:RepoStructure 2026-06-14-22:12:
 Phase 3 Rust must use the TypeScript SQLite tables as durable state instead of an in-memory compatibility stub. Preserve project/session IDs, JSON validation, corrupt-state errors, and camelCase response fields so sidebar inventory can opt into Rust without a client protocol change.
 */
 pub struct DomainRepository<'a> {

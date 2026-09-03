@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { validateMajorMinorReleaseNotes } from './release-ghostex.mjs';
 
 /*
- CDXC:ReleaseNotes 2026-09-01-12:05:
+ CDXC:Release 2026-09-01-12:05:
  Writing the CHANGELOG.md section for 8.4.0 meant reading 24 commits by hand and
  privately deciding which were user-facing - about fifteen minutes, with the
  exclusions kept in a scratch ledger nobody else could review. The raw material

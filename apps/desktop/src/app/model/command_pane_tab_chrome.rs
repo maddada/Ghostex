@@ -96,7 +96,7 @@ pub(crate) fn agents_workspace_tab_context_focus_label() -> &'static str {
 pub(crate) fn agents_workspace_tab_context_scoped_close_order() -> [AgentsWorkspaceTabCloseScope; 3]
 {
     /*
-    CDXC:GPUIAgentsTabContextMenu 2026-06-26-06:57:
+    CDXC:ContextMenus 2026-06-26-06:57:
     Native workspace tab right-click menus omit direct Close Tab and order scoped close rows as Close Right, Close Left, then Close Other Tabs. GPUI Agents menus use the same row set while direct close remains owned by inline tab chrome and middle-click gestures.
     */
     [
@@ -109,7 +109,7 @@ pub(crate) fn agents_workspace_tab_context_scoped_close_order() -> [AgentsWorksp
 pub(crate) fn agents_workspace_tab_context_scoped_sleep_order() -> [AgentsWorkspaceTabSleepScope; 3]
 {
     /*
-    CDXC:GPUIAgentsTabContextMenu 2026-08-31:
+    CDXC:ContextMenus 2026-08-31:
     Direct Sleep lives beside Rename at the top of the native tab menu. The
     scoped sibling actions remain together below the session runtime actions.
     Empty sibling scopes remain action rows and no-op in the pane-local resolver.
@@ -172,10 +172,10 @@ pub(crate) fn command_pane_tab_context_session_action_focus_policy(
     action: CommandPaneTabSessionAction,
 ) -> CommandPaneTabContextFocusPolicy {
     /*
-    CDXC:GPUICommandTabContextMenu 2026-06-25-18:33:
+    CDXC:ContextMenus 2026-06-25-18:33:
     Retained clicked-tab action handlers focus the clicked terminal before dispatch. GPUI mirrors native dispatch for Rename and Close After Done by selecting/focusing the clicked command tab without expanding hidden chrome, while Delayed Send still expands and wakes because it must target a visible mounted command body for the later Return.
 
-    CDXC:GPUICommandTabContextMenu 2026-06-27-01:49:
+    CDXC:ContextMenus 2026-06-27-01:49:
     Keep these dispatch policies for existing non-menu action handlers, but do not use them as evidence that command-tab right-click should expose Rename Session, Delayed Send, or Close After Done rows.
     */
     match action {
@@ -191,7 +191,7 @@ pub(crate) fn command_pane_tab_context_session_action_focus_policy(
 pub(crate) fn command_pane_tab_context_scoped_lifecycle_focus_policy()
 -> CommandPaneScopedTabMutationFocusPolicy {
     /*
-    CDXC:GPUICommandTabContextMenu 2026-06-25-18:38:
+    CDXC:ContextMenus 2026-06-25-18:38:
     Native scoped Sleep/Close context-menu rows do not focus the clicked terminal before dispatch; only primary tab actions route through `nativeTabContextMenuAction`. Preserve GPUI shell focus for scoped lifecycle rows while direct/focused command close and focused Sleep keep their existing focus ownership.
     */
     CommandPaneScopedTabMutationFocusPolicy::PreserveCurrentFocus
@@ -203,10 +203,10 @@ pub(crate) fn command_pane_tab_context_runtime_action_count(
     _session_id: CommandSessionId,
 ) -> usize {
     /*
-    CDXC:GPUICommandTabRuntimeActions 2026-06-25-21:59:
+    CDXC:CommandPane 2026-06-25-21:59:
     Fork Session, Reload Session, and Pop Out Pane must stay absent from GPUI command-tab context menus until they can dispatch to real command-pane runtime semantics. Current command Ghostty surfaces support mount, focus, input, close/confirm, sleep parking, and action timers only; there is no command-session clone, live embedded reload, or popped-out command-owner transfer path. Do not add disabled rows, fallback toasts, shell-only duplicates, surface drops, or placeholder menu actions.
 
-    CDXC:GPUICommandTabRuntimeActions 2026-06-28-15:12:
+    CDXC:CommandPane 2026-06-28-15:12:
     GPUI tests are intentionally absent, so preserve this as the production row-count policy instead of retaining unused runtime-action enums or test-gated assertion helpers.
     */
     0
@@ -217,7 +217,7 @@ pub(crate) fn command_pane_tab_tooltip(
     delayed_send_remaining_label: Option<&str>,
 ) -> String {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-25-17:57:
+    CDXC:DelayedSend 2026-06-25-17:57:
     Native command tabs keep the normal title tooltip but append "Delayed Send in <remaining>" while a live timer label exists. Use only the visible title plus the runtime countdown label already allowed for tab/body/sidebar timer chrome; do not read command text, terminal content, shell-state JSON, paths, stdout/stderr, or persisted placeholder flags.
     */
     let title = if title.trim().is_empty() {
@@ -234,7 +234,7 @@ pub(crate) fn command_pane_tab_tooltip(
 
 pub(crate) fn command_pane_tab_context_scoped_close_order() -> [CommandPaneTabCloseScope; 3] {
     /*
-    CDXC:GPUICommandTabContextMenu 2026-06-25-14:07:
+    CDXC:ContextMenus 2026-06-25-14:07:
     Native tab-button context menus order scoped close rows as Close Right, Close Left, then Close Other Tabs. Command-role GPUI menus should match those labels and order while preserving the existing clicked-group close resolution.
     */
     [
@@ -248,7 +248,7 @@ pub(crate) fn command_pane_tab_context_sleep_order(
     clicked_tab_is_sleeping: bool,
 ) -> Vec<CommandPaneTabSleepScope> {
     /*
-    CDXC:GPUICommandTabContextMenu 2026-06-25-14:27:
+    CDXC:ContextMenus 2026-06-25-14:27:
     Native tab menus show direct Sleep only for awake clicked tabs, then always show Sleep Right, Sleep Left, and Sleep Other Tabs before the close group. Keep the row order separate from close ordering so sleeping command tabs remain visible while not offering a redundant direct Sleep action.
     */
     let mut scopes = Vec::with_capacity(4);
@@ -266,7 +266,7 @@ pub(crate) fn command_pane_tab_context_sleep_order(
 pub(crate) fn command_pane_new_command_control_placement() -> CommandPaneNewCommandControlPlacement
 {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-12:13:
+    CDXC:CommandPane 2026-06-25-12:13:
     macOS command-pane chrome keeps New Terminal inline with the tab run, while the fixed right action cluster is reserved for panel actions such as Pin/Unpin and Minimize/Expand. GPUI should not render New Terminal in that fixed cluster.
     */
     CommandPaneNewCommandControlPlacement::InlineTabRun
@@ -274,7 +274,7 @@ pub(crate) fn command_pane_new_command_control_placement() -> CommandPaneNewComm
 
 pub(crate) fn command_pane_tab_add_icon_path() -> &'static str {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-13:54:
+    CDXC:CommandPane 2026-06-25-13:54:
     Native command-pane New Terminal chrome is the tab-strip add button, not the generic `.newTerminal` titlebar action button. It uses plus symbol chrome, so GPUI should render a plus icon rather than the terminal action symbol here.
     */
     COMMAND_ICON_PLUS
@@ -282,7 +282,7 @@ pub(crate) fn command_pane_tab_add_icon_path() -> &'static str {
 
 pub(crate) fn command_pane_panel_mode_controls_visible(expanded_chrome: bool) -> bool {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-12:05:
+    CDXC:CommandPane 2026-06-25-12:05:
     Hidden/collapsed command-panel chrome mirrors macOS expand-only panel actions, so Pin/Unpin is visible only in expanded command-pane titlebars. Keep New Terminal as inline tab-run chrome and Expand in the collapsed strip for existing GPUI collapsed-strip creation/open behavior, but do not expose panel mode mutation while hidden.
     */
     COMMAND_PANE_FLOATING_MODE_ENABLED && expanded_chrome
@@ -298,7 +298,7 @@ pub(crate) fn command_pane_mode_for_current_release(mode: CommandPaneMode) -> Co
 
 pub(crate) fn command_pane_panel_pin_icon_path(mode: CommandPaneMode) -> &'static str {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-13:40:
+    CDXC:CommandPane 2026-06-25-13:40:
     macOS command-panel mode chrome uses pin and pin.slash symbols for Pin/Unpin Commands Panel. GPUI should not expose raw P/U fallback letters when SVG chrome is available.
     */
     match mode {
@@ -309,7 +309,7 @@ pub(crate) fn command_pane_panel_pin_icon_path(mode: CommandPaneMode) -> &'stati
 
 pub(crate) fn command_pane_panel_visibility_icon_path(expanded: bool) -> &'static str {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-13:40:
+    CDXC:CommandPane 2026-06-25-13:40:
     macOS command-panel visibility chrome uses chevron.down for Minimize Commands Panel and chevron.up for Expand Commands Panel. Keep GPUI on symbol chrome instead of visible v/^ fallback text.
     */
     if expanded {
@@ -323,7 +323,7 @@ pub(crate) fn command_pane_bottom_reservation_chrome(
     mode: CommandPaneMode,
 ) -> Option<CommandPaneBottomReservationChrome> {
     /*
-    CDXC:GPUICommandPaneFloating 2026-06-25-18:19:
+    CDXC:CommandPane 2026-06-25-18:19:
     Native floating command panels reserve `collapsedCommandsPanelHeight` as a plain black `CommandsPanelChromeView` while the expanded floating panel owns the actual tabs and controls. Render the interactive collapsed strip only for collapsed command-pane mode so floating mode does not duplicate command tabs below the panel.
     */
     match mode {
@@ -343,13 +343,13 @@ pub(crate) fn command_pane_workspace_layout_plan(
     width_ratio: f32,
 ) -> CommandPaneWorkspaceLayoutPlan {
     /*
-    CDXC:GPUICommandPaneLayout 2026-06-27-08:32:
+    CDXC:CommandPane 2026-06-27-08:32:
     Native TerminalWorkspaceView lays command panels out from session presence and mode: pinned reserves the full command-panel height and pushes the workspace up, floating expanded overlays the panel while reserving only collapsedCommandsPanelHeight as plain bottom chrome, and collapsed renders only the interactive collapsed strip.
 
-    CDXC:GPUICommandPaneLayout 2026-06-27-15:00:
+    CDXC:CommandPane 2026-06-27-15:00:
     The command-pane chrome belongs to live command sessions. Once the final command session closes, hide the entire bottom strip so the active workspace reclaims its full height; reopening a command pane still follows the existing session-creation path.
 
-    CDXC:GPUICommandPaneSide 2026-08-16:
+    CDXC:CommandPane 2026-08-16:
     `commandsPanelSide: "right"` only changes the pinned placement: the expanded pane becomes a workspace column sized by `widthRatio`. Floating (release-disabled) and the collapsed footer strip keep their bottom layout so the pane is discoverable from the same place on both sides.
     */
     if !has_sessions {
@@ -387,7 +387,7 @@ pub(crate) fn command_pane_workspace_layout_plan(
 
 pub(crate) fn command_pane_control_trailing_padding(expanded_chrome: bool) -> f32 {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-13:47:
+    CDXC:CommandPane 2026-06-25-13:47:
     Expanded and collapsed command action clusters keep their rightmost button flush inside the surrounding command chrome. The collapsed strip supplies its separate outer right margin.
     */
     if expanded_chrome {
@@ -403,7 +403,7 @@ pub(crate) fn command_pane_tab_left_mouse_up_selects(
     command_tab_drag_active: bool,
 ) -> bool {
     /*
-    CDXC:GPUICommandTabSelection 2026-06-25-19:14:
+    CDXC:CommandPane 2026-06-25-19:14:
     Left-click command tab activation is a mouse-up commit after a matching mouse-down token. Once GPUI starts a command-tab drag, the pending token is canceled and mouse-up must not mutate the active command selection.
     */
     pending_click == Some(target) && !command_tab_drag_active
@@ -417,7 +417,7 @@ pub(crate) fn command_pane_tab_left_mouse_up_focuses(
     command_pane: &CommandPaneModel,
 ) -> bool {
     /*
-    CDXC:GPUICommandFocusMode 2026-06-25-21:50:
+    CDXC:FocusMode 2026-06-25-21:50:
     Native command-pane tabs route double-click mouse-up to Focus instead of the normal selection request, but only for split owners that expose the Focus tab action. Keep the same pending-click and drag gates as single-click selection so double-click Focus cannot fire after drag start, stale mouse-up delivery, collapsed hidden-open tabs, or non-eligible command groups.
     */
     click_count >= 2
@@ -427,7 +427,7 @@ pub(crate) fn command_pane_tab_left_mouse_up_focuses(
 
 pub(crate) fn command_pane_tab_left_mouse_up_finishes_drag(command_tab_drag_active: bool) -> bool {
     /*
-    CDXC:GPUICommandTabSelection 2026-06-25-19:21:
+    CDXC:CommandPane 2026-06-25-19:21:
     A left mouse-up delivered to a command tab still has to clear any active command-tab drag state after skipping click selection. Native AppKit's tab mouse-up ends the drag/click gesture through the same owner; GPUI must not rely only on the root mouse-up path because the tab handler consumes the event.
     */
     command_tab_drag_active
@@ -438,10 +438,10 @@ pub(crate) fn command_pane_tab_pending_click_after_mouse_up_out(
     target: CommandPanePendingTabClick,
 ) -> Option<CommandPanePendingTabClick> {
     /*
-    CDXC:GPUICommandTabSelection 2026-06-26-05:22:
+    CDXC:CommandPane 2026-06-26-05:22:
     Native command-tab selection is a same-gesture mouse-up commit. A left mouse-up outside the tab must cancel the armed left-click token so a stale future mouse-up on that tab cannot select or enter command Focus mode.
 
-    CDXC:GPUICommandTabSelection 2026-06-26-05:23:
+    CDXC:CommandPane 2026-06-26-05:23:
     Mouse-up-out cancellation is exact to the command tab whose current gesture is ending. Leave any nonmatching pending token intact so only that tab's later same-tab mouse-up is prevented from selecting or focusing without a fresh mouse-down.
     */
     if pending_click == Some(target) {
@@ -457,7 +457,7 @@ pub(crate) fn workspace_tab_left_mouse_up_selects(
     workspace_tab_drag_active: bool,
 ) -> bool {
     /*
-    CDXC:GPUIWorkspaceTabs 2026-06-26-06:34:
+    CDXC:Workarea 2026-06-26-06:34:
     Native Agents pane tabs arm selection on mouse-down and commit it on mouse-up only if the same tab still owns the gesture and no tab drag began. GPUI must keep that as runtime-only click state so dragging a tab does not first select/focus it or wake/materialize any placeholder.
     */
     pending_click == Some(target) && !workspace_tab_drag_active
@@ -470,7 +470,7 @@ pub(crate) fn workspace_tab_left_mouse_up_focuses(
     workspace_tab_drag_active: bool,
 ) -> bool {
     /*
-    CDXC:GPUIWorkspaceTabs 2026-06-26-06:34:
+    CDXC:Workarea 2026-06-26-06:34:
     Native pane-tab double-click sends a Focus request from mouse-up after the same click/drag gates as normal selection. The model helper decides whether Focus mode can actually toggle, but stale or drag-active gestures must not route into Focus.
     */
     click_count >= 2
@@ -482,7 +482,7 @@ pub(crate) fn workspace_tab_pending_click_after_mouse_up_out(
     target: WorkspacePendingTabClick,
 ) -> Option<WorkspacePendingTabClick> {
     /*
-    CDXC:GPUIWorkspaceTabs 2026-06-26-06:34:
+    CDXC:Workarea 2026-06-26-06:34:
     Mouse-up outside a native Agents pane tab cancels only that armed tab gesture. Preserve unrelated pending tab tokens for their own mouse-up path, and do not use broad root hit-test routing or synthetic input cleanup.
     */
     if pending_click == Some(target) {
@@ -494,7 +494,7 @@ pub(crate) fn workspace_tab_pending_click_after_mouse_up_out(
 
 pub(crate) fn command_pane_tab_separator_visible(has_following_command_tab: bool) -> bool {
     /*
-    CDXC:GPUICommandTabSeparators 2026-06-25-14:17:
+    CDXC:CommandPane 2026-06-25-14:17:
     Native command tab buttons draw the trailing separator only when another command tab follows. The final tab in either expanded titlebar or collapsed strip must not get separator chrome.
     */
     has_following_command_tab
@@ -505,7 +505,7 @@ pub(crate) fn command_pane_sticky_active_tab_edge_for_scroll_handle(
     active_index: usize,
 ) -> Option<CommandPaneStickyActiveTabEdge> {
     /*
-    CDXC:GPUICommandTabOverflow 2026-06-25-13:34:
+    CDXC:CommandPane 2026-06-25-13:34:
     Match native command overflow visibility from actual scroll geometry: hide the proxy unless the tab strip overflows and the active command tab has less than the native usable visible width.
     */
     command_pane_sticky_active_tab_edge(
@@ -588,7 +588,7 @@ pub(crate) fn command_pane_active_tab_reveal_scroll_offset_x(
     max_scroll_x: Pixels,
 ) -> Option<Pixels> {
     /*
-    CDXC:GPUICommandTabOverflow 2026-06-25-13:34:
+    CDXC:CommandPane 2026-06-25-13:34:
     Native command tab activation preserves scroll position when the selected tab is already usable, and otherwise reveals the active tab with a 12px margin instead of snapping the strip more than needed.
     */
     if !command_pane_tab_scroll_geometry_ready(viewport_bounds, active_tab_bounds, max_scroll_x) {
@@ -657,7 +657,7 @@ pub(crate) fn command_pane_tab_wheel_scroll_delta_x(
     line_height: Pixels,
 ) -> Option<Pixels> {
     /*
-    CDXC:GPUICommandTabScrolling 2026-06-25-13:45:
+    CDXC:CommandPane 2026-06-25-13:45:
     Match native command tab wheel routing: horizontal gestures move tabs directly, precise vertical gestures are not remapped, and non-precision vertical wheel ticks are amplified before becoming horizontal tab movement.
     */
     let pixel_delta = delta.pixel_delta(line_height);
@@ -718,7 +718,7 @@ pub(crate) fn command_pane_centered_active_tab_scroll_offset_x(
     max_scroll_x: Pixels,
 ) -> Pixels {
     /*
-    CDXC:GPUICommandTabOverflow 2026-06-25-13:34:
+    CDXC:CommandPane 2026-06-25-13:34:
     Clicking native Show Active Tab centers the real active tab when scroll bounds allow, then clamps at the strip ends. Keep GPUI on explicit scroll-offset math instead of the minimal `scroll_to_item` reveal path.
     */
     if viewport_bounds.size.width <= px(0.0)
@@ -769,7 +769,7 @@ pub(crate) fn command_pane_sticky_active_tab_trailing_inset(
     tab_add_visible: bool,
 ) -> f32 {
     /*
-    CDXC:GPUICommandTabOverflow 2026-06-25-18:51:
+    CDXC:CommandPane 2026-06-25-18:51:
     Native Show Active Tab chrome overlays the tab viewport edge and does not consume tab-run layout width. Keep the trailing proxy before the inline New Terminal button and fixed command-panel actions so the overlay covers clipped tabs, not controls.
     */
     command_pane_fixed_panel_control_width(expanded_chrome)
@@ -784,7 +784,7 @@ pub(crate) fn command_pane_empty_titlebar_double_click_creates_new_terminal(
     click_count: usize,
 ) -> bool {
     /*
-    CDXC:GPUICommandTabDoubleClick 2026-06-25-13:50:
+    CDXC:CommandPane 2026-06-25-13:50:
     Native command titlebars create New Terminal only for double-clicks on empty tab chrome. Single clicks and real tab/control hits must keep their normal focus, selection, drag, and action behavior.
     */
     click_count >= 2
@@ -792,7 +792,7 @@ pub(crate) fn command_pane_empty_titlebar_double_click_creates_new_terminal(
 
 pub(crate) fn command_pane_fixed_panel_control_count(expanded_chrome: bool) -> usize {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-12:26:
+    CDXC:CommandPane 2026-06-25-12:26:
     Native command-panel fixed chrome has one visibility action in all states, plus Pin/Unpin only while visible. New Terminal stays inline with tabs, and visible panels do not add a second close/minimize button.
     */
     let mut count = 1;
@@ -818,7 +818,7 @@ pub(crate) fn command_pane_inline_tab_add_visible_for_chrome_width(
     expanded_chrome: bool,
 ) -> bool {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-18:46:
+    CDXC:CommandPane 2026-06-25-18:46:
     Native computes command tab-add visibility from the tab area left after fixed panel actions. Hide GPUI's inline plus under the same threshold so narrow command groups keep usable tab/double-click chrome instead of pinning a New Terminal button over it.
     */
     let tab_area_width =
@@ -831,7 +831,7 @@ pub(crate) fn command_pane_inline_tab_add_visible_for_chrome_width(
 
 pub(crate) fn command_pane_panel_pin_label(mode: CommandPaneMode) -> &'static str {
     /*
-    CDXC:GPUICommandPaneControls 2026-06-25-12:19:
+    CDXC:CommandPane 2026-06-25-12:19:
     macOS command-panel chrome labels the mode toggle as Pin/Unpin Commands Panel, not Float/Pin Command Pane. Keep the label tied to the native action vocabulary while preserving the existing pinned/floating state mutation.
     */
     match mode {
@@ -864,7 +864,7 @@ pub(crate) fn cpraildbg(message: &str) {
 }
 
 /*
-CDXC:GPUICommandPaneTabs 2026-06-22-17:20:
+CDXC:CommandPane 2026-06-22-17:20:
 Command-pane tab chrome is focus-invariant: command group focus and shell focus may drive keyboard ownership and group borders, but per-tab brightness derives only from semantic command status and active membership inside the command tab group. CommandPaneModel.focused_group and shell focus are intentionally excluded.
 */
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -890,7 +890,7 @@ pub(crate) fn command_pane_group_has_first_responder_border(
     group_id: CommandPaneGroupId,
 ) -> bool {
     /*
-    CDXC:GPUICommandPaneFocus 2026-06-27-03:03:
+    CDXC:FocusRouting 2026-06-27-03:03:
     `native-command-panel-focus-source.test.ts` covers the AppKit source path that repaints command-pane borders after programmatic first-responder focus. GPUI command borders must treat shell command focus plus the focused command group as the responder chrome source; selected-group state alone is not focused chrome.
     */
     shell_focus == ShellFocusTarget::CommandPane && focused_group == group_id
@@ -903,10 +903,10 @@ pub(crate) fn command_pane_group_border_color(
     group_id: CommandPaneGroupId,
 ) -> Hsla {
     /*
-    CDXC:GPUICommandPaneFocus 2026-06-25-17:57:
+    CDXC:FocusRouting 2026-06-25-17:57:
     Native command-pane focus borders are first-responder chrome, not only selected command-group state. Show the focused border only when the command pane owns shell focus and the group is the command model's focused group, so returning focus to Agents, Browser, or project-editor surfaces clears command focus chrome without changing command tab selection.
 
-    CDXC:GPUICommandPaneFocus 2026-06-25-18:02:
+    CDXC:FocusRouting 2026-06-25-18:02:
     Native pinned command panels hide inactive command borders while floating command panels keep the inactive command outline. Keep the GPUI border frame stable but make pinned inactive command groups transparent so the visual state follows AppKit without resizing panes.
     */
     if command_pane_group_has_first_responder_border(shell_focus, focused_group, group_id) {
@@ -940,7 +940,7 @@ pub(crate) fn command_pane_group_border_width(
     group_id: CommandPaneGroupId,
 ) -> CommandPaneGroupBorderWidth {
     /*
-    CDXC:GPUICommandPaneFocus 2026-06-27-04:35:
+    CDXC:FocusRouting 2026-06-27-04:35:
     Native command-pane chrome uses a 1px first-responder border and a 2px inactive command border. GPUI must keep the inactive width even when pinned inactive groups use transparent color, so hidden inactive command groups remain layout-stable while focused chrome stays thinner than attention/command borders.
     */
     if command_pane_group_has_first_responder_border(shell_focus, focused_group, group_id) {

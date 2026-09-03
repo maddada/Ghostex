@@ -203,7 +203,7 @@ pub(crate) struct GpuiFirstRunOnboardingState {
     pub(crate) windows_terminal_setup_complete: bool,
 }
 
-/// CDXC:GPUIFirstRunOnboardingOnce 2026-08-18: the markers whose surfaces are
+/// CDXC:Onboarding 2026-08-18: the markers whose surfaces are
 /// user-visible, so they are written only after that surface is on screen.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum GpuiFirstRunOnboardingMarker {

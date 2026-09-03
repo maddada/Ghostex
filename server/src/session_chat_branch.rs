@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatRewind 2026-09-02:
+CDXC:SessionChat 2026-09-02:
 Active-branch selection for Claude transcripts. Claude Code's transcript is an
 append-only message TREE (`uuid`/`parentUuid`), and a `/rewind` → "Restore
 conversation" writes NOTHING when it happens: it truncates the agent's
@@ -19,7 +19,7 @@ them:
      parent many children, are untouched, and so are the compaction and
      resume boundaries that break the chain without ever producing two prompts
      on one parent. This subsumes the older no-descendants rule
-     (CDXC:SessionChatCore 2026-08-18), whose subtree is empty by construction.
+     (CDXC:SessionChat 2026-08-18), whose subtree is empty by construction.
   2. Explicit leaf markers. Claude's own resume loader treats a
      `{"type":"last-prompt","leafUuid":…,"explicit":true}` row as the active
      leaf when nothing was written after it, so every tree row between that

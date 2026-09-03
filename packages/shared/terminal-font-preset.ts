@@ -85,7 +85,7 @@ export function getTerminalFontFamilyForPreset(preset: TerminalFontPreset): stri
 }
 
 /**
- * CDXC:TerminalSettings 2026-04-26-18:36
+ * CDXC:Terminal 2026-04-26-18:36
  * ghostex terminal font choices now write into the user's real Ghostty config.
  * Ghostty expects a single font family name, while the web UI uses CSS fallback
  * stacks, so sync the first concrete family instead of copying browser syntax.

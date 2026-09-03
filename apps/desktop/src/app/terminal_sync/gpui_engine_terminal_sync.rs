@@ -15,7 +15,7 @@ use crate::*;
 
 impl GhostexGpuiApp {
     /*
-    CDXC:GPUITerminalGpuiEngine 2026-07-04:
+    CDXC:Terminal 2026-07-04:
     GPUI-engine terminal reconciliation runs before native host sync so
     engine-claimed sessions exclude the retained native pipeline in the same
     frame on every OS. Exit consumption mirrors the native process-exit path
@@ -166,7 +166,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUITerminalGpuiEngine 2026-07-06:
+    CDXC:Terminal 2026-07-06:
     Engine startup consumption: consume the same startup launch plans the
     retained native hidden-host path understands, but resolve them on every OS
     by spawning the composited GPUI-engine terminal and applying the shared
@@ -246,7 +246,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn sync_command_gpui_engine_terminals(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUICommandPaneQuitPersistence 2026-07-10:
+        CDXC:Workarea 2026-07-10:
         During app quit, dropping a composited terminal record intentionally
         detaches its zmx client. Do not reinterpret that renderer exit as the
         user's shell exiting: the normal exit path removes the command tab and
@@ -257,7 +257,7 @@ impl GhostexGpuiApp {
         }
         {
             /*
-            CDXC:GPUITerminalGpuiEngine 2026-07-04-12:40:
+            CDXC:Terminal 2026-07-04-12:40:
             Native command-tab Sleep is a renderer AND process teardown
             (TerminalWorkspaceView closeTerminal with preserveLayoutPlaceholder:
             command sessions have no persistence provider, so the shell dies and
@@ -371,7 +371,7 @@ impl GhostexGpuiApp {
                 .map(command_terminal_runtime_session_id_from_gxserver_key)
                 .or_else(|| {
                     /*
-                    CDXC:RemoteProjectActions 2026-08-29:
+                    CDXC:RemoteMachines 2026-08-29:
                     A remote Action tab has no local daemon identity, so its
                     runtime owner is derived from the remote session it attaches
                     to. Without this the mounted attach would be reported as
@@ -440,7 +440,7 @@ impl GhostexGpuiApp {
         }
 
         /*
-        CDXC:GPUITerminalGpuiEngineDiagnostics 2026-07-04-12:40:
+        CDXC:Diagnostics 2026-07-04-12:40:
         Grid breadcrumbs for command engine terminals under the existing
         `native.terminal.focus` scenario gate. The element resizes the model
         from prepaint bounds, so the applied cols/rows sequence recorded here
@@ -830,7 +830,7 @@ impl GhostexGpuiApp {
                 );
             }
             /*
-            CDXC:ExportTranscript 2026-08-20:
+            CDXC:TranscriptExport 2026-08-20:
             The transcript file only exists on the machine that runs the agent,
             so the export is a daemon call, not a local read. Route it through
             the same sidebar-runtime lifecycle path Fork uses: the runtime owns

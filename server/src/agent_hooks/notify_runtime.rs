@@ -95,7 +95,7 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         nested_get(&payload, &["prompt", "text"]),
     ]);
     /*
-    CDXC:SessionChatAntigravity 2026-09-03:
+    CDXC:AgentProviders 2026-09-03:
     Antigravity's hook payloads name no event and carry no prompt: every event
     is `{conversationId, transcriptPath, modelName, …}` plus a `toolCall` or an
     `invocationNum`. The step log it names already holds the submitted prompt
@@ -142,7 +142,7 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         && claude_notification_is_idle_input(&payload);
     if let Some(next_activity) = activity_for_hook_event(&agent_key, &event_name, &payload) {
         /*
-        CDXC:SessionChatPromptQueue 2026-08-24:
+        CDXC:SessionChat 2026-08-24:
         Claude's 60s "waiting for your input" reminder means the CLI is idle at
         its input prompt. It is not a completion, permission, or approval
         event, so it must always settle to idle regardless of the prior state.
@@ -226,7 +226,7 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
 }
 
 /*
-CDXC:FirstPromptRealMessage 2026-08-28:
+CDXC:SessionTitles 2026-08-28:
 `/model`, `/effort`, and other slash or meta submissions are commands, not the
 user's first message. Capturing one as `firstUserMessageBase64` did double
 damage: it armed the first-prompt auto-title flow while the conversation held
@@ -448,7 +448,7 @@ fn post_gxserver_hook_event(
         read_state_string(state, "title").as_deref(),
     );
     /*
-    CDXC:SessionChatSend 2026-07-31:
+    CDXC:SessionChat 2026-07-31:
     Session Chat interactive-prompt capture needs the hook payload's tool
     identity: gxserver derives question/approval cards from
     AskUserQuestion-ish tool_input and PermissionRequest tool names at
@@ -459,13 +459,13 @@ fn post_gxserver_hook_event(
     }
     // The call id pairs a PostToolUse with the PreToolUse that stored a
     // question/approval card, so only the asking call's completion retires it
-    // (CDXC:SessionChatQuestionCardLifecycle 2026-09-03).
+    // (CDXC:AgentScreenDetection 2026-09-03).
     if let Some(tool_use_id) = first_string([payload.get("tool_use_id"), payload.get("toolUseId")])
     {
         params.insert("toolUseId".to_string(), json!(tool_use_id));
     }
     /*
-    CDXC:SessionChatPromptQueue 2026-08-24:
+    CDXC:SessionChat 2026-08-24:
     gxserver's own event mapping outranks the posted sidecar status, so the
     idle-input distinction must travel with the event: without it the server
     re-derives Notification → attention and re-creates the stuck-attention

@@ -14,16 +14,16 @@ const WATCH_GHOSTEX_VIDEO_SOURCE_URL = 'https://www.youtube.com/watch?v=APdP-j5n
 const WATCH_GHOSTEX_VIDEO_EMBED_URL = 'https://www.youtube.com/embed/APdP-j5n4Mw?playsinline=1&rel=0';
 
 /*
- * CDXC:GhostexTutorialVideo 2026-06-18-04:49:
+ * CDXC:Onboarding 2026-06-18-04:49:
  * The tutorial video modal is a direct copy of the Highlighted Features modal shell, but it must show one page only: the supplied walkthrough video.
  * Keep disabled outside-click dismissal and the first-launch dialog surface so
  * the tutorial behaves like the existing replayable feature modal.
  *
- * CDXC:GhostexTutorialVideo 2026-08-03:
+ * CDXC:Onboarding 2026-08-03:
  * The native child-window title is the tutorial surface's one visible heading.
  * Do not repeat it in the video body.
  *
- * CDXC:GhostexTutorialVideo 2026-08-08:
+ * CDXC:Onboarding 2026-08-08:
  * YouTube negotiates a CEF-compatible rendition of the walkthrough after its
  * upload finishes processing, so keep the video remote instead of adding it
  * to every Ghostex app bundle.

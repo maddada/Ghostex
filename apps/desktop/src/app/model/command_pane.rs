@@ -25,10 +25,10 @@ impl CommandPaneModel {
         default_height_px: f32,
     ) -> Self {
         /*
-        CDXC:GPUICommandPane 2026-06-25-11:40:
+        CDXC:CommandPane 2026-06-25-11:40:
         The production GPUI command pane starts with no command terminal sessions. Opening the pane creates the first `Command Terminal` placeholder at the open boundary, while Action runs and transferred tabs can still supply specific titles. Do not seed fake Command/Shell sessions into app startup or persisted fallback state.
 
-        CDXC:GPUICommandPane 2026-06-27-15:00:
+        CDXC:CommandPane 2026-06-27-15:00:
         The empty model still must not spawn a command terminal at startup, but GPUI now keeps the bottom command-pane strip visible so users can discover and open Commands from the workspace footer. The visible strip is presentation chrome; plus, double-click, F12, and Actions remain the only boundaries that create the first command session.
         */
         Self {
@@ -80,7 +80,7 @@ impl CommandPaneModel {
         &self,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandPaneFocus 2026-06-25-21:24:
+        CDXC:FocusRouting 2026-06-25-21:24:
         Native command-pane focus chrome and focused-session actions require the stored command focus and live responder to identify the same command session. GPUI shell focus is the responder proxy, so responder-style command helpers must not fall back to the first command group when focused_group is stale or missing.
         */
         self.find_leaf(self.focused_group)
@@ -109,13 +109,13 @@ impl CommandPaneModel {
 
     pub(crate) fn rename_session(&mut self, id: CommandSessionId, title: String) -> bool {
         /*
-        CDXC:GPUICommandPaneRename 2026-06-25-16:33:
+        CDXC:CommandPane 2026-06-25-16:33:
         GPUI command-pane Rename Session updates only the live command-tab title. Command shell persistence remains layout/lifecycle-only and must not write user-entered titles, command text, terminal content, paths, stdout, stderr, or action payloads into shell-state JSON.
 
-        CDXC:GPUICommandPaneRename 2026-06-25-22:33:
+        CDXC:CommandPane 2026-06-25-22:33:
         Rename Session is a live command-tab title edit. The requested session id must still be attached to a command tab group; stale stored sessions no-op without falling back to the focused group or another tab.
 
-        CDXC:GPUICommandPaneGxserverRestore 2026-07-04:
+        CDXC:Workarea 2026-07-04:
         Command-pane restart parity now persists this bounded display title beside the gxserver session id so renamed command tabs restore with their daemon-backed identity. The title remains chrome metadata only; command text, terminal output, paths, and attach payloads stay out of shell state.
         */
         if command_pane_group_for_session(self, id).is_none() {
@@ -133,7 +133,7 @@ impl CommandPaneModel {
 
     pub(crate) fn set_focused_group_for_selected_owner(&mut self, group_id: CommandPaneGroupId) {
         /*
-        CDXC:GPUICommandFocusMode 2026-06-26-04:43:
+        CDXC:FocusMode 2026-06-26-04:43:
         Command-pane Focus is a visibility filter, not sticky selection. When a command insertion, reorder, or grouping path makes a different command group the active owner, clear Focus before render so the selected command owner is visible; same-group selection and reorder keep Focus reversible.
         */
         self.focused_group = group_id;
@@ -174,7 +174,7 @@ impl CommandPaneModel {
         default_height_px: f32,
     ) -> bool {
         /*
-        CDXC:GPUICommandPane 2026-06-25-12:10:
+        CDXC:CommandPane 2026-06-25-12:10:
         Selecting a tab from collapsed command-strip chrome is a hidden-open path like macOS `openCommandsPanelForActiveProject`. Apply the Workspace default-height reset before expanding so collapsed tab clicks and context-menu Select do not preserve a stale hidden pane height.
         */
         if !self.select_session_in_group(group_id, session_id) {
@@ -201,7 +201,7 @@ impl CommandPaneModel {
         session_id: CommandSessionId,
     ) -> bool {
         /*
-        CDXC:GPUICommandFocusMode 2026-06-25-21:40:
+        CDXC:FocusMode 2026-06-25-21:40:
         Command-tab Focus is the command-panel equivalent of native split-owner Focus mode. Store only the focused command group id, preserve the full command split tree for reversible exit, and select/focus the clicked command tab before zooming so the visible owner matches the menu target without creating terminal processes, command text, fallback rows, overlays, or persisted runtime state.
         */
         if self.focus_mode_group == Some(group_id) {
@@ -224,7 +224,7 @@ impl CommandPaneModel {
         session_id: CommandSessionId,
     ) -> bool {
         /*
-        CDXC:GPUICommandAttention 2026-06-25-19:58:
+        CDXC:Notifications 2026-06-25-19:58:
         Native command content, titlebar, and tab activation acknowledge a focused Attention command session. GPUI should clear only the directly activated command session from Attention to Idle, leaving Working, Delayed Send flags, sleeping state, and Agents workspace activity unchanged.
         */
         let Some(session) = self.session_mut(session_id) else {
@@ -239,7 +239,7 @@ impl CommandPaneModel {
 
     pub(crate) fn acknowledge_attention_for_focused_session_activation(&mut self) -> bool {
         /*
-        CDXC:GPUICommandAttention 2026-06-26-00:38:
+        CDXC:Notifications 2026-06-26-00:38:
         Responder and titlebar-control command activation must acknowledge only the active tab in the live focused command group. A stale `focused_group` is not an activation target and must no-op instead of falling back to the first command group and clearing unrelated Attention state.
         */
         let Some((_group_id, session_id)) = self.focused_group_active_session_id() else {
@@ -250,7 +250,7 @@ impl CommandPaneModel {
 
     pub(crate) fn acknowledge_attention_for_live_focused_group_activation(&mut self) -> bool {
         /*
-        CDXC:GPUICommandAttention 2026-06-25-23:55:
+        CDXC:Notifications 2026-06-25-23:55:
         Keyboard focus transfer into an already-open command panel is responder-like. Acknowledge only the active session in the live `focused_group`; stale command focus must not fall back to the first command group and clear unrelated Attention state.
         */
         let Some((_group_id, session_id)) = self.focused_group_active_session_id() else {
@@ -261,7 +261,7 @@ impl CommandPaneModel {
 
     pub(crate) fn cycle_active_session(&mut self, reverse: bool) -> bool {
         /*
-        CDXC:GPUICommandPaneFocus 2026-06-25-23:20:
+        CDXC:FocusRouting 2026-06-25-23:20:
         Command-pane Ctrl-Tab parity is responder-like: cycle only the live focused command group and no-op when `focused_group` is stale instead of falling back to the first command group.
         */
         self.find_leaf_mut(self.focused_group)
@@ -302,7 +302,7 @@ impl CommandPaneModel {
         session_id: CommandSessionId,
     ) -> bool {
         /*
-        CDXC:GPUICommandPaneTabs 2026-06-26-06:18:
+        CDXC:CommandPane 2026-06-26-06:18:
         Direct GPUI command-tab close mirrors native command titlebar close: select the clicked command session before removal so right-then-left neighbor selection is resolved from the close target, not from a previously active tab. Scoped Close Left/Right/Others continue to call `close_session` directly because their native menu rows do not focus the clicked terminal first.
         */
         if !self.select_session_in_group(group_id, session_id) {
@@ -318,7 +318,7 @@ impl CommandPaneModel {
         scope: CommandPaneTabCloseScope,
     ) -> Vec<CommandSessionId> {
         /*
-        CDXC:GPUICommandPaneTabs 2026-06-25-11:20:
+        CDXC:CommandPane 2026-06-25-11:20:
         GPUI command-tab context menu close scopes must match macOS command-panel tab behavior: resolve the clicked tab's sibling ids before closing anything, stay inside that command group, and never cross into another command split group, Agents workspace pane, Browser tab, project-editor surface, command text, terminal output, paths, or persisted shell inference.
         */
         let Some(leaf) = self.find_leaf(group_id) else {
@@ -355,7 +355,7 @@ impl CommandPaneModel {
         scope: CommandPaneTabSleepScope,
     ) -> Vec<CommandSessionId> {
         /*
-        CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+        CDXC:SessionSleep 2026-06-25-14:27:
         Command-tab Sleep scopes use the clicked command group's sibling list, just like native pane-tab sleep. Keep sleep resolution inside the command group so Sleep Right/Left/Others never crosses command splits, Agents workspace panes, Browser tabs, project-editor surfaces, command text, terminal output, paths, or persisted shell inference.
         */
         let Some(leaf) = self.find_leaf(group_id) else {
@@ -399,7 +399,7 @@ impl CommandPaneModel {
         session.is_sleeping = is_sleeping;
         if is_sleeping {
             /*
-            CDXC:GPUICommandDelayedSend 2026-06-25-15:46:
+            CDXC:DelayedSend 2026-06-25-15:46:
             Manual command-tab Sleep parks the terminal surface but must not cancel Delayed Send or Close After Done intent. Native keeps those timers/flags attached to the session; Delayed Send fires only if the tab is awake again at the deadline, and Close After Done resumes countdown evaluation after wake.
             */
             session.activity = CommandTerminalActivity::Idle;
@@ -417,10 +417,10 @@ impl CommandPaneModel {
         default_height_px: f32,
     ) -> bool {
         /*
-        CDXC:GPUICommandPane 2026-06-25-11:47:
+        CDXC:CommandPane 2026-06-25-11:47:
         Opening a hidden GPUI command pane must match macOS `createCommandsPanelOpenStatePatch`: reset height from the Workspace default only when the pane is hidden, and preserve the user's live resize while the pane is already expanded. Keep this model-local so F12, titlebar Actions, sidebar Actions, and command chrome share the same rule.
 
-        CDXC:GPUICommandPaneSide 2026-08-16:
+        CDXC:CommandPane 2026-08-16:
         Only the height resets here, because it comes from the Workspace default-height Setting. The right dock's width has no Settings default, so its ratio is user-owned: opening the pane again keeps the width the divider drag stored, and the divider's double-click reset stays the only way back to the default.
         */
         if self.is_expanded() {
@@ -444,7 +444,7 @@ impl CommandPaneModel {
         &mut self,
     ) -> Option<(CommandPaneGroupId, CommandSessionId, bool)> {
         /*
-        CDXC:GPUICommandPane 2026-06-25-11:40:
+        CDXC:CommandPane 2026-06-25-11:40:
         Opening an empty command pane mirrors macOS `openCommandsPanelForActiveProject`: create exactly one selected `Command Terminal` placeholder at open time. If a valid command tab already exists, preserve it and only expand/focus the pane so opening never invents extra tabs.
         */
         if let Some((group_id, session_id)) = self.active_group_and_session_id() {
@@ -462,7 +462,7 @@ impl CommandPaneModel {
         target_group_id: Option<CommandPaneGroupId>,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandPaneInsertion 2026-06-25-21:21:
+        CDXC:CommandPane 2026-06-25-21:21:
         Native command-panel New Terminal carries the clicked titlebar session as the insertion target, while keyboard creation uses the command panel's focused responder. Resolve the command group explicitly at the creation boundary so clicked plus/double-click chrome inserts into that group without depending on a prior focus side effect.
         */
         if let Some(group_id) = target_group_id {
@@ -497,10 +497,10 @@ impl CommandPaneModel {
 
     pub(crate) fn live_group_for_untargeted_creation(&self) -> Option<CommandPaneGroupId> {
         /*
-        CDXC:GPUICommandPaneInsertion 2026-06-26-04:29:
+        CDXC:CommandPane 2026-06-26-04:29:
         Untargeted New Terminal creation must recover from a stale `focused_group` by using the first live command group, while explicit clicked-group creation still rejects missing targets before this path. This preserves the existing command split tree instead of replacing it with a new root leaf.
 
-        CDXC:GPUICommandPaneInsertion 2026-06-27-04:36:
+        CDXC:CommandPane 2026-06-27-04:36:
         Terminal Action creation no longer uses this focused-group fallback: newly-created non-reused Action tabs need native `createCommandTerminal(... focusAfterCreate:false)` placement, while Cmd+T/New Terminal keeps the focused command-group insertion rule.
         */
         self.find_leaf(self.focused_group)
@@ -527,7 +527,7 @@ impl CommandPaneModel {
         session_id: CommandSessionId,
     ) -> CommandPaneGroupId {
         /*
-        CDXC:GPUICommandPaneActions 2026-06-27-04:36:
+        CDXC:CommandPane 2026-06-27-04:36:
         Newly-created non-reused terminal Actions follow native untargeted Action placement, not Cmd+T focus placement: an empty command layout creates the first owner, a single owner appends as a tab, and an existing split gets a new selected rightmost command owner without moving existing group memberships.
         */
         match command_node_leaf_count(&self.root) {
@@ -551,10 +551,10 @@ impl CommandPaneModel {
             .find_leaf_mut(group_id)
             .expect("created command tab target group must exist");
         /*
-        CDXC:GPUICommandPaneInsertion 2026-06-25-19:27:
+        CDXC:CommandPane 2026-06-25-19:27:
         Native command-panel New Terminal uses `targetSessionId` only to find the command tab group; `addCommandSessionToPaneTabGroup` appends the new command session to the end of that group and then selects it. Keep `insert_session_at` as the exact-index API for command tab-strip transfer and reorder paths.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-04:36:
+        CDXC:CommandPane 2026-06-27-04:36:
         Terminal Action creation shares this append path only when the command layout has a single live owner. Split layouts must create a separate Action owner so stale or unrelated command focus cannot pull the Action tab into an existing group.
         */
         leaf.tab_group
@@ -591,7 +591,7 @@ impl CommandPaneModel {
         session_id: CommandSessionId,
     ) -> CommandPaneGroupId {
         /*
-        CDXC:GPUICommandPaneActions 2026-06-27-04:36:
+        CDXC:CommandPane 2026-06-27-04:36:
         Native `appendCommandSessionToPaneLayout` appends untargeted Action creation to an existing split as a separate rightmost command owner. GPUI represents that by wrapping the current command root as the first branch and the new Action leaf as the second branch, preserving all existing tab groups and their internal selections.
         */
         let existing_leaf_count = command_node_leaf_count(&self.root).max(1);
@@ -625,7 +625,7 @@ impl CommandPaneModel {
         title: String,
     ) -> CommandPaneActionSessionSelection {
         /*
-        CDXC:GPUICommandPane 2026-06-24-23:36:
+        CDXC:CommandPane 2026-06-24-23:36:
         GPUI sidebar/titlebar terminal Actions own one live command-pane tab per
         Action. Idle owners rerun in place; active owners are selected without a
         duplicate run. The command id and run id remain process-memory ownership
@@ -667,7 +667,7 @@ impl CommandPaneModel {
         command_id: &str,
     ) -> bool {
         /*
-        CDXC:GPUICommandPaneActions 2026-06-27-06:10:
+        CDXC:CommandPane 2026-06-27-06:10:
         Native `runNativeSidebarCommand` closes an existing mapped Action session before creating a replacement when that mapped terminal is no longer running. Match that only for exact same-command sleeping or orphaned GPUI command tabs; keep running non-idle tabs alive, let idle running tabs reuse earlier, and do not prune title-only restored candidates for other command ids.
         */
         let tab_groups = self
@@ -714,10 +714,10 @@ impl CommandPaneModel {
         CommandSessionId,
     )> {
         /*
-        CDXC:GPUICommandPane 2026-06-25-11:18:
+        CDXC:CommandPane 2026-06-25-11:18:
         MacOS command Actions reuse one idle command-pane tab per normalized Action title after restore, even when the live command-id map is missing. Keep the exact command-id match first, then allow idle title-owned reuse regardless of stale/missing action id; duplicate Action titles are rejected at save time, and run-start rewrites the live mapping.
 
-        CDXC:GPUICommandPaneActions 2026-08-08:
+        CDXC:CommandPane 2026-08-08:
         Idle sleeping/restored Action tabs are reusable too. Run start wakes the
         selected session before mounted-surface detection, and an unmounted reuse
         goes through the exact existing gxserver attach slot with startup text.
@@ -769,13 +769,13 @@ impl CommandPaneModel {
         command_id: &str,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandPane 2026-06-25-10:34:
+        CDXC:CommandPane 2026-06-25-10:34:
         `endSidebarCommandRun` mirrors macOS's one mapped command-pane session per Action. Prefer the selected matching tab, then an active matching run, then any matching action-owned tab; restored ownership may use only the validated bounded Action selector, never titles, command text, status paths, terminal output, or project paths.
 
-        CDXC:GPUICommandPaneActions 2026-06-26-04:16:
+        CDXC:CommandPane 2026-06-26-04:16:
         The selected Action tab preference is responder-style focus and must use only the live focused command group. A stale `focused_group` must not choose the first-group fallback as the selected tab, so command-run-end cleanup falls through to active matching runs before any idle action-owned tab.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-05:59:
+        CDXC:CommandPane 2026-06-27-05:59:
         Run-end lookup trusts the current command-button owner only. Older same-command tabs whose `action_command_id` was invalidated by a newer run are intentionally invisible here even when selected or still clearing their own status file.
         */
         let selected = self
@@ -811,10 +811,10 @@ impl CommandPaneModel {
         command_id: &str,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandPaneActions 2026-06-27-06:21:
+        CDXC:CommandPane 2026-06-27-06:21:
         Deleting an Action in Settings must mirror native `deleteSidebarCommand`: clear the current command-to-session ownership before closing the mapped command tab. If a mounted terminal needs close confirmation and remains visible temporarily, it must no longer emit command-button completion feedback, timers, or HUD command-session mapping for the deleted command.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-06:41:
+        CDXC:CommandPane 2026-06-27-06:41:
         Shared `endSidebarCommandRun` uses the same ownership split as native `closeNativeSidebarCommandSession`: clear Action ownership before requesting the terminal close, so close-confirm survivors cannot remain the current command id owner or keep private run/status-file state alive.
         */
         let slot = self.action_session_slot_for_command_id(command_id)?;
@@ -874,7 +874,7 @@ impl CommandPaneModel {
         session_id: CommandSessionId,
     ) -> Option<CommandPaneActionRunCompletion> {
         /*
-        CDXC:GPUICommandPane 2026-06-25-11:11:
+        CDXC:CommandPane 2026-06-25-11:11:
         If a mapped command-pane terminal exits before the status-file poller clears the run, GPUI must still finish sidebar Action feedback like macOS terminal-exit cleanup. Trust only the matching session-state file when it already reached idle; otherwise report the live run as error so button feedback cannot remain running after the command-pane surface is gone. Do not read terminal output, command text, cwd/env, project paths, logs, or shell-state JSON.
         */
         let session = self.session_mut(session_id)?;
@@ -921,10 +921,10 @@ impl CommandPaneModel {
         close_terminal_on_exit: bool,
     ) -> bool {
         /*
-        CDXC:GPUICommandPaneActions 2026-06-26-06:28:
+        CDXC:CommandPane 2026-06-26-06:28:
         Native `setNativeSidebarCommandPaneTitle` run-start parity requires reused/restored Action tabs to carry the current live Action title and command id, clear stale Delayed Send chrome, and show Working without allocating a replacement tab.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-05:59:
+        CDXC:CommandPane 2026-06-27-05:59:
         Native command-pane Action ownership has one current `commandId -> session` mapping. Starting a newer same-command run clears only `action_command_id` on older same-command sessions, preserving their run id, status-file path, activity, and title so status refresh can clear their local Working state without sidebar completion feedback.
         */
         let Some(target_index) = self
@@ -960,19 +960,19 @@ impl CommandPaneModel {
         &mut self,
     ) -> CommandPaneActionRunRefresh {
         /*
-        CDXC:GPUICommandPane 2026-06-24-23:36:
+        CDXC:CommandPane 2026-06-24-23:36:
         Command Action completion is observed only through the same session-state file env contract the hidden shell wrapper writes. Refreshing this state may change a live tab's safe activity enum and clear its run id. Shell state may retain only the validated bounded Action selector needed for restart reuse; command text, output, paths, env, tokens, run ids, and status-file paths remain runtime-only.
 
-        CDXC:GPUICommandPane 2026-06-24-23:49:
+        CDXC:CommandPane 2026-06-24-23:49:
         The refresh result carries only command id, run id, exit code, and the saved per-action sound flag so the app can mirror macOS button success/error feedback and action completion sounds. Do not include command text, cwd, env, terminal output, status-file paths, project names, or renderer payloads in the completion record.
 
-        CDXC:GPUICommandPaneActions 2026-06-26-04:59:
+        CDXC:CommandPane 2026-06-26-04:59:
         Command-pane Action completions normalize legacy close-on-exit requests to false at the poller boundary. The status-file poller may still return safe command group/session ids for feedback plumbing, but it must leave the completed command tab alive for reuse and must not persist or report command text, status-file paths, cwd/env, terminal output, or project paths.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-05:07:
+        CDXC:CommandPane 2026-06-27-05:07:
         A matching `status=working` file is live Action ownership evidence only: keep the tab Working, retain the in-memory command id/run id/status path for the poller, emit no completion, and ignore unrelated status-file keys. Only a matching idle stamp or exact exit cleanup may clear ownership and post completion feedback, and neither path may infer status from shell titles, output, paths, command text, env, logs, or persisted shell JSON.
 
-        CDXC:GPUICommandPaneActions 2026-06-27-05:59:
+        CDXC:CommandPane 2026-06-27-05:59:
         Superseded same-command Action sessions may keep a run id and status-file path after losing `action_command_id`. Their idle status refresh clears only local runtime state; without current command ownership it must not emit command-button completion feedback or expose private status-file fields.
         */
         let mut refresh = CommandPaneActionRunRefresh::default();
@@ -1047,7 +1047,7 @@ impl CommandPaneModel {
         direction: FocusedTerminalSplitDirection,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUIFocusedSplits 2026-06-25-16:05:
+        CDXC:FocusMode 2026-06-25-16:05:
         Native command panels intentionally coerce both Cmd+D and Cmd+Shift+D to horizontal command splits. Keep GPUI command hotkey splits beside the focused command group while still storing split axis metadata for layout restore; do not create Agents tabs, processes, or terminal content.
         */
         let target_group_id = self
@@ -1095,7 +1095,7 @@ impl CommandPaneModel {
         zone: WorkspaceDropZone,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandPaneDragDrop 2026-06-22-13:05:
+        CDXC:CommandPane 2026-06-22-13:05:
         Workspace-to-command drops are command-pane placeholder creation, not command-tab movement. Allocate a command-only session id, keep the dragged Agents tab title for the live placeholder label, and map top/bottom intent to center grouping because command panes support only tab grouping and left/right horizontal splits.
         */
         match zone {
@@ -1128,7 +1128,7 @@ impl CommandPaneModel {
         title: String,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandPaneDragDrop 2026-06-22-16:18:
+        CDXC:CommandPane 2026-06-22-16:18:
         Agents-to-command tab-strip drops are grouping operations at a command tab boundary, not command split operations. Insert a command-only placeholder with the visible Agents title at the requested index, select it, focus/expand the target group, and keep all real terminal/process/content state on the Agents side out of the command model.
         */
         self.find_leaf(target_group_id)?;
@@ -1202,7 +1202,7 @@ impl CommandPaneModel {
 
     pub(crate) fn pane_owner_session_ids(&self) -> HashSet<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandPaneAutoSleep 2026-06-27-06:53:
+        CDXC:SessionSleep 2026-06-27-06:53:
         Native Auto Sleep protects the selected owner of each visible command-panel split leaf, while HUD focus remains responder-exact. Derive this set from explicit pane-layout active tabs, not from focused_group fallback, so split siblings can stay protected without becoming `isActive`.
         */
         self.group_order()
@@ -1223,22 +1223,22 @@ impl CommandPaneModel {
         now: SystemTime,
     ) -> serde_json::Value {
         /*
-        CDXC:GPUICommandPane 2026-06-25-10:50:
+        CDXC:CommandPane 2026-06-25-10:50:
         GPUI Sidebar command-session indicators need the same live command-pane session matching as macOS. Export only sanitized command-pane summary fields: external `G{u64}` session ids, normalized title, lifecycle-style HUD status, and focused-tab boolean. Do not include command text, cwd, env, status-file paths, terminal output, shell-state JSON, or project paths.
 
-        CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+        CDXC:SessionSleep 2026-06-25-14:27:
         Sleeping command tabs stay represented in the GPUI sidebar bridge with a boolean lifecycle marker while their command activity is idle. Keep the bridge sanitized to ids, normalized title, enum status, focus, action command id, and isSleeping only.
 
-        CDXC:GPUICommandPaneTimers 2026-06-25-17:09:
+        CDXC:DelayedSend 2026-06-25-17:09:
         Native projects Delayed Send and Close After Done timer state into sidebar/titlebar terminal rows. GPUI command indicators should carry only the same safe timer fields: armed booleans, UTC deadlines, remaining labels, and remaining milliseconds. Keep command text, terminal output, paths, run ids, status files, titles beyond the visible sanitized label, and shell-state JSON out of this bridge.
 
-        CDXC:GPUICommandPaneFocus 2026-06-26-04:15:
+        CDXC:FocusRouting 2026-06-26-04:15:
         Sidebar and app-modal commandSessionIndicator active state mirrors responder-exact command focus. Mark a command tab active only when shell focus is in the command pane and `focused_group` still resolves to a live command group; stale command focus and non-command focus must export every indicator with isActive=false instead of falling back to the first command group.
 
-        CDXC:GPUICommandSessionHud 2026-06-27-06:30:
+        CDXC:SessionStatus 2026-06-27-06:30:
         Native HUD status is terminal lifecycle-derived: running terminals are running, error lifecycle is error, and non-running lifecycle is idle. GPUI local command tabs currently expose only awake/sleeping lifecycle, so project awake tabs as running and sleeping tabs as idle; Action Attention remains separate button feedback and must not make HUD sessions error.
 
-        CDXC:GPUICommandPaneAutoSleep 2026-06-27-06:53:
+        CDXC:SessionSleep 2026-06-27-06:53:
         `isActive` is reserved for responder/focused-HUD state. Export `isPaneOwner` separately from the command layout owner set so native Auto Sleep can protect every active split owner without treating unfocused split siblings as HUD-active.
         */
         let active = if command_pane_focused {
@@ -1308,7 +1308,7 @@ impl CommandPaneModel {
         leaf: &CommandPaneLeaf,
     ) -> Option<CommandPaneVisibleBodyOwner> {
         /*
-        CDXC:GPUICommandTerminalSurface 2026-06-27-04:36:
+        CDXC:Terminal 2026-06-27-04:36:
         GPUI command-pane body ownership mirrors native `visibleCommandPaneOwnerSessionIds`: an expanded command group gives its visible body to the stored selected command tab only when that exact tab still has a stored session. Sleeping selected tabs own a placeholder body without a Ghostty mount slot, and stale active ids must not fall back to sibling tabs.
         */
         if !self.is_expanded() {
@@ -1330,16 +1330,16 @@ impl CommandPaneModel {
 
     pub(crate) fn rendered_terminal_body_mount_slots(&self) -> Vec<CommandTerminalBodyMountSlotId> {
         /*
-        CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+        CDXC:Terminal 2026-06-23-05:03:
         Real command-pane terminal bodies are limited to the expanded command pane and the active tab in each visible command group. Inactive command tabs, collapsed strip tabs, missing sessions, and command titles/status are intentionally excluded so command Ghostty surfaces stay body-bounds-driven and runtime-only.
 
-        CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+        CDXC:SessionSleep 2026-06-25-14:27:
         Sleeping command tabs remain in the tab/group model but are not renderable body mount slots. Withhold their command terminal body until an explicit body activation wakes the session.
 
-        CDXC:GPUICommandFocusMode 2026-06-25-21:40:
+        CDXC:FocusMode 2026-06-25-21:40:
         Command Focus mode filters the mounted/rendered command body slots to the focused command group only after eligibility is computed from the full split tree. This preserves the reversible command split layout while preventing hidden command groups from retaining native terminal hosts or Ghostty focus.
 
-        CDXC:GPUICommandTerminalSurface 2026-06-27-04:36:
+        CDXC:Terminal 2026-06-27-04:36:
         Rendered command mount slots are the non-sleeping subset of explicit visible command body owners. Sleeping owners remain visible placeholders, while missing sessions, stale selected ids, inactive siblings, and collapsed panes produce no Ghostty host slot.
         */
         let slots = self.rendered_terminal_body_mount_slots_without_focus();
@@ -1394,7 +1394,7 @@ impl CommandPaneModel {
         leaf: &CommandPaneLeaf,
     ) -> Option<CommandTerminalBodyMountSlotId> {
         /*
-        CDXC:GPUICommandTerminalSurface 2026-06-27-04:36:
+        CDXC:Terminal 2026-06-27-04:36:
         Command-pane Ghostty slots are derived from the visible body-owner helper, not from tab-group fallback selection. A selected non-sleeping command tab may mount a blank pending terminal body; sleeping selected tabs, missing selected sessions, stale active ids, inactive siblings, and collapsed panes must not borrow a mount slot.
         */
         self.visible_command_body_owner_for_leaf(leaf)
@@ -1435,7 +1435,7 @@ impl CommandPaneModel {
         session_id: CommandSessionId,
     ) -> bool {
         /*
-        CDXC:GPUICommandTabContextMenu 2026-06-25-21:29:
+        CDXC:ContextMenus 2026-06-25-21:29:
         Native command-tab Focus is split-owner Focus mode, not tab selection or command-pane keyboard focus. GPUI allows the row only when the clicked tab belongs to a group with a rendered awake owner and the command pane has more than one rendered awake owner; one command group with multiple tabs does not qualify.
         */
         let Some(leaf) = self.find_leaf(group_id) else {
@@ -1465,7 +1465,7 @@ impl CommandPaneModel {
         insertion_index: usize,
     ) -> Option<(usize, usize)> {
         /*
-        CDXC:GPUICommandPaneDragDrop 2026-06-25-19:57:
+        CDXC:CommandPane 2026-06-25-19:57:
         Native same-group command tab-strip drops interpret the marker index before removing the dragged tab. Adjust forward moves by one after removal, and classify both same-index and adjacent same-slot markers as no-ops so persistence and reorder notifications only represent real user-visible order changes.
         */
         let leaf = self.find_leaf(group_id)?;
@@ -1564,13 +1564,13 @@ impl CommandPaneModel {
         zone: WorkspaceDropZone,
     ) -> bool {
         /*
-        CDXC:GPUICommandPane 2026-06-22-06:13:
+        CDXC:CommandPane 2026-06-22-06:13:
         Command-pane drag/drop is intentionally narrower than Agents workspace drag/drop. Center drops group command tabs into the target command tab group, left/right edge drops create horizontal command splits, and top/bottom intent is treated as center so command panes never create vertical splits in this in-memory slice.
 
-        CDXC:GPUICommandFocusMode 2026-06-26-06:37:
+        CDXC:FocusMode 2026-06-26-06:37:
         Command drag/drop must match native Focus-mode ownership. Same-group grouping stays inside the focused command owner, while left/right side drops split the dragged command into a new selected owner, clear command Focus, and render that dragged command immediately.
 
-        CDXC:GPUICommandPaneDragDrop 2026-06-26-06:37:
+        CDXC:CommandPane 2026-06-26-06:37:
         Native command-panel same-session body side drops resolve the drop to the first or last remaining tab sibling before removing the dragged tab. GPUI owns only command groups here, so split after removal beside the still-live source group, reject single-tab self side drops, leave the source group order/selection to the normal removal rule, and focus the new dragged split group without touching unrelated groups.
         */
         if !matches!(zone, WorkspaceDropZone::Left | WorkspaceDropZone::Right) {

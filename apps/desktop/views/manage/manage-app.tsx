@@ -104,147 +104,147 @@ import {
 } from './annotation-store';
 
 /*
- * CDXC:ManageEditing 2026-06-20-06:14:
+ * CDXC:Docs 2026-06-20-06:14:
  * Manage is an editable bundled WKWebView project workarea beside Kanban. The page opens project-relative text, Markdown, and drawing files; Swift owns root resolution and save scoping, so the WK URL and JavaScript bridge never carry absolute workspace paths.
  *
- * CDXC:ManageAnnotations 2026-06-20-06:14:
+ * CDXC:Docs 2026-06-20-06:14:
  * Markdown review in Manage needs lightweight annotation behavior in the same workarea as editing. Keep annotations path-scoped in page state, capture selected source or preview text, mark matching Markdown text in the preview, and surface counts in the file tree without persisting user text to logs.
  *
- * CDXC:ManageAnnotations 2026-06-20-06:35:
+ * CDXC:Docs 2026-06-20-06:35:
  * Markdown feedback must behave like a local review tool: Select mode exposes a nearby action toolbar, Redline mode turns selected text into deletion annotations immediately, Comment mode focuses the comment composer, global comments work without selected text, quick labels add preset feedback, and structured Markdown export copies review data without logging annotation text.
  *
- * CDXC:ManageAnnotationPersistence 2026-06-20-06:35:
+ * CDXC:Docs 2026-06-20-06:35:
  * Annotation state should survive Manage reloads when the native project bridge is available. Store a versioned JSON sidecar under a Ghostex-owned project folder through the same project-relative read/save bridge, so Swift keeps path normalization and traversal checks at the writer boundary.
  *
- * CDXC:ManageAnnotationAttachments 2026-06-20-06:35:
+ * CDXC:Docs 2026-06-20-06:35:
  * Annotation images are user-provided feedback artifacts. Keep them local to the annotation sidecar as bounded data URLs, render compact thumbnails, and include attachment references in copied Markdown only when the user explicitly copies feedback.
  *
- * CDXC:ManageAnnotations 2026-06-26-23:35:
+ * CDXC:Docs 2026-06-26-23:35:
  * Markdown artifacts should use a rendered-document review shape with floating selection actions, an anchored comment popover, and a side annotation timeline. Do not show Manage's old Edit/Split/Preview tabs or fixed bottom annotation composer for Markdown files.
  *
- * CDXC:ManageMarkdownRendering 2026-06-26-23:35:
+ * CDXC:Docs 2026-06-26-23:35:
  * Manage Markdown rendering should use a local block parser and consistent visual scale for headings, lists, blockquotes, code, tables, alerts, directives, and raw HTML blocks instead of a generic Markdown preview.
  *
- * CDXC:ManageMarkdownEditing 2026-06-27-12:40:
+ * CDXC:Docs 2026-06-27-12:40:
  * Markdown artifacts must be editable and richly rendered in one surface, matching Meo's live Markdown editor instead of a split edit/preview or review-only view.
  * Mount Meo's copied CodeMirror live editor for Markdown files while keeping Ghostex annotations in the same Manage workarea.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-27-12:40:
+ * CDXC:Docs 2026-06-27-12:40:
  * Users need to edit Markdown text and annotate selections at the same time.
  * Feed Meo editor selections into the existing annotation toolbar and render sidecar comments/redlines as CodeMirror decorations so annotation review remains visible during editing.
  *
- * CDXC:ManageMarkdownHeader 2026-06-27-13:01:
+ * CDXC:Docs 2026-06-27-13:01:
  * Markdown artifacts need a single top row: show the project-relative file path in the header, remove the separate path/status row, move Comment/Copy controls into the header, and expose a collapsible annotation rail with the active annotation count.
  * Annotation cards must size to their own content instead of stretching to fill the rail.
  *
- * CDXC:ManageArtifactHeader 2026-06-28-00:13:
+ * CDXC:Docs 2026-06-28-00:13:
  * HTML and Excalidraw artifacts need the same compact header cleanup as Markdown: show the project-relative artifact path in the title, keep type/size/edit state in that one row, and remove the separate path row.
  *
- * CDXC:ManageHtmlRendering 2026-06-28-01:25:
+ * CDXC:Docs 2026-06-28-01:25:
  * HTML artifacts in Manage should render as page DOM instead of source text.
  *
- * CDXC:ManageHtmlRendering 2026-06-29-17:25:
+ * CDXC:Docs 2026-06-29-17:25:
  * HTML Docs need to look like the same real page users see in a browser. Preserve full-document head CSS, stylesheet links, and meta tags inside an isolated srcdoc frame instead of stripping styles and injecting only body markup into Ghostex's dark Manage document.
  *
- * CDXC:ManageHtmlRendering 2026-07-01-18:12:
+ * CDXC:Docs 2026-07-01-18:12:
  * HTML Docs are an interactive document preview. Preserve page-authored scripts, event handlers, script-like URLs, frames, and base tags so generated docs can use full browser JavaScript instead of a passive sanitized snapshot.
  *
- * CDXC:ManageHtmlAgentation 2026-06-28-01:46:
+ * CDXC:Docs 2026-06-28-01:46:
  * Rendered HTML artifacts need their own Agentation launch control because Manage hides the native browser toolbar that normally exposes feedback tools.
  *
- * CDXC:ManageHtmlAgentation 2026-06-28-02:29:
+ * CDXC:Docs 2026-06-28-02:29:
  * The control is named Annotate, behaves as a toggle, and defaults on for HTML artifacts.
  * When enabled, the rendered HTML document includes the Agentation bootstrap; when disabled, the document reloads without that bootstrap so no annotation overlay remains.
  *
- * CDXC:ManageHtmlAgentation 2026-06-29-18:20:
+ * CDXC:Docs 2026-06-29-18:20:
  * Agentation must be injected into the loaded HTML document itself, not mounted by the parent Manage page into the iframe wrapper. Append only the fixed Ghostex bootstrap module after parsing the authored document so page scripts remain intact while the annotation runtime executes in the rendered page context.
  *
- * CDXC:ManageHtmlAgentation 2026-06-30-04:41:
+ * CDXC:Docs 2026-06-30-04:41:
  * The embedded HTML document must run page-authored JavaScript and the fixed Agentation bootstrap with its normal document origin so remote module imports and DOM overlays initialize reliably inside the loaded page. Allow scripts and same-origin for the full srcdoc output.
  *
- * CDXC:ManageHtmlRendering 2026-06-30-04:57:
+ * CDXC:Docs 2026-06-30-04:57:
  * Embedded HTML Docs should keep page-owned layout and colors while Ghostex owns only the viewer chrome. Inject a final document-scoped scrollbar style so all page scrollbars are 4px wide with transparent tracks and corners instead of a visible background gutter.
  *
- * CDXC:ManageHtmlRendering 2026-06-30-11:58:
+ * CDXC:Docs 2026-06-30-11:58:
  * Do not use standards `scrollbar-width: thin` for embedded HTML Docs because Chromium/WebKit can render that as a wider browser-defined scrollbar. Reset standards scrollbar properties to `auto`, then rely on the WebKit scrollbar pseudo-elements for exact 4px sizing and the required #3e444c thumb color.
  *
- * CDXC:ManageHtmlAgentation 2026-06-28-07:58:
+ * CDXC:Docs 2026-06-28-07:58:
  * Opening an HTML Docs page should show Agentation's bottom-left control but must not auto-enter feedback mode because immediate activation steals mouse focus from users who only want to read or interact with the page.
  *
- * CDXC:ManageDefaultHtml 2026-06-28-07:17:
+ * CDXC:Docs 2026-06-28-07:17:
  * New HTML Docs files should start with a dark Ghostex-styled onboarding page that explains how to ask an agent for an explanatory HTML document and how to use Agentation to annotate the rendered result.
  * The starter document stays self-contained with document-owned styles and no scripts, while the HTML renderer now preserves author CSS in an isolated document so future generated pages render like browser HTML instead of inheriting Ghostex UI styles.
  *
- * CDXC:ManageDefaultHtml 2026-06-30-04:41:
+ * CDXC:Docs 2026-06-30-04:41:
  * The starter page should not leave an empty fourth grid cell on narrower Docs widths. Use document-owned CSS for a max two-column feature grid, move the good-request/good-annotation guidance into a fourth card, and keep the page background covering the full embedded viewport including scrollbar gutters.
  *
- * CDXC:ManageMarkdownSelectionToolbar 2026-06-27-22:41:
+ * CDXC:Docs 2026-06-27-22:41:
  * The floating Markdown selection toolbar should be icon-only: remove Copy/Delete, keep Comment plus quick labels and Dismiss, show hover tooltips, and color each annotation action to match the highlight it writes into the selected text.
  * Plain comments use #e2b340 so the comment icon and unlabeled comment highlight stay visually paired.
  *
- * CDXC:ManageMarkdownSelectionToolbar 2026-06-28-01:49:
+ * CDXC:Docs 2026-06-28-01:49:
  * The floating selection toolbar should stay visually inset from the Manage window edge even when the selected text starts at the first column.
  * Clamp the centered toolbar by its real compact width so it does not sit flush against the left side.
  *
- * CDXC:ManageMarkdownToolbar 2026-06-28-06:00:
+ * CDXC:Docs 2026-06-28-06:00:
  * Markdown Manage in the macOS app should expose Meo's editor-native formatting toolbar and Meo's inline formatting selection toolbar while keeping Ghostex annotation actions active in the same editor.
  * Selected text opens the annotation toolbar by default, and the floating toolbar provides an explicit switch between annotation actions and formatting actions.
  *
- * CDXC:ManageMarkdownToolbar 2026-06-28-07:56:
+ * CDXC:Docs 2026-06-28-07:56:
  * The Live/Source segmented control must make the selected mode visually explicit. Manage overrides Meo's neutral active state with a tinted fill and inset outline while keeping the copied toolbar's stable button dimensions.
  *
- * CDXC:ManageMarkdownTheme 2026-06-28-06:00:
+ * CDXC:Docs 2026-06-28-06:00:
  * Manage Markdown headings should use #42a5f5 for the Meo heading token instead of the previous red heading color.
  *
- * CDXC:ManageMarkdownGitGutter 2026-06-28-06:17:
+ * CDXC:Docs 2026-06-28-06:17:
  * Markdown artifacts should show Meo's Git changes gutter in the same live editor surface by comparing the current editor text with the file's Git HEAD baseline. Native supplies only the Meo-compatible baseline fields needed for rendering so repo roots and Git paths do not cross into the bundled WK page.
  *
- * CDXC:ManageMarkdownEditing 2026-06-28-01:49:
+ * CDXC:Docs 2026-06-28-01:49:
  * Markdown editing should keep the line-number gutter tight in Manage.
  * Scope the gutter width and content padding overrides to Manage's Meo wrapper so the gap between line numbers, Meo's 3px Git gutter, and text is minimal without changing the shared Meo editor.
  *
- * CDXC:ManageMarkdownLineNumbers 2026-06-29-01:53:
+ * CDXC:Docs 2026-06-29-01:53:
  * Wrapped Markdown lines should keep their line number aligned with the first visual row instead of centering the number across the wrapped block. Override Meo's flex-centered line-number gutter only inside Manage so source and live Markdown text stay visually scan-aligned.
  *
- * CDXC:ManageAnnotationComposer 2026-06-28-01:49:
+ * CDXC:Docs 2026-06-28-01:49:
  * The anchored comment composer should feel like a compact dark panel: show only the note textarea, close from a top-right X, keep image upload as a plain action button, and submit with a green Submit button instead of a Cancel/Comment action row.
  *
- * CDXC:ManageAnnotationComposer 2026-06-28-07:56:
+ * CDXC:Docs 2026-06-28-07:56:
  * The Add global comment composer opens from the compact Docs header and must render above Meo's copied toolbar layer, matching the annotation dropdown's overlay ownership instead of being hidden behind editor chrome.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-27-22:52:
+ * CDXC:Docs 2026-06-27-22:52:
  * The annotation list should open as a top-row dropdown instead of occupying a persistent sidebar.
  * Keep cards compact, subtly tint their background from the annotation type or quick-label color, avoid repeating quick-label text as body copy, and expose a persistent top-right remove X.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-28-05:24:
+ * CDXC:Docs 2026-06-28-05:24:
  * Manage Markdown annotations must accept selections that span multiple rendered lines and still resolve their normalized quote back onto the raw Markdown text.
  * When the caret rests inside an existing annotated range, show a passive floating card above the full annotated range with a short preview of the saved comment so users can recover annotation context without opening the dropdown.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-28-06:49:
+ * CDXC:Docs 2026-06-28-06:49:
  * The Docs annotation dropdown opens from the compact file header and must render above Meo's copied toolbar layer. Keep the dropdown owned by the header action but give it a higher stack level than Meo's z-index 500 toolbar so the menu is not hidden until below the editor toolbar.
  *
- * CDXC:ManageDrawings 2026-06-20-06:14:
+ * CDXC:Docs 2026-06-20-06:14:
  * .excalidraw files should open as editable drawings instead of raw JSON. Use the upstream Excalidraw component for canvas behavior, serialize full scene JSON through the normal Manage save bridge, and keep invalid drawings editable as source text so users can repair them.
  *
- * CDXC:ManageDrawings 2026-06-28-01:43:
+ * CDXC:Docs 2026-06-28-01:43:
  * The Manage Excalidraw canvas should use Excalidraw's dark scheme so the drawing surface is dark in the macOS Manage view. This intentionally prioritizes app dark-mode consistency over the previous light-theme literal color behavior.
  *
- * CDXC:ManageEditing 2026-06-21-18:00:
+ * CDXC:Docs 2026-06-21-18:00:
  * The macOS Manage editor header should not show an explicit Save button. Keep edited/saved status visible in metadata while retaining the existing bridge-backed save behavior through the keyboard shortcut and editor flows.
  *
- * CDXC:ManageSidebar 2026-06-20-17:15:
+ * CDXC:Docs 2026-06-20-17:15:
  * Manage's file-sidebar refresh control is an overflow menu with Refresh and Switch sidebar side actions. A separate adjacent icon hides the file sidebar, and the editor area provides a small restore affordance so hiding is reversible.
  *
- * CDXC:ManageSidebar 2026-06-30-01:35:
+ * CDXC:Docs 2026-06-30-01:35:
  * The Docs sidebar overflow dropdown should read as a compact polished popover instead of a flat black rectangle. Inset it from the sidebar edge, round the menu surface, soften the shadow, and keep each action as a clear icon/text row with a visible hover state.
  *
- * CDXC:ManageSidebar 2026-06-30-02:30:
+ * CDXC:Docs 2026-06-30-02:30:
  * The Docs sidebar dropdown should not have a pointer arrow and should use a flat #0e0e0e background with a 1px #595959 border instead of a gradient surface.
  *
- * CDXC:ManageSidebar 2026-06-30-02:45:
+ * CDXC:Docs 2026-06-30-02:45:
  * Docs dropdown corners should be only slightly rounded, using a 4px menu radius and 3px row radius so the popover feels sharper.
  *
- * CDXC:ManageArtifacts 2026-06-26-13:59:
+ * CDXC:Docs 2026-06-26-13:59:
  * Manage started as an artifacts-focused project surface with first-class sidebar actions for new Markdown, HTML, and Excalidraw files.
  *
  * CDXC:Docs 2026-06-28-06:24:
@@ -252,103 +252,103 @@ import {
  * documents under ./docs. New Markdown, HTML, and Excalidraw documents should
  * be created in that docs root instead of the previous artifacts root.
  *
- * CDXC:ManageFileActions 2026-06-28-04:35:
+ * CDXC:Docs 2026-06-28-04:35:
  * Users need to right-click files in the Manage sidebar and rename or delete them from a context menu. Keep the menu file-scoped, require a second destructive click before delete, preserve annotations across rename, and send only project-relative paths through the native bridge.
  *
- * CDXC:ManageSidebar 2026-06-26-23:14:
+ * CDXC:Docs 2026-06-26-23:14:
  * The Manage file sidebar needs a visible resizer so users can widen the artifacts tree on either sidebar side without overlapping the preview/editor. Persist the width locally and clamp it to the current workarea so the preview keeps usable space.
  *
- * CDXC:ManageSidebar 2026-06-28-05:18:
+ * CDXC:Docs 2026-06-28-05:18:
  * The Manage artifact sidebar should visually match Ghostex's left reference sidebar: use the same near-black surface, muted section hierarchy, borderless navigation-style controls, larger lightweight rows, and neutral selected-row chrome instead of boxed blue file-list styling.
  *
- * CDXC:ManageFolders 2026-06-28-06:39:
+ * CDXC:Docs 2026-06-28-06:39:
  * The Docs sidebar needs first-class folders: users can create folders, collapse or expand folder rows, and drag files or folders into another folder or back to the docs root. Keep the drag feedback aligned with the main sidebar by dimming the dragged row, using the same neutral insertion-line treatment for root drops, and using a dark row target for folder drops.
  *
- * CDXC:ManageFolders 2026-06-28-07:02:
+ * CDXC:Docs 2026-06-28-07:02:
  * Native preserves a flat listing order that protects root docs from nested-folder entry caps, but the UI must render that data as a real tree. Reorder entries in the web layer so each folder's children appear directly below their parent before applying collapsed-folder filtering.
  *
- * CDXC:ManageCreateMenu 2026-06-28-07:04:
+ * CDXC:Docs 2026-06-28-07:04:
  * The Docs sidebar create actions should live behind one header plus button instead of consuming a permanent four-button row below the project title. Keep Folder, Markdown, HTML, and Draw as menu items so the left sidebar starts with Search and file content after the header.
  *
- * CDXC:ManageFolders 2026-06-28-07:12:
+ * CDXC:Docs 2026-06-28-07:12:
  * Dragging over a file row should target that row's containing folder, and dragging over a root-level file should target docs/ so users can move items out of folders without needing blank sidebar space.
  * File rows should not show file size badges.
  *
- * CDXC:DocsSidebar 2026-06-28-15:05:
+ * CDXC:Docs 2026-06-28-15:05:
  * Docs sidebar chrome should match the compact macOS sidebar: keep the project title non-selectable, remove the file count/selected-file summary block, show a 2px scrollbar only on hover/focus, and mirror the native sidebar divider's five-point rail with a one-point edge line plus three-point hover affordance.
  *
- * CDXC:DocsSidebar 2026-06-28-15:57:
+ * CDXC:Docs 2026-06-28-15:57:
  * Docs file rows should use tighter button padding. The active file keeps the selected-row surface, while every ancestor folder of the active file turns full white without gaining a background so users can track the open document through collapsed or nested folder context.
  *
- * CDXC:DocsSidebar 2026-06-28-16:29:
+ * CDXC:Docs 2026-06-28-16:29:
  * Docs sidebar search and file row buttons should fill the sidebar width with no outer horizontal gutter. Keep spacing as internal padding so hover, active, and focus backgrounds reach both sidebar edges.
  *
- * CDXC:DocsHeader 2026-06-28-18:02:
+ * CDXC:Docs 2026-06-28-18:02:
  * The Docs main header should be a compact titlebar-like chrome strip. Reduce title/meta/action text, keep action buttons full-height with square corners and separator borders, and use hover/open fills that match the macOS titlebar button treatment.
  *
- * CDXC:DocsHeader 2026-06-29-03:43:
+ * CDXC:Docs 2026-06-29-03:43:
  * Manage's sidebar header and hidden-sidebar restore affordance should share the editor header's compact titlebar strip: compact title typography, full-height square buttons with separator borders, and expand icons that communicate reopening the sidebar.
  *
- * CDXC:DocsHeader 2026-06-29-13:00:
+ * CDXC:Docs 2026-06-29-13:00:
  * The compact editor header hosts dropdown actions such as the annotations button. Keep text truncation on the title span, but let the header overflow visibly so action popovers are not clipped to the titlebar strip.
  *
- * CDXC:DocsHeader 2026-06-29-13:45:
+ * CDXC:Docs 2026-06-29-13:45:
  * Drawing-mode compact headers do not have a right-side action group, so keep a right inset on the header metadata instead of letting the file type and size touch the expanded sidebar divider.
  *
- * CDXC:DocsHeader 2026-06-29-21:48:
+ * CDXC:Docs 2026-06-29-21:48:
  * The Docs editor and sidebar headers were raised to 36px, three pixels taller than the earlier compact strip, with title line-height and full-height header buttons matching that height.
  *
- * CDXC:DocsHeader 2026-06-29-23:39:
+ * CDXC:Docs 2026-06-29-23:39:
  * The Docs editor and sidebar titlebars should now be one pixel shorter at
  * 35px, while keeping the same full-height button and title line-height
  * geometry so the internal Docs chrome matches the native project-editor
  * companion titlebar height.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-29-20:13:
+ * CDXC:Docs 2026-06-29-20:13:
  * Markdown header annotations need a two-step Clear All action beside Copy: first click arms a three-second red Confirm state, the second click clears the current file's annotations, and the annotations count button keeps a 7px inset from the right edge.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-29-20:16:
+ * CDXC:Docs 2026-06-29-20:16:
  * Annotation cards need a persistent remove X in the card's top-right corner so deletion is discoverable without depending on hover-only opacity.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-29-20:54:
+ * CDXC:Docs 2026-06-29-20:54:
  * The caret-triggered floating annotation preview uses a separate card from the dropdown. It needs the same top-right remove X, with pointer events enabled only for that button so the preview remains passive while the remove action is clickable.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-29-21:02:
+ * CDXC:Docs 2026-06-29-21:02:
  * Annotation dropdown and caret-preview cards should use flat, subtle tinted surfaces instead of gradient backgrounds so annotations read as quieter UI chrome.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-29-21:21:
+ * CDXC:Docs 2026-06-29-21:21:
  * Annotation-card remove X controls should not draw a left divider or boxed chrome; they sit directly on the card surface as simple icon affordances.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-30-11:14:
+ * CDXC:Docs 2026-06-30-11:14:
  * The Docs annotation dropdown should not repeat the annotation count because the titlebar trigger already owns that indicator.
  * Keep the dropdown, annotation cards, and count indicator slightly rounded, and force card remove controls to opt out of titlebar button separators inside the dropdown.
  *
- * CDXC:ManageMarkdownAnnotations 2026-06-30-15:15:
+ * CDXC:Docs 2026-06-30-15:15:
  * Annotation quote overflow should use a 2px transparent scrollbar with no visible track, and the thumb should appear only while the user hovers or focuses within that card.
  *
- * CDXC:DocsSidebar 2026-06-29-04:08:
+ * CDXC:Docs 2026-06-29-04:08:
  * Root-level artifact files and docs/ content share the same Docs sidebar, so docs/ must render as an explicit expandable folder instead of an invisible tree root. Keep creation/drop defaults targeting docs/, but order rows from the real repo root and provide a header button to collapse or expand docs/.
  *
- * CDXC:DocsSidebar 2026-06-30-00:15:
+ * CDXC:Docs 2026-06-30-00:15:
  * The Docs header folder control should use the same diagonal-arrows icon language as the macOS sidebar Projects Collapse All / Expand Previous control, but Docs does not remember previous expansion state. Collapse All must collapse every expandable nested folder, and Expand All must clear every collapsed folder so all descendants reopen.
  *
- * CDXC:DocsSidebar 2026-06-30-01:46:
+ * CDXC:Docs 2026-06-30-01:46:
  * The Docs sidebar header should be actions-only; do not repeat the root docs folder icon/name in the titlebar. Keep the search-to-file-list gap tight so the file tree begins immediately below Search.
  *
- * CDXC:ManageFileActions 2026-06-29-03:27:
+ * CDXC:Docs 2026-06-29-03:27:
  * Docs sidebar context actions apply to folders as well as files. Right-clicking empty sidebar chrome must suppress the browser/WebKit default context menu, while folder rename/delete remaps nested selected paths and annotation keys through the same docs-relative bridge.
  *
- * CDXC:ManageFileActions 2026-06-30-09:48:
+ * CDXC:Docs 2026-06-30-09:48:
  * Files and folders need a Copy path action in the Docs sidebar. Copy the same relative path used by Manage file operations so users can paste stable docs paths without exposing absolute workspace paths to WebKit. The docs root may open this copy-only menu, but rename/delete remain unavailable for that fixed root.
  *
- * CDXC:ManageFileActions 2026-07-01-00:59:
+ * CDXC:Docs 2026-07-01-00:59:
  * File context menus need a Duplicate action that creates a same-folder copy named with the next available " (n)" suffix before the extension. Save the selected dirty file before duplicating it so the copy matches the visible editor content, but keep folders out of the duplicate action.
  *
- * CDXC:ManageFileActions 2026-07-02-13:14:
+ * CDXC:Docs 2026-07-02-13:14:
  * Docs sidebar context menus should feel like a macOS file navigator: reveal any visible file or folder in Finder, copy the docs-relative path label explicitly, create Markdown/HTML/Excalidraw files or folders inside the clicked folder, and stage readable files into the current agent session as context. Keep create-here folder-scoped, keep Duplicate file-only, and preserve Rename/Delete as the core destructive pair.
  */
 /*
- * CDXC:GPUISessionChatLinks 2026-08-03:
+ * CDXC:SessionChat 2026-08-03:
  * The gpui app asks Docs to open one specific docs-relative file when a chat
  * file link points inside the Docs scope. The request can land before this
  * page mounts (the workarea surface is created while the mode switches), so
@@ -480,7 +480,7 @@ export function ManageApp() {
   );
 
   /*
-   * CDXC:GPUISessionChatLinks 2026-08-03:
+   * CDXC:SessionChat 2026-08-03:
    * Docs opens the file a chat link asked for and expands the folders leading
    * to it, so the sidebar shows where the opened file lives instead of
    * selecting a row hidden inside a collapsed folder.
@@ -518,7 +518,7 @@ export function ManageApp() {
       setEntries(nextEntries);
       if (!hasInitializedDirectoryCollapseRef.current) {
         /*
-         * CDXC:DocsSidebar 2026-06-30-12:40:
+         * CDXC:Docs 2026-06-30-12:40:
          * Opening Docs should start with every expandable folder and subfolder collapsed in the file-list sidebar. Initialize this once from the first successful listing so later refreshes preserve the user's manual expand/collapse choices.
          */
         hasInitializedDirectoryCollapseRef.current = true;
@@ -569,7 +569,7 @@ export function ManageApp() {
 
   useEffect(() => {
     /*
-     * CDXC:GPUIDocsFileRefresh 2026-07-15:
+     * CDXC:Docs 2026-07-15:
      * GPUI's bundled Docs page has no native WKWebView file-presenter callback. Poll only
      * the selected artifact's lightweight metadata through the GPUI bridge, then apply a
      * trailing debounce before rereading it. HTML and Excalidraw are preview artifacts and
@@ -661,7 +661,7 @@ export function ManageApp() {
 
   useEffect(() => {
     /*
-     * CDXC:DocsSidebar 2026-06-30-19:47:
+     * CDXC:Docs 2026-06-30-19:47:
      * Native watches the active project's Docs scan roots for file additions, removals, and renames. Treat the event as a path-free invalidation signal and reuse the normal list bridge so the sidebar refreshes without requiring an app refresh.
      */
     const handleFilesChanged = () => {
@@ -685,10 +685,10 @@ export function ManageApp() {
       return undefined;
     }
     /*
-     * CDXC:DocsSidebar 2026-06-30-13:45:
+     * CDXC:Docs 2026-06-30-13:45:
      * The Docs sidebar becomes a floating panel when the Manage page itself is narrower than 690px, not when the whole app window crosses a generic breakpoint. Measure the shell element so embedded and resized Manage surfaces use the same behavior.
      *
-     * CDXC:DocsSidebar 2026-06-30-22:58:
+     * CDXC:Docs 2026-06-30-22:58:
      * Startup must apply floating sidebar mode before the first Docs paint when the project editor pane is already narrow. Use a layout effect so the shell width, not the larger app window width, decides the initial rendered mode.
      */
     const updateManageSidebarLayout = () => {
@@ -821,7 +821,7 @@ export function ManageApp() {
     setFileContextMenu(undefined);
     try {
       /*
-       * CDXC:DocsRootAdditive 2026-08-10:
+       * CDXC:Docs 2026-08-10:
        * Copy the path the tree shows, not the routing address. For a file under
        * a configured Docs directory those differ: the address leads with the
        * reserved mount segment, which is meaningless anywhere it would be
@@ -1035,7 +1035,7 @@ export function ManageApp() {
         }
         const savedContent = savedFile.content ?? content;
         /*
-         * CDXC:ManageAutosave 2026-06-28-02:36:
+         * CDXC:Docs 2026-06-28-02:36:
          * Autosave may finish after another Markdown keystroke or Excalidraw gesture. Update file metadata and the saved baseline, but only replace editor content when the user has not changed the snapshot that was sent to native.
          */
         if (selectedPathRef.current === savedFile.path) {

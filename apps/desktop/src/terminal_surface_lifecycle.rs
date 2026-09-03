@@ -10,19 +10,19 @@ use crate::terminal_surface_host::{
 use crate::{AgentsTerminalBodyMountSlotId, TerminalSurfaceMountSlotKey};
 
 /*
-CDXC:GPUTerminalSurfaceLifecycle 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 The native-view lifecycle boundary is runtime-only for every current visible running Agents terminal mount slot. Host reconciliation commands may only become AppKit/Ghostty work after the slot has a supplied real native terminal view; awaiting state records only the current slot plan and must not manufacture handles, create views, call GhosttyKit/libghostty, build Ghostty surface configs, execute AppKit, log, persist, overlay, route hit tests, or launch/restart the app.
 
-CDXC:GPUTerminalSurfaceLifecycle 2026-06-22-21:27:
+CDXC:Terminal 2026-06-22-21:27:
 Slice 107 depends on empty host command batches being meaningful no-ops during visible Agents pre-layout bounds resets. The lifecycle must keep its awaiting real-view slot until host sync later reports same-bounds NoOp, move/resize, hidden workspace, or no-current-slot detach commands.
 
-CDXC:GPUTerminalSurfaceLifecycle 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 The App may own one runtime host NSView per visible running Agents mount slot. A lifecycle slot may move from awaiting to ready only after an owned host view is created for the exact same plan, and this state still must not execute AppKit commands, build Ghostty configs, call GhosttyKit/libghostty, log, persist, show, focus, or launch a terminal.
 
-CDXC:GPUTerminalSurfaceLifecycle 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 The all-visible-running-leaf slice keeps lifecycle state per pane/session mount slot. Adding, resizing, or detaching one visible Agents terminal must not clear unrelated visible running slots, and each slot still requires an explicit real App-owned host view before AppKit or Ghostty work can proceed.
 
-CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+CDXC:Terminal 2026-06-23-05:03:
 Command-pane runtime terminal bodies use the same lifecycle state machine with command group/session slot ids. The shared lifecycle never crosses into Agents startup/session registries or shell-state persistence; command collapse and close reconcile as ordinary detach commands before AppKit host views are released.
 */
 pub(crate) struct NativeTerminalSurfaceLifecycleState<SlotId = AgentsTerminalBodyMountSlotId> {
@@ -52,7 +52,7 @@ where
         real_view: RealTerminalNativeViewHandle,
     ) -> Self {
         /*
-        CDXC:GPUTerminalSurfaceLifecycle 2026-06-22-21:17:
+        CDXC:Terminal 2026-06-22-21:17:
         Ready lifecycle state can only be constructed around an explicit existing real terminal native view handle. This constructor does not create, retain, validate, log, persist, or operate on the view; the unsafe boundary remains the handle supplier.
         */
         Self {

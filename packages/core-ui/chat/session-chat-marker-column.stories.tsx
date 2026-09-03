@@ -17,7 +17,7 @@ import type { SessionChatMessage } from '../../shared/session-chat';
 import { SessionChatMessageList } from './session-chat-message-list';
 
 /*
-CDXC:SessionChatMarkerColumn 2026-08-23:
+CDXC:SessionChat 2026-08-23:
 
 Showcase for the transcript's LEFT MARGIN: one glyph vocabulary, one gutter.
 

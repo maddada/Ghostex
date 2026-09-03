@@ -148,7 +148,7 @@ export function IntegrationsSettingsTab({
   const ghostexCliStatusChecking = ghostexCliStatusLoading || !ghostexCliStatus;
   const cliReady = ghostexCliStatus?.installed === true;
   /**
-   * CDXC:CuaPermissions 2026-05-29-06:00:
+   * CDXC:OsIntegration 2026-05-29-06:00:
    * Trycua Permissions status must be based on Trycua's own permission check,
    * because granting Trycua in macOS can still leave Ghostex's separate
    * Accessibility trust bit false. The row represents desktop automation
@@ -160,15 +160,15 @@ export function IntegrationsSettingsTab({
     <SettingsNativeScrollArea className='h-full min-h-0'>
       <div className='settings-page-width flex flex-col gap-6 px-5 pb-5'>
         {/*
-         * CDXC:IntegrationsSetup 2026-05-27-04:17:
+         * CDXC:RemotePairing 2026-05-27-04:17:
          * Settings owns one Integrations tab for post-onboarding CLI, bundled
          * Ghostex skills, Trycua runtime lifecycle, and macOS privacy
          * permissions. Keeping Trycua here avoids duplicating it in Extensions.
          *
-         * CDXC:AgentHookSettings 2026-06-29-01:26:
+         * CDXC:AgentHooks 2026-06-29-01:26:
          * Agent hook install/status UI lives in Settings -> Agents, where the detailed per-agent hook list already exists. Integrations should not duplicate that setup row.
          *
-         * CDXC:AgentHookSettings 2026-08-19-11:20:
+         * CDXC:AgentHooks 2026-08-19-11:20:
          * Hook and bundled-skill removal moved next to the hook setup panel in Settings -> Agents, so Integrations no longer carries a Hooks & Skills recovery card.
          *
          * CDXC:AgentSkills 2026-05-31-09:18:
@@ -176,7 +176,7 @@ export function IntegrationsSettingsTab({
          * not hidden side effects of CLI setup. Each row explains what the skill
          * teaches agents and remains disabled until the Ghostex CLI is present.
          *
-         * CDXC:CliInstall 2026-06-07-13:53:
+         * CDXC:Cli 2026-06-07-13:53:
          * Ghostex installs and repairs the app-bundled CLI automatically for
          * DMG and Homebrew installs. Settings should expose a manual Repair CLI
          * action for unusual PATH states, not a cask reinstall flow.
@@ -332,7 +332,7 @@ export function IntegrationsSettingsTab({
               </IntegrationSettingsRow>
             ) : null}
             {/*
-            CDXC:SettingsIntegrations 2026-06-19-14:51:
+            CDXC:Settings 2026-06-19-14:51:
             macOS Settings > Integrations should not include a Setup Flow launcher row.
             Keep setup access owned by first-launch and other explicit entry points instead of listing it as an integration setting.
           */}

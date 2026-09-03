@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatOmpBlockingScreens 2026-08-31:
+CDXC:AgentScreenDetection 2026-08-31:
 Oh My Pi audit against can1357/oh-my-pi 96906220. OMP has diverged from Pi's
 focused-component grammar and deliberately owns a separate detector. Ordinary
 prompt input is unavailable while OMP presents any of these terminal states:

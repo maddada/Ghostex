@@ -16,7 +16,7 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('first launch setup modal source', () => {
   test('shows the redesigned six-step sequence and keeps dormant pages out of it', () => {
     /*
-    CDXC:FirstLaunchSetup 2026-08-24:
+    CDXC:Onboarding 2026-08-24:
     The onboarding redesign flow is Welcome -> Extensions -> Agents -> Connect
     (hooks) -> Skills -> Get started (project). Older page components stay in
     source for future reuse but never enter the visible sequence.
@@ -45,7 +45,7 @@ describe('first launch setup modal source', () => {
 
   test('skips the Connect step entirely when no agent CLI is installed', () => {
     /*
-    CDXC:FirstLaunchSetup 2026-08-24:
+    CDXC:Onboarding 2026-08-24:
     The Connect (hooks) step can only connect agents that exist on the machine,
     so with zero installed agent CLIs the step disappears from the sequence
     instead of nagging with a skip warning. The old continue-warning overlay is
@@ -75,7 +75,7 @@ describe('first launch setup modal source', () => {
 
   test('shows Recommended as the leftmost default sidebar-style preset', () => {
     /*
-    CDXC:FirstLaunchPreferences 2026-06-13-03:28:
+    CDXC:Onboarding 2026-06-13-03:28:
     The (currently dormant) defaults page keeps Recommended to the left of
     Minimal, Codex, and Detailed.
     */
@@ -90,7 +90,7 @@ describe('first launch setup modal source', () => {
 
   test('keeps defaults-page checkbox controls square', () => {
     /*
-    CDXC:FirstLaunchPreferences 2026-06-13-05:27:
+    CDXC:Onboarding 2026-06-13-05:27:
     The dormant defaults page should keep square checkbox controls scoped to
     the onboarding preference tiles.
     */
@@ -107,7 +107,7 @@ describe('first launch setup modal source', () => {
 
   test('uses the latest-release redirect for Android APK downloads', () => {
     /*
-    CDXC:FirstLaunchSetup 2026-06-16-01:04:
+    CDXC:Onboarding 2026-06-16-01:04:
     First-launch Android APK buttons must use a latest-release redirect instead
     of a tagged APK URL so release updates do not leave onboarding pointed at an
     older Android package.
@@ -127,7 +127,7 @@ describe('first launch setup modal source', () => {
 
   test('preserves unavailable gxserver-owned default prompt agents on the preferences page', () => {
     /*
-    CDXC:GxserverAgentSettings 2026-06-19-08:58:
+    CDXC:AgentProviders 2026-06-19-08:58:
     First-launch preferences can save unrelated defaults, so the default-agent
     select must display an unavailable saved gxserver id instead of visually
     falling back to Codex and inviting accidental overwrite.

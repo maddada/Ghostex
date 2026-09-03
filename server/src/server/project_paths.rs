@@ -23,7 +23,7 @@ impl ProjectPathHttpError {
 }
 
 /*
-CDXC:GxserverHttpApi 2026-06-22-04:19:
+CDXC:ServerApi 2026-06-22-04:19:
 The Rust HTTP dispatcher must implement the same generic filesystem API surface
 as TypeScript gxserver before domain-specific worktree deletion parity lands.
 Remote project picking may browse directory names through `/api/browseProjectDirectories`,
@@ -51,7 +51,7 @@ pub(crate) fn handle_browse_project_directories_http(
 }
 
 /*
-CDXC:AddProjectNewFolder 2026-08-18:
+CDXC:AddProject 2026-08-18:
 The Add Project dialog creates its destination folder through this endpoint
 instead of relying on the add/clone step to `mkdir -p` a typed path, so a user
 can make a folder, browse into it, and only then decide whether to add it or
@@ -237,7 +237,7 @@ pub(crate) fn browse_project_directories(
             .unwrap_or_default()
     };
     /*
-    CDXC:AddProjectDialog 2026-07-30:
+    CDXC:AddProject 2026-07-30:
     A path browser walks directories the user may not be allowed to read, and a
     hard error there would replace the suggestion list with a failure every time
     the caret crosses one. Permission failures therefore answer with an empty
@@ -283,7 +283,7 @@ pub(crate) fn browse_project_directories(
         }));
     }
     /*
-    CDXC:AddProjectDialog 2026-07-30:
+    CDXC:AddProject 2026-07-30:
     The browse list is read top-to-bottom by a human, so it sorts the way
     `localeCompare` does rather than by byte value: case-insensitive first, raw
     name only as the tiebreaker. A byte sort would file every capitalized folder

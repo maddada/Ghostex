@@ -63,7 +63,7 @@ export function remoteMachineFailureLabel(status: RemoteMachineRuntimeStatus['st
 }
 
 /*
- * CDXC:SidebarProjectMenu 2026-09-02:
+ * CDXC:ContextMenus 2026-09-02:
  * The remote machine header is gone. Its connection control (Connect, busy
  * spinner, error cloud with retry) now lives on the machine's tab in the top
  * strip, and Add Project, Sort & Filter, Collapse All, and Edit Machine live at
@@ -91,7 +91,7 @@ export function RemoteMachineSidebarSection({
   isDragPreviewSource: boolean;
   machine: RemoteMachineSettings;
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * A remote gxserver's Spaces come from that server and are never mixed with
    * the local set, so this section takes its own Space state plus its own
    * selection and reorder callback. `spaces` is undefined for a machine whose
@@ -116,7 +116,7 @@ export function RemoteMachineSidebarSection({
 }) {
   const isConnected = status === 'connected';
   /*
-   * CDXC:GPUIRemoteLastSeen 2026-07-12:
+   * CDXC:RemoteMachines 2026-07-12:
    * Disconnected machines keep listing their last-seen project groups faded
    * (the runtime marks those groups stale) instead of hiding the body, so
    * "No projects" is a connected-only empty state.

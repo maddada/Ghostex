@@ -130,7 +130,7 @@ describe('phased macOS code-server prerequisite contract', () => {
 
   test('keeps every other active macOS release entry path fail-closed', () => {
     const reusableWorkflow = workflow('release-gpui-macos.yml');
-    // CDXC:ReleaseChangeAwarePlanning 2026-08-13: release-gpui-runtime.yml was
+    // CDXC:Release 2026-08-13: release-gpui-runtime.yml was
     // split into release-gpui-gxserver.yml (the package) and
     // release-gpui-code-server.yml (the immutable component, reuse-first).
     const codeServerWorkflow = workflow('release-gpui-code-server.yml');

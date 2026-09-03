@@ -232,7 +232,7 @@ pub(crate) fn gpui_gte_homebrew_install_command() -> (&'static str, [&'static st
 
 pub(crate) fn gpui_install_gte_from_homebrew() -> GpuiGteInstallActionResult {
     /*
-    CDXC:GtePromptEditing 2026-06-24-13:28:
+    CDXC:PromptEditor 2026-06-24-13:28:
     GPUI Settings must use the same fixed Homebrew resolution order and `maddada/tap/gte` install operation as the macOS Settings button, bounded to five minutes with stdout/stderr suppressed. Installing the binary is separate from selecting the promptEditorBackend, and failures must report generic copy instead of raw Homebrew output, paths, command output, URLs, tokens, or environment.
     */
     let (command, args, timeout) = gpui_gte_homebrew_install_command();
@@ -269,12 +269,12 @@ pub(crate) const GPUI_CUA_DRIVER_INSTALL_RUNNING_MESSAGE: &str = "The official T
 pub(crate) const GPUI_CUA_DRIVER_UPDATE_RUNNING_MESSAGE: &str = "Trycua is checking for and applying the latest official update in a command terminal tab. Plugin status updates when it finishes.";
 
 /*
-CDXC:GPUIDesktopControlSettings 2026-08-09:
+CDXC:Extensions 2026-08-09:
 macOS owns the in-app Trycua lifecycle. A missing driver runs trycua's
 official installer; an existing driver performs a fresh update check and then
 uses its canonical self-updater.
 
-CDXC:TrycuaPrerequisite 2026-08-24:
+CDXC:Extensions 2026-08-24:
 Every desktop platform now runs the official Trycua installer in a command-pane
 tab instead of sending Windows and Linux to a downloads page, so Settings can
 show one exact command and one button that runs it. Windows Ghostex terminals

@@ -81,7 +81,7 @@ pub(crate) fn gpui_workspace_shell_state_is_legacy_unversioned_object(
 
 pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_json::Value {
     let active_mode = app.available_titlebar_mode_or_agents(app.active_mode);
-    // CDXC:GPUISessionChatViewPersistence 2026-07-31: bare shell session ids
+    // CDXC:SessionChat 2026-07-31: bare shell session ids
     // only (layout metadata) — which sessions last showed Session Chat.
     let mut agents_chat_mode_session_ids = app
         .agents_chat_mode_sessions
@@ -161,7 +161,7 @@ pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_jso
 
 pub(crate) fn persist_gpui_workspace_shell_state(app: &GhostexGpuiApp) {
     /*
-    CDXC:GPUIPrivacyAudit 2026-06-23-13:18:
+    CDXC:Telemetry 2026-06-23-13:18:
     Phase 10 persistence re-audit keeps this as the only GPUI-owned workspace shell-state writer. It may write writer-owned layout/focus/tab/profile/lifecycle metadata, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, plus the `petOverlayActivitiesVisible` UI boolean only; pet activity payloads, pet titles, raw settings JSON, terminal content, command text, stdout/stderr, project paths, file paths, raw URLs/query/fragment, page titles, profile paths, cookies, credentials, tokens, raw payloads, private user content, and runtime surface data must stay out at the serializer boundary.
     */
     let path = gpui_workspace_shell_state_path();
@@ -305,7 +305,7 @@ pub(crate) fn agents_delayed_sends_to_shell_state_json(
     now: SystemTime,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUIAgentsDelayedSendPersistence 2026-07-22:
+    CDXC:DelayedSend 2026-07-22:
     Agents Delayed Send restart state is keyed only by the canonical gxserver
     project/session identity already accepted by the workspace mapping parser.
     Fixed timers keep the same bounded remaining-time checkpoint as command
@@ -426,7 +426,7 @@ pub(crate) fn agents_delayed_send_restore_intents_from_shell_state(
 
 pub(crate) fn workspace_model_to_shell_state_json(model: &WorkspaceModel) -> serde_json::Value {
     /*
-    CDXC:GPUIAgentsTabStatus 2026-06-22-16:27:
+    CDXC:SessionStatus 2026-06-22-16:27:
     Agents tab status persistence is intentionally limited to enum/boolean shell metadata so restored placeholder tabs keep their semantic dots without storing delayed-send deadlines, labels, commands, terminal output, paths, tokens, private titles, or user content.
     */
     serde_json::json!({
@@ -506,7 +506,7 @@ pub(crate) fn workspace_model_from_shell_state(
     let empty_root_pane_id = workspace_empty_root_leaf_id(&root);
     let workspace_is_empty = sessions.is_empty() && empty_root_pane_id.is_some();
     /*
-    CDXC:GPUIWorkspacePersistence 2026-06-26-05:23:
+    CDXC:Workarea 2026-06-26-05:23:
     The macOS workspace can close the last visible terminal and keep the project open. GPUI shell-state restore therefore accepts only the exact empty Agents root-leaf shape with zero terminal sessions, while split layouts and non-empty session lists must still reference real terminal tabs.
     */
     if sessions.is_empty() != workspace_is_empty {
@@ -647,10 +647,10 @@ pub(crate) fn terminal_session_from_shell_state(
             .with_delayed_send_active(delayed_send_active);
     if presentation_state == TerminalSessionPresentationState::Mounting {
         /*
-        CDXC:GPUITerminalActivationRuntimeGuard 2026-06-23-18:00:
+        CDXC:Terminal 2026-06-23-18:00:
         Shell-state JSON intentionally stores only the visible `mounting` presentation, not whether that Mounting tab came from a new startup, failed retry, wake, materialize, or reattach action. Restored Mounting sessions therefore come back as non-startup-eligible placeholders so a pre-restart wake/reattach state cannot create a new Ghostty process or claim a parked runtime owner that no longer exists.
 
-        CDXC:GPUITerminalActivationRuntimeGuard 2026-06-23-18:12:
+        CDXC:Terminal 2026-06-23-18:12:
         Slice 229 keeps restored `presentationState:"mounting"` out of startup eligibility at the restore boundary itself. New Mounting terminal creation and in-process failed-startup retry set eligibility through runtime-only transitions after restore, not through persisted shell state.
         */
         session.set_presentation_state_with_startup_eligibility(presentation_state, false);

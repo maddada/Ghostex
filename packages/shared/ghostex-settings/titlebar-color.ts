@@ -4,15 +4,15 @@ export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_COLOR = '#040607';
 export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR = '#88d7ff';
 export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT = 98;
 /*
- * CDXC:SidebarTitlebarColors 2026-06-28-08:01:
+ * CDXC:Theming 2026-06-28-08:01:
  * The tint scale keeps the original 95 reference so existing saved contrast
  * values do not darken or brighten when the app default changes.
  *
- * CDXC:SidebarTitlebarColors 2026-07-22:
+ * CDXC:Theming 2026-07-22:
  * New installs used the neutral #808080 tint at 93 Background Contrast,
  * resolving to #141414 while preserving the existing calibrated scale.
  *
- * CDXC:SidebarTitlebarColors 2026-08-30:
+ * CDXC:Theming 2026-08-30:
  * New installs use ice #88d7ff at 98 Background Contrast, resolving to
  * #040607. Neutral Gray remains a swatch at #808080; it is no longer the
  * first-run default.
@@ -172,31 +172,31 @@ export function getSidebarTitlebarBackgroundForDarkness(
   tintColor = DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR
 ): string {
   /**
-   * CDXC:SidebarTitlebarColors 2026-06-15-13:45:
+   * CDXC:Theming 2026-06-15-13:45:
    * Replace the freeform custom background color picker with a contrast slider.
    * The slider controls how strongly the calibrated dark tint background is
    * applied so custom chrome can vary in contrast without turning into
    * arbitrary bright sidebar colors.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-15:01:
+   * CDXC:Theming 2026-06-15-15:01:
    * Limit the contrast slider to 85-100 so custom chrome stays in the dark
    * gray range instead of drifting into mid-gray sidebar backgrounds.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-15:15:
+   * CDXC:Theming 2026-06-15-15:15:
    * Keep the internal darkness percentage name for compatibility while the
    * visible Settings control is labeled Background Contrast.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-15:28:
+   * CDXC:Theming 2026-06-15-15:28:
    * Add a web-only tint picker without returning to arbitrary background
    * colors. Map tint choices to dark applied backgrounds so tint changes are
    * subtle and neutral #808080 preserves the original gray.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-16-14:28:
+   * CDXC:Theming 2026-06-16-14:28:
    * Default custom chrome should now use 95 contrast with white tint. White
    * remains neutral in the calibrated tint table because all same-channel
    * tints should keep the sidebar/titlebar background gray.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-19-14:20:
+   * CDXC:Theming 2026-06-19-14:20:
    * Tint swatches stay visually legible in Settings, but applied custom chrome
    * should default to calibrated very-dark backgrounds such as #0d0005 for red
    * and #0c0e11 for blue. Scale those dark targets with the Contrast slider,
@@ -212,7 +212,7 @@ export function getSidebarTitlebarBackgroundForDarkness(
 }
 
 /**
- * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
+ * CDXC:Theming 2026-06-15-13:22:
  * The foreground is no longer user-selectable. Ignore any legacy saved
  * foreground value and recompute it from the validated background color, using
  * the standard light foreground for dark backgrounds and standard dark
@@ -241,18 +241,18 @@ export type SidebarTitlebarGradientColors = {
 
 export function getSidebarTitlebarGradientColors(backgroundColor: string): SidebarTitlebarGradientColors {
   /*
-   * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
+   * CDXC:Theming 2026-06-19-12:33:
    * Custom sidebar chrome should render as a fixed-strength gradient instead of
    * a flat color. Derive the hue direction from the resolved tint-adjusted
    * background, normalize it so every tint uses the same gradient degree, and
    * keep neutral white/black/gray tints on a neutral gray gradient.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-19-13:26:
+   * CDXC:Theming 2026-06-19-13:26:
    * The titlebar should share the sidebar's gradient stops: left side matches
    * the sidebar top stop and right side matches the sidebar bottom stop so the
    * chrome fades darker across the titlebar instead of brighter.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-19-14:20:
+   * CDXC:Theming 2026-06-19-14:20:
    * Same-channel tint outputs must not receive the older blue fallback
    * direction. White and black selections should leave the dark sidebar area
    * neutral instead of shifting it toward blue.

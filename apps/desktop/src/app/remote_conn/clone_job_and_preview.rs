@@ -161,7 +161,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:RemoteClone 2026-06-24-19:35:
+        CDXC:AddProject 2026-06-24-19:35:
         GPUI remote Clone Repository preview accepts only the selected saved machine id plus explicit modal input. Rust forwards those bounded fields through the live tunnel and returns only the preview payload needed by the shared modal; raw failures remain generic and are not logged.
         */
         let Some(request_id) = gpui_remote_request_id_from_command(command) else {
@@ -248,7 +248,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:RemoteClone 2026-06-24-19:35:
+        CDXC:AddProject 2026-06-24-19:35:
         Starting a remote clone is a Rust-owned gxserver job request, not renderer shell execution. CEF may submit repository URL text, target parent text, optional folder/branch text, clone flags, and the selected machine id; the remote daemon validates, derives the target path, runs Git, registers the project, and publishes presentation.
         */
         let Some(request_id) = gpui_remote_request_id_from_command(command) else {

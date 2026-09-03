@@ -1,5 +1,5 @@
 /*
-CDXC:SwitchAccount 2026-09-03:
+CDXC:AgentProviders 2026-09-03:
 "Switch Account" moves a PROMPTED session onto another agent configuration of
 the same CLI family, so the same conversation can be resumed under a different
 account (two Claude configurations, each logged into its own subscription, are

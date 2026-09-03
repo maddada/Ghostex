@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 /*
-CDXC:SessionChatCore 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Session Chat renders an agent terminal session as a normalized chat by tailing
 the agent CLI's own JSONL transcript. This module is the Rust mirror of
 `packages/shared/session-chat.ts` plus the upstream chat spec's decoders/readers/watch
@@ -51,7 +51,7 @@ pub(crate) fn read_exact_at(file: &File, buffer: &mut [u8], offset: u64) -> io::
 }
 
 /*
-CDXC:SessionChatCore 2026-08-24:
+CDXC:SessionChat 2026-08-24:
 The largest transcript line the reader will parse. This was 2 MiB, which real
 rollouts exceed routinely — one 106 MB Codex rollout on this machine holds 15
 lines above 2 MiB (up to 8.4 MB), all giant `custom_tool_call_output` /
@@ -73,7 +73,7 @@ pub(crate) const MAX_RESOLVE_POLL: Duration = Duration::from_millis(5_000);
 /// How long a subscribe waits for its one model/effort probe before emitting
 /// the snapshot anyway, and how long a read waits for the same probe before
 /// answering without the screen-derived fields. See
-/// `CDXC:SessionChatSeedDetection` and `CDXC:SessionChatReadDetectionDeadline`.
+/// `CDXC:AgentScreenDetection` and `CDXC:AgentScreenDetection`.
 pub(crate) const SEED_OPTION_DETECTION_DEADLINE: Duration = Duration::from_millis(500);
 /// How long the steady-state model/effort/notice probe may take before the
 /// reconcile pass abandons it. The probe runs on the blocking pool but is
@@ -81,7 +81,7 @@ pub(crate) const SEED_OPTION_DETECTION_DEADLINE: Duration = Duration::from_milli
 /// connection and never answers wedges the whole follower.
 pub(crate) const STEADY_OPTION_DETECTION_DEADLINE: Duration = Duration::from_millis(10_000);
 /*
-CDXC:SessionChatFollowerLiveness 2026-08-24:
+CDXC:AgentScreenDetection 2026-08-24:
 How long a follower task may run without reaching a new reconcile iteration
 before the sync path calls it wedged and respawns it. Every legitimate long
 wait PARKS the heartbeat and is exempt, so this only has to clear the longest
@@ -94,7 +94,7 @@ pub(crate) const SESSION_CHAT_FOLLOWER_WEDGE_DEADLINE: Duration = Duration::from
 pub(crate) const STALE_TRANSCRIPT_IDLE: Duration = Duration::from_millis(10_000);
 pub(crate) const INTERRUPTED_STATUS_TEXT: &str = "Conversation interrupted";
 /*
-CDXC:SessionChatCore 2026-08-23:
+CDXC:SessionChat 2026-08-23:
 Codex's compaction seam. Unlike Claude, Codex leaves every summarised turn in
 the rollout, so a compaction changes nothing a transcript projection can see —
 the conversation just silently stops carrying the older turns' context. Its TUI
@@ -173,7 +173,7 @@ pub struct SessionChatMessage {
     #[serde(rename = "turnId", skip_serializing_if = "Option::is_none", default)]
     pub turn_id: Option<String>,
     /*
-    CDXC:SessionChatCore 2026-08-01:
+    CDXC:SessionChat 2026-08-01:
     Byte offset of the record's line in the transcript file. Stamped by the
     readers (the decoders are line-local and cannot know it), so it is stable
     across tail, incremental and pagination reads of the same file. Clients use
@@ -187,7 +187,7 @@ pub struct SessionChatMessage {
     )]
     pub byte_offset: Option<u64>,
     /*
-    CDXC:SessionChatCore 2026-08-19:
+    CDXC:SessionChat 2026-08-19:
     The row is a prompt sitting in the agent's own queue that has NOT been
     handed to the model yet (see `TranscriptQueueOp`). Clients label it; the
     server retracts it the moment the queue releases it, and the delivered row
@@ -314,7 +314,7 @@ pub fn session_chat_lifecycle_decoder(
 }
 
 /*
-CDXC:SessionChatCore 2026-08-19:
+CDXC:SessionChat 2026-08-19:
 Agent-side prompt queue. Typing while the model is mid-turn does NOT write a
 prompt row — the harness parks the text in its own queue and writes bookkeeping
 rows instead, then delivers it later (Claude: `queue-operation`
@@ -337,7 +337,7 @@ pub enum TranscriptQueueOp {
 }
 
 /*
-CDXC:SessionChatRewind 2026-09-02:
+CDXC:SessionChat 2026-09-02:
 Claude Code's own resume loader reads `last-prompt` rows to decide which leaf a
 reopened conversation continues from. Only `explicit: true` rows are leaf
 markers: the harness also writes non-explicit ones as ordinary bookkeeping
@@ -398,7 +398,7 @@ pub fn session_chat_lineage_extractor(
 }
 
 /*
-CDXC:SessionChatCore 2026-08-18:
+CDXC:SessionChat 2026-08-18:
 Abandoned prompts. Submitting a prompt and then revising or re-sending it
 before the model answered leaves BOTH rows in the transcript as siblings of the
 same `parentUuid`; only the last one is ever answered. The terminal renders the
@@ -422,7 +422,7 @@ Measured over the 80 most recent local transcripts this drops 16 rows, every one
 a re-sent or revised submission; "keep only the leaf chain" dropped 9k rows and
 "keep the newest child of every parent" 9.2k.
 
-CDXC:SessionChatRewind 2026-09-02 (generalized to whole subtrees):
+CDXC:SessionChat 2026-09-02 (generalized to whole subtrees):
 The rule above only ever fired on a prompt with NO message descendants, so a
 `/rewind` → "Restore conversation" left its abandoned turns in chat: the rewind
 writes nothing at the time, and the next prompt lands as a SECOND prompt child
@@ -532,7 +532,7 @@ pub(crate) fn text_block(text: impl Into<String>) -> SessionChatBlock {
 }
 
 /*
-CDXC:SessionChatCore 2026-08-24:
+CDXC:SessionChat 2026-08-24:
 How much of a tool payload a client is shown. Tool outputs and raw tool-call
 inputs are the only blocks that reach megabyte size, and every decoded block
 crosses the events websocket into the page, so the DISPLAY copy is bounded here
@@ -626,7 +626,7 @@ fn tool_result_output_raw(value: Option<&Value>) -> String {
 pub(crate) const PASTED_IMAGE_ALT: &str = "Pasted image";
 
 /*
-CDXC:SessionChatCore 2026-08-01:
+CDXC:SessionChat 2026-08-01:
 Claude records a pasted/screenshotted image as
 `{"type":"image","source":{"type":"base64",…}}` — no url, no path. Returning
 None there dropped the block, and an image-only user turn then decoded to zero
@@ -674,7 +674,7 @@ pub struct SessionChatIncrementalState {
     pending_bytes: usize,
     dropping_oversized_record: bool,
     /*
-    CDXC:SessionChatCore 2026-08-18:
+    CDXC:SessionChat 2026-08-18:
     Forward half of the abandoned-prompt rule (see `superseded_prompt_id`). The
     tail read can decide in one pass because it walks newest-first; the append
     stream sees the prompt BEFORE the row that abandons it, so it must publish
@@ -686,7 +686,7 @@ pub struct SessionChatIncrementalState {
     unanswered_prompt_parents: HashMap<String, String>,
     superseded_prompt_ids: Vec<String>,
     /*
-    CDXC:SessionChatCore 2026-08-19:
+    CDXC:SessionChat 2026-08-19:
     Prompts published with the "Queued" label that the agent's queue has not
     released yet, oldest first, as `(normalized text, message id)`. The release
     row retracts them through the same channel abandoned prompts use. Seeded
@@ -695,7 +695,7 @@ pub struct SessionChatIncrementalState {
     */
     queued_prompts: VecDeque<(String, String)>,
     /*
-    CDXC:SessionChatRewind 2026-09-02:
+    CDXC:SessionChat 2026-09-02:
     The newest tree row the stream has seen, seeded from the tail read after
     every snapshot. An ordinary prompt names it as its parent; a prompt that
     names anything else re-attaches further up the tree, which is a rewind and

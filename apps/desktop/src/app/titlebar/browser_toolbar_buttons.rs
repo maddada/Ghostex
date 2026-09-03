@@ -144,7 +144,7 @@ impl GhostexGpuiApp {
                 MouseButton::Left,
                 cx.listener(move |this, _, window, cx| {
                     /*
-                    CDXC:GPUIBrowserToolbar 2026-06-14-17:42:
+                    CDXC:Browser 2026-06-14-17:42:
                     GPUI owns the browser toolbar input even though CEF owns the page below it. Route clicks through the complete Browser address-focus boundary so shell focus leaves terminal companion panes before GPUI/AppKit keyboard ownership moves to the input.
                     */
                     let _ = this.focus_browser_address_input_for_pane(pane_id, window, cx);

@@ -167,7 +167,7 @@ pub(crate) fn gpui_titlebar_exit_focus_control_signature(
     agents_focus_mode_active: bool,
 ) -> Option<GpuiTitlebarExitFocusControlSignature> {
     /*
-    CDXC:GPUITitlebarFocusExit 2026-06-27-02:05:
+    CDXC:FocusRouting 2026-06-27-02:05:
     The titlebar Exit Focus affordance is visible only while the Agents workspace is in pane Focus mode, and it must reuse active mode-tab chrome instead of a separate outlined or icon-button skin. Activating it clears Agents focus mode through the workspace model without changing command-pane focus mode, project-editor focus, terminal content, paths, commands, or renderer state.
     */
     agents_focus_mode_active.then_some(GpuiTitlebarExitFocusControlSignature {

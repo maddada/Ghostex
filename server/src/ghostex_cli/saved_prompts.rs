@@ -5,7 +5,7 @@ use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 
 /*
-CDXC:MobileSavedPrompts 2026-08-26:
+CDXC:SavedPrompts 2026-08-26:
 Saved Prompts is a shared React surface, but mobile reaches the owning
 gxserver only through SSH-executed CLI verbs. Keep this as one narrowly scoped
 RPC bridge with an allowlisted subaction set: the page sends the same payloads

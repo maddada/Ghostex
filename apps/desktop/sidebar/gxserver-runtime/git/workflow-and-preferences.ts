@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines) into git/. This
 slice covers the prompt-agent commit/PR workflow (local and remote) and Git
 preference persistence/resolution. See `index.ts` for how the runtime's Git
@@ -102,7 +102,7 @@ export const gpuiSidebarRuntimeGitWorkflowAndPreferencesMethods = {
       return;
     }
     /*
-    CDXC:GPUISidebarGit 2026-06-24-16:45:
+    CDXC:Git 2026-06-24-16:45:
     Visible PR-agent workflows are for user-observable, non-delete PR creation only. The terminal session can report gxserver lifecycle/activity, but it cannot prove that `gh pr create` produced an open PR; delete-after cleanup must stay on the direct gxserver PR result path.
     */
     const prompt = buildGpuiGitPullRequestAgentPrompt({
@@ -312,7 +312,7 @@ export const gpuiSidebarRuntimeGitWorkflowAndPreferencesMethods = {
       primaryAction: normalizeSidebarGitAction(updates.primaryAction ?? currentPreferences.primaryAction),
     };
     /*
-    CDXC:GPUIRemoteGit 2026-06-24-18:22:
+    CDXC:Git 2026-06-24-18:22:
     Remote Git preference writes use only the selected machine id, gxserver project id, and the three known preference keys. Rust owns the tunnel and response shaping; the renderer never sends paths, labels, branch names, command text, URLs, tokens, stdout/stderr, or raw daemon bodies as write authority.
     */
     try {

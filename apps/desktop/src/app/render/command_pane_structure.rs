@@ -44,7 +44,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUICommandPane 2026-06-22-05:42:
+        CDXC:CommandPane 2026-06-22-05:42:
         Command terminals render as a bottom workspace surface beside Agents and project/editor modes without entering the normal workspace tab tree. Pinned mode reserves height and pushes the active workspace area up, floating mode keeps a collapsed bottom strip while drawing the expanded command surface above the workspace, collapsed mode keeps the compact command strip visible while sessions exist, and the command surface disappears when its final session closes.
         */
         let workspace_width =
@@ -87,7 +87,7 @@ impl GhostexGpuiApp {
                 .into_any_element(),
             CommandPaneWorkspaceLayoutPlan::PinnedRight { panel_width } => h_flex()
                 /*
-                CDXC:GPUICommandPaneSide 2026-08-16:
+                CDXC:CommandPane 2026-08-16:
                 Right dock is strict normal layout: workspace, a real 5px
                 divider sibling, and the pane column. gpui-component `h_flex`
                 centers its children by default, so stretch them or the pane
@@ -172,7 +172,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUICommandPaneSide 2026-08-16:
+        CDXC:CommandPane 2026-08-16:
         `extent` is the panel height for the bottom dock and the panel width
         for the right dock. Floating is always bottom-anchored. The right dock
         skips the top border because its divider sibling paints the separator.
@@ -278,7 +278,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUICommandPaneSide 2026-08-16:
+        CDXC:CommandPane 2026-08-16:
         The right-docked pane's grab target is a real 5px divider sibling, the
         same strict-layout pattern as the sidebar divider and command split
         handles, rather than porting the bottom rail's approved 12px overlap to
@@ -352,7 +352,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUICommandPaneResize 2026-08-18:
+        CDXC:CommandPane 2026-08-18:
         The command-pane boundary uses the same real five-pixel divider as the
         project-editor companion boundary. In pinned mode it is a reserved
         normal-layout sibling between the workspace and command pane; floating
@@ -505,7 +505,7 @@ impl GhostexGpuiApp {
             ));
 
         /*
-        CDXC:GPUIFocusedSplits 2026-06-25-16:05:
+        CDXC:FocusMode 2026-06-25-16:05:
         Command-pane split layout is axis-aware so persisted command split geometry renders from its stored axis. Focused command hotkeys currently create horizontal splits only, matching native; the split handle remains a real non-overlapping layout sibling when restored layouts carry either orientation.
         */
         match split.axis {

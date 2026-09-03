@@ -26,7 +26,7 @@ pub(crate) struct GpuiEngineTerminalAnnouncedVisibility {
 
 impl GhostexGpuiApp {
     /*
-    CDXC:GpuiEngineTerminalVisibility 2026-09-03:
+    CDXC:Terminal 2026-09-03:
     Agent sessions run inside zmx, and every Agents engine terminal keeps its
     `zmx attach` client alive while parked (background tab, chat mode, another
     titlebar mode, collapsed companion). A parked client used to keep its last

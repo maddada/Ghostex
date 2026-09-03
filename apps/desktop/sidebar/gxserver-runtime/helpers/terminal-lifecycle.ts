@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -78,7 +78,7 @@ export function normalizeGpuiWorkspaceTerminalTitleChanged(
 }
 
 /*
-CDXC:ExportTranscript 2026-08-20:
+CDXC:TranscriptExport 2026-08-20:
 The follow-up conversation's staged input, not a prompt. gxserver types this
 into the new agent's composer and never submits it, so the user writes their
 own prompt around the mention: sending anything on their behalf was rejected.
@@ -263,7 +263,7 @@ export function normalizeQueuedGpuiWorkspaceTerminalLifecycleRequest(
   value: unknown
 ): GpuiWorkspaceTerminalLifecycleRequest | undefined {
   /*
-  CDXC:GPUIWorkspaceLifecycle 2026-06-26-05:23:
+  CDXC:Workarea 2026-06-26-05:23:
   Lifecycle retries may contain either the raw fixed bridge payload queued before React started or the runtime's already-normalized id-only request queued while the CEF result bridge was missing. Accept only those two bounded shapes so retries do not reintroduce paths, commands, terminal text, URLs, tokens, or generic IPC fields.
   */
   return (
@@ -419,7 +419,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
 
 export function didGpuiGxserverProviderTransitionCommit(result: GxserverSessionTransitionResult): boolean {
   /*
-  CDXC:GPUIWorkspaceLifecycle 2026-06-26-08:01:
+  CDXC:Workarea 2026-06-26-08:01:
   GPUI sleep must match macOS gxserver lifecycle ownership: `/api/transitionSession` resolving is not proof that zmx stopped. Only publish local sleep state after the returned session lifecycle matches the action, provider lifecycle is `missing`, and the optional kill result did not explicitly fail.
   */
   if (!isObjectRecord(result) || !isObjectRecord(result.session)) {
@@ -445,7 +445,7 @@ export function shouldApplyGpuiLocalWorkspaceTransition(
   action: 'close' | 'sleep'
 ): boolean {
   /*
-  CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:44:
+  CDXC:Workarea 2026-06-26-23:44:
   macOS close and sleep intentionally diverge after gxserver handles a provider transition. Close removes the local pane/sidebar row once `/api/transitionSession` returns a valid close result, even when provider kill did not commit; sleep must stay strict so GPUI does not show a cold sleeping placeholder while the zmx runtime is still live.
   */
   if (!isObjectRecord(result) || result.action !== action || !isObjectRecord(result.session)) {

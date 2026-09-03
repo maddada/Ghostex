@@ -204,7 +204,7 @@ export class GxserverConnection {
             logPresentationSnapshot(this.machine, snapshot.revision, snapshot.projects.length);
           },
           /*
-          CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+          CDXC:StateSync 2026-09-01:
           `connect` fetches the snapshot over HTTP and then subscribes quoting
           that revision, so this is the daemon confirming the state already in
           `this.state.presentation` is current. There is nothing to apply —

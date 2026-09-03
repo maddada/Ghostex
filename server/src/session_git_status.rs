@@ -12,7 +12,7 @@ use std::{
 use serde_json::{json, Map, Value};
 
 /*
-CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+CDXC:Git 2026-07-29-00:00:
 Server side of Sidebar V2's git/PR card row (spec `plans/009-sidebar-v2-inbox.md`,
 decision 7 + the P3 wire contract). Each worktree session's cwd IS the checkout it
 works in, so per-session git state is resolved from the session cwd and published
@@ -356,7 +356,7 @@ merge — and never held while a subprocess runs. Returns the cwds whose publish
 status changed, which is exactly the set the caller turns into presentation
 deltas.
 
-CDXC:SidebarV2DataGate 2026-07-29:
+CDXC:StateSync 2026-07-29:
 `sidebar_v2_selected` is the version gate (`session_lifecycle::
 read_sidebar_v2_selected`), taken as an argument so no entry point into this
 module can probe without stating it. It is checked BEFORE `plan_refresh`, which
@@ -526,7 +526,7 @@ pub fn session_cwd_key(session: &Value) -> Option<String> {
 }
 
 /*
-CDXC:SidebarV2GitStatus 2026-07-30 (effective cwd):
+CDXC:Git 2026-07-30 (effective cwd):
 A session row's git state lives in the directory the session actually RUNS in,
 and that is not always `session.cwd`. Agent sessions are created without a cwd on
 purpose — they run in their project's path — so `zmx.rs` and `agents.rs` resolve
@@ -1458,7 +1458,7 @@ mod tests {
     }
 
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     The version gate, asserted where the cost actually is. A V1 machine renders
     none of this data, so its pass must spawn no git, make no `gh` network call,
     publish nothing — and evict nothing either, so entries an earlier V2 stretch
@@ -1879,7 +1879,7 @@ mod tests {
     #[test]
     fn session_pull_request_disposition_falls_back_to_the_project_path() {
         /*
-        CDXC:SidebarV2GitStatus 2026-07-30 (effective cwd):
+        CDXC:Git 2026-07-30 (effective cwd):
         An agent session carries no cwd, so PR-driven auto-settle must read the
         cache entry for its PROJECT path — otherwise the whole auto-settle trigger
         is dead for every agent row on the machine.
@@ -1928,7 +1928,7 @@ mod tests {
     #[test]
     fn effective_session_git_cwds_fall_back_to_the_project_path() {
         /*
-        CDXC:SidebarV2GitStatus 2026-07-30 (effective cwd):
+        CDXC:Git 2026-07-30 (effective cwd):
         The same rule `zmx.rs`/`agents.rs` launch with: an explicit session cwd
         wins, anything blank falls through to the project's path, and a project
         with no usable path resolves nothing at all (no probe, no key).
@@ -2089,7 +2089,7 @@ mod tests {
     }
 
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     The two probe surfaces share the runner but NOT the counter, so a leak under
     the `origin` probe is logged as `projectGitRemoteReaderAbandoned` instead of
     being reported under the git-status pass's event name.

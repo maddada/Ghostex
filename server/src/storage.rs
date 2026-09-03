@@ -33,10 +33,10 @@ const LEGACY_RECENT_PROJECTS_BACKFILL_METADATA_KEY: &str =
 const LEGACY_NATIVE_PROJECTS_STATE_FILE: &str = "native-sidebar-projects.json";
 
 /*
-CDXC:GxserverStorage 2026-06-14-20:37:
+CDXC:ServerDaemon 2026-06-14-20:37:
 SQLite remains TypeScript-compatible during the Rust port. Open every connection with foreign_keys=ON and journal_mode=WAL, then apply migration IDs 0001 through 0015 without inventing a parallel schema.
 
-CDXC:GxserverAppUserData 2026-06-24-13:30:
+CDXC:ServerDaemon 2026-06-24-13:30:
 Pinned Prompts are a shared user-data surface, not GPUI-local modal state. Store their content in gxserver SQLite behind explicit product-data RPCs so every client hydrates the same React contract without logging prompt bodies.
 */
 pub fn initialize_gxserver_storage(paths: &GxserverPaths) -> Result<StorageInitResult> {
@@ -80,7 +80,7 @@ fn default_no_legacy_state_import_status() -> LegacyMacosStateImportStatus {
 }
 
 /*
-CDXC:GxserverStorage 2026-06-22-05:10:
+CDXC:ServerDaemon 2026-06-22-05:10:
 Existing TypeScript-created state.db files can already contain the legacy macOS import marker in metadata. Rust startup must surface that durable marker as TypeScript does on later launches: completed markers report `skipped` with `alreadyCompleted`, while missing or non-completed markers continue through the no-legacy startup status path.
 */
 fn read_existing_legacy_import_status(state_db_file: &str) -> Option<LegacyMacosStateImportStatus> {
@@ -105,7 +105,7 @@ fn read_existing_legacy_import_status(state_db_file: &str) -> Option<LegacyMacos
 
 fn backfill_legacy_macos_recent_projects(db: &mut Connection, paths: &GxserverPaths) -> Result<()> {
     /*
-    CDXC:GPUIRecentProjects 2026-06-27-19:37:
+    CDXC:Projects 2026-06-27-19:37:
     Local Recent Projects are gxserver-owned shared project state. Existing users may already have matching P-project rows imported before the recent-project columns existed, while WK/macOS storage still carries `isRecentProject`. Reconcile that legacy file into `projects.isRecentProject` once so GPUI and macOS read the same drawer source without copying project names or paths into logs.
     */
     let existing_marker: Option<String> = db
@@ -884,7 +884,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0011_t3_session_kind",
         /*
-        CDXC:T3Code 2026-06-23-06:19:
+        CDXC:AgentProviders 2026-06-23-06:19:
         Embedded T3 panes now have gxserver-owned session identity. Rebuild the
         sessions table so existing state.db files accept kind=t3 rows without
         weakening the rest of the TypeScript-compatible session constraints.
@@ -894,7 +894,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0012_recent_projects",
         /*
-        CDXC:GPUIRecentProjects 2026-06-24-12:27:
+        CDXC:Projects 2026-06-24-12:27:
         Recent Projects is a first-class gxserver project-domain state. Store
         explicit parked state and closed time on the project row so GPUI can
         hydrate a real path-bearing recent list without deriving rows from
@@ -914,7 +914,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0013_app_user_data",
         /*
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
+        CDXC:ServerDaemon 2026-06-24-13:30:
         Scratch Pad and Pinned Prompts need a global gxserver-owned source of
         truth for reused React app-modal surfaces. Keep their user-authored
         bodies out of project/session metadata, presentation deltas, and logs by
@@ -943,7 +943,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0014_automations",
         /*
-        CDXC:GxserverAutomations 2026-06-29-15:55:
+        CDXC:Automations 2026-06-29-15:55:
         Project automations are daemon-owned instead of native-sidebar project-cache fields. Store definitions and run history in dedicated tables so macOS, CLI, GPUI, and remote clients control the same scheduler without renderer-local timers or duplicated CLI bridge state.
         */
         sql: r#"
@@ -998,7 +998,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0015_project_visibility",
         /*
-        CDXC:ProjectVisibility 2026-06-30-21:23:
+        CDXC:Projects 2026-06-30-21:23:
         Project visibility and system roles are gxserver domain state, not macOS sidebar-only filtering. Store hidden/system markers on project rows so mobile, CLI, GPUI, and macOS all omit Remote Attach carrier projects and other non-active project containers from shared inventory without client-specific project-name filters.
         */
         sql: r#"
@@ -1026,7 +1026,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0016_session_settle_snooze_lifecycle",
         /*
-        CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+        CDXC:StateSync 2026-07-29-00:00:
         Sidebar V2 settle/snooze is server-owned session state, so every client
         (GPUI, web, mobile, CLI, remote machines) reads one durable answer
         instead of deriving a private inbox. `settledOverrideAt` is the
@@ -1052,7 +1052,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0017_stashed_prompts",
         /*
-        CDXC:StashedPrompts 2026-07-29-00:00:
+        CDXC:SavedPrompts 2026-07-29-00:00:
         Prompt stash entries are captured server-side when a prompt-editor
         save-and-close completes, so every client reads one durable queue.
         projectId/sessionId are soft references (no FK): a stash must outlive
@@ -1080,7 +1080,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0018_global_sidebar_commands",
         /*
-        CDXC:GlobalActions 2026-08-01-16:00:
+        CDXC:AgentLauncher 2026-08-01-16:00:
         Global Actions show the same action on every project, so they cannot
         live in projects.customCommandsJson the way Project Actions do. Store
         them daemon-side in their own table so mobile, web, and every desktop
@@ -1244,7 +1244,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0020_delayed_sends",
         /*
-        CDXC:GxserverDelayedSends 2026-08-17:
+        CDXC:DelayedSend 2026-08-17:
         Delayed Send is session automation, not renderer state. Keep one
         durable row beside the gxserver session it targets so the hosting
         daemon can re-arm it after either the desktop app or gxserver restarts.
@@ -1280,7 +1280,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0021_session_chat_queue",
         /*
-        CDXC:SessionChatPromptQueue 2026-08-21:
+        CDXC:SessionChat 2026-08-21:
         The Ghostex-owned chat prompt queue and the synced composer draft. Both
         are daemon-owned so the queue drains with every client closed and the
         same session opened on another device shows what was already typed.
@@ -1324,7 +1324,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0022_stashed_prompt_tags",
         /*
-        CDXC:StashedPromptTags 2026-08-23:
+        CDXC:SavedPrompts 2026-08-23:
         Saved Prompts get user-defined tags, filtered from a pill rail above the
         list. Favorites is not a separate column: it is a seeded builtin tag row
         so the star, the Favorites pill, and a user tag all read and write the
@@ -1380,7 +1380,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0024_stashed_prompt_tag",
         /*
-        CDXC:StashedPromptTags 2026-08-24:
+        CDXC:SavedPrompts 2026-08-24:
         Stash actions file prompts under a durable builtin Stashed tag. Seed
         the catalogue and backfill existing stash rows so old and new Saved
         Prompts have the same filing behavior.
@@ -1408,7 +1408,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0025_session_agent_notes",
         /*
-        CDXC:SessionAgentNotes 2026-08-24:
+        CDXC:SessionNotes 2026-08-24:
         A session note is keyed by the AGENT session id (the provider resume
         id), not by the ghostex session id, so closing a session and resuming
         the same conversation later brings the note back with it. That is also
@@ -1434,7 +1434,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0026_stashed_prompt_agent_session",
         /*
-        CDXC:StashedPromptAgentSession 2026-08-24:
+        CDXC:SavedPrompts 2026-08-24:
         A stashed prompt belongs to the agent CONVERSATION it was stashed from,
         not merely to the ghostex session row that happened to be open: Claude
         and Codex mint a new conversation id on compaction/resume, and the
@@ -1459,7 +1459,7 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
     Migration {
         id: "0027_tailcat_state",
         /*
-        CDXC:Tailcat 2026-09-01:
+        CDXC:RemotePairing 2026-09-01:
         Only the user's intent is durable: enabled, the served ports, and the
         client-key allow-list. The address blob is deliberately absent, because
         it is derived from the on-disk server key at runtime and a persisted
@@ -1934,7 +1934,7 @@ mod tests {
         insert_project(&db, "P1cle", "Ghostex", "/repo/ghostex");
 
         /*
-        CDXC:GxserverStorage 2026-06-22-05:10:
+        CDXC:ServerDaemon 2026-06-22-05:10:
         Rust storage migrations must preserve TypeScript-created state.db behavior for existing users. Migration 0004 removes only low-signal inactive placeholder rows and backfills retained inactive rows with updatedAt, matching the TypeScript cleanup semantics.
         */
         insert_pre_tag_session(&db, "P1cle", "G1noi", "Terminal Session", "stopped", 0);
@@ -1975,7 +1975,7 @@ mod tests {
     #[test]
     fn session_lifecycle_migration_leaves_pre_upgrade_rows_without_lifecycle_state() {
         /*
-        CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+        CDXC:StateSync 2026-07-29-00:00:
         Every state.db written before migration 0016 must keep working: the new
         settle/snooze columns are added as NULL, which is exactly the "never
         settled, never snoozed" state the Sidebar V2 predicates already expect,
@@ -2125,7 +2125,7 @@ mod tests {
         update_session_tag(&db, "G1old", Some("todo"));
 
         /*
-        CDXC:SessionTags 2026-06-22-05:58:
+        CDXC:Sessions 2026-06-22-05:58:
         Rust storage migrations must keep the TypeScript sessionTag schema contract: supported tag values survive each constraint rebuild, legacy/retired values are cleared by migration 0008, and existing state.db files can continue through the expanded tag model.
         */
         apply_migration_range(&mut db, 5..6);
@@ -2191,7 +2191,7 @@ mod tests {
             .to_string();
 
         /*
-        CDXC:GxserverStorage 2026-06-22-05:10:
+        CDXC:ServerDaemon 2026-06-22-05:10:
         Migration 0009 is intentionally narrow for TypeScript-created state.db compatibility: delete only legacy `~/zmux/chats` Chat/Browser/Plugins quick-project rows, leaving current `~/ghostex/chats` projects and normal repositories whose paths happen to include `/zmux/chats/`.
         */
         insert_project(&db, "P4rpp", "Chat 2026-05-08 14:07", &old_chat_path);

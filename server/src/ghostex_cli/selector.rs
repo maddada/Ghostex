@@ -8,7 +8,7 @@ use crate::ghostex_cli::sessions;
 use crate::ghostex_cli::sessions::{js_coalesce, js_string, js_template, js_truthy};
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's session selector surface: the global alias
 cache written after every printed live list, and the alias / id / globalRef /
 provider-session-name / title / project:title selector resolution shared by
@@ -66,7 +66,7 @@ pub fn session_selector_from_args(rest: &[String], flags: &Flags) -> Option<Stri
 
 pub fn resolve_cli_session_selector(selector: &str, flags: &Flags) -> CliResult<Value> {
     /*
-     * CDXC:CliSessionSelectors 2026-05-23-13:18:
+     * CDXC:Cli 2026-05-23-13:18:
      * Cross-session CLI actions need the same id/title/project:title selector
      * behavior as attach/focus so agents can address another visible sidebar
      * thread without knowing its raw runtime id.
@@ -118,7 +118,7 @@ fn resolve_listed_sessions_with_cache<'a>(
         ));
     }
     /*
-     * CDXC:CliSessionSelectors 2026-06-04-03:20:
+     * CDXC:Cli 2026-06-04-03:20:
      * Bare G session ids can repeat across projects. Honor --project-id when a
      * caller has inventory context, and keep unscoped duplicates ambiguous so
      * the CLI does not silently attach to a different zmx session than the
@@ -172,7 +172,7 @@ fn resolve_listed_sessions_with_cache<'a>(
         return Ok(vec![*exact_global_ref]);
     }
     /*
-     * CDXC:CliSessionSelectors 2026-05-28-10:55:
+     * CDXC:Cli 2026-05-28-10:55:
      * Terminals export GHOSTEX_SESSION_ID as the provider persistence name
      * (for example `g-0527-090339`). Resolve that id before falling back to
      * title matching so generate-title and agent orchestration can target the

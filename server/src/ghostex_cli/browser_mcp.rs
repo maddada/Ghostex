@@ -10,7 +10,7 @@ use crate::ghostex_cli::output::print_json;
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's `browser` namespace: subcommand dispatch,
 browser usage text, the openBrowserPane bridge payload, and the full stdio MCP
 server (Content-Length framed JSON-RPC) that drives Ghostex's embedded CEF
@@ -24,7 +24,7 @@ pub fn browser_command(args: &[String]) -> CliResult<()> {
     let subcommand = args.first().map(String::as_str).unwrap_or("help");
     let rest: Vec<String> = args.iter().skip(1).cloned().collect();
     /*
-     * CDXC:BrowserAgentControl 2026-05-27-01:59:
+     * CDXC:Browser 2026-05-27-01:59:
      * Agents should discover embedded CEF control through `gx browser --help`.
      * Keep browser MCP, skill install, pane opening, and browser visibility under
      * the `browser` namespace so "browser" is the durable keyword for this control
@@ -152,13 +152,13 @@ fn format_help_command(signature: &str, description: &str) -> String {
 
 fn browser_usage() -> String {
     /*
-     * CDXC:BrowserAgentControl 2026-05-27-01:59:
+     * CDXC:Browser 2026-05-27-01:59:
      * `gx browser --help` is the agent-facing entry point for embedded CEF
      * control. Document the MCP command, install command, tool names, and common
      * debugging workflow here so agents do not need to infer browser setup from
      * the general Ghostex CLI help.
      *
-     * CDXC:BrowserAgentControl 2026-05-27-06:43:
+     * CDXC:Browser 2026-05-27-06:43:
      * Browser help must prevent agents from creating duplicate tabs and from
      * opening panes in whichever project is currently active. Document project
      * scoping flags, cwd-based defaults, reuse behavior, and page-id reuse so

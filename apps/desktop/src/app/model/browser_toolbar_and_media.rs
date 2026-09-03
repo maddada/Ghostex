@@ -29,7 +29,7 @@ pub(crate) struct GpuiBrowserFindState {
 }
 
 /*
-CDXC:GPUIBrowserMediaPermissions 2026-07-27:
+CDXC:Browser 2026-07-27:
 Browser panes answer CEF microphone/camera requests with a real in-pane
 permission prompt instead of the Alloy default (silent deny). The prompt is a
 normal layout row between the toolbar and the page body — no overlay, no

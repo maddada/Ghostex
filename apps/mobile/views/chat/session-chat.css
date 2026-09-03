@@ -45,7 +45,7 @@
 }
 
 /*
- * CDXC:SessionChatMobileKeyboard 2026-08-21:
+ * CDXC:Mobile 2026-08-21:
  * The height the page is actually allowed to paint into, published by
  * `trackVisualViewportHeight` in session-chat-main.tsx. Without it the shell
  * would keep the layout-viewport height that the iOS keyboard covers, and the

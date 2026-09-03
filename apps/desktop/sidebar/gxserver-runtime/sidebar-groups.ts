@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -86,7 +86,7 @@ import { DEFAULT_TERMINAL_SESSION_TITLE, GRID_COLUMN_COUNT } from '@/packages/sh
 import { createDefaultSidebarGitState } from '@/packages/shared/sidebar-git';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeSidebarGroupMethods` — because deriving them would make
@@ -155,7 +155,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     const previousGroups = this.latestGroups;
     const groups = this.createSidebarGroups(presentation);
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-23:24:
+    CDXC:FocusRouting 2026-06-26-23:24:
     Sidebar session-card wake decisions should use the lifecycle state that was just rendered from gxserver presentation. Cache only bounded local project/session routing ids for sleeping rows before emitting hydrate/patch so a same-tick click cannot miss the sleeping state and fall through to plain focus.
     */
     this.sleepingLocalSidebarSessionIds = new Set(
@@ -200,7 +200,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
   },
 
   /*
-  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  CDXC:Git 2026-08-16:
   Routine publishes frequently rebuild a projection identical to the last one
   (background pollers, presentation deltas that only touch non-rendered
   state). Sending those anyway made the renderer re-normalize the full tree
@@ -253,7 +253,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     this.gitState = createDefaultSidebarGitState();
     this.lastGitRefreshProjectId = undefined;
     /*
-    CDXC:SidebarGitMemo 2026-07-29:
+    CDXC:Git 2026-07-29:
     gxserver went away, so nothing memoized about its projects can be trusted
     or republished. Drop both leases and cancel any in-flight GitHub probe so a
     reconnect starts from real probes.
@@ -400,7 +400,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       })
       .catch(() => {
         /*
-         * CDXC:SidebarHudContract 2026-06-24-20:34:
+         * CDXC:AgentLauncher 2026-06-24-20:34:
          * Sidebar HUD projection refresh is best-effort after active-project or
          * project-metadata changes. Failure keeps the previous gxserver
          * projection instead of rebuilding custom launcher/action rows from
@@ -439,7 +439,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
 
   postActiveProjectContext(this: GpuiSidebarRuntime, attempt = 0): void {
     /*
-    CDXC:NavigationHistory 2026-08-19:
+    CDXC:Navigation 2026-08-19:
     Every path that republishes active-project identity lands here, which makes
     it the one place the trail has to be fed from. The controller collapses an
     unchanged target to a string compare, so this stays free on the hot path.
@@ -454,7 +454,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     const postActiveProjectContext = window.ghostexGpui?.postActiveProjectContext;
     if (typeof postActiveProjectContext !== 'function') {
       /*
-      CDXC:GPUISidebarGxserverRuntime 2026-06-24-11:00:
+      CDXC:StateSync 2026-06-24-11:00:
       CEF may install the sidebar bridge after the React entrypoint starts. Retry only the bridge send and rebuild the active-project payload from the latest live groups at send time, so startup never replays a stale fixture/workspace payload.
       */
       if (attempt < GPUI_SIDEBAR_BOOTSTRAP_MAX_ATTEMPTS) {
@@ -469,7 +469,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       groups: this.activeProjectContextGroups(),
     });
     /*
-    CDXC:GPUIAutomateWorkarea 2026-07-04-23:18:
+    CDXC:Automations 2026-07-04-23:18:
     The active-project helper owns Source/Kanban/Automate/Docs surface identity. Post its payload unchanged so Rust can strictly accept `automateBoardId` beside `kanbanBoardId` before issuing the bundled Automate runtime URL.
     */
     postActiveProjectContext(JSON.stringify(payload));
@@ -481,7 +481,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       return;
     }
     /*
-    CDXC:GPUIRemoteWorkspaceProjectKey 2026-07-30:
+    CDXC:RemoteMachines 2026-07-30:
     Rust treats this snapshot's activeProjectId as the authoritative Agents
     workspace switch target. `this.activeProjectId` stays a local-only concept
     while a remote session or remote group is active, so publishing it here
@@ -510,7 +510,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       postFocusState(payload);
     } catch {
       /*
-      CDXC:GPUISidebarGxserverFocusState 2026-06-24-21:07:
+      CDXC:FocusRouting 2026-06-24-21:07:
       Focus-state publication is a sidebar-native synchronization hint for Rust bootstrap replay only. A missing or rejecting CEF bridge must not change gxserver data, create fallback focus ids, log renderer payloads, or block the visible SidebarApp state that React already owns.
       */
     }
@@ -544,7 +544,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
 
   activeWorkspaceTabSessionsFromLatestGroups(this: GpuiSidebarRuntime): GpuiActiveWorkspaceTabSessionPayload[] {
     /*
-    CDXC:GPUIWorkspaceTabsParity 2026-07-05:
+    CDXC:CommandPane 2026-07-05:
     The native GPUI Agents tab strip mirrors the already-projected active
     SidebarApp group. Hidden, companion, carrier, and subgroup filtering stays
     upstream in createSidebarGroups; this bridge only serializes the active
@@ -594,7 +594,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
         ...(typeof session.stashedPromptCount === 'number' && session.stashedPromptCount > 0
           ? { stashedPromptCount: Math.floor(session.stashedPromptCount) }
           : {}),
-        // CDXC:SwitchAccount 2026-09-03: present-only, daemon-resolved rows.
+        // CDXC:AgentProviders 2026-09-03: present-only, daemon-resolved rows.
         ...(session.switchableAgents && session.switchableAgents.length > 0
           ? {
               switchableAgents: session.switchableAgents.map((row) => ({
@@ -604,7 +604,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
               })),
             }
           : {}),
-        // CDXC:DraftAgentSwitch 2026-08-28: present-only, so a non-draft row
+        // CDXC:Drafts 2026-08-28: present-only, so a non-draft row
         // publishes exactly what it published before drafts existed.
         ...(session.isDraft === true ? { isDraft: true } : {}),
         isGeneratingFirstPromptTitle: session.isGeneratingFirstPromptTitle === true,
@@ -626,7 +626,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
   },
 
   /*
-   * CDXC:GlobalActions 2026-08-01:
+   * CDXC:AgentLauncher 2026-08-01:
    * Publish only what the native strip draws: bounded action id, display name,
    * and icon slug. Command text, URLs, links, and run state deliberately stay
    * on this side — a strip click sends the id back and this runtime resolves
@@ -675,10 +675,10 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     const statusPayload = createGpuiSessionStatusIndicatorsPayload(candidates, settings);
     const petPayload = createGpuiPetOverlayStatePayload(candidates, settings);
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+    CDXC:StatusPet 2026-06-26-04:38:
     GPUI status indicators and the pet overlay consume the same saved shared Settings object as SidebarApp hydrate. Publish only bounded counts, booleans, pet id, and sidebar-projected project/session ids/titles through fixed bridge functions.
 
-    CDXC:GPUIStatusPetOverlay 2026-06-27-20:11:
+    CDXC:StatusPet 2026-06-27-20:11:
     The standalone GPUI floating session indicator was removed. Keep posting
     status counts/projects for the menu bar and pet badge surfaces, but do not
     include floating visibility or floating size settings in the status payload.
@@ -688,7 +688,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       window.ghostexGpui?.postPetOverlayState?.(JSON.stringify(petPayload));
     } catch {
       /*
-      CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+      CDXC:StatusPet 2026-06-26-04:38:
       The status/pet bridge is presentation-only. If CEF has not installed the fixed functions or rejects a payload, keep SidebarApp state authoritative and avoid fallback UI state, raw JSON logging, project/path/title side channels, or invented native indicators.
       */
     }
@@ -732,7 +732,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
   },
 
   /*
-  CDXC:SidebarSpaces 2026-08-27:
+  CDXC:Spaces 2026-08-27:
   Each gxserver owns its own Space set, so hydrate carries the remote documents
   keyed by machine and never merges them. LOCAL Spaces stay out of hydrate for
   the same reason the local project collections do: they arrive through
@@ -920,7 +920,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     const sessionId = this.quickAutomationsSidebarSessionId();
     const isActive = this.activeProjectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID;
     /*
-    CDXC:GPUIAutomationsOverview 2026-07-08:
+    CDXC:Automations 2026-07-08:
     Mirror macOS `createQuickAutomationsSidebarSession` and
     `isQuickAutomationsSidebarReference`: the overview is one synthetic Quick
     row named Automations Overview, scoped to project id `quick-automations`,
@@ -1181,7 +1181,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
   createRemoteSidebarGroups(this: GpuiSidebarRuntime): SidebarSessionGroup[] {
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
     /*
-    CDXC:GPUIRemoteLastSeen 2026-07-12:
+    CDXC:RemoteMachines 2026-07-12:
     Disconnected machines keep rendering their last-seen presentation as
     stale (faded, non-interactive terminals) instead of disappearing, so the
     user still sees which projects and sessions live on the machine and can
@@ -1243,7 +1243,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
   },
 
   /*
-  CDXC:GPUIRemoteSidebarParity 2026-07-12:
+  CDXC:RemoteMachines 2026-07-12:
   Remote project groups reuse the local sidebar overlays instead of a reduced
   remote feature set: machine-scoped browser tabs splice in as browser session
   rows, and the client-owned named session groups overlay applies to remote
@@ -1369,7 +1369,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     projectProjection: GpuiPresentationProjectProjectionMetadata
   ): void {
     /*
-    CDXC:GPUIRemoteWorkspaceProjectKey 2026-08-26:
+    CDXC:RemoteMachines 2026-08-26:
     A remote group the user selected owns the active project, and
     `activeProjectId` stays a local-only field while it does — so the local id
     beside it is stale or empty by design. Rebuilding local groups must not
@@ -1392,7 +1392,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     }
     if (this.focusedSessionId) {
       /*
-      CDXC:GPUIWorkspaceSessionFocus 2026-06-27-13:22:
+      CDXC:FocusRouting 2026-06-27-13:22:
       Re-clicking a local session in the GPUI sidebar must keep behaving like the macOS app: the focused terminal owns the active project. Bootstrap can replay a stale initial project beside the current focused session, so resolve the session from the fresh presentation snapshot before rendering groups.
       */
       const focusedProjectId = presentation.sessions.find(

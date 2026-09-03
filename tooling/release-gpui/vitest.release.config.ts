@@ -3,12 +3,12 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 /*
- * CDXC:RepoRestructure 2026-08-22: source trees moved under packages/ and apps/,
+ * CDXC:RepoStructure 2026-08-22: source trees moved under packages/ and apps/,
  * and cross-tree imports are written as repo-root `@/...` specifiers. Vitest needs
  * the same `@` -> repository-root alias every vite/esbuild/Storybook config already
  * declares, otherwise suites that pull in shared UI fail to resolve those modules.
  *
- * CDXC:ReleaseAutomation 2026-08-23: this config lives at
+ * CDXC:Release 2026-08-23: this config lives at
  * tooling/release-gpui/vitest.release.config.ts, not the repo root, so `root`
  * must be set explicitly. Vite/Vitest default `root` to the config file's own
  * directory, and every test/exclude glob below is written relative to the
@@ -29,7 +29,7 @@ export default defineConfig({
   },
   test: {
     /*
-     * CDXC:ReleaseAutomation 2026-06-14-09:07:
+     * CDXC:Release 2026-06-14-09:07:
      * Release verification must exercise Ghostex-owned Vitest suites without
      * walking imported, generated, packaged dependency, or alternate-runner
      * trees. The broad default Vitest discovery can pick up node:test files

@@ -15,7 +15,7 @@ use crate::presentation::list_previous_sessions;
 use crate::sidebar_hud::sidebar_agent_buttons_from_projects;
 
 /*
-CDXC:BoardStartWork 2026-08-07:
+CDXC:ProjectBoard 2026-08-07:
 `ghostex board start-work <bead-id>` is the daemon-owned dispatch for a Project
 Board card: resolve the bead's board project, reuse any usable linked
 conversation, otherwise create the visible agent session with the canonical
@@ -195,7 +195,7 @@ pub fn start_board_work(
 }
 
 /*
-CDXC:BoardAssociateSession 2026-08-24:
+CDXC:ProjectBoard 2026-08-24:
 `ghostex board associate <bead-id>` is the other half of "this session is working
 that card": an agent that was prompted by hand instead of dispatched from the
 board links the session it is running in to the bead itself, writing the same
@@ -507,7 +507,7 @@ fn run_bd_show(
 }
 
 /*
-CDXC:BoardStartWork 2026-08-07:
+CDXC:ProjectBoard 2026-08-07:
 Phase 3 agent resolution: an explicit --agent always wins; a bead assignee is
 honored only when it matches a configured board agent's id or name
 case-insensitively (a role-name assignee that matches nothing falls through);
@@ -551,7 +551,7 @@ fn board_prompt_agent_options(projects: &[Value]) -> Vec<Value> {
 }
 
 /*
-CDXC:BoardStartWork 2026-08-07:
+CDXC:ProjectBoard 2026-08-07:
 Rust port of `buildAgentWorkPrompt` in apps/desktop/views/project-board-shared.ts —
 the canonical bead work prompt. The endpoint owns this copy for the CLI path;
 `apps/desktop/views/board-start-work-prompt-parity.test.ts` asserts both templates
@@ -595,7 +595,7 @@ pub(crate) fn build_board_bead_work_prompt(
 }
 
 /*
-CDXC:BoardAssociateSession 2026-08-24:
+CDXC:ProjectBoard 2026-08-24:
 A project with no Beads directory of its own still shows the Global Default's
 board, so its link store is that board's — not its own folder. Resolving the
 same cascade `/api/runBeadsAction` resolves is what keeps the links a card shows

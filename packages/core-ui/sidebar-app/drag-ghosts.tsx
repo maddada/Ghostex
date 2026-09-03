@@ -13,7 +13,7 @@ export type SidebarGroupDragPreview = {
 };
 
 /*
- * CDXC:CollectionDragPreview 2026-07-22:
+ * CDXC:Projects 2026-07-22:
  * Collection reordering uses feedback "none", and dnd-kit only flips a
  * draggable's status to "dragging" inside its feedback plugin, so with "none"
  * sortable.isDragging never becomes true and the drag starts with zero visual
@@ -48,13 +48,13 @@ export function ProjectGroupDragGhost({ preview }: { preview: SidebarGroupDragPr
   } as CSSProperties;
 
   /*
-   * CDXC:ProjectDragPreview 2026-07-02-13:05:
+   * CDXC:Projects 2026-07-02-13:05:
    * The ghost mirrors the real project header DOM (group > group-head >
    * group-title-wrap > group-title-row) so it picks up the exact header
    * padding, font, and theme color instead of a bespoke approximation. It
    * renders the title only — trailing header action buttons are omitted.
    *
-   * CDXC:ProjectDragPreview 2026-07-02-21:10:
+   * CDXC:Projects 2026-07-02-21:10:
    * The reference-layout .group-head uses negative scroll-bleed margins to
    * extend the row past the panel clip. The ghost's fixed shell is already
    * anchored to the measured header rect (which reflects those margins), so
@@ -101,7 +101,7 @@ export function ProjectCollectionDragGhost({ preview }: { preview: SidebarProjec
   } as CSSProperties;
 
   /*
-   * CDXC:CollectionDragPreview 2026-07-22:
+   * CDXC:Projects 2026-07-22:
    * The ghost mirrors a collapsed collection panel's DOM
    * (section.project-collection > .project-collection-header > caret + title)
    * so it inherits the exact reference-panel skin and typography. It renders

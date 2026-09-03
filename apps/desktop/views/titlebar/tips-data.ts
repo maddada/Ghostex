@@ -10,19 +10,19 @@ import type {
 import type { TitlebarNotice, TitlebarResourceGroup, TitlebarResourceSession, TitlebarTip } from './types';
 
 /**
- * CDXC:TipsAndTricks 2026-05-30-08:31:
+ * CDXC:Onboarding 2026-05-30-08:31:
  * Tips are authored in code, not by end users in the dropdown. Keep this array
  * as the ordered source of truth so adding, removing, or reordering tips is a
  * normal code edit while read state survives app updates by stable tip id.
  *
- * CDXC:TipsAndTricks 2026-06-05-12:39:
+ * CDXC:Onboarding 2026-06-05-12:39:
  * The dropdown should teach users early that the sidebar is highly customizable.
  * Keep this as the second built-in tip so it appears immediately after the command-palette hint for users who have not marked it read.
  *
- * CDXC:TipsAndTricks 2026-06-13-10:26:
+ * CDXC:Onboarding 2026-06-13-10:26:
  * The first tip should introduce Cmd Shift P as the universal entry point for app actions, not only pane moves.
  *
- * CDXC:TipsAndTricks 2026-06-28-08:00:
+ * CDXC:Onboarding 2026-06-28-08:00:
  * Tips should actively teach the agent-facing Browser Use and Computer Use
  * skills. Ghostex-owned skills deep-link to Settings > Integrations with the
  * relevant row searched.
@@ -115,11 +115,11 @@ export const TITLEBAR_TIPS: TitlebarTip[] = [
 ];
 
 /**
- * CDXC:DiagnosticsSettings 2026-06-06-07:09:
+ * CDXC:Diagnostics 2026-06-06-07:09:
  * Debugging Mode previously wrote detailed diagnostics to disk and could affect
  * performance.
  *
- * CDXC:DiagnosticsSettings 2026-06-27-22:07:
+ * CDXC:Diagnostics 2026-06-27-22:07:
  * Debugging Mode now exposes debug UI only. Keep the notice, but point users to
  * scenario-specific disk logging so turning on debug controls does not imply
  * every routine support log is active.
@@ -136,7 +136,7 @@ export function createTitlebarGhostexCliNotice(
   ghostexCliStatus: SidebarGhostexCliStatusMessage | undefined
 ): TitlebarNotice | undefined {
   /**
-   * CDXC:CliInstall 2026-06-07-15:26:
+   * CDXC:Cli 2026-06-07-15:26:
    * Tips & Tricks should warn when either public CLI command is not accessible
    * on PATH. Keep the description to three lines or less while naming concrete
    * benefits: terminal commands, mobile attach, and agent integration skills.
@@ -207,7 +207,7 @@ export function createTitlebarMissingAgentHooksNotice(
   }
 
   /**
-   * CDXC:AgentHookSettings 2026-06-07-08:51:
+   * CDXC:AgentHooks 2026-06-07-08:51:
    * Installed agent CLIs without current Ghostex hooks should surface in Tips
    * & Tricks as non-dismissable runtime notices. Hooks power reliable session
    * status, first-message naming, and sleep/resume identity; read-once tips are

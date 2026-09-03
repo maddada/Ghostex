@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CDXC:GPUIWindowsWslStart 2026-08-02:
+# CDXC:PlatformSupport 2026-08-02:
 # Build and stage the native Win32 GPUI app from a WSL-owned `bun run start`
 # without routing any part of the workflow through PowerShell. Web resources
 # build with Windows Bun so Vite reads the NTFS checkout natively instead of
@@ -267,7 +267,7 @@ cleanup_windows_build_batch
 trap - EXIT
 
 build_current_wsl_gxserver() {
-	# CDXC:GPUIWindowsWslRuntime 2026-08-03:
+	# CDXC:PlatformSupport 2026-08-03:
 	# A WSL-owned Windows development build must package gxserver and zmx from
 	# the same checkout as the native shell. Previously `bun run start` rebuilt
 	# GPUI but retained runtime pieces from a cached Linux archive, so daemon and
@@ -322,7 +322,7 @@ EOF
 		exit 1
 	fi
 
-	# CDXC:AnonymousAnalytics 2026-08-26: GHOSTEX_GPUI_MARKETING_VERSION is set
+	# CDXC:Telemetry 2026-08-26: GHOSTEX_GPUI_MARKETING_VERSION is set
 	# INSIDE the batch rather than exported from WSL, because the WSL->Win32 hop
 	# drops the environment unless the name is also listed in WSLENV. server/build.rs
 	# bakes it in; without it gxserver reports its 0.1.0 placeholder crate version.

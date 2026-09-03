@@ -65,7 +65,7 @@ pub(crate) fn parse_process_rows(ps_output: &str) -> Vec<ProcessRow> {
 
 /// PID of the daemon that owns `session_name`, read from the process table.
 ///
-/// CDXC:ZmxWireCycle 2026-08-23: `zmx run <name> -d` keeps its argv across
+/// CDXC:ZmxWireGeneration 2026-08-23: `zmx run <name> -d` keeps its argv across
 /// daemonization, so the owning process identifies itself without answering any
 /// IPC. `zmx list` reports the same PID but pays a per-session probe that a
 /// pre-wire-break daemon cannot complete, which is exactly the case this exists
@@ -133,7 +133,7 @@ pub(crate) fn resolve_process_tree_agent_identity(
         .collect::<HashMap<_, _>>();
     let mut candidates = Vec::<ProcessIdentityCandidate>::new();
     /*
-    CDXC:ZmxProcessIdentityOwner 2026-09-02:
+    CDXC:SessionIdentity 2026-09-02:
     The first agent process found on a path down from the zmx root owns the
     terminal; every process below it was spawned BY that agent. A different
     agent CLI down there is one of its tool invocations (`grok models`,
@@ -356,7 +356,7 @@ pub(crate) fn codex_session_id_from_transcript_path(path: &Path) -> Option<Strin
 }
 
 /*
-CDXC:OmpSessionChatIdentity 2026-08-06:
+CDXC:SessionIdentity 2026-08-06:
 OMP owns an exact terminal-to-transcript record under
 `agent/terminal-sessions/<tty>`. A fresh OMP process has no `--session` argv,
 so its TTY record is the authoritative provider identity source for the live
@@ -487,7 +487,7 @@ fn extract_agent_process_session_id(
 ) -> Option<String> {
     let args = tokens.get(executable_index + 1..).unwrap_or(&[]);
     /*
-    CDXC:SessionForkIdentity 2026-09-02:
+    CDXC:SessionFork 2026-09-02:
     A fork launch (`codex fork <id>`, `claude --resume <id> --fork-session`)
     names the PARENT conversation in argv; the forked conversation gets a brand
     new id that only the agent's hook or transcript can report. Reading the

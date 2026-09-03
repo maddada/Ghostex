@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatAntigravity 2026-09-03:
+CDXC:AgentProviders 2026-09-03:
 Antigravity CLI (`agy`) keeps its conversation store encrypted
 (`~/.gemini/antigravity-cli/conversations/<id>.pb|.db`, 8.0 bits/byte), but it
 also appends a plaintext step log per conversation that its own checkpoint

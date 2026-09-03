@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Materializes one plan-marked `reuse` product into exactly the same
  * `release-<platform>` artifact shape a build job produces, so nothing
  * downstream — publisher, cross-payload checks, final verifier — has to know

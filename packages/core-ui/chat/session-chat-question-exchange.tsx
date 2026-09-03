@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatQuestionExchange 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 Answered agent questions (AskUserQuestion / request_user_input /
 cursor_ask_question / Hermes' clarify / omp's ask) rendered as a first-class
 card in the chat log instead of a generic tool row with raw JSON.

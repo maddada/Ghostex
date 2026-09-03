@@ -25,26 +25,26 @@ import {
 } from './session-grid-contract-core';
 
 /**
- * CDXC:Claude-session-status 2026-04-25-08:29
+ * CDXC:SessionStatus 2026-04-25-08:29
  * Visible session titles should remove agent status glyphs, including Claude
  * Code's animated star markers, while the activity parser uses them for
  * working/done indicators.
- * CDXC:Terminology 2026-05-09-15:53
+ * CDXC:RepoStructure 2026-05-09-15:53
  * Use working for agent work status. Reserve running for live runtime state.
  *
- * CDXC:CursorCLI 2026-05-19-15:22:
+ * CDXC:AgentProviders 2026-05-19-15:22:
  * Cursor CLI appends ` - ⏳ Working <spinner>` and ` - ✅ Ready` to terminal titles,
  * including the startup title `Cursor Agent - ✅ Ready`. Strip those trailing status
  * suffixes for visible sidebar titles. Keep the gxserver session-status title
  * classifier aligned with these strip rules.
  *
- * CDXC:AntigravityCLI 2026-05-19-18:45:
+ * CDXC:AgentProviders 2026-05-19-18:45:
  * Antigravity CLI uses `agy` while running and `🔔 agy` when finished. Strip the
  * bell attention prefix for visible sidebar titles while gxserver keeps the raw
  * terminal title for attention detection.
  */
 /*
- * CDXC:AgentResume 2026-06-01-12:59:
+ * CDXC:AgentProviders 2026-06-01-12:59:
  * The sidebar status marker uses the mathematical asterisk `∗`, not only ASCII `*`.
  * Strip it before title trust checks so display markers cannot make placeholder titles look like real restore lookup titles.
  */
@@ -60,20 +60,20 @@ const CURSOR_CLI_WORKING_TITLE_STRIP_PATTERN = /\s*-\s*⏳ Working [.·]+$/u;
 const CURSOR_CLI_READY_TITLE_STRIP_PATTERN = /\s*-\s*✅ Ready$/u;
 export const DEFAULT_TERMINAL_SESSION_TITLE = 'Terminal Session';
 /**
- * CDXC:CommandsPanel 2026-05-16-07:36:
+ * CDXC:CommandPane 2026-05-16-07:36:
  * Users need the bottom command pane to shrink to 5% of the window height.
  *
- * CDXC:CommandsPanel 2026-05-30-09:20:
+ * CDXC:CommandPane 2026-05-30-09:20:
  * The command pane may grow up to 90% of the workspace height. Opening the pane and double-clicking the top resize rail restore a pixel default height from Settings, not a percentage of the window.
  *
- * CDXC:CommandsPanel 2026-05-30-09:45:
+ * CDXC:CommandPane 2026-05-30-09:45:
  * The built-in default height is 125px until the user changes Command Pane Default Height in Workspace settings.
  */
 export const MIN_COMMANDS_PANEL_HEIGHT_RATIO = 0.05;
 export const MAX_COMMANDS_PANEL_HEIGHT_RATIO = 0.9;
 export const DEFAULT_COMMANDS_PANEL_HEIGHT_PX = 125;
 /**
- * CDXC:CommandsPanel 2026-05-30-09:20:
+ * CDXC:CommandPane 2026-05-30-09:20:
  * Persisted command-pane ratios are normalized before the native workspace reports its height. Seed defaults from this reference height so first paint matches the 125px target on typical windows.
  */
 export const DEFAULT_COMMANDS_PANEL_REFERENCE_WORKSPACE_HEIGHT_PX = 900;
@@ -221,7 +221,7 @@ const CODEX_SESSION_ID_TITLE_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 
 export function clampVisibleSessionCount(value: number): VisibleSessionCount {
   /**
-   * CDXC:NativeSplits 2026-05-11-17:14
+   * CDXC:Workarea 2026-05-11-17:14
    * Workspace visibility no longer has a fixed pane cap. Clamp only to a
    * positive integer so tab groups and native pane layouts can keep every
    * session the user opens.
@@ -256,14 +256,14 @@ export function clampSidebarThemeSetting(value: string | undefined): SidebarThem
   switch (value) {
     case 'auto':
       /**
-       * CDXC:SidebarTheme 2026-06-15-02:29:
+       * CDXC:Theming 2026-06-15-02:29:
        * Theme selection is disabled again while themes are coming soon, so
        * legacy Auto should resolve to the active Dark Gray/Dark 2 chrome.
        */
       return 'dark-2';
     case 'plain':
       /**
-       * CDXC:SidebarTheme 2026-06-15-01:43:
+       * CDXC:Theming 2026-06-15-01:43:
        * The old persisted "plain" setting is the current shipped dark surface.
        * Keep it as the Dark 2 snapshot so existing users do not silently move
        * off the exact #0e0e0e chrome they selected before Dark 1 became the
@@ -277,7 +277,7 @@ export function clampSidebarThemeSetting(value: string | undefined): SidebarThem
     case 'dark-modern':
     case 'dark-green':
       /**
-       * CDXC:SidebarTheme 2026-06-15-02:29:
+       * CDXC:Theming 2026-06-15-02:29:
        * Hidden theme values may exist from prior builds or settings files, but
        * the disabled Settings control must keep the app on Dark Gray/Dark 2.
        */
@@ -303,7 +303,7 @@ export function clampSidebarThemeSetting(value: string | undefined): SidebarThem
 export function resolveSidebarTheme(themeSetting: SidebarThemeSetting, variant: SidebarThemeVariant): SidebarTheme {
   if (themeSetting === 'auto') {
     /**
-     * CDXC:SidebarTheme 2026-06-15-02:29:
+     * CDXC:Theming 2026-06-15-02:29:
      * Theme selection is disabled again; direct Auto callers should use the
      * same active Dark Gray/Dark 2 chrome as normalized settings.
      */
@@ -312,7 +312,7 @@ export function resolveSidebarTheme(themeSetting: SidebarThemeSetting, variant: 
 
   if (themeSetting === 'plain') {
     /**
-     * CDXC:SidebarTheme 2026-06-15-01:43:
+     * CDXC:Theming 2026-06-15-01:43:
      * Preserve old callers that pass the legacy "plain" value directly by
      * resolving it to Dark 2, the snapshot of the previous #0e0e0e app chrome.
      */
@@ -373,12 +373,12 @@ export function createDefaultGroupedSessionWorkspaceSnapshot(): GroupedSessionWo
 }
 
 /**
- * CDXC:Session-identity 2026-04-26-20:54
+ * CDXC:SessionIdentity 2026-04-26-20:54
  * New workspace sessions use one opaque, timestamped ID for sessionId,
  * displayId, and the generated alias so daemon state, socket routing, and
  * sidebar labels do not reuse numeric identities from closed sessions.
  *
- * CDXC:Session-identity 2026-05-15-17:33
+ * CDXC:SessionIdentity 2026-05-15-17:33
  * Session IDs and provider-backed default names should stay short enough to
  * read in tmux, zmx, zellij, pane overlays, and sidebar metadata. Generate
  * `g-MMDD-HHMMSS` as the canonical identity anywhere a new session ID is used.
@@ -450,7 +450,7 @@ export function createSessionAlias(sessionNumber: number, slotIndex: number, dis
 }
 
 /**
- * CDXC:Session-title-defaults 2026-04-27-03:58
+ * CDXC:SessionTitles 2026-04-27-03:58
  * Newly created sessions should not expose their routing/session id as the
  * primary title. Creation source owns the default title until the live terminal
  * emits a meaningful title or the user explicitly renames the session.
@@ -612,7 +612,7 @@ export function normalizeTerminalSessionPersistenceProvider(
   provider: TerminalSessionPersistenceProvider | undefined
 ): TerminalSessionPersistenceProvider | undefined {
   /**
-   * CDXC:SessionPersistence 2026-05-07-20:32
+   * CDXC:Workarea 2026-05-07-20:32
    * Provider-backed terminal records persist the provider with the provider
    * session name. Restore, wake, reload, and sidebar badges must not reinterpret
    * a stored tmux/zmx/zellij name through the current global Settings provider.
@@ -672,7 +672,7 @@ export function getSessionCardPrimaryTitle(
 ): string | undefined {
   const normalizedTitle = session.title.trim().replace(/\s+/g, ' ');
   /**
-   * CDXC:Session-title-defaults 2026-04-27-08:31
+   * CDXC:SessionTitles 2026-04-27-08:31
    * Session cards still need a human placeholder while resume/persistence code
    * treats placeholders and Ghostty cwd titles as not persisted. Show the
    * neutral or agent-aware placeholder with the card's unsynced marker instead
@@ -693,7 +693,7 @@ export function getSessionCardPrimaryTitle(
 }
 
 /**
- * CDXC:SessionTitleSync 2026-05-07-17:27
+ * CDXC:SessionTitles 2026-05-07-17:27
  * zmx reconnect can emit the Ghostty placeholder title as `👻` before the pane
  * reports a persisted session title. Treat the ghost forms as placeholders in
  * the shared title contract so they cannot outrank known stored names, render
@@ -710,7 +710,7 @@ export function isDefaultSessionSearchTitle(title: string | undefined): boolean 
     return false;
   }
   /*
-   * CDXC:SessionSearch 2026-06-18-00:01:
+   * CDXC:PromptSearch 2026-06-18-00:01:
    * Session search should be a jump-to-named-work surface. Creation defaults
    * from supported agent CLIs, including `Pi Agent Session`, are placeholders
    * and must not appear as search hits until the agent or user gives the
@@ -722,7 +722,7 @@ export function isDefaultSessionSearchTitle(title: string | undefined): boolean 
 const SESSION_RENAME_UNSUPPORTED_GLYPH_PATTERN = /[^\p{L}\p{N} !"#$%&'()*+,\-.\/:;<=>?@[\\\]^_`{|}~]/gu;
 
 /**
- * CDXC:SidebarRename 2026-05-15-16:15
+ * CDXC:Sessions 2026-05-15-16:15
  * Direct Rename submissions from pasted modal text must store a plain session
  * name: keep letters, numbers, spaces, and simple ASCII punctuation; drop
  * decorative glyphs such as bullet and mathematical asterisk symbols; trim the
@@ -782,7 +782,7 @@ function isCursorCliPlaceholderTerminalTitle(title: string): boolean {
 
 function isIgnoredGenericAgentTerminalTitle(title: string): boolean {
   /**
-   * CDXC:CursorCLI 2026-05-19-19:05:
+   * CDXC:AgentProviders 2026-05-19-19:05:
    * Agent boot titles such as `Codex`, `Claude Code`, and `Cursor Agent` are CLI
    * placeholders. They may drive agent detection, but must never persist as the
    * canonical session title or render as a user-named card heading.
@@ -812,7 +812,7 @@ function normalizePiTerminalTitle(title: string): string | undefined {
   const ompMatch = /^π\s*(?:>|[\u2800-\u28ff])\s*(.*)$/u.exec(normalizedTitle);
   if (ompMatch) {
     /**
-     * CDXC:OmpTerminalTitles 2026-08-06:
+     * CDXC:SessionTitles 2026-08-06:
      * Omp prefixes its human title with `π >` while idle and `π <braille>`
      * while working. The braille character is an animated spinner, so strip
      * the whole status prefix and trim the remaining title for every client.
@@ -830,7 +830,7 @@ function normalizePiTerminalTitle(title: string): string | undefined {
     .map((part) => part.trim())
     .filter(Boolean);
   /**
-   * CDXC:PiAgent 2026-05-08-09:42
+   * CDXC:AgentProviders 2026-05-08-09:42
    * Pi emits `π - <cwd>` before a session is named and
    * `π - <session name> - <cwd>` afterward. Keep unnamed Pi titles generic
    * while surfacing the named session portion as the sidebar title, matching
@@ -844,7 +844,7 @@ function normalizePiTerminalTitle(title: string): string | undefined {
 }
 
 /**
- * CDXC:CodexAgent 2026-05-11-07:35
+ * CDXC:AgentProviders 2026-05-11-07:35
  * Recent Codex CLI builds can publish the underlying conversation UUID as the
  * terminal title before a human title exists. Store that UUID as agent session
  * identity, but keep it out of visible titles so unnamed Codex cards continue
@@ -890,7 +890,7 @@ export function getVisibleTerminalTitle(title: string | undefined): string | und
 function isIgnoredPlaceholderSessionTitle(title: string): boolean {
   const normalizedTitle = title.trim().replace(/\s+/g, ' ');
   /**
-   * CDXC:Session-title-defaults 2026-04-27-08:20
+   * CDXC:SessionTitles 2026-04-27-08:20
    * Neutral titles such as `Terminal Session` and agent-aware creation titles
    * such as `Codex Session` are placeholders from session creation. Path-like
    * Ghostty titles such as `…/dev/_active/agent-tiler` are also shell context,

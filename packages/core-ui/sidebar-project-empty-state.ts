@@ -7,7 +7,7 @@ export type SidebarProjectInventoryGroupsById = Record<
 >;
 
 /**
- * CDXC:SidebarProjectsEmptyState 2026-06-30-03:25:
+ * CDXC:Projects 2026-06-30-03:25:
  * Sidebar search must not flash first-project onboarding after any project is
  * known. Search filtering and transient group display updates can temporarily
  * remove all visible Projects rows, so decide first-run copy from authoritative

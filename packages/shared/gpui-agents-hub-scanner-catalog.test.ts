@@ -9,7 +9,7 @@ import { describe, expect, test } from 'vitest';
  * catalog root/file path from that scanner and asserts the known provider
  * roots are all still present. Removing or renaming a provider root fails here.
  *
- * CDXC:AgentsHubCatalog 2026-08-20-13:05:
+ * CDXC:AgentLauncher 2026-08-20-13:05:
  * This was a two-sided parity test against the macOS `native-sidebar.tsx`
  * helper script. That host is gone, so only the GPUI side is asserted now.
  */

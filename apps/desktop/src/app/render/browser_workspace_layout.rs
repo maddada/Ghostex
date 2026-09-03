@@ -93,10 +93,10 @@ impl GhostexGpuiApp {
             .child(self.render_browser_node(&split.second, window, cx));
 
         /*
-        CDXC:GPUIBrowserSplits 2026-06-22-09:02:
+        CDXC:Browser 2026-06-22-09:02:
         Browser split panes are normal non-overlapping layout siblings. Split creation and persistence stay shell-owned while rendered leaves may attach existing tab-owned CEF bodies without adding overlays or hidden hit regions.
 
-        CDXC:GPUIBrowserSplitResize 2026-06-22-09:05:
+        CDXC:Browser 2026-06-22-09:05:
         Browser split containers report first/handle/second child bounds from normal GPUI layout before resize starts. The visible handle is the actual drag target, matching Agents workspace and command-pane split behavior without transparent overlays, root hit-test routing, or hidden drag regions.
         */
         match split.axis {
@@ -214,7 +214,7 @@ impl GhostexGpuiApp {
         let view = cx.entity().clone();
 
         /*
-        CDXC:GPUIBrowserKeyboardFocus 2026-06-22-09:24:
+        CDXC:FocusRouting 2026-06-22-09:24:
         Browser split leaf panes report focus geometry from their actual rendered tab-strip/body children. Directional keyboard focus must treat Browser split placeholders and existing visible Browser CEF bodies as real panes, so geometry stays runtime-only and comes from normal layout rather than overlays or hit-test routing.
         */
         v_flex()
@@ -365,7 +365,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
         /*
-        CDXC:GPUIBrowserMediaPermissions 2026-07-27:
+        CDXC:Browser 2026-07-27:
         The prompt is a real chrome row owned by the pane's normal layout, like
         the find bar: it shrinks the CEF child view instead of floating over it,
         so nothing overlaps the page and no hit-test routing is involved.

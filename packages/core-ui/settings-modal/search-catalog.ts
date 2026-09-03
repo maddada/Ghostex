@@ -1,5 +1,5 @@
 /*
- * CDXC:SettingsModalSplit 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * Settings search metadata, the grouped page search, and the main-settings
  * navigation rail are pure derivations of the search query and the settings
  * draft, so they live here instead of inside the SettingsModal component body.
@@ -42,13 +42,13 @@ export const PASTE_PREVIEWABLE_IMAGES_DESCRIPTION =
 
 export function getSettingsSearchSections(settingsSearchQuery: string, draft: ghostexSettings) {
   /**
-   * CDXC:SettingsSearch 2026-05-04-02:30
+   * CDXC:Settings 2026-05-04-02:30
    * Settings search must be fuzzy and cover section titles, setting subtitles,
    * and selectable option text so users can find controls by the value they
    * want to choose, not only by the visible setting label.
    */
   const settingsSearch = {
-    // CDXC:AppIconPicker 2026-06-25-21:50: Make the App Icon section findable by Settings search.
+    // CDXC:Icons 2026-06-25-21:50: Make the App Icon section findable by Settings search.
     appIcon: getSettingsSectionSearch(settingsSearchQuery, 'App Icon', [
       {
         key: 'appIconSourceId',
@@ -233,7 +233,7 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Use colored agent icons',
       },
       /*
-       * CDXC:SidebarSessions 2026-05-15-19:46:
+       * CDXC:Sessions 2026-05-15-19:46:
        * Settings must not expose the card-hotkey visibility row; session-card shortcut visibility is no longer configurable from the modal.
        */
       {
@@ -248,15 +248,15 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
       PET_CONTROLS_VISIBLE
         ? [
             /*
-             * CDXC:StatusIndicators 2026-05-20-12:00:
+             * CDXC:SessionStatus 2026-05-20-12:00:
              * Status Indicators groups session presence surfaces that communicate
              * status at a glance.
              *
-             * CDXC:StatusIndicators 2026-06-27-20:11:
+             * CDXC:SessionStatus 2026-06-27-20:11:
              * The removed floating session badge and its size selector must not
              * appear in macOS or GPUI Settings.
              *
-             * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
+             * CDXC:Settings 2026-06-30-22:22:
              * The menu bar session indicator now lives under Sidebar because sidebar
              * presets mutate it.
              */
@@ -308,7 +308,7 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Show project icons',
       },
       /*
-       * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
+       * CDXC:Settings 2026-06-30-22:22:
        * Search metadata follows the visible row order: preset-controlled rows
        * sit immediately after Preset, before independent sidebar sizing and
        * placement controls.
@@ -748,7 +748,7 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
     ]),
     beta: getSettingsSectionSearch(settingsSearchQuery, 'Experimental', [
       /*
-       * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+       * CDXC:Settings 2026-06-28-07:41:
        * Settings search should find the advanced experimental gate by label and
        * by the concrete surfaces it enables so the required inventory stays
        * discoverable without tying Agents Hub to this gate.
@@ -761,16 +761,16 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
     ]),
     debugging: getSettingsSectionSearch(settingsSearchQuery, 'Debugging', [
       /*
-       * CDXC:DiagnosticsSettings 2026-06-06-07:09:
+       * CDXC:Diagnostics 2026-06-06-07:09:
        * Show debug UI controls is the global gate for routine diagnostic disk
        * logging as well as debug-only UI. Scenario controls narrow which
        * routine log area writes while the global gate is on; important
        * warnings, errors, and crashes remain available independently.
        *
-       * CDXC:DebuggingSettings 2026-06-15-21:34:
+       * CDXC:Diagnostics 2026-06-15-21:34:
        * The Debugging section owns support and diagnostic toggles at the bottom of Settings, including command copy actions and Copy details, so users can find debug-only context-menu features together.
        *
-       * CDXC:DiagnosticsSettings 2026-06-27-22:07:
+       * CDXC:Diagnostics 2026-06-27-22:07:
        * Disk logging needs exact scenario controls. Search should match both
        * the scenario labels and their support-bundle file names so a user can
        * enable only the requested repro log without browsing every Debugging row.
@@ -882,7 +882,7 @@ export function getMainSettingsSectionNavigation(mainSettingsGroupSearch: MainSe
       title: 'Tools',
     },
     /*
-     * CDXC:SettingsNavigation 2026-06-12-04:13:
+     * CDXC:Settings 2026-06-12-04:13:
      * Ghostty terminal controls belong on the main Settings page so one search query can find app settings and terminal settings together.
      */
     { id: 'terminal', searchResult: mainSettingsGroupSearch.terminal, title: 'Terminal' },

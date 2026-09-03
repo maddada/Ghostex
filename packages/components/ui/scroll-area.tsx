@@ -7,7 +7,7 @@ function ScrollArea({ className, children, ...props }: ScrollAreaPrimitive.Root.
   return (
     <ScrollAreaPrimitive.Root data-slot='scroll-area' className={cn('relative', className)} {...props}>
       {/*
-       * CDXC:ScrollFades 2026-06-19-14:16:
+       * CDXC:DesignSystem 2026-06-19-14:16:
        * Shared ScrollArea viewports are used by Project Board details,
        * Agents Hub, and modal bodies. Apply the Codex-style mask at the
        * scrolling viewport so fixed outer chrome and custom scrollbars stay

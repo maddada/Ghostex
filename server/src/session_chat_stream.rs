@@ -12,7 +12,7 @@ pub struct SessionChatStream {
     epoch: AtomicI64,
     seq: AtomicI64,
     /*
-    CDXC:SessionChatCore 2026-08-01:
+    CDXC:SessionChat 2026-08-01:
     Two threads publish into one seq counter: the follower task and hook ingest
     (prompt/activity state frames). Taking the seq and broadcasting as separate
     steps let thread B's frame reach the hub BEFORE thread A's lower seq, and
@@ -74,7 +74,7 @@ impl Default for SessionChatStream {
 }
 
 /*
-CDXC:SessionChatFollowerLiveness 2026-08-24:
+CDXC:AgentScreenDetection 2026-08-24:
 A follower task that is alive but WEDGED — stuck in an inline await inside the
 reconcile loop (the blocking drain, the steady-state detection probe, a path
 re-resolution, a successor scan) — still passes `task.is_finished()`, so
@@ -165,7 +165,7 @@ pub struct SessionChatLiveState {
 pub type SessionChatStateReader = Arc<dyn Fn() -> SessionChatLiveState + Send + Sync>;
 
 /*
-CDXC:SessionChatQueueCarriage 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 Reads the session's Ghostex-owned prompt queue and synced composer draft so
 snapshot / replaced / state frames carry them. Deliberately NOT read once per
 reconcile tick: it opens the state database, so it is called only when a frame
@@ -211,7 +211,7 @@ pub enum SessionChatSuccessorNotice {
 }
 
 /*
-CDXC:SessionChatIdentity 2026-08-02:
+CDXC:SessionIdentity 2026-08-02:
 Successor adoption needs three things the follower must NOT own itself (they all
 touch the domain database / logger): the ids already bound to other sessions, a
 write of the corrected identity through the same passive path hook observations
@@ -224,7 +224,7 @@ pub struct SessionChatSuccessorHooks {
     /// Read only when a successor search actually runs.
     pub bound_agent_session_ids: Arc<dyn Fn() -> Vec<String> + Send + Sync>,
     /*
-    CDXC:SessionForkIdentity 2026-09-02:
+    CDXC:SessionFork 2026-09-02:
     Creation time (epoch ms) of the OLDEST live session forked from this one
     that has not yet reported its own conversation id. Between a fork's launch
     and its first hook, the fork's transcript is a proven, unowned successor of
@@ -256,7 +256,7 @@ pub struct SessionChatFollowerConfig {
     /// replaced frames carry the cached value; a periodic probe re-detects and
     /// emits a state frame only when it CHANGED.
     pub options_reader: Option<crate::session_chat_options::SessionChatOptionsReader>,
-    /// CDXC:ClaudeStatusline 2026-09-03: answers "did the stored statusline
+    /// CDXC:AgentScreenDetection 2026-09-03 WHY: answers "did the stored statusline
     /// payload for this agent session id change since I last asked?", so the
     /// reconcile loop re-probes within a tick of a `/model`, `/effort` or
     /// compaction instead of waiting for the idle 30s tier. Absent ⇒ the
@@ -272,7 +272,7 @@ pub struct SessionChatFollowerConfig {
     pub successor_hooks: Option<SessionChatSuccessorHooks>,
     /// Pushes the session's current terminal notice to every live follower
     /// after the drain stores a transcript-derived notice (the API refusal
-    /// card, CDXC:SessionChatApiRefusal). Absent ⇒ refusal rows still render
+    /// card, CDXC:AgentScreenDetection). Absent ⇒ refusal rows still render
     /// inline as chat text but no notice card is raised.
     pub notice_publisher: Option<crate::session_chat_watchdog::SessionChatWatchdogPublisher>,
     /// Timers the reconcile loop runs on. Production uses `Default`; tests

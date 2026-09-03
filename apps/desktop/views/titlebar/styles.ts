@@ -6,11 +6,11 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-open-menu {
     /**
-     * CDXC:TitlebarMenus 2026-05-28-13:52:
+     * CDXC:Titlebar 2026-05-28-13:52:
      * Titlebar dropdown surfaces should match the unified app overlay
      * background instead of using the older #181818 menu shell.
      *
-     * CDXC:SidebarTheme 2026-06-15-01:43:
+     * CDXC:Theming 2026-06-15-01:43:
      * Titlebar dropdowns follow --app-dropdown-background so Dark 1 uses
      * #191919, Dark 2 preserves #0e0e0e, and Light uses a light overlay.
      */
@@ -20,13 +20,13 @@ export const TITLEBAR_STYLES = `
     box-shadow: 0 18px 42px rgba(0,0,0,0.44);
   }
   /*
-   * CDXC:ReactTitlebar 2026-06-11-13:22:
+   * CDXC:Titlebar 2026-06-11-13:22:
    * Native child-window dropdowns reuse the existing web menu components, but
    * their document is the panel itself rather than Radix portal content inside
    * the titlebar WKWebView. Remove portal-era viewport offsets so the Swift
    * child window owns placement.
    *
-   * CDXC:ReactTitlebar 2026-06-12-02:50:
+   * CDXC:Titlebar 2026-06-12-02:50:
    * Native panels are still sized before they open, but compact dropdown height
    * now comes from the rendered option count while Tips/Resources keep their
    * larger reading surfaces. The React panel fills the child WebView exactly
@@ -75,12 +75,12 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-tips-menu {
     /**
-     * CDXC:TipsAndTricks 2026-05-30-08:31:
+     * CDXC:Onboarding 2026-05-30-08:31:
      * Tips should use the same maximum dropdown height as Resources and keep
      * the authored array order on screen. The menu is a reading surface, not an
      * editor, so it stays dense and square like the Resources manager.
      *
-     * CDXC:TipsAndTricks 2026-06-12-08:56:
+     * CDXC:Onboarding 2026-06-12-08:56:
      * The macOS Tips & Tricks child panel is 100px narrower than the Resources
      * reading panel so the guide occupies less horizontal space.
      */
@@ -121,27 +121,27 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-tips-actions {
     /*
-     * CDXC:TipsAndTricks 2026-06-16-10:04:
+     * CDXC:Onboarding 2026-06-16-10:04:
      * Tips & Tricks header actions should use matching button widths, point to
      * Features and Setup, and omit the previous unread
      * text summary from the top-right action row.
      *
-     * CDXC:TipsAndTricks 2026-06-16-19:42:
+     * CDXC:Onboarding 2026-06-16-19:42:
      * Add the release-updates action as the rightmost equal-width header action
      * so release notes are available without changing the existing titlebar Tips
      * layout model.
      *
-     * CDXC:TipsAndTricks 2026-06-18-04:53:
+     * CDXC:Onboarding 2026-06-18-04:53:
      * Add Docs as a fourth equal-width action and keep the labels short enough
      * that all actions fit in the native titlebar dropdown.
      *
-     * CDXC:TipsAndTricks 2026-06-30-01:38:
+     * CDXC:Onboarding 2026-06-30-01:38:
      * The Tips header action buttons should fill the header height and touch side by side. Use left/right borders as the only separators so the row reads as connected titlebar chrome instead of separate inset buttons.
      *
-     * CDXC:TipsAndTricks 2026-06-30-03:22:
+     * CDXC:Onboarding 2026-06-30-03:22:
      * The rightmost Tips header action should sit flush with the panel edge, the idle buttons should have no fill, and every action should share the widest button's width with only 15px of side padding.
      *
-     * CDXC:TipsAndTricks 2026-06-30-04:28:
+     * CDXC:Onboarding 2026-06-30-04:28:
      * The visible Tips action labels should stay compact: Video opens the tutorial video, and Updates opens the releases changelog. Short labels keep the equal-width action columns from widening the dropdown header.
      */
     align-self: stretch;
@@ -175,7 +175,7 @@ export const TITLEBAR_STYLES = `
   .titlebar-tips-panel button:not(:disabled),
   .titlebar-tips-panel [role="button"]:not([aria-disabled="true"]) {
     /*
-     * CDXC:TipsAndTricks 2026-06-16-10:04:
+     * CDXC:Onboarding 2026-06-16-10:04:
      * Every actionable control inside the Tips & Tricks panel should expose the
      * pointer cursor so clickable rows and buttons advertise their interaction.
      */
@@ -232,7 +232,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-tip-row[data-actionable="true"]:hover {
     /*
-     * CDXC:TipsAndTricks 2026-06-28-08:00:
+     * CDXC:Onboarding 2026-06-28-08:00:
      * Action-backed tips should read like clickable detail rows without making
      * the per-row read check part of the navigation target.
      */
@@ -256,7 +256,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-tip-row-notice .titlebar-tip-body {
     /**
-     * CDXC:CliInstall 2026-06-07-15:26:
+     * CDXC:Cli 2026-06-07-15:26:
      * Runtime notices can describe an action plus a short benefit list, but
      * Tips & Tricks should remain dense. Clamp notice descriptions to three
      * lines so the CLI accessibility warning cannot dominate the dropdown.
@@ -343,11 +343,11 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resources-menu {
     /**
-     * CDXC:TitlebarResources 2026-05-28-13:22:
+     * CDXC:Resources 2026-05-28-13:22:
      * The Resources manager background must match the titlebar dropdown family
      * while adjacent titlebar dropdowns keep the existing titlebar menu color.
      *
-     * CDXC:SidebarTheme 2026-06-15-01:43:
+     * CDXC:Theming 2026-06-15-01:43:
      * Resources uses the dropdown token so the large child panel switches with
      * Dark 1, Dark 2, and Light.
      */
@@ -365,12 +365,12 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resources-panel button:not(:disabled) {
     /*
-     * CDXC:TitlebarResources 2026-06-16-10:36:
+     * CDXC:Resources 2026-06-16-10:36:
      * Resources should show the pointer cursor only over real button controls.
      * CPU/RAM metric chips are read-only status, so they override expandable row
      * pointer inheritance back to the default cursor below.
      *
-     * CDXC:TitlebarResources 2026-06-16-12:34:
+     * CDXC:Resources 2026-06-16-12:34:
      * The Resources modal should not show a hand cursor over expandable row
      * chrome in the macOS titlebar. Keep expansion clickable through the row
      * handler, but reserve pointer cursor feedback for explicit buttons only.
@@ -402,7 +402,7 @@ export const TITLEBAR_STYLES = `
   .titlebar-resources-title {
     gap: 8px;
     /*
-     * CDXC:TitlebarResources 2026-06-16-00:19:
+     * CDXC:Resources 2026-06-16-00:19:
      * The Resources dropdown should use the same lighter text treatment as the
      * titlebar action menus. Keep labels, metrics, daemon status, and controls
      * visually consistent instead of mixing heavy font weights across the panel.
@@ -469,7 +469,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resources-collapse-all-button {
     /*
-     * CDXC:TitlebarResources 2026-06-12-20:20:
+     * CDXC:Resources 2026-06-12-20:20:
      * Keep the Resources bulk section toggle visible at rest. Sleep actions
      * intentionally fade in only after header interaction, but this Resources
      * affordance is the user's fixed control immediately to their left.
@@ -499,7 +499,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resources-action-button {
     /*
-     * CDXC:TitlebarResources 2026-06-12-23:37:
+     * CDXC:Resources 2026-06-12-23:37:
      * Header Sleep buttons are ordinary controls. Keep them visible and
      * hit-testable at rest; use only standard hover/disabled selectors for
      * interaction feedback.
@@ -562,12 +562,12 @@ export const TITLEBAR_STYLES = `
   .titlebar-resource-section-heading:hover .titlebar-resource-section-quit-button,
   .titlebar-resource-section-heading:focus-within .titlebar-resource-section-quit-button {
     /*
-     * CDXC:TitlebarResources 2026-05-21-16:58:
+     * CDXC:Resources 2026-05-21-16:58:
      * Resource-manager Quit controls should stay available without crowding the
      * header or section chrome. Reveal destructive buttons only while the row is
      * hovered or keyboard-focused.
      *
-     * CDXC:TitlebarResources 2026-05-26-13:11:
+     * CDXC:Resources 2026-05-26-13:11:
      * Sleep Project is a non-destructive project-group action, but it should
      * use the same hover reveal slot as section Quit so resource metrics remain
      * stable until the user targets the group action area.
@@ -594,7 +594,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resources-scroll {
     /*
-     * CDXC:TitlebarResources 2026-06-16-09:49:
+     * CDXC:Resources 2026-06-16-09:49:
      * Resources sections must stay stacked at the top of the fixed-height child
      * panel when few rows are visible. Keep implicit grid rows content-sized
      * and align the grid content to the start so spare height remains after the
@@ -626,16 +626,16 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resources-info-note {
     /*
-     * CDXC:TitlebarResources 2026-05-21-16:58:
+     * CDXC:Resources 2026-05-21-16:58:
      * Keep explanatory copy out of the crowded titlebar. Put the general
      * resource-usage note in the scroll body above the resource sections.
      *
-     * CDXC:TitlebarResources 2026-06-16-01:08:
+     * CDXC:Resources 2026-06-16-01:08:
      * The note now appears only inside the click-triggered info dropdown next
      * to the bulk expand/collapse control, with paragraph spacing instead of
      * inline line breaks.
      *
-     * CDXC:TitlebarResources 2026-06-16-01:54:
+     * CDXC:Resources 2026-06-16-01:54:
      * The popover shell owns the only card background and border. Keep this
      * inner text wrapper visually transparent so the note is not a card inside
      * another boxed surface.
@@ -651,13 +651,13 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-gxserver-daemon {
     /*
-     * CDXC:TitlebarResources 2026-05-31-03:56:
+     * CDXC:Resources 2026-05-31-03:56:
      * The Resources dropdown must expose gxserver daemon status, version, stop/restart controls, and a small Always start checkbox without changing the sidebar session restore list.
      *
-     * CDXC:TitlebarResources 2026-06-12-11:30:
+     * CDXC:Resources 2026-06-12-11:30:
      * The gxserver status headline should show the live status message (for example "gxserver is running and uses the expected protocol.") beside the state dot instead of a generic "Daemon" label, with the state/version line directly underneath.
      *
-     * CDXC:TitlebarResources 2026-06-16-00:56:
+     * CDXC:Resources 2026-06-16-00:56:
      * Hide the gxserver daemon status strip in the Resources dropdown with CSS
      * only. Keep the component mounted so the surrounding daemon controls and
      * status plumbing do not need a separate conditional path.
@@ -778,7 +778,7 @@ export const TITLEBAR_STYLES = `
   .titlebar-resource-section-heading:hover .titlebar-resource-section-summary,
   .titlebar-resource-section-heading:focus-within .titlebar-resource-section-summary {
     /*
-     * CDXC:TitlebarResources 2026-05-22-23:21:
+     * CDXC:Resources 2026-05-22-23:21:
      * Section-level Quit actions should replace the CPU/RAM/count metrics on
      * hover, matching resource session rows where destructive controls occupy
      * the metrics area instead of adding another right-edge control.
@@ -804,7 +804,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resource-section-body {
     /*
-     * CDXC:TitlebarResources 2026-05-28-10:17:
+     * CDXC:Resources 2026-05-28-10:17:
      * Expanded project sections need a small gutter below the project header so
      * the hover-revealed Sleep Project button does not visually touch the first
      * resource row.
@@ -824,30 +824,30 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resource-row {
     /*
-     * CDXC:TitlebarResources 2026-05-16-20:07:
+     * CDXC:Resources 2026-05-16-20:07:
      * Long session titles must not shift row controls. Keep identity controls in
      * fixed grid tracks and let only the text track shrink.
      *
-     * CDXC:TitlebarResources 2026-06-13-00:56:
+     * CDXC:Resources 2026-06-13-00:56:
      * Per-item Focus and Sleep/Close buttons are fixed visible columns. Do not
      * overlay them on hover or hide metrics to reveal
      * actions; normal hover on the buttons is the only interaction treatment.
      *
-     * CDXC:TitlebarResources 2026-06-13-02:07:
+     * CDXC:Resources 2026-06-13-02:07:
      * CPU and RAM should read as one usage cluster. Keep the text and action
      * tracks stable so values do not drift into the action area.
      *
-     * CDXC:TitlebarResources 2026-06-16-01:10:
+     * CDXC:Resources 2026-06-16-01:10:
      * CPU and RAM must always occupy the far-right row area. Focus and
      * Sleep/Close sit immediately to the left of the metrics so usage values
      * stay aligned at the panel edge across all resource rows.
      *
-     * CDXC:TitlebarResources 2026-06-16-07:37:
+     * CDXC:Resources 2026-06-16-07:37:
      * Resource row action buttons must stay on the same line as the CPU/RAM
      * cards. Explicitly pin every row item to grid row 1 so reordered or
      * conditionally missing controls cannot create a second implicit row.
      *
-     * CDXC:TitlebarResources 2026-06-16-07:37:
+     * CDXC:Resources 2026-06-16-07:37:
      * CPU and RAM cards should keep the smaller collapsed-row dimensions at
      * every hierarchy level. Use one fixed metrics cluster for parent rows and
      * expanded child-process rows instead of allowing parent rows to stretch.
@@ -902,7 +902,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resource-avatar-logo {
     /*
-     * CDXC:TitlebarResources 2026-05-26-13:24:
+     * CDXC:Resources 2026-05-26-13:24:
      * Resource avatars use the Agents Hub mask-logo rendering path, so rows get
      * recognizable agent icons without changing the fixed avatar column size.
      */
@@ -1028,7 +1028,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resource-focus-button {
     /*
-     * CDXC:TitlebarResources 2026-05-28-10:39:
+     * CDXC:Resources 2026-05-28-10:39:
      * Keep row Focus directly left of Sleep/Close in a stable action column so
      * the session label and process totals never shift.
      */
@@ -1045,7 +1045,7 @@ export const TITLEBAR_STYLES = `
   }
   .titlebar-resource-kill-button {
     /*
-     * CDXC:TitlebarResources 2026-06-14-16:50:
+     * CDXC:Resources 2026-06-14-16:50:
      * Row-level Close should carry the same neutral background, border, and
      * icon color as Sleep. The Resources modal still distinguishes the action
      * by the X icon and aria label without using a destructive red palette.
@@ -1090,7 +1090,7 @@ export const TITLEBAR_STYLES = `
     padding: 10px 4px;
   }
   /*
-   * CDXC:TooltipLifecycle 2026-06-13-02:30:
+   * CDXC:Tooltips 2026-06-13-02:30:
    * Titlebar native pointer-out may hide currently visible tooltip surfaces,
    * but it must not reset all hover styling or stay false until a click. The
    * main titlebar document restores this flag on DOM pointer movement so hover

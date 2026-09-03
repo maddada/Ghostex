@@ -368,7 +368,7 @@ export function IntegratedAgentsPage() {
         });
 
         /*
-         * CDXC:WebCommandPaneActions 2026-08-09:
+         * CDXC:CommandPane 2026-08-09:
          * The stable commandId owns one command pane across client reloads. A
          * non-idle owner is selected without submitting the Action a second time;
          * an idle running owner receives the next run directly, while an idle

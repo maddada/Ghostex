@@ -23,10 +23,10 @@ pub(crate) fn command_pane_model_to_shell_state_json_with_optional_delayed_send_
     now: Option<SystemTime>,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUICommandTabStatus 2026-06-22-16:40:
+    CDXC:SessionStatus 2026-06-22-16:40:
     Command tab status persistence is limited to enum/boolean shell metadata so restored command placeholders keep semantic status indicators without storing command text, command output, terminal content, delayed-send deadlines, private titles, paths, tokens, or user content.
 
-    CDXC:GPUICommandPaneReuse 2026-08-13:
+    CDXC:CommandPane 2026-08-13:
     Persist the bounded Action command id as tab ownership metadata. A restored
     running tab cannot use the idle title-only recovery rule, so without this
     selector a repeated Quick Action allocates a second local tab before the
@@ -34,34 +34,34 @@ pub(crate) fn command_pane_model_to_shell_state_json_with_optional_delayed_send_
     Run ids, per-action sound preferences, status-file paths, and command text
     remain process-only.
 
-    CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+    CDXC:SessionSleep 2026-06-25-14:27:
     Command tab sleep is safe shell lifecycle metadata. Persist only the isSleeping boolean beside activity and delayed-send state so restored tabs stay parked without storing command text, output, paths, process ids, status-file paths, or terminal content.
 
-    CDXC:GPUICommandDelayedSend 2026-06-25-15:11:
+    CDXC:DelayedSend 2026-06-25-15:11:
     Live GPUI Delayed Send timers are process-memory contracts that press Return later through the exact mounted Ghostty surface. App-level persistence may snapshot only the deadline and remaining milliseconds for restart re-arm; model-only persistence still writes only semantic restored delayed-send placeholders.
 
-    CDXC:GPUICommandCloseAfterDone 2026-06-25-15:24:
+    CDXC:Sessions 2026-06-25-15:24:
     Close After Done arming is safe command lifecycle metadata. Persist only the armed boolean so restored command-pane Action tabs can keep the user request, while deadlines/countdowns/generations stay process-local and restart from the current visible done state.
 
-        CDXC:GPUICommandDelayedSend 2026-06-25-15:46:
+        CDXC:DelayedSend 2026-06-25-15:46:
         Sleeping command tabs preserve Delayed Send and Close After Done intent in shell state like native session records. Timer-owned Delayed Send writes only the safe restart checkpoint, while non-runtime restored placeholders keep the boolean intent.
 
-    CDXC:GPUIFocusedSplits 2026-06-25-16:05:
+    CDXC:FocusMode 2026-06-25-16:05:
     Command split axis is shell layout metadata. Persist it so command-pane split geometry round-trips without storing command text, terminal content, paths, process ids, or runtime mount state. Focused command hotkeys still write horizontal command splits for both directions to match native.
 
-    CDXC:GPUICommandDelayedSend 2026-06-25-16:41:
+    CDXC:DelayedSend 2026-06-25-16:41:
     App-level command-pane persistence now mirrors native delayed-send restart behavior by writing only a live timer's UTC deadline and remaining-duration checkpoint. The model-only serializer still emits no deadlines, and neither path stores command text, titles, terminal content, paths, runtime ids, stdout/stderr, or countdown labels.
 
-    CDXC:GPUICommandPane 2026-06-25-17:37:
+    CDXC:CommandPane 2026-06-25-17:37:
     Native hides an emptied Commands panel without retaining the last resize height. Persist command-pane height only while command sessions exist; an empty hidden panel restores from the current Workspace default instead of an old user-resized ratio.
 
-    CDXC:GPUICommandFocusMode 2026-06-25-21:40:
+    CDXC:FocusMode 2026-06-25-21:40:
     Command Focus mode persistence stores only the focused command group id as reversible layout metadata. Restore validates that the group still exists and has more than one visible awake command owner before hiding any command split peers; no command text, terminal content, paths, runtime ids, or surface state are serialized.
 
-    CDXC:GPUICommandDelayedSend 2026-06-25-22:40:
+    CDXC:DelayedSend 2026-06-25-22:40:
     App-level Delayed Send timer checkpoints belong to command-tab membership, not arbitrary stored command-session rows. Serialize restart checkpoints only for sessions still attached to a command group so orphaned rows cannot re-arm or redirect a timer after layout repair.
 
-    CDXC:GPUICommandPaneGxserverRestore 2026-07-04:
+    CDXC:Workarea 2026-07-04:
     Command-pane restart parity persists the command-surface gxserver project/session ids, bounded display title, and validated bounded Action selector for each command tab. The daemon still owns scrollback and process state through zmx; shell JSON must not grow command text, cwd, env, terminal output, status-file paths, tokens, or raw attach commands.
     */
     let mut state = serde_json::json!({
@@ -106,7 +106,7 @@ pub(crate) fn command_pane_model_to_shell_state_json_with_optional_delayed_send_
                     );
                 }
                 /*
-                CDXC:RemoteProjectActions 2026-08-29:
+                CDXC:RemoteMachines 2026-08-29:
                 A remote Action's command tab has no local daemon identity, so
                 restart parity persists the remote machine/project/session
                 selectors instead. Without them a restored tab would try to
@@ -356,7 +356,7 @@ pub(crate) fn command_pane_model_from_shell_state_with_default_height_px(
     }
 
     /*
-    CDXC:GPUICommandPaneGxserverRestore 2026-08-13:
+    CDXC:Workarea 2026-08-13:
     A command-surface gxserver session has exactly one local command-tab owner.
     Older shell state could contain duplicate local tabs after Action reuse found
     the daemon session only after allocating a placeholder. Repair that persisted
@@ -393,7 +393,7 @@ pub(crate) fn command_session_from_shell_state(
         CommandTerminalActivity::Idle
     } else {
         /*
-        CDXC:GPUICommandPaneActions 2026-08-26:
+        CDXC:CommandPane 2026-08-26:
         Action run ids and status-file paths are runtime-only, so any restored
         pane (startup live pane or a per-project parked pane swapped back in)
         has no run the status-file poller can ever clear. A `working` stamp
@@ -434,7 +434,7 @@ pub(crate) fn command_session_remote_action_session_from_shell_state(
     object: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<GpuiRemoteAttachSessionReference> {
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     Restore a remote Action tab's identity only from a complete triple that
     still passes the same id validation the live remote tunnel applies. A
     partial or malformed row restores as a plain tab with no remote identity,
@@ -508,7 +508,7 @@ pub(crate) fn command_session_gxserver_key_from_shell_state(
     object: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<GpuiLocalWorkspaceSessionKey> {
     /*
-    CDXC:GPUICommandPaneGxserverRestore 2026-07-04:
+    CDXC:Workarea 2026-07-04:
     Old command-pane shell state has no daemon identity. Treat missing or invalid gxserver ids as absent so legacy tabs can be recreated through the normal Phase 1 creation path; only a complete validated local project/session pair becomes a restore attach key.
     */
     let project_id = json_string_field(object, "gxserverProjectId")?
@@ -619,7 +619,7 @@ pub(crate) fn split_command_pane_shell_state_json_by_gxserver_project(
     fallback_project_id: Option<&str>,
 ) -> Vec<(String, serde_json::Value)> {
     /*
-    CDXC:GPUICommandPanePerProject 2026-07-10:
+    CDXC:CommandPane 2026-07-10:
     One-time migration for the pre-per-project global command pane: every
     persisted command tab already carries its owning gxserver project id, so
     the mixed panel splits into one single-leaf panel per project (rows
@@ -731,7 +731,7 @@ pub(crate) fn command_delayed_send_restore_timers_from_shell_state(
     command_pane: &CommandPaneModel,
 ) -> Vec<GpuiCommandDelayedSendRestoreTimer> {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-25-22:40:
+    CDXC:DelayedSend 2026-06-25-22:40:
     Restore-time Delayed Send timers require live command-tab group membership resolved through the command pane, not just a stored terminal-session row. Orphaned session rows are stale persistence data and must not re-arm timers or fall back to another command group.
     */
     let Some(object) = value.as_object() else {
@@ -769,7 +769,7 @@ pub(crate) fn command_delayed_send_stale_runtime_timer_session_ids(
     delayed_send_timers: &HashMap<CommandSessionId, GpuiCommandDelayedSendTimer>,
 ) -> Vec<CommandSessionId> {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-27-05:50:
+    CDXC:DelayedSend 2026-06-27-05:50:
     Delayed Send runtime timers require the same live command-tab membership as modal submissions and restore checkpoints: a current command group reference plus a stored command session row. Stale root tab ids whose session row disappeared must prune their timers instead of being treated as mounted-capable command terminals.
     */
     delayed_send_timers
@@ -821,10 +821,10 @@ pub(crate) fn command_pane_apply_startup_activity_restore_intents(
     restore_intents: &[GpuiCommandStartupActivityRestoreIntent],
 ) -> bool {
     /*
-    CDXC:GPUICommandStartupRestore 2026-06-25-17:25:
+    CDXC:Workarea 2026-06-25-17:25:
     Native command-panel restoreActivity treats Working as a one-shot startup wake hint and Attention as a wake plus visible status. GPUI must parse those raw activity hints before sleeping-session normalization, then use normal visible command-pane layout to expand/select/wake the restored tab; Working is cleared to Idle after the wake while Attention remains visible.
 
-    CDXC:GPUICommandStartupRestore 2026-06-26-04:29:
+    CDXC:Workarea 2026-06-26-04:29:
     Restore-time command focus normalization must compare the target against `focused_group_active_session_id`, not `active_group_and_session_id`, because active fallback can report the first command tab while `focused_group` is stale. Select the restored live tab so native restore leaves the mounted command body as the command focus target.
     */
     let mut changed = false;
@@ -872,13 +872,13 @@ pub(crate) fn command_pane_apply_delayed_send_restore_intent(
     session_id: CommandSessionId,
 ) -> bool {
     /*
-    CDXC:GPUICommandDelayedSend 2026-06-25-16:56:
+    CDXC:DelayedSend 2026-06-25-16:56:
     Native startup restores command-panel terminal sessions with active Delayed Send deadlines so the pending Enter has a live terminal when the timer fires. GPUI should wake only this persisted restore path while preserving the existing in-process manual Sleep rule that parks active timers until the user wakes the tab.
 
-    CDXC:GPUICommandDelayedSend 2026-06-25-17:19:
+    CDXC:DelayedSend 2026-06-25-17:19:
     A restored GPUI Delayed Send timer needs the command body to exist through normal visible layout because GPUI command terminals do not use hidden/offscreen mounts. Promote the restored command tab to the active visible command-pane body during startup restore so the timer is not stranded behind a collapsed pane or inactive tab.
 
-    CDXC:GPUICommandDelayedSend 2026-06-26-04:29:
+    CDXC:DelayedSend 2026-06-26-04:29:
     Delayed Send restore must normalize stale command focus even when `active_group_and_session_id` would fall back to the restored tab. Compare against `focused_group_active_session_id` so the resumed timer's mounted body is also the live command focus target.
     */
     let Some(target_group_id) = command_pane_group_for_session(command_pane, session_id) else {
@@ -923,7 +923,7 @@ pub(crate) fn command_pane_node_from_shell_state(
                 .map(json_u64_value)
                 .collect::<Option<Vec<_>>>()?;
             /*
-            CDXC:GPUICommandPaneRestore 2026-06-27-04:15:
+            CDXC:CommandPane 2026-06-27-04:15:
             Native command-panel restore repairs stale local pane layout by filtering leaf tab ids against stored command sessions and keeping only the first occurrence of repeated ids. GPUI must normalize each restored command leaf before validating the broader split tree so one stale or duplicate tab reference does not discard the whole command pane.
             */
             let mut seen_tab_ids = HashSet::new();
@@ -959,7 +959,7 @@ pub(crate) fn command_pane_node_from_shell_state(
             let first = command_pane_node_from_shell_state(object.get("first")?, session_ids);
             let second = command_pane_node_from_shell_state(object.get("second")?, session_ids);
             /*
-            CDXC:GPUICommandPaneRestore 2026-06-27-04:15:
+            CDXC:CommandPane 2026-06-27-04:15:
             Native command-panel split restore prunes children that normalize to no valid tabs and collapses a one-child split to the remaining layout. Preserve that repair behavior so stale command leaf data cannot discard a sibling command group that still has valid restored sessions.
             */
             match (first, second) {

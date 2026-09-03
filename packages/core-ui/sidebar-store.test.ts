@@ -426,7 +426,7 @@ describe('sidebar store', () => {
     };
 
     /**
-     * CDXC:AppModals 2026-05-29-19:44:
+     * CDXC:AppModal 2026-05-29-19:44:
      * Attention/activity snapshots may rebuild HUD objects without changing
      * agents or settings. Open modals subscribe to those slices, so preserving
      * unchanged references keeps unrelated session status updates from
@@ -447,7 +447,7 @@ describe('sidebar store', () => {
   });
 
   /**
-   * CDXC:SidebarV2Lifecycle 2026-07-29:
+   * CDXC:StateSync 2026-07-29:
    * Settling or snoozing a quiet session changes nothing else on the row, and
    * hydrate has no revision escape hatch, so the session equality check is the
    * only thing that can hand React a new object for it. Without these fields the
@@ -606,7 +606,7 @@ describe('sidebar store', () => {
   });
 
   /*
-  CDXC:SettingsModalBlankUnnormalizedHydrate 2026-07-29:
+  CDXC:Settings 2026-07-29:
   The GPUI hydrate carries the shared settings file verbatim, so a file only ever
   written by titlebar code paths arrives without whole nested schema objects. The
   app-modal Settings render read `settings.workspaceOpenTargetAvailability

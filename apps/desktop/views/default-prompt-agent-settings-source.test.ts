@@ -6,17 +6,17 @@ const modalHostSource = readFileSync(new URL('./modal-host.tsx', import.meta.url
 describe('default prompt agent settings source', () => {
   test('does not save modal default settings before native hydrate', () => {
     /*
-     * CDXC:GxserverAgentSettings 2026-06-19-08:58:
+     * CDXC:AgentProviders 2026-06-19-08:58:
      * The modal store initializes with DEFAULT_ghostex_SETTINGS. Settings and
      * First Launch should not render as writable until a native hydrate replaces
      * that placeholder with the gxserver-backed settings snapshot.
      *
-     * CDXC:SettingsModalStuckBlank 2026-06-21-04:18:
+     * CDXC:Settings 2026-06-21-04:18:
      * Settings renderability now separates the Settings-family modal check from
      * the hydrate check so native child windows can block `presented` until the
      * actual Settings UI is renderable.
      *
-     * CDXC:FirstLaunchSetup 2026-06-29-13:46:
+     * CDXC:Onboarding 2026-06-29-13:46:
      * First Launch uses the same hydrated Settings store gate, so it must also
      * block native presentation until the modal host has applied native state.
      */

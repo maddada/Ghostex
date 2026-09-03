@@ -37,58 +37,58 @@ use crate::{
 use crate::terminal_native_view::RealTerminalNativeViewHandle;
 
 /*
-CDXC:GPUIGhosttySurfaceRuntime 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 Phase 2 crosses the real GhosttyKit/libghostty boundary for visible running Agents mount slots. The runtime owners may initialize Ghostty, create a finalized default config, share one Ghostty app, create/drop/update real surfaces from App-owned host NSViews, and mirror shell-derived terminal focus idempotently; they must not add command/cwd/env/session lifecycle, persistent IDs, terminal content, stdout/stderr, logs, fake handles, fallback success paths, overlays, hidden hit regions, broad hit-test routing, or synthetic input routing.
 
-CDXC:GPUITerminalRuntimeIdentity 2026-06-22-23:24:
+CDXC:SessionIdentity 2026-06-22-23:24:
 Ghostty surface owners carry the private runtime session id separately from the pane/body mount slot. Mount slots remain layout attachments keyed by pane plus shell session, while runtime ids are process-local session identity and must not be persisted, logged, or shown as terminal titles.
 
-CDXC:GPUITerminalLaunchPayload 2026-06-22-23:58:
+CDXC:Terminal 2026-06-22-23:58:
 Phase 3 startup may carry cwd, command, env vars, initial input, and wait-after-command only as runtime launch data on a prepared Ghostty surface request. Reject interior-NUL strings before FFI and keep CString/env-var storage scoped to ghostty_surface_new so private launch values never enter Debug output, logs, shell state, titles, or returned configs with dangling pointers.
 
-CDXC:GPUITerminalStartupGhosttySurface 2026-06-23-03:33:
+CDXC:Terminal 2026-06-23-03:33:
 Mounting startup surfaces need a startup-owned Ghostty boundary keyed by `AgentsTerminalStartupBodySlotId` plus process-local runtime id. This owner may create, resize, and free a hidden Ghostty surface from an already-prepared config request, but it must not require a Running mount slot, show or focus AppKit hosts, set Ghostty app/surface focus, apply Ready/Failed, persist, log, or expose launch/private terminal payloads.
 
-CDXC:GPUITerminalStartupGhosttySurface 2026-06-23-04:13:
+CDXC:Terminal 2026-06-23-04:13:
 Startup readiness may inspect Ghostty surface metadata only as redacted runtime facts: process-exited, foreground-process-id-present, and tty-name-present. Raw tty names and process ids must be freed or discarded at the FFI boundary and must not enter Debug output, shell state, logs, titles, launch payloads, or persistence.
 
-CDXC:GPUITerminalStartupHandoff 2026-06-23-04:25:
+CDXC:Terminal 2026-06-23-04:25:
 Ready Mounting startup surfaces must be re-owned by the Running surface path instead of being dropped and recreated. The conversion consumes the startup owner without freeing the Ghostty surface, changes only the map key identity from startup body slot to Running body mount slot, and keeps raw process, tty, launch, and terminal content data out of logs, shell state, and Debug output.
 
-CDXC:GPUITerminalGhosttyClose 2026-06-23-04:49:
+CDXC:Terminal 2026-06-23-04:49:
 Running Ghostty close parity must ask the embedded surface to close and wait for the runtime close callback before shell-tab removal. Each surface owner passes a process-memory close token as surface userdata, keeps the AppKit NSView available only through `platform.macos.nsview`, and records only confirmation-needed or confirmed-close state without logging, persistence, runtime ids, raw paths, command text, environment, stdout/stderr, tty names, process ids, or terminal content.
 
-CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+CDXC:Terminal 2026-06-23-05:03:
 Running Ghostty surface ownership is generic over a typed body mount slot so command-pane terminals can use the same App-owned NSView and GhosttyKit surface pipeline without entering Agents workspace/startup maps. Command owners use command group/session ids, explicit launch-payload sources only, no title/status/path parsing, no logs, no persistence, and no input routing changes.
 
-CDXC:GPUICommandTerminalLaunchPayload 2026-06-27-01:25:
+CDXC:Terminal 2026-06-27-01:25:
 Plain command terminals may carry only the active project cwd supplied by the app's exact-slot command launch source, while Action terminals may carry their separate command payload. The Ghostty surface owner must remain ignorant of titles, shell state, terminal content, fallback cwd inference, and persisted project paths.
 
-CDXC:GPUITerminalProcessExit 2026-06-23-05:30:
+CDXC:Terminal 2026-06-23-05:30:
 Mounted Running Agents and command terminals need a runtime-only process-exited query that returns only a redacted boolean. Callers that only need exit state must not use the richer metadata snapshot because that would unnecessarily cross the tty/pid FFI boundary and increase the chance of exposing raw terminal/process details.
 
-CDXC:GPUITerminalCloseConfirm 2026-06-23-05:39:
+CDXC:CommandPane 2026-06-23-05:39:
 Close-confirm parity needs the Ghostty callback token to hand confirmation-needed events to GPUI exactly once so App-owned runtime state can hold the pending prompt identity. The token remains process memory only and must not expose terminal content, command text, paths, runtime ids, durable ids, logs, shell-state fields, or launch payload data.
 
-CDXC:GPUITerminalCloseConfirm 2026-06-23-05:47:
+CDXC:CommandPane 2026-06-23-05:47:
 Canceling a pending close-confirm prompt must reset only the owner-local close-request latch after exact GPUI surface matching. That lets a later user close action ask Ghostty again without inventing a fallback close path or persisting prompt state.
 
-CDXC:GPUITerminalInputABI 2026-06-23-05:53:
+CDXC:Terminal 2026-06-23-05:53:
 Real terminal input parity begins with narrow owner wrappers over the existing embedded Ghostty input exports. These wrappers accept already-sanitized primitive values or borrowed byte slices, do not translate GPUI keyboard/mouse events yet, and must not store, log, persist, or expose terminal input text through Debug or shell-state JSON.
 
-CDXC:GPUITerminalInputABI 2026-06-23-05:58:
+CDXC:Terminal 2026-06-23-05:58:
 Zero-length text and preedit are distinct FFI edge cases. Text uses a stable non-null empty pointer because Ghostty slices the pointer unconditionally, while preedit clear follows Ghostty's AppKit path and passes a null pointer with length zero.
 
-CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+CDXC:CommandPane 2026-06-23-20:04:
 Slice 237 binds GhosttyKit's real `ghostty_surface_needs_confirm_quit` query so close-confirm prompts can be backed by source-side ABI evidence. Surface owners may expose only a boolean for the current mounted surface; they must not log, persist, or reveal process ids, tty names, commands, paths, runtime ids, or terminal content.
 
-CDXC:GPUITerminalNativeKeyBridge 2026-06-24-20:58:
+CDXC:Terminal 2026-06-24-20:58:
 Mounted GPUI terminal host NSViews own native AppKit key events because GPUI's root `KeyDownEvent` drops the macOS native keycode Ghostty needs for Return, Backspace, arrows, modifiers, and bindings. Register only the exact host-view to Ghostty-surface pairing while a real surface is mounted, keep the registry runtime-only, and never store typed text beyond the synchronous FFI call.
 
-CDXC:GPUITerminalFileDropInsertion 2026-06-27-03:34:
+CDXC:Clipboard 2026-06-27-03:34:
 Terminal file drops are transient text insertion to the exact mounted AppKit host view registered for native key forwarding. Dispatch the borrowed bytes only through that matched Ghostty surface, reject null, unregistered, or empty input, and do not add focused-surface fallback routing, logging, persistence, overlays, or hit-test routing.
 
-CDXC:GPUITerminalNativeImeBridge 2026-06-27-03:46:
+CDXC:Terminal 2026-06-27-03:46:
 AppKit IME committed text, marked preedit text, and candidate-window geometry must route only through the exact mounted terminal host view registered for Ghostty native input, including command-pane terminals. Borrow callback bytes only for the synchronous Ghostty call, reject empty committed text, allow empty preedit to clear via the null/zero Ghostty convention, and do not store raw IME text or fall back to focused surfaces.
 */
 
@@ -335,7 +335,7 @@ pub(crate) struct GhosttyKitFunctionTable {
 
 impl GhosttyKitFunctionTable {
     /*
-    CDXC:GPUILinuxX11Backend 2026-07-05:
+    CDXC:PlatformSupport 2026-07-05:
     The production table binds the real GhosttyKit exports, which exist only
     in the macOS static archive (gpui/build.rs). Non-macOS terminals run the
     libghostty-vt GPUI engine instead, so the table constructor and every
@@ -1330,7 +1330,7 @@ impl GhosttySurfaceConfigRequest {
 
     fn apply_base_to_ffi_config(&self, config: &mut ffi::ghostty_surface_config_s) {
         /*
-        CDXC:GPUITerminalSettings 2026-06-27-10:10:
+        CDXC:Terminal 2026-06-27-10:10:
         Embedded Ghostty surface requests can carry only the GhosttyKit-supported live/recreate FFI typography field, `font_size`; config-file-backed settings such as font family, theme, cursor, scrollback, clipboard, and mouse are intentionally not represented in `ghostty_surface_config_s`. A `font_size` of 0.0 remains the unmanaged Ghostty default for generic callers, while GPUI-owned request builders attach the shared Settings `terminalFontSize` value before creating Agents, command, or startup surfaces; live surface reload is not claimed here.
         */
         let nsview = self.nsview.as_ptr();
@@ -1623,10 +1623,10 @@ impl Drop for GhosttyAppOwner {
 }
 
 /*
-CDXC:GPUITerminalClipboard 2026-06-27-04:10:
+CDXC:Clipboard 2026-06-27-04:10:
 Ghostty runtime clipboard callbacks must never touch GPUI App clipboard APIs directly. Embedded Ghostty passes surface userdata to clipboard callbacks, so GPUI may accept only registered surface close tokens with mounted surfaces, enqueue owner-local standard-clipboard operations, and let the app-thread drain perform explicit clipboard access for the exact Agents or command surface owner.
 
-CDXC:GPUITerminalClipboard 2026-06-27-04:10:
+CDXC:Clipboard 2026-06-27-04:10:
 The low-level Ghostty clipboard path is surface-scoped only. Runtime app userdata, null request state, selection clipboard requests, missing `text/plain` write payloads, or focused-surface inference must not authorize clipboard access. Initial reads complete as unconfirmed, confirm callbacks borrow the original content pointer only for synchronous completion, and callbacks must not log, persist, or retain raw clipboard diagnostics beyond the owner-local queue.
 */
 const GHOSTTY_RUNTIME_SUPPORTS_SELECTION_CLIPBOARD: bool = false;
@@ -1743,7 +1743,7 @@ unsafe fn runtime_action_sized_string(value: *const c_char, len: usize) -> Optio
 }
 
 /*
-CDXC:GPUITerminalClipboard 2026-06-27-04:10:
+CDXC:Clipboard 2026-06-27-04:10:
 Ghostty's embedded runtime calls clipboard callbacks with `SurfaceUD`, while wakeup/action still use app-level runtime userdata. Validate the pointer against registered surface tokens before casting, enqueue only standard reads and explicit `text/plain` standard writes, complete initial reads as unconfirmed so Ghostty paste protection can ask back through `confirm_read_clipboard_cb`, and mirror native Ghostex by confirming the borrowed callback content synchronously without storing or logging it.
 */
 unsafe extern "C" fn ghostty_runtime_read_clipboard_cb(
@@ -1819,7 +1819,7 @@ const GHOSTTY_SURFACE_CLOSE_STATE_CONFIRMATION_NEEDED: u8 = 1;
 const GHOSTTY_SURFACE_CLOSE_STATE_CONFIRMED: u8 = 2;
 
 /*
-CDXC:GPUITerminalClipboard 2026-06-27-04:10:
+CDXC:Clipboard 2026-06-27-04:10:
 Owner-local clipboard operations are the only bridge from Ghostty callbacks to GPUI clipboard APIs. A denied drain completes pending reads with empty data and drops writes without invoking clipboard closures; an allowed drain may read/write only for the exact mounted owner that holds this token, never through focus, app-level userdata, logs, persistence, or selection clipboard routing.
 */
 enum GhosttyRuntimeClipboardOperation {
@@ -2209,7 +2209,7 @@ unsafe extern "C" fn ghostty_runtime_close_surface_cb(
     confirmation_needed: bool,
 ) {
     /*
-    CDXC:GPUITerminalGhosttyClose 2026-06-27-04:25:
+    CDXC:Terminal 2026-06-27-04:25:
     Ghostty close callbacks use the same surface userdata channel as clipboard callbacks. Validate the pointer against registered surface tokens before mutating owner-local close state so app-level runtime userdata and stale pointers cannot be treated as terminal owners.
     */
     let Some(token) = registered_surface_close_token_from_userdata(userdata) else {
@@ -2446,7 +2446,7 @@ where
         runtime_session_id: AgentsTerminalRuntimeSessionId,
     ) -> Self {
         /*
-        CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+        CDXC:Terminal 2026-06-23-19:41:
         Parked Running owners must reattach by moving the same Ghostty surface back under the current body slot. `ManuallyDrop` prevents `ghostty_surface_free` during the rekey and keeps the close/clipboard token with the surface userdata so reattach cannot recreate the process or lose owner-scoped runtime callbacks.
         */
         let owner = ManuallyDrop::new(self);
@@ -2777,13 +2777,13 @@ impl StartupGhosttySurfaceOwner {
         mount_slot_id: AgentsTerminalBodyMountSlotId,
     ) -> GhosttySurfaceOwner {
         /*
-        CDXC:GPUITerminalStartupHandoff 2026-06-23-04:25:
+        CDXC:Terminal 2026-06-23-04:25:
         Promotion must transfer the exact startup Ghostty surface into the Running owner without calling `ghostty_surface_free`. `ManuallyDrop` keeps the surface alive while the new owner takes the same raw handle and runtime id; focus starts unset because startup owners never focus hidden hosts.
 
-        CDXC:GPUITerminalGhosttyClose 2026-06-23-04:49:
+        CDXC:Terminal 2026-06-23-04:49:
         The surface userdata is the owner-held close token, so Ready handoff must move that token with the raw Ghostty surface. Replacing it would leave the embedded close callback pointing at stale process memory.
 
-        CDXC:GPUITerminalClipboard 2026-06-27-04:10:
+        CDXC:Clipboard 2026-06-27-04:10:
         The surface userdata carries the registered close/clipboard token, so Ready handoff must move that token with the Ghostty surface. Clipboard callbacks can then keep enqueueing owner-local operations for the promoted Running owner without recreating the process, using focus, or falling back to app-level runtime userdata.
         */
         let startup_owner = ManuallyDrop::new(self);

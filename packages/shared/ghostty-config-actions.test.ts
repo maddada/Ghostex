@@ -9,10 +9,10 @@ import {
 describe('mergeGhosttyConfigLines', () => {
   test('applies recommended Ghostty settings without removing user config', () => {
     /**
-     * CDXC:GhosttySettings 2026-04-30-01:48
+     * CDXC:Terminal 2026-04-30-01:48
      * Applying recommended settings must replace only Ghostex's marked block and
      * retain user-owned settings even when they use the same Ghostty keys.
-     * CDXC:Branding 2026-05-12-07:35
+     * CDXC:Icons 2026-05-12-07:35
      * The inserted marker is user-visible in Ghostty config, so it should use
      * Ghostex even though the managed-key constants keep their ghostex prefix.
      */

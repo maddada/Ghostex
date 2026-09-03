@@ -95,13 +95,13 @@ impl GhostexGpuiApp {
         placeholder: BrowserBodyPlaceholder,
     ) -> AnyElement {
         /*
-        CDXC:GPUIBrowserTabs 2026-06-22-06:59:
+        CDXC:Browser 2026-06-22-06:59:
         Address-only Browser tabs are real shell tabs but not real page surfaces yet. Render an empty black GPUI body for those tabs so creating or selecting a new tab never exposes the previous tab's CEF page.
 
-        CDXC:GPUIBrowserSplits 2026-06-22-09:02:
+        CDXC:Browser 2026-06-22-09:02:
         Browser split panes remain visible shell panes even when their active loaded tab has no existing CEF entity. Render those loaded bodies as restored/sleeping placeholders while preserving their tab groups and selected tab ids for later focused activation or wake materialization.
 
-        CDXC:GPUIBrowserRestoredPlaceholder 2026-06-22-13:38:
+        CDXC:Browser 2026-06-22-13:38:
         Restored loaded Browser tabs are shell metadata until focus materializes their tab-owned CEF surface. Render a visible sleeping placeholder from sanitized shell URL state only: no CEF creation from render, runtime page titles, query strings, fragments, credentials, local paths, tokens, cookies, or user content.
         */
         if placeholder.state == BrowserTabState::Loaded && !placeholder.has_cef_surface {
@@ -176,16 +176,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIBrowserTabs 2026-06-22-05:56:
+        CDXC:Browser 2026-06-22-05:56:
         Browser mode needs native-style tabs above the address toolbar while GPUI owns Browser tab identity. Render the strip as a real top chrome row in normal layout, keep tab overflow horizontally scrollable, and reserve only an in-memory new-tab control in this slice.
 
-        CDXC:GPUIBrowserTabs 2026-06-22-06:59:
+        CDXC:Browser 2026-06-22-06:59:
         Each rendered Browser pane's active loaded tab selects which tab-owned CEF entity may occupy that pane's body. Inactive tabs retain their shell identity and any runtime CEF entity, but their native views are hidden instead of being stacked under another tab.
 
-        CDXC:GPUIBrowserDragDrop 2026-06-22-07:41:
+        CDXC:Browser 2026-06-22-07:41:
         Browser tabs need Agents/command-style typed GPUI drag within this single tab strip only. Render a visible insertion marker at the computed tab boundary plus a real end-of-strip drop target, and leave Browser body edge drops and cross-pane Browser splitting out of this slice.
 
-        CDXC:GPUIBrowserSplits 2026-06-22-09:02:
+        CDXC:Browser 2026-06-22-09:02:
         Browser tab strips now belong to Browser panes, not one flat workspace strip. Each pane owns its tab order and active selection, while the shared toolbar follows the focused pane's active tab and CEF ownership stays keyed by BrowserTabId.
         */
         let pane_id = leaf.pane_id;
@@ -520,7 +520,7 @@ impl GhostexGpuiApp {
         zone: WorkspaceDropZone,
     ) -> AnyElement {
         /*
-        CDXC:GPUIBrowserSplits 2026-06-22-09:02:
+        CDXC:Browser 2026-06-22-09:02:
         Browser body drop feedback must distinguish center grouping from edge split intent while staying non-interactive. Render the indication as a normal child inside the Browser pane body so native CEF views stay hidden by the drag visibility gate instead of relying on transparent overlays or hit-test rerouting.
         */
         let label = match zone {

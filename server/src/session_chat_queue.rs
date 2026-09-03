@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 gxserver owns a per-session queue of prompts the user wrote but does not want
 delivered yet, plus the unsent composer draft synced between devices. The wire
 contract is `packages/shared/session-chat-queue.ts` and this file is its Rust mirror:
@@ -73,7 +73,7 @@ pub struct SessionChatDraft {
 }
 
 /*
-CDXC:SessionChatQueueCarriage 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 `queue` and `draft` ride readSessionChat results and the snapshot / replaced /
 state frames, never `appended`. Their omission semantics differ:
 
@@ -133,7 +133,7 @@ impl SessionChatQueueSnapshot {
     }
 
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21-b:
+    CDXC:SessionChat 2026-08-21-b:
     The badge count is EVERY row, `failed` included. Excluding failed rows made
     the one state that needs the user act invisible everywhere outside the chat
     view: a queue stalled behind a failed head published no count at all, so a
@@ -733,7 +733,7 @@ fn set_draft(
 }
 
 /*
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 The synced composer draft on its own, without the queue rows `read_snapshot`
 carries. Draft sessions read it for the sidebar display title, published on
 every presentation delta, which must never pay for the queue. A blank draft
@@ -787,7 +787,7 @@ pub fn read_non_blank_session_chat_draft_contents(
 }
 
 /*
-CDXC:DraftCrashSafety 2026-08-28:
+CDXC:Drafts 2026-08-28:
 The `/api/listSessionChatDrafts` read behind the client-side draft-cache
 reconcile. The composer's per-keystroke localStorage cache is not durable — a
 kill that skips a clean Chromium shutdown drops uncommitted batches — so this
@@ -849,7 +849,7 @@ pub fn clear_session_chat_draft_after_delivery(
 }
 
 /*
-CDXC:SessionChatDraftRetireOnSend 2026-09-02:
+CDXC:Drafts 2026-09-02:
 Clears the synced composer draft once a chat send delivered exactly its text.
 Until this existed the row was cleared only by the client's debounced empty
 push after Enter, which is fire-and-forget: when it was skipped, failed, or

@@ -7,7 +7,7 @@ export type SidebarProjectDiffStats = {
 };
 
 /**
- * CDXC:ProjectDiffStats 2026-05-06-14:21
+ * CDXC:Git 2026-05-06-14:21
  * Project editor buttons must show a compact file/addition/deletion summary
  * for each project. Keep the parsing pure so native sidebar process output can
  * be tested without touching the filesystem or shelling out from tests.
@@ -60,7 +60,7 @@ export function mergeSidebarProjectDiffStats(
 }
 
 /**
- * CDXC:ProjectDiffStats 2026-05-27-09:25:
+ * CDXC:Git 2026-05-27-09:25:
  * Project-header git stats should match Starship-style tracked diffs
  * (`git diff --numstat HEAD`) by default. Only fold untracked `wc -l` totals in
  * when the user enables the opt-in setting and there are no tracked line changes.

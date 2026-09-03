@@ -53,24 +53,24 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIProjectSidebarBridge 2026-06-23-08:23:
+        CDXC:CefRuntime 2026-06-23-08:23:
         GPUI runtime settings polling is intentionally narrow: read the shared sidebar settings snapshot once, pass strict debuggingMode/showBetaFeatures plus the saved object to SidebarApp normalization, skip unchanged payloads, and refresh the sidebar CEF bridge only. Browser CEF tabs, generic settings buses, filesystem watchers, path heuristics, and persisted/logged raw settings data stay out of this path.
 
-        CDXC:GPUISettingsPersistence 2026-06-24-11:14:
+        CDXC:Settings 2026-06-24-11:14:
         Settings saves use this same sidebar CEF runtime-settings refresh path immediately after the shared service write succeeds. The save path must not wait for polling, add a broad settings event bus, or leak raw Settings JSON into Browser tabs, logs, paths, titles, commands, tokens, stdout/stderr, or user content.
 
-        CDXC:GPUISourceRuntime 2026-06-24-23:17:
+        CDXC:CodeEditor 2026-06-24-23:17:
         code-server consumes VS Code settings-link choices only at process launch. When shared Settings changes those choices while Source is awake, restart the GPUI-owned runtime through the same lazy Source path instead of mutating a live process or trusting renderer-provided launch flags.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-25-23:49:
+        CDXC:KeepAwake 2026-06-25-23:49:
         Keep Awake automation is part of the existing Settings save/runtime refresh path. A saved beta/control disable stops the GPUI-owned hold and suppresses future autostarts, while launch/display/delayed-send rules are re-evaluated immediately without adding a broad Settings event bus.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-26-00:29:
+        CDXC:KeepAwake 2026-06-26-00:29:
         Settings refresh also re-evaluates the Working-session automatic hold against app-owned terminal model state. Keep this in the existing narrow refresh path instead of introducing a broad settings or terminal event bus.
         */
         self.sync_gpui_keep_awake_automation_from_settings(settings, cx);
         /*
-        CDXC:GlobalActions 2026-08-01-16:00:
+        CDXC:AgentLauncher 2026-08-01-16:00:
         The tab strip draws every frame, so which built-in buttons are visible is
         cached here rather than re-read from the settings file during render.
         This runs before the unchanged-snapshot early return below, because the
@@ -131,7 +131,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUISidebarGxserverBootstrap 2026-06-24-11:17:
+        CDXC:ServerDaemon 2026-06-24-11:17:
         Reuse the existing narrow sidebar polling cadence to notice gxserver token bootstrap availability after load. The poll reads only the existing token helper, fixed local gxserver constants, the current explicit sidebar active-project id, and the exact local focus key when it matches the stored focused session. Update only the sidebar CEF bridge on actual snapshot change and do not add file watchers, logs, persistence, Browser/workarea/modal exposure, fake gxserver sessions, or fallback project/session id inference.
         */
         let next_bootstrap = gpui_sidebar_gxserver_bootstrap(
@@ -151,7 +151,7 @@ impl GhostexGpuiApp {
             });
         }
         /*
-        CDXC:GPUISessionChatSurface 2026-07-31:
+        CDXC:SessionChat 2026-07-31:
         Session Chat surfaces carry either the local loopback bootstrap or the
         owning remote machine's loopback SSH-tunnel bootstrap. Refresh each
         surface from its session identity so a local bootstrap replay cannot
@@ -195,7 +195,7 @@ impl GhostexGpuiApp {
             ],
             "confirmDeleteWorktree" => &["projectId"],
             /*
-            CDXC:WorktreeRename 2026-08-09-18:40:
+            CDXC:Worktrees 2026-08-09-18:40:
             The rename confirmation carries the typed name across the modal
             boundary. It is NOT a path: the runtime revalidates the project and
             gxserver derives the destination folder from the name itself, so this
@@ -328,7 +328,7 @@ impl GhostexGpuiApp {
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
-    /// CDXC:SidebarSpaces 2026-08-27:
+    /// CDXC:Spaces 2026-08-27:
     /// The New/Edit Space dialog's confirm and delete. The dialog is an app-modal
     /// window, so its result has to cross back into the sidebar page — and it is
     /// SidebarApp, not Rust, that owns the Space document, so this forwards the
@@ -408,7 +408,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandPane 2026-06-24-23:49:
+        CDXC:CommandPane 2026-06-24-23:49:
         Command-pane Action run-state feedback targets only the first-party GPUI sidebar CEF surface and the typed `window.ghostexGpui.onSidebarHostMessage` callback installed by the SidebarApp runtime. The generated script carries only existing sidebar message JSON and must not expose generic eval IPC, command text, paths, terminal output, status-file paths, tokens, or persisted shell-state fields.
         */
         let Some(sidebar) = self.sidebar.clone() else {
@@ -770,7 +770,7 @@ impl GhostexGpuiApp {
                     cx,
                 );
                 /*
-                CDXC:DisabledPluginRouting 2026-08-23:
+                CDXC:Extensions 2026-08-23:
                 Registering the project is still the right half of an OS open
                 request, but with Code turned off in Settings → Customize there
                 is no editor to reveal the path in. Keep the project and hand
@@ -920,7 +920,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:FirstLaunchSetup 2026-08-24:
+    CDXC:Onboarding 2026-08-24:
     The onboarding Get Started page's Browse button. Same round trip as the
     terminal background image picker: native dialog host-side, picked absolute
     path posted back to the open app-modal window, where the first-launch page
@@ -975,7 +975,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:FirstLaunchSetup 2026-08-24:
+    CDXC:Onboarding 2026-08-24:
     Onboarding Finish crosses from the app-modal window into the sidebar
     runtime over the existing workspaceFolderPicked chain, which already owns
     project registration and focus. `firstLaunchAgentId` additionally asks the
@@ -1135,7 +1135,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-07:25:
+        CDXC:Workarea 2026-06-26-07:25:
         Native GPUI workspace tab lifecycle uses a fixed Rust-to-sidebar callback, not a generic renderer bus. The request contains only request id, action, bounded gxserver project/session ids, and optional replacement ids so the sidebar can perform gxserver lifecycle ownership while Rust keeps pane/tab ownership local.
         */
         let Some(sidebar) = self.sidebar.clone() else {
@@ -1174,10 +1174,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIAppShots 2026-06-25-23:28:
+        CDXC:AppShots 2026-06-25-23:28:
         Native Rust owns App Shot capture, path creation, and settings reads. CEF receives only a transient first-party capture payload so the gxserver sidebar runtime can format the macOS-parity prompt, try focused/recent existing-session insertion, or create a prompt-agent session; this capture bridge must not accept renderer-provided screenshot paths, persist capture data, log app/window/path text, or become generic eval IPC.
 
-        CDXC:GPUIAppShots 2026-06-26-04:27:
+        CDXC:AppShots 2026-06-26-04:27:
         Focused/recent App Shot staging may target a remote row only through the separate fixed prompt bridge and an already-mounted remote attach Agents surface. Capture metadata remains first-party and cannot authorize renderer paths, SSH details, URLs, tokens, commands, output, or terminal text.
         */
         let Some(sidebar) = self.sidebar.clone() else {
@@ -1316,7 +1316,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:SidebarBrowserTabReveal 2026-08-18:
+    CDXC:Browser 2026-08-18:
     Record that a newly opened Browser tab should be revealed in the sidebar.
     Only the tab identity is stored; the reveal itself is sent once the tab has
     actually been published to the sidebar, so the sidebar never receives a
@@ -1379,7 +1379,7 @@ impl GhostexGpuiApp {
             .copied()
             .collect::<HashSet<_>>();
         /*
-        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        CDXC:Browser 2026-08-26:
         A tab of an inactive project is asleep only when its page is really
         gone. Since a project switch parks the outgoing project's pages instead
         of destroying them, "awake" is per-project surface ownership: the live
@@ -1420,7 +1420,7 @@ impl GhostexGpuiApp {
                     .filter_map(|pane_id| model.active_tab_id_for_pane(pane_id))
                     .collect::<HashSet<_>>();
                 /*
-                CDXC:GPUIBrowserSidebarSessions 2026-07-12:
+                CDXC:Browser 2026-07-12:
                 Only loaded tabs project as sidebar browser sessions. The
                 address-only "New Tab" placeholder (including the in-place
                 reset left behind by closing the last tab) stays out of the
@@ -1452,7 +1452,7 @@ impl GhostexGpuiApp {
             })
             .collect::<Vec<_>>();
         /*
-        CDXC:SidebarBrowserTabReveal 2026-08-18:
+        CDXC:Browser 2026-08-18:
         A reveal may only be sent for a tab this snapshot actually carries;
         otherwise the sidebar would be asked to expand and scroll to a row it
         has never been told about. A pending reveal whose tab is missing from a
@@ -1498,7 +1498,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:AutoSleepDisplayedSessions 2026-08-20:
+        CDXC:SessionSleep 2026-08-20:
         Auto Sleep ("Sleep idle agent sessions") runs in the sidebar runtime,
         which only knows which rows it last saw selected. That is not the same
         thing as what this shell is rendering: a session switched to Chat view
@@ -1547,7 +1547,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandPane 2026-06-25-10:50:
+        CDXC:CommandPane 2026-06-25-10:50:
         Command-pane session indicators use a dedicated first-party sidebar bridge callback and cached `window.ghostexGpui.commandPaneSessions` value so restored tabs can hydrate before React installs listeners. The script may carry only sanitized session summaries, never action command text, cwd, env, status-file paths, terminal output, or project paths.
         */
         let Some(sidebar) = self.sidebar.clone() else {
@@ -1631,7 +1631,7 @@ impl GhostexGpuiApp {
                 let _ = gpui_play_completion_sound(gpui_action_completion_sound_from_settings());
             }
             /*
-            CDXC:GPUIDesktopControlSettings 2026-08-09:
+            CDXC:Extensions 2026-08-09:
             Cua Driver install/update runs as a normal command Action, so its
             exit is the only honest completion signal. Complete the bundled
             Ghostex Computer Use skill step and refresh Settings from that exit
@@ -1661,7 +1661,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandPaneActions 2026-06-26-04:59:
+        CDXC:CommandPane 2026-06-26-04:59:
         Native command-pane Actions keep completed tabs reusable even when older Action definitions requested close-on-exit. Keep this completion close helper as a stale-record guard only; current runtime completions normalize close-on-exit to false and must not remove the Action-owned command tab after sidebar feedback.
         */
         let Some(completed_tab) = self.command_pane.close_completed_action_run_tab(completion)
@@ -1691,7 +1691,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandPane 2026-06-25-10:34:
+        CDXC:CommandPane 2026-06-25-10:34:
         Ending a sidebar command run closes only the live command-pane Action tab mapped to that command id and clears sidebar button feedback. The tab is removed from the command-pane model immediately (macOS command close parity); render reconciliation drops any mounted surface. This path must not inspect command text, terminal output, titles, status-file contents, paths, URLs, or persisted shell JSON.
         */
         let slot = self
@@ -2000,7 +2000,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn toggle_gpui_sidebar_collapsed(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUISidebarCollapse 2026-06-26-10:04:
+        CDXC:Sidebar 2026-06-26-10:04:
         GPUI Cmd+B and the shared `toggleSidebarCollapsed` action collapse only shell chrome state. Preserve `sidebar_width` and cancel divider interaction state so expanding restores the user's resized sidebar without writing a zero-width setting or leaving stale hover/drag chrome active.
         */
         self.sidebar_collapsed = gpui_next_sidebar_collapsed_state(self.sidebar_collapsed);
@@ -2011,7 +2011,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn move_gpui_sidebar_to_other_side(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUISidebarSide 2026-06-26-23:35:
+        CDXC:Sidebar 2026-06-26-23:35:
         `moveSidebar` changes only GPUI sidebar placement and persists the shared `sidebarSide` value. Cancel divider drag/hover state at the move boundary so the visible divider cannot keep stale geometry from the old side.
         */
         self.sidebar_side = gpui_next_sidebar_side(self.sidebar_side);
@@ -2022,7 +2022,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn update_sidebar_cef_surface_visibility(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUISidebarCollapse 2026-07-05:
+        CDXC:Sidebar 2026-07-05:
         Sidebar collapse still removes the sidebar and divider from normal GPUI layout on the next render, but the native CEF child view must hide/show immediately at the toggle boundary. This keeps the titlebar button visually instant without adding overlays, zero-width fallbacks, hit-test rerouting, or persisting a collapsed width.
         */
         let visible = gpui_sidebar_chrome_visible(self.sidebar_collapsed);

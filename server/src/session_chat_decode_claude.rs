@@ -56,7 +56,7 @@ fn claude_content_is_reasoning_only(content: Option<&Value>) -> bool {
 }
 
 /*
-CDXC:SessionChatCore 2026-08-01:
+CDXC:SessionChat 2026-08-01:
 `input_text`/`output_text`/`summary_text` are the Responses-API spellings Codex
 writes inside `response_item` content arrays and inside `custom_tool_call_output`
 payloads. They carry the same `text` field as Anthropic's `text` block, so the
@@ -92,7 +92,7 @@ pub(crate) fn claude_content_block(record: &Map<String, Value>) -> Option<Sessio
 }
 
 /*
-CDXC:SessionChatApiRefusal 2026-08-28:
+CDXC:AgentScreenDetection 2026-08-28:
 Claude Code records a safeguards refusal as a SYNTHETIC assistant row it writes
 itself (`message.model` is `<synthetic>`): `isApiErrorMessage: true` plus
 `message.stop_reason == "refusal"` (mirrored in `stop_details.type`), with the
@@ -201,7 +201,7 @@ pub(crate) fn claude_record_type_can_be_prompt(record: &Map<String, Value>) -> b
 }
 
 /*
-CDXC:SessionChatCore 2026-08-19:
+CDXC:SessionChat 2026-08-19:
 Queue text is matched between the enqueue row and the removal row that releases
 it, and the two are not byte-identical (the removal echoes what the composer
 finally submitted). Whitespace folding is the narrowest normalization that
@@ -238,7 +238,7 @@ const CLAUDE_ATTACHMENT_RECORD_TYPE: &str = "attachment";
 const CLAUDE_QUEUED_COMMAND_ATTACHMENT: &str = "queued_command";
 
 /*
-CDXC:SessionChatCore 2026-08-19:
+CDXC:SessionChat 2026-08-19:
 A prompt the user typed mid-turn is NOT written as a `user` row when the
 harness injects it into the running turn: the queue entry is released as an
 `attachment`/`queued_command` row and the model answers from that. The prompt
@@ -389,7 +389,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
     }
 
     /*
-    CDXC:SessionChatCore 2026-08-01:
+    CDXC:SessionChat 2026-08-01:
     `uuid` is per-ROW; `message.id` is per-API-RESPONSE and is shared by every
     row Claude writes for one assistant turn. Falling back to `message.id` gave
     several rows the same chat id, and the client assembler's id-dedup then

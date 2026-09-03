@@ -25,7 +25,7 @@ const ignoredDirectoryNames = new Set([
 ]);
 
 /*
-CDXC:LocalStartFast 2026-06-07-16:23:
+CDXC:Build 2026-06-07-16:23:
 `bun run start` must not rebuild app resource packages when their runtime inputs are unchanged. Hash explicit source paths, toolchain values, and package metadata so the native build can skip repeated work without relying on stale mtimes or broad fallback behavior.
 */
 const { values, positionals } = parseArgs({

@@ -6,7 +6,7 @@
 use crate::*;
 
 /*
-CDXC:GPUITerminalTextInput 2026-06-23-20:34:
+CDXC:Terminal 2026-06-23-20:34:
 Focused terminal text mount targets derive Debug for compile-time diagnostics and tests, so their Agents and command slot IDs must carry Debug too. The derived output contains only stable numeric IDs, not user-owned terminal text or paths.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -45,7 +45,7 @@ pub(crate) struct TerminalAgentBarCompanionFocusReturn {
 }
 
 /*
-CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
+CDXC:Zmx 2026-07-06:
 Runtime-only identity of the terminal slot that currently owns shell focus,
 compared across renders to mirror macOS
 `refreshZmxPersistenceTerminalIfFocusOrSurfaceChanged`. Carries only slot ids;

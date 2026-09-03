@@ -10,7 +10,7 @@ export type OpenRecentProjectsModalDetail = Pick<
 export type OpenDelayedActionsModalDetail = Extract<OpenAppModalMessage, { modal: 'delayedSend' }>;
 
 /*
- * CDXC:SessionAgentNotes 2026-08-24:
+ * CDXC:SessionNotes 2026-08-24:
  * The session-note editor's open payload, forwarded verbatim from the shared
  * sidebar's `openAppModal` call so the web dialog opens on exactly the note the
  * row was rendering.
@@ -18,7 +18,7 @@ export type OpenDelayedActionsModalDetail = Extract<OpenAppModalMessage, { modal
 export type OpenSessionNoteModalDetail = Extract<OpenAppModalMessage, { modal: 'sessionNote' }>;
 
 /*
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * The New/Edit Space dialog's open payload, forwarded verbatim from the shared
  * sidebar's `openAppModal` call so the web dialog opens on exactly the Space the
  * row was rendering. `remoteMachineId` is the only routing token it carries.
@@ -42,7 +42,7 @@ export interface OpenAddProjectModalDetail {
 }
 
 /*
- * CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
+ * CDXC:TranscriptExport 2026-08-20 / CDXC:TranscriptExport 2026-08-24:
  * The Export Transcript action runs from two mounts of the same host-action
  * cluster (the chat surface and the terminal surface's floating overlay), so
  * its dialog cannot live inside either one. The action only names the session
@@ -70,7 +70,7 @@ export interface RunTitlebarActionDetail {
 }
 
 /**
- * CDXC:RemoteSetup 2026-09-03:
+ * CDXC:RemotePairing 2026-09-03:
  * Settings deep-link fields the web shell honours: the tab, and the Remote tab
  * card the Remote Setup modal hands off to.
  */

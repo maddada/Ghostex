@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::ghostex_cli::rpc::CliResult;
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's lightweight attach picker and compact session
 list printing (scripts/ghostex-cli.mjs lines 76-122 and 6178-6560). The rendered
 bytes — ANSI styles, agent indicator labels, layout, ordering, viewport math —

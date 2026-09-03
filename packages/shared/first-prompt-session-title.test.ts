@@ -8,7 +8,7 @@ import {
 describe('first-prompt auto naming current title selection', () => {
   test('should claim generic titles but preserve meaningful terminal-synced titles', () => {
     /**
-     * CDXC:SessionTitleSync 2026-05-08-16:23
+     * CDXC:SessionTitles 2026-05-08-16:23
      * Codex can publish a good terminal title before the first-prompt hook is
      * polled. That title must count as the current title so the pending prompt
      * does not generate and send a redundant `/rename <generated title>`.
@@ -67,7 +67,7 @@ describe('Pi first-prompt auto naming', () => {
 describe('Cursor first-prompt auto naming', () => {
   test('should not auto generate titles because Cursor names sessions itself', () => {
     /**
-     * CDXC:SessionTitleSync 2026-05-30-05:44:
+     * CDXC:SessionTitles 2026-05-30-05:44:
      * Cursor Agent owns its session titles by default, so Ghostex must not run
      * first-prompt title generation or send `/rename` for Cursor sessions.
      */
@@ -88,7 +88,7 @@ describe('Cursor first-prompt auto naming', () => {
 describe('Claude first-prompt auto naming', () => {
   test('should send a bare rename command strategy for generic titles', () => {
     /**
-     * CDXC:SessionTitleSync 2026-06-12-07:08:
+     * CDXC:SessionTitles 2026-06-12-07:08:
      * Claude Code hook activity can begin before the CLI has a meaningful
      * session title. Ghostex should stage bare `/rename` for generic Claude
      * titles and let Claude generate the title itself.
@@ -111,7 +111,7 @@ describe('Claude first-prompt auto naming', () => {
 describe('first-prompt slash command mentions', () => {
   test('should allow title generation when slash commands are not at the start of a line', () => {
     /**
-     * CDXC:SessionTitleSync 2026-05-30-05:18:
+     * CDXC:SessionTitles 2026-05-30-05:18:
      * Forked Codex sessions must still generate a first-prompt title when the
      * user's natural-language request mentions `/rename` as product behavior.
      * Only short slash-command invocations at the start of a line should

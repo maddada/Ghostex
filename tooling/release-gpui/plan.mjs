@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The release planner. Given the git tree at the source commit, the release
  * scope flags, and the provenance of recent releases (and optionally a nominated
  * source run), it decides for every product whether the release must `build` it,
@@ -293,7 +293,7 @@ function planJobs({ components, products }) {
     macos: action('macos-arm64'),
     reuse_matrix: PRODUCT_IDS.filter((productId) => action(productId) === 'reuse'),
     /*
-     * CDXC:WindowsValidationIsNotAGate 2026-09-01:
+     * CDXC:Release 2026-09-01:
      * There is deliberately no `validate_windows` flag here. Both release-gpui.yml
      * and release-amend-existing.yml deleted that job — the Windows packaging jobs
      * compile the same tree natively and ARE the Windows compile validation — so

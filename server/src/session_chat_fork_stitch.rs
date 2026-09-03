@@ -17,11 +17,11 @@ use crate::session_chat_successor::{
 use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
 
 /*
-CDXC:SessionChatForkStitch 2026-08-28:
+CDXC:SessionFork 2026-08-28:
 `codex fork` (codex-cli >= 0.149) does NOT replay history into the file it
 opens: the new rollout starts with a `session_meta` naming its predecessor in
 `payload.forked_from_id` and then continues appending. The follower already
-adopts the successor for LIVE streaming (CDXC:SessionChatIdentity 2026-08-24),
+adopts the successor for LIVE streaming (CDXC:SessionIdentity 2026-08-24),
 but chat pagination pages by byte offset inside ONE file, so scroll-back used to
 dead-end at the fork point while the terminal scrollback still showed the whole
 thread. This module stitches the lineage back together on the read path.
@@ -323,7 +323,7 @@ fn session_meta_timestamp_ms(path: &Path) -> Option<i64> {
 }
 
 /*
-CDXC:SessionChatForkStitch 2026-08-28 (divider ordering):
+CDXC:SessionFork 2026-08-28 (divider ordering):
 The client assembler sorts by timestamp and maps a null timestamp to -Infinity,
 which threw a timestamp-less divider to the very top of the whole thread instead
 of the fork seam. The divider therefore carries a synthesized timestamp: the

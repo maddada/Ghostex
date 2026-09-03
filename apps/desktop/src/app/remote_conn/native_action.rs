@@ -393,7 +393,7 @@ impl GhostexGpuiApp {
             }
             GpuiSidebarNativeProjectPathAction::OpenRemoteProjectPortsBrowser => {
                 /*
-                CDXC:GPUIRemotePortsBrowser 2026-07-30:
+                CDXC:RemoteMachines 2026-07-30:
                 A remote project's Browser pane opens on the machine's
                 listening-ports page: Rust lists the sockets over the saved
                 SSH configuration, renders a local HTML page whose rows link

@@ -66,7 +66,7 @@ release_gpui_assert_dmg_budget() {
 	printf 'Release DMG size: %.1f MiB / 300.0 MiB budget\n' "$(awk -v bytes="$size_bytes" 'BEGIN { print bytes / 1048576 }')"
 }
 
-# CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+# CDXC:Release 2026-08-13:
 # Every producing job also emits the per-product provenance record next to its
 # manifest, so the publisher can cross-check plan <-> manifest <-> provenance
 # instead of trusting a hand-written duplicate. It runs only when the job was

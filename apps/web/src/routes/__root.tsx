@@ -50,7 +50,7 @@ function ShellIcon({ name }: { name: IconName }) {
 }
 
 /*
- * CDXC:NavigationHistory 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * The web titlebar names the ACTIVE PROJECT in the same slot the gpui titlebar
  * does, falling back to the product name before any project is selected. Back
  * and Forward sit LEFT of it, anchored to the fixed-width sidebar toggle, so

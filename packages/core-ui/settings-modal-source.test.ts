@@ -10,7 +10,7 @@ const sharedSidebarContractSource = readFileSync(
   new URL('../shared/session-grid-contract-sidebar.ts', import.meta.url),
   'utf8'
 );
-// CDXC:SettingsModalSplit 2026-08-22: settings-modal.tsx was split into
+// CDXC:RepoStructure 2026-08-22: settings-modal.tsx was split into
 // packages/core-ui/settings-modal/*; these mirror the pieces raw-source
 // assertions below now need to read from.
 const settingsModalFieldsSource = readFileSync(new URL('./settings-modal/fields.tsx', import.meta.url), 'utf8');
@@ -28,7 +28,7 @@ const settingsModalPortlessTabSource = readFileSync(
   new URL('./settings-modal/tabs/portless.tsx', import.meta.url),
   'utf8'
 );
-// CDXC:SettingsModalSplit 2026-08-23: the inline SettingsModal hook/logic block
+// CDXC:RepoStructure 2026-08-23: the inline SettingsModal hook/logic block
 // was decomposed into packages/core-ui/settings-modal/*; these mirror the pieces
 // the raw-source assertions below now need to read from.
 const settingsModalSearchCatalogSource = readFileSync(
@@ -68,7 +68,7 @@ function sourceBetween(source: string, start: string, end: string): string {
   return source.slice(startIndex, endIndex);
 }
 
-// CDXC:SettingsModalSplit 2026-08-22: some markers used to bound a slice up to
+// CDXC:RepoStructure 2026-08-22: some markers used to bound a slice up to
 // the NEXT top-level declaration in the old monolithic settings-modal.tsx.
 // After the split that next declaration can live in a different file, so
 // there is no longer an `end` marker to search for in the same source; take
@@ -82,12 +82,12 @@ function sourceFrom(source: string, start: string): string {
 describe('settings modal source', () => {
   test('keeps Agents Hub tab rail visibly bordered while Settings uses sidebar navigation', () => {
     /*
-     * CDXC:AppModalTabs 2026-06-24-04:25:
+     * CDXC:AppModal 2026-06-24-04:25:
      * Agents Hub top-level tabs use the app-modal tab style, and that style
      * must keep a visible 1px #252525 outside border plus single-pixel internal
      * dividers.
      *
-     * CDXC:SettingsNavigation 2026-06-24-22:16:
+     * CDXC:Settings 2026-06-24-22:16:
      * Settings must not render the app-modal top tab rail anymore; Settings
      * page navigation belongs in the left sidebar.
      */
@@ -107,31 +107,31 @@ describe('settings modal source', () => {
 
   test('keeps Settings page navigation and Show Advanced inside the sidebar', () => {
     /*
-     * CDXC:SettingsNavigation 2026-06-19-08:40:
+     * CDXC:Settings 2026-06-19-08:40:
      * The macOS Settings section list and Show Advanced filter should render
      * as one sidebar surface, not as separate floating controls.
      *
-     * CDXC:SettingsNavigation 2026-06-24-22:16:
+     * CDXC:Settings 2026-06-24-22:16:
      * Top-level Settings pages and expandable page sections now share that
      * sidebar, replacing the old top tab bar.
      *
-     * CDXC:SettingsNavigation 2026-06-25-17:12:
+     * CDXC:Settings 2026-06-25-17:12:
      * Only top-level Settings categories should get Tabler icons; nested
      * expandable section rows remain text-only.
      *
-     * CDXC:SettingsNavigation 2026-06-25-17:58:
+     * CDXC:Settings 2026-06-25-17:58:
      * Expanded subsection titles should indent 14px farther than the base
      * sidebar button text while keeping the full-row highlight intact.
      *
-     * CDXC:SettingsNavigation 2026-06-25-18:05:
+     * CDXC:Settings 2026-06-25-18:05:
      * Active subsection rows should not have a filled background; use dim
      * inactive text and brighter active text to show section selection.
      *
-     * CDXC:SettingsNavigation 2026-06-25-22:10:
+     * CDXC:Settings 2026-06-25-22:10:
      * The macOS Settings sidebar container should sit 1px higher than the
      * default grid alignment so it lines up with the native window chrome.
      *
-     * CDXC:SettingsAdvanced 2026-06-28-18:14:
+     * CDXC:Settings 2026-06-28-18:14:
      * Show Advanced is persisted in the settings draft. Do not keep a duplicate
      * local state copy that can initialize before native settings hydrate and
      * reset the switch on reopen.
@@ -213,7 +213,7 @@ describe('settings modal source', () => {
 
   test('persists Settings location while browsing the native Settings window', () => {
     /*
-     * CDXC:SettingsNavigation 2026-06-30-04:47:
+     * CDXC:Settings 2026-06-30-04:47:
      * The native AppKit Settings close button can tear down the child window
      * before React's Dialog close callback runs. Persist the selected Settings
      * page immediately and persist scroll after a short idle window so app
@@ -246,7 +246,7 @@ describe('settings modal source', () => {
 
   test('uses the native window title instead of duplicate Settings chrome', () => {
     /*
-     * CDXC:SettingsWindow 2026-06-25-17:05:
+     * CDXC:Settings 2026-06-25-17:05:
      * The native Settings titlebar owns the visible "Ghostex Settings" title.
      * React should not duplicate a large Settings heading or render an extra
      * close button inside the content surface.
@@ -264,11 +264,11 @@ describe('settings modal source', () => {
 
   test('keeps settings search at the top of the content column outside the sidebar', () => {
     /*
-     * CDXC:SettingsNavigation 2026-06-19-12:18:
+     * CDXC:Settings 2026-06-19-12:18:
      * Settings and Hotkeys search should center above the settings card column,
      * independent of the floating left sidebar.
      *
-     * CDXC:SettingsNavigation 2026-06-24-22:16:
+     * CDXC:Settings 2026-06-24-22:16:
      * Settings has one search field above the active content column while page
      * and section navigation lives in the sidebar.
      */
@@ -283,12 +283,12 @@ describe('settings modal source', () => {
 
   test('keeps focused text fields from being redirected into settings search', () => {
     /*
-     * CDXC:SettingsTextFields 2026-06-19-16:53:
+     * CDXC:Settings 2026-06-19-16:53:
      * Font Family and other Settings text fields must keep printable typing in
      * the focused input while immediate-save settings updates round-trip
      * through the native modal host.
      *
-     * CDXC:SettingsSearch 2026-06-25-21:21:
+     * CDXC:Settings 2026-06-25-21:21:
      * Settings search may prefill from deep links and printable-key capture,
      * but automatic focus must not move from an already-focused Settings text
      * field, including portal-rendered popover inputs, into the search field.
@@ -331,20 +331,20 @@ describe('settings modal source', () => {
 
   test('keeps hook and skill uninstall controls beside their install controls', () => {
     /*
-     * CDXC:IntegrationsSetup 2026-06-21-02:54:
+     * CDXC:RemotePairing 2026-06-21-02:54:
      * Hooks & Skills uninstall controls must disable their no-op states when
      * hooks or bundled skills are already absent.
      *
-     * CDXC:AgentHookSettings 2026-06-29-01:26:
+     * CDXC:AgentHooks 2026-06-29-01:26:
      * Agent hook setup belongs in Settings > Agents, so Integrations must not
      * duplicate the Agent Hooks row.
      *
-     * CDXC:AgentHookSettings 2026-08-19-11:20:
+     * CDXC:AgentHooks 2026-08-19-11:20:
      * Removal lives next to the install control it undoes — a per-agent remove
      * on each installed hook row plus one Uninstall All in the hooks toolbar —
      * instead of a separate Hooks & Skills recovery card.
      *
-     * CDXC:AgentHookSettings 2026-08-28:
+     * CDXC:AgentHooks 2026-08-28:
      * Settings > Agents has one roster card. The standalone Agent Hooks card is
      * gone, so hook install/uninstall must live in the merged card's toolbar and
      * in each expandable agent row.
@@ -390,7 +390,7 @@ describe('settings modal source', () => {
 
   test('gates Keep Awake settings behind Enable Experimental Features', () => {
     /*
-     * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+     * CDXC:Settings 2026-06-28-07:41:
      * Keep Awake is experimental-only in regular macOS Settings, but the
      * Experimental section must name the hidden Power settings and titlebar
      * button so search can lead users to the opt-in gate.
@@ -423,7 +423,7 @@ describe('settings modal source', () => {
 
   test('hides debugging settings below Show debug UI controls when disabled', () => {
     /*
-     * CDXC:DebuggingSettings 2026-06-28-18:14:
+     * CDXC:Diagnostics 2026-06-28-18:14:
      * Disabling Show debug UI controls should hide the related Debugging rows
      * below it, and Settings search/navigation should use the same gate so
      * hidden diagnostic rows do not leave an empty Debugging section.
@@ -462,7 +462,7 @@ describe('settings modal source', () => {
 
   test('shows unavailable gxserver-owned default prompt agents without selecting Codex', () => {
     /*
-     * CDXC:GxserverAgentSettings 2026-06-19-08:58:
+     * CDXC:AgentProviders 2026-06-19-08:58:
      * Settings must preserve and display a gxserver-owned Default Prompt Agent
      * even when the local launcher registry cannot currently provide a command.
      * Showing an unavailable row is preferable to visually falling back to Codex.
@@ -481,7 +481,7 @@ describe('settings modal source', () => {
 
   test('routes settings select popups through the close-before-write wrapper', () => {
     /*
-     * CDXC:SettingsDropdowns 2026-06-19-19:22:
+     * CDXC:Settings 2026-06-19-19:22:
      * Changing Settings dropdowns in the macOS modal must close the popup
      * before native and gxserver settings hydration can re-render the dialog,
      * otherwise the portaled popup can keep input trapped.
@@ -506,10 +506,10 @@ describe('settings modal source', () => {
 
   test('keeps dev-server controls in the Terminal settings flow', () => {
     /*
-     * CDXC:TerminalDevServers 2026-06-23-19:22:
+     * CDXC:Resources 2026-06-23-19:22:
      * Dev-server detection and ignored ports should live in a dedicated Terminal settings section rather than the generic Browser section or a per-browser checklist.
      *
-     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * CDXC:Navigation 2026-08-19:
      * The launch choice moved the other way: it is now the Browser section's single web-link target, shared with terminal and session chat links.
      */
     const sectionKeys = sourceBetween(settingsModalTypesSource, 'terminalDevServers: [', 'browser: [');
@@ -533,7 +533,7 @@ describe('settings modal source', () => {
 
   test('keeps terminal pane padding sliders in Terminal settings', () => {
     /*
-     * CDXC:TerminalPanePadding 2026-06-25-21:27:
+     * CDXC:Terminal 2026-06-25-21:27:
      * Inner terminal pane padding is a Terminal settings control with separate
      * horizontal and vertical sliders. It should not be modeled as Workspace
      * pane gap or Terminal Behavior because it changes AppKit terminal content
@@ -563,7 +563,7 @@ describe('settings modal source', () => {
 
   test('closes the custom tint picker dialog before final setting commits', () => {
     /*
-     * CDXC:SidebarTitlebarColors 2026-06-19-19:51:
+     * CDXC:Theming 2026-06-19-19:51:
      * The custom Background Tint picker is a nested dialog, not a dropdown,
      * but it still must close before final settings persistence can re-render
      * the macOS Settings modal.
@@ -582,7 +582,7 @@ describe('settings modal source', () => {
 
   test('keeps project deletion out of the Projects settings page', () => {
     /*
-     * CDXC:ProjectSettings 2026-06-19-12:11:
+     * CDXC:Projects 2026-06-19-12:11:
      * Projects settings edits selected-project metadata only. The standalone
      * trash action should not be available from this page.
      */
@@ -600,7 +600,7 @@ describe('settings modal source', () => {
 
   test('keeps Portless global settings out of the Projects tab', () => {
     /*
-     * CDXC:PortlessSettings 2026-06-23-03:47 / CDXC:RemotePairing 2026-09-03:
+     * CDXC:Portless 2026-06-23-03:47 / CDXC:RemotePairing 2026-09-03:
      * Phase 14 put app-wide Portless controls at the top of Settings ->
      * Projects. The panel was later hidden behind PORTLESS_SETTINGS_VISIBLE and
      * its gated render plus the dead portless props were removed from the
@@ -622,7 +622,7 @@ describe('settings modal source', () => {
 
   test('keeps the Portless panel defaults wired to normalized global settings', () => {
     /*
-     * CDXC:PortlessSettings 2026-06-23-03:47:
+     * CDXC:Portless 2026-06-23-03:47:
      * The retained Portless panel still reads the global settings defaults
      * from normalizeghostexSettings (Portless enabled and HTTPS protocol) even
      * though the Projects tab no longer mounts it.
@@ -648,7 +648,7 @@ describe('settings modal source', () => {
 
   test('keeps Portless settings actions explicit and sanitized', () => {
     /*
-     * CDXC:PortlessSettings 2026-06-23-03:47:
+     * CDXC:Portless 2026-06-23-03:47:
      * Settings actions can install, reconfigure, retry, disable, or remove the
      * Ghostex-managed proxy, but the sidebar command may carry only enum action,
      * request id, and selected protocol metadata.
@@ -672,7 +672,7 @@ describe('settings modal source', () => {
 
   test('shows assigned Portless domains as read-only project and worktree summaries', () => {
     /*
-     * CDXC:PortlessSettings 2026-06-23-03:47:
+     * CDXC:Portless 2026-06-23-03:47:
      * Phase 14 displays generated project/worktree domains without slug edit,
      * reset, or input controls. Worktree grouping needs only stable project ids.
      */
@@ -702,7 +702,7 @@ describe('settings modal source', () => {
 
   test('wires the App Icon picker to the native wire contract with prop-driven confirm-before-persist', () => {
     /*
-     * CDXC:AppIconPicker 2026-06-28-06:05:
+     * CDXC:Icons 2026-06-28-06:05:
      * The App Icon section must remain an advanced custom-image flow, speak the
      * exact native wire-contract messages, receive appIconState as a PROP
      * relayed through the modal host (mirroring osIntegrationStatus, not direct
@@ -710,7 +710,7 @@ describe('settings modal source', () => {
      * (confirm-before-persist), and render one preview with Select Image plus
      * an inline default-restore X.
      *
-     * CDXC:SettingsNavigation 2026-06-30-01:23:
+     * CDXC:Settings 2026-06-30-01:23:
      * App Icon now lives under the grouped Appearance navigation item rather
      * than owning a separate sidebar row.
      */
@@ -772,7 +772,7 @@ describe('settings modal source', () => {
 
   test('relays appIconState through the modal host like osIntegrationStatus', () => {
     /*
-     * CDXC:AppIconPicker 2026-06-28-06:05:
+     * CDXC:Icons 2026-06-28-06:05:
      * SettingsModal renders in the modal-host child window, so the native
      * appIconState host event must be relayed to the modal host through the same
      * main-bus + sidebarState plumbing used by osIntegrationStatus. App-icon
@@ -789,7 +789,7 @@ describe('settings modal source', () => {
 
   test('keeps the open project selector neutral', () => {
     /*
-     * CDXC:ProjectSettings 2026-06-19-12:22:
+     * CDXC:Projects 2026-06-19-12:22:
      * The Projects dropdown trigger should use neutral Settings colors when
      * open, not the app accent color that appears blue in dark themes.
      */

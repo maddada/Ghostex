@@ -99,16 +99,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarAppModalHost 2026-06-24-11:09:
+        CDXC:AppModal 2026-06-24-11:09:
         The GPUI titlebar Settings glyph opens this NativeMenu so Settings, Hotkeys, and Command Palette all have typed titlebar actions into the shared React app-modal host. Keep this menu OS-owned and action-backed, with no visual-only dropdown, fake control, WebKit surface, overlay, hidden hit region, or generic fallback behavior.
 
-        CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
+        CDXC:Sessions 2026-06-24-11:53:
         Previous Sessions is exposed from the same titlebar NativeMenu so GPUI opens the shared history/restore modal through a typed app-modal action rather than duplicating the React UI or adding an overlay surface.
 
-        CDXC:GPUIAgentsHubModal 2026-06-24-12:26:
+        CDXC:AgentLauncher 2026-06-24-12:26:
         Agents Hub belongs in the same typed GPUI app-modal route as the Settings utility surfaces. The menu action must open the shared React Hub in the owned CEF app-modal host while Rust supplies the real filesystem catalog/content bridge instead of duplicate modal UI or fallback rows.
 
-        CDXC:GPUISettingsEntryModals 2026-06-24-12:22:
+        CDXC:Settings 2026-06-24-12:22:
         Configure Agents, Configure Actions, and Open Targets belong in the same typed NativeMenu because macOS/React already treat them as Settings-modal entry points. Keep the menu action-backed so GPUI opens the shared Settings host with the requested initial tab instead of introducing a second modal surface.
         */
         NativeMenu::new()
@@ -131,7 +131,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarCompactMode 2026-07-04-01:00:
+        CDXC:Titlebar 2026-07-04-01:00:
         The compact titlebar mode picker is an OS-owned NativeMenu for narrow windows. Rows are projected from the same titlebar_mode_switcher_items list as the center tabs, disabled states stay disabled in Quick/projectless contexts, and selections dispatch through set_active_mode rather than mutating active_mode directly.
         */
         let mut menu = NativeMenu::new();
@@ -161,7 +161,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarCustomize 2026-08-11:
+        CDXC:Titlebar 2026-08-11:
         Right-clicking blank titlebar chrome or a workarea mode button should
         expose the page that owns titlebar visibility. Keep this as an OS-owned
         NativeMenu action into the existing Settings > Extensions route (the
@@ -205,7 +205,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarOpenIn 2026-06-24-12:50:
+        CDXC:Titlebar 2026-06-24-12:50:
         The visible GPUI titlebar folder control mirrors macOS Open In behavior with an in-app gpui-component PopupMenu. Menu rows remain typed GPUI actions, Configure routes to the shared Open Targets Settings tab, and the control must not add React overlays, WebKit dropdowns, invisible hit regions, hit-test overrides, or synthetic coordinate routing.
         */
         self.set_gpui_titlebar_popup_open(
@@ -224,7 +224,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarActions 2026-06-24-14:24:
+        CDXC:Titlebar 2026-06-24-14:24:
         Right-clicking the visible GPUI titlebar Actions play control opens an in-app gpui-component PopupMenu of sidebar actions plus Configure. Rows dispatch typed GPUI actions by visible index into the current projected action list, unconfigured rows route through the existing Settings > Actions path, and the control must not add React overlays, WebKit dropdowns, invisible hit regions, hit-test overrides, or synthetic coordinate routing.
         */
         self.set_gpui_titlebar_popup_open(

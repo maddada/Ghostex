@@ -4,7 +4,7 @@ import type { SidebarSpace, SidebarSpacesState } from '../spaces';
 import { createProjectCollectionIdByProjectId, type SidebarProjectGroupLookup } from './drag-drop-geometry';
 
 /*
-CDXC:SidebarSpaces 2026-08-27:
+CDXC:Spaces 2026-08-27:
 A Space is scoped to the gxserver that owns its projects, so every Space-aware
 value in the sidebar is keyed by SECTION rather than by machine alone: the local
 Projects section and each remote machine section each have their own Space set,
@@ -13,7 +13,7 @@ place those keys are minted, so the persisted selection map
 (`selectedSpaceIdBySectionKey`), the dnd sortable ids, and the Space-editor
 modal payload cannot drift apart.
 
-CDXC:SidebarSpaces 2026-09-02:
+CDXC:Spaces 2026-09-02:
 The one built-in view is "Other" (packages/shared/sidebar-spaces-other.ts): the
 last button of every Space row, showing exactly what no user Space claims. It
 has a reserved id rather than being "no selection", so a section is always
@@ -27,7 +27,7 @@ export function createRemoteSidebarSpaceSectionKey(machineId: string): string {
 }
 
 /*
-CDXC:SidebarSpaces 2026-08-27:
+CDXC:Spaces 2026-08-27:
 Membership is stored on collections ("groups") and ungrouped projects only.
 Everything else is derived here:
 
@@ -83,7 +83,7 @@ export function createSidebarSpaceGroupVisibility({
 }
 
 /*
-CDXC:SidebarSpaces 2026-09-02:
+CDXC:Spaces 2026-09-02:
 The built-in Other view, built on the shared rule the mobile app mirrors. It is
 the complement of `createSidebarSpaceGroupVisibility` over EVERY Space the
 section's gxserver owns, resolved from the same collection map so a worktree and
@@ -136,7 +136,7 @@ export type SelectedSidebarSpace =
   | { kind: 'space'; space: SidebarSpace; spaceId: string };
 
 /**
- * CDXC:SidebarSpaces 2026-09-02:
+ * CDXC:Spaces 2026-09-02:
  * The default selection rule, in one place: a section with nothing stored — and
  * a section whose stored Space no longer exists, deleted from another client or
  * from a daemon that has since replaced its whole Space document — shows the

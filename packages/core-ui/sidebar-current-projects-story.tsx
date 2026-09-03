@@ -184,7 +184,7 @@ function createCurrentProjectGroups(
   activeProjectId: string | undefined
 ): SidebarSessionGroup[] {
   /**
-   * CDXC:SidebarScroll 2026-05-20-08:08:
+   * CDXC:Sidebar 2026-05-20-08:08:
    * The current-projects regression story must mirror Combined mode: one Quick
    * group for chat sessions followed by one project row per non-recent code
    * project. Keeping zmux expanded with its real session count reproduces the

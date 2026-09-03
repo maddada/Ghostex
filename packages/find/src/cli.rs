@@ -108,7 +108,7 @@ pub fn run(args: &[String]) -> i32 {
         i += 1;
     }
 
-    // CDXC:AgentHistorySearch 2026-06-07-14:59:
+    // CDXC:PromptSearch 2026-06-07-14:59:
     // Interactive startup can spend visible time indexing previous agent prompts
     // and metadata before the picker appears. Show a transient terminal status
     // line while scanning so users are not left staring at a blank launch.

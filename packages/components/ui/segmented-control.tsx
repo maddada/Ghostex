@@ -7,7 +7,7 @@ import { ToggleGroup as ToggleGroupPrimitive } from '@base-ui/react/toggle-group
 import { cn } from '../utils';
 
 /*
- * CDXC:SegmentedControl 2026-08-24:
+ * CDXC:DesignSystem 2026-08-24:
  * The one segmented single-select control for the whole app. It renders the
  * stock shadcn ButtonGroup shape — a single bordered, rounded container whose
  * segments are flat, share one hairline, and only the outer corners are

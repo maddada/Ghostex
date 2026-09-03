@@ -29,7 +29,7 @@ type ProjectCollectionDragData = {
 };
 
 /*
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * A Space button dragged inside its section's Space row. `sectionKey` is part
  * of the payload because the same row renders once per gxserver section and a
  * Space may only be reordered among its own section's Spaces.
@@ -418,7 +418,7 @@ function getSidebarSessionDropTargetFromElement(
       const bounds = sessionElement.getBoundingClientRect();
       const relativeY = clientY ?? bounds.top + bounds.height / 2;
       /*
-       * CDXC:SidebarDragDrop 2026-06-19-11:12:
+       * CDXC:Sidebar 2026-06-19-11:12:
        * Session insertion indicators should never disappear at row center.
        * Treat the midpoint as the first pixel of the lower half so center/down
        * shows an after-line and center/up shows a before-line.
@@ -435,7 +435,7 @@ function getSidebarSessionDropTargetFromElement(
   }
 
   /*
-   * CDXC:SidebarDragDrop 2026-07-02-13:05:
+   * CDXC:Sidebar 2026-07-02-13:05:
    * The pointer can land in the padding between two session rows, where the
    * hit-tested element is the group container instead of a row. Resolving that
    * to a group start/end target made the insertion line teleport to the list
@@ -486,7 +486,7 @@ function getSidebarSessionDropTargetFromElement(
 
 export function canonicalizeSidebarSessionDropTarget(target: SidebarSessionDropTarget): SidebarSessionDropTarget {
   /*
-   * CDXC:SidebarDragDrop 2026-07-02-13:05:
+   * CDXC:Sidebar 2026-07-02-13:05:
    * Targets resolved from dnd-kit drop data bypass the DOM hit-testing path,
    * so they can still carry the "after A" form of a boundary. Normalize them
    * to the same "before next row" form as pointer hit testing so every
@@ -528,7 +528,7 @@ function canonicalizeSessionRowBoundary(
   }
 
   /*
-   * CDXC:SidebarDragDrop 2026-07-02-13:05:
+   * CDXC:Sidebar 2026-07-02-13:05:
    * The boundary between two rows can be expressed as "after A" or "before B",
    * which draw on different pseudo-elements a few pixels apart. Always emit
    * the "before next row" form so one boundary maps to exactly one insertion
@@ -571,7 +571,7 @@ function getSidebarGroupDropTargetFromElement(
   }
 
   /*
-   * CDXC:ProjectReorder 2026-05-22-22:18:
+   * CDXC:Projects 2026-05-22-22:18:
    * Project reorder insertion lines should be stable while dragging across
    * expanded projects. Resolve before/after from the visible header row instead
    * of the full group height so session lists do not move the midpoint.

@@ -21,7 +21,7 @@ export type SessionNoteModalProps = {
 };
 
 /**
- * CDXC:SessionAgentNotes 2026-08-24:
+ * CDXC:SessionNotes 2026-08-24:
  * "What to do next in this thread". The note is filed against the session's
  * provider conversation id, not the Ghostex session, so it survives closing the
  * row and resuming the same agent conversation later — which is why this dialog
@@ -49,7 +49,7 @@ export function SessionNoteModal({ initialNote, isOpen, onCancel, onConfirm, ses
   }, [initialNote, isOpen]);
 
   /**
-   * CDXC:SessionAgentNotes 2026-08-24:
+   * CDXC:SessionNotes 2026-08-24:
    * Same focus contract as Rename Session: own the initial focus through the
    * dialog's `initialFocus` hook (returning false so base-ui does not re-focus
    * afterwards) and keep re-requesting it across the native child window's

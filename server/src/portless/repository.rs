@@ -10,64 +10,64 @@ const PORTLESS_STATE_ID: &str = "global";
 const MAX_STABLE_KEY_LEN: usize = 160;
 
 /*
-CDXC:PortlessPersistence 2026-06-22-22:41:
+CDXC:Portless 2026-06-22-22:41:
 server owns Portless durable metadata in SQLite during the first local macOS integration. Metadata APIs stay database-only; Phase 6 adds an explicit route-sync API for the separate Ghostex-managed Portless state directory.
 
-CDXC:PortlessPersistence 2026-06-22-22:41:
+CDXC:Portless 2026-06-22-22:41:
 Persist project and worktree slugs separately from project display names, worktree display names, paths, branches, and terminal content. Phase 4 accepts explicit slugs only; slug generation, backfill, collision suffixing, and rename-derived changes are Phase 5 work.
 
-CDXC:PortlessPersistence 2026-06-22-22:41:
+CDXC:Portless 2026-06-22-22:41:
 Setup and runtime state is metadata-only and enum-like. Keep it limited to enabled/protocol/ownership/status values so persistence cannot store project names, worktree names, paths, URLs, hostnames, command text, tokens, environment values, or user content.
 
-CDXC:PortlessSlugAllocation 2026-06-22-22:49:
+CDXC:Portless 2026-06-22-22:49:
 Generated project slugs and worktree suffixes are one-time durable metadata. ensure_* APIs must return existing rows before inspecting display names, branches, or paths so user-facing renames cannot silently change local domains.
 
-CDXC:PortlessSlugAllocation 2026-06-22-22:49:
+CDXC:Portless 2026-06-22-22:49:
 Worktree domain parts use the parent project's persisted project slug plus a separately persisted suffix. At first allocation, the suffix source order is stored worktree name, then the last branch segment, then a deterministic worktree-key fallback; raw branch, path, and display-name text may only influence the normalized hostname-safe label.
 
-CDXC:PortlessSlugAllocation 2026-06-22-22:49:
+CDXC:Portless 2026-06-22-22:49:
 Collision handling is append-only: the earliest existing or backfilled record keeps the clean label, while later records receive a deterministic stable-id suffix. Existing persisted labels are reserved and never reshuffled during later backfills.
 
-CDXC:PortlessState 2026-06-22-23:05:
+CDXC:Portless 2026-06-22-23:05:
 Portless active route state is mirrored directly to the resolved Ghostex Portless state directory using Portless 0.14.0's array schema with hostname, port, and pid fields. Ghostex live routes must carry the actual listener pid; pid 0 remains Portless's static-alias convention and is rejected here.
 
-CDXC:PortlessState 2026-06-22-23:05:
+CDXC:Portless 2026-06-22-23:05:
 The Portless package serializes empty route sets as an empty routes.json array rather than removing the file, so Ghostex cleanup writes [] to replace stale routes. The writer takes routes.lock as a directory lock, writes a same-directory temp file, flushes it, then renames over routes.json without persistent logging.
 
-CDXC:PortlessOwnership 2026-06-22-23:15:
+CDXC:Portless 2026-06-22-23:15:
 Phase 7 listener detection may only adopt dev servers whose listener pid is in the live process tree of a running Ghostex zmx session. Do not infer ownership from cwd, project-looking names, command text, hostnames, URLs, or stale session rows.
 
-CDXC:PortlessOwnership 2026-06-22-23:15:
+CDXC:Portless 2026-06-22-23:15:
 Detected listeners are temporary metadata only. A listener must appear in the current TCP listener snapshot and the current zmx-rooted process tree; when either disappears, the computed desired listener set drops it instead of preserving a fallback route.
 
-CDXC:PortlessRouteNaming 2026-06-22-23:28:
+CDXC:Portless 2026-06-22-23:28:
 Desired route computation is metadata-only: convert only the supplied live owned listeners to temporary PortlessRoute values, use persisted or backfilled slugs for base domains, preserve listener port and pid, and never touch routes.json or Portless state files.
 
-CDXC:PortlessRouteNaming 2026-06-22-23:28:
+CDXC:Portless 2026-06-22-23:28:
 Each project/worktree group has one primary domain selected by 3000, 5173, 5174, 8080, 8000, then the lowest remaining port. Other live listeners use p<port>.<base-domain> so multiple live servers in one group stay addressable without permanent service names.
 
-CDXC:PortlessBackgroundSync 2026-06-22-23:40:
+CDXC:Portless 2026-06-22-23:40:
 Phase 9 route sync is policy-driven and independent of Resources/sidebar polling. When Portless is enabled, server computes desired routes from the current live Ghostex-owned listener set, mirrors them only for Ghostex-owned active setup metadata, writes [] for disabled state, and skips setup-missing/failed/non-Ghostex states instead of inventing service detection.
 
-CDXC:PortlessBackgroundSync 2026-06-22-23:40:
+CDXC:Portless 2026-06-22-23:40:
 The current gxserver health, presentation, and sidebar contracts have no Portless status field. Keep setup-needed/setup-failed/status as an internal sync outcome until Phase 12 adds a metadata-only wire contract, rather than broadcasting an ad hoc UI payload.
 
-CDXC:PortlessServiceDetection 2026-06-22-23:58:
+CDXC:Portless 2026-06-22-23:58:
 Phase 10 detects the global macOS Portless service from launchd plist metadata before route sync. The classification stores only setup/runtime enums: missing means Install, standalone means takeover prompt, Ghostex config mismatch means Reconfigure, Ghostex unreachable means Retry, and active means routes may be mirrored.
 
-CDXC:PortlessServiceDetection 2026-06-22-23:58:
+CDXC:Portless 2026-06-22-23:58:
 Ghostex ownership requires the launchd service to use Ghostex's bundled code-server Node, bundled Portless CLI, and resolved Portless state directory. HTTPS/HTTP, standard proxy port, .localhost TLD, LAN off, wildcard off, expected Node, expected CLI, expected state dir, hosts sync off, and non-persistent launchd stdout/stderr sinks are strict reconfigure facts; first-version Ghostex must not accept LAN service config or persistent proxy output files.
 
-CDXC:PortlessServiceDetection 2026-06-23-05:11:
+CDXC:Portless 2026-06-23-05:11:
 Phase 10-12 verification requires old Ghostex-marked launchd plists to be treated as reconfigure-needed when they would let the root Portless service write /etc/hosts or persist proxy stdout/stderr under Ghostex support-bundle state. Service inspection therefore checks PORTLESS_SYNC_HOSTS=0 plus /dev/null launchd output paths as ownership facts, not optional diagnostics.
 
-CDXC:PortlessProtocol 2026-06-23-00:25:
+CDXC:Portless 2026-06-23-00:25:
 Phase 12 exposes Portless to health and presentation clients as metadata-only protocol payloads. Status, action availability, and route previews may carry enums, counts, stable project/session ids, protocol, hostnames, and ports, but never paths, command text, env values, process output, tokens, cookies, full URLs, query strings, terminal text, or file contents.
 
-CDXC:PortlessProtocol 2026-06-23-00:25:
+CDXC:Portless 2026-06-23-00:25:
 server only describes native admin actions; it does not advertise them as directly runnable because privileged setup is local-mac native-sidebar work in the first version. Non-local and remote gxserver consumers must see unavailable action booleans and can still render state and route previews without reading Portless files.
 
-CDXC:PortlessLogging 2026-06-23-04:45:
+CDXC:Portless 2026-06-23-04:45:
 Phase 17 Portless operational logs are support diagnostics, not route or service dumps. Persist only structured counts, booleans, enum states, protocol, setup/runtime state, fixed error codes, and durations through the gxserver logger; never put project/worktree names, paths, full URLs, hostnames, command text, env values, tokens, secrets, stdout, or stderr into Portless log payloads.
 */
 pub struct PortlessRepository<'a> {

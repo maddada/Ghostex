@@ -21,7 +21,7 @@ pub(crate) fn gpui_remote_gxserver_post_typed_operation(
     timeout: Duration,
 ) -> Result<(u16, String), String> {
     /*
-    CDXC:GPUIRemoteMachines 2026-06-24-16:48:
+    CDXC:RemoteMachines 2026-06-24-16:48:
     Remote gxserver RPCs use the live SSH tunnel target and in-memory token captured by Rust after Keychain storage. Keep this helper transport-only and response-unlogged: callers own endpoint allowlists and user-facing generic errors, while tokens, URLs, remote paths, params, stdout/stderr, and daemon bodies are never persisted or copied to renderer globals.
     */
     if !path.starts_with("/api/") {
@@ -72,10 +72,10 @@ pub(crate) fn gpui_remote_gxserver_project_path_by_id(
     project_id: &str,
 ) -> Result<String, String> {
     /*
-    CDXC:GPUIRemoteNativeActions 2026-06-24-19:25:
+    CDXC:RemoteMachines 2026-06-24-19:25:
     Remote project path copy must resolve the path from the owning remote gxserver immediately before writing the local clipboard. React may identify only the saved machine and project id; it must not provide or authorize the remote path string.
 
-    CDXC:GPUIRemoteNativeActions 2026-06-24-20:26:
+    CDXC:RemoteMachines 2026-06-24-20:26:
     Remote IDE opens reuse this resolver so project and changed-file editor launches also receive remote paths only from the owning gxserver, never from React payloads, DOM labels, cached presentation text, or renderer-built URI strings.
     */
     gpui_remote_gxserver_project_path_by_id_from_endpoint(
@@ -143,7 +143,7 @@ pub(crate) fn gpui_open_remote_existing_project_pull_request_in_browser(
     project_id: &str,
 ) -> Result<(), String> {
     /*
-    CDXC:GPUIRemoteNativeActions 2026-06-24-19:25:
+    CDXC:RemoteMachines 2026-06-24-19:25:
     Remote PR browser opens must re-run `prView` through the saved-machine gxserver tunnel and open only a validated HTTPS GitHub pull-request URL. Renderer URLs, cached PR payloads, Browser titles, command text, SSH details, tokens, and daemon bodies are not launch authority.
     */
     let result = gpui_remote_gxserver_rpc_result(
@@ -173,10 +173,10 @@ pub(crate) fn gpui_open_remote_project_in_ide(
     project_id: &str,
 ) -> Result<(), String> {
     /*
-    CDXC:GPUIRemoteNativeActions 2026-06-24-20:26:
+    CDXC:RemoteMachines 2026-06-24-20:26:
     Remote project IDE opens are native-owned fixed editor launches. Resolve the remote path from the owning gxserver immediately before launch, derive SSH targeting from saved Settings, and support only reviewed VS Code/Insiders argv or Zed/Zeditor URI paths so custom Settings text, renderer paths, local Finder, and local filesystem paths never become remote-open authority.
 
-    CDXC:GPUIRemoteNativeActions 2026-06-24-21:33:
+    CDXC:RemoteMachines 2026-06-24-21:33:
     Posix-host Zed/Zeditor opens use Zed's documented SSH URI CLI form.
     Windows-host WSL opens instead execute the fixed editor CLI inside the
     retained distribution, matching each editor's documented WSL integration.
@@ -214,10 +214,10 @@ pub(crate) fn gpui_open_remote_sidebar_git_changed_file_in_ide(
     file_path: &str,
 ) -> Result<(), String> {
     /*
-    CDXC:GPUIRemoteNativeActions 2026-06-24-19:25:
+    CDXC:RemoteMachines 2026-06-24-19:25:
     Remote changed-file opens still revalidate the project-relative candidate against current remote gxserver Git state before any editor side effect. Never open a local path for a remote file and never accept renderer-controlled SSH, path, or URI fallback data.
 
-    CDXC:GPUIRemoteNativeActions 2026-06-24-20:26:
+    CDXC:RemoteMachines 2026-06-24-20:26:
     Remote changed-file opens now use the same Rust-owned fixed editor path as remote project opens after revalidating the relative file candidate against fresh remote Git state. Keep custom editors, local remote paths, renderer URI strings, and unreviewed editor protocols unsupported.
     */
     let relative_file_path = gpui_normalized_relative_git_file_path(file_path)

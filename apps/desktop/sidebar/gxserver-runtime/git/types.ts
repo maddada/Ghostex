@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines) into git/. This
 file holds the interface only, unchanged from the original: a standalone
 type (rather than one derived from `typeof gpuiSidebarRuntimeGitMethods`)

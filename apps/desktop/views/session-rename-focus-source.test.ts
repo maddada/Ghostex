@@ -9,7 +9,7 @@ const sessionRenameModalSource = readFileSync(
 describe('session rename modal focus source', () => {
   test('retries full-name selection across native child-window focus', () => {
     /*
-    CDXC:SidebarRename 2026-06-15-01:27:
+    CDXC:Sessions 2026-06-15-01:27:
     Rename Session is presented from a hidden native child-window host, so initial React focus can run before the visible window becomes key. Source coverage keeps the focus/select request tied to native window focus and guarded by user interaction.
     */
     expect(sessionRenameModalSource).toContain('userInteractedAfterOpenRef.current = false;');

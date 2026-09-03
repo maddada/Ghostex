@@ -28,49 +28,49 @@ use crate::{
 };
 
 /*
-CDXC:GPUTerminalNativeView 2026-06-22-21:04:
+CDXC:Terminal 2026-06-22-21:04:
 Slice 104 introduces only the Rust-side execution boundary for the GPUI terminal AppKit adapter. AppKit terminal commands require a real non-null native terminal view handle, map host reconciliation commands to frame/show/hide operations, and stay unwired from GhostexGpuiApp until future terminal code supplies an existing NSView; do not create fake views, dangling production handles, terminal processes, GhosttyKit calls, focus side effects, logging, persistence, overlays, hidden hit regions, hit-test routing, or app launch behavior here.
 
-CDXC:GPUTerminalNativeView 2026-06-22-21:11:
+CDXC:Terminal 2026-06-22-21:11:
 Slice 105 allows only pure config-building code to read this handle as an opaque non-null NSView pointer. That accessor must not allocate, retain, synthesize fallback views, call AppKit, call GhosttyKit, launch terminals, log, persist, route hit tests, or change focus.
 
-CDXC:GPUTerminalNativeView 2026-06-22-21:42:
+CDXC:Terminal 2026-06-22-21:42:
 Slice 108 adds the AppKit host-view ownership boundary but keeps it unwired from GhostexGpuiApp. Creating a terminal host view requires an explicit non-null parent NSView plus validated finite, non-negative GPUI body bounds; only the owned wrapper may destroy the retained child view it created, while borrowed/test handles remain non-owning and must not trigger AppKit destroy.
 
-CDXC:GPUTerminalNativeView 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 App-owned runtime host-view ownership is per visible running Agents mount slot. Creation is driven exclusively by a `NeedsRealNativeView` lifecycle decision, uses the app's parent NSView plus the exact plan bounds, remains hidden until a real Ghostty surface exists, and may execute only the slice-115 first-responder focus helper after a real focused surface is mounted; it must not log, persist, or invent fallback views.
 
-CDXC:GPUTerminalStartupNativeHost 2026-06-23-00:32:
+CDXC:Terminal 2026-06-23-00:32:
 Mounting startup preparation may create a separate hidden App-owned host NSView only from a current `AgentsTerminalStartupLaunchPlan`. This startup owner is keyed by `AgentsTerminalStartupBodySlotId`, never by the Running mount slot during preparation, and it must not show, focus, create Ghostty surfaces, launch processes, persist, log, or feed the Running host maps except through the exact ready handoff.
 
-CDXC:GPUTerminalStartupHostLifetime 2026-06-23-03:23:
+CDXC:Terminal 2026-06-23-03:23:
 Startup host lifetime may bridge the render-start geometry gap only for an already-created host whose stored launch plan matches the current pending runtime id and startup body slot. This helper must not create from pending records without geometry, and invalid parent/bounds/config state must still prune before any future launch consumer can use it.
 
-CDXC:GPUTerminalStartupGhosttySurface 2026-06-23-03:33:
+CDXC:Terminal 2026-06-23-03:33:
 Startup Ghostty surfaces borrow the hidden startup host NSView, so app sync must be able to prove whether a startup host will survive before host reconciliation drops or replaces it. This helper remains a normal ownership predicate only; it does not show, focus, route input, launch processes, log, persist, or promote Mounting sessions.
 
-CDXC:GPUTerminalStartupHandoff 2026-06-23-04:25:
+CDXC:Terminal 2026-06-23-04:25:
 Ready Mounting startup hosts must move into the Running host-owner map as the same AppKit child view. The conversion is allowed only for the same pane/session body identity and exact launch bounds, and it must not create, destroy, show, focus, overlap, route hit tests, log, persist, or infer command/cwd/env state.
 
-CDXC:GPUTerminalNativeView 2026-06-22-22:05:
+CDXC:Terminal 2026-06-22-22:05:
 Slice 110 frame reconciliation may execute only `SetFrame` for same-slot `MoveOrResize` lifecycle decisions whose real-view handle still matches the App-owned hidden host view. Generic attach/show and hide/detach command execution still do not focus; slice 115 uses a separate focused-slot helper so terminal focus handoff cannot leak into broad host reconciliation.
 
-CDXC:GPUTerminalGhosttySurfaceConfig 2026-06-22-22:17:
+CDXC:Terminal 2026-06-22-22:17:
 Slice 111 may prepare only a runtime Ghostty surface config request from the App-owned hidden host NSView plus the current GPUI window scale. The helper must return no request without an owner, reject invalid scale, and avoid AppKit attach/show/hide/focus, GhosttyKit/libghostty calls, surface creation, terminal processes, logging, persistence, fallbacks, overlays, hidden hit regions, and hit-test routing.
 
-CDXC:GPUTerminalGhosttySurface 2026-06-22-22:59:
+CDXC:Terminal 2026-06-22-22:59:
 After a real GhosttyKit surface is created for a visible running Agents mount slot, that App-owned host view may be shown as the normal child view inside the exact recorded terminal body bounds. Visibility remains bounded to owned children only, and first-responder focus is allowed only through the slice-115 focused-slot helper for the same owned host view; keyboard/mouse event translation, broad AppKit execution, fallback views, overlays, hidden hit regions, hit-test routing, command/cwd/env lifecycle, persistence, and logging remain out of scope.
 
-CDXC:GPUTerminalNativeView 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 All visible running Agents leaves now own AppKit host views by stable pane/session mount slot. The helper must reconcile maps without recreating same-slot views on resize and must drop only stale slot owners after Ghostty surfaces have already been released by the app.
 
-CDXC:GPUTerminalNativeViewFocus 2026-06-22-23:11:
+CDXC:FocusRouting 2026-06-22-23:11:
 Slice 115 wires AppKit first-responder handoff through only the App-owned terminal host NSView that already backs a mounted real Agents Ghostty surface. Focus uses `[window makeFirstResponder:view]` via the GPUI-local adapter, is tracked as runtime-only slot plus host identity for idempotence, and must not add hit-test overrides, window pre-dispatch routing, transparent overlays, synthetic event routing, IME/paste/selection behavior, persistent logs, or shell persistence.
 
-CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+CDXC:Terminal 2026-06-23-05:03:
 Runtime AppKit host ownership is shared across Agents and command-pane terminal bodies by a typed mount-slot key. Command hosts use command group/session ids and never reuse Agents pane/session keys, startup host keys, shell-state JSON, or launch payload sources; collapse and close detach through the normal host/surface cleanup order.
 
-CDXC:GPUITerminalNativeKeyBridge 2026-06-24-20:58:
+CDXC:Terminal 2026-06-24-20:58:
 Real terminal host views now accept native key focus only as exact App-owned child views. Visibility false and Drop both unregister the host from the Ghostty key-target registry so a stale NSView pointer cannot keep forwarding Return, Backspace, or modifier events after the mounted surface pairing is gone.
 */
 #[cfg(target_os = "macos")]
@@ -227,7 +227,7 @@ impl TerminalHostNativeViewFactory {
             .ok_or(TerminalHostNativeViewCreateError::CreateReturnedNull)?;
 
         /*
-        CDXC:GPUTerminalNativeView 2026-06-22-21:42:
+        CDXC:Terminal 2026-06-22-21:42:
         The factory owns only host views returned by the GPUI AppKit create shim. It must return an owned wrapper instead of a bare borrowed handle so Drop can remove and release exactly that retained child view later without touching borrowed/test handles.
         */
         Ok(unsafe { OwnedTerminalHostNativeView::from_created_native_view(native_view) })
@@ -330,7 +330,7 @@ where
         _plan: NativeTerminalSurfaceAttachmentPlan<SlotId>,
     ) -> bool {
         /*
-        CDXC:GPUISidebarGroupFocus 2026-07-10:
+        CDXC:Workarea 2026-07-10:
         A sidebar terminal selection may move the same Agents session into
         another group. The already-owned AppKit child
         can therefore accept a new typed Agents attachment slot; the caller
@@ -345,10 +345,10 @@ where
         plan: NativeTerminalSurfaceAttachmentPlan<SlotId>,
     ) -> AppOwnedTerminalHostNativeView<SlotId> {
         /*
-        CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+        CDXC:Terminal 2026-06-23-19:41:
         Sleeping wake and popped-out reattach move an existing Running AppKit host owner back to the current Agents body slot instead of creating a replacement view. Rekeying may update only the slot plan and current body bounds while preserving the retained child view and leaving show/focus to the normal Running sync path.
 
-        CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-07:42:
+        CDXC:Terminal 2026-06-27-07:42:
         Command sleeping wake uses the same typed host-owner move for `CommandTerminalBodyMountSlotId`; the host child view is rekeyed only to the same command group/session slot and never recreated, retargeted to Agents, logged, persisted, or backed by fallback host state.
         */
         AppOwnedTerminalHostNativeView::new(plan, self.native_view)
@@ -406,7 +406,7 @@ impl AppOwnedTerminalStartupHostNativeView {
         plan: NativeTerminalSurfaceAttachmentPlan,
     ) -> AppOwnedTerminalHostNativeView {
         /*
-        CDXC:GPUTerminalStartupHandoff 2026-06-23-04:25:
+        CDXC:Terminal 2026-06-23-04:25:
         The startup host owns the retained AppKit child view until a ready startup surface can become the same Running mount slot. Moving `native_view` into `AppOwnedTerminalHostNativeView` preserves the child view and leaves visibility/focus to the existing Running sync path.
         */
         AppOwnedTerminalHostNativeView::new(plan, self.native_view)

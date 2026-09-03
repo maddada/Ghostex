@@ -90,7 +90,7 @@ pub(crate) struct ZmxCommandResult {
 }
 
 /*
-CDXC:ZmxWakeProbeReuse 2026-09-01:
+CDXC:Zmx 2026-09-01:
 One `/api/wakeSession` used to spawn three separate `zmx list` probes for the
 same session: the attach-metadata probe, `start_session_provider`'s immediate
 re-probe of the state its caller had just read, and a third probe after the

@@ -157,7 +157,7 @@ pub(crate) fn normalize_zmx_provider_state(
     zmx_name: &str,
 ) -> Map<String, Value> {
     /*
-    CDXC:RemotePresentation 2026-06-30-00:11:
+    CDXC:RemoteMachines 2026-06-30-00:11:
     Remote sidebar clients depend on presentation publishing both the canonical zmx session name and its provider label so titles, status dots, and native idle indicators agree. Store `provider: "zmx"` with every gxserver session provider state instead of forcing clients to infer it from zmxName.
     */
     provider_state.insert(
@@ -430,7 +430,7 @@ pub(crate) fn normalize_create_agent_session_params(
 
 fn default_agent_command(agent_id: &str) -> Option<&'static str> {
     /*
-    CDXC:AgentDefaults 2026-07-02-14:20:
+    CDXC:AgentProviders 2026-07-02-14:20:
     The launcher default-command registry is owned by the agents module so every
     create path resolves the same command set; keeping a second literal map here
     silently dropped newer built-in agents from this normalization path.
@@ -525,7 +525,7 @@ pub(crate) fn normalize_session_order_ids(value: Option<&Value>) -> DomainResult
 }
 
 /*
-CDXC:GxserverIds 2026-06-22-05:29:
+CDXC:ServerApi 2026-06-22-05:29:
 Restored session references are user-provided gxserver session IDs. Match TypeScript by accepting only undefined, null, the exact empty string, or a valid G-id; whitespace and non-string values must be rejected instead of silently dropping the restore link.
 */
 fn normalize_session_restore_id(value: Option<&Value>) -> DomainResult<Option<String>> {
@@ -628,7 +628,7 @@ fn normalize_session_surface(value: Option<&Value>) -> Option<String> {
 
 fn is_temporary_session_title(title: &str) -> bool {
     /*
-    CDXC:GxserverDomainState 2026-06-22-05:22:
+    CDXC:StateSync 2026-06-22-05:22:
     TypeScript domain normalization only auto-persists placeholder title provenance for Search by Text launches. Broader generic session labels are presentation and restore-filtering concerns, so the Rust repository must not store titleSource=placeholder for them at the durable row boundary.
     */
     title

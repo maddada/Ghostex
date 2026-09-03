@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -87,7 +87,7 @@ export function isGxserverRpcSuccess<TResult>(value: unknown): value is GpuiGxse
 
 export function gpuiGxserverRpcErrorMessage(value: unknown): string | undefined {
   /*
-  CDXC:GPUISidebarGxserverErrors 2026-07-11-05:56:
+  CDXC:ServerDaemon 2026-07-11-05:56:
   gxserver domain endpoints return an intentionally user-facing `message` in
   their bounded RPC error envelope. The GPUI-local client must preserve that
   field just like the shared native client does; replacing it with a generic

@@ -212,7 +212,7 @@ pub(crate) fn gpui_status_optional_icon_data_url_field(
     key: &str,
 ) -> Result<Option<String>, ()> {
     /*
-    CDXC:GPUISettingsNotifications 2026-06-26-07:22:
+    CDXC:Notifications 2026-06-26-07:22:
     GPUI session-attention icons may enter Rust only as bounded image data URLs on sanitized status project rows. Reject paths, http(s) URLs, control characters, oversized strings, malformed headers, and unexpected keys so native notification attachment creation never receives a fallback file/URL source or raw renderer payload.
     */
     match object.get(key) {
@@ -278,7 +278,7 @@ pub(crate) fn gpui_pet_overlay_activity_activation_session_id(
     activity: &GpuiPetOverlayActivityState,
 ) -> &str {
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-05:30:
+    CDXC:StatusPet 2026-06-26-05:30:
     Pet activity cards activate the exact sanitized activity `id` supplied by the sidebar bridge. The GPUI click payload must not include project ids, titles, paths, URLs, commands, logs, or terminal content, and it must not derive a different target from the visible card text.
     */
     activity.session_id.as_str()
@@ -290,7 +290,7 @@ pub(crate) fn gpui_status_indicator_aggregate_activation_session_id(
     focused_session_id: Option<&str>,
 ) -> Option<String> {
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-05:07:
+    CDXC:StatusPet 2026-06-26-05:07:
     Aggregate GPUI status clicks must mirror macOS ordering from the sanitized sidebar payload: sort same-status candidates by lastActiveAt descending, then sidebarOrder. If the focused session is already the top candidate and another candidate exists, cycle to the next candidate instead of reselecting the same row.
     */
     let mut candidates = state

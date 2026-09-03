@@ -22,10 +22,10 @@ pub(crate) fn gpui_prepare_local_workspace_attach_terminal_plan_with_startup_tex
     intent: GpuiLocalWorkspaceAttachIntent,
 ) -> Result<GpuiLocalWorkspaceAttachTerminalPlan, String> {
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:08:
+    CDXC:FocusRouting 2026-06-26-06:08:
     Local GPUI sidebar session clicks follow macOS zmx attach sequencing: Rust asks localhost gxserver for wake/attach metadata, starts every missing zmx provider through gxserver (with queued startup text when present), then opens an awake Agents Running tab whose exact mount slot consumes the daemon-built attach command. CEF cannot provide commands, cwd, titles, paths, daemon bodies, tokens, stdout/stderr, or terminal content.
 
-    CDXC:GPUICommandPaneGxserverAttach 2026-07-04:
+    CDXC:CommandPane 2026-07-04:
     Command-pane fresh Action launches pass their one-shot startup text as the
     explicit gxserver attach parameter, matching native's wake/attach/provider
     sequence. The text is consumed only by gxserver's startupTextDisposition path;
@@ -118,7 +118,7 @@ pub(crate) fn gpui_command_terminal_create_session_params(
     input: &GpuiCommandTerminalCreateInput,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUICommandPaneGxserverAttach 2026-07-04:
+    CDXC:CommandPane 2026-07-04:
     GPUI command-pane creation mirrors native `createCommandTerminal`: create
     the gxserver row first with `surface:"commands"` and zmx provider metadata,
     then pass Action startup text through the attach RPC sequence rather than
@@ -201,7 +201,7 @@ pub(crate) fn gpui_create_local_project_workspace_terminal(
         return Err("The active project is unavailable.".to_string());
     }
     /*
-    CDXC:GPUIWindowsTerminalStartup 2026-07-26:
+    CDXC:PlatformSupport 2026-07-26:
     The selected WSL gxserver can create a fresh workspace terminal, start its
     never-reused zmx identity, and return the final require-existing attach
     plan in one operation. Windows uses that atomic path so New Terminal does
@@ -356,7 +356,7 @@ pub(crate) fn should_start_local_zmx_provider_before_gpui_attach(
     attach: &serde_json::Map<String, serde_json::Value>,
 ) -> bool {
     /*
-    CDXC:GPUIZmxProviderOwnership 2026-07-15:
+    CDXC:Zmx 2026-07-15:
     A GPUI attach must never be the operation that creates a missing zmx
     provider. gxserver owns provider startup for both restored agents and
     blank terminal rows because that path installs the prompt-editor wrapper
@@ -654,7 +654,7 @@ pub(crate) fn attach_gpui_surfaced_local_workspace_terminal(
     plan: GpuiLocalWorkspaceAttachTerminalPlan,
 ) -> Result<TerminalSessionId, &'static str> {
     /*
-    CDXC:GPUIWorkspaceSessionReattach 2026-07-24:
+    CDXC:Workarea 2026-07-24:
     Startup reattachment for a surfaced non-focused terminal is an ownership
     repair, not a selection action. Require the canonical gxserver mapping to
     still identify the active Running terminal in this exact rendered pane,

@@ -1,5 +1,5 @@
 /*
-CDXC:MobileKeepAwake 2026-08-19:
+CDXC:KeepAwake 2026-08-19:
 Auto Sleep ("Sleep inactive agents") is decided by whichever Ghostex client owns
 the sidebar on that machine — today the gpui desktop app's sidebar runtime. That
 client can only see ITS OWN visible/focused panes, so a session a phone is

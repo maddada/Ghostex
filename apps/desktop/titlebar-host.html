@@ -15,10 +15,10 @@
   <body>
     <div id="root"></div>
     <!--
-      CDXC:GPUITitlebarTips 2026-06-24-23:17:
+      CDXC:Onboarding 2026-06-24-23:17:
       GPUI titlebar dropdown panels reuse the production React titlebar host from native/sidebar/titlebar-host.tsx. Keep this CEF wrapper thin so the info dropdown renders the same Tips panel as macOS without AppKit/Swift windows, duplicated GPUI tips data, placeholder UI, or dev-server-only assets.
 
-      CDXC:GPUIResourcesTitlebar 2026-07-09:
+      CDXC:Resources 2026-07-09:
       Do NOT re-add a page-level `ghostexNativeHost` shim here. The CEF shell
       installs the real `ghostexNativeHost` bridge at V8 context creation for
       this surface (see gpui/src/cef/shell.rs), and it owns

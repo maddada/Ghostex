@@ -41,13 +41,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIStatusPetOverlay 2026-06-26-05:07:
+        CDXC:StatusPet 2026-06-26-05:07:
         Worker 49 added aggregate status activation with exact visible controls and no broad UI, transparent root overlays, hidden hit regions, hit-test reroutes, or Rust-side session materialization fallbacks.
 
-        CDXC:GPUIStatusPetOverlay 2026-06-26-05:30:
+        CDXC:StatusPet 2026-06-26-05:30:
         Worker 50 adds the Pet Overlay surface to the bottom-right GPUI-owned stack. When the saved pet setting is disabled, GPUI renders no pet surface; when enabled, only the visible avatar, activity cards, and collapsed status badges are interactive, and all clicks still dispatch one bounded session id through the fixed status/pet activation callback.
 
-        CDXC:GPUIStatusPetOverlay 2026-06-27-20:11:
+        CDXC:StatusPet 2026-06-27-20:11:
         The standalone GPUI floating session indicator was removed. Keep this
         stack for the floating pet only; status counts still feed the pet badges,
         menu bar item, and attention notifications without rendering a separate
@@ -122,7 +122,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIStatusPetOverlay 2026-06-26-05:36:
+        CDXC:StatusPet 2026-06-26-05:36:
         GPUI pet activity cards must match native pet bubbles: render the state as the colored dot only and keep the title as the sole text. Do not show words like "Working" or "Attention" under the title; activation still uses only the exact sanitized session id.
         */
         let state = activity.state;
@@ -246,13 +246,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIStatusPetOverlay 2026-06-26-05:30:
+        CDXC:StatusPet 2026-06-26-05:30:
         GPUI Pet Overlay uses the real bundled WebP spritesheets and must not fall back to another pet asset when `selectedPetId` is wrong, because the parser should accept only known bundled ids.
 
-        CDXC:GPUIStatusPetOverlay 2026-06-26-11:17:
+        CDXC:StatusPet 2026-06-26-11:17:
         Worker 53 advances the real bundled 8x9 spritesheet with the shared React avatar frame rows: idle loops slowly, attention uses review, working uses running, and hover uses jumping only when no activity needs attention or work.
 
-        CDXC:GPUIStatusPetOverlay 2026-06-26-07:31:
+        CDXC:StatusPet 2026-06-26-07:31:
         Worker 57 honors macOS Reduce Motion by rendering one stable frame for the current semantic pet state while retaining the selected bundled pet id. The accessibility preference changes animation scheduling only; it does not substitute pet assets, hide activity rows, or persist system preference data.
         */
         let Some(image) = gpui_pet_overlay_spritesheet_image(selected_pet_id) else {
@@ -366,10 +366,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIStatusPetOverlay 2026-06-26-11:17:
+        CDXC:StatusPet 2026-06-26-11:17:
         GPUI Pet Overlay avatar clicks toggle only the in-stack card/badge presentation. Activity cards and collapsed status badges own their own activation handlers and stop propagation, so selecting a session/status must not also expand or collapse the avatar stack.
 
-        CDXC:GPUIStatusPetOverlay 2026-06-26-11:46:
+        CDXC:StatusPet 2026-06-26-11:46:
         Persist the expanded/collapsed activity-card boolean with GPUI shell state so restart restores the same visible pet shape as native `PetOverlayController`. The writer must keep this to one boolean and never persist activity payloads, titles, ids, paths, raw settings JSON, commands, URLs, terminal output, tokens, detached panel origin, or drag state.
         */
         self.gpui_pet_overlay_activities_visible = !self.gpui_pet_overlay_activities_visible;
@@ -467,7 +467,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIStatusPetOverlay 2026-06-26-11:17:
+        CDXC:StatusPet 2026-06-26-11:17:
         The visible GPUI pet surface uses an OS-owned NativeMenu with Sleep Pet first and Go to Ghostex second, matching the native pet host. Menu actions carry no session/project/path/settings payloads; Sleep Pet writes only `petOverlayEnabled: false`, and Go to Ghostex raises the GPUI app/window without selecting a session.
         */
         if !self.sidebar_pet_overlay.enabled {
@@ -544,7 +544,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIStatusPetOverlay 2026-06-26-05:07:
+        CDXC:StatusPet 2026-06-26-05:07:
         Visible GPUI status activation returns only a bounded session id to the sidebar runtime's existing focusSession path. Rust never wakes, creates, restores, or materializes a session from these clicks, and the transient callback shape is deliberately reusable for a later pet slice without exposing a generic event bus, paths, URLs, commands, tokens, titles, or terminal text.
         */
         if !gpui_status_bridge_id_allowed(session_id) {
@@ -569,7 +569,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+        CDXC:StatusPet 2026-06-26-06:05:
         Menu-bar project rows route through a fixed first-party sidebar callback carrying only one bounded project id. The sidebar runtime owns project focus and publishing; Rust does not add a generic bus, derive paths/titles, or materialize terminals from project-only clicks.
         */
         if !gpui_status_bridge_id_allowed(project_id) {
@@ -595,7 +595,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+        CDXC:StatusPet 2026-06-26-06:05:
         Menu-bar session rows route through a fixed first-party sidebar callback carrying bounded project/session ids. The sidebar then reuses normal session-card focus, including the existing WorkspaceTerminalFocus Rust handoff for local materialization, without renderer JSON, paths, commands, stdout/stderr, tokens, terminal content, or fallback attach behavior.
         */
         if !gpui_status_bridge_id_allowed(project_id) || !gpui_status_bridge_id_allowed(session_id)
@@ -710,7 +710,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GlobalActions 2026-08-01-19:00:
+    CDXC:AgentLauncher 2026-08-01-19:00:
     A run-by-id selector cannot tell a Global Action from a Project Action with
     the same id, so the tab strip stamps its scope and the sidebar runtime
     resolves that list exclusively. The Command Palette keeps sending no scope,
@@ -764,13 +764,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-26-08:01:
+        CDXC:FocusRouting 2026-06-26-08:01:
         Native GPUI workspace tab selection has already mutated Rust pane state, so the sidebar callback may update only local or machine-scoped remote presentation focus. Use a dedicated first-party callback instead of menu-bar session activation so tab clicks cannot re-enter the WorkspaceTerminalFocus attach path and bounce the selected tab.
 
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-27-00:33:
+        CDXC:FocusRouting 2026-06-27-00:33:
         MacOS reattaches a stale locally sleeping pane tab when gxserver already reports that canonical session running. Send only a true `localWasSleeping` flag for that reconciliation check; ordinary tab selections remain one-way sidebar focus updates.
 
-        CDXC:GPUIWorkspaceSessionFocus 2026-07-11:
+        CDXC:FocusRouting 2026-07-11:
         Restored-after-restart Running tabs can have no live terminal owner, no parked owner, and no pending attach payload behind them; selecting one shows an empty body. Send only a true `localRuntimeMissing` flag so the sidebar runtime can reconcile through one bounded WorkspaceTerminalFocus when gxserver still reports that canonical session running, reusing the exact gxserver attach pipeline instead of mounting anything from renderer input.
 
         Sidebar visibility follows the actual rendered workspace rather than a

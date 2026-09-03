@@ -8,7 +8,7 @@ const projectStateSource = readFileSync(new URL('./titlebar/project-state.ts', i
 describe('native titlebar Git source', () => {
   test('hydrates transient refresh state from cached Git metadata', () => {
     /*
-     * CDXC:TitlebarGit 2026-06-16-19:19:
+     * CDXC:Git 2026-06-16-19:19:
      * The titlebar Git dropdown should reuse the last cached Git snapshot for
      * the active project while refresh is still publishing its busy/default
      * state, so Branch does not flash as detached before the branch probe

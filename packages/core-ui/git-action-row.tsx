@@ -26,7 +26,7 @@ import type { WebviewApi } from './webview-api';
 export type GitActionRowProps = {
   git: SidebarGitState;
   /*
-   * CDXC:GPUIRemoteGit 2026-06-24-21:26:
+   * CDXC:Git 2026-06-24-21:26:
    * Reused Git controls must include the owning project/group scope for project-specific reads, opens, actions, and preference writes so GPUI routes remote project work through the selected machine tunnel instead of the active local project.
    */
   groupId?: string;

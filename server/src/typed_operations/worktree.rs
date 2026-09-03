@@ -31,7 +31,7 @@ pub(crate) async fn run_worktree_action(
     }
     if action == "hasPopulatedSubmodules" {
         /*
-        CDXC:WorktreeRename 2026-08-09-18:40:
+        CDXC:Worktrees 2026-08-09-18:40:
         `git worktree move` hard-refuses a worktree with populated submodules,
         and the only honest answer is to say so before the user names a folder.
         This probe stays worktree-scoped (it only ever inspects a path already
@@ -50,7 +50,7 @@ pub(crate) async fn run_worktree_action(
     }
     if action == "renameBranch" {
         /*
-        CDXC:WorktreeRename 2026-08-09-18:40:
+        CDXC:Worktrees 2026-08-09-18:40:
         `refs/heads/<x>` cannot exist while `refs/heads/<x>/…` does, in either
         direction, and `git branch -m` reports that as a bare
         `fatal: branch rename failed`. Probe both directions here, before the
@@ -135,7 +135,7 @@ pub(crate) fn build_worktree_command(
         }
         "renameBranch" => {
             /*
-            CDXC:WorktreeRename 2026-08-09-18:40:
+            CDXC:Worktrees 2026-08-09-18:40:
             `-m`, never `-M`. Force does not help with the ref-namespace
             collision this operation actually hits, and it would let a rename
             silently clobber an existing branch — losing commits, not saving a
@@ -232,7 +232,7 @@ fn normalize_worktree_destination_path(
 ) -> Result<String, TypedOperationError> {
     let destination_path = normalize_worktree_family_path(input, "destinationPath", context)?;
     /*
-    CDXC:WorktreeRename 2026-08-09-18:40:
+    CDXC:Worktrees 2026-08-09-18:40:
     `git worktree move A B` with B already present is NOT an error: git moves the
     worktree to B/A and exits 0, so the checkout silently lands one level deeper
     than anyone asked for and the registered project path becomes wrong — a

@@ -219,7 +219,7 @@ export function ManageCommentPopover({
       {draft.attachmentError ? <div className='manage-attachment-error'>{draft.attachmentError}</div> : null}
       <div className='manage-comment-popover-actions'>
         {/*
-         * CDXC:ManageAnnotationComposer 2026-06-28-08:31:
+         * CDXC:Docs 2026-06-28-08:31:
          * The Image action in the Markdown annotation comment composer is hidden because the current picker does not open from this surface. Keep the button source commented so the picker flow can be restored when it is fixed instead of deleting the intended UI.
          *
          * <button

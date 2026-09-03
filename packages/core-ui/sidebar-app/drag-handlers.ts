@@ -104,7 +104,7 @@ export type SidebarDragHandlersOptions = {
 };
 
 /*
- * CDXC:SidebarHookDecomposition 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * Everything the sidebar's dnd-kit provider needs: the drop-candidate scoping
  * helpers, the live drop-indicator resolver, and the four drag lifecycle
  * handlers. They were one contiguous block in SidebarApp and share the same
@@ -145,7 +145,7 @@ export function useSidebarDragHandlers({
   vscode,
 }: SidebarDragHandlersOptions) {
   /*
-   * CDXC:RemoteGroupReorder 2026-07-12:
+   * CDXC:RemoteMachines 2026-07-12:
    * Remote machine project groups reorder among their own machine's rows only.
    * Resolve drag candidates from the source group's scope so a remote drag
    * cannot target local Projects rows (and vice versa), while local project
@@ -280,7 +280,7 @@ export function useSidebarDragHandlers({
       );
 
       /*
-       * CDXC:SidebarDragDrop 2026-06-19-11:12:
+       * CDXC:Sidebar 2026-06-19-11:12:
        * Manual session sorting should always show an insertion line while the
        * pointer is over another session row: above the row midpoint means
        * before, below the midpoint means after. Store the resolved drop target
@@ -308,13 +308,13 @@ export function useSidebarDragHandlers({
       const group = groupsById[sourceData.groupId];
       const headerMetrics = point ? getProjectGroupDragHeaderMetrics(sourceData.groupId, point) : undefined;
       /**
-       * CDXC:ProjectDragPreview 2026-05-21-11:45:
+       * CDXC:Projects 2026-05-21-11:45:
        * Project drag ghosts should be anchored to the live cursor and should
        * render only the project header, even when the source project is expanded.
        * Keep the source row in the list as the faint placeholder instead of
        * cloning the whole expanded project into the moving preview.
        *
-       * CDXC:ProjectDragPreview 2026-05-28-12:35:
+       * CDXC:Projects 2026-05-28-12:35:
        * The project drag ghost should preserve the grabbed header button's
        * exact left edge and width, then move only on the vertical axis. Capture
        * the header row bounds at drag start and keep the pointer's initial
@@ -512,7 +512,7 @@ export function useSidebarDragHandlers({
        * project order stays intact, and the resulting flat project order is
        * persisted through the same sync contract as ordinary project drags.
        *
-       * CDXC:CollectionReorder 2026-07-21:
+       * CDXC:Projects 2026-07-21:
        * Collections drag with feedback "none" (like project cards), so dnd-kit
        * never reports a rect-overlap target for them: the source shape stays at
        * its resting position for the whole drag. Resolve the insertion boundary
@@ -599,7 +599,7 @@ export function useSidebarDragHandlers({
       }
 
       /*
-       * CDXC:RemoteGroupReorder 2026-07-12:
+       * CDXC:RemoteMachines 2026-07-12:
        * Remote machine groups reorder within their machine section and post the
        * machine-scoped id order through the same syncGroupOrder contract; the
        * host persists the per-machine order. Collections apply to local
@@ -827,7 +827,7 @@ export function useSidebarDragHandlers({
       }
 
       /**
-       * CDXC:PinnedSessions 2026-05-28-14:29:
+       * CDXC:Sessions 2026-05-28-14:29:
        * Dropping a pinned project session must persist exactly the row slot
        * indicated during drag. Resolve pinned drops from pointer position
        * against the pinned partition, then save pinned rows first while leaving
@@ -888,7 +888,7 @@ export function useSidebarDragHandlers({
     if (previousGroupId !== nextGroupId) {
       if (sessionsById[sourceData.sessionId]?.isPinned === true) {
         /**
-         * CDXC:PinnedSessions 2026-05-28-12:04:
+         * CDXC:Sessions 2026-05-28-12:04:
          * Project pinned sessions are only reorderable inside their owning
          * project. A pinned drag that lands over another project must not turn
          * into a cross-project move just because pinned cards are draggable in
@@ -927,7 +927,7 @@ export function useSidebarDragHandlers({
           haveSameSessionSet(previousPinnedSessionIds, nextPinnedSessionIds)
         ) {
           /**
-           * CDXC:PinnedSessions 2026-05-28-12:04:
+           * CDXC:Sessions 2026-05-28-12:04:
            * Last-activity mode still needs pinned rows to be manually
            * rearrangeable within a project. Persist only the pinned partition
            * order, then keep non-pinned sessions in their authoritative order

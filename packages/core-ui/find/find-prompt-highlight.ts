@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 The matcher reports highlight positions as BYTE offsets into UTF-8 prompt text,
 because it matches bytes. JavaScript strings are indexed by UTF-16 code units,
 so a prompt containing an emoji or any non-ASCII character would highlight the

@@ -697,7 +697,7 @@ pub(crate) fn focus_existing_local_workspace_terminal_tab_model(
     session_id: TerminalSessionId,
 ) -> bool {
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:34:
+    CDXC:FocusRouting 2026-06-26-06:34:
     Existing local gxserver-to-GPUI tab mappings should focus and activate the mapped shell tab in place. Reuse the placeholder activation path for non-running placeholders, then select the same tab so sidebar wake/focus cannot create a duplicate attach tab or leave a selected sleeping/restored tab inert.
     */
     if !workspace.session_belongs_to_pane(pane_id, session_id) {

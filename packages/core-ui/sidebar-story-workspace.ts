@@ -39,14 +39,14 @@ type SidebarStoryWorkspaceOptions = {
   completionSound: SidebarHydrateMessage['hud']['completionSound'];
   debuggingMode: boolean;
   /*
-   * CDXC:SidebarV2Lifecycle 2026-07-29:
+   * CDXC:StateSync 2026-07-29:
    * The story workspace rebuilds the HUD from scratch on every round trip, so
    * anything not carried here is silently dropped. Capability has to survive:
    * without it the V2 shelves classify nothing and the lifecycle stories would
    * pass against an empty inbox.
    */
   /*
-   * CDXC:SidebarV2LogicalProjects 2026-07-29:
+   * CDXC:StateSync 2026-07-29:
    * Per-remote-machine capability and per-daemon auto-settle window. Same
    * reason as the local capability above: the HUD is rebuilt from scratch every
    * round trip, so a multi-machine story would lose its remote machine's
@@ -65,7 +65,7 @@ type SidebarSessionDecoration = Pick<
   | 'agentIcon'
   | 'createdAt'
   /*
-   * CDXC:SidebarV2Worktree 2026-07-29:
+   * CDXC:Worktrees 2026-07-29:
    * The session's working directory. V2 identifies a worktree by the PAIR of
    * cwd and branch, so dropping it here would make every worktree story
    * unreachable even with the branch present.
@@ -73,7 +73,7 @@ type SidebarSessionDecoration = Pick<
   | 'cwd'
   | 'detail'
   /*
-   * CDXC:SidebarV2ContextMenuParity 2026-07-30:
+   * CDXC:ContextMenus 2026-07-30:
    * The four fields the session context menu gates items on. Without them the
    * round trip silently strips the row's captured 1st user message (View 1st
    * message, Generate Title), its stored provider/name pair (Copy attach
@@ -86,7 +86,7 @@ type SidebarSessionDecoration = Pick<
   | 'sessionPersistenceProvider'
   | 'sessionTag'
   /*
-   * CDXC:SidebarV2Git 2026-07-29:
+   * CDXC:Git 2026-07-29:
    * gxserver's per-session git/PR probe. It has to survive this round trip or
    * no story can ever show the card's branch line — the snapshot rebuild below
    * only keeps fields named here.
@@ -98,7 +98,7 @@ type SidebarSessionDecoration = Pick<
   | 'isRunning'
   | 'lastInteractionAt'
   /*
-   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * CDXC:SessionChat 2026-08-21-b:
    * The queued-prompt badge's two inputs. The snapshot rebuild below keeps only
    * fields named here, so without them no story can ever put a badge on a card
    * — neither the yellow waiting badge nor the red failed one — and a layout
@@ -117,7 +117,7 @@ export type SidebarStoryWorkspace = {
       Pick<
         SidebarHydrateMessage['groups'][number],
         /*
-         * CDXC:SidebarV2ContextMenuParity 2026-07-30:
+         * CDXC:ContextMenus 2026-07-30:
          * `canFocusMode` is per-group host state ("this group has split panes to
          * zoom"), and both sidebars' Focus item is gated on it. It has to survive
          * the round trip or Focus can never appear in any story.
@@ -155,7 +155,7 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
         {
           canFocusMode: group.canFocusMode,
           /**
-           * CDXC:StorybookSettings 2026-05-08-17:01
+           * CDXC:DesignSystem 2026-05-08-17:01
            * Combined sidebar stories must preserve the synthetic Chats marker
            * through the Storybook workspace round trip. Dropping this flag
            * makes Storybook classify Chats as a project group, which no longer
@@ -165,7 +165,7 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
           kind: group.kind,
           projectContext: group.projectContext,
           /*
-           * CDXC:SidebarV2LogicalProjects 2026-07-29:
+           * CDXC:StateSync 2026-07-29:
            * Which machine a group belongs to survives the round trip too:
            * without it every group reads as local, and the cross-machine merge
            * and machine badges could never be exercised in Storybook.
@@ -185,7 +185,7 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
               activity: session.activity,
               activityLabel: session.activityLabel,
               /*
-               * CDXC:AgentDetection 2026-04-27-06:55
+               * CDXC:AgentProviders 2026-04-27-06:55
                * Storybook must preserve agent identity across its session-grid
                * round trip so sidebar card icon rendering can be verified there.
                */
@@ -285,7 +285,7 @@ export function createSidebarStoryMessage(
     hud: {
       ...hud,
       /*
-       * CDXC:ProjectActions 2026-08-01:
+       * CDXC:Projects 2026-08-01:
        * Project rows read their Actions from `commandsByProject`, not the flat
        * active-project list, so the story harness has to publish the same block
        * the daemon does or a flagged Action can never render on a story row.

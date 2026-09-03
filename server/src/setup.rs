@@ -11,7 +11,7 @@ use anyhow::{anyhow, Context, Result};
 use crate::config::read_selected_local_api_port;
 
 /*
-CDXC:RemoteMinimalDeps 2026-07-13:
+CDXC:RemotePairing 2026-07-13:
 `gxserver setup` owns the package-activation steps that used to live in a long
 generated POSIX-sh install script inside the macOS app (stale-listener stop,
 package symlink swap, tool links, CLI wrapper). Keeping this logic in the
@@ -44,7 +44,7 @@ struct SetupOptions {
     release_dir: PathBuf,
     upload_path: Option<PathBuf>,
     /*
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     Declared by the installer, never guessed here. `gxserver setup` runs for BOTH
     remote SSH installs and the Windows desktop app's local WSL install, so the
     subcommand itself is not evidence of a remote role — only the caller knows.
@@ -140,7 +140,7 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
     let package_link = options.install_root.join("package");
 
     /*
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     Written BEFORE the old daemon is stopped and the new package activated, so
     no gxserver this install is responsible for can ever run without the marker
     already on disk. It lands in the state dir, which upgrades never touch, so
@@ -180,7 +180,7 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
         }
     }
     /*
-    CDXC:SystemBeadsOnly 2026-09-03:
+    CDXC:ProjectBoard 2026-09-03:
     Ghostex no longer ships Beads. Earlier releases linked the package's bin/bd
     into ~/.local/bin on remote SSH hosts and inside WSL, so those hosts keep a
     dangling `bd` symlink into a Ghostex release directory once the package
@@ -191,7 +191,7 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
         remove_stale_ghostex_bd_link(&local_bin.join("bd"), &options.install_root);
     }
     /*
-    CDXC:GhostexRustCli 2026-07-13:
+    CDXC:Cli 2026-07-13:
     bin/ghostex is the native Rust CLI shipped in the package (it replaced the
     Node CLI wrapper + CLI/ghostex-cli.mjs). The tool loop above already
     linked it into ~/.local/bin; here only the `gx` alias is created.

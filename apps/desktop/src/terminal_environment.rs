@@ -74,7 +74,7 @@ fn environment_pair_disables_color(key: &str, value: &str) -> bool {
 
 pub(crate) unsafe fn remove_color_disabling_from_current_process() {
     /*
-    CDXC:GPUIProcessColorEnv 2026-07-04:
+    CDXC:Terminal 2026-07-04:
     GPUI can be launched from agent terminals that export NO_COLOR, but the app
     is a color-capable host for gxserver, zmx, provider CLIs, GhosttyKit, and
     the GPUI PTY terminal engine. Strip inherited color-disabling keys at
@@ -96,7 +96,7 @@ pub(crate) unsafe fn remove_color_disabling_from_current_process() {
 
 pub(crate) unsafe fn remove_session_identity_from_current_process() {
     /*
-    CDXC:GPUISessionIdentityEnv 2026-07-04:
+    CDXC:SessionIdentity 2026-07-04:
     GPUI can itself be launched from a Ghostex pane. GhosttyKit snapshots the
     host process environment when creating embedded surfaces, so remove stale
     pane/session identity keys at startup and let explicit terminal launch
@@ -111,7 +111,7 @@ pub(crate) fn color_capable_terminal_env_vars(
     env_vars: Vec<(String, String)>,
 ) -> Vec<(String, String)> {
     /*
-    CDXC:GPUITerminalColorEnv 2026-07-04:
+    CDXC:Terminal 2026-07-04:
     GPUI terminal launch payloads use the same color policy as the macOS
     Ghostty boundary: remove NO_COLOR-style blockers, remove only disabling
     FORCE_COLOR values, preserve positive FORCE_COLOR overrides, and set the
@@ -147,7 +147,7 @@ pub(crate) fn apply_color_capable_terminal_command_builder(command: &mut Command
 
 pub(crate) fn remove_session_identity_from_terminal_command_builder(command: &mut CommandBuilder) {
     /*
-    CDXC:GPUITerminalSessionIdentityEnv 2026-07-04:
+    CDXC:SessionIdentity 2026-07-04:
     portable_pty::CommandBuilder starts with a copy of the process base
     environment. Strip stale inherited Ghostex/zmx identity before callers add
     their explicit per-terminal env overlay, matching macOS Ghostty creation.
@@ -160,7 +160,7 @@ pub(crate) fn remove_session_identity_from_terminal_command_builder(command: &mu
 #[allow(dead_code)] // no live caller: only the superseded native terminal-environment path used it
 pub(crate) fn remove_session_identity_from_process_command(command: &mut Command) {
     /*
-    CDXC:GPUIGxserverSessionIdentityEnv 2026-07-04:
+    CDXC:SessionIdentity 2026-07-04:
     GPUI-spawned daemon/helper processes must not inherit the pane identity of
     the terminal that launched the app; gxserver provider scripts export the
     active session identity explicitly when needed.
@@ -173,7 +173,7 @@ pub(crate) fn remove_session_identity_from_process_command(command: &mut Command
 #[allow(dead_code)] // no live caller: only the superseded native terminal-environment path used it
 pub(crate) fn apply_color_capable_process_command(command: &mut Command) {
     /*
-    CDXC:GPUIGxserverColorEnv 2026-07-04:
+    CDXC:ServerDaemon 2026-07-04:
     GPUI-spawned helper processes that can own future terminal/provider
     launches must not inherit NO_COLOR-style blockers from the app process.
     This mirrors the macOS gxserver bootstrap boundary while preserving

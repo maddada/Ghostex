@@ -83,7 +83,7 @@ pub(crate) fn gpui_remote_gxserver_presentation_stream_once(
     last_revision: &mut Option<u64>,
 ) -> Result<(), String> {
     /*
-    CDXC:GPUIRemotePresentationStreaming 2026-06-24-19:54:
+    CDXC:RemoteMachines 2026-06-24-19:54:
     The remote presentation stream uses gxserver's existing WebSocket protocol through the authenticated localhost tunnel. The only renderer-bound products of this helper are presentation snapshots/deltas and the bounded workspace-order metadata already consumed by SidebarApp; eventStreamReady, server ids, auth details, raw response bodies, and transport failures stay native-only.
     */
     let mut stream = gpui_remote_gxserver_open_presentation_websocket(target, cancel)?;

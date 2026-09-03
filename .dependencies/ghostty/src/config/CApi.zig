@@ -79,7 +79,7 @@ export fn ghostty_config_load_file(self: *Config, path: [*:0]const u8) void {
 
 /// Load configuration from a string using Ghostty's normal config-file syntax.
 ///
-/// CDXC:iOSNativeTerminals 2026-05-22-11:06:
+/// CDXC:Terminal 2026-05-22-11:06:
 /// Native iOS terminal settings must update Ghostty surfaces through Ghostty
 /// configuration, not hterm preference JavaScript or UIKit-only colors.
 /// Expose string-backed config loading so the iOS host can apply its existing

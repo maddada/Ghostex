@@ -1,5 +1,5 @@
 /**
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * Visual review story for the Add Worktree modal so the Codex-style restyle
  * can be confirmed without launching the app. Renders the real
  * WorktreeCreateModal with mock agents; bridge calls (existing worktrees,

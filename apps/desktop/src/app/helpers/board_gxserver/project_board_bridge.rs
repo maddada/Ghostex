@@ -12,7 +12,7 @@ pub(crate) fn kanban_workarea_runtime_url_from_project_snapshot(
     snapshot: &GpuiProjectSnapshot,
 ) -> Option<ProjectWorkareaRealRuntimeUrl> {
     /*
-    CDXC:GPUIProjectWorkareaRuntimeCefBundles 2026-06-24-11:03:
+    CDXC:CefRuntime 2026-06-24-11:03:
     Kanban runtime URL authority is the bundled first-party CEF page plus the explicit live sidebar project identity. The URL is passed directly to CefSurface creation and is not stored in shell state, logged, derived from .git/folders, or backed by WKWebView/WebKit.
     */
     if !snapshot.feature_availability.kanban || snapshot.is_quick_projectless {
@@ -58,7 +58,7 @@ pub(crate) fn project_board_bridge_runtime_context_from_snapshot(
     snapshot: Option<&GpuiProjectSnapshot>,
 ) -> Option<ProjectBoardBridgeRuntimeContext> {
     /*
-    CDXC:GPUIProjectWorkareaCefBridge 2026-06-24-11:03:
+    CDXC:CefRuntime 2026-06-24-11:03:
     Kanban and Automate CEF bridge execution may carry only explicit active-project identity from the live sidebar snapshot. The bridge sends gxserver the current project id/path pair for scoped Beads and automation operations, never derives projects from .git/folders/URLs, never launches bd directly, and never logs or persists the private path.
     */
     let snapshot = snapshot?;

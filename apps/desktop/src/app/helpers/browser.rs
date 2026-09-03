@@ -722,16 +722,16 @@ pub(crate) fn browser_tab_icon_element(
     runtime_favicon_fetch: Option<&BrowserFaviconFetchSource>,
 ) -> AnyElement {
     /*
-    CDXC:GPUIBrowserFavicons 2026-06-22-09:11:
+    CDXC:Browser 2026-06-22-09:11:
     GPUI Browser tabs must visibly distinguish address-only placeholders, generic loaded pages, and loaded pages that reported favicon metadata. Use a deterministic native shell glyph/color derived from the runtime-only safe favicon marker whenever an actual favicon image is unavailable.
 
-    CDXC:GPUIBrowserFavicons 2026-06-22-10:41:
+    CDXC:Browser 2026-06-22-10:41:
     Render decoded runtime favicon images when CEF provides a safe capped data:image URL, but keep tab chrome as normal in-layout GPUI elements and fall back to the deterministic URL marker or generic dot when decoding is unavailable.
 
-    CDXC:GPUIBrowserFavicons 2026-06-22-11:05:
+    CDXC:Browser 2026-06-22-11:05:
     HTTP(S) favicon images must render through a favicon-only non-AssetLogger asset loader inside the existing tab icon slot. Loading, failed status, unsupported MIME/format, oversized bodies, oversized decode dimensions, and decode failures all show the safe marker or generic icon without logging raw URLs, response bodies, headers, cookies, tokens, paths, titles, command text, stdout/stderr, or user content.
 
-    CDXC:GPUIBrowserTabs 2026-06-22-16:48:
+    CDXC:Browser 2026-06-22-16:48:
     Restored loaded Browser placeholders have loaded shell state but no materialized CEF surface, so their tab chrome uses a restored teal status dot and suppresses runtime favicon image/fetch rendering until a live surface exists. Address-only tabs keep the neutral placeholder dot and cannot borrow stale page or favicon state.
 
     Non-default profiles replace the favicon slot with their stable generated profile number in a circular badge. The badge is tab-owned chrome, so mixed-profile tabs remain visible without adding overlays or another interactive hit region.
@@ -1016,7 +1016,7 @@ pub(crate) fn browser_feedback_js_string_literal(value: &str) -> String {
 
 pub(crate) fn browser_agentation_feedback_injection_script() -> String {
     /*
-    CDXC:GPUIBrowserFeedback 2026-06-23-11:04:
+    CDXC:Browser 2026-06-23-11:04:
     Browser feedback toolbar parity now injects the Settings-selected Agentation tool into the active GPUI CEF main frame instead of showing a placeholder notification. Keep the script bounded to pinned module URLs, auto-start feedback mode, and avoid persistent logs, console page metadata, raw URLs, titles, page content, cookies, tokens, paths, command text, terminal content, or JS error payloads.
     */
     const TEMPLATE: &str = r##"
@@ -1218,7 +1218,7 @@ pub(crate) fn browser_tab_title_for_url(url: &str) -> String {
 }
 
 /*
-CDXC:GPUIBrowserTabTitleCache 2026-07-12:
+CDXC:Browser 2026-07-12:
 The cached title persisted into browser shell state is the user-visible tab
 label only: trimmed, bounded, and never a URL/query/credential field. It exists
 so restart keeps showing the last displayed title instead of the URL-host
@@ -1311,7 +1311,7 @@ pub(crate) fn gpui_open_existing_project_pull_request_in_browser(
     project_id: &str,
 ) -> Result<(), String> {
     /*
-    CDXC:GPUISidebarGit 2026-06-24-15:43:
+    CDXC:Git 2026-06-24-15:43:
     Existing PR browser opens must derive the URL from gxserver's current GitHub state for the supplied project id. Renderer-provided URLs, DOM text, browser titles, cached labels, and arbitrary payload fields are not accepted as launch authority.
     */
     let result = gpui_gxserver_rpc_result(

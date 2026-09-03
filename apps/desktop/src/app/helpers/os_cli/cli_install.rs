@@ -22,7 +22,7 @@ pub(crate) fn gpui_finish_desktop_control_setup(
     was_update: bool,
 ) -> Result<String, String> {
     /*
-    CDXC:GPUIDesktopControlSettings 2026-08-09:
+    CDXC:Extensions 2026-08-09:
     The Cua Driver installer/updater runs in a visible command-pane terminal.
     This completion step installs the bundled Ghostex Computer Use skill through
     the fixed ownership-verified Ghostex CLI helper and reports command failure
@@ -58,7 +58,7 @@ pub(crate) fn gpui_finish_desktop_control_setup(
 
 pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
     /*
-    CDXC:GPUISettingsCliInstall 2026-06-24-12:56:
+    CDXC:Cli 2026-06-24-12:56:
     CLI repair is real only when GPUI is running from a packaged app that ships the native `Contents/Resources/CLI/ghostex` binary. Development binaries must report unavailable status instead of synthesizing wrappers to a source checkout, while packaged repair writes public wrappers outside the app and replaces only marked Ghostex wrappers, app-owned CLI symlinks, or broken symlinks.
     */
     let cli_dir = gpui_bundled_ghostex_cli_resource_dir()?;
@@ -114,7 +114,7 @@ fn gpui_describe_cli_install_dirs(install_dirs: &[PathBuf]) -> String {
 
 pub(crate) fn gpui_auto_repair_stale_ghostex_cli_wrappers() {
     /*
-    CDXC:GPUIStaleCliWrapperAutoRepair 2026-08-30:
+    CDXC:Cli 2026-08-30:
     Sparkle and DMG updates replace the app bundle but never touch the public
     PATH wrappers, so a wrapper written by an older install keeps exec'ing a
     path that no longer exists (pre-2026-07-13 wrappers exec a removed Node
@@ -215,7 +215,7 @@ pub(crate) fn gpui_install_ghostex_cli_command(
     install_dirs: &[PathBuf],
 ) -> GpuiCliCommandInstallResult {
     /*
-    CDXC:GPUICliInstallRobustness 2026-09-02:
+    CDXC:Cli 2026-09-02:
     First-launch setup links the CLI while the startup wrapper refresh may still
     be running for a user who upgraded, so the wrapper is staged and renamed
     into place instead of remove-then-write: two writers can never race each
@@ -262,7 +262,7 @@ pub(crate) fn gpui_install_ghostex_cli_command(
 
 pub(crate) fn gpui_ghostex_cli_wrapper_content(cli_binary_path: &Path) -> String {
     /*
-    CDXC:GhostexRustCli 2026-07-13:
+    CDXC:Cli 2026-07-13:
     The bundled CLI is the native Rust `ghostex` binary (Contents/Resources/
     CLI/ghostex); wrappers exec it directly with no Node runtime. The wrapper
     file (rather than a symlink) is kept so macOS policy assessment does not
@@ -502,7 +502,7 @@ pub(crate) fn gpui_set_executable_permissions(path: &Path) -> std::io::Result<()
 
 pub(crate) fn gpui_clear_macos_execution_policy_xattrs(path: &Path) {
     /*
-    CDXC:GPUISettingsCliInstall 2026-06-24-12:56:
+    CDXC:Cli 2026-06-24-12:56:
     Repaired public CLI wrappers may inherit macOS execution-policy xattrs from a previous install location. Clear only the two known assessment attributes after wrapper writes/replacements, suppress command output, and keep repair success independent from xattr removal failures.
     */
     #[cfg(target_os = "macos")]
@@ -540,10 +540,10 @@ pub(crate) fn gpui_install_bundled_ghostex_skill(
     display_name: &str,
 ) -> Result<String, String> {
     /*
-    CDXC:GPUISettingsAgentSkills 2026-06-24-12:56:
+    CDXC:AgentSkills 2026-06-24-12:56:
     GPUI Settings installs bundled Ghostex skills by resolving the fixed `ghostex` command on PATH and running only the known `ghostex <namespace> install-skill` argv. Command text never comes from React, child stdout/stderr are suppressed, failures are reported generically, and status is refreshed from disk afterward.
 
-    CDXC:GPUISettingsAgentSkills 2026-06-24-13:08:
+    CDXC:AgentSkills 2026-06-24-13:08:
     Executing a PATH `ghostex` command from Settings requires strict Ghostex ownership evidence: a repair marker plus `ghostex-cli.mjs`, or an app-owned realpath recognized by the CLI repair ownership helper. Broad read-only status strings are not sufficient for process execution.
     */
     let Some(ghostex_path) = gpui_which_command("ghostex") else {

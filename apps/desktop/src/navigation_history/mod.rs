@@ -1,5 +1,5 @@
 /*
-CDXC:NavigationHistory 2026-08-19:
+CDXC:Navigation 2026-08-19:
 The titlebar's Back/Forward pair, sitting between the sidebar toggle and the
 active project name. It walks ONE chronological trail of everything the user has
 had active — sessions and projects, across machines — not a per-project stack.

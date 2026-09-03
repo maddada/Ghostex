@@ -9,7 +9,7 @@ use crate::ghostex_cli::args::Flags;
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's tool launchers: interactive shell resolution,
 desktop activation, ghostex-history/bd/gxserver
 binary discovery, and the shared interactive process runner. Resolution order and error strings must
@@ -605,7 +605,7 @@ pub fn ghostex_desktop_command() -> CliResult<()> {
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 Zehn is no longer a separate Zig binary that Ghostex bundles and spawns. It is a
 Rust crate compiled into this one, so `gx f` runs the picker in-process: no
 `bin/zehn` to stage, no Zig toolchain in the release path, and the Find GUI
@@ -613,7 +613,7 @@ shares the exact same scanner, matcher, and ranking through the same crate.
 */
 pub fn zehn_search_command(args: &[String]) -> CliResult<()> {
     /*
-    CDXC:AgentHistoryFocus 2026-08-07-09:18:
+    CDXC:PromptSearch 2026-08-07-09:18:
     `ghostex find` must give Zehn the exact Ghostex CLI executable that launched
     it. Zehn can then request agent-session focus through the authenticated
     gxserver control path without PATH discovery or coupling itself to Ghostex

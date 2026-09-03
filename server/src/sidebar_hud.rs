@@ -64,7 +64,7 @@ pub struct SidebarHudProjectMutation {
 #[derive(Clone, Debug)]
 pub struct SidebarHudSettingsMutation {
     /*
-    CDXC:GlobalActions 2026-08-01-16:00:
+    CDXC:AgentLauncher 2026-08-01-16:00:
     Global Actions belong to the daemon, not to a project row, so a settings
     mutation is no longer always a project write. A global mutation carries this
     field and leaves `updates` empty; a project mutation is unchanged and leaves
@@ -100,16 +100,16 @@ enum SidebarAgentAcceptAllModeUpdate {
 }
 
 /*
-CDXC:SidebarHudContract 2026-06-24-20:34:
+CDXC:AgentLauncher 2026-06-24-20:34:
 GPUI sidebar and app-modal clients consume normalized launcher/action HUD rows from gxserver instead of hand-mirroring the shared TypeScript read projection in each Rust host. Keep this platform-neutral and project-metadata-only: default rows, hidden built-ins, custom validation, icon allowlists, display order, deleted default actions, and active-project command ownership are resolved here without logging paths, names, commands, URLs, prompts, tokens, stdout/stderr, or daemon bodies.
 
-CDXC:SidebarHudSettingsMutation 2026-06-24-20:54:
+CDXC:AgentLauncher 2026-06-24-20:54:
 Settings save/delete/order mutations for custom agents and actions are gxserver-owned. Accept only narrow semantic mutation payloads, resolve hidden built-in agents, deleted default actions, display order, icon allowlists, active-project command scoping, and worktree parent ownership here, then persist only normalized project metadata fields through the existing project store.
 
-CDXC:GPUIRecentProjects 2026-06-25-21:36:
+CDXC:Projects 2026-06-25-21:36:
 Sidebar HUD action commands must resolve from normal project rows only: explicit boolean isRecentProject true rows are parked Recent Projects metadata and cannot hydrate command buttons or own action mutations. False, missing, or non-boolean flags stay normal so older metadata remains eligible.
 
-CDXC:GPUIRecentProjects 2026-06-25-21:36:
+CDXC:Projects 2026-06-25-21:36:
 When an explicit active project ID resolves only to a parked recent row, the HUD must show default actions and action mutations must fail as no-normal-project behavior instead of borrowing parked commands. Worktree parent ownership also skips parked rows and falls back to the active normal project.
 */
 const DEFAULT_SIDEBAR_AGENTS: &[DefaultSidebarAgent] = &[
@@ -360,7 +360,7 @@ pub fn read_sidebar_hud(projects: &[Value], active_project_id: Option<&str>) -> 
 }
 
 /*
-CDXC:MobileSidebarHud 2026-07-12-00:00:
+CDXC:AgentLauncher 2026-07-12-00:00:
 Mobile clients render quick-action rows for every visible project in one list,
 so the CLI transport needs per-project command buttons in a single response.
 Reuse the exact active-project command resolution per project id; parked
@@ -729,7 +729,7 @@ fn sidebar_command_order_mutation(
 }
 
 /*
-CDXC:GlobalActions 2026-08-01-16:00:
+CDXC:AgentLauncher 2026-08-01-16:00:
 Project and Global Actions accept the exact same action definition from
 Settings — only ownership differs — so both saves validate through one path.
 Splitting the validation would let the two lists drift into accepting different
@@ -809,7 +809,7 @@ fn stored_sidebar_command_from_save_params(
 }
 
 /*
-CDXC:GlobalActions 2026-08-01-16:00:
+CDXC:AgentLauncher 2026-08-01-16:00:
 Global Action mutations never read or write project rows, so they do not resolve
 a command scope, an owner project, or a worktree parent the way Project Action
 mutations must. The repository owns ordering and the stored list; these arms only
@@ -874,7 +874,7 @@ fn global_sidebar_command_order_mutation(
 }
 
 /*
-CDXC:GlobalActions 2026-08-01-16:00:
+CDXC:AgentLauncher 2026-08-01-16:00:
 Global Actions are normalized through the same stored-command projection as
 Project Actions, minus the defaults branch: there are no built-in global actions
 to resurrect or tombstone, so the stored rows are the whole list. Rows arrive
@@ -2161,7 +2161,7 @@ mod tests {
     }
 
     /*
-    CDXC:GlobalActions 2026-08-01-19:00:
+    CDXC:AgentLauncher 2026-08-01-19:00:
     A Global Action may not claim a reserved built-in id. The read projection
     recomputes isDefault from the id, so a stored global "dev" would come back
     marked as a default however it was written, and a run-by-id selector could

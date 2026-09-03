@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines) into git/. This
 slice covers the commit/branch mutation primitives (commit, generate commit
 message, checkout, push, sync-with-remote) and their Beads pre-commit-hook

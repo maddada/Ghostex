@@ -479,7 +479,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     The terminal view's "Queued: N" control is the leading item of the pane's
     own tab bar — existing chrome, a normal sibling frame, drawn beside the tab
     strip rather than over anything.
@@ -514,7 +514,7 @@ impl GhostexGpuiApp {
         }
         let count = counts.total;
         /*
-        CDXC:SessionChatPromptQueue 2026-08-21-b:
+        CDXC:SessionChat 2026-08-21-b:
         A `failed` row holds the whole queue until the user retries or deletes
         it, so the chip's dot turns the sidebar's error red instead of the
         waiting yellow. Only the dot's colour changes — every box property below

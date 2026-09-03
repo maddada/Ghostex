@@ -175,7 +175,7 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_DELAYED_SEND_WINDOW_HEIGHT),
             ),
             /*
-            CDXC:SessionAgentNotes 2026-08-24:
+            CDXC:SessionNotes 2026-08-24:
             The note editor is Rename Session's dialog with a taller text field,
             so it opens on the same frame and the one-shot fit-height pass sizes
             the child window down to whatever it actually rendered.
@@ -197,7 +197,7 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT),
             ),
             /*
-            CDXC:GPUIAppModalSizes 2026-07-26-07:20:
+            CDXC:AppModal 2026-07-26-07:20:
             Settings, Hotkeys, Configure Agents, Configure Actions, and Open Targets all render the one tabbed Settings dialog in the modal host, so they must keep the full Settings frame even though their legacy standalone stylesheets are narrower.
             */
             Self::Settings
@@ -232,7 +232,7 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_DELETE_WORKTREE_WINDOW_HEIGHT),
             ),
             /*
-            CDXC:WorktreeRename 2026-08-09-18:40:
+            CDXC:Worktrees 2026-08-09-18:40:
             Rename Worktree is one field, a preview, a checkbox, and however many
             warnings the checkout has, so it opens on the same compact frame as
             Delete Worktree and the one-shot fit-height pass sizes it down to
@@ -243,7 +243,7 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_DELETE_WORKTREE_WINDOW_HEIGHT),
             ),
             /*
-            CDXC:SidebarSpaces 2026-08-28:
+            CDXC:Spaces 2026-08-28:
             New/Edit Space is a name field, an icon grid, and a color row, so it
             uses the compact modal width with a 380px GPUI content height. The
             native titlebar and frame are outside these window content bounds.
@@ -277,13 +277,13 @@ impl GpuiAppModalKind {
 
     pub(crate) fn is_resizable(self) -> bool {
         /*
-        CDXC:GPUICommandAppModalSize 2026-06-27-09:57:
+        CDXC:AppModal 2026-06-27-09:57:
         Native command-pane Rename Session and Delayed Send are fixed-size child windows. GPUI must not apply a generic resizable minimum to these compact dialogs because Delayed Send is intentionally 470x365.
 
-        CDXC:GPUIAppModalSizes 2026-07-26-07:20:
+        CDXC:AppModal 2026-07-26-07:20:
         Every app-modal window is now fitted to its own dialog, so none of them are resizable. The React dialogs own their internal scrolling, and a resizable frame only ever produced dead space around a fixed-height form or a stretched compact dialog.
 
-        CDXC:SettingsExtensionsTab 2026-08-30:
+        CDXC:Extensions 2026-08-30:
         The Extensions browser was the last resizable app modal; it is a
         Settings tab now, so this is unconditionally false again.
         */
@@ -418,7 +418,7 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
     action_id: &str,
 ) -> Option<GpuiAppModalKind> {
     /*
-    CDXC:GPUICommandPalette 2026-06-26-23:04:
+    CDXC:CommandPalette 2026-06-26-23:04:
     `runGhostexHotkeyAction` needs an explicit app-modal allowlist after shell, pane, sidebar, focus, and action-slot routes have run. Map the separate Quick Access command/session entry actions and legacy sidebar modal ids here without treating every unknown hotkey id as a modal candidate.
     */
     match action_id {
@@ -433,7 +433,7 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
         "actions" | "configureActions" => Some(GpuiAppModalKind::ConfigureActions),
         "openTargets" => Some(GpuiAppModalKind::OpenTargets),
         /*
-        CDXC:SettingsExtensionsTab 2026-08-30:
+        CDXC:Extensions 2026-08-30:
         `openExtensions` is deliberately absent: the Extensions surface is a
         Settings tab now, so the shell route in `run_ghostex_hotkey_action`
         opens Settings with `initialTab: "extensions"` before this app-modal

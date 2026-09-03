@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { buildAgentWorkPrompt } from './project-board-shared';
 
 /*
- * CDXC:BoardStartWork 2026-08-07:
+ * CDXC:ProjectBoard 2026-08-07:
  * gxserver's /api/startBoardWork owns a Rust port of buildAgentWorkPrompt so
  * `ghostex board start-work` sends the same canonical bead work prompt the
  * board sends. There must be exactly one prompt shape: this test renders the

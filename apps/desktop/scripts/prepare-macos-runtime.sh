@@ -19,14 +19,14 @@ if ! xcrun xcodebuild -version >/dev/null 2>&1; then
 	done
 fi
 
-# CDXC:AgentHistorySearch 2026-08-20: zehn is no longer a Zig submodule that this
+# CDXC:PromptSearch 2026-08-20: zehn is no longer a Zig submodule that this
 # script builds and stages as Web/bin/zehn. Prompt-history search is a Rust crate
 # compiled into gxserver, so there is nothing to build, cache, or copy here.
 ZMX_ROOT_EXPLICITLY_CONFIGURED=0
 [[ -n "${ZMX_ROOT:-}" ]] && ZMX_ROOT_EXPLICITLY_CONFIGURED=1
 ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/.dependencies/zmx}"
 GXSERVER_RS_ROOT="${GXSERVER_RS_ROOT:-$REPO_ROOT/server}"
-# CDXC:GhostexTui 2026-08-23: the vendored ghostex-tui terminal app was deleted
+# CDXC:Release 2026-08-23: the vendored ghostex-tui terminal app was deleted
 # from the repository, so nothing is built, fingerprinted, or staged as
 # Web/bin/ghostex-tui any more. A herdr plugin replaces it (spec in
 # docs/2026-08-23/tui2-herdr-plugin/).
@@ -44,7 +44,7 @@ GHOSTEX_APP_VARIANT="${GHOSTEX_APP_VARIANT:-prod}"
 case "$GHOSTEX_APP_VARIANT" in
 prod) ;;
 dev)
-	# CDXC:LocalStartSingleApp 2026-06-09-09:27: Ghostex-dev builds were removed because agents were invoking the dev app path by mistake. Fail before toolchain checks or Xcode generation so direct build commands cannot create Ghostex-dev outside `bun run start`.
+	# CDXC:Build 2026-06-09-09:27: Ghostex-dev builds were removed because agents were invoking the dev app path by mistake. Fail before toolchain checks or Xcode generation so direct build commands cannot create Ghostex-dev outside `bun run start`.
 	echo "Ghostex-dev builds were removed. Use GHOSTEX_APP_VARIANT=prod or unset it." >&2
 	exit 1
 	;;
@@ -54,7 +54,7 @@ dev)
 	;;
 esac
 
-# CDXC:LocalStartArchitecture 2026-06-08-08:42: Apple Silicon local builds must produce Apple-native app resources even when the caller's shell is translated by Rosetta and `uname -m` reports x86_64. Use the physical arm64 capability as the default and keep GHOSTEX_MACOS_ARCH=x86_64 as the explicit Intel build path.
+# CDXC:Build 2026-06-08-08:42: Apple Silicon local builds must produce Apple-native app resources even when the caller's shell is translated by Rosetta and `uname -m` reports x86_64. Use the physical arm64 capability as the default and keep GHOSTEX_MACOS_ARCH=x86_64 as the explicit Intel build path.
 default_macos_arch() {
 	if [[ "$(/usr/sbin/sysctl -in hw.optional.arm64 2>/dev/null || true)" == "1" ]]; then
 		printf 'arm64\n'
@@ -101,7 +101,7 @@ case "$(printf '%s' "$GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES" | tr '[:up
 	GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=0
 	;;
 esac
-# CDXC:OnDemandAssets 2026-07-02-14:10: Release app bundles stop embedding the Ubuntu remote gxserver payloads. In this mode the build tars those payloads into build/on-demand-assets/<version>/ and seals their checksums into Web/on-demand-resources.json inside the signed app. Dev builds keep bundling everything locally, so this stays a release-only mode.
+# CDXC:Release 2026-07-02-14:10: Release app bundles stop embedding the Ubuntu remote gxserver payloads. In this mode the build tars those payloads into build/on-demand-assets/<version>/ and seals their checksums into Web/on-demand-resources.json inside the signed app. Dev builds keep bundling everything locally, so this stays a release-only mode.
 GHOSTEX_ON_DEMAND_ASSETS="${GHOSTEX_ON_DEMAND_ASSETS:-0}"
 case "$(printf '%s' "$GHOSTEX_ON_DEMAND_ASSETS" | tr '[:upper:]' '[:lower:]')" in
 1 | true | yes | on)
@@ -111,7 +111,7 @@ case "$(printf '%s' "$GHOSTEX_ON_DEMAND_ASSETS" | tr '[:upper:]' '[:lower:]')" i
 	GHOSTEX_ON_DEMAND_ASSETS=0
 	;;
 esac
-# CDXC:ContributorStart 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source resources are absent.
+# CDXC:Build 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source resources are absent.
 GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES="${GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES:-${GHOSTEX_LOCAL_START:-0}}"
 case "$(printf '%s' "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" | tr '[:upper:]' '[:lower:]')" in
 1 | true | yes | on)
@@ -140,13 +140,13 @@ acquire_local_start_lock_if_needed() {
 	fi
 	local lock_file="$REPO_ROOT/build/ghostex-local-start.lock"
 	mkdir -p "$(dirname "$lock_file")"
-	# CDXC:LocalStartConcurrency 2026-06-11-18:59: Direct native builds mutate the same DerivedData app bundle that `bun run start` later mirrors into /Applications. Re-enter under the local-start lock unless the launcher already owns it, so a direct build cannot remove generated CEF payloads while another process installs the signed app.
+	# CDXC:Build 2026-06-11-18:59: Direct native builds mutate the same DerivedData app bundle that `bun run start` later mirrors into /Applications. Re-enter under the local-start lock unless the launcher already owns it, so a direct build cannot remove generated CEF payloads while another process installs the signed app.
 	exec /usr/bin/lockf -k "$lock_file" /usr/bin/env GHOSTEX_BUILD_LOCK_HELD=1 /bin/bash "$0" "$@"
 }
 
 acquire_local_start_lock_if_needed "$@"
 
-# CDXC:LocalStartFast 2026-06-07-16:23: Local starts should rebuild expensive bundled resources only when their runtime inputs change. Store content-hash stamps under build/<arch> so repeated `bun run start` calls do not churn source files or rely on generated folders that may be deleted by other build steps.
+# CDXC:Build 2026-06-07-16:23: Local starts should rebuild expensive bundled resources only when their runtime inputs change. Store content-hash stamps under build/<arch> so repeated `bun run start` calls do not churn source files or rely on generated folders that may be deleted by other build steps.
 fingerprint_inputs() {
 	"${GXSERVER_NODE_BIN:-node}" "$REPO_ROOT/tooling/fingerprint-build-inputs.mjs" "$@"
 }
@@ -240,7 +240,7 @@ prune_node_pty_prebuilds() {
 	if [[ ! -d "$root" ]]; then
 		return 0
 	fi
-	# CDXC:ReleaseBundleSize 2026-06-08-19:49: macOS DMGs are built per architecture, so bundled app resources must keep only the matching node-pty darwin prebuild. Prune Windows/Linux and opposite-arch prebuild directories from generated code-server payloads to reduce download size without changing runtime behavior.
+	# CDXC:Release 2026-06-08-19:49: macOS DMGs are built per architecture, so bundled app resources must keep only the matching node-pty darwin prebuild. Prune Windows/Linux and opposite-arch prebuild directories from generated code-server payloads to reduce download size without changing runtime behavior.
 	while IFS= read -r -d '' prebuilds_dir; do
 		while IFS= read -r -d '' platform_dir; do
 			if [[ "$(basename "$platform_dir")" != "$keep_platform" ]]; then
@@ -327,7 +327,7 @@ prepare_code_server_app_node_runtime() {
 	expected_sha256="$(code_server_node_distribution_sha256 "$distribution_arch")"
 	node_bin="$extract_root/bin/node"
 
-	# CDXC:CodeServerRuntime 2026-06-08-12:17: code-server owns Ghostex's app-bundled Node runtime. Cache the official per-architecture Node 22 distribution for build-time npm/node-gyp work, then stage the executable inside Web/code-server/lib/node so gxserver and code-server share one bundled Node instead of shipping duplicate runtimes.
+	# CDXC:CodeEditor 2026-06-08-12:17: code-server owns Ghostex's app-bundled Node runtime. Cache the official per-architecture Node 22 distribution for build-time npm/node-gyp work, then stage the executable inside Web/code-server/lib/node so gxserver and code-server share one bundled Node instead of shipping duplicate runtimes.
 	if [[ -x "$node_bin" ]] &&
 		"$node_bin" -e "process.exit(process.versions.node === '$CODE_SERVER_APP_NODE_VERSION' ? 0 : 1)" >/dev/null 2>&1 &&
 		binary_supports_macos_arch "$node_bin" "$GHOSTEX_MACOS_ARCH"; then
@@ -358,7 +358,7 @@ prepare_code_server_app_node_runtime() {
 	printf '%s\n' "$node_bin"
 }
 
-# CDXC:StrandedSubmoduleCheckout 2026-08-25: The 2026-08-22 restructure moved the
+# CDXC:RepoStructure 2026-08-25: The 2026-08-22 restructure moved the
 # code-server, zmx and zehn gitlinks from the repository root into .dependencies/.
 # Git cannot relocate a submodule working tree as part of a gitlink rename, so every
 # checkout that had them initialized before that commit keeps the real tree at the old
@@ -594,7 +594,7 @@ ensure_code_server_payload() {
 	commit="$(git -C "$CODE_SERVER_ROOT" rev-parse HEAD 2>/dev/null || printf 'development')"
 	payload_digest="$(code_server_vscode_payload_digest "$vscode_target" "$node_identity" "$npm_version" "$package_version" "$commit")"
 	payload_cache_key="code-server-vscode-payload-$GHOSTEX_MACOS_ARCH"
-	# CDXC:CodeServerRuntime 2026-06-09-17:06: Embedded VS Code search depends on @vscode/ripgrep/bin/rg. Rebuild the generated REH web payload when code-server packaging inputs change, server-main.js is missing, or ripgrep is missing/wrong-arch so `bun run start` and release builds cannot reuse a stale payload that opens but fails search.
+	# CDXC:CodeEditor 2026-06-09-17:06: Embedded VS Code search depends on @vscode/ripgrep/bin/rg. Rebuild the generated REH web payload when code-server packaging inputs change, server-main.js is missing, or ripgrep is missing/wrong-arch so `bun run start` and release builds cannot reuse a stale payload that opens but fails search.
 	if ! cache_matches "$payload_cache_key" "$payload_digest" "$vscode_release_root/out/server-main.js" "$vscode_ripgrep_bin" ||
 		! binary_supports_macos_arch "$vscode_ripgrep_bin" "$GHOSTEX_MACOS_ARCH"; then
 		(
@@ -650,12 +650,12 @@ package_code_server_if_needed() {
 		--path "$CODE_SERVER_ROOT/package-lock.json" \
 		--path "$CODE_SERVER_ROOT/.node-version" \
 		--path "$CODE_SERVER_ROOT/src/browser")"
-	# CDXC:CodeServerRuntime 2026-06-08-12:17: The app bundle must contain a self-contained code-server runtime at Web/code-server and the single shared Node executable at Web/code-server/lib/node. Missing code-server resources are build failures instead of installed-user Node prompts.
+	# CDXC:CodeEditor 2026-06-08-12:17: The app bundle must contain a self-contained code-server runtime at Web/code-server and the single shared Node executable at Web/code-server/lib/node. Missing code-server resources are build failures instead of installed-user Node prompts.
 	if cache_matches "code-server-package-$GHOSTEX_MACOS_ARCH" "$package_digest" "$target_dir/out/node/entry.js" "$target_dir/lib/vscode/out/server-main.js" "$target_dir/lib/vscode/node_modules/@vscode/ripgrep/bin/rg" "$target_dir/lib/node" "$target_dir/node_modules" "$expected_node_pty_prebuild" &&
 		node_pty_prebuilds_match_arch "$target_dir" &&
 		binary_supports_macos_arch "$target_dir/lib/node" "$GHOSTEX_MACOS_ARCH" &&
 		binary_supports_macos_arch "$target_dir/lib/vscode/node_modules/@vscode/ripgrep/bin/rg" "$GHOSTEX_MACOS_ARCH"; then
-		# CDXC:CodeServerRuntime 2026-06-08-16:23: Web/code-server is a shared staging directory reused by arm64 and x86_64 release passes. A per-arch cache stamp is only valid when the staged Node executable still contains the requested CPU slice; otherwise restage the package so app validation uses the matching runtime.
+		# CDXC:CodeEditor 2026-06-08-16:23: Web/code-server is a shared staging directory reused by arm64 and x86_64 release passes. A per-arch cache stamp is only valid when the staged Node executable still contains the requested CPU slice; otherwise restage the package so app validation uses the matching runtime.
 		echo "code-server package is current; skipping package rebuild."
 		return 0
 	fi
@@ -708,7 +708,7 @@ package_code_server_if_needed() {
 
 stage_shared_code_server_node_runtime() {
 	local target_node="$WEB_DIR/code-server/lib/node"
-	# CDXC:ContributorStart 2026-06-22-23:23: Optional Source panes must not remove the shared app-owned Node runtime. Native sidebar helpers and Portless still resolve Web/code-server/lib/node, so contributor builds without the code-server submodule stage only that executable and leave Source-specific files absent.
+	# CDXC:Build 2026-06-22-23:23: Optional Source panes must not remove the shared app-owned Node runtime. Native sidebar helpers and Portless still resolve Web/code-server/lib/node, so contributor builds without the code-server submodule stage only that executable and leave Source-specific files absent.
 	if [[ "$APP_CAPABILITY_SOURCE_EDITOR" != "true" ]]; then
 		rm -rf "$WEB_DIR/code-server"
 	fi
@@ -881,7 +881,7 @@ package_portless_if_needed() {
 	done < <(find "$source_dir" -type f -print | LC_ALL=C sort)
 	package_digest="$(fingerprint_inputs "${fingerprint_args[@]}")"
 
-	# CDXC:PortlessPackaging 2026-06-22-22:26: Ghostex packages the published portless@0.14.0 CLI as Web/portless and runs it with the shared Web/code-server/lib/node runtime. Do not stage a second Node runtime; fail packaging if the installed package does not contain dist/cli.js.
+	# CDXC:Portless 2026-06-22-22:26: Ghostex packages the published portless@0.14.0 CLI as Web/portless and runs it with the shared Web/code-server/lib/node runtime. Do not stage a second Node runtime; fail packaging if the installed package does not contain dist/cli.js.
 	if cache_matches "portless-package-$GHOSTEX_MACOS_ARCH" "$package_digest" "$target_dir/package.json" "$target_dir/dist/cli.js" &&
 		portless_staged_cli_smoke_check "$target_dir" >/dev/null 2>&1; then
 		echo "Portless package is current; skipping package rebuild."
@@ -960,7 +960,7 @@ build_zmx_if_needed() {
 		--path "$ZMX_ROOT/build.zig" \
 		--path "$ZMX_ROOT/build.zig.zon")"
 	if cache_matches "zmx-$GHOSTEX_MACOS_ARCH" "$build_digest" "$output_path"; then
-		# CDXC:LocalStartArchitecture 2026-06-08-08:42: zmx writes every macOS target to .dependencies/zmx/zig-out/bin/zmx, so an old per-arch cache stamp is not enough to prove the shared output still contains the requested CPU slice. Verify the Mach-O architecture before skipping or Ghostex can launch Intel zmx from an arm64 app.
+		# CDXC:Build 2026-06-08-08:42: zmx writes every macOS target to .dependencies/zmx/zig-out/bin/zmx, so an old per-arch cache stamp is not enough to prove the shared output still contains the requested CPU slice. Verify the Mach-O architecture before skipping or Ghostex can launch Intel zmx from an arm64 app.
 		if binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
 			echo "zmx is current; skipping Zig build."
 			return 0
@@ -970,7 +970,7 @@ build_zmx_if_needed() {
 
 	(
 		cd "$ZMX_ROOT"
-		# CDXC:ZmxPersistence 2026-05-20-10:23: Zig resolves the native build runner through the selected macOS Xcode SDK, which can fail before zmx compilation starts. Scope the Command Line Tools developer dir to the zmx submodule build only; the zmx artifact itself is still built for the explicit deployment target above. This is not version-specific: it applied to Zig 0.15 and still applies to the 0.16 toolchain zmx builds with today.
+		# CDXC:Zmx 2026-05-20-10:23: Zig resolves the native build runner through the selected macOS Xcode SDK, which can fail before zmx compilation starts. Scope the Command Line Tools developer dir to the zmx submodule build only; the zmx artifact itself is still built for the explicit deployment target above. This is not version-specific: it applied to Zig 0.15 and still applies to the 0.16 toolchain zmx builds with today.
 		ZMX_BUILD_ENV=(env -u LDFLAGS ZIG="$ZIG_BIN")
 		if [[ -z "${ZMX_BUILD_DEVELOPER_DIR:-}" ]] &&
 			DEVELOPER_DIR=/Library/Developer/CommandLineTools /usr/bin/xcrun --sdk macosx --show-sdk-path >/dev/null 2>&1; then
@@ -1042,7 +1042,7 @@ EOF
 	printf '%s\n' "$cargo_bin"
 }
 
-# CDXC:AnonymousAnalytics 2026-08-26: the marketing version gxserver bakes in
+# CDXC:Telemetry 2026-08-26: the marketing version gxserver bakes in
 # (server/build.rs). Same resolution rule build-macos-app.sh uses for the desktop
 # crate: an explicit env wins, otherwise the root package.json is the source of
 # truth. Without this the daemon would report its placeholder crate version
@@ -1090,8 +1090,8 @@ EOF
 		return 0
 	fi
 
-	# CDXC:GxserverRustBuild 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
-	# CDXC:LocalBuildCache 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `bun run start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (sccache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
+	# CDXC:Build 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
+	# CDXC:Build 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `bun run start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (sccache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
 	(
 		cd "$GXSERVER_RS_ROOT"
 		GHOSTEX_GPUI_MARKETING_VERSION="$marketing_version" \
@@ -1163,7 +1163,7 @@ stage_gxserver_protocol_exports() {
 	rm -rf "$protocol_stage_dir"
 	mkdir -p "$protocol_stage_dir/src" "$protocol_stage_dir/types" "$target_dir/dist/protocol"
 	cp "$REPO_ROOT/packages/shared/gxserver-protocol.ts" "$protocol_stage_dir/src/index.ts"
-	# CDXC:GxserverProtocolStaging 2026-08-21-12:10: packages/shared/gxserver-protocol.ts pulls in
+	# CDXC:ServerApi 2026-08-21-12:10: packages/shared/gxserver-protocol.ts pulls in
 	# sibling shared modules (session-chat.ts, which now pulls session-chat-queue.ts).
 	# Stage the whole relative-import closure instead of a hand-kept file list so adding a
 	# shared module never breaks packaging with a TS2307 "cannot find module" failure.
@@ -1326,12 +1326,12 @@ package_gxserver_rust_package() {
 	local package_dir="$1"
 	local rust_bin="$2"
 	local package_version="$3"
-	# CDXC:GxserverRustPackaging 2026-06-22-16:17: Local and release macOS builds no longer keep the deleted gxserver/ TypeScript source tree. Assemble the Rust daemon package directly from server, packages/shared/gxserver-protocol.ts, and app-owned tool binaries so `bun run start` never cds into gxserver/ for the default packaged daemon.
-	# CDXC:ContributorStart 2026-06-22-23:23: zmx remains required.
+	# CDXC:Release 2026-06-22-16:17: Local and release macOS builds no longer keep the deleted gxserver/ TypeScript source tree. Assemble the Rust daemon package directly from server, packages/shared/gxserver-protocol.ts, and app-owned tool binaries so `bun run start` never cds into gxserver/ for the default packaged daemon.
+	# CDXC:Build 2026-06-22-23:23: zmx remains required.
 	rm -rf "$package_dir"
 	mkdir -p "$package_dir/bin"
 	cp "$rust_bin" "$package_dir/bin/gxserver"
-	# CDXC:GhostexRustCli 2026-07-13: the public ghostex/gx CLI is the native
+	# CDXC:Cli 2026-07-13: the public ghostex/gx CLI is the native
 	# Rust binary built alongside gxserver; stage it in the same package so
 	# app bundles and PATH wrappers resolve one implementation.
 	cp "${rust_bin%/*}/ghostex" "$package_dir/bin/ghostex"
@@ -1429,7 +1429,7 @@ stage_remote_gxserver_linux_package_if_configured() {
 
 stage_remote_gxserver_linux_packages_if_configured() {
 	if [[ "$GHOSTEX_ON_DEMAND_ASSETS" == "1" ]]; then
-		# CDXC:OnDemandAssets 2026-07-02-14:10: On-demand releases publish the Ubuntu packages as version-pinned GitHub release assets instead of embedding them in the app bundle. stage_on_demand_release_assets validates the same source packages and tars them; nothing is copied under Web/.
+		# CDXC:Release 2026-07-02-14:10: On-demand releases publish the Ubuntu packages as version-pinned GitHub release assets instead of embedding them in the app bundle. stage_on_demand_release_assets validates the same source packages and tars them; nothing is copied under Web/.
 		rm -rf "$WEB_DIR/gxserver-linux-x64" "$WEB_DIR/gxserver-linux-arm64"
 		return 0
 	fi
@@ -1558,7 +1558,7 @@ package_gxserver_if_needed() {
 	# GPUI bundles the native Rust gxserver package used by standalone installs.
 	# TypeScript daemon packaging is intentionally unsupported.
 	#
-	# CDXC:LocalStartFast 2026-06-07-16:23: gxserver packaging should skip work when gxserver runtime sources, package metadata, packager code, the bundled zmx binary, and generated protocol inputs are unchanged.
+	# CDXC:Build 2026-06-07-16:23: gxserver packaging should skip work when gxserver runtime sources, package metadata, packager code, the bundled zmx binary, and generated protocol inputs are unchanged.
 	#
 	# Rust packaging preserves generated TypeScript protocol exports for web
 	# consumers, but the daemon and public CLI are native executables.
@@ -1585,7 +1585,7 @@ package_gxserver_if_needed() {
 	cache_outputs+=("$target_dir/bin/ghostex")
 	if cache_matches "gxserver-package-$GHOSTEX_MACOS_ARCH" "$package_digest" "${cache_outputs[@]}" &&
 		gxserver_package_supports_macos_arch "$target_dir"; then
-		# CDXC:GxserverPackaging 2026-06-08-16:23: Web/gxserver is also shared across dual-architecture release passes. Do not accept a cache hit unless the staged gxserver and zmx binaries match the requested architecture, or Intel and arm64 DMGs can silently inherit the previous pass's native artifacts.
+		# CDXC:Release 2026-06-08-16:23: Web/gxserver is also shared across dual-architecture release passes. Do not accept a cache hit unless the staged gxserver and zmx binaries match the requested architecture, or Intel and arm64 DMGs can silently inherit the previous pass's native artifacts.
 		echo "gxserver package is current; skipping package rebuild."
 		return 0
 	fi
@@ -1600,7 +1600,7 @@ package_gxserver_if_needed() {
 write_build_capabilities_manifest() {
 	local notes_payload=""
 	local note
-	# CDXC:ContributorStart 2026-06-23-04:03: Local starts may have no skipped optional resources. macOS /bin/bash 3.2 treats an empty array expansion as unbound under `set -u`, so emit an empty notes payload without expanding the array when it has no entries.
+	# CDXC:Build 2026-06-23-04:03: Local starts may have no skipped optional resources. macOS /bin/bash 3.2 treats an empty array expansion as unbound under `set -u`, so emit an empty notes payload without expanding the array when it has no entries.
 	if ((${#APP_OPTIONAL_RESOURCE_NOTES[@]} > 0)); then
 		for note in "${APP_OPTIONAL_RESOURCE_NOTES[@]}"; do
 			notes_payload+="$note"$'\n'
@@ -1623,7 +1623,7 @@ const notes = String(process.env.GHOSTEX_CAP_NOTES || "")
 const bool = (name) => process.env[name] === "true" || process.env[name] === "1";
 
 /*
-CDXC:ContributorStart 2026-06-22-23:23:
+CDXC:Build 2026-06-22-23:23:
 The app bundle needs a structured resource-capability manifest so local validation and Settings can distinguish intentionally omitted optional contributor modules from broken packaged resources. Keep the payload free of filesystem paths because persistent app diagnostics may include the same capability fields later.
 */
 writeFileSync(
@@ -1644,7 +1644,7 @@ writeFileSync(
 JS
 }
 
-# CDXC:CodeServerRuntime 2026-06-08-12:17: code-server owns the bundled Node runtime in the macOS app. Build code-server with Node 22 and stage that runtime inside Web/code-server/lib/node; explicit TypeScript gxserver packages reuse that runtime instead of shipping a duplicate Node.
+# CDXC:CodeEditor 2026-06-08-12:17: code-server owns the bundled Node runtime in the macOS app. Build code-server with Node 22 and stage that runtime inside Web/code-server/lib/node; explicit TypeScript gxserver packages reuse that runtime instead of shipping a duplicate Node.
 CODE_SERVER_NODE_BIN="$(prepare_code_server_app_node_runtime)"
 CODE_SERVER_NODE_DIR="$(cd "$(dirname "$CODE_SERVER_NODE_BIN")" && pwd)"
 CODE_SERVER_NPM_BIN="$CODE_SERVER_NODE_DIR/npm"
@@ -1654,7 +1654,7 @@ if [[ ! -x "$CODE_SERVER_NPM_BIN" ]]; then
 fi
 CODE_SERVER_ROOT="$(resolve_code_server_root || true)"
 if [[ -z "$CODE_SERVER_ROOT" ]]; then
-	# CDXC:StrandedSubmoduleCheckout 2026-08-25: An explicitly configured root that does
+	# CDXC:RepoStructure 2026-08-25: An explicitly configured root that does
 	# not resolve is a caller mistake, not a stranded checkout, so keep its own message.
 	# Otherwise a previously initialized code-server must never fall through to the
 	# contributor skip below; that skip is only correct when nothing was ever set up.
@@ -1690,7 +1690,7 @@ if [[ "$GXSERVER_NODE_MAJOR" != "$CODE_SERVER_APP_NODE_MAJOR" ]]; then
 fi
 GXSERVER_NODE_MODULE_VERSION="$("$GXSERVER_NODE_BIN" -p 'process.versions.modules')"
 
-# CDXC:NativeBuild 2026-05-29-11:24: `bun run start` builds zmx and its Ghostty Zig dependency.
+# CDXC:Build 2026-05-29-11:24: `bun run start` builds zmx and its Ghostty Zig dependency.
 # Both are on Zig 0.16 now (zmx was re-ported onto upstream/main for 0.16, matching the
 # vendored ghostty pin), so the repo needs exactly one Zig toolchain. An explicit `ZIG` still
 # wins; otherwise prefer a 0.16 binary from PATH/Homebrew/mise instead of blindly taking the
@@ -1743,14 +1743,14 @@ mkdir -p "$WEB_DIR"
 rm -rf "$CLI_DIR"
 mkdir -p "$CLI_DIR"
 
-# CDXC:ZmxPersistence 2026-05-20-09:57: zmx pane refresh is now a zmx IPC feature, so Ghostex must bundle the pinned submodule binary instead of depending on whichever zmx happens to be on PATH. Build the submodule for the requested macOS architecture and copy it into app resources where TerminalWorkspaceView can launch it directly.
+# CDXC:Zmx 2026-05-20-09:57: zmx pane refresh is now a zmx IPC feature, so Ghostex must bundle the pinned submodule binary instead of depending on whichever zmx happens to be on PATH. Build the submodule for the requested macOS architecture and copy it into app resources where TerminalWorkspaceView can launch it directly.
 if [[ ! -f "$ZMX_ROOT/build.zig" ]]; then
 	{
 		if [[ "$ZMX_ROOT_EXPLICITLY_CONFIGURED" == "1" ]]; then
 			printf 'zmx source is missing:\n  %s\n\n' "$ZMX_ROOT"
 			printf 'ZMX_ROOT is set to an external checkout, so it is not a submodule of this repository.\nPoint ZMX_ROOT at a zmx checkout that contains build.zig, or unset it to use the bundled submodule.\n'
 		else
-			# CDXC:StrandedSubmoduleCheckout 2026-08-25: `git submodule update --init` is the
+			# CDXC:RepoStructure 2026-08-25: `git submodule update --init` is the
 			# wrong repair for a checkout the 2026-08-22 restructure stranded at the old
 			# top-level zmx path: it re-clones instead of reusing the tree that is already
 			# on disk. Detect that signature and print the move plus pointer repair.
@@ -1798,7 +1798,7 @@ rm -rf "$WEB_DIR/bin"
 mkdir -p "$WEB_DIR/bin"
 cp "$ZMX_ROOT/zig-out/bin/zmx" "$WEB_DIR/bin/zmx"
 chmod 755 "$WEB_DIR/bin/zmx"
-# CDXC:ContributorStart 2026-06-22-23:23: Optional contributor submodules should be packaged when present and strict, but absent optional checkouts should only disable their feature in local starts. Keep zmx above as the hard terminal/persistence dependency; gate Source independently so one missing feature cannot remove the rest of the app shell.
+# CDXC:Build 2026-06-22-23:23: Optional contributor submodules should be packaged when present and strict, but absent optional checkouts should only disable their feature in local starts. Keep zmx above as the hard terminal/persistence dependency; gate Source independently so one missing feature cannot remove the rest of the app shell.
 if [[ -n "$CODE_SERVER_ROOT" ]]; then
 	if [[ "$GHOSTEX_ON_DEMAND_ASSETS" == "1" ]] && published_code_server_component_asset; then
 		echo "Skipping local code-server packaging because its immutable macOS component is already published."
@@ -1810,17 +1810,17 @@ fi
 stage_shared_code_server_node_runtime
 package_portless_if_needed
 package_gxserver_if_needed
-# CDXC:CliSessions 2026-05-10-03:28: Shells resolve the installed macOS
+# CDXC:Cli 2026-05-10-03:28: Shells resolve the installed macOS
 # executable as a terminal command. Bundle the native CLI in app resources
 # so main.swift can proxy command argv before the AppKit app starts.
-# CDXC:CliBranding 2026-05-26-15:11: Public CLI commands are now `ghostex`
+# CDXC:Cli 2026-05-26-15:11: Public CLI commands are now `ghostex`
 # and `gx`; the bundled binary filename follows the long public CLI name while
 # internal GHOSTEX_* environment names and storage paths remain implementation
 # details. The macOS app bundle should ship executable `ghostex` and `gx`
 # launchers automatically so Homebrew can install both public commands without
 # asking users to add shell aliases by hand.
-# CDXC:CliInstall 2026-06-07-13:53: The app CLI is not a web asset. Stage it under Contents/Resources/CLI so DMG and Homebrew installs can symlink public commands to one app-owned runtime while Web remains only the sidebar/runtime asset folder.
-# CDXC:GhostexRustCli 2026-07-13: the public CLI is the native Rust `ghostex`
+# CDXC:Cli 2026-06-07-13:53: The app CLI is not a web asset. Stage it under Contents/Resources/CLI so DMG and Homebrew installs can symlink public commands to one app-owned runtime while Web remains only the sidebar/runtime asset folder.
+# CDXC:Cli 2026-07-13: the public CLI is the native Rust `ghostex`
 # binary built with gxserver; the Node module + launcher scripts were deleted.
 cp "$WEB_DIR/gxserver/bin/ghostex" "$CLI_DIR/ghostex"
 ln -sfh "ghostex" "$CLI_DIR/gx"

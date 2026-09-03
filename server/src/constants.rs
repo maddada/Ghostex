@@ -8,7 +8,7 @@ pub const GXSERVER_REMOTE_API_HOST: &str = "0.0.0.0";
 pub const GXSERVER_REMOTE_API_PORT: u16 = 58745;
 pub const GXSERVER_JSON_BODY_LIMIT_BYTES: usize = 1024 * 1024;
 /*
-CDXC:SessionChatImagePaste 2026-08-01:
+CDXC:Clipboard 2026-08-01:
 saveSessionChatImage carries a pasted image as base64 inside the JSON body.
 The terminal paste path caps images at 12 MiB on disk; base64 inflates that
 by 4/3, so 20 MiB leaves headroom for the JSON envelope without opening the
@@ -29,7 +29,7 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     "remoteLimitedApi",
     "strictProtocolVersion",
     /*
-    CDXC:GPUIWindowsTerminalStartup 2026-08-03:
+    CDXC:PlatformSupport 2026-08-03:
     Windows shells can outlive or temporarily bundle an older WSL gxserver.
     Advertise the atomic create/start/attach operation explicitly so clients
     select it before sending a request instead of inferring endpoint support
@@ -37,7 +37,7 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     */
     "atomicWorkspaceTerminalCreate",
     /*
-    CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     Sidebar V2 hides its settle/snooze affordances against daemons that cannot
     persist the lifecycle. The presentation snapshot carries the machine-scoped
     `capabilities` object clients actually read; these strings keep
@@ -46,7 +46,7 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     "sessionSettlement",
     "sessionSnooze",
     /*
-    CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+    CDXC:Git 2026-07-29-00:00:
     Sidebar V2's card row hides its branch/PR affordances against daemons that
     cannot resolve per-session git state. Same split as the lifecycle flags: the
     presentation snapshot's `capabilities` object is what clients read, this
@@ -54,7 +54,7 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     */
     "sessionGitStatus",
     /*
-    CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+    CDXC:Worktrees 2026-07-29-00:00:
     Sidebar V2 hides "New worktree session…" against daemons that cannot create
     a worktree session atomically. Same split as the flags above: the
     presentation snapshot's `capabilities` object is what clients read, this
@@ -62,7 +62,7 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     */
     "worktreeSessions",
     /*
-    CDXC:GPUIRemoteNewTerminal 2026-08-20:
+    CDXC:RemoteMachines 2026-08-20:
     A remote machine runs the gxserver package its client installed, so it can
     be older than the client that talks to it. `promptEditor: "code-server"` is
     rejected outright by daemons built before that mode existed, which turned a
@@ -72,7 +72,7 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     */
     "codeServerPromptEditor",
     /*
-    CDXC:SessionAgentNotes 2026-08-24:
+    CDXC:SessionNotes 2026-08-24:
     Session notes are keyed by the agent session id and published on the
     presentation snapshot, so a client talking to an older remote daemon must
     be able to tell "this daemon has no notes table" apart from "this session
@@ -80,7 +80,7 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     */
     "sessionAgentNotes",
     /*
-    CDXC:SidebarSpaces 2026-08-27:
+    CDXC:Spaces 2026-08-27:
     Spaces are the daemon-owned saved sidebar filter. Same split as the flags
     above: the presentation snapshot's `capabilities` object is what clients
     read before offering the Space row and the Spaces context submenu; this

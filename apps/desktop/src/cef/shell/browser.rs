@@ -61,7 +61,7 @@ wrap_task! {
             platform::prepare_native_view_for_focus(native_view);
             register_native_view_browser(native_view, &self.browser, false, false);
             /*
-            CDXC:GPUICefDevToolsFocus 2026-07-15:
+            CDXC:FocusRouting 2026-07-15:
             OnAfterCreated precedes native DevTools window attachment on macOS,
             so its host handle can still be null. A CEF UI task runs after that
             creation callback, at which point the final native root can be
@@ -103,7 +103,7 @@ wrap_context_menu_handler! {
                 return;
             };
             /*
-            CDXC:GPUICefContextMenuParity 2026-07-10:
+            CDXC:ContextMenus 2026-07-10:
             Match the production macOS CEF browser menu by preserving CEF's
             normal page/edit/link commands and appending one real Inspect
             Element command. This remains Chromium-owned menu UI and does not
@@ -207,7 +207,7 @@ wrap_life_span_handler! {
 
         fn do_close(&self, _browser: Option<&mut cef::Browser>) -> c_int {
             /*
-            CDXC:GPUIResourcesTitlebar 2026-07-09:
+            CDXC:Resources 2026-07-09:
             All GPUI CEF browsers are child NSViews inside app-owned GPUI
             windows. CEF's default DoClose flow (returning 0) sends a native
             close to the browser's top-level host window, so dropping any
@@ -217,7 +217,7 @@ wrap_life_span_handler! {
             is fully owned by `CefBrowser::drop`, and the host GPUI window
             must never receive a close from CEF.
 
-            CDXC:GPUICefCloseContract 2026-08-24:
+            CDXC:CefRuntime 2026-08-24:
             Returning handled here does NOT end the close on its own — per
             cef_life_span_handler.h the app must still complete it by
             proceeding with window/view-hierarchy tear-down, or the browser is
@@ -228,7 +228,7 @@ wrap_life_span_handler! {
             teardown because it performs that removal; do not turn
             release_native_view back into a no-op.
 
-            CDXC:GPUIBrowserAgentClose 2026-08-21:
+            CDXC:Browser 2026-08-21:
             DevTools Target.closeTarget and /json/close enter through this
             same CEF close request. Browser panes must hand that request back
             to the GPUI tab model before returning handled; otherwise CEF
@@ -244,7 +244,7 @@ wrap_life_span_handler! {
 
         fn on_before_close(&self, browser: Option<&mut cef::Browser>) {
             /*
-            CDXC:GPUICefTeardownRegistry 2026-07-11:
+            CDXC:CefRuntime 2026-07-11:
             The main-thread native-view registries (CEF_BROWSERS_BY_NATIVE_VIEW,
             HIDDEN_CEF_NATIVE_VIEWS, ACTIVE_CEF_NATIVE_VIEW) were cleaned up
             only by `CefBrowser::drop`, so a browser torn down by CEF itself
@@ -282,10 +282,10 @@ wrap_life_span_handler! {
             no_javascript_access: Option<&mut c_int>,
         ) -> c_int {
             /*
-            CDXC:GPUIBrowserPopups 2026-06-22-07:14:
+            CDXC:Browser 2026-06-22-07:14:
             Browser-mode target=_blank and window.open requests must stay inside the GPUI Browser workspace. Intercept CEF popup creation through cef-rs LifeSpanHandler, forward only the requested target URL to the shell tab model, and return handled so Chromium does not create a separate native CEF window.
 
-            CDXC:GPUIBrowserPopups 2026-06-23-11:43:
+            CDXC:Browser 2026-06-23-11:43:
             Match native macOS CEF popup policy: empty target URLs are handled here without dispatching a shell popup callback because there is no transferable URL/content and no fallback transfer path. Non-empty targets remain shell-owned Browser tab requests.
             */
             if let Some(no_javascript_access) = no_javascript_access {
@@ -317,7 +317,7 @@ wrap_display_handler! {
             url: Option<&CefString>,
         ) {
             /*
-            CDXC:GPUIBrowserMetadata 2026-06-22-07:23:
+            CDXC:Browser 2026-06-22-07:23:
             Browser-tab URL state must be driven by CEF's DisplayHandler rather than synthetic shell guesses. Forward only main-frame address changes to the GPUI tab model, where raw runtime URLs can update the active address field while persistence remains guarded by the existing sanitizer.
             */
             if let Some(frame) = frame
@@ -338,7 +338,7 @@ wrap_display_handler! {
 
         fn on_title_change(&self, _browser: Option<&mut cef::Browser>, title: Option<&CefString>) {
             /*
-            CDXC:GPUIBrowserMetadata 2026-06-22-07:23:
+            CDXC:Browser 2026-06-22-07:23:
             Page titles may contain user-owned content, so CEF title callbacks may update only runtime tab-strip presentation. The GPUI shell-state writer must continue deriving restored titles from sanitized URLs instead of storing raw page titles.
             */
             let title = title.map(CefString::to_string).unwrap_or_default();
@@ -351,7 +351,7 @@ wrap_display_handler! {
             icon_urls: Option<&mut cef::CefStringList>,
         ) {
             /*
-            CDXC:GPUIBrowserFavicons 2026-06-22-09:11:
+            CDXC:Browser 2026-06-22-09:11:
             CEF favicon URL callbacks are runtime browser metadata only. Forward a single representative non-empty URL so GPUI browser chrome and sidebar sessions can show favicon presence, but keep bitmap download/cache and shell-state persistence of favicon URLs out of this slice.
             */
             let representative_url = icon_urls.and_then(|icon_urls| {
@@ -383,7 +383,7 @@ wrap_drag_handler! {
             _mask: DragOperationsMask,
         ) -> c_int {
             /*
-            CDXC:GPUISessionChatDropPaths 2026-08-29:
+            CDXC:Clipboard 2026-08-29:
             Chromium never exposes an OS file drag's absolute paths to the
             page, so the browser process is the only place a Session Chat
             drop can resolve to real local paths (folders included). Publish
@@ -445,7 +445,7 @@ wrap_permission_handler! {
             callback: Option<&mut MediaAccessCallback>,
         ) -> c_int {
             /*
-            CDXC:GPUIBrowserMediaPermissions 2026-07-27:
+            CDXC:Browser 2026-07-27:
             Only device microphone/camera requests are answered by the shell;
             desktop capture bits keep CEF's default deny so a mixed request can
             never grant screen capture as a side effect of a microphone
@@ -488,7 +488,7 @@ wrap_permission_handler! {
             callback: Option<&mut PermissionPromptCallback>,
         ) -> c_int {
             /*
-            CDXC:GPUIWindowsLoopbackPermission 2026-08-04:
+            CDXC:PlatformSupport 2026-08-04:
             Current Windows CEF asks for LOCAL_NETWORK_ACCESS, LOCAL_NETWORK,
             or LOOPBACK_NETWORK before a bundled file:// app surface may call
             the authenticated loopback gxserver API. Alloy has no permission
@@ -560,7 +560,7 @@ pub(crate) fn apply_browser_page_appearance(browser: &cef::Browser) {
         return;
     };
     /*
-    CDXC:GPUIBrowserPageAppearanceParity 2026-07-10:
+    CDXC:Browser 2026-07-10:
     Public Browser tabs match the production macOS CEF host: the page receives
     the current system prefers-color-scheme while Chromium's unspecified
     document canvas stays Chrome-like white. This is renderer state only; it
@@ -668,11 +668,11 @@ impl CefBrowser {
             || project_workarea_bridge_event_handler.is_some()
             || app_modal_host_bridge_surface == Some(AppModalHostBridgeSurface::SessionChat);
         /*
-        CDXC:GPUICefBrowserCreateFallible 2026-07-11:
+        CDXC:CefRuntime 2026-07-11:
         CreateBrowserSync returns null when the per-profile request context's
         asynchronous initialization has not completed yet (the same race the
         app-ui profiles dodge via the pre-initialized global context — see
-        CDXC:GPUIAppUiPersistence 2026-07-09). This used to be an `.expect`
+        CDXC:CefRuntime 2026-07-09). This used to be an `.expect`
         that hard-crashed the whole app (five "failed to create cef-rs child
         browser" aborts on 2026-07-10, all from fresh browser
         profile contexts). Creation is now fallible; ensure-style callers skip
@@ -711,7 +711,7 @@ impl CefBrowser {
             return Err("app-modal CEF surface does not match its first-party entry URL".into());
         }
         /*
-        CDXC:GPUIExtensionRemoteUrlSurface 2026-08-28:
+        CDXC:Extensions 2026-08-28:
         A `server.url` extension's surface is pinned to a third-party HTTPS
         origin with `bridge_enabled` false. Drop its bridge event handler here
         rather than at each caller, so the browser process is the single place
@@ -742,7 +742,7 @@ impl CefBrowser {
             background_color
         };
         /*
-        CDXC:GPUIBrowserMediaPermissions 2026-07-27:
+        CDXC:Browser 2026-07-27:
         The permission handler now serves independent surfaces: the
         code-server clipboard grant (trusted origin only) and Browser-pane
         microphone/camera prompts, plus bundled sidebar/session-chat loopback
@@ -793,7 +793,7 @@ impl CefBrowser {
             Some(GhostexGpuiExtensionBridgeLoadHandler::new(surface))
         } else if let Some(page_load_end_handler) = page_load_end_handler {
             /*
-            CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+            CDXC:Onboarding 2026-08-18:
             Only bridge-less third-party surfaces (the tutorial video modal)
             pass this handler, so it can never displace the sidebar,
             session-chat, workarea, or Browser load handlers below.
@@ -806,7 +806,7 @@ impl CefBrowser {
             ))
         } else if sidebar_gxserver_bootstrap.is_some() {
             /*
-            CDXC:GPUISessionChatSurface 2026-07-31:
+            CDXC:SessionChat 2026-07-31:
             A bootstrap without the sidebar bridge handler identifies the
             per-session Session Chat surface: it gets only the bootstrap
             install message so the bundled chat page can reach the local
@@ -880,7 +880,7 @@ impl CefBrowser {
             let native_view = platform::native_view_ptr(host.window_handle());
             platform::prepare_native_view_for_focus(native_view);
             /*
-            CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+            CDXC:FocusRouting 2026-07-22:
             The shared sidebar is chrome, not a work surface: clicking its
             background must never pull the keyboard away from the active
             terminal/pane. Mark exactly this surface mouse-focus passive so
@@ -958,7 +958,7 @@ impl CefBrowser {
         };
         let native_view = platform::native_view_ptr(host.window_handle());
         /*
-        CDXC:GPUICefNativeViewFrame 2026-06-14-15:25:
+        CDXC:CefRuntime 2026-06-14-15:25:
         Match Tauri's CEF child-view model: cef-rs owns the browser host while a thin platform adapter positions the native child view inside the GPUI-owned parent. The adapter respects the parent's coordinate/scale conventions (flipped NSView points on macOS, DPI-scaled physical pixels on Windows) so CEF never overlaps GPUI chrome or sibling surfaces.
 
         GPUI layout can place a surface on a half logical pixel. Preserve that
@@ -1005,7 +1005,7 @@ impl CefBrowser {
         if self.last_visible.get() == Some(visible) {
             return;
         }
-        // CDXC:SessionChatFocusDiagnostics 2026-08-24: hiding a CEF surface
+        // CDXC:Diagnostics 2026-08-24: hiding a CEF surface
         // blurs its document (relatedTarget null in the page) without any
         // first-responder transition, so this is the only place a
         // visibility-driven focus loss can be observed. Real transitions
@@ -1037,7 +1037,7 @@ impl CefBrowser {
 
     pub fn order_front(&self) {
         /*
-        CDXC:GPUITitlebarDropdownZOrder 2026-07-09:
+        CDXC:Titlebar 2026-07-09:
         Native child views stack in creation order, and terminal host views
         keep being appended as sessions mount. Reused overlay CEF surfaces
         (titlebar dropdown panels) must re-assert their top sibling position
@@ -1058,7 +1058,7 @@ impl CefBrowser {
             return;
         };
         /*
-        CDXC:GPUICefFocusRouting 2026-06-14-16:31:
+        CDXC:FocusRouting 2026-06-14-16:31:
         Web-page text fields inside CEF must regain both native focus ownership (AppKit first responder / Win32 keyboard focus) and Chromium browser focus after GPUI chrome has been focused. Without this handoff, command shortcuts such as Cmd+A can stay routed to GPUI instead of selecting text in the active page input.
         */
         platform::focus_native_view(platform::native_view_ptr(host.window_handle()));
@@ -1077,7 +1077,7 @@ impl CefBrowser {
             return;
         };
         /*
-        CDXC:GPUIBrowserLifecycle 2026-06-23-11:32:
+        CDXC:Browser 2026-06-23-11:32:
         Hiding a GPUI Browser CEF child view for sleep, mode switch, or tab drag must also release Chromium focus and runtime active-view bookkeeping so hidden pages cannot keep command-dispatch ownership. This is a narrow native-view boundary blur; it does not destroy the CEF browser, change layout, persist data, log content, or synthesize native hit routing.
         */
         let native_view = platform::native_view_ptr(host.window_handle());
@@ -1093,7 +1093,7 @@ impl CefBrowser {
     }
 
     /*
-    CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+    CDXC:Onboarding 2026-08-18:
     The tutorial modal loads the YouTube watch page as its own top-level CEF
     document, so the app cannot put its player in fullscreen from injected
     JavaScript: Chromium's Fullscreen API requires a transient user
@@ -1153,10 +1153,10 @@ impl CefBrowser {
             return false;
         };
         /*
-        CDXC:GPUIBrowserFeedback 2026-06-23-11:04:
+        CDXC:Browser 2026-06-23-11:04:
         GPUI Browser feedback tools now use CEF's normal main-frame JavaScript execution path for app-owned injection scripts. Pass a synthetic script URL and return only main-frame availability so this backend does not log page URLs, titles, script bodies, user content, JS errors, cookies, tokens, paths, command text, or terminal content.
 
-        CDXC:GPUICefAppOwnedScriptFocus 2026-07-15:
+        CDXC:FocusRouting 2026-07-15:
         App-owned renderer notifications are sideband state delivery, not an
         input-focus action. Executing one must preserve the current GPUI,
         terminal, or CEF responder; callers that represent an explicit user
@@ -1203,7 +1203,7 @@ impl CefBrowser {
         gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
     ) {
         /*
-        CDXC:GPUISessionChatSurface 2026-07-31:
+        CDXC:SessionChat 2026-07-31:
         Session Chat surfaces refresh through their dedicated bootstrap
         message because the sidebar update path refuses pages without the
         installed sidebar bridge. Same scope rules as the sidebar refresh:
@@ -1306,7 +1306,7 @@ impl CefBrowser {
             return;
         };
         /*
-        CDXC:GPUIBrowserToolbar 2026-06-22-11:59:
+        CDXC:Browser 2026-06-22-11:59:
         Zoom reset in the GPUI browser toolbar must use Chromium's browser-host zoom level, matching native CEF behavior and avoiding CSS, JavaScript, overlay, or fallback scaling.
         */
         host.zoom(ZoomCommand::RESET);
@@ -1318,7 +1318,7 @@ impl CefBrowser {
             return;
         };
         /*
-        CDXC:GPUIBrowserToolbar 2026-06-22-11:50:
+        CDXC:Browser 2026-06-22-11:50:
         Browser toolbar DevTools is a real CEF host action in GPUI. Toggle the browser's associated DevTools surface through CEF itself so the toolbar action is not a silent placeholder and no GPUI overlay, hidden hit region, or synthetic coordinate routing is introduced.
         */
         if host.has_dev_tools() != 0 {
@@ -1337,7 +1337,7 @@ impl Drop for CefBrowser {
             platform::release_native_view(native_view);
             host.close_browser(1);
             /*
-            CDXC:GPUICefDropPumpReentrancy 2026-07-11:
+            CDXC:CefRuntime 2026-07-11:
             CefBrowser drops happen inside gpui entity updates while the
             AppCell is borrowed. Pumping cef::do_message_loop_work() inline
             here ran arbitrary Chromium tasks and CEF handler callbacks
@@ -1352,7 +1352,7 @@ impl Drop for CefBrowser {
             BrowserProcessHandler::on_schedule_message_pump_work uses) to
             run soon and let CEF process the close on later runloop turns.
 
-            CDXC:GPUICefCloseContract 2026-08-24:
+            CDXC:CefRuntime 2026-08-24:
             release_native_view above destroys the CEF child view/window
             (removeFromSuperview on macOS, DestroyWindow on Windows, embed-host
             destroy on Linux), which can complete the whole browser close
@@ -1368,7 +1368,7 @@ impl Drop for CefBrowser {
 
 pub(crate) fn cef_root_cache_path() -> Result<PathBuf> {
     /*
-    CDXC:GPUIPrivacyAudit 2026-06-23-13:18:
+    CDXC:Telemetry 2026-06-23-13:18:
     The explicit CEF root cache path prevents Chromium from falling back to its platform default user-data folder. The built-in Default Browser profile and first-party app-UI surfaces use the durable global context, while generated Browser profiles remain memory-backed.
     */
     let os_default_root = Some(crate::shared_settings::ghostex_storage_paths().cef_cache_dir());
@@ -1382,14 +1382,14 @@ pub(crate) fn cef_root_cache_path() -> Result<PathBuf> {
 
 pub(crate) fn cef_request_context_for_profile(profile: &str) -> Result<cef::RequestContext> {
     /*
-    CDXC:GPUIBrowserProfilePersistence 2026-07-16:
+    CDXC:Browser 2026-07-16:
     Browser profile ids are app-global rather than project- or tab-scoped. The
     built-in Default profile uses CEF's pre-initialized durable global context,
     so ordinary logins survive app restarts and are visible from every
     Default-profile tab/project. Generated profiles remain separate and
     memory-backed.
 
-    CDXC:GPUIAppUiPersistence 2026-07-09-03:40:
+    CDXC:CefRuntime 2026-07-09-03:40:
     First-party app-UI surfaces (sidebar, app modal, titlebar panels, project workareas) need durable localStorage for UI state (collapse state, Show more/less, project order), matching how the macOS sidebar WKWebViews use the persistent default WKWebsiteDataStore. They and the built-in Default Browser profile use CEF's global persistent request context, which is initialized with the runtime before synchronous browser creation. Creating a new disk-backed request context here races its asynchronous initialization and causes CreateBrowserSync to return null during app startup. Generated Browser profiles stay memory-backed.
     */
     let profile_segment = cef_profile_cache_segment(profile)

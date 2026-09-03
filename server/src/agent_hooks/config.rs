@@ -135,7 +135,7 @@ pub(crate) struct HookPaths {
     pub(crate) hook_state_directory: PathBuf,
     pub(crate) notify_hook_path: PathBuf,
     /// The Claude Code `statusLine` command Ghostex installs beside the notify
-    /// hook (CDXC:ClaudeStatusline 2026-09-03, `statusline.rs`).
+    /// hook (CDXC:AgentHooks 2026-09-03, `statusline.rs`).
     pub(crate) statusline_hook_path: PathBuf,
     pub(crate) respect_config_environment: bool,
 }
@@ -143,7 +143,7 @@ pub(crate) struct HookPaths {
 impl HookPaths {
     pub(crate) fn from_paths(paths: &GxserverPaths) -> Self {
         /*
-        CDXC:AgentHookIsolation 2026-08-06-21:35:
+        CDXC:AgentHooks 2026-08-06-21:35:
         GHOSTEX_HOME and explicit daemon homes are isolated profiles. Their
         hook discovery and writes must stay inside that profile instead of
         following the process HOME or absolute provider-config environment

@@ -40,18 +40,18 @@ export function getVisibleProjectSessionIds({
 }): readonly string[] {
   const normalizedCollapsedCount = clampProjectSessionListCollapsedCount(collapsedCount);
   /**
-   * CDXC:ProjectSessionLists 2026-05-16-21:50:
+   * CDXC:Projects 2026-05-16-21:50:
    * Project groups with more than the collapsed-count threshold need a
    * per-project Show less / Show more toggle. Default to all sessions, and
    * only trim rendering after the user explicitly collapses that project list.
    *
-   * CDXC:ProjectSessionLists 2026-05-26-22:27:
+   * CDXC:Projects 2026-05-26-22:27:
    * Show less must be literal: render only the first collapsed-count sessions
    * in project order. Live zmx-backed rows still remain in sidebar inventory
    * and Show more, but they must not expand the collapsed card list past the
    * user-requested cap.
    *
-   * CDXC:ProjectSessionLists 2026-06-10-13:39:
+   * CDXC:Projects 2026-06-10-13:39:
    * The collapsed cap is now Settings-owned, but the default remains six. Use the normalized cap for both row rendering and shortcut slot calculations so Show less can mean ten or another configured count without diverging from the visible sidebar.
    */
   if (!isProjectGroup || !isToggleEnabled || !isCollapsed || sessionIds.length <= normalizedCollapsedCount) {
@@ -63,7 +63,7 @@ export function getVisibleProjectSessionIds({
 
 export function getExpandedProjectSessionListScrollHeight({ rowCount }: { rowCount: number }): number {
   /*
-   * CDXC:ProjectSessionLists 2026-06-30-12:55:
+   * CDXC:Projects 2026-06-30-12:55:
    * Reference sidebar session rows paint a 34px card plus a 1px row boundary in
    * the actual list stack. Size the expanded project inner scroller from that
    * full row step so a configured Show more count of 10 reveals ten complete
@@ -89,10 +89,10 @@ export function getProjectSessionListBoundaryHeight({
   }
 
   /**
-   * CDXC:ProjectSessionLists 2026-06-12-23:53:
+   * CDXC:Projects 2026-06-12-23:53:
    * Show more and Show less should use the same measured max-height motion as project expand/collapse. Measure the bottom of the last user-visible session row so Show less can clip the still-mounted overflow rows smoothly instead of removing them before the collapse animation can run.
    *
-   * CDXC:ProjectSessionLists 2026-06-30-02:45:
+   * CDXC:Projects 2026-06-30-02:45:
    * Collapsed Show more rows still need DOM measurement because the synthetic
    * reveal row participates in the clipped edge. Expanded lists use fixed row
    * math instead so large projects avoid layout reads and ResizeObserver work.
@@ -106,7 +106,7 @@ export function getProjectSessionListBoundaryHeight({
   const listBounds = sessionListElement.getBoundingClientRect();
   const rowBounds = rowElement?.getBoundingClientRect();
   /**
-   * CDXC:ProjectSessionLists 2026-06-13-19:49:
+   * CDXC:Projects 2026-06-13-19:49:
    * A collapsed project list now shows a regular session-card reveal row after
    * the last visible session. Include that row in the measured clipped height
    * so it stays visible as the bottom of the collapsed list.
@@ -156,15 +156,15 @@ export function readProjectSessionListCollapsedState(
 
 export function writeProjectSessionListCollapsedState(state: ProjectSessionListCollapsedState): void {
   /**
-   * CDXC:ProjectSessionLists 2026-05-16-21:50:
+   * CDXC:Projects 2026-05-16-21:50:
    * Show less / Show more is per-project navigation state, not session data.
    * Persist only the collapsed project ids so new projects and projects the
    * user has never collapsed continue to start with all sessions shown.
    *
-   * CDXC:WorktreeProjectOrder 2026-06-02-15:27:
+   * CDXC:Worktrees 2026-06-02-15:27:
    * gxserver owns worktree creation, but the macOS sidebar owns the local Show less state for the source project after submit. Broadcast same-document updates because localStorage storage events do not fire in the writing webview.
    *
-   * CDXC:ProjectSessionLists 2026-06-05-20:53:
+   * CDXC:Projects 2026-06-05-20:53:
    * Cmd+number session slots and project row rendering must share the same Show less / Show more state so shortcuts target the sessions currently visible in the sidebar, not hidden rows from a collapsed project list.
    */
   localStorage.setItem(PROJECT_SESSION_LIST_COLLAPSED_STORAGE_KEY, JSON.stringify(state));

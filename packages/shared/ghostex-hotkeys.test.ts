@@ -34,7 +34,7 @@ describe('normalizeghostexHotkeySettings', () => {
     expect(DEFAULT_ghostex_HOTKEYS.openSettings).toBe('cmd+,');
     expect(DEFAULT_ghostex_HOTKEYS.openHotkeys).toBe('cmd+.');
     /**
-     * CDXC:SidebarCollapse 2026-06-12-02:23:
+     * CDXC:Sidebar 2026-06-12-02:23:
      * Cmd+B is the complete sidebar collapse toggle. Moving the sidebar between
      * left and right remains available as an explicit command, but it starts
      * without a default shortcut.
@@ -68,7 +68,7 @@ describe('normalizeghostexHotkeySettings', () => {
     expect(DEFAULT_ghostex_HOTKEYS.reloadSession).toBe('ctrl+shift+r');
     expect(DEFAULT_ghostex_HOTKEYS.popOutPane).toBe('ctrl+shift+o');
     /**
-     * CDXC:ProjectHotkeys 2026-06-15-11:12:
+     * CDXC:Hotkeys 2026-06-15-11:12:
      * Cmd+Ctrl+1..9 are project jumps now, preserving the old physical chords
      * while targeting Projects sidebar rows instead of workspace groups.
      */
@@ -81,7 +81,7 @@ describe('normalizeghostexHotkeySettings', () => {
     expect(DEFAULT_ghostex_HOTKEYS.switchKanbanView).toBe('alt+4');
     expect(DEFAULT_ghostex_HOTKEYS.switchManageView).toBe('alt+5');
     /**
-     * CDXC:ActionsHotkeys 2026-05-17-01:18:
+     * CDXC:Hotkeys 2026-05-17-01:18:
      * Action launch hotkeys are positional so Settings can bind the first five
      * Actions list rows without coupling shortcuts to command ids.
      */
@@ -101,7 +101,7 @@ describe('normalizeghostexHotkeySettings', () => {
 
   test('matches WebKit shifted digit characters for positional action hotkeys', () => {
     /**
-     * CDXC:ActionsHotkeys 2026-05-26-13:21:
+     * CDXC:Hotkeys 2026-05-26-13:21:
      * Ctrl+Shift+1 should launch action slot 1 even when the sidebar DOM path
      * receives KeyboardEvent.key as "!" instead of the unshifted digit AppKit
      * uses for the same physical shortcut.
@@ -120,7 +120,7 @@ describe('normalizeghostexHotkeySettings', () => {
 
   test('matches Cmd+B to the sidebar collapse toggle', () => {
     /**
-     * CDXC:SidebarCollapse 2026-06-12-02:23:
+     * CDXC:Sidebar 2026-06-12-02:23:
      * The default Cmd+B action should collapse or expand the sidebar, not switch
      * the sidebar placement side.
      */
@@ -129,7 +129,7 @@ describe('normalizeghostexHotkeySettings', () => {
 
   test('does not assign Cmd+Q to configurable app hotkeys by default', () => {
     /**
-     * CDXC:MacQuit 2026-06-12-03:09:
+     * CDXC:OsIntegration 2026-06-12-03:09:
      * Cmd+Q must remain the native app quit shortcut. No configurable Ghostex
      * hotkey should claim it by default; any previous default owner would need
      * to start unassigned so the native app command wins.
@@ -194,7 +194,7 @@ describe('normalizeghostexHotkeySettings', () => {
 
   test('uses direct split creation defaults', () => {
     /**
-     * CDXC:NativeSplits 2026-05-10-18:30
+     * CDXC:Workarea 2026-05-10-18:30
      * Cmd+D and Cmd+Shift+D create real terminal splits in the native
      * workspace.
      */
@@ -230,7 +230,7 @@ describe('normalizeghostexHotkeySettings', () => {
 
   test('preserves legacy focus group customizations for project jumps', () => {
     /*
-     * CDXC:ProjectHotkeys 2026-06-15-11:12:
+     * CDXC:Hotkeys 2026-06-15-11:12:
      * Renaming Focus Group 1..5 to Jump to Project 1..5 must keep customized
      * or explicitly cleared user bindings instead of restoring defaults.
      */

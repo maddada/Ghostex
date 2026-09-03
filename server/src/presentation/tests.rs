@@ -38,7 +38,7 @@ fn snapshot_sorts_projects_and_sessions_for_sidebar_projection() {
 #[test]
 fn snapshot_publishes_one_cached_git_status_to_every_session_sharing_a_cwd() {
     /*
-    CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+    CDXC:Git 2026-07-29-00:00:
     The probe is per unique cwd, so a project's terminal and its agent — two
     rows, one checkout — must render the identical card row from the single
     cached answer. Sessions whose cwd was never probed publish no key at all.
@@ -105,7 +105,7 @@ fn snapshot_publishes_one_cached_git_status_to_every_session_sharing_a_cwd() {
 #[test]
 fn snapshot_publishes_git_status_for_sessions_running_in_the_project_root() {
     /*
-    CDXC:SidebarV2GitStatus 2026-07-30 (effective cwd):
+    CDXC:Git 2026-07-30 (effective cwd):
     Agent sessions are created WITHOUT a cwd — they run in the project's path,
     which is why every launcher resolves `session.cwd` else `project.path`.
     Presentation must resolve the git-status key the same way or no agent card
@@ -156,7 +156,7 @@ fn snapshot_publishes_git_status_for_sessions_running_in_the_project_root() {
 #[test]
 fn snapshot_publishes_session_lifecycle_state_and_capability_flags() {
     /*
-    CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     Sidebar V2 reads settle/snooze from presentation and hides its
     affordances for machines whose snapshot carries no capability object.
     Sessions with no lifecycle state must publish absent keys, not nulls.
@@ -225,7 +225,7 @@ fn snapshot_publishes_session_lifecycle_state_and_capability_flags() {
 #[test]
 fn snapshot_publishes_the_cached_origin_remote_for_a_project_and_its_worktree_family() {
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     Sidebar V2 merges the same repository across machines by its `origin`
     remote. A registered worktree project must carry its FAMILY ROOT's
     remote, so the parent and its worktrees land in one logical project; a
@@ -312,7 +312,7 @@ fn snapshot_publishes_the_cached_origin_remote_for_a_project_and_its_worktree_fa
     );
 
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+    CDXC:StateSync 2026-07-29 (P5 fix round):
     The repository root rides the same cache entry, so it must follow the
     same family rule as the remote and be omitted — never null — wherever
     the probe has no answer.
@@ -337,7 +337,7 @@ fn snapshot_publishes_the_cached_origin_remote_for_a_project_and_its_worktree_fa
 #[test]
 fn snapshot_publishes_the_auto_settle_window_this_daemon_sweeps_with() {
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     One sidebar renders rows from several daemons, so each snapshot states
     the window THAT daemon applies. The published value comes from
     `read_sweep_auto_settle_after_days` — the same function the auto-settle
@@ -408,7 +408,7 @@ fn snapshot_publishes_the_auto_settle_window_this_daemon_sweeps_with() {
 }
 
 /*
-CDXC:SidebarV2DataGate 2026-07-29:
+CDXC:StateSync 2026-07-29:
 The capability tells the truth about what this daemon will actually produce.
 With Sidebar V1 selected the git/`gh` probes do not run, so `sessionGitStatus`
 is false and a V2 client (local or remote) renders those cards exactly as it
@@ -464,7 +464,7 @@ fn the_git_status_capability_follows_the_sidebar_version_gate() {
 #[test]
 fn snapshot_omits_recent_and_hidden_system_projects() {
     /*
-    CDXC:ProjectVisibility 2026-06-30-21:23:
+    CDXC:Projects 2026-06-30-21:23:
     Project presentation is the shared active inventory contract. Recent Projects and Remote Attach carrier projects must stay out of presentation snapshots so React Native Android does not show closed workspaces or remote-attach containers as selectable projects.
     */
     let mut recent = project("P200", "Closed", false, false);

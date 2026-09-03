@@ -8,7 +8,7 @@ export type PrimaryAgentLauncherChangedEvent = CustomEvent<{
 
 export function readPrimaryAgentLauncherId(): string | undefined {
   /**
-   * CDXC:QuickAgents 2026-06-08-18:25:
+   * CDXC:AgentLauncher 2026-06-08-18:25:
    * Quick and project headers share one selected sidebar agent so the section-level Quick picker behaves like the existing project-header picker instead of maintaining a second default. Keep the historic storage key so existing project agent choices carry forward.
    */
   return localStorage.getItem(PRIMARY_AGENT_LAUNCHER_STORAGE_KEY)?.trim() || undefined;

@@ -16,7 +16,7 @@ bytes so the user-facing contract is stable across scripts and emoji.
 const SESSION_AGENT_NOTE_MAX_CHARS: usize = 4_096;
 
 /*
-CDXC:SessionAgentNotes 2026-08-24:
+CDXC:SessionNotes 2026-08-24:
 "What to do next when I come back" text attached to a conversation, not to a
 ghostex session row. The key is the provider resume id (`agentSessionId`), so
 closing the session and resuming the same agent conversation later still finds
@@ -126,7 +126,7 @@ impl DomainRepository<'_> {
     }
 
     /*
-    CDXC:SessionAgentNotes 2026-08-24 (successor re-key):
+    CDXC:SessionNotes 2026-08-24 (successor re-key):
     Claude Code and Codex mint a NEW conversation id on compaction/resume, and
     the daemon adopts that successor as the session's `agentSessionId`. Without
     this re-key the note would stay stranded on the dead id and the session

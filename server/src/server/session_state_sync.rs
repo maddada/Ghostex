@@ -2,7 +2,7 @@ use super::*;
 use crate::agents::{repair_session_working_directory_title, LifecycleParams};
 
 /*
-CDXC:GxserverSessionSyncOneList 2026-09-01:
+CDXC:StateSync 2026-09-01:
 The presentation sync passes used to each run their own `list_sessions`, so a
 single `listSessions` or `readPresentationSnapshot` request built the full JSON
 row set roughly five times over. They now operate on the one list their caller
@@ -103,7 +103,7 @@ pub(crate) fn sync_zmx_provider_existence(
     }
 
     /*
-    CDXC:GxserverUnrestorableAgentSessions 2026-08-04:
+    CDXC:SessionSleep 2026-08-04:
     A workspace agent whose zmx provider disappeared is recoverable only when
     durable state can produce the same queued launch/resume startup text used
     by startSessionProvider. Keeping an agent with neither a provider nor that
@@ -114,7 +114,7 @@ pub(crate) fn sync_zmx_provider_existence(
     rows still restart as shells, and agents with queued or resume startup text
     remain running so the ordinary restore path can revive them.
 
-    CDXC:UnrestorableAgentsSleepNotStop 2026-09-01:
+    CDXC:SessionSleep 2026-09-01:
     They are marked "sleeping", not "stopped". "stopped" is the user's close
     action; writing it here made sessions silently vanish from the sidebar
     whenever a daemon died outside Ghostex's control (crash, reboot, external
@@ -263,7 +263,7 @@ pub(crate) fn sync_live_zmx_process_identities(
             continue;
         }
         /*
-        CDXC:GxserverAgentTitles 2026-08-04:
+        CDXC:SessionTitles 2026-08-04:
         Codex forks and in-TUI resumes do not put the current conversation id
         in the process argv that this live zmx repair scans. The installed hook
         records that id against the exact GHOSTEX_SESSION_ID/zmx surface. Fold
@@ -282,7 +282,7 @@ pub(crate) fn sync_live_zmx_process_identities(
             .and_then(|hook| hook.agent_session_path.clone())
             .or_else(|| identity.agent_session_path.clone());
         /*
-        CDXC:GxserverSessionIdentity 2026-06-21-18:25:
+        CDXC:SessionIdentity 2026-06-21-18:25:
         Rust must copy TypeScript gxserver's live zmx process repair before sidebar list/snapshot responses. A running zmx terminal whose foreground process is Codex/Claude/etc. must be promoted to the matching agent row in durable state so macOS shows the same session identity after the server cutover.
         */
         let changed = apply_live_process_session_identity(
@@ -343,7 +343,7 @@ pub(crate) fn sync_title_signaled_zmx_process_identity(
 }
 
 /*
-CDXC:MobileSessionStatus 2026-06-22-00:47:
+CDXC:SessionStatus 2026-06-22-00:47:
 Rust gxserver must read the same hook sidecar files as TypeScript before list, snapshot, and subscription projections. Hooks can write provider session id and working/idle state even when an HTTP hook POST is missed, so presentation state must ingest those sidecars at the daemon boundary instead of leaving Codex rows idle or unresumable.
 */
 pub(crate) fn sync_session_state_sidecars(
@@ -666,7 +666,7 @@ pub(crate) fn should_probe_title_signaled_zmx_process_identity(session: &Value) 
 }
 
 /*
-CDXC:GxserverSessionIdentity 2026-06-30-11:15:
+CDXC:SessionIdentity 2026-06-30-11:15:
 Live process identity repair must use the same persistence-provider source as
 presentation rows. Remote/attached zmx sessions can have providerState.provider
 without runtimeSettings.sessionPersistenceProvider, and those rows still need

@@ -91,7 +91,7 @@ describe('createSidebarSessionItems', () => {
 
   test('should treat Ghostty ghost titles as placeholders instead of persisted session names', () => {
     /**
-     * CDXC:SessionTitleSync 2026-05-07-17:27
+     * CDXC:SessionTitles 2026-05-07-17:27
      * Reconnected zmx panes may report `👻` while the real title is still known
      * by the session record. The shared card/title contract must reject that
      * placeholder before it can replace the restored name or render as
@@ -108,7 +108,7 @@ describe('createSidebarSessionItems', () => {
 
   test('should treat Codex UUID terminal titles as session identity instead of display names', () => {
     /**
-     * CDXC:CodexAgent 2026-05-11-07:35
+     * CDXC:AgentProviders 2026-05-11-07:35
      * Codex can expose the durable conversation UUID as the terminal title. The
      * UUID should be captured for restore metadata, not displayed as the card
      * title or treated as a human session name.

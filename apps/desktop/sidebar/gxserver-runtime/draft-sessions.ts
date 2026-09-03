@@ -1,10 +1,10 @@
 /*
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 The sidebar's share of the draft-session lifecycle. gxserver owns the marker,
 promotion, and the draft-derived display title; what is left here is the
 boot-time heal of the per-keystroke composer cache below.
 
-CDXC:DraftSessions 2026-08-29 (drafts are durable):
+CDXC:Drafts 2026-08-29 (drafts are durable):
 There is deliberately no navigate-away discard: a draft the user created stays
 in the sidebar whether or not anything has been typed into it, and leaves only
 by being deleted or promoted.
@@ -18,7 +18,7 @@ export interface GpuiSidebarRuntimeDraftSessionMethods {
 }
 
 /*
-CDXC:DraftCrashSafety 2026-08-28:
+CDXC:Drafts 2026-08-28:
 Once per sidebar page load, not per (re)connect: the reconcile heals a store
 that only decays when the whole app dies, so re-running it on every daemon
 reconnect would be pure churn against a cache the composers are actively

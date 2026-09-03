@@ -87,7 +87,7 @@ export function focusVisibleDirectionInSnapshot(
     }
 
     /**
-     * CDXC:PaneFocus 2026-05-29-06:35:
+     * CDXC:FocusRouting 2026-05-29-06:35:
      * Visible native pane tab groups are the directional focus regions users see on screen.
      * Resolve macOS focus-arrow moves from paneLayout geometry before using legacy grid row/column data, because tab groups can contain sessions whose stored slot coordinates no longer match their visible left/right pane position.
      */
@@ -108,7 +108,7 @@ export function focusVisibleDirectionInSnapshot(
   }
 
   /**
-   * CDXC:PaneFocus 2026-05-28-14:29:
+   * CDXC:FocusRouting 2026-05-28-14:29:
    * macOS directional focus hotkeys are spatial focus moves within the already visible native pane set.
    * They must not reuse generic session reveal behavior, because that swaps hidden/offscreen sessions into visibleSessionIds and changes the visible session tabs.
    */
@@ -181,7 +181,7 @@ function getExactVisibleSessionIdsForFocus(
   );
   if (exactVisibleSessionIds.length > 0) {
     /**
-     * CDXC:PaneFocus 2026-05-29-07:09:
+     * CDXC:FocusRouting 2026-05-29-07:09:
      * Native focus-arrow navigation must use the exact mounted pane ids, not normalized visibleCount padding.
      * The native workspace can keep a large historical visibleCount while only a few pane surfaces are mounted; padded sleeping/parked ids must not become directional focus targets or rewrite visibleSessionIds.
      */
@@ -217,7 +217,7 @@ function getPaneFocusSessionIdsForDirection(
   }
 
   /*
-   * CDXC:PaneFocus 2026-06-13-18:35:
+   * CDXC:FocusRouting 2026-06-13-18:35:
    * Cmd+Alt+Arrow must use the paneLayout the user can see, even when legacy visibleSessionIds is stale.
    * Repair the focus candidate set from active pane owners in visual order so a1 b1 c1 and a1 b1 c1/c2 layouts navigate through the middle panes instead of bouncing only between stale endpoint ids.
    */
@@ -285,7 +285,7 @@ function collectVisiblePaneFocusRects(
   }
 
   /**
-   * CDXC:PaneFocus 2026-05-29-06:35:
+   * CDXC:FocusRouting 2026-05-29-06:35:
    * Directional focus geometry must match the native visible pane layout.
    * Hidden paneLayout nodes keep their tree position for session restoration, but they do not occupy focus-navigation space once they are absent from visibleSessionIds.
    */
@@ -417,11 +417,11 @@ function findDirectionalPaneFocusRect(
           ? rangesIntersect(currentPane.top, currentPane.bottom, pane.top, pane.bottom)
           : rangesIntersect(currentPane.left, currentPane.right, pane.left, pane.right);
       /**
-       * CDXC:PaneFocus 2026-05-29-06:35:
+       * CDXC:FocusRouting 2026-05-29-06:35:
        * Directional focus follows pane adjacency, not center-point drift.
        * A tall right-hand pane can have a lower center than a top-left pane, but Down must choose the pane whose top edge is below the current pane and whose horizontal range overlaps the current column.
        *
-       * CDXC:PaneFocus 2026-05-29-06:35:
+       * CDXC:FocusRouting 2026-05-29-06:35:
        * In 4-way splits, Right from top-left must choose the top-right pane before the bottom-right pane.
        * Treat positive cross-axis overlap as a hard preference and do not count edge-touching as overlap, because touching only at the split boundary is not the same row or column.
        */

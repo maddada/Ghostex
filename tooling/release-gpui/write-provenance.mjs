@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Emits the per-product `provenance.json` that travels inside every
  * `release-<platform>` artifact (§3.5) and, in a second tiny artifact, feeds the
  * planner's Tier-2 reuse index.

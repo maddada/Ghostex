@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatRewind 2026-09-02:
+CDXC:SessionChat 2026-09-02:
 A Claude TUI rewind (`/rewind` → "Restore conversation") truncates the agent's
 IN-MEMORY conversation only; the transcript on disk is untouched until the next
 prompt is appended, at which point that prompt's `parentUuid` names the rewound

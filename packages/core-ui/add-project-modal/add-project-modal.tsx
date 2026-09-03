@@ -103,7 +103,7 @@ const BROWSE_UP_VALUE = 'browse:up';
 const ADD_PROJECT_ROW_ICON_CLASS = 'size-4 text-muted-foreground/80';
 
 /*
- * CDXC:AddProjectChrome 2026-08-18:
+ * CDXC:AddProject 2026-08-18:
  * The dialog's action buttons are titlebar chrome, not inset controls: each one
  * fills its container's full height, sits flush against the container edge, and
  * carries a single side border as the only separator. A row of them therefore
@@ -115,7 +115,7 @@ const ADD_PROJECT_ACTION_BUTTON_CLASS =
   'h-full self-stretch border-y-0 border-r-0 border-l border-l-border/70 px-3 text-sm';
 
 /*
- * CDXC:AddProjectChrome 2026-08-19:
+ * CDXC:AddProject 2026-08-19:
  * The path bar is the dialog's only text field and it is autofocused, so the
  * shared InputGroup focus treatment (ring + accent border) would draw a
  * permanent highlight frame around the whole strip. Keep the resting border and
@@ -178,7 +178,7 @@ export function AddProjectModal(props: AddProjectModalProps) {
    */
   return (
     /*
-     * CDXC:AddProjectChrome 2026-07-31:
+     * CDXC:AddProject 2026-07-31:
      * Floating surfaces (web, Storybook) hug their content between a min and a
      * max so a six-row Sources step never renders a half-empty frame and a long
      * browse listing still gets a tall scroller. The gpui child window is the
@@ -414,7 +414,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     (hasTrailingPathSeparator(query) ? !browseResult : exactEntry === null);
 
   /*
-   * CDXC:AddProjectNewFolder 2026-08-18:
+   * CDXC:AddProject 2026-08-18:
    * The folder is created inside the directory whose entries are on screen,
    * which is the server-resolved parent of the current query. A typed leaf
    * filter narrows that listing but never changes which directory it belongs
@@ -1577,7 +1577,7 @@ function AddProjectModalBody(props: AddProjectModalProps) {
 }
 
 /*
- * CDXC:AddProjectChrome 2026-07-31:
+ * CDXC:AddProject 2026-07-31:
  * Footer hints render their keys as key caps so the shortcut row reads as
  * chrome instead of a run-on sentence ("Enter Select Backspace Back Esc Close").
  */

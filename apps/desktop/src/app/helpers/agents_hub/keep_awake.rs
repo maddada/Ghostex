@@ -40,7 +40,7 @@ pub(crate) fn gpui_keep_awake_command_delayed_send_session_count(
     command_pane: &CommandPaneModel,
 ) -> usize {
     /*
-    CDXC:GPUITitlebarKeepAwake 2026-06-27-01:05:
+    CDXC:KeepAwake 2026-06-27-01:05:
     Native `createTitlebarKeepAwakeSessionState` treats projected Delayed Send remaining-time fields as a Keep Awake hold input only for non-sleeping terminal sessions. Agents `delayed_send_active` is semantic tab chrome in GPUI, unlike native projected remaining-time fields, so only command tabs with timer-owned runtime Delayed Send state can start the titlebar power hold.
     */
     command_pane
@@ -61,7 +61,7 @@ pub(crate) fn gpui_keep_awake_working_session_count(
     command_pane: &CommandPaneModel,
 ) -> usize {
     /*
-    CDXC:GPUITitlebarKeepAwake 2026-06-26-00:29:
+    CDXC:KeepAwake 2026-06-26-00:29:
     GPUI `keepAwakeWhileWorkingSessions` counts only real local terminal model facts equivalent to the macOS titlebar projection: Running Agents with `AgentTerminalActivity::Working` plus live command-tab sessions that are not sleeping and have `CommandTerminalActivity::Working`. Do not infer work from titles, command text, paths, status-file contents, terminal output, gxserver ids, or persisted private metadata.
     */
     gpui_keep_awake_agents_working_session_count(workspace)
@@ -120,7 +120,7 @@ pub(crate) fn gpui_read_keep_awake_power_snapshot(
     options: GpuiKeepAwakePowerProbeOptions,
 ) -> Result<GpuiKeepAwakePowerSnapshot, String> {
     /*
-    CDXC:GPUITitlebarKeepAwake 2026-06-25-23:49:
+    CDXC:KeepAwake 2026-06-25-23:49:
     Power automation probes must use fixed macOS command paths and only when the corresponding Settings rule can act. Parse stdout in memory into battery percent, Low Power Mode boolean, and display count; never log or persist command output, display names, paths, URLs, commands, settings payloads, or private terminal content.
     */
     let battery_output = if options.include_battery {

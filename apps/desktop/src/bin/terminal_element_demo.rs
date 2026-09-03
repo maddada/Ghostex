@@ -1,5 +1,5 @@
 /*
-CDXC:GPUITerminalElement 2026-07-03:
+CDXC:Terminal 2026-07-03:
 TEMPORARY demo binary for the P1c/P1d GPUI-composited terminal element — the
 deliverable proving PTY → vt snapshots → TerminalElement rendering plus the
 P1d input path (keyboard through the vt key encoder, mouse

@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 Find surface transport contract. Hosts (gpui CEF, ghostex-web, the mobile
 WebView) inject an implementation so the shared Find components never talk to
 gxserver directly — the same split the Session Chat surface uses.

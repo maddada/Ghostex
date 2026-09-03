@@ -17,7 +17,7 @@ enum PlatformShellKind {
 }
 
 /*
-CDXC:GxserverUbuntu 2026-06-23-07:52:
+CDXC:PlatformSupport 2026-06-23-07:52:
 server must run the same command, zmx, hook, and title-generation script contract on macOS and Ubuntu from one Rust codebase. Keep macOS pinned to /bin/zsh for exact existing behavior, while Linux executes the same POSIX script bodies through a deterministic installed shell instead of assuming zsh exists.
 */
 pub fn command_shell() -> PlatformShell {
@@ -55,7 +55,7 @@ pub fn login_shell_candidates() -> Vec<String> {
 }
 
 /*
-CDXC:GxserverUserLoginShell 2026-07-24:
+CDXC:ServerDaemon 2026-07-24:
 Persistence-session interactive shells must be the user's own login shell, not
 the pinned script shell: gxserver runs as a launchd agent whose environment
 never saw the user's shell profiles, so pinning `/bin/zsh` gave bash/fish users
@@ -153,7 +153,7 @@ impl PlatformShell {
     }
 
     /*
-    CDXC:GxserverZmxProbeShell 2026-09-01:
+    CDXC:Zmx 2026-09-01:
     Probe and snapshot pipelines only invoke the bundled zmx binary, `ps`, and
     shell builtins; they run on every ~2s presentation poll and never present
     shell output to a user. Sourcing the login profile there costs tens of

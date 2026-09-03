@@ -47,7 +47,7 @@ function clipBody(text: string): string {
 
 /*
  * The one glyph on this surface that says WHAT ran rather than "this expands":
- * semantic tier (see CDXC:SessionChatGlyphRamp in chat.css). It shares the
+ * semantic tier (see CDXC:SessionChat in chat.css). It shares the
  * control tier's size because it stands in the same marker slot on the same
  * vertical axis as the chevrons; only its stroke weight and its shape set it
  * apart, and it must never be flattened into a chevron.

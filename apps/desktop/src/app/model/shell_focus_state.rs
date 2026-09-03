@@ -151,7 +151,7 @@ pub(crate) fn restored_non_command_shell_focus_or_default_with_browser_tabs(
     browser_tabs: &BrowserTabModel,
 ) -> ShellFocusTarget {
     /*
-    CDXC:GPUIKeyboardFocus 2026-06-25-19:27:
+    CDXC:FocusRouting 2026-06-25-19:27:
     Command-panel collapse may restore only a currently valid non-command focus target. Stale panes, hidden companions, wrong workarea modes, and command-pane focus fall back through the active shell mode instead of persisting unusable keyboard ownership.
     */
     previous_non_command_focus

@@ -10,7 +10,7 @@ use crate::{domain::DomainStateError, paths::GxserverPaths};
 
 pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     /*
-    CDXC:CodexSessionMove 2026-06-26-13:47:
+    CDXC:AgentSkills 2026-06-26-13:47:
     Ghostex ships `$ghostex-move-codex-session` as an app-bundled skill, so gxserver must accept it in the same install/status allow-list as the existing first-launch skills.
     */
     "ghostex-browser-use",
@@ -22,7 +22,7 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
     /*
-    CDXC:BoardAssociateSession 2026-08-24:
+    CDXC:ProjectBoard 2026-08-24:
     The Project Board beads skill teaches agents `ghostex board associate`, the
     only way a hand-started session gets onto its card, so it must be installable
     through the same allow-list as the other bundled skills.
@@ -51,7 +51,7 @@ pub const GHOSTEX_SKILLS_CLI_AGENT_IDS: &[&str] = &[
 
 const AGENT_SKILL_DISCOVERY_MAX_DEPTH: usize = 8;
 /*
-CDXC:NativeAgentSkillInstall 2026-09-02:
+CDXC:AgentSkills 2026-09-02:
 Bundled skill installs used to shell out to `npx --yes skills add … --global
 --copy`, which made first-launch setup depend on a Node runtime being on the
 app's PATH (nvm/fnm installs are not) and on the npm registry being reachable,
@@ -848,7 +848,7 @@ fn path_string(path: &Path) -> String {
 }
 
 /*
-CDXC:SkillConsolidation 2026-08-24:
+CDXC:AgentSkills 2026-08-24:
 `ghostex-manage-automations`, `ghostex-agent-orchestration`, and
 `ghostex-find-prev-session` were folded into the CLI help (`$ghostex-cli` is
 the entry-point skill), so newer Ghostex must clean up copies that older

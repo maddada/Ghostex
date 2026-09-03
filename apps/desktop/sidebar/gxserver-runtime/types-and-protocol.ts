@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -43,7 +43,7 @@ export type GpuiGxserverBootstrap = {
 };
 
 /*
-CDXC:RemoteProjectActions 2026-08-29:
+CDXC:RemoteMachines 2026-08-29:
 A project's Actions are stored by the daemon that owns it, so a remote
 project's Actions come from that machine's own `/api/readSidebarHud`. The Rust
 bridge cuts that answer down to the Action button lists before the renderer
@@ -66,7 +66,7 @@ export type GpuiCommandPaneSessionSummary = {
   delayedSendRemainingMs?: number;
   isActive?: boolean;
   /*
-  CDXC:GPUISidebarAutoSleep 2026-06-27-06:54:
+  CDXC:SessionSleep 2026-06-27-06:54:
   Rust forwards this true-only bit for native-shaped external `G...` command-panel split pane owners so GPUI Auto Sleep can protect every active command leaf while keeping `isActive` scoped to HUD/responder focus. Rust shell internals may still use numeric ids, but those ids must not cross this TypeScript bridge as command-pane owners.
   */
   isPaneOwner?: true;
@@ -117,7 +117,7 @@ export type GpuiSidebarHostMessage =
       SidebarToExtensionMessage,
       {
         /*
-         * CDXC:SessionAgentNotes 2026-08-24:
+         * CDXC:SessionNotes 2026-08-24:
          * `setSessionNote` joins this list for the same reason `renameSession`
          * is on it: the note editor is an app-modal window, so its confirm
          * arrives through Rust rather than from the sidebar page itself.
@@ -137,7 +137,7 @@ export type GhostexGpuiSidebarBridge = {
   browserTabs?: readonly GpuiBrowserTabSummary[];
   commandPaneSessions?: readonly GpuiCommandPaneSessionSummary[];
   /**
-   * CDXC:AutoSleepDisplayedSessions 2026-08-20:
+   * CDXC:SessionSleep 2026-08-20:
    * The local gxserver sessions the shell is rendering right now, terminal body
    * or chat surface alike. Auto Sleep protects these instead of guessing
    * visibility from the rows this runtime last saw selected.
@@ -147,7 +147,7 @@ export type GhostexGpuiSidebarBridge = {
   workspaceSessionDelayedSends?: readonly GpuiWorkspaceSessionDelayedSendSummary[];
   onBrowserTabsChanged?: (tabs: readonly GpuiBrowserTabSummary[]) => void;
   /**
-   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * CDXC:Browser 2026-08-18:
    * Rust asks the sidebar to reveal one Browser tab row after the user opened
    * it. Rust owns tab identity (project id + tab id); the session id the
    * sidebar rows are keyed by is derived here, in the same place that builds
@@ -171,7 +171,7 @@ export type GhostexGpuiSidebarBridge = {
   onRuntimeSettingsChanged?: (runtimeSettings: GpuiSidebarRuntimeSettingsSnapshot) => void;
   onSidebarHostMessage?: (message: GpuiSidebarHostMessage) => void;
   /**
-   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * CDXC:SavedPrompts 2026-08-24:
    * A Saved Prompts row asked to be taken back to the session it was stashed
    * from. Rust forwards the row's raw gxserver ids plus the durable provider
    * conversation id; this runtime resolves the best available target.
@@ -181,7 +181,7 @@ export type GhostexGpuiSidebarBridge = {
   onTitlebarGitAction?: (payload: unknown) => void;
   onWorktreeModalCommand?: (payload: unknown) => void;
   /**
-   * CDXC:GPUISidebarPointerTracking 2026-08-02:
+   * CDXC:Sidebar 2026-08-02:
    * Close every open sidebar context menu because a native mouse-down landed
    * outside the sidebar's frame. Installed by the sidebar entry point, called
    * by Rust's AppKit pointer observer.
@@ -189,7 +189,7 @@ export type GhostexGpuiSidebarBridge = {
   dismissSidebarContextMenus?: () => void;
   dismissSidebarTooltips?: () => void;
   /**
-   * CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+   * CDXC:Spaces 2026-08-29:
    * A finger scroll gesture began (NSEventPhaseBegan) inside the sidebar's
    * native frame. Installed by the sidebar entry point, called by Rust's
    * AppKit observer; the Space-swipe handler resets its gesture lock on it
@@ -429,14 +429,14 @@ export type GpuiActiveWorkspaceTabSessionPayload = {
   hasSessionNote?: boolean;
   stashedPromptCount?: number;
   /*
-  CDXC:SwitchAccount 2026-09-03:
+  CDXC:AgentProviders 2026-09-03:
   The daemon-resolved accounts this session can be resumed under, so the native
   terminal action bar can render the "Switch Account" submenu without any Rust
   knowledge of project agent configuration. PRESENT-ONLY: absent means none.
   */
   switchableAgents?: readonly { agentId: string; icon: string; name: string }[];
   /*
-  CDXC:DraftAgentSwitch 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   The session is a draft (no first prompt yet), copied from the projected
   sidebar row. Rust needs it because a draft is chat-eligible WITHOUT an
   `agentSessionId`: its CLI publishes one only once it has booted, and an agent
@@ -471,7 +471,7 @@ export type GpuiRendererCommandResolvedSession = {
 };
 
 /*
-CDXC:SidebarGitMemo 2026-07-29:
+CDXC:Git 2026-07-29:
 The two GitHub-CLI derived fields of `SidebarGitState`, memoized as one unit so
 they are always published together (a `pr` from one probe can never pair with a
 `hasGitHubCli` from another).
@@ -582,7 +582,7 @@ export type GpuiRemoteProjectReference = {
 };
 
 /*
-CDXC:ExportTranscriptOptions 2026-08-24:
+CDXC:TranscriptExport 2026-08-24:
 Which session the open Export Transcript dialog is about, parked in the
 runtime while the user chooses the include-toggles. The dialog is a separate
 child window with no gxserver client, so its export request comes back with
@@ -747,7 +747,7 @@ export type GpuiWorkspaceTerminalRuntimeActionPayload =
     }
   | {
       /**
-       * CDXC:SwitchAccount 2026-09-03:
+       * CDXC:AgentProviders 2026-09-03:
        * Rust-origin Switch Account (terminal action bar, chat composer). The
        * agent id is one of the rows the runtime itself forwarded to Rust on the
        * tab session's `switchableAgents`.

@@ -39,7 +39,7 @@ const FIRST_CHAR_MULT: i32 = 2;
 
 const NEG: i32 = i32::MIN / 2;
 
-// CDXC:AgentHistorySearch 2026-06-16-18:16:
+// CDXC:PromptSearch 2026-06-16-18:16:
 // Search filtering must stop showing sessions just because the query is a loose
 // subsequence. Non-empty queries need both a minimum score percentage against an
 // ideal match and compact per-term spans, so unrelated prompts with scattered
@@ -141,7 +141,7 @@ impl Matcher {
         }
     }
 
-    // CDXC:AgentHistorySearch 2026-08-07-09:08:
+    // CDXC:PromptSearch 2026-08-07-09:08:
     // A literal query occurrence must always remain searchable, regardless of
     // earlier characters that could form a lower-quality fuzzy subsequence.
     // Prefer the literal span whenever one exists so the visible reason for the

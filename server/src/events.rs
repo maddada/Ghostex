@@ -75,10 +75,10 @@ pub struct RendererCommandError {
 }
 
 /*
-CDXC:GxserverPresentationEvents 2026-06-15-09:55:
+CDXC:StateSync 2026-06-15-09:55:
 Phase 4 Rust WebSockets must move beyond eventStreamReady and own the same server event hub contract as TypeScript: broadcast lifecycle/API/presentation events, let clients subscribe for fresh snapshots, and route renderer-only commands through the authenticated event stream without changing the default product port.
 
-CDXC:GxserverPresentationEvents 2026-06-22-04:30:
+CDXC:StateSync 2026-06-22-04:30:
 TypeScript keeps renderer-capable WebSocket clients in insertion order and dispatches renderer commands to the first open subscriber. Rust must retain multiple subscribers instead of replacing the earlier renderer so native command ownership stays stable across secondary clients and reconnect races.
 */
 impl GxserverEventHub {
@@ -252,7 +252,7 @@ impl GxserverEventHub {
 
 impl RendererCommandError {
     /*
-    CDXC:GxserverUbuntu 2026-06-23-07:52:
+    CDXC:PlatformSupport 2026-06-23-07:52:
     Renderer-only RPC behavior must stay protocol-identical on macOS and Ubuntu. Report the same no-renderer dependency failure without naming macOS so Linux clients do not receive platform-specific error copy.
     */
     fn dependency_unavailable() -> Self {

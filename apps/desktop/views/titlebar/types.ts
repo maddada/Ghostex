@@ -349,7 +349,7 @@ export type ResolvedOpenTarget =
     };
 
 /*
-CDXC:TitlebarHostBootstrap 2026-08-20-12:40:
+CDXC:Titlebar 2026-08-20-12:40:
 The host bootstrap object used to be declared by the removed macOS
 `native-sidebar.tsx`. GPUI injects only `codeServerRuntime.port` into it (see
 `render_titlebar`'s bootstrap script in apps/desktop/src/app/render/mode_switcher_and_titlebar.rs), so this host owns the

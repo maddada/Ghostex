@@ -83,7 +83,7 @@ pub(crate) fn gpui_save_agents_hub_file(
 
 pub(crate) fn gpui_agents_hub_open_path_in_finder(path: String) -> Result<(), String> {
     /*
-    CDXC:GPUIAgentsHubBridge 2026-06-24-12:26:
+    CDXC:AgentLauncher 2026-06-24-12:26:
     Agents Hub opener commands accept only paths proven by the current catalog builder: catalog files, their containing directories, group roots, and profile roots. React-supplied arbitrary paths, URLs, shell commands, query strings, environment values, and file contents are never forwarded to the OS opener.
     */
     let normalized = path.trim();

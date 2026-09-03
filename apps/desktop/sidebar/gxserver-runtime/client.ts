@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -75,7 +75,7 @@ export class GpuiGxserverClient {
   async fetchSidebarHud(activeProjectId: string | undefined): Promise<GxserverSidebarHudResponse> {
     const normalizedActiveProjectId = activeProjectId?.trim();
     /*
-     * CDXC:ProjectActions 2026-08-01:
+     * CDXC:Projects 2026-08-01:
      * The GPUI sidebar renders showOnProjectRow quick actions on every project
      * row, so the HUD read always asks for the per-project command block.
      */
@@ -242,7 +242,7 @@ export class GpuiGxserverClient {
         return;
       }
       /*
-      CDXC:GlobalActions 2026-08-07:
+      CDXC:AgentLauncher 2026-08-07:
       The Global Actions announcement carries no list — the handler refetches
       the HUD, which is the one projection of it — so there is no payload to
       shape-validate before forwarding it.
@@ -252,7 +252,7 @@ export class GpuiGxserverClient {
         return;
       }
       /*
-      CDXC:SessionChatCore 2026-07-31:
+      CDXC:SessionChat 2026-07-31:
       Session-chat frames ride the same local /api/events socket as
       presentation. The runtime only forwards shape-validated frames to an
       opted-in handler; the gpui chat CEF surface owns its own subscription,

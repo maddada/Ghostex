@@ -1,5 +1,5 @@
 /*
-CDXC:GPUITerminalGpuiEngine 2026-07-04:
+CDXC:Terminal 2026-07-04:
 P1e integration glue for the GPUI-composited terminal engine (libghostty-vt +
 TerminalElement). This is the single terminal pipeline on every OS; the macOS
 GhosttyKit implementation remains compiled but is not selected at runtime.
@@ -335,7 +335,7 @@ pub(crate) fn gpui_engine_terminal_spawn_config(
         configure_default_zsh_shell_integration(&mut env);
     }
     // The Linux app removed WAYLAND_DISPLAY from its own environment to run
-    // as an X11 client (see CDXC:GPUILinuxX11Backend in main.rs); terminal
+    // as an X11 client (see CDXC:PlatformSupport in main.rs); terminal
     // children are not part of that constraint, so they get the inherited
     // value back and user-launched GUI apps keep running native Wayland.
     #[cfg(target_os = "linux")]
@@ -361,7 +361,7 @@ pub(crate) fn gpui_engine_terminal_spawn_config(
 #[cfg(target_os = "macos")]
 fn configure_default_zsh_shell_integration(env: &mut Vec<(String, String)>) {
     /*
-    CDXC:GPUITerminalGpuiEngineShellIntegration 2026-07-10:
+    CDXC:Terminal 2026-07-10:
     Plain GPUI-engine zsh terminals must enter the same real Ghostty shell
     integration mode as native Ghostty surfaces. The engine's close policy
     intentionally uses OSC 133 prompt semantics; without the integration,

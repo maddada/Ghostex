@@ -25,7 +25,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsNotifications 2026-06-24-12:44:
+        CDXC:Notifications 2026-06-24-12:44:
         The GPUI Settings notification permission action mirrors the native Settings boundary: read macOS authorization, request only alert permission when it is notDetermined, report denied as a system-settings repair path, and never fake success with an in-app notification fallback.
         */
         let background = cx.background_executor().clone();
@@ -130,7 +130,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn test_gpui_agent_task_completion(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUISettingsNotifications 2026-06-24-12:44:
+        CDXC:Notifications 2026-06-24-12:44:
         Settings test-agent-completion parity is intentionally bounded to the local test action. Continue the existing completion-sound preview when enabled, then send one generic no-sound macOS banner only when the Settings notification toggle is enabled; do not route real session attention notifications, names, paths, command text, URLs, or click-to-focus metadata through this path.
         */
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
@@ -216,10 +216,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsStatusBridge 2026-06-24-11:40:
+        CDXC:StatusPet 2026-06-24-11:40:
         Saved Settings changes in GPUI must synchronize Portless enabled/protocol state to gxserver through `/api/updatePortlessState`, matching the shared modal's production behavior without running privileged Portless admin scripts from this slice.
 
-        CDXC:GPUISettingsPortlessBridge 2026-06-24-11:48:
+        CDXC:Portless 2026-06-24-11:48:
         Portless Settings fan-out must stay bounded to shared contract values: missing or malformed `portlessEnabled` behaves as enabled, protocol is restricted to HTTP/HTTPS, and saved changes emit only `setEnabled` plus enabled-only `setProtocol` metadata RPCs so local Settings saves cannot carry paths, URLs, commands, tokens, or native admin payloads.
         */
         let previous_enabled = gpui_settings_portless_enabled(previous_settings);
@@ -259,7 +259,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRemoteMachinesSettings 2026-06-24-13:36:
+        CDXC:RemoteMachines 2026-06-24-13:36:
         Normal GPUI Settings saves mirror native-sidebar cleanup for deleted Remote Machines: after the settings object is already saved, remove Keychain passwords for disappeared machines that carried `sshPasswordSaved === true`. This cleanup is silent and best-effort, carries only bounded ids, and never blocks the settings save or logs machine/user/host/password details.
         */
         let removed_ids =
@@ -333,7 +333,7 @@ impl GhostexGpuiApp {
         // windows), so an occupied host defers the prompt to a later check.
         if self.app_modal_window.is_some() {
             /*
-            CDXC:GPUIPortlessPromptDeferral 2026-08-18:
+            CDXC:Portless 2026-08-18:
             "Later check" used to mean "whenever some other Portless state
             update happens to run again", which for a prompt resolved during
             startup meant never: the prompt was dropped for the whole run.
@@ -400,7 +400,7 @@ impl GhostexGpuiApp {
         self.portless_setup_prompt_pending_modal_close = false;
     }
 
-    /// CDXC:GPUIPortlessPromptDeferral 2026-08-18: the app-modal host is free
+    /// CDXC:Portless 2026-08-18: the app-modal host is free
     /// again, so a prompt that was deferred because the user had a modal open
     /// gets its check re-run instead of being lost for the rest of the run.
     pub(crate) fn resume_deferred_gpui_portless_setup_prompt(
@@ -460,7 +460,7 @@ impl GhostexGpuiApp {
             return;
         };
         /*
-        CDXC:GPUIPortlessAdminBridge 2026-06-24-14:28:
+        CDXC:Portless 2026-06-24-14:28:
         GPUI Settings/setup Portless admin commands now run through a fixed macOS helper equivalent to the reviewed Swift PortlessAdminClient. Accept only bounded action/protocol/requestId metadata, use the bundled Web/code-server Node plus Web/portless CLI runtime, record only sanitized result fields in gxserver, and refresh the app-modal HUD without logging scripts, paths, URLs, stdout/stderr, command text, tokens, environment values, project data, or user content.
         */
         let Some(request_id) = gpui_portless_admin_request_id(command) else {
@@ -527,7 +527,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsProjectMetadata 2026-06-24-11:59:
+        CDXC:Projects 2026-06-24-11:59:
         GPUI Settings project metadata edits are gxserver-owned. Apply worktree command, Beads display-key, and Beads directory changes through `/api/updateProject`, then rehydrate the open modal from real gxserver/shared Settings state instead of mutating local fake project rows or shelling out.
         */
         let active_project_id = self.gpui_app_modal_active_project_id();

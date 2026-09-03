@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatTerminalActivity 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 Live work the agent CLI reports ONLY on its terminal screen, before the same
 text reaches the transcript. Claude Code replaces a current-status line as it
 works:
@@ -165,7 +165,7 @@ impl SessionChatTerminalActivity {
     }
 
     /*
-    CDXC:SessionChatCompactingStatus 2026-09-02:
+    CDXC:AgentScreenDetection 2026-09-02:
     Most terminal activity is stale scrollback once the main turn becomes
     ready: a `⏺` status row stays on the primary screen after Claude stops, so
     the hook-derived working flag is what proves it current. Two kinds are
@@ -207,7 +207,7 @@ pub fn publishable_session_chat_terminal_activity(
 pub const SESSION_CHAT_ACTIVITY_COMMAND_PROBE_TICKS: u64 = 8;
 
 /*
-CDXC:SessionChatCompactingStatus 2026-09-02:
+CDXC:AgentScreenDetection 2026-09-02:
 The transcript is the one place BOTH ways of issuing `/compact` land: Claude
 records `<command-name>/compact</command-name>` whether the bytes came from the
 chat composer or were typed straight into the terminal. The follower keys its
@@ -511,7 +511,7 @@ fn cursor_activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> 
 }
 
 /*
-CDXC:SessionChatTerminalActivity 2026-09-02:
+CDXC:AgentScreenDetection 2026-09-02:
 One physical screen row with its layout kept. `normalized_screen_lines` throws
 the indentation away, which is right for every marker scan but wrong for the
 `⏺` row: Claude wraps a long status at the terminal width and paints the rest
@@ -571,7 +571,7 @@ struct ClaudeStatusExtent {
 }
 
 /*
-CDXC:SessionChatTerminalActivity 2026-09-03:
+CDXC:AgentScreenDetection 2026-09-03:
 Only rows that are physically contiguous with the `⏺` row are part of it. A
 blank row ends the status even though what follows is indented the same way,
 because Claude paints everything that belongs to the turn under that bullet
@@ -639,7 +639,7 @@ pub fn detect_session_chat_terminal_activity(
     }
     let mut rows = screen_rows(screen_text);
     /*
-    CDXC:SessionChatAgentFleet 2026-08-23: cut the background-agent block off
+    CDXC:AgentScreenDetection 2026-08-23: cut the background-agent block off
     the bottom of the screen before reading anything. Its rows are
     indistinguishable from a status line — `⏺` there is the TUI's selection
     marker, so a selected subagent paints `⏺ general-purpose  Fixing tool-ro…`

@@ -1,7 +1,7 @@
 import { getVisiblePrimaryTitle, normalizeTerminalTitle } from './session-grid-contract';
 
 /**
- * CDXC:NativeOnlyCleanup 2026-05-05-02:22
+ * CDXC:RepoStructure 2026-05-05-02:22
  * Native ghostex owns active terminal/session behavior. Keep first-prompt
  * title helpers in shared code so the retired VS Code extension tree can be
  * removed without changing native Ghostty session naming.
@@ -44,14 +44,14 @@ const GENERIC_SESSION_TITLES_BY_AGENT = new Map<string, ReadonlySet<string>>([
   ['claude', new Set(['claude', 'claude code', 'claude session'])],
   ['codex', new Set(['codex', 'openai codex', 'codex cli'])],
   /**
-   * CDXC:CursorCLI 2026-05-19-15:35:
+   * CDXC:AgentProviders 2026-05-19-15:35:
    * Cursor CLI sessions start with placeholder names until the CLI publishes a
    * real terminal title. Treat those placeholders as generic so terminal-title
    * sync can persist the CLI-provided name without fighting first-prompt rename.
    */
   ['cursor', new Set(['cursor', 'cursor agent', 'cursor cli', 'cursor-agent'])],
   /**
-   * CDXC:AntigravityCLI 2026-05-19-18:45:
+   * CDXC:AgentProviders 2026-05-19-18:45:
    * Antigravity CLI keeps the short `agy` terminal title while running. Treat
    * that placeholder as generic so richer auto titles can sync when available.
    */
@@ -71,7 +71,7 @@ export function resolveFirstPromptAutoRenameStrategy(
   const normalizedAgentName = agentName?.trim().toLowerCase();
   if (normalizedAgentName === 'claude' || normalizedAgentName === 'claude code') {
     /**
-     * CDXC:SessionTitleSync 2026-06-12-07:08:
+     * CDXC:SessionTitles 2026-06-12-07:08:
      * Claude Code can leave newly working sessions at the generic `Claude Code`
      * title. Send a bare `/rename` for unrenamed Claude sessions because
      * Claude can generate the title itself from the active conversation.
@@ -90,7 +90,7 @@ export function resolveFirstPromptAutoRenameStrategy(
     normalizedAgentName === 'cursor-agent'
   ) {
     /**
-     * CDXC:SessionTitleSync 2026-05-30-05:44:
+     * CDXC:SessionTitles 2026-05-30-05:44:
      * Cursor Agent already names its sessions automatically. Do not run
      * Ghostex first-prompt auto-title generation for Cursor sessions.
      */
@@ -99,7 +99,7 @@ export function resolveFirstPromptAutoRenameStrategy(
 
   if (normalizedAgentName === 'pi' || normalizedAgentName === 'π') {
     /**
-     * CDXC:PiAgent 2026-05-08-09:42
+     * CDXC:AgentProviders 2026-05-08-09:42
      * Pi's CLI names sessions with `/name <title>` instead of Codex's
      * `/rename <title>`. Keep the generation policy shared while letting the
      * native sender choose Pi's command syntax.
@@ -112,7 +112,7 @@ export function resolveFirstPromptAutoRenameStrategy(
 
 export function isGenericAgentSessionTitle(agentName: string | undefined, title: string | undefined): boolean {
   /**
-   * CDXC:SessionTitleSync 2026-04-28-03:49
+   * CDXC:SessionTitles 2026-04-28-03:49
    * First-prompt auto-title is allowed only while the session is effectively
    * untitled. Placeholder creation names and path-like shell titles are not
    * persisted names, but user/terminal/generated meaningful titles must block
@@ -150,7 +150,7 @@ export function getCurrentTitleForFirstPromptAutoRename(input: {
   terminalTitle: string | undefined;
 }): string | undefined {
   /**
-   * CDXC:SessionTitleSync 2026-05-08-16:23
+   * CDXC:SessionTitles 2026-05-08-16:23
    * First-prompt auto-rename may claim a terminal-auto title only while the
    * session is still effectively generic, such as `Codex Session`. A meaningful
    * Codex-provided terminal title is already the desired session name and must
@@ -262,7 +262,7 @@ function normalizePrompt(prompt: string): string | undefined {
 
 function containsLeadingSlashCommandLine(prompt: string): boolean {
   /**
-   * CDXC:SessionTitleSync 2026-05-30-05:18:
+   * CDXC:SessionTitles 2026-05-30-05:18:
    * First-prompt auto-title should still run when a normal request discusses
    * slash commands, such as asking Ghostex to send `/rename <title>`.
    * Suppress only short slash-command invocations that start a line. Longer

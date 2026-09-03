@@ -17,7 +17,7 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
         output.insert("gitConfig".to_string(), git_config);
     }
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     Sidebar V2 merges the same repository across machines by its `origin` remote.
     This is a READ of the background probe cache keyed by the project's family
     root path (`project_git_remote_key`) — never a probe — so building a snapshot
@@ -51,7 +51,7 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
         }),
     );
     /*
-    CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+    CDXC:Icons 2026-07-29 (discovered icons):
     The icon the project itself ships through a favicon, app icon, or
     the icon its HTML entry point declares — discovered server-side and published
     as a data URL. Another pure cache READ (`project_icon`), keyed on the same
@@ -95,7 +95,7 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
 
 pub(crate) fn project_presentation_git_config(project: &Value) -> Option<Value> {
     /*
-    CDXC:GPUIRemoteGit 2026-06-24-18:22:
+    CDXC:Git 2026-06-24-18:22:
     Presentation may expose only Git preference keys needed by reused sidebar controls. Do not forward arbitrary project gitConfig values, command text, paths, URLs, branch names, tokens, or daemon output through remote sidebar presentation.
     */
     let source = project.get("gitConfig")?.as_object()?;
@@ -170,7 +170,7 @@ pub(crate) fn project_presentation_session(
         read_runtime_text(session, "agentSessionPath"),
     );
     /*
-    CDXC:SwitchAccount 2026-09-03:
+    CDXC:AgentProviders 2026-09-03:
     The accounts this session can be resumed under, resolved by the daemon that
     owns the project so every surface (sidebar context menu, terminal action
     bar, chat composer) renders the same rows. ABSENT when there is nothing to
@@ -188,7 +188,7 @@ pub(crate) fn project_presentation_session(
         );
     }
     /*
-    CDXC:WebCommandPaneActions 2026-08-08:
+    CDXC:CommandPane 2026-08-08:
     Command-pane clients need the stable saved Action id to find the daemon
     session that already owns that Action. Publish only that identifier;
     command text and launch settings remain outside presentation snapshots.
@@ -197,14 +197,14 @@ pub(crate) fn project_presentation_session(
     output.insert("createdAt".to_string(), value_field(session, "createdAt"));
     insert_optional_js_truthy_value(&mut output, "cwd", session.get("cwd").cloned());
     /*
-    CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+    CDXC:Git 2026-07-29-00:00:
     Sidebar V2's card row reads branch / +n −n / PR badge from server-owned state.
     This is a READ of the background probe cache keyed by the session cwd — never
     a probe — so building a snapshot stays a pure in-memory projection. A cwd the
     background pass has not reached yet, a cwd outside any repository, and an
     older remote daemon all publish the same thing: no `gitStatus` key at all.
 
-    CDXC:SidebarV2GitStatus 2026-07-30 (effective cwd):
+    CDXC:Git 2026-07-30 (effective cwd):
     The lookup key is the session's EFFECTIVE cwd — its own `cwd`, else the
     project's path — because agent sessions carry no cwd by design and run in the
     project root. The published `cwd` field above stays raw on purpose: V2 uses it
@@ -218,7 +218,7 @@ pub(crate) fn project_presentation_session(
     );
     output.insert("groupId".to_string(), Value::String(group_id.to_string()));
     /*
-    CDXC:AutoSleepNeverActive 2026-08-22:
+    CDXC:SessionSleep 2026-08-22:
     `lastActiveAt` below falls back to `createdAt` so sorting and Last Active
     labels always have a timestamp, which leaves a session that has NEVER been
     active indistinguishable from one last active when it was created. Auto
@@ -237,7 +237,7 @@ pub(crate) fn project_presentation_session(
         ),
     );
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     A session created from the sidebar that has never received a user prompt.
     Published as a PRESENT-ONLY key — never `false` — so it reads identically to
     what a daemon predating drafts sends, and so promotion clears it through the
@@ -249,7 +249,7 @@ pub(crate) fn project_presentation_session(
     }
     output.insert("isFavorite".to_string(), Value::Bool(is_favorite(session)));
     /*
-    CDXC:GxserverSessionTitle 2026-07-02-15:10:
+    CDXC:SessionTitles 2026-07-02-15:10:
     gxserver stages and submits first-prompt title commands itself through zmx, so presentation no longer carries a client Enter-submit flag. `isGeneratingFirstPromptTitle` stays published for client loading chrome only.
     */
     output.insert(
@@ -269,7 +269,7 @@ pub(crate) fn project_presentation_session(
     );
     output.insert("lifecycleState".to_string(), Value::String(lifecycle_state));
     /*
-    CDXC:ActivitySuppressionPolicy 2026-07-29-12:00:
+    CDXC:AgentScreenDetection 2026-07-29-12:00:
     `meaningfulActivityAt` is the recency clients sort by: it ignores working
     blips shorter than the meaningful threshold and advances live while a
     session is meaningfully working. `workingStartedAt` lets sort layers tell
@@ -298,7 +298,7 @@ pub(crate) fn project_presentation_session(
         session.get("sessionTag").cloned(),
     );
     /*
-    CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     Sidebar V2's settled/snoozed shelves read server-owned lifecycle state, so
     presentation publishes it verbatim. Absent keys mean "never settled / never
     snoozed" — the same shape a pre-migration state.db and an older remote
@@ -405,7 +405,7 @@ pub(crate) fn read_session_persistence_provider(session: &Value) -> Option<Strin
 }
 
 /*
-CDXC:GxserverPresentation 2026-06-22-06:36:
+CDXC:StateSync 2026-06-22-06:36:
 Presentation snapshots are active-focused state, not full stopped history. Match TypeScript by keeping all active sessions, capping explicitly pinned/favorite/tagged stopped rows to the first 20 per project by presentation sort key, and treating null or empty tags as absent.
 */
 pub(crate) fn select_presentation_sessions(sessions: Vec<Value>) -> Vec<Value> {
@@ -420,7 +420,7 @@ pub(crate) fn select_presentation_sessions(sessions: Vec<Value>) -> Vec<Value> {
         }
     }
     /*
-    CDXC:RecentStoppedCapKeepsNewest 2026-09-01:
+    CDXC:Sessions 2026-09-01:
     The cap picks by recency, newest first. It used to take the first 20 by
     presentation sort key, which orders lastActiveAt ascending — so in a
     project with more than 20 pinned/tagged stopped rows the OLDEST ones held

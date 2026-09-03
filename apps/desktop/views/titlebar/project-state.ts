@@ -98,7 +98,7 @@ export function resolveTitlebarGitStateForMerge(
   }
   if (shouldUseCachedTitlebarGitState(incoming, cached)) {
     /*
-     * CDXC:TitlebarGit 2026-06-16-19:19:
+     * CDXC:Git 2026-06-16-19:19:
      * Git refresh publishes a transient busy/default state before branch and
      * diff probes finish. Keep the last cached project Git snapshot visible
      * during that refresh so titlebar dropdowns do not flash detached/default
@@ -251,7 +251,7 @@ export function formatToggleSidebarTooltipLabel(hotkey: string | undefined): str
     return '';
   }
   /*
-   * CDXC:SidebarCollapse 2026-06-15-13:34:
+   * CDXC:Sidebar 2026-06-15-13:34:
    * The titlebar-side collapse control tooltip should name the command and
    * show the assigned shortcut, matching native hover help language while
    * preserving the empty label when Toggle Sidebar has no hotkey.
@@ -329,7 +329,7 @@ export function createInitialProjectState(bootstrap: Record<string, unknown>): T
     updateDownloading: readInitialTitlebarUpdateDownloading(bootstrap),
   };
   /*
-   * CDXC:ReactTitlebar 2026-06-11-18:06:
+   * CDXC:Titlebar 2026-06-11-18:06:
    * Native dropdown child windows need the latest titlebar project/resource
    * payload before first render. Swift injects that payload into the bootstrap
    * object at document start; merge it here so Resources does not briefly or
@@ -342,7 +342,7 @@ export function createInitialProjectState(bootstrap: Record<string, unknown>): T
 
 export function readInitialTitlebarUpdateAvailable(bootstrap: Record<string, unknown>): boolean {
   /**
-   * CDXC:AutoUpdate 2026-06-08-18:21:
+   * CDXC:Release 2026-06-08-18:21:
    * The native launch probe can finish before or during titlebar startup.
    * Accept both the injected bootstrap boolean and the pending native bridge
    * boolean so detected updates show the titlebar button on first render.
@@ -352,7 +352,7 @@ export function readInitialTitlebarUpdateAvailable(bootstrap: Record<string, unk
 
 export function readInitialTitlebarUpdateDownloading(bootstrap: Record<string, unknown>): boolean {
   /**
-   * CDXC:AutoUpdate 2026-06-13-17:52:
+   * CDXC:Release 2026-06-13-17:52:
    * Download animation is native-owned Sparkle state. Accept both the injected
    * bootstrap boolean and the pending bridge boolean so titlebar reloads do not
    * lose the active download indicator while an update is already downloading.
@@ -362,7 +362,7 @@ export function readInitialTitlebarUpdateDownloading(bootstrap: Record<string, u
 
 export function readInitialTitlebarUpdateDownloadProgress(bootstrap: Record<string, unknown>): number | null {
   /**
-   * CDXC:AutoUpdate 2026-06-30-22:18:
+   * CDXC:Release 2026-06-30-22:18:
    * Download progress is a nullable native-owned ratio. Prefer the pending
    * bridge value over bootstrap because `null` is an intentional clear when
    * Sparkle leaves the download phase.
@@ -377,7 +377,7 @@ export function createTitlebarKeepAwakeSettings(
   settings: ReturnType<typeof normalizeghostexSettings>
 ): TitlebarKeepAwakeSettings {
   /*
-   * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+   * CDXC:Settings 2026-06-28-07:41:
    * The macOS Keep Awake feature is experimental-only. Build the titlebar-facing
    * state with one effective visibility flag so startup, Settings sync, and
    * native child dropdown windows all hide the button when Enable Experimental
@@ -488,7 +488,7 @@ export async function applyKeepAwakeLidSleepPrevention(
   options: { installIfNeeded?: boolean } = {}
 ): Promise<boolean> {
   /**
-   * CDXC:TitlebarKeepAwake 2026-05-28-19:28:
+   * CDXC:KeepAwake 2026-05-28-19:28:
    * User-requested closed-lid wakefulness requires a privileged helper because
    * `caffeinate` cannot cover MacBook lid-close sleep. The helper is installed
    * only when this setting and Keep Awake are both active. Lease refreshes never
@@ -524,7 +524,7 @@ export async function readKeepAwakePowerSnapshot(options: {
 > {
   try {
     /*
-    CDXC:TitlebarKeepAwake 2026-06-07-16:20:
+    CDXC:KeepAwake 2026-06-07-16:20:
     Keep Awake automation should not run heavyweight power probes just because
     Keep Awake is active. Build the shell command from the enabled rules so
     hidden checks skip system_profiler, pmset battery, or low-power reads when no

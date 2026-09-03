@@ -1,7 +1,7 @@
 import { quoteShellDoubleArg } from './shell-quote';
 
 /**
- * CDXC:CursorCLI 2026-05-20-08:20:
+ * CDXC:AgentProviders 2026-05-20-08:20:
  * Cursor Agent resumes by chat UUID (`cursor-agent --resume <id>`), not by
  * sidebar title. Ghostex-created sessions store the UUID from `create-chat`;
  * externally started sessions resolve the latest matching chat `name` from the
@@ -30,7 +30,7 @@ export function getCursorChatSessionIdFromIdentity(value: string | undefined): s
 }
 
 /**
- * CDXC:CursorCLI 2026-05-27-09:06:
+ * CDXC:AgentProviders 2026-05-27-09:06:
  * Cursor Agent hooks persist transcript paths under Cursor's project-scoped
  * `agent-transcripts` directory. Treat that path shape as authoritative Cursor
  * identity when older records have a stale inherited agent name.
@@ -44,7 +44,7 @@ export function isCursorAgentTranscriptPath(value: string | undefined): boolean 
 }
 
 /**
- * CDXC:CursorCLI 2026-05-20-08:20:
+ * CDXC:AgentProviders 2026-05-20-08:20:
  * Accept-all and other launch flags stay on the configured base command; append
  * `--resume` after them so Ghostex-owned sessions always attach to the chat id
  * created at launch time.
@@ -59,7 +59,7 @@ export function appendCursorCliResumeFlag(agentCommand: string, chatId: string):
 }
 
 /**
- * CDXC:CursorCLI 2026-06-10-18:17:
+ * CDXC:AgentProviders 2026-06-10-18:17:
  * Native full-reload and copy-resume run this script through Ghostex's bundled
  * Node runtime, not Python or system sqlite. It scans the current project's
  * Cursor chat store and returns the newest chat whose `name` matches.

@@ -18,7 +18,7 @@ export type SidebarCollapseActionsOptions = {
 };
 
 /*
- * CDXC:SidebarHookDecomposition 2026-08-22:
+ * CDXC:RepoStructure 2026-08-22:
  * The collapse setters SidebarApp hands to project rows and collection
  * panels. They hold no React state of their own —
  * they only close over the collapse state and the collapse diagnostic logger —

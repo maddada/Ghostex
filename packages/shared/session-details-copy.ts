@@ -19,7 +19,7 @@ const AGENT_LABELS: Record<string, string> = {
 };
 
 /**
- * CDXC:SidebarContextMenu 2026-06-11-23:08:
+ * CDXC:ContextMenus 2026-06-11-23:08:
  * The Copy details action should copy stable session metadata from the rendered
  * sidebar row, not terminal output or the saved first user message. This keeps
  * the context-menu action useful for support/debug handoffs without silently

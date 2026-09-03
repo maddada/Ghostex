@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatAppCommands 2026-08-23:
+CDXC:SessionChat 2026-08-23:
 Slash commands GHOSTEX types into the agent, not the user.
 
 Several flows write a command straight into the session's pty without the chat

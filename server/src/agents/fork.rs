@@ -18,7 +18,7 @@ pub(crate) fn fork_session(
     let project = require_project(repository, &lifecycle.project_id)?;
     let source_session = require_session(repository, lifecycle)?;
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     A draft has nothing to fork. Its CLI publishes an `agentSessionId` at
     startup, before any prompt, so `build_agent_fork_plan` below happily finds a
     restorable reference and passes the identity check — and the fork it builds
@@ -329,20 +329,20 @@ pub(crate) fn request_session_rename(
         let updated = repository.update_session(&update)?;
         let pending_changed = updated.get("updatedAt") != session.get("updatedAt");
         /*
-        CDXC:DraftSessions 2026-08-28:
+        CDXC:Drafts 2026-08-28:
         Renaming is a supported action on a draft, and it must not promote one.
         This branch ends with `/rename <title>` being typed into the agent's
         input line — by the local GPUI's own surface, or by the remote submission
         in `agent_http.rs` — and the terminal churn that produces is
         indistinguishable from a user prompt to the title-derived half of draft
         promotion. Ghostex typed those bytes, not the user, so re-arm layer 1 of
-        CDXC:ActivitySuppressionPolicy here, at the ONE point both submission
+        CDXC:AgentScreenDetection here, at the ONE point both submission
         paths pass through. Same carve-out the composer's option commands get,
         and a no-op on every session that is not a draft.
         */
         let updated = arm_draft_launch_activity_suppression(repository, &updated)?;
         /*
-        CDXC:GxserverAgentTitles 2026-06-21-15:35:
+        CDXC:SessionTitles 2026-06-21-15:35:
         Rust requestSessionRename must mirror TypeScript gxserver for Agent CLI renames: the renderer command can ask the CLI to rename, but the app sidebar title must be reconciled from the agent's own structured session metadata before the RPC returns so clients receive the canonical session projection.
         */
         let reconciled =

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CDXC:ReleaseTransientFailureClassification 2026-08-13:
+# CDXC:Release 2026-08-13:
 # Bounded, classified retries for external dependency fetches.
 #
 # Only wrap operations whose failure mode is transport or availability: archive

@@ -1,5 +1,5 @@
 /*
-CDXC:StashedPromptSessionAssociation 2026-08-24:
+CDXC:SavedPrompts 2026-08-24:
 Per-concern module for the Saved Prompts "Go to session" jump. The modal host
 window posts `jumpToStashedPromptSession` with the raw gxserver ids a stash row
 carries plus the durable provider conversation id (`agentSessionId`); Rust only

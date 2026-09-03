@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 `POST /api/recordClientEvent` — the desktop app's loopback analytics ping.
 
 Two things about this endpoint are deliberate and both matter.

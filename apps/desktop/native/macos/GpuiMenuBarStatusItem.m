@@ -831,14 +831,14 @@ static const CGFloat GhostexGpuiMenuBarStatusProjectCardVerticalPadding = 6.0;
                     backing:NSBackingStoreBuffered
                       defer:NO];
     /*
-     CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+     CDXC:StatusPet 2026-06-26-06:05:
      The GPUI menu-bar primary click opens a native Running Agents dropdown, not
      a CEF or GPUI overlay. Keep it as a borderless non-activating AppKit panel
      with normal visible row controls, click-away dismissal, project/session
      callbacks, and Restart/Quit footer rows so opening it does not raise the
      main app.
 
-     CDXC:GPUIMenuBarStatusItem 2026-06-26-06:29:
+     CDXC:StatusPet 2026-06-26-06:29:
      Pixel parity with the native menu-bar dropdown requires a hover-only 2px
      scrollbar pinned to the panel's right edge. Keep it as visible AppKit
      chrome with the system scroller disabled; it must not introduce hidden hit
@@ -1418,7 +1418,7 @@ static const CGFloat GhostexGpuiMenuBarStatusProjectCardVerticalPadding = 6.0;
 - (void)statusItemClicked:(NSStatusBarButton *)sender {
   NSEvent *event = NSApp.currentEvent;
   /*
-   CDXC:GPUIMenuBarStatusItem 2026-06-26-06:29:
+   CDXC:StatusPet 2026-06-26-06:29:
    The status button is already registered for leftMouseUp, but AppKit may
    dispatch this action after NSApp.currentEvent is nil or has moved to another
    event. Match the Swift host by ignoring only explicit secondary-click events
@@ -1475,7 +1475,7 @@ GhostexGpuiMenuBarStatusEntries(uint64_t attentionCount, uint64_t workingCount,
   }
   if (count == 0) {
     /*
-     CDXC:GPUIMenuBarStatusItem 2026-06-26-05:44:
+     CDXC:StatusPet 2026-06-26-05:44:
      When Rust applies instead of hides, the menu-bar item must remain visible
      as the Running Agents dropdown target. Render an available-style zero chip
      for the all-empty state; only the Rust hide path removes the NSStatusItem.
@@ -1510,11 +1510,11 @@ static void GhostexGpuiApplyMenuBarStatusItemOnMain(
     uint64_t attentionCount, uint64_t workingCount, uint64_t availableCount,
     NSArray<GhostexGpuiMenuBarStatusProjectModel *> *copiedProjects) {
   /*
-   CDXC:GPUIMenuBarStatusItem 2026-06-26-05:42:
+   CDXC:StatusPet 2026-06-26-05:42:
    The compact NSStatusItem badge is still driven by primitive counts selected
    by Rust; renderer-owned menu-bar payloads remain rejected.
 
-   CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+   CDXC:StatusPet 2026-06-26-06:05:
    The Running Agents dropdown may receive only Rust-owned sanitized
    project/session ids, titles, status, order, and timestamps from the strict
    parser. AppKit copies that data at the FFI boundary and owns only
@@ -1531,7 +1531,7 @@ static void GhostexGpuiApplyMenuBarStatusItemOnMain(
       attentionCount, workingCount, availableCount, entries);
   if (count == 0) {
     /*
-     CDXC:GPUIMenuBarStatusItem 2026-06-26-05:44:
+     CDXC:StatusPet 2026-06-26-05:44:
      Applying primitive counts is a visible-state operation; hiding is reserved
      for the explicit Rust None path. Keep a defensive available-style zero
      entry here so future edits to the entry builder cannot make an all-zero

@@ -11,7 +11,7 @@ use super::{
 };
 
 /*
-CDXC:GxserverZmxProbeCache 2026-09-01:
+CDXC:Zmx 2026-09-01:
 `listSessions`, `readPresentationSnapshot`, `readProjectStatus`, and the
 presentation subscribe boundary all run the same zmx existence and process
 snapshot probes, and desktop/web clients poll them roughly every two seconds.

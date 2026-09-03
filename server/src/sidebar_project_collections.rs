@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::domain::DomainStateError;
 
 /*
-CDXC:SidebarProjectCollections 2026-07-18-00:00:
+CDXC:Projects 2026-07-18-00:00:
 GPUI's colored "Group N" project collections used to live only in the desktop
 sidebar's localStorage (`ghostex.sidebar.projectCollections.v1`), so React
 Native Android could neither render nor edit the same grouped project list. gxserver

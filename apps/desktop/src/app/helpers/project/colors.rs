@@ -16,7 +16,7 @@ use crate::*;
 
 pub(crate) fn gpui_project_icon_image_from_data_url(value: &str) -> Option<Arc<Image>> {
     /*
-    CDXC:GPUITitlebarProjectIcon 2026-07-04-03:00:
+    CDXC:Titlebar 2026-07-04-03:00:
     The titlebar project icon is render-only and may come only from the explicit
     active-project `projectIconDataUrl` snapshot field. Decode the already
     bounded image data URL for the 16px titlebar slot without probing paths,
@@ -81,7 +81,7 @@ pub(crate) fn refresh_gpui_visual_settings(
     GPUI_WORKSPACE_BACKGROUND_RGB.store(u64::from(workspace), Ordering::Relaxed);
 
     /*
-    CDXC:GPUITitlebarGradient 2026-07-22:
+    CDXC:Theming 2026-07-22:
     The saved `customSidebarTitlebarBackgroundColor` hex is a legacy migration
     seed only — since the contrast-slider redesign the sidebar resolves the
     effective chrome background from `customSidebarTitlebarBackgroundDarkness-
@@ -96,7 +96,7 @@ pub(crate) fn refresh_gpui_visual_settings(
             .unwrap_or(0xffffff);
     GPUI_TITLEBAR_BACKGROUND_RGB.store(u64::from(titlebar_background), Ordering::Relaxed);
     /*
-    CDXC:GPUITitlebarGradient 2026-07-22:
+    CDXC:Theming 2026-07-22:
     The shared sidebar renders custom chrome as a fixed-strength gradient
     derived from the resolved titlebar background
     (getSidebarTitlebarGradientColors in packages/shared/ghostex-settings.ts), and the
@@ -645,7 +645,7 @@ pub(crate) fn project_editor_companion_divider_line_color() -> Hsla {
 
 pub(crate) fn command_pane_chrome_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneChrome 2026-06-25-13:19:
+    CDXC:CommandPane 2026-06-25-13:19:
     Native command-panel chrome and command titlebars use an opaque black background. Keep GPUI command chrome on black instead of the generic dark titlebar gray so tabs, tab-add, and panel actions sit on the same base as macOS.
     */
     rgb(0x000000).into()
@@ -653,7 +653,7 @@ pub(crate) fn command_pane_chrome_color() -> Hsla {
 
 pub(crate) fn command_pane_strip_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneChrome 2026-06-25-13:19:
+    CDXC:CommandPane 2026-06-25-13:19:
     The collapsed command strip is native command titlebar chrome with side margins, so its background stays black like expanded command titlebars.
     */
     command_pane_chrome_color()
@@ -661,7 +661,7 @@ pub(crate) fn command_pane_strip_color() -> Hsla {
 
 pub(crate) fn command_pane_panel_separator_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneChrome 2026-06-25-13:19:
+    CDXC:CommandPane 2026-06-25-13:19:
     Native command-panel boundaries use the workspace separator line #1e1e1e for the panel edge, separate from focused pane outlines and titlebar command separators.
     */
     rgb(0x1e1e1e).into()
@@ -669,7 +669,7 @@ pub(crate) fn command_pane_panel_separator_color() -> Hsla {
 
 pub(crate) fn command_pane_border_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneChrome 2026-06-25-13:19:
+    CDXC:CommandPane 2026-06-25-13:19:
     Native inactive command terminal pane outlines use #111111, not the translucent command titlebar separator. Keep the inactive command group outline distinct from titlebar chrome.
     */
     rgb(0x111111).into()
@@ -681,7 +681,7 @@ pub(crate) fn command_pane_side_edge_color() -> Hsla {
 
 pub(crate) fn command_pane_hidden_border_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneFocus 2026-06-25-18:02:
+    CDXC:FocusRouting 2026-06-25-18:02:
     Pinned native command panels set inactive command borders to nil. Use a transparent GPUI border color instead of removing the border frame so split command groups keep stable layout while matching the hidden inactive outline.
     */
     rgb(0x000000).opacity(0.0).into()
@@ -689,7 +689,7 @@ pub(crate) fn command_pane_hidden_border_color() -> Hsla {
 
 pub(crate) fn command_pane_focused_border_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneChrome 2026-06-25-13:19:
+    CDXC:CommandPane 2026-06-25-13:19:
     Native focused terminal pane chrome is a neutral #737373 outline at 95% alpha, while #95d7f6 remains reserved for attention/done status. Do not tint command focus blue.
     */
     rgb(0x737373).opacity(0.95).into()
@@ -697,10 +697,10 @@ pub(crate) fn command_pane_focused_border_color() -> Hsla {
 
 pub(crate) fn command_pane_tab_background_color(is_active: bool, is_sleeping: bool) -> Hsla {
     /*
-    CDXC:GPUICommandTabBackground 2026-06-25-14:36:
+    CDXC:CommandPane 2026-06-25-14:36:
     Match macOS `compositedWorkspaceTabColor` for command-role tabs instead of using generic GPUI dark fills. The channel math keeps the active and inactive tab backgrounds tied to the native AppKit source values.
 
-    CDXC:GPUICommandTabSleepVisuals 2026-06-25-14:39:
+    CDXC:SessionSleep 2026-06-25-14:39:
     Native command-role sleeping tabs keep the active fill when selected and use the parked 3.2% inactive overlay only as inactive siblings.
     */
     let overlay_alpha = if is_active {
@@ -715,7 +715,7 @@ pub(crate) fn command_pane_tab_background_color(is_active: bool, is_sleeping: bo
 
 pub(crate) fn command_pane_tab_hover_background_color(is_active: bool, is_sleeping: bool) -> Hsla {
     /*
-    CDXC:GPUICommandTabBackground 2026-06-25-14:36:
+    CDXC:CommandPane 2026-06-25-14:36:
     Native command tabs do not brighten the tab fill on hover; hover state only affects the drawn trailing status/close affordance.
     */
     command_pane_tab_background_color(is_active, is_sleeping)
@@ -732,7 +732,7 @@ pub(crate) fn command_pane_native_composited_tab_color(overlay_alpha: f32) -> Hs
 
 pub(crate) fn command_pane_tab_title_text_color(is_active: bool, is_sleeping: bool) -> Hsla {
     /*
-    CDXC:GPUICommandTabSleepVisuals 2026-06-25-14:39:
+    CDXC:SessionSleep 2026-06-25-14:39:
     Command-role tab titles use selected-label white for both active and inactive tabs, but inactive sleeping tabs multiply title alpha by the native 0.48 parked-session treatment. Active sleeping tabs keep full selected label opacity.
     */
     let sleep_alpha_multiplier = if is_sleeping && !is_active {
@@ -745,7 +745,7 @@ pub(crate) fn command_pane_tab_title_text_color(is_active: bool, is_sleeping: bo
 
 pub(crate) fn command_pane_tab_separator_color() -> Hsla {
     /*
-    CDXC:GPUICommandTabSeparators 2026-06-25-14:17:
+    CDXC:CommandPane 2026-06-25-14:17:
     macOS command tab separators use calibrated white at 10% alpha, separate from the heavier command-pane structural border color.
     */
     rgb(0xffffff).opacity(0.10).into()
@@ -808,7 +808,7 @@ pub(crate) fn command_terminal_tab_status_indicator_visible(
     tab_hovered: bool,
 ) -> bool {
     /*
-    CDXC:GPUICommandTabStatus 2026-06-25-13:18:
+    CDXC:SessionStatus 2026-06-25-13:18:
     Native command tabs hide working/attention/Delayed Send status chrome while the tab is hovered so the inline close affordance owns the trailing slot. Title reservation remains status-based, not hover-based, to avoid reflow.
     */
     command_terminal_tab_status_has_indicator(tab_status) && !tab_hovered
@@ -862,7 +862,7 @@ pub(crate) fn command_pane_control_hover_color() -> Hsla {
 
 pub(crate) fn command_pane_sticky_active_tab_button_color() -> Hsla {
     /*
-    CDXC:GPUICommandTabOverflow 2026-06-25-13:34:
+    CDXC:CommandPane 2026-06-25-13:34:
     Native sticky active-tab navigation shares the command tab-bar icon-button background with Pin, Minimize, and inline New Terminal.
     */
     command_pane_control_button_color()
@@ -878,7 +878,7 @@ pub(crate) fn command_pane_sticky_active_tab_border_color() -> Hsla {
 
 pub(crate) fn command_pane_split_handle_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneResize 2026-06-25-13:19:
+    CDXC:CommandPane 2026-06-25-13:19:
     Native pane split rails are transparent five-pixel hit regions; pane borders provide visible separation until hover feedback appears.
     */
     rgb(0x000000).opacity(0.0).into()
@@ -886,7 +886,7 @@ pub(crate) fn command_pane_split_handle_color() -> Hsla {
 
 pub(crate) fn command_pane_split_separator_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneResize 2026-06-25-13:19:
+    CDXC:CommandPane 2026-06-25-13:19:
     Command split handles should not draw a persistent center separator because native resize rails are transparent in their normal state.
     */
     rgb(0x000000).opacity(0.0).into()
@@ -898,7 +898,7 @@ pub(crate) fn command_terminal_placeholder_color() -> Hsla {
 
 pub(crate) fn command_pane_sleeping_placeholder_wake_label_color() -> Hsla {
     /*
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-25-14:49:
+    CDXC:SessionSleep 2026-06-25-14:49:
     Native AppKit uses calibrated white 0.55 for the sleeping placeholder wake label; keep the GPUI label on the equivalent neutral gray instead of reusing brighter tab or state-placeholder text colors.
     */
     rgb(0x8c8c8c).into()

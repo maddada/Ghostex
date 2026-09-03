@@ -1,5 +1,5 @@
 /*
-CDXC:AgentModelCatalog 2026-09-02:
+CDXC:AgentProviders 2026-09-02:
 Where a client's current agent model catalog comes from, in order:
 
 1. The snapshot bundled with the build (`agent-model-catalog.json` at the repo

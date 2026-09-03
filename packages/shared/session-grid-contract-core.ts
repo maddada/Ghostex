@@ -18,7 +18,7 @@ export type SessionGridDirection = 'up' | 'right' | 'down' | 'left';
 export type SessionPaneSplitDirection = 'horizontal' | 'vertical';
 
 /**
- * CDXC:NativeSplits 2026-05-10-18:30
+ * CDXC:Workarea 2026-05-10-18:30
  * Workspace panes persist as an explicit split/tab tree instead of deriving
  * native geometry from visibleSessionIds counts. This lets Cmd+D and
  * Cmd+Shift+D add the new terminal beside the targeted pane without the
@@ -45,12 +45,12 @@ export type SessionPaneLayoutNode =
 export type SidebarSessionActivityState = 'idle' | 'working' | 'attention';
 export type SessionLifecycleState = 'running' | 'done' | 'sleeping' | 'error';
 /**
- * CDXC:SessionTitleSync 2026-04-27-17:45
+ * CDXC:SessionTitles 2026-04-27-17:45
  * Session titles keep provenance so restart restore can trust real terminal
  * titles and browser page titles while rejecting placeholders, shell paths,
  * command names, and legacy auto-captured noise such as mojibake.
  *
- * CDXC:BrowserPanes 2026-05-03-01:58
+ * CDXC:Browser 2026-05-03-01:58
  * Browser pane cards and native title bars use webpage titles supplied by the
  * embedded WKWebView. Track that source separately from terminal OSC/window
  * titles so browser reloads can refresh page identity without looking like a
@@ -112,14 +112,14 @@ export type BaseSessionRecord = {
   alias: string;
   isFavorite?: boolean;
   /**
-   * CDXC:SessionTags 2026-06-05-12:30:
+   * CDXC:Sessions 2026-06-05-12:30:
    * Session tags persist the expanded Favorite replacement on the canonical
    * session record so active rows, restored Previous Sessions, and local
    * Electron panes can keep the same marker after app restart.
    */
   sessionTag?: SidebarSessionTag;
   /**
-   * CDXC:PinnedSessions 2026-05-28-12:04:
+   * CDXC:Sessions 2026-05-28-12:04:
    * Pinned sessions are project-scoped ordering state, separate from Favorite
    * so pinning a live sidebar row does not affect previous-session filters or
    * favorite auto-sleep policy.
@@ -128,7 +128,7 @@ export type BaseSessionRecord = {
   /** Durable sidebar organization state for sessions intentionally deferred. */
   isParked?: boolean;
   /**
-   * CDXC:PanePopOut 2026-05-11-09:35
+   * CDXC:Workarea 2026-05-11-09:35
    * Popped-out panes keep their terminal or browser runtime alive in a native
    * ghostex window while the original workspace slot stays visible as a reattach
    * placeholder. This is presentation state, not sleep state.
@@ -140,7 +140,7 @@ export type BaseSessionRecord = {
   column: number;
   createdAt: string;
   /**
-   * CDXC:AutoSleep 2026-05-28-08:32:
+   * CDXC:SessionSleep 2026-05-28-08:32:
    * Auto Sleep must distinguish semantic agent activity from runtime lifecycle.
    * Persist the most recent start/wake time on terminal and browser-capable
    * session records so an old idle agent does not immediately sleep again after
@@ -148,7 +148,7 @@ export type BaseSessionRecord = {
    */
   lastStartedAt?: string;
   /**
-   * CDXC:AutoSleep 2026-05-28-08:32:
+   * CDXC:SessionSleep 2026-05-28-08:32:
    * Browser-like panes sleep from user access time, not agent activity, because
    * viewing a browser/project/editor pane is the meaningful interaction even
    * when the page itself is quiet.
@@ -159,7 +159,7 @@ export type BaseSessionRecord = {
 export type TerminalSessionRecord = BaseSessionRecord & {
   agentName?: string;
   /**
-   * CDXC:CloseAfterDone 2026-06-15-21:00:
+   * CDXC:Sessions 2026-06-15-21:00:
    * Close After Done is a per-terminal arming flag, not a lifecycle fallback.
    * Keep it on the terminal record so the sidebar can wait for a continuous
    * Done state and then close through the normal session close path.
@@ -180,14 +180,14 @@ export type TerminalSessionRecord = BaseSessionRecord & {
   delayedSendDeadlineAt?: string;
   delayedSendRemainingMs?: number;
   /**
-   * CDXC:SessionLastActive 2026-05-17-02:45:
+   * CDXC:SessionStatus 2026-05-17-02:45:
    * Last Active is durable sidebar metadata for terminal sessions. Persist it
    * on the canonical session record so sleeping or unmounted sessions can keep
    * correct timestamps and Last Active ordering immediately after app restart.
    */
   lastActivityAt?: string;
   /**
-   * CDXC:StartupRestore 2026-05-21-13:04:
+   * CDXC:Workarea 2026-05-21-13:04:
    * Runtime working/attention state is normally inferred from terminal output,
    * but app quit needs a durable hint so interrupted work wakes on next launch.
    * Attention is restored visually; working only wakes the session and is then
@@ -195,19 +195,19 @@ export type TerminalSessionRecord = BaseSessionRecord & {
    */
   restoreActivity?: Extract<SidebarSessionActivityState, 'attention' | 'working'>;
   /**
-   * CDXC:CommandPanes 2026-05-16-15:08:
+   * CDXC:CommandPane 2026-05-16-15:08:
    * Command-pane reuse is keyed by the configured action title rather than the
    * mutable command id. Persist the title owner on command terminal records so
    * Ghostex can rediscover the correct idle pane after restart or state hydrate.
    */
   commandTitle?: string;
   /**
-   * CDXC:PiAgent 2026-05-08-09:42
+   * CDXC:AgentProviders 2026-05-08-09:42
    * Some agents need a durable conversation identity that is not the sidebar
    * title or terminal-provider session name. Pi restore/fork uses its session
    * jsonl path/id, so store that metadata on the terminal record.
    *
-   * CDXC:CodexAgent 2026-05-11-07:35
+   * CDXC:AgentProviders 2026-05-11-07:35
    * Codex can publish its conversation UUID before a human title exists. Store
    * that UUID here for restore while the display-title layer keeps UUID-looking
    * titles rendered as unnamed `Codex Session` cards.

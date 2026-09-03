@@ -77,12 +77,12 @@ type RepositoryClonePreviewResultMessage = {
 };
 
 /**
- * CDXC:AddRepository 2026-05-29-11:45:
+ * CDXC:AddProject 2026-05-29-11:45:
  * Projects needs a full-window Clone Repository dialog next to Add Project. Keep
  * the visual shell aligned with Rename Session, accept flexible repository
  * paste formats, and remember the last clone parent folder across the app.
  *
- * CDXC:AddRepository 2026-06-01-10:33:
+ * CDXC:AddProject 2026-06-01-10:33:
  * Submitting Clone & Add closes the modal immediately. Long-running clone
  * progress, cancellation, and final errors live in toasts so the modal does not
  * block the workspace while Git runs.
@@ -379,10 +379,10 @@ export function AddRepositoryModal({
             </Field>
             <Field data-invalid={destinationWarning ? true : undefined}>
               {/*
-              CDXC:AddRepository 2026-06-01-11:18:
+              CDXC:AddProject 2026-06-01-11:18:
               The modal needs an explicit editable new-folder name because gxserver now blocks clone start when the resolved destination already exists. Keep the warning tied to server preview results so all clients enforce the same destination rule.
 
-              CDXC:AddRepository 2026-06-07-16:01:
+              CDXC:AddProject 2026-06-07-16:01:
               The field must remain empty by default so users can clone with the repository name as the destination folder. Only typed text should override gxserver's repo-name default.
               */}
               <FieldLabel htmlFor={newFolderId}>New folder</FieldLabel>
@@ -406,7 +406,7 @@ export function AddRepositoryModal({
             </Field>
             <Field data-invalid={hasInvalidBranchName ? true : undefined}>
               {/*
-              CDXC:AddRepository 2026-06-07-16:06:
+              CDXC:AddProject 2026-06-07-16:06:
               Branch input is optional. Empty keeps Git on the repository default branch, usually main or master, while typed text asks gxserver to clone and check out that branch by name.
               */}
               <FieldLabel htmlFor={branchId}>Branch</FieldLabel>
@@ -431,13 +431,13 @@ export function AddRepositoryModal({
             <TooltipProvider delayDuration={300}>
               <div className='add-repository-options-row'>
                 {/*
-                CDXC:AddRepository 2026-06-01-10:28:
+                CDXC:AddProject 2026-06-01-10:28:
                 The Clone Repository modal needs explicit unchecked clone-scope options for reference-only repositories. Keep the option help adjacent to each checkbox so users understand main-only and shallow clones are for repos they want to inspect, not repos they expect to work on heavily.
 
-                CDXC:AddRepository 2026-06-02-20:12:
+                CDXC:AddProject 2026-06-02-20:12:
                 Clone option help tooltips must wrap within a 230px maximum width so explanatory copy stays readable and does not span across the modal.
 
-                CDXC:AddRepository 2026-06-07-16:06:
+                CDXC:AddProject 2026-06-07-16:06:
                 Branch-only clone scope now follows the Branch field. If Branch is empty, Git clones only the repository default branch; if Branch is typed, Git clones only that branch.
                 */}
                 <label className='add-repository-option' htmlFor={cloneMainOnlyId}>
@@ -512,7 +512,7 @@ export function AddRepositoryModal({
         </form>
         {isRemoteClone ? (
           /*
-           * CDXC:RemoteClone 2026-06-02-23:53:
+           * CDXC:AddProject 2026-06-02-23:53:
            * Remote Clone Repository uses the shared path-aware browse picker
            * for destination selection. The local macOS folder picker stays
            * local-only; remote browsing is machine-scoped through gxserver.

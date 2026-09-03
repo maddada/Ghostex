@@ -204,7 +204,7 @@ export function getSidebarFixedTooltipPosition({
 }
 
 /**
- * CDXC:SidebarTooltips 2026-06-25-15:48:
+ * CDXC:Tooltips 2026-06-25-15:48:
  * Sidebar action tooltips must render through a fixed document-body popup instead of CSS pseudo-elements so scroll masks, the Recent Projects footer boundary, and section overflow cannot clip the label.
  * Resolve the popup side from measured viewport space so the last remote-machine or project header action can flip above its trigger while normal actions still prefer the requested side.
  */

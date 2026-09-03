@@ -11,7 +11,7 @@ const svgDataUrl = 'data:image/svg+xml;base64,PHN2Zy8+';
 describe('resolveWorkspaceProjectIconDataUrl', () => {
   test('prefers the typed image icon for shared React and native project chrome', () => {
     /**
-     * CDXC:ProjectIcons 2026-05-11-01:50
+     * CDXC:Icons 2026-05-11-01:50
      * macOS notification attachments and future React titlebar project UI must
      * consume the same validated project image data URL from workspace state.
      */
@@ -38,7 +38,7 @@ describe('resolveWorkspaceProjectIconDataUrl', () => {
 });
 
 /**
- * CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+ * CDXC:Icons 2026-07-29 (discovered icons):
  * A discovered icon is whatever the repository ships, arriving from a daemon
  * that may be another machine, and it lands in an `<img src>`. So the accepted
  * set is wider than the picker's PNG/SVG — `favicon.ico` is the most common

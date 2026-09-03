@@ -9,7 +9,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsPersistence 2026-06-24-11:14:
+        CDXC:Settings 2026-06-24-11:14:
         The shared React Settings modal posts normalized `updateSettings` objects through the app-modal host. GPUI must persist only object-shaped payloads through the shared settings service, reject malformed or non-object messages without panicking, then use the returned in-memory snapshot to refresh runtime settings and rehydrate the open modal host so the saved revision/object cannot drift.
         */
         let Some(settings_object) = message
@@ -172,7 +172,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRemoteMachinesSettings 2026-06-24-13:36:
+        CDXC:RemoteMachines 2026-06-24-13:36:
         Remote Machine password saves are explicit one-shot Settings commands. GPUI may accept the transient password only from this command, validate the bounded remote machine id, write or delete macOS Keychain first, and persist only the `sshPasswordSaved` marker after Keychain success.
         */
         let Some(remote_machine_id) = command

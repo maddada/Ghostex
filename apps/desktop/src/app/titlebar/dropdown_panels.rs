@@ -386,7 +386,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn render_titlebar_resources_loading_skeleton() -> impl IntoElement {
         /*
-        CDXC:GPUIResourcesInstantOpen 2026-07-11:
+        CDXC:Resources 2026-07-11:
         CEF browser creation and the first Resources process sample must not
         delay the dropdown itself. GPUI owns this immediate placeholder in the
         same non-overlapping content frame; the hidden CEF child replaces it
@@ -485,7 +485,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn titlebar_tips_badge_count(&self) -> u64 {
         /*
-        CDXC:GPUITitlebarTipsBadge 2026-07-04-03:00:
+        CDXC:Onboarding 2026-07-04-03:00:
         The GPUI strip stores only the last unread tip count sampled from the
         shared React titlebar panel's own localStorage key, plus notice facts
         Rust already owns through shared Settings. The titlebar must not keep a

@@ -60,7 +60,7 @@ const AGENT_TYPE_SELECT_ITEMS = [
 ];
 
 /**
- * CDXC:AppModals 2026-05-08-09:00
+ * CDXC:AppModal 2026-05-08-09:00
  * Reference-mode agent configuration uses the shared shadcn dialog stack so
  * native and web modal hosts render consistent focus management, sizing, and
  * close behavior.
@@ -284,7 +284,7 @@ export function AgentConfigModal({ draft, isOpen, onCancel, onSave, theme = 'dar
 
 function getSidebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
   /**
-   * CDXC:SidebarTheme 2026-06-15-01:43:
+   * CDXC:Theming 2026-06-15-01:43:
    * Agent editor modals share the app modal theme contract so Dark 1/Dark 2
    * keep dark shadcn mode and Light uses shadcn's light component tokens.
    */

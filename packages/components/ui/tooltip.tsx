@@ -52,7 +52,7 @@ function TooltipContent({
   return (
     <TooltipPrimitive.Portal>
       {/*
-       * CDXC:SidebarTooltips 2026-06-30-02:02:
+       * CDXC:Tooltips 2026-06-30-02:02:
        * macOS sidebar tooltip surfaces must stay outside pointer hit testing.
        * Hover over the label must not keep it shown, wheel events should pass
        * through to underlying scroll containers, and clicks should land on the

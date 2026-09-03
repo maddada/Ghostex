@@ -36,7 +36,7 @@ pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
             | "/api/wakeSession"
             | "/api/killSession"
             /*
-            CDXC:GPUIRemoteAgentLaunch 2026-08-18:
+            CDXC:RemoteMachines 2026-08-18:
             Creating a remote agent session is a two-step daemon operation:
             `/api/createAgentSession` writes the row and queues the agent's
             launch startup text, then `/api/startSessionProvider` spawns the
@@ -53,7 +53,7 @@ pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
             | "/api/updateSession"
             | "/api/requestSessionRename"
             /*
-            CDXC:ExportTranscript 2026-08-20:
+            CDXC:TranscriptExport 2026-08-20:
             A remote session's transcript only exists on the machine that runs
             the agent, so Export Transcript is an id-scoped read-and-write on
             that machine's own daemon, exactly like sleep/wake. Params are
@@ -62,7 +62,7 @@ pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
             */
             | "/api/exportSessionTranscript"
             /*
-            CDXC:SidebarV2Lifecycle 2026-07-29:
+            CDXC:StateSync 2026-07-29:
             Sidebar V2's settle/snooze commands are id-scoped session mutations
             on a remote machine's own daemon, exactly like sleep/wake/kill.
             Their params are reshaped below so CEF can only ever send the two
@@ -84,7 +84,7 @@ pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
             | "/api/createProjectWorktree"
             | "/api/openProjectWorktree"
             /*
-            CDXC:SidebarV2LogicalProjects 2026-07-29:
+            CDXC:StateSync 2026-07-29:
             Sidebar V2's worktree flow, allow-listed for remote machines: only
             the daemon that holds the repository can cut or delete a checkout in
             it, so these are project-scoped mutations on that machine's own
@@ -100,7 +100,7 @@ pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
             | "/api/checkoutProjectNewBranch"
             | "/api/readPresentationSnapshot"
             /*
-            CDXC:RemoteProjectActions 2026-08-29:
+            CDXC:RemoteMachines 2026-08-29:
             A project's Actions are stored by the daemon that owns the project,
             so the sidebar's project-row quick actions for a remote project can
             only come from that machine's own HUD projection. This is an
@@ -123,7 +123,7 @@ pub(crate) fn gpui_remote_sidebar_request_params(
     params: serde_json::Value,
 ) -> Option<serde_json::Value> {
     /*
-    CDXC:GPUIRemoteProjects 2026-06-24-18:22:
+    CDXC:RemoteMachines 2026-06-24-18:22:
     The remote sidebar bridge allowlists project mutation endpoints only for id-scoped operations. Shape params at the Rust boundary so CEF cannot tunnel arbitrary updateProject fields, paths, names, commands, URLs, branch refs, tokens, stdout/stderr, or daemon response authority to a remote gxserver.
     */
     match path {
@@ -353,7 +353,7 @@ pub(crate) fn gpui_remote_sidebar_project_collections_state(
 }
 
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29:
+CDXC:StateSync 2026-07-29:
 Settle/snooze params reduced to their id scope at the Rust boundary. The only
 extra field any of them may carry is `snoozedUntil`, and it is accepted only as
 a bounded RFC3339-shaped ASCII timestamp — the remote daemon validates that it
@@ -399,7 +399,7 @@ pub(crate) fn gpui_remote_sidebar_session_lifecycle_params(
 }
 
 /*
-CDXC:GPUIRemoteAgentLaunch 2026-08-18:
+CDXC:RemoteMachines 2026-08-18:
 A remote agent prompt is user-authored message text, not a command: gxserver
 types it into the session and submits it. Shape it to the two ids plus the
 bounded body and pin `submit` here so this route can never become a way for CEF
@@ -446,7 +446,7 @@ pub(crate) fn gpui_remote_sidebar_request_session_rename_params(
     params: serde_json::Value,
 ) -> Option<serde_json::Value> {
     /*
-    CDXC:GPUIRemoteSessionRename 2026-08-12:
+    CDXC:RemoteMachines 2026-08-12:
     A remote rename may carry only the target ids, bounded normalized title,
     and optional agent id into the selected machine's gxserver. The native
     bridge fixes the request reason/source and opts into daemon-owned command
@@ -554,7 +554,7 @@ pub(crate) fn gpui_remote_sidebar_open_project_worktree_params(
 }
 
 /*
-CDXC:SidebarV2LogicalProjects 2026-07-29:
+CDXC:StateSync 2026-07-29:
 Sidebar V2 worktree-create params, reduced to the P4 wire contract at the Rust
 boundary. Every optional field is dropped unless it passes its own shape check,
 so a malformed value can never be forwarded verbatim: the remote daemon then
@@ -731,7 +731,7 @@ pub(crate) fn gpui_remote_sidebar_project_id_allowed(value: &str) -> bool {
 }
 
 /*
-CDXC:GPUIRemoteWorkspaceProjectKey 2026-07-30:
+CDXC:RemoteMachines 2026-07-30:
 The Agents workspace, presentation focus state, and parked shell-state models
 key projects by either a raw local gxserver project id or a machine-scoped
 remote project id. Both shapes are opaque workspace keys; everything that
@@ -819,7 +819,7 @@ pub(crate) fn gpui_remote_sidebar_response_payload(
     result: serde_json::Value,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUIRemoteSessions 2026-06-24-17:19:
+    CDXC:RemoteMachines 2026-06-24-17:19:
     Response-capable remote sidebar RPCs may return only the sanitized payload shapes explicitly matched here: created-session ids, previous-session metadata, recent-project rows, presentation snapshots, project Git preference metadata, command-stripped typed Git/GitHub/Beads results, generated commit text, PR state confirmation, and delete-warning kinds. Keep path-bearing project list/add and remote native launch data out of this bridge so renderer payloads do not become side-effect authority.
     */
     match path {
@@ -925,7 +925,7 @@ pub(crate) fn gpui_remote_sidebar_agent_hook_status_response_payload(
 }
 
 /*
-CDXC:ExportTranscript 2026-08-20:
+CDXC:TranscriptExport 2026-08-20:
 The export answer the sidebar actually consumes: where the markdown landed on
 the remote machine (so the dialog can show and copy it, and the seeded prompt
 can reference it) and how big it is. The remote daemon also reports its source
@@ -995,7 +995,7 @@ pub(crate) fn gpui_remote_sidebar_created_session_response_payload(
 }
 
 /*
-CDXC:SidebarV2LogicalProjects 2026-07-29:
+CDXC:StateSync 2026-07-29:
 The worktree-create answer the sidebar actually consumes: the created session's
 id (so the host can focus it), the checkout it landed in (so the cleanup prompt
 can name it later), and the branch (so the toast/label can state it). Anything
@@ -1079,7 +1079,7 @@ pub(crate) fn gpui_remote_sidebar_previous_sessions_response_payload(
     result: serde_json::Value,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUIRemotePreviousSessions 2026-06-24-17:19:
+    CDXC:RemoteMachines 2026-06-24-17:19:
     Remote previous-session search results only need titles, stable project/session ids, timestamps, tags, and provider identity metadata for restore. Strip path-bearing fields at the Rust boundary before CEF sees the response.
     */
     let cursor = result.get("cursor").cloned();
@@ -1139,7 +1139,7 @@ pub(crate) fn gpui_remote_sidebar_project_worktrees_response_payload(
     result: serde_json::Value,
 ) -> serde_json::Value {
     /*
-    CDXC:RemoteWorktrees 2026-06-24-18:40:
+    CDXC:RemoteMachines 2026-06-24-18:40:
     Remote Add Worktree receives display rows plus opaque worktree keys from the
     owning daemon. The bridge must not accept renderer paths for the subsequent
     open-existing mutation; it forwards only daemon-returned rows and strips all
@@ -1320,7 +1320,7 @@ pub(crate) fn gpui_remote_sidebar_presentation_project_payload(
     project: &serde_json::Map<String, serde_json::Value>,
 ) -> Option<serde_json::Value> {
     /*
-    CDXC:GPUIRemoteProjects 2026-06-24-18:22:
+    CDXC:RemoteMachines 2026-06-24-18:22:
     Remote project mutations may return only presentation-shaped project metadata plus sanitized Git preferences. Strip raw domain-only state such as custom commands, agents, launch settings, notifications, history, and board config before CEF receives the response.
     */
     let project_id = json_string_field(project, "projectId")?;

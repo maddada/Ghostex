@@ -8,34 +8,34 @@ export const HIGHLIGHTED_FEATURES_CURRENT_REVISION = '2026-06-16-highlighted-fea
 type FirstLaunchSetupSeenStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 /**
- * CDXC:FirstLaunchSetup 2026-05-19-11:20:
+ * CDXC:Onboarding 2026-05-19-11:20:
  * First launch setup reuses the Settings main tab with a filtered subset of
  * controls. Add setting keys to this list as product requirements specify which
  * options appear in the post-tips onboarding modal.
  *
- * CDXC:FirstLaunchPreferences 2026-05-31-07:10:
+ * CDXC:Onboarding 2026-05-31-07:10:
  * ZMU-71: the first-time defaults step must include keepAwakePreventLidSleep
  * ("Keep awake when lid is closed") alongside the other high-impact toggles on
  * FirstLaunchPreferencesPage. Keep this list aligned with that page.
  *
- * CDXC:FirstLaunchPreferences 2026-06-04-21:02:
+ * CDXC:Onboarding 2026-06-04-21:02:
  * The first-time defaults modal must also expose the first-prompt title
  * generation agent selector so new installs can choose Codex, Cursor, Claude,
  * Grok Build, or Custom before automatic session naming runs.
  *
- * CDXC:FirstLaunchSetup 2026-06-07-12:32:
+ * CDXC:Onboarding 2026-06-07-12:32:
  * The first-time modal changed after the last release, so the seen marker is a
  * revision string instead of a forever boolean. Legacy `true` values should
  * reopen the refreshed setup once, then store this revision to avoid repeated
  * prompts on later launches.
  *
- * CDXC:HighlightedFeatures 2026-06-16-18:55:
+ * CDXC:Onboarding 2026-06-16-18:55:
  * Highlighted Features is a product-update announcement as well as first-run
  * intro. Store a separate revision marker so existing users who already
  * completed first-launch setup still see the new feature tour once after
  * updating, while future launches and manual replays remain independent.
  *
- * CDXC:FirstLaunchSetup 2026-06-18-02:29:
+ * CDXC:Onboarding 2026-06-18-02:29:
  * The visible first-time setup flow is shortened to Welcome, Agent Hooks, and
  * Bundled Agent Skills. Bump the setup revision so installs that were silently
  * marked seen by the temporary no-startup-flow behavior get this shorter setup

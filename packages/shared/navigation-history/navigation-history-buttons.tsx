@@ -1,5 +1,5 @@
 /**
- * CDXC:NavigationHistory 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * The React half of the titlebar Back/Forward pair, used by every React titlebar
  * (the web app today). The gpui desktop titlebar is native GPUI and paints its
  * own pair from the same controller state pushed over its Rust bridge — see

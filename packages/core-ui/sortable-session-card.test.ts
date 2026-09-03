@@ -42,7 +42,7 @@ describe('getSessionCardAccessibleLabel', () => {
 describe('getSessionTagSubmenuSections', () => {
   test('uses default enabled and visible tag rows for the Tag as menu', () => {
     /*
-     * CDXC:SessionTagFilters 2026-06-15-22:23:
+     * CDXC:Sessions 2026-06-15-22:23:
      * Session context-menu tagging should mirror the Settings-controlled
      * sidebar tag list so Reset to Default removes default-off tags from both
      * the filter menu and the Tag as assignment submenu.
@@ -132,7 +132,7 @@ describe('resolveSessionCardSessionIdsBelow', () => {
 
   test('preserves remote scoped ids for native bulk below handling', () => {
     /*
-     * CDXC:RemoteContextMenu 2026-06-30-15:22:
+     * CDXC:ContextMenus 2026-06-30-15:22:
      * Sleep below and Close below must pass scoped remote session ids through
      * unchanged. Native owns splitting local ids from remote gxserver ids, so
      * the sidebar should not normalize or strip the machine/project namespace.
@@ -169,7 +169,7 @@ describe('shouldFocusSidebarSessionOnPointerDown', () => {
 
   test('waits for click semantics when the session row can start a drag', () => {
     /*
-     * CDXC:PinnedSessions 2026-07-01-00:47:
+     * CDXC:Sessions 2026-07-01-00:47:
      * Last Active sorting keeps pinned project sessions draggable. Those rows
      * must not focus on pointer-down because native focus can take the WebKit
      * pointer stream before dnd-kit activates the delayed drag.
@@ -286,7 +286,7 @@ function createContextMenuSession(overrides: Partial<SidebarSessionItem> = {}): 
 describe('getSidebarSessionContextMenuEligibility', () => {
   test('keeps shared remote terminal affordances visible without host-local capability guesses', () => {
     /*
-     * CDXC:RemoteSessionMenus 2026-06-30-15:22:
+     * CDXC:RemoteMachines 2026-06-30-15:22:
      * Remote terminal rows should retain the shared gxserver-backed context-menu
      * affordances while Pop Out Pane, Delayed Send, and Close After Done remain
      * hidden until the row explicitly reports support for those host-local flows.

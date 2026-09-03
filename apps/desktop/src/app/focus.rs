@@ -69,7 +69,7 @@ impl GhostexGpuiApp {
         let target = self.classify_first_responder_target(responder, cx);
         update_gpui_keyboard_router_first_responder(self.parent_ns_view, target);
         /*
-        CDXC:GPUITitlebarDropdownCefDismissal 2026-07-15:
+        CDXC:Titlebar 2026-07-15:
         Native CEF child views bypass the main GPUI root's outside-click
         capture. Their AppKit mouseDown hook reports the current responder on
         every click, including repeated clicks in an already-focused pane, so
@@ -291,7 +291,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectWorkareaCefKeyboardOwnership 2026-08-09:
+        CDXC:FocusRouting 2026-08-09:
         Project-workarea CEF clicks can arrive through Chromium's AppKit NSView
         subclass before GPUI's normal mouse hitbox focuses the CefSurface
         handle. When the native first responder proves a workarea CEF view
@@ -321,7 +321,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIBrowserCefKeyboardOwnership 2026-07-28:
+        CDXC:FocusRouting 2026-07-28:
         Browser page clicks reach Chromium's AppKit NSView directly, so the
         CEF child becomes native first responder while GPUI's own focus stays
         on whatever chrome held it last — usually the pane's address input.
@@ -361,7 +361,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISessionChatCefKeyboardOwnership 2026-08-17:
+        CDXC:FocusRouting 2026-08-17:
         Chat body clicks reach Chromium before GPUI's hitbox, so AppKit can
         focus Chat while GPUI remains focused on the command terminal. Mirror
         the other CEF surfaces by synchronizing the existing GPUI handle once
@@ -373,7 +373,7 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        // CDXC:AgentHistorySearch 2026-08-20: the SessionChat responder class
+        // CDXC:PromptSearch 2026-08-20: the SessionChat responder class
         // means "a CEF surface owns this session's pane", which is true of the
         // Find surface too. Resolve whichever one is mounted.
         let Some(surface) = self.agents_pane_cef_surface(session_id) else {
@@ -390,7 +390,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUISourceViewHotkeyPassthrough 2026-07-05:
+        CDXC:Hotkeys 2026-07-05:
         The Source workarea hosts embedded VSCode inside a CEF NSView. When that
         CEF view is AppKit's first responder, VSCode-owned editing chords
         must reach code-server. The GPUI binding leg calls `cx.propagate()`
@@ -570,7 +570,7 @@ impl GhostexGpuiApp {
                 })
         {
             /*
-            CDXC:GPUISessionChatSurface 2026-07-31:
+            CDXC:SessionChat 2026-07-31:
             The chat pane is a first-class work surface: classifying its
             responder keeps focus arbitration from reclaiming keyboard focus
             while the user types in the chat composer.
@@ -995,7 +995,7 @@ impl GhostexGpuiApp {
             });
         if let Some(slot_id) = requested_terminal_focus {
             /*
-            CDXC:GPUITerminalPaneFocusHandoff 2026-07-15:
+            CDXC:FocusRouting 2026-07-15:
             Pane-level focus actions (adjacent-group hotkeys, pane chrome, and
             directional navigation) must finish at the selected mounted
             terminal, not only update shell focus. Request the same exact
@@ -1082,7 +1082,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-26-23:24:
+        CDXC:FocusRouting 2026-06-26-23:24:
         Agents pane-tab selection follows the macOS click-to-wake setting. The default keeps sleeping tabs cold until their placeholder body is activated; strict `clickToWakeSleepingSessions: false` requests a gxserver wake for mapped sleeping sessions after selection, while unmapped local tabs use the shell-only wake state.
         */
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
@@ -1236,7 +1236,7 @@ impl GhostexGpuiApp {
                 .agents_workspace
                 .acknowledge_attention_for_session_activation(session_id);
             /*
-            CDXC:GPUIAgentsTerminalActivation 2026-06-26-23:24:
+            CDXC:SessionSleep 2026-06-26-23:24:
             Placeholder body activation for mapped sleeping gxserver sessions must be a wake request first, matching macOS. Keep the native pane focused while pending, but do not move the tab to Mounting until the sidebar lifecycle result confirms gxserver wake.
             */
             let focus = ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane);
@@ -1310,7 +1310,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUTerminalAppKitFocus 2026-06-22-23:11:
+        CDXC:FocusRouting 2026-06-22-23:11:
         Running terminal body clicks are focus handoffs, not placeholder activation. Keep the existing body div as the click/drop owner, update the shell focus to the clicked Agents pane, and force one AppKit first-responder handoff for the mounted real surface without adding overlays, hit-test routing, synthetic input routing, process lifecycle, or persistence fields.
         */
         if !self
@@ -1361,7 +1361,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
+    CDXC:Zmx 2026-07-06:
     Clicking terminal content, including an already-focused pane, is an explicit
     opportunity to recover from a zmx daemon grid that another client changed.
     Mirrors macOS `refreshZmxPersistenceTerminalIfNeeded(mode: .ifStale)`: use
@@ -1381,7 +1381,7 @@ impl GhostexGpuiApp {
             return;
         }
         // A parked or just-surfacing engine grid is the zmx resting width,
-        // not a displayed size (CDXC:GpuiEngineTerminalVisibility 2026-09-03).
+        // not a displayed size (CDXC:Terminal 2026-09-03).
         if !self.agents_gpui_engine_terminal_zmx_grid_is_displayed(slot_id.session_id, cx) {
             return;
         }
@@ -1500,7 +1500,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
+    CDXC:Zmx 2026-07-06:
     Mirrors macOS `scheduleZmxPersistenceTerminalRefreshAfterResize`: split,
     sidebar, companion-ratio, and window resizes re-arm a trailing-edge 0.8s
     debounce, and the settled pass refreshes every surfaced zmx pane. Unlike
@@ -1531,7 +1531,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
+    CDXC:Zmx 2026-07-06:
     Mirrors macOS `zmxPersistenceTerminalSessionIdsForSurfacedPanes`: with a
     project editor active only the visible companion refreshes, otherwise the
     visible Agents mount slots do, and rendered command-pane slots always join.
@@ -1592,7 +1592,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
+    CDXC:Zmx 2026-07-06:
     Mirrors macOS `refreshZmxPersistenceTerminalIfFocusOrSurfaceChanged` for
     non-click focus movement (keyboard pane navigation, sidebar focus routing,
     programmatic focus). Render-start change detection covers every focus call
@@ -1629,7 +1629,7 @@ impl GhostexGpuiApp {
         modifiers: Modifiers,
     ) -> bool {
         /*
-        CDXC:GPUITerminalMouseForwarding 2026-06-23-08:32:
+        CDXC:Terminal 2026-06-23-08:32:
         Mounted Running Agents bodies may forward only sanitized body-relative pointer position plus mapped keyboard modifier bits to the exact current Ghostty owner. Mouse movement uses the body event's GPUI modifiers and no capture, selection, drag, paste, keyboard, IME, logging, persistence, or coordinate routing outside the body event itself.
         */
         if !self
@@ -1676,7 +1676,7 @@ impl GhostexGpuiApp {
         modifiers: Modifiers,
     ) -> bool {
         /*
-        CDXC:GPUITerminalMouseButtons 2026-06-23-10:23:
+        CDXC:Terminal 2026-06-23-10:23:
         Mounted Running Agents button press/release forwarding uses the existing current-slot and body-boundary gates, verifies the mounted surface owner and runtime identity, then updates pointer position and sends the mapped left/right/middle Ghostty button value. GPUI navigation buttons no-op before position forwarding so parity does not create stored button state or fallback routing.
         */
         let Some(ghostty_button) = ghostty_mouse_button_from_gpui_button(button) else {
@@ -1738,7 +1738,7 @@ impl GhostexGpuiApp {
         modifiers: Modifiers,
     ) -> bool {
         /*
-        CDXC:GPUITerminalMouseButtons 2026-06-23-10:23:
+        CDXC:Terminal 2026-06-23-10:23:
         Mounted Agents mouse-up-out remains capture recovery only. Require the current slot and exact Ghostty owner runtime identity to still match, require Ghostty mouse capture, then send the mapped left/right/middle release with mapped modifiers without updating mouse_pos, storing last positions, or synthesizing outside coordinates.
         */
         if !self
@@ -1793,7 +1793,7 @@ impl GhostexGpuiApp {
         modifiers: Modifiers,
     ) -> bool {
         /*
-        CDXC:GPUITerminalPressureForwarding 2026-06-23-09:51:
+        CDXC:Terminal 2026-06-23-09:51:
         Mounted Running Agents body pressure is forwarded only from the exact current body mount slot. Require recorded body bounds and the matching Ghostty surface owner, update the body-relative pointer position with mapped modifiers first, then pass the mapped pressure stage and raw GPUI pressure value without capture, selection, paste, keyboard, IME, logging, persistence, overlays, or routing.
         */
         if !self
@@ -1884,10 +1884,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandTerminalInputForwarding 2026-06-23-09:41:
+        CDXC:Terminal 2026-06-23-09:41:
         Mounted command terminal body clicks are command-pane focus handoffs before input forwarding. Accept only the current command body mount slot, focus that command group, keep shell focus on `CommandPane`, force the existing AppKit terminal handoff path, persist the same shell focus state as placeholder clicks, and avoid new persisted fields or hit-test routing.
 
-        CDXC:GPUICommandPaneFocus 2026-06-26-00:00:
+        CDXC:FocusRouting 2026-06-26-00:00:
         Mounted command terminal body focus must reveal the active command tab in both the expanded group strip and collapsed strip, matching native `focusTerminal(...)->revealActivePaneTab` while leaving mouse forwarding and terminal handoff ownership on the body element.
         */
         if !self
@@ -1936,7 +1936,7 @@ impl GhostexGpuiApp {
         modifiers: Modifiers,
     ) -> bool {
         /*
-        CDXC:GPUICommandTerminalInputForwarding 2026-06-23-09:41:
+        CDXC:Terminal 2026-06-23-09:41:
         Command terminal pointer movement forwards only body-relative coordinates plus mapped keyboard modifier bits from a current command body slot to the exact mounted Ghostty surface. Missing bounds, stale slots, mismatched owners, non-macOS builds, and absent surfaces no-op without logging, persistence, capture, overlays, hidden hit regions, or synthetic routing.
         */
         if !self
@@ -1983,7 +1983,7 @@ impl GhostexGpuiApp {
         modifiers: Modifiers,
     ) -> bool {
         /*
-        CDXC:GPUITerminalMouseButtons 2026-06-23-10:23:
+        CDXC:Terminal 2026-06-23-10:23:
         Mounted command terminal button press/release forwarding keeps the current command body slot and body-boundary gates, verifies the mounted surface owner and runtime identity, then updates pointer position and sends the mapped left/right/middle Ghostty button value. GPUI navigation buttons no-op before position forwarding so command terminals do not store raw button state or add fallback routing.
         */
         let Some(ghostty_button) = ghostty_mouse_button_from_gpui_button(button) else {
@@ -2040,7 +2040,7 @@ impl GhostexGpuiApp {
         modifiers: Modifiers,
     ) -> bool {
         /*
-        CDXC:GPUITerminalMouseButtons 2026-06-23-10:23:
+        CDXC:Terminal 2026-06-23-10:23:
         Command terminal mouse-up-out mirrors Agents capture recovery on the mounted body element. It validates the current slot and exact Ghostty owner runtime identity, requires Ghostty mouse capture, and sends only the mapped left/right/middle release with mapped modifiers so outside coordinates never update or get synthesized.
         */
         if !self
@@ -2090,7 +2090,7 @@ impl GhostexGpuiApp {
         modifiers: Modifiers,
     ) -> bool {
         /*
-        CDXC:GPUITerminalPressureForwarding 2026-06-23-09:51:
+        CDXC:Terminal 2026-06-23-09:51:
         Mounted command body pressure mirrors Agents forwarding through the normal command body element only. Current slot, recorded body bounds, exact Ghostty surface identity, and macOS availability must all match before updating pointer position and sending raw GPUI pressure without fallback behavior, logging, persistence, overlays, hidden hit regions, or input routing.
         */
         if !self
@@ -2266,7 +2266,7 @@ impl GhostexGpuiApp {
         self.source_code_server_runtime
             .cancel_remote_prompt_editor_request_for_shell_session(shell_session_id);
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:57:
+        CDXC:FocusRouting 2026-06-26-06:57:
         Removing a GPUI shell tab must also drop only the process-local gxserver/session mapping for that shell id. Close provider cleanup and acknowledged Sleep transitions remain sidebar-owned through the lifecycle bridge; this cleanup prevents stale GPUI mappings from selecting a deleted tab without fabricating daemon success, deleting gxserver rows, logging ids, or touching persisted private data.
         */
         let scoped_remote_key = self
@@ -2328,10 +2328,10 @@ impl GhostexGpuiApp {
                 self.workspace_terminal_key_for_shell_session(replacement_session_id)
             });
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-05:23:
+        CDXC:Workarea 2026-06-26-05:23:
         Direct mapped Close mirrors macOS pane tabs, including final-root close. When there is no pane-local replacement, tell the sidebar runtime not to focus a fallback session; Rust removes the shell tab immediately and leaves the workspace empty if this was the final terminal.
 
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:59:
+        CDXC:Workarea 2026-06-26-23:59:
         Mapped GPUI workspace close bypasses Ghostty close-confirm, commits the Rust tab mutation locally, and routes only provider cleanup through SidebarApp. Mounted surface close-confirm remains for unmapped/local-only running terminals only.
         */
         let skip_replacement_fallback = replacement_key.is_none();
@@ -2408,7 +2408,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIAgentsTabContextMenu 2026-06-26-06:57:
+        CDXC:ContextMenus 2026-06-26-06:57:
         Scoped Agents context-menu Close rows are local tab mutations plus asynchronous lifecycle cleanup, not tab-selection actions. Resolve the clicked pane group before mutation, preserve current shell focus for Close Right/Left/Others, and let direct inline close keep using the clicked-tab focus path.
         */
         if scope == AgentsWorkspaceTabCloseScope::Close {
@@ -2429,7 +2429,7 @@ impl GhostexGpuiApp {
                 self.workspace_terminal_key_for_shell_session(close_session_id)
             {
                 /*
-                CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:59:
+                CDXC:Workarea 2026-06-26-23:59:
                 Scoped mapped close follows macOS by removing the Rust tab immediately and asking SidebarApp to clean up the provider asynchronously, before considering any mounted Ghostty close-confirm path. This prevents either a retryable terminal prompt or a delayed external bridge from blocking local tab removal.
                 */
                 let requested = match workspace_key {
@@ -2515,7 +2515,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIAgentsTabSleep 2026-06-26-06:57:
+        CDXC:SessionSleep 2026-06-26-06:57:
         Agents context-menu Sleep keeps tabs in the main workspace instead of closing them. Direct Sleep may retarget active selection to an awake sibling from the clicked pane group; Sleep Right/Left/Others preserve shell focus and only mark resolved sessions sleeping so parked-owner detach happens through normal surface reconciliation.
         */
         let session_ids = self
@@ -2646,10 +2646,10 @@ impl GhostexGpuiApp {
         slot_id: AgentsTerminalBodyMountSlotId,
     ) -> bool {
         /*
-        CDXC:GPUITerminalGhosttyClose 2026-06-23-04:49:
+        CDXC:Terminal 2026-06-23-04:49:
         User close on a real mounted Running Agents terminal asks Ghostty to run its normal close path instead of deleting the shell tab first. This is idempotent per surface and falls back to existing placeholder close behavior only when no exact current Running Ghostty owner exists.
 
-        CDXC:GPUITerminalGhosttyClose 2026-06-26-23:59:
+        CDXC:Terminal 2026-06-26-23:59:
         Callers must resolve mapped workspace sessions before this helper. The helper is the terminal-owned close path for unmapped/local-only mounted surfaces, not the SidebarApp-owned close path for gxserver sessions.
         */
         if !self
@@ -2723,7 +2723,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUITerminalGpuiEngine 2026-07-04:
+    CDXC:Terminal 2026-07-04:
     GPUI-engine close requests decide confirmation at request time from live
     process/prompt state (mirroring ghostty `needsConfirmQuit`: exited never
     confirms; `confirm-close-surface = true` skips confirmation at a

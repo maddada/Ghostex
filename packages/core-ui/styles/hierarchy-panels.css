@@ -1,5 +1,5 @@
 /*
- * CDXC:HierarchyPanels 2026-07-21:
+ * CDXC:Sidebar 2026-07-21:
  * "Layered panels" hierarchy skin for the combined sidebar. The five grouping
  * levels were hard to tell apart (machine headers looked weaker than group
  * headers, project titles matched session rows, kind labels were near
@@ -244,7 +244,7 @@ section.project-collection > .project-collection-header {
 }
 
 /*
- * CDXC:CollectionReorder 2026-07-21:
+ * CDXC:Projects 2026-07-21:
  * Pointer-resolved insertion line while another collection is being dragged
  * (set via data-collection-drop-position from the app's drag-move handler).
  * Matches the fixed neutral #c8cdd5 project drop line so both reorder flows
@@ -590,7 +590,7 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
 }
 
 /*
- * CDXC:ProjectUngroupDrop 2026-07-23:
+ * CDXC:Projects 2026-07-23:
  * This normal-flow zone supplies the missing "outside all collections" target
  * when a section has no ungrouped projects. It occupies the existing bottom
  * breathing room and paints the same neutral insertion line as project rows.

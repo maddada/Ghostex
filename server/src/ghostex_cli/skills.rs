@@ -8,7 +8,7 @@ use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::ghostex_cli::usage;
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI agent-skill surfaces. Public Ghostex skill
 install commands delegate to gxserver's external `agent-skills` CLI wrapper
 (resolved like `gx server ...`) instead of copying folders into one legacy
@@ -337,7 +337,7 @@ pub fn install_cli_skill_command(args: &[String]) -> CliResult<()> {
 }
 
 /*
-CDXC:SkillConsolidation 2026-08-24:
+CDXC:AgentSkills 2026-08-24:
 The `ghostex-manage-automations`, `ghostex-agent-orchestration`, and
 `ghostex-find-prev-session` skills were folded into the CLI help; `$ghostex-cli`
 is the single entry-point skill. `gx automations --help` stays as a plain

@@ -253,7 +253,7 @@ impl GhostexGpuiApp {
         self.dispatch_gpui_workspace_session_key_runtime_action_with_agent(action, key, None, cx)
     }
 
-    /// CDXC:SwitchAccount 2026-09-03: Switch Account from the terminal action
+    /// CDXC:AgentProviders 2026-09-03: Switch Account from the terminal action
     /// bar or the chat composer, addressed like Fork / Full reload but carrying
     /// the picked agent id, which the runtime forwards to
     /// `/api/switchSessionAgent` before running its Full reload.
@@ -360,10 +360,10 @@ impl GhostexGpuiApp {
         force_terminal_appkit_focus_handoff: bool,
     ) {
         /*
-        CDXC:GPUTerminalGhosttySurfaceFocus 2026-06-22-22:59:
+        CDXC:Terminal 2026-06-22-22:59:
         Apply focus only to already-mounted real Agents Ghostty surfaces. The focused surface is the current shell-focused visible Running Agents mount slot; all other mounted slots receive unfocused state. The shared Ghostty app focus means only "GPUI currently has a focused terminal surface" and deliberately does not infer NSApp activation or route keyboard/mouse input.
 
-        CDXC:GPUTerminalAppKitFocus 2026-06-22-23:11:
+        CDXC:FocusRouting 2026-06-22-23:11:
         The same focused mounted Agents slot must also hand first responder to the exact App-owned host NSView that backs its real Ghostty surface. Store only runtime slot plus host identity to avoid repeated `makeFirstResponder` calls during render sync, but allow terminal-body clicks to force one handoff even when shell focus already points at the same slot.
         */
         let mounted_slot_ids = self
@@ -579,7 +579,7 @@ impl GhostexGpuiApp {
                     self.command_terminal_ghostty_surfaces.get(&slot_id),
                 ) {
                     /*
-                    CDXC:GPUITerminalNativeKeyBridge 2026-06-24-20:58:
+                    CDXC:Terminal 2026-06-24-20:58:
                     Command-pane terminals use the same exact host-view key bridge as Agents terminals, but registration is scoped to command mount slots and their own Ghostty app/surface map so command keys cannot fall through to Agents surfaces or shell placeholders.
                     */
                     terminal_ghostty_surface::register_native_key_target(

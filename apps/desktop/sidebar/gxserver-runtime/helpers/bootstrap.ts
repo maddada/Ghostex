@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -82,7 +82,7 @@ export function activeGroupIdForGpuiGxserverBootstrapPresentationState({
 
 export function createGpuiSidebarSettings(runtimeSettings?: GpuiSidebarRuntimeSettings): ghostexSettings {
   /*
-  CDXC:GPUISettingsSidebarHandoff 2026-06-24-11:22:
+  CDXC:Settings 2026-06-24-11:22:
   GPUI SidebarApp must receive the real saved shared Settings object, normalized through the same TypeScript settings schema as macOS, instead of hardcoded bootstrap defaults. Keep debuggingMode/showBetaFeatures pinned to strict CEF-provided booleans so string-like or numeric truthy values cannot alter the Settings/HUD projection.
   */
   const settings = normalizeghostexSettings(runtimeSettings?.settings);

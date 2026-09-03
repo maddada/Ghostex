@@ -56,7 +56,7 @@ impl GhostexGpuiApp {
                     return;
                 };
                 /*
-                CDXC:GPUIGitCommitInlineDiff 2026-07-26:
+                CDXC:Git 2026-07-26:
                 The commit review dialog asks native for each changed file's
                 patch while it opens, and native answers with a `gitFileDiff`
                 open message. For an open commit modal that payload is inline
@@ -67,7 +67,7 @@ impl GhostexGpuiApp {
                 File Diff modal. Deliver it into the live window instead.
                 */
                 /*
-                CDXC:ExportTranscript 2026-08-20:
+                CDXC:TranscriptExport 2026-08-20:
                 Capture the exported file's path from the dialog's own open
                 message so Reveal in Finder runs against Rust-held state. A
                 remote export never lands on this machine, so the sidebar
@@ -115,7 +115,7 @@ impl GhostexGpuiApp {
                 let sidebar_state_message =
                     self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
                 /*
-                CDXC:SidebarSpaces 2026-08-28:
+                CDXC:Spaces 2026-08-28:
                 A modal whose whole open payload is a known, flat set of string
                 fields is rebuilt from its own `open_message()` template plus the
                 allowlist below, so nothing else the sidebar page put on the
@@ -278,7 +278,7 @@ impl GhostexGpuiApp {
             "close" => {
                 if !self.remote_repository_clone_requests.is_empty() {
                     /*
-                    CDXC:RemoteClone 2026-06-24-19:35:
+                    CDXC:AddProject 2026-06-24-19:35:
                     The shared Clone Repository modal clears its React dialog immediately after submit. While a GPUI remote clone is pending, keep the native app-modal host alive so the real daemon job can show cancel/final toasts; close the host only after the final toast dismisses instead of dropping visible progress.
                     */
                     return;
@@ -339,7 +339,7 @@ impl GhostexGpuiApp {
             }
             "exportSessionTranscriptResult" => {
                 /*
-                CDXC:ExportTranscriptOptions 2026-08-24:
+                CDXC:TranscriptExport 2026-08-24:
                 The sidebar runtime's answer to the Export Transcript dialog's
                 `runExportSessionTranscript` request. Forward only the shared
                 result fields into the open modal window, and capture the
@@ -426,7 +426,7 @@ impl GhostexGpuiApp {
                 self.receive_gpui_app_toast_bridge_message(&message, cx);
             }
             /*
-            CDXC:SettingsModalBlankUnnormalizedHydrate 2026-07-29:
+            CDXC:Settings 2026-07-29:
             The shared React modal host already reports its uncaught renderer
             exceptions (`logError`, installed by
             `installAppModalGlobalErrorLogging`) and its Settings lifecycle
@@ -563,7 +563,7 @@ impl GhostexGpuiApp {
             "gxserverPresentationReady" => {
                 if !self.sidebar_timer_presentations_replayed_after_ready {
                     /*
-                    CDXC:GPUIAgentsDelayedSendPersistence 2026-07-22:
+                    CDXC:DelayedSend 2026-07-22:
                     Restored timer state is re-armed before the sidebar CEF
                     surface exists. The first renderer presentation hydrate is
                     the earliest authority that its bridge and React runtime
@@ -663,7 +663,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIResourcesTitlebar 2026-07-08:
+        CDXC:Resources 2026-07-08:
         React sends the exact inactive session ids it derived from the Resources
         rows, but the GPUI sidebar runtime's existing batch path revalidates the
         current inactive set itself. Reuse that owner instead of introducing a
@@ -687,7 +687,7 @@ impl GhostexGpuiApp {
             let Some(shell_session_id) = self.gpui_titlebar_resource_shell_session_id(&session_id)
             else {
                 /*
-                CDXC:GPUIResourcesDevServers 2026-07-26:
+                CDXC:Resources 2026-07-26:
                 Resources now also lists sessions this window has not mounted,
                 so Close cannot stop at the local pane map. Sessions that carry
                 a gxserver identity close through the sidebar runtime's existing
@@ -730,7 +730,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIResourcesTitlebar 2026-07-08:
+        CDXC:Resources 2026-07-08:
         GPUI has no shared Settings key for disabling local gxserver startup; the
         app bootstrap already starts/reconciles it. Keep the React action wired
         and refresh daemon status without inventing or faking a persisted

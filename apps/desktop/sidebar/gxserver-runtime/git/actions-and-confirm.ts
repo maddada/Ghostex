@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines) into git/. This
 slice covers dispatching `runSidebarGitAction` (local and remote) and
 confirming the commit / direct-merge review modals it opens. See `index.ts`
@@ -701,7 +701,7 @@ export const gpuiSidebarRuntimeGitActionsAndConfirmMethods = {
       toastId,
     });
     /*
-    CDXC:RemoteGitBranching 2026-06-24-18:55:
+    CDXC:Git 2026-06-24-18:55:
     Remote direct merge and commit-on-new-branch must go through id-scoped gxserver operations so the daemon derives main, parent, and branch targets. GPUI may refresh presentation and create a conflict-resolution agent session, but it must not attach terminals, focus remote panes, open native apps, or expose branch/path/command details in status text.
     */
     try {

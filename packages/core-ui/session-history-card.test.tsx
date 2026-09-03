@@ -117,6 +117,6 @@ describe('SessionHistoryCard', () => {
 
     expect(css).toContain(".session-history-frame:is([data-tagged='true'], [data-pinned='true'])");
     expect(css).toContain('.session-floating-agent-tabler-icon[data-agent-icon]');
-    expect(css).toContain('CDXC:PreviousSessions 2026-06-09-09:41');
+    expect(css).toContain('CDXC:Sessions 2026-06-09-09:41');
   });
 });

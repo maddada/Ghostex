@@ -151,7 +151,7 @@ pub(crate) fn gpui_resolve_portless_setup_prompt(
 impl GpuiPortlessStateUpdate {
     pub(crate) fn to_rpc_params(self) -> serde_json::Value {
         /*
-        CDXC:GPUISettingsPortlessBridge 2026-06-24-11:48:
+        CDXC:Portless 2026-06-24-11:48:
         `/api/updatePortlessState` accepts only the shared Portless state-update contract: `setEnabled`, `setProtocol`, or `recordAdminResult` with booleans and bounded action/protocol enums. Keep request construction centralized here so GPUI never forwards request ids, paths, URLs, commands, output, environment, tokens, or arbitrary React payload fields to gxserver.
         */
         match self {
@@ -384,7 +384,7 @@ pub(crate) fn gpui_portless_admin_result(
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_resolve_portless_admin_runtime() -> Option<GpuiPortlessAdminRuntime> {
     /*
-    CDXC:GPUIPortlessAdminBridge 2026-06-24-14:28:
+    CDXC:Portless 2026-06-24-14:28:
     The GPUI privileged Portless helper is production-capable only from a packaged macOS app with Contents/Resources/Web/code-server/lib/node and Contents/Resources/Web/portless/dist/cli.js. Development binaries and incomplete bundles must report `missing-bundled-portless-runtime` rather than using PATH, global npm, server, or repository-local commands.
 
     Portless integration is currently disabled. If it returns, its Node runtime must resolve from the installed code-server component instead of restoring a Node binary to the base app bundle.
@@ -536,7 +536,7 @@ pub(crate) fn gpui_portless_admin_commands(
                 GpuiPortlessProtocol::Http => ("80", ""),
             };
             format!(
-                r#"# CDXC:GPUIPortlessServiceInstall 2026-06-24-14:28:
+                r#"# CDXC:Portless 2026-06-24-14:28:
 # GPUI installs the Portless macOS LaunchDaemon with the same fixed root commands as the reviewed Swift helper. The daemon writes stdout/stderr to /dev/null and runs with PORTLESS_SYNC_HOSTS=0 so support bundles do not persist paths, hostnames, command/env values, or proxy output.
 {trust_command}/bin/launchctl bootout system "$PLIST_PATH" >/dev/null 2>&1 || true
 run_portless_cli proxy stop --port {proxy_port} >/dev/null 2>&1 || true
@@ -872,10 +872,10 @@ pub(crate) fn gpui_portless_admin_action(value: &str) -> Option<GpuiPortlessAdmi
 }
 
 /*
-CDXC:GPUISettingsMetadata 2026-06-24-12:19:
+CDXC:Settings 2026-06-24-12:19:
 The GPUI app-modal write bridge validates bounded Settings agent/action messages from CEF, while read hydration comes from gxserver's `/api/readSidebarHud` contract instead of app-modal Rust reimplementing the custom launcher/action projection.
 
-CDXC:SidebarHudSettingsMutation 2026-06-24-20:54:
+CDXC:AgentLauncher 2026-06-24-20:54:
 Agent/action Settings writes now persist through gxserver's `/api/mutateSidebarHudSettings` contract. Keep this parser as a shape/type boundary only; do not mutate custom agent/action project metadata locally or log launcher commands, URLs, project names, paths, prompts, tokens, stdout/stderr, daemon bodies, or renderer payload contents.
 */
 pub(crate) fn source_code_server_runtime_target_from_project_snapshot(
@@ -883,7 +883,7 @@ pub(crate) fn source_code_server_runtime_target_from_project_snapshot(
     endpoint: SourceCodeServerRuntimeEndpoint,
 ) -> Option<SourceCodeServerRuntimeTarget> {
     /*
-    CDXC:GPUISourceRuntime 2026-06-24-23:17:
+    CDXC:CodeEditor 2026-06-24-23:17:
     Source folder URLs are authorized only from the strict in-memory sidebar project snapshot: explicit project id, Source workarea id, project path, and Source availability. This mirrors the macOS sidebar's `createCodeServerProjectEditorUrl(project.path)` contract without accepting renderer URLs, filesystem probes, fallback localhost strings, or persisted project facts.
     */
     if !snapshot.feature_availability.source || snapshot.is_quick_projectless {
@@ -1189,7 +1189,7 @@ pub(crate) fn source_code_server_should_seed_default_theme(
 
 pub(crate) fn source_code_server_ensure_default_theme(user_data_dir: &Path) -> Result<(), String> {
     /*
-    CDXC:GPUISourceRuntime 2026-06-24-23:17:
+    CDXC:CodeEditor 2026-06-24-23:17:
     When GPUI owns the code-server user-data profile, seed the same Dark 2026 default theme as macOS only if the profile has no settings file. Do not overwrite user-edited runtime settings or linked local VS Code settings.
     */
     let user_dir = user_data_dir.join("User");

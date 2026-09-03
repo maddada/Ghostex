@@ -10,7 +10,7 @@ export type QrCodeProps = {
 };
 
 /**
- * CDXC:RemoteSetup 2026-09-03:
+ * CDXC:RemotePairing 2026-09-03:
  * One QR renderer for every surface that shows a scannable code (the Android
  * install popover, the Easy Connect pairing card, the Tailscale card). The
  * image is rendered off-thread by `qrcode` into a data URL; while it renders,

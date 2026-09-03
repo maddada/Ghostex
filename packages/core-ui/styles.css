@@ -19,15 +19,15 @@
  * Sidebar and app context menus should behave like native menus: menu items
  * keep the default cursor instead of the hand pointer.
  *
- * CDXC:AppModals 2026-05-28-13:52:
+ * CDXC:AppModal 2026-05-28-13:52:
  * Menu overlay surfaces should use the same app-owned background family as
  * modal surfaces regardless of the theme/card color below.
  *
- * CDXC:ReactDropdowns 2026-05-30-08:58:
+ * CDXC:DesignSystem 2026-05-30-08:58:
  * Expanded React dropdowns should show the same border color as sidebar
  * tooltips so every floating menu has a visible edge against the app chrome.
  *
- * CDXC:SidebarTheme 2026-06-15-01:43:
+ * CDXC:Theming 2026-06-15-01:43:
  * Dropdown, popover, select, and context-menu surfaces follow
  * --app-dropdown-background so Dark 1 uses #191919, Dark 2 preserves #0e0e0e,
  * and Light can render shadcn/Base UI overlay content on light surfaces.
@@ -65,13 +65,13 @@
 }
 
 /*
- * CDXC:SidebarBrandIcons 2026-05-16-22:34:
+ * CDXC:Icons 2026-05-16-22:34:
  * SVGL editor logos render as data-URL images so native WKWebView and
  * Storybook share the same offline assets. Keep the wrapper dimension-driven
  * and add only the VS Code Insiders overlay here so each caller can size the
  * icon with its existing menu/button classes.
  *
- * CDXC:SidebarBrandIcons 2026-05-17-18:56:
+ * CDXC:Icons 2026-05-17-18:56:
  * Settings Open In rows must not let SVG intrinsic dimensions resize the row.
  * Use a fixed, clipped icon slot because several SVGL assets ship 96px or
  * 256px intrinsic dimensions and data-URL images otherwise paint at natural
@@ -118,7 +118,7 @@
 }
 
 /*
- * CDXC:SidebarCursor 2026-05-15-11:28:
+ * CDXC:Sidebar 2026-05-15-11:28:
  * Sidebar buttons should keep the default cursor instead of the hand pointer.
  * Hover, focus, selected, and disabled styling carry button affordance without
  * changing the pointer shape across native buttons, shadcn buttons, and custom
@@ -130,7 +130,7 @@ button,
 }
 
 /*
- * CDXC:SidebarCursor 2026-05-15-19:57:
+ * CDXC:Sidebar 2026-05-15-19:57:
  * Sidebar search boxes should use the default arrow cursor for now, matching
  * app-modal text fields while the macOS WKWebView/native cursor flicker root
  * cause remains unresolved. Keep this scoped to search inputs so other sidebar
@@ -146,7 +146,7 @@ button,
 }
 
 /*
- * CDXC:SidebarScroll 2026-07-22:
+ * CDXC:Sidebar 2026-07-22:
  * The sidebar must never rubber-band, per explicit user request. Chromium can
  * apply macOS elastic overscroll at the viewport root even when the root does
  * not scroll, so the root opts out alongside the sidebar scrollers in
@@ -163,7 +163,7 @@ body {
   width: 0;
 }
 
-/* CDXC:SettingsControls 2026-05-07-18:03: Only shadcn Button instances need
+/* CDXC:DesignSystem 2026-05-07-18:03: Only shadcn Button instances need
    protection from legacy sidebar button globals. Radix controls such as Select
    and Switch also render buttons with data-slot attributes; resetting all of
    them strips their shadcn backgrounds and makes dropdowns blend into the
@@ -177,7 +177,7 @@ body {
   font: revert-layer;
   transition: revert-layer;
   /*
-   * CDXC:ModalRedesign 2026-08-24:
+   * CDXC:AppModal 2026-08-24:
    * `font: revert-layer` rolls the whole font shorthand back to the shadcn
    * utility layer, which reinstates Button's 14px/500. Re-state the redesign's
    * quiet type here, after the shorthand, so buttons match the 13px/400 used
@@ -193,12 +193,12 @@ body {
 }
 
 /*
- CDXC:UnifiedSettings 2026-05-09-17:01:
+ CDXC:Settings 2026-05-09-17:01:
  The unified Settings modal should use the sidebar reference button radius
  across cards and controls, with the modal surface pinned to the app modal token so
  Settings, Agents, Actions, and Hotkeys read as one product surface.
 
- CDXC:AppModals 2026-05-16-08:10:
+ CDXC:AppModal 2026-05-16-08:10:
  All React modal background shells should use the same 7px radius as the
  Settings modal background. Keep that radius as an app modal token so Radix
  dialogs and legacy React modal shells cannot drift apart.
@@ -208,7 +208,7 @@ body {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * Every app modal that opts into .ghostex-settings-shadcn now shares the Codex
  * surface language already approved for the Kanban/Automate/Docs pages:
  *
@@ -230,7 +230,7 @@ body {
 .ghostex-settings-shadcn,
 .ghostex-settings-shadcn[data-sidebar-theme] {
   /*
-   * CDXC:ModalRedesign 2026-08-24 (round 2):
+   * CDXC:AppModal 2026-08-24 (round 2):
    * The modal shell is the app's #0e0e0e window tone — every modal shares one
    * background — and the elevation steps above it match the Kanban page
    * (#161616 panels, #1d1d1d hover). The first pass used #161616 as the shell,
@@ -251,7 +251,7 @@ body {
   --accent-foreground: var(--foreground);
 
   /*
-   * CDXC:ModalRedesign 2026-08-24:
+   * CDXC:AppModal 2026-08-24:
    * Superseded the earlier near-square settings roundness (2/3/7px). Controls
    * and cards are 8px, modal and section surfaces are 12px, menu rows are 6px,
    * and switches are full pills.
@@ -271,7 +271,7 @@ body {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * The Codex greys are dark-only. Light themes derive the same three-step
  * elevation from their own modal background so the redesign does not paint
  * black panels on a white surface.
@@ -286,13 +286,13 @@ body {
 
 .settings-select-content {
   /*
-   * CDXC:SettingsDropdowns 2026-06-16-17:02:
+   * CDXC:Settings 2026-06-16-17:02:
    * Settings dropdown popups are portaled outside .ghostex-settings-shadcn.
    * Set their accent tokens directly on the popup so focused and hovered menu
    * rows use an unsaturated context-menu gray instead of the active theme tint.
    */
   /*
-   * CDXC:ModalRedesign 2026-08-24:
+   * CDXC:AppModal 2026-08-24:
    * The popup is portaled, so it repeats the Codex surface tokens instead of
    * inheriting them: #161616 popover, 8px popup radius, 6px row radius.
    */
@@ -320,7 +320,7 @@ body {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * Selected values stay neutral in every settings dropdown. The full-white
  * label and right-side check carry selection without borrowing the app accent
  * or filling the row. `data-highlighted` remains the separate hover/keyboard
@@ -338,7 +338,7 @@ body {
 }
 
 /*
- * CDXC:SquareTheme 2026-05-29:
+ * CDXC:Theming 2026-05-29:
  * The app chrome now uses squared controls everywhere. Keep this as a final
  * theme override so shadcn/Base UI primitives and older bespoke sidebar
  * controls share the same zero-radius treatment. Select popups and their rows
@@ -398,7 +398,7 @@ body {
 }
 
 /*
- * CDXC:RoundedSelectDropdowns 2026-08-26:
+ * CDXC:DesignSystem 2026-08-26:
  * Base UI portals select popups under <body>, where the modal's --radius and
  * --settings-radius-* tokens do not inherit. Keep the shared select geometry
  * explicit here so every app select has the same rounded popup and rows.
@@ -432,7 +432,7 @@ body {
 }
 
 /*
- * CDXC:RoundedDropdownMenus 2026-08-26:
+ * CDXC:DesignSystem 2026-08-26:
  * Dropdown menus, submenus, popovers, and the chat surface's right-click
  * context menu share the select popup's geometry: an
  * 8px panel with 6px rows, so a hovered row's highlight sits inside the panel's
@@ -462,7 +462,7 @@ body {
 }
 
 /*
- * CDXC:RoundedDropdownMenus 2026-08-26:
+ * CDXC:DesignSystem 2026-08-26:
  * The app's hand-built menus — sidebar/session/project/group context menus, the
  * git action menu, quick actions, the command icon picker — are the same kind of
  * surface as a Base UI dropdown, so they take the same 8px/6px geometry instead
@@ -493,7 +493,7 @@ body {
 }
 
 /*
- * CDXC:SessionChatRoundedChrome 2026-08-02:
+ * CDXC:SessionChat 2026-08-02:
  * The Session Chat surface keeps rounded controls even though the shared
  * Button primitive and app chrome are square by default. Apply the chat radius
  * explicitly instead of reverting to the primitive's rounded-none layer. The
@@ -547,7 +547,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * The modal shell is the Codex modal surface (#161616) rather than the app
  * window background, so raised cards inside it have something to sit on.
  */
@@ -574,7 +574,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  whole command component. Keep the override scoped to this dialog so other
  CommandInput surfaces retain their shared padding.
 
- CDXC:SearchInputs 2026-06-15-16:21:
+ CDXC:DesignSystem 2026-06-15-16:21:
  Command input clear controls should render as just the X glyph inside the
  input, without inherited square button chrome around the icon.
 */
@@ -830,7 +830,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:StashedPrompts 2026-08-08:
+ CDXC:SavedPrompts 2026-08-08:
  Saved Prompts is the fourth Ghostex Quick Access page. Its tabs, search,
  group heading, typography, padding, and selected background all come from the
  same Quick Access primitives as Command Pane. Saved Prompt rows use two lines
@@ -861,7 +861,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:StashedPromptTags 2026-08-23:
+ CDXC:SavedPrompts 2026-08-23:
  Saved Prompt rows separate on rhythm, not rules. A hairline between every row
  competed with the hover and selection fills and made the list read as a table;
  the row is instead a 62px block with its own gap and a 3px tag-colored stripe
@@ -1000,7 +1000,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:StashedPromptSessionAssociation 2026-08-24:
+ CDXC:SavedPrompts 2026-08-24:
  The origin-session chip borrows the tag chip's geometry so the meta row reads
  as one strip, but it carries no tag color: it is neutral chrome describing
  where the prompt came from, not another thing the user filed it under. It is
@@ -1040,7 +1040,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:StashedPromptTags 2026-08-23:
+ CDXC:SavedPrompts 2026-08-23:
  The tag menu renders in a portal, so pointing at it ends this row's :hover.
  The row keeps its hover fill and its action cluster while that menu is open —
  otherwise the trigger collapses to display:none, the popover anchor measures
@@ -1052,7 +1052,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:StashedPromptTags 2026-08-23:
+ CDXC:SavedPrompts 2026-08-23:
  The persistent star and the action cluster share the row's right edge, so the
  star hides the moment the cluster appears rather than the two stacking there.
 */
@@ -1460,20 +1460,20 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:SettingsNavigation 2026-05-13-08:05: The Settings dialog needs enough horizontal room for a main-tab section sidebar and terminal settings.
+ CDXC:Settings 2026-05-13-08:05: The Settings dialog needs enough horizontal room for a main-tab section sidebar and terminal settings.
  Use scoped CSS so the native modal host and Storybook share the same width without relying on newly generated utilities.
 
- CDXC:SettingsNavigation 2026-05-13-08:11: The modal should be 20% wider than the first section-sidebar layout and use a taller viewport so more settings remain visible without scrolling.
+ CDXC:Settings 2026-05-13-08:11: The modal should be 20% wider than the first section-sidebar layout and use a taller viewport so more settings remain visible without scrolling.
 
- CDXC:SettingsNavigation 2026-05-23-11:05: Superseded by CDXC:SettingsNavigation 2026-06-24-22:16.
+ CDXC:Settings 2026-05-23-11:05: Superseded by CDXC:Settings 2026-06-24-22:16.
 
- CDXC:SettingsNavigation 2026-05-27-10:44: Do not draw a vertical divider between the section table of contents and the settings body on Settings or Hotkeys tabs.
+ CDXC:Settings 2026-05-27-10:44: Do not draw a vertical divider between the section table of contents and the settings body on Settings or Hotkeys tabs.
 
- CDXC:SettingsNavigation 2026-06-13: Superseded by CDXC:SettingsNavigation 2026-06-24-22:16.
+ CDXC:Settings 2026-06-13: Superseded by CDXC:Settings 2026-06-24-22:16.
 
- CDXC:SettingsSearch 2026-06-16-09:37: The Settings/Hotkeys search field should match the centered main Settings content exactly: use the same 770px column and 20px inner inset so the input edges align with section cards.
+ CDXC:Settings 2026-06-16-09:37: The Settings/Hotkeys search field should match the centered main Settings content exactly: use the same 770px column and 20px inner inset so the input edges align with section cards.
 
- CDXC:SettingsWindow 2026-06-24-05:39:
+ CDXC:Settings 2026-06-24-05:39:
  The macOS Settings surface lives in a separate titled, draggable, resizable
  native modal with AppKit enforcing 1000x750 minimum/default content size and
  1800x1200 maximum content size. In the native-window modal host, let React fill
@@ -1481,16 +1481,16 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 */
 .ghostex-settings-shadcn.settings-modal-dialog {
   /*
-   * CDXC:SettingsNavigation 2026-06-19-11:15:
-   * Superseded by CDXC:SettingsNavigation 2026-06-19-12:18.
+   * CDXC:Settings 2026-06-19-11:15:
+   * Superseded by CDXC:Settings 2026-06-19-12:18.
    *
-   * CDXC:SettingsNavigation 2026-06-19-12:18:
+   * CDXC:Settings 2026-06-19-12:18:
    * Settings and Hotkeys section navigation should float over the left side of
    * the settings pages instead of reserving a layout column. Keep shared panel
    * geometry on the modal root so the floating rail can sit consistently near
    * the tabs row without shifting the centered search and card columns.
    *
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
+   * CDXC:Settings 2026-06-24-22:16:
    * Superseded by the sidebar-owned navigation layout. Keep the sidebar width
    * token on the modal root, but the rail now participates in the normal body
    * grid instead of floating over tab content.
@@ -1538,12 +1538,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .first-launch-setup-story-frame {
   /*
-   CDXC:AppModals 2026-06-11-20:28:
+   CDXC:AppModal 2026-06-11-20:28:
    Story-backed modal preview frames should use the same tokenized background
    as native modal windows so screenshots and local QA do not preserve older
    app-modal shells.
 
-   CDXC:ModalRedesign 2026-08-24:
+   CDXC:AppModal 2026-08-24:
    The Codex window tone is a flat #0e0e0e page behind the #161616 modal, so the
    preview frame drops the old blue radial wash.
   */
@@ -1553,41 +1553,41 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:FirstLaunchSetup 2026-05-26-06:23
+ CDXC:Onboarding 2026-05-26-06:23
  The first page of the real first-launch modal must introduce Ghostex with an
  image generated from the README hero screenshot so the page reflects the actual
  tool instead of generic app artwork. Keep hook installation as the bottom
  decision so users understand why native setup is being requested before
  clicking it.
 
- CDXC:FirstLaunchSetup 2026-05-26-07:14
+ CDXC:Onboarding 2026-05-26-07:14
  The intro page should feel like app setup, not marketing: a two-column main area
  with copy and benefits on the left and the workspace screenshot on the right,
  then a bordered hook panel with actions in the header row. Avoid full-width tone
  bands, cropped hero strips, and disconnected benefit cards.
 
- CDXC:FirstLaunchSetup 2026-05-26-07:22
+ CDXC:Onboarding 2026-05-26-07:22
  The hook actions should sit inside the bordered agent-card area, with Refresh
  rendered as an icon-only control, so the setup action cluster stays connected
  to the agent statuses without adding another readiness summary line.
 
- CDXC:FirstLaunchSetup 2026-05-26-07:27
+ CDXC:Onboarding 2026-05-26-07:27
  The hook explainer copy is redundant on the first page after the intro cards.
  Keep the hook panel focused on agent state and place Refresh, Install Hooks,
  Skip, and Continue together in the footer as one action row. Let the body take
  remaining height so the footer stays a compact bottom action bar.
 
- CDXC:FirstLaunchSetup 2026-05-26-07:41
+ CDXC:Onboarding 2026-05-26-07:41
  Narrow first-launch layouts should hide the preview image instead of stacking it
  above the intro content, because the fixed modal footer can otherwise overlap
  the hook status area on shorter or narrower Storybook/app viewports.
 
- CDXC:FirstLaunchSetup 2026-05-26-07:48
+ CDXC:Onboarding 2026-05-26-07:48
  The heading and setup sentence span the full modal body width while the feature
  list and README-derived preview image sit in the row below, giving both lower
  surfaces the same top alignment.
 
- CDXC:FirstLaunchSetup 2026-05-26-15:53
+ CDXC:Onboarding 2026-05-26-15:53
  The second first-launch page needs the same setup-modal language as the hooks
  page: concise left-column instructions, concrete CLI/mobile access details from
  README.md, and a right-side Android app screenshot that disappears at narrow
@@ -1604,7 +1604,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .first-launch-setup-dialog-title {
   /*
-   CDXC:ModalRedesign 2026-08-24:
+   CDXC:AppModal 2026-08-24:
    The wizard title is a quiet 15px/500 heading, matching the section labels on
    the redesigned Settings surface instead of a 20px display size.
   */
@@ -1642,7 +1642,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:FirstLaunchSetup 2026-08-24:
+ CDXC:Onboarding 2026-08-24:
  Onboarding redesign styles. The branching flow reuses the Automate/Project-board design
  language through the --settings-* tokens (surface #0e0e0e, raised #161616,
  cards #1d1d1d, accent #86d3f8): labeled step chips in the header, row cards
@@ -2126,7 +2126,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .first-launch-setup-art-shell {
   /*
-   CDXC:FirstLaunchSetup 2026-05-27-04:52:
+   CDXC:Onboarding 2026-05-27-04:52:
    The intro workspace image must never run underneath the hook-status panel on
    wide modal layouts. Cap the visual height and crop inside the shell so the
    grid row remains bounded while preserving a useful screenshot preview.
@@ -2170,7 +2170,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:FirstLaunchWelcome 2026-05-27-05:04
+ CDXC:Onboarding 2026-05-27-05:04
  First launch starts with an honest welcome before setup. It should explain
  Ghostex as an intuitive Agent Development Environment, document the native
  terminal and Chromium tradeoffs, and invite users to Discord without making
@@ -2296,7 +2296,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:FirstLaunchPreferences 2026-05-29-15:31
+ CDXC:Onboarding 2026-05-29-15:31
  The first-launch defaults page should expose the highest-impact settings in
  one compact step: sidebar style ordered Recommended / Minimal / Codex /
  Detailed, default agent, first-prompt title-generation agent, lid-close
@@ -2304,17 +2304,17 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  controls write to the normal Settings model instead of keeping onboarding-only
  state.
 
- CDXC:FirstLaunchPreferences 2026-06-04-21:02
+ CDXC:Onboarding 2026-06-04-21:02
  The first-time defaults modal must include the same title-generation agent
  selector as Settings, including a Custom command input, before automatic
  first-prompt session naming can run.
 
- CDXC:FirstLaunchPreferences 2026-06-13-03:28
+ CDXC:Onboarding 2026-06-13-03:28
  The sidebar-style control adds Recommended as the leftmost and default first-run
  choice, so the preset grid uses four equal columns on desktop before stacking
  into one column on narrow modal widths.
 
- CDXC:FirstLaunchPreferences 2026-06-13-05:27
+ CDXC:Onboarding 2026-06-13-05:27
  The first-time defaults modal checkbox affordances should read as square
  controls rather than native macOS rounded checkboxes. Keep this custom shape
  scoped to onboarding preference tiles so other Settings checkboxes retain their
@@ -2423,7 +2423,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .first-launch-setup-preset-button[data-active='true'] {
   /*
-   CDXC:ModalRedesign 2026-08-24 (round 2):
+   CDXC:AppModal 2026-08-24 (round 2):
    The selected preset is marked by a brightened hairline and the full
    foreground tone — selection state stays neutral, no accent.
   */
@@ -2530,7 +2530,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .first-launch-setup-checkbox {
   /*
-   CDXC:ModalRedesign 2026-08-24:
+   CDXC:AppModal 2026-08-24:
    Onboarding checkboxes stay a small square affordance rather than the native
    macOS rounded control, but pick up the redesign's adaptive corner so they sit
    in the same family as the 8px controls around them.
@@ -2549,7 +2549,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 .ghostex-settings-shadcn .first-launch-setup-checkbox:checked {
-  /* CDXC:ModalRedesign 2026-08-24 (round 2): checked = foreground, not accent. */
+  /* CDXC:AppModal 2026-08-24 (round 2): checked = foreground, not accent. */
   background: var(--foreground);
   border-color: transparent;
 }
@@ -2760,17 +2760,17 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:IntegrationsSetup 2026-05-27-04:17
+ CDXC:RemotePairing 2026-05-27-04:17
  Setup install actions belong inside the relevant integration panel while the
  footer stays focused on modal navigation. Missing optional integrations show a
  warning panel after Continue, then allow the user to proceed deliberately.
 
- CDXC:FirstLaunchSetup 2026-06-18-02:38:
+ CDXC:Onboarding 2026-06-18-02:38:
  Continuing without first-launch hooks or bundled skills should show an in-modal
  warning overlay, and the primary install action belongs at the bottom right so
  users have a clear repair action before deliberately continuing.
 
- CDXC:FirstLaunchSetup 2026-06-19-08:42:
+ CDXC:Onboarding 2026-06-19-08:42:
  Continue warnings should use the normal modal surface instead of brown warning
  colors. Keep the alert visually clear with a subtle primary-tinted edge, icon
  well, and shadow so it reads as a deliberate setup confirmation across dark and
@@ -2789,7 +2789,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .first-launch-setup-warning {
   /*
-   CDXC:ModalRedesign 2026-08-24:
+   CDXC:AppModal 2026-08-24:
    The continue-warning alert is the raised card tone on the modal surface with
    one hairline and a plain drop shadow, instead of the primary-tinted gradient
    panel the earlier design used.
@@ -2847,7 +2847,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:FirstLaunchSetup 2026-05-26-07:09
+ CDXC:Onboarding 2026-05-26-07:09
  The first-launch hook list should group agents by shared status instead of
  repeating "Installed", "Not installed", or "CLI missing" in every chip. Keep
  the per-agent names visible while using section headers for status context.
@@ -2965,7 +2965,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:FirstLaunchSetup 2026-05-27-02:41
+ CDXC:Onboarding 2026-05-27-02:41
  The first-launch modal is now the single app guide. Keep the former Tips &
  Tricks guide pages inside this modal's visual system instead of maintaining a
  second dialog with separate navigation and card styles.
@@ -3199,73 +3199,73 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:HighlightedFeatures 2026-06-16-08:17:
+ CDXC:Onboarding 2026-06-16-08:17:
  The Highlighted Features modal should reuse the first-launch modal surface while
  presenting a replayable feature tour.
 
- CDXC:DiscoverGhostex 2026-06-16-02:01:
+ CDXC:Onboarding 2026-06-16-02:01:
  Superseded by the 2026-06-17 bottom-strip removal. The tour should use README
  screenshots without rendering the old five-tile thumbnail selector.
 
- CDXC:HighlightedFeatures 2026-06-16-08:54:
+ CDXC:Onboarding 2026-06-16-08:54:
  The feature title and copy should sit side by side above the main screenshot.
  The screenshot should use the full modal width, fit completely inside its
  thin frame.
 
- CDXC:HighlightedFeatures 2026-06-16-09:14:
+ CDXC:Onboarding 2026-06-16-09:14:
  Keep the subtitle visually secondary and neutral instead of heavy or blue.
  Place it close to the title with both text blocks left-aligned, and put the
  thin outline on the actual screenshot image instead of the empty fit area.
 
- CDXC:HighlightedFeatures 2026-06-16-11:24:
+ CDXC:Onboarding 2026-06-16-11:24:
  Superseded by the 2026-06-17 bottom-strip removal. The content revamp treats
  the page title, page subtitle, and screenshot as the authored content for each
  feature page.
 
- CDXC:HighlightedFeatures 2026-06-16-11:45:
+ CDXC:Onboarding 2026-06-16-11:45:
  The header should not stretch into a banner-length line. Reduce the icon/title
  scale and use thin 1px borders for every bordered surface inside the modal.
 
- CDXC:HighlightedFeatures 2026-06-16-12:15:
+ CDXC:Onboarding 2026-06-16-12:15:
  Superseded by the 2026-06-16-19:50 close-button change and the 2026-06-16-18:48
  icon removal.
 
- CDXC:HighlightedFeatures 2026-06-16-12:26:
+ CDXC:Onboarding 2026-06-16-12:26:
  Match Settings roundness by using the existing settings radius tokens for the
  screenshot frame instead of adding modal-specific radius values.
 
- CDXC:HighlightedFeatures 2026-06-16-12:31:
+ CDXC:Onboarding 2026-06-16-12:31:
  Superseded by 2026-06-16-12:35; the title is no longer fixed-width.
 
- CDXC:HighlightedFeatures 2026-06-16-12:35:
+ CDXC:Onboarding 2026-06-16-12:35:
  The title should use the available header width without a fixed title column,
  and the subtitle should sit directly under the title in the same text stack.
 
- CDXC:HighlightedFeatures 2026-06-16-12:45:
+ CDXC:Onboarding 2026-06-16-12:45:
  Image outlines should be thinner-looking and less bright than the screenshots.
  Superseded by the 2026-06-17 bottom-strip removal.
 
- CDXC:HighlightedFeatures 2026-06-16-13:45:
+ CDXC:Onboarding 2026-06-16-13:45:
  Superseded by the 2026-06-17 bottom-strip removal. Main image navigation
  should expose left/right arrow buttons and loop through the authored feature
  order.
 
- CDXC:HighlightedFeatures 2026-06-16-14:08:
+ CDXC:Onboarding 2026-06-16-14:08:
  Keep carousel arrows outside the main screenshot so controls do not cover
  product detail. Use an even shadow outline on the screenshot itself to avoid
  heavy rounded-corner artifacts.
 
- CDXC:HighlightedFeatures 2026-06-16-18:27:
+ CDXC:Onboarding 2026-06-16-18:27:
  Several highlighted-feature screenshots include alpha at their rounded window
  corners. Keep screenshot frames transparent so no artificial tile background
  bleeds through those transparent image corners.
 
- CDXC:HighlightedFeatures 2026-06-16-18:48:
+ CDXC:Onboarding 2026-06-16-18:48:
  The highlighted-feature header should not show a leading feature icon. Let the
  title/subtitle own the full header width and keep the modal visually focused
  on the screenshots.
 
- CDXC:HighlightedFeatures 2026-06-17-12:45:
+ CDXC:Onboarding 2026-06-17-12:45:
  The bottom thumbnail strip is no longer needed. Let the main feature stage own
  the full modal body height, with only the side arrow buttons changing pages.
 */
@@ -3347,14 +3347,14 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- CDXC:GhostexTutorialVideo 2026-06-18-04:49:
+ CDXC:Onboarding 2026-06-18-04:49:
  The copied Highlighted Features shell must become a one-page tutorial video modal. Remove the carousel side columns for this modal only and let the video player fill the body.
 
- CDXC:GhostexTutorialVideo 2026-08-03:
+ CDXC:Onboarding 2026-08-03:
  The native child-window title owns the tutorial heading. Collapse the copied
  feature-stage title row so the video uses the entire body without repeating it.
 
- CDXC:UnifiedAppModal 2026-08-26:
+ CDXC:AppModal 2026-08-26:
  The walkthrough surround is an app-modal shell, so it keeps the shared window
  chrome it already inherits from `.ghostex-settings-shadcn[data-slot='dialog-content']`
  (a #0e0e0e surface, a hairline edge, and 12px corners). Inset the player by the
@@ -3464,24 +3464,24 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-main-tab-layout {
   /*
-   * CDXC:SettingsNavigation 2026-06-16-09:20:
-   * Superseded by CDXC:SettingsNavigation 2026-06-19-08:40.
+   * CDXC:Settings 2026-06-16-09:20:
+   * Superseded by CDXC:Settings 2026-06-19-08:40.
    *
-   * CDXC:SettingsNavigation 2026-06-19-08:40:
+   * CDXC:Settings 2026-06-19-08:40:
    * The macOS Settings section list and Show Advanced filter should read as one left sidebar instead of separate floating cards.
    * Give the rail an owned layout column and pin the filter to the sidebar footer while the settings body centers inside the remaining content area.
    *
-   * CDXC:SettingsNavigation 2026-06-19-10:30:
-   * Superseded by CDXC:SettingsNavigation 2026-06-24-22:16.
+   * CDXC:Settings 2026-06-19-10:30:
+   * Superseded by CDXC:Settings 2026-06-24-22:16.
    *
-   * CDXC:SettingsNavigation 2026-06-19-11:15:
-   * Superseded by CDXC:SettingsNavigation 2026-06-19-12:18.
+   * CDXC:Settings 2026-06-19-11:15:
+   * Superseded by CDXC:Settings 2026-06-19-12:18.
    *
-   * CDXC:SettingsNavigation 2026-06-19-12:18:
+   * CDXC:Settings 2026-06-19-12:18:
    * The section rail is a floating overlay in General Settings and Hotkeys, so
    * it must not reserve a column that pushes the main settings content right.
    *
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
+   * CDXC:Settings 2026-06-24-22:16:
    * Superseded by the shared Settings sidebar. Individual tab panels now own
    * only their scrollable content while the sidebar grid outside TabsContent
    * owns top-level page and section navigation.
@@ -3494,7 +3494,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-modal-body-layout {
   /*
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
+   * CDXC:Settings 2026-06-24-22:16:
    * Settings no longer renders a top tab bar. Use one normal two-column body:
    * a left sidebar for page/section navigation and a right content column with
    * search pinned above whichever Settings page is active.
@@ -3523,16 +3523,16 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-main-tabs-content {
   /*
-   * CDXC:SettingsNavigation 2026-06-19-10:30:
+   * CDXC:Settings 2026-06-19-10:30:
    * The sidebar intentionally extends upward to the tabs row while the body
    * keeps scrolling inside the owned Settings viewport. Let this tab content expose that
    * sidebar extension instead of clipping it at the search-field baseline.
    *
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
+   * CDXC:Settings 2026-06-24-22:16:
    * The sidebar is no longer inside tab content, so tab panels can keep normal
    * overflow clipping inside the content column.
    *
-   * CDXC:SettingsPerformance 2026-06-29-00:40:
+   * CDXC:Settings 2026-06-29-00:40:
    * Settings now uses a native overflow viewport instead of Base UI ScrollArea
    * so long pages avoid custom scrollbar bookkeeping during scroll.
    */
@@ -3546,7 +3546,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-native-scroll-viewport {
   /*
-   * CDXC:SettingsPerformance 2026-06-29-00:40:
+   * CDXC:Settings 2026-06-29-00:40:
    * Native overflow is the fast path for Settings scrolling. Keep scrollbars
    * from shifting content and contain wheel momentum inside the modal now that
    * Settings no longer uses Base UI ScrollArea.
@@ -3561,12 +3561,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-page-width {
   /*
-   * CDXC:SettingsLayout 2026-06-16-08:12:
+   * CDXC:Settings 2026-06-16-08:12:
    * Settings tab content should scan at a readable 770px max width. Center the
    * content inside the scrollable page area while leaving any left section rail
    * outside that width calculation.
    *
-   * CDXC:SettingsLayout 2026-07-22-00:00:
+   * CDXC:Settings 2026-07-22-00:00:
    * Every Settings page and the search field must share one effective content
    * width equal to the Projects page column (--settings-content-max-width).
    * settings-page-width containers carry their inline gutter padding inside
@@ -3581,12 +3581,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-section-sidebar {
   /*
-   * CDXC:SettingsNavigation 2026-06-25-22:10:
+   * CDXC:Settings 2026-06-25-22:10:
    * The macOS Settings sidebar container should sit 1px higher so its card
    * aligns with the native Settings window content chrome.
    */
   /*
-   * CDXC:ModalRedesign 2026-08-24:
+   * CDXC:AppModal 2026-08-24:
    * The navigation rail is a raised panel at the same elevation as the section
    * cards it navigates, with a single hairline and no drop shadow.
    */
@@ -3608,12 +3608,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-sidebar-tabs-list[data-slot='tabs-list'] {
   /*
-   * CDXC:ScrollFades 2026-06-19-14:16:
+   * CDXC:DesignSystem 2026-06-19-14:16:
    * Settings section navigation can scroll independently from the main page.
    * Use the shared Codex-style mask so the rail matches command palettes,
    * dropdowns, and sidebar lists.
    *
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
+   * CDXC:Settings 2026-06-24-22:16:
    * The list now contains top-level Settings pages plus collapsible section
    * groups, so override the horizontal tab-list default into a vertical rail.
    */
@@ -3656,7 +3656,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 .ghostex-settings-shadcn .settings-sidebar-page-row:focus-within,
 .ghostex-settings-shadcn .settings-sidebar-page-row:has(.settings-sidebar-tab-trigger[data-active]) {
   /*
-   * CDXC:SettingsNavigation 2026-06-25-17:05:
+   * CDXC:Settings 2026-06-25-17:05:
    * Expandable Settings sidebar page rows must highlight the full row,
    * including the disclosure chevron, so active pages read as one button rather
    * than a selected label beside an unselected icon target.
@@ -3671,7 +3671,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 .ghostex-settings-shadcn
   .settings-sidebar-page-row[data-expanded='true']:has(.settings-sidebar-tab-trigger[data-active]) {
   /*
-   * CDXC:SettingsNavigation 2026-08-24:
+   * CDXC:Settings 2026-08-24:
    * Expansion only reveals navigation children; it is not a selected-button
    * surface. Keep the whole page disclosure row transparent while expanded
    * and communicate the active page through its foreground treatment.
@@ -3709,7 +3709,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24 (round 2):
+ * CDXC:AppModal 2026-08-24 (round 2):
  * A selected collapsed page can use the row's raised fill, while an expanded
  * page remains transparent under the explicit disclosure-state rule above.
  * Selection itself stays readable through the full foreground tone.
@@ -3756,10 +3756,10 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-show-advanced-toggle {
   /*
-   * CDXC:SettingsAdvanced 2026-06-16-01:35:
+   * CDXC:Settings 2026-06-16-01:35:
    * Show Advanced is a browsing filter for the first Settings page.
    *
-   * CDXC:SettingsNavigation 2026-06-19-08:40:
+   * CDXC:Settings 2026-06-19-08:40:
    * Keep Show Advanced as a sidebar row instead of a bordered floating control
    * so it belongs to the same navigation surface as the section list.
    */
@@ -3800,7 +3800,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-about-page {
   /*
-   * CDXC:SettingsLayout 2026-07-22-00:00:
+   * CDXC:Settings 2026-07-22-00:00:
    * About shares the standard Settings gutter so its content column matches
    * the same effective width as every other Settings page.
    */
@@ -3897,12 +3897,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-sidebar-subsection-button {
   /*
-   * CDXC:SettingsNavigation 2026-06-25-17:58:
+   * CDXC:Settings 2026-06-25-17:58:
    * Expanded subsection titles should sit 14px farther right than the base
    * sidebar button inset so they read as nested items under icon-led main
    * categories without moving the row highlight itself.
    *
-   * CDXC:SettingsNavigation 2026-06-25-18:05:
+   * CDXC:Settings 2026-06-25-18:05:
    * Subsection selection should be text-only: inactive labels stay dim, the
    * active label brightens, and subsection rows do not use the main-category
    * filled background treatment.
@@ -3960,7 +3960,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:SettingsNavigation 2026-08-19:
+ * CDXC:Settings 2026-08-19:
  * Section headers grouped inside a General category (Browser under Tools, Power
  * under System) expand one level deeper than their group row. Repeat the 14px
  * step so the nesting reads by inset alone, and keep the rule list separate so
@@ -3982,13 +3982,13 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:AppModalTabs 2026-06-23-04:30:
+ * CDXC:AppModal 2026-06-23-04:30:
  * Agents Hub uses the app-modal tab rail styled after the titlebar mode
  * switcher (Agents/Source/Browser/Kanban/Manage): a flat row of equal-width
  * tabs with thin separators and a subtle highlight box behind the active tab.
  * The active tab brightens its label color instead of bolding it.
  *
- * CDXC:AppModalTabs 2026-06-23-04:45:
+ * CDXC:AppModal 2026-06-23-04:45:
  * Each tab now carries a full 4-direction #252525 outline matching the macOS
  * titlebar mode switcher, instead of the earlier theme-mixed left-only
  * separators. Top/bottom/left live on every trigger and the last child adds the
@@ -3997,12 +3997,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  * no background fill, so the highlight box stays exclusive to the active tab
  * (data-active wins over :hover by source order at equal specificity).
  *
- * CDXC:AppModalTabs 2026-06-24-04:25:
+ * CDXC:AppModal 2026-06-24-04:25:
  * Agents Hub tabs need a visible 1px #252525 border around the rail itself,
  * with trigger-side borders limited to internal dividers so the outside edge
  * stays continuous and never renders as doubled 2px seams.
  *
- * CDXC:SettingsNavigation 2026-06-24-22:16:
+ * CDXC:Settings 2026-06-24-22:16:
  * Settings no longer uses this top tab rail; Settings page navigation lives in
  * the left sidebar instead.
  */
@@ -4047,14 +4047,14 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-modal-search-row {
   /*
-   * CDXC:SettingsNavigation 2026-06-19-11:15:
-   * Superseded by CDXC:SettingsNavigation 2026-06-19-12:18.
+   * CDXC:Settings 2026-06-19-11:15:
+   * Superseded by CDXC:Settings 2026-06-19-12:18.
    *
-   * CDXC:SettingsNavigation 2026-06-19-12:18:
+   * CDXC:Settings 2026-06-19-12:18:
    * Settings and Hotkeys search should center over the same card column as the
    * settings body, independent of the floating sidebar overlay.
    *
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
+   * CDXC:Settings 2026-06-24-22:16:
    * Search is a single top-of-content control for the sidebar-driven Settings
    * modal. Keep it above active page content rather than inside the sidebar or
    * a removed tab bar.
@@ -4067,7 +4067,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-modal-search-toolbar {
   /*
-   * CDXC:SettingsLayout 2026-07-22-00:00:
+   * CDXC:Settings 2026-07-22-00:00:
    * The search input must span the same effective content width as every
    * Settings page column, so its gutter padding sits outside the shared
    * --settings-content-max-width instead of narrowing the input by 40px.
@@ -4081,7 +4081,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-modal-search-input {
   /*
-   * CDXC:ModalRedesign 2026-08-24:
+   * CDXC:AppModal 2026-08-24:
    * Search joins the one 32px control height shared by every dropdown, input,
    * and button in the modal, on the raised card tone with a single hairline.
    */
@@ -4106,10 +4106,10 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-modal-search-input:focus {
   /*
-   CDXC:SettingsSearch 2026-06-12-05:18:
+   CDXC:Settings 2026-06-12-05:18:
    The active Settings/Hotkeys search field should stay subtle: use the existing input border as the focus outline instead of adding an outer ring that reads like a terminal active-pane outline.
 
-   CDXC:SettingsSearch 2026-06-16-09:37:
+   CDXC:Settings 2026-06-16-09:37:
    The focused search outline should be dimmer than pure white so it reads as Settings chrome rather than a high-priority terminal focus ring.
    */
   border-color: var(--settings-focus-border-color);
@@ -4119,7 +4119,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .group-title-input {
   /*
-   * CDXC:SettingsFocus 2026-06-16-17:05:
+   * CDXC:Settings 2026-06-16-17:05:
    * The Settings action icon picker trigger reuses the sidebar group title
    * input class. Keep its resting border neutral inside Settings so the focus
    * treatment is the only visible state change.
@@ -4134,12 +4134,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 .ghostex-settings-shadcn .group-title-input:is(:focus, :focus-visible),
 .ghostex-settings-shadcn .settings-management-edit-button:focus-visible {
   /*
-   * CDXC:SettingsSearch 2026-06-15-11:30:
+   * CDXC:Settings 2026-06-15-11:30:
    * Settings text inputs and textareas should use the same focus treatment as
    * the Settings search box: muted border on the existing control, no outer
    * shadcn ring.
    *
-   * CDXC:SettingsFocus 2026-06-16-17:02:
+   * CDXC:Settings 2026-06-16-17:02:
    * Settings select triggers, action icon picker triggers, and management row
    * edit buttons should use the same neutral focus border as text fields
    * instead of theme-accent blue.
@@ -4237,7 +4237,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * Switches and slider tracks are pills, and portaled/inline menu rows use the
  * 6px menu-item radius rather than the 8px control radius.
  */
@@ -4246,7 +4246,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   border-radius: var(--settings-radius-pill) !important;
 }
 
-/* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
+/* CDXC:DesignSystem 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
 .ghostex-settings-shadcn [data-slot='switch'] {
   border-radius: 6px !important;
 }
@@ -4287,7 +4287,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * Shared control geometry. Every dropdown, text input, and segmented toggle in
  * a redesigned modal is exactly one 32px row tall so a label + select + button
  * on the same line share one baseline. shadcn Button and SelectTrigger already
@@ -4323,7 +4323,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * One quiet type scale for field copy: 13px labels in the foreground tone and
  * 12px descriptions in the muted tone, so a settings page reads as one column
  * of text rather than three competing sizes.
@@ -4339,7 +4339,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:SegmentedControl 2026-08-24:
+ * CDXC:DesignSystem 2026-08-24:
  * Canonical look for the shared SegmentedControl
  * (packages/components/ui/segmented-control.tsx): the stock shadcn
  * ButtonGroup shape, one bordered rounded container, flat segments sharing a
@@ -4412,7 +4412,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24 (round 2):
+ * CDXC:AppModal 2026-08-24 (round 2):
  * Switches are pills on the raised card tone. "On" is the foreground tone
  * (white in dark themes) with a surface-toned thumb — not the accent, which
  * made every enabled row shout.
@@ -4434,7 +4434,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * One quiet type scale: 400 for body text and 500 for ordinary headings. The
  * Settings section titles below are the deliberate 600-weight exception that
  * establishes the page hierarchy. The doubled class is deliberate — it
@@ -4468,7 +4468,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-section-with-actions {
   /*
-   * CDXC:ModalRedesign 2026-08-24:
+   * CDXC:AppModal 2026-08-24:
    * Header actions now sit inside the card next to the section label, so the
    * with-actions variant shares the same 48px header band as a plain section.
    */
@@ -4477,10 +4477,10 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-section-card {
   /*
-   * CDXC:SettingsSurfaces 2026-06-16-08:12:
-   * Superseded by CDXC:ModalRedesign 2026-08-24.
+   * CDXC:Settings 2026-06-16-08:12:
+   * Superseded by CDXC:AppModal 2026-08-24.
    *
-   * CDXC:ModalRedesign 2026-08-24:
+   * CDXC:AppModal 2026-08-24:
    * Section cards are the raised tone (#1d1d1d) on the #161616 modal surface,
    * with a single hairline and no shadow, so groups separate by elevation
    * instead of by the old mixed-in tint.
@@ -4498,7 +4498,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:SettingsManagement 2026-05-21-09:17:
+ * CDXC:Settings 2026-05-21-09:17:
  * Settings Agents and Actions rows keep edit/delete controls on the right side
  * of each card, but reveal those controls only while the card is hovered or
  * keyboard-focused so management lists stay quiet while scanning.
@@ -4519,7 +4519,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * Section header actions used to straddle the card's top border next to the
  * floating title pill. The title is now a quiet label inside the card, so the
  * actions sit on the same line inside the card instead of cutting the border.
@@ -4539,7 +4539,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   z-index: 1;
 }
 
-/* CDXC:SettingsModifiedState 2026-05-07-19:44: Modified settings use a small
+/* CDXC:Settings 2026-05-07-19:44: Modified settings use a small
    gray IconAsterisk to the left of the label. Absolute positioning keeps the
    marker from changing label layout or pushing controls around, and the 3px
    right shift keeps the heavier glyph visually close to the setting label. */
@@ -4594,7 +4594,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * "New"/"Beta" chips beside a setting label: hairline chip on the raised tone
  * with the accent doing the work, instead of a filled primary badge.
  */
@@ -4608,7 +4608,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-row-advanced-button {
   /*
-   * CDXC:SettingsAdvanced 2026-06-16-18:22:
+   * CDXC:Settings 2026-06-16-18:22:
    * Advanced setting arrows must stay visible without row hover so users can
    * scan advanced rows immediately. Color them from the Accent Color setting
    * (--ghostex-accent) so those markers track the same highlight as accent
@@ -4646,11 +4646,11 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
    must size to the full title in the native app as well as Storybook. A
    scoped CSS class avoids shadcn CardHeader/container internals under-measuring
    the text and clipping labels like "Sidebar".
-   CDXC:SidebarTheme 2026-06-15-01:43:
+   CDXC:Theming 2026-06-15-01:43:
    Settings section header chrome follows the modal token so Dark 1, Dark 2,
    and Light do not leave old dark islands inside the chosen mode. */
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * Superseded the floating bordered pill that straddled the card's top border.
  * The section name is now a clear 16px/600 title sitting inside the card, so a
  * settings page reads as a stack of clean cards instead of notched boxes. The
@@ -4688,7 +4688,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * The update modal renders inside AppModalShell now, so its surface, width,
  * title scale, and footer buttons come from `.gx-app-modal`. The old
  * near-fullscreen shell rule and the bespoke bordered notes box / action row
@@ -4721,7 +4721,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24 — Ghostex Quick Access
+ * CDXC:AppModal 2026-08-24 — Ghostex Quick Access
  *
  * Quick Access is one window frame shared by four sibling pages (Command Pane,
  * Recent Projects, Sessions, Saved Prompts), so its redesign is one block that
@@ -4785,7 +4785,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24 (round 2):
+ * CDXC:AppModal 2026-08-24 (round 2):
  * In the native Quick Access child window the window itself is the frame, so
  * the surface must not paint its own inset box — that read as a stray
  * "background behind the whole area" on Command Pane and Saved Prompts. The
@@ -4801,7 +4801,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 /* Tab header -------------------------------------------------------------- */
 
 /*
- * CDXC:ModalRedesign 2026-08-24 (round 5):
+ * CDXC:AppModal 2026-08-24 (round 5):
  * Every React modal tab rail is the Agents Hub strip: ONE bordered container
  * with an 8px radius and clipped corners, flat 32px segments divided by a
  * single hairline, a centered `label + kbd` pair, no focus ring, and a raised

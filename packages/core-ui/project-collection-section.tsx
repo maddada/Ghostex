@@ -54,7 +54,7 @@ type ProjectCollectionSectionProps = {
   collection: SidebarProjectCollection;
   draggingDisabled: boolean;
   /*
-   * CDXC:CollectionReorder 2026-07-21:
+   * CDXC:Projects 2026-07-21:
    * Pointer-resolved insertion boundary while another collection is being
    * dragged; renders the drop line above/below this panel.
    */
@@ -62,7 +62,7 @@ type ProjectCollectionSectionProps = {
   index: number;
   containsActiveSession?: boolean;
   /*
-   * CDXC:CollectionDragPreview 2026-07-22:
+   * CDXC:Projects 2026-07-22:
    * With feedback "none" dnd-kit never flips sortable.isDragging (only its
    * feedback plugin sets a draggable's status to "dragging"), so the app's
    * drag-preview state marks the grabbed section as the faint placeholder.
@@ -77,7 +77,7 @@ type ProjectCollectionSectionProps = {
   onHide: () => void;
   onSelectSessions: (sessionIds: string[]) => void;
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * Space membership for this group, per the Spaces decision that membership is
    * managed only from an item's own context menu. `spaces` is this section's
    * gxserver's Space set: `undefined` means that daemon delivered no Space state
@@ -93,7 +93,7 @@ type ProjectCollectionSectionProps = {
   spaces?: SidebarSpacesState;
   bulkProjectActionLabel: 'Collapse All' | 'Expand Previous';
   /*
-   * CDXC:RemoteProjectCollections 2026-07-21:
+   * CDXC:Projects 2026-07-21:
    * The same collection can render once in the local Projects section and once
    * per remote machine section. dnd-kit sortable ids must stay unique across
    * the app, so remote instances pass a machine-scoped id.
@@ -110,7 +110,7 @@ type ContextMenuPosition = {
 };
 
 /*
- * CDXC:CollectionReorder 2026-07-21:
+ * CDXC:Projects 2026-07-21:
  * Pointer-only on purpose. dnd-kit's KeyboardSensor starts a drag on
  * Space/Enter whenever the focusable header has focus, and with feedback
  * "none" that drag is completely invisible: nothing on screen indicates a
@@ -253,7 +253,7 @@ export function ProjectCollectionSection({
     runSidebarBulkContextMenuActionInBackground(targetSessionIds, run);
   };
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * A group may belong to any number of Spaces, and every project inside it
    * inherits those memberships. Toggling closes the menu, which is the Tags
    * submenu's own behaviour and what the Spaces decision asks this submenu to

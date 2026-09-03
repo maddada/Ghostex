@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 The Find surface (a GUI for `gx f`) is served from here. It keeps one warm
 `ghostex_find::SearchIndex` — the same scanner, matcher, favorites file, and Codex cache
 the terminal picker uses — so both surfaces rank identically and a prompt starred
@@ -86,7 +86,7 @@ fn now_unix() -> i64 {
 }
 
 /*
-CDXC:AgentHookIsolation 2026-08-06-21:35 (same rule, applied to history):
+CDXC:AgentHooks 2026-08-06-21:35 (same rule, applied to history):
 GHOSTEX_HOME and explicit daemon homes are isolated profiles. Their history
 scan, derived cache, and favorites file must stay inside that profile instead
 of following the process environment back into the real user's agent data.
@@ -463,7 +463,7 @@ pub fn resolve_agent_prompt_launch(
         .and_then(Value::as_str)
         .unwrap_or("resume");
     /*
-    CDXC:AgentHistorySearch 2026-08-20:
+    CDXC:PromptSearch 2026-08-20:
     Accept All is a daemon-owned setting, exactly as it is for `gx f` (which
     reads it and prepends `--accept-all`). Clients therefore do not have to know
     it, and a client that does pass it explicitly still wins — that is the

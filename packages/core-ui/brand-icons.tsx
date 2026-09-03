@@ -27,13 +27,13 @@ export type EditorBrandIconId =
   | 'zed';
 
 /**
- * CDXC:SidebarBrandIcons 2026-05-16-22:34:
+ * CDXC:Icons 2026-05-16-22:34:
  * Open-target menus and Settings rows must use canonical SVGL editor logos
  * instead of Tabler placeholders or hand-maintained path copies. VS Code
  * Insiders shares the VS Code mark and adds a small green overlay so it stays
  * visually related while remaining distinguishable in dense native menus.
  *
- * CDXC:SidebarBrandIcons 2026-05-16-23:24:
+ * CDXC:Icons 2026-05-16-23:24:
  * SVGL does not publish individual logos for every JetBrains IDE in the
  * built-in catalog. Use direct SVGL product icons where present and the SVGL
  * JetBrains mark for the remaining JetBrains-family targets so Settings still

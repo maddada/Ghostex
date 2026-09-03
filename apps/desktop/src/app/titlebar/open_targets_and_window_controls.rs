@@ -157,7 +157,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         /*
-        CDXC:GPUIWindowsTitlebarButtons 2026-07-26:
+        CDXC:PlatformSupport 2026-07-26:
         These controls are exact normal-layout children of the draggable
         titlebar. On Windows each interactive frame must occlude the ancestor
         Drag hitbox so WM_NCHITTEST leaves that rectangle in the client area

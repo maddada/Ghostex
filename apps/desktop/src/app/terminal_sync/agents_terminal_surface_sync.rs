@@ -16,64 +16,64 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUTerminalSurfaceHost 2026-06-22-22:45:
+        CDXC:Terminal 2026-06-22-22:45:
         The GPUI App owns native terminal host plans as runtime-only slot-keyed maps, not persisted workspace model data. Recompute them only from current rendered running Agents mount slots, active Agents visibility, and runtime body bounds so stale tabs, sleeping/missing sessions, hidden leaves, and inactive tabs cannot retain or fabricate native terminal views.
 
-        CDXC:GPUTerminalSurfaceLifecycle 2026-06-22-21:17:
+        CDXC:Terminal 2026-06-22-21:17:
         Host sync feeds a runtime-only native-view lifecycle boundary. Waiting decisions stay inert until the App-owned host view exists for an exact `NeedsRealNativeView` plan, and the lifecycle state must never be logged, persisted, represented by fallback handles, or backed by overlapping hit-test regions.
 
-        CDXC:GPUTerminalSurfaceHost 2026-06-22-21:27:
+        CDXC:Terminal 2026-06-22-21:27:
         Active Agents mode is the visibility gate for terminal host reconciliation. A render-start bounds clear while Agents is visible should only mark the current slot as awaiting this frame's body bounds; switching away from Agents or losing the current running slot still clears stale host and lifecycle state through the normal detach path.
 
-        CDXC:GPUTerminalNativeView 2026-06-22-22:59:
+        CDXC:Terminal 2026-06-22-22:59:
         The App owns one runtime host NSView per eligible visible Agents slot. Host sync may create each normal child only after a matching `NeedsRealNativeView` lifecycle decision and must drop only stale slot-owned views after surfaces are released; Ghostty surface focus and AppKit first-responder handoff are mirrored by the focused-slot sync path, while event routing, logging, persistence, and fallback surfaces remain out of scope.
 
-        CDXC:GPUTerminalNativeView 2026-06-22-22:59:
+        CDXC:Terminal 2026-06-22-22:59:
         Same-slot bounds changes for the App-owned host view may execute only a frame update after owner reconciliation proves the lifecycle real-view handle still matches that owned child. Visibility, Ghostty focus, and AppKit first-responder focus each use separate bounded helpers; keyboard/mouse event translation, process lifecycle, logging, persistence, overlays, and hit-test routing remain out of scope.
 
-        CDXC:GPUTerminalGhosttySurfaceConfig 2026-06-22-22:17:
+        CDXC:Terminal 2026-06-22-22:17:
         Prepare runtime GhosttySurfaceConfigRequest state after App-owned host-view reconciliation, using that real owned NSView handle and the current GPUI window scale. Keep the request out of persistence/logging and never synthesize fallback hosts, overlays, hidden hit regions, or rerouted input.
 
-        CDXC:GPUTerminalGhosttySurface 2026-06-22-22:59:
+        CDXC:Terminal 2026-06-22-22:59:
         Consume prepared requests for every App-owned host NSView backing a current visible running Agents slot. Preserve each same-slot surface across frame updates, resize it from exact body bounds and current scale, show each host only after surface creation succeeds, mirror shell focus onto mounted Agents Ghostty surfaces and their AppKit host first responder, and drop/hide stale surfaces before releasing host views; command/cwd/env lifecycle, keyboard/mouse event translation, command-pane terminals, fallbacks, persistence, logging, overlays, hidden hit regions, and hit-test routing remain out of scope.
 
-        CDXC:GPUITerminalRuntimeIdentity 2026-06-22-23:24:
+        CDXC:SessionIdentity 2026-06-22-23:24:
         Runtime session ids are reconciled from shell `TerminalSessionId` before terminal host and Ghostty surface sync. The shell id remains the persisted layout identity across moves/splits/restore, while the runtime id is private app-process state that prunes when shell sessions disappear and must never be serialized or used as a title.
 
-        CDXC:GPUITerminalStartupBoundary 2026-06-22-23:50:
+        CDXC:Terminal 2026-06-22-23:50:
         Host sync also refreshes runtime-only startup candidates for visible selected Mounting sessions before any Running-only surface work. This creates no process, no fake success, no mount slot, no placeholder overlay, no persistent runtime field, and no log entry; Ready/Failed results must cross the explicit startup result boundary later.
 
-        CDXC:GPUITerminalStartupGeometry 2026-06-23-00:10:
+        CDXC:Terminal 2026-06-23-00:10:
         Startup body geometry is pruned before coordinator sync and never feeds the Running-only host path by itself. Pending startup records may know only whether an exact current Mounting body bounds/scale record exists; real mount slots, Running AppKit host views, and Ghostty owners become available only through the later ready handoff that transfers existing startup ownership.
 
-        CDXC:GPUITerminalStartupLaunchPlan 2026-06-23-00:22:
+        CDXC:Terminal 2026-06-23-00:22:
         Startup launch plans are derived after pending Mounting records refresh and before Running-only host reconciliation. This keeps future launch readiness tied to active Agents visibility, matching runtime/session identity, and exact startup body geometry while preventing Mounting plans alone from creating `AgentsTerminalBodyMountSlotId` Running host state, Ghostty surfaces, process launches, logs, persistence, or Ready/Failed results.
 
-        CDXC:GPUITerminalStartupNativeHost 2026-06-23-00:32:
+        CDXC:Terminal 2026-06-23-00:32:
         Mounting may now prepare a hidden startup host/config request boundary from current launch plans, but that state is startup-only and runtime-only. It must stay separate from Running host/surface maps, remain hidden/unfocused, accept launch payloads only from the explicit runtime source boundary, and disappear with stale visibility, selection, lifecycle state, shell session, or runtime identity.
 
-        CDXC:GPUITerminalStartupGhosttySurface 2026-06-23-03:33:
+        CDXC:Terminal 2026-06-23-03:33:
         Startup config requests may now create startup-owned Ghostty surfaces only inside the startup boundary. The startup surface map is keyed by `AgentsTerminalStartupBodySlotId`, preserves only through same-runtime geometry gaps, and may feed the Running `agents_terminal_ghostty_surfaces` map only through the exact ready handoff that transfers ownership without dropping or recreating the process.
 
-        CDXC:GPUITerminalStartupHandoff 2026-06-23-04:25:
+        CDXC:Terminal 2026-06-23-04:25:
         Ready startup metadata must be consumed before Running host reconciliation so the current Mounting tab can become Running with its existing hidden host and Ghostty surface already re-owned by the Running maps. The handoff seeds Running body bounds from the startup launch plan and then lets the existing Running sync resize, show, and focus through normal mount-slot paths.
 
-        CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+        CDXC:Terminal 2026-06-23-19:41:
         Sleeping wake and popped-out reattach use a separate parked-owner path before Running host reconciliation. Only an exact parked host/surface owner plus current non-startup Mounting body geometry may become Running; this path must not enter startup candidates, hidden startup hosts, launch payloads, completion intents, runtime-id rotation, or fallback surface creation.
 
-        CDXC:GPUITerminalGhosttyClose 2026-06-23-04:49:
+        CDXC:Terminal 2026-06-23-04:49:
         Confirmed close callbacks are consumed before Running host reconciliation computes current slots. Removing the shell session first lets the existing hide/detach path drop the matching Ghostty surface before releasing the AppKit host, while confirmation-needed callbacks become runtime-only pending close-confirm state for the family-scoped normal-layout UI surface.
 
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-05:39:
+        CDXC:CommandPane 2026-06-23-05:39:
         Running Agents close-confirm sync happens before confirmed-close consumption and process-exit polling so a confirmation-needed callback cannot delete shell state, and any stale pending prompt identity is pruned as soon as the current mount slot or surface owner no longer matches.
 
-        CDXC:GPUITerminalProcessExit 2026-06-23-05:30:
+        CDXC:Terminal 2026-06-23-05:30:
         Mounted Running process-exited polling follows confirmed-close consumption and precedes Running host reconciliation. Exited sessions are removed from the workspace model first, runtime ids are reconciled immediately afterward, and stale hosts/surfaces detach through the normal render/bounds path without another Ghostty close request.
 
-        CDXC:GPUTerminalGhosttySurface 2026-06-22-22:39:
+        CDXC:Terminal 2026-06-22-22:39:
         Ghostty surfaces borrow the App-owned host NSView through the C config, so any host detach/replacement must drop the surface before the AppKit owner releases the child view. Keep this as an explicit pre-reconcile step instead of relying on struct field drop order during runtime slot changes.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-26-00:29:
+        CDXC:KeepAwake 2026-06-26-00:29:
         Agents startup ready handoff, parked-owner reattach, confirmed close, and process-exit cleanup can change whether an existing safe `AgentTerminalActivity::Working` row counts as running. Compare the working-session count across this lifecycle boundary and resync Keep Awake automation only from app-owned model state.
         */
         let working_session_count_before =
@@ -119,7 +119,7 @@ impl GhostexGpuiApp {
                 &self.agents_terminal_runtime_sessions,
                 &self.agents_terminal_startup_body_slot_geometries,
             );
-        // CDXC:GPUITerminalGpuiEngine 2026-07-11: every startup launch plan
+        // CDXC:Terminal 2026-07-11: every startup launch plan
         // (new terminals, restored sessions, splits, retry, and materialize)
         // uses the GPUI-composited engine on every OS. The native hidden-host
         // implementation remains compiled but receives no runtime work.
@@ -243,7 +243,7 @@ impl GhostexGpuiApp {
                     continue;
                 }
                 /*
-                CDXC:GPUIWorkspaceSessionReattach 2026-07-10:
+                CDXC:Workarea 2026-07-10:
                 A restored gxserver-backed Agents tab is persisted as Running
                 presentation state, but its process-local attach payload and
                 terminal owner do not survive an app restart. Match the macOS
@@ -499,7 +499,7 @@ impl GhostexGpuiApp {
                 .contains_key(&completion_intent.runtime_session_id);
         if changed || exact_completion_intent_pruned {
             /*
-            CDXC:GPUITerminalStartupCompletion 2026-06-23-03:51:
+            CDXC:Terminal 2026-06-23-03:51:
             Applying Failed or stale-pruning an exact current startup result may retire startup-owned runtime state without creating Running ownership. Ready promotion on macOS must use the startup handoff path above so host/surface ownership moves before cleanup instead of dropping the process and recreating it later.
             */
             #[cfg(target_os = "macos")]
@@ -694,7 +694,7 @@ impl GhostexGpuiApp {
                     self.agents_terminal_ghostty_surfaces.get(&slot_id),
                 ) {
                     /*
-                    CDXC:GPUITerminalNativeKeyBridge 2026-06-24-20:58:
+                    CDXC:Terminal 2026-06-24-20:58:
                     The AppKit key bridge is registered only after the exact Running Agents host view and Ghostty surface both exist. The registry carries only process-local pointers and function slots for synchronous key forwarding; it must not store typed text, terminal content, commands, paths, titles, logs, or shell state.
                     */
                     terminal_ghostty_surface::register_native_key_target(

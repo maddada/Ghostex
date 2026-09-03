@@ -17,7 +17,7 @@ private final class LidSleepHelper: NSObject, NSXPCListenerDelegate, GhostexLidS
   override init() {
     super.init()
     /**
-     CDXC:TitlebarKeepAwake 2026-05-28-19:28:
+     CDXC:KeepAwake 2026-05-28-19:28:
      The privileged helper starts from launchd as root and must never preserve a
      stale lid-close policy after reboot, helper restart, or app crash. Reset
      `disablesleep` before accepting leases, then only enable it while Ghostex
@@ -106,7 +106,7 @@ private final class LidSleepHelper: NSObject, NSXPCListenerDelegate, GhostexLidS
 
   private func applyDisableSleep(_ enabled: Bool) -> (ok: Bool, error: String?) {
     /**
-     CDXC:TitlebarKeepAwake 2026-05-28-19:28:
+     CDXC:KeepAwake 2026-05-28-19:28:
      The root helper must not run arbitrary shell commands. Keep the only
      privileged operation hardcoded to `/usr/bin/pmset -a disablesleep 0|1`.
      */
@@ -179,7 +179,7 @@ private final class LidSleepHelper: NSObject, NSXPCListenerDelegate, GhostexLidS
 
   private func isValidClientCode(_ code: SecCode, requirementString: String) -> Bool {
     /**
-     CDXC:TitlebarKeepAwake 2026-05-28-20:18:
+     CDXC:KeepAwake 2026-05-28-20:18:
      The root helper accepts XPC clients only when their live code satisfies the
      Ghostex requirement captured during administrator-approved installation.
      Bundle id and path checks remain as additional narrowing, not the primary

@@ -6,7 +6,7 @@ const sessionCardsCssSource = readFileSync(new URL('./styles/session-cards.css',
 describe('session card icon source', () => {
   test('positions the floating pin button from the leading icon anchor', () => {
     /*
-     * CDXC:PinnedSessions 2026-06-30-00:34:
+     * CDXC:Sessions 2026-06-30-00:34:
      * The pin affordance is a separate IconPin button, not a replacement for
      * the agent/tag slot. It is anchored one icon-width to the left and remains
      * hidden on unpinned rows unless the pointer is over that exact hitbox.
@@ -32,7 +32,7 @@ describe('session card icon source', () => {
 
   test('keeps tagged session leading icons mutually exclusive', () => {
     /*
-     * CDXC:SidebarSessionAgentIcons 2026-06-30-00:12:
+     * CDXC:Icons 2026-06-30-00:12:
      * Tagged rows render both the tag glyph and the hidden agent glyph so hover
      * can swap identities without layout churn. CSS must keep the tag colored
      * and hide the underlying agent at rest, then hide the tag on pointer hover.

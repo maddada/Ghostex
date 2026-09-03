@@ -15,7 +15,7 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('reference sidebar section header layout source', () => {
   test('applies native left inset to primary sidebar nav buttons', () => {
     /*
-     * CDXC:SidebarReferenceBounds 2026-06-22-01:11:
+     * CDXC:Sidebar 2026-06-22-01:11:
      * The macOS sidebar left inset must be 5px beyond the shared reference
      * layout, and the top Agents Hub, Automations, Mobile, and Search buttons
      * must use the native primary-nav bleed so their row surfaces move with the
@@ -50,7 +50,7 @@ describe('reference sidebar section header layout source', () => {
 
   test('collapses Quick and Projects labels when hover actions become visible', () => {
     /*
-     * CDXC:SidebarHeaderActions 2026-06-17-23:21:
+     * CDXC:Sidebar 2026-06-17-23:21:
      * Quick and Projects section labels should shorten like Search instead of
      * painting underneath their hover action buttons in the narrow native
      * sidebar.
@@ -65,7 +65,7 @@ describe('reference sidebar section header layout source', () => {
       ".reference-sidebar-section-row[data-reference-section='projects']"
     );
     expect(sectionRowRule).toContain('--reference-sidebar-section-actions-max-width: 132px;');
-    expect(sectionRowRule).toContain('CDXC:SidebarHeaderActions 2026-06-17-23:21');
+    expect(sectionRowRule).toContain('CDXC:Sidebar 2026-06-17-23:21');
 
     const titleRule = sourceBetween(
       groupPanelsSource,

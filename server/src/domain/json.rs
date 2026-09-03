@@ -131,7 +131,7 @@ pub(crate) fn stringify_domain_json_field(field: &str, value: &Value) -> DomainR
 
 fn domain_json_text_length(text: &str) -> usize {
     /*
-    CDXC:GxserverDomainState 2026-06-22-05:22:
+    CDXC:StateSync 2026-06-22-05:22:
     TypeScript enforces the domain JSON limit with JavaScript string length, which counts UTF-16 code units rather than UTF-8 bytes. Match that boundary so non-ASCII project/session metadata is not rejected earlier in Rust.
     */
     text.encode_utf16().count()

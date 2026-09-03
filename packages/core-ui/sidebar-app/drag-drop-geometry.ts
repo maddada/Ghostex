@@ -347,7 +347,7 @@ export function resolveSessionDropTargetFromPoint(
 ) {
   const point = getClientPoint(nativeEvent);
   /*
-   * CDXC:SidebarDragDrop 2026-06-19-11:12:
+   * CDXC:Sidebar 2026-06-19-11:12:
    * Prefer current pointer hit testing over dnd-kit's reported target so the
    * insertion line follows the hovered row midpoint continuously, including
    * the exact center of a session row.
@@ -375,7 +375,7 @@ export function resolveSessionDropTargetFromPoint(
     }
 
     /*
-     * CDXC:SidebarDragDrop 2026-07-02-13:05:
+     * CDXC:Sidebar 2026-07-02-13:05:
      * When releasing here would keep the session exactly where it started,
      * suppress the insertion line entirely instead of falling through to a
      * different candidate, so no line is shown for a no-op drop.
@@ -454,13 +454,13 @@ export function resolvePinnedSessionDropTargetFromPoint(
   }
 
   /*
-   * CDXC:PinnedSessions 2026-05-28-14:29:
+   * CDXC:Sessions 2026-05-28-14:29:
    * Pinned session drag feedback should be a stable insertion line within the
    * pinned partition. Base the active slot on pinned row midpoints only, not on
    * whichever full-project or unpinned-row droppable dnd-kit reports while the
    * pointer crosses row gaps.
    *
-   * CDXC:SidebarDragDrop 2026-06-19-11:12:
+   * CDXC:Sidebar 2026-06-19-11:12:
    * The exact midpoint belongs to the lower half so a session row always shows
    * an insertion line: center/down is after, center/up is before.
    */
@@ -486,7 +486,7 @@ export function resolvePinnedSessionDropTargetFromPoint(
   })();
 
   /*
-   * CDXC:SidebarDragDrop 2026-07-02-13:05:
+   * CDXC:Sidebar 2026-07-02-13:05:
    * Pinned reorder also hides its insertion feedback when releasing would keep
    * the pinned row in its current slot.
    */
@@ -583,7 +583,7 @@ export function createRemoteProjectListScopeId(remoteMachineId: string): string 
 }
 
 /*
- * CDXC:ProjectUngroupDrop 2026-07-23:
+ * CDXC:Projects 2026-07-23:
  * A collection-only Projects or Remote Machine section has no ungrouped row
  * whose collection id can resolve to undefined. Give each section a real
  * normal-flow end zone, then resolve it only for a grouped project from that
@@ -636,7 +636,7 @@ export function moveProjectGroupFamilyToEnd(
 }
 
 /*
- * CDXC:CollectionReorder 2026-07-21:
+ * CDXC:Projects 2026-07-21:
  * Collection drags use feedback "none", so dnd-kit's rect-overlap collision
  * never reports a target (the source shape never leaves its slot). Resolve the
  * insertion boundary from the pointer against the local collection panels'
@@ -737,7 +737,7 @@ export function resolveGroupDropTargetFromPoint(
   targetData: ReturnType<typeof getSidebarDropData>,
   sourceData: Extract<ReturnType<typeof getSidebarDropData>, { kind: 'group' }> | undefined,
   /*
-   * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
+   * CDXC:Projects 2026-07-30:
    * How "this drop would change nothing" is decided. V1's default answer runs the
    * physical project-with-worktrees move; grouped V2 passes its own, because its
    * ids are LOGICAL rows and the two moves can disagree about which boundaries
@@ -748,7 +748,7 @@ export function resolveGroupDropTargetFromPoint(
 ): SidebarGroupDropTarget | undefined {
   const point = getClientPoint(nativeEvent);
   /*
-   * CDXC:ProjectReorder 2026-07-02-13:05:
+   * CDXC:Projects 2026-07-02-13:05:
    * The insertion line was dancing because dnd-kit's rect-overlap target could
    * disagree with the pointer position, and because the same boundary could be
    * reported as "after A" or "before B", which draw in different spots. While
@@ -865,7 +865,7 @@ export function getSidebarSessionDropTargetFromDropData(
     const bounds = sessionElement.getBoundingClientRect();
     const relativeY = point?.y ?? bounds.top + bounds.height / 2;
     /*
-     * CDXC:SidebarDragDrop 2026-06-19-11:12:
+     * CDXC:Sidebar 2026-06-19-11:12:
      * Dnd-kit may report a broad target while the pointer is around a row
      * midpoint. Resolve the explicit target with the same center/down-after
      * rule as point-based row hit testing so the line stays visible.
@@ -912,7 +912,7 @@ export function getSidebarGroupDropTargetFromDropData(
   }
 
   /*
-   * CDXC:ProjectReorder 2026-05-22-22:18:
+   * CDXC:Projects 2026-05-22-22:18:
    * Dnd-kit target data can point at an expanded project container. Use the
    * same header-row bounds as point-based hit testing so the drop line does not
    * jump between above and below while the pointer moves through session rows.
@@ -933,12 +933,12 @@ export function isNoOpGroupDropTarget(
   groupsById: SidebarProjectGroupLookup
 ): boolean {
   /*
-   * CDXC:ProjectReorder 2026-05-22-22:18:
+   * CDXC:Projects 2026-05-22-22:18:
    * Do not show an insertion line for adjacent before/after targets that would
    * leave the project order unchanged on drop. The preview should only mark
    * committed position changes.
    *
-   * CDXC:WorktreeProjectOrder 2026-05-25-12:38:
+   * CDXC:Worktrees 2026-05-25-12:38:
    * Worktree projects cannot be dropped outside their main-project family, and
    * a main-project drag is computed as a family move so its worktrees stay
    * directly underneath it in the same order.
@@ -1153,7 +1153,7 @@ export function getProjectCollectionDragMetrics(
   collectionId: string
 ): { left: number; top: number; width: number } | undefined {
   /*
-   * CDXC:CollectionDragPreview 2026-07-22:
+   * CDXC:Projects 2026-07-22:
    * The same collection can render once locally and once per remote machine
    * section, so prefer the dnd-kit source element (the grabbed section) over a
    * document query that could match another instance. The section rect is used

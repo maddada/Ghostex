@@ -213,7 +213,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { id: 'toggleSidebarCollapsed', kind: 'toggleSidebarCollapsed' },
     /**
-     * CDXC:SidebarCollapse 2026-06-12-02:23:
+     * CDXC:Sidebar 2026-06-12-02:23:
      * Cmd+B should completely collapse or expand the native sidebar chrome. Keep this separate from sidebar placement so the same shortcut never moves the sidebar between left and right sides.
      */
     defaultKey: 'cmd+b',
@@ -224,7 +224,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { id: 'toggleCompanionPane', kind: 'toggleCompanionPane' },
     /**
-     * CDXC:ProjectEditorCompanion 2026-07-29-05:03:
+     * CDXC:CodeEditor 2026-07-29-05:03:
      * Cmd+Option+B toggles the project-editor companion independently from the main app sidebar. Collapsing transfers focus to the active Code, Browser, Kanban, Automate, or Docs pane; expanding restores and focuses the companion.
      */
     defaultKey: 'cmd+alt+b',
@@ -235,7 +235,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { id: 'moveSidebar', kind: 'moveSidebar' },
     /**
-     * CDXC:SidebarCollapse 2026-06-12-02:23:
+     * CDXC:Sidebar 2026-06-12-02:23:
      * Sidebar side switching remains configurable, but it must be unassigned by default now that Cmd+B is the complete sidebar collapse toggle.
      */
     defaultKey: '',
@@ -286,7 +286,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * CDXC:Hotkeys 2026-06-06-04:36:
      * Option+1..5 are default workarea view switchers for the five hotkey-backed views: Agents, Source, Browser, Kanban, Docs. Keep these as named actions instead of overloading group/session slots so AppKit, Settings, and sidebar DOM dispatch switch the same project surface.
      *
-     * CDXC:Manage 2026-06-20-04:36:
+     * CDXC:Docs 2026-06-20-04:36:
      * Manage is a first-party project workarea beside Kanban, so it needs a named configurable hotkey action instead of sharing another mode's shortcut or command id.
      *
      * CDXC:Docs 2026-06-28-06:24:
@@ -334,7 +334,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { focusedPaneAction: 'closeAfterDone', id: 'closeAfterDone', kind: 'focusedPaneAction' },
     /**
-     * CDXC:FocusedSessionActions 2026-06-19-15:43:
+     * CDXC:FocusMode 2026-06-19-15:43:
      * Focused-session commands that already exist in native pane menus should also be configurable hotkey actions and command-palette rows. Close After Done starts unassigned so adding discoverability does not introduce a new default shortcut.
      */
     defaultKey: '',
@@ -407,7 +407,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       terminalToolbarAction: 'exportTranscript',
     },
     /**
-     * CDXC:ExportTranscript 2026-08-20:
+     * CDXC:TranscriptExport 2026-08-20:
      * Handoff / Export writes the focused agent session's conversation to a
      * markdown file on the machine that owns the transcript, then offers to
      * seed a new conversation from it.
@@ -435,7 +435,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       terminalToolbarAction: 'toggleChatView',
     },
     /**
-     * CDXC:SessionChatView 2026-07-31:
+     * CDXC:SessionChat 2026-07-31:
      * Session Chat swaps the focused agent terminal's pane body with the shared
      * chat surface for supported transcript agents (claude/openclaude/codex/grok).
      * Alt+G keeps the chat toggle compact, and the same action id must always
@@ -450,13 +450,13 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { id: 'openFindPrompts', kind: 'openFindPrompts' },
     /**
-     * CDXC:AgentHistorySearch 2026-08-20:
+     * CDXC:PromptSearch 2026-08-20:
      * Find is the GUI for `gx f`: it swaps the focused pane for a searchable
      * list of every prompt this machine has ever sent to an agent. It is
      * dispatched natively like Chat View, so the same id always toggles back
      * out of Find even while the terminal is hidden behind it.
      *
-     * CDXC:AgentHistorySearch 2026-08-24:
+     * CDXC:PromptSearch 2026-08-24:
      * Cmd+Shift+F replaces Alt+F as the default because prompt search is a
      * search-everywhere habit. The chord deliberately stays off the Code pane:
      * openFindPrompts is not in the Source-workarea hotkey allowlist, so a
@@ -525,7 +525,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       kind: 'focusedPaneAction',
     },
     /**
-     * CDXC:FocusedSessionActions 2026-06-19-15:43:
+     * CDXC:FocusMode 2026-06-19-15:43:
      * Wake is the inverse focused-session lifecycle command. Keep it unassigned by default but available in Hotkeys and command palette so sleeping focused tabs can be restored without a row-specific sidebar click.
      */
     defaultKey: '',
@@ -540,7 +540,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       kind: 'focusedPaneAction',
     },
     /**
-     * CDXC:FocusedSessionActions 2026-06-19-15:43:
+     * CDXC:FocusMode 2026-06-19-15:43:
      * Close is already available from pane/tab chrome and Cmd+W, but it should be bindable and runnable from the command palette without claiming a second default shortcut.
      */
     defaultKey: '',
@@ -573,7 +573,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     title: 'Next Group',
   },
   /**
-   * CDXC:NavigationHistory 2026-08-19:
+   * CDXC:Navigation 2026-08-19:
    * Back/Forward walk the chronological trail of previously active sessions and
    * projects — where you have BEEN, not where a session sits in an ordered list.
    * That is why they are not bound to the bracket chords beside them: Cmd+[ / ]
@@ -647,7 +647,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       projectIndex,
     },
     /**
-     * CDXC:ProjectHotkeys 2026-06-15-11:12:
+     * CDXC:Hotkeys 2026-06-15-11:12:
      * Cmd+Ctrl+1..9 are project jump shortcuts, not workspace-group shortcuts.
      * Resolve these against the Projects rows as shown in the sidebar so numbered project navigation follows the same ordering model users can see.
      */
@@ -675,7 +675,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       slotNumber,
     },
     /**
-     * CDXC:ActionsHotkeys 2026-05-17-01:18:
+     * CDXC:Hotkeys 2026-05-17-01:18:
      * Action hotkeys are positional by the Actions settings list, not tied to
      * command ids, so users can reorder actions without rebinding the first
      * five launcher shortcuts.
@@ -689,7 +689,7 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   {
     action: { direction: 'horizontal', id: 'splitMore', kind: 'splitFocusedPane' },
     /**
-     * CDXC:NativeSplits 2026-05-10-18:30
+     * CDXC:Workarea 2026-05-10-18:30
      * Cmd+D creates a real terminal session beside the focused pane instead of
      * only increasing the visible split count. This matches terminal split
      * muscle memory and lets users immediately send work into the new pane.
@@ -787,7 +787,7 @@ function readLegacyProjectJumpHotkey(source: Record<string, unknown>, actionId: 
   }
 
   /**
-   * CDXC:ProjectHotkeys 2026-06-15-11:12:
+   * CDXC:Hotkeys 2026-06-15-11:12:
    * Existing users may have customized or cleared the old Focus Group 1..5 bindings.
    * When those action ids become Jump to Project 1..5, preserve the persisted chord or explicit blank value instead of silently restoring the default.
    */
@@ -864,7 +864,7 @@ function normalizeHotkeyChordText(chord: string): string {
   }
   if (parts.includes('shift') && SHIFTED_DIGIT_KEYS[key]) {
     /**
-     * CDXC:ActionsHotkeys 2026-05-26-13:20:
+     * CDXC:Hotkeys 2026-05-26-13:20:
      * Browser/WebKit keydown events report Ctrl+Shift+1 as "ctrl+shift+!" while
      * AppKit and Settings store the same physical action shortcut as "ctrl+shift+1".
      * Normalize shifted digit glyphs at the shared matcher so action-slot

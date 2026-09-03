@@ -68,13 +68,13 @@ export function PortlessSetupModal({
   const dismiss = mode === 'firstSetup' ? onPostpone : onCancel;
 
   /*
-   * CDXC:PortlessSetupModal 2026-06-23-13:42:
+   * CDXC:Portless 2026-06-23-13:42:
    * The Portless setup prompt is an app-modal React dialog, not an AppKit
    * alert. Buttons send only action/protocol/request-id enums or booleans to
    * native-sidebar so the logged modal command boundary never receives the
    * user's full settings object, paths, domains, URLs, or project metadata.
    *
-   * CDXC:UnifiedAppModal 2026-08-26:
+   * CDXC:AppModal 2026-08-26:
    * Portless setup now composes the shared AppModalShell, so its chrome comes
    * from `.gx-app-modal`. Keep the `portless-setup-modal-shadcn` marker class:
    * apps/desktop/views/modal-host.tsx measures that selector for the one-shot

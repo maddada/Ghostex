@@ -135,7 +135,7 @@ button {
 }
 
 /*
- * CDXC:NavigationHistory 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * Back/Forward sit right of the active project name. Disabled is a real
  * `disabled` button, not a class, so keyboard and assistive tech see the same
  * state the dimming shows; the tooltip lives on the wrapping span because a

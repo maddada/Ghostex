@@ -52,7 +52,7 @@ export function SidebarStoryHarness({ message, onWorkspaceChange }: SidebarStory
 
   useEffect(() => {
     /*
-     * CDXC:GPUIProjectSidebarBridge 2026-06-22-20:02:
+     * CDXC:CefRuntime 2026-06-22-20:02:
      * Storybook owns the current explicit sidebar workspace state. Let embeds observe that state directly so GPUI can post active-project changes without deriving project identity from fixture names, sidebar labels alone, paths, or logs.
      */
     workspaceRef.current = workspace;
@@ -79,7 +79,7 @@ export function SidebarStoryHarness({ message, onWorkspaceChange }: SidebarStory
   return (
     <div
       /*
-       * CDXC:SidebarStorybook 2026-05-05-05:29
+       * CDXC:DesignSystem 2026-05-05-05:29
        * Native sidebar stories must not insert an extra block between
        * .native-sidebar-main and SidebarApp. The real app renders the project
        * header and stack as direct flex children, and scroll/overflow bugs only

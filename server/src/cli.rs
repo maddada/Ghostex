@@ -31,10 +31,10 @@ pub async fn run_from_env() -> Result<()> {
 }
 
 /*
-CDXC:GxserverCli 2026-06-14-20:37:
+CDXC:Cli 2026-06-14-20:37:
 The Rust CLI intentionally keeps the TypeScript command surface and --json behavior for start, stop, stop-all, and status so app/CLI opt-in can swap binaries without changing client command construction.
 
-CDXC:GxserverCli 2026-06-22-04:47:
+CDXC:Cli 2026-06-22-04:47:
 `gxserver status` reports any reachable same-product, same-protocol daemon as running; build identity is a start-time replacement decision. `gxserver start` must match TypeScript by requesting control-plane shutdown for a running build-identity mismatch instead of returning a Rust-only portConflict status.
 */
 pub async fn run(args: Vec<String>) -> Result<()> {
@@ -527,7 +527,7 @@ fn parse_cli_args(args: &[String]) -> ParsedCliArgs {
 }
 
 /*
-CDXC:AgentSkillsCli 2026-06-19-18:44:
+CDXC:AgentSkills 2026-06-19-18:44:
 Agent-skill commands must treat known value-less switches such as --json as flags even when a positional skill name follows, so `gxserver agent-skills status --json ghostex-browser-use` keeps the skill name in rest while enabling JSON output.
 */
 fn is_value_less_cli_flag(key: &str) -> bool {

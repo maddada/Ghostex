@@ -33,7 +33,7 @@ function createFirstLaunchSetupStorage(initialValue?: string, highlightedFeature
 describe('first launch setup visible settings', () => {
   test('exposes keep awake when lid closed on the first-launch defaults step', () => {
     /**
-     * CDXC:FirstLaunchPreferences 2026-05-31-07:10:
+     * CDXC:Onboarding 2026-05-31-07:10:
      * ZMU-71 requires the lid-close keep-awake preference on the first-time
      * defaults page so new installs can opt in before using Keep Awake.
      */
@@ -45,7 +45,7 @@ describe('first launch setup visible settings', () => {
 
   test('exposes title generation agent settings on the first-launch defaults step', () => {
     /**
-     * CDXC:FirstLaunchPreferences 2026-06-04-21:02:
+     * CDXC:Onboarding 2026-06-04-21:02:
      * The first-time modal must expose the same first-prompt title-generation
      * agent selector as Settings so new installs can choose Codex, Cursor,
      * Claude, Grok Build, or Custom before automatic session naming runs.
@@ -59,7 +59,7 @@ describe('first launch setup visible settings', () => {
 
   test('treats legacy boolean seen markers as older first-launch setup revisions', () => {
     /**
-     * CDXC:FirstLaunchSetup 2026-06-07-12:32:
+     * CDXC:Onboarding 2026-06-07-12:32:
      * Users who saw the pre-refresh first-time modal stored the old boolean
      * marker. The refreshed modal must open once for those installs, then write
      * the current revision so the setup flow does not repeat every launch.
@@ -82,7 +82,7 @@ describe('first launch setup visible settings', () => {
 
   test('treats the pre-shortened setup revision as stale', () => {
     /**
-     * CDXC:FirstLaunchSetup 2026-06-18-02:29:
+     * CDXC:Onboarding 2026-06-18-02:29:
      * The shortened Welcome / Agent Hooks / Bundled Agent Skills flow should
      * open once even for installs that stored the previous setup revision.
      */
@@ -93,7 +93,7 @@ describe('first launch setup visible settings', () => {
 
   test('tracks highlighted features as a separate update announcement revision', () => {
     /**
-     * CDXC:HighlightedFeatures 2026-06-16-18:55:
+     * CDXC:Onboarding 2026-06-16-18:55:
      * Existing users may already have the current first-launch setup marker, so
      * Highlighted Features needs its own revision marker to show once after
      * update without reopening the setup flow on later launches.

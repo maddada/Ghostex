@@ -15,10 +15,10 @@ pub(crate) fn confirmed_agents_terminal_ghostty_surface_close_slots(
     >,
 ) -> Vec<AgentsTerminalBodyMountSlotId> {
     /*
-    CDXC:GPUITerminalGhosttyClose 2026-06-23-04:49:
+    CDXC:Terminal 2026-06-23-04:49:
     Confirmed Ghostty close callbacks are consumed only for exact current Running Agents mount slots. Return slot ids without mutating shell state so the app can route mapped gxserver tabs through sidebar-owned lifecycle while unmapped tabs still close through `WorkspaceModel::close_tab`.
 
-    CDXC:GPUITerminalCloseConfirm 2026-06-23-05:39:
+    CDXC:CommandPane 2026-06-23-05:39:
     Confirmation-needed callbacks are consumed into the Agents pending close-confirm map before this confirmed-close path runs. This path may remove shell state only when the current mounted owner still matches the slot and runtime identity, and it clears only the matching pending entry after the existing close callback is consumed.
     */
     let mut confirmed_slots = Vec::new();
@@ -76,7 +76,7 @@ pub(crate) fn consume_exited_agents_terminal_ghostty_surfaces(
     >,
 ) -> bool {
     /*
-    CDXC:GPUITerminalProcessExit 2026-06-23-05:30:
+    CDXC:Terminal 2026-06-23-05:30:
     Mounted Running Agents process-exit cleanup mirrors native policy by deleting the shell session through `WorkspaceModel::close_tab` without asking Ghostty to close again. Eligibility is limited to exact current Running mount slots with matching process-local runtime ids, and startup maps remain outside this helper so Mounting/Failed startup state cannot be changed by Running process polling.
     */
     let mut changed = false;
@@ -114,10 +114,10 @@ pub(crate) fn consume_confirmed_command_terminal_ghostty_surface_closes(
     >,
 ) -> bool {
     /*
-    CDXC:GPUICommandTerminalGhosttyClose 2026-06-23-05:21:
+    CDXC:Terminal 2026-06-23-05:21:
     Confirmed command Ghostty close callbacks are consumed before command host reconciliation and may remove only the exact current command mount slot through `CommandPaneModel::close_session`. Confirmation-needed callbacks stay in command-only pending runtime state for the normal-layout command close-confirm surface, and this path must not touch Agents runtime maps, startup maps, shell-state JSON, logs, runtime ids, commands, paths, env, output, pids, tty names, or terminal content.
 
-    CDXC:GPUITerminalCloseConfirm 2026-06-23-05:39:
+    CDXC:CommandPane 2026-06-23-05:39:
     Confirmed command closes clear only the matching command pending close-confirm entry after the existing callback path removes shell state. They must not infer confirmation from the pending map or remove command sessions from confirm/cancel actions directly.
     */
     let mut changed = false;
@@ -147,13 +147,13 @@ pub(crate) fn consume_exited_command_terminal_ghostty_surfaces(
     >,
 ) -> CommandTerminalProcessExitCleanup {
     /*
-    CDXC:GPUICommandTerminalProcessExit 2026-06-23-05:30:
+    CDXC:Terminal 2026-06-23-05:30:
     Mounted command process-exit cleanup is command-pane-only and removes only exact current command body slots through `CommandPaneModel::close_session`. Already-exited surfaces must not receive a Ghostty close request, and this helper cannot touch Agents workspace/runtime/startup maps or command close-confirm callback state.
 
-    CDXC:GPUICommandPane 2026-06-25-11:11:
+    CDXC:CommandPane 2026-06-25-11:11:
     Mapped Action sessions that disappear through process-exit cleanup must also finish sidebar button feedback before the command tab is removed. The completion record is derived only from live command ownership plus the matching status-file stamp when available; missing or non-idle status stamps become error feedback so the reused SidebarApp cannot keep an orphaned running state.
 
-    CDXC:GPUICommandTerminalProcessExit 2026-06-26-06:28:
+    CDXC:Terminal 2026-06-26-06:28:
     Native `handleNativeSidebarCommandSessionExit` and `cleanupExitedNativeCommandPaneSession` parity requires removing the exact exited Action command tab, then letting the caller's existing command-model prune paths clear stale Delayed Send and Close After Done runtime intents for that tab. Completion records may carry only command id, run id, completed tab ids, exit code, and sound preference; a matching idle status file supplies the exit code, while missing, working, or mismatched status files report error.
     */
     let mut cleanup = CommandTerminalProcessExitCleanup::default();
@@ -189,7 +189,7 @@ pub(crate) fn focused_agents_terminal_surface_mount_slot(
     agents_workspace: &WorkspaceModel,
 ) -> Option<AgentsTerminalBodyMountSlotId> {
     /*
-    CDXC:GPUTerminalGhosttySurfaceFocus 2026-06-22-22:59:
+    CDXC:Terminal 2026-06-22-22:59:
     Real Agents Ghostty surface focus is a runtime decision derived from shell focus only: Agents mode, an AgentsPane focus target, a rendered pane, and that pane's selected Running session. Command pane, Browser/project-editor modes, sleeping or hidden Focus-mode panes, stale panes, and missing sessions must leave every mounted terminal surface unfocused without adding input routing or persisted focus ids.
     */
     if active_mode != TitlebarMode::Agents {
@@ -243,7 +243,7 @@ pub(crate) fn command_terminal_runtime_session_id(
     slot_id: CommandTerminalBodyMountSlotId,
 ) -> AgentsTerminalRuntimeSessionId {
     /*
-    CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+    CDXC:Terminal 2026-06-23-05:03:
     Command-pane surfaces need a process-local owner identity for the shared Ghostty owner, but they must not enter the Agents runtime-session registry or any startup map. Derive this transient id only from the command mount slot and keep it scoped to the command surface owner map.
     */
     const COMMAND_RUNTIME_ID_NAMESPACE: u64 = 0xC000_0000_0000_0000;
@@ -258,7 +258,7 @@ pub(crate) fn command_terminal_runtime_session_id_from_gxserver_key(
     key: &GpuiLocalWorkspaceSessionKey,
 ) -> AgentsTerminalRuntimeSessionId {
     /*
-    CDXC:GPUICommandPaneGxserverAttach 2026-07-04:
+    CDXC:CommandPane 2026-07-04:
     GPUI-engine command terminals use the daemon project/session identity as
     their runtime owner key once gxserver creation succeeds. Keep the value
     process-local and numeric for existing terminal runtime maps, but derive it
@@ -286,7 +286,7 @@ pub(crate) fn command_terminal_runtime_session_id_from_remote_reference(
     reference: &GpuiRemoteAttachSessionReference,
 ) -> AgentsTerminalRuntimeSessionId {
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     A remote Action's command tab has no local daemon identity, so it derives
     its runtime owner from the remote machine/project/session triple instead.
     That keeps the id stable while the tab is moved between command groups —
@@ -323,10 +323,10 @@ pub(crate) fn command_terminal_config_request_with_launch_payload_source(
     terminal_ghostty_surface::GhosttySurfaceConfigRequestError,
 > {
     /*
-    CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:59:
+    CDXC:Terminal 2026-06-27-04:59:
     Command Ghostty config requests may attach launch payloads only after the explicit Action/plain-cwd command source validates a payload for the same current body slot and runtime key. If that explicit payload is invalid, the caller must omit or prune the config request instead of falling back to inferred cwd, command, env, initial input, wait policy, status, titles, labels, paths, shell state, logs, terminal content, or delayed-send state.
 
-    CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:47:
+    CDXC:Terminal 2026-06-27-04:47:
     Config preparation consumes explicit command launch payloads exactly once for the current mount slot. A failed conversion still consumes the payload so stale startup data cannot survive into a remount or be replaced by inferred launch data.
     */
     let launch_payload = launch_payload_source.take_payload_for_mount_slot(slot_id)?;
@@ -347,7 +347,7 @@ pub(crate) fn agents_terminal_config_request_with_launch_payload_source(
     terminal_ghostty_surface::GhosttySurfaceConfigRequestError,
 > {
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-27-13:25:
+    CDXC:FocusRouting 2026-06-27-13:25:
     Local gxserver sidebar attach must not wait behind the Mounting startup card. The first config request for the exact Running Agents mount slot consumes the attach launch payload once; invalid payloads prune that mount request instead of falling back to a blank shell or inferred command.
     */
     let launch_payload =
@@ -363,7 +363,7 @@ pub(crate) fn focused_command_terminal_surface_mount_slot(
     command_pane: &CommandPaneModel,
 ) -> Option<CommandTerminalBodyMountSlotId> {
     /*
-    CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+    CDXC:Terminal 2026-06-23-05:03:
     Command Ghostty focus is mirrored only when shell focus is the command pane and the focused command group has a mounted active session. Agents, Browser, project-editor focus, collapsed panes, inactive command tabs, and missing sessions clear command focus without synthetic input routing.
     */
     if shell_focus != ShellFocusTarget::CommandPane {
@@ -416,13 +416,13 @@ pub(crate) fn focused_sleeping_command_placeholder_wake_target(
     keystroke: &Keystroke,
 ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
     /*
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-25-14:49:
+    CDXC:SessionSleep 2026-06-25-14:49:
     Keyboard wake is scoped to the command pane's focused active tab and only when that command session is parked sleeping. Non-command focus, running command terminals, collapsed/missing groups, and non-alphanumeric keys must not create terminals, reroute input, or mutate shell state.
 
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-25-19:07:
+    CDXC:SessionSleep 2026-06-25-19:07:
     Native key wake belongs to the visible AppKit placeholder first responder. A collapsed command strip may remember command focus, but it has no visible placeholder body, so alphanumeric keys must not wake parked command tabs until the panel is expanded.
 
-    CDXC:GPUICommandSleepingPlaceholder 2026-06-27-04:36:
+    CDXC:SessionSleep 2026-06-27-04:36:
     Keyboard wake resolves through the visible command body owner, so only the exact focused selected sleeping tab can wake. Stale selected ids, missing sessions, inactive siblings, and collapsed panes have no visible placeholder owner and must not wake or create a terminal.
     */
     if shell_focus != ShellFocusTarget::CommandPane
@@ -443,7 +443,7 @@ pub(crate) fn terminal_close_confirm_surface_signature(
     family: TerminalCloseConfirmSurfaceFamily,
 ) -> TerminalCloseConfirmSurfaceSignature {
     /*
-    CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+    CDXC:CommandPane 2026-06-23-20:04:
     Close-confirm UI copy must stay generic while the action is enabled by the real GhosttyKit `needs_confirm_quit` ABI contract. It may identify only the safe family scope, Keep Open cancel action, and generic close action; it must not display session names, terminal titles, command text, paths, URLs, stdout/stderr, terminal content, runtime ids, tokens, raw callback payloads, or fallback close behavior.
     */
     let message = match family {
@@ -521,7 +521,7 @@ pub(crate) fn terminal_session_title_for_id(_id: TerminalSessionId) -> String {
 
 pub(crate) fn command_session_title_for_id(_id: CommandSessionId) -> String {
     /*
-    CDXC:GPUICommandPane 2026-06-25-11:56:
+    CDXC:CommandPane 2026-06-25-11:56:
     Restored GPUI command placeholders must use the same generic `Command Terminal` fallback as newly created macOS command-pane terminals. Do not derive fallback titles from command ids or persist visible/private command titles, because shell-state JSON is layout metadata rather than command-content storage.
     */
     COMMAND_PANE_DEFAULT_SESSION_TITLE.to_string()

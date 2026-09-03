@@ -1599,7 +1599,7 @@ export function createEditor({
       diagnosticDataField,
       diagnosticField,
       /*
-       * CDXC:ManageMarkdownEditing 2026-06-27-12:40:
+       * CDXC:Docs 2026-06-27-12:40:
        * Manage embeds Meo's live Markdown editor directly, but annotations still belong to Ghostex's project-scoped review sidecar.
        * Let Manage add CodeMirror decorations through a narrow extension hook instead of rewriting Meo's live Markdown renderer.
        */

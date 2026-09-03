@@ -6,7 +6,7 @@ import { moveSessionChatQueueRow } from './session-chat-queue';
 import type { SessionChatQueueController } from './use-session-chat';
 
 /*
-CDXC:SessionChatAgentFleet 2026-08-23:
+CDXC:AgentScreenDetection 2026-08-23:
 The sub-agent strip, mounted on the REAL composer with a REAL prompt
 queue, because the thing worth looking at is the boundary between them:
 

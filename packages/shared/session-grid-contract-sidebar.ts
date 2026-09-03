@@ -114,7 +114,7 @@ export type SidebarAgentHookStatusItem = {
 };
 
 /**
- * CDXC:AgentHookSettings 2026-05-23-10:05:
+ * CDXC:AgentHooks 2026-05-23-10:05:
  * Settings -> Agents shows machine-local hook setup status for the same reliable-resume agents Ghostex installs at startup. Native owns filesystem inspection and returns only normalized status rows so the modal host can render the result without direct filesystem access.
  */
 export type SidebarAgentHookStatusMessage = {
@@ -128,17 +128,17 @@ export type SidebarAgentHookStatusMessage = {
 
 export type SidebarGhostexCliStatusMessage = {
   /**
-   * CDXC:BrowserAgentControl 2026-05-26-22:17:
+   * CDXC:Browser 2026-05-26-22:17:
    * First-launch CLI setup treats the Ghostex Browser Use skill as part of the
    * installed CLI experience because agents need both the executable and the
    * skill instructions before they can inspect embedded CEF logs and pages.
    *
-   * CDXC:IntegrationsSetup 2026-05-27-04:17:
+   * CDXC:RemotePairing 2026-05-27-04:17:
    * Settings -> Integrations and the first-launch flow need one native-owned
    * status payload for CLI, Ghostex Browser Use, and Ghostex Computer Use. Native owns
    * PATH and app-bundle checks so React can warn without guessing from UI state.
    *
-   * CDXC:ComputerAgentControl 2026-05-27-06:58:
+   * CDXC:Extensions 2026-05-27-06:58:
    * Desktop Control readiness includes the `$ghostex-computer-use` wrapper
    * skill, because Cua Driver alone does not teach agents the Ghostex-named
    * computer-use workflow.
@@ -149,17 +149,17 @@ export type SidebarGhostexCliStatusMessage = {
    * Agent Orchestration, and Generate Title instead of only exposing the skills
    * that also have standalone guide pages.
    *
-   * CDXC:CodexSessionMove 2026-06-26-13:24:
+   * CDXC:AgentSkills 2026-06-26-13:24:
    * The Codex session-move skill is part of the bundled skills setup surface,
    * so the status payload must carry its installed state and path like the
    * other app-shipped skills.
    *
-   * CDXC:CuaPermissions 2026-05-29-06:00:
+   * CDXC:OsIntegration 2026-05-29-06:00:
    * The Cua Permissions row must report Cua Driver's own macOS privacy grants,
    * not Ghostex's Accessibility grant. Carry both Accessibility and Screen
    * Recording from `cua-driver check_permissions` in the setup status payload.
    *
-   * CDXC:ContributorStart 2026-06-22-23:23:
+   * CDXC:Build 2026-06-22-23:23:
    * `unavailable` means an optional local-build resource was intentionally not
    * bundled, while `missing` means a strict or release-shaped build is broken.
    */
@@ -170,7 +170,7 @@ export type SidebarGhostexCliStatusMessage = {
   computerUseSkillInstalled: boolean;
   computerUseSkillPath?: string;
   /**
-   * CDXC:SkillConsolidation 2026-08-24:
+   * CDXC:AgentSkills 2026-08-24:
    * `$ghostex-cli` is the entry-point skill after the agent-orchestration,
    * manage-automations, and find-prev-session skills were folded into the CLI
    * help, so its status fields (and Manage Beads') stay optional for older
@@ -181,7 +181,7 @@ export type SidebarGhostexCliStatusMessage = {
   manageBeadsSkillInstalled?: boolean;
   manageBeadsSkillPath?: string;
   /**
-   * CDXC:Fable56Orchestration 2026-07-04-00:00:
+   * CDXC:AgentSkills 2026-07-04-00:00:
    * `$ghostex-fable-56-orchestration` shipped after existing hosts, so its
    * status fields stay optional and consumers must treat a missing value as
    * not installed instead of requiring every host build to send it.
@@ -196,7 +196,7 @@ export type SidebarGhostexCliStatusMessage = {
   cuaAppInstalled: boolean;
   cuaDriverInstalled: boolean;
   /**
-   * CDXC:TrycuaPrerequisite 2026-08-24:
+   * CDXC:Extensions 2026-08-24:
    * The exact shell command the host's Install Trycua button runs, published by
    * the host that owns it so Settings can show the command it will execute
    * instead of picking one per platform in React. Hosts that cannot install
@@ -247,12 +247,12 @@ export type SidebarOSIntegrationStatusItem = {
 
 export type SidebarOSIntegrationStatusMessage = {
   /**
-   * CDXC:OSIntegration 2026-05-27-18:06:
+   * CDXC:OsIntegration 2026-05-27-18:06:
    * Settings -> OS Integration shows native Launch Services diagnostics so the
    * user can tell whether Ghostex is merely available in Open With or is the
    * current default for editor, terminal-link, and script-runner roles.
    *
-   * CDXC:OSIntegration 2026-06-24-15:10:
+   * CDXC:OsIntegration 2026-06-24-15:10:
    * Reused Settings surfaces need a shared privacy-safe status channel for
    * Launch Services failures. `statusItems` carries only enum reasons, target,
    * operation, known file extensions, and the fixed ghostex scheme; it must not
@@ -272,7 +272,7 @@ export type SidebarOSIntegrationStatusMessage = {
 };
 
 /**
- * CDXC:SidebarV2Lifecycle 2026-07-29:
+ * CDXC:StateSync 2026-07-29:
  * The explicit user pin on a session's settle state. `"settled"` forces the
  * settled shelf, `"active"` holds a session in the inbox and suppresses
  * auto-settle. gxserver keeps an unpublished `settledOverrideAt` so real
@@ -281,7 +281,7 @@ export type SidebarOSIntegrationStatusMessage = {
 export type SidebarSessionSettledOverride = 'active' | 'settled';
 
 /**
- * CDXC:SidebarV2Git 2026-07-29:
+ * CDXC:Git 2026-07-29:
  * A session's git/PR state is gxserver's to compute (only the daemon can run
  * git in the session's cwd), so the sidebar contract ALIASES the wire type
  * instead of restating it. One source of truth means a field the server adds
@@ -293,13 +293,13 @@ export type SidebarSessionGitStatus = GxserverPresentationSessionGitStatus;
 export type SidebarSessionPrState = NonNullable<SidebarSessionGitStatus['prState']>;
 
 /**
- * CDXC:SidebarV2Lifecycle 2026-07-29:
+ * CDXC:StateSync 2026-07-29:
  * gxserver's per-daemon settle/snooze capability flags, mirrored from
  * `GxserverPresentationSnapshot.capabilities`. ABSENCE means "this daemon
  * predates session lifecycle": the affordances hide entirely and nothing
  * classifies as settled or snoozed, instead of clicking through to a 404.
  *
- * CDXC:SidebarV2Git 2026-07-29:
+ * CDXC:Git 2026-07-29:
  * `sessionGitStatus` rides the same per-daemon block and the same
  * machine-scoped resolution, because git/PR data is exactly as machine-local
  * as settle state: one gxserver in the merged sidebar can publish it while
@@ -323,12 +323,12 @@ export type SidebarSessionItem = {
   /** Canonical or configured agent name used by native agent-session controls. */
   agentName?: string;
   /**
-   * CDXC:SessionRestore 2026-05-22-23:59:
+   * CDXC:SessionSleep 2026-05-22-23:59:
    * Agent CLI hook installs capture the stable provider session id separately from Ghostex's visible session id. Sidebar cards carry that value so hover tooltips can show the exact resume target while title-based restore remains a backup.
    */
   agentSessionId?: string;
   /**
-   * CDXC:SessionForkFamilies 2026-08-28:
+   * CDXC:SessionFork 2026-08-28:
    * The registry session this row's conversation branched off, when gxserver
    * could prove the edge: a Ghostex fork or restore records it directly, and an
    * out-of-band `codex fork` becomes provable once the chat follower adopts the
@@ -356,14 +356,14 @@ export type SidebarSessionItem = {
   lifecycleState?: SessionLifecycleState;
   isFavorite?: boolean;
   /**
-   * CDXC:SessionTags 2026-06-05-12:30:
+   * CDXC:Sessions 2026-06-05-12:30:
    * Sidebar rows carry the expanded tag marker separately from legacy
    * `isFavorite`. Renderers use this for the leading icon, tag filters, and
    * tooltip prefix while older Favorite-only rows still project as Favorite.
    */
   sessionTag?: SidebarSessionTag;
   /**
-   * CDXC:SessionAgentNotes 2026-08-24:
+   * CDXC:SessionNotes 2026-08-24:
    * Free-text "what to do next here" note the user filed against this session's
    * provider conversation (`agentSessionId`), projected straight from gxserver.
    * Rows use it for the hover tooltip line and the note dot beside the leading
@@ -374,14 +374,14 @@ export type SidebarSessionItem = {
   /** Saved prompts associated with this agent conversation; absent at zero. */
   stashedPromptCount?: number;
   /**
-   * CDXC:SwitchAccount 2026-09-03:
+   * CDXC:AgentProviders 2026-09-03:
    * The same-family agent configurations (accounts) this session can be
    * resumed under, projected straight from gxserver. Absent when there is
    * nothing to switch to, which hides the "Switch Account" submenu.
    */
   switchableAgents?: readonly SidebarSwitchableSessionAgent[];
   /**
-   * CDXC:PinnedSessions 2026-05-28-12:04:
+   * CDXC:Sessions 2026-05-28-12:04:
    * Sidebar rows carry project-local pin state so the React display sorter can
    * keep pinned sessions at the top of their project and render pin chrome
    * without overloading Favorite.
@@ -390,7 +390,7 @@ export type SidebarSessionItem = {
   /** Parked rows render in a collapsible section at the bottom of the sidebar. */
   isParked?: boolean;
   /**
-   * CDXC:DraftSessions 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * The session was created from the sidebar and has not received its first user
    * prompt yet, copied straight through from
    * `GxserverPresentationSession.isDraft`. PRESENT-ONLY (never `false`), which
@@ -401,7 +401,7 @@ export type SidebarSessionItem = {
    */
   isDraft?: true;
   /**
-   * CDXC:SidebarV2 2026-07-29:
+   * CDXC:StateSync 2026-07-29:
    * Session creation stamp, projected straight from gxserver's presentation
    * session. Sidebar V2's inbox is ordered by creation and must never move a
    * row on activity, so it needs a clock that activity cannot advance —
@@ -409,7 +409,7 @@ export type SidebarSessionItem = {
    */
   createdAt?: string;
   /**
-   * CDXC:ActivitySuppressionPolicy 2026-07-29-12:00:
+   * CDXC:AgentScreenDetection 2026-07-29-12:00:
    * `lastInteractionAt` carries gxserver's meaningful-activity recency: short
    * working blips (tiny commands, wake redraws) do not advance it, so
    * activity-sorted lists stay stable. `workingStartedAt` marks the current
@@ -420,7 +420,7 @@ export type SidebarSessionItem = {
   lastInteractionAt?: string;
   workingStartedAt?: string;
   /**
-   * CDXC:SidebarV2Lifecycle 2026-07-29:
+   * CDXC:StateSync 2026-07-29:
    * Server-owned settle/snooze lifecycle, projected straight from gxserver's
    * presentation session. Every field is optional because an older daemon (a
    * remote machine that has not been upgraded) publishes none of them, and the
@@ -441,7 +441,7 @@ export type SidebarSessionItem = {
   snoozedAt?: string;
   snoozedUntil?: string;
   /**
-   * CDXC:SidebarV2Git 2026-07-29:
+   * CDXC:Git 2026-07-29:
    * Branch, diff stats, and change-request state for this session's cwd,
    * copied through from gxserver's presentation session. Absent for every
    * session the daemon could not (or does not yet) probe, which is also what
@@ -451,7 +451,7 @@ export type SidebarSessionItem = {
    */
   gitStatus?: SidebarSessionGitStatus;
   /**
-   * CDXC:SidebarV2Worktree 2026-07-29:
+   * CDXC:Worktrees 2026-07-29:
    * The session's working directory, copied through from gxserver's
    * presentation session. Sidebar V2 needs it because a worktree is an
    * ATTRIBUTE of a session: `cwd` IS the checkout, and pairing it with
@@ -462,7 +462,7 @@ export type SidebarSessionItem = {
   cwd?: string;
   sessionId: string;
   /**
-   * CDXC:SessionTooltips 2026-05-31-06:25:
+   * CDXC:Tooltips 2026-05-31-06:25:
    * macOS gxserver sessions need their full routed identity in hover tooltips
    * instead of the legacy two-digit display number, because the short display
    * number does not identify the server/project/session being restored.
@@ -472,7 +472,7 @@ export type SidebarSessionItem = {
   sessionPersistenceName?: string;
   sessionPersistenceProvider?: TerminalSessionPersistenceProvider;
   /**
-   * CDXC:GxserverSessionTitles 2026-06-07-09:33:
+   * CDXC:SessionTitles 2026-06-07-09:33:
    * gxserver-owned rows carry the final visible title string. Sidebar clients render this directly so platform adapters do not duplicate terminal-title trust, placeholder, or unsynced-marker rules.
    */
   displayTitle?: string;
@@ -491,19 +491,19 @@ export type SidebarSessionItem = {
   column: number;
   isFocused: boolean;
   /**
-   * CDXC:SessionLifecycle 2026-05-29-09:20:
+   * CDXC:Sessions 2026-05-29-09:20:
    * Session lifecycle uses resource-specific state names so UI and batch
    * actions do not infer provider session existence from the legacy `isSleeping` and
    * `isRunning` booleans. A native pane can be unmounted while a zmx/tmux/zellij
    * provider session still exists, so both resource states are carried
    * explicitly and `isLive` is derived from them.
    *
-   * CDXC:SessionLifecycle 2026-05-29-06:29:
+   * CDXC:Sessions 2026-05-29-06:29:
    * Persistence-disabled terminal sessions must report `providerSessionState:
    * "persistence-disabled"` instead of `unknown`. Unknown is reserved for configured
    * providers whose existence check has not completed or failed.
    *
-   * CDXC:SessionLifecycle 2026-05-29-07:19:
+   * CDXC:Sessions 2026-05-29-07:19:
    * Name the providerless state `persistence-disabled` so payloads make it
    * clear the terminal provider is absent because persistence is off, not
    * because some unrelated disabled flag was set.
@@ -518,7 +518,7 @@ export type SidebarSessionItem = {
   isRunning: boolean;
   detail?: string;
   /**
-   * CDXC:CloseAfterDone 2026-06-15-21:00:
+   * CDXC:Sessions 2026-06-15-21:00:
    * Sidebar cards need both the armed Close After Done flag and countdown
    * projection. The armed flag keeps the red clock visible before Done, while
    * the deadline fields drive the fading countdown once the session remains
@@ -529,7 +529,7 @@ export type SidebarSessionItem = {
   closeAfterDoneRemainingLabel?: string;
   closeAfterDoneRemainingMs?: number;
   /**
-   * CDXC:RemoteSessionMenus 2026-06-30-15:22:
+   * CDXC:RemoteMachines 2026-06-30-15:22:
    * Remote session rows opt into sidebar actions that depend on host timers or local pane carriers. Absence is false so the shared context menu never assumes every remote terminal can schedule Delayed Send, toggle Close After Done, or pop out through AppKit.
    */
   canScheduleDelayedSend?: boolean;
@@ -544,7 +544,7 @@ export type SidebarSessionItem = {
   delayedSendRemainingLabel?: string;
   delayedSendRemainingMs?: number;
   /**
-   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * CDXC:SessionChat 2026-08-21-b:
    * Number of Ghostex-owned chat prompts held for this session, `failed` rows
    * included. Drives the count badge over the leading agent icon; absent or
    * zero means no badge, which is also what a daemon that predates the queue
@@ -552,7 +552,7 @@ export type SidebarSessionItem = {
    */
   queuedPromptCount?: number;
   /**
-   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * CDXC:SessionChat 2026-08-21-b:
    * How many of those rows failed to deliver and are held for the user. Any
    * non-zero value paints the same badge red instead of yellow, because a queue
    * that has stopped dead is the one queue state that needs the user to act.
@@ -563,12 +563,12 @@ export type SidebarSessionItem = {
   /** True when Delayed Send is armed for this agent to finish. */
   sendWhenAgentStopsActive?: boolean;
   /**
-   * CDXC:PanePopOut 2026-05-19-10:15:
+   * CDXC:Workarea 2026-05-19-10:15:
    * Sidebar session context menus need the live pop-out presentation flag so
    * browser and agent cards can offer Pop Out Pane versus Restore Pane without
    * re-querying native chrome state.
    *
-   * CDXC:RemoteAttach 2026-06-30-15:24:
+   * CDXC:RemoteMachines 2026-06-30-15:24:
    * Remote rows must expose Pop Out Pane as an explicit local-carrier capability. A remote gxserver session can look like a normal agent terminal, but AppKit pop-out is only valid when a live local attach carrier already exists.
    */
   canPopOutPane?: boolean;
@@ -607,7 +607,7 @@ export type SidebarPreviousSessionItem = SidebarSessionItem & {
   isGeneratedName: boolean;
   isRestorable: boolean;
   /**
-   * CDXC:PreviousSessions 2026-05-05-05:30
+   * CDXC:Sessions 2026-05-05-05:30
    * Restoring from Previous Sessions must recreate the archived agent session,
    * not only its card title. Store the normalized session record and source
    * project/group metadata so native restore can preserve agent identity,
@@ -625,22 +625,22 @@ export type SidebarSessionGroup = {
   groupId: string;
   isActive: boolean;
   /**
-   * CDXC:Chats 2026-05-04-09:41
+   * CDXC:Projects 2026-05-04-09:41
    * Native Combined mode renders all chat folders under one synthetic Chats
    * header. Mark it explicitly so the React sidebar can keep it non-draggable
    * and route its add button to creating a new chat folder.
    */
   isChatCollection?: boolean;
   /**
-   * CDXC:SessionFocusMode 2026-05-28-12:52:
+   * CDXC:FocusMode 2026-05-28-12:52:
    * Focus is a split-pane zoom, not a tab selector. Sidebar groups must carry actual pane topology so session context menus can hide Focus when a project has only one pane, even if that pane has multiple tabs.
    *
-   * CDXC:SessionFocusMode 2026-05-28-15:35:
+   * CDXC:FocusMode 2026-05-28-15:35:
    * The topology signal must reflect awake rendered pane owners, not only persisted paneLayout children, so sleeping-only split panes do not leave Focus visible while the user sees one native pane.
    */
   canFocusMode?: boolean;
   /**
-   * CDXC:SidebarContract 2026-07-02-03:49:
+   * CDXC:StateSync 2026-07-02-03:49:
    * The shared sidebar can expose named session-group creation only when the host can persist or emulate user-defined groups for the project.
    *
    * Hosts that support user-defined named session groups within a project set
@@ -654,12 +654,12 @@ export type SidebarSessionGroup = {
   projectContext?: {
     canRemoveProject: boolean;
     /**
-     * CDXC:GPUISettingsNotifications 2026-06-26-07:22:
+     * CDXC:Notifications 2026-06-26-07:22:
      * GPUI session-attention notifications need the same project icon attachment source as the macOS host. Carry only the already-normalized project image data URL on project context so status bridges can attach icons without paths, URLs, file probes, command text, terminal output, or generic renderer IPC.
      */
     iconDataUrl?: string;
     /**
-     * CDXC:SidebarV2ProjectIcons 2026-07-29:
+     * CDXC:Icons 2026-07-29:
      * The project's TYPED icon, exactly as the user chose it in the project
      * appearance UI. `iconDataUrl` above covers only the image variant, which
      * is the rarer of the two: most Ghostex projects carry a Tabler glyph plus
@@ -670,7 +670,7 @@ export type SidebarSessionGroup = {
      */
     icon?: WorkspaceProjectIcon;
     /**
-     * CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+     * CDXC:Icons 2026-07-29 (discovered icons):
      * The icon the project's own repository ships through standard web metadata,
      * its favicon, or the icon its HTML entry point declares — discovered by
      * gxserver and carried as a `data:` URL
@@ -687,7 +687,7 @@ export type SidebarSessionGroup = {
      */
     discoveredIconDataUrl?: string;
     /**
-     * CDXC:SidebarV2LogicalProjects 2026-07-29:
+     * CDXC:StateSync 2026-07-29:
      * The project's git `origin` remote URL, straight off the presentation
      * project (`GxserverPresentationProject.gitRemoteOriginUrl`) with no
      * client-side interpretation. Sidebar V2 normalizes it into a repository
@@ -702,7 +702,7 @@ export type SidebarSessionGroup = {
      */
     gitRemoteOriginUrl?: string | null;
     /**
-     * CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+     * CDXC:StateSync 2026-07-29 (P5 fix round):
      * The repository root the checkout belongs to, straight off
      * `GxserverPresentationProject.gitRepositoryRootPath`. Paired with
      * `gitRemoteOriginUrl` it lets Sidebar V2 derive each project's path
@@ -717,7 +717,7 @@ export type SidebarSessionGroup = {
     path: string;
     pathState?: 'available' | 'missing' | 'notDirectory' | 'unavailable';
     /**
-     * CDXC:EditorPanes 2026-05-06-14:21
+     * CDXC:CodeEditor 2026-05-06-14:21
      * Combined project cards expose one project-owned code editor surface.
      * The editor is not a split session, so sidebar state carries it through
      * project context instead of mixing it into session card records.
@@ -725,7 +725,7 @@ export type SidebarSessionGroup = {
     editor: {
       diffStats: SidebarProjectDiffStats;
       /**
-       * CDXC:EditorPanes 2026-05-09-17:24
+       * CDXC:CodeEditor 2026-05-09-17:24
        * Project editor rows represent attempted/running editor surfaces, not
        * only focused panes. Carry load status so the sidebar can keep the row
        * visible through startup failures and show timeout diagnostics.
@@ -747,7 +747,7 @@ export type SidebarSessionGroup = {
     projectId?: string;
   };
   /**
-   * CDXC:GPUIRemoteLastSeen 2026-07-12:
+   * CDXC:RemoteMachines 2026-07-12:
    * A stale group renders the last-seen state of a disconnected remote
    * machine: faded, with terminal/agent rows non-interactive while browser
    * rows (local CEF tabs) stay clickable. Hosts without last-seen retention
@@ -779,12 +779,12 @@ export type SidebarProjectSettingsItem = {
   beadsDirectory?: string;
   beadsDisplayKey?: string;
   /**
-   * CDXC:DocsRootDirectory 2026-08-09:
+   * CDXC:Docs 2026-08-09:
    * Absolute folder this project's Docs surface shows IN ADDITION to the
    * project's own docs. Absent/blank means the project inherits the Docs
    * directory Global Default, and an unset global adds nothing.
    *
-   * CDXC:DocsRootAdditive 2026-08-09: it never replaces the project's own
+   * CDXC:Docs 2026-08-09: it never replaces the project's own
    * README.md, CLAUDE.md, docs/, or configured Docs folders.
    */
   docsDirectory?: string;
@@ -792,7 +792,7 @@ export type SidebarProjectSettingsItem = {
   path: string;
   projectId: string;
   /**
-   * CDXC:PortlessSettings 2026-06-23-03:47:
+   * CDXC:Portless 2026-06-23-03:47:
    * Projects settings groups read-only Portless domain summaries by project
    * and worktree family. Carry only the stable parent project id for worktree
    * rows so the Settings UI does not need branch names, parent paths, command
@@ -811,7 +811,7 @@ export type SidebarRecentProject = {
   projectId: string;
   recentClosedAt?: string;
   /**
-   * CDXC:RemoteRecentProjects 2026-06-24-10:36:
+   * CDXC:RemoteMachines 2026-06-24-10:36:
    * Remote closed projects share the Recent Projects drawer with local parked projects. Carry the owning machine separately so React can display "Project (Machine)" while native still routes restore/open/remove by the trusted scoped project id.
    */
   remoteMachineId?: string;
@@ -826,7 +826,7 @@ export type SidebarRecentProject = {
 export type SidebarCommandSessionIndicator = {
   commandId: string;
   /**
-   * CDXC:GPUICommandPaneTimers 2026-06-27-02:05:
+   * CDXC:DelayedSend 2026-06-27-02:05:
    * Command-session HUD indicators need the same safe timer projection as sidebar session cards so GPUI command panes can show Delayed Send and Close After Done parity without carrying command text, cwd/env, paths, URLs, output, run ids, status-file paths, tokens, or unknown native fields.
    */
   closeAfterDone?: boolean;
@@ -852,7 +852,7 @@ export type SidebarPortlessNativeAdminActionAvailability = {
 
 export type SidebarPortlessState = {
   /*
-  CDXC:PortlessProtocol 2026-06-23-00:25:
+  CDXC:Portless 2026-06-23-00:25:
   React receives Portless setup state, route previews, local-only native action availability, and sanitized native admin results through HUD metadata. This keeps future modal/settings/resources UI off Portless files and prevents remote gxserver state from advertising runnable privileged actions.
   */
   health: GxserverPortlessStatus;
@@ -882,7 +882,7 @@ export type SidebarHudState = {
   buildStamp?: string;
   commands: SidebarCommandButton[];
   /**
-   * CDXC:ProjectActions 2026-08-01:
+   * CDXC:Projects 2026-08-01:
    * Per-project Action buttons keyed by project id (worktrees already resolved
    * to their parent's Actions by gxserver). Project rows read their own entry
    * so showOnProjectRow actions render for every visible project, not just the
@@ -895,7 +895,7 @@ export type SidebarHudState = {
   completionSound: CompletionSoundSetting;
   completionSoundLabel: string;
   /**
-   * CDXC:WorkspaceTheme 2026-05-05-02:58
+   * CDXC:Theming 2026-05-05-02:58
    * The active workspace can override the preset sidebar theme with a custom
    * validated color. Keep the preset `theme` as the fallback, and send this
    * color separately so CSS can derive app-level theme variables.
@@ -905,7 +905,7 @@ export type SidebarHudState = {
   focusedSessionTitle?: string;
   git: SidebarGitState;
   /**
-   * CDXC:GlobalActions 2026-08-01:
+   * CDXC:AgentLauncher 2026-08-01:
    * Actions that apply to every project, stored by the daemon rather than in
    * project metadata. Optional because hosts that do not serve them (legacy
    * macOS) leave it absent, and Settings renders an empty section rather than
@@ -921,7 +921,7 @@ export type SidebarHudState = {
    */
   projectSettingsProjects?: SidebarProjectSettingsItem[];
   /**
-   * CDXC:RecentProjects 2026-05-04-14:25
+   * CDXC:Projects 2026-05-04-14:25
    * Combined sidebar hides projects without active/sleeping sessions in a
    * bottom Recent Projects drawer. The drawer receives a compact, sorted
    * projection so React can restore projects without owning native session
@@ -929,7 +929,7 @@ export type SidebarHudState = {
    */
   recentProjects: SidebarRecentProject[];
   /**
-   * CDXC:GlobalActions 2026-08-29:
+   * CDXC:AgentLauncher 2026-08-29:
    * Global Actions are owned by ONE gxserver daemon, so a host that shows
    * projects from several daemons at once (the web app's remote machines)
    * cannot describe them with a single list: `globalCommands` stays the local
@@ -1002,7 +1002,7 @@ export type SidebarGroupsChangedMessage = {
   removedSessionIds?: string[];
   revision: number;
   /*
-  CDXC:SidebarHydration 2026-06-09-23:01:
+  CDXC:StateSync 2026-06-09-23:01:
   Routine gxserver presentation changes must patch the React sidebar tree instead of posting a full hydrate. Carry changed groups, removals, and authoritative order so session add/remove/reorder/project deltas update visible rows without replacing unrelated sidebar state or letting WKWebView refreshes steal terminal focus.
   */
   type: 'sidebarGroupsChanged';
@@ -1010,7 +1010,7 @@ export type SidebarGroupsChangedMessage = {
 
 export type SidebarProjectCollectionsChangedMessage = {
   /*
-  CDXC:SidebarProjectCollections 2026-07-18-00:00:
+  CDXC:Projects 2026-07-18-00:00:
   gxserver owns the shared colored "Group N" project-collection overlay so
   React Native Android edits the same grouped project list. Hosts forward the normalized
   wire state (snapshot field, live event, or update ack) to SidebarApp, which
@@ -1023,7 +1023,7 @@ export type SidebarProjectCollectionsChangedMessage = {
 
 export type SidebarSpacesChangedMessage = {
   /*
-  CDXC:SidebarSpaces 2026-08-27:
+  CDXC:Spaces 2026-08-27:
   gxserver owns the Space document (the saved sidebar filters and their
   memberships) for the projects it hosts. Hosts forward the normalized wire
   state (snapshot field, live event, or update ack) to SidebarApp, tagged with
@@ -1036,7 +1036,7 @@ export type SidebarSpacesChangedMessage = {
 };
 
 /**
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * What the New/Edit Space dialog reports back, and nothing more: the user's
  * typed field values plus the identity of the Space and the daemon they belong
  * to. The dialog deliberately never carries a Space document — it renders in a
@@ -1074,7 +1074,7 @@ export type SidebarHudChangedMessage = {
   hud: SidebarHudState;
   revision: number;
   /*
-  CDXC:SidebarHydration 2026-06-09-23:01:
+  CDXC:StateSync 2026-06-09-23:01:
   Live presentation patches still need HUD-derived chrome such as focused title, counts, and command indicators. Send HUD as its own patch so gxserver deltas do not force a session-tree hydrate just to keep non-row controls current.
   */
   type: 'sidebarHudChanged';
@@ -1117,7 +1117,7 @@ export type SidebarCommandRunStateClearedMessage = {
 };
 
 /**
- * CDXC:SidebarBrowserTabReveal 2026-08-18:
+ * CDXC:Browser 2026-08-18:
  * A host-owned request to make one existing session row visible in the sidebar:
  * expand every collapsed container above it and scroll it into view if it is
  * off screen. gpui sends this when the user opens a new Browser tab, because a
@@ -1149,7 +1149,7 @@ export type SidebarDaemonSessionItem = {
   isCurrentWorkspace: boolean;
   isLocalOnly?: boolean;
   /**
-   * CDXC:SessionInventoryOwnership 2026-06-02-17:19:
+   * CDXC:SessionIdentity 2026-06-02-17:19:
    * Running Sessions may show gxserver-backed terminal rows and macOS-local panes in one modal. Carry ownership on the contract so the UI and external consumers can label local-only rows instead of treating every row as shared daemon state.
    */
   ownership?: 'gxserver' | 'local';
@@ -1172,7 +1172,7 @@ export type SidebarDaemonSessionsStateMessage = {
 
 export type SidebarPromptGitCommitMessage = {
   /**
-   * CDXC:PromptAgents 2026-05-29-10:53:
+   * CDXC:AgentLauncher 2026-05-29-10:53:
    * Git commit review, Multiple Commits, Release, and generated rename/title flows
    * must carry the user-selected prompt agent explicitly. Modal-specific choices
    * are remembered by the modal host, while Settings default-agent changes clear
@@ -1197,7 +1197,7 @@ export type SidebarPromptGitCommitMessage = {
 
 export type SidebarGitFileDiffMessage = {
   /*
-  CDXC:GitReview 2026-06-24-15:22:
+  CDXC:Git 2026-06-24-15:22:
   Reused SidebarApp commit review can run outside the native app-modal host.
   Return selected-file diffs through a request-scoped shared message so non-native hosts can fill the inline review pane without opening files, trusting renderer paths as authority, or adding GPUI-only UI.
   */
@@ -1208,7 +1208,7 @@ export type SidebarGitFileDiffMessage = {
 
 export type SidebarGitPreferenceScope = {
   /*
-  CDXC:GPUIRemoteGit 2026-06-24-18:22:
+  CDXC:Git 2026-06-24-18:22:
   Git preference writes are project-scoped when the shared UI knows the owning project row. Carry a trusted group id or machine-scoped project id with preference changes so GPUI can route remote writes through the owning gxserver tunnel instead of inferring from the active local project, labels, or DOM text.
   */
   groupId?: string;
@@ -1222,7 +1222,7 @@ export type SidebarGhostexFolderStat = {
 };
 
 /**
- * CDXC:SettingsStorage 2026-05-09-15:25
+ * CDXC:Settings 2026-05-09-15:25
  * Settings exposes Ghostex data-directory usage only after the user scrolls to the
  * bottom of the modal. The native sidebar sends per-folder byte counts back as
  * a sidebar message so the full-window modal can render stats without owning
@@ -1255,7 +1255,7 @@ export type SidebarPluginSettingsStatusMessage = {
 };
 
 /**
- * CDXC:AppModals 2026-04-28-16:18
+ * CDXC:AppModal 2026-04-28-16:18
  * User-input flows must not use VS Code input boxes, quick picks, or modal
  * editors. Extension-initiated prompts are represented as sidebar messages so
  * the existing React modal host owns rendering and styling.
@@ -1285,7 +1285,7 @@ export type SidebarSessionTranscriptSizesResultMessage = {
 };
 
 /*
- * CDXC:StashedPrompts 2026-07-29:
+ * CDXC:SavedPrompts 2026-07-29:
  * Answer to `requestStashedPrompts`, correlated by requestId. Rows carry
  * user-authored prompt bodies from gxserver, so hosts must forward them to the
  * Prompts modal verbatim and never log or persist them outside that surface.
@@ -1294,7 +1294,7 @@ export type SidebarStashedPromptsResultMessage = {
   prompts: GxserverStashedPrompt[];
   requestId: string;
   /**
-   * CDXC:StashedPromptTags 2026-08-23:
+   * CDXC:SavedPrompts 2026-08-23:
    * The tag catalogue rides along with the prompts so the pill rail, its
    * counts, and the row chips all paint from one answer instead of three.
    */
@@ -1303,7 +1303,7 @@ export type SidebarStashedPromptsResultMessage = {
 };
 
 /**
- * CDXC:StashedPromptTags 2026-08-23:
+ * CDXC:SavedPrompts 2026-08-23:
  * Answer to `saveStashedPromptTag` and `deleteStashedPromptTag`. Both return
  * the whole refreshed catalogue rather than the one row they touched, because
  * a create can resolve to an existing tag and a delete reorders nothing but
@@ -1342,7 +1342,7 @@ export type SidebarSaveStashedPromptResultMessage = {
 };
 
 /*
- * CDXC:SidebarV2Worktree 2026-07-29:
+ * CDXC:Worktrees 2026-07-29:
  * Answers to the two V2 worktree commands, correlated by the `requestId` the
  * sidebar minted. They exist ONLY to end a pending state: the created session
  * itself arrives the normal way, as a presentation delta, and the host is the
@@ -1384,14 +1384,14 @@ export type SidebarRecentProjectsResultMessage = {
 export type SidebarRemoteMachineStatusMessage = {
   machineId: string;
   /**
-   * CDXC:GPUIRemoteConnectFeedback 2026-07-12:
+   * CDXC:RemoteMachines 2026-07-12:
    * Optional sanitized failure summary authored by the native host (the same
    * text as the failure toast) so the remote header's error control can explain
    * why a connect attempt failed. Never raw SSH/daemon output.
    */
   message?: string;
   /**
-   * CDXC:GPUIRemoteConnectFeedback 2026-07-12:
+   * CDXC:RemoteMachines 2026-07-12:
    * The union now names the granular native connect states that hosts were
    * already sending as raw strings, so the sidebar can show real progress
    * ("Installing…", "Downloading…") and per-cause failure text instead of
@@ -1428,7 +1428,7 @@ export type SidebarNativeHotkeyMessage = {
 };
 
 /**
- * CDXC:AppIconPicker 2026-06-25-21:50:
+ * CDXC:Icons 2026-06-25-21:50:
  * One available Dock/app-switcher icon as reported by native. thumbnailDataUrl
  * is a self-contained data: URL so the picker grid renders without native file
  * reads, and `selected` mirrors which entry native currently has applied.
@@ -1441,7 +1441,7 @@ export type SidebarAppIconInfo = {
 };
 
 /**
- * CDXC:AppIconPicker 2026-06-25-21:50:
+ * CDXC:Icons 2026-06-25-21:50:
  * Native -> Settings App Icon state. Already trimmed by native to the newest 10
  * icons plus the selected one. `ok: false` with `error` describes a failed list
  * or swap; the sidebar persists appIconSourceId only when ok is true.
@@ -1456,7 +1456,7 @@ export type SidebarAppIconStateMessage = {
 
 export type SidebarGpuiProjectSlotHotkeyMessage = {
   /**
-   * CDXC:GPUIProjectHotkeys 2026-06-26-23:42:
+   * CDXC:Hotkeys 2026-06-26-23:42:
    * GPUI project slot hotkeys resolve locally in SidebarApp because SidebarApp owns the rendered Projects row order. Carry only the 1-based slot number so host payloads do not expose paths, titles, session ids, command text, URLs, or project metadata.
    */
   slotNumber: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
@@ -1500,7 +1500,7 @@ export type ExtensionToSidebarMessage =
   | SidebarSessionWorktreeRemovalResultMessage
   | SidebarRecentProjectsResultMessage
   | SidebarRemoteMachineStatusMessage
-  // CDXC:AppIconPicker 2026-06-25-21:50: Native pushes App Icon list/selection state into Settings.
+  // CDXC:Icons 2026-06-25-21:50: Native pushes App Icon list/selection state into Settings.
   | SidebarAppIconStateMessage;
 
 /**
@@ -1552,7 +1552,7 @@ export type SidebarAddProjectDialogRequestParams = {
 export type SidebarToExtensionMessage =
   | {
       /**
-       * CDXC:GxserverBootstrap 2026-05-31-03:56:
+       * CDXC:ServerDaemon 2026-05-31-03:56:
        * The gxserver failure toast needs a Retry action that returns to the
        * trusted sidebar command router, then native performs the daemon restart.
        */
@@ -1563,7 +1563,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SidebarDiscord 2026-05-27-05:04:
+       * CDXC:Sidebar 2026-05-27-05:04:
        * Sidebar surfaces can link to the public Ghostex Discord for support,
        * questions, and contributors. Native owns URL opening so the sidebar
        * does not depend on webview popup behavior.
@@ -1573,7 +1573,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SidebarTopChrome 2026-06-29-01:43:
+       * CDXC:Sidebar 2026-06-29-01:43:
        * The sidebar Keep Awake dropdown moved into top chrome but must command the existing titlebar runtime owner instead of duplicating caffeinate lifecycle state in the sidebar renderer.
        */
       action: 'start';
@@ -1586,7 +1586,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SettingsStorage 2026-05-09-15:25
+       * CDXC:Settings 2026-05-09-15:25
        * The settings modal can request Ghostex folder stats lazily, but native
        * resolves the folder path itself and never trusts a path from React.
        */
@@ -1594,10 +1594,10 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:AgentHookSettings 2026-05-23-10:05:
+       * CDXC:AgentHooks 2026-05-23-10:05:
        * Settings -> Agents can refresh hook status and trigger the existing hook installer, but native remains the owner of config paths, executable checks, and hook-file mutation.
        *
-       * CDXC:FirstLaunchSetup 2026-06-18-02:38:
+       * CDXC:Onboarding 2026-06-18-02:38:
        * First launch narrows hook setup to Codex, Claude, and Pi by passing
        * agentIds while Settings can omit agentIds to inspect the full supported
        * provider set.
@@ -1607,7 +1607,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:FirstLaunchSetup 2026-05-26-17:12:
+       * CDXC:Onboarding 2026-05-26-17:12:
        * First launch CLI setup must distinguish a missing CLI from an app that
        * was already installed through Homebrew. Native owns PATH inspection so
        * the production modal and Storybook mock can share the same UI contract.
@@ -1616,7 +1616,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:IntegrationsSetup 2026-05-27-04:17:
+       * CDXC:RemotePairing 2026-05-27-04:17:
        * First launch and Settings -> Integrations expose one-click install
        * actions for optional integrations. Native runs the actual commands and
        * refreshes the shared integration status afterward.
@@ -1646,7 +1646,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:OSIntegration 2026-05-27-18:06:
+       * CDXC:OsIntegration 2026-05-27-18:06:
        * Settings exposes explicit OS default actions. Installing Ghostex only
        * registers it as an available handler; default editor, terminal-link,
        * and script-runner ownership changes happen only through this command.
@@ -1677,7 +1677,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-      CDXC:PortlessSetupModal 2026-06-23-13:42:
+      CDXC:Portless 2026-06-23-13:42:
       Portless setup prompts run in a separate app-modal child-window document,
       and native logs modal sidebar commands as JSON. Keep this boundary
       metadata-only: admin actions carry action/protocol/request id, Disable
@@ -1691,7 +1691,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-      CDXC:PortlessSettings 2026-06-23-03:47:
+      CDXC:Portless 2026-06-23-03:47:
       Settings -> Projects exposes explicit Portless setup actions outside the
       setup prompt. Keep this command metadata-only: install/reconfigure/retry
       carry the selected HTTP/HTTPS mode, remove carries only intent, and
@@ -1727,12 +1727,12 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:GhosttySettings 2026-04-30-01:48
+       * CDXC:Terminal 2026-04-30-01:48
        * The settings modal exposes Ghostty-specific actions that are not plain
        * ghostex preference changes: reset managed config keys, apply the
        * recommended config block, open docs, and open the platform config file.
        *
-       * CDXC:AccessibilityPermissions 2026-05-08-13:08
+       * CDXC:OsIntegration 2026-05-08-13:08
        * The same modal action channel also carries a direct open-settings
        * command for macOS Accessibility status. It does not enable attachment
        * or trigger the permission prompt by itself.
@@ -1767,7 +1767,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:ExportTranscriptOptions 2026-08-24:
+       * CDXC:TranscriptExport 2026-08-24:
        * The Export Transcript dialog's Export button: run the export with the
        * chosen include-toggles. The dialog never names the session — the
        * sidebar runtime holds the pending export context from opening the
@@ -1781,7 +1781,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SessionAttentionNotifications 2026-05-11-01:14
+       * CDXC:Notifications 2026-05-11-01:14
        * Settings' test button should exercise the same native attention
        * completion flow as a real agent task without mutating any session.
        */
@@ -1820,7 +1820,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SidebarCollapse 2026-06-12-02:23:
+       * CDXC:Sidebar 2026-06-12-02:23:
        * Cmd+B and command-palette execution need a native chrome command that
        * collapses the whole AppKit sidebar, not only React sidebar content.
        */
@@ -1828,7 +1828,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SidebarContextMenu 2026-05-20-13:05:
+       * CDXC:ContextMenus 2026-05-20-13:05:
        * Session and project context menus notify native when open so clicks on
        * terminal, titlebar, and other non-sidebar surfaces dismiss the menu
        * while the original AppKit click still reaches its target.
@@ -1862,7 +1862,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:PaneTabs 2026-05-11-11:51
+       * CDXC:CommandPane 2026-05-11-11:51
        * The combined sidebar Settings row has a legacy-named secondary terminal
        * action. It targets the currently active project and creates the new
        * terminal as the selected tab in the focused session's tab group so pane
@@ -1872,7 +1872,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:Chats 2026-05-04-09:30
+       * CDXC:Projects 2026-05-04-09:30
        * Chats are projectless AI work areas. The native sidebar owns chat
        * folder creation and then opens a normal empty terminal there so agent
        * title/icon detection stays identical to project sessions.
@@ -1882,7 +1882,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:Plugins 2026-05-08-10:44
+       * CDXC:Extensions 2026-05-08-10:44
        * The top-sidebar Plugins entry opens the skills directory as a Chromium
        * browser pane under Chats, not inside the active project. Keep this
        * separate from generic browser actions because its destination is fixed.
@@ -1908,7 +1908,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:AgentsHub 2026-05-12-09:21
+       * CDXC:AgentLauncher 2026-05-12-09:21
        * Agents Hub runs in the full-window modal host, but profile/file actions
        * still need native filesystem affordances from the sidebar bridge.
        */
@@ -1925,11 +1925,11 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:AgentsHub 2026-05-14-08:29:
+       * CDXC:AgentLauncher 2026-05-14-08:29:
        * Agents Hub must show the real files installed on the user's machine, including files owned by Claude/Codex profiles and plugin caches.
        * The modal host requests a fresh native filesystem catalog whenever the Hub opens instead of relying on a bundled placeholder list.
        *
-       * CDXC:AgentsHub 2026-06-12-02:53:
+       * CDXC:AgentLauncher 2026-06-12-02:53:
        * Catalog requests return metadata only so large profile/plugin trees can
        * paint the Hub immediately without pushing every file buffer through the
        * native process-result bridge.
@@ -1938,7 +1938,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:AgentsHub 2026-06-12-02:53:
+       * CDXC:AgentLauncher 2026-06-12-02:53:
        * Agents Hub reads file contents only after selection because the left
        * tree needs metadata, while editor buffers can be large enough to block
        * the modal bridge when loaded for every file at once.
@@ -1949,7 +1949,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:AgentsHub 2026-05-14-08:27:
+       * CDXC:AgentLauncher 2026-05-14-08:27:
        * The Hub modal edits real agent instruction/config files and enables Save only after text changes.
        * Persist the current editor buffer through the native sidebar command contract so the modal host keeps using the same catalog-validated filesystem bridge as the built-in Source action.
        */
@@ -1959,7 +1959,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:Chats 2026-05-08-11:53
+       * CDXC:Projects 2026-05-08-11:53
        * The reference-style Chats section header has a hover-only browser
        * action beside New Chat. It creates a new projectless chat and opens a
        * browser pane there, without requiring a concrete chat group id.
@@ -1971,7 +1971,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:ChromiumBrowserPanes 2026-05-27-07:24
+       * CDXC:Browser 2026-05-27-07:24
        * Browser actions always create in-workspace browser panes now that the
        * legacy Chrome Canary attachment route has been removed.
        */
@@ -1980,7 +1980,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:ProjectGroups 2026-05-06-18:42
+       * CDXC:Projects 2026-05-06-18:42
        * Project headers expose New Browser beside the create-session control.
        * Carry the group id so native can focus that project/group before
        * creating the browser pane.
@@ -1993,12 +1993,12 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-       * CDXC:HighlightedFeatures 2026-06-16-08:17:
+       * CDXC:Onboarding 2026-06-16-08:17:
        * The titlebar Tips & Tricks panel can open the replayable highlighted
        * features modal. Keep the request in the sidebar command contract so
        * the native sidebar remains the single owner of app modal presentation.
        *
-       * CDXC:GhostexTutorialVideo 2026-06-18-05:31:
+       * CDXC:Onboarding 2026-06-18-05:31:
        * Keep this legacy command for callers, but native routes it to the
        * tutorial video modal so Highlighted Features can remain unused.
        */
@@ -2006,11 +2006,11 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-       * CDXC:GhostexTutorialVideo 2026-06-18-04:49:
+       * CDXC:Onboarding 2026-06-18-04:49:
        * Help surfaces need a dedicated request for the one-page Ghostex tutorial
        * video modal.
        *
-       * CDXC:GhostexTutorialVideo 2026-06-18-05:31:
+       * CDXC:Onboarding 2026-06-18-05:31:
        * Current Features/help entry points should open this video modal while
        * leaving the old Highlighted Features modal unused.
        */
@@ -2018,7 +2018,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:NativeWorkspacePicker 2026-05-08-18:45
+       * CDXC:AddProject 2026-05-08-18:45
        * The reference Projects header add button should open the trusted native
        * folder picker.
        */
@@ -2079,7 +2079,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:RemoteProjectPicker 2026-06-02-23:22:
+       * CDXC:RemoteMachines 2026-06-02-23:22:
        * Remote Add Project uses a path-aware directory picker, but every
        * browse request is machine-scoped. Native must route it to that
        * machine's gxserver after SSH reconnect/token setup instead of exposing
@@ -2092,7 +2092,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:RemoteProjects 2026-06-03-00:18:
+       * CDXC:RemoteMachines 2026-06-03-00:18:
        * Adding a remote project is not the local Add Project command. Carry the
        * remote machine id with the selected path so native can add the project
        * through that machine's gxserver and later render it under that machine's
@@ -2141,7 +2141,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-       * CDXC:SidebarSessionFocus 2026-06-29-02:04:
+       * CDXC:FocusRouting 2026-06-29-02:04:
        * The macOS focused-pane border must be preserved only for real sidebar session-row clicks. Send a hover-scoped native hint from the session card so AppKit's pre-dispatch mouseDown path can distinguish session focus clicks from other sidebar chrome before WebKit temporarily becomes first responder.
        */
       isSessionCard: boolean;
@@ -2149,7 +2149,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-       * CDXC:SidebarSessionFocus 2026-06-29-02:04:
+       * CDXC:FocusRouting 2026-06-29-02:04:
        * If a session-row mouseDown is actually a child control, modified click, or context-menu path, cancel the pre-dispatch border handoff so only session focus selection keeps the old border during the AppKit sidebar responder gap.
        */
       type: 'cancelSidebarSessionFocusBorderHandoff';
@@ -2160,7 +2160,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:StashedPromptSessionAssociation 2026-08-24:
+       * CDXC:SavedPrompts 2026-08-24:
        * A Saved Prompts row asks to be taken back to the session it was stashed
        * from. The ids are RAW gxserver ids (never the combined
        * `combined-session:<project>:<session>` form) because the stash rows
@@ -2178,7 +2178,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SessionFocusMode 2026-05-23-09:28:
+       * CDXC:FocusMode 2026-05-23-09:28:
        * Session-card and pane-tab Focus is a reversible zoom for the clicked
        * session's pane tab group. The native/sidebar controller owns this
        * command because it must also switch from Code/Browser/Project/Manage
@@ -2201,7 +2201,7 @@ export type SidebarToExtensionMessage =
       sessionId: string;
       title: string;
       /**
-       * CDXC:SessionNaming 2026-05-09-17:25
+       * CDXC:SessionTitles 2026-05-09-17:25
        * Generate Title reuses renameSession with the saved 1st user message,
        * but must force controller-side title generation even when that message
        * is shorter than the rename modal's 70-character Generate Name threshold.
@@ -2215,7 +2215,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:WorktreeDelete 2026-05-28-07:46:
+       * CDXC:Worktrees 2026-05-28-07:46:
        * Combined project rows render worktrees as project headers, so project-name edits and delete confirmation prompts must route through trusted group ids instead of trusting DOM-provided paths.
        */
       type: 'renameWorkspaceProjectForGroup';
@@ -2237,7 +2237,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:RecentProjects 2026-05-27-07:04:
+       * CDXC:Projects 2026-05-27-07:04:
        * Recent Projects rows have their own right-click menu because they are
        * parked projects without a rendered project group id. Route filesystem
        * and removal actions by trusted project id so the sidebar does not send
@@ -2248,7 +2248,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:WorkspaceActions 2026-05-04-08:22
+       * CDXC:Workarea 2026-05-04-08:22
        * Combined-mode project cards expose native open actions from the
        * right-click menu. The native sidebar resolves the group id to its
        * trusted stored workspace path instead of accepting a client path.
@@ -2258,12 +2258,12 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:EditorPanes 2026-05-06-14:21
+       * CDXC:CodeEditor 2026-05-06-14:21
        * Project editor buttons are trusted group-scoped commands. Native
        * resolves the group id to its stored project path before launching the
        * embedded code-server editor or refreshing its diff stats.
        *
-       * CDXC:EditorPanes 2026-05-06-18:55
+       * CDXC:CodeEditor 2026-05-06-18:55
        * The editor card also accepts middle-click close, but the editor is not a
        * session; route close through the same trusted project/group resolver.
        */
@@ -2275,7 +2275,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SidebarActions 2026-05-05-02:47
+       * CDXC:AgentLauncher 2026-05-05-02:47
        * Sidebar Open In dropdowns know the active project but not a group id.
        * Route these commands through the native sidebar so stored workspace
        * paths remain trusted on the app side instead of being accepted from DOM.
@@ -2284,7 +2284,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SidebarActions 2026-05-05-03:11
+       * CDXC:AgentLauncher 2026-05-05-03:11
        * The sidebar Open In dropdown lists explicit IDE targets. The selected
        * target must travel with the active-project open command instead of
        * being inferred from Settings, so choosing VS Code or Zed immediately
@@ -2295,7 +2295,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:WorkspaceTheme 2026-05-05-05:01
+       * CDXC:Theming 2026-05-05-05:01
        * Preset theme selection must actively clear a previous Custom color.
        * `themeColor: null` is the sidebar-to-native signal that the custom
        * override is being removed, so icon and project-header tinting cannot
@@ -2308,7 +2308,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:RecentProjects 2026-05-04-14:25
+       * CDXC:Projects 2026-05-04-14:25
        * Combined project context menus close projects into the Recent Projects
        * drawer instead of deleting their stored sessions. Remove remains the
        * explicit project-delete path.
@@ -2318,7 +2318,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:WorktreeDelete 2026-06-02-13:41:
+       * CDXC:Worktrees 2026-06-02-13:41:
        * Delete Worktree first asks gxserver for a fresh Git status summary,
        * then the native sidebar opens the full-window confirmation modal before
        * any checkout directory is removed.
@@ -2328,7 +2328,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:WorktreeRename 2026-08-09-18:40:
+       * CDXC:Worktrees 2026-08-09-18:40:
        * Rename Worktree collects the worktree's git state — populated
        * submodules, lock, pushed branch, uncommitted changes, live sessions —
        * before the native modal opens, because those answers decide whether the
@@ -2361,7 +2361,7 @@ export type SidebarToExtensionMessage =
       sessionIds: string[];
       sleeping: boolean;
       /**
-       * CDXC:NativeSidebarBulkActions 2026-06-13-12:59:
+       * CDXC:SessionSleep 2026-06-13-12:59:
        * Bulk sleep diagnostics need to distinguish Sleep below from other
        * setSessionsSleeping callers without logging session ids, titles, paths,
        * commands, or user text. Keep this as an enum-like action source only.
@@ -2380,7 +2380,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SessionAgentNotes 2026-08-24:
+       * CDXC:SessionNotes 2026-08-24:
        * Writes the session's free-text note. The host resolves the provider
        * conversation id the note is filed under, so the renderer only names the
        * session; `projectId` is an optional hint for hosts that need the scope
@@ -2405,7 +2405,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SidebarV2Lifecycle 2026-07-29:
+       * CDXC:StateSync 2026-07-29:
        * Sidebar V2's settle/snooze commands. They carry only the sidebar
        * session id, exactly like `setSessionPinned` and `setSessionSleeping`:
        * the host already owns the id -> (machine, project, session) mapping and
@@ -2430,7 +2430,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:ProjectSleep 2026-05-27-01:50:
+       * CDXC:SessionSleep 2026-05-27-01:50:
        * Combined project rows do not map to one native workspace group. Their
        * context-menu sleep action must be project-scoped and must only sleep
        * inactive sessions so running, working, and attention sessions stay
@@ -2441,7 +2441,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:ProjectClose 2026-06-04-23:40:
+       * CDXC:Projects 2026-06-04-23:40:
        * Combined project-row Close inactive is project-scoped, not group-scoped.
        * It closes idle terminal sessions while preserving working and attention
        * sessions, and it must not park the whole project in Recent Projects.
@@ -2451,7 +2451,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:ProjectSleep 2026-05-27-02:18:
+       * CDXC:SessionSleep 2026-05-27-02:18:
        * Combined project-row Wake must wake sleeping terminal sessions across
        * every workspace group because the row does not carry a concrete native
        * workspace group id.
@@ -2469,7 +2469,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SidebarContextMenu 2026-06-11-23:08:
+       * CDXC:ContextMenus 2026-06-11-23:08:
        * The React sidebar builds Copy details text from its rendered session row
        * and sends only that user-requested clipboard payload to native.
        */
@@ -2506,7 +2506,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:CloseAfterDone 2026-06-15-21:00:
+       * CDXC:Sessions 2026-06-15-21:00:
        * Session context menus toggle Close After Done without sending titles,
        * commands, or terminal content. Native owns the actual three-minute Done
        * stability timer and routes closure through the existing close path.
@@ -2529,7 +2529,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:SwitchAccount 2026-09-03:
+       * CDXC:AgentProviders 2026-09-03:
        * Resume this session under another same-family agent configuration
        * (`agentId` is one of the row's `switchableAgents`): the runtime asks
        * gxserver to rewrite the launch identity, then full-reloads the session.
@@ -2540,7 +2540,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:PanePopOut 2026-05-19-10:15:
+       * CDXC:Workarea 2026-05-19-10:15:
        * Browser and agent session cards expose Pop Out Pane in the sidebar
        * context menu. The controller toggles pop-out presentation from the
        * current session record, matching the focused-pane hotkey behavior.
@@ -2554,7 +2554,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:ProjectReload 2026-05-27-02:18:
+       * CDXC:Projects 2026-05-27-02:18:
        * Combined project rows need a project-scoped full reload because their
        * sidebar group id is synthetic. Reload only idle attached zmx terminals
        * so project-level reload never interrupts working or attention sessions
@@ -2565,7 +2565,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:BrowserPanes 2026-05-02-06:35
+       * CDXC:Browser 2026-05-02-06:35
        * Browser session cards expose pane-specific controls copied from the
        * native browser workflow: DevTools, the Settings-selected feedback tool,
        * and profile selection. The native host owns the macOS UI and WebKit/CEF
@@ -2577,7 +2577,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:GxserverPresentationSearch 2026-06-01-15:08:
+       * CDXC:Sessions 2026-06-01-15:08:
        * Previous Sessions is loaded on demand from gxserver after the presentation hard cutover. React sends debounced metadata queries through native so startup no longer hydrates all previous-session history into the sidebar store.
        */
       limit?: number;
@@ -2610,16 +2610,16 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:PreviousSessions 2026-05-29-12:36:
+       * CDXC:Sessions 2026-05-29-12:36:
        * Previous Sessions needs a direct text-search launcher. Keep it as an
        * explicit sidebar command so the Search row can start a fresh terminal
        * running `gx f`.
        *
-       * CDXC:PreviousSessions 2026-05-29-20:32:
+       * CDXC:Sessions 2026-05-29-20:32:
        * Search by Text must create that terminal in the currently active
        * project, not in the Quick/projectless terminal area.
        *
-       * CDXC:PreviousSessions 2026-06-13-01:09:
+       * CDXC:Sessions 2026-06-13-01:09:
        * The Previous Sessions modal no longer renders launch buttons, and the
        * agent-based previous-session prompt path has been removed. This command
        * remains the direct Search row launcher only.
@@ -2634,7 +2634,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:StashedPrompts 2026-07-29:
+       * CDXC:SavedPrompts 2026-07-29:
        * The session Prompts modal loads gxserver-stashed prompt-editor saves on
        * demand. projectId limits the answer to that project plus its worktree
        * family; omitting it returns every stashed prompt.
@@ -2649,7 +2649,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:StashedPromptTags 2026-08-23:
+       * CDXC:SavedPrompts 2026-08-23:
        * Creates a tag, or renames/recolors `tagId` when it is supplied. The
        * daemon owns the catalogue, so the modal never mints tag ids itself.
        */
@@ -2684,7 +2684,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:StashedPrompts 2026-07-29:
+       * CDXC:SavedPrompts 2026-07-29:
        * Selecting a stashed prompt inserts its text into the named session's
        * active composer without submitting it. The host owns the chat/native
        * input mechanics; the modal only supplies the prompt body and target.
@@ -2713,7 +2713,7 @@ export type SidebarToExtensionMessage =
   | {
       type: 'createGroup';
       /**
-       * CDXC:SidebarContract 2026-07-02-03:49:
+       * CDXC:StateSync 2026-07-02-03:49:
        * GPUI can create a group inside a specific project section, while legacy macOS sidebar handlers can still use the active project fallback.
        *
        * Optional sidebar group id identifying the project the new group should
@@ -2750,7 +2750,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-      CDXC:SidebarProjectCollections 2026-07-18-00:00:
+      CDXC:Projects 2026-07-18-00:00:
       SidebarApp write-through-syncs its whole project-collection overlay after
       each local edit. The host debounces and pushes the wire state to
       gxserver's /api/updateSidebarProjectCollections; only bounded metadata
@@ -2762,7 +2762,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-      CDXC:SidebarSpaces 2026-08-27:
+      CDXC:Spaces 2026-08-27:
       SidebarApp write-through-syncs the whole Space document of one gxserver
       after each local edit. The host debounces and pushes the wire state to
       that daemon's /api/updateSidebarSpaces; only bounded metadata (space ids,
@@ -2776,7 +2776,7 @@ export type SidebarToExtensionMessage =
     }
   | (SidebarSpaceEditorResultFields & {
       /*
-      CDXC:SidebarSpaces 2026-08-27:
+      CDXC:Spaces 2026-08-27:
       The New/Edit Space dialog's confirm (and its Delete). It travels as a
       sidebar command because the dialog is a separate app-modal window, and the
       host bounces it straight back to SidebarApp as
@@ -2787,17 +2787,17 @@ export type SidebarToExtensionMessage =
     })
   | {
       /*
-      CDXC:GPUICommandPane 2026-06-26-05:11:
+      CDXC:CommandPane 2026-06-26-05:11:
       `runSidebarCommand` is a narrow Action selector: renderer messages may provide only the saved command id and optional run mode. Native and GPUI hosts must resolve command text, URLs, saved close-on-exit metadata, cwd/env, paths, output, and launch behavior from trusted command/HUD state.
 
-      CDXC:ProjectActions 2026-08-01:
+      CDXC:Projects 2026-08-01:
       Project-row Action buttons add an optional group selector like
       `runSidebarAgent` already carries. The host resolves the group to its
       project, activates that project through the existing focus flow, and only
       then dispatches the trusted launch — the message never gains launch
       metadata or project paths.
 
-      CDXC:GlobalActions 2026-08-07:
+      CDXC:AgentLauncher 2026-08-07:
       Project rows also render Global Actions flagged showOnProjectRow, so the
       selector must say which list its id belongs to: the two scopes are
       separate id spaces and an id alone cannot pick one. Scope stays optional
@@ -2829,7 +2829,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-      CDXC:GPUISidebarGit 2026-06-24-21:26:
+      CDXC:Git 2026-06-24-21:26:
       Git refreshes can originate from reused project-scoped controls, including remote project rows. Carry the optional group/project scope so GPUI refreshes the owning gxserver project instead of falling back to the active local project.
       */
       groupId?: string;
@@ -2873,10 +2873,10 @@ export type SidebarToExtensionMessage =
   | {
       filePath: string;
       /*
-      CDXC:GPUISidebarGit 2026-06-24-15:43:
+      CDXC:Git 2026-06-24-15:43:
       Commit-review changed-file opens may include the active review request id so non-native hosts can validate the file against the gxserver-derived review list before native code resolves and opens the project-relative path.
 
-      CDXC:GPUISidebarGit 2026-06-24-21:26:
+      CDXC:Git 2026-06-24-21:26:
       Non-review changed-file opens may come from scoped Git controls. Carry the same optional group/project scope as Git actions so GPUI can re-read the owning local or remote gxserver project before opening a file.
       */
       groupId?: string;
@@ -2895,7 +2895,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:WorktreeDelete 2026-06-10-22:56:
+       * CDXC:Worktrees 2026-06-10-22:56:
        * Delete Worktree confirmation may request branch cleanup after the
        * checkout is removed. Keep only boolean user choices in the sidebar
        * bridge message; native re-resolves branch names before mutating Git.
@@ -2911,7 +2911,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:WorktreeRename 2026-08-09-18:40:
+       * CDXC:Worktrees 2026-08-09-18:40:
        * One typed name plus one boolean. gxserver derives the destination folder
        * (`<ParentFolder>-<slug>`) and the project label from it, so the modal
        * never names a path; `renameBranch` stays opt-in because renaming a
@@ -2945,7 +2945,7 @@ export type SidebarToExtensionMessage =
       commandIds: string[];
     }
   /*
-   * CDXC:GlobalActions 2026-08-01:
+   * CDXC:AgentLauncher 2026-08-01:
    * Global Actions get their own message types rather than a scope flag on the
    * project ones. A host that predates this feature drops an unknown message
    * type through the unsupported-message path, which is a visible no-op; a host
@@ -2962,7 +2962,7 @@ export type SidebarToExtensionMessage =
       name: string;
       playCompletionSound: boolean;
       /*
-       * CDXC:GlobalActions 2026-08-07:
+       * CDXC:AgentLauncher 2026-08-07:
        * Settings offers the project-row toggle on Global Actions too, and
        * gxserver stores it for both lists. The field was missing here, so the
        * host had nothing to forward and every global save wrote the flag back
@@ -3013,7 +3013,7 @@ export type SidebarToExtensionMessage =
       remoteMachineId?: string;
     }
   /*
-   * CDXC:SidebarV2Worktree 2026-07-29:
+   * CDXC:Worktrees 2026-07-29:
    * Sidebar V2's worktree flow. These mirror gxserver's
    * `/api/createWorktreeSession` and `/api/removeSessionWorktree` one-for-one,
    * with two deliberate differences:
@@ -3061,7 +3061,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-       * CDXC:DocsRootDirectory 2026-08-09:
+       * CDXC:Docs 2026-08-09:
        * Absolute folder this project's Docs surface shows in addition to the
        * project's own docs. Blank clears the override so the project inherits
        * the Docs directory Global Default.
@@ -3072,7 +3072,7 @@ export type SidebarToExtensionMessage =
     }
   | {
       /*
-       * CDXC:ProjectSettings 2026-06-17-17:13:
+       * CDXC:Projects 2026-06-17-17:13:
        * The Projects settings selector lists durable project rows, so Settings must be able to remove any selected project through the same native removeProject path used by project headers instead of limiting deletion to sidebar context menus.
        */
       type: 'removeProject';
@@ -3096,7 +3096,7 @@ export type SidebarToExtensionMessage =
       agentIds: string[];
     }
   /**
-   * CDXC:AppIconPicker 2026-06-25-21:50:
+   * CDXC:Icons 2026-06-25-21:50:
    * Settings -> App Icon talks to native through these four messages. Native
    * owns the icons folder, file picking, and the live Dock/app-switcher icon;
    * the sidebar only requests state and selections. sourceId is a filename in
@@ -3118,7 +3118,7 @@ export type SidebarToExtensionMessage =
       type: 'revealAppIconsFolder';
     }
   /**
-   * CDXC:TerminalBackgroundImage 2026-08-01:
+   * CDXC:Terminal 2026-08-01:
    * Settings -> Terminal Background Image "Browse" opens a native file dialog
    * host-side; the picked absolute path comes back to the settings modal as a
    * terminalBackgroundImageFilePicked host message and fills the path field.
@@ -3127,7 +3127,7 @@ export type SidebarToExtensionMessage =
       type: 'pickTerminalBackgroundImageFile';
     }
   /**
-   * CDXC:FirstLaunchSetup 2026-08-24:
+   * CDXC:Onboarding 2026-08-24:
    * The onboarding footer's Add 1st project action opens a native folder dialog
    * host-side. The picked absolute path returns to the modal as a
    * firstLaunchProjectFolderPicked host message, then registers `path` as a

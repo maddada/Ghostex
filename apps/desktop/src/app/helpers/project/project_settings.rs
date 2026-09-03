@@ -76,7 +76,7 @@ where
     F: FnOnce() -> Vec<serde_json::Value>,
 {
     /*
-    CDXC:GPUIRecentProjects 2026-06-25-19:02:
+    CDXC:Projects 2026-06-25-19:02:
     Project Settings parks only explicit boolean `isRecentProject: true` domain rows; string, number, false, missing, and malformed values do not become Recent Projects. If all domain rows are explicit recent or otherwise unusable, keep the presentation fallback path available rather than fabricating Settings rows.
     */
     let project_settings_projects =
@@ -312,7 +312,7 @@ pub(crate) fn gpui_project_settings_project_from_domain_project(
 ) -> Option<serde_json::Value> {
     let project = project.as_object()?;
     /*
-    CDXC:GPUIRecentProjects 2026-06-25-18:50:
+    CDXC:Projects 2026-06-25-18:50:
     GPUI app-modal normal project lists must mirror macOS by excluding explicit parked Recent Projects from `/api/listProjects` instead of deriving Settings project rows from those parked rows. Only `isRecentProject: true` is parked; zero-session normal projects and rows without the flag remain settings projects.
     */
     if gpui_gxserver_project_row_is_explicit_recent_project(project) {
@@ -371,7 +371,7 @@ pub(crate) fn gpui_project_settings_project_from_domain_project(
             .and_then(|config| gpui_trimmed_json_string_field(config, "beadsDirectory")),
     );
     /*
-    CDXC:DocsRootDirectory 2026-08-09:
+    CDXC:Docs 2026-08-09:
     The per-project Docs root rides in the same per-project config object the
     Beads directory already uses, so Settings -> Projects keeps one storage seam
     and the feature needs no new domain field, column, or migration.
@@ -538,10 +538,10 @@ pub(crate) fn automate_workarea_runtime_url_from_project_snapshot(
     runtime_settings: &cef::SidebarRuntimeSettingsSnapshot,
 ) -> Option<ProjectWorkareaRealRuntimeUrl> {
     /*
-    CDXC:GPUIAutomateWorkarea 2026-07-04-23:18:
+    CDXC:Automations 2026-07-04-23:18:
     Automate mirrors macOS `createProjectAutomateEditorUrl`: use the bundled Kanban/tasks CEF page, the explicit project identity params, the automate-mode project editor id, and `surface=automations`. Projectless contexts, missing project path, or missing automateBoardId must stay on the placeholder instead of synthesizing an Automate URL.
 
-    CDXC:GPUIAutomateStable 2026-07-26:
+    CDXC:Automations 2026-07-26:
     Project-scoped Automate is no longer an experimental GPUI feature. Mark that first-party workarea explicitly so the shared page does not apply the Show Beta Features content gate or experimental label. Quick Automations Overview keeps its existing experimental startup seed.
     */
     if !snapshot.feature_availability.automate {
@@ -550,7 +550,7 @@ pub(crate) fn automate_workarea_runtime_url_from_project_snapshot(
     let active_project_id = snapshot.active_project_id.as_ref()?.0.clone();
     if active_project_id == GPUI_QUICK_AUTOMATIONS_PROJECT_ID {
         /*
-        CDXC:GPUIQuickAutomationsOverview 2026-07-08:
+        CDXC:Automations 2026-07-08:
         Mirror macOS `createQuickAutomationsProjectEditorUrl` in `native/sidebar/native-sidebar.tsx`: the quick-automations project is a real Automate overview surface with empty `projectPath`, all-project scope, and the same Show Beta Features seed. Its identity is the project id, so it must not require an in-memory project path or be rejected by the projectless guard.
         */
         let surface_id = snapshot.surface_ids.automate_board_id.as_ref()?.clone();

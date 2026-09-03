@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::session_git_status::run_project_git_remote_probe_command;
 
 /*
-CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 Server side of project Git origin presentation. Sidebar V2 uses the origin to
 merge matching cross-machine checkouts, while the classic sidebar exposes the
 exact value through Copy Remote URL. gxserver publishes that URL on
@@ -381,7 +381,7 @@ pub fn ensure_project_git_remote_probed(project: &Value, enabled: bool) {
 }
 
 /*
-CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+CDXC:StateSync 2026-07-29 (P5 fix round):
 The warm every project DELTA runs, and the reason it is not limited to
 `projectAdded`.
 
@@ -628,7 +628,7 @@ mod tests {
     #[test]
     fn the_repository_root_rides_the_same_probe_and_the_same_work_tree_gate() {
         /*
-        CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+        CDXC:StateSync 2026-07-29 (P5 fix round):
         `gitRepositoryRootPath` is what makes the client's "Repository + path"
         mode able to split a monorepo, so the probe has to answer it in the same
         pass as the URL — and answer it with the key ABSENT (never null, never
@@ -805,7 +805,7 @@ mod tests {
     }
 
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     Cross-machine grouping is a Sidebar V2 concept, so a V1 machine must spawn no
     git for it, publish nothing, and evict nothing — and must start probing again
     on the first pass after the user selects V2, without a daemon restart.
@@ -944,7 +944,7 @@ mod tests {
         );
 
         /*
-        CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+        CDXC:StateSync 2026-07-29 (P5 fix round):
         The repository root shares the entry, so it must share the delta rule:
         a checkout that moves under a different root republishes exactly like one
         that changed its remote, or the client's "Repository + path" keys would
@@ -1156,7 +1156,7 @@ mod tests {
         );
 
         /*
-        CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+        CDXC:StateSync 2026-07-29 (P5 fix round):
         A sub-directory of the repository must report the REPOSITORY root, not
         itself — that difference is exactly what lets the client derive a
         monorepo sub-project's relative path and keep it apart under
@@ -1300,7 +1300,7 @@ mod tests {
     }
 
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     The warm answers to the same version gate as the pass, and it is gated at the
     PROBE rather than by unwiring the hook: a V1 daemon still announces the
     project through exactly the same delta path, it just spawns no git on the way.
@@ -1342,7 +1342,7 @@ mod tests {
     #[test]
     fn a_restored_parked_project_carries_its_origin_in_the_delta_that_restores_it() {
         /*
-        CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+        CDXC:StateSync 2026-07-29 (P5 fix round):
         The reported regression, end to end. A parked project leaves
         presentation, so the refresh pass stops wanting its path and evicts the
         cache entry. Restoring it then published a project with NO remote until

@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 Row and header labels, ported from the terminal picker so both surfaces read the
 same ("6m ago", "Today", "3 days ago", "last active Aug 18 23:47 UTC").
 */

@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. See `core.ts` for
 how the runtime's methods are re-attached.
 */
@@ -17,7 +17,7 @@ import { createAgentSessionDefaultTitle } from '@/packages/shared/session-grid-c
 import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeExportTranscriptMethods` — because deriving them would make
@@ -39,7 +39,7 @@ export interface GpuiSidebarRuntimeExportTranscriptMethods {
 
 export const gpuiSidebarRuntimeExportTranscriptMethods = {
   /*
-  CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
+  CDXC:TranscriptExport 2026-08-20 / CDXC:TranscriptExport 2026-08-24:
   Export Transcript opens its dialog on the include-toggle options stage; the
   daemon call only runs when the user confirms it there
   (`runExportSessionTranscriptForDialog`). This method resolves which session
@@ -97,7 +97,7 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
   },
 
   /*
-  CDXC:ExportTranscriptOptions 2026-08-24:
+  CDXC:TranscriptExport 2026-08-24:
   The dialog's Export button. The export is a daemon operation, not a local
   file read: the agent's raw transcript only exists on the machine that runs
   it, so the export lands next to the transcript and the returned path is
@@ -247,14 +247,14 @@ export const gpuiSidebarRuntimeExportTranscriptMethods = {
       return;
     }
     /*
-    CDXC:ExportTranscript 2026-08-20:
+    CDXC:TranscriptExport 2026-08-20:
     The new session is created with a staged input draft, never a first user
     message: gxserver types the mention into the agent's composer after the
     provider starts and stops there. Nothing on this side sends a prompt or an
     Enter, so the conversation only begins when the user writes their own
     prompt around the mention and submits it themselves.
 
-    CDXC:SessionChatLaunchDraft 2026-09-02:
+    CDXC:Drafts 2026-09-02:
     The row is a draft, like every other promptless sidebar launch, so Chat
     View is available from the first frame instead of only after the agent's
     hooks report a conversation id — the old non-draft row left the Chat

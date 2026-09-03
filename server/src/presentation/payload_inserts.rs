@@ -11,7 +11,7 @@ pub(crate) fn insert_workspace_groups_presentation_payload(
     db: &Connection,
 ) -> Result<(), DomainStateError> {
     /*
-    CDXC:WorkspaceSessionGroups 2026-07-12-00:00:
+    CDXC:Sessions 2026-07-12-00:00:
     Mobile and CLI consumers read the GPUI-authored named-group overlay from the
     same presentation snapshot they already poll, so grouped ordering needs no
     extra round trip.
@@ -28,7 +28,7 @@ pub(crate) fn insert_sidebar_project_collections_presentation_payload(
     db: &Connection,
 ) -> Result<(), DomainStateError> {
     /*
-    CDXC:SidebarProjectCollections 2026-07-18-00:00:
+    CDXC:Projects 2026-07-18-00:00:
     Mobile and CLI consumers read the colored project-collection overlay from
     the same presentation snapshot they already poll, so grouped project
     rendering needs no extra round trip.
@@ -45,7 +45,7 @@ pub(crate) fn insert_sidebar_spaces_presentation_payload(
     db: &Connection,
 ) -> Result<(), DomainStateError> {
     /*
-    CDXC:SidebarSpaces 2026-08-27:
+    CDXC:Spaces 2026-08-27:
     The saved-filter overlay rides the same presentation snapshot every client
     already polls, so a Space row and its filtered project list need no second
     round trip and stay in step with the collections overlay beside it.
@@ -58,7 +58,7 @@ pub(crate) fn insert_sidebar_spaces_presentation_payload(
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 `queuedPromptCount` is the sidebar badge's whole input: how many Ghostex-owned
 prompts are waiting for this session. It rides the presentation projection for
 the same reason Delayed Send's countdown does — the sidebar already renders
@@ -177,7 +177,7 @@ pub(crate) fn insert_session_chat_queue_session_projection(
 }
 
 /*
-CDXC:SessionAgentNotes 2026-08-24:
+CDXC:SessionNotes 2026-08-24:
 `sessionNote` is the sidebar row's whole note input: the hover tooltip line and
 the note dot both read it, and the row must show it for SLEEPING sessions too,
 so it rides the presentation projection instead of a per-row round trip — same
@@ -262,7 +262,7 @@ struct StashedPromptSessionOwner {
 }
 
 /*
-CDXC:TerminalAgentBarSavedPromptCount 2026-08-26:
+CDXC:SavedPrompts 2026-08-26:
 The terminal action bar badges Saved Prompts with the number filed against the
 current agent conversation. Read the bounded stash table once per presentation
 snapshot, then match each session using the same union as the chat composer:
@@ -341,7 +341,7 @@ pub(crate) fn insert_stashed_prompt_count_session_projection(session: &mut Value
 }
 
 /*
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 A draft's sidebar row shows the first line of the text the user is typing into
 it, not "Claude Session". The text lives in the synced `session_chat_drafts`
 table rather than in the session row, so — exactly like the queue counts and
@@ -444,7 +444,7 @@ pub(crate) fn insert_auto_settle_window_presentation_payload(
     auto_settle_after_days: Option<f64>,
 ) {
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     One sidebar renders rows from several daemons and each daemon reads its OWN
     `sidebarAutoSettleAfterDays`, so a client that applied the local window to
     every machine would park remote sessions the remote daemon still considers

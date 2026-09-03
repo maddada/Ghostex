@@ -1,6 +1,6 @@
 //! The shared search engine: scan once, then answer ranked queries.
 //!
-//! CDXC:AgentHistorySearch 2026-08-20:
+//! CDXC:PromptSearch 2026-08-20:
 //! The TUI and the Find GUI must rank identically, so both go through this one
 //! module rather than each re-implementing filtering and sorting. `gx f` holds a
 //! `SearchIndex` for the life of the picker; gxserver keeps one warm and answers
@@ -93,7 +93,7 @@ pub struct SearchIndex {
     pub opencode_error: Option<String>,
     pub built_at: SystemTime,
     /*
-    CDXC:AgentHistorySearch 2026-08-20:
+    CDXC:PromptSearch 2026-08-20:
     Prompts are addressed by a stable key rather than a position, so a client can
     act on a result it fetched minutes ago. The key is the favorites hash of
     agent+text — already unique per record, because dedup collapses identical
@@ -195,7 +195,7 @@ impl SearchIndex {
 
     /// Rank the index against `options` and return the requested window.
     ///
-    /// CDXC:AgentHistorySearch 2026-08-20:
+    /// CDXC:PromptSearch 2026-08-20:
     /// The Find GUI runs this per keystroke against ~25k records, where a single
     /// thread spends ~350ms in the DP matcher. The scan is embarrassingly
     /// parallel — records are immutable and each worker owns its own scratch —

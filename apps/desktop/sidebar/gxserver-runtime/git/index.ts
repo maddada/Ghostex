@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines), pure move, no
 logic changes. Each sibling module contributes part of the
 `gpuiSidebarRuntimeGitMethods` object; this barrel combines them with the

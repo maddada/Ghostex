@@ -8,7 +8,7 @@ import { createGpuiSidebarRuntime } from './gxserver-runtime';
 import './sidebar.css';
 
 /*
-CDXC:GPUISidebarGxserverRuntime 2026-06-24-11:00:
+CDXC:StateSync 2026-06-24-11:00:
 GPUI sidebar production runtime mounts the shared SidebarApp directly and feeds it through the local gxserver message source. Storybook fixtures are not a runtime fallback; missing or invalid Rust/CEF gxserver bootstrap publishes the explicit gxserver-unavailable sidebar state until real presentation data arrives.
 */
 document.body.dataset.sidebarTheme = 'plain-dark';
@@ -16,7 +16,7 @@ document.body.dataset.sidebarTheme = 'plain-dark';
 document.body.classList.add('vscode-dark', 'native-sidebar-body');
 
 /*
-CDXC:GPUISidebarCollapseRestore 2026-07-09:
+CDXC:Sidebar 2026-07-09:
 Sidebar collapse and Show more/less state persist through plain localStorage,
 exactly like the macOS sidebar WKWebView: the GPUI sidebar CEF profile has a
 persistent cache_path (see cef_app_ui_profile_cache_path in apps/desktop/src/cef/shell.rs),
@@ -28,7 +28,7 @@ if (!rootElement) {
 }
 
 /*
-CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+CDXC:FocusRouting 2026-07-22:
 The sidebar CEF surface is mouse-focus passive on the native side: clicking
 its background leaves keyboard focus on the active terminal/pane. The page
 does NOT watch DOM focus events for this — Chromium defers focus/blur events
@@ -37,7 +37,7 @@ The CEF helper's renderer-side focused-node callback reports editable-focus
 transitions to Rust instead, which grants/releases native keyboard focus.
 */
 /*
-CDXC:GPUISidebarPointerTracking 2026-08-02:
+CDXC:Sidebar 2026-08-02:
 An open sidebar context menu closes on Escape, on its own in-sidebar backdrop,
 and on window blur — but none of those fire when the click lands on a native
 sibling. The sidebar CEF surface is mouse-focus passive, so clicking a terminal
@@ -52,7 +52,7 @@ window.ghostexGpui.dismissSidebarContextMenus = () => {
 };
 
 /*
-CDXC:GPUISidebarPointerTracking 2026-08-20:
+CDXC:Sidebar 2026-08-20:
 A tooltip opens on pointer-enter and closes on pointer-leave, and the sidebar
 CEF surface never receives that leave when the pointer crosses into a native
 sibling: the tooltip for a session row stayed on screen with the pointer over a
@@ -60,7 +60,7 @@ terminal pane. The same AppKit observer that owns `data-native-pointer-inside`
 reports the crossing here.
 
 This is a dismissal, not a suppression: `data-sidebar-tooltips-suppressed` is
-deliberately drag-only (see CDXC:TooltipLifecycle 2026-06-13-02:30 in
+deliberately drag-only (see CDXC:Tooltips 2026-06-13-02:30 in
 app-tooltip.tsx), because a persistent CSS flag would also keep the *next*
 hover from opening a tooltip until something cleared it. Closing the open
 tooltips leaves the next pointer-enter free to open a new one.
@@ -70,7 +70,7 @@ window.ghostexGpui.dismissSidebarTooltips = () => {
 };
 
 /*
-CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+CDXC:Spaces 2026-08-29:
 Rust's AppKit observer reports each finger scroll-gesture begin
 (NSEventPhaseBegan) inside the sidebar's frame. The Space-swipe handler resets
 its one-Space-per-swipe gesture lock on this signal — the renderer's wheel

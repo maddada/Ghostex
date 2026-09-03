@@ -1,6 +1,6 @@
 //! The interactive picker (port of zehn's `src/tui.zig`).
 //!
-//! CDXC:AgentHistorySearch 2026-08-20:
+//! CDXC:PromptSearch 2026-08-20:
 //! Two hotkeys moved so the terminal picker and the Find GUI can share one key
 //! map. `^t` (agents) and `^r` (projects) are unusable in the GUI: browsers
 //! reserve Ctrl+T for a new tab and Ctrl+R for reload, and a page cannot take
@@ -178,7 +178,7 @@ pub struct Tui<'a> {
     preview_focus: bool,
     wrap_preview: bool,
     fullscreen_preview: bool,
-    // CDXC:AgentHistorySearch 2026-06-16-18:16:
+    // CDXC:PromptSearch 2026-06-16-18:16:
     // Search results start as a flat relevance list; day grouping stays opt-in
     // through ^d. Recomputing after query edits, filter changes, or grouping
     // toggles returns to the first visible result instead of a stale scroll.

@@ -150,7 +150,7 @@ function expectMarkerGeometry(canvasElement: HTMLElement): void {
   const thinkingLine = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-line');
   const thinkingTrigger = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-trigger');
   const thinkingIcon = canvasElement.querySelector<HTMLElement>('.ghostex-chat-thinking-icon');
-  // CDXC:SessionChatMarkerColumn 2026-08-23: the reasoning disclosure's glyph
+  // CDXC:SessionChat 2026-08-23: the reasoning disclosure's glyph
   // is the transcript's ONE disclosure chevron now, not a clip-path triangle.
   const caret = canvasElement.querySelector<HTMLElement>(
     '.ghostex-chat-thinking-icon .ghostex-chat-disclosure-chevron'
@@ -290,7 +290,7 @@ export const HoverHeadingTreatmentPreview: Story = {
     expect(workTriggerRectangle).toBeDefined();
     const caretInset = (caretRectangle?.left ?? 0) - triggerRectangle.left;
     const toolInset = (toolIconRectangle?.left ?? 0) - (workTriggerRectangle?.left ?? 0);
-    // CDXC:SessionChatMarkerColumn 2026-08-23: one gutter for both lanes —
+    // CDXC:SessionChat 2026-08-23: one gutter for both lanes —
     // --chat-marker-inset (2px) plus the 1px each side that centres a 14px
     // glyph in the 16px slot.
     expect(caretInset).toBeCloseTo(3, 1);

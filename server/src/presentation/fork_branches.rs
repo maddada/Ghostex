@@ -6,7 +6,7 @@ use crate::domain::{DomainRepository, DomainStateError};
 use super::*;
 
 /*
-CDXC:SessionForkFamilies 2026-08-28:
+CDXC:SessionFork 2026-08-28:
 `/api/sessionForkBranches` is the read side of the same derivation Previous
 Sessions hides superseded ancestors with. A chat header asks it "what else
 shares this conversation's history", and gets every registry row in the family —

@@ -145,7 +145,7 @@ static BOOL
 GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint);
 
 /*
- CDXC:GPUISidebarPointerTracking 2026-08-02:
+ CDXC:Sidebar 2026-08-02:
  The sidebar CEF surface is a native sibling of GPUI chrome, Ghostty terminal
  hosts, and other CEF panes, so its renderer never receives a reliable
  mouse-leave when the pointer crosses into one of those siblings: Chromium can
@@ -161,7 +161,7 @@ GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint);
 static __weak NSView *g_ghostexGpuiSidebarPointerTrackingView = nil;
 
 /*
- CDXC:GPUISidebarPointerTracking 2026-08-20:
+ CDXC:Sidebar 2026-08-20:
  This is "what the sidebar page was last told", and it exists to keep the
  high-frequency mouse-moved path from running a script per event. It must
  therefore have an honest `Unknown` value: any moment the page's copy can no
@@ -229,7 +229,7 @@ GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint) {
 }
 
 /*
- CDXC:GPUISidebarPointerTracking 2026-08-20:
+ CDXC:Sidebar 2026-08-20:
  The workspace window stopped being active, so mouse-moved events stop
  arriving and a crossing out of the sidebar can no longer be observed. Report
  the pointer as outside — the same thing leaving for another app does to a
@@ -241,7 +241,7 @@ void GhostexGpuiCEFReportSidebarPointerOutside(void) {
 }
 
 /*
- CDXC:GPUISidebarPointerTracking 2026-08-20:
+ CDXC:Sidebar 2026-08-20:
  The workspace window became active again. The pointer may already be parked
  over a session row, and a pointer that never moves produces no event to
  recompute from, so resolve the crossing from the real pointer location rather
@@ -254,7 +254,7 @@ void GhostexGpuiCEFRefreshSidebarPointerInside(void) {
 }
 
 /*
- CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+ CDXC:Spaces 2026-08-29:
  The sidebar page navigates Spaces with horizontal trackpad swipes, and DOM
  wheel events carry no NSEvent phase/momentumPhase, so the renderer cannot
  tell "second physical swipe" apart from "momentum tail of the first": every
@@ -401,7 +401,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
 }
 
 /*
- CDXC:GPUICefAppProtocol 2026-06-14-16:14:
+ CDXC:CefRuntime 2026-06-14-16:14:
  CEF's macOS external-run-loop path requires NSApplication to conform to
  CefAppProtocol before Chromium installs its CFRunLoop observers. Mirror the
  protocol definitions from cef_application_mac.h locally so this lightweight
@@ -466,7 +466,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
           dbgResponder ? object_getClassName(dbgResponder) : "nil");
   }
   /*
-   CDXC:GPUINavKeyEventNormalization 2026-07-04:
+   CDXC:Hotkeys 2026-07-04:
    CGEvent-synthesized keyboards (Karabiner's virtual HID, BetterTouchTool,
    CGEvent-posting automation) deliver arrow/Home/End/PageUp/PageDown and
    backspace/forward-delete key events whose underlying CGEvent unicode
@@ -488,7 +488,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
   GhostexGpuiSidebarPointerTrackingObserveEvent(event);
 
   /*
-   CDXC:GPUIKeyboardRouter 2026-07-24:
+   CDXC:Hotkeys 2026-07-24:
    GPUI, native Ghostty, and CEF use separate responder systems. Offer key
    press/repeat/release events once to the window-scoped Rust router before
    AppKit key-equivalent traversal. The router claims only an application
@@ -517,7 +517,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
   }
 
   /*
-   CDXC:GPUISessionChatEditHotkeys 2026-08-13:
+   CDXC:Hotkeys 2026-08-13:
    The chat composer is a Monaco renderer editor, so its command chords must
    reach Chromium as the original trusted key event. AppKit's Edit-menu key
    equivalents and generic CEF select-all mirror are intentionally disabled
@@ -546,7 +546,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
   }
 
   /*
-   CDXC:GPUIDocsRendererSearchHotkeys 2026-08-09:
+   CDXC:Hotkeys 2026-08-09:
    GPUI and AppKit both have process-level meanings for editor chords before
    Chromium's renderer sees them. When the exact Docs workarea is the proven
    native keyboard owner, deliver its VS Code-compatible Command+F Find,
@@ -570,7 +570,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
   }
 
   /*
-   CDXC:GPUICefEditCommands 2026-06-14-17:25:
+   CDXC:Hotkeys 2026-06-14-17:25:
    GPUI can keep its address-input focus handle after Chromium has accepted a
    page click, so AppKit command-key dispatch may never invoke selectAll: on
    CEF's responder chain. When the active native target is a registered CEF
@@ -579,7 +579,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
    clear that active target before their own text shortcuts run.
    */
   /*
-   CDXC:GPUICefRendererEditHotkeyPassthrough 2026-08-09:
+   CDXC:Hotkeys 2026-08-09:
    Renderer editors such as Monaco own Cmd+A as a renderer keybinding.
    Chromium's generic Frame::select_all edit command does not execute that
    keybinding, so the app-wide CEF Select All mirror must stay out of those
@@ -593,7 +593,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
           event.window ?: NSApp.keyWindow);
 
   /*
-   CDXC:GPUICefEditCommands 2026-07-09:
+   CDXC:Hotkeys 2026-07-09:
    Cmd+X/C/V need the same post-dispatch mirror as Cmd+A because GPUI's
    window key handling consumes command chords before AppKit menu or
    responder-chain dispatch can reach CEF child views. Two differences from
@@ -620,7 +620,7 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
   }
 
   /*
-   CDXC:GPUICefEditCommands 2026-08-18:
+   CDXC:Hotkeys 2026-08-18:
    The mirror exists for the case where GPUI chrome still holds the focus
    handle, so it resolves its target from the last-active CEF registry rather
    than the real first responder. Repeating it after normal dispatch already
@@ -661,7 +661,7 @@ void GhostexGpuiCEFPrepareApplication(void) {
         [[defaults volatileDomainForName:NSArgumentDomain] mutableCopy]
             ?: [NSMutableDictionary dictionary];
     /*
-     CDXC:GPUICefCrashRestore 2026-06-14-15:25:
+     CDXC:CefRuntime 2026-06-14-15:25:
      The GPUI CEF shell is launched repeatedly while Chromium embedding is under
      construction. Disable AppKit's crash-state restoration prompts in the
      process argument domain so a saved-state modal cannot block the first GPUI
@@ -689,14 +689,14 @@ void GhostexGpuiCEFInstallMessagePump(void) {
   }
 
   /*
-   CDXC:GPUICefMessagePump 2026-06-14-15:25:
+   CDXC:CefRuntime 2026-06-14-15:25:
    GPUI owns the AppKit run loop, while cef-rs exposes a single-step
    CefDoMessageLoopWork pump. Let CEF's BrowserProcessHandler schedule each
    required step onto the main queue instead of handing the process to
    CefRunMessageLoop, matching Ghostex's GPUI-safe external-pump model without
    replacing GPUI's application loop.
 
-   CDXC:GPUICefMessagePump 2026-06-14-17:38:
+   CDXC:CefRuntime 2026-06-14-17:38:
    The cef-rs/Tauri external pump does not fire only once. It cancels stale
    work, caps placeholder delays to a short timer, and reschedules idle work so
    CEF renderers continue painting React sidebar content and browser pages after
@@ -727,7 +727,7 @@ void GhostexGpuiCEFInvalidateMessagePump(void) {
 
 void GhostexGpuiCEFScheduleMessagePumpWork(int64_t delayMs) {
   /*
-   CDXC:GPUICefMessagePumpCoalescing 2026-07-12:
+   CDXC:CefRuntime 2026-07-12:
    CEF may request message-pump work from any thread, including synchronously
    while the main thread is inside CefDoMessageLoopWork. Marshalling every
    callback with dispatch_async lets the post-pump placeholder race ahead of
@@ -877,14 +877,14 @@ void GhostexGpuiCEFInstallApplicationHooks(void) {
   }
 
   /*
-   CDXC:GPUICefAppProtocol 2026-06-14-15:25:
+   CDXC:CefRuntime 2026-06-14-15:25:
    Tauri's CEF runtime makes its NSApplication subclass conform to
    CefAppProtocol and toggles isHandlingSendEvent during sendEvent:. GPUI must
    keep GPUIApplication as the concrete app class, so install the same protocol
    surface and send-event state on GPUIApplication at runtime without changing
    window layout or input routing.
 
-   CDXC:GPUICefAppProtocol 2026-06-14-16:14:
+   CDXC:CefRuntime 2026-06-14-16:14:
    Chromium's message_pump_mac.mm traps if CefAppProtocol is missing when
    NSApplication's run loop is already active. Register the protocol through the
    NSApplication category above before main, then add the same protocol chain to
@@ -960,7 +960,7 @@ static void GhostexGpuiCEFInstallStandardEditMenu(void) {
   }
 
   /*
-   CDXC:GPUICefEditCommands 2026-06-14-16:31:
+   CDXC:Hotkeys 2026-06-14-16:31:
    Web-page inputs inside the embedded CEF browser need macOS standard Edit
    commands, including Cmd+A Select All. Install first-responder menu actions
    instead of synthesizing web-specific fallbacks so CEF, AppKit text views, and
@@ -999,7 +999,7 @@ static void GhostexGpuiCEFInstallStandardEditMenu(void) {
   }
 
   /*
-   CDXC:GPUICefRendererEditHotkeyPassthrough 2026-08-08:
+   CDXC:Hotkeys 2026-08-08:
    Source and Docs own renderer-level editing histories (Monaco, CodeMirror,
    and Excalidraw). While either exact workarea is the proven window keyboard
    owner, keep the standard Edit menu actions clickable but remove their key
@@ -1040,7 +1040,7 @@ void GhostexGpuiCEFSetNativeViewFrame(void *nativeView, double x, double y,
   }
 
   /*
-   CDXC:GPUICefNativeViewFrame 2026-07-07:
+   CDXC:CefRuntime 2026-07-07:
    GPUI layout is the only owner of this CEF child view's frame. CEF creates
    the child with a width/height-sizable autoresizing mask, so AppKit resizes
    it on every window resize before GPUI's next layout pass; the Rust
@@ -1095,7 +1095,7 @@ void GhostexGpuiCEFOrderNativeViewFront(void *nativeView) {
   }
 
   /*
-   CDXC:GPUITitlebarDropdownZOrder 2026-07-09:
+   CDXC:Titlebar 2026-07-09:
    Sibling native children of the GPUI content view stack in creation order,
    and terminal host views are appended whenever a session mounts. A reused
    dropdown CEF panel created earlier would therefore reappear underneath
@@ -1114,7 +1114,7 @@ void GhostexGpuiCEFRemoveNativeViewFromSuperview(void *nativeView) {
   }
 
   /*
-   CDXC:GPUICefCloseContract 2026-08-24:
+   CDXC:CefRuntime 2026-08-24:
    Completes CEF's close contract for browsers whose DoClose returns handled
    (cef_life_span_handler.h: the app must still finish the close by proceeding
    with window/view-hierarchy tear-down, otherwise the browser stays partially
@@ -1137,7 +1137,7 @@ void GhostexGpuiCEFPrepareNativeViewForFocus(void *nativeView) {
   }
 
   /*
-   CDXC:GPUICefFocusRouting 2026-06-14-16:45:
+   CDXC:FocusRouting 2026-06-14-16:45:
    Browser clicks land on CEF's native child view, not always on GPUI's hitbox
    tree. Make the exact CEF NSView accept first responder and claim it on
    mouseDown before forwarding the event, so macOS command-key text actions
@@ -1147,7 +1147,7 @@ void GhostexGpuiCEFPrepareNativeViewForFocus(void *nativeView) {
 }
 
 /*
- CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+ CDXC:FocusRouting 2026-07-22:
  The shared sidebar CEF surface is app chrome: clicking its background must
  not move keyboard focus away from the active terminal/pane. A browser root
  flagged mouse-focus passive declines first responder for every view in its
@@ -1251,7 +1251,7 @@ static void GhostexGpuiInstallRootPointerTrackingArea(NSView *view) {
   }
 
   /*
-   CDXC:GPUICefGpuiHoverTracking 2026-08-23:
+   CDXC:CefRuntime 2026-08-23:
    A normal GPUI macOS window asks NSWindow to distribute mouse-moved events,
    but AppKit sends those generic moves to the first responder. Clicking a CEF
    child correctly makes Chromium first responder for keyboard input, which
@@ -1285,7 +1285,7 @@ static void GhostexGpuiFirstResponderReportWindow(NSWindow *window) {
   NSView *gpuiRootView = observer.gpuiRootView;
   id responder = window.firstResponder;
   /*
-   CDXC:GPUIFirstResponderLifetime 2026-07-11:
+   CDXC:FocusRouting 2026-07-11:
    The Rust side defers responder classification onto the gpui foreground
    executor, and responder churn is often CAUSED by the very teardown that
    deallocates the outgoing responder view (browser/terminal host drops). A
@@ -1399,7 +1399,7 @@ static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView *view) {
 static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd,
                                                NSEvent *event) {
   /*
-   CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+   CDXC:FocusRouting 2026-07-22:
    A mouse-focus-passive surface (the shared sidebar) never claims first
    responder from a click: the active terminal keeps typing focus while the
    click continues to Chromium unchanged. Keyboard focus for its editable
@@ -1428,7 +1428,7 @@ static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd,
         object_getClassName(self));
   }
   /*
-   CDXC:GPUITitlebarDropdownCefDismissal 2026-07-15:
+   CDXC:Titlebar 2026-07-15:
    CEF child views receive mouseDown before GPUI's main-window mouse capture,
    so clicking a Source/Browser/project-workarea pane cannot dismiss a GPUI
    titlebar popup through the normal outside-click route. Report the current
@@ -1453,7 +1453,7 @@ static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd,
 static BOOL GhostexGpuiCEFBrowserViewAcceptsFirstResponder(id self, SEL _cmd) {
   (void)_cmd;
   /*
-   CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+   CDXC:FocusRouting 2026-07-22:
    AppKit also moves first responder to a clicked view on its own when that
    view accepts first responder, before mouseDown is delivered. A passive
    surface must decline here too, or the automatic transfer would undo the
@@ -1469,14 +1469,14 @@ static BOOL GhostexGpuiCEFBrowserViewAcceptsFirstResponder(id self, SEL _cmd) {
 
 static void GhostexGpuiCEFBrowserViewSelectAll(id self, SEL _cmd, id sender) {
   /*
-   CDXC:GPUICefEditCommands 2026-06-14-17:25:
+   CDXC:Hotkeys 2026-06-14-17:25:
    Cmd+A in focused CEF page text fields must stay inside Chromium after the
    GPUI address bar has previously owned focus. Implement the standard AppKit
    selectAll: command on the exact CEF NSView and delegate to cef-rs
    Frame::select_all, so macOS command dispatch uses Chromium selection
    semantics without a hidden hit-test layer or page-specific fallback.
 
-   CDXC:GPUICefEditCommands 2026-06-14-17:25:
+   CDXC:Hotkeys 2026-06-14-17:25:
    CEF can deliver page clicks to descendant NSViews below the browser host
    returned by cef-rs. Install the focus subclass on the CEF view tree and
    resolve selectAll: by walking ancestor views back to the registered browser
@@ -1504,7 +1504,7 @@ static void GhostexGpuiCEFBrowserViewForwardEditActionToSuper(id self, SEL _cmd,
 }
 
 /*
- CDXC:GPUICefEditCommands 2026-07-09:
+ CDXC:Hotkeys 2026-07-09:
  Standard Edit-menu actions (menu-bar clicks and nil-target responder-chain
  dispatch) must reach Chromium's frame edit commands on the exact CEF view
  tree, the same way selectAll: already does. Routing through the bridge —
@@ -1646,7 +1646,7 @@ static NSEvent *GhostexGpuiNormalizedNavigationKeyEvent(NSEvent *event) {
       {51, 0x7F, NO, NO},
       {117, NSDeleteFunctionKey, YES, NO},
       /*
-       CDXC:GPUIFunctionKeyEventNormalization 2026-08-18:
+       CDXC:Hotkeys 2026-08-18:
        F1-F20 carry the same defect in the same place: their raw layout
        translation is the single control code 0x10, so a CGEvent-synthesized
        F1 gets committed by TSM as a literal DLE character into whatever text
@@ -1906,7 +1906,7 @@ GhostexGpuiCEFHandleZoomCommandForResponder(id responder,
   }
 
   /*
-   CDXC:GPUICefPaneZoomShortcuts 2026-07-14:
+   CDXC:Hotkeys 2026-07-14:
    Resolve page zoom only by walking from the exact CEF responder to its
    registered Browser/project-workarea root. This keeps Source, Browser,
    Kanban, Automate, and Docs zoom local to the focused pane without window
@@ -1946,7 +1946,7 @@ void GhostexGpuiCEFFocusNativeView(void *nativeView) {
   }
 
   /*
-   CDXC:GPUICefFocusRouting 2026-06-14-18:05:
+   CDXC:FocusRouting 2026-06-14-18:05:
    CEF child views can remain the AppKit first responder after browser
    interaction. When the GPUI-owned address bar is clicked, return
    first-responder ownership to the exact GPUI parent view before focusing the
@@ -1967,7 +1967,7 @@ void GhostexGpuiCEFActivateNativeViewWindow(void *nativeView) {
   }
 
   /*
-   CDXC:GPUICefDevToolsFocus 2026-07-15:
+   CDXC:FocusRouting 2026-07-15:
    CEF DevTools owns a separate native window. Making its browser view first
    responder is insufficient while the GPUI window remains key: AppKit sends
    application edit shortcuts through the key window's GPUIView instead.
@@ -1995,7 +1995,7 @@ void GhostexGpuiCEFFocusGpuiRootView(void *nativeView) {
   }
 
   /*
-   CDXC:GPUICefExplicitNativeFocusOwnership 2026-07-15:
+   CDXC:FocusRouting 2026-07-15:
    A caller that owns the GPUI root already knows this target is not a CEF
    surface. Do not run it through the generic CEF registry probe: clear the
    active Chromium grant unconditionally before AppKit transfers first

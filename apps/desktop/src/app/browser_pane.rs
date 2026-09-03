@@ -292,7 +292,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICefPaneZoomShortcuts 2026-07-14:
+        CDXC:Hotkeys 2026-07-14:
         Cmd+=, Cmd+-, and Cmd+0 belong to the exact focused main CEF pane,
         not only Browser tabs. Source, Kanban, Automate, and Docs use the
         same Chromium host zoom API as Browser while sidebar, modal,
@@ -525,7 +525,7 @@ impl GhostexGpuiApp {
         self.browser_url = url.clone();
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         /*
-        CDXC:SidebarBrowserTabReveal 2026-08-18:
+        CDXC:Browser 2026-08-18:
         Committing an address in an address-only "New Tab" is the moment that
         tab first becomes a sidebar row (placeholders are deliberately not
         projected as browser sessions), so it is a new tab as far as the sidebar
@@ -587,7 +587,7 @@ impl GhostexGpuiApp {
         leaf: &BrowserLeaf,
     ) -> Option<Entity<CefSurface>> {
         /*
-        CDXC:GPUIBrowserSplits 2026-06-22-09:55:
+        CDXC:Browser 2026-06-22-09:55:
         Browser body rendering may attach an existing tab-owned CEF entity for every rendered split leaf whose active tab is loaded, but rendering must never materialize a restored or inactive tab. Missing loaded CEF entities return no surface so the body renderer can show the restored/sleeping placeholder card, address-only tabs stay blank, and Browser sleep, non-Browser modes, Browser tab drags, and command-tab drags hide every surface.
         */
         if !self.browser_surfaces_may_be_visible() {
@@ -624,7 +624,7 @@ impl GhostexGpuiApp {
         let parent_ns_view = self.parent_ns_view;
         let surface_id = format!("gpui-browser-tab-{}", tab_id.0);
         /*
-        CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+        CDXC:Browser 2026-06-23-11:14:
         CEF Browser surfaces must be keyed by tab id for runtime ownership but created with the tab's generated Browser profile id. This lets existing loaded surfaces keep their profile after toolbar selection changes while future tabs/surfaces use the newly selected profile.
         */
         let profile = profile_id.cef_profile_string();
@@ -667,7 +667,7 @@ impl GhostexGpuiApp {
             Err(error) => {
                 // Ensure-style reconcile: skip this pass, retried the next
                 // time the tab needs a surface
-                // (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
+                // (CDXC:CefRuntime 2026-07-11).
                 support_logs::append(
                     support_logs::GpuiSupportLog::CrashReports,
                     "gpui.cefSurface.createFailed",
@@ -681,7 +681,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIBrowserProjectParking 2026-08-26:
+    CDXC:Browser 2026-08-26:
     A surface's async CEF callbacks carry the runtime key of the browser tab
     model that was live when the surface was created, because BrowserTabIds are
     project-local and would otherwise land on whichever project holds the same

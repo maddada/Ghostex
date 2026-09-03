@@ -1,5 +1,5 @@
 /*
-CDXC:GPUILibghosttyVt 2026-07-03:
+CDXC:Terminal 2026-07-03:
 Smoke/demo binary for the libghostty-vt Rust wrapper — the P1a deliverable
 proving parse → render-state → row readback end to end, and demonstrating the
 two-level dirty contract (update never clears; the caller clears global and

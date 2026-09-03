@@ -1,5 +1,5 @@
 /*
-CDXC:CodexHookTrust 2026-09-02:
+CDXC:AgentHooks 2026-09-02:
 Codex CLI does not run a command hook merely because it sits in `hooks.json`.
 Every non-managed hook must be TRUSTED first: Codex hashes the hook's
 normalized identity (event + matcher group + handler config, canonical JSON,

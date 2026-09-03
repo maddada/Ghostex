@@ -1,10 +1,10 @@
 import type { TitlebarDropdownPanelKind, TitlebarDropdownPanelSize } from './types';
 
 /*
- * CDXC:TipsAndTricks 2026-06-16-19:42:
+ * CDXC:Onboarding 2026-06-16-19:42:
  * The Tips & Tricks header needs a Changelog action that opens the full Ghostex GitHub releases page as an in-project browser session, keeping release history inside the current workspace instead of the system browser.
  *
- * CDXC:TipsAndTricks 2026-06-18-04:53:
+ * CDXC:Onboarding 2026-06-18-04:53:
  * The tips panel header should not repeat the Tips & Tricks label in text. Expose Docs as a first-row action and keep documentation inside the current workspace browser session.
  */
 export const GHOSTEX_CHANGELOG_URL = 'https://github.com/maddada/ghostex/releases';
@@ -34,12 +34,12 @@ export const TITLEBAR_EVENT_LOOP_WATCHDOG_INTERVAL_MS = 2_000;
 export const TITLEBAR_EVENT_LOOP_STALL_THRESHOLD_MS = 1_000;
 export const TITLEBAR_EVENT_LOOP_STALL_LOG_THROTTLE_MS = 10_000;
 /**
- * CDXC:ReactTitlebar 2026-06-11-13:22:
+ * CDXC:Titlebar 2026-06-11-13:22:
  * The titlebar document uses native child-window dropdown panels instead of
  * Radix portals in the full-window WKWebView, so the workspace never sits under
  * a titlebar-owned overlay during editor drag/drop.
  *
- * CDXC:ReactTitlebar 2026-06-11-15:58:
+ * CDXC:Titlebar 2026-06-11-15:58:
  * Native titlebar dropdown panels must load the real titlebar-host.html file URL
  * without query parameters. Swift injects the panel kind at document start so
  * WebKit does not treat a synthetic local-file URL as the document resource.
@@ -47,7 +47,7 @@ export const TITLEBAR_EVENT_LOOP_STALL_LOG_THROTTLE_MS = 10_000;
 export const TITLEBAR_PANEL_QUERY_PARAM = 'ghostexTitlebarPanel';
 export const TITLEBAR_DROPDOWN_RESOURCES_PANEL_WIDTH = 656;
 /**
- * CDXC:TipsAndTricks 2026-06-12-08:56:
+ * CDXC:Onboarding 2026-06-12-08:56:
  * The macOS Tips & Tricks child panel should be 100px narrower than the shared
  * Resources reading panel while preserving the always-expanded section layout.
  */
@@ -66,7 +66,7 @@ export function readTitlebarDropdownPanelKind(): TitlebarDropdownPanelKind | und
 
 export function createTitlebarDropdownPanelPreferredSize(kind: TitlebarDropdownPanelKind): TitlebarDropdownPanelSize {
   /*
-   * CDXC:ReactTitlebar 2026-06-12-02:50:
+   * CDXC:Titlebar 2026-06-12-02:50:
    * Compact native titlebar dropdown panels must be sized from the number and
    * type of rendered options before AppKit creates the child window. This keeps
    * short menus from clipping rows below the fold without reintroducing
@@ -87,13 +87,13 @@ export function createTitlebarDropdownPanelPreferredSize(kind: TitlebarDropdownP
 }
 
 /**
- * CDXC:ReactTitlebar 2026-06-11-17:16:
+ * CDXC:Titlebar 2026-06-11-17:16:
  * Native dropdown child windows reuse this titlebar bundle, but their document
  * must avoid inheriting the normal full-width titlebar viewport. Read the panel
  * kind once before React mounts so document, body, and root sizing can be set
  * before WebKit lays out content.
  *
- * CDXC:ReactTitlebar 2026-06-11-17:27:
+ * CDXC:Titlebar 2026-06-11-17:27:
  * Dynamic measurement still allowed WebKit/AppKit feedback to shrink panels
  * after opening. Native titlebar dropdowns now use fixed child-window sizes, so
  * panel documents fill the WebView and dropdown content scrolls internally.

@@ -17,7 +17,7 @@ describe('worktreeRenameNameError', () => {
 
   test("rejects unsupported characters, leading punctuation, and git's reserved component shapes", () => {
     /*
-     * CDXC:WorktreeRename 2026-08-09-18:40:
+     * CDXC:Worktrees 2026-08-09-18:40:
      * `-abc` is the footgun this rule exists for: it passes
      * `git check-ref-format`, so a laxer validator would let it through and
      * `git branch -m -- -abc` would still parse it as a flag. Requiring a
@@ -49,7 +49,7 @@ describe('worktreeRenameNameError', () => {
 
   test('treats an empty name as an error rather than a request to auto-name', () => {
     /*
-     * CDXC:WorktreeRename 2026-08-09-18:40:
+     * CDXC:Worktrees 2026-08-09-18:40:
      * The create flow's branch field reads empty as "gxserver picks the name".
      * Rename has no such fallback: there is nothing to rename to, so empty is a
      * hard validation failure and Rename stays disabled.
@@ -78,7 +78,7 @@ describe('worktreeRenameNameError', () => {
 describe('worktreeRenameFolderSlug', () => {
   test('folds path separators into hyphens without lowercasing', () => {
     /*
-     * CDXC:WorktreeRename 2026-08-09-18:40:
+     * CDXC:Worktrees 2026-08-09-18:40:
      * The branch keeps the typed name verbatim while the folder gets this slug,
      * because `/` cannot appear in a directory name. Case is preserved: the
      * existing worktree slugifiers lowercase because they slug a sentence, and

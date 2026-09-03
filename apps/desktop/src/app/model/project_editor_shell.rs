@@ -109,7 +109,7 @@ impl ProjectEditorAutoSleepPolicySnapshot {
 }
 
 /*
-CDXC:GPUIProjectViewMemory 2026-08-07:
+CDXC:Navigation 2026-08-07:
 The workarea a project was last shown in — and how that project's companion
 pane was arranged — is project-owned state, exactly like its Agents split
 topology. Keyed by the same canonical workspace project key, so a remote
@@ -147,31 +147,31 @@ pub(crate) struct ProjectEditorShellModel {
 impl ProjectEditorShellModel {
     pub(crate) fn shell_default() -> Self {
         /*
-        CDXC:GPUIProjectEditor 2026-06-22-05:49:
+        CDXC:CodeEditor 2026-06-22-05:49:
         Source, Browser, Kanban, Automate, and Docs are project-editor workspace modes in the GPUI parity shell. They replace the normal Agents workspace while active, keep command-pane wrapping outside the editor area, and reserve an in-memory left companion pane with a real divider region while project routing stays deferred.
 
-        CDXC:GPUIProjectEditor 2026-06-22-06:24:
+        CDXC:CodeEditor 2026-06-22-06:24:
         The project-editor companion should start near the macOS default ratio intent instead of a small fixed pixel width. Store the shell default as a 32% editor-area ratio and apply practical companion/editor minimums at render and resize time.
 
-        CDXC:GPUIProjectEditorLifecycle 2026-06-22-08:29:
+        CDXC:CodeEditor 2026-06-22-08:29:
         Source, Browser, Kanban, Automate, and Docs need independent shell-level awake/sleeping state while their real surfaces remain runtime-owned. Persist only enum-like lifecycle values and recency counters; runtime auto-sleep epochs live on the GPUI app so timer tokens never enter shell state and no source content, paths, raw page titles, command text, tokens, or secrets are stored.
 
-        CDXC:GPUIManageLifecycle 2026-06-23-14:08:
+        CDXC:Docs 2026-06-23-14:08:
         Docs sleep/wake must preserve the selected project/workarea runtime identity while hiding or restoring only shell-owned surface state. Sleeping, waking, and load-failed Docs states must not clear or synthesize CEF/file-bridge readiness, perform file I/O, persist project facts, or create fallback surfaces.
 
-        CDXC:GPUIManageLifecycle 2026-06-23-14:48:
+        CDXC:Docs 2026-06-23-14:48:
         Docs sleep/wake must preserve companion layout and command-pane shell state at the same shell boundary as Source and Kanban. Lifecycle toggles may not synthesize readiness, mount CEF or file bridges, reset shell-owned layout, persist private project/workarea facts, or create fallback surfaces.
 
-        CDXC:GPUIAutomateWorkarea 2026-07-04-23:18:
+        CDXC:Automations 2026-07-04-23:18:
         Automate participates in project-editor shell lifecycle, focus, persistence, companion layout, and the direct workarea CEF slot. Shell lifecycle may wake or sleep the mode only; it must not synthesize surface ids, issue fallback URLs, persist private page facts, or mount hidden CEF views outside the active workarea gate.
 
-        CDXC:GPUIKanbanLifecycle 2026-06-24-08:09:
+        CDXC:ProjectBoard 2026-06-24-08:09:
         Kanban sleep/wake/lifecycle must preserve the explicit project/board runtime identity plus separate CEF bridge state, including load-failed, without becoming runtime CEF instantiation, runtime URL issuance, hidden mounts, placeholder replacement, fallback probes, logging/persistence/private payloads, or WKWebView/WebKit/non-CEF paths.
 
-        CDXC:GPUIKanbanLifecycle 2026-06-28-17:09:
+        CDXC:ProjectBoard 2026-06-28-17:09:
         Kanban runtime CEF creation is owned by the direct runtime URL/CefSurface gate, not by shell lifecycle. Do not widen readiness or sidebar bridge routing into URL/path/CEF payloads, hidden mounts, placeholder replacement, fallback probes, logging, persistence, private payloads, or WKWebView/WebKit paths.
 
-        CDXC:GPUIProjectEditor 2026-06-22-08:15:
+        CDXC:CodeEditor 2026-06-22-08:15:
         The optional project-editor companion has explicit shell-owned hide and restore controls before real Source, Browser, Kanban, Automate, and Docs companion content exists. Hiding only toggles companion visibility and focus; it preserves the stored width ratio plus Browser tab/surface identity, placeholder editor identity, command-pane state, and terminal placeholder state.
         */
         Self {
@@ -352,7 +352,7 @@ impl ProjectEditorShellModel {
 
     pub(crate) fn hide_left_companion(&mut self) -> bool {
         /*
-        CDXC:GPUIProjectEditor 2026-06-22-14:42:
+        CDXC:CodeEditor 2026-06-22-14:42:
         Companion close/hide needs a pure model transition for regression coverage: it may only hide the companion pane and must preserve stored width, mode lifecycle/recency, Browser tab identity, command-pane state, and terminal placeholder state for later restore.
         */
         if !self.left_companion_visible {
@@ -365,7 +365,7 @@ impl ProjectEditorShellModel {
 
     pub(crate) fn restore_left_companion(&mut self) -> bool {
         /*
-        CDXC:GPUIProjectEditor 2026-06-22-14:42:
+        CDXC:CodeEditor 2026-06-22-14:42:
         Companion restore reuses the current shell-owned width and lifecycle state instead of recreating placeholder surfaces or resetting the project-editor layout.
         */
         if self.left_companion_visible {

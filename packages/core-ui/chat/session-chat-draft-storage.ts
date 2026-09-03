@@ -1,5 +1,5 @@
 /*
- * CDXC:RecoveredDrafts 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * The composer's per-keystroke draft cache, shared with the Saved Prompts
  * modal's Recovered view. Drafts are stored one-per-session under
  * `ghostex.sessionChat.draft.<sessionKey>` and cleared only after a successful
@@ -114,7 +114,7 @@ export function clearStoredSessionChatDraftIfUnchanged(sessionKey: string | unde
 }
 
 /*
- * CDXC:DraftCrashSafety 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * An explicit delete (the Recovered row's trash action) writes a STAMPED BLANK
  * entry rather than removing the key. gxserver holds a durable copy of every
  * draft and `reconcileSessionChatDraftsFromServer` heals this cache from it at

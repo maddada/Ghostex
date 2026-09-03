@@ -430,7 +430,7 @@ describe('normalizeStoredSidebarCommands', () => {
 
   test('should normalize command icons and strip legacy icon colors', () => {
     /*
-     * CDXC:ProjectActions 2026-06-17-07:40:
+     * CDXC:Projects 2026-06-17-07:40:
      * Existing users may have saved per-action icon colors from older builds.
      * Updating the Mac app must keep the Action command while stripping the
      * removed color field so titlebar action glyphs inherit chrome color.
@@ -466,7 +466,7 @@ describe('normalizeStoredSidebarCommands', () => {
 
   test('should keep saved terminal action links and normalize their targets', () => {
     /*
-     * CDXC:ProjectActions 2026-07-31-12:00:
+     * CDXC:Projects 2026-07-31-12:00:
      * Terminal actions can open saved links alongside their command run. Keep
      * valid links, trim URLs, default unknown targets to the integrated
      * browser, and drop link entries without a URL.

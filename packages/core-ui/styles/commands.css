@@ -367,7 +367,7 @@
 }
 
 /*
- * CDXC:SidebarActions 2026-05-05-02:47
+ * CDXC:AgentLauncher 2026-05-05-02:47
  * The Actions section hosts compact React split dropdowns under the sidebar
  * header. The left segment runs the promoted option; the chevron opens a React
  * menu aligned under the trigger, matching the native-looking segmented
@@ -441,7 +441,7 @@
 
 .quick-action-menu {
   /*
-   * CDXC:ScrollFades 2026-06-19-14:16:
+   * CDXC:DesignSystem 2026-06-19-14:16:
    * Custom sidebar action menus can overflow vertically outside the shadcn
    * primitives. Give them the same scroll-container fade as command palettes
    * and dropdowns so long menus do not end on a hard edge.

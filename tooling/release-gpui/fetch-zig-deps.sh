@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CDXC:ReleaseTransientFailureClassification 2026-08-13:
+# CDXC:Release 2026-08-13:
 # Pre-fetch every Zig package dependency into ZIG_GLOBAL_CACHE_DIR before any
 # compile starts.
 #

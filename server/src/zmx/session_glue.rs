@@ -63,7 +63,7 @@ pub(crate) fn require_session(
 
 /// Whether this session has ever entered working or attention.
 ///
-/// CDXC:AutoSleepNeverActive 2026-08-22: the durable `lastActiveAt` column is
+/// CDXC:SessionSleep 2026-08-22: the durable `lastActiveAt` column is
 /// written only by an activity transition, so its absence is the daemon's own
 /// record that nobody has prompted this terminal yet. Presentation publishes the
 /// same fact as `hasEverBeenActive` because the projected `lastActiveAt` there
@@ -81,7 +81,7 @@ pub(crate) fn require_zmx() -> ZmxEndpointResult<GxserverResolvedTool> {
 
 pub(crate) fn provider_zmx_session_name(session: &Value) -> Result<String, DomainStateError> {
     /*
-    CDXC:GxserverUnsupportedSessionParity 2026-06-22-07:30:
+    CDXC:Sessions 2026-06-22-07:30:
     TypeScript gxserver does not have an unsupported-session branch for zmx lifecycle or session-I/O endpoints. Route every persisted session through the canonical top-level zmxName, ignoring providerState.provider, providerState.zmxName, and runtimeSettings.sessionPersistenceProvider so provider-off, missing-provider, and migrated rows keep the same error/order behavior.
     */
     string_field(session, "zmxName").ok_or_else(|| {
@@ -127,7 +127,7 @@ pub(crate) fn missing_provider_state_patch(
         .unwrap_or_default();
     provider_state.remove("killError");
     provider_state.remove("probeError");
-    // No daemon, so nothing was spawned by any zmx binary. See CDXC:ZmxWireCycle.
+    // No daemon, so nothing was spawned by any zmx binary. See CDXC:ZmxWireGeneration.
     provider_state.remove(ZMX_WIRE_GENERATION_KEY);
     provider_state.remove(LEGACY_ZMX_BINARY_STAMP_KEY);
     provider_state.insert("lifecycleState".to_string(), json!("missing"));
@@ -278,7 +278,7 @@ pub(crate) fn get_persisted_provider_startup_text_for_session(
 }
 
 /*
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 The last step of startup-text precedence — what to run when the queued
 fresh-launch text has already been consumed and the provider has to come back.
 For an ordinary session that is the daemon-owned resume plan: reopen the agent

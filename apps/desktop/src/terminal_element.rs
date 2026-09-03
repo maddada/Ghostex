@@ -1,5 +1,5 @@
 /*
-CDXC:GPUITerminalElement 2026-07-03:
+CDXC:Terminal 2026-07-03:
 P1c GPUI-composited terminal renderer over the P1b terminal model. One
 `TerminalView` entity owns the model plus the render caches; `TerminalElement`
 is a thin gpui::Element that reads them each frame. Replaces native Ghostty
@@ -24,7 +24,7 @@ cell of advance inside a batch, so wide cells always flush the current batch
 and paint as their own run positioned by grid column; spacer cells keep the
 cells vector column-aligned and are skipped for text.
 
-CDXC:GPUITerminalInput 2026-07-04 (P1d):
+CDXC:Terminal 2026-07-04 (P1d):
 Input rides libghostty-vt's own encoders so encoding always matches the modes
 the running program set. Key path: the platform delivers plain-alt text keys
 and IME composition to the InputHandler (marked text renders, commits write
@@ -43,7 +43,7 @@ uses the vt paste encoder (bracketed mode + unsafe byte stripping).
 Known follow-ups: selection is viewport-relative (drifts under output,
 no soft-wrap join on copy), modifier-only kitty events aren't wired.
 
-CDXC:GPUITerminalElementIntegration 2026-07-04 (P1e):
+CDXC:Terminal 2026-07-04 (P1e):
 The view is the app-facing integration boundary: it emits TerminalViewEvent
 (title/pwd readback after wakeups, bell, exit, cmd+click URL opens) instead
 of letting pane code reach into the model, and it owns the parity features
@@ -618,7 +618,7 @@ pub struct TerminalView {
     /// Set by the app's zmx visibility sync when this terminal becomes (or
     /// starts) displayed; the next prepaint writes `ZMX_VISIBLE` after the
     /// real grid resize so the claim carries the grid the slot actually has
-    /// (CDXC:GpuiEngineTerminalVisibility 2026-09-03).
+    /// (CDXC:Terminal 2026-09-03).
     pending_zmx_visible_announce: bool,
 }
 
@@ -1168,7 +1168,7 @@ impl TerminalView {
         let modifiers = &keystroke.modifiers;
         self.last_modifiers = *modifiers;
         /*
-        CDXC:GPUISessionTitleOverlay 2026-07-26:
+        CDXC:SessionTitles 2026-07-26:
         While a first-prompt title is generating the pane is input-suppressed
         and shows the blocking "Generating title" overlay. Escape is the
         documented cancel affordance there, so it reports the cancel side band
@@ -1192,7 +1192,7 @@ impl TerminalView {
         }
 
         /*
-        CDXC:GPUITerminalNaturalEditing 2026-07-12:
+        CDXC:Terminal 2026-07-12:
         The composited libghostty-vt path owns terminal encoding but not the
         embedded surface's AppKit key-equivalent layer. Preserve the managed
         macOS pane contract here: natural line editing uses Ctrl-A/E, Cmd-G is
@@ -1250,7 +1250,7 @@ impl TerminalView {
         }
 
         /*
-        CDXC:GPUITerminalClearScreen 2026-08-22:
+        CDXC:Terminal 2026-08-22:
         Cmd-K is ghostty's default `clear_screen` binding on macOS. Ghostty
         marks it `performable`, so it is only consumed when it actually
         clears: on the alternate screen the clear is a no-op and the key
@@ -1364,7 +1364,7 @@ impl TerminalView {
             );
         }
         /*
-        CDXC:GPUISessionTitleOverlay 2026-07-26:
+        CDXC:SessionTitles 2026-07-26:
         The agent-cancel side band reports Escape only when Escape is actually
         forwarded to the terminal process, mirroring the managed pane. During
         IME composition Escape belongs to marked text and must not race agent
@@ -1735,7 +1735,7 @@ impl TerminalView {
         }
 
         /*
-        CDXC:GPUITerminalContextMenu 2026-07-11:
+        CDXC:ContextMenus 2026-07-11:
         Match the managed macOS libghostty surface menu exactly: terminal body
         right-clicks open an OS-owned Copy/Paste menu, Copy reflects the live
         selection, and a terminal application that consumed mouse reporting
@@ -2260,7 +2260,7 @@ impl TerminalView {
         }
         if self.pending_zmx_visible_announce {
             // The grid above is the real one for this displayed slot, so the
-            // visibility claim carries it (CDXC:GpuiEngineTerminalVisibility
+            // visibility claim carries it (CDXC:Terminal
             // 2026-09-03).
             self.pending_zmx_visible_announce = false;
             let (cols, rows) = self.model.size();

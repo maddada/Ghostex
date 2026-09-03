@@ -1,5 +1,5 @@
 /*
-CDXC:GPUICefPlatformSeam 2026-07-04:
+CDXC:CefRuntime 2026-07-04:
 Windows platform adapter for the shared windowed-CEF backend (cef/shell.rs).
 This module owns only the truly per-OS pieces: the helper-exe subprocess
 path, a message-only HWND that turns CEF's on_schedule_message_pump_work
@@ -351,7 +351,7 @@ pub(super) fn native_view_has_direct_focus(native_view: *mut c_void) -> bool {
 
 pub(super) fn release_native_view(native_view: *mut c_void) {
     /*
-    CDXC:GPUICefCloseContract 2026-08-24:
+    CDXC:CefRuntime 2026-08-24:
     GhostexGpuiLifeSpanHandler::do_close returns handled, so per
     cef_life_span_handler.h's DoClose docs the app is still required to complete
     the close by proceeding with window-hierarchy tear-down. Without it the

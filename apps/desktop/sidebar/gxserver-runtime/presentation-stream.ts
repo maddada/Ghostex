@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -38,7 +38,7 @@ import type {
 } from '@/packages/shared/gxserver-protocol';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimePresentationStreamMethods` — because deriving them would make
@@ -85,7 +85,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       return;
     }
     /*
-    CDXC:GPUISidebarBootstrapReplay 2026-06-26-05:31:
+    CDXC:CefRuntime 2026-06-26-05:31:
     Post-start same-transport bootstrap refreshes are Rust's replay channel for the sidebar bridge, not a new macOS-style focus command. Store the refreshed transport/focus hint snapshot but do not reapply `initialActiveProjectId`, focused session, or visible ids over live React focus; otherwise the active project can bounce between stale and current sidebar snapshots after a local click.
     */
     this.gxserverBootstrap = validated;
@@ -168,7 +168,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     const nextFocusedSessionId = bootstrap.focusedSessionId;
     const nextVisibleSessionIds = new Set(bootstrap.visibleSessionIds ?? []);
     /*
-    CDXC:GPUIRemoteWorkspaceProjectKey 2026-07-30:
+    CDXC:RemoteMachines 2026-07-30:
     A bootstrap can replay a machine-scoped remote project id after a remote
     session owned focus at shutdown. `this.activeProjectId` is a local-only
     gxserver key (HUD fetches, domain-project lookups), so the scoped id may
@@ -212,7 +212,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         this.recoverPresentationStream(clientId);
       },
       /*
-      CDXC:GlobalActions 2026-08-07:
+      CDXC:AgentLauncher 2026-08-07:
       Global Action writes reach this surface only as this announcement. They
       are not project writes, so they produce no projectUpdated delta, and the
       Settings window that made the write is a different surface whose response
@@ -235,7 +235,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         this.applyPresentationSnapshot(snapshot, this.hasHydrated ? 'patch' : 'hydrate');
       },
       /*
-      CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+      CDXC:StateSync 2026-09-01:
       The daemon answers a subscribe that already names its current revision
       with the revision alone, because there is nothing to send: this runtime
       applied that exact snapshot over HTTP moments earlier, right before it
@@ -261,7 +261,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
   },
 
   /*
-  CDXC:GxserverPresentationStreamBackoff 2026-09-01:
+  CDXC:StateSync 2026-09-01:
   A dropped socket fires `onClose` *and* `onError`, and a daemon that is down
   keeps dropping the replacement, so recovering inline meant a full presentation
   snapshot plus three more RPCs per drop with nothing between them. Schedule the
@@ -467,7 +467,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
 
   hideLocalPresentationSession(this: GpuiSidebarRuntime, projectId: string, sessionId: string): void {
     /*
-    CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:59:
+    CDXC:Workarea 2026-06-26-23:59:
     GPUI native tab close must match macOS local-first sidebar removal. Keep a runtime-only hidden-session overlay so future gxserver hydrates cannot reinsert a locally closed mapped Agents row while the backend transition catches up or fails best-effort. Store only project/session ids.
     */
     this.localFirstHiddenPresentationSessionKeys.add(createGxserverPresentationSidebarSessionKey(projectId, sessionId));
@@ -479,7 +479,7 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       return;
     }
     /*
-    CDXC:GPUIRecentProjects 2026-06-25-18:50:
+    CDXC:Projects 2026-06-25-18:50:
     Local close-to-recent must immediately mirror macOS by removing the parked project from normal GPUI sidebar groups while using gxserver's `/api/closeProjectToRecent` recent-project response as the only drawer source.
     */
     this.presentation = reduceGxserverPresentationDelta(

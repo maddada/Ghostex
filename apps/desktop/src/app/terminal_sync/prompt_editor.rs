@@ -88,7 +88,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:SessionChatViewSwitch 2026-08-21:
+        CDXC:SessionChat 2026-08-21:
         Show Chat before asking the daemon to copy the terminal draft. Agent
         startup prompts, permission prompts, shell state, and older CLIs may
         not answer their prompt-editor command; none of those terminal states
@@ -556,7 +556,7 @@ impl GhostexGpuiApp {
                 return;
             }
             /*
-            CDXC:DisabledPluginRouting 2026-08-23:
+            CDXC:Extensions 2026-08-23:
             Answer the Customize refusal here rather than letting the open take
             the renderer round trip only to be refused on the way back: the
             reader cmd+clicked, so the copied link and its toast should land on

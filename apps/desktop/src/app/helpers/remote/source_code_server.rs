@@ -237,7 +237,7 @@ pub(crate) fn run_remote_manage_files_bridge_request_for_project_snapshot(
     target: Option<&GpuiRemoteGxserverRequestTarget>,
 ) -> ManageFilesBridgeOutcome {
     /*
-    CDXC:RemoteProjectDocs 2026-08-06:
+    CDXC:Docs 2026-08-06:
     Remote Docs uses the owning gxserver as the filesystem boundary. The CEF
     request must still match the active machine-scoped project/editor snapshot,
     then Rust replaces that scoped presentation id with the daemon's raw

@@ -94,13 +94,13 @@ struct CloneRunOutput {
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-16-00:49:
+CDXC:RepoStructure 2026-06-16-00:49:
 Phase 7 repository clone jobs remain gxserver-owned background work. Rust keeps the TypeScript preview/start/read/cancel lifecycle, rejects existing destinations before spawning Git, stores jobs in memory for initial parity, and writes only job ids plus booleans to persistent logs so clone URLs, branches, paths, argv, stdout, and stderr stay out of support bundles.
 
-CDXC:RepositoryClone 2026-06-22-09:21:
+CDXC:AddProject 2026-06-22-09:21:
 Repository clone parity depends on matching TypeScript's URL token parsing, destination folder normalization, color-stripped Git environment, and active cancellation semantics. Canceling a running job must terminate the spawned Git process instead of only changing the in-memory job status.
 
-CDXC:RemoteClone 2026-06-24-19:35:
+CDXC:AddProject 2026-06-24-19:35:
 Remote GPUI clone parity needs the daemon-owned clone job to register the cloned project and publish the authoritative project presentation delta after Git succeeds. Clients may refresh snapshots after completion, but the remote daemon remains the producer of project state and never relies on renderer paths as launch authority.
 */
 pub async fn dispatch_repository_clone_endpoint(
@@ -237,7 +237,7 @@ async fn run_clone_job(
         .unwrap_or_default()
         .to_string();
     /*
-    CDXC:AddProjectDialog 2026-07-30:
+    CDXC:AddProject 2026-07-30:
     A destination typed in the Add Project dialog can name folders that do not
     exist yet, so the parent chain is created here, right before git runs in it.
     In the `parentPath` shape the parent was already validated as an existing
@@ -418,7 +418,7 @@ fn publish_cloned_project_presentation(
         .map_err(|error| RepositoryCloneError::dependency_unavailable(error.to_string()))?;
     let repository = DomainRepository::new(&db, runtime.server_id.as_str());
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     A just-cloned repository is the case where the `origin` remote matters most —
     it is by definition a checkout of a repository that exists elsewhere — so its
     remote is probed here, outside the sequencer below, and rides the very delta
@@ -427,7 +427,7 @@ fn publish_cloned_project_presentation(
     leaves refreshes to the background pass.
     */
     /*
-    CDXC:ProjectRemoteCopy 2026-08-26:
+    CDXC:Git 2026-08-26:
     Both sidebar versions need the origin now: V2 groups by it and the classic
     project menu copies it. Probe before the clone's first presentation delta so
     either surface receives the URL immediately.
@@ -435,7 +435,7 @@ fn publish_cloned_project_presentation(
     if let Ok(Some(project)) = repository.get_project(project_id) {
         crate::project_git_remote::ensure_project_git_remote_probed(&project, true);
         /*
-        CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+        CDXC:Icons 2026-07-29 (discovered icons):
         A just-cloned repository has its icon on disk already, so discovering it
         here means the delta that announces the project shows the project's own
         icon rather than a folder glyph that changes a minute later. Same
@@ -498,7 +498,7 @@ fn add_cloned_project(
 }
 
 /*
-CDXC:AddProjectDialog 2026-07-30:
+CDXC:AddProject 2026-07-30:
 The Add Project dialog's clone step asks for ONE destination path the user typed
 or browsed to. A missing path (`~/projects/my-app`) is the folder Git creates,
 and an existing empty directory is cloned into directly. An existing non-empty

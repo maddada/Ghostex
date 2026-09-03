@@ -181,7 +181,7 @@ export async function readResourceProcesses(): Promise<ResourceProcess[]> {
 
 export async function readResourceListeningServers(): Promise<ResourceListeningServer[]> {
   /*
-   * CDXC:TitlebarResources 2026-06-22-00:30:
+   * CDXC:Resources 2026-06-22-00:30:
    * Resources needs a top Dev Servers section sourced from real TCP listeners,
    * not terminal text heuristics. Read lsof's structured fields while the panel
    * is open, then use cwd only for internal ownership matching without rendering
@@ -221,13 +221,13 @@ export async function readResourceListeningServers(): Promise<ResourceListeningS
 }
 
 /**
- * CDXC:TitlebarResources 2026-05-23-10:46:
+ * CDXC:Resources 2026-05-23-10:46:
  * Resource-manager Quit is a process-manager action, so it must terminate the
  * exact processes shown in the dropdown while the sidebar separately preserves
  * terminal cards as sleeping sessions. Recheck the command before SIGKILL so a
  * delayed hard kill cannot target an unrelated process that reused the PID.
  *
- * CDXC:TitlebarResources 2026-06-22-00:30:
+ * CDXC:Resources 2026-06-22-00:30:
  * Dev Servers Stop should behave like a terminal Ctrl-C against the listener
  * process tree before escalating. Use SIGINT for server bundles and keep SIGTERM
  * for the existing close/sleep resource cleanup paths.
@@ -315,15 +315,15 @@ export function createResourceGroupViews(
 
 export function createGhostexResourceProcessTotals(processes: ResourceProcess[]): ResourceProcessTotals {
   /*
-   * CDXC:TitlebarResources 2026-06-30-23:17:
+   * CDXC:Resources 2026-06-30-23:17:
    * The Resources header RAM/CPU total must match external monitors that group Ghostex with every owned child process, not only the rows that are visible and safe to Sleep/Close.
    * Compute the app-wide total from the raw `ps` snapshot while leaving row bundles scoped to actionable user resources.
    *
-   * CDXC:TitlebarResources 2026-06-30-23:29:
+   * CDXC:Resources 2026-06-30-23:29:
    * Use Ghostex-owned executable roots plus their descendants for the header total.
    * This matches app monitors that aggregate child processes and avoids rescanning every long command line with broad ownership regexes while the Resources child window refreshes.
    *
-   * CDXC:TitlebarResources 2026-06-30-23:43:
+   * CDXC:Resources 2026-06-30-23:43:
    * gxserver, zmx, and bundled helper processes can daemonize under launchd while still belonging to Ghostex's app footprint. Seed totals from any executable inside the Ghostex app bundle, then traverse descendants so orphaned helper roots and their agent children remain counted without treating arbitrary command text as ownership evidence.
    */
   const childrenByParent = createProcessChildrenMap(processes);
@@ -348,13 +348,13 @@ export function createResourceServerBundles(
   portless: SidebarPortlessState | undefined
 ): ResourceProcessBundle[] {
   /*
-   * CDXC:TitlebarResources 2026-06-22-00:30:
+   * CDXC:Resources 2026-06-22-00:30:
    * The Dev Servers section belongs above project sessions but must still be
    * owned by a visible terminal resource. Attribute listeners by process-tree
    * membership first, then by listener cwd inside the project path when a
    * provider-backed session is visible without a sampled zmx root.
    *
-   * CDXC:PortlessResources 2026-06-23-15:18:
+   * CDXC:Portless 2026-06-23-15:18:
    * Resources may show Portless domains only on Ghostex-owned live server rows.
    * Join routePreviews to the existing listener-backed server bundles by
    * project id, session id, and port so assigned domains never become extra
@@ -413,7 +413,7 @@ export function findResourceServerCwdOwner(
   terminalOwners: { bundle: ResourceProcessBundle; view: ResourceGroupView }[]
 ): { bundle: ResourceProcessBundle; view: ResourceGroupView } | undefined {
   /*
-   * CDXC:TitlebarResources 2026-07-26:
+   * CDXC:Resources 2026-07-26:
    * Project paths nest, so the first group whose path contains the listener cwd
    * is not necessarily its owner: a home-directory or monorepo-root project
    * would otherwise claim every dev server started inside a project below it.
@@ -578,16 +578,16 @@ export function createResourceViewItemCollapseTargets(
   serverBundles: ResourceProcessBundle[] = []
 ): ResourceItemCollapseTarget[] {
   /*
-   * CDXC:TitlebarResources 2026-06-11-18:30:
+   * CDXC:Resources 2026-06-11-18:30:
    * Resource project/group sections no longer expose their own collapse controls
    * because per-section headers create a cramped, ambiguous Resources state.
    *
-   * CDXC:TitlebarResources 2026-06-12-23:33:
+   * CDXC:Resources 2026-06-12-23:33:
    * The header expand/collapse control beside Sleep Inactive bulk-toggles
    * individual expandable resource rows inside Projects, Browser Tabs, and
    * Orphaned / Detached. It must never collapse those top-level sections.
    *
-   * CDXC:TitlebarResources 2026-06-13-02:02:
+   * CDXC:Resources 2026-06-13-02:02:
    * Opening Resources should begin with every expandable row collapsed for that
    * modal instance, not just the user's first-ever Resources visit. Return
    * targets with their default-state polarity so open seeding and button clicks
@@ -704,7 +704,7 @@ export function hasRunningZmxProviderForTitlebarResourceSession(
   >
 ): boolean {
   /*
-   * CDXC:TitlebarResources 2026-06-19-19:21:
+   * CDXC:Resources 2026-06-19-19:21:
    * Resources must list every zmx-backed terminal whose provider is running,
    * even when the macOS pane is not loaded and the sampled process command
    * does not expose the zmx session name. The sidebar labels that state as
@@ -727,11 +727,11 @@ export function createCodeIdeResourceBundles(
   codeEditorProjectIds: string[]
 ): ResourceProcessBundle[] {
   /*
-   * CDXC:TitlebarResources 2026-06-22-13:50:
+   * CDXC:Resources 2026-06-22-13:50:
    * Embedded Code is one shared code-server runtime, not a project child process.
    * Identify it from Ghostex's fixed localhost editor listener and render it in a Code IDE section so a root "/" project cannot claim it through path substring matching.
    *
-   * CDXC:SourceRuntimeOwnership 2026-06-28-04:05:
+   * CDXC:CodeEditor 2026-06-28-04:05:
    * Resources must use the native Source runtime port from bootstrap so legacy
    * dev bundles and GPUI-specific ports are recognized without reverting to the
    * old global 3775 assumption.
@@ -774,16 +774,16 @@ export function claimAppRuntimeProcesses(
   );
   const appPids = new Set(appProcesses.map((process) => process.pid));
   /**
-   * CDXC:TitlebarResources 2026-05-16-19:53:
+   * CDXC:Resources 2026-05-16-19:53:
    * Ghostex-owned app processes need to be claimed as one process tree, not as
    * individual helper matches, so they never leak into detached resource rows.
    *
-   * CDXC:TitlebarResources 2026-05-25-16:53:
+   * CDXC:Resources 2026-05-25-16:53:
    * The Resources dropdown should hide Ghostex's own app-runtime rows. Keep
    * matching these processes only to reserve their PIDs before browser and
    * orphan resource sections are built.
    *
-   * CDXC:TitlebarResources 2026-05-29-12:02:
+   * CDXC:Resources 2026-05-29-12:02:
    * Ghostex-launched zmx/tmux/zellij and agent roots are user work resources,
    * not app runtime. Do not reserve those roots here; leave them for session or
    * orphan resource tree walking so child processes such as node, npm, Codex,
@@ -810,7 +810,7 @@ export function createBrowserBundles(
   options: { includeRuntimeBundles?: boolean } = {}
 ): ResourceProcessBundle[] {
   /**
-   * CDXC:TitlebarResources 2026-05-17-03:09:
+   * CDXC:Resources 2026-05-17-03:09:
    * Browser tab resources must only count Ghostex-owned embedded browser helper
    * processes. System-wide Chromium/Electron helpers from Chrome, VS Code,
    * Codex, Discord, or other apps can share the same `--type=renderer`
@@ -910,7 +910,7 @@ export function createOrphanBundles(
 export function isGhostexOwnedResourceProcess(process: ResourceProcess): boolean {
   const command = process.command;
   /**
-   * CDXC:TitlebarResources 2026-05-28-21:04:
+   * CDXC:Resources 2026-05-28-21:04:
    * Orphaned / Detached resources are still part of the app's CPU/RAM total, so
    * command-name matches are not enough. Only include ungrouped agent-looking
    * root processes when their command proves Ghostex ownership, then walk only
@@ -1025,19 +1025,19 @@ export function sumBundleMemory(bundles: ResourceProcessBundle[]): number {
 
 export function createInactiveTerminalSleepSessionIds(resourceGroups: TitlebarResourceGroup[]): string[] {
   /**
-   * CDXC:TitlebarResources 2026-05-16-19:53:
+   * CDXC:Resources 2026-05-16-19:53:
    * The dropdown sleep shortcut is intentionally conservative: only awake,
    * idle agent terminal sessions older than seven minutes are eligible. Working
    * and attention sessions must stay awake because those states indicate active
    * output or a user-visible response waiting for review.
    *
-   * CDXC:TitlebarResources 2026-05-26-17:16:
+   * CDXC:Resources 2026-05-26-17:16:
    * Sleep Inactive should sleep every awake idle terminal represented in the
    * Resources dropdown, not only old agent-detected rows. Keep working,
    * attention, and already sleeping sessions awake, but do not require agent
    * metadata or a seven-minute age gate.
    *
-   * CDXC:TitlebarResources 2026-06-06-06:09:
+   * CDXC:Resources 2026-06-06-06:09:
    * Delayed Send means a terminal has a staged Enter that must fire while the
    * pane is awake. Exclude delayed-send sessions from the Resources sleep count
    * and payload so macOS and Electron do not hide pending sends behind sleep.
@@ -1074,7 +1074,7 @@ export function titlebarResourceSidebarSessionId(
   session: Pick<TitlebarResourceSession, 'projectId' | 'sessionId'>
 ): string {
   /*
-   * CDXC:TitlebarResources 2026-06-15-15:27:
+   * CDXC:Resources 2026-06-15-15:27:
    * gxserver presentation-backed Resources rows already arrive with combined
    * project/session ids. Focus, Sleep, and Close must forward that id unchanged
    * instead of wrapping it again, or the sidebar resolves a synthetic session
@@ -1099,7 +1099,7 @@ export function uniqueResourceBundles(bundles: ResourceProcessBundle[]): Resourc
 
 export function isResourceBundleActionable(bundle: ResourceProcessBundle): boolean {
   /**
-   * CDXC:TitlebarResources 2026-06-15-13:45:
+   * CDXC:Resources 2026-06-15-13:45:
    * Resources must not expose Close for shared Chromium runtime bundles because killing GPU, network, storage, or unmatched renderer helpers can leave the app's embedded browser surfaces broken. Only user-owned browser tabs get resource Close controls; diagnostic browser helper rows stay visible for CPU/RAM accounting.
    */
   return !(bundle.type === 'browser' && !bundle.browserTab);
@@ -1162,7 +1162,7 @@ export function formatWholePercent(value: number): string {
 
 export function formatResourceMemory(value: number): string {
   /*
-   * CDXC:TitlebarResources 2026-06-30-23:17:
+   * CDXC:Resources 2026-06-30-23:17:
    * Resource memory labels must not floor GB values because that made near-2 GB totals render as 1 GB and hid real app pressure.
    * Round GB values to one decimal while keeping whole-MB labels for smaller processes.
    */

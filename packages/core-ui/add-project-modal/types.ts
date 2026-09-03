@@ -49,7 +49,7 @@ export interface AddProjectBrowseResult {
 }
 
 /*
- * CDXC:AddProjectNewFolder 2026-08-18:
+ * CDXC:AddProject 2026-08-18:
  * Creating a folder is its own round trip rather than a side effect of adding
  * or cloning, so the browser can make a folder, step into it, and only then
  * decide what to do with it. `name` is a single segment; the daemon rejects

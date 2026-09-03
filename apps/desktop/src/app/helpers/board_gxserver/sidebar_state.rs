@@ -14,7 +14,7 @@ pub(crate) fn gpui_sidebar_hud_from_gxserver(
     active_project_id: Option<&str>,
 ) -> Result<GpuiSidebarHudButtons, String> {
     /*
-    CDXC:SidebarHudContract 2026-06-24-20:34:
+    CDXC:AgentLauncher 2026-06-24-20:34:
     GPUI Settings/app-modal and titlebar reads must use gxserver's normalized sidebar HUD contract instead of recreating custom agent/action projection in host Rust. If the endpoint is unavailable, callers leave those read rows empty rather than falling back to a second custom metadata normalizer.
     */
     let mut params = serde_json::Map::new();
@@ -94,7 +94,7 @@ pub(crate) fn gpui_persist_sidebar_agents_to_gxserver_projects(
 
 pub(crate) fn gpui_read_gxserver_app_user_data(timeout: Duration) -> GpuiAppModalProductState {
     /*
-    CDXC:GxserverAppUserData 2026-06-24-13:30:
+    CDXC:ServerDaemon 2026-06-24-13:30:
     GPUI app-modal hydrate reads Pinned Prompts from gxserver's shared
     app-user-data snapshot instead of the old GPUI product-state file. Parse
     only the shared React contract fields and silently drop malformed prompt

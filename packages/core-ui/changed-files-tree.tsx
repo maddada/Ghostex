@@ -69,7 +69,7 @@ export function ChangedFilesTree({
 
   const openFilePathContextMenu = (event: ReactMouseEvent<HTMLElement>, filePath: string) => {
     /*
-     * CDXC:TitlebarGit 2026-06-08-09:41:
+     * CDXC:Git 2026-06-08-09:41:
      * Commit review file rows need a right-click Copy path action. Keep the
      * menu local to file rows so directory expansion and normal left-click diff
      * preview behavior stay unchanged.

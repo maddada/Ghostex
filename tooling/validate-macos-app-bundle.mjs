@@ -15,10 +15,10 @@ export class MacosAppBundleValidationError extends Error {
 }
 
 /**
- * CDXC:LocalStartReleaseParity 2026-06-09-09:07:
+ * CDXC:Build 2026-06-09-09:07:
  * Local production starts should validate the same bundled runtime shape as release builds without paying notarization or DMG costs. Keep app-bundle resource checks in one module so `bun run start` and release automation reject stale cross-architecture Web resources before the app opens.
  *
- * CDXC:ContributorStart 2026-06-22-23:23:
+ * CDXC:Build 2026-06-22-23:23:
  * Local contributor starts may intentionally omit optional submodules. Callers that explicitly allow the legacy/dev shape still validate its bundled code-server/Node, CEF, gxserver, zmx, and optional resources; release validation requires manifest v2 by default.
  */
 export async function validateMacosAppBundle({
@@ -121,7 +121,7 @@ async function validateSharedCodeServerNodeRuntime({ arch, resourcesRoot }) {
   const obsoleteWebNode = path.join(resourcesRoot, 'bin', 'node');
 
   /*
-   CDXC:ContributorStart 2026-06-22-23:23:
+   CDXC:Build 2026-06-22-23:23:
    Legacy/dev bundles keep Node inside code-server. Release bundles never call this validator because manifest v2 requires code-server (and its private Node runtime) to be an on-demand component.
    */
   await assertRequiredPaths(arch, 'legacy bundled code-server Node runtime resource', [codeServerRoot, codeServerNode]);
@@ -131,7 +131,7 @@ async function validateSharedCodeServerNodeRuntime({ arch, resourcesRoot }) {
     );
   }
   /*
-   CDXC:LocalStartRuntimePolicy 2026-06-12-09:58:
+   CDXC:Build 2026-06-12-09:58:
    macOS policy assessment can hang when a Node/Bun validator child-executes the app-bundled Node runtime. Validate bundle shape from Mach-O slices and package-time native-runtime.json metadata here; package builders own runtime smoke tests before resources are sealed into the app.
    */
   await assertMachOContainsArch(codeServerNode, arch);
@@ -153,9 +153,9 @@ async function validateBundledCodeServerRuntime({ arch, resourcesRoot, expectedN
   );
 
   /*
-   CDXC:CodeServerRuntime 2026-06-09-17:06:
+   CDXC:CodeEditor 2026-06-09-17:06:
    Embedded VS Code search shells out to @vscode/ripgrep/bin/rg. Treat that binary as a required app resource, not an optional npm postinstall side effect, so local starts and releases fail before users see ENOENT in the search panel.
-   CDXC:ReleaseDmgPolicy 2026-07-03-04:55:
+   CDXC:Release 2026-07-03-04:55:
    Do not run a VS Code ripgrep --version smoke test from this validator. Directly executing nested helpers from a mounted notarized DMG can block in macOS policy assessment even when the app container is valid and notarized. Package builders own functional smoke tests before sealing; bundle validation proves the helper is present, executable, and the right Mach-O architecture.
    */
   await assertRequiredPaths(arch, 'bundled code-server runtime resource', [
@@ -177,7 +177,7 @@ async function validateBundledPortlessRuntime({ arch, resourcesRoot }) {
   const portlessCli = path.join(portlessRoot, 'dist', 'cli.js');
 
   /*
-   CDXC:PortlessPackaging 2026-06-22-22:30:
+   CDXC:Portless 2026-06-22-22:30:
    App validation requires the published Portless CLI payload at Web/portless/dist/cli.js. Portless is disabled today; if it returns, runtime resolution must use the installed code-server component rather than restoring Node to the base bundle. Reject Portless-local node shapes in every mode.
    */
   await assertRequiredPaths(arch, 'bundled Portless CLI payload', [portlessCli]);
@@ -253,7 +253,7 @@ async function validateBundledGxserverRuntime({ arch, resourcesRoot }) {
     'better_sqlite3.node'
   );
   /*
-   CDXC:GxserverRustPackaging 2026-06-16-01:30:
+   CDXC:Release 2026-06-16-01:30:
    Phase 8 app validation must accept the Rust gxserver package shape without Node ABI metadata while still rejecting stale TypeScript packages that lost native-runtime.json. A Rust package is identified by its native bin/gxserver plus no bundled better-sqlite3 module.
    */
   if (existsSync(rustGxserverBinary) && !existsSync(gxserverRuntimePath) && !existsSync(bundledDatabaseModulePath)) {
@@ -348,7 +348,7 @@ async function readOnDemandResourceManifest(resourcesRoot) {
 }
 
 /*
- CDXC:OnDemandAssets 2026-07-02-14:10:
+ CDXC:Release 2026-07-02-14:10:
  On-demand release bundles replace the embedded Ubuntu remote gxserver
  payloads with a sealed checksum manifest. Validation must prove that shape: no
  leftover fat payloads and complete 64-hex checksums for every published asset.

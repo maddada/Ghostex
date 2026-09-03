@@ -2,7 +2,7 @@ use chrono::{SecondsFormat, TimeZone, Utc};
 use serde_json::{Map, Value};
 
 /*
-CDXC:ActivitySuppressionPolicy 2026-07-29-12:00:
+CDXC:AgentScreenDetection 2026-07-29-12:00:
 Every activity-suppression rule lives here so clients never re-implement or
 partially mirror them. The policy has four layers:
 
@@ -488,7 +488,7 @@ fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
 }
 
 /*
-CDXC:ActivitySuppressionPolicy 2026-07-29-12:00:
+CDXC:AgentScreenDetection 2026-07-29-12:00:
 The meaningful-activity clock is applied once, after every transition branch,
 so early returns and from-scratch state rebuilds (launch/resume/wake resets,
 working entry, agent switches) cannot drop or double-apply it. It advances on
@@ -570,7 +570,7 @@ fn working_stint_is_meaningful(working_started_at: Option<&str>, stint_end_ms: i
 }
 
 /*
-CDXC:ActivitySuppressionPolicy 2026-07-29-12:00:
+CDXC:AgentScreenDetection 2026-07-29-12:00:
 Presentation reads recency through this projection: while a session is
 effectively working past the meaningful threshold the published recency is
 "now", so recency keeps advancing between durable writes; otherwise it is the
@@ -661,7 +661,7 @@ fn is_trusted_spinner_stop_title(
         return false;
     }
     /*
-    CDXC:CursorReadyTitle 2026-09-03:
+    CDXC:SessionStatus 2026-09-03:
     Cursor Agent writes "<chat> - ✅ Ready" only once its loop has ended, so
     the Ready title that replaces the same chat's "<chat> - ⏳ Working ···"
     is as authoritative as its stop hook. The hook post can be lost (the
@@ -1211,7 +1211,7 @@ trait CursorTitleExt {
 
 impl CursorTitleExt for str {
     /*
-    CDXC:CursorReadyTitle 2026-09-03:
+    CDXC:SessionStatus 2026-09-03:
     Cursor's spinner cycles "⏳ Working ···", ".··", "..·", "...", so the
     suffix is the marker followed by any mix of dots and middle dots. The old
     check matched only the "..." frame, which left most working titles

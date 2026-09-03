@@ -93,7 +93,7 @@ pub(crate) fn gpui_strict_sidebar_agent_icon(candidate: &str) -> Option<&str> {
 }
 
 /*
-CDXC:GlobalActions 2026-08-01-16:00:
+CDXC:AgentLauncher 2026-08-01-16:00:
 Action icon slugs are camelCase ids shared with the TypeScript surfaces, while
 the bundled assets are kebab-case files under `titlebar/`. Convert rather than
 hand-maintaining a 59-entry table that would silently rot whenever an icon is
@@ -133,7 +133,7 @@ pub(crate) fn gpui_sidebar_command_session_indicators_from_command_pane_sources(
     command_pane_sessions: &serde_json::Value,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUICommandSessionHud 2026-06-27-08:45:
+    CDXC:SessionStatus 2026-06-27-08:45:
     Command-session HUD matching consumes the same external bridge shape emitted by command-pane sources: `sessionId` must be a string accepted by the canonical `G{u64}` parser and `status` must be a known lifecycle value before commandId/title matching runs. Stale legacy numeric, lowercase, malformed, non-string, or invalid-status rows must be invisible to matching so they cannot mask a live canonical row, and emitted indicators must continue to omit command text, paths, URLs, run ids, status files, terminal output, and unknown raw fields.
     */
     let Some(commands) = commands.as_array() else {

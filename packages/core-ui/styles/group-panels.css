@@ -88,7 +88,7 @@
   gap: calc(10px * var(--sidebar-density-scale));
   justify-content: space-between;
   /*
-   * CDXC:SidebarHover 2026-05-05-05:29
+   * CDXC:Sidebar 2026-05-05-05:29
    * Section headers and chat/browser group headers share one surface style:
    * no extra margins, the same 6px left content padding as project headers,
    * and no right content padding.
@@ -246,7 +246,7 @@
 .sidebar-collapse-shell {
   margin-top: 0;
   /*
-   * CDXC:SidebarAgents 2026-05-04-07:00
+   * CDXC:AgentLauncher 2026-05-04-07:00
    * Agent launcher buttons can render a few device pixels taller than their
    * measured CSS height after density scaling and icon rasterization. Keep a
    * small expanded-state cushion so the collapsible shell does not crop the
@@ -262,7 +262,7 @@
 
 .sidebar-collapse-shell[data-collapsed='true'] {
   /*
-   * CDXC:SidebarScroll 2026-05-20-08:08:
+   * CDXC:Sidebar 2026-05-20-08:08:
    * Collapsed project bodies must not contribute their hidden session rows to
    * the parent scrollHeight. Expanded group bodies can keep visible overflow
    * for anchored status/UI affordances, but collapsed shells need to clip so an
@@ -277,7 +277,7 @@
 
 .group-sessions-shell[data-project-session-list-clipped='true'][data-collapsed='false'] {
   /*
-   * CDXC:SidebarCollapseAnimation 2026-08-19:
+   * CDXC:Sidebar 2026-08-19:
    * Show more / Show less and the inner scroll cap only describe an *expanded*
    * project body. They used to match while collapsed too, and because they sit
    * later in this file at the same specificity as the collapsed rule they beat
@@ -285,13 +285,13 @@
    * therefore expanded and collapsed at full height, with no height animation
    * in either direction.
    *
-   * CDXC:ProjectSessionLists 2026-06-12-23:53:
+   * CDXC:Projects 2026-06-12-23:53:
    * Show less uses the project expand/collapse max-height path. Clip only this header-toggle state because normal expanded project bodies allow visible overflow for anchored status affordances.
    *
-   * CDXC:ProjectSessionLists 2026-06-13-19:49:
+   * CDXC:Projects 2026-06-13-19:49:
    * The bottom hidden-session reveal row is the exact clipped edge for a collapsed project list. Do not use the expanded shell's 4px cushion here, because that can reveal a sliver of the first hidden session below the "Show N more" row.
    *
-   * CDXC:ProjectSessionLists 2026-06-13-20:03:
+   * CDXC:Projects 2026-06-13-20:03:
    * Collapsed project lists now render only the visible rows plus the count button. Keep the exact max-height so project headers and the separator define clear row boundaries without clipped overflow rows.
    */
   max-height: var(--sidebar-collapse-content-height);
@@ -300,23 +300,23 @@
 
 .group-sessions-shell[data-project-session-list-scrollable='true'][data-collapsed='false'] {
   /*
-   * CDXC:ProjectSessionLists 2026-06-25-12:20:
+   * CDXC:Projects 2026-06-25-12:20:
    * Keep the Show more / Show less interaction, but make the expanded project
    * body a bounded inner scroll surface. Reuse the same core overflow contract
    * as the main sidebar project scroll viewport: hidden horizontal overflow and
    * vertical auto scrolling.
    *
-   * CDXC:SidebarScroll 2026-07-22:
+   * CDXC:Sidebar 2026-07-22:
    * Overscroll rubber-banding is disabled on this inner project scroller by
    * explicit user request: reaching the top or bottom is a hard stop.
    *
-   * CDXC:SidebarScroll 2026-07-23:
+   * CDXC:Sidebar 2026-07-23:
    * `none` also kills native scroll chaining, but wheel gestures at this
    * scroller's edges should still move the main sidebar scroller. That handoff
    * is done in JS (handleSessionsShellWheel in session-group-section.tsx)
    * because CSS cannot express "chain to parent but never rubber-band".
    *
-   * CDXC:SidebarScroll 2026-06-30-01:59:
+   * CDXC:Sidebar 2026-06-30-01:59:
    * Expanded project bodies should not use scroll masks or scroll-linked fade
    * state. Plain overflow keeps long projects usable while avoiding compositor
    * work during every scroll frame.
@@ -337,7 +337,7 @@
 }
 
 /*
- * CDXC:ProjectReorderScrollLock 2026-07-22:
+ * CDXC:Projects 2026-07-22:
  * While a project or collection header drag is active, inner project session
  * scrollers must not scroll under the drag ghost. dnd-kit's auto-scroller only
  * targets ancestors whose computed overflow is auto/scroll/overlay, so hidden
@@ -385,7 +385,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   /*
-   * CDXC:SidebarScroll 2026-07-22:
+   * CDXC:Sidebar 2026-07-22:
    * `none` instead of `contain`: contain only blocked scroll chaining but
    * still allowed macOS elastic rubber-banding on this scroller. The sidebar
    * should hard-stop at its ends per explicit user request.
@@ -396,7 +396,7 @@
 
 .session-groups-content[data-scrollable-y='false'] {
   /*
-   * CDXC:SidebarScroll 2026-05-05-05:29
+   * CDXC:Sidebar 2026-05-05-05:29
    * Sparse Combined sidebars with only a chat and a collapsed project should
    * stay fixed under wheel/trackpad input. The React overflow measurement
    * flips this back to auto only when the list is taller than its viewport.
@@ -517,7 +517,7 @@
 }
 
 /*
- * CDXC:SidebarSearch 2026-05-08-11:20
+ * CDXC:Sidebar 2026-05-08-11:20
  * Inline search results in the reference sidebar must treat Previous Sessions
  * as a peer section to Chats and Projects. Use the same section heading inset
  * and vertical rhythm so search does not pin the header to the webview edge.
@@ -538,7 +538,7 @@
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-search-previous-group .group-head {
   /*
-   * CDXC:SidebarSearch 2026-05-08-15:07
+   * CDXC:Sidebar 2026-05-08-15:07
    * Filtered Previous Sessions appears after the Projects results section and
    * should use the same vertical gap that Projects uses after Chats.
    */
@@ -574,36 +574,36 @@
   width: 100%;
 }
 
-/* CDXC:SidebarReference 2026-05-08-01:10: Combined mode must copy the
+/* CDXC:Sidebar 2026-05-08-01:10: Combined mode must copy the
    provided app sidebar: a dark full-height rail, top window/navigation chrome,
    hidden legacy grids via display:none and section labels.
-   CDXC:SidebarReference 2026-05-08-01:28: Reference sizing follows the
+   CDXC:Sidebar 2026-05-08-01:28: Reference sizing follows the
    measured sidebar button geometry: a 298px viewport gives 7px side margins
    and 284x34px primary rows with compact 12px icons.
-   CDXC:SidebarReference 2026-05-08-01:41: Plain/default reference mode uses
+   CDXC:Sidebar 2026-05-08-01:41: Plain/default reference mode uses
    the requested dark reference color as the sidebar background and exposes collapsible Chats/Projects section headers with project
    management actions on hover.
-   CDXC:SidebarReference 2026-05-08-02:21: The reference background must fill
+   CDXC:Sidebar 2026-05-08-02:21: The reference background must fill
    the whole native sidebar viewport, including parent shell/main surfaces that
    would otherwise keep the plain-dark theme's #111 background visible.
-   CDXC:SidebarReference 2026-05-08-02:31: The top native-style window/chrome
+   CDXC:Sidebar 2026-05-08-02:31: The top native-style window/chrome
    controls are no longer part of the requested reference sidebar; keep the
    component mounted but hide that row with display:none.
-   CDXC:SidebarReference 2026-05-08-02:40: Match the sidebar webview background
+   CDXC:Sidebar 2026-05-08-02:40: Match the sidebar webview background
    to the requested standalone macOS titlebar color.
-   CDXC:SidebarTheme 2026-06-15-01:43:
+   CDXC:Theming 2026-06-15-01:43:
    The reference sidebar background follows the selected app background token:
    Dark 1 uses #191919, Dark 2 preserves #0e0e0e, and Light can use light chrome.
-   CDXC:SidebarReference 2026-05-08-02:52: Section collapse chevrons belong on
+   CDXC:Sidebar 2026-05-08-02:52: Section collapse chevrons belong on
    the right side of the Chats/Projects label, matching the reference header
    affordance instead of leading the label.
-   CDXC:SidebarReference 2026-05-08-02:56: Project bulk controls are icon-only
+   CDXC:Sidebar 2026-05-08-02:56: Project bulk controls are icon-only
    buttons; Collapse All uses arrows-diagonal-2, and Expand Previous uses
    arrows-diagonal-minimize.
-   CDXC:SidebarSearch 2026-05-08-11:49: The top sidebar search field replaces the
+   CDXC:Sidebar 2026-05-08-11:49: The top sidebar search field replaces the
    Search nav row while active, animates the row swap, closes on Escape or empty
    focus-away, and sit 6px from the left sidebar edge and 7px from the right.
-   CDXC:SidebarResizeHandle 2026-05-31-15:13:
+   CDXC:Sidebar 2026-05-31-15:13:
    Do not correct the right-edge sidebar gap by over-bleeding button boxes or
    increasing their padding. The native resize strip is responsible for that
    visual area, so child hover actions must stay positioned by the normal
@@ -622,7 +622,7 @@ body:has(.sidebar-reference-layout[data-reference-sidebar='true']) .stack {
 }
 
 /*
- * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
+ * CDXC:Theming 2026-06-15-11:24:
  * The experimental custom color setting is intentionally limited to the
  * sidebar viewport and the separate native titlebar host. Override only the
  * reference sidebar shell/main/stack and sidebar-local theme tokens so row
@@ -630,12 +630,12 @@ body:has(.sidebar-reference-layout[data-reference-sidebar='true']) .stack {
  * hover colors inherit the custom foreground/background without changing
  * modal, dropdown portal, or shadcn surface tokens.
  *
- * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
+ * CDXC:Theming 2026-06-19-12:33:
  * The visible custom sidebar backing should now be a fixed-strength vertical
  * gradient. Keep app/theme tokens on the solid selected color because cards,
  * hovers, and color-mix calculations need one stable contrast color.
  *
- * CDXC:SidebarScroll 2026-06-30-01:59:
+ * CDXC:Sidebar 2026-06-30-01:59:
  * Project headers no longer stick, and the sidebar no longer needs fixed
  * gradient sampling variables for those headers. Keep the visible custom
  * sidebar gradient as a normal background so scroll frames do not pay for
@@ -726,53 +726,53 @@ body[data-custom-sidebar-titlebar-colors='true'] .sidebar-reference-layout[data-
   min-height: 0;
   overflow: hidden;
   /*
-   * CDXC:SidebarReference 2026-05-28-11:20:
+   * CDXC:Sidebar 2026-05-28-11:20:
    * The native reference sidebar should expose a 7px visual gutter on both
    * sides. Keep the left gutter near the 8px CSS edge while reducing the right
    * CSS inset because the native sidebar composition leaves an extra right-side
    * gap in the final rendered viewport.
    *
-   * CDXC:SidebarReference 2026-05-28-11:46:
+   * CDXC:Sidebar 2026-05-28-11:46:
    * A symmetric 8px content-box inset rendered as about 7px on the left and
    * 14px on the right. Reduce only the right inset so the visible right gutter
    * matches the existing 7px left gutter instead of widening both sides.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-15:38:
+   * CDXC:Sidebar 2026-05-31-15:38:
    * Native full-width sidebar rows must visually touch both sidebar edges.
    * Keep the edge compensation in variables so row surfaces can expand without
    * shifting the icon/text scan columns.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-16:16:
+   * CDXC:Sidebar 2026-05-31-16:16:
    * Full-width rows must stop at the visible sidebar edge, not overrun the
    * right side. Use only the layout padding compensation for right bleed so
    * hover child controls, timestamps, and trailing labels keep their previous
    * right-side positions.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-16:31:
+   * CDXC:Sidebar 2026-05-31-16:31:
    * Quick/Projects headers, project headers, and session buttons still showed
    * a native 7px left gap after the right-edge correction. Keep the safe
    * 1px right bleed, but restore the stronger main-row left bleed so those
    * button surfaces start at the sidebar edge.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-17:31:
+   * CDXC:Sidebar 2026-05-31-17:31:
    * Scroll-area rows can be wider than their own boxes, but the scroll viewport
    * itself clipped that paint back to the padded content column. Let the scroll
    * viewport start at the sidebar edge, then use a smaller row bleed so project
    * headers and session buttons keep their content columns while their visible
    * surfaces reach the left edge.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-17:36:
+   * CDXC:Sidebar 2026-05-31-17:36:
    * Scroll-area row surfaces should stop exactly at the right edge while the
    * scroll viewport itself handles the layout padding. Keep a separate 0px
    * right row bleed so trailing session chrome cannot paint outside the
    * visible sidebar.
    *
-   * CDXC:SidebarReferenceBounds 2026-06-04-22:14:
+   * CDXC:Sidebar 2026-06-04-22:14:
    * The full reference sidebar container needs a 1px left margin so the whole
    * sidebar shifts right together instead of changing individual row padding,
    * hover backgrounds, icons, titles, or trailing controls independently.
    *
-   * CDXC:SidebarReferenceBounds 2026-06-06-05:37:
+   * CDXC:Sidebar 2026-06-06-05:37:
    * The shared sidebar component, not the macOS host, owns the 9px left inset
    * formed by the 1px container margin and 8px content padding. Keep Electron
    * and macOS on this same component-level edge contract so shared rows do not
@@ -784,7 +784,7 @@ body[data-custom-sidebar-titlebar-colors='true'] .sidebar-reference-layout[data-
 
 body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'] {
   /*
-   * CDXC:SidebarReferenceBounds 2026-06-22-01:11:
+   * CDXC:Sidebar 2026-06-22-01:11:
    * The macOS native sidebar needs 5px more left inset, and the primary buttons for Agents Hub, Automations, Mobile, and Search must honor that inset instead of bleeding back to the viewport edge. Override only the native body contract so non-native reference layouts keep the shared 8px content inset.
    *
    * The sidebar page owns a symmetric 5px sidebar-colored gutter on BOTH of
@@ -887,66 +887,66 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
   display: grid;
   gap: 0;
   /*
-   * CDXC:SidebarReferenceBounds 2026-05-26-22:59:
+   * CDXC:Sidebar 2026-05-26-22:59:
    * Storybook and the native sidebar must keep primary buttons inside the
    * sidebar-reference-layout content box. Horizontal negative margins made
    * buttons wider than the padded area and pushed folder icons into the left
    * gutter in Storybook.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-15:38:
+   * CDXC:Sidebar 2026-05-31-15:38:
    * Top sidebar rows should have a 0px left gap in the native sidebar while
    * keeping icons/labels where users already scan for them. Bleed the row
    * surface left and right, then restore that distance as button padding.
    *
-   * CDXC:SidebarReference 2026-06-28-15:04:
+   * CDXC:Sidebar 2026-06-28-15:04:
    * Agents Hub, Automations, and Mobile share one equal-width icon row at the
    * top of the sidebar. Keep Search as the separate full-width row underneath.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-01:43:
+   * CDXC:Sidebar 2026-06-29-01:43:
    * Settings and Keep Awake now live in the same icon row as Agents Hub,
    * Automations, and Mobile. Keep all top controls full-width while Search
    * remains a full-width row below the shortcut strip.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-02:13:
+   * CDXC:Sidebar 2026-06-29-02:13:
    * Search should stay visually distinct as a borderless full-width row under
    * the shortcut strip.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-02:24:
+   * CDXC:Sidebar 2026-06-29-02:24:
    * Settings and Keep Awake dropdowns should open centered within the sidebar
    * instead of anchoring to a single shortcut cell, because the 230px minimum
    * sidebar is narrower than a cell-anchored menu.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-03:01:
+   * CDXC:Sidebar 2026-06-29-03:01:
    * The primary shortcut icons should sit 14px higher in the sidebar, while
    * Search keeps its own gap below the shortcut row instead of inheriting
    * the old nav-level top offset.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-18:34:
+   * CDXC:Sidebar 2026-06-29-18:34:
    * The vertical gap between the shortcut row and Search should match the
    * horizontal gap between shortcut buttons. Use the same 4px spacing value so
    * the top controls read as one grouped block.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-03:05:
+   * CDXC:Sidebar 2026-06-29-03:05:
    * The shortcut icon buttons should extend 1px farther downward than the
    * standard sidebar nav button height, keeping their top edge fixed while
    * increasing the button box from 34px to 35px.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-16:40:
+   * CDXC:Sidebar 2026-06-29-16:40:
    * The top shortcut icon buttons should have a titlebar-colored outline,
    * slight rounding, and internal-only spacing between buttons. Keep the icon
    * row full-width.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-18:10:
+   * CDXC:Sidebar 2026-06-29-18:10:
    * Search should use the same titlebar-colored border and 5px corner radius
    * as the shortcut buttons, with its left and right border edges aligned to the
    * first and last shortcut buttons.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-21:32:
+   * CDXC:Sidebar 2026-06-29-21:32:
    * The top Search row is text-only and uses the shared primary-nav left padding
    * again so its text aligns with rows below. Do not keep the prior Search-only
    * 6px left-padding reduction after removing the search icon.
    *
-   * CDXC:SidebarTopChrome 2026-07-04-17:26:
+   * CDXC:Sidebar 2026-07-04-17:26:
    * The top chrome is now one row: Search on the left and the More overflow
    * trigger on the right. Primary shortcuts and previous-session actions live
    * in the overflow dropdown instead of separate sidebar buttons.
@@ -988,7 +988,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
 }
 
 /*
- * CDXC:SidebarMachineTabs 2026-08-30:
+ * CDXC:RemoteMachines 2026-08-30:
  * With remote machines saved, the machine tab strip under Search visually
  * closes off the top chrome. Without machines that strip is absent, so the
  * Search row itself draws the separator: a full-bleed hairline 3px below its
@@ -1019,7 +1019,7 @@ body:focus-within .reference-sidebar-window-dot[data-window-dot='zoom'] {
 }
 
 /*
- * CDXC:SidebarFooter 2026-08-29:
+ * CDXC:Sidebar 2026-08-29:
  * Commands has one shared, fixed home at the bottom of the GPUI and web sidebar.
  * The footer owns exactly the bottom 45px, including its top border, and bleeds
  * through the reference layout padding without moving the icon/text scan columns
@@ -1267,7 +1267,7 @@ body.native-sidebar-body
 }
 
 /*
- * CDXC:GPUISidebarMoreDropdown 2026-07-21:
+ * CDXC:Sidebar 2026-07-21:
  * Once the GPUI sidebar reaches its 235px default width, anchor the More
  * dropdown to the trigger row's right edge. The More button owns that same
  * edge, while narrower sidebars keep the existing centered placement so the
@@ -1350,23 +1350,23 @@ body.native-sidebar-body
 }
 
 /*
- * CDXC:SidebarReference 2026-05-15-10:04:
+ * CDXC:Sidebar 2026-05-15-10:04:
  * The top overflow trigger must not make the primary nav wider than a narrow
  * native sidebar. Allow all top rows to shrink below their intrinsic width;
  * text rows truncate labels while the icon shortcut row divides available
  * width equally.
  *
- * CDXC:SidebarReference 2026-05-15-10:15:
+ * CDXC:Sidebar 2026-05-15-10:15:
  * Hidden secondary actions must not pre-truncate primary button titles. Use the
  * full label width until the row is hovered or focused, then reserve the
  * secondary-action slot so the revealed overflow/history/terminal button does
  * not overlap the title.
  *
- * CDXC:SidebarReference 2026-05-15-15:36:
+ * CDXC:Sidebar 2026-05-15-15:36:
  * Primary sidebar labels must keep their descenders visible in the 34px rows.
  * Use an 18px text line box instead of clipping labels to 14px.
  *
- * CDXC:SidebarTopChrome 2026-07-04-17:26:
+ * CDXC:Sidebar 2026-07-04-17:26:
  * Search history controls moved into More, so shared hover-action padding only
  * protects rows that still render secondary hover buttons.
  */
@@ -1375,24 +1375,24 @@ body.native-sidebar-body
 }
 
 /*
- * CDXC:SidebarActions 2026-05-08-09:11
+ * CDXC:AgentLauncher 2026-05-08-09:11
  * The combined-sidebar Actions row owns a small hover-only right-side quick
  * run button. It must not resize the row or replace the main click target,
  * because the row opens the action list while the icon launches the project
  * scoped recent action.
  *
- * CDXC:SidebarSearch 2026-05-08-12:41
+ * CDXC:Sidebar 2026-05-08-12:41
  * The combined-sidebar Search row owns a matching hover-only right-side
  * Previous Sessions button so history can open directly without replacing the
  * Search row's primary click target.
  *
- * CDXC:SidebarReference 2026-05-08-14:48
+ * CDXC:Sidebar 2026-05-08-14:48
  * Combined-sidebar New Session owns the same small right-side overflow trigger
  * as the Actions and Search rows. Reserve right padding only while the hover
  * action is visible so hidden secondary controls do not shorten the primary
  * title unnecessarily.
  *
- * CDXC:SidebarReferenceBounds 2026-05-31-15:38:
+ * CDXC:Sidebar 2026-05-31-15:38:
  * Hover child buttons for More and Previous Sessions should sit
  * 5px farther left from the sidebar edge while their parent rows still occupy
  * the full button width.
@@ -1436,12 +1436,12 @@ body.native-sidebar-body
 
 .reference-sidebar-inline-search-row {
   /*
-   * CDXC:SidebarSearch 2026-06-19-13:52:
+   * CDXC:Sidebar 2026-06-19-13:52:
    * Active top Search must keep the original nav-row geometry. Use a
    * transparent input in the label slot instead of the boxed shared session
    * search field so the placeholder is the Search text itself.
    *
-   * CDXC:SidebarSearch 2026-06-19-13:59:
+   * CDXC:Sidebar 2026-06-19-13:59:
    * The active Search placeholder should briefly read like the original label,
    * then fade to low opacity so users can tell it is placeholder text. Closing
    * empty search should restore the plain nav row immediately without the old
@@ -1511,13 +1511,13 @@ body.native-sidebar-body
  * against the trigger. Keep this path on Ghostex-owned tooltip positioning
  * instead of the shared primitive.
  *
- * CDXC:SidebarTooltips 2026-05-30-06:36:
+ * CDXC:Tooltips 2026-05-30-06:36:
  * Sidebar action tooltips should all read as the same square bordered surface
  * and appear below their trigger rather than to the left. Align right-edge
  * action labels to the trigger's right edge so long labels extend inward inside
  * the narrow sidebar instead of clipping against the webview edge.
  *
- * CDXC:SidebarTooltips 2026-06-25-15:48:
+ * CDXC:Tooltips 2026-06-25-15:48:
  * Sidebar action labels now render through SidebarFixedTooltipButton's fixed
  * document-body popup instead of CSS pseudo-elements. Keep the trigger classes
  * for hover-action layout, but suppress pseudo labels so scroll viewports and
@@ -1555,7 +1555,7 @@ body.native-sidebar-body
 }
 
 /*
- * CDXC:TooltipLifecycle 2026-06-13-02:30:
+ * CDXC:Tooltips 2026-06-13-02:30:
  * This body flag is drag-only tooltip suppression. Native pointer-leave should
  * dismiss visible tooltips through events, not set a persistent CSS flag that
  * prevents later hover from showing a tooltip until the user clicks.
@@ -1597,7 +1597,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
- * CDXC:SidebarTopChrome 2026-07-01-02:12:
+ * CDXC:Sidebar 2026-07-01-02:12:
  * The sidebar Keep Awake shortcut must not change background color when hovered, focused, running, or when its dropdown is open.
  * Scope the stable-background override to opted-in shortcut buttons so other sidebar controls keep their filled hover/open affordance.
  */
@@ -1622,18 +1622,18 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-panel {
   gap: 0;
   /*
-   * CDXC:SidebarReferenceScroll 2026-05-24-14:05:
+   * CDXC:Sidebar 2026-05-24-14:05:
    * The grid row already defines the available session-list height.
    * Avoid a forced 100% item height because it makes the scroll surface include footer space and creates false overflow.
    *
-   * CDXC:SidebarReferenceScroll 2026-05-24-14:05:
+   * CDXC:Sidebar 2026-05-24-14:05:
    * Reference mode renders an empty .session-groups-top, and the shared CSS hides empty top rows with display:none.
    * Use a single 1fr row here so the scroll shell does not auto-place into the shared auto toolbar row and leave unused space below it.
   */
   grid-template-rows: minmax(0, 1fr);
   height: auto;
   /*
-   * CDXC:SidebarReferenceBounds 2026-05-31-17:39:
+   * CDXC:Sidebar 2026-05-31-17:39:
    * Session/project row surfaces are clipped by this panel, so the panel itself
    * must reach the sidebar edge. Child rows keep smaller compensated bleeds so
    * text/icon columns stay stable while hover and active surfaces start at 0px.
@@ -1651,7 +1651,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
- * CDXC:SidebarMachineTabs 2026-08-28:
+ * CDXC:RemoteMachines 2026-08-28:
  * With remote machines saved, the panel's top row carries the machine tab strip
  * and must size to it; the reference layout's single-row override above is for
  * the empty top row that renders when there is nothing to switch between.
@@ -1673,7 +1673,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
- * CDXC:SidebarMachineTabsEdge 2026-09-02:
+ * CDXC:RemoteMachines 2026-09-02:
  * The strip is edge-to-edge. It lives in the unclipped top chrome and bleeds
  * by the layout root's full horizontal padding (not the 5px-gutter row
  * bleeds), so it reaches the page edge on the left and the workspace-facing
@@ -1745,7 +1745,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
- * CDXC:SidebarMachineTabCounts 2026-09-03:
+ * CDXC:RemoteMachines 2026-09-03:
  * The tab reuses the group header's count markers, whose colors are custom
  * properties the header defines on its `.group-collapsed-status-counts`
  * wrapper. This wrapper is not that class, so it must define the same
@@ -1762,7 +1762,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
- * CDXC:SidebarProjectMenu 2026-09-02:
+ * CDXC:ContextMenus 2026-09-02:
  * The cloud glyph is the tab's connection control (it replaced the machine
  * header's Connect / spinner / error cloud). It spins while busy, and when
  * clickable it is its own hover target inside the tab so the retry affordance
@@ -1815,12 +1815,12 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-search-toolbar {
   padding: 0;
   /*
-   * CDXC:SidebarSearch 2026-05-31-18:39:
+   * CDXC:Sidebar 2026-05-31-18:39:
    * Boxed session-search fields in reference layout need 5px more right-edge
    * gap. Shrink the toolbar width instead of changing parent padding so the
    * search box's left edge and internal icon/text spacing stay fixed.
    *
-   * CDXC:SidebarSearch 2026-06-19-13:52:
+   * CDXC:Sidebar 2026-06-19-13:52:
    * The top Search row no longer uses this boxed toolbar while active. Keep
    * this sizing for other shared SidebarSessionSearchField surfaces that still
    * intentionally render as boxes.
@@ -1870,35 +1870,35 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-content {
   /*
-   * CDXC:SidebarStickyHeaders 2026-05-20-10:15:
+   * CDXC:Sidebar 2026-05-20-10:15:
    * Project folder headers previously stuck to the top of the scroll area.
    * The scroll viewport still owns the top breathing room below Search, and the
    * first section header margin keeps Quick and Projects in the same visual
    * position in normal document flow.
    *
-   * CDXC:SidebarStickyHeaders 2026-05-20-10:31:
+   * CDXC:Sidebar 2026-05-20-10:31:
    * Add 7px more space below the Search button by increasing the scroll
    * viewport's top offset from 8px to 15px. Keep the first section header's
    * visual position stable by deriving its top margin from the same offset.
    *
-   * CDXC:SidebarStickyHeaders 2026-05-20-10:38:
+   * CDXC:Sidebar 2026-05-20-10:38:
    * Quick needs 5px more visible breathing room inside the scroll area after
    * the Search-to-scroll gap was increased, so expose a separate first-section
    * top inset.
    *
-   * CDXC:SidebarTopChrome 2026-06-29-18:34:
+   * CDXC:Sidebar 2026-06-29-18:34:
    * The gap above Quick remains 7px tighter toward Search while Search's own
    * spacing now matches the shortcut button gap. Keep the Quick first-section
    * extra scoped so Projects and remote sections keep their existing spacing.
    *
-   * CDXC:SidebarScroll 2026-06-30-01:59:
+   * CDXC:Sidebar 2026-06-30-01:59:
    * Project headers no longer use sticky positioning, so this viewport keeps
    * only spacing variables.
    */
   --reference-sidebar-quick-top-extra: -2px;
   --reference-sidebar-scroll-top-offset: 15px;
   /*
-   * CDXC:SidebarSearch 2026-05-08-16:20
+   * CDXC:Sidebar 2026-05-08-16:20
    * Reference-mode search renders filtered current projects followed by
    * Previous Sessions in the same scroll surface. The shared grid layout can
    * collapse the project-list track to 0px while its session rows still paint,
@@ -1943,32 +1943,32 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
   padding-left: calc(18px + var(--reference-sidebar-scroll-row-bleed-left));
   padding-right: calc(9px + var(--reference-sidebar-scroll-row-bleed-right));
   /*
-   * CDXC:SidebarStickyHeaders 2026-05-20-08:08:
+   * CDXC:Sidebar 2026-05-20-08:08:
    * Quick and Projects started as scroll-context headers, but review
    * showed the section label plus project row created awkward stacked
    * whitespace. Keep section labels in normal document flow.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-15:38:
+   * CDXC:Sidebar 2026-05-31-15:38:
    * Quick and Projects header buttons should start at the sidebar's left edge,
    * not the padded content column. Compensated padding keeps the labels and
    * header action icons in their existing visual columns.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-18:16:
+   * CDXC:Sidebar 2026-05-31-18:16:
    * Quick and Projects section headers remain full-width hit targets, but
    * their labels and action controls should sit 6px farther inward from both
    * edges.
    *
-   * CDXC:SidebarReferenceBounds 2026-05-31-18:24:
+   * CDXC:Sidebar 2026-05-31-18:24:
    * Quick and Projects section header contents need another 7px of left inset
    * only, while the right-side spacing and full-width row surface stay fixed.
    *
-   * CDXC:SidebarHeaderActions 2026-06-17-23:21:
+   * CDXC:Sidebar 2026-06-17-23:21:
    * Quick and Projects labels must collapse like the Search row when hover
    * actions appear. Keep the action buttons in normal flex layout, but remove
    * their hidden-state width and let the title ellipsize once the visible
    * action cluster needs room.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-19-12:56:
+   * CDXC:Theming 2026-06-19-12:56:
    * Section headers sit above the custom sidebar gradient and should not paint
    * the solid contrast token at rest. Keep the row transparent so only hover
    * controls add local chrome.
@@ -1977,12 +1977,12 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 
 .reference-sidebar-section-row[data-reference-section='projects'] {
   /*
-   * CDXC:SidebarStickyHeaders 2026-05-20-09:55:
+   * CDXC:Sidebar 2026-05-20-09:55:
    * The first project folder should sit close to the normal Projects section
    * label so the handoff into project-folder rows feels immediate
    * without making Quick's chat-section spacing tighter.
    *
-   * CDXC:SidebarStickyHeaders 2026-05-24-11:23:
+   * CDXC:Sidebar 2026-05-24-11:23:
    * Add 10px more breathing room under the Projects label before the first
    * project folder. This only changes the Projects-to-first-project gap and
    * leaves Quick spacing and project-to-project spacing unchanged.
@@ -2066,7 +2066,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
- * CDXC:GPUIRemoteLastSeen 2026-07-12:
+ * CDXC:RemoteMachines 2026-07-12:
  * Disconnected machines render their last-seen project groups faded. Browser
  * rows stay fully interactive (their tabs are local CEF panes), so the fade
  * applies to the group header and the inert terminal/agent rows individually
@@ -2147,7 +2147,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
- * CDXC:SidebarCollapseAnimation 2026-08-19:
+ * CDXC:Sidebar 2026-08-19:
  * Collapsible bodies like the project collection list carry block padding
  * (`.project-collection-projects` has 5px on top). With `box-sizing:
  * border-box` that padding survives `height: 0`, so the body still occupied a
@@ -2222,7 +2222,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
- * CDXC:GPUIRemoteConnectFeedback 2026-07-21:
+ * CDXC:RemoteMachines 2026-07-21:
  * Connected machines use the normal collapse chevron. The idle Connect action
  * reserves a title-adjacent control, while busy and error states replace the
  * leading cloud with status feedback. The heading shrinks only for the
@@ -2304,7 +2304,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 
 .reference-sidebar-section-actions {
   /*
-   * CDXC:Chats 2026-05-08-11:53
+   * CDXC:Projects 2026-05-08-11:53
    * Chats header actions are hover-only: the browser and new-chat buttons must
    * stay visually and interactively hidden until the user hovers or focuses the
    * Chats section header, matching the project section controls.
@@ -2324,7 +2324,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
   .reference-sidebar-section-actions
   .reference-sidebar-section-agent-picker {
   /*
-   * CDXC:QuickAgents 2026-06-08-18:25:
+   * CDXC:AgentLauncher 2026-06-08-18:25:
    * The Quick section agent picker reuses the project-header split button classes. Override the project-row hover hiding only inside section-header actions so the picker follows the section action cluster visibility instead of waiting for a project group row hover.
    */
   opacity: 1;
@@ -2370,7 +2370,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
 }
 
 /*
-CDXC:ManualSessionSorting 2026-06-05-12:30:
+CDXC:Sessions 2026-06-05-12:30:
 The Quick and Projects sort picker is compact header chrome, not a settings
 surface. Keep the filter icon aligned with existing hover actions while making
 manual mode visibly selected without adding text to the section row.
@@ -2397,7 +2397,7 @@ manual mode visibly selected without adding text to the section row.
 
 .reference-sidebar-section-bulk-project-action svg {
   /*
-   * CDXC:SidebarReference 2026-05-28-12:59:
+   * CDXC:Sidebar 2026-05-28-12:59:
    * Collapse All and Expand Previous use diagonal arrows in the Projects
    * header. Rotate only that bulk-project icon 90deg clockwise so the sidebar
    * and Resources header share the same requested orientation without
@@ -2607,7 +2607,7 @@ manual mode visibly selected without adding text to the section row.
 }
 
 /*
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * The per-gxserver Space filter row. It is compact section chrome that sits
  * between a section header and that section's project list, so it borrows the
  * header's row height and the sidebar's existing chip vocabulary instead of
@@ -2620,7 +2620,7 @@ manual mode visibly selected without adding text to the section row.
 .sidebar-space-filter-row {
   box-sizing: border-box;
   /*
-   * CDXC:SidebarProjectMenu 2026-09-02:
+   * CDXC:ContextMenus 2026-09-02:
    * The row used to tuck 10px up under the Projects / machine header. That
    * header is gone, so the row is now the first thing in its list and rests
    * flush at the top instead of pulling itself into the scroll offset.
@@ -2632,7 +2632,7 @@ manual mode visibly selected without adding text to the section row.
 }
 
 /*
- * CDXC:SidebarSpaces 2026-08-29:
+ * CDXC:Spaces 2026-08-29:
  * The Projects header and its Space switcher stay pinned while the project
  * list scrolls under them. Both stick against the `.session-groups-content`
  * scroller as direct children of it; the row's offset equals the header's
@@ -2641,7 +2641,7 @@ manual mode visibly selected without adding text to the section row.
  * sidebar gradient mode keys its rows off) so scrolled rows never bleed
  * through the pinned chrome.
  *
- * CDXC:SidebarSpaces 2026-08-30:
+ * CDXC:Spaces 2026-08-30:
  * Pinned chrome must not move at all while the list scrolls, which means each
  * row's resting position has to coincide exactly with its sticky pin position:
  *
@@ -2681,7 +2681,7 @@ manual mode visibly selected without adding text to the section row.
 }
 
 /*
- * CDXC:SidebarProjectMenu 2026-09-02:
+ * CDXC:ContextMenus 2026-09-02:
  * With the Projects header removed the Space row is the only pinned chrome in
  * the local list, so it pins at the scroller's top edge, which is also its
  * resting position: nothing above it can scroll away. It carries no extra
@@ -2697,7 +2697,7 @@ manual mode visibly selected without adding text to the section row.
 }
 
 /*
- * CDXC:SidebarSpaces 2026-08-28:
+ * CDXC:Spaces 2026-08-28:
  * Keep the Space switcher aligned with the project content on the left. During
  * the pre-paint measuring pass every button renders at once, and the row clips
  * any temporary overflow at its right edge.
@@ -2752,7 +2752,7 @@ manual mode visibly selected without adding text to the section row.
 }
 
 /*
- * CDXC:SidebarSpaces 2026-08-30:
+ * CDXC:Spaces 2026-08-30:
  * The Space overflow ("More") dropdown echoes the switcher's pill buttons with
  * rounded corners instead of the sidebar's default square context menu.
  */

@@ -37,7 +37,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GlobalActions 2026-08-01-16:00:
+        CDXC:AgentLauncher 2026-08-01-16:00:
         GPUI accepts the Global Actions list only through the fixed sidebar
         bridge and keeps the parsed bounded rows in runtime memory for tab strip
         rendering. Malformed payloads are ignored without logging raw JSON,
@@ -60,7 +60,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+        CDXC:StatusPet 2026-06-26-04:38:
         GPUI accepts status-indicator state only through the fixed sidebar bridge and stores the parsed bounded presentation model in runtime memory. Malformed payloads are ignored without logging raw JSON, paths, titles beyond the bounded UI strings, command text, terminal output, URLs, tokens, or fallback status data.
         */
         let Ok(next_state) = gpui_sidebar_session_status_indicators_from_json(payload) else {
@@ -91,7 +91,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsNotifications 2026-06-26-06:56:
+        CDXC:Notifications 2026-06-26-06:56:
         GPUI session attention banners fire only on sanitized status rows newly entering `attention` after the first status snapshot. Saved `showMacOSAttentionNotifications` defaults to true, notification sound stays nil, and runtime rate limiting mirrors native without persisting or logging titles, ids, raw payloads, paths, URLs, command text, stdout/stderr, settings JSON, tokens, or terminal content.
         */
         if candidates.is_empty() || !gpui_macos_attention_notifications_enabled() {
@@ -124,10 +124,10 @@ impl GhostexGpuiApp {
 
     pub(crate) fn apply_gpui_menu_bar_status_item_state(&self) {
         /*
-        CDXC:GPUIMenuBarStatusItem 2026-06-26-05:42:
+        CDXC:StatusPet 2026-06-26-05:42:
         GPUI applies the macOS menu-bar badge directly from sanitized Rust-owned counts and the saved hideMenuBarSessionStatusIndicators setting.
 
-        CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+        CDXC:StatusPet 2026-06-26-06:05:
         The primary-click dropdown shares this Rust-owned status snapshot for bounded project/session rows. AppKit receives explicit copied FFI fields for ids, titles, status, order, and timestamps only; it never receives renderer JSON, paths, URLs, command text, tokens, logs, terminal output, hidden hit regions, or overlay instructions.
         */
         apply_gpui_menu_bar_status_item(&self.sidebar_session_status_indicators);
@@ -139,7 +139,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+        CDXC:StatusPet 2026-06-26-04:38:
         The pet overlay settings fan-out shares the status bridge privacy boundary: Rust stores only bounded enabled/pet-id/status/activity ids and titles for future GPUI-owned presentation, with no generic IPC, renderer paths, URLs, commands, terminal content, or menu-bar emulation.
         */
         let Ok(next_state) = gpui_sidebar_pet_overlay_state_from_json(payload) else {
@@ -256,10 +256,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIAppShots 2026-06-25-23:28:
+        CDXC:AppShots 2026-06-25-23:28:
         Existing-session App Shot insertion accepts only the fixed sidebar App Shot prompt payload: a gxserver presentation session id plus the already formatted prompt string. Rust maps that id to a live Agents shell tab, selects it through normal workspace state if needed, verifies the exact mounted Ghostty owner/runtime id, and returns only a transient boolean result to the sidebar.
 
-        CDXC:GPUIAppShots 2026-06-26-04:27:
+        CDXC:AppShots 2026-06-26-04:27:
         Remote App Shot insertion uses the same fixed prompt bridge with a machine-scoped remote presentation session id. It may write only to an already-mounted remote attach Agents terminal in `remote_attach_sessions`; it must not wake, create, or materialize remote tabs, and it stores no prompt, path, SSH, title, URL, or terminal content.
         */
         let Ok(message) = gpui_sidebar_native_app_shot_prompt_from_json(payload) else {
@@ -428,7 +428,7 @@ impl GhostexGpuiApp {
             key.session_id.as_str(),
         );
         /*
-        CDXC:GPUIRemoteWorkspaceProjectKey 2026-07-30:
+        CDXC:RemoteMachines 2026-07-30:
         The Agents workspace keys remote projects by the machine-scoped id
         (`remote:<machineId>:project:<projectId>`), matching the sidebar's
         active-project snapshot. A raw remote project id here would swap the
@@ -478,22 +478,22 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISidebarProjectPathActions 2026-06-24-14:18:
+        CDXC:Projects 2026-06-24-14:18:
         Sidebar copy/open project path actions in GPUI are native side effects authorized by gxserver project ids, not renderer paths. Parse only the small fixed JSON action contract from the bundled sidebar bridge, resolve the path through authenticated localhost gxserver reads, then perform clipboard/Finder actions without logging paths, daemon response bodies, tokens, project names, or renderer text.
 
-        CDXC:GPUISidebarProjectPathActions 2026-06-24-13:49:
+        CDXC:Projects 2026-06-24-13:49:
         Sidebar IDE-open actions reuse this pathless native bridge instead of accepting targetApp, app-name, or editor command data from React. Resolve the gxserver project path in Rust; group IDE opens read the shared Settings default editor while active-workspace VS Code/Zed opens use fixed native action names. Fail with a generic warning when the configured editor is unsupported or unavailable rather than claiming a launch.
 
-        CDXC:GPUISidebarProjectPathActions 2026-06-24-13:57:
+        CDXC:Projects 2026-06-24-13:57:
         Settings custom default editor commands for group project IDE opens must stay native-owned: React sends only a fixed action plus gxserver project id, Rust reads shared Settings, accepts only a bounded argv-style command string, appends the resolved project path as a separate argv item, and never logs command text, paths, renderer payloads, stdout, or stderr.
 
-        CDXC:GPUISidebarGit 2026-06-24-15:43:
+        CDXC:Git 2026-06-24-15:43:
         Git browser/file side effects on this bridge must re-query gxserver in background Rust before launch. Existing PR opens accept no renderer URL, and changed-file IDE opens accept only a relative candidate that must still be present in the current gxserver Git state.
 
-        CDXC:GPUIRemoteAttach 2026-06-24-19:06:
+        CDXC:RemoteMachines 2026-06-24-19:06:
         Remote attach/resume side effects share this fixed sidebar-native bridge, but Rust must parse the machine-scoped remote session id and own gxserver metadata reads, SSH command construction, terminal launch payloads, and clipboard writes. CEF cannot pass hosts, users, paths, tokens, daemon bodies, stdout/stderr, or command text.
 
-        CDXC:GPUIRemoteNativeActions 2026-08-14:
+        CDXC:RemoteMachines 2026-08-14:
         Remote project copy-path, PR browser, IDE, Recent Projects terminal creation, and changed-file open requests reuse the same fixed native bridge, but Rust must parse a machine-scoped project id and revalidate through the live saved-machine gxserver tunnel before any side effect. Clipboard, browser, terminal, and fixed remote-editor actions may proceed only from remote daemon state; local Finder and unsupported/custom editor opens for remote paths fail honestly.
         */
         let Ok(message) = gpui_sidebar_native_project_path_action_from_json(payload) else {
@@ -537,7 +537,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPane 2026-06-24-23:17:
+        CDXC:CommandPane 2026-06-24-23:17:
         Shared SidebarApp project Actions must run in GPUI through the same Browser or command-pane path as titlebar Actions. Parse only the fixed sidebar command-action JSON emitted from the gxserver HUD projection, then reuse the window-aware action runner so command text enters only the command-terminal launch payload boundary and never logs, shell-state JSON, paths, fallback project detection, or renderer execution.
         */
         let Ok(action) = gpui_sidebar_command_action_from_json(payload) else {
@@ -552,7 +552,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPane 2026-06-25-10:34:
+        CDXC:CommandPane 2026-06-25-10:34:
         Shared SidebarApp `endSidebarCommandRun` must close the GPUI command-pane Action tab mapped to the command id and clear sidebar button feedback, matching macOS. Accept only the fixed command-run-end payload; do not accept command text, URLs, cwd/env, run ids, status-file paths, terminal output, project paths, or generic IPC fields.
         */
         let Ok(command_id) = gpui_sidebar_command_run_end_from_json(payload) else {
@@ -568,7 +568,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPalette 2026-06-27-08:17:
+        CDXC:CommandPalette 2026-06-27-08:17:
         Shared SidebarApp and command-palette hotkey rows reach GPUI through the CEF sidebar runtime, not the native WKScriptMessage path. Parse only the fixed action-id selector and feed the existing Rust `runGhostexHotkeyAction` dispatcher so Open Commands Panel uses the shared open/focus/minimize route and focused-pane, Settings, and modal routes do not accept renderer-owned sessions, paths, commands, URLs, or launch metadata.
         */
         let Ok(action_id) = gpui_sidebar_ghostex_hotkey_action_from_json(payload) else {
@@ -592,7 +592,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIQuickAutomationsOverview 2026-07-08:
+        CDXC:Automations 2026-07-08:
         Mirror macOS `focusQuickAutomationsProject` in `native/sidebar/native-sidebar.tsx`: when the sidebar focuses the quick-automations registry project, select Automate via `set_active_mode` so availability, wake, focus, CEF visibility, and shell-state persistence stay on the reviewed titlebar path.
         */
         if self.active_mode == TitlebarMode::Automate
@@ -632,19 +632,19 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectSidebarBridge 2026-06-22-19:32:
+        CDXC:CefRuntime 2026-06-22-19:32:
         Live sidebar project context is accepted only through the slice-91 active-project contract and stored as runtime memory. Slice 92 intentionally does not replace titlebar availability, remove the strict env bridge, persist project facts, log raw JSON, or infer projects from .git, names, paths, fixtures, workspace labels, URLs, or filesystem markers.
 
-        CDXC:GPUIProjectSidebarBridge 2026-06-22-19:44:
+        CDXC:CefRuntime 2026-06-22-19:44:
         Slice 93 makes valid stored sidebar snapshots the runtime availability source for App titlebar/workarea decisions while retaining the strict env bridge for startup/tests before any sidebar message arrives. Malformed payloads must not replace the previous snapshot or coerce the active mode.
 
-        CDXC:GPUITitlebarProjectLabel 2026-06-22-19:57:
+        CDXC:Titlebar 2026-06-22-19:57:
         Slice 95 makes the visible titlebar project label runtime-only sidebar snapshot state. A valid active-project payload updates the label from the stored snapshot display name in memory; malformed payloads leave the existing label unchanged and must not persist, log, or derive display labels from env vars, repo folders, .git, workspace names, fixture names, paths, URLs, or sidebar titles.
 
-        CDXC:GPUIProjectSidebarBridge 2026-06-23-06:53:
+        CDXC:CefRuntime 2026-06-23-06:53:
         Duplicate valid active-project payloads are accepted as a bridge heartbeat but are not a project change. Only a changed stored snapshot may refresh the titlebar label, coerce project-scoped mode availability, or notify GPUI, and malformed payloads still preserve the prior snapshot.
 
-        CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
+        CDXC:Workarea 2026-06-29-00:02:
         Active-project changes no longer reconcile Source/Browser/Kanban/Automate/Manage readiness stores. The stored snapshot immediately feeds titlebar availability and the direct runtime URL/CEF gates, so stale proof state cannot keep or block a workarea surface.
         */
         match store_latest_gpui_project_snapshot_from_sidebar_contract_json(
@@ -653,7 +653,7 @@ impl GhostexGpuiApp {
         ) {
             Ok(GpuiProjectSnapshotStoreResult::Changed) => {
                 /*
-                CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
+                CDXC:Navigation 2026-07-29:
                 The parsed snapshot is stored before the coalescing gate, so a
                 collapsed request needs no payload: replaying it applies
                 whatever the newest stored snapshot is, and duplicate
@@ -710,7 +710,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
+    CDXC:Navigation 2026-07-29:
     The single decision point every sidebar-driven project switch passes
     through. Returns true when the caller must stop and hand its request to the
     trailing flush instead of executing it now.
@@ -896,7 +896,7 @@ impl GhostexGpuiApp {
         }
 
         /*
-        CDXC:GPUIAgentsWorkspacePerProject 2026-07-23:
+        CDXC:Workarea 2026-07-23:
         Agents split/tab topology is project/worktree-owned. Park the complete
         outgoing writer-owned shell model plus its canonical session mappings
         before activating another project. Reconciliation may then update only
@@ -914,7 +914,7 @@ impl GhostexGpuiApp {
             SystemTime::now(),
         );
         /*
-        CDXC:GPUISessionChatSurfacePerProject 2026-08-26:
+        CDXC:SessionChat 2026-08-26:
         Chat pages park with the terminal owners rather than being destroyed and
         reloaded, so the outgoing project's Chromium browsers survive the switch.
         The bundle is taken before the ownership branch below because it also
@@ -1088,7 +1088,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPanePerProject 2026-07-10:
+        CDXC:CommandPane 2026-07-10:
         macOS parity: command panels are per-project (`NativeProject.commandsPanel`
         in native-sidebar.tsx), so an active-project change swaps the whole
         command pane instead of sharing one global panel. The outgoing pane is
@@ -1154,7 +1154,7 @@ impl GhostexGpuiApp {
         self.command_pane_project_id = new_project_id;
 
         /*
-        CDXC:GPUICommandPanePerProject 2026-07-10:
+        CDXC:CommandPane 2026-07-10:
         Command session ids are per-pane counters, so ids can collide across
         projects. Every piece of live command runtime state belongs to the
         outgoing pane and is torn down wholesale here instead of pruned by
@@ -1168,7 +1168,7 @@ impl GhostexGpuiApp {
         self.command_gxserver_session_mappings =
             command_gxserver_session_mappings_from_command_model(&self.command_pane);
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         Remote Action tabs park with their project exactly like local command
         tabs: the incoming pane's own remote identities replace the outgoing
         pane's, and the parked project's remote sessions stay alive on their
@@ -1235,7 +1235,7 @@ impl GhostexGpuiApp {
         self.browser_tabs_project_epoch = self.browser_tabs_project_epoch.wrapping_add(1);
 
         /*
-        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        CDXC:Browser 2026-08-26:
         Browser ids are project-local, so the live surface/input maps can only
         describe one project at a time — but that is a reason to move the
         outgoing project's runtime out of the way, not to destroy it. The whole
@@ -1305,7 +1305,7 @@ impl GhostexGpuiApp {
             ));
         }
         /*
-        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        CDXC:Browser 2026-08-26:
         Restored surfaces come back hidden, because parking hid them. Run the
         normal visibility gate so the incoming project's rendered tabs are shown
         again by the one owner of that decision, instead of leaving the Browser
@@ -1326,7 +1326,7 @@ impl GhostexGpuiApp {
         match event {
             cef::BrowserPageMetadataEvent::AddressChanged(url) => {
                 /*
-                CDXC:GPUIBrowserMetadata 2026-06-22-07:23:
+                CDXC:Browser 2026-06-22-07:23:
                 CEF-reported Browser navigation owns the runtime URL for that tab. Update the URL-derived fallback title, refresh the active address field only when the reporting tab is selected, keep the selected tab's own CEF surface visible, and persist through the existing Browser URL sanitizer instead of writing raw navigation details directly.
                 */
                 // A cross-origin navigation invalidates any prompt the previous
@@ -1356,10 +1356,10 @@ impl GhostexGpuiApp {
             }
             cef::BrowserPageMetadataEvent::TitleChanged(title) => {
                 /*
-                CDXC:GPUIBrowserMetadata 2026-06-22-07:23:
+                CDXC:Browser 2026-06-22-07:23:
                 CEF page titles change the visible Browser tab-strip label while the app runs.
 
-                CDXC:GPUIBrowserTabTitleCache 2026-07-12:
+                CDXC:Browser 2026-07-12:
                 Shell-state serialization now persists the bounded last displayed title (`cachedTitle`) so restart keeps the same label; raw titles still never enter history or URL persistence.
                 */
                 if self.browser_tabs.record_page_title_change(tab_id, title) {
@@ -1368,7 +1368,7 @@ impl GhostexGpuiApp {
             }
             cef::BrowserPageMetadataEvent::FaviconUrlChanged(favicon_url) => {
                 /*
-                CDXC:GPUIBrowserFavicons 2026-06-22-09:11:
+                CDXC:Browser 2026-06-22-09:11:
                 CEF favicon metadata may update Browser tab chrome at runtime, but favicon URLs can reveal page-owned or user-specific state. Store them only on the in-memory BrowserTab record, never persist them, and repaint without touching shell-state JSON.
                 */
                 if self
@@ -1519,7 +1519,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUTitlebarAvailability 2026-06-22-15:52:
+        CDXC:Titlebar 2026-06-22-15:52:
         Browser toolbar commands are user-facing Browser activation routes. In Quick/projectless GPUI context they must no-op through the same titlebar availability guard as mode clicks and Option workarea hotkeys, instead of directly switching activeMode to Browser.
         */
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
@@ -1622,7 +1622,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+        CDXC:Browser 2026-06-23-11:14:
         Browser Profiles are a normal GPUI Browser toolbar feature. The menu reflects real shell profile state through an OS-owned NativeMenu with checked generated profile rows and New Profile; do not use GPUI overlays, hidden hit regions, hit-test routing, or user-entered profile names.
         */
         if !self.prepare_browser_toolbar_right_action(pane_id, cx) {
@@ -1721,7 +1721,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn browser_profile_actions_available(&self) -> bool {
         /*
-        CDXC:GPUIBrowserProfiles 2026-06-23-11:28:
+        CDXC:Browser 2026-06-23-11:28:
         Profile menu actions are registered globally like other NativeMenu commands, so the handler boundary must repeat the Browser availability gate. Stale or direct action dispatch cannot create, select, persist, or touch CEF profile state outside the Browser workspace.
         */
         self.titlebar_mode_available(TitlebarMode::Browser)
@@ -1826,13 +1826,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIBrowserTabs 2026-06-22-05:56:
+        CDXC:Browser 2026-06-22-05:56:
         Browser tab selection is shell state in this slice but still has to feel real: selecting a tab updates the active tab id, the toolbar URL state, the address input text, and the active tab's owned CEF surface without reloading existing tab page state.
 
-        CDXC:GPUIBrowserTabs 2026-06-22-06:59:
+        CDXC:Browser 2026-06-22-06:59:
         Selecting a Browser tab should reveal that tab's CEF entity and hide any Browser CEF entity that is not the active loaded tab of a rendered Browser leaf. Address-only placeholder tabs deliberately do not create or show a CEF surface, so the Browser body stays empty instead of displaying stale page state from another tab.
 
-        CDXC:GPUIBrowserSplits 2026-06-22-09:55:
+        CDXC:Browser 2026-06-22-09:55:
         Selection still materializes only the focused/global active loaded tab for toolbar parity, but the visibility gate now also keeps any other rendered Browser leaf's already-created active loaded surface visible. Inactive restored loaded tabs without CEF entities remain placeholders instead of being created from render or visibility updates.
         */
         let pane_id = self.browser_tabs.focused_pane;
@@ -1918,13 +1918,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIFocusedNewTabs 2026-06-22-12:51:
+        CDXC:FocusMode 2026-06-22-12:51:
         Cmd+N is an explicit Browser-opening command in the GPUI shell. Switch to Browser before reusing the normal new-tab helper so the new address-only tab is inserted in the focused Browser pane, Browser lifecycle is marked awake, shell focus moves to Browser, address/CEF visibility sync runs, the active tab scrolls into view, and shell state persists.
 
-        CDXC:GPUTitlebarAvailability 2026-06-22-15:52:
+        CDXC:Titlebar 2026-06-22-15:52:
         Cmd+N must respect Quick/projectless titlebar availability before switching modes. Browser placeholder tabs stay part of durable shell state, but user-facing Browser creation commands cannot make Browser active when the native titlebar would show it disabled.
 
-        CDXC:GPUICommandPalette 2026-06-26-06:47:
+        CDXC:CommandPalette 2026-06-26-06:47:
         Focused-pane Browser open commands must match native command-panel parity: CommandPane shell focus no-ops because the native command terminal titlebar branch default-returns, while Agents, Browser, and project-editor focus still create and focus a Browser tab.
         */
         if !gpui_focused_pane_open_browser_hotkey_should_open(self.shell_focus) {
@@ -2070,16 +2070,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIBrowserPopups 2026-06-22-07:14:
+        CDXC:Browser 2026-06-22-07:14:
         CEF popup callbacks enter the shell outside normal GPUI mouse/key handlers, so handle them as Browser tab model mutations: create a selected tab, switch to Browser mode, show only that tab's CEF surface, update the address field, and persist through the existing sanitized Browser shell metadata path.
 
-        CDXC:GPUIBrowserPopups 2026-06-23-11:43:
+        CDXC:Browser 2026-06-23-11:43:
         Empty-target CEF popups must return handled with no shell side effects: no selected-tab mutation, Browser wake/focus, CEF surface sync/creation, shell-state persistence, notification, or fallback content transfer. Non-empty target URLs still follow the selected-tab Browser activation path.
 
-        CDXC:GPUTitlebarAvailability 2026-06-22-15:52:
+        CDXC:Titlebar 2026-06-22-15:52:
         Popup callbacks are another Browser activation route. If Quick/projectless context has disabled Browser, discard the popup request before mutating Browser tab state so background CEF callbacks cannot bypass the titlebar guard.
 
-        CDXC:GPUIBrowserLinkNewTab 2026-08-18:
+        CDXC:Browser 2026-08-18:
         Middle-click and Cmd/Ctrl-click link opens arrive here with background
         placement. They are not an activation route: append the tab, persist,
         and repaint the tab strip without switching modes, moving shell focus,
@@ -2100,7 +2100,7 @@ impl GhostexGpuiApp {
         self.request_sidebar_browser_tab_reveal(popup_tab_id);
         if matches!(placement, cef::BrowserPopupPlacement::Background) {
             /*
-            CDXC:SidebarBrowserTabReveal 2026-08-18:
+            CDXC:Browser 2026-08-18:
             A background tab is the one open with no other visible feedback: the
             page does not change, so with the sidebar chrome collapsed the row it
             created is off screen entirely. Say so, instead of letting the click
@@ -2153,7 +2153,7 @@ impl GhostexGpuiApp {
 
         let previous_mode = self.active_mode;
         /*
-        CDXC:AnonymousAnalytics 2026-08-26:
+        CDXC:Telemetry 2026-08-26:
         Every workarea switch route — center tabs, the compact titlebar menu,
         Option+1..5, the command palette, and the sidebar focus helpers — funnels
         through set_active_mode, so this is the one place a `surface.opened` ping
@@ -2169,7 +2169,7 @@ impl GhostexGpuiApp {
         let previous_first_responder_target = self.first_responder_target;
         self.active_mode = mode;
         /*
-        CDXC:GPUIProjectEditorLifecycle 2026-07-05:
+        CDXC:CodeEditor 2026-07-05:
         Opening Source, Browser, Kanban, Automate, or Docs is an activation
         route. Match macOS by marking the selected project-editor mode awake
         before render, so deliberate page opens never show the sleeping
@@ -2229,7 +2229,7 @@ impl GhostexGpuiApp {
         self.reconcile_agents_pane_surfaces(cx);
         if restore_companion_focus {
             /*
-            CDXC:GPUIProjectBrowserDefault 2026-07-14:
+            CDXC:Browser 2026-07-14:
             Switching workareas may materialize a fresh project Browser tab,
             but it must leave keyboard focus with the most recently active
             terminal/chat rendered in the companion pane. Browser chrome and
@@ -2253,7 +2253,7 @@ impl GhostexGpuiApp {
         }
 
         /*
-        CDXC:GPUIProjectBrowserDefault 2026-07-14:
+        CDXC:Browser 2026-07-14:
         A project with no saved Browser tabs starts at its repository origin's
         web URL when available. Reuse the active project's machine-scoped
         Browser home URL, and mutate only the single address-only
@@ -2283,10 +2283,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkareaHotkeys 2026-06-22-13:00:
+        CDXC:Hotkeys 2026-06-22-13:00:
         Option+1 through Option+5 must match the native sidebar workarea switchers and use the same titlebar selection route: Agents, Source, Browser, Kanban, and Manage. Browser, Kanban, and Manage remain gated by titlebar_mode_available through set_active_mode, and sleeping project-editor modes keep the titlebar route's no-wake behavior while awake editors refresh through the existing lifecycle, focus, Browser visibility, and persistence sync.
 
-        CDXC:GPUICommandPalette 2026-06-26-07:24:
+        CDXC:CommandPalette 2026-06-26-07:24:
         Command-palette workarea switchers must reuse this exact hotkey route instead of mutating active_mode directly, so unavailable project-scoped modes remain guarded and all focus/visibility side effects stay identical to keyboard workarea switching.
         */
         if self.set_active_mode(mode, window, cx) {

@@ -38,7 +38,7 @@ if (!/^[0-9a-f]{64}$/u.test(dmgSha)) {
 }
 
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The cask may only advance when macOS is actually part of this release. It does
  * not matter whether the DMG was rebuilt or reused: macOS is version-stamped, so
  * a reused DMG can only come from a same-version recovery whose cask update never

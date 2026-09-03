@@ -39,7 +39,7 @@ pub(crate) struct BrowserProfileModel {
 impl BrowserProfileModel {
     pub(crate) fn shell_default() -> Self {
         /*
-        CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+        CDXC:Browser 2026-06-23-11:14:
         GPUI Browser profile parity is shell-owned and generated-only for this slice: keep a built-in Default profile plus app-generated Profile N ids, persist only those stable ids and the active id, and avoid user-entered names, profile paths, cookies, credentials, history, page titles, URLs, command text, or local paths.
         */
         Self {
@@ -99,7 +99,7 @@ pub(crate) fn browser_profile_model_to_shell_state_json(
     model: &BrowserProfileModel,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+    CDXC:Browser 2026-06-23-11:14:
     Browser profile shell-state serialization is sanitized at the writer boundary: persist only generated numeric profile ids, the active generated id, and the next generated id. Never persist profile display names from user input, filesystem paths, CEF cache directories, imported data choices, cookies, credentials, history, URLs, page titles, command text, or terminal content.
     */
     serde_json::json!({

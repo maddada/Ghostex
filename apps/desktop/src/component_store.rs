@@ -664,7 +664,7 @@ impl ComponentStore {
         replacement.commit()?;
 
         /*
-        CDXC:ComponentStoreInterruptedInstallCleanup 2026-08-09:
+        CDXC:Extensions 2026-08-09:
         A process terminated after downloading or unpacking cannot run its
         normal error cleanup. Once this version has been installed atomically,
         every remaining .download-* or .install-* sibling is obsolete; remove
@@ -894,7 +894,7 @@ fn component_store_root() -> Result<PathBuf, String> {
     }
     #[cfg(target_os = "windows")]
     /*
-    CDXC:WindowsComponentPersistence 2026-08-16:
+    CDXC:PlatformSupport 2026-08-16:
     Velopack owns %LOCALAPPDATA%\Ghostex and transactionally replaces that
     entire directory during reinstall/update. Keep large on-demand runtimes in
     a sibling data root so the installer cannot discard a verified CEF payload
@@ -968,7 +968,7 @@ fn download(
     #[cfg(target_os = "windows")]
     {
         /*
-        CDXC:WindowsComponentDownloader 2026-08-16:
+        CDXC:PlatformSupport 2026-08-16:
         Do not resolve and launch an arbitrary curl.exe from the customer's
         PATH. Windows installations already carry Velopack's in-process HTTPS
         stack for signed application updates; use that same deterministic
@@ -1009,7 +1009,7 @@ fn download(
     #[cfg(target_os = "linux")]
     {
         /*
-        CDXC:LinuxComponentDownloader 2026-08-16:
+        CDXC:PlatformSupport 2026-08-16:
         Installed Ghostex must not depend on a PATH-resolved curl process for
         its first-launch CEF download. Stream through an in-process HTTPS
         client using the Linux system certificate verifier, keep the existing

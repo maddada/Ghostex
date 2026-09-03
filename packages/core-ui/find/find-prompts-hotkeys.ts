@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 One key map for the Find surface, shared by every host so `gx f` muscle memory
 carries over. It is a pure resolver — no DOM, no state — so the whole map is
 unit-testable and gpui/web/mobile cannot drift apart.

@@ -55,7 +55,7 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('Portless Phase 12 protocol plumbing source contract', () => {
   test('gxserver and shared contracts expose metadata-only status and route previews', () => {
     /*
-    CDXC:PortlessProtocol 2026-06-23-00:25:
+    CDXC:Portless 2026-06-23-00:25:
     Phase 12 protocol plumbing must let React render Portless state, desired route previews, and action metadata without reading Portless files or receiving paths, commands, env, process output, tokens, cookies, terminal text, full URLs, or query strings.
     */
     expect(protocolRustSource).toContain('pub portless: PortlessStatusPayload');
@@ -92,7 +92,7 @@ describe('Portless Phase 12 protocol plumbing source contract', () => {
 
   test('Rust route preview payload joins desired routes without Portless file reads or private fields', () => {
     /*
-    CDXC:PortlessProtocol 2026-06-23-00:25:
+    CDXC:Portless 2026-06-23-00:25:
     Desired route previews should be derived from existing listener and route computation, not routes.json. The preview payload must omit pids because React only needs route target metadata and stable owner ids.
     */
     const presentationPayload = sourceBetween(
@@ -134,7 +134,7 @@ describe('Portless Phase 12 protocol plumbing source contract', () => {
 
   test('native sidebar exposes local-only action availability and sanitized admin results through HUD', () => {
     /*
-    CDXC:PortlessProtocol 2026-06-23-00:25:
+    CDXC:Portless 2026-06-23-00:25:
     Native-sidebar is the first local-Mac action boundary. Its HUD projection may make recommended setup actions available only when the native bridge exists, while remote/non-native gxserver metadata remains localMacOnly.
     */
     const sidebarPortlessStateSource = sourceBetween(
@@ -162,7 +162,7 @@ describe('Portless Phase 12 protocol plumbing source contract', () => {
 
   test('Phase 16 state update contract covers protocol change, failure, retry, disable, and remove', () => {
     /*
-    CDXC:PortlessFailureUX 2026-06-23-04:28:
+    CDXC:Portless 2026-06-23-04:28:
     Phase 16 recovery must flow through gxserver-owned state. Native-sidebar may
     launch privileged local actions, but setup failure, retry, Disable route
     clearing, protocol changes, and explicit service removal are reported as

@@ -29,16 +29,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarKeepAwake 2026-06-25-23:49:
+        CDXC:KeepAwake 2026-06-25-23:49:
         GPUI Keep Awake automation matches the available macOS runtime behavior from shared Settings: launch and external-display rules start the default-duration hold, battery and Low Power Mode stop the GPUI-owned hold with generic user-visible failure boundaries, and active Delayed Send timers start an automatic until-turned-off hold only while no manual/launch/display hold exists.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-26-00:09:
+        CDXC:KeepAwake 2026-06-26-00:09:
         `keepAwakePreventLidSleep` now mirrors macOS through the privileged lid-sleep helper only. GPUI enables the helper lease only for a live Keep Awake runtime, refreshes it while active, disables it on runtime/settings/app shutdown paths without prompting, and never runs `pmset disablesleep` directly from the main app.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-26-00:29:
+        CDXC:KeepAwake 2026-06-26-00:29:
         `keepAwakeWhileWorkingSessions` now mirrors the native automatic-hold rule from safe GPUI session state: count Running Agents marked Working and live awake command tabs marked Working, start an automatic until-turned-off hold while the count is positive, and keep only that automatic hold alive for the 20-minute grace after the count drops to zero. `keepAwakeDeactivateOnUserSwitch` remains parsed/no-op because no concrete macOS titlebar runtime behavior has been identified.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-27-00:40:
+        CDXC:KeepAwake 2026-06-27-00:40:
         Native titlebar Keep Awake also holds for non-sleeping terminal sessions with projected Delayed Send timers. GPUI derives the same automatic input from live command-tab model state instead of the raw timer map so sleeping tabs and orphan persisted command rows cannot keep the power hold alive.
         */
         let settings = settings_snapshot.keep_awake_titlebar_settings();
@@ -328,10 +328,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUITitlebarKeepAwake 2026-06-24-13:16:
+        CDXC:KeepAwake 2026-06-24-13:16:
         Keep Awake is beta-gated and titlebar-control-gated at runtime, not just at render time. If Settings disables beta or hides the control while this GPUI process owns a caffeinate child, stop only that child so hidden chrome cannot leave an invisible process-local hold running.
 
-        CDXC:GPUITitlebarKeepAwake 2026-06-25-23:49:
+        CDXC:KeepAwake 2026-06-25-23:49:
         A beta/control visibility disable also suppresses launch/display/delayed-send autostarts for the current GPUI run once it stops an active hold, matching the macOS titlebar runtime boundary without killing non-GPUI caffeinate processes.
         */
         if settings_snapshot

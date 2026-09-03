@@ -403,7 +403,7 @@ fn zmx_process_identity_parser_recognizes_attached_codex_resume_without_thread_i
             ),
         );
     /*
-    CDXC:GxserverSessionIdentity 2026-06-30-11:15:
+    CDXC:SessionIdentity 2026-06-30-11:15:
     Attached remote zmx terminals can run Codex as a shell child without a
     resume thread id argument. The live-process scanner still needs to
     identify the agent so gxserver can project the sidebar agent icon.
@@ -429,7 +429,7 @@ fn zmx_process_identity_parser_ignores_helper_payload_agent_mentions() {
             &format!("  name={session_name}\tpid=23572\tclients=1\tcreated=1781317239\tstart_dir=/repo"),
         );
     /*
-    CDXC:GxserverSessionIdentity 2026-06-21-18:25:
+    CDXC:SessionIdentity 2026-06-21-18:25:
     Rust process identity parsing must copy TypeScript's helper-process guard. Agent labels come from actual executable tokens, not serialized helper payloads that may mention other CLIs in user-owned text.
     */
     let identity = identities.get(&session_name).expect("identity");

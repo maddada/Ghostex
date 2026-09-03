@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -142,73 +142,73 @@ import {
 } from '@/packages/shared/sidebar-git-state-memo';
 
 /*
-CDXC:GPUISidebarGxserverRuntime 2026-06-24-11:00:
+CDXC:StateSync 2026-06-24-11:00:
 The production GPUI sidebar must mount the shared SidebarApp and hydrate it from gxserver presentation, never Storybook fixtures. Keep the renderer contract narrow: Rust/CEF installs baseUrl, authToken, protocolVersion, and optional active/focus ids on window.ghostexGpui.gxserverBootstrap; this adapter owns HTTP/WebSocket presentation flow, shared reducer/projection, active-project posting, and explicit unsupported handling for sidebar commands outside this slice.
 
-CDXC:GPUISettingsMetadata 2026-06-24-11:59:
+CDXC:Settings 2026-06-24-11:59:
 Settings project/worktree metadata in the GPUI SidebarApp still comes from real gxserver project domain rows, but read-side agent/action chrome now comes from `/api/readSidebarHud` so the renderer does not duplicate custom launcher/action normalization. Keep Beads/worktree metadata on project rows and never invent project paths when gxserver omits them.
 
-CDXC:GPUISidebarProjectPathActions 2026-06-24-14:18:
+CDXC:Projects 2026-06-24-14:18:
 Reused SidebarApp project path actions in GPUI may send only fixed action names plus trusted gxserver project ids to the sidebar-native bridge. The renderer must never send paths from DOM text, group labels, project titles, or cached project domain rows; Rust resolves ids through gxserver immediately before clipboard/Finder side effects.
 
-CDXC:GPUISidebarProjectPathActions 2026-06-24-13:49:
+CDXC:Projects 2026-06-24-13:49:
 Reused SidebarApp IDE-open messages in GPUI use the same pathless native project action bridge. The renderer maps group IDE opens to a Settings-owned fixed action and active workspace IDE opens to fixed VS Code/Zed action names plus gxserver project ids only; targetApp, editor commands, app names, paths, labels, URLs, and shell snippets stay out of the bridge payload so Rust owns editor selection and launch.
 
-CDXC:GPUIWorktrees 2026-06-24-18:21:
+CDXC:Worktrees 2026-06-24-18:21:
 The reused Add Worktree modal in GPUI must run local worktree create/open flows through gxserver typed endpoints instead of shelling from TypeScript or accepting arbitrary renderer paths. Remote worktree create/open must use id-scoped gxserver endpoints where the owning daemon derives target paths, branch refs, and Open Existing selections from project ids plus daemon-issued keys; do not route remote checkout paths or branch text through the renderer as authority.
 
-CDXC:GPUIWorktrees 2026-06-24-14:06:
+CDXC:Worktrees 2026-06-24-14:06:
 Open Existing prompt starts come from the reused modal's real prompt and
 visible agent selector. Blank prompts keep the project-open-only behavior, but
 a non-blank prompt must fail if the submitted agent is not configured instead
 of silently opening the worktree without starting the requested session.
 
-CDXC:GxserverAppUserData 2026-06-24-13:30:
+CDXC:ServerDaemon 2026-06-24-13:30:
 Pinned Prompts in the reused GPUI SidebarApp must hydrate and save through
 gxserver app-user-data, matching the app-modal host. Keep prompt bodies inside
 authenticated RPC payloads only; do not log them or persist them in a
 GPUI-only JSON file.
 
-CDXC:GPUISidebarGit 2026-06-24-15:22:
+CDXC:Git 2026-06-24-15:22:
 GPUI Git controls may use gxserver-owned project ids and typed Git/GitHub/Beads endpoints for status, diffs, commit, push, and direct remote sync. Commit and PR creation paths must use the reused review modal or visible gxserver agent sessions, with remote-machine actions routed through the Rust-owned saved-machine tunnel and the owning remote gxserver.
 
-CDXC:GPUISidebarGit 2026-06-24-15:43:
+CDXC:Git 2026-06-24-15:43:
 Existing pull-request browser open and changed-file IDE open are native GPUI side effects. React may send only fixed action names, gxserver project ids, and normalized project-relative file candidates from current HUD/review state; Rust must re-resolve PR URLs and changed-file membership through gxserver before launching a browser or editor.
 
-CDXC:GPUISidebarGit 2026-06-24-15:55:
+CDXC:Git 2026-06-24-15:55:
 GPUI worktree completion may run direct merge-to-main and delete-after-cleanup only from a confirmed Git review request. The renderer uses the pending machine-scoped gxserver project id plus gxserver worktree parent metadata, fixed Git action names, and `/api/deleteWorktreeProject`; renderer paths, branch text, shell snippets, command output, and modal labels are never authority for side effects.
 
-CDXC:GPUISidebarGit 2026-06-24-16:11:
+CDXC:Git 2026-06-24-16:11:
 Blank GPUI commit messages use a local gxserver generation endpoint after the reused commit modal validates the selected review files. The renderer sends only the trusted project id, review-approved relative paths, and selected prompt-agent id; gxserver stages/diffs the registered project and returns the subject/body used by the same commit pipeline.
 
-CDXC:GPUISidebarGit 2026-06-24-16:28:
+CDXC:Git 2026-06-24-16:28:
 Direct/background GPUI PR creation must complete through gxserver before the UI opens a PR or removes a worktree. Reused review confirmations commit only validated review files, push with fixed Git action names, call the sanitized `/api/createPullRequest` project-id RPC, and run delete-after cleanup only after that result confirms an open PR; visible-agent PR workflows remain non-delete because they have no gxserver-owned PR completion signal.
 
-CDXC:GPUISidebarGit 2026-06-24-16:45:
+CDXC:Git 2026-06-24-16:45:
 Visible PR-agent sessions expose gxserver lifecycle/activity only, not a trusted PR-created result. Preserve visible PR sessions for non-delete-after workflows, but route every delete-after PR request through the direct/background gxserver PR result before removing the original validated worktree.
 
-CDXC:GPUIRemoteGit 2026-06-24-17:47:
+CDXC:Git 2026-06-24-17:47:
 Remote GPUI Git/GitHub/worktree actions must route through the Rust-owned saved-machine gxserver tunnel with machine-scoped project ids, reviewed file paths, fixed endpoint action names, and id-scoped worktree/branch operations only. Native side effects stay explicit: terminal focus uses remote attach, PR browser opens and copy-path use Rust revalidation, local Finder dereference remains unsupported for remote paths, and remote IDE opens require Rust-owned fixed editor support.
 
-CDXC:GPUIRemoteAttach 2026-06-24-19:06:
+CDXC:RemoteMachines 2026-06-24-19:06:
 Remote terminal focus and copy-attach commands may leave React only as fixed native action names plus machine-scoped remote presentation session ids. Rust owns saved-machine SSH details, gxserver attach/resume metadata, GPUI terminal launch payloads, and clipboard command construction so renderer state never carries tokens, hostnames, paths, or command text.
 
-CDXC:GPUIRemoteNativeActions 2026-08-14:
+CDXC:RemoteMachines 2026-08-14:
 Remote Recent Projects opens a real project-scoped terminal through the fixed `openRemoteProjectTerminal` selector. React sends only the machine-scoped project id; Rust restores the parked project, creates the remote gxserver terminal, and owns all SSH attach metadata and terminal launch payloads.
 
-CDXC:GPUIRemoteNativeActions 2026-06-24-20:26:
+CDXC:RemoteMachines 2026-06-24-20:26:
 Remote IDE project and changed-file opens are allowed only through Rust-owned fixed editor openers. React may request a fixed action for a machine-scoped project id, but it must never send remote paths, URI strings, SSH host/user/port/identity details, Settings custom commands, or editor command text.
 
-CDXC:GPUIRemoteNativeActions 2026-06-24-21:33:
+CDXC:RemoteMachines 2026-06-24-21:33:
 Zed remote opens are allowed through Rust-owned documented `zed ssh://[user@]host[:port]/path` argv only. React still sends only fixed action names and machine-scoped project ids; Cursor, Windsurf, VSCodium, Sublime, and custom remote editor commands remain unsupported without an equally reviewed native opener contract.
 
-CDXC:GPUISidebarGxserverFocusState 2026-06-24-21:07:
+CDXC:FocusRouting 2026-06-24-21:07:
 Focused and visible session bootstrap state may use only gxserver presentation session ids the GPUI runtime already owns from create/focus/fork/restore results or machine-scoped remote presentation ids. Local ids stay raw gxserver session ids; remote ids use the existing `remote:<machine>:session:<project>:<session>` convention so React, Rust, and the CEF bootstrap never infer focus from labels, paths, terminal text, project names, or shell placeholder ids.
 
-CDXC:GPUISidebarProjectClassification 2026-06-24-22:18:
+CDXC:Projects 2026-06-24-22:18:
 GPUI must mirror the macOS sidebar projection rules for gxserver project domain metadata and canonical chat-folder paths. Legacy `isChat`/`isQuick`, `launchSettings.isChat`, `launchSettings.isQuick`, and projects under the Ghostex chats roots feed the synthetic Chats group instead of normal Project groups, `isRecentProject` rows stay out of active presentation groups, and automatic fallback focus must choose a visible non-chat project while explicit chat-session focus keeps the Chats group active.
 
-CDXC:GPUISidebarProjectClassification 2026-06-24-22:51:
+CDXC:Projects 2026-06-24-22:51:
 Generated Chat folders must not render as individual GPUI project groups, and clicking a chat session must not publish that chat folder as the active project to Rust. Treat host Ghostex-home chat roots, including dev `.active/chats` homes, as projectless Chats containers before building active-project context, Settings project rows, or Git HUD state.
 */
 export function createGpuiSidebarRuntime(): {
@@ -296,7 +296,7 @@ export class GpuiSidebarRuntime {
   pendingProjectDiffRefreshProjectIds = new Set<string>();
   projectDiffStatsByProjectId = new Map<string, SidebarProjectDiffStats>();
   /*
-  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  CDXC:Git 2026-08-16:
   Projects (plain local ids, machine-scoped remote ids) whose cwd answered
   `isInsideWorkTree` with true. Repo-ness effectively never changes at runtime,
   so steady-state polling skips that probe and goes straight to `diffNumstat`;
@@ -366,7 +366,7 @@ export class GpuiSidebarRuntime {
    */
   lastGitRefreshProjectId: string | undefined;
   /*
-  CDXC:SidebarGitMemo 2026-07-29:
+  CDXC:Git 2026-07-29:
   Per-project TTL memo for the local Git fan-out. Before this existed the
   runtime only remembered the last refreshed project, so switching A -> B -> A
   re-ran ~10 subprocess-spawning gxserver RPCs every time and starved terminal
@@ -379,7 +379,7 @@ export class GpuiSidebarRuntime {
     ttlMs: SIDEBAR_GIT_STATE_MEMO_TTL_MS,
   });
   /*
-  CDXC:SidebarGitMemo 2026-07-29:
+  CDXC:Git 2026-07-29:
   GitHub CLI results get their own, much longer lease because `gh pr view` is a
   network round trip and pull-request state changes on a human timescale. Kept
   separate from the Git-state memo so a deferred probe landing later can be
@@ -396,7 +396,7 @@ export class GpuiSidebarRuntime {
   pendingGitCommitRequests = new Map<string, GpuiPendingGitCommitRequest>();
   pendingRemoteGxserverRequests = new Map<string, GpuiPendingRemoteGxserverRequest>();
   /*
-  CDXC:ExportTranscript 2026-08-20:
+  CDXC:TranscriptExport 2026-08-20:
   What the open Export Transcript result dialog is describing. The dialog is a
   separate child window with no gxserver client, so it sends back only the agent
   the user picked; the exported path and the project the export came from stay
@@ -405,7 +405,7 @@ export class GpuiSidebarRuntime {
   */
   pendingExportedTranscript: GpuiExportedTranscriptResult | undefined;
   /*
-  CDXC:ExportTranscriptOptions 2026-08-24:
+  CDXC:TranscriptExport 2026-08-24:
   Which session the open Export Transcript dialog is about while the user is
   still on the include-toggle stage; the dialog's export request carries only
   the toggles back.
@@ -430,7 +430,7 @@ export class GpuiSidebarRuntime {
   remoteGxserverRequestSequence = 0;
   remotePresentations = new Map<string, GxserverPresentationSnapshot>();
   /*
-   * CDXC:RemoteProjectActions 2026-08-29:
+   * CDXC:RemoteMachines 2026-08-29:
    * Each connected machine's own Action lists, kept per machine so the merged
    * HUD can key them under this app's machine-scoped project ids without the
    * two machines' project id spaces colliding.
@@ -449,7 +449,7 @@ export class GpuiSidebarRuntime {
   postedGlobalActionsPayload: string | undefined;
 
   /*
-   * CDXC:GlobalActions 2026-08-01:
+   * CDXC:AgentLauncher 2026-08-01:
    * The gpui tab strip renders Global Actions natively and cannot read this
    * runtime's state, so every HUD change has to push the list across the
    * bridge. Routing all HUD writes through this accessor is what guarantees a
@@ -511,10 +511,10 @@ export class GpuiSidebarRuntime {
     const gpuiBridge = (window.ghostexGpui = window.ghostexGpui ?? {});
     gpuiBridge.onSidebarHostMessage = (message) => {
       /*
-      CDXC:GPUICommandPane 2026-06-24-23:49:
+      CDXC:CommandPane 2026-06-24-23:49:
       Rust-owned command-pane Action lifecycle feedback enters the reused SidebarApp through the same local message source as gxserver presentation patches. Keep this callback typed to existing sidebar messages so GPUI can update button run-state without exposing generic IPC, command text, paths, terminal output, or persisted state to React.
 
-      CDXC:GPUISidebarRename 2026-07-29:
+      CDXC:Sessions 2026-07-29:
       Rust also forwards sidebar-owned app-modal commands (Rename Session
       confirm, focused-session Close After Done toggles) through this one
       bridge callback. Those are sidebar-to-extension commands: posting them
@@ -524,7 +524,7 @@ export class GpuiSidebarRuntime {
       the terminal. Route exactly these known command types to the runtime's
       own sidebar-message handler instead.
 
-      CDXC:GxserverRuntimeSplit 2026-08-22:
+      CDXC:RepoStructure 2026-08-22:
       `removeProject` (Settings → Projects → Remove) is dispatched by Rust over
       this same bridge and belongs in that list: it too has no inbound React
       branch, so it was reaching the message source and dying there. The union
@@ -571,17 +571,17 @@ export class GpuiSidebarRuntime {
     };
     gpuiBridge.onWorkspaceTerminalLifecycleRequest = (payload) => {
       /*
-      CDXC:GPUIWorkspaceLifecycle 2026-06-26-07:25:
+      CDXC:Workarea 2026-06-26-07:25:
       GPUI native workspace lifecycle must follow macOS ownership: Rust commits Close locally before this callback and uses the sidebar only for asynchronous provider cleanup, while Sleep/Wake still report transition success through the fixed result bridge. Payloads are bounded ids plus action/request enums only; no titles, paths, commands, terminal text, URLs, tokens, or daemon bodies cross this callback.
 
-      CDXC:GPUIWorkspaceLifecycle 2026-06-26-05:23:
+      CDXC:Workarea 2026-06-26-05:23:
       The callback may be installed before CEF exposes `postWorkspaceTerminalLifecycleResult`. Queue normalized requests until that bridge exists so Close provider cleanup and acknowledged Sleep/Wake transitions are not lost during startup.
       */
       this.handleOrQueueWorkspaceTerminalLifecycleRequest(payload);
     };
     const applyCommandPaneSessions = (sessions: readonly GpuiCommandPaneSessionSummary[] | undefined) => {
       /*
-      CDXC:GPUICommandPane 2026-06-25-10:50:
+      CDXC:CommandPane 2026-06-25-10:50:
       Rust owns GPUI command-pane session identity, activity, and active-tab state. The external bridge uses native-shaped `G...` local command-pane ids even though Rust internal shell state may still use numeric ids; the sidebar runtime only matches those sanitized summaries to current gxserver HUD command buttons by command id first and normalized title second, mirroring macOS without exposing command text, cwd, output, status-file paths, or shell-state JSON to React.
       */
       const next = normalizeGpuiCommandPaneSessions(sessions);
@@ -596,7 +596,7 @@ export class GpuiSidebarRuntime {
     applyCommandPaneSessions(gpuiBridge.commandPaneSessions);
     const applyDisplayedWorkspaceSessionIds = (sessionIds: readonly string[] | undefined) => {
       /*
-      CDXC:AutoSleepDisplayedSessions 2026-08-20:
+      CDXC:SessionSleep 2026-08-20:
       Rust owns what is actually on screen. This runtime's own visible/focused
       sets are a click-history projection: they cannot see that a session's
       terminal is parked behind its chat surface, and they are dropped whenever
@@ -707,7 +707,7 @@ export class GpuiSidebarRuntime {
       : [];
     if (pendingStatusPetActivations.length > 0) {
       /*
-      CDXC:GPUIStatusPetOverlay 2026-06-26-05:07:
+      CDXC:StatusPet 2026-06-26-05:07:
       GPUI status clicks, and a later pet slice using the same fixed shape, can arrive before the runtime installs callbacks. Drain only first-party activation payloads carrying bounded session ids, then route through focusSession; do not persist payloads or expose paths, titles, commands, URLs, tokens, terminal text, or a generic native event bus.
       */
       for (const payload of pendingStatusPetActivations) {
@@ -719,7 +719,7 @@ export class GpuiSidebarRuntime {
       : [];
     if (pendingMenuBarProjectActivations.length > 0) {
       /*
-      CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+      CDXC:StatusPet 2026-06-26-06:05:
       GPUI menu-bar project clicks can arrive before the SidebarApp runtime installs callbacks. Drain only fixed first-party project activation payloads carrying one bounded project id, then route through focusProjectId; do not persist payloads or expose paths, titles, commands, URLs, tokens, terminal text, or a generic native event bus.
       */
       for (const payload of pendingMenuBarProjectActivations) {
@@ -731,7 +731,7 @@ export class GpuiSidebarRuntime {
       : [];
     if (pendingMenuBarSessionActivations.length > 0) {
       /*
-      CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+      CDXC:StatusPet 2026-06-26-06:05:
       GPUI menu-bar session clicks use a fixed first-party payload with bounded project/session ids. Drain queued clicks into the existing focusSession path so local clicks still use WorkspaceTerminalFocus and remote-shaped ids stay within reviewed focus routing.
       */
       for (const payload of pendingMenuBarSessionActivations) {
@@ -774,7 +774,7 @@ export class GpuiSidebarRuntime {
       : [];
     if (pendingWorkspaceTabSessionSelections.length > 0) {
       /*
-      CDXC:GPUIWorkspaceSessionFocus 2026-06-26-08:01:
+      CDXC:FocusRouting 2026-06-26-08:01:
       Workspace tab clicks originate from Rust after the local tab is already selected. Drain them into sidebar focus only so startup-time delivery cannot re-enter the Rust workspace materialization bridge or create a focus loop.
       */
       for (const payload of pendingWorkspaceTabSessionSelections) {
@@ -868,7 +868,7 @@ export class GpuiSidebarRuntime {
       : [];
     if (pendingNativeAppShots.length > 0) {
       /*
-      CDXC:GPUIAppShots 2026-06-25-23:07:
+      CDXC:AppShots 2026-06-25-23:07:
       Rust may deliver a native App Shot before the SidebarApp runtime finishes installing callbacks. Drain only the first-party queued capture payloads and keep them transient; do not persist app names, window titles, image paths, command text, terminal content, URLs, or side-channel metadata from this bridge.
       */
       for (const payload of pendingNativeAppShots) {
@@ -921,7 +921,7 @@ export class GpuiSidebarRuntime {
         // the machine is no longer reachable to serve it.
         this.forgetStaleRemotePresentationRefresh(remoteEvent.machineId);
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         A disconnected machine's Actions are no longer runnable, so its cached
         Action lists go with its presentation instead of leaving dead buttons on
         rows the app can no longer reach.
@@ -953,7 +953,7 @@ export class GpuiSidebarRuntime {
       this.syncRemotePresentationAttentionTracking(remoteEvent.remoteMachineId, previousSessions, snapshot.sessions);
       this.publishRemotePresentationPatch();
       /*
-      CDXC:RemoteProjectActions 2026-08-29:
+      CDXC:RemoteMachines 2026-08-29:
       The snapshot is the point where this app learns which projects the machine
       has, so it is also where their Actions have to be read. The HUD is a
       separate projection from presentation, so it needs its own read.
@@ -1026,7 +1026,7 @@ export class GpuiSidebarRuntime {
     this.syncRemotePresentationAttentionTracking(remoteEvent.remoteMachineId, previous.sessions, snapshot.sessions);
     this.publishRemotePresentationPatch();
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     A project row on the remote machine is the one delta that can carry an
     Actions edit made over there, so re-read that machine's Action lists then
     and only then — session deltas arrive constantly and cannot change them.
@@ -1099,7 +1099,7 @@ export class GpuiSidebarRuntime {
         return;
       case 'runSidebarCommand': {
         /*
-        CDXC:GPUICommandPane 2026-06-26-05:22:
+        CDXC:CommandPane 2026-06-26-05:22:
         Runtime command-pane messages can arrive from untyped CEF/renderer boundaries. Reject missing, non-string, or blank command ids before Action lookup so unsafe extra launch fields cannot make the selector path throw or reach the fixed command-action bridge.
         */
         const commandId = normalizeNonEmptyString(message.commandId);
@@ -1108,7 +1108,7 @@ export class GpuiSidebarRuntime {
           return;
         }
         /*
-        CDXC:GlobalActions 2026-08-07:
+        CDXC:AgentLauncher 2026-08-07:
         Project rows can run either list, so the renderer names the scope.
         Validate the value like runMode rather than trusting the annotation: an
         unrecognized scope is an unsupported no-op, never a silent fallback to
@@ -1129,7 +1129,7 @@ export class GpuiSidebarRuntime {
       }
       case 'endSidebarCommandRun': {
         /*
-        CDXC:GPUICommandPane 2026-06-26-05:22:
+        CDXC:CommandPane 2026-06-26-05:22:
         Closing a command-pane Action run is command-id-only. Validate the selector at the runtime boundary so malformed renderer messages with command text, URLs, paths, cwd/env, logs, or output are unsupported no-ops instead of crashing before the run-end bridge can decline them.
         */
         const commandId = normalizeNonEmptyString(message.commandId);
@@ -1182,7 +1182,7 @@ export class GpuiSidebarRuntime {
         return;
       case 'openAutomationsPage':
         /*
-        CDXC:GPUIAutomationsOverview 2026-07-08:
+        CDXC:Automations 2026-07-08:
         Mirror macOS `openQuickAutomationsPage`, `ensureQuickAutomationsProject`,
         and `focusQuickAutomationsProject` from native/sidebar/native-sidebar.tsx:
         create the session-local Quick overview row, focus it, and let the
@@ -1232,7 +1232,7 @@ export class GpuiSidebarRuntime {
         await this.saveSessionNote(message.sessionId, message.note);
         return;
       /*
-      CDXC:SidebarV2Lifecycle 2026-07-29:
+      CDXC:StateSync 2026-07-29:
       Sidebar V2's settle/snooze commands map 1:1 onto gxserver endpoints. They
       are remote-allowed, so they route through the same machine resolution
       every other session mutation uses; the client posts no optimistic patch
@@ -1528,14 +1528,14 @@ export class GpuiSidebarRuntime {
 
   handleUnsupportedSidebarMessage(_message: SidebarToExtensionMessage): void {
     /*
-    CDXC:GPUISidebarGxserverRuntime 2026-06-24-11:00:
+    CDXC:StateSync 2026-06-24-11:00:
     GPUI command parity is intentionally incremental. Unsupported SidebarApp messages must be explicit no-ops in this adapter instead of mutating fixture state, inventing host behavior, logging user content, or pretending native-only Browser/Git/settings/chrome actions succeeded.
     */
   }
 }
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 `GpuiSidebarRuntime` is one object with one lifetime; the split only moved its
 method bodies into per-responsibility modules. Each of those modules exports a
 plain object of methods declared with an explicit `this: GpuiSidebarRuntime`,

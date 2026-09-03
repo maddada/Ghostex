@@ -5,7 +5,7 @@ use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
 use crate::ghostex_cli::rpc::{call_gxserver_rpc, CliError, CliResult};
 
 /*
-CDXC:GxserverAutomations 2026-06-29-15:55 (ported 2026-07-13):
+CDXC:Automations 2026-06-29-15:55 (ported 2026-07-13):
 `ghostex` and `gx` automation commands should talk to server automation
 RPCs directly. Keep this in a separate CLI module so the main dispatcher does
 not own automation parsing or route through renderer command automation

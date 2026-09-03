@@ -163,7 +163,7 @@ export function AgentsSettingsTab({
   const [editorState, setEditorState] = useState<SettingsAgentEditorState>();
   const [draftAgentIds, setDraftAgentIds] = useState<string[]>();
   /*
-   * CDXC:AgentHookSettings 2026-08-28:
+   * CDXC:AgentHooks 2026-08-28:
    * Row expansion is view state only: every row starts collapsed each time
    * Settings opens so the Agents tab reads as one compact roster.
    */
@@ -207,7 +207,7 @@ export function AgentsSettingsTab({
     ? promptAgentOptions
     : [
         /*
-         * CDXC:GxserverAgentSettings 2026-06-19-08:58:
+         * CDXC:AgentProviders 2026-06-19-08:58:
          * Default Prompt Agent is gxserver-owned and may name a custom or hidden
          * agent before the local launcher registry has a command for it. Show
          * that saved id as unavailable instead of rendering Codex as selected,
@@ -247,7 +247,7 @@ export function AgentsSettingsTab({
       : 'Hook status not checked';
 
   /*
-   * CDXC:PerAgentDefaultView 2026-08-27:
+   * CDXC:AgentProviders 2026-08-27:
    * Inherit is stored as an absent key, never as a third stored value, so an
    * agent the user never touched keeps following the global Default Agent View
    * when that global setting changes later.
@@ -320,7 +320,7 @@ export function AgentsSettingsTab({
         {!editorState && shouldShowSettingsSection(search.sections.config) ? (
           <SettingsSection title='Config'>
             {/*
-             * CDXC:AgentConfigSettings 2026-06-12-04:40:
+             * CDXC:Settings 2026-06-12-04:40:
              * Default prompt, title generation, custom title command, and global Accept All are configuration controls, not agent management rows. Group them under the same labeled SettingsSection chrome as the Agents roster so the Agents tab scans as two consistent areas: config and the agent roster.
              */}
             {!shouldShowSetting(search.sections.config, 'defaultPromptAgent') ? null : promptAgentOptions.length > 0 ? (
@@ -340,10 +340,10 @@ export function AgentsSettingsTab({
               />
             )}
             {/*
-             * CDXC:GxserverSessionTitle 2026-06-04-08:24:
+             * CDXC:SessionTitles 2026-06-04-08:24:
              * First-prompt session-title generation needs its own agent selector instead of reusing Default Prompt Agent, because title generation is a gxserver-owned background job while prompt-launch defaults affect Git helpers, project-board prompts, and worktree starts.
              *
-             * CDXC:GxserverSessionTitle 2026-06-04-22:44:
+             * CDXC:SessionTitles 2026-06-04-22:44:
              * Show the disabled command preview directly under the selector so users can inspect the exact Codex, Cursor CLI, Claude, Grok Build, or Custom command template before Ghostex sends a background title-generation prompt.
              */}
             {shouldShowSetting(search.sections.config, 'titleGenerationAgent') ? (
@@ -436,7 +436,7 @@ export function AgentsSettingsTab({
             ) : (
               <div className='flex flex-col gap-3'>
                 {/*
-                 * CDXC:AgentHookSettings 2026-08-28:
+                 * CDXC:AgentHooks 2026-08-28:
                  * Hook setup lives inside the one Agents roster instead of a
                  * second card that repeats every agent. The toolbar keeps the
                  * whole-set controls quiet (ghost buttons plus the readiness
@@ -491,7 +491,7 @@ export function AgentsSettingsTab({
                       {updateRequiredHookCount > 0 ? 'Update All' : 'Install All'}
                     </SettingButton>
                     {/*
-                     * CDXC:AgentHookSettings 2026-08-19-11:20:
+                     * CDXC:AgentHooks 2026-08-19-11:20:
                      * Hook removal lives beside the install control it undoes: one Uninstall All for the whole set, plus a per-agent removal in each expanded row. Both stay disabled while status is loading or when no Ghostex-owned hook is present, so users cannot fire a no-op removal.
                      */}
                     <SettingButton
@@ -538,7 +538,7 @@ export function AgentsSettingsTab({
                     <div className='flex flex-col gap-2'>
                       {orderedAgents.map((agent, index) => {
                         /*
-                         * CDXC:AgentHookSettings 2026-08-28:
+                         * CDXC:AgentHooks 2026-08-28:
                          * Hooks are per CLI, not per launcher row, so a roster
                          * agent resolves to its default agent through the same
                          * icon mapping session creation uses. Custom launchers
@@ -633,7 +633,7 @@ export function resolveSettingsTitleGenerationCommand(
 }
 
 /*
- * CDXC:PerAgentDefaultView 2026-08-27:
+ * CDXC:AgentProviders 2026-08-27:
  * Only chat-capable agents get this control. A terminal-only agent has no
  * second view to choose, so a disabled select there would be noise; its row
  * simply ends at the hook status.
@@ -761,7 +761,7 @@ export function getAgentHookStatusClassName(
 }
 
 /*
- * CDXC:AgentHookSettings 2026-08-28:
+ * CDXC:AgentHooks 2026-08-28:
  * One roster row owns everything about an agent: reorder, identity, its session
  * resume hook, and the agent actions. The collapsed row stays compact and keeps
  * the single-click install affordance for any agent whose hook is missing; the
@@ -864,7 +864,7 @@ export function SettingsAgentRow({
           </span>
           <span className='min-w-0 flex-1'>
             {/*
-             * CDXC:PerAgentDefaultView 2026-08-27:
+             * CDXC:AgentProviders 2026-08-27:
              * The chat-bubble badge sits with the agent name, not with the hook
              * status pill: it describes the agent, not its hook state, and the
              * two must not read as one combined status. Terminal-only agents get

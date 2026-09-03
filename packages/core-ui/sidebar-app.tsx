@@ -214,7 +214,7 @@ export type SidebarAppProps = {
 };
 
 /**
- * CDXC:SidebarBrowserTabReveal 2026-08-18:
+ * CDXC:Browser 2026-08-18:
  * `requestId` is what makes a reveal one-shot: two consecutive middle-clicks on
  * the same link name the same session and must each scroll it back into view.
  */
@@ -322,7 +322,7 @@ export function SidebarApp({
     Record<string, SidebarProjectCollectionsState>
   >({});
   /*
-  CDXC:SidebarProjectCollections 2026-07-18-00:00:
+  CDXC:Projects 2026-07-18-00:00:
   Tracks the last collection state exchanged with gxserver (pushed to it or
   adopted from it) so the write-through effect posts only real local edits.
   Without this baseline, mount and server reconciliation would echo the state
@@ -331,7 +331,7 @@ export function SidebarApp({
   */
   const lastGxserverSyncedProjectCollectionsRef = useRef(projectCollections);
   /*
-  CDXC:SidebarSpaces 2026-08-27:
+  CDXC:Spaces 2026-08-27:
   Spaces are entirely gxserver-owned — there is no localStorage overlay to seed
   from — so `undefined` here means "this daemon has never delivered a Space
   state", which is the capability signal: a section with no state renders no
@@ -353,7 +353,7 @@ export function SidebarApp({
   );
   const [autoEditingProjectCollectionId, setAutoEditingProjectCollectionId] = useState<string>();
   /*
-   * CDXC:SidebarMachineTabs 2026-08-28:
+   * CDXC:RemoteMachines 2026-08-28:
    * Machines are top-level tabs, so exactly one machine's projects are in the
    * sidebar body at a time. `local` is the reserved local tab and the default.
    */
@@ -378,7 +378,7 @@ export function SidebarApp({
     useState<SidebarProjectCollectionDragPreview>();
   const [remoteMachineDragPreview, setRemoteMachineDragPreview] = useState<SidebarRemoteMachineDragPreview>();
   /*
-   * CDXC:ProjectReorderScrollLock 2026-07-22:
+   * CDXC:Projects 2026-07-22:
    * While a project or collection header is being dragged, the per-project
    * session scrollers must not auto-scroll under the ghost. dnd-kit's Scroller
    * treats any computed overflow auto/scroll ancestor under the pointer as a
@@ -393,7 +393,7 @@ export function SidebarApp({
   const [isSessionSearchSelectionVisible, setIsSessionSearchSelectionVisible] = useState(false);
   const [focusedSessionRevealRequestId, setFocusedSessionRevealRequestId] = useState(0);
   /**
-   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * CDXC:Browser 2026-08-18:
    * The host's pending "make this row visible" request. It is kept in state
    * rather than handled inline because the row it names can arrive after the
    * request: gpui creates a Browser tab and asks for the reveal in the same
@@ -456,7 +456,7 @@ export function SidebarApp({
     }
     writeSidebarProjectCollections(projectCollections);
     /*
-    CDXC:SidebarProjectCollections 2026-07-18-00:00:
+    CDXC:Projects 2026-07-18-00:00:
     localStorage stays the instant-edit overlay, but every local collection
     edit also write-through-syncs the whole wire state to gxserver via the
     host so React Native Android sees the same colored "Group N" overlay. States that
@@ -475,7 +475,7 @@ export function SidebarApp({
 
   useEffect(() => {
     /*
-    CDXC:SidebarSpaces 2026-08-27:
+    CDXC:Spaces 2026-08-27:
     Local Space edits write through to the owning daemon so every client
     connected to it sees the same Spaces. States that just arrived from the
     daemon carry the same baseline, so they are skipped instead of echoing back.
@@ -566,7 +566,7 @@ export function SidebarApp({
     }
 
     /*
-     * CDXC:GPUIGxserverLiveDisconnect 2026-07-14:
+     * CDXC:ServerDaemon 2026-07-14:
      * The 20-second grace period below is only for cold startup while gxserver
      * may still recover. GPUI supplies the explicit start action, so once this
      * mounted sidebar has already rendered an available daemon state, a later
@@ -579,7 +579,7 @@ export function SidebarApp({
     }
 
     /*
-     * CDXC:GxserverPresentation 2026-06-16-09:35:
+     * CDXC:StateSync 2026-06-16-09:35:
      * When gxserver is off or missing during startup, the sidebar must not show
      * the raw synthetic status project row. Keep the Projects body blank while
      * startup can still recover, then after 20 seconds show the two-line restart
@@ -598,7 +598,7 @@ export function SidebarApp({
 
   const effectiveSettings = settings ?? DEFAULT_ghostex_SETTINGS;
   /*
-   * CDXC:SidebarSpaces 2026-08-28:
+   * CDXC:Spaces 2026-08-28:
    * Spaces are opt-in. The daemon keeps owning the Space document either way —
    * the setting is a UI gate, so a disabled sidebar simply never sees a Space
    * state: no Space row, no Space filtering, no Spaces submenu, and no way to
@@ -651,7 +651,7 @@ export function SidebarApp({
 
   useEffect(() => {
     /*
-     * CDXC:SessionTagFilters 2026-06-13-17:50:
+     * CDXC:Sessions 2026-06-13-17:50:
      * If a selected sidebar tag filter becomes hidden or disabled from
      * Settings, drop it from the active filter state so sessions are not
      * invisibly filtered by a tag the sidebar menu no longer lets users choose.
@@ -744,13 +744,13 @@ export function SidebarApp({
     );
 
     /**
-     * CDXC:SidebarReference 2026-05-08-11:09
+     * CDXC:Sidebar 2026-05-08-11:09
      * When creating a chat, terminal, browser pane, or agent session inside a
      * collapsed Combined sidebar area, expand the owning Chats section
      * as soon as the host hydrates the added session so the user sees the
      * result of the action. Projects is always expanded, so it needs no
      * equivalent auto-expand.
-     * CDXC:SidebarReference 2026-05-20-12:00
+     * CDXC:Sidebar 2026-05-20-12:00
      * Do not expand the Chats section header on the first post-hydrate
      * baseline pass after restart. Restored session counts are not new sessions.
      */
@@ -787,7 +787,7 @@ export function SidebarApp({
 
   const dismissAppModalForSidebarNavigation = (area: string) => {
     /*
-     * CDXC:SettingsDismissal 2026-06-15-14:07:
+     * CDXC:Settings 2026-06-15-14:07:
      * Settings is a workspace-scoped app modal, but sidebar navigation should
      * always return users to the live workspace. Dismiss the native app-modal
      * host before session focus, session creation, sidebar nav buttons,
@@ -846,7 +846,7 @@ export function SidebarApp({
 
     if (event.data.type === 'hydrate' || event.data.type === 'sessionState') {
       /*
-      CDXC:SidebarSpaces 2026-08-27:
+      CDXC:Spaces 2026-08-27:
       Remote Space states arrive on hydrate and on every presentation patch, so
       the whole map is replaced whenever the field is present. The LOCAL state is
       asymmetric: the desktop host publishes it only through
@@ -966,7 +966,7 @@ export function SidebarApp({
 
     if (event.data.type === 'sidebarProjectCollectionsChanged') {
       /*
-      CDXC:SidebarProjectCollections 2026-07-18-00:00:
+      CDXC:Projects 2026-07-18-00:00:
       gxserver's normalized copy is authoritative whenever it has collections;
       adopt it into the localStorage-backed state so edits from React Native Android or
       another desktop land here. An empty server copy while local collections
@@ -1013,7 +1013,7 @@ export function SidebarApp({
 
     if (event.data.type === 'sidebarSpacesChanged') {
       /*
-      CDXC:SidebarSpaces 2026-08-27:
+      CDXC:Spaces 2026-08-27:
       The daemon owns the whole Space document, so its copy is simply adopted —
       including an empty one, which is a real "this daemon has no Spaces" answer
       rather than a missing overlay to seed. Adopting also re-baselines the echo
@@ -1040,7 +1040,7 @@ export function SidebarApp({
 
     if (event.data.type === 'applySidebarSpaceEditorResult') {
       /*
-      CDXC:SidebarSpaces 2026-08-27:
+      CDXC:Spaces 2026-08-27:
       The New/Edit Space dialog's confirm/delete, bounced back from the host.
       The dialog carries field values only, so the edit lands on the CURRENT
       Space document here; the write-through effect (local) or
@@ -1096,7 +1096,7 @@ export function SidebarApp({
 
     if (event.data.type === 'sidebarGitFileDiff') {
       /*
-      CDXC:GitReview 2026-06-24-15:22:
+      CDXC:Git 2026-06-24-15:22:
       Inline commit-review diffs may now arrive from any shared SidebarApp host.
       Apply them only to the matching open request so an async gxserver diff from an older review cannot populate a later modal.
       */
@@ -1199,7 +1199,7 @@ export function SidebarApp({
         lastCollapseStateHydrateShapeRef.current !== sidebarCollapseMessageShape);
     if (shouldLogSidebarCollapseHydrateMessage) {
       /**
-       * CDXC:SidebarCollapseDiagnostics 2026-06-02-22:18:
+       * CDXC:Diagnostics 2026-06-02-22:18:
        * Collapse-state startup logs need the first hydrate sequence and shape
        * changes, not every repeated gxserver presentation refresh. Limit the
        * high-frequency message logs so support bundles stay readable while
@@ -1239,7 +1239,7 @@ export function SidebarApp({
       });
     }
     /*
-     * CDXC:AgentDetection 2026-04-27-07:29
+     * CDXC:AgentProviders 2026-04-27-07:29
      * Agent-icon debugging must verify the message boundary, not the CSS layer:
      * log whether native-projected agentIcon values reach the sidebar webview
      * and survive the Zustand store apply step.
@@ -1370,7 +1370,7 @@ export function SidebarApp({
 
   const isManualActiveSessionsSort = activeSessionsSortMode === 'manual';
   /**
-   * CDXC:SidebarLayout 2026-05-13-08:11
+   * CDXC:Sidebar 2026-05-13-08:11
    * The reference sidebar replaces the old visible Actions/Agents grids with
    * app-modal entries, titlebar modes, and project header controls. Do not
    * mount the obsolete hidden panels in the sidebar tree.
@@ -1407,7 +1407,7 @@ export function SidebarApp({
       const requestId = `sidebar-search-previous-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       latestSessionSearchPreviousRequestIdRef.current = requestId;
       /*
-      CDXC:GxserverPresentationSearch 2026-06-01-15:08:
+      CDXC:Sessions 2026-06-01-15:08:
       Main sidebar search must show active-session matches immediately from the hydrated presentation snapshot, then query gxserver for previous/history metadata with a 200ms debounce. Do not depend on startup-hydrated previousSessions after the hard cutover.
       */
       vscode.postMessage({
@@ -1422,7 +1422,7 @@ export function SidebarApp({
     };
   }, [isSessionSearchFiltering, normalizedSessionSearchQuery, vscode]);
   /**
-   * CDXC:ProjectBrowserTabs 2026-05-16-12:59:
+   * CDXC:Browser 2026-05-16-12:59:
    * Do not render a standalone Browsers group in the sidebar. Browser pane
    * sessions belong in their project group, and the shared workspace display
    * layout orders those project browser sessions before terminals/agents.
@@ -1499,7 +1499,7 @@ export function SidebarApp({
     [displayedWorkspaceGroupIds, groupsById]
   );
   /*
-   * CDXC:SidebarSearch 2026-06-28-06:29:
+   * CDXC:Sidebar 2026-06-28-06:29:
    * Search results must reveal matching live project sessions even when the
    * user's normal section or project collapse state would hide them. Treat
    * collapse as render-only while filtering so clearing search restores the
@@ -1514,7 +1514,7 @@ export function SidebarApp({
     [displayedWorkspaceGroupIds, groupsById]
   );
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The Space filter is an intersection applied to each gxserver section's own
    * group list, which is what makes sidebar search Space-scoped for free: the
    * search pass above has already dropped non-matching groups, so filtering the
@@ -1557,7 +1557,7 @@ export function SidebarApp({
     [effectiveGroupIds, effectiveSessionIdsByGroup, groupsById, sessionsById]
   );
   /*
-   * CDXC:SidebarMachineTabCounts 2026-09-03:
+   * CDXC:RemoteMachines 2026-09-03:
    * The machine tab reports the whole machine, not the sidebar body: every
    * group that belongs to the machine counts, whatever the selected Space,
    * search query, tag filter, or hidden state leaves visible below. Groups are
@@ -1587,7 +1587,7 @@ export function SidebarApp({
       }
     }
     /*
-     * CDXC:RemoteProjectCollections 2026-07-21:
+     * CDXC:Projects 2026-07-21:
      * Worktree children inherit their parent's collection for remote machine
      * projects too, so iterate every displayed workspace group instead of only
      * the local Projects section.
@@ -1604,7 +1604,7 @@ export function SidebarApp({
     return next;
   }, [displayedWorkspaceGroupIds, groupsById, projectCollections]);
   /*
-   * CDXC:RemoteProjectCollections 2026-07-21:
+   * CDXC:Projects 2026-07-21:
    * The collection/project interleaving is shared between the local Projects
    * section and each remote machine section, so the builder takes the section's
    * group ids instead of closing over the local list. Remote machines only
@@ -1643,7 +1643,7 @@ export function SidebarApp({
       }
     }
     /*
-     * CDXC:GroupedProjectsFirst 2026-07-21:
+     * CDXC:Projects 2026-07-21:
      * Collections render first, in their definition order (which collection
      * drags reorder), and ungrouped projects always stack below the last
      * group while keeping their own drag order among themselves.
@@ -1783,7 +1783,7 @@ export function SidebarApp({
     return next;
   }, [displayedWorkspaceGroupIds, groupsById]);
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * Each remote gxserver owns its own Spaces and its own selection, so a machine
    * whose daemon never delivered a Space state is Space-incapable and keeps its
    * full list. Remote membership is keyed by the RAW project id the remote
@@ -1822,7 +1822,7 @@ export function SidebarApp({
     unfilteredRemoteProjectGroupIdsByMachineId,
   ]);
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The rendered group set once every section's Space filter has been applied.
    * The search empty state keys off THIS list rather than the unfiltered one: a
    * query that only matches projects outside the selected Space renders nothing
@@ -1867,7 +1867,7 @@ export function SidebarApp({
     ? JSON.stringify(settings.remoteMachines.filter(isRemoteMachineEnabledInSidebar).map((machine) => machine.id))
     : undefined;
   /*
-   * CDXC:SidebarMachineTabs 2026-08-28:
+   * CDXC:RemoteMachines 2026-08-28:
    * A tab for the local machine plus one per saved remote machine, in the saved
    * order. Each remote tab carries its connection state so a machine that cannot
    * connect is visible as such without opening it, and the same working/
@@ -1881,9 +1881,9 @@ export function SidebarApp({
     });
   });
   /*
-   * CDXC:SidebarProjectMenu 2026-09-02:
+   * CDXC:ContextMenus 2026-09-02:
    * The remote machine header's connection control moved onto its tab
-   * (CDXC:GPUIRemoteConnectFeedback 2026-07-21 describes the states): a
+   * (CDXC:RemoteMachines 2026-07-21 describes the states): a
    * connected machine shows nothing extra, a busy one spins, and a
    * disconnected or failed one carries a Connect / retry glyph whose tooltip
    * is the host's sanitized failure reason. Native still owns the matching
@@ -1955,7 +1955,7 @@ export function SidebarApp({
     writeSidebarSelectedMachineTabId(windowScopeId, selectedMachineTabId);
   }, [selectedMachineTabId, windowScopeId]);
   /*
-   * CDXC:SidebarMachineTabs 2026-08-28:
+   * CDXC:RemoteMachines 2026-08-28:
    * The selected machine is only a remote one while that machine is actually in
    * the saved list. The stored id is read before host settings arrive, so the
    * render must not hide the local project list for a machine that has no
@@ -1974,7 +1974,7 @@ export function SidebarApp({
     }
     const remoteMachineIds = new Set<string>(JSON.parse(savedRemoteMachineIdsKey) as string[]);
     /*
-     * CDXC:SidebarSpaces 2026-08-27:
+     * CDXC:Spaces 2026-08-27:
      * A forgotten machine's Space state and its remembered Space selection go
      * with it, on the authoritative saved-machine signal, so a re-added machine
      * never inherits a stale selection.
@@ -2004,7 +2004,7 @@ export function SidebarApp({
     });
   }, [savedRemoteMachineIdsKey]);
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * Every Space selection change goes through here. The persisted map holds
    * either a real Space id or the reserved built-in `other` id; a section with
    * no entry has never been switched and resolves through the shared default
@@ -2022,7 +2022,7 @@ export function SidebarApp({
     setSpacesState((previous) => (previous ? reorderSidebarSpaces(previous, orderedSpaceIds) : previous));
   });
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * Remote Space state has no write-through effect the way the local one does —
    * it is a per-machine map, and a single effect over it could not tell WHICH
    * machine changed — so every remote edit goes through here and posts its own
@@ -2053,7 +2053,7 @@ export function SidebarApp({
     updateRemoteSpaces(machineId, (previous) => reorderSidebarSpaces(previous, orderedSpaceIds));
   });
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * Membership toggles from the group / ungrouped-project context menus. The
    * member ids are always in the OWNING daemon's id space: a local project's own
    * project id, and for a remote machine the raw remote project/collection id
@@ -2076,7 +2076,7 @@ export function SidebarApp({
     updateRemoteSpaces(machineId, (previous) => toggleSpaceProjectMembership(previous, spaceId, projectId));
   });
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The New/Edit Space dialog's confirm and delete. The dialog carries only the
    * user's field values, so the mutation is composed HERE against the Space
    * document this sidebar holds right now — never against the snapshot the
@@ -2110,7 +2110,7 @@ export function SidebarApp({
     setSpacesState((previous) => (previous ? applySidebarSpaceEditorResult(previous, result) : previous));
   });
   /*
-   * CDXC:SidebarMachineTabMenu 2026-09-02:
+   * CDXC:RemoteMachines 2026-09-02:
    * Hide Machine from a tab's context menu is the same edit as switching off
    * "Show in sidebar" in Settings → Remote: the saved machine stays, only its
    * `disabled` flag flips, sent under the explicit remote-machine source so
@@ -2243,10 +2243,10 @@ export function SidebarApp({
     }
 
     /**
-     * CDXC:ProjectHotkeys 2026-06-15-11:12:
+     * CDXC:Hotkeys 2026-06-15-11:12:
      * Jump to Project shortcuts are navigation in the visible Projects sidebar area. When configured, a keyboard jump must reveal a collapsed target row immediately through React state, and the optional Show less write is only applied when that project row was actually expanded by the jump.
      *
-     * CDXC:SidebarSessionReveal 2026-06-16-07:55:
+     * CDXC:Sessions 2026-06-16-07:55:
      * Project/worktree creation can ask this same event to retry focused-row
      * scrolling after the target project has been expanded, because a new
      * gxserver row may arrive after the first focus hydrate.
@@ -2276,7 +2276,7 @@ export function SidebarApp({
     }
 
     /*
-     * CDXC:GPUIProjectHotkeys 2026-06-26-23:42:
+     * CDXC:Hotkeys 2026-06-26-23:42:
      * GPUI project slot messages resolve locally in SidebarApp because SidebarApp owns rendered Projects row order. Use displayedReferenceProjectGroupIds so slots match visible Projects rows while excluding Quick chats and remote machine projects, then focus the group's currently focused or first displayed session through the existing WorkspaceTerminalFocus bridge; GPUI has no focusGroup host bridge to materialize command panes.
      */
     handleSidebarProjectJump({
@@ -2316,7 +2316,7 @@ export function SidebarApp({
   );
   const postMultiSelectSelectionDebugLog = useEffectEvent((event: string, details: Record<string, unknown>) => {
     /*
-     * CDXC:SidebarMultiSelect 2026-07-02-07:32:
+     * CDXC:Sessions 2026-07-02-07:32:
      * Selection-change repros need the resolver inputs and outputs even when
      * the sidebar Debugging Mode toggle is off, so post directly instead of
      * going through postSidebarDebugLog. Persistence is gated natively by the
@@ -2346,7 +2346,7 @@ export function SidebarApp({
       }
 
       /*
-       * CDXC:SidebarMultiSelect 2026-07-02-08:12:
+       * CDXC:Sessions 2026-07-02-08:12:
        * A user repro log showed every shift/cmd selection resolving against
        * visibleCount:2 with clickedIndex:-1 while the sidebar rendered a full
        * project list. data-visible tracks surfaced workspace panes, so the
@@ -2397,12 +2397,12 @@ export function SidebarApp({
   );
   useEffect(() => {
     /*
-     * CDXC:SidebarMultiSelect 2026-07-01-18:33:
+     * CDXC:Sessions 2026-07-01-18:33:
      * Multi-selected session ids are transient UI state. Hydration, close, and
      * remote updates can remove rows, so prune stale ids instead of letting a
      * later selected-row context menu target invisible or missing sessions.
      *
-     * CDXC:SidebarMultiSelect 2026-07-02-07:32:
+     * CDXC:Sessions 2026-07-02-07:32:
      * Pruning can also silently shrink a selection the user just made when a
      * hydrate briefly drops session records, so log every actual prune.
      */
@@ -2526,7 +2526,7 @@ export function SidebarApp({
     }
 
     /*
-     * CDXC:HotkeyRouting 2026-06-26-23:04:
+     * CDXC:Hotkeys 2026-06-26-23:04:
      * Rename Active Session, Open Commands Panel, Start Action slots, and
      * Focus Previous/Next Group, Directional Focus, and Split Sideways/Downwards
      * are native-owned hotkey actions when dispatched through the shared
@@ -2535,7 +2535,7 @@ export function SidebarApp({
      * renderer-owned private data payloads such as session ids, titles, paths,
      * command text, or URLs.
      *
-     * CDXC:HotkeyRouting 2026-06-26-23:58:
+     * CDXC:Hotkeys 2026-06-26-23:58:
      * View Mode switching is native-owned; SidebarApp forwards setViewMode
      * through the same action-id-only bridge so renderer state stays private.
      */
@@ -2545,7 +2545,7 @@ export function SidebarApp({
       action.kind === 'focusedPaneAction' ||
       action.kind === 'jumpToProject' ||
       /*
-       * CDXC:NavigationHistory 2026-08-19:
+       * CDXC:Navigation 2026-08-19:
        * Back/Forward is host-owned: gpui walks the trail through its native
        * titlebar route and the web shell through its sidebar runtime, so the
        * palette row forwards the action id and nothing else, exactly like the
@@ -2579,7 +2579,7 @@ export function SidebarApp({
         section: 'quick',
       });
       /**
-       * CDXC:SidebarReference 2026-05-10-15:51
+       * CDXC:Sidebar 2026-05-10-15:51
        * Startup restores the user's section/group collapse state, except an empty
        * Combined Chats section must always begin collapsed so a project-only
        * workspace does not waste vertical space on an empty chat container.
@@ -2590,11 +2590,11 @@ export function SidebarApp({
 
   useEffect(() => {
     /**
-     * CDXC:SidebarReference 2026-05-10-15:51
+     * CDXC:Sidebar 2026-05-10-15:51
      * Combined section headers and per-group collapse state are
      * UI navigation state. Persist them in the sidebar webview so restarting
      * ghostex keeps collapsed items collapsed and expanded items expanded.
-     * CDXC:SidebarReference 2026-05-20-12:00
+     * CDXC:Sidebar 2026-05-20-12:00
      * The first post-hydrate group-collapse reconcile seeds session-count baseline
      * without expand-on-count-increase so restored projects do not reopen on launch.
      */
@@ -2627,14 +2627,14 @@ export function SidebarApp({
     spaceFilteredDisplayedWorkspaceGroupIds.length === 0 &&
     filteredPreviousSessions.length === 0;
   /**
-   * CDXC:SidebarSearch 2026-05-08-11:26
+   * CDXC:Sidebar 2026-05-08-11:26
    * A no-match search is its own result state. Hide the normal Chats and
    * Projects sections while it is visible so the empty placeholder has the
    * same visual role as the existing "No Quick Sessions" group placeholder.
    */
   const shouldHideReferenceSectionsForSearchEmptyState = shouldShowSessionSearchEmptyState;
   /**
-   * CDXC:SidebarProjectsEmptyState 2026-06-18-06:01:
+   * CDXC:Projects 2026-06-18-06:01:
    * A sidebar with zero rendered project groups should guide first-time setup from the same left-aligned Projects empty-state block as the previous "No projects" placeholder. Tie the copy to the visible Projects label and its hover plus action instead of adding a separate card or fallback surface.
    */
   const hasKnownProjectInventoryForEmptyState = hasKnownSidebarProjectInventory({
@@ -2646,7 +2646,7 @@ export function SidebarApp({
   });
   const shouldShowFirstProjectEmptyState = !isSessionSearchOpen && !hasKnownProjectInventoryForEmptyState;
   /*
-   * CDXC:SidebarProjectsEmptyState 2026-06-30-03:25:
+   * CDXC:Projects 2026-06-30-03:25:
    * Sidebar search must not flash first-project onboarding after any project is
    * known. Search filtering and transient group display updates can temporarily
    * remove all visible Projects rows, so decide the first-run copy from
@@ -2760,10 +2760,10 @@ export function SidebarApp({
     }
 
     /*
-     * CDXC:SidebarWakeScrollDiagnostics 2026-06-16-02:20:
+     * CDXC:Diagnostics 2026-06-16-02:20:
      * Wake-scroll repros need to prove whether the sidebar jumped because focus-following issued scrollIntoView or because the focused row moved in the displayed order. Log only session IDs, row indexes, sort mode, and geometry metrics while the native.sidebar.refresh scenario is enabled.
      *
-     * CDXC:SidebarSessionClose 2026-06-21-18:02:
+     * CDXC:Sessions 2026-06-21-18:02:
      * Closing the focused terminal session should retarget native focus without reveal-scrolling the sidebar. Consume the one-shot close marker before scrollIntoViewIfNeeded so the user's list position stays stable after close.
      */
     let afterAnimationFrameId: number | undefined;
@@ -2857,7 +2857,7 @@ export function SidebarApp({
   }, [consumeFocusedSessionScrollSuppression, focusedSessionId, focusedSessionRevealRequestId]);
 
   /*
-   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * CDXC:Browser 2026-08-18:
    * Opening a Browser tab must leave the user able to SEE it in the sidebar.
    * Every collapsed container between the sidebar scroller and the row is
    * expanded for real (the same persisted collapse state the chevrons write, so
@@ -3000,7 +3000,7 @@ export function SidebarApp({
 
     if (sessionsById[sessionId]?.isPinned === true) {
       /*
-       * CDXC:PinnedSessions 2026-06-02-19:53:
+       * CDXC:Sessions 2026-06-02-19:53:
        * Pinned project-session reorder regressions can fail before dnd-kit
        * emits a session drag. Persist one pointer-down breadcrumb for pinned
        * rows so support can distinguish "drag never started" from "drop guard
@@ -3133,7 +3133,7 @@ export function SidebarApp({
   };
 
   /*
-   * CDXC:SidebarV2 2026-07-29:
+   * CDXC:StateSync 2026-07-29:
    * Search results are one feature, not a V1 feature: the Inbox sidebar filters
    * the live list exactly as V1 does, so it must also offer the closed sessions
    * that match. This group is self-contained (it posts its own restore/delete
@@ -3269,7 +3269,7 @@ export function SidebarApp({
       }
 
       /*
-       * CDXC:SidebarKeyboard 2026-05-26-15:29:
+       * CDXC:Hotkeys 2026-05-26-15:29:
        * Ordinary typing while focus is on sidebar chrome should not open or edit session search.
        * Leave non-editable sidebar keypresses unhandled so the host can provide its default invalid-key feedback instead of capturing the user's text in the sidebar.
        */
@@ -3320,7 +3320,7 @@ export function SidebarApp({
     workspaceGroupIds,
   });
   /*
-   * CDXC:SidebarProjectMenu 2026-09-02:
+   * CDXC:ContextMenus 2026-09-02:
    * The Projects header and the remote machine headers no longer exist. Their
    * actions sit at the top of the More dropdown and follow the machine tab
    * strip: whichever machine is selected is the one Add Project, Sort & Filter,
@@ -3504,17 +3504,17 @@ export function SidebarApp({
               ref={sessionGroupsPanelRef}
             >
               {/*
-               * CDXC:SidebarMachineTabs 2026-08-28:
+               * CDXC:RemoteMachines 2026-08-28:
                * The machine strip is pinned above the scrolling project list so
                * switching machines never depends on scrolling to the bottom of
-               * the list. CDXC:SidebarMachineTabsEdge 2026-09-02: it renders in
+               * the list. CDXC:RemoteMachines 2026-09-02: it renders in
                * the top chrome (see SidebarReferenceTopChrome) because this
                * panel clips to the sidebar gutters; the panel's own top row
                * stays empty and hidden.
                */}
               <div className='session-groups-top' />
               {/*
-            CDXC:SidebarScroll 2026-06-30-01:59:
+            CDXC:Sidebar 2026-06-30-01:59:
             The sidebar's project list must scroll as fast as the browser can move it.
             Do not apply the vertical scroll mask or sticky-header gradient geometry here; the user explicitly accepts losing those visual fades to remove scroll-linked paint work.
           */}
@@ -3528,13 +3528,13 @@ export function SidebarApp({
                   ref={sessionGroupsContentRef}
                 >
                   {/*
-                CDXC:SidebarSessions 2026-05-17-00:11:
+                CDXC:Sessions 2026-05-17-00:11:
                 Opening or closing one session must not remount every sidebar
                 project. Keep DragDropProvider stable so sortable/droppable hooks
                 update the dnd registry without forcing all project rows to
                 replay their entrance animation.
 
-                CDXC:SidebarV2GroupedProjectUX 2026-07-30:
+                CDXC:Projects 2026-07-30:
                 ONE provider now wraps BOTH sidebar bodies. Grouped V2 reorders
                 projects through the same dnd-kit sortables, the same pointer drop
                 resolution, and the same `syncGroupOrder` contract as V1, so a
@@ -3554,7 +3554,7 @@ export function SidebarApp({
                     {
                       <>
                         {/*
-                         * CDXC:SidebarSpaces 2026-08-27:
+                         * CDXC:Spaces 2026-08-27:
                          * The local gxserver's Space row sits between its section
                          * header and its project list. It renders only once the
                          * local daemon has delivered a Space state — a daemon that
@@ -3704,7 +3704,7 @@ export function SidebarApp({
                         {!shouldHideReferenceSectionsForSearchEmptyState && selectedRemoteMachineId !== undefined ? (
                           <div className='reference-remote-section-list'>
                             {/*
-                             * CDXC:SidebarMachineTabs 2026-08-28:
+                             * CDXC:RemoteMachines 2026-08-28:
                              * Only the machine selected in the top tab strip
                              * renders. Machines are no longer stacked sections
                              * pinned under the local project list.
@@ -3719,7 +3719,7 @@ export function SidebarApp({
                               .filter((machine) => machine.id === selectedRemoteMachineId)
                               .map((machine, index) => {
                                 /*
-                                 * CDXC:RemoteProjectCollections 2026-07-21:
+                                 * CDXC:Projects 2026-07-21:
                                  * Remote machine sections render the same collection
                                  * panels as local Projects. Assigning a remote project
                                  * to a group previously updated state with no visible
@@ -3750,7 +3750,7 @@ export function SidebarApp({
                                   : undefined;
                                 const renderRemoteProjectGroup = (groupId: string, groupIndex: number) => {
                                   /*
-                                   * CDXC:SidebarSpaces 2026-08-27:
+                                   * CDXC:Spaces 2026-08-27:
                                    * A remote daemon stores membership under ITS
                                    * own project id, which is the raw id on the
                                    * group's remote context — not the sidebar's
@@ -3998,14 +3998,14 @@ export function SidebarApp({
                       </>
                     }
                     {/*
-                     * CDXC:ProjectDragPreview 2026-07-02-21:10:
+                     * CDXC:Projects 2026-07-02-21:10:
                      * The ghost must live inside the .sidebar-reference-layout
                      * scope, or the reference project-header title rules do not
                      * match and the ghost renders with the base uppercase
                      * section-label styling. The layout root is display:contents,
                      * so the fixed-position ghost still anchors to the viewport.
                      *
-                     * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
+                     * CDXC:Projects 2026-07-30:
                      * Hoisted out of the V1 branch with the provider. Grouped V2
                      * project rows drag with `feedback: "none"` exactly as V1's do,
                      * so this cursor ghost is the ONLY thing that follows the

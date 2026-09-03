@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatComposerReady 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 POSITIVE evidence that an agent CLI's input box is on screen and accepting
 input, as opposed to the negative evidence session_chat_notice.rs collects.
 
@@ -785,7 +785,7 @@ pub async fn wait_for_session_chat_composer_by_ids(
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatComposerReady 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 "What is actually in the terminal", for a client that just got `composerNotReady`
 back from a send.
 

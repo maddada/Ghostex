@@ -2142,7 +2142,7 @@ impl GpuiTitlebarTipsPanel {
         cx: &mut gpui::Context<GhostexGpuiApp>,
     ) -> Result<Entity<Self>, String> {
         /*
-        CDXC:GPUITitlebarTips 2026-06-24-23:17:
+        CDXC:Onboarding 2026-06-24-23:17:
         The GPUI Tips dropdown reuses the production React titlebar-host panel in a CEF surface owned by the app's anchored GPUI overlay. This keeps the content source aligned with macOS while avoiding AppKit/Swift dropdown windows, duplicated GPUI tips data, transparent overlays, hidden hit regions, and broad native hit-test routing.
         */
         let surface = CefSurface::try_new(
@@ -2246,7 +2246,7 @@ impl GpuiTitlebarResourcesPanel {
         event_handler: cef::AppModalHostBridgeEventHandler,
     ) -> Result<Rc<CefBrowser>, String> {
         /*
-        CDXC:GPUIResourcesTitlebar 2026-07-08:
+        CDXC:Resources 2026-07-08:
         The Resources dropdown is the production React titlebar-host resources
         panel inside a CEF child view owned by the anchored GPUI overlay. It is
         created hidden, revealed only after the React ready event, and dropped
@@ -2430,7 +2430,7 @@ pub(crate) fn gpui_titlebar_native_process_request_from_message(
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
     /*
-    CDXC:GPUITitlebarNativeHostRunProcess 2026-07-08:
+    CDXC:Titlebar 2026-07-08:
     The GPUI `ghostexNativeHost` runProcess bridge executes only the fixed ps/lsof/kill shapes issued by the shared Resources titlebar panel. Reject every other executable, cwd/env, signal, PID, and argument layout before spawning so first-party React cannot become an arbitrary process runner.
     */
     if !gpui_titlebar_native_process_request_is_allowed(&executable, &args) {

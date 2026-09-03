@@ -1,5 +1,5 @@
 /*
-CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+CDXC:Worktrees 2026-07-29-00:00:
 Sidebar V2 treats a worktree as an ATTRIBUTE of a session (its cwd plus the
 branch checked out there), never as a registered sibling project. This module
 owns the parts of that model that are pure or process-local:
@@ -112,7 +112,7 @@ pub fn worktree_directory_name(project_folder_name: &str, suffix: &str) -> Strin
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 Renaming a worktree types ONE name that becomes two things: the branch keeps it
 verbatim (so `feat/kanban-assignee` is possible) while the folder gets this slug,
 because `/` cannot be part of a directory name. This mirrors
@@ -362,7 +362,7 @@ pub fn runtime_settings_with_renamed_worktree_branch(
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 A moved worktree leaves the marker's `path` pointing at a folder that no longer
 exists, and `run_worktree_git` no-ops on a non-directory cwd — so a stale marker
 silently disables that session's auto-rename forever, and `remove_session_worktree`
@@ -468,7 +468,7 @@ pub fn worktree_branch_exists(repository_path: &str, branch: &str) -> bool {
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 `refs/heads/<x>` cannot be a ref while `refs/heads/<x>/…` holds refs, and vice
 versa: with `test/board-batch` present, `git branch -m test/other test` fails with
 `error: 'refs/heads/test/board-batch' exists; cannot create 'refs/heads/test'`
@@ -532,7 +532,7 @@ pub fn worktree_branch_namespace_blocker(repository_path: &str, branch: &str) ->
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 `git worktree move` hard-refuses a worktree with POPULATED submodules
 (`fatal: working trees containing submodules cannot be moved or removed`); an
 uninitialised gitlink is fine. `mv` plus `git worktree repair` is not a
@@ -557,7 +557,7 @@ pub fn worktree_has_populated_submodules(worktree_path: &str) -> bool {
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 `git worktree move` refuses a locked worktree with
 `fatal: cannot move a locked working tree`, and the override is `move -f -f`,
 which this feature deliberately does not offer — a lock is someone saying "do not
@@ -695,7 +695,7 @@ mod tests {
     #[test]
     fn rename_folder_slugs_fold_separators_without_lowercasing() {
         /*
-        CDXC:WorktreeRename 2026-08-09-18:40:
+        CDXC:Worktrees 2026-08-09-18:40:
         Same table as `packages/shared/worktree-rename-name.test.ts`. The daemon computes
         the destination folder itself, so if these two rules ever drift the
         modal's live preview stops describing the folder the user actually gets.
@@ -953,7 +953,7 @@ mod tests {
     #[test]
     fn a_moved_marker_still_plans_no_rename_for_a_human_branch() {
         /*
-        CDXC:WorktreeRename 2026-08-09-18:40:
+        CDXC:Worktrees 2026-08-09-18:40:
         Moving a worktree must not hand the auto-rename sweep a branch it never
         minted. A marker whose branch the user renamed by hand stays finished
         business after the move, and a marker moved onto a temp branch is still
@@ -1080,7 +1080,7 @@ mod tests {
     #[test]
     fn ref_namespace_collisions_are_detected_in_both_directions() {
         /*
-        CDXC:WorktreeRename 2026-08-09-18:40:
+        CDXC:Worktrees 2026-08-09-18:40:
         This is the failure that produces a raw `fatal: branch rename failed`
         with no explanation: `test` is a legal ref name and no branch called
         `test` exists, yet git still refuses while `test/board-batch` does,

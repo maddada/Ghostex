@@ -8,13 +8,13 @@ use crate::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ShellFocusTarget {
     /*
-    CDXC:GPUIKeyboardFocus 2026-06-22-22:59:
+    CDXC:FocusRouting 2026-06-22-22:59:
     The GPUI shell needs explicit surface ownership before full keyboard/mouse delivery exists. Track which shell surface owns keyboard actions so tab cycling, Cmd-W close, command-pane F12 focus, project-editor companion close, and runtime Agents Ghostty surface focus mirror the macOS workspace without adding native hit-test routing or runtime teardown.
 
-    CDXC:GPUIKeyboardFocus 2026-06-22-07:54:
+    CDXC:FocusRouting 2026-06-22-07:54:
     The command pane must remember the last valid non-command workspace/editor focus before it takes keyboard ownership, then restore that focus when command chrome or the final command placeholder hides the pane. Store only the same enum/id focus metadata already used by shell-state persistence.
 
-    CDXC:GPUIKeyboardFocus 2026-06-27-09:42:
+    CDXC:FocusRouting 2026-06-27-09:42:
     Hiding or collapsing Commands from the Browser workarea must restore the exact focused Browser pane, not only the coarse BrowserSurface. Persist BrowserPane only for TitlebarMode::Browser; Agents-mode browser sessions remain unavailable until GPUI has an Agents workspace browser-session model.
     */
     AgentsPane(WorkspacePaneId),
@@ -54,7 +54,7 @@ pub(crate) enum FirstResponderTarget {
 }
 
 /*
-CDXC:GPUIKeyboardRouter 2026-07-24:
+CDXC:Hotkeys 2026-07-24:
 Keyboard ownership is window-scoped and exact. AppKit, CEF, native Ghostty,
 and composited GPUI terminals do not share one responder system, so the native
 event boundary records the owner that existed when a key was pressed and
@@ -186,7 +186,7 @@ impl WorkspaceFocusDirection {
         action_id: &str,
     ) -> Option<Self> {
         /*
-        CDXC:GPUICommandPalette 2026-06-26-07:33:
+        CDXC:CommandPalette 2026-06-26-07:33:
         Shared command-palette directional focus rows post `focusUp`, `focusRight`, `focusDown`, and `focusLeft` through `runGhostexHotkeyAction`. Keep this mapper exact so the handler can dispatch to the existing workspace directional-focus route without inventing separate focus semantics or absorbing unrelated hotkey ids.
         */
         match action_id {
@@ -213,7 +213,7 @@ pub(crate) fn command_pane_focused_split_axis(
     direction: FocusedTerminalSplitDirection,
 ) -> WorkspaceSplitAxis {
     /*
-    CDXC:GPUIFocusedSplits 2026-06-25-16:05:
+    CDXC:FocusMode 2026-06-25-16:05:
     macOS command-panel split hotkeys log the requested direction but force command panes to horizontal split placement. Mirror that rule in GPUI so Cmd+Shift+D inside the command pane does not create a vertical command split.
     */
     match direction {
@@ -394,7 +394,7 @@ pub(crate) fn workspace_render_order_focus_targets(
         .map(SpatialFocusTarget::AgentsPane)
         .collect::<Vec<_>>();
     /*
-    CDXC:GPUICommandTabKeyboardParity 2026-06-25-23:35:
+    CDXC:CommandPane 2026-06-25-23:35:
     Render-order keyboard fallback must target the same live expanded command groups as spatial focus. Do not append a generic command-pane target for collapsed strips, empty panels, or stored sessions that no longer belong to a rendered command group.
     */
     targets.extend(command_pane_render_order_focus_targets(

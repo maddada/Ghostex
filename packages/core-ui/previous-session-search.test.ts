@@ -81,7 +81,7 @@ describe('filterPreviousSessions', () => {
     ];
 
     /*
-     * CDXC:SidebarSearch 2026-06-28-06:29:
+     * CDXC:Sidebar 2026-06-28-06:29:
      * Typing a concrete long term like "sidebar" should show exact and joined
      * word matches in live projects and Previous Sessions, but it should not
      * pull in rows whose only relationship is scattered letters such as
@@ -118,7 +118,7 @@ describe('filterPreviousSessions', () => {
     ];
 
     /*
-     * CDXC:SessionSearch 2026-06-18-00:01:
+     * CDXC:PromptSearch 2026-06-18-00:01:
      * Default agent CLI names are creation placeholders, so active sidebar
      * search and previous-session search must omit them while preserving real
      * user/agent titles that mention the same agent.

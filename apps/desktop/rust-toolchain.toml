@@ -1,4 +1,4 @@
-# CDXC:GPUIToolchain 2026-06-14-12:06:
+# CDXC:Build 2026-06-14-12:06:
 # Current GPUI/Zed main uses Rust library APIs newer than the repository's default stable toolchain. Pin only the GPUI crate so building this prototype does not require changing the user's global Rust default.
 [toolchain]
 channel = "1.95.0"

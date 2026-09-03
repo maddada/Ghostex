@@ -4,7 +4,7 @@ import { resolveSettingsModalTabForVisibility, shouldShowOSIntegrationSettingsTa
 describe('settings modal tabs', () => {
   test('hides macOS OS Integration unless experimental features are enabled', () => {
     /*
-     * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+     * CDXC:Settings 2026-06-28-07:41:
      * Settings should not expose macOS OS Integration during ordinary app use.
      * A direct or remembered OS Integration tab request must land on General
      * unless Enable Experimental Features makes the experimental tab visible.

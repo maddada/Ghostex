@@ -10,7 +10,7 @@ const SCROLL_GLOW_EPSILON_PX = 2;
 
 function getScrollableContentHeight(element: HTMLElement): number {
   /**
-   * CDXC:SidebarScroll 2026-05-08-10:53
+   * CDXC:Sidebar 2026-05-08-10:53
    * Bottom-of-list scrolling must preserve the user's offset. Child
    * getBoundingClientRect() values move upward as scrollTop increases, so
    * using them made the list look non-overflowing at the bottom and reset to
@@ -40,7 +40,7 @@ export function useScrollGlowState(scrollContainerRef: RefObject<HTMLElement | n
       const contentHeight = getScrollableContentHeight(element);
       const hasOverflow = contentHeight - element.clientHeight > SCROLL_GLOW_EPSILON_PX;
       /**
-       * CDXC:SidebarScroll 2026-05-05-05:29
+       * CDXC:Sidebar 2026-05-05-05:29
        * Combined-mode sparse project lists must not rubber-band or preserve a
        * stale scroll offset after sessions are collapsed/closed. When the
        * measured content fits, pin the session-list viewport back to the top
@@ -50,7 +50,7 @@ export function useScrollGlowState(scrollContainerRef: RefObject<HTMLElement | n
         element.scrollTop = 0;
       }
       /*
-       * CDXC:SidebarScroll 2026-06-30-01:59:
+       * CDXC:Sidebar 2026-06-30-01:59:
        * The main sidebar must prioritize raw scroll throughput over edge-fade polish.
        * Keep the overflow measurement that disables wheel handling for sparse lists, but do not subscribe to scroll frames or update top/bottom glow state now that the main sidebar scroll mask is removed.
        */
@@ -83,7 +83,7 @@ export function useScrollGlowState(scrollContainerRef: RefObject<HTMLElement | n
     });
 
     /*
-     * CDXC:SidebarScroll 2026-08-20:
+     * CDXC:Sidebar 2026-08-20:
      * The overflow measurement depends on the scroller's *content* height, but
      * the scroller's own box is `height: 100%` and never resizes when content
      * grows, so observing only `element` measured the wrong box. That was

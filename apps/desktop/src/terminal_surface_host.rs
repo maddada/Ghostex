@@ -7,22 +7,22 @@ use crate::{
 };
 
 /*
-CDXC:GPUTerminalSurfaceHost 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 Phase 2 native terminal parity needs App-owned runtime host boundaries before GPUI can safely create real libghostty AppKit child views. This synchronizer plans normal-layout attachments for current visible terminal mount slots and their recorded body bounds, but it must stay inert: no fake terminal surface, process, command text, output, fallback mount, logging, persistence, overlay, hidden hit region, AppKit hook, or libghostty call is allowed here.
 
-CDXC:GPUTerminalSurfaceHost 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 The platform adapter needs typed runtime commands derived by reconciling previous validated host plans against the latest all-visible slot plans. Commands may only carry host id, slot id, and exact body bounds so stale cleanup, attach/show, and move/resize stay executable without exposing command text, terminal content, output, paths, URLs, titles, or user text.
 
-CDXC:GPUTerminalAppKitAdapter 2026-06-22-20:58:
+CDXC:Terminal 2026-06-22-20:58:
 Platform-command conversion stays pure and runtime-only until a future slice supplies a real terminal NSView pointer. The converted AppKit payload preserves GPUI body bounds without CEF-style integer rounding so the native terminal view can stay inside the measured body rectangle instead of overlapping tab bars, split handles, sidebars, CEF, or command-pane chrome.
 
-CDXC:GPUTerminalSurfaceHost 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 Per-render GPUI bounds resets are not terminal removals. When Agents mode is visible and current running slots exist but body canvases have not recorded this frame's bounds yet, preserve their runtime host/lifecycle identities and wait for recorded bounds; clear stale state only when Agents is hidden or slots are no longer current.
 
-CDXC:GPUTerminalSurfaceHost 2026-06-22-22:45:
+CDXC:Terminal 2026-06-22-22:45:
 The Phase 2 all-visible-leaf expansion plans one runtime host per rendered Agents leaf whose selected session is Running. Reconcile by stable pane/session slot id so visible non-focused leaves can mount real surfaces while hidden, sleeping, missing, inactive-tab, and non-Agents slots detach without fallback views or overlap.
 
-CDXC:GPUICommandTerminalSurface 2026-06-23-05:03:
+CDXC:Terminal 2026-06-23-05:03:
 The host reconciler is shared by Agents and command-pane terminal bodies through a typed mount-slot key. Command panes instantiate it with command group/session ids only, so command hosts remain isolated from Agents workspace maps, startup maps, shell-state JSON, and launch payload sources while still using the same normal AppKit child-view pipeline.
 */
 #[derive(Clone, Copy, PartialEq, Eq)]

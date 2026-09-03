@@ -206,7 +206,7 @@ pub(crate) fn gpui_ghostex_folder_stats_error_message(message: &str) -> serde_js
 
 pub(crate) fn gpui_play_completion_sound(sound: &str) -> Result<(), String> {
     /*
-    CDXC:GPUISettingsActionBridge 2026-06-24-11:59:
+    CDXC:Settings 2026-06-24-11:59:
     GPUI sound preview may play only validated bundled completion sound filenames from the app bundle/sidebar resources or the repository media directory used by local GPUI runs. The command never accepts a path from React and falls back to an explicit unsupported status when the sound asset or platform playback command is unavailable.
     */
     let file_name = gpui_completion_sound_file_name(sound);
@@ -247,7 +247,7 @@ pub(crate) fn gpui_deliver_macos_settings_test_notification() -> GpuiMacOSNotifi
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_macos_reduce_motion_enabled() -> bool {
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-07:31:
+    CDXC:StatusPet 2026-06-26-07:31:
     Read only the macOS Reduce Motion boolean from the AppKit shim. Unknown or unsupported native results intentionally mean "animation allowed" so GPUI does not add fake fallback state or persist accessibility preferences.
     */
     unsafe { GhostexGpuiAccessibilityDisplayShouldReduceMotion() == 1 }
@@ -356,7 +356,7 @@ pub(crate) fn register_gpui_app_shots_callback_target(
     async_app: gpui::AsyncApp,
 ) {
     /*
-    CDXC:GPUIAppShots 2026-06-25-23:07:
+    CDXC:AppShots 2026-06-25-23:07:
     The macOS App Shots monitor is process-global, but its callback target is the live GPUI root entity only. Register and remove it with the root lifecycle so native flags monitors cannot route captures to stale windows or fallback targets.
     */
     GPUI_APP_SHOTS_CALLBACK_TARGET.with(|target| {
@@ -392,7 +392,7 @@ pub(crate) fn register_gpui_session_attention_notification_callback_target(
     async_app: gpui::AsyncApp,
 ) {
     /*
-    CDXC:GPUISettingsNotifications 2026-06-26-06:56:
+    CDXC:Notifications 2026-06-26-06:56:
     macOS attention notification responses are process-global UserNotifications callbacks, but GPUI should route clicks only while a live root app target is registered. The callback target carries no notification content and only dispatches the copied bounded session id through the existing status/pet activation path.
     */
     GPUI_SESSION_ATTENTION_NOTIFICATION_CALLBACK_TARGET.with(|target| {
@@ -420,7 +420,7 @@ pub(crate) fn register_gpui_accessibility_display_options_callback_target(
     async_app: gpui::AsyncApp,
 ) {
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-07:31:
+    CDXC:StatusPet 2026-06-26-07:31:
     NSWorkspace accessibility display-option notifications are process-global, but Reduce Motion should update only the live GPUI root. Register the callback target with app lifecycle and carry only the current boolean preference into the pet animation gate.
     */
     GPUI_ACCESSIBILITY_DISPLAY_OPTIONS_CALLBACK_TARGET.with(|target| {

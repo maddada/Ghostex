@@ -409,7 +409,7 @@ pub fn detect_cursor_question_prompt(
 }
 
 /*
-CDXC:SessionChatSend 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Hook-side prompt derivation (upstream `deriveInteractivePrompt`): an
 AskUserQuestion-ish tool with input on a NON-post-tool event becomes a
 question card; a `PermissionRequest` event with a tool name becomes an
@@ -482,7 +482,7 @@ pub struct SessionChatPromptClearEvent<'a> {
 }
 
 /*
-CDXC:SessionChatQuestionCardLifecycle 2026-09-03:
+CDXC:AgentScreenDetection 2026-09-03:
 Whether a hook event retires the stored card, given the card it would retire.
 
 Claude Code runs the PreToolUse/PostToolUse hooks of every background subagent
@@ -555,7 +555,7 @@ pub fn parse_stored_session_chat_prompt(stored: &str) -> Option<SessionChatInter
 }
 
 /*
-CDXC:SessionChatCore 2026-08-01:
+CDXC:SessionChat 2026-08-01:
 Transcript-derived question detection. Hook delivery of `toolName`/`toolInput`
 is optional (older installed hook scripts do not forward it) and PostToolUse is
 not guaranteed, so the transcript is the second, independent source of truth for
@@ -702,7 +702,7 @@ pub fn resolve_session_chat_prompt(
 /// a fresh model/effort detection (post-dispatch probe) so a producer outside
 /// the follower task can push it through a live stream.
 ///
-/// CDXC:SessionChatTerminalNotices 2026-08-19: `terminal_notice` is the notice
+/// CDXC:AgentScreenDetection 2026-08-19: `terminal_notice` is the notice
 /// the session is showing right now, not a delta — an omitted field clears the
 /// client's card, so every producer restates it.
 #[allow(clippy::too_many_arguments)]
@@ -719,7 +719,7 @@ pub fn build_session_chat_prompt_state_frame(
     working: bool,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
     screen: SessionChatScreenState<'_>,
-    // CDXC:SessionChatQueueCarriage 2026-08-21: the session's queue + draft.
+    // CDXC:SessionChat 2026-08-21: the session's queue + draft.
     // Every producer of a state frame restates them, because a client replaces
     // its list with whatever a state frame carries; omitting them here is how a
     // pre-queue daemon is recognised, not how "unchanged" is expressed.
@@ -759,7 +759,7 @@ pub fn build_session_chat_prompt_state_frame(
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatSend 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Prompt changes ride the LIVE follower stream: hook ingest reports
 sessionChatPromptChanged, and this emits a sessionChatState frame through the
 session's SessionChatStream (same epoch, next seq) so subscribed clients
@@ -799,7 +799,7 @@ pub(crate) fn emit_session_chat_prompt_state_frame(state: &AppState, session: &V
     };
     let agent_session_id = read_runtime_text(session, "agentSessionId");
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-19:
+    CDXC:AgentScreenDetection 2026-08-19:
     Clients treat an OMITTED `terminalNotice` on a state frame as "cleared"
     (prompt semantics), so a prompt-driven frame has to re-state the notice the
     session is currently showing or the card would blink away on every hook
@@ -807,7 +807,7 @@ pub(crate) fn emit_session_chat_prompt_state_frame(state: &AppState, session: &V
     */
     let screen = cached_session_chat_screen_state(state, &project_id, &session_id);
     /*
-    CDXC:SessionChatQueueCarriage 2026-08-21: a state frame REPLACES the
+    CDXC:SessionChat 2026-08-21: a state frame REPLACES the
     client's queue, so every producer of one restates the current rows rather
     than leaving them out.
     */
@@ -822,7 +822,7 @@ pub(crate) fn emit_session_chat_prompt_state_frame(state: &AppState, session: &V
     and a frame that reaches the hub out of seq order makes every client treat
     it as a gap and force a resync.
 
-    CDXC:SessionChatFollowerLiveness 2026-08-24: the EPOCH is read in here for
+    CDXC:AgentScreenDetection 2026-08-24: the EPOCH is read in here for
     the same reason. Sampled before the call, the follower could start a new
     generation in between — the frame then carried a new-generation seq stamped
     with the retired epoch, which clients read as a gap and answered with a

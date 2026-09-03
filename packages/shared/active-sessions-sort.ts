@@ -30,7 +30,7 @@ export function createDisplaySessionLayout({
   );
   if (sortMode === 'manual') {
     /*
-    CDXC:ManualSessionSorting 2026-06-05-12:30:
+    CDXC:Sessions 2026-06-05-12:30:
     Manual Sorting preserves the saved order inside each session kind. Browser
     tabs are a dedicated first section, so they stay above terminals even when
     either kind contains pinned rows.
@@ -68,7 +68,7 @@ function orderProjectSessionsForDisplay(
   options: { enableSessionParking?: boolean; sortUnpinnedByLastActivity?: boolean } = {}
 ): string[] {
   /**
-   * CDXC:PinnedSessions 2026-05-28-12:04:
+   * CDXC:Sessions 2026-05-28-12:04:
    * Pinned sessions must stay at the top of their owning project regardless of
    * the active session sort mode. Preserve the existing order inside pinned and
    * unpinned partitions so users can rearrange pinned rows while non-pinned
@@ -157,7 +157,7 @@ function getSessionActivitySortPriority(session: SidebarSessionItem | undefined)
 }
 
 /**
- * CDXC:ActivitySuppressionPolicy 2026-07-29-12:00:
+ * CDXC:AgentScreenDetection 2026-07-29-12:00:
  * A working session only earns activity-sort priority once gxserver's
  * meaningful-activity clock has caught up with the current stint
  * (lastInteractionAt >= workingStartedAt). Short working blips from tiny
@@ -178,7 +178,7 @@ function isMeaningfulWorkingStint(session: SidebarSessionItem): boolean {
 }
 
 /**
- * CDXC:StableWorkingOrder 2026-07-30-07:50:
+ * CDXC:SessionStatus 2026-07-30-07:50:
  * A meaningful working stint sorts by when it STARTED, never by the
  * meaningful-activity recency clock. gxserver keeps bumping
  * lastInteractionAt (~10s cadence) for every working session while it runs,

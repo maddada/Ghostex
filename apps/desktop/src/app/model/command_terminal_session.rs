@@ -6,16 +6,16 @@
 use crate::*;
 
 /*
-CDXC:GPUICommandTabStatus 2026-06-27-05:07:
+CDXC:SessionStatus 2026-06-27-05:07:
 Command-pane tab status indicators now have live Action parity plus safe restored metadata: Action command tabs own run ids, session-state file stamping, status-file polling, run-start Working, idle completion, completion feedback, and exit cleanup, while non-Action/restored tabs remain enum/boolean status only. Status must not be inferred from shell titles, output, paths, command text, env, logs, or persisted shell JSON. Persistence keeps only the bounded Action selector needed to reclaim the same tab after restart; run ids, status-file paths, command text, stdout/stderr, terminal content, countdown labels, paths, tokens, and private titles remain runtime-only.
 
-CDXC:GPUICommandPaneTabs 2026-06-25-11:24:
+CDXC:CommandPane 2026-06-25-11:24:
 The command-pane model still keeps an idle enum for persistence and sidebar indicators, but command tab chrome should match macOS by rendering indicators only for working, attention, and delayed-send states. Idle command tabs show no status indicator.
 
-CDXC:GPUICommandTabStatus 2026-06-25-13:18:
+CDXC:SessionStatus 2026-06-25-13:18:
 Command-tab status chrome is a trailing native slot, not a leading title prefix: the tab title reserves trailing space for active status, the indicator hides while hover close chrome is visible, and Delayed Send uses clock glyph chrome instead of a rounded dot.
 
-CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+CDXC:SessionSleep 2026-06-25-14:27:
 Command-pane Sleep is a renderer lifecycle flag, not tab deletion. Persist only the sleeping boolean with safe command metadata so tabs remain in their command group while mounted command terminal body slots are withheld until explicit wake.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,7 +89,7 @@ pub(crate) struct CommandTerminalSession {
     pub(crate) title: String,
     pub(crate) gxserver_session_key: Option<GpuiLocalWorkspaceSessionKey>,
     /*
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     A remote project's terminal Action runs its command on the machine that
     owns the project, so its command tab attaches over SSH to a session on that
     machine's daemon instead of owning a local one. This is that session's
@@ -184,7 +184,7 @@ impl CommandTerminalSession {
 
     pub(crate) fn tab_status(&self) -> CommandTerminalTabStatus {
         /*
-        CDXC:GPUICommandDelayedSend 2026-06-25-18:07:
+        CDXC:DelayedSend 2026-06-25-18:07:
         Native command-pane tab sync publishes Delayed Send countdown labels before it skips sleeping sessions for working/attention activity. Preserve the timer clock on sleeping command tabs, while sleeping tabs without a timer still render idle parked chrome.
         */
         if self.delayed_send_active {
@@ -198,7 +198,7 @@ impl CommandTerminalSession {
 
     pub(crate) fn sidebar_hud_indicator_status(&self) -> &'static str {
         /*
-        CDXC:GPUICommandSessionHud 2026-06-27-06:30:
+        CDXC:SessionStatus 2026-06-27-06:30:
         Sidebar command-session HUD indicators mirror native terminal lifecycle, not Action completion feedback. GPUI has no persisted lifecycle error state for live local command tabs, so awake command tabs export running and sleeping tabs export idle without deriving error from Attention or exposing terminal-private data.
         */
         if self.is_sleeping { "idle" } else { "running" }

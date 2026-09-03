@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -54,7 +54,7 @@ import type { SidebarAgentButton } from '@/packages/shared/sidebar-agents';
 import { createSidebarAgentButtons } from '@/packages/shared/sidebar-agents';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeProjectBoardMethods` — because deriving them would make
@@ -451,7 +451,7 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     from a sibling worktree while its ticket stays on the parent board, so the
     option list spans the worktree family.
 
-    CDXC:ProjectBoardBeads 2026-08-07:
+    CDXC:ProjectBoard 2026-08-07:
     Rows that mount the same Beads board are part of the same board too. Their
     sessions belong in the list, or a link inherited from one of them reads as
     dead while its session is still running.
@@ -504,7 +504,7 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     ghostexSessionId: string
   ): ProjectBoardSessionOption | undefined {
     /*
-    CDXC:ProjectBoardBeads 2026-08-07:
+    CDXC:ProjectBoard 2026-08-07:
     The option list is scoped to the board's worktree family and board mounts,
     but a bead can be worked from any project. Jump already focuses such a
     session straight from presentation, so liveness is resolved the same way —
@@ -550,7 +550,7 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     daemon directly behind a short TTL because getState re-runs on the board's
     8s auto-refresh.
 
-    CDXC:ProjectBoardBeads 2026-08-07:
+    CDXC:ProjectBoard 2026-08-07:
     Previous-session history only carries rows that closed with a trusted
     resume title, so a bead worked by a since-closed agent session usually has
     no restorable row at all. The daemon can still plan a resume from the
@@ -650,7 +650,7 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     linkStoreProjects: GxserverProjectDomainState[];
   }> {
     /*
-    CDXC:ProjectBoardBeads 2026-08-07:
+    CDXC:ProjectBoard 2026-08-07:
     Starting work can take minutes before the link is written (the worktree
     path registers a project, runs setup, and refreshes presentation), and
     /api/updateProject replaces projectBoardConfig wholesale. Re-read the row
@@ -916,7 +916,7 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
       sessionId,
     };
     /*
-    CDXC:StashedPromptSessionAssociation 2026-08-24:
+    CDXC:SavedPrompts 2026-08-24:
     The present → restore → resume routing that used to live inline here is now
     `openGpuiConversationSessionReference` in `session-conversation-jump.ts`,
     shared with the Saved Prompts jump. The board keeps the two pieces only it
@@ -1026,7 +1026,7 @@ export const gpuiSidebarRuntimeProjectBoardMethods = {
     mutate: (currentLinks: BeadConversationLink[], storeProject: GxserverProjectDomainState) => BeadConversationLink[]
   ): Promise<void> {
     /*
-    CDXC:ProjectBoardBeads 2026-08-07:
+    CDXC:ProjectBoard 2026-08-07:
     The board reads links from every project row that mounts the same Beads
     board, so a link the user acts on can be stored on a row other than the one
     whose board is open. Apply link mutations to each row that actually holds a

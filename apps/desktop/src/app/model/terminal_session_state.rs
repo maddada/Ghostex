@@ -6,7 +6,7 @@
 use crate::*;
 
 /*
-CDXC:GPUIAgentsTerminalStartupState 2026-06-22-23:50:
+CDXC:Terminal 2026-06-22-23:50:
 Failed Agents terminal startup is a first-class presentation state so the tab survives launch failure with clear retry UI. The durable shell state stores only the safe `startup-failed` slug; runtime ids, launch errors, command text, cwd/path, env, process ids, stdout/stderr, and terminal content remain runtime-only or absent.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -95,7 +95,7 @@ impl TerminalSessionPresentationState {
     }
 
     /*
-    CDXC:GPUITerminalPresentationState 2026-06-24-07:35:
+    CDXC:Terminal 2026-06-24-07:35:
     Terminal presentation-state copy is user-visible terminal copy, even though this source helper still represents the current shell body. Sleeping and mounting messages must remain source-only, non-launching, and private-detail-free while accurately describing pending wake/materialization state.
     */
     pub(crate) fn placeholder_message(self) -> &'static str {
@@ -132,7 +132,7 @@ impl TerminalSessionPresentationState {
 }
 
 /*
-CDXC:GPUIAgentsTabStatus 2026-06-22-16:27:
+CDXC:SessionStatus 2026-06-22-16:27:
 Agents running-tab dots must use semantic placeholder state from the macOS sidebar vocabulary instead of arbitrary session-id colors. Persist only the safe shell metadata: idle/working/attention activity plus a Delayed Send boolean; never persist deadlines, labels, command text, paths, stdout/stderr, terminal content, tokens, or user-owned titles.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,7 +208,7 @@ pub(crate) struct TerminalSession {
     pub(crate) presentation_state: TerminalSessionPresentationState,
     pub(crate) startup_eligible_when_mounting: bool,
     /*
-    CDXC:GPUISessionTitleOverlay 2026-08-04:
+    CDXC:SessionTitles 2026-08-04:
     The generating-title flag belongs to the reconciled runtime tab session
     that owns the visible pane. Keeping it only in the separate sidebar focus
     snapshot made Windows render depend on a reverse project/session mapping
@@ -221,7 +221,7 @@ pub(crate) struct TerminalSession {
     pub(crate) kind: AgentsWorkspaceSessionKind,
     pub(crate) delayed_send_active: bool,
     /*
-    CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
+    CDXC:Zmx 2026-07-06:
     Runtime-only zmx persistence session name captured from gxserver attach
     metadata, mirroring macOS `session.sessionPersistenceName`. Terminal-content
     clicks use it for zmx's conditional grid-size refresh. Never persisted to
@@ -313,7 +313,7 @@ impl TerminalSession {
         startup_eligible_when_mounting: bool,
     ) {
         /*
-        CDXC:GPUITerminalActivationRuntimeGuard 2026-06-23-18:00:
+        CDXC:Terminal 2026-06-23-18:00:
         `Mounting` can mean a true new/retry/materialize startup or a wake/reattach placeholder waiting for an exact parked owner move. Keep that startup eligibility runtime-only and out of shell-state JSON so restored shell-state `mounting` after restart, sleeping wake, and popped-out reattach cannot accidentally create a duplicate Ghostty process, while new terminals, explicit restored-unmounted activation, and in-process failed-startup retry remain eligible.
         */
         self.presentation_state = presentation_state;

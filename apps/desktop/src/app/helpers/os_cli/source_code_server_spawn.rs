@@ -100,7 +100,7 @@ pub(crate) fn source_code_server_spawn_runtime(
     startup_deadline: Instant,
 ) -> Result<SourceCodeServerRuntimeStartOutput, String> {
     /*
-    CDXC:GPUISourceWindowsWsl 2026-07-26:
+    CDXC:PlatformSupport 2026-07-26:
     Windows projects and their authoritative paths live inside the selected
     WSL2 distribution. Launch code-server there as well; a native Windows
     Node child cannot use the WSL project path or the Linux runtime payload.

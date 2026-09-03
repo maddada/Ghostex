@@ -43,7 +43,7 @@ export const PORTLESS_SETTINGS_ADMIN_ACTION_LABELS: Record<NativePortlessAdminAc
 };
 
 /*
- * CDXC:PortlessSettingsDisabled 2026-07-25:
+ * CDXC:Portless 2026-07-25:
  * Preserve the complete Portless Settings implementation for a later return,
  * but do not expose its controls while the app integration is disabled.
  */
@@ -76,7 +76,7 @@ export function PortlessGlobalSettingsPanel({
       <div className='settings-projects-global-header'>
         <div className='settings-management-header-text'>
           {/*
-            CDXC:PortlessSettings 2026-06-30-11:42:
+            CDXC:Portless 2026-06-30-11:42:
             Projects global settings should title the Portless card as Portless and briefly define it, because the controls manage Ghostex's local-domain proxy rather than generic project metadata.
           */}
           <h3 className='settings-management-heading'>Portless</h3>

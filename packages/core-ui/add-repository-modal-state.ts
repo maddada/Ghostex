@@ -12,13 +12,13 @@ export type AddRepositoryCloneSubmitState = {
 };
 
 /*
-CDXC:AddRepository 2026-06-06-06:38:
+CDXC:AddProject 2026-06-06-06:38:
 Clone & Add must enable as soon as the typed repository, parent folder, and new folder are locally valid. The gxserver preview remains the authority for existing-destination warnings, but waiting for an async preview before enabling the button makes correct input look broken.
 
-CDXC:AddRepository 2026-06-07-16:01:
+CDXC:AddProject 2026-06-07-16:01:
 The new-folder field is optional. Empty input means gxserver should use the parsed repository name as the destination folder, while custom text still overrides that default.
 
-CDXC:AddRepository 2026-06-07-16:06:
+CDXC:AddProject 2026-06-07-16:06:
 The branch field is optional. Empty branch input leaves Git on the repository default branch, while valid typed branch names are passed through as the checkout branch.
 */
 export function canSubmitAddRepositoryClone(state: AddRepositoryCloneSubmitState): boolean {

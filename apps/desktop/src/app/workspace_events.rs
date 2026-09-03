@@ -52,7 +52,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectWorkareaCefBridge 2026-06-24-11:03:
+        CDXC:CefRuntime 2026-06-24-11:03:
         Runtime workarea bridge events are accepted only from the CefSurface that owns the current slot. Manage file events resolve against the explicit in-memory project root from the sidebar snapshot, Kanban/Automate Beads and board events call gxserver's typed Project Board endpoints, and response dispatch stays inside the owning CEF surface without WKWebView/WebKit handlers, shelling out to bd, fallback project detection, logs, persistence, or generic IPC.
         */
         match (slot_key, event) {
@@ -61,7 +61,7 @@ impl GhostexGpuiApp {
                 cef::ProjectWorkareaBridgeEvent::ManageFilesRequest(payload),
             ) => {
                 /*
-                CDXC:GPUIManageFilesBridge 2026-07-11:
+                CDXC:Docs 2026-07-11:
                 This arm previously ran synchronously inside the bridge event
                 handler, but manage_files_bridge_result shells out to `git`
                 (rev-parse/check-ignore/cat-file, up to six calls, no timeout)
@@ -180,7 +180,7 @@ impl GhostexGpuiApp {
                         match gpui_project_board_command_request(&request, context.as_ref()) {
                             Ok(intent) => {
                                 /*
-                                CDXC:ProjectBoardBeadsCommands 2026-08-14:
+                                CDXC:ProjectBoard 2026-08-14:
                                 The Kanban CEF surface sends only fixed setup/migration selectors.
                                 Rust owns every literal command and the active-project cwd, then uses
                                 the existing command-Action lifecycle so completion comes from the
@@ -408,7 +408,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
+        CDXC:Navigation 2026-07-29:
         Backstop for the coalescer: a project-scoped sidebar command must never
         overtake a project switch that is still queued behind the settle
         window, or it would act on the outgoing project's runtime. Land the
@@ -450,7 +450,7 @@ impl GhostexGpuiApp {
             | cef::SidebarBridgeEvent::ProjectWorkareaReadiness(_)
             | cef::SidebarBridgeEvent::ManageFileWorkareaOperationRequest(_) => {
                 /*
-                CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
+                CDXC:Workarea 2026-06-29-00:02:
                 Legacy sidebar readiness/proof messages stay accepted as compatibility no-ops. Source, Kanban, Automate, and Manage mounting now follows only the current runtime URL gate plus owned CEF surface map, and first-party Kanban/Automate/Manage CEF requests still flow through the separate project-workarea bridge.
                 */
             }
@@ -594,7 +594,7 @@ impl GhostexGpuiApp {
             tab_id: BrowserTabId(tab_id),
         };
         /*
-        CDXC:GPUIRemoteBrowserTabs 2026-07-12:
+        CDXC:Browser 2026-07-12:
         The sidebar lists browser rows for every project (parked local and
         machine-scoped remote models included), so this bridge must reach
         beyond the active browser project: close edits the parked model
@@ -602,7 +602,7 @@ impl GhostexGpuiApp {
         first — but only when that parked model really contains the tab, so
         stale rows cannot park the live project into an empty default model.
 
-        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        CDXC:Browser 2026-08-26:
         A parked project's tabs do own live CEF surfaces now, so close and
         sleep reach the parked bundle too: both drop that tab's parked page, the
         same teardown the mounted project gets, instead of leaving an orphaned
@@ -639,13 +639,13 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:DisabledPluginRouting 2026-08-23:
+        CDXC:Extensions 2026-08-23:
         Close and sleep above are housekeeping the sidebar may still need for
         tabs that already exist, but everything past this point focuses the
         Browser workarea. With Browser turned off in Settings → Customize a
         stale sidebar tab row must not be able to drag the shell back into it.
 
-        CDXC:GPUIBrowserProjectParking 2026-08-26:
+        CDXC:Browser 2026-08-26:
         Availability is decided by the tab's own project, not by whichever
         project the shell is currently showing. A row of another project is
         exactly the click that has to switch projects, and its active-project
@@ -704,7 +704,7 @@ impl GhostexGpuiApp {
         tab in the focused pane (the reviewed popup-tab path). The URL goes
         through the same toolbar normalization as typed addresses.
 
-        CDXC:GPUIRemoteBrowserTabs 2026-07-12:
+        CDXC:Browser 2026-07-12:
         A validated explicit project target swaps the browser workarea to that
         project's tab model synchronously before the open, so sidebar project
         headers (local and machine-scoped remote) never race the async
@@ -713,7 +713,7 @@ impl GhostexGpuiApp {
         untargeted opens.
         */
         /*
-        CDXC:DisabledPluginRouting 2026-08-23:
+        CDXC:Extensions 2026-08-23:
         This is the one door every embedded-browser open goes through — chat
         and terminal links, saved Action links, sidebar project and Quick
         headers, `ghostex browser open`. With Browser turned off in Settings →
@@ -792,7 +792,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISidebarGxserverFocusState 2026-06-24-21:07:
+        CDXC:FocusRouting 2026-06-24-21:07:
         React may return only the gxserver presentation session ids it already owns from daemon create/focus/fork/restore flows. Store the parsed focus state in runtime memory, refresh only the sidebar bootstrap bridge on changes, and ignore malformed payloads without logging raw renderer JSON or deriving ids from terminal tabs, labels, paths, project names, or command text.
         */
         let Ok(next_state) =
@@ -809,7 +809,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:08:
+        CDXC:FocusRouting 2026-06-26-06:08:
         A local SidebarApp session click is a real workspace selection request, not only a sidebar highlight. Parse the fixed project/session payload, select an existing mapped Agents tab when possible, or ask gxserver for attach metadata before creating an awake Running tab through the exact mount-slot launch source. Renderer labels, commands, paths, titles, daemon responses, and terminal content are not accepted by this bridge.
         */
         let Ok(message) = gpui_sidebar_workspace_terminal_focus_from_json(payload) else {
@@ -829,7 +829,7 @@ impl GhostexGpuiApp {
             }),
         );
         /*
-        CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
+        CDXC:Navigation 2026-07-29:
         The sidebar posts the presentation snapshot before this imperative
         focus request, so when the snapshot is collapsed into the trailing
         switch this request must ride with it. Running it now would attach the
@@ -860,7 +860,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIWorkspaceRenameCommand 2026-07-29:
+    CDXC:SessionTitles 2026-07-29:
     Rename-command delivery shares this exact focus/attach pipeline with
     sidebar session clicks: selecting a tab alone never mounts its Ghostty
     surface (mount slots consume one-shot attach payloads), so any flow that
@@ -888,7 +888,7 @@ impl GhostexGpuiApp {
             }),
         );
         /*
-        CDXC:GPUIForkParity 2026-07-10:
+        CDXC:SessionFork 2026-07-10:
         Ordinary sidebar focus keeps targeting the currently focused Agents
         pane. Fork may additionally name the clicked source session; resolve
         that bounded gxserver id through the process-local map so the returned
@@ -956,7 +956,7 @@ impl GhostexGpuiApp {
         self.local_workspace_latest_focus_key = Some(key.clone());
         self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
         /*
-        CDXC:GPUIFullReload 2026-07-12:
+        CDXC:CefRuntime 2026-07-12:
         Full reload kills the zmx daemon before this focus arrives, so the
         mounted terminal owner is a dead attach client that map-presence
         liveness would happily re-select. `forceRemount` drops the stale engine
@@ -1026,7 +1026,7 @@ impl GhostexGpuiApp {
         #[cfg(target_os = "windows")]
         {
             /*
-            CDXC:GPUIWindowsProjectAgent 2026-08-11:
+            CDXC:PlatformSupport 2026-08-11:
             Project-header agents on Windows use one Rust-owned WSL operation
             from gxserver row creation through provider startup and terminal
             attachment. CEF supplies only the clicked project id, selected
@@ -1119,7 +1119,7 @@ impl GhostexGpuiApp {
         #[cfg(target_os = "windows")]
         {
             /*
-            CDXC:GPUIWindowsProjectTerminal 2026-07-26:
+            CDXC:PlatformSupport 2026-07-26:
             A Windows project-heading terminal uses the same host-owned
             gxserver create-plus-attach operation as New Terminal. The renderer
             supplies only the bounded clicked project id; gxserver resolves the
@@ -1377,7 +1377,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:DraftAgentSwitch 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     "This projected row can carry the chat view." A conversation proves that
     with its provider conversation id, but a DRAFT has none to give: its CLI
     publishes one only after it boots, and switching the draft's agent takes it
@@ -1526,7 +1526,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:SessionChatDraftHandoff 2026-08-18:
+    CDXC:Drafts 2026-08-18:
     Background terminal → chat draft transfer for every view switch. Automatic,
     manual, local, and remote switches all show Chat first; draft capture must
     never keep the user trapped on a terminal startup/permission prompt or on
@@ -1771,7 +1771,7 @@ impl GhostexGpuiApp {
         self.agents_chat_mode_sessions.insert(session_id);
         self.pending_session_chat_composer_focus = Some(session_id);
         /*
-        CDXC:SessionChatDraftHandoff 2026-08-24:
+        CDXC:Drafts 2026-08-24:
         A handed-off draft that never reached the terminal follows the user
         back into chat instead of leaving them an alarmingly empty composer
         while it waits, invisible, for another terminal switch. The Saved
@@ -1883,7 +1883,7 @@ impl GhostexGpuiApp {
             self.pending_agents_chat_launch_intents.remove(&key);
             if self.show_agents_session_chat_mode(shell_session_id, cx) {
                 /*
-                CDXC:SessionChatDraftHandoff 2026-08-18:
+                CDXC:Drafts 2026-08-18:
                 This intent waits for the agent to become chat-eligible, which
                 can take the whole of its boot. The terminal is live and
                 focused that entire time, so a user who started typing before
@@ -1982,7 +1982,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:AgentHistorySearchModal 2026-08-23:
+    CDXC:PromptSearch 2026-08-23:
     Search by Prompt is a native child-window page, matching the Settings
     ownership model instead of replacing a pane body. Prompt history is
     machine-wide, so the page URL carries only the current visual theme while
@@ -2130,7 +2130,7 @@ impl GhostexGpuiApp {
             rgb(0x0d0d0d).into()
         };
         /*
-        CDXC:GPUISessionChatContextMenu 2026-08-21:
+        CDXC:ContextMenus 2026-08-21:
         The first-party chat composer owns a shadcn context menu instead of
         exposing Chromium's page/developer menu. Copy and Cut still use the
         browser clipboard writer, while Paste is routed through CEF's native
@@ -2165,7 +2165,7 @@ impl GhostexGpuiApp {
             Ok(surface) => surface,
             Err(error) => {
                 // Ensure-style reconcile: skip this pass, retried on the next
-                // visibility sync (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
+                // visibility sync (CDXC:CefRuntime 2026-07-11).
                 support_logs::append(
                     support_logs::GpuiSupportLog::CrashReports,
                     "gpui.cefSurface.createFailed",
@@ -2189,7 +2189,7 @@ impl GhostexGpuiApp {
         self.agents_chat_mode_sessions
             .retain(|session_id| live_session_ids.contains(session_id));
         /*
-        CDXC:SessionChatLoadingDiagnostics 2026-08-28:
+        CDXC:Diagnostics 2026-08-28:
         Only surfaces whose SESSION is gone are destroyed here. A live session
         toggled back to the terminal view used to lose its page too, so every
         chat↔terminal toggle reloaded chat.html from scratch — the visible
@@ -2237,7 +2237,7 @@ impl GhostexGpuiApp {
                 .filter(|session_id| self.agents_chat_mode_sessions.contains(session_id))
                 .collect::<HashSet<_>>()
         } else if self.active_mode.is_project_editor_mode() {
-            // CDXC:GPUISessionChatSurface 2026-08-02: the companion side pane
+            // CDXC:SessionChat 2026-08-02: the companion side pane
             // shows chat-mode sessions in Code/Browser/Kanban/Automate/Docs
             // too. The mount-slot enumeration already gates on companion
             // visibility, mode wakefulness, and slot eligibility.
@@ -2256,7 +2256,7 @@ impl GhostexGpuiApp {
             let visible = visible_session_ids.contains(session_id);
             surface.update(cx, |surface, _| surface.set_visible(visible));
             /*
-            CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+            CDXC:SessionChat 2026-08-24:
             The hidden clock the RAM eviction pass reads. `or_insert_with` is
             load-bearing: a surface that is already aging must keep its original
             stamp across every later hidden pass, and only a pass that actually
@@ -2275,7 +2275,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+    CDXC:SessionChat 2026-08-24:
     Destroy the Chromium page behind a chat surface nobody has looked at for
     `GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER`. Chat-mode membership
     (`agents_chat_mode_sessions`) is deliberately untouched: it is the persisted
@@ -2314,7 +2314,7 @@ impl GhostexGpuiApp {
             self.agents_chat_surface_hidden_since.remove(&session_id);
         }
         /*
-        CDXC:GPUISessionChatSurfacePerProject 2026-08-26:
+        CDXC:SessionChat 2026-08-26:
         Parked projects keep their chat pages alive, so the same RAM ceiling has
         to reach them; otherwise every project the user ever visited would hold
         its browsers until the app quits. A parked surface ages on the stamp it
@@ -2431,7 +2431,7 @@ impl GhostexGpuiApp {
         self.pending_session_chat_composer_insert
             .remove(&session_id);
         /*
-        CDXC:SessionChatDraftHandoff 2026-08-24:
+        CDXC:Drafts 2026-08-24:
         A handed-off draft that never reached its terminal is dropped here with
         no way to hand it anywhere else — the chat surface that owned it is
         going away in the same call. That is survivable only because the record
@@ -2448,7 +2448,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUISessionChatSurfacePerProject 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     An active-project switch parks the outgoing project's chat pages instead of
     destroying them, the same treatment the terminal runtime already gets on
     that path. Destroying them closed every Chromium browser and made the next
@@ -2513,7 +2513,7 @@ impl GhostexGpuiApp {
         self.pending_session_chat_composer_focus = parked.pending_composer_focus;
         self.pending_session_chat_composer_insert = parked.pending_composer_insert;
         /*
-        CDXC:GPUISessionChatSurface 2026-07-31 (extended 2026-08-26):
+        CDXC:SessionChat 2026-07-31 (extended 2026-08-26):
         A parked page still holds whichever gxserver bootstrap it had when it
         went hidden, and a remote chat page points at an SSH tunnel whose local
         port and token can be rebuilt while its project is away. Re-push each

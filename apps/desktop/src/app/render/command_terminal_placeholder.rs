@@ -37,7 +37,7 @@ impl GhostexGpuiApp {
             .unwrap_or(CommandSessionId(0));
         let active_session_is_sleeping = body_owner.is_some_and(|owner| owner.is_sleeping);
         let mount_slot_id = body_owner.and_then(CommandPaneVisibleBodyOwner::mount_slot_id);
-        // See CDXC:GPUITerminalGpuiEngine in the Agents body renderer: an
+        // See CDXC:Terminal in the Agents body renderer: an
         // engine-claimed command slot renders the composited element and
         // skips native probes/forwarding gates.
         let gpui_engine_view = mount_slot_id
@@ -60,43 +60,43 @@ impl GhostexGpuiApp {
         });
 
         /*
-        CDXC:GPUICommandTerminalInputForwarding 2026-06-23-09:41:
+        CDXC:Terminal 2026-06-23-09:41:
         Mounted command terminal input uses the same command body div that already owns focus and drop behavior. Button press focuses the command group/pane before trying Ghostty forwarding, movement and button release pass GPUI modifiers to Ghostty input.Mods, and wheel events update pointer position with those mapped modifiers while keeping scroll mods precision-only.
 
-        CDXC:GPUITerminalPressureForwarding 2026-06-23-09:51:
+        CDXC:Terminal 2026-06-23-09:51:
         Command terminal force-click pressure events are wired only for mounted command body slots. Forward pressure through the existing body element without default-stop so command focus and drop behavior keep their current ownership.
 
-        CDXC:GPUICommandTerminalInputForwarding 2026-06-23-10:05:
+        CDXC:Terminal 2026-06-23-10:05:
         Mounted command bodies use GPUI element-level mouse-up-out only for capture-gated release parity. The handler does not route through the window, record outside positions, or synthesize coordinates.
 
-        CDXC:GPUITerminalMouseButtons 2026-06-23-10:23:
+        CDXC:Terminal 2026-06-23-10:23:
         Mounted command bodies must forward right and middle down/up/up-out through the same body element as left. Right and middle down focus the mounted command terminal surface before forwarding the press, while placeholders keep their existing left-click-only focus behavior and no tab/chrome context menus are changed.
 
-        CDXC:GPUITerminalSelectionDrag 2026-06-23-12:43:
+        CDXC:Terminal 2026-06-23-12:43:
         Mounted command selection drag does not need a command-pane-owned selection or drag-capture field. The command body already owns left press, body-relative move, in-body release, capture-gated up-out, typed command/workspace tab drag-over/drop handlers, and command focus handoff as normal sibling layout behavior; keep selection forwarding inside that body instead of adding overlays, hidden hit regions, stored coordinates, global capture, or root/window mouse routing.
 
-        CDXC:GPUITerminalNativeKeyBridge 2026-07-10:
+        CDXC:Terminal 2026-07-10:
         Mounted libghostty terminals keep keyboard and IME ownership on their exact AppKit host NSView. The body still owns normal mouse/layout behavior, but it must not track GPUI's legacy terminal text focus handle because that changes the window first responder and drops native keycodes/modifiers before libghostty sees them.
 
-        CDXC:GPUICommandTabSleep 2026-06-25-14:27:
+        CDXC:SessionSleep 2026-06-25-14:27:
         A sleeping active command tab renders the same body placeholder but no Ghostty mount slot. Left-clicking that body wakes the command session; tab selection, right-click menus, and placeholder paint do not wake it.
 
-        CDXC:GPUICommandSleepingPlaceholder 2026-06-25-14:49:
+        CDXC:SessionSleep 2026-06-25-14:49:
         The sleeping command body paints the native centered wake label only while click-to-wake placeholders are enabled. Mounting command placeholders stay blank, while the normal body element continues to own click wake, drag/drop, and any future terminal mount slot.
 
-        CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+        CDXC:SessionSleep 2026-06-27-00:22:
         Render the sleeping wake label as paint-only canvas chrome using this exact body element's prepaint bounds. Do not add flex overlays, input-owning label elements, root/window routing, persistent geometry, or fallback dimensions; the body remains the sole layout and wake interaction owner.
 
-        CDXC:GPUICommandDelayedSend 2026-06-25-15:42:
+        CDXC:DelayedSend 2026-06-25-15:42:
         Active command Delayed Send timers also paint a centered countdown badge inside the same body element. This is visual-only child chrome so command body focus, mouse forwarding, wake, drag/drop, and native host bounds stay owned by the normal command body layout.
 
-        CDXC:GPUICommandAttention 2026-06-25-19:58:
+        CDXC:Notifications 2026-06-25-19:58:
         Command body clicks are direct command-session activation. Match native by acknowledging only the clicked command session's Attention state when the body takes focus, without clearing Working, Delayed Send, sleeping placeholders, or Agents activity.
 
-        CDXC:GPUICommandPaneFocus 2026-06-26-00:00:
+        CDXC:FocusRouting 2026-06-26-00:00:
         Non-mounted command body focus must reveal the focused group's active command tab in the expanded strip and collapsed strip, sharing the same body-click parity as mounted command terminals without changing wake, attention, or placeholder activation semantics.
 
-        CDXC:GPUICommandTerminalSurface 2026-06-27-04:36:
+        CDXC:Terminal 2026-06-27-04:36:
         The command body renderer must consume the same visible body owner as mount-slot reconciliation. This keeps sleeping selected tabs visible as wake placeholders, lets selected non-sleeping tabs mount Ghostty, and prevents stale active ids from borrowing an inactive sibling's session for badges, wake, or input forwarding.
         */
         div()

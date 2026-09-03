@@ -1,5 +1,5 @@
 /*
-CDXC:ClaudeStatusline 2026-09-03:
+CDXC:AgentScreenDetection 2026-09-03 WHY:
 Context window usage ring for the chat composer, the t3code ContextWindowMeter
 shape: a small ring in the footer that fills as the window fills, hover for a
 popover with the percentage, tokens over window size, a progress bar and a

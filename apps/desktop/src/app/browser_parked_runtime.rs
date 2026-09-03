@@ -8,7 +8,7 @@ use crate::*;
 
 impl GhostexGpuiApp {
     /*
-    CDXC:GPUIBrowserProjectParking 2026-08-26:
+    CDXC:Browser 2026-08-26:
     An active-project switch parks the outgoing project's browser pages instead
     of destroying them, the same treatment the terminal and chat runtimes
     already get on that path. Destroying them closed every Chromium browser, so
@@ -100,7 +100,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIBrowserProjectParking 2026-08-26:
+    CDXC:Browser 2026-08-26:
     A parked page keeps navigating, so its title, favicon, address, load state,
     and find results must keep landing on the model that owns it. Applying them
     to the live model instead would corrupt whichever tab happens to share the
@@ -194,7 +194,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIBrowserProjectParking 2026-08-26:
+    CDXC:Browser 2026-08-26:
     A parked page can still open a popup (a link target, a `window.open`). The
     tab belongs to the project that opened it, so it is appended to that
     project's parked model and queued for the sidebar reveal there. This is not

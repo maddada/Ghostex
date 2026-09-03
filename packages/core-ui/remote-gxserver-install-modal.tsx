@@ -35,7 +35,7 @@ export function RemoteGxserverInstallModal({
    * Ghostex CLI, and Node resources needed for first-run Ubuntu attach, so copy
    * must not imply that only the local macOS daemon is uploaded.
    *
-   * CDXC:UnifiedAppModal 2026-08-26:
+   * CDXC:AppModal 2026-08-26:
    * The prompt composes the shared AppModalShell; the install detail paragraph
    * (with its monospace path/binary chips) is one section card. Keep the
    * `remote-gxserver-install-modal` marker class: apps/desktop/views/modal-host.tsx

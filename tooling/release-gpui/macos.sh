@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Usage: macos.sh [--phase <name>] <version> [output-dir]
 #
-# CDXC:ReleaseMacosPhases 2026-09-02: the GitHub Actions job used to run this
+# CDXC:Release 2026-09-02: the GitHub Actions job used to run this
 # script as one 24-minute step, so per-phase timing was invisible from the jobs
 # API. The script is now a sequence of phase functions dispatched by `--phase`.
 # Without `--phase` (or with `--phase all`) it runs every phase in the original
@@ -328,7 +328,7 @@ phase_dmg() {
 	trap 'rm -rf "$STAGE"' EXIT
 	ditto "$APP_PATH" "$STAGE/Ghostex.app"
 	ln -s /Applications "$STAGE/Applications"
-	# CDXC:ReleaseHdiutilResourceBusy 2026-08-22:
+	# CDXC:Release 2026-08-22:
 	# `hdiutil create` attaches a device to read the staging folder, and another
 	# process on the runner — Spotlight indexing the stage it has just seen appear,
 	# or a leftover attachment — can hold it and fail the whole macOS build with

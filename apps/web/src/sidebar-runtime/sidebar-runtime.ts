@@ -79,7 +79,7 @@ type MachineRecentProjects = {
 };
 
 /*
- * CDXC:ProjectActions 2026-08-29:
+ * CDXC:Projects 2026-08-29:
  * Quick Actions are stored per gxserver machine, so the HUD is read once per
  * connected machine instead of once for the active target. Project rows on
  * every machine need their own machine's `commandsByProject`, and Global
@@ -113,7 +113,7 @@ class WebSidebarMessageSource extends EventTarget {
 export type WebSidebarRuntime = {
   messageSource: SidebarMessageSource;
   /**
-   * CDXC:NavigationHistory 2026-08-19:
+   * CDXC:Navigation 2026-08-19:
    * The titlebar's Back/Forward pair reads this controller. It is owned by the
    * runtime, not the titlebar component, because the trail is fed by every
    * active-target change the runtime publishes — not only by clicks.
@@ -147,7 +147,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   const pendingRecentProjectMutations = new Map<string, Promise<void>>();
 
   /*
-   * CDXC:NavigationHistory 2026-08-19:
+   * CDXC:Navigation 2026-08-19:
    * The trail lives on ONE daemon even though entries can point at several
    * machines, because a back stack split per machine has no meaningful order.
    * The local daemon (the one serving this page) owns it; if it is not
@@ -370,7 +370,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
   };
 
   /*
-   * CDXC:ProjectActions 2026-08-29:
+   * CDXC:Projects 2026-08-29:
    * One HUD read per connected machine, asking for `includeAllProjectCommands`
    * so every project row can render its own project's Actions instead of only
    * the active project's. The active machine also carries `activeProjectId`,
@@ -542,7 +542,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         return;
       }
       case 'switchSessionAgent': {
-        // CDXC:SwitchAccount 2026-09-03: rewrite the row's agent on the owning
+        // CDXC:AgentProviders 2026-09-03: rewrite the row's agent on the owning
         // daemon, then Full reload it so the wake resumes with the new command.
         const target = parseSidebarSessionId(message.sessionId);
         if (target) {
@@ -638,7 +638,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         });
         return;
       /*
-      CDXC:SessionAgentNotes 2026-08-24:
+      CDXC:SessionNotes 2026-08-24:
       The note is keyed by the session's PROVIDER conversation id, which only
       the daemon can resolve, so the client sends the session reference and the
       text and nothing else. No optimistic patch: gxserver schedules a
@@ -704,7 +704,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         return;
       }
       /*
-      CDXC:SidebarSpaces 2026-08-27:
+      CDXC:Spaces 2026-08-27:
       The New/Edit Space dialog's confirm and delete. This runtime deliberately
       does NOT talk to gxserver here: the dialog carries field values only, and
       the Space document lives in SidebarApp, so the result is bounced straight
@@ -862,7 +862,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       }
       case 'runGhostexHotkeyAction': {
         /*
-         * CDXC:NavigationHistory 2026-08-19:
+         * CDXC:Navigation 2026-08-19:
          * The shared command palette forwards host-owned hotkey rows as action
          * ids. Back/Forward, Find, and Open Commands Panel are owned here;
          * everything else stays a native-only no-op.
@@ -873,7 +873,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
           return;
         }
         /*
-         * CDXC:AgentHistorySearch 2026-08-20:
+         * CDXC:PromptSearch 2026-08-20:
          * Find is an app-level modal, matching Settings. The root modal host
          * owns presentation, so native-style command actions only announce
          * the intent here and never mutate the focused workspace pane.
@@ -982,7 +982,7 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
     await rpcForMachine(target.machineId, '/api/createAgentSession', {
       agentId: agentId.trim(),
       /*
-      CDXC:DraftSessions 2026-08-28:
+      CDXC:Drafts 2026-08-28:
       Sidebar agent launches carry no prompt, so the row is created as a draft.
       gxserver clears `draftStatus` the moment a first user prompt reaches the
       agent; the provider is started when the session is opened, not here.
@@ -1198,7 +1198,7 @@ function createWebSidebarHud(
     .flatMap((group) => group.sessions)
     .find((session) => session.sessionId === focusedSessionId);
   /*
-   * CDXC:ProjectActions 2026-08-29:
+   * CDXC:Projects 2026-08-29:
    * Agent launchers and the flat `commands` list are the active project's, so
    * they come from the machine that project lives on. Everything keyed by
    * project or machine is merged across every connected machine below.
@@ -1227,7 +1227,7 @@ function createWebSidebarHud(
 }
 
 /*
- * CDXC:ProjectActions 2026-08-29:
+ * CDXC:Projects 2026-08-29:
  * gxserver keys `commandsByProject` by the raw project id on its own machine,
  * while the sidebar keys project rows with `createSidebarProjectId` so two
  * machines cannot collide. Re-key on the way in so a row's lookup hits its own
@@ -1246,7 +1246,7 @@ function createWebCommandsByProject(
 }
 
 /*
- * CDXC:GlobalActions 2026-08-29:
+ * CDXC:AgentLauncher 2026-08-29:
  * Global Actions belong to the daemon that stores them, and the web app shows
  * projects from several daemons at once. The local machine's list stays in the
  * flat `globalCommands` field every host serves; each remote machine's list is
@@ -1266,7 +1266,7 @@ function createWebRemoteGlobalCommands(
 }
 
 /*
- * CDXC:ProjectActions 2026-08-29:
+ * CDXC:Projects 2026-08-29:
  * Quick Actions live in project metadata, so a project row's `updatedAt` moves
  * when one is saved, exactly like the `/api/listProjects` refresh above. Global
  * Actions are not project metadata, so the daemon announces those separately
@@ -1441,7 +1441,7 @@ function lifecycleParams(target: SidebarSessionReference): Record<string, unknow
 }
 
 /*
- * CDXC:NavigationHistory 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * A trail stop is the project the user is on plus the session inside it, in the
  * SIDEBAR id vocabulary, so activating one later is a plain focusSession /
  * focusGroup call with no re-resolution. Labels are the same titles the sidebar

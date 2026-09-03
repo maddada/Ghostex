@@ -14,7 +14,7 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('gxserver unavailable sidebar empty state source', () => {
   test('keeps the startup placeholder silent until the delayed restart guidance', () => {
     /*
-     * CDXC:GxserverPresentation 2026-06-16-09:35:
+     * CDXC:StateSync 2026-06-16-09:35:
      * The synthetic gxserver-unavailable group exists for startup state
      * bookkeeping, not as visible copy. Source coverage keeps the raw placeholder
      * out of the Projects list and protects the 20-second delayed, No-projects

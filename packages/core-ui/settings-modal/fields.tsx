@@ -96,7 +96,7 @@ import {
 export const MODIFIED_SETTING_TOOLTIP = 'Modified Setting.\n \nClick to Reset to Default';
 
 /*
- * CDXC:SettingsTextFields 2026-06-15-18:19:
+ * CDXC:Settings 2026-06-15-18:19:
  * Settings text fields hold explicit configuration values, including Remote SSH names, users, hosts, ports, identity files, commands, and prompts. Disable browser and macOS text assistance at the Settings modal field boundary so autocomplete, autocorrect, capitalization, and spellcheck cannot rewrite user-entered configuration.
  */
 export function SettingsInput({
@@ -161,7 +161,7 @@ export function SettingsSelect({
   };
 
   /*
-   * CDXC:SettingsDropdowns 2026-06-19-19:22:
+   * CDXC:Settings 2026-06-19-19:22:
    * Settings select changes save immediately through the native modal host.
    * Close every Base UI popup before posting the setting update so portaled
    * dropdowns, including Default Prompt Agent and command editor selects,
@@ -227,7 +227,7 @@ export function SettingSwitch({
 
 export function SettingsSelectContent({ className, ...props }: ComponentProps<typeof SelectContent>) {
   /*
-   * CDXC:SettingsDropdowns 2026-06-16-16:58:
+   * CDXC:Settings 2026-06-16-16:58:
    * Settings Select popups are portaled outside the Settings dialog subtree.
    * Carry a stable class on the popup so row hover, focus, and selected states
    * can stay neutral gray instead of inheriting saturated app accent styling.
@@ -236,7 +236,7 @@ export function SettingsSelectContent({ className, ...props }: ComponentProps<ty
 }
 
 /*
- * CDXC:SettingsPerformance 2026-06-29-00:40:
+ * CDXC:Settings 2026-06-29-00:40:
  * Settings management rows still need dnd-kit to register one element as both sortable item and drag source, but the row components need React Compiler coverage.
  * Keep the callback-ref mutation behind this helper so render code does not directly invoke ref-named mutators.
  */
@@ -260,7 +260,7 @@ export function SettingsNativeScrollArea({
   return (
     <div {...props} className={cn('relative', className)} data-slot='scroll-area'>
       {/*
-       * CDXC:SettingsPerformance 2026-06-29-00:40:
+       * CDXC:Settings 2026-06-29-00:40:
        * Settings pages must scroll with native overflow instead of Base UI
        * ScrollArea because long pages do not need custom scrollbar metrics or
        * scroll-linked edge masks on every frame. Keep the viewport data-slot so
@@ -431,7 +431,7 @@ export function SettingsSection({
         <div className='settings-section-title-pill'>
           <CardTitle className='settings-section-title-pill-text'>{title}</CardTitle>
         </div>
-        {/* CDXC:UnifiedSettings 2026-05-09-17:01: Agents and Actions management
+        {/* CDXC:Settings 2026-05-09-17:01: Agents and Actions management
           controls belong in the section header row. Action creation labels omit
           "Add", while the agent creation CTA keeps "Add Agent" per product
           requirements. */}
@@ -767,7 +767,7 @@ export function PetPickerField({
 }
 
 /**
- * CDXC:AppIconPicker 2026-06-28-06:05:
+ * CDXC:Icons 2026-06-28-06:05:
  * App Icon is an advanced custom-image flow, not a preset gallery. Render one
  * selected-icon preview, one Select Image button, and an X on the custom preview
  * to restore the empty/default source id. Selection still posts to native first;
@@ -970,7 +970,7 @@ export function TextField({
 
   useEffect(() => {
     /*
-     * CDXC:SettingsTextFields 2026-06-19-16:53:
+     * CDXC:Settings 2026-06-19-16:53:
      * Immediate-save Settings text fields must keep the user's focused edit
      * buffer while native settings hydration echoes persisted values back into
      * the modal host. Sync external values only when the field is not actively
@@ -1173,7 +1173,7 @@ export function WebColorPickerField({
   };
   const commitColorAfterClosingPicker = (nextColor: string) => {
     /*
-     * CDXC:SidebarTitlebarColors 2026-06-19-19:51:
+     * CDXC:Theming 2026-06-19-19:51:
      * The custom tint picker is a nested Base UI dialog inside Settings.
      * Close the dialog before the final setting commit so native settings
      * hydration cannot re-render while the picker still owns modal focus.
@@ -1194,41 +1194,41 @@ export function WebColorPickerField({
       onResetToDefault={onResetToDefault}
     >
       {/*
-        CDXC:SidebarTitlebarColors 2026-06-15-15:28:
+        CDXC:Theming 2026-06-15-15:28:
         Background Tint must be a web picker, not input[type=color], so the
         macOS color panel never opens. Use swatches plus a hex field and let
         shared settings normalize the saved color.
 
-        CDXC:SidebarTitlebarColors 2026-06-15-16:04:
+        CDXC:Theming 2026-06-15-16:04:
         The first tint picker rendered as a full-width framed popover trigger,
         which made the Settings section look like an empty bordered slab. Keep
         the control inline and compact: swatches first, hex value second, no
         extra container chrome.
 
-        CDXC:SidebarTitlebarColors 2026-06-15-16:13:
+        CDXC:Theming 2026-06-15-16:13:
         Users need both more tint presets and a way to pick any tint color.
         Keep presets inline, and put the full web picker behind a compact
         swatch trigger so the Settings row does not regain the oversized
         framed surface that was removed.
 
-        CDXC:SidebarTitlebarColors 2026-06-15-16:13:
+        CDXC:Theming 2026-06-15-16:13:
         Picker dragging should preview immediately from local color state while
         the saved tint setting still uses the existing debounced Settings write
         path before native sidebar/titlebar chrome is updated.
 
-        CDXC:SidebarTitlebarColors 2026-06-15-17:34:
+        CDXC:Theming 2026-06-15-17:34:
         Replace the hand-built hue picker with the same
         react-best-gradient-color-picker control used in Sharptabs. Keep this
         setting solid-color only, and expose it as a simple Pick Color dialog
         rather than showing technical hue/saturation labels in the Settings row.
 
-        CDXC:SidebarTitlebarColors 2026-06-19-13:44:
+        CDXC:Theming 2026-06-19-13:44:
         Background Tint presets should scan as neutrals first and then a hue-wheel sequence. Keep only fifteen presets by removing near-duplicate Sky and Purple stops, and use compact row spacing so the custom picker and hex field remain on the same row.
 
-        CDXC:SidebarTitlebarColors 2026-06-19-14:20:
+        CDXC:Theming 2026-06-19-14:20:
         Add Black to the neutral preset group because white, gray, and black are all valid untinted chrome choices. Keep the input two character cells narrower than the first compact layout so the added swatch does not force the hex field onto a second row.
 
-        CDXC:SidebarTitlebarColors 2026-06-19-14:36:
+        CDXC:Theming 2026-06-19-14:36:
         The hex field should use exactly the remaining first-row width after the swatches and custom picker. Use a zero-basis flexible input instead of a fixed character width so it fills the right-side remainder without wrapping to a second line.
       */}
       <div className='flex flex-wrap items-center gap-1.5'>
@@ -1511,7 +1511,7 @@ export function TerminalViewWidthModeField({
 }
 
 /*
- * CDXC:SidebarSpaces 2026-08-28:
+ * CDXC:Spaces 2026-08-28:
  * Spaces is a feature switch rather than a density tweak, so it reads as the
  * same combined button the Project group style row above it uses instead of the
  * small toggle the per-row visibility settings use.
@@ -1807,7 +1807,7 @@ export function getDiagnosticLoggingScenarioStateForDuration(
   now: Date = new Date()
 ) {
   /*
-   * CDXC:ChromeResponsivenessDiagnostics 2026-06-30-23:52:
+   * CDXC:Diagnostics 2026-06-30-23:52:
    * Some lag/crash diagnostic scenarios are enabled by default so repro logs
    * exist immediately after update. Persist Off as an explicit disabled state
    * instead of deleting the scenario so Settings can override those defaults.
@@ -1882,7 +1882,7 @@ export function SidebarTagListSettingsField({
   };
   const updateItemEnabled = (itemId: string, enabled: boolean) => {
     /*
-     * CDXC:SessionTagFilters 2026-06-15-22:10:
+     * CDXC:Sessions 2026-06-15-22:10:
      * The Settings switch is the primary on/off control for tag filters.
      * Switching a row off should also hide it from the sidebar filter menu,
      * while switching it back on restores visibility so the eye icon and switch
@@ -1893,7 +1893,7 @@ export function SidebarTagListSettingsField({
 
   const updateItemVisible = (itemId: string, visible: boolean) => {
     /*
-     * CDXC:SessionTagFilters 2026-06-15-22:10:
+     * CDXC:Sessions 2026-06-15-22:10:
      * The eye button mirrors the same on/off model as the switch for tag rows.
      * Showing a hidden row should re-enable it; hiding a row should disable it
      * so Settings does not present hidden filters as enabled.
@@ -1904,13 +1904,13 @@ export function SidebarTagListSettingsField({
   return (
     <details className='group w-full'>
       {/*
-       * CDXC:SessionTagFilters 2026-06-13-17:50:
+       * CDXC:Sessions 2026-06-13-17:50:
        * The bottom main Settings area starts collapsed and mirrors the
        * configurable-list chrome used by tab context menu item settings:
        * full-width rows, drag handles, enabled switches, and visibility icons.
        * Separators are real rows so users can move or hide them with tags.
        *
-       * CDXC:SessionTagFilters 2026-06-15-14:02:
+       * CDXC:Sessions 2026-06-15-14:02:
        * The expanded Sidebar Tags list should attach directly to the disclosure
        * header; no vertical gutter belongs between the header and its rows.
        */}
@@ -2061,25 +2061,25 @@ export function SidebarTagListSettingsRow({
 
 /**
  * CDXC:Settings 2026-05-06-12:57
- * CDXC:SettingsModifiedState 2026-05-07-18:03
+ * CDXC:Settings 2026-05-07-18:03
  * Every changed settings control needs a small, low-emphasis asterisk to the
  * left of its label. Position it absolutely so modified-state indication does
  * not reflow setting titles, while the tooltip action still resets only that
  * setting to DEFAULT_ghostex_SETTINGS.
  *
- * CDXC:SettingsDensity 2026-06-15-20:53:
+ * CDXC:Settings 2026-06-15-20:53:
  * Main Settings rows should not show explanatory subtitles inline because the
  * modal needs to stay dense and scannable. Reveal a compact info trigger only
  * while the row is hovered or focused, then show the description in a
  * right-side tooltip capped at 350px.
  *
- * CDXC:SettingsAdvanced 2026-06-16-10:40:
+ * CDXC:Settings 2026-06-16-10:40:
  * Advanced rows should no longer use a text badge. Mark them with a light blue
  * up-arrow affordance beside the label actions, immediately before the info
  * button when one is present, so the label stays compact while hover explains
  * the row as an Advanced Setting.
  *
- * CDXC:SettingsAdvanced 2026-06-16-18:22:
+ * CDXC:Settings 2026-06-16-18:22:
  * The advanced up-arrow is a persistent scan marker, not hover-only chrome, and
  * needs a small gap from the label so advanced rows are visible at rest.
  */

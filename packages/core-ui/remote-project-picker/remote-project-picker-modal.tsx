@@ -209,13 +209,13 @@ export function RemoteProjectPickerModal({
       title={title}
     >
       {/*
-       * CDXC:RemoteProjectPicker 2026-06-02-23:22:
+       * CDXC:RemoteMachines 2026-06-02-23:22:
        * Remote Add Project uses a path-aware browse model: typing a path browses
        * that machine's gxserver, hidden folders appear only for a dot prefix,
        * Enter adds the typed/exact path, and highlighted directories require
        * the primary modifier plus Enter to add instead of navigate.
        *
-       * CDXC:RemoteProjectPicker 2026-06-24-21:09:
+       * CDXC:RemoteMachines 2026-06-24-21:09:
        * Worktree Add Project should open from the top of the native child window
        * with equal top and side insets. The path input also needs explicit inline
        * text padding so typed project paths do not hug the input border or action.

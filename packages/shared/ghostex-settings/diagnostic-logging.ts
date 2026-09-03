@@ -314,7 +314,7 @@ export function normalizeDiagnosticLoggingSettings(candidate: unknown): Diagnost
 
 function normalizeDiagnosticLoggingScenarioState(candidate: unknown): DiagnosticLoggingScenarioState | undefined {
   /*
-   * CDXC:ChromeResponsivenessDiagnostics 2026-06-30-23:52:
+   * CDXC:Diagnostics 2026-06-30-23:52:
    * Default-on diagnostic scenarios need a durable Off state. Preserve explicit
    * enabled:false values so Settings can disable routine chrome/lag logging
    * without reset-to-default immediately turning it back on.
@@ -343,7 +343,7 @@ function normalizeDiagnosticLoggingScenarioState(candidate: unknown): Diagnostic
 
 function isValidDiagnosticLoggingExpiry(value: string): boolean {
   /*
-   * CDXC:DiagnosticsSettings 2026-06-27-22:07:
+   * CDXC:Diagnostics 2026-06-27-22:07:
    * Time-limited logging scenarios persist as ISO timestamps produced by
    * Date.toISOString. Normalize only parseable absolute times so native Swift
    * and GPUI can evaluate expiry without accepting arbitrary strings into the

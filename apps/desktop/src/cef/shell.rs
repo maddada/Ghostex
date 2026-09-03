@@ -76,7 +76,7 @@ fn cef_resize_diagnostics_enabled() -> bool {
 }
 
 /*
-CDXC:GPUICefPlatformSeam 2026-07-04:
+CDXC:CefRuntime 2026-07-04:
 This module owns every platform-independent piece of the windowed-CEF
 backend: runtime init/shutdown ordering, the app/client/bridge handler
 machinery, and the CefBrowser wrapper. Truly per-OS behavior (framework
@@ -103,7 +103,7 @@ const SIDEBAR_RUNTIME_SETTINGS_UPDATE_MESSAGE_NAME: &str =
 const SIDEBAR_GXSERVER_BOOTSTRAP_UPDATE_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.gxserverBootstrapChanged";
 /*
-CDXC:GPUISessionChatSurface 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 The Session Chat pane surface needs only the gxserver bootstrap
 (baseUrl/token/protocolVersion), never the sidebar post-function bridge. The
 sidebar bootstrap-update path deliberately refuses pages without the full
@@ -170,7 +170,7 @@ thread_local! {
 static ACTIVE_CEF_NATIVE_VIEW: AtomicUsize = AtomicUsize::new(0);
 
 /*
-CDXC:GPUIWindowsSidebarEditableFocus 2026-07-25:
+CDXC:PlatformSupport 2026-07-25:
 Windows Chromium can report the final focus transfer into a newly mounted
 sidebar input as NAVIGATION even though the app already authorized that exact
 editable node through the fixed sidebar bridge. Keep that narrow grant

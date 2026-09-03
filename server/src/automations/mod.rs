@@ -68,7 +68,7 @@ struct AutomationRunRecord {
 
 struct AutomationLaunch {
     /*
-    CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+    CDXC:Automations 2026-07-30:
     Launches that create a fresh agent session own an undelivered prompt.
     `createAgentSession` only records the prompt as `runtimeSettings.firstUserMessage`
     metadata, and the agent launch plan's `startupText` carries the agent command
@@ -87,13 +87,13 @@ const AUTOMATION_SCHEDULER_TICK_SECONDS: u64 = 30;
 const AUTOMATION_RUN_POLL_SECONDS: u64 = 5;
 const AUTOMATION_RUN_POLL_LIMIT: usize = 720;
 /*
-CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+CDXC:Automations 2026-07-30:
 Mirror the GPUI sidebar's agent prompt contract (`GPUI_AGENT_PROMPT_READY_DELAY_MS`):
 a freshly launched agent TUI needs a settle window before it accepts composer
 input. The daemon waits inside the spawned run watcher, never inside the
 scheduler tick or the `runAutomationNow` endpoint, so neither blocks.
 
-CDXC:SessionChatComposerReady 2026-08-26: the settle window is now the FALLBACK
+CDXC:SessionChat 2026-08-26: the settle window is now the FALLBACK
 for an agent with no measured composer signature; a signed agent is released as
 soon as its input box appears. An automation is the case that suffered most from
 the blind version — nobody is watching the pane, so a prompt typed into a boot
@@ -119,7 +119,7 @@ impl AutomationRuntime {
 
     pub fn start(&self, mut shutdown_rx: broadcast::Receiver<()>) {
         /*
-        CDXC:GxserverAutomations 2026-06-29-15:55:
+        CDXC:Automations 2026-06-29-15:55:
         Automations are daemon-owned work now, not macOS renderer timers. Keep the scheduler loop in the gxserver automation module so CLI, macOS, GPUI, and remote clients share one durable SQLite source of truth and one runner while Ghostex is open.
         */
         let runtime = self.clone();
@@ -223,7 +223,7 @@ impl AutomationRuntime {
     }
 
     /*
-    CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+    CDXC:Automations 2026-07-30:
     Deliver the automation prompt the same way the GPUI sidebar delivers a first
     user message: start the provider, let the agent TUI settle, then submit the
     text through `sendSessionMessage`. Without this the session launches its agent
@@ -948,7 +948,7 @@ fn read_automation_result_from_session(
 }
 
 /*
-CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+CDXC:Automations 2026-07-30:
 The delivered prompt is echoed into the session scrollback, so the marker scan
 reads the instruction block too. Scanning only the first occurrence let that echo
 decide the run: every run resolved to the first status word named in the
@@ -1903,7 +1903,7 @@ fn find_run_session_project_id(
 }
 
 /*
-CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+CDXC:Automations 2026-07-30:
 This text is typed into the session, so it is echoed into the same scrollback the
 run watcher scans. Two constraints therefore apply at once, and they pull against
 each other.
@@ -2222,7 +2222,7 @@ mod tests {
     #[test]
     fn prompt_instructions_never_parse_as_a_result() {
         /*
-        CDXC:GxserverAutomationPromptDelivery 2026-07-30:
+        CDXC:Automations 2026-07-30:
         Regression lock for the pair of bugs that made every delivered run report a
         bogus result: the prompt is echoed into the scanned scrollback, so the
         instruction block must not contain a parseable marker line, and the scan

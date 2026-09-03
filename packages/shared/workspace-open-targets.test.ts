@@ -9,7 +9,7 @@ import {
 describe('workspace open targets', () => {
   test('keeps embedded editor out of the built-in open target catalog', () => {
     /**
-     * CDXC:TitlebarOpenIn 2026-05-16-23:02
+     * CDXC:Titlebar 2026-05-16-23:02
      * Embedded Editor is opened through Code mode, so the Open In target
      * catalog should contain only external project-open destinations.
      */

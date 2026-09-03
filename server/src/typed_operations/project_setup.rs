@@ -26,7 +26,7 @@ pub(crate) async fn run_project_setup_command(
     let action = action.expect("validated setup action");
     let setup_project = resolve_project_setup_command_project(params, context)?;
     /*
-    CDXC:GlobalProjectDefaults 2026-08-02:
+    CDXC:Projects 2026-08-02:
     A project without its own worktree command now runs the Global Default. With
     no global configured this resolves to None and the operation still no-ops
     below, which is the pre-feature behavior.

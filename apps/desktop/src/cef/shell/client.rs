@@ -71,25 +71,25 @@ wrap_client! {
             message: Option<&mut ProcessMessage>,
         ) -> c_int {
             /*
-            CDXC:GPUIProjectSidebarBridge 2026-06-23-18:29:
+            CDXC:CefRuntime 2026-06-23-18:29:
             The GPUI sidebar bridge may carry only the allowlisted typed sidebar events from `window.ghostexGpui`, each as one bounded string payload. Ordinary Browser CEF surfaces construct clients without this handler, and CEF only classifies the private event kind; strict JSON parsing and stale/private-shape rejection stay in the GPUI app stores with no logging or persistence at this boundary.
 
-            CDXC:GPUISidebarProjectPathActions 2026-06-24-14:18:
+            CDXC:Projects 2026-06-24-14:18:
             Sidebar-native project path actions use the same fixed-function CEF bridge as project-context/readiness events. CEF forwards only a bounded string from the bundled sidebar main frame; Rust app code must parse the small action/project-id JSON and resolve project paths through gxserver, not from renderer-provided absolute path data.
 
-            CDXC:GPUISidebarGit 2026-06-24-15:43:
+            CDXC:Git 2026-06-24-15:43:
             Existing-PR browser open and changed-file IDE open are still sidebar-only native side effects on this fixed bridge. CEF does not trust or inspect URLs or paths; app-side Rust must re-query gxserver and treat any file path as a relative candidate only.
 
-            CDXC:GPUICommandPane 2026-06-24-23:17:
+            CDXC:CommandPane 2026-06-24-23:17:
             Sidebar command actions use their own fixed sidebar bridge function so the shared SidebarApp and command palette can ask GPUI to run the gxserver-projected action through Rust-owned Browser or command-pane paths. CEF still forwards only one bounded string from the sidebar main frame and does not log, persist, inspect, or execute command text.
 
-            CDXC:GPUIAppShots 2026-06-25-23:28:
+            CDXC:AppShots 2026-06-25-23:28:
             App Shot prompt insertion uses its own fixed sidebar bridge function. CEF forwards only one bounded JSON string from the bundled sidebar; app-side Rust must parse the gxserver presentation session id and prompt, then verify the exact mounted Agents surface before writing terminal bytes.
 
-            CDXC:GPUIAppShots 2026-06-26-04:27:
+            CDXC:AppShots 2026-06-26-04:27:
             The same bridge may carry a machine-scoped remote presentation session id for App Shots, but CEF remains a string forwarder only; Rust must decline unless the exact remote attach Agents terminal is already mounted.
 
-            CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+            CDXC:StatusPet 2026-06-26-04:38:
             GPUI status indicators and pet overlay state use their own fixed sidebar bridge functions. CEF forwards only bounded first-party strings; app-side Rust must strictly parse counts/settings/candidate ids and never treat renderer paths, URLs, command text, terminal output, tokens, or generic message names as presentation authority.
             */
             if source_process != ProcessId::RENDERER {
@@ -133,7 +133,7 @@ wrap_client! {
             let payload = CefString::from(&arguments.string(0)).to_string();
             if is_sidebar_editable_focus_message {
                 /*
-                CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+                CDXC:FocusRouting 2026-07-22:
                 The shared sidebar surface is mouse-focus passive: clicking its
                 background never moves AppKit first responder away from the
                 active terminal. The only way the sidebar may take keyboard
@@ -162,7 +162,7 @@ wrap_client! {
                     return 0;
                 };
                 /*
-                CDXC:GPUIProjectWorkareaCefBridge 2026-06-24-11:03:
+                CDXC:CefRuntime 2026-06-24-11:03:
                 Project-workarea CEF process messages are fixed-function and main-frame-only like the sidebar bridge, but their payload budget is larger because Manage save requests carry bounded file contents. The CEF boundary forwards only in-memory strings to the app handler and does not log, persist, inspect URL/title state, expose generic IPC, or create a WKWebView/WebKit path.
                 */
                 if payload.chars().count() > PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS {
@@ -178,7 +178,7 @@ wrap_client! {
                     return 0;
                 };
                 /*
-                CDXC:GPUIExtensionRemoteUrlSurface 2026-08-28:
+                CDXC:Extensions 2026-08-28:
                 A remote `server.url` surface never receives the bridge install
                 message, so this shape can only arrive from a page that built
                 the message itself. Drop it here as well, so the inbound path
@@ -212,7 +212,7 @@ wrap_client! {
                     return 0;
                 };
                 /*
-                CDXC:GPUITitlebarAppModalHost 2026-06-24-10:42:
+                CDXC:AppModal 2026-06-24-10:42:
                 The GPUI app-modal host and titlebar Tips panel reuse the macOS React bridge shape, but CEF forwards each message as a single bounded JSON string from first-party bundled pages only. Keep this main-frame-only and handler-scoped so Browser tabs, workarea pages, logs, persistence, raw URLs, page titles, and generic IPC never receive app-modal payloads.
                 */
                 if payload.chars().count() > APP_MODAL_HOST_BRIDGE_PAYLOAD_MAX_CHARS {
@@ -228,7 +228,7 @@ wrap_client! {
                     return 0;
                 };
                 /*
-                CDXC:GPUITitlebarNativeHost 2026-07-08:
+                CDXC:Titlebar 2026-07-08:
                 The bundled titlebar-host Resources document uses macOS's `ghostexNativeHost` bridge for process sampling and titlebar actions. CEF forwards only a bounded main-frame JSON string from first-party modal/sidebar/titlebar surfaces and tags it as native-host; app-side Rust owns the fixed process allowlist and action validation.
                 */
                 if payload.chars().count() > NATIVE_HOST_BRIDGE_PAYLOAD_MAX_CHARS {
@@ -319,7 +319,7 @@ wrap_load_handler! {
             }
 
             /*
-            CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+            CDXC:Onboarding 2026-08-18:
             Report only the main-frame load-end edge to the app; sub-frames
             (ads, player iframes) must not retrigger the host action.
             */
@@ -349,10 +349,10 @@ wrap_load_handler! {
             }
 
             /*
-            CDXC:GPUIProjectSidebarBridge 2026-06-24-11:17:
+            CDXC:CefRuntime 2026-06-24-11:17:
             Install renderer-side `window.ghostexGpui` only for sidebar CEF clients with fixed allowlisted post functions, strict debug/beta booleans, saved shared Settings, and the real gxserver bootstrap when the local token helper can construct it. The private install message may carry the loopback base URL, bearer token, protocol version, stable client id, and only explicit gxserver ids from app state; ordinary Browser, workarea, and modal CEF clients never attach this load handler or receive the bootstrap.
 
-            CDXC:GPUISettingsSidebarHandoff 2026-06-24-11:22:
+            CDXC:Settings 2026-06-24-11:22:
             The same sidebar-only runtime message must carry the saved shared Settings object so the mounted React SidebarApp can normalize real user preferences instead of booting from hardcoded GPUI defaults plus debug/beta flags. Keep this as a bounded first-party CEF payload scoped to the sidebar renderer; Browser, workarea, and modal-host clients must not receive it.
             */
             send_sidebar_install_process_message(
@@ -384,7 +384,7 @@ wrap_load_handler! {
             }
 
             /*
-            CDXC:GPUISessionChatSurface 2026-07-31:
+            CDXC:SessionChat 2026-07-31:
             Session Chat CEF clients receive only the gxserver bootstrap so the
             bundled chat.html page can call the session-chat endpoints and open
             /api/events directly, matching the sidebar's loopback token scope.
@@ -421,7 +421,7 @@ wrap_load_handler! {
             }
 
             /*
-            CDXC:GPUIProjectWorkareaCefBridge 2026-06-24-11:03:
+            CDXC:CefRuntime 2026-06-24-11:03:
             Project workarea CEF clients install only the Kanban/Manage fixed bridge functions after the first-party CEF entry loads. Sidebar and ordinary Browser clients do not receive this handler, keeping project file/board messages out of generic Browser tabs and avoiding WKWebView/WebKit compatibility at the native runtime layer.
             */
             let mut message =
@@ -467,10 +467,10 @@ wrap_render_process_handler! {
                 return;
             };
             /*
-            CDXC:GPUITitlebarAppModalHost 2026-06-24-11:09:
+            CDXC:AppModal 2026-06-24-11:09:
             Install the CEF-compatible `window.webkit.messageHandlers.ghostexAppModalHost` shim at V8 context creation for only bundled modal-host.html, titlebar-host.html, and sidebar index.html entries. Install `ghostexNativeHost` for titlebar-host and the first-party sidebar so either surface can invoke Rust's fixed, validated native actions, including gxserver lifecycle controls. The shared React modal host posts `ready` during mount, the titlebar panels post dropdown/process messages during hydration, and the shared sidebar can emit Settings/Hotkeys/Command Palette opens after hydration, so waiting for load-end would race real presentation. Only modal-host.html receives the native-window identity fields; Browser tabs, project workareas, arbitrary pages, raw URLs, titles, logs, persistence, and generic IPC do not receive these bridges.
 
-            CDXC:GPUILoggingRemoval 2026-06-28-17:06:
+            CDXC:Diagnostics 2026-06-28-17:06:
             App-modal CEF setup keeps only the functional host message bridge. Do not emit lifecycle diagnostic IPC or renderer logging events from bridge installation while GPUI logging is intentionally removed.
             */
             install_app_modal_host_v8_bridge(Some(&mut *context), surface);
@@ -552,7 +552,7 @@ wrap_render_process_handler! {
                 update_sidebar_runtime_settings_v8_bridge(Some(&mut context), runtime_settings);
             } else if is_session_chat_gxserver_bootstrap_message {
                 /*
-                CDXC:GPUISessionChatSurface 2026-07-31:
+                CDXC:SessionChat 2026-07-31:
                 Session Chat bootstrap install creates the ghostexGpui
                 namespace when missing and sets only the gxserverBootstrap
                 object plus the fixed changed callback; it must not install

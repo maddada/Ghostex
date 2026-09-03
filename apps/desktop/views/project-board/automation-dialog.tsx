@@ -1,5 +1,5 @@
 /**
- * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+ * CDXC:ProjectBoard 2026-08-24:
  * The automation create/edit dialog moved out of project-board-app.tsx so the
  * Codex-style redesign can be rendered from Storybook with mock props. It is
  * pure presentation over the automation draft state and its save callback.
@@ -98,7 +98,7 @@ export function AutomationDialog({
         </DialogHeader>
         <div className='project-ticket-dialog-body project-automation-form vertical-scroll-fade-mask'>
           {/*
-           * CDXC:ProjectAutomations 2026-06-09-10:30:
+           * CDXC:Automations 2026-06-09-10:30:
            * Automation setup is scoped to the Project board's current project, so the create/edit dialog drops project switching and keeps dropdown widths aligned at 250px for agent, schedule, weekday, and thread-session fields.
            *
            * CDXC:Automations 2026-06-30-11:05:

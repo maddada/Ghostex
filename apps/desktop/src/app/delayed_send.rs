@@ -26,7 +26,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:SidebarHudSettingsMutation 2026-06-24-20:54:
+        CDXC:AgentLauncher 2026-06-24-20:54:
         Settings > Agents writes in GPUI must enter gxserver's semantic agent/action mutation contract. The app-modal bridge only validates the bounded CEF message shape; gxserver owns hidden-default restoration, custom metadata persistence, order normalization, and refreshed HUD/project rows without logging launcher text, project identity, paths, URLs, tokens, stdout, or stderr.
         */
         let write = match gpui_sidebar_agent_metadata_write_from_command(command) {
@@ -68,7 +68,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:SidebarHudSettingsMutation 2026-06-24-20:54:
+        CDXC:AgentLauncher 2026-06-24-20:54:
         Settings > Actions writes in GPUI are active-project scoped but gxserver-owned. Pass the current app-modal active project id into the semantic mutation contract so gxserver resolves worktree parent ownership, deleted default actions, command/browser validation, display order, and refreshed HUD/project rows without local metadata rewrites.
         */
         let active_project_id = self.gpui_app_modal_active_project_id();
@@ -191,7 +191,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
+        CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompt saves must use the shared gxserver product-data contract
         while keeping the React `savePinnedPrompt` bridge message unchanged.
         Reject malformed non-string fields locally and let gxserver preserve
@@ -230,7 +230,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIRemoteDelayedSend 2026-08-17:
+        CDXC:DelayedSend 2026-08-17:
         Remote sidebar rows carry their canonical machine/project/session id,
         but they do not belong to a local command tab or local Agents mapping.
         Return that bounded command to the sidebar runtime so it can submit the
@@ -246,7 +246,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUICommandDelayedSend 2026-06-25-23:04:
+        CDXC:DelayedSend 2026-06-25-23:04:
         `scheduleDelayedSend` is a direct command-session sidebar command, so resolve its external `G{u64}` sessionId through the shared live command-tab bridge before reading delayMs. Malformed, legacy numeric, stale, missing, and orphan ids must no-op without falling back to the focused command group or surfacing duration validation for the wrong target.
         */
         let Some((_group_id, session_id)) =
@@ -289,7 +289,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPaneRename 2026-06-25-16:33:
+        CDXC:CommandPane 2026-06-25-16:33:
         Rename Session submissions from a GPUI command-pane modal are local command-tab title edits. Accept only the command session id and normalized title; generated-title requests require a gxserver-backed agent session and must not write long prompt text into a local command tab.
         */
         let Some(session_id) = command
@@ -354,7 +354,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUICommandDelayedSend 2026-06-25-23:04:
+        CDXC:DelayedSend 2026-06-25-23:04:
         Cancel submissions from the shared sidebar/app-modal bridge must target a live command tab, not a stale stored command-session row. Resolve the external `G{u64}` sessionId through the shared app-modal command bridge so malformed, legacy numeric, missing, orphan, or stale ids no-op before any runtime timer is cleared.
         */
         let Some((_group_id, session_id)) =
@@ -396,7 +396,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandStartupRestore 2026-06-25-17:25:
+        CDXC:Workarea 2026-06-25-17:25:
         Startup activity restore mutates only the command-pane model and leaves persistence to the app startup pass after Delayed Send restore also runs. This keeps Working wake hints one-shot without rewriting a restored timer checkpoint before the runtime timer map is installed.
         */
         if !command_pane_apply_startup_activity_restore_intents(
@@ -416,10 +416,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandDelayedSend 2026-06-25-16:41:
+        CDXC:DelayedSend 2026-06-25-16:41:
         Startup re-arms restored command Delayed Send timers from the saved remaining-duration checkpoint as normal runtime timers. This keeps native parity without persisting command text, terminal content, paths, titles, Ghostty runtime ids, stdout/stderr, or old deadlines as authority after restart.
 
-        CDXC:GPUICommandDelayedSend 2026-06-25-16:56:
+        CDXC:DelayedSend 2026-06-25-16:56:
         Restored Delayed Send timers are also startup wake reasons for command-pane tabs. Wake only after loading a safe persisted checkpoint so a restarted timer can reach a command terminal body, while manual in-process Sleep remains parked until the user wakes it.
         */
         let mut changed = false;
@@ -473,7 +473,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandPaneGxserverRestore 2026-07-04:
+        CDXC:Workarea 2026-07-04:
         Startup restore validates persisted command-surface daemon sessions by
         running the same wake/attach metadata flow as live command tabs. Awake
         restored tabs get one-shot attach payloads for their command mount
@@ -524,7 +524,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandDelayedSend 2026-06-25-15:11:
+        CDXC:DelayedSend 2026-06-25-15:11:
         A GPUI Delayed Send timer may be armed only for a currently mounted command terminal body. This preserves native's exact target-session behavior without falling back to shell focus, titles, command text, persisted state, or another visible terminal when the original command surface is unavailable.
         */
         if command_pane_mounted_slot_for_session(&self.command_pane, session_id).is_none() {
@@ -564,7 +564,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandDelayedSend 2026-06-25-15:42:
+        CDXC:DelayedSend 2026-06-25-15:42:
         The command-pane Delayed Send body badge is live countdown chrome. Run a process-local one-second ticker only while timers exist so the centered badge can update without persisting deadlines, logging command content, or creating a renderer-owned timer fallback.
         */
         if self.command_delayed_send_countdown_ticker_active
@@ -602,7 +602,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandDelayedSend 2026-06-25-16:41:
+        CDXC:DelayedSend 2026-06-25-16:41:
         Native refreshes Delayed Send remaining-duration checkpoints once per minute so restart resumes near the live countdown position. GPUI mirrors that with a low-frequency shell-state write while timers exist, still serializing only safe timer metadata through the central writer.
         */
         if self.command_delayed_send_persistence_ticker_active
@@ -726,7 +726,7 @@ impl GhostexGpuiApp {
         open_message["supportsSendWhenAllProjectSessionsStop"] =
             serde_json::json!(supports_project_scope);
         /*
-        CDXC:GxserverDelayedSends 2026-08-19:
+        CDXC:DelayedSend 2026-08-19:
         Armed Delayed Sends live on the daemon, and the sidebar row already
         carries that projected trigger state into the open message. Only a
         locally owned watcher/timer may restate it, so this enrichment must not
@@ -1029,7 +1029,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIAgentsDelayedSend 2026-07-21:
+        CDXC:DelayedSend 2026-07-21:
         Agents Delayed Send is a terminal-engine-neutral action. The old arm
         gate looked only in the native Ghostty surface map, so every terminal
         owned by the GPUI engine was rejected even though the fire path already
@@ -1545,13 +1545,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandTabContextMenu 2026-06-25-17:37:
+        CDXC:ContextMenus 2026-06-25-17:37:
         Close After Done from a clicked command tab is session-scoped like native. Validate the clicked tab membership before toggling so retained command-tab action handlers cannot arm a stale or unrelated command session.
 
-        CDXC:GPUICommandTabContextMenu 2026-06-25-18:33:
+        CDXC:ContextMenus 2026-06-25-18:33:
         Retained clicked-tab action handlers focus the clicked command terminal before dispatch. GPUI Close After Done should therefore make the clicked command tab the command-pane focus before toggling the armed flag, without expanding collapsed command chrome.
 
-        CDXC:GPUICommandTabContextMenu 2026-06-27-01:55:
+        CDXC:ContextMenus 2026-06-27-01:55:
         This path is no longer emitted by the command-tab right-click menu; focused command-palette/sidebar/modal routes still use it to preserve exact target validation.
         */
         if !self.focus_command_pane_tab_for_context_session_action(
@@ -1571,10 +1571,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandCloseAfterDone 2026-06-25-15:24:
+        CDXC:Sessions 2026-06-25-15:24:
         The command-palette Close After Done row is terminal-scoped command-pane behavior. Toggle the focused command session's armed flag, start the three-minute countdown only once the session is done/non-working, and keep deadlines/countdowns runtime-only.
 
-        CDXC:GPUICommandCloseAfterDone 2026-06-25-16:52:
+        CDXC:Sessions 2026-06-25-16:52:
         Sleeping command tabs may still toggle Close After Done like native focused-session routing. Arming a sleeping tab persists only the boolean intent; no countdown starts until the tab wakes and becomes Done.
         */
         match gpui_command_close_after_done_toggle_target(&self.command_pane, session_id) {
@@ -1703,7 +1703,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPaneTimers 2026-06-25-17:09:
+        CDXC:DelayedSend 2026-06-25-17:09:
         Close After Done remaining labels are sidebar/titlebar projection chrome, matching native's one-second publish loop. Keep this ticker process-local and active only while runtime countdowns exist; it must not persist countdown labels, inspect command output, or read status-file paths.
         */
         if self.command_close_after_done_countdown_ticker_active
@@ -1903,7 +1903,7 @@ impl GhostexGpuiApp {
                 self.handle_gpui_pick_replacement_project_folder_message(project_id, cx);
             }
             /*
-            CDXC:SessionAgentNotes 2026-08-24:
+            CDXC:SessionNotes 2026-08-24:
             The Session Note dialog's confirm. Like `removeProject`, this is a
             sidebar-owned write that happens to be issued from an app-modal
             window, so it is forwarded to the sidebar runtime rather than acted
@@ -1939,7 +1939,7 @@ impl GhostexGpuiApp {
                 self.dispatch_gpui_sidebar_host_message(message, cx);
             }
             /*
-            CDXC:SidebarSpaces 2026-08-27:
+            CDXC:Spaces 2026-08-27:
             The New/Edit Space dialog's confirm and delete. Like `setSessionNote`
             this is a sidebar-owned write issued from an app-modal window, so it
             is forwarded to the sidebar rather than acted on here — and unlike
@@ -2066,46 +2066,46 @@ impl GhostexGpuiApp {
                     return;
                 };
                 /*
-                CDXC:GPUICommandFocusedSessionActions 2026-06-25-15:01:
+                CDXC:FocusMode 2026-06-25-15:01:
                 The shared command palette posts focused-session commands as `runGhostexHotkeyAction`. Handle command-pane Sleep/Wake/Close focused-session ids directly in GPUI before modal routing so command-palette rows operate on the shell-focused command tab instead of no-oping or trying to open another modal.
 
-                CDXC:GPUICommandDelayedSend 2026-06-27-06:37:
+                CDXC:DelayedSend 2026-06-27-06:37:
                 The shared Delayed Send row is also a focused-pane action, but native command terminals consume it through the command-panel titlebar default no-op. GPUI must consume the id before generic modal routing without opening the focused command-pane timer modal.
 
-                CDXC:GPUICommandCloseAfterDone 2026-06-25-15:24:
+                CDXC:Sessions 2026-06-25-15:24:
                 The shared Close After Done row is also a focused command-terminal action. In GPUI command panes it toggles the focused mounted command tab's terminal-scoped watcher before modal routing, matching native command-palette behavior without applying the timer to Agents, Browser, or project-editor focus.
 
-                CDXC:GPUICommandPaneRename 2026-06-25-16:33:
+                CDXC:CommandPane 2026-06-25-16:33:
                 Rename Active Session is also a focused command-terminal action. When the command pane owns shell focus, open the shared Rename Session modal for the active command tab instead of falling through to unrelated app-modal commands.
 
-                CDXC:GPUICommandPalette 2026-06-25-17:32:
+                CDXC:CommandPalette 2026-06-25-17:32:
                 The shared command palette sends focused-pane split/open/merge actions through the same `runGhostexHotkeyAction` bridge as focused-session actions. Route the supported GPUI pane actions to the existing shell hotkey helpers before modal routing so command-pane focus can create command splits and Browser opens without requiring a separate keybinding event.
 
-                CDXC:GPUICommandPalette 2026-06-26-07:24:
+                CDXC:CommandPalette 2026-06-26-07:24:
                 Command-palette Create Session is ordinary focused hotkey behavior in GPUI. Dispatch it to the same Cmd+T helper before app-modal routing so command-pane focus and Agents-pane focus keep their existing source gates and placeholder semantics.
 
-                CDXC:GPUICommandPalette 2026-06-26-07:24:
+                CDXC:CommandPalette 2026-06-26-07:24:
                 Shared workarea switch rows also arrive as hotkey actions. Route them before app-modal fallback through `switch_workarea_from_hotkey` so command-palette selection uses the same titlebar availability checks, no-wake lifecycle, focus target, Browser visibility, and persistence behavior as Option+1..5.
 
-                CDXC:GPUICommandPalette 2026-06-26-07:36:
+                CDXC:CommandPalette 2026-06-26-07:36:
                 Command-palette focus-navigation rows are shell navigation, not app-modal commands. Route tab cycling and directional focus through the same GPUI keyboard helpers as direct hotkeys so command-pane, Agents, Browser, and project-editor focus keep their existing source gates and layout semantics.
 
-                CDXC:GPUICommandPalette 2026-06-26-10:04:
+                CDXC:CommandPalette 2026-06-26-10:04:
                 Shared previous/next group focus is render-order navigation, not spatial arrow focus. Dispatch `focusPreviousGroup` and `focusNextGroup` directly through the existing render-order workspace traversal only from Agents-pane or command-pane focus so GPUI moves like native focusAdjacentGroup without adding numbered group slots, project jumps, or fallback guessing.
 
-                CDXC:GPUICommandPalette 2026-06-26-10:04:
+                CDXC:CommandPalette 2026-06-26-10:04:
                 Command-palette Start Action 1-5 rows are positional titlebar Actions hotkeys. Dispatch them through the existing titlebar action index runner so GPUI executes the configured project action without adding renderer payloads containing command text, URLs, paths, or session data.
 
-                CDXC:GPUISidebarCollapse 2026-06-26-10:04:
+                CDXC:Sidebar 2026-06-26-10:04:
                 `toggleSidebarCollapsed` is shell chrome, not a modal command. Route it before app-modal fallback so the command-palette row and Cmd+B hide or restore the GPUI sidebar and divider while preserving the expanded sidebar width.
 
-                CDXC:GPUISidebarSide 2026-06-26-23:35:
+                CDXC:Sidebar 2026-06-26-23:35:
                 `moveSidebar` is also shell chrome, not an app-modal command. Route it beside collapse handling so the shared command-palette row flips GPUI's normal-layout sidebar side and persists `sidebarSide` without opening fallback UI.
 
-                CDXC:GPUICommandPalette 2026-06-26-23:20:
+                CDXC:CommandPalette 2026-06-26-23:20:
                 Numbered session-slot rows are delegated to SidebarApp as nativeHotkey messages because rendered sidebar slot order is the only safe owner for `focusSessionSlot1..9`. Previous/next session remains GPUI tab-cycle routing, and jump-to-project ids must not enter this bounce path because SidebarApp forwards those back to native.
 
-                CDXC:GPUIProjectHotkeys 2026-06-26-23:42:
+                CDXC:Hotkeys 2026-06-26-23:42:
                 Project jump rows also depend on SidebarApp's rendered project order, but they must use the dedicated `gpuiProjectSlotHotkey` host message instead of `nativeHotkey` so SidebarApp resolves the slot locally without forwarding the same `jumpToProject*` id back to GPUI.
                 */
                 if self.run_gpui_terminal_toolbar_hotkey_action(action_id, window, cx) {
@@ -2113,7 +2113,7 @@ impl GhostexGpuiApp {
                 }
                 if action_id == "toggleChatView" {
                     /*
-                    CDXC:GPUISessionChatSurface 2026-07-31:
+                    CDXC:SessionChat 2026-07-31:
                     Chat View toggling must work while the terminal is hidden
                     behind the chat surface, so it resolves the focused Agents
                     session directly instead of requiring a focused terminal
@@ -2134,7 +2134,7 @@ impl GhostexGpuiApp {
                     navigation_history::navigation_history_hotkey_direction(action_id)
                 {
                     /*
-                    CDXC:NavigationHistory 2026-08-19:
+                    CDXC:Navigation 2026-08-19:
                     Back/Forward is shell navigation, not an app-modal command,
                     and it is owned by the sidebar runtime rather than Rust —
                     the keypress takes the exact same route as a click on the
@@ -2530,7 +2530,7 @@ impl GhostexGpuiApp {
             }
             "requestAgentsHubCatalog" => {
                 /*
-                CDXC:GPUIAgentsHubBridge 2026-06-24-12:26:
+                CDXC:AgentLauncher 2026-06-24-12:26:
                 Agents Hub catalog requests return metadata-only rows through the existing app-modal sidebarState path. File bodies stay out of the open/catalog message and are read only by requestAgentsHubFileContent after Rust validates the selected file against the generated Hub catalog.
                 */
                 self.run_gpui_app_modal_sidebar_status_task(gpui_agents_hub_catalog_message, cx);
@@ -2747,7 +2747,7 @@ impl GhostexGpuiApp {
             }
             "requestStashedPrompts" => {
                 /*
-                CDXC:StashedPrompts 2026-07-29:
+                CDXC:SavedPrompts 2026-07-29:
                 The Prompts modal loads stashed prompt-editor saves on demand
                 through the local gxserver daemon. The answer is a transient
                 `stashedPromptsResult` sidebarState payload the modal host
@@ -2819,7 +2819,7 @@ impl GhostexGpuiApp {
             }
             "saveStashedPromptTag" => {
                 /*
-                CDXC:StashedPromptTags 2026-08-23:
+                CDXC:SavedPrompts 2026-08-23:
                 Tag create/rename runs through the same local gxserver daemon as
                 the prompts, and answers with the whole refreshed catalogue so
                 the modal's rail cannot drift from what is stored.
@@ -2943,7 +2943,7 @@ impl GhostexGpuiApp {
                 });
                 if !inserted {
                     /*
-                    CDXC:StashedPrompts 2026-07-29:
+                    CDXC:SavedPrompts 2026-07-29:
                     When the originating terminal is gone (closed tab, sleeping
                     session, all-projects row from another project), fall back
                     to the clipboard and say so instead of silently dropping
@@ -3023,7 +3023,7 @@ impl GhostexGpuiApp {
                 }
             }
             /*
-            CDXC:StashedPromptSessionAssociation 2026-08-24:
+            CDXC:SavedPrompts 2026-08-24:
             Saved Prompts rows carry the raw gxserver ids of the session they
             were stashed from plus that session's provider conversation id. The
             modal closes itself (like the Quick Access rows above), so this arm
@@ -3094,7 +3094,7 @@ impl GhostexGpuiApp {
                                     session_id,
                                 } => {
                                     /*
-                                    CDXC:GPUIPreviousSessionsModal 2026-07-11:
+                                    CDXC:Sessions 2026-07-11:
                                     macOS restores a previous terminal by creating its
                                     replacement row and then running the normal attach
                                     sequence. A focus-only dispatch lets the presentation
@@ -3225,7 +3225,7 @@ impl GhostexGpuiApp {
             }
             "searchPreviousSessionsByText" => {
                 /*
-                CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
+                CDXC:Sessions 2026-06-24-11:53:
                 The shared Previous Sessions modal no longer renders Search by Text launch buttons, and GPUI does not yet have enough current-project launch authority here to recreate macOS's direct text-search terminal honestly. Keep the legacy command harmless and response-free instead of faking a terminal launch or claiming success.
                 */
             }

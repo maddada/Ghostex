@@ -1,5 +1,5 @@
 /*
-CDXC:SidebarSpaces 2026-09-02:
+CDXC:Spaces 2026-09-02:
 The built-in "Other" Space. Ghostex has no "All Projects" view any more: the
 LAST button of every Space row is Other, and it shows exactly the groups and
 ungrouped projects that no user Space claims.

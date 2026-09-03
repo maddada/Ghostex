@@ -9,7 +9,7 @@ use crate::session_chat::*;
 /// Hook-supplied `agentSessionPath` wins when it points at an existing .jsonl
 /// file; otherwise fall back to the per-agent session-id search. Grok's hooks
 /// report `updates.jsonl`, which is exactly the file chat follows
-/// (`CDXC:SessionChatGrokUpdates`), so every agent's supplied path is taken
+/// (`CDXC:AgentProviders`), so every agent's supplied path is taken
 /// as-is now.
 pub fn resolve_session_chat_transcript_path(
     agent: SessionChatTranscriptAgent,
@@ -31,7 +31,7 @@ pub fn resolve_session_chat_transcript_path(
     if agent == SessionChatTranscriptAgent::Antigravity {
         // Antigravity's hooks name its raw step log, which is a .jsonl the
         // fast path below would tail as-is; chat reads the mirror that splits
-        // each step into rows instead (`CDXC:SessionChatAntigravity`).
+        // each step into rows instead (`CDXC:AgentProviders`).
         return crate::session_chat_antigravity_mirror::resolve_antigravity_chat_transcript_path(
             agent_session_id,
             supplied_path.as_deref(),
@@ -234,7 +234,7 @@ pub(crate) fn is_claude_sidechain_transcript_name(path: &Path) -> bool {
 }
 
 /*
-CDXC:SessionChatCore 2026-08-01:
+CDXC:SessionChat 2026-08-01:
 The scan used to accept any file whose first 256KiB merely CONTAINED the literal
 `"session_id":"<id>"`. Transcripts quote each other constantly (orchestrator
 prompts, hook payloads, tool results), so an unrelated transcript could be
@@ -324,7 +324,7 @@ fn find_grok_session_file(session_id: &str, file_name: &str) -> Option<PathBuf> 
     None
 }
 
-/// Chat reads the live update stream (`CDXC:SessionChatGrokUpdates`).
+/// Chat reads the live update stream (`CDXC:AgentProviders`).
 fn find_grok_session_update_log(session_id: &str) -> Option<PathBuf> {
     find_grok_session_file(session_id, GROK_SESSION_UPDATE_LOG_FILE)
 }
@@ -339,7 +339,7 @@ pub fn find_grok_chat_history(session_id: &str) -> Option<PathBuf> {
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatIdentity 2026-08-02:
+CDXC:SessionIdentity 2026-08-02:
 Claude Code starts a NEW `<uuid>.jsonl` when a conversation is compacted or
 resumed, and the registry only learns the new id from an agent hook. Hooks never
 fire for background-job continuations, so a Ghostex session can keep its stored
@@ -368,7 +368,7 @@ Codex RESUME stays out of scope: it re-plays `session_meta` into the new rollout
 with the id the daemon already stores (the "first-session_meta-wins" rule in the
 decoders), so the stored identity keeps resolving.
 
-Codex FORK is not (CDXC:SessionChatIdentity 2026-08-24). `codex fork` opens a new
+Codex FORK is not (CDXC:SessionIdentity 2026-08-24). `codex fork` opens a new
 `rollout-<ts>-<uuid>.jsonl` under a NEW id, leaves the predecessor dead, and
 never tells the registry — so it froze chat exactly like a Claude compaction.
 `find_codex_successor_transcript` handles it, proving lineage from the opening

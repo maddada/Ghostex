@@ -16,7 +16,7 @@ const APP_ICON_LIST_LIMIT: usize = 10;
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
 
 /*
-CDXC:GPUIAppIcon 2026-07-12:
+CDXC:Icons 2026-07-12:
 The GPUI app icon backend shares the app's settings key and resolved Ghostex
 icons directory. Rust keeps all persisted/renderer identifiers as
 validated filenames, scans only bounded valid PNGs, and copies picker results

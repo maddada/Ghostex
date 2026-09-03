@@ -11,7 +11,7 @@ type SidebarRefreshSnapshotMessage = {
 };
 
 /**
- * CDXC:SidebarRefreshDiagnostics 2026-05-11-12:32
+ * CDXC:Diagnostics 2026-05-11-12:32
  * Sidebar refresh investigations need a dedicated persistent log that records
  * React instance lifetime, hydrate boundaries, and action-triggered session
  * count changes only when Settings enables the relevant scenario; the native
@@ -48,7 +48,7 @@ export function summarizeSidebarRefreshMessage(
 ): Record<string, unknown> {
   const sessionCount = countSidebarRefreshSessions(message.groups);
   /**
-   * CDXC:SidebarRefreshDiagnostics 2026-06-06-23:07:
+   * CDXC:Diagnostics 2026-06-06-23:07:
    * Hydrate diagnostics must stay count-only. Full session-id arrays made the
    * refresh log grow by megabytes during title storms while support only needs
    * revision, group count, and total row count to diagnose render loops.

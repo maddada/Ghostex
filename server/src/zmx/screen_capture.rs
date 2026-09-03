@@ -22,7 +22,7 @@ pub(crate) struct ZmxHistoryCapture {
 }
 
 /*
-CDXC:SessionChatScreenCapture 2026-08-22:
+CDXC:AppShots 2026-08-22:
 Screen-state readers (chat model/effort pills, terminal notices, the compaction
 activity row, the send-delivery watchdog) talk the zmx IPC socket directly
 instead of spawning `zsh -lc … zmx history`. Measured on this machine against
@@ -107,7 +107,7 @@ pub(crate) fn zmx_session_socket_path(session_name: &str) -> PathBuf {
 /// cannot see the daemon's socket namespace at all, so callers must treat the
 /// daemon as unobservable rather than absent.
 ///
-/// CDXC:ZmxWireCycle 2026-08-23: this is the liveness signal for daemons that
+/// CDXC:ZmxWireGeneration 2026-08-23: this is the liveness signal for daemons that
 /// cannot answer IPC. A probe would time out on a pre-wire-break daemon and on
 /// a merely busy one alike, and the second must never be terminated.
 #[cfg(unix)]
@@ -143,7 +143,7 @@ pub(crate) fn remove_zmx_session_socket(_session_name: &str) {}
 /// of its scrollback, or — while a full-screen TUI such as Claude Code holds
 /// the alternate screen — that grid alone, since Ghostty gives the alternate
 /// screen no scrollback. Primary-screen history is never mixed into an
-/// alternate-screen capture. See `CDXC:SessionChatScreenCapture`.
+/// alternate-screen capture. See `CDXC:AppShots`.
 #[cfg(unix)]
 pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
     let socket_path = zmx_session_socket_path(zmx_name);
@@ -235,7 +235,7 @@ fn zmx_screen_capture_tail_text(tail: Vec<u8>, payload_len: usize) -> String {
 }
 
 /*
-CDXC:SessionChatScreenCapture 2026-08-22:
+CDXC:AppShots 2026-08-22:
 On Windows every zmx daemon lives inside WSL, so its session socket sits in the
 WSL filesystem namespace and a Windows process has no AF_UNIX path that reaches
 it. The direct read above is therefore Unix-only, and Windows keeps running

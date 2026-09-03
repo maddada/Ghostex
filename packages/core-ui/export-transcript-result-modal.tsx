@@ -23,7 +23,7 @@ import {
 import { AppTooltip } from './app-tooltip';
 
 /**
- * CDXC:ExportTranscriptOptions 2026-08-24:
+ * CDXC:TranscriptExport 2026-08-24:
  * The export dialog's include-toggles. User and agent messages are never
  * optional, so only the three optional record families appear here. The
  * defaults mirror the daemon's historical selection: commands and patches in,
@@ -137,7 +137,7 @@ const INCLUDE_TOGGLE_ROWS: Array<{
 const EXPORT_TRANSCRIPT_PRIMARY_ACTION_ID = 'export-transcript-primary-action';
 
 /**
- * CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
+ * CDXC:TranscriptExport 2026-08-20 / CDXC:TranscriptExport 2026-08-24:
  * Handoff / Export's one dialog: an options stage with include-toggles, the
  * in-flight stage, and the result stage. The export only runs once the user
  * confirms it here, so the toggles govern the file that is actually written.

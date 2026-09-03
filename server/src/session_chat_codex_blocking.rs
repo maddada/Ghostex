@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatCodexBlockingScreens 2026-08-31:
+CDXC:AgentScreenDetection 2026-08-31:
 Codex TUI audit against openai/codex a9519cbc. The TUI has two complementary
 ways to say that ordinary composer input is unavailable:
 

@@ -124,7 +124,7 @@ describe('command palette modes', () => {
      * typed title query should not match hidden details, project labels, or
      * near-looking words such as Settings when the user typed testing.
      *
-     * CDXC:SessionSearch 2026-06-18-00:01:
+     * CDXC:PromptSearch 2026-06-18-00:01:
      * Default agent CLI names are placeholders, so Cmd+P should omit them even
      * when the query text would otherwise match the default title exactly.
      */
@@ -411,7 +411,7 @@ describe('command palette source contracts', () => {
 
   test('keeps command-palette Action launch messages authority-only', () => {
     /*
-     * CDXC:GPUICommandPane 2026-06-27-07:54:
+     * CDXC:CommandPane 2026-06-27-07:54:
      * Command Palette Action launches may use saved command metadata to pick
      * debug runMode, but the `runSidebarCommand` message must remain exactly
      * selector-shaped: command id, optional non-default runMode, and type.
@@ -438,7 +438,7 @@ describe('command palette source contracts', () => {
 
   test('keeps command-palette focused-pane hotkey messages authority-only', () => {
     /*
-     * CDXC:GPUICommandPane 2026-06-26-05:34:
+     * CDXC:CommandPane 2026-06-26-05:34:
      * Command Palette focused-pane commands are shared Ghostex hotkey actions.
      * Selecting them may identify only the chosen action id and fixed
      * runGhostexHotkeyAction message type; renderer-owned session ids, command
@@ -477,7 +477,7 @@ describe('command palette source contracts', () => {
 
   test('keeps sidebar native hotkey bounce and forwarding authority-only', () => {
     /*
-     * CDXC:HotkeyRouting 2026-06-26-23:04:
+     * CDXC:Hotkeys 2026-06-26-23:04:
      * Sidebar DOM hotkey dispatch must delegate Rename Active Session, Open
      * Commands Panel, Start Action slots, Focus Previous/Next Group,
      * Directional Focus, and Split Sideways/Downwards to the same native-owned
@@ -486,19 +486,19 @@ describe('command palette source contracts', () => {
      * authority state without renderer session ids, titles, paths, command text,
      * URLs, or launch metadata.
      *
-     * CDXC:HotkeyRouting 2026-06-26-23:20:
+     * CDXC:Hotkeys 2026-06-26-23:20:
      * GPUI can safely bounce numbered Focus Session slot hotkeys to SidebarApp
      * because the renderer owns rendered slot order. Native-owned forwarding
      * remains authority-only for other actions, with the payload limited to
      * action id and bridge type.
      *
-     * CDXC:GPUIProjectHotkeys 2026-06-26-23:42:
+     * CDXC:Hotkeys 2026-06-26-23:42:
      * GPUI project slot hotkeys use a separate host message so SidebarApp can
      * resolve rendered Projects row order locally. That message must not call
      * runGhostexHotkeyAction, while SidebarApp DOM jumpToProject actions stay
      * in the ordinary native-forwarding branch.
      *
-     * CDXC:HotkeyRouting 2026-06-26-23:58:
+     * CDXC:Hotkeys 2026-06-26-23:58:
      * setViewMode is native-owned when present in the shared action union.
      * Source coverage verifies SidebarApp forwards the action kind without
      * inventing concrete hotkey ids or handling View Mode locally.
@@ -642,7 +642,7 @@ describe('command palette source contracts', () => {
      * The setup command should render as Setup while search metadata keeps
      * Ghostex setup and onboarding discoverable.
      *
-     * CDXC:GhostexTutorialVideo 2026-06-18-04:49:
+     * CDXC:Onboarding 2026-06-18-04:49:
      * Command mode should include the dedicated tutorial video entry so users
      * can open the one-video walkthrough without replacing the Features tour.
      *
@@ -666,7 +666,7 @@ describe('command palette source contracts', () => {
     expect(commandPaletteSource).toContain("action.kind === 'openHotkeys'");
     expect(commandPaletteSource).not.toContain("commandId: 'hotkeys'");
     /*
-     * CDXC:FocusedSessionActions 2026-06-19-15:43:
+     * CDXC:FocusMode 2026-06-19-15:43:
      * Focused session sleep/wake/close commands belong in the command palette
      * Pane Actions group even when only Sleep has a default shortcut.
      */
@@ -696,7 +696,7 @@ describe('command palette source contracts', () => {
     expect(commandPaletteSource).toContain("modal: 'addProject'");
     expect(commandPaletteSource).not.toContain("message: { type: 'pickWorkspaceFolder' }");
     /*
-     * CDXC:AgentHistorySearch 2026-08-20:
+     * CDXC:PromptSearch 2026-08-20:
      * Search by Text is the Find Prompts surface now, dispatched natively like
      * the other hotkey rows, not a sidebar message that spawned a `gx f`
      * terminal.

@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 ghostex-web FindPromptsTransport. Prompt history lives on the machine that ran
 the agent, so every Find RPC is scoped to one machine's gxserver connection —
 the same rule the Session Chat transport follows.

@@ -25,7 +25,7 @@ declare global {
 }
 
 /**
- * CDXC:AppModals 2026-04-27-14:25
+ * CDXC:AppModal 2026-04-27-14:25
  * Modal-host errors must be persisted even when debugging mode is disabled.
  * Send every captured exception to the native host so it can append a timestamped
  * area-tagged line under the resolved Ghostex logs directory for post-failure diagnosis.
@@ -35,7 +35,7 @@ export function logAppModalError(area: string, error: unknown): void {
     area,
     message: describeErrorMessage(error),
     /*
-     * CDXC:GPUISettingsModalDiagnostics 2026-06-27-17:25:
+     * CDXC:Diagnostics 2026-06-27-17:25:
      * GPUI persists app-modal errors through a sanitized writer so blank Settings repros can identify the error class without storing raw messages or stacks that may contain paths, URLs, commands, tokens, or user content.
      */
     name: error instanceof Error ? error.name : undefined,

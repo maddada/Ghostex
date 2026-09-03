@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -178,13 +178,13 @@ export function formatGpuiNativeAppShotPrompt(appShot: GpuiNativeAppShotCapture,
     metadataLines.push(`Window size: ${appShot.windowWidth} x ${appShot.windowHeight} px`);
   }
   /*
-  CDXC:GPUIAppShots 2026-06-25-23:07:
+  CDXC:AppShots 2026-06-25-23:07:
   GPUI formats App Shot prompts using only native-supplied app/window metadata and the resolved Ghostex image-directory display path. The prompt must not include OCR, Accessibility text, DOM text, terminal content, stdout/stderr, commands, URLs, or renderer-supplied file paths.
 
-  CDXC:GPUIAppShots 2026-06-29-01:29:
+  CDXC:AppShots 2026-06-29-01:29:
   Superseded by 2026-06-29-02:59.
 
-  CDXC:GPUIAppShots 2026-06-29-02:59:
+  CDXC:AppShots 2026-06-29-02:59:
   App Shot prompt text should paste only the image link by default, with no intro sentence, no closing instruction, no blank spacer lines, and one newline of padding before and after. Add WindowServer metadata only when the Settings App Shots metadata toggle is enabled.
   */
   const promptLines = [`[Image #1](${appShot.imagePath})`];

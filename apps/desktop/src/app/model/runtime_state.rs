@@ -41,7 +41,7 @@ pub(crate) struct GpuiKeepAwakeRuntime {
 }
 
 /*
-CDXC:GPUIRemoteNewTerminal 2026-08-20:
+CDXC:RemoteMachines 2026-08-20:
 A remote machine runs the gxserver package this app installed for it, so it can
 implement fewer operations than the app that is driving it. The authenticated
 `/api/health/server` probe this connection already performs carries the daemon's
@@ -136,37 +136,37 @@ impl GpuiProjectContext {
 }
 
 /*
-CDXC:GPUIProjectSnapshot 2026-06-24-07:41:
+CDXC:CefRuntime 2026-06-24-07:41:
 The live sidebar active-project snapshot is strict instead of a pre-bridge placeholder. The snapshot carries active project id, display name, Quick/projectless state, project-scoped availability, the allowlisted in-memory project path, and identity-only Source, Kanban, Automate, and gated Manage surface ids from explicit sidebar/native project-editor state without inventing .git, path, fixture, workspace-name, or fallback project detection. Browser runtime state plus Source/Kanban/Automate/Manage runtime URL, CEF, and file-bridge facts stay outside the snapshot; real workarea surfaces are created only through direct runtime gates after snapshot acceptance.
 
-CDXC:GPUIProjectSnapshot 2026-06-22-18:14:
+CDXC:CefRuntime 2026-06-22-18:14:
 Project display names, project paths, and the sanitized Browser home URL are private runtime facts. `in_memory_project_path` and `browser_home_url` are accepted only from the allowlisted sidebar contract, are not probed on disk, and must not be serialized by GPUI shell-state persistence or emitted in logs; durable shell state may only store privacy-boundary booleans/count-like facts unless a later requirement explicitly adds a sanitized field.
 
-CDXC:GPUIProjectSnapshotContract 2026-06-22-18:14:
+CDXC:CefRuntime 2026-06-22-18:14:
 The staged sidebar message contract is deliberately narrow: version 1, type `ghostex.gpui.sidebar.activeProjectContext`, and one `activeProject` object with explicit allowlisted fields. Reject non-object JSON, malformed booleans/strings, unknown keys, unsupported versions, unexpected message types, and Quick/projectless payloads that still carry project ids, paths, project-scoped surface ids, or enabled project-only workareas.
 
-CDXC:GPUIProjectSidebarBridge 2026-06-23-06:53:
+CDXC:CefRuntime 2026-06-23-06:53:
 Active-project change semantics need deterministic duplicate handling: valid payloads are accepted, but only snapshots that differ from the stored runtime snapshot may replace it or trigger titlebar label, mode-availability coercion, and render notification work.
 
-CDXC:GPUISourceWorkarea 2026-06-23-12:16:
+CDXC:CodeEditor 2026-06-23-12:16:
 Source mounting may only use explicit active-project and Source surface identity from the sidebar snapshot. The active-project payload still does not carry runtime Source instantiation data, so GPUI must keep Source on the existing placeholder path instead of deriving readiness, URLs, paths, .git, labels, fixtures, filesystem probes, or localhost constants.
 
-CDXC:GPUISourceWorkarea 2026-06-23-12:25:
+CDXC:CodeEditor 2026-06-23-12:25:
 Normal sidebar project payloads may now carry the explicit Source workarea identity from the sidebar/native project-editor id. Missing or malformed Source identity still blocks without deriving ids or readiness from paths, titles, fixtures, probes, group ids, URLs, or localhost constants; runtime Source instantiation remains outside the active-project snapshot.
 
-CDXC:GPUISourceWorkarea 2026-06-24-07:41:
+CDXC:CodeEditor 2026-06-24-07:41:
 Source identity is not runtime authority. The app-owned code-server owner must turn the snapshot into the only Source runtime URL gate; this boundary must not treat raw URLs, localhost values, paths, filesystem probes, sidebar readiness messages, or placeholder shell state as readiness, mount permission, or placeholder replacement.
 
-CDXC:GPUISourceRuntime 2026-06-24-23:17:
+CDXC:CodeEditor 2026-06-24-23:17:
 GPUI Source runtime authority now starts after this snapshot boundary: the snapshot may supply only explicit project identity, Source workarea identity, and in-memory project path; the app-owned runtime owner turns that into the macOS-compatible code-server folder URL only at the visible Source startup edge.
 
-CDXC:GPUISourceWorkarea 2026-06-23-14:36:
+CDXC:CodeEditor 2026-06-23-14:36:
 Source sleep/wake evidence must preserve explicit Source runtime identity while keeping code-server launch state separate from shell lifecycle. Shell sleep/wake may only toggle the placeholder lifecycle; it must not synthesize Source readiness, mount CEF/code-server, persist private ids/paths/URLs, or reset companion and command-pane shell state.
 
-CDXC:GPUIProjectSnapshotContract 2026-06-23-15:18:
+CDXC:CefRuntime 2026-06-23-15:18:
 The active-project snapshot accepts identity-only Source, Kanban, Automate, and gated Manage surface ids, but Browser surface identity is not part of the snapshot. Browser availability may still gate the titlebar; any `browserWorkareaId` field must be rejected instead of stored as speculative identity.
 
-CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
+CDXC:Workarea 2026-06-29-00:02:
 Browser active-project readiness no longer has a GPUI proof store. Keep `browserWorkareaId` rejected in `surfaceIds`; Source/Kanban/Automate/Manage readiness messages are compatibility no-ops, and real workarea surfaces depend on direct runtime URL plus CEF surface ownership.
 */
 #[allow(dead_code)]
@@ -196,7 +196,7 @@ impl GpuiProjectSurfaceIds {
         feature_availability: GpuiProjectScopedFeatureAvailability,
     ) -> bool {
         /*
-        CDXC:GPUIProjectSnapshotContract 2026-06-23-13:01:
+        CDXC:CefRuntime 2026-06-23-13:01:
         Surface ids must agree with explicit workarea availability. The sidebar may send Kanban and Automate identity only for project contexts. Docs identity is accepted independently of the old beta/debug titlebar gate so the Rust titlebar can expose Docs consistently while still relying on the direct runtime URL gate before any CEF surface is used.
         */
         (!feature_availability.source && self.source_workarea_id.is_some())
@@ -411,10 +411,10 @@ impl ProjectScopedWorkareaAvailability {
 
     pub(crate) fn titlebar_mode_available(self, mode: TitlebarMode) -> bool {
         /*
-        CDXC:GPUIProjectRouting 2026-07-04-01:00:
+        CDXC:Navigation 2026-07-04-01:00:
         Titlebar availability mirrors macOS: Agents and Source are always selectable; Browser, Kanban, Automate, and Docs are visible for all contexts but selectable only for real project-scoped contexts. The old Docs/Manage debuggingMode plus showBetaFeatures visibility gate must not participate in switcher visibility, activation guards, restored active-mode coercion, or persisted active-mode fallback.
 
-        CDXC:GPUTitlebarAvailability 2026-08-20:
+        CDXC:Titlebar 2026-08-20:
         Source is the one exception: a machine-scoped remote project has no
         working Source runtime, so it is unavailable there.
         */
@@ -485,7 +485,7 @@ impl ProjectScopedWorkareaAvailability {
 }
 
 /*
-CDXC:GPUISourceRuntimeCleanup 2026-06-28-17:09:
+CDXC:CodeEditor 2026-06-28-17:09:
 Keep only the lean runtime value types needed to launch Source and create Source/Kanban/Automate/Manage CEF surfaces. These structs are process-local implementation state, not retired proof records, and must not grow JSON status APIs, persisted URL fields, private logging, fallback navigation, or placeholder-preflight evidence.
 */
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -558,7 +558,7 @@ impl ProjectWorkareaRealRuntimeUrl {
 }
 
 /*
-CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-29-00:15:
+CDXC:Workarea 2026-06-29-00:15:
 Project workarea CEF ownership keeps only the process-local direct runtime URL identity beside the CefSurface so active-project changes can prune stale slot reuse. This identity is not a readiness/proof store, must not be serialized or logged, and must only be compared against `project_workarea_runtime_url_for_slot`.
 */
 pub(crate) struct ProjectWorkareaRuntimeCefSurface {

@@ -9,7 +9,7 @@ import {
 describe('combined sidebar mode ids', () => {
   test('round-trips project group ids', () => {
     /**
-     * CDXC:SidebarMode 2026-05-03-10:42
+     * CDXC:Sidebar 2026-05-03-10:42
      * Combined-mode project groups need stable presentation IDs that can be
      * converted back into project IDs when drag reorder syncs to storage.
      */

@@ -6,7 +6,7 @@
 use super::*;
 
 /*
-CDXC:GPUIManageHtmlResources 2026-07-14:
+CDXC:Docs 2026-07-14:
 Manage renders authored HTML through srcdoc, whose default base is the bundled
 manage.html file. Give only the Manage CEF client a synthetic HTTPS resource
 origin so normal browser URL resolution can load sibling CSS, JavaScript,
@@ -21,14 +21,14 @@ pub(crate) const MANAGE_DOCS_RESOURCE_BASE_URL: &str =
 pub(crate) type ManageDocsRemoteResourceLoader = Arc<dyn Fn(&str) -> Option<Vec<u8>> + Send + Sync>;
 
 /*
-CDXC:DocsRootDirectory 2026-08-09:
+CDXC:Docs 2026-08-09:
 The local Docs root is a configurable folder now, and resolving it reads the
 project's Docs directory from the daemon. That resolution must not run on the
 main thread while a CEF surface is being created, so the scope carries a
 resolver that runs on the same blocking-capable worker sequence as the file
 open, memoized so one document's images cost one lookup.
 
-CDXC:DocsRootAdditive 2026-08-09: Docs serves TWO roots — the project's own and
+CDXC:Docs 2026-08-09: Docs serves TWO roots — the project's own and
 the mounted Docs directory — so the resolver answers with every mount, each
 carrying the path segment that addresses it and the relative roots a resource
 may live under inside it. Which mounts exist and what they allow both come out
@@ -56,7 +56,7 @@ pub(crate) enum ManageDocsResourceSource {
         resolve_dynamic_root: ManageDocsDynamicRootResolver,
         resolve_root: ManageDocsLocalRootResolver,
         /*
-        CDXC:DocsRootDirectory 2026-08-10:
+        CDXC:Docs 2026-08-10:
         Memoize only a successful resolution. The lookup reads the project's
         Docs directory from the daemon, so it can answer `None` for a reason
         that passes — daemon not reachable yet, project row not loaded. Sealing
@@ -105,7 +105,7 @@ impl ManageDocsResourceScope {
 }
 
 /*
-CDXC:GPUIManageHtmlResources 2026-08-07:
+CDXC:Docs 2026-08-07:
 Serve Docs resources straight from a CEF resource handler instead of the cef
 wrapper's ResourceManager. That wrapper re-locks its own manager mutex while
 already holding it (ResourceManager::send_request -> ResourceManagerRequest::
@@ -149,7 +149,7 @@ pub(crate) fn open_manage_docs_resource(
             resolved_root,
         } => {
             /*
-            CDXC:DocsRootAdditive 2026-08-09:
+            CDXC:Docs 2026-08-09:
             The requested path names its own root through the reserved mount
             segment, exactly as the Docs bridge routes it, so an image beside a
             note in the mounted Docs directory resolves there and a path can
@@ -365,7 +365,7 @@ wrap_resource_request_handler! {
 
     impl ResourceRequestHandler {
         /*
-        CDXC:GPUIManageHtmlResources 2026-08-08:
+        CDXC:Docs 2026-08-08:
         CEF consults on_before_resource_load BEFORE resource_handler, and the
         generated cef-rs binding's inherited default returns
         ReturnValue::default() == RV_CANCEL. Without this explicit CONTINUE
@@ -505,7 +505,7 @@ wrap_request_handler! {
             _user_gesture: c_int,
         ) -> c_int {
             /*
-            CDXC:GPUIBrowserLinkNewTab 2026-08-18:
+            CDXC:Browser 2026-08-18:
             Chromium reports middle-click and Cmd/Ctrl-click link opens here,
             not through OnBeforePopup, so Browser panes need this callback to
             keep those gestures inside the GPUI Browser workspace. Forward only
@@ -515,7 +515,7 @@ wrap_request_handler! {
             save-to-disk, ignored actions) stay on CEF's default path.
 
             Empty targets mirror the popup policy
-            (CDXC:GPUIBrowserPopups 2026-06-23-11:43): handled here with no
+            (CDXC:Browser 2026-06-23-11:43): handled here with no
             shell dispatch, because there is no transferable URL and no
             fallback transfer path.
             */

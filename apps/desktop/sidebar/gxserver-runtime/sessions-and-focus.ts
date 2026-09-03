@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -55,7 +55,7 @@ import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-c
 import type { SidebarSessionTag } from '@/packages/shared/session-tags';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeSessionFocusMethods` — because deriving them would make
@@ -175,7 +175,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
 
   ensureQuickAutomationsProject(this: GpuiSidebarRuntime): void {
     /*
-    CDXC:GPUIAutomationsOverview 2026-07-08:
+    CDXC:Automations 2026-07-08:
     GPUI mirrors macOS `ensureQuickAutomationsProject` without daemon storage:
     macOS writes a client registry row, while GPUI keeps this overview as a
     session-local runtime projection until its synthetic Quick row is closed.
@@ -185,7 +185,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
 
   focusQuickAutomationsProject(this: GpuiSidebarRuntime): void {
     /*
-    CDXC:GPUIAutomationsOverview 2026-07-08:
+    CDXC:Automations 2026-07-08:
     Mirror macOS `focusQuickAutomationsProject`: selecting the synthetic
     quick-automations project activates the Quick group and focused overview row;
     Rust receives the Automate workarea through the active-project context post.
@@ -275,14 +275,14 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this.acknowledgeSessionAttention(sessionId, 'sidebar-focus');
     if (this.isSleepingLocalPresentationSession(reference.projectId, reference.sessionId)) {
       /*
-      CDXC:GPUIWorkspaceSessionFocus 2026-06-26-23:24:
+      CDXC:FocusRouting 2026-06-26-23:24:
       Sleeping local session-card clicks must match macOS session activation by committing gxserver `/api/wakeSession` before the Rust workspace materializes the terminal. A plain focus bridge can select the tab but leaves gxserver sleeping, so route this branch through the same Wake path as the sidebar sleep toggle.
       */
       await this.setSessionSleeping(sessionId, false);
       return;
     }
     /*
-    CDXC:GPUISidebarSessionFocus 2026-06-26-04:42:
+    CDXC:FocusRouting 2026-06-26-04:42:
     Local GPUI sidebar clicks must match the macOS sidebar ownership model: the SidebarApp adapter applies local focus immediately and publishes the CEF bootstrap focus hint, but it must not call gxserver `/api/focusSession`. That endpoint is an external renderer-command route and can bounce focus when another renderer is the first open gxserver subscriber.
     */
     this.focusLocalWorkspaceSession(reference.projectId, reference.sessionId);
@@ -290,7 +290,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
   },
 
   /*
-  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  CDXC:Git 2026-08-16:
   The SidebarApp applies focus optimistically (pendingFocusedSessionId) and
   waits for a groups message containing the session to confirm or correct it.
   Full-tree publishes used to provide that confirmation implicitly on every
@@ -328,7 +328,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
   ): void {
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:18:
+    CDXC:FocusRouting 2026-06-26-06:18:
     Any successful local GPUI activation that makes a gxserver workspace session current must update both the reused SidebarApp presentation focus and the real GPUI Agents workspace. This matches macOS create, fork, restore, App Shot, and session-click behavior instead of requiring a second sidebar click to show the newly focused terminal.
     */
     const normalizedProjectId = normalizeNonEmptyString(projectId);
@@ -348,7 +348,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
   ): void {
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:08:
+    CDXC:FocusRouting 2026-06-26-06:08:
     Local GPUI session-card clicks must drive the real Agents workspace the way macOS does: after React updates gxserver presentation focus, send only bounded project/session ids to Rust so Rust can select or materialize the corresponding terminal tab from gxserver attach metadata. Do not pass labels, titles, commands, paths, terminal content, or daemon responses through the renderer bridge.
     */
     const postFocus = window.ghostexGpui?.postWorkspaceTerminalFocus;
@@ -462,7 +462,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
 
   async fullReloadSession(this: GpuiSidebarRuntime, sessionId: string): Promise<void> {
     /*
-    CDXC:GPUIFullReload 2026-07-12:
+    CDXC:CefRuntime 2026-07-12:
     Full reload must really cycle the provider: `/api/sleepSession` zmx-kills
     the daemon (and the CLI inside it) and `/api/wakeSession` respawns it with
     the restore command. The local surface in the Rust workspace is now dead,
@@ -483,7 +483,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
 
   async switchSessionAgent(this: GpuiSidebarRuntime, sessionId: string, agentId: string): Promise<void> {
     /*
-    CDXC:SwitchAccount 2026-09-03:
+    CDXC:AgentProviders 2026-09-03:
     Resume the same conversation under another same-family agent configuration
     (another account). The owning daemon rewrites the row's launch identity;
     the provider cycle that follows is Full Reload itself, so the wake resumes
@@ -580,7 +580,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     removedSessionId: string
   ): string | undefined {
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:34:
+    CDXC:FocusRouting 2026-06-26-06:34:
     Sidebar-origin local close/sleep must follow the macOS project-list focus rule: background transitions do not steal focus, while closing or sleeping the focused session selects the next running row from the same displayed local project order and routes it through the workspace focus bridge.
     */
     const normalizedProjectId = normalizeNonEmptyString(projectId);
@@ -666,10 +666,10 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
       /*
-      CDXC:GPUIRemoteSessions 2026-06-24-17:19:
+      CDXC:RemoteMachines 2026-06-24-17:19:
       Remote fork authority comes only from a machine-prefixed session id already present in the remote presentation snapshot. Route the project/session ids to `/api/forkSession` on that machine; do not derive ids from labels or terminal text.
 
-      CDXC:GPUIForkParity 2026-07-10:
+      CDXC:SessionFork 2026-07-10:
       Match macOS remote Fork exactly: the owning gxserver creates the fork and
       the refreshed remote presentation renders it without moving focus away
       from the session the user was viewing.
@@ -705,7 +705,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       createGxserverPresentationProjectGroupId(reference.projectId);
     if (this.activeProjectId !== reference.projectId || this.activeGroupId !== sourceGroupId) {
       /*
-      CDXC:GPUIForkParity 2026-07-10:
+      CDXC:SessionFork 2026-07-10:
       macOS focuses the clicked session's project before awaiting gxserver.
       GPUI also activates its clicked sidebar subgroup so Rust has the source
       tab-group mapping before the fork result arrives.
@@ -718,7 +718,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
 
     try {
       /*
-      CDXC:GPUIForkParity 2026-07-10:
+      CDXC:SessionFork 2026-07-10:
       `/api/forkSession` returns `{ fork }`, exactly as the macOS gxserver
       client unwraps it. The previous GPUI code treated the result itself as
       the fork payload, so `response.session` was undefined and the action
@@ -769,7 +769,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     const remoteSession = parseGpuiRemotePresentationSessionId(message.sessionId);
     if (remoteSession) {
       /*
-      CDXC:SessionHistoryTitleSource 2026-07-29:
+      CDXC:SessionTitles 2026-07-29:
       Empty-title Generate Name is a local-transcript flow; a remote machine's
       transcripts are not readable here, and a blank direct rename would erase
       the remote title.
@@ -778,7 +778,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
         return;
       }
       /*
-      CDXC:GPUIRemoteSessionRename 2026-08-12:
+      CDXC:RemoteMachines 2026-08-12:
       Remote agent sessions must use the same pending-metadata rename contract
       as local sessions. The remote gxserver owns that session's zmx provider,
       so ask it to submit the provider-specific slash command itself instead of
@@ -802,7 +802,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     }
     if (message.shouldGenerateTitle) {
       /*
-      CDXC:GPUISidebarRename 2026-07-29:
+      CDXC:Sessions 2026-07-29:
       Generate Name reuses the first-message auto-title UX end to end:
       gxserver marks the session generating (the card shows the same
       "Generating title…" chrome), summarizes the pasted text with the chosen
@@ -831,7 +831,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       titleSource: 'user',
     });
     /*
-    CDXC:GPUISidebarRename 2026-08-18:
+    CDXC:Sessions 2026-08-18:
     Session cards render `displayTitle`, so patching only `title` moved the
     row's alias without changing the text on the card. Apply gxserver's own
     title projection instead — the same fields presentation publishes — so the
@@ -841,7 +841,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     */
     this.patchPresentationSession(reference.projectId, reference.sessionId, result.projection);
     /*
-    CDXC:GPUISidebarRename 2026-07-28:
+    CDXC:Sessions 2026-07-28:
     gxserver keeps agent-session renames pending until the Agent CLI itself is
     renamed, and it answers `shouldSendAgentRenameCommand` so the client stages
     `/rename <title>` (Pi uses `/name`; Hermes Agent uses `/title`) into the
@@ -911,7 +911,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
   },
 
   /*
-  CDXC:SessionAgentNotes 2026-08-25:
+  CDXC:SessionNotes 2026-08-25:
   Open the note editor for a session, as the session row's context menu does.
   This exists so the desktop terminal's agent action bar opens the SAME dialog
   the sidebar opens rather than a second note surface of its own: the bar is a
@@ -954,7 +954,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
   },
 
   /*
-  CDXC:SessionAgentNotes 2026-08-24:
+  CDXC:SessionNotes 2026-08-24:
   Save (or, with an empty note, clear) this session's free-text note.
 
   - The note is filed against the session's PROVIDER conversation id, which only
@@ -997,7 +997,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
   },
 
   /*
-  CDXC:SidebarV2Lifecycle 2026-07-29:
+  CDXC:StateSync 2026-07-29:
   One code path for settle/unsettle/snooze/unsnooze, local and remote.
 
   - Routing mirrors `updateSessionFlags`: a remote-prefixed sidebar session id
@@ -1186,7 +1186,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
 
   nextVisibleSessionIdsForLocalFocus(this: GpuiSidebarRuntime, projectId: string, sessionId: string): Set<string> {
     /*
-    CDXC:GPUISidebarSessionFocus 2026-06-26-04:42:
+    CDXC:FocusRouting 2026-06-26-04:42:
     GPUI local session focus should follow the macOS sidebar rule that a click selects the target within the current visible workspace projection instead of replacing all visible ownership with a singleton. Preserve live local visible ids and remote ids, materialize the current project's projected visible row, then add the clicked session so last-activity resorting cannot make a second session steal focus back.
     */
     const liveLocalSessionIds = new Set<string>(

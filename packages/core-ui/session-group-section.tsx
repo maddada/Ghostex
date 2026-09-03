@@ -120,7 +120,7 @@ const CONTEXT_MENU_VERTICAL_PADDING_PX = 12;
 const GROUP_CONTROL_MENU_MARGIN_PX = 12;
 const GROUP_AGENT_MENU_WIDTH_PX = 220;
 /**
- * CDXC:SidebarReorderActivation 2026-08-08:
+ * CDXC:Sidebar 2026-08-08:
  * Project headers define the shared sidebar reorder gesture. Its timing and
  * distance constraints now live in `sidebar-reorder-activation.ts` so session,
  * collection, and machine rows cannot silently drift to a slower gesture.
@@ -155,7 +155,7 @@ function isNestedInteractiveContextMenuTarget(event: ReactMouseEvent<HTMLElement
 }
 
 /**
- * CDXC:ProjectReorder 2026-06-09-17:15:
+ * CDXC:Projects 2026-06-09-17:15:
  * Project headers should reorder from any non-control header surface, not only
  * the project-name text. Keep nested action buttons and title-edit inputs out
  * of drag activation so their clicks and editing behavior stay deterministic.
@@ -180,14 +180,14 @@ function isElementTarget(target: EventTarget | null): target is Element {
   return typeof Element !== 'undefined' && target instanceof Element;
 }
 /**
- * CDXC:ProjectDiffStats 2026-05-27-10:44:
+ * CDXC:Git 2026-05-27-10:44:
  * Cap git +/− line counts shown in project headers at four digits so very large
  * diffs stay readable in the sidebar without widening the status label.
  */
 const PROJECT_EDITOR_DISPLAY_MAX_LINES = 9999;
 const PROJECT_CONTEXT_THEME_OPTIONS: ReadonlyArray<{ label: string; value: SidebarTheme }> = [
   /**
-   * CDXC:SidebarTheme 2026-06-15-01:43:
+   * CDXC:Theming 2026-06-15-01:43:
    * Workspace/project theme menus expose the same app-level Dark 1, Dark 2,
    * and Light choices as Settings so project chrome can persist the new
    * default or the previous dark snapshot explicitly.
@@ -223,7 +223,7 @@ function getCollapsedGroupStatusStyle(groupId: string): CSSProperties {
 }
 
 /**
- * CDXC:WorkspaceTheme 2026-05-05-02:58
+ * CDXC:Theming 2026-05-05-02:58
  * Combined-mode project headers consume the persisted workspace theme color
  * through one CSS variable so titles and hover surfaces can share the same tint
  * without changing chat or browser group styling.
@@ -249,7 +249,7 @@ function getProjectThemeSwatchStyle(themeColor: string | undefined): CSSProperti
 }
 
 /**
- * CDXC:SidebarV2GroupedProjectUX 2026-07-30:
+ * CDXC:Projects 2026-07-30:
  * Exported so Sidebar V2's grouped project headers also inherit V1's control
  * blocking and deliberate absence of a KeyboardSensor. The pointer timing and
  * distance rules themselves live in `sidebar-reorder-activation.ts`, shared by
@@ -263,7 +263,7 @@ export const groupSensors = [
     },
   }),
   /*
-   * CDXC:CollectionReorder 2026-07-21:
+   * CDXC:Projects 2026-07-21:
    * No KeyboardSensor: Space/Enter on the focusable group head started an
    * invisible keyboard drag (project groups use feedback "none"), and an
    * uncommitted keyboard drag leaves the shared dnd manager stuck non-idle,
@@ -283,7 +283,7 @@ type GroupContextMenuPosition = ContextMenuPosition & {
 type GroupControlMenu = 'project-agent';
 
 /**
- * CDXC:ProjectHeaderTooltips 2026-06-25-15:48:
+ * CDXC:Tooltips 2026-06-25-15:48:
  * Project-header action labels share SidebarFixedTooltipButton so project, section, and footer/sidebar hover actions all use one fixed popup that avoids section overflow and Recent Projects clipping.
  */
 const ProjectHeaderActionButton = SidebarFixedTooltipButton;
@@ -296,7 +296,7 @@ export function shouldTreatProjectAsEmptySessionGroup({
   sessionCount: number;
 }): boolean {
   /**
-   * CDXC:ProjectGroups 2026-06-15-20:14:
+   * CDXC:Projects 2026-06-15-20:14:
    * Empty project groups should stay visible after their last terminal is closed
    * and render an explicit New Session row in the body. The project header
    * remains only an expand/collapse target so first-terminal creation always
@@ -316,7 +316,7 @@ function getSessionDropGapKeyBefore(sessionId: string): string {
 }
 
 /**
- * CDXC:PinnedSessions 2026-06-02-20:35:
+ * CDXC:Sessions 2026-06-02-20:35:
  * Pinned project-session reorder feedback should paint one stable insertion
  * line in a fixed gap slot, including the slot before the first pinned row.
  * Map row-based drop targets to visible list gaps so the line does not jitter
@@ -356,7 +356,7 @@ export function getPinnedSessionDropGapKey({
 
 export function formatProjectEditorDiffStatsLabel(stats: SidebarProjectDiffStats, showFileCount = false): string {
   /**
-   * CDXC:ProjectDiffStats 2026-05-15-13:58:
+   * CDXC:Git 2026-05-15-13:58:
    * Project git additions/deletions belong beside the project name, not inside
    * the former sidebar Code launcher. Keep the compact stat formatter shared
    * so the header label and tests preserve the existing capped numeric
@@ -373,7 +373,7 @@ export function formatProjectEditorDiffStatsLabel(stats: SidebarProjectDiffStats
 
 export function shouldShowProjectEditorDiffStats(stats: SidebarProjectDiffStats): boolean {
   /**
-   * CDXC:ProjectDiffStats 2026-05-15-19:36:
+   * CDXC:Git 2026-05-15-19:36:
    * Project headers should stay quiet when git reports no added or removed
    * lines. Hide the adjacent status text for +0 -0, but keep showing it as
    * soon as either additions or deletions is nonzero.
@@ -420,7 +420,7 @@ export function formatProjectTooltipGitStats(stats: SidebarProjectDiffStats): st
   const fileCount = Math.max(0, stats.files);
   const changedLineCount = Math.max(0, stats.additions) + Math.max(0, stats.deletions);
   /**
-   * CDXC:ProjectDiffStats 2026-06-14-16:33:
+   * CDXC:Git 2026-06-14-16:33:
    * Project and worktree title tooltips should spell out the file and line
    * nouns so one changed file or one changed line reads as singular while the
    * compact inline diff badge can remain numeric-only.
@@ -484,7 +484,7 @@ export type SessionGroupSectionProps = {
   onMoveProjectToCollection?: (projectId: string, collectionId: string | undefined) => void;
   onProjectSessionListCollapsedChange?: (projectId: string, collapsed: boolean) => void;
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * Space membership for an UNGROUPED project row. Per the Spaces decision, a
    * project inside a group cannot be assigned directly — it inherits its group's
    * Spaces — and a worktree can never be assigned at all, so this entry renders
@@ -513,7 +513,7 @@ export type SessionGroupSectionProps = {
   projectCollectionOptions?: readonly { collectionId: string; color: string; title: string }[];
   projectSessionListCollapsedState?: Readonly<ProjectSessionListCollapsedState>;
   /**
-   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * CDXC:Browser 2026-08-18:
    * A host reveal request for one session row. The kind sections inside a
    * project group (Browser / Pinned / Sessions) are this component's own state,
    * so revealing a row it owns has to reach it as a request instead of being
@@ -619,21 +619,21 @@ export function getGroupContextMenuItemCount({
   spacesEnabled?: boolean;
 }): number {
   /*
-   * CDXC:ProjectGroups 2026-06-08-09:19:
+   * CDXC:Projects 2026-06-08-09:19:
    * Worktree project headings should expose Copy Path but omit the IDE Open action in their compact context menu. Keep the root context-menu item count explicit by project kind so viewport clamping stays aligned with the visible worktree and repository menu actions.
    *
-   * CDXC:WorktreeRename 2026-08-10:
+   * CDXC:Worktrees 2026-08-10:
    * Rename Worktree replaced the dead label-only Rename on worktree rows rather
    * than joining it, so the count is unchanged. It drives viewport clamping, so
    * it has to move with the menu or the last item opens off-screen.
    *
-   * CDXC:SidebarContextMenu 2026-08-10:
+   * CDXC:ContextMenus 2026-08-10:
    * Hide/Unhide renders in both project menus whenever `onHideGroup` is supplied
    * — which the sidebar always does — and was never counted, so every project
    * menu was measured one row short and the last item could open off-screen. It
    * is not part of the group menu, so only the project branches take it.
    *
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The Spaces submenu entry renders only on ORDINARY ungrouped project rows —
    * grouped projects inherit their group's Spaces and worktrees can never be
    * assigned — so it is counted only in the non-worktree project branch, and the
@@ -672,7 +672,7 @@ export function getSidebarSessionGapContextMenuTarget<T>({
   sessionRows: readonly SidebarSessionGapContextMenuCandidate<T>[];
 }): T | undefined {
   /*
-   * CDXC:SidebarContextMenu 2026-06-19-10:46:
+   * CDXC:ContextMenus 2026-06-19-10:46:
    * Project context menus are owned by the project header only. A right-click in
    * the narrow visual gap between two sidebar session rows belongs to the
    * session directly above the gap, preserving row-level actions without adding
@@ -773,7 +773,7 @@ export function SessionGroupSection({
     ).length;
   });
   /*
-   * CDXC:ProjectActions 2026-08-01:
+   * CDXC:Projects 2026-08-01:
    * Project rows render only the Actions the user flagged showOnProjectRow,
    * read from the HUD's per-project block so every row shows its own project's
    * Actions instead of the active project's. Hosts that do not serve
@@ -788,7 +788,7 @@ export function SessionGroupSection({
     return state.hud.commandsByProject?.[projectId];
   });
   /*
-   * CDXC:GlobalActions 2026-08-07:
+   * CDXC:AgentLauncher 2026-08-07:
    * Global Actions live in their own daemon-owned list, never in
    * commandsByProject, so reading only the per-project block made the row
    * toggle dead for them. Merge the two lists here and keep each button's
@@ -800,7 +800,7 @@ export function SessionGroupSection({
    * Actions above the project's own. That order also keeps a global button at
    * the same spot on every row, since only the project part varies per row.
    *
-   * CDXC:GlobalActions 2026-08-29:
+   * CDXC:AgentLauncher 2026-08-29:
    * The list is owned by the daemon the row's project lives on, so a row on a
    * remote machine reads that machine's entry instead of the local daemon's
    * `globalCommands`. Hosts that serve one daemon never set the remote map and
@@ -843,7 +843,7 @@ export function SessionGroupSection({
   const debugInstanceIdRef = useRef(createSessionGroupDebugInstanceId());
 
   /*
-   * CDXC:SidebarScroll 2026-07-23:
+   * CDXC:Sidebar 2026-07-23:
    * Boundary scroll handoff for the inner project session scroller. Both this
    * shell and the main sidebar scroller use `overscroll-behavior: none` (no
    * rubber-banding per explicit user request), but `none` also kills native
@@ -889,12 +889,12 @@ export function SessionGroupSection({
   }, []);
 
   /**
-   * CDXC:ProjectHeaders 2026-06-29-21:04:
+   * CDXC:Projects 2026-06-29-21:04:
    * Project and worktree group headers should not render the old leading folder
    * or branch glyph. The full header still owns activation/collapse, while the
    * synthetic Chats collection keeps its chat glyph so it stays visually distinct.
    *
-   * CDXC:Chats 2026-05-04-09:41
+   * CDXC:Projects 2026-05-04-09:41
    * The Combined-mode Chats header is a synthetic collection, not one mutable
    * project group. It can create new chat folders, but it must not accept
    * session drops, group dragging, or project/group context-menu mutations.
@@ -912,14 +912,14 @@ export function SessionGroupSection({
     projectSessionListStorageId !== undefined &&
     projectSessionListCollapsedState[projectSessionListStorageId] === true;
   /**
-   * CDXC:SidebarLayout 2026-05-13-08:11
+   * CDXC:Sidebar 2026-05-13-08:11
    * Project groups stay draggable while session drag targets are disabled in
    * the reference sidebar. That prevents session moves across project
    * boundaries without taking away project-group reordering.
    */
   const areSessionDropTargetsDisabled = draggingDisabled || sessionDraggingDisabled;
   /**
-   * CDXC:PinnedSessions 2026-05-28-12:04:
+   * CDXC:Sessions 2026-05-28-12:04:
    * Reference project rows still disable general session dragging, but
    * pinned-session reorder needs active drop targets across the same project
    * list so a dragged pinned row can be released over any row in that project.
@@ -941,7 +941,7 @@ export function SessionGroupSection({
     (state) => state.hud.settings?.enableSessionParking ?? DEFAULT_ghostex_SETTINGS.enableSessionParking
   );
   /*
-   * CDXC:DisabledPluginRouting 2026-08-23:
+   * CDXC:Extensions 2026-08-23:
    * Turning Browser off in Settings → Extensions removes the Browser workarea,
    * so the project header's New Browser Tab button has nowhere left to put a
    * tab. Hide it rather than leaving a control whose only outcome is a refusal.
@@ -955,7 +955,7 @@ export function SessionGroupSection({
     )
   );
   /*
-   * CDXC:SidebarScroll 2026-06-30-02:45:
+   * CDXC:Sidebar 2026-06-30-02:45:
    * Large project lists can render many fixed-height session rows while manual
    * drag ordering stays mounted. Read global card settings once per group and
    * pass them into rows so each card keeps only session-specific store work.
@@ -963,14 +963,14 @@ export function SessionGroupSection({
   const sessionCardSettings = useSidebarStore(
     useShallow((state): SortableSessionCardSharedSettings => ({
       /*
-       * CDXC:BrowserPanes 2026-05-28-07:38:
+       * CDXC:Browser 2026-05-28-07:38:
        * Browser favicons identify pages and need their own hover-only setting
        * instead of being suppressed by the agent-logo hover preference.
        */
       hideBrowserFaviconUntilHover:
         state.hud.settings?.hideBrowserFaviconUntilHover ?? DEFAULT_ghostex_SETTINGS.hideBrowserFaviconUntilHover,
       /*
-       * CDXC:SidebarSessions 2026-05-16-08:46:
+       * CDXC:Sessions 2026-05-16-08:46:
        * The hover-only agent icon setting is visual chrome only; keep icons in
        * the DOM so the same row can reveal them on hover/focus without
        * changing session identity or drag hit targets.
@@ -987,7 +987,7 @@ export function SessionGroupSection({
         DEFAULT_ghostex_SETTINGS.hideLastActiveTimeOnSessionCards
       ),
       /*
-       * CDXC:SidebarContextMenu 2026-06-10-13:58:
+       * CDXC:ContextMenus 2026-06-10-13:58:
        * The destructive single-session Close item is hidden unless Settings
        * explicitly enables close actions in session context menus.
        */
@@ -995,7 +995,7 @@ export function SessionGroupSection({
         state.hud.settings?.showSessionCloseContextMenuAction ??
         DEFAULT_ghostex_SETTINGS.showSessionCloseContextMenuAction,
       /*
-       * CDXC:SidebarContextMenu 2026-06-09-23:17:
+       * CDXC:ContextMenus 2026-06-09-23:17:
        * Copy resume and Copy attach command are opt-in context-menu utilities.
        * Hide both by default and reveal them only when Settings explicitly
        * enables command-copy actions for session buttons.
@@ -1003,7 +1003,7 @@ export function SessionGroupSection({
       showSessionCommandCopyActions:
         state.hud.settings?.showSessionCommandCopyActions ?? DEFAULT_ghostex_SETTINGS.showSessionCommandCopyActions,
       /*
-       * CDXC:SidebarContextMenu 2026-06-11-23:08:
+       * CDXC:ContextMenus 2026-06-11-23:08:
        * Copy details is an opt-in metadata clipboard action. Gate the menu item
        * with its own Settings flag instead of tying it to shell command copying.
        */
@@ -1061,7 +1061,7 @@ export function SessionGroupSection({
     }));
   };
   /*
-   * CDXC:SidebarBrowserTabReveal 2026-08-18:
+   * CDXC:Browser 2026-08-18:
    * A revealed row is useless inside a collapsed kind section, so open the one
    * that owns it (Browser for a new Browser tab) and leave it open — the user
    * can close it again, and nothing re-collapses it behind their back.
@@ -1091,7 +1091,7 @@ export function SessionGroupSection({
   const shouldClipProjectSessionList = shouldShowProjectSessionListToggle && isProjectSessionListCollapsed;
   const shouldScrollExpandedProjectSessionList = shouldShowProjectSessionListToggle && !isProjectSessionListCollapsed;
   /*
-   * CDXC:SidebarScroll 2026-06-30-02:45:
+   * CDXC:Sidebar 2026-06-30-02:45:
    * Expanded projects may contain hundreds of rows. Only build the DOM-measure
    * dependency key for the collapsed clipped state, where the visible row set is
    * capped by the Show less count.
@@ -1165,7 +1165,7 @@ export function SessionGroupSection({
     });
   });
   /**
-   * CDXC:PinnedSessions 2026-05-28-14:29:
+   * CDXC:Sessions 2026-05-28-14:29:
    * Reference-sidebar pinned session dragging is a row-to-row reorder inside
    * one project. Do not let the project section itself accept session drags,
    * because the group drop surface competes with pinned row insertion lines
@@ -1177,7 +1177,7 @@ export function SessionGroupSection({
     data: createGroupDropData(groupId),
     disabled: isChatCollection || draggingDisabled,
     /**
-     * CDXC:ProjectDragPreview 2026-05-21-11:45:
+     * CDXC:Projects 2026-05-21-11:45:
      * Project reordering uses an app-rendered cursor ghost instead of dnd-kit's
      * source-sized feedback. Expanded projects can contain many session rows,
      * so the default feedback makes the preview appear far from the cursor and
@@ -1245,7 +1245,7 @@ export function SessionGroupSection({
   const hasSleepingSessions = groupSessions.some((session) => getSidebarSessionLifecycleState(session) === 'sleeping');
   const allSessionsSleeping = !hasRunningSessions && hasSleepingSessions;
   /**
-   * CDXC:ProjectSleep 2026-05-27-06:28:
+   * CDXC:SessionSleep 2026-05-27-06:28:
    * Sleep Inactive means awake plus idle/unknown activity, not "no live zmx
    * runtime." Live zmx-backed terminals should still be sleepable when they are
    * not working and not waiting for attention.
@@ -1262,7 +1262,7 @@ export function SessionGroupSection({
     );
   const canFullReloadGroup = groupSessions.length > 0;
   /*
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * The exact condition the Spaces entry renders on, so the menu-height budget
    * and the menu itself can never disagree: an ordinary (non-worktree) project
    * row that is NOT inside a group, on a Space-capable gxserver.
@@ -1280,11 +1280,11 @@ export function SessionGroupSection({
   const collapsedIndicatorActivity = sessionSummary.indicatorActivity;
   const hasCollapsedSummary = collapsedIndicatorActivity !== undefined;
   /**
-   * CDXC:ProjectStatusIndicators 2026-05-08-09:33
+   * CDXC:SessionStatus 2026-05-08-09:33
    * Collapsed project headers must expose the hidden session status counts
    * inline with the project title: attention/done sessions stay #95d7f6 and
    * working sessions stay amber. Header actions replace this slot on hover.
-   * CDXC:ProjectStatusIndicators 2026-05-08-10:48
+   * CDXC:SessionStatus 2026-05-08-10:48
    * Project-header status counts render in the visual order users scan for
    * active work: working count first, then attention count. When neither action
    * state exists, the same collapsed-only slot shows awake terminals/browsers.
@@ -1328,7 +1328,7 @@ export function SessionGroupSection({
   const isGroupDropTarget =
     sortable.isDropTarget || emptyGroupDropTarget.isDropTarget || sessionGroupDropPosition !== undefined;
   /**
-   * CDXC:ProjectReorder 2026-05-18-20:39:
+   * CDXC:Projects 2026-05-18-20:39:
    * Dragging a project in the reference sidebar must show a dim insertion line
    * where the project will land on pointer release. Keep the indicator on the
    * target project row instead of coloring the whole row so scanning remains
@@ -1340,7 +1340,7 @@ export function SessionGroupSection({
     sessions: groupSessions,
   });
   /*
-   * CDXC:QuickSessions 2026-05-16-12:55:
+   * CDXC:AgentLauncher 2026-05-16-12:55:
    * The projectless chat collection remains modeled as Chats internally, but the empty reference-sidebar copy should read as Quick Sessions for users.
    */
   const emptyStateLabel = isChatCollection ? 'No Quick Sessions' : 'No sessions';
@@ -1349,7 +1349,7 @@ export function SessionGroupSection({
     sessionCount: actualSessionCount,
   });
   /**
-   * CDXC:ProjectGroups 2026-05-15-14:33:
+   * CDXC:Projects 2026-05-15-14:33:
    * Project groups remain expandable even with no sessions because the body can
    * later receive project sessions. The sidebar no longer exposes an embedded
    * Code editor row or a project-header Code reveal button.
@@ -1357,7 +1357,7 @@ export function SessionGroupSection({
    */
   const canToggleCollapsed = actualSessionCount > 0 || Boolean(projectContext);
   /*
-   * CDXC:SidebarPerformance 2026-06-28-05:39:
+   * CDXC:Sidebar 2026-06-28-05:39:
    * Collapsed project groups must be header-only work. Do not mount hidden
    * session rows, row dnd hooks, row observers, or sticky-body scroll
    * measurement while the user has collapsed a project.
@@ -1378,32 +1378,32 @@ export function SessionGroupSection({
     ? `${isCollapsed ? 'Expand' : 'Collapse'} ${group.title}`
     : group.title;
   /**
-   * CDXC:ProjectHeaders 2026-05-18-14:53:
+   * CDXC:Projects 2026-05-18-14:53:
    * Project row collapse/expand keeps an accessible label but no hover tooltip.
    * Project header clicks toggle the project session list rather than activating
    * the project; only the right-side action buttons keep their own click
    * behavior.
    *
-   * CDXC:ProjectHeaders 2026-06-29-21:04:
+   * CDXC:Projects 2026-06-29-21:04:
    * Regular project rows no longer rely on a visual-only leading glyph; keep
    * collapse semantics on the header/title instead of preserving the old icon slot.
    *
-   * CDXC:ProjectHeaderTooltips 2026-05-25-09:43:
+   * CDXC:Tooltips 2026-05-25-09:43:
    * Project header action buttons need compact hover labels without relying on
    * native title attributes.
    *
-   * CDXC:ProjectHeaderTooltips 2026-05-29-18:19:
+   * CDXC:Tooltips 2026-05-29-18:19:
    * Project header action labels must open below their button, not to the left,
    * because left-side labels clip against the sidebar edge when the compact
    * action cluster is near the left side of the project header.
    *
-   * CDXC:ProjectHeaderTooltips 2026-05-29-20:29:
+   * CDXC:Tooltips 2026-05-29-20:29:
    * Project header action labels must render through a fixed tooltip portal so
    * section overflow and following rows cannot cover labels from the previous row.
    */
   const shouldSuppressProjectCollapseTooltip = Boolean(projectContext) && canToggleCollapsed;
   /*
-   * CDXC:ProjectTitleTooltips 2026-05-30-07:33:
+   * CDXC:Tooltips 2026-05-30-07:33:
    * Hovering a project name should show a richer sidebar tooltip, not the
    * collapse/expand hint. The tooltip title uses brighter medium-weight text,
    * then shows factual project metadata: project kind, path, git file/+/- stats,
@@ -1431,7 +1431,7 @@ export function SessionGroupSection({
   const primaryProjectAgent = agents.find((agent) => agent.agentId === primaryProjectAgentLauncherId) ?? agents[0];
   const primaryProjectAgentLabel = primaryProjectAgent?.name ?? 'Agent';
   /*
-   * CDXC:RemoteRecentProjects 2026-06-24-10:36:
+   * CDXC:RemoteMachines 2026-06-24-10:36:
    * Remote project rows can be closed into Recent Projects even though remote remove/delete remains disabled from the normal project context. Keep close eligibility separate from canRemoveProject so the menu does not expose remote deletion.
    */
   const canCloseProject =
@@ -1708,12 +1708,12 @@ export function SessionGroupSection({
       return;
     }
     /*
-     * CDXC:ProjectActions 2026-08-01:
+     * CDXC:Projects 2026-08-01:
      * Row Action clicks stay selector-shaped like the Command Palette: command
      * id plus the row's group id. The host resolves launch metadata from its
      * trusted per-project HUD state and activates the project before running.
      *
-     * CDXC:GlobalActions 2026-08-07:
+     * CDXC:AgentLauncher 2026-08-07:
      * The scope names the list to resolve the id against; the group id keeps
      * meaning the project to run in, so a Global Action clicked on a row runs
      * in that row's project exactly like a project one.
@@ -2035,18 +2035,18 @@ export function SessionGroupSection({
   const handleGroupHeaderContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
     if (!projectContext && isNestedInteractiveContextMenuTarget(event)) {
       /**
-       * CDXC:SidebarContextMenu 2026-05-15-17:53:
+       * CDXC:ContextMenus 2026-05-15-17:53:
        * Header buttons without their own context menu should not open the
        * surrounding project/group context menu on right-click. Suppress nested
        * interactive targets while preserving right-click menus on the row
        * surface itself.
        *
-       * CDXC:SidebarContextMenu 2026-05-16-13:39:
+       * CDXC:ContextMenus 2026-05-16-13:39:
        * Project headers own a custom project context menu across their whole
        * header, including icon/title and action-button children. Do not apply
        * the nested-control suppression to project groups.
        *
-       * CDXC:SidebarContextMenu 2026-06-19-10:46:
+       * CDXC:ContextMenus 2026-06-19-10:46:
        * The project context menu must open from the project header only, not
        * from the project body or the spacing between session rows.
        */
@@ -2349,7 +2349,7 @@ export function SessionGroupSection({
                     ) : null}
                   </div>
                 ) : null}
-                {/* CDXC:ProjectDiffStats 2026-05-16-08:46: Users can hide the project-header +added/-removed line summary entirely while keeping diff collection and action refresh behavior unchanged. */}
+                {/* CDXC:Git 2026-05-16-08:46: Users can hide the project-header +added/-removed line summary entirely while keeping diff collection and action refresh behavior unchanged. */}
                 {projectContext &&
                 !hideProjectHeaderDiffStats &&
                 !shouldShowCollapsedProjectCounts &&
@@ -2370,7 +2370,7 @@ export function SessionGroupSection({
                   >
                     {projectContext ? (
                       /**
-                       * CDXC:ProjectGroups 2026-05-10-14:18
+                       * CDXC:Projects 2026-05-10-14:18
                        * Project headers expose a compact control family on
                        * every project row: browser pane creation, a separate
                        * terminal button, and an agent-only split launcher.
@@ -2378,22 +2378,22 @@ export function SessionGroupSection({
                        * agent dropdown option so terminal and agent launches
                        * stay visually and behaviorally distinct.
                        *
-                       * CDXC:ProjectGroups 2026-05-15-14:33:
+                       * CDXC:Projects 2026-05-15-14:33:
                        * The sidebar no longer shows the Code editor row or a
                        * project-header Show Code Editor button. Embedded Code
                        * remains reachable through the native titlebar.
                        *
-                       * CDXC:ProjectGroups 2026-05-18-14:53:
+                       * CDXC:Projects 2026-05-18-14:53:
                        * Project header icon actions originally relied on
                        * accessible labels only so project rows stayed visually
                        * quiet while scanning and hovering.
                        *
-                       * CDXC:ProjectHeaderTooltips 2026-05-25-09:43:
+                       * CDXC:Tooltips 2026-05-25-09:43:
                        * Project header icon actions now show compact local
                        * tooltips without native title attributes, matching the
                        * settings/header hover-action surface.
                        *
-                       * CDXC:ProjectHeaderTooltips 2026-05-29-18:19:
+                       * CDXC:Tooltips 2026-05-29-18:19:
                        * Keep project header action tooltips below each hovered
                        * button when space allows and clamp the fixed tooltip
                        * portal so short labels remain visible inside narrow
@@ -2404,7 +2404,7 @@ export function SessionGroupSection({
                        * originally showed disabled PR and merge affordances until
                        * those follow-up actions were wired to real commands.
                        *
-                       * CDXC:WorktreeMerge 2026-05-27-06:25:
+                       * CDXC:Worktrees 2026-05-27-06:25:
                        * Worktree rows keep one Git affordance: Create PR opens the
                        * review flow for commit/push/PR, and that modal now
                        * owns the optional direct merge-to-main path so the header does
@@ -2416,7 +2416,7 @@ export function SessionGroupSection({
                        * routes browser, terminal, agent, worktree, and pull-request
                        * actions through their machine-scoped project identities.
                        *
-                       * CDXC:ProjectSessionLists 2026-06-10-13:39:
+                       * CDXC:Projects 2026-06-10-13:39:
                        * Show more / Show less moved from the bottom of long project session lists into the project header action cluster. Keep it as an icon button with the same per-project collapsed-state storage, and only show it when the expanded project has more rows than the Settings-owned collapsed count.
                        */
                       <>
@@ -2779,7 +2779,7 @@ export function SessionGroupSection({
                   })}
                   {projectSessionListHiddenCount > 0 ? (
                     /*
-                     * CDXC:ProjectSessionLists 2026-06-13-22:23:
+                     * CDXC:Projects 2026-06-13-22:23:
                      * The hidden-session count belongs below the last rendered project row. Render it through the regular session-card component so it has identical row geometry, but disable session-only chrome and actions; clicking the row restores the normal expanded project list, removes this row, and brings the header Show less action back.
                      */
                     <SortableSessionCard
@@ -2810,7 +2810,7 @@ export function SessionGroupSection({
                 </>
               ) : isEmptyProjectGroup ? (
                 /*
-                 * CDXC:ProjectGroups 2026-06-15-20:14:
+                 * CDXC:Projects 2026-06-15-20:14:
                  * After the last terminal in a project closes, the project body
                  * should expose a session-shaped New Session button with no Last
                  * Active timestamp. Mark it sleeping so it matches dormant rows,
@@ -2943,7 +2943,7 @@ export function SessionGroupSection({
             ) : contextMenuPosition.view === 'project-spaces' ? (
               <>
                 {/*
-                 * CDXC:SidebarSpaces 2026-08-27:
+                 * CDXC:Spaces 2026-08-27:
                  * Membership rows for one ungrouped project, in the owning
                  * gxserver's Space order. Multi-membership is allowed, so these
                  * are checkboxes rather than radios; toggling closes the menu,
@@ -3058,7 +3058,7 @@ export function SessionGroupSection({
                 <div className='session-context-menu-divider' role='separator' />
                 <div className='workspace-theme-custom-picker'>
                   {/*
-                   * CDXC:WorkspaceTheme 2026-05-05-02:58
+                   * CDXC:Theming 2026-05-05-02:58
                    * Combined-mode project headers own the Theme menu custom color picker after the far-left project list was removed. Applying a color posts a validated project theme color and records it in the local recent-color palette.
                    */}
                   <input
@@ -3111,13 +3111,13 @@ export function SessionGroupSection({
             ) : projectContext.worktree ? (
               <>
                 {/*
-                 * CDXC:WorktreeDelete 2026-05-28-07:46:
+                 * CDXC:Worktrees 2026-05-28-07:46:
                  * Worktree project rows have their own compact context menu: open/reveal/rename first, then destructive worktree-specific actions. Delete removes the Git worktree checkout after confirmation; Remove only drops the Ghostex project row.
                  *
-                 * CDXC:ProjectGroups 2026-06-04-13:39:
+                 * CDXC:Projects 2026-06-04-13:39:
                  * Project and worktree filesystem menu items should say Open Folder instead of Finder-specific copy so the macOS app presents OS-agnostic action names.
                  *
-                 * CDXC:ProjectGroups 2026-06-08-09:19:
+                 * CDXC:Projects 2026-06-08-09:19:
                  * Worktree project headings should keep Copy Path but omit Open so the compact menu prioritizes filesystem copy/reveal and worktree-specific rename/delete/remove actions.
                  */}
                 <button className='session-context-menu-item' onClick={copyProjectPath} role='menuitem' type='button'>
@@ -3145,7 +3145,7 @@ export function SessionGroupSection({
                   Open Folder
                 </button>
                 {/*
-                 * CDXC:WorktreeRename 2026-08-10:
+                 * CDXC:Worktrees 2026-08-10:
                  * Worktree rows deliberately do NOT offer the label-only
                  * Rename. It posts `renameWorkspaceProjectForGroup`, which
                  * the GPUI runtime has no case for, so on the desktop app it
@@ -3215,27 +3215,27 @@ export function SessionGroupSection({
             ) : (
               <>
                 {/*
-                 * CDXC:ProjectGroups 2026-05-11-01:05
+                 * CDXC:Projects 2026-05-11-01:05
                  * Project group context menus expose filesystem actions
                  * first, then group lifecycle actions, and end with Close
                  * Project. Close Project parks the project in Recent
                  * Projects without deleting saved sessions.
-                 * CDXC:ProjectSleep 2026-05-27-01:50:
+                 * CDXC:SessionSleep 2026-05-27-01:50:
                  * Project rows expose Sleep Inactive instead of a generic
                  * Sleep label because the action must preserve running,
                  * working, and attention sessions while sleeping inactive
                  * sessions across every workspace group in the project.
-                 * CDXC:ProjectReload 2026-05-27-02:18:
+                 * CDXC:Projects 2026-05-27-02:18:
                  * Project-row Wake and Full reload use project-scoped
                  * messages because the rendered row owns a synthetic group
                  * id. Full reload is intentionally narrower than group
                  * reload: native only reloads idle attached zmx terminals.
-                 * CDXC:ProjectClose 2026-06-04-23:40:
+                 * CDXC:Projects 2026-06-04-23:40:
                  * Project rows expose Close inactive directly above Close
                  * Project so users can remove idle project terminal
                  * sessions without parking the whole project in Recent
                  * Projects or interrupting working/attention sessions.
-                 * CDXC:WorkspaceTheme 2026-05-09-17:18
+                 * CDXC:Theming 2026-05-09-17:18
                  * The Theme submenu is unused in the UI for now because
                  * theming has been disabled in this app for now. Keep the
                  * theme implementation available for a later re-enable, but
@@ -3278,7 +3278,7 @@ export function SessionGroupSection({
                   </button>
                 ) : null}
                 {/*
-                 * CDXC:SidebarSpaces 2026-08-27:
+                 * CDXC:Spaces 2026-08-27:
                  * Ungrouped projects only. A project inside a group takes its
                  * Spaces from that group and cannot be assigned on its own, so
                  * offering the entry there would promise an override the model
@@ -3439,7 +3439,7 @@ export function SessionGroupSection({
           vscode={vscode}
         >
           {/*
-           * CDXC:ProjectAgents 2026-06-22-13:11:
+           * CDXC:AgentLauncher 2026-06-22-13:11:
            * Project-header agent menus can open near the bottom of the native sidebar.
            * Use the measured sidebar menu portal so long agent lists clamp to the visible webview and scroll instead of overflowing past the sidebar edge.
            */}
@@ -3472,7 +3472,7 @@ export function SessionGroupSection({
         </SidebarContextMenuPortal>
       ) : null}
       {/**
-       * CDXC:SessionClose 2026-05-11-00:45
+       * CDXC:Sessions 2026-05-11-00:45
        * Group close confirmation copy must use Close so bulk session removal
        * matches the session context menu and does not expose
        * process-lifecycle wording to users.

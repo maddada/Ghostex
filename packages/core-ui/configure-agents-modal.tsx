@@ -26,7 +26,7 @@ export type ConfigureAgentsModalProps = {
 };
 
 /**
- * CDXC:SidebarAgents 2026-05-08-09:00
+ * CDXC:AgentLauncher 2026-05-08-09:00
  * The sidebar-reference import needs a dedicated Configure Agents surface so
  * reference-mode project launchers can add, edit, delete, and reorder agents
  * without exposing the older Agents panel grid.
@@ -154,7 +154,7 @@ export function ConfigureAgentsModal({ isOpen, onClose, vscode }: ConfigureAgent
   const isEditorOpen = editorState !== undefined;
 
   /**
-   * CDXC:SidebarAgents 2026-05-08-11:18
+   * CDXC:AgentLauncher 2026-05-08-11:18
    * Configure Agents and Configure agent are one edit flow. Hide the management
    * modal while the agent editor is open so users never see stacked configure
    * dialogs when creating or editing an agent.

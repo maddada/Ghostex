@@ -92,7 +92,7 @@ pub(crate) fn gpui_native_resource_is_app_shell_process(
 }
 
 /*
-CDXC:GPUITitlebarResources 2026-08-24:
+CDXC:Resources 2026-08-24:
 gxserver is the app's own control plane, and it binds an ephemeral loopback
 port the user never types or opens. It lives in `Contents/Resources/`, so the
 bundle-path markers above (which deliberately stay narrow, because the same
@@ -216,7 +216,7 @@ pub(crate) fn file_url(path: &std::path::Path) -> String {
 pub(crate) const MANAGE_FILE_LIST_MAX_ENTRIES: usize = 1_200;
 pub(crate) const MANAGE_FILE_LIST_MAX_DEPTH: usize = 8;
 /*
-CDXC:DocsRootRecursive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Mirrors `server/src/project_docs.rs`: a mounted Docs directory is a notes
 tree, not a repo, so it gets its own far larger bounds. They are still bounds,
 and hitting one labels that mount with the cap instead of returning a tree that
@@ -234,7 +234,7 @@ pub(crate) const MANAGE_DOCS_RELATIVE_PATH: &str = "docs";
 pub(crate) const MANAGE_BUILT_IN_DOCS_RELATIVE_PATHS: &[&str] =
     &[MANAGE_DOCS_RELATIVE_PATH, "artifacts", "ai", "tmp"];
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Mirrors `EXTRA_ROOT_MOUNT_SEGMENT` in `server/src/project_docs.rs`: the
 reserved first path segment that addresses the mounted Docs directory. Every
 other Docs path is project-relative, so one relative path can only ever mean one
@@ -243,7 +243,7 @@ root it was addressed to.
 */
 pub(crate) const MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT: &str = ".ghostex-docs-root";
 /*
-CDXC:GPUISessionChatExternalDocs 2026-08-27:
+CDXC:SessionChat 2026-08-27:
 Chat may open one explicitly referenced Markdown, HTML, or Excalidraw file in
 the active project's Docs surface even when it lives outside the tree Docs
 normally lists. This reserved runtime-only mount addresses the selected file's
@@ -268,7 +268,7 @@ pub(crate) const GPUI_GXSERVER_LOCAL_API_PORT: u16 = 58_744;
 pub(crate) const GPUI_GXSERVER_PRODUCT: &str = "gxserver";
 pub(crate) const GPUI_GXSERVER_PROTOCOL_HEADER: &str = "x-gxserver-protocol-version";
 pub(crate) const GPUI_GXSERVER_PROTOCOL_VERSION: u64 = 1;
-// CDXC:PortlessSettingsDisabled 2026-07-25: Keep the complete GPUI Portless
+// CDXC:Portless 2026-07-25: Keep the complete GPUI Portless
 // implementation available for later, while gating all current runtime and UI
 // exposure behind one intentionally disabled product switch.
 pub(crate) const GPUI_PORTLESS_APP_INTEGRATION_ENABLED: bool = false;
@@ -349,7 +349,7 @@ pub(crate) const GPUI_MACOS_SCREEN_RECORDING_PREFERENCES_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
 pub(crate) const GPUI_MACOS_NOTIFICATION_SETTINGS_URL: &str =
     "x-apple.systempreferences:com.apple.Notifications-Settings.extension";
-pub(crate) const GPUI_GHOSTEX_CLI_WRAPPER_MARKER: &str = "CDXC:CliInstall 2026-06-12-09:31";
+pub(crate) const GPUI_GHOSTEX_CLI_WRAPPER_MARKER: &str = "CDXC:Cli 2026-06-12-09:31";
 pub(crate) const GPUI_GTE_INSTALL_ACTION_ID: &str = "installGte";
 pub(crate) const GPUI_GTE_HOMEBREW_INSTALL_SCRIPT: &str = concat!(
     "if command -v brew >/dev/null 2>&1; then BREW=$(command -v brew); ",
@@ -363,7 +363,7 @@ pub(crate) const GPUI_GTE_INSTALL_FAILURE_MESSAGE: &str =
     "gte install failed. Install Homebrew or run brew install maddada/tap/gte in a terminal.";
 pub(crate) const GPUI_BUNDLED_GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     /*
-    CDXC:CodexSessionMove 2026-06-26-13:47:
+    CDXC:AgentSkills 2026-06-26-13:47:
     GPUI packages the same app-bundled Codex session-move skill as the native sidebar so settings repair and install flows expose a consistent Ghostex skill set.
     */
     "ghostex-browser-use",

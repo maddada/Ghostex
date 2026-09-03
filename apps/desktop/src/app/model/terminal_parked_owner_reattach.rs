@@ -6,7 +6,7 @@
 use crate::*;
 
 /*
-CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+CDXC:Terminal 2026-06-23-19:41:
 Sleeping wake and popped-out reattach are runtime-owner moves, not startup attempts. Parked owner geometry and reattach plans stay process-local, require the same durable shell session, process-local runtime id, pane/session slot, and current body bounds, and must not create launch payloads, startup hosts, fallback surfaces, logs, shell-state fields, or fake Running state.
 */
 #[derive(Clone, Copy, PartialEq)]
@@ -114,7 +114,7 @@ impl AgentsTerminalParkedRuntimeOwner {
 }
 
 /*
-CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-07:42:
+CDXC:Terminal 2026-06-27-07:42:
 Sleeping command terminals should park the existing AppKit host and Ghostty surface owner, not free and recreate them on wake. The parked owner is process-local and exact command group/session keyed; it must never infer ownership from titles, command text, cwd/env, terminal output, focus fallback, shell-state JSON, logs, or Agents runtime maps.
 */
 #[cfg(target_os = "macos")]
@@ -292,7 +292,7 @@ pub(crate) fn prune_agents_terminal_parked_runtime_owners(
     >,
 ) {
     /*
-    CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+    CDXC:Terminal 2026-06-23-19:41:
     Parked Agents owners survive only while the same shell session and process-local runtime id remain current and absent from Running owner maps. The remembered slot stays the proof of where the owner was parked. Running tabs may otherwise park while inactive so tab switches preserve their attached terminal like macOS; stale entries are pruned instead of relaunched, inferred from titles/paths/commands, or promoted to fake Running state.
     */
     parked_runtime_owners.retain(|runtime_session_id, owner| {
@@ -365,7 +365,7 @@ pub(crate) fn agents_terminal_running_parked_owner_reattach_plan_for_slot(
     slot_id: AgentsTerminalBodyMountSlotId,
 ) -> Option<AgentsTerminalParkedOwnerReattachPlan> {
     /*
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-27-13:25:
+    CDXC:FocusRouting 2026-06-27-13:25:
     Inactive Running Agents tabs keep their AppKit/Ghostty owner parked so switching back to a sidebar-attached session shows the existing terminal immediately instead of creating a blank replacement shell. Reattach only when the same Running slot is current and its body bounds were recorded by the normal mount-slot canvas.
     */
     if !agents_workspace_visible || !workspace.is_current_terminal_body_mount_slot(slot_id) {
@@ -467,7 +467,7 @@ pub(crate) fn park_agents_terminal_runtime_owner_before_host_detach(
     detach_plan: terminal_surface_host::NativeTerminalSurfaceAttachmentPlan,
 ) -> bool {
     /*
-    CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+    CDXC:Terminal 2026-06-23-19:41:
     Detaching a Running slot parks ownership when the same shell tab remains a valid Running, Sleeping, popped-out, or non-startup Mounting owner. This preserves inactive running tabs across ordinary tab switches while still requiring the exact AppKit host and Ghostty surface to match the runtime id; otherwise the normal detach/drop path remains honest instead of creating a fallback parked owner.
     */
     let slot_id = detach_plan.slot_id;
@@ -547,7 +547,7 @@ pub(crate) fn park_agents_terminal_runtime_owner_for_group_move(
     source_slot_id: AgentsTerminalBodyMountSlotId,
 ) -> bool {
     /*
-    CDXC:GPUISidebarGroupFocus 2026-07-10:
+    CDXC:Workarea 2026-07-10:
     Before a sidebar-selected Running terminal moves from its old Agents group
     into the currently focused group, park its exact AppKit/Ghostty owners.
     The normal render pass will provide the destination bounds and reattach the
@@ -637,7 +637,7 @@ pub(crate) fn transfer_agents_terminal_parked_runtime_owner_reattach(
     plan: AgentsTerminalParkedOwnerReattachPlan,
 ) -> bool {
     /*
-    CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+    CDXC:Terminal 2026-06-23-19:41:
     Reattach is transactional: require exact current body geometry, exact parked runtime ownership, empty Running owner maps, and the same pane/session slot before moving ownership back. Mounting wake/reattach placeholders transition to Running; already-Running inactive tabs keep their shell state and reclaim the parked host/surface without relaunching or showing a blank replacement.
     */
     let Some(session) = workspace.session(plan.shell_session_id) else {
@@ -708,7 +708,7 @@ pub(crate) fn command_terminal_session_can_hold_parked_runtime_owner(
     slot_id: CommandTerminalBodyMountSlotId,
 ) -> bool {
     /*
-    CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-08:59:
+    CDXC:Terminal 2026-06-27-08:59:
     Native command-panel owner selection parks renderer ownership whenever the command session still belongs to its command group, not only when Sleep hides it. Inactive tabs, collapsed command panels, and Focus-hidden groups may reattach the same host/surface later; removed or stale command sessions still prune.
     */
     command_pane_group_for_session(command_pane, slot_id.session_id) == Some(slot_id.group_id)
@@ -732,10 +732,10 @@ pub(crate) fn prune_command_terminal_parked_runtime_owners(
     >,
 ) {
     /*
-    CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-07:42:
+    CDXC:Terminal 2026-06-27-07:42:
     Parked command owners survive only for the same command group/session slot while the tab is still part of command-panel state. Stale session membership, close/removal, and Running owner collisions prune the parked process instead of relaunching, retargeting, logging, persisting, or fabricating fallback surfaces.
 
-    CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-08:59:
+    CDXC:Terminal 2026-06-27-08:59:
     Owner-selection parity requires inactive, collapsed, and Focus-hidden command tabs to keep their parked runtime owners. Prune only when the command session no longer belongs to that exact command group or a live Running owner already exists for the slot.
     */
     parked_runtime_owners.retain(|runtime_session_id, owner| {
@@ -771,10 +771,10 @@ pub(crate) fn park_command_terminal_runtime_owner_before_host_detach(
     >,
 ) -> bool {
     /*
-    CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-07:42:
+    CDXC:Terminal 2026-06-27-07:42:
     Command `HideAndDetach` parks ownership only when the command tab still belongs to its exact group. The AppKit host and Ghostty surface must already exist with the exact command slot/runtime identity; close/removal, stale groups, collisions, and missing owners continue through the honest detach/drop path.
 
-    CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-08:59:
+    CDXC:Terminal 2026-06-27-08:59:
     Native owner-selection, collapse, and Focus hiding detach visible command panes without freeing their terminal owners. Do not require `isSleeping`; a live inactive command tab should park so reselecting or reopening can reattach the same runtime owner instead of creating a replacement process.
     */
     let slot_id = detach_plan.slot_id;
@@ -912,10 +912,10 @@ pub(crate) fn transfer_command_terminal_parked_runtime_owner_reattach(
     plan: CommandTerminalParkedOwnerReattachPlan,
 ) -> bool {
     /*
-    CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-07:42:
+    CDXC:Terminal 2026-06-27-07:42:
     Command reattach is transactional around exact current command body geometry and empty Running owner maps. A sleeping tab waking to the same group/session slot may receive the parked host/surface owner; mismatches leave normal command mount reconciliation responsible and never create launch payloads, new Ghostty surfaces, logs, persisted runtime ids, or fallback command processes.
 
-    CDXC:GPUICommandTerminalParkedOwnerReattach 2026-06-27-08:59:
+    CDXC:Terminal 2026-06-27-08:59:
     Reattach also serves native command-panel owner selection: an inactive or collapsed command tab that becomes the current visible owner may receive its parked host/surface if the same group/session slot and current body bounds match.
     */
     if plan.parked_mount_slot_id != plan.current_mount_slot_id

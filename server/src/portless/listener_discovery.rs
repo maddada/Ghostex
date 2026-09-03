@@ -531,7 +531,7 @@ pub(crate) fn parse_portless_tcp_listener_rows(
 }
 
 /*
-CDXC:GhostexPorts 2026-09-02:
+CDXC:Resources 2026-09-02:
 `ghostex ports` lists every listening socket on the machine, including ones
 owned by another user (no pid/command visible through lsof/ss), so it reads the
 same tool output Portless parses instead of growing a second parser that could

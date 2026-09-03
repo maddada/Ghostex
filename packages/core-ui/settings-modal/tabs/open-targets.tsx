@@ -43,7 +43,7 @@ export function OpenTargetsSettingsTab({
   const [editorState, setEditorState] = useState<SettingsOpenTargetEditorState>();
   const hiddenIds = new Set(settings.workspaceOpenTargetHiddenIds);
   /**
-   * CDXC:TitlebarOpenIn 2026-05-11-02:03
+   * CDXC:Titlebar 2026-05-11-02:03
    * Settings shows installed built-ins as toggleable and unavailable built-ins
    * as disabled rows. Turning an installed target off writes only hidden ids,
    * so the startup scan can refresh availability without undoing that choice.
@@ -104,11 +104,11 @@ export function OpenTargetsSettingsTab({
         {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
         {shouldShowSettingsSection(search.sections.openIn) ? (
           <SettingsSection title='Open In'>
-            {/* CDXC:TitlebarOpenIn 2026-05-11-00:22
+            {/* CDXC:Titlebar 2026-05-11-00:22
               Users need a Settings tab opened from the titlebar dropdown to
               show or hide IDE targets and add custom project-open commands.
 
-              CDXC:TitlebarOpenIn 2026-05-16-23:24
+              CDXC:Titlebar 2026-05-16-23:24
               Settings must show the same Open In editor icons as the titlebar
               dropdown so users can scan Cursor, VS Code variants, Zed,
               Antigravity, VSCodium, and JetBrains-family targets by brand. */}

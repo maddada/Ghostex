@@ -5,7 +5,7 @@ export type SidebarProjectJumpEventDetail = {
   groupId: string;
   projectId: string;
   /**
-   * CDXC:SidebarSessionReveal 2026-06-16-07:55:
+   * CDXC:Sessions 2026-06-16-07:55:
    * Add Project and Add Worktree launch flows need the same Projects-area reveal
    * event as project jumps, plus an explicit retry of the focused-session row
    * scroll after React expands the target project.

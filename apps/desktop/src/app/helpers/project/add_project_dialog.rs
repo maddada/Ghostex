@@ -41,7 +41,7 @@ pub(crate) fn gpui_add_project_dialog_params(
         }
         GpuiAddProjectDialogOperation::CreateDirectory => {
             /*
-            CDXC:AddProjectNewFolder 2026-08-18:
+            CDXC:AddProject 2026-08-18:
             The new-folder request names an existing parent directory plus one
             bounded segment. The daemon re-validates both, so the bridge only
             has to keep the segment from carrying a path.
@@ -103,7 +103,7 @@ pub(crate) fn gpui_add_project_dialog_translate_local_windows_paths(
     mut params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     /*
-    CDXC:AddProjectWindowsWslPaths 2026-08-02:
+    CDXC:AddProject 2026-08-02:
     The Windows shell deliberately runs its one local gxserver inside WSL2.
     The shared dialog accepts Win32 drive and UNC paths on a Win32 machine,
     but those paths are not absolute to the Linux daemon. Translate only the
@@ -193,7 +193,7 @@ pub(crate) fn gpui_workspace_project_key_allowed(value: &str) -> bool {
 }
 
 /*
-CDXC:GPUIRemoteBrowserTabs 2026-07-12:
+CDXC:Browser 2026-07-12:
 Browser tab models are keyed by project id strings. Local projects use the
 plain workspace id, and remote projects use their machine-scoped
 `remote:<machine>:project:<id>` identity so their tabs park, persist, and
@@ -346,7 +346,7 @@ pub(crate) fn gpui_workspace_terminal_runtime_action_script(message: &serde_json
 }
 
 /*
-CDXC:GPUISidebarPointerTracking 2026-08-02:
+CDXC:Sidebar 2026-08-02:
 `data-native-pointer-inside` is a pure CSS state flag whose only writer is the
 native pointer observer, so it is set directly on `document.body` rather than
 through a page bridge: the attribute exists from the first paint, no page code

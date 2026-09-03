@@ -192,7 +192,7 @@ export function ProjectBoardApp() {
   const displayKey = normalizeDisplayIssueKey(urlSearchParams.get('beadsDisplayKey') ?? projectName);
   const issuePrefix = normalizeIssuePrefix(projectName || projectPath.split('/').filter(Boolean).at(-1) || displayKey);
   /*
-   * CDXC:ProjectBoardCustomColumns 2026-08-21:
+   * CDXC:ProjectBoard 2026-08-21:
    * Lanes are the board's own bd statuses, which are only known once ensureWorkflowStatuses has read
    * the config, so the board opens on the six built-in lanes and adopts the extras on the first load.
    * The columns are mirrored into a ref because the refresh callback maps issue statuses onto them:
@@ -202,7 +202,7 @@ export function ProjectBoardApp() {
   const boardColumnsRef = useRef<BoardColumn[]>(buildBoardColumns(''));
   const [boardColumns, setBoardColumns] = useState<BoardColumn[]>(boardColumnsRef.current);
   /*
-   * CDXC:ProjectBoardColumnManagement 2026-08-21:
+   * CDXC:ProjectBoard 2026-08-21:
    * Column management writes the same config string it read, so the raw value is kept rather than
    * rebuilt from the derived columns: the derived list has already dropped each entry's bd category
    * suffix, and regenerating the config from it would silently strip categories the board relies on.
@@ -211,7 +211,7 @@ export function ProjectBoardApp() {
   const [boardColumnConfig, setBoardColumnConfig] = useState('');
   const [columnsDialogOpen, setColumnsDialogOpen] = useState(false);
   /*
-   * CDXC:ProjectBoardRedesign 2026-08-24:
+   * CDXC:ProjectBoard 2026-08-24:
    * Card-detail visibility is one app-wide preference shared by every
    * project's board: it loads from localStorage on mount, saves on every
    * toggle, and follows cross-window storage events so all open boards match.
@@ -323,18 +323,18 @@ export function ProjectBoardApp() {
    * CDXC:ProjectBoard 2026-05-30-08:59:
    * The edit-ticket Status select follows the same collapsed-label rule as Priority: show board status labels to users while keeping the stored board status key for Beads updates.
    *
-   * CDXC:ProjectBoardFilters 2026-05-30-08:31:
+   * CDXC:ProjectBoard 2026-05-30-08:31:
    * The board toolbar should place the search icon inside the input at the left edge and replace the status dropdown with Priority and Estimate filters.
    * Toolbar selects use root item metadata so collapsed controls show friendly labels instead of raw filter values.
    *
-   * CDXC:ProjectBoardFilters 2026-05-30-09:13:
+   * CDXC:ProjectBoard 2026-05-30-09:13:
    * The top Project-page filter controls and + Ticket action should share the search input height so the toolbar reads as one aligned control row.
    *
-   * CDXC:ProjectBoardLaneCreation 2026-05-30-09:15:
+   * CDXC:ProjectBoard 2026-05-30-09:15:
    * Lane headers should expose a hover/focus + action in place of the ticket count so users can create a ticket directly in that workflow status.
    * Beads creates issues in Todo first, so non-Todo lane creation must immediately update the new issue status before refreshing the board or starting work.
    *
-   * CDXC:ProjectBoardLaneHeader 2026-06-05-14:30:
+   * CDXC:ProjectBoard 2026-06-05-14:30:
    * The lane header action slot should sit 4px in from the right edge, keep ticket counts right-aligned within that slot, and place the hover + action 3px farther right than the count alignment.
    *
    * CDXC:ProjectBoard 2026-05-30-08:54:
@@ -352,31 +352,31 @@ export function ProjectBoardApp() {
    * Create & Start should hand the created bead to native session launch as soon as the bead id is available.
    * Board refresh, lane hydration, labels, dependencies, and generated title updates are secondary work and must not sit in front of terminal creation.
    *
-   * CDXC:ProjectBoardBeads 2026-06-10-20:27:
+   * CDXC:ProjectBoard 2026-06-10-20:27:
    * New tickets must be created under the active project prefix, not a stale Beads issue-prefix value left by earlier gxserver-focused work.
    * Keep Beads issue_prefix reconciled from the project identity before initial/manual board reads and before create so new cards return in the same project board scope.
    *
-   * CDXC:ProjectBoardForms 2026-06-09-15:36:
+   * CDXC:ProjectBoard 2026-06-09-15:36:
    * Typing in New automation, edit-ticket, or new-ticket fields must never blank the Project/Kanban page.
    * Snapshot input values before functional state updates because React clears event currentTarget after dispatch and delayed updaters cannot safely read from the event object.
    *
-   * CDXC:ProjectBoardLocalFirst 2026-06-16-13:16:
+   * CDXC:ProjectBoard 2026-06-16-13:16:
    * Kanban create and drag/drop interactions must update the board from local React state as soon as Beads returns a bead id or the user drops a card.
    * Keep status moves, generated titles, dependency/label mutations, and full Beads refreshes as background reconciliation so the page stays responsive while durable storage catches up.
    *
-   * CDXC:ProjectBoardLocalFirst 2026-06-16-20:01:
+   * CDXC:ProjectBoard 2026-06-16-20:01:
    * Generated titles must not run as immediate follow-up work after local ticket insertion.
    * Defer generated-title prompt-agent work to idle time, and keep label vocabulary local-first instead of starting global label reads after create.
    *
-   * CDXC:ProjectBoardLabels 2026-06-19-09:35:
+   * CDXC:ProjectBoard 2026-06-19-09:35:
    * Kanban create, drag, initial render, manual refresh, and auto-refresh must not call Beads `label list-all`.
    * The board derives label suggestions from the already-loaded issue rows and merges labels from successful local mutations so global label inventory cannot block scrolling or card movement.
    *
-   * CDXC:ProjectBoardLoading 2026-06-20-18:21:
+   * CDXC:ProjectBoard 2026-06-20-18:21:
    * The first time the macOS Kanban board opens, the lane strip should stay mounted but covered by a spinner overlay until the initial Beads load finishes.
    * Later refreshes should keep the already-loaded board visible and interactive instead of replaying the first-open loading mask.
    *
-   * CDXC:ProjectBoardLocalFirst 2026-06-27-18:02:
+   * CDXC:ProjectBoard 2026-06-27-18:02:
    * Edit-ticket Save must close immediately and treat Beads persistence as background reconciliation.
    * Optimistically patch the local card, show an error toast, and reopen the same draft only if persistence fails so slow storage does not hold the modal open or lose the user's edits.
    */
@@ -444,7 +444,7 @@ export function ProjectBoardApp() {
       });
     };
     /*
-     * CDXC:ProjectBoardFocus 2026-06-12-08:44:
+     * CDXC:ProjectBoard 2026-06-12-08:44:
      * Typing in Kanban must own keyboard focus over sidebar hydration and delayed companion-session focus repairs.
      * Report only sanitized focus-owner events from the Project WKWebView so native can protect active board input without logging field text, ticket titles, paths, URLs, or command content.
      */
@@ -513,7 +513,7 @@ export function ProjectBoardApp() {
         throw new Error('No active project path is available.');
       }
       /*
-       * CDXC:ProjectBoardRouting 2026-06-04-23:51:
+       * CDXC:Navigation 2026-06-04-23:51:
        * Beads CRUD must address gxserver by the raw project id when the Project pane has one, not only by the URL path. Project paths in restored WKWebView URLs can be stale, while gxserver project ids are the canonical board scope.
        */
       const response = await sendBeadsRequest({
@@ -802,7 +802,7 @@ export function ProjectBoardApp() {
         const rawIssues = normalizeBeadsPayload<BeadsIssue[]>(payload, Array.isArray(payload) ? payload : []);
         const issues = applyPendingBoardStatusMoves(rawIssues, pendingStatusMovesRef.current);
         /*
-         * CDXC:ProjectBoardCustomColumns 2026-08-21:
+         * CDXC:ProjectBoard 2026-08-21:
          * The lane a bead belongs to is resolved against the column list, so the signature carries the
          * columns too. A status added to the board config while beads already sit in it changes no
          * issue, and remapping only on an issue change would leave the new lane empty and those beads
@@ -859,7 +859,7 @@ export function ProjectBoardApp() {
   ]);
 
   /*
-   * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
+   * CDXC:ProjectBoard 2026-08-07-07:01:
    * A ticket assigned to a configured agent must start work with that agent, so a
    * bead assigned to Dobby does not open a Claude session.
    * An agent the user picked for that ticket this session outranks the assignee,
@@ -870,7 +870,7 @@ export function ProjectBoardApp() {
     resolveAssignedAgentId(ticket.assignee, conversationState.agents);
 
   /*
-   * CDXC:ProjectBoardStartWork 2026-08-07-07:01:
+   * CDXC:ProjectBoard 2026-08-07-07:01:
    * Re-resolve the open ticket's agent whenever the ticket or the configured agent
    * list changes, because the ticket refresh and the conversation state both land
    * after the ticket dialog opens.
@@ -989,7 +989,7 @@ export function ProjectBoardApp() {
     [activeTagFilter, estimateFilter, priorityFilter, searchQuery, tickets]
   );
   /*
-   * CDXC:ProjectBoardFiltersPopover 2026-08-24:
+   * CDXC:ProjectBoard 2026-08-24:
    * The toolbar shows one Filters button with an active-count badge; the
    * priority/estimate/tag/sort selects live inside its popover so the bar
    * stays one row at any window width.
@@ -1118,7 +1118,7 @@ export function ProjectBoardApp() {
   };
 
   /*
-   * CDXC:ProjectBoardBeadsRejection 2026-08-20:
+   * CDXC:ProjectBoard 2026-08-20:
    * Beads refuses some board operations for domain reasons rather than failing:
    * a guarded close, an impossible dependency edge, an id that names no issue.
    * None of those is a board-wide failure, so none belongs in the inline notice
@@ -1154,7 +1154,7 @@ export function ProjectBoardApp() {
       }
       case 'close-open-children': {
         /*
-         * CDXC:ProjectBoardBeadsRejection 2026-08-20:
+         * CDXC:ProjectBoard 2026-08-20:
          * Beads reports only the open-child COUNT, so resolve the ids from the
          * board's own graph. Offer the action only when that lookup actually
          * finds them: a button that closes an unknown set would be guessing.
@@ -1251,7 +1251,7 @@ export function ProjectBoardApp() {
       } catch (error) {
         toast.dismiss(toastId);
         /*
-         * CDXC:ProjectBoardBeadsRejection 2026-08-20:
+         * CDXC:ProjectBoard 2026-08-20:
          * A blocker or child can be guarded in turn. Re-report that refusal
          * against the issue that raised it so the operator walks the chain one
          * toast at a time instead of hitting a dead end.
@@ -1297,7 +1297,7 @@ export function ProjectBoardApp() {
   };
 
   /*
-   * CDXC:ProjectBoardColumnManagement 2026-08-21:
+   * CDXC:ProjectBoard 2026-08-21:
    * Every column edit is one config write followed by a manual reload, so the lanes the user sees
    * always come back from bd rather than from optimistic local state — a board config write is rare
    * and cheap, and guessing at the result would drift from whatever bd actually stored.
@@ -1318,7 +1318,7 @@ export function ProjectBoardApp() {
   };
 
   /*
-   * CDXC:ProjectBoardColumnManagement 2026-08-21:
+   * CDXC:ProjectBoard 2026-08-21:
    * Deleting is refused while the column still holds beads, so this never has to decide where an
    * orphan goes. That is deliberate: an unconfigured status resolves to Todo, so silently emptying a
    * parked lane would make parked work read as fresh work, which is the bug custom columns fixed.
@@ -1331,7 +1331,7 @@ export function ProjectBoardApp() {
   };
 
   /*
-   * CDXC:ProjectBoardColumnManagement 2026-08-21:
+   * CDXC:ProjectBoard 2026-08-21:
    * Renaming is not a config edit alone: every bead still holding the old status has to move, and a
    * bead may not carry a status the config does not list. So the new name is added alongside the old
    * one first, the beads are moved onto it, and only then is the old entry dropped — no point in the
@@ -1550,7 +1550,7 @@ export function ProjectBoardApp() {
       }
       const generateCreatedTicketTitle = async (issueId: string) => {
         /*
-         * CDXC:ProjectBoardDiagnostics 2026-06-21-03:56:
+         * CDXC:Diagnostics 2026-06-21-03:56:
          * Empty-title ticket creation is a two-step flow: Beads persists the
          * ticket first, then the Project board asks the selected/default prompt
          * agent to generate a display title. Log only built-in agent categories,
@@ -1604,7 +1604,7 @@ export function ProjectBoardApp() {
             title: generatedTitle,
           });
           /*
-           * CDXC:ProjectBoardTitleGeneration 2026-06-21-16:56:
+           * CDXC:ProjectBoard 2026-06-21-16:56:
            * Generated title completion is background polish for one card.
            * Patch the local ticket title after the durable Beads update and do not reload the full board, so a slow prompt-agent title cannot hitch Kanban scrolling, drag/drop, or follow-up ticket creation.
            */
@@ -1707,7 +1707,7 @@ export function ProjectBoardApp() {
       };
 
       /*
-       * CDXC:ProjectBoardTitleGeneration 2026-06-21-16:56:
+       * CDXC:ProjectBoard 2026-06-21-16:56:
        * Ticket reconciliation owns dependency/status/label durability, while prompt-agent title generation owns only replacing the deterministic draft title.
        * Start both as detached background work so title generation is not serialized behind board reconciliation and the create flow can return immediately.
        */
@@ -2285,7 +2285,7 @@ export function ProjectBoardApp() {
     [automationState.projects]
   );
   /*
-   * CDXC:ProjectAutomations 2026-06-09-15:38:
+   * CDXC:Automations 2026-06-09-15:38:
    * Automation agents come from the Project Board bridge as label/icon options, while shared select metadata expects sidebar-agent names.
    * Adapt only the root select items so the automation bridge contract stays focused on user-facing labels.
    */
@@ -2357,7 +2357,7 @@ export function ProjectBoardApp() {
        * The Quick-level all-project page is named Automations Overview and should not repeat "Automations" in both the eyebrow and page title. Keep the project-scoped Automate surface eyebrow explicit while the overview uses only "Experimental" above the title.
        */}
       {/*
-       * CDXC:ProjectBoardRedesign 2026-08-23:
+       * CDXC:ProjectBoard 2026-08-23:
        * Codex-style header shared by the Kanban and Automate surfaces: quiet
        * eyebrow + regular-weight project title on the left, plain text tabs
        * centered (Automate only), default-size (h-8) actions on the right.
@@ -2401,7 +2401,7 @@ export function ProjectBoardApp() {
           <div />
         )}
         {/*
-         * CDXC:ProjectBoardRedesign 2026-08-23:
+         * CDXC:ProjectBoard 2026-08-23:
          * On the board surface the refresh and + Ticket actions live at the
          * right end of the filter row below, so the header is just the title.
          * The Automate surfaces keep their actions up here beside the tabs.
@@ -2437,7 +2437,7 @@ export function ProjectBoardApp() {
             <section className='flex shrink-0 flex-wrap items-center gap-2' aria-label='Ticket filters'>
               <div className='relative w-64'>
                 {/*
-                 * CDXC:SearchInputs 2026-06-04-03:11:
+                 * CDXC:DesignSystem 2026-06-04-03:11:
                  * Project Board ticket search is hosted by the native tasks bundle,
                  * so mirror the sidebar search affordance locally: keep the search
                  * icon on the right while empty, replace it with an X button after
@@ -2480,7 +2480,7 @@ export function ProjectBoardApp() {
                 )}
               </div>
               {/*
-               * CDXC:ProjectBoardFiltersPopover 2026-08-24:
+               * CDXC:ProjectBoard 2026-08-24:
                * Priority, Estimate, Tags, and Sort live in one Filters popover
                * so the toolbar stays a single row at any width; the badge on
                * the trigger counts the non-default choices.
@@ -2596,7 +2596,7 @@ export function ProjectBoardApp() {
                 </PopoverContent>
               </Popover>
               {/*
-               * CDXC:ProjectBoardColumnManagement 2026-08-21:
+               * CDXC:ProjectBoard 2026-08-21:
                * Columns sits with the filters because it changes what the board shows, and it is the only
                * control here that writes to the board rather than to this client's view preferences.
                */}
@@ -2829,13 +2829,13 @@ export function ProjectBoardApp() {
               <div className='project-board-board-region'>
                 <DragDropProvider onDragEnd={handleDragEnd}>
                   {/*
-                CDXC:ScrollFades 2026-06-19-14:16:
+                CDXC:DesignSystem 2026-06-19-14:16:
                 Kanban uses a horizontal board scroller plus vertical lane
                 scrollers. Apply the shared Codex-style masks to the scroll
                 containers themselves so lane headers and custom scrollbars stay
                 crisp while overflowing cards fade at the edges.
 
-                CDXC:BoardScrollbars 2026-08-07:
+                CDXC:ProjectBoard 2026-08-07:
                 Both bars are now the browser's own scrollbars on those same
                 masked scrollers, so their ends fade with the content instead of
                 staying crisp.
@@ -3023,7 +3023,7 @@ export function ProjectBoardApp() {
         ticketOptions={ticketOptions}
       />
       {/*
-       * CDXC:ProjectBoardBlockedMove 2026-08-20:
+       * CDXC:ProjectBoard 2026-08-20:
        * The board's own toaster lives in this surface rather than the native
        * app-modal host because board rejections need an inline action button,
        * which the native showToast bridge carries no room for. Match the modal

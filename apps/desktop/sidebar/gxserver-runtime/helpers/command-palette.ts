@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -48,7 +48,7 @@ export function normalizeGpuiCommandPaletteSessionFocus(value: unknown): string 
 }
 
 /*
- * CDXC:GlobalActions 2026-08-01:
+ * CDXC:AgentLauncher 2026-08-01:
  * The tab strip runs Global Actions and the Command Palette runs Project
  * Actions, and both send only an id. Without a scope on the selector the two
  * id spaces are indistinguishable, so a Global Action whose id also exists as a

@@ -192,7 +192,7 @@ pub(crate) fn gpui_agents_hub_catalog_message() -> serde_json::Value {
 
 pub(crate) fn gpui_agents_hub_catalog_build() -> GpuiAgentsHubCatalogBuild {
     /*
-    CDXC:GPUIAgentsHubBridge 2026-06-24-12:26:
+    CDXC:AgentLauncher 2026-06-24-12:26:
     GPUI Agents Hub scans the same machine-local agent/profile/skill/config roots as the macOS native helper, but catalog rows remain metadata-only. File bodies are deliberately omitted here so opening the Hub cannot bridge private instruction/config contents until the user selects a file.
     */
     let Some(home) = env::var_os("HOME")

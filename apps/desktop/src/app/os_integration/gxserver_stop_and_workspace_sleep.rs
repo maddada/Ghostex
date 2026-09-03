@@ -140,7 +140,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUISidebarPointerTracking 2026-08-02:
+    CDXC:Sidebar 2026-08-02:
     Report an observed pointer crossing of the sidebar's native frame into the
     page. The sidebar CEF surface is a native sibling of GPUI chrome, Ghostty
     terminal hosts, and the other CEF panes, so Chromium never sees the pointer
@@ -160,7 +160,7 @@ impl GhostexGpuiApp {
         let script = gpui_sidebar_native_pointer_inside_script(inside);
         let wrote_flag = sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
         /*
-        CDXC:GPUISidebarPointerTracking 2026-08-20:
+        CDXC:Sidebar 2026-08-20:
         The CSS flag can only neutralize hover-derived *styling*. A tooltip is
         page state opened on pointer-enter and closed on pointer-leave, and the
         leave never reaches the renderer when the pointer crosses into a native
@@ -179,7 +179,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+    CDXC:Spaces 2026-08-29:
     The AppKit observer saw a finger scroll gesture begin (NSEventPhaseBegan)
     inside the sidebar's frame. Forward it into the page so the Space-swipe
     handler can reset its gesture lock: the renderer's wheel stream has no
@@ -199,7 +199,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUISidebarPointerTracking 2026-08-02:
+    CDXC:Sidebar 2026-08-02:
     A mouse-down landed outside the sidebar's native frame, so any open sidebar
     context menu must close. The page's own backdrop only covers the sidebar
     document, and its window-blur dismissal never fires here: the sidebar

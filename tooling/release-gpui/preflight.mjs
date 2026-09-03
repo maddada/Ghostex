@@ -8,7 +8,7 @@ import { validatePlan } from './plan.mjs';
 import { PRODUCT_IDS, isProductRequested, productDefinition } from './product-inputs.mjs';
 
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * `--plan <file>` cross-checks the resolved plan against the scope the run was
  * dispatched with. `--only-plan` runs that check alone, so the workflow can keep
  * the expensive immutable-input validation first (it must fail within seconds)

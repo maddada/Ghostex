@@ -27,7 +27,7 @@ export const PROJECT_BOARD_STYLES = `
     --project-board-panel: #161616;
     --project-board-panel-hover: #1b1b1b;
     /*
-     * CDXC:ProjectBoardCards 2026-06-19-09:14:
+     * CDXC:ProjectBoard 2026-06-19-09:14:
      * Kanban card surfaces need a brighter resting background than their lane panels so cards stand out in the macOS Project board.
      * Keep hover one step brighter than the resting card color so hover feedback remains visible after raising the base card tone.
      */
@@ -38,7 +38,7 @@ export const PROJECT_BOARD_STYLES = `
     --project-board-control-height: 32px;
     --project-board-scrollbar: rgba(255, 255, 255, 0.28);
     /*
-     * CDXC:ProjectBoardRoundness 2026-06-29-20:55:
+     * CDXC:ProjectBoard 2026-06-29-20:55:
      * The Kanban ticket dialog and board cards/controls should adopt the Settings surface roundness instead of the global square theme.
      * Small chips/labels use the compact radius, interactive controls/cards/inputs use the control radius, and the dialog plus dropdown popups use the section/control radius. Field focus reuses a neutral dimmed border like Settings rather than a saturated focus ring.
      */
@@ -47,7 +47,7 @@ export const PROJECT_BOARD_STYLES = `
     --project-board-radius-section: 12px;
     --project-board-focus-border: color-mix(in srgb, #f4f4f5 58%, var(--project-board-border) 42%);
     /*
-     * CDXC:AccentColor 2026-08-24:
+     * CDXC:Theming 2026-08-24:
      * The Kanban/Automate page is loaded outside the sidebar chrome effects and
      * its bridge state carries no settings, so it can only paint the shipped
      * default accent until live accentColor plumbing reaches this page.
@@ -76,7 +76,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardRedesign 2026-08-23:
+   * CDXC:ProjectBoard 2026-08-23:
    * Codex-style control language shared with the Automate surface: one 32px
    * control height (the shadcn default sizes), 8px radius on controls and
    * cards, pill switches, regular-weight button text. The old
@@ -93,7 +93,7 @@ export const PROJECT_BOARD_STYLES = `
     font-weight: 400;
   }
 
-  /* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
+  /* CDXC:DesignSystem 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
   [data-slot="switch"] {
     border-radius: 6px;
   }
@@ -117,7 +117,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardRedesign 2026-08-24:
+   * CDXC:ProjectBoard 2026-08-24:
    * Select popups size to their trigger (--anchor-width), and long option
    * labels (tags, sort orders) ship in a nowrap flex ItemText (a div) that
    * overflows to the popup's right edge. Ellipsize the label instead: the
@@ -148,7 +148,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+   * CDXC:ProjectBoard 2026-08-24:
    * One control language for every dialog row: 32px tall inputs and dropdowns,
    * one 14px text scale shared with the buttons beside them, regular weight.
    * This replaces the per-class height opt-in lists the dialogs used to carry,
@@ -162,7 +162,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+   * CDXC:ProjectBoard 2026-08-24:
    * Footer actions (Delete / Start work / Save, Create / Create & Start) are
    * pinned to the same 32px control height so no variant or icon combination
    * can render one taller than its neighbors.
@@ -181,7 +181,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardRoundness 2026-06-29-20:55:
+   * CDXC:ProjectBoard 2026-06-29-20:55:
    * Give Kanban form controls the Settings field treatment: a subtle translucent fill, a visible neutral border (select triggers ship transparent borders by default), and a dimmed neutral focus border without the saturated shadcn focus ring.
    */
   .project-ticket-dialog [data-slot="input"],
@@ -215,7 +215,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:BoardScrollbars 2026-08-07:
+   * CDXC:ProjectBoard 2026-08-07:
    * The board strip and every lane body keep the browser's own scrollbar so the
    * bar stays clickable and draggable instead of wheel-only. Chromium paints
    * ::-webkit-scrollbar geometry only while the scroller keeps scrollbar-width
@@ -225,7 +225,7 @@ export const PROJECT_BOARD_STYLES = `
    * mouse target and the thumb's transparent borders keep the painted rail at
    * the board's 2px width.
    *
-   * CDXC:DialogScrollbar 2026-08-07:
+   * CDXC:AppModal 2026-08-07:
    * The ticket dialog body sat in the hidden-scrollbar rules above, and
    * measuring it in Chromium showed the same wheel-only failure the board had:
    * a 0px gutter, and no scroll from a track click or a thumb drag at any x
@@ -240,7 +240,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardRedesign 2026-08-24:
+   * CDXC:ProjectBoard 2026-08-24:
    * Reserve the lane's 8px scrollbar rail even when a lane does not overflow,
    * so the card column keeps the same right inset (2px padding + 8px gutter =
    * the 10px the left side gets) whether or not a scrollbar is present.
@@ -291,7 +291,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+   * CDXC:ProjectBoard 2026-08-24:
    * The dialog body reveals its thumb on hover only. It used to also reveal on
    * :focus-within, but a form dialog always has a focused field, so the bar
    * never went away while the dialog was open.
@@ -329,7 +329,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+   * CDXC:ProjectBoard 2026-08-24:
    * Automation field labels and section headers are quiet 12px/500 text, not
    * the old 650/700-weight uppercase headings, so the dialog reads as one
    * typographic scale with the ticket dialogs.
@@ -389,7 +389,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:SegmentedControl 2026-08-24:
+   * CDXC:DesignSystem 2026-08-24:
    * The Automate dialog's schedule/execution pickers are the shared
    * SegmentedControl now, so they render the same shadcn ButtonGroup strip as
    * Settings and the modals: one bordered container, flat segments sharing a
@@ -663,7 +663,7 @@ export const PROJECT_BOARD_STYLES = `
 
   .project-ticket-dialog {
     /*
-     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * CDXC:ProjectBoard 2026-08-24:
      * The Codex-style board paints the page at #0e0e0e and every raised panel
      * at #161616, so the dialogs sit on the shared --popover surface instead of
      * the app-modal background they used to borrow from the sidebar theme.
@@ -675,7 +675,7 @@ export const PROJECT_BOARD_STYLES = `
     overflow: hidden;
     width: 780px;
     /*
-     * CDXC:ProjectBoardDialogHeight 2026-08-22:
+     * CDXC:ProjectBoard 2026-08-22:
      * The dialog is centred with a -50% translate, so a popup taller than the
      * window loses its top and bottom to the viewport edges with no way to
      * reach them. Bound the popup to the window and lay it out as a column so
@@ -704,7 +704,7 @@ export const PROJECT_BOARD_STYLES = `
     min-height: 0;
     overflow: auto;
     /*
-     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * CDXC:ProjectBoard 2026-08-24:
      * 10px on the right keeps the form fields off the scrollbar rail, and the
      * bottom padding keeps the last field (Add comment) clear of the 16px
      * bottom fade so it never renders cut off at the end of the scroll.
@@ -714,7 +714,7 @@ export const PROJECT_BOARD_STYLES = `
 
   .project-ticket-dialog-footer {
     /*
-     * CDXC:ProjectBoardTicketEditor 2026-05-28-08:02:
+     * CDXC:ProjectBoard 2026-05-28-08:02:
      * The ticket editor footer should not distribute Delete, Start work, and Save as left, center, and right islands. Keep the destructive Delete action isolated while grouping the workflow and save actions together at the right edge.
      */
     align-items: center;
@@ -832,7 +832,7 @@ export const PROJECT_BOARD_STYLES = `
 
   .project-ticket-title-input {
     /*
-    CDXC:ProjectBoardTickets 2026-06-15-21:00:
+    CDXC:ProjectBoard 2026-06-15-21:00:
     Ticket title editing is a single-line text field. Keep the create/edit title control at one input row so it does not inherit prompt textarea height or wrap its value like long-form content.
     */
     line-height: 18px;
@@ -1044,7 +1044,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardDialogRedesign 2026-08-24 (round 2):
+   * CDXC:ProjectBoard 2026-08-24 (round 2):
    * Titled field groups in the ticket dialogs (Properties, Comments) share the
    * Automate dialog's section rhythm: a quiet 12px/500 header above a 10px
    * grid, separated from the previous block by a hairline so the form reads as
@@ -1059,7 +1059,7 @@ export const PROJECT_BOARD_STYLES = `
 
   .project-ticket-comment-list {
     /*
-     * CDXC:ProjectBoardDialogRedesign 2026-08-24:
+     * CDXC:ProjectBoard 2026-08-24:
      * The ScrollArea root only ships position: relative, so without an explicit
      * clip the comment viewport paints past the list and over the Add comment
      * label below it.
@@ -1080,7 +1080,7 @@ export const PROJECT_BOARD_STYLES = `
   }
 
   /*
-   * CDXC:ProjectBoardComments 2026-06-05-06:43:
+   * CDXC:ProjectBoard 2026-06-05-06:43:
    * Ticket comments in the edit dialog need readable author/date separation, author (agent) attribution, and a bottom-aligned full session id while preserving multiline comment text.
    */
   .project-ticket-comment {

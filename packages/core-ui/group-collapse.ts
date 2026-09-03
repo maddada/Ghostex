@@ -12,7 +12,7 @@ export function getAutoCollapseGroupIds({
   workspaceGroupIds: readonly string[];
 }): string[] {
   /**
-   * CDXC:ProjectGroups 2026-05-21-11:07:
+   * CDXC:Projects 2026-05-21-11:07:
    * The current reference sidebar no longer renders a global Browsers section.
    * Only non-project workspace sections should use automatic empty-collapse;
    * project groups stay expandable so they can receive sessions without hidden
@@ -47,7 +47,7 @@ export function reconcileCollapsedGroupsById({
   expandOnSessionCountIncreaseGroupIds?: readonly string[];
   groupIds: readonly string[];
   /**
-   * CDXC:SidebarGroups 2026-06-02-22:18:
+   * CDXC:Projects 2026-06-02-22:18:
    * App restart can first hydrate the sidebar with temporary gxserver
    * unavailable groups before the real project groups arrive. That snapshot is
    * not authoritative for deleting saved collapsed project IDs, because doing
@@ -58,7 +58,7 @@ export function reconcileCollapsedGroupsById({
   previousCollapsedGroupsById: CollapsedGroupsById;
   sessionIdsByGroup: SessionIdsByGroup;
   /**
-   * CDXC:SidebarGroups 2026-05-20-12:00:
+   * CDXC:Projects 2026-05-20-12:00:
    * After restart, hydrated session counts must not be treated as newly created
    * sessions. Skip expand-on-count-increase while seeding the first post-hydrate
    * baseline so persisted project collapse state survives app relaunch.
@@ -85,7 +85,7 @@ export function reconcileCollapsedGroupsById({
   }
 
   /**
-   * CDXC:SidebarGroups 2026-05-21-11:07:
+   * CDXC:Projects 2026-05-21-11:07:
    * Empty non-project sidebar sections collapse while empty and expand when a
    * session appears. Browser sessions now live inside project groups, so this
    * logic must stay generic and never reference a global browser group.
@@ -107,7 +107,7 @@ export function reconcileCollapsedGroupsById({
   }
 
   /**
-   * CDXC:SidebarGroups 2026-05-08-11:09:
+   * CDXC:Projects 2026-05-08-11:09:
    * Any action that creates a session inside a collapsed Chats/project group
    * must reveal the result. Keep this separate from empty-group auto-collapse
    * so project groups can avoid forced empty collapse but still expand when

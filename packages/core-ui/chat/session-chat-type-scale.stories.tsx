@@ -3,7 +3,7 @@ import type { SessionChatMessage } from '../../shared/session-chat';
 import { SessionChatMessageList } from './session-chat-message-list';
 
 /*
- * CDXC:SessionChatOneSize 2026-08-22:
+ * CDXC:SessionChat 2026-08-22:
  * The transcript's type scale — one size, and what it replaced.
  *
  * Every line of reading content is now 0.875rem/14px at 1.625: the answer, the

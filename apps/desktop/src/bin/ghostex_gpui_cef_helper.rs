@@ -51,7 +51,7 @@ const SIDEBAR_RUNTIME_SETTINGS_UPDATE_MESSAGE_NAME: &str =
 const SIDEBAR_GXSERVER_BOOTSTRAP_UPDATE_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.gxserverBootstrapChanged";
 /*
-CDXC:GPUISessionChatSurface 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Session Chat surfaces receive only the gxserver bootstrap through this
 dedicated message; unlike the sidebar bootstrap-update path it must not
 require the installed sidebar post-function bridge, because chat.html never
@@ -235,7 +235,7 @@ wrap_render_process_handler! {
             node: Option<&mut cef::Domnode>,
         ) {
             /*
-            CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+            CDXC:FocusRouting 2026-07-22:
             The sidebar surface is mouse-focus passive, so its document is
             usually NOT natively focused. Chromium defers DOM focus/blur
             events in unfocused documents (element.focus() moves activeElement
@@ -313,7 +313,7 @@ wrap_render_process_handler! {
                 return;
             };
             /*
-            CDXC:GPUICefBridgeOwnership 2026-06-29-14:45:
+            CDXC:CefRuntime 2026-06-29-14:45:
             Helper-backed renderers must install the same surface-scoped app-modal shim as the macOS CEF path by reading allowed surfaces from the shared Rust manifest. Browser tabs and project workareas still do not receive this bridge.
             */
             install_app_modal_host_v8_bridge(Some(&mut *context), surface);
@@ -369,7 +369,7 @@ wrap_render_process_handler! {
                 install_extension_v8_bridge(Some(&mut context));
             } else if is_project_workarea_install_message {
                 /*
-                CDXC:RemoteProjectDocs 2026-08-07:
+                CDXC:Docs 2026-08-07:
                 Mirror cef/shell.rs exactly: the install message optionally
                 carries the Manage Docs resource base URL, and the helper must
                 install it too or Docs HTML documents lose their <base> and
@@ -605,28 +605,28 @@ fn install_sidebar_project_context_v8_bridge(
     gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
 ) {
     /*
-    CDXC:GPUIProjectSidebarBridge 2026-06-24-11:17:
+    CDXC:CefRuntime 2026-06-24-11:17:
     The CEF helper exposes fixed renderer-side GPUI bridge functions, runtimeSettings, and the real sidebar gxserver bootstrap only after the sidebar browser sends the private install message to its own main frame. gxserverBootstrap may carry only the loopback base URL, bearer token, protocol version, stable client id, and explicit gxserver ids supplied by app state; this helper is not a generic event bus and does not inspect projects, paths, URLs, titles, terminal content, cookies, filesystem markers, logs, or persistence.
 
-    CDXC:GPUIProjectSidebarBridge 2026-06-23-06:57:
+    CDXC:CefRuntime 2026-06-23-06:57:
     Initial install publishes runtime settings through an already-registered `window.ghostexGpui.onRuntimeSettingsChanged(settings)` callback because the sidebar runtime can mount before CEF's load-end install message. If install wins the race, the runtime reads the installed object directly. Later refreshes use a private post-install CEF message with the same callback contract. This does not add a settings bus, project detection path, logging path, or Browser-tab bridge.
 
-    CDXC:GPUISettingsSidebarHandoff 2026-06-24-11:22:
+    CDXC:Settings 2026-06-24-11:22:
     The helper must mirror the macOS renderer bridge by parsing the bounded saved Settings JSON into `runtimeSettings.settings` for SidebarApp normalization while keeping Manage availability tied only to strict debuggingMode/showBetaFeatures booleans.
 
-    CDXC:GPUISidebarGxserverBootstrap 2026-06-24-11:17:
+    CDXC:ServerDaemon 2026-06-24-11:17:
     Post-load bootstrap refresh uses a separate private sidebar message that may replace only `window.ghostexGpui.gxserverBootstrap` and call `onGxserverBootstrapChanged(bootstrap)`. Keep the helper bridge in sync with the macOS renderer bridge so ordinary Browser/workarea/modal CEF pages never receive tokens.
 
-    CDXC:GPUISidebarProjectPathActions 2026-06-24-14:18:
+    CDXC:Projects 2026-06-24-14:18:
     The helper must expose the sidebar-native project path action as a named bridge function, not a generic IPC method. It forwards only one bounded string payload to the browser process; app-side Rust resolves trusted project ids through gxserver before clipboard or Finder side effects.
 
-    CDXC:GPUISidebarGit 2026-06-24-15:43:
+    CDXC:Git 2026-06-24-15:43:
     Existing-PR browser open and changed-file IDE open reuse this fixed sidebar-native bridge instead of adding renderer-owned URL/path launch APIs. The helper still forwards only one bounded string; Rust must parse the allowlisted action contract and re-query gxserver before any browser or editor side effect.
 
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:08:
+    CDXC:FocusRouting 2026-06-26-06:08:
     Workspace terminal focus is a fixed sidebar-only bridge function carrying one bounded project/session id JSON payload. The helper must not add renderer-provided commands, cwd, paths, titles, terminal text, logs, or generic native IPC for local attach behavior.
 
-    CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+    CDXC:StatusPet 2026-06-26-04:38:
     The helper mirrors the main CEF bridge for status indicator and pet overlay state as fixed sidebar-only functions. These functions are not activation callbacks or a generic native bus; they forward only bounded presentation JSON for app-side parsing.
     */
     let Some(context) = context else {
@@ -693,7 +693,7 @@ fn install_project_workarea_v8_bridge(
     };
 
     /*
-    CDXC:GPUICefBridgeOwnership 2026-06-29-14:45:
+    CDXC:CefRuntime 2026-06-29-14:45:
     Project workarea renderers in the helper install only the manifest-listed Kanban/Manage fixed functions. This keeps helper support in sync with macOS CEF without exposing project-workarea calls to sidebar, modal, titlebar, or Browser surfaces.
     */
     for spec in PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS {
@@ -780,7 +780,7 @@ fn install_app_modal_host_v8_bridge(
     );
 
     /*
-    CDXC:GPUINativeHostBridge 2026-07-14:
+    CDXC:CefRuntime 2026-07-14:
     Helper-backed titlebar and sidebar renderers must install the same
     `ghostexNativeHost` bridge as the shell CEF path (apps/desktop/src/cef/shell.rs).
     The titlebar uses it for Resources actions, while the sidebar uses it for

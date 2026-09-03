@@ -17,7 +17,7 @@ export const SIDEBAR_SESSION_TAGS = [
 export type SidebarSessionTag = (typeof SIDEBAR_SESSION_TAGS)[number];
 
 /**
- * CDXC:SessionTagFilters 2026-08-18-02:49:
+ * CDXC:Sessions 2026-08-18-02:49:
  * "No tag" is filter chrome only. Sessions stay untagged by omitting
  * `sessionTag`; this sentinel never becomes a persisted marker.
  */
@@ -36,16 +36,16 @@ export type SidebarSessionTagSection = {
 };
 
 /**
- * CDXC:SessionTags 2026-06-05-12:30:
+ * CDXC:Sessions 2026-06-05-12:30:
  * Session tags replace the single Favorite affordance with one mutually exclusive session marker. Keep the list centralized so sidebar rows, Previous Sessions, macOS, Electron, and gxserver share the same persisted values and user-facing labels.
  *
- * CDXC:SessionTags 2026-06-05-14:45:
+ * CDXC:Sessions 2026-06-05-14:45:
  * Testing and Blocked are first-class tags. Todo remains distinct from progress work state and uses a bright neutral icon color in the sidebar/menu palette instead of green.
  *
- * CDXC:SessionTags 2026-06-05-15:22:
+ * CDXC:Sessions 2026-06-05-15:22:
  * The session tag menu and filters are grouped by meaning: Priority tags first, workflow Progress tags in lifecycle order, and Type tags last. Research is a Type tag, not a Progress tag. In Progress is a user-assigned progress tag, separate from runtime activity state, and must use the persisted value `in-progress`.
  *
- * CDXC:SessionTags 2026-06-05-19:12:
+ * CDXC:Sessions 2026-06-05-19:12:
  * Type tags are limited to Research, Bug, Feature, and Design so the tag picker, filters, and persisted union expose only the current supported classification set.
  */
 export const SIDEBAR_SESSION_TAG_SECTIONS: readonly SidebarSessionTagSection[] = [
@@ -119,24 +119,24 @@ export type SidebarSessionTagListItem =
 const SIDEBAR_SESSION_TAG_LIST_SEPARATOR_SET = new Set<string>(SIDEBAR_SESSION_TAG_LIST_SEPARATOR_IDS);
 
 /**
- * CDXC:SessionTagFilters 2026-06-13-17:50:
+ * CDXC:Sessions 2026-06-13-17:50:
  * Sidebar tag filters need a user-reorderable presentation list with movable
  * separators between the default Priority, Progress, and Type groups. Keep this
  * separate from the durable sessionTag union so changing filter chrome cannot
  * rewrite existing session metadata.
  *
- * CDXC:SessionTagFilters 2026-06-15-18:32:
+ * CDXC:Sessions 2026-06-15-18:32:
  * First-run sidebar tag filters should show a smaller triage set by default.
  * Keep High Priority, Low Priority, Todo, Bug, and Feature hidden from the
  * filter menu until users opt them back in from Settings, while Testing,
  * Research, and Design remain visible.
  *
- * CDXC:SessionTagFilters 2026-06-15-22:10:
+ * CDXC:Sessions 2026-06-15-22:10:
  * Tags hidden by the first-run default should also be disabled so Reset to
  * Default does not leave a filter row looking enabled while its eye state is
  * hidden. Treat those defaults as fully off until the user turns them back on.
  *
- * CDXC:SessionTagFilters 2026-08-18-02:49:
+ * CDXC:Sessions 2026-08-18-02:49:
  * The filter menu ends with a No tag row so users can isolate sessions that
  * have no marker. Keep that row out of the durable sessionTag union.
  */
@@ -287,7 +287,7 @@ export function getEnabledVisibleSidebarSessionTagSections(
   options: { includeTags?: readonly SidebarSessionTag[] } = {}
 ): SidebarSessionTagSection[] {
   /*
-   * CDXC:SessionTagFilters 2026-06-15-22:33:
+   * CDXC:Sessions 2026-06-15-22:33:
    * Every tag-selection surface should derive its menu sections from the same
    * enabled-and-visible sidebar tag list. This keeps Previous Sessions filters
    * and session-card Tag as menus aligned with Settings Reset to Default while
@@ -410,7 +410,7 @@ export function getRestoredPreviousSessionTag(input: {
   sessionTag?: SidebarSessionTag | null;
 }): SidebarSessionTag | undefined {
   /*
-  CDXC:PreviousSessions 2026-06-06-05:29:
+  CDXC:Sessions 2026-06-06-05:29:
   Restoring a Previous Sessions row must keep the user's durable tag marker attached to the recreated session. Legacy Favorite-only rows restore as the `favorite` tag so the new tag model does not lose older session intent.
   */
   return normalizeSidebarSessionTag(input.sessionTag) ?? (input.isFavorite === true ? 'favorite' : undefined);
@@ -418,7 +418,7 @@ export function getRestoredPreviousSessionTag(input: {
 
 export function getRestoredPreviousSessionSidebarOrder(input: { sidebarOrder?: number | null }): number | undefined {
   /*
-  CDXC:ManualSessionSorting 2026-06-06-05:29:
+  CDXC:Sessions 2026-06-06-05:29:
   Previous-session restore should return near the old manual sidebar position only when gxserver has a saved positive sidebarOrder from an explicit manual/pinned order. Rows without a saved manual position keep the normal new-session order at the top.
   */
   return typeof input.sidebarOrder === 'number' && Number.isFinite(input.sidebarOrder) && input.sidebarOrder > 0

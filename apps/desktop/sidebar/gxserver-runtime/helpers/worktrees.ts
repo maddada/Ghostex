@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -70,7 +70,7 @@ export function gpuiWorktreeFolderSuffix(folderName: string, parentFolderName: s
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 The branch checkbox defaults on only for a branch gxserver minted or manages —
 `ghostex/<8hex>` or `ghostex/<slug>`, mirroring `is_worktree_temp_branch` and
 `is_managed_worktree_branch` in `server/src/worktree_sessions.rs`. A branch
@@ -84,7 +84,7 @@ export function isGpuiManagedWorktreeBranch(branch: string | undefined): boolean
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 `gpuiWorktreeUserVisibleErrorMessage` drops any message containing `/`, which
 would swallow every rename refusal that names a branch — `Branch "feat/x" already
 exists.` is exactly the sentence the user needs. gxserver's rename errors are
@@ -94,7 +94,7 @@ guards the shape instead: single line, no backslashes, bounded length.
 export function gpuiWorktreeRenameUserVisibleErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message.trim() : '';
   /*
-  CDXC:WorktreeRename 2026-08-09-18:40:
+  CDXC:Worktrees 2026-08-09-18:40:
   A daemon older than this feature cannot route the rename endpoint at all, and
   says so by naming the path back at the user — verified live as
   `notFound: "No gxserver endpoint for POST /api/renameWorktreeProject."`, though
@@ -169,7 +169,7 @@ export function parseGpuiWorktreeModalCommand(payload: unknown): GpuiWorktreeMod
     }
     case 'confirmRenameWorktree': {
       /*
-      CDXC:WorktreeRename 2026-08-09-18:40:
+      CDXC:Worktrees 2026-08-09-18:40:
       `name` crosses this boundary as bounded text, never as a path: gxserver
       derives the destination folder from it and re-validates it against the
       daemon's own ref policy, so nothing here can name a directory. The 200-char

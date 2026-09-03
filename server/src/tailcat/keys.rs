@@ -17,7 +17,7 @@ pub fn tailcat_address_file(paths: &GxserverPaths) -> PathBuf {
 }
 
 /*
-CDXC:Tailcat 2026-09-01:
+CDXC:RemotePairing 2026-09-01:
 The server key IS the identity every paired device dialed, so it is created
 exactly once and never regenerated: overwriting it would silently orphan every
 saved address blob. `--fixed-region` is what makes the derived blob stable

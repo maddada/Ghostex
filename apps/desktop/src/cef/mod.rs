@@ -1,5 +1,5 @@
 /*
-CDXC:GPUICefPlatformSeam 2026-07-04:
+CDXC:CefRuntime 2026-07-04:
 Windowed-CEF module layout: `shell` owns every OS-agnostic piece (runtime
 init/shutdown, app/client/bridge handlers, the CefBrowser wrapper) and calls
 into exactly one `platform` module for the truly per-OS glue (framework

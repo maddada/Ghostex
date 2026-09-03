@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -55,7 +55,7 @@ import type { SidebarToExtensionMessage } from '@/packages/shared/session-grid-c
 import { createAgentSessionDefaultTitle } from '@/packages/shared/session-grid-contract';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeWorktreeMethods` — because deriving them would make
@@ -424,7 +424,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     const agentId = message.agentId?.trim() ?? '';
     const agentTitle = createAgentSessionDefaultTitle(this.resolveSidebarAgent(agentId)?.name ?? agentId);
     /*
-    CDXC:RemoteWorktrees 2026-06-24-18:40:
+    CDXC:RemoteMachines 2026-06-24-18:40:
     GPUI remote Add Worktree submits only the selected remote project id plus
     bounded create/open labels to gxserver. The remote daemon derives checkout
     paths, branch names, and open-existing worktree paths; GPUI preserves the
@@ -536,7 +536,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     }
   ): void {
     /*
-    CDXC:SidebarV2Worktree 2026-07-29:
+    CDXC:Worktrees 2026-07-29:
     The SAME answer also goes to the sidebar document, because Sidebar V2's
     worktree popover asks this question from inside the sidebar itself rather
     than from the app-modal window. Both listeners match on their own
@@ -573,7 +573,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   },
 
   /*
-  CDXC:SidebarV2Worktree 2026-07-29:
+  CDXC:Worktrees 2026-07-29:
   Sidebar V2's worktree flow is ONE gxserver call, not a client-orchestrated
   sequence. The daemon creates the checkout, runs the project's setup command,
   spawns the session with cwd=worktree, sends the optional first prompt, and
@@ -586,7 +586,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     is the V2 row's project/group id; only the host turns it into a daemon +
     project, exactly like the settle/snooze path.
   - REMOTE machines route to their OWN daemon over the Rust bridge, exactly
-    like the settle/snooze path (CDXC:SidebarV2LogicalProjects 2026-07-29 — the
+    like the settle/snooze path (CDXC:StateSync 2026-07-29 — the
     bridge allow-list now carries both worktree endpoints with param shapers).
     The daemon that owns the repository is the only one that can cut a checkout
     in it, so the call goes to the machine, never to the local gxserver with a
@@ -658,7 +658,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   },
 
   /*
-  CDXC:SidebarV2LogicalProjects 2026-07-29:
+  CDXC:StateSync 2026-07-29:
   The remote half of the worktree create, kept as its own method because every
   step after the RPC differs: the presentation to refresh is that machine's, the
   focus helper is the remote one, and the sidebar session id is machine-scoped.
@@ -722,13 +722,13 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   },
 
   /*
-  CDXC:SidebarV2Worktree 2026-07-29:
+  CDXC:Worktrees 2026-07-29:
   Cleanup for the checkout whose last session just closed. gxserver answers a
   dirty worktree with `removed: false, dirty: true` — a REFUSAL, not a failure —
   and the sidebar re-asks with `force`. That decision stays server-side so the
   client never has to read git status to know whether it is safe to delete.
 
-  CDXC:SidebarV2LogicalProjects 2026-07-29:
+  CDXC:StateSync 2026-07-29:
   Remote projects route to their own daemon rather than being refused. The
   worktree path travelling here came from that machine's own presentation
   (`session.cwd`), so the daemon is being handed back a path it published, and
@@ -877,7 +877,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       toastId,
     });
     /*
-    CDXC:SidebarGitMemo 2026-07-29:
+    CDXC:Git 2026-07-29:
     Same reasoning as `confirmDeleteWorktree`: gxserver rewrites the parent
     repo's worktree list here and the flow focuses the parent afterwards. The
     parent lease was already dropped by the merge that got us here, but this
@@ -1011,7 +1011,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
   },
 
   /*
-  CDXC:WorktreeRename 2026-08-09-18:40:
+  CDXC:Worktrees 2026-08-09-18:40:
   Everything the modal needs to decide whether a rename can happen is gathered
   HERE, before the native child window opens, because that window has no channel
   to ask gxserver anything once it is up. The split is deliberate:
@@ -1061,7 +1061,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
         this.runGitAction(project, { action: 'branch' }),
         this.runGitAction(project, { action: 'status' }),
         /*
-        CDXC:WorktreeRename 2026-08-09-18:40:
+        CDXC:Worktrees 2026-08-09-18:40:
         The submodule probe is an early warning, not the guard. A daemon that
         does not know the action rejects it, and that must not cost the user the
         whole dialog — gxserver re-checks submodules inside the rename itself and
@@ -1162,7 +1162,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       toastId,
     });
     /*
-    CDXC:SidebarGitMemo 2026-07-29 (extended for rename):
+    CDXC:Git 2026-07-29 (extended for rename):
     Same reasoning as `confirmDeleteWorktree`: the rename is a git write that
     does not go through the `runGitAction` chokepoint — gxserver moves the
     checkout and can rename the branch in the parent repo — so a memoized state
@@ -1276,7 +1276,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       toastId,
     });
     /*
-    CDXC:SidebarGitMemo 2026-07-29:
+    CDXC:Git 2026-07-29:
     Worktree removal is a Git write that does not go through the `runGitAction`
     chokepoint: gxserver removes the worktree from the parent repo and, when
     asked, deletes the branch there too. This flow then focuses the parent, so
@@ -1400,7 +1400,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
     setupCommandProject: GxserverProjectDomainState
   ): Promise<void> {
     /*
-     * CDXC:GlobalProjectDefaults 2026-08-02:
+     * CDXC:Projects 2026-08-02:
      * This gate decides whether to call the setup endpoint at all, so it has to
      * see the Global Default the same way gxserver does. Without that, a project
      * inheriting its worktree command would return here and the configured
@@ -1508,7 +1508,7 @@ export const gpuiSidebarRuntimeWorktreeMethods = {
       );
     } catch {
       /*
-      CDXC:GPUIWorktrees 2026-06-24-18:21:
+      CDXC:Worktrees 2026-06-24-18:21:
       Worktree mutations should still run when the toast host is unavailable.
       The missing toast bridge is a presentation problem, while gxserver remains
       the production owner for Git, setup, Beads hook, and agent-session state.

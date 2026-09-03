@@ -18,19 +18,19 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('native titlebar Tips & Tricks source', () => {
   test('uses video, setup, and updates actions', () => {
     /*
-     * CDXC:TipsAndTricks 2026-06-16-19:42:
+     * CDXC:Onboarding 2026-06-16-19:42:
      * The Tips & Tricks header should not expose a bulk Read all button.
      * It should instead open the tutorial video with a filled star, Setup with guide wording, and release updates as an in-project browser session while individual tips keep their per-row read controls.
      *
-     * CDXC:TipsAndTricks 2026-06-18-04:53:
+     * CDXC:Onboarding 2026-06-18-04:53:
      * The header should use the shorter Tips text, add Docs as an in-project
      * browser action, and shorten the setup label to Setup.
      *
-     * CDXC:GhostexTutorialVideo 2026-06-18-05:31:
+     * CDXC:Onboarding 2026-06-18-05:31:
      * The Video button should open the tutorial video modal while leaving
      * the old Highlighted Features modal unused.
      *
-     * CDXC:TipsAndTricks 2026-06-30-04:28:
+     * CDXC:Onboarding 2026-06-30-04:28:
      * The header should label the tutorial-video action Video and the changelog action Updates so the widest equal-width header button is shorter.
      */
     const menuSource = sourceBetween(tipsPanelSource, 'function TitlebarTipsMenu', 'function TitlebarTipsSection');
@@ -68,13 +68,13 @@ describe('native titlebar Tips & Tricks source', () => {
 
   test('keeps tips actions equal width, full height, connected, and right-flush', () => {
     /*
-     * CDXC:TipsAndTricks 2026-06-16-19:42:
+     * CDXC:Onboarding 2026-06-16-19:42:
      * The Tips & Tricks panel should make all three header actions the same width, remove the top-right unread text summary, and use pointer cursors for clickable controls.
      *
-     * CDXC:TipsAndTricks 2026-06-30-01:38:
+     * CDXC:Onboarding 2026-06-30-01:38:
      * The Tips header actions should fill the full header height and remove inter-button gaps, leaving only left/right borders between adjacent titlebar buttons.
      *
-     * CDXC:TipsAndTricks 2026-06-30-03:22:
+     * CDXC:Onboarding 2026-06-30-03:22:
      * The header actions should sit flush to the right edge, remove the idle
      * button background fill, and share the widest action width with 15px side
      * padding.
@@ -114,7 +114,7 @@ describe('native titlebar Tips & Tricks source', () => {
 
   test('opens agent skill tips to their related detail surfaces', () => {
     /*
-     * CDXC:TipsAndTricks 2026-06-28-08:00:
+     * CDXC:Onboarding 2026-06-28-08:00:
      * Agent-facing Browser Use and Computer Use tips should open Settings >
      * Integrations with the relevant skill searched. The read check remains
      * separate from row navigation.
@@ -144,7 +144,7 @@ describe('native titlebar Tips & Tricks source', () => {
 
   test('does not render right-aligned section counts', () => {
     /*
-     * CDXC:TipsAndTricks 2026-06-12-23:28:
+     * CDXC:Onboarding 2026-06-12-23:28:
      * macOS Tips & Tricks section headers should show labels only; the previous
      * right-side count looked like noisy chrome beside Read and Unread headings.
      */

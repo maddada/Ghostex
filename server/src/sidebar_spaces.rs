@@ -5,7 +5,7 @@ use crate::domain::DomainStateError;
 use crate::sidebar_project_collections::read_sidebar_project_collections;
 
 /*
-CDXC:SidebarSpaces 2026-08-27:
+CDXC:Spaces 2026-08-27:
 A Space is a server-owned saved sidebar filter: a name, an icon id, a color, a
 manual position, and the set of sidebar members it shows. Members are sidebar
 project collections ("groups") and ungrouped projects; a collection or an

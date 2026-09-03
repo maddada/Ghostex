@@ -65,7 +65,7 @@ pub fn last_codex_record_timestamp_ms(file_path: &Path) -> Option<i64> {
 }
 
 /*
-CDXC:SessionForkIdentity 2026-09-02:
+CDXC:SessionFork 2026-09-02:
 A continuation and a fork carry the SAME lineage proof: Claude copies the
 predecessor id into the new file's rows for both, and Codex stamps
 `forked_from_id` for both. What separates them is time. A continuation starts
@@ -447,7 +447,7 @@ successor.
 `owned_session_ids` are ids bound to OTHER sessions that could actually be
 tailing them — adopting one of those would steal a live conversation.
 
-CDXC:SessionChatIdentity 2026-08-02 (bug fix, same day):
+CDXC:SessionIdentity 2026-08-02 (bug fix, same day):
 Ownership is checked AFTER the lineage proof, not as a pre-filter, and the
 caller must pass ACTIVE owners only. The first cut excluded every id in the
 registry and screened candidates out before the head scan: this machine's
@@ -549,7 +549,7 @@ pub fn find_claude_successor_transcript(
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatIdentity 2026-08-24:
+CDXC:SessionIdentity 2026-08-24:
 `codex fork` (codex-cli 0.149) does NOT keep one rollout per conversation. It
 opens a brand-new `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl` whose
 FIRST line is a `session_meta` record carrying `payload.session_id` = the new

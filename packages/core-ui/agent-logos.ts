@@ -25,12 +25,12 @@ import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 import type { CSSProperties } from 'react';
 
 /**
- * CDXC:AgentDetection 2026-04-27-07:07
+ * CDXC:AgentProviders 2026-04-27-07:07
  * Sidebar card agent icons render as CSS masks. Native WKWebView can create
  * the span correctly while failing to paint a relative-file SVG mask, so agent
  * logos must be inline data URLs shared by masks and regular image sources.
  *
- * CDXC:AgentsHub 2026-05-13-08:08
+ * CDXC:AgentLauncher 2026-05-13-08:08
  * Hub profile chips reuse these same mask data URLs. Storybook may resolve
  * text imports to data URLs, while the native Bun build reads raw SVG text, so
  * keep both forms valid instead of using bundler-specific import query syntax.
@@ -103,7 +103,7 @@ export const AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
 };
 
 /**
- * CDXC:NativePaneReorder 2026-05-03-04:59
+ * CDXC:CommandPane 2026-05-03-04:59
  * Sidebar agent SVGs are mask assets, so their visible color comes from CSS,
  * not the SVG fill. Native title bars and drag ghosts receive this same color
  * map with the data URL so AppKit can tint the template image to match the
@@ -136,7 +136,7 @@ export const AGENT_LOGO_COLORS: Record<SidebarAgentIcon, string> = {
 };
 
 /**
- * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
+ * CDXC:Icons 2026-06-29-23:58:
  * Colored session-card agent icons render the SVGs as image backgrounds, not
  * CSS masks. Patch currentColor, inherited-fill, and black-only source logos
  * to the existing brand color map so colored mode does not turn dark logos

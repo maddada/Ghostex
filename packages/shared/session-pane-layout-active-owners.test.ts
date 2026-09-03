@@ -5,7 +5,7 @@ import { collectActivePaneOwnerSessionIds } from './session-pane-layout-active-o
 describe('collectActivePaneOwnerSessionIds', () => {
   test('collects one selected owner from each split pane', () => {
     /*
-     * CDXC:AutoSleep 2026-06-09-20:33:
+     * CDXC:SessionSleep 2026-06-09-20:33:
      * Split protection is based on persisted pane ownership, not only current
      * AppKit visibility, so hidden Focus Mode branches still keep their active
      * terminal owner awake.

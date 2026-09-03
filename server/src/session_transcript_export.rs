@@ -1,5 +1,5 @@
 /*
-CDXC:SessionTranscriptExport 2026-08-20:
+CDXC:TranscriptExport 2026-08-20:
 "Export transcript" turns a running agent session's conversation into one
 markdown file so a NEW agent conversation can be seeded with it (plan
 `plans/015-export-transcript.md`).
@@ -442,7 +442,7 @@ fn resolve_export_transcript_path(
     agent_session_path: Option<&str>,
 ) -> Option<PathBuf> {
     /*
-    CDXC:SessionChatGrokUpdates 2026-08-22: chat follows grok's live
+    CDXC:AgentProviders 2026-08-22: chat follows grok's live
     `updates.jsonl`, but an export renders a FINISHED conversation, and the
     parser below reads the persisted `chat_history.jsonl` records. Resolve that
     file directly rather than the shared chat path.
@@ -698,7 +698,7 @@ fn parse_transcript(
 ) -> ParsedTranscript {
     let mut builder = TranscriptBuilder::new();
     /*
-    CDXC:SessionChatRewind 2026-09-02:
+    CDXC:SessionChat 2026-09-02:
     The export is read against the terminal, so it renders the same active
     branch chat does: a rewind leaves its abandoned turns in the file, and
     exporting them put turns in the document that the session no longer has.
@@ -2804,7 +2804,7 @@ fn export_session_prefix(session_id: &str) -> String {
 }
 
 /*
-CDXC:ExportTranscript 2026-08-20:
+CDXC:TranscriptExport 2026-08-20:
 exportSessionTranscript renders a session's agent transcript into a markdown
 file under `<app data dir>/exports` and answers with its absolute path on THIS
 machine. The transcript only exists where the agent runs, so every client
@@ -2851,7 +2851,7 @@ pub(crate) async fn handle_export_session_transcript_http(
     }
 
     /*
-    CDXC:ExportTranscriptOptions 2026-08-24:
+    CDXC:TranscriptExport 2026-08-24:
     The export dialog's include-toggles arrive as three optional booleans.
     Absent params keep the historical default selection (commands and patches
     in, reasoning out), so older clients and the CLI export exactly what they

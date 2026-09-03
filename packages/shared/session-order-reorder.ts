@@ -20,7 +20,7 @@ export function reorderGroupSessions(
     ...createDefaultSessionGridSnapshot(),
     ...snapshot,
     /**
-     * CDXC:NativePaneReorder 2026-05-03-02:50
+     * CDXC:CommandPane 2026-05-03-02:50
      * Native header drag-to-reorder works across every visible pane type:
      * terminal and browser sessions. Keep browser records in the reorder set so a
      * drop involving a WKWebView pane mutates the same session order that

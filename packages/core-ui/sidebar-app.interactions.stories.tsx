@@ -51,7 +51,7 @@ async function showGroupHeaderActions(storyRoot: HTMLElement, groupId: string) {
     `${groupId} header`
   );
   /**
-   * CDXC:StorybookInteractions 2026-05-08-17:58
+   * CDXC:DesignSystem 2026-05-08-17:58
    * Group create/split controls are hover-only UI. Storybook's user-event hover
    * can miss CSS-only visibility in headless playback, so interaction stories
    * dispatch the same mouse-enter event the app uses before querying controls.
@@ -188,7 +188,7 @@ export const ScrollEndRetention: Story = {
       await waitForSidebarScrollObservers(canvasElement.ownerDocument.defaultView);
 
       /*
-       * CDXC:SidebarScroll 2026-05-08-10:53
+       * CDXC:Sidebar 2026-05-08-10:53
        * Reaching the end of the sidebar list is a stable user scroll state.
        * Storybook should catch regressions where overflow measurement flips
        * false at the bottom and sends the list back to scrollTop 0.
@@ -255,7 +255,7 @@ export const ActiveSortToggle: Story = {
     await step('keep the manual order in Storybook', async () => {
       resetSidebarStoryMessages();
       /**
-       * CDXC:StorybookInteractions 2026-05-08-18:18
+       * CDXC:DesignSystem 2026-05-08-18:18
        * Storybook renders the sidebar with the currently applied app settings,
        * so the sort menu may not expose every mode in every local config. This
        * story keeps coverage on the visible session ordering contract without
@@ -394,7 +394,7 @@ export const CombinedSearchKeepsPreviousSessionsBelowProjects: Story = {
 
     await step('top row creates a session and keeps the overflow trigger', async () => {
       /**
-       * CDXC:SidebarReference 2026-05-10-14:47
+       * CDXC:Sidebar 2026-05-10-14:47
        * Combined mode's top primary row is New Session. It posts createSession
        * for the current project/chat context and still contains the sidebar
        * overflow trigger inside the row.
@@ -409,7 +409,7 @@ export const CombinedSearchKeepsPreviousSessionsBelowProjects: Story = {
 
     await step('search matching project and previous-session rows', async () => {
       /**
-       * CDXC:SidebarSearch 2026-05-08-17:21
+       * CDXC:Sidebar 2026-05-08-17:21
        * The Combined sidebar search regression mixed current project matches
        * and Previous Sessions in one scroll surface. Typing the same query as
        * the native repro keeps this story aligned with the user-facing issue.
@@ -460,7 +460,7 @@ export const TypingSidebarChromeDoesNotStartSearchAndEscapePrefersModals: Story 
 
     await step('typing on a non-input target does not open search', async () => {
       /*
-       * CDXC:SidebarKeyboard 2026-05-26-15:29:
+       * CDXC:Hotkeys 2026-05-26-15:29:
        * Sidebar chrome can hold focus after mouse navigation, but ordinary text
        * input must not start session search. The key event should remain
        * unhandled so the native host can use its default invalid-key feedback.
@@ -642,7 +642,7 @@ export const EmptySidebarDoubleClickEnabled: Story = {
       const storyDocument = canvasElement.ownerDocument;
       const originalElementsFromPoint = storyDocument.elementsFromPoint;
       /**
-       * CDXC:StorybookInteractions 2026-05-08-18:36
+       * CDXC:DesignSystem 2026-05-08-18:36
        * Empty-sidebar double click depends on browser hit testing. Headless
        * Storybook can report child controls for synthetic coordinates, so this
        * story supplies the same empty-space element list the app receives when
@@ -708,7 +708,7 @@ export const SessionCardActions: Story = {
       await expect(await body.findByRole('menuitem', { name: 'Rename' })).toBeVisible();
 
       /**
-       * CDXC:StorybookInteractions 2026-05-08-18:18
+       * CDXC:DesignSystem 2026-05-08-18:18
        * Rename opens through the native full-window app modal host. Storybook
        * should verify that the action is present without invoking a host that
        * does not exist in the isolated iframe.

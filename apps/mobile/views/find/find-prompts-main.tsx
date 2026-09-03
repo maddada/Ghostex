@@ -14,7 +14,7 @@ import { FindPromptsView } from '@/packages/core-ui/find/find-prompts-view';
 import type { FindPromptsTransport } from '@/packages/core-ui/find/find-prompts-transport';
 
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 Find page for the React Native app — the GUI for `gx f` — bundled by
 tooling/build-mobile-find.mjs into one self-contained HTML string the app loads
 in a react-native-webview. It mounts the same shared FindPromptsView as gpui's

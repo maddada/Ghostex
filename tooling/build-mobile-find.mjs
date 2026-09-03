@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 Bundles apps/mobile/views/find/find-prompts-main.tsx (the shared Find page — the GUI for
 `gx f` — that the React Native app hosts in a webview) into ONE self-contained
 HTML document and writes it as a generated TypeScript module inside the mobile

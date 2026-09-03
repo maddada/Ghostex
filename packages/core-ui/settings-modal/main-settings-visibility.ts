@@ -1,5 +1,5 @@
 /*
- * CDXC:SettingsModalSplit 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * Which General-settings rows, sections, and subsections are visible, and which
  * navigation rail entries survive that filtering. Both factories are plain
  * render-time helpers (no React hooks), so the component keeps calling them at
@@ -101,7 +101,7 @@ export function createMainSettingsVisibility({
   };
   const mainSectionVisible = (sectionId: MainSettingsSectionId, sectionResult: SettingsSectionSearchResult) => {
     /*
-     * CDXC:TitlebarKeepAwake 2026-06-19-13:13:
+     * CDXC:KeepAwake 2026-06-19-13:13:
      * Keep Awake is experimental-only in the regular macOS Settings UI. Hide
      * the Power section until Enable Experimental Features is enabled, while
      * preserving the first-launch lid-close preference required by onboarding.
@@ -205,7 +205,7 @@ export function createVisibleMainSettingsNavigation({
     .map((section) => ({
       ...section,
       /*
-       * CDXC:SettingsNavigation 2026-08-19:
+       * CDXC:Settings 2026-08-19:
        * A nested row must not outlive the section it points at, so hide the
        * ones a search query, Show Advanced, or an unavailable capability
        * (Power without experimental features, App Icon off macOS) already

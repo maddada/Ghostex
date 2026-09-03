@@ -86,14 +86,14 @@ export function CommandIconPicker({ icon, onIconChange }: CommandIconPickerProps
           >
             <Command>
               {/*
-               * CDXC:SidebarActions 2026-05-15-14:24:
+               * CDXC:AgentLauncher 2026-05-15-14:24:
                * The action icon dropdown needs a searchable shadcn Command
                * input at the top while every option keeps a left-side glyph.
                * Use Popover for open/close behavior instead of custom document
                * listeners so keyboard and outside-click handling stay with the
                * component primitive.
                *
-               * CDXC:SidebarActions 2026-05-15-14:46:
+               * CDXC:AgentLauncher 2026-05-15-14:46:
                * The picker appears inside a modal settings dialog, so wheel
                * input on the portaled Popover can be consumed by dialog scroll
                * locking before the browser performs default list scrolling.
@@ -101,12 +101,12 @@ export function CommandIconPicker({ icon, onIconChange }: CommandIconPickerProps
                * icon sets remain browseable while the modal background stays
                * locked.
                *
-               * CDXC:CommandIcons 2026-06-09-09:32:
+               * CDXC:Icons 2026-06-09-09:32:
                * CommandInput sits inside InputGroup without an inline-start addon,
                * so add pl-3 here to match other Settings fields; InputGroup only
                * applies horizontal inset when start/end addons are present.
                *
-               * CDXC:CommandIcons 2026-06-16-07:48:
+               * CDXC:Icons 2026-06-16-07:48:
                * Action icons inherit the surrounding titlebar/settings glyph
                * color. Do not expose or apply per-action icon colors because
                * action glyphs should match the titlebar icons beside them.
@@ -128,7 +128,7 @@ export function CommandIconPicker({ icon, onIconChange }: CommandIconPickerProps
                       key={option.icon}
                       onSelect={() => {
                         /*
-                         * CDXC:SidebarActions 2026-06-19-19:52:
+                         * CDXC:AgentLauncher 2026-06-19-19:52:
                          * The action icon picker is a portaled Popover inside
                          * Settings. Close it before handing the selected icon
                          * to the parent editor so parent re-renders cannot leave

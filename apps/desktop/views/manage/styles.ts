@@ -24,7 +24,7 @@ export const MANAGE_STYLES = `
     --manage-accent-muted: rgba(255, 255, 255, 0.055);
     --manage-row-surface: #202020;
     /*
-     * CDXC:DocsControlHeight 2026-08-23:
+     * CDXC:Docs 2026-08-23:
      * One control height for every free-standing in-row control (inputs,
      * buttons, dropdowns that share a row), matching the Kanban/Automate
      * 32px convention. Header bars keep their own 35px full-height segments.
@@ -51,7 +51,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:DocsRootLayout 2026-08-18:
+   * CDXC:Docs 2026-08-18:
    * Manage pulls in the shared sidebar theme for its tooltip/app tokens, and
    * that stylesheet also carries the sidebar app's own shell layout
    * ('#root { display: grid; grid-template-rows: auto minmax(0, 1fr) }', a
@@ -101,10 +101,10 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:DocsSidebar 2026-06-30-13:45:
+   * CDXC:Docs 2026-06-30-13:45:
    * When the Manage page is below 690px wide, Docs should use a floating sidebar above the full-width preview instead of squeezing the preview into a second grid column. Keep the sidebar side preference for which edge the floating panel opens from, and let outside clicks hide it.
    *
-   * CDXC:DocsSidebar 2026-06-30-21:52:
+   * CDXC:Docs 2026-06-30-21:52:
    * The floating Docs sidebar must paint above the copied Meo Markdown toolbar, whose z-index is 500, so the file tree covers the entire editor chrome instead of starting visually below the toolbar. Cast the floating shadow from the sidebar edge that overlaps the Markdown editor so the panel reads as a raised sheet.
    */
   .manage-shell[data-sidebar-floating="true"],
@@ -294,7 +294,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:DocsSidebar 2026-06-30-04:55:
+   * CDXC:Docs 2026-06-30-04:55:
    * Docs sidebar header actions should now use the same 42px width, including the rightmost action, so the top control strip stays evenly spaced.
    */
   .manage-sidebar-header .manage-icon-button:last-child {
@@ -334,7 +334,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:UnifiedAppModal 2026-08-26:
+   * CDXC:AppModal 2026-08-26:
    * Docs dropdown panels follow the app's rounded menu language — 8px panels
    * with 6px item rows — the same radii the shared modal tokens use for menu
    * surfaces (--gx-modal-radius-control / --gx-modal-radius-menu).
@@ -442,13 +442,13 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:DocsAnnotationToolbar 2026-06-30-22:58:
+   * CDXC:Docs 2026-06-30-22:58:
    * Markdown Docs can collapse header action labels at narrow widths, making
    * the annotations/comments button the last visible header action before the
    * right-side restore control. Reserve only the restore button's real width so
    * the comments button does not leave an empty gutter to its right.
    *
-   * CDXC:DocsAnnotationToolbar 2026-06-30-23:52:
+   * CDXC:Docs 2026-06-30-23:52:
    * Floating sidebars hide and show above the same preview grid, so header
    * action geometry must not depend on whether the floating sidebar is currently
    * visible. Apply the same right-edge reservation in floating mode to prevent
@@ -476,7 +476,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:DocsSidebarSearch 2026-06-30-11:11:
+   * CDXC:Docs 2026-06-30-11:11:
    * Docs file search needs an inline X button that appears only while text is present; clicking it or pressing Escape clears the filter and keeps keyboard focus in the search field.
    */
   .manage-search:focus-within {
@@ -585,7 +585,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:DocsSidebar 2026-06-30-03:20:
+   * CDXC:Docs 2026-06-30-03:20:
    * The Docs file tree should sit 5px closer to the sidebar's left edge while the Search field keeps its current padding and icon alignment.
    */
   .manage-file-row {
@@ -702,7 +702,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:ManageFileActions 2026-08-08:
+   * CDXC:Docs 2026-08-08:
    * Docs uses the shared sidebar context-menu stylesheet and class contract.
    * Keep only Docs-specific tokens and nested-row layout here so its menu
    * surface, spacing, square corners, hover, dividers, and danger rows cannot
@@ -724,7 +724,7 @@ export const MANAGE_STYLES = `
     --app-card: var(--manage-panel);
     --app-context-menu-hover-background: var(--manage-row-surface);
     /*
-     * CDXC:UnifiedAppModal 2026-08-26:
+     * CDXC:AppModal 2026-08-26:
      * Docs-scoped only. The shared sidebar-context-menu sheet stays square for
      * every other surface that uses it; rounding is applied through the Docs
      * class so this page's menus match the Docs dropdown language.
@@ -779,7 +779,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:UnifiedAppModal 2026-08-26:
+   * CDXC:AppModal 2026-08-26:
    * Docs modals are AppModalShell dialogs, so their surface, radius, hairlines,
    * control height, typography, and footer pills all come from the .gx-app-modal
    * rules in packages/core-ui/styles/modals.css. Only two things stay here.
@@ -855,7 +855,7 @@ export const MANAGE_STYLES = `
 
   .manage-preview-title {
     /*
-     * CDXC:DocsHeader 2026-07-01-00:11:
+     * CDXC:Docs 2026-07-01-00:11:
      * Long project-relative Docs filenames should truncate before they can
      * displace metadata or header action buttons. Use a zero flex basis and
      * hidden overflow so the title yields width first while keeping the file
@@ -918,7 +918,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:DocsAnnotationToolbar 2026-06-30-22:58:
+   * CDXC:Docs 2026-06-30-22:58:
    * When the right-side Docs sidebar is hidden, the restore button already owns the titlebar edge spacing. Remove the annotation dropdown shell's extra right margin so no empty strip appears between the comments/count button and the restore control.
    */
   .manage-shell[data-sidebar-hidden="true"][data-sidebar-side="right"] .manage-preview-content[data-kind="markdown"] .manage-annotation-dropdown-shell,
@@ -957,10 +957,10 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:ManageHtmlRendering 2026-06-29-17:25:
+   * CDXC:Docs 2026-06-29-17:25:
    * Rendered HTML Docs should give the artifact an isolated browser-like viewport. Do not apply Ghostex typography, padding, link colors, or dark background to the iframe because the HTML document's own CSS must decide how the page looks.
    *
-   * CDXC:ManageHtmlRendering 2026-06-30-04:41:
+   * CDXC:Docs 2026-06-30-04:41:
    * The iframe element itself should not paint a white scrollbar gutter around dark HTML documents. Keep it transparent over the Manage background while the loaded document still owns its actual page background.
    */
   .manage-html-render-view {
@@ -1133,7 +1133,7 @@ export const MANAGE_STYLES = `
   }
 
   /*
-   * CDXC:ManageMarkdownLayout 2026-06-30-13:45:
+   * CDXC:Docs 2026-06-30-13:45:
    * The embedded Meo editor must keep both its toolbar and CodeMirror surface owned by the Manage preview column after heading formatting changes remeasure live Markdown content.
    * Keep Meo's single-row toolbar layout, measure before hiding the three secondary right-side utility buttons, and use one Live/Source toggle button instead of a two-option segmented control.
    */
@@ -1150,7 +1150,7 @@ export const MANAGE_STYLES = `
 
   .manage-meo-markdown-editor .format-group {
     /*
-     * CDXC:ManageMarkdownLayout 2026-07-01-00:11:
+     * CDXC:Docs 2026-07-01-00:11:
      * The left formatting group must not push the persistent right-side toolbar
      * controls outside narrow Docs panes. Let it shrink from zero-basis and
      * clip lower-priority formatting buttons before search, display toggles, or

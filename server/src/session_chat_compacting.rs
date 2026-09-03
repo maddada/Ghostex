@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatCompactingStatus 2026-08-31:
+CDXC:AgentScreenDetection 2026-08-31:
 The zmx screen classifier in session_chat_terminal_activity.rs is the source of
 truth for Claude Code's live `/compact` state. This module projects that
 ephemeral screen fact into the session's effective activity without rewriting

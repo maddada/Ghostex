@@ -30,7 +30,7 @@ export function ManageHtmlRenderViewer({
   );
 
   /*
-   * CDXC:ManageHtmlAgentation 2026-08-08:
+   * CDXC:Docs 2026-08-08:
    * A feature named in `allow` without an explicit allowlist defaults to
    * `'src'`, which resolves against the frame's `src` URL. This frame renders
    * from `srcdoc` and has no `src`, so bare feature names matched no origin
@@ -54,7 +54,7 @@ export function ManageHtmlRenderViewer({
       data-document-key={documentKey}
       onLoad={(event) => {
         /*
-         * CDXC:ManageHtmlDocumentNavigation 2026-08-06:
+         * CDXC:Docs 2026-08-06:
          * The synthetic folder base that makes sibling assets work also changes
          * fragment-link resolution inside srcdoc. Keep fragments owned by the
          * rendered document, and hand sibling HTML files back to Docs so its
@@ -117,7 +117,7 @@ export function buildManageHtmlDocument(
   options: { injectAgentation?: boolean; resourceBaseUrl?: string } = {}
 ): string {
   /*
-   * CDXC:ManageHtmlRendering 2026-07-01-18:12:
+   * CDXC:Docs 2026-07-01-18:12:
    * Docs HTML files should behave like real interactive browser documents. Parse only to append Ghostex-owned viewer chrome and the optional Agentation bootstrap; do not remove authored scripts, inline handlers, JavaScript URLs, frames, form targets, srcdoc content, or base tags.
    */
   const documentValue = new DOMParser().parseFromString(html, 'text/html');
@@ -217,10 +217,10 @@ export function injectManageHtmlResourceBase(documentValue: Document, resourceBa
 
 export function injectManageHtmlViewerChromeStyles(documentValue: Document): void {
   /*
-   * CDXC:ManageHtmlRendering 2026-06-30-04:57:
+   * CDXC:Docs 2026-06-30-04:57:
    * The rendered artifact document owns its page CSS, but Docs owns the embedded scrollbar chrome. Append the style after author CSS so the iframe never shows wide default scrollbars or an opaque track/corner behind them.
    *
-   * CDXC:ManageHtmlRendering 2026-06-30-11:58:
+   * CDXC:Docs 2026-06-30-11:58:
    * Use document tagging plus WebKit scrollbar pseudo-elements for exact 4px embedded scrollbars. Standards `scrollbar-width: thin` is intentionally avoided because it produced a wider rendered scrollbar than the Docs requirement.
    */
   documentValue.documentElement.setAttribute('data-ghostex-manage-html-viewer', 'true');

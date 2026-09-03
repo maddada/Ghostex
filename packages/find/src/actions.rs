@@ -117,7 +117,7 @@ pub fn ghostex_focus_outcome_for_exit_code(code: i32) -> GhostexFocusOutcome {
     }
 }
 
-// CDXC:AgentHistoryFocus 2026-08-07-09:18:
+// CDXC:PromptSearch 2026-08-07-09:18:
 // Zehn owns agent-history selection while Ghostex owns live workspace identity.
 // `ghostex find` provides its exact CLI executable so selecting history that
 // already has a live Ghostex owner focuses that pane instead of asking the agent

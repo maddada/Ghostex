@@ -387,7 +387,7 @@ pub(crate) fn session_from_row(server_id: &str, row: SessionRow) -> DomainResult
     )?;
     let worktree = parse_object_map(&row.worktree_json, "worktreeJson", "session", &row_id)?;
     /*
-    CDXC:SessionTags 2026-06-22-05:58:
+    CDXC:Sessions 2026-06-22-05:58:
     Stored sessionTag values are durable gxserver metadata, so Rust row hydration must reject the same invalid non-empty values as TypeScript instead of silently hiding corrupt or retired tags from clients.
     Legacy rows that only have isFavorite still hydrate as the Favorite tag so old state.db files keep the expanded tag model after migration.
     */
@@ -483,7 +483,7 @@ pub(crate) fn session_from_row(server_id: &str, row: SessionRow) -> DomainResult
         session.insert("sessionTag".to_string(), Value::String(tag));
     }
     /*
-    CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     Settle/snooze columns are absent (NULL) on every state.db written before
     migration 0016, and the whole lifecycle is "no state" in that case. Hydrate
     them as omitted keys rather than explicit nulls so presentation, the CLI

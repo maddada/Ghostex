@@ -1,7 +1,7 @@
 import { normalizeAgentAcceptAllMode, type AgentAcceptAllMode } from './sidebar-agent-accept-all';
 const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
   /**
-   * CDXC:SidebarAgents 2026-05-15-15:25:
+   * CDXC:AgentLauncher 2026-05-15-15:25:
    * The default model picker should present the first built-in launch engines
    * in the user-facing order Codex, Claude, Cursor CLI, Pi Agent, OpenCode,
    * Gemini, Copilot, Factory Droid, Grok Build, Antigravity CLI, and
@@ -20,7 +20,7 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     name: 'Claude',
   },
   /**
-   * CDXC:SidebarAgents 2026-05-19-09:10:
+   * CDXC:AgentLauncher 2026-05-19-09:10:
    * Cursor CLI is a built-in launch engine directly under Claude in the default
    * agent list. Launch it with `cursor-agent` and reuse the Cursor editor
    * logomark so sidebar cards, configure-agent rows, and native title bars stay
@@ -33,7 +33,7 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     name: 'Cursor CLI',
   },
   /**
-   * CDXC:PiAgent 2026-05-15-15:25:
+   * CDXC:AgentProviders 2026-05-15-15:25:
    * Pi is a first-class default agent so the configure-agent modal, sidebar
    * launch buttons, automatic icon selection, and restore commands can share
    * the same default-agent registry used by Codex. The model picker labels the
@@ -65,7 +65,7 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     name: 'Copilot',
   },
   /**
-   * CDXC:SidebarAgents 2026-05-15-12:41:
+   * CDXC:AgentLauncher 2026-05-15-12:41:
    * Factory Droid is a built-in launch engine that belongs at the bottom of
    * the default agent list. Launch it through Factory's `droid` CLI command
    * while keeping the display label explicit enough to distinguish the vendor.
@@ -77,7 +77,7 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     name: 'Factory Droid',
   },
   /**
-   * CDXC:SidebarAgents 2026-05-15-12:45:
+   * CDXC:AgentLauncher 2026-05-15-12:45:
    * Grok Build is a built-in launch engine at the end of the default list.
    * xAI's current setup docs install Grok Build and launch the interactive CLI
    * with `grok`, so use that executable while keeping the product name visible.
@@ -89,7 +89,7 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     name: 'Grok Build',
   },
   /**
-   * CDXC:SidebarAgents 2026-05-19-14:40:
+   * CDXC:AgentLauncher 2026-05-19-14:40:
    * Antigravity CLI is a built-in launch engine just above Amp at the bottom of
    * the default agent list. Launch it with `agy` and use the Antigravity
    * logomark path from the official icon as a mask-friendly sidebar asset.
@@ -101,7 +101,7 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     name: 'Antigravity CLI',
   },
   /**
-   * CDXC:SidebarAgents 2026-05-19-09:10:
+   * CDXC:AgentLauncher 2026-05-19-09:10:
    * Amp CLI is a built-in launch engine at the bottom of the default agent list.
    * Launch it with Sourcegraph's `amp` command and use the official Amp wordmark
    * so the sidebar launcher matches Amp's CLI branding.
@@ -113,7 +113,7 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     name: 'Amp CLI',
   },
   /**
-   * CDXC:SidebarAgents 2026-07-02-14:05:
+   * CDXC:AgentLauncher 2026-07-02-14:05:
    * Hermes Agent is a built-in launch engine at the bottom of the default
    * agent list. The `hermes` CLI opens the interactive Hermes Agent TUI, and
    * gxserver already owns its hook install, resume shaping, and detection, so
@@ -126,7 +126,7 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     name: 'Hermes Agent',
   },
   /**
-   * CDXC:SessionRestore 2026-05-23-00:25:
+   * CDXC:SessionSleep 2026-05-23-00:25:
    * Keep Rovo Dev, CodeBuddy, and Qoder in the restorable-agent
    * surface, but keep these less-common launchers hidden until the user
    * explicitly enables or configures them.
@@ -246,7 +246,7 @@ export type StoredSidebarAgent = {
 };
 
 /**
- * CDXC:SessionHistoryTitleSource 2026-07-29:
+ * CDXC:SessionTitles 2026-07-29:
  * Empty-title Generate Name asks gxserver to summarize the session's recent
  * transcript user messages. Only agents whose local transcript format gxserver
  * can read support this; other agents keep requiring pasted text in the
@@ -262,7 +262,7 @@ export function createSidebarAgentSelectItems(
   agents: readonly Pick<SidebarAgentButton, 'agentId' | 'name'>[]
 ): Array<{ label: string; value: string }> {
   /*
-   * CDXC:PromptAgents 2026-05-30-07:46:
+   * CDXC:AgentLauncher 2026-05-30-07:46:
    * Collapsed macOS agent selects must show the configured friendly title, not
    * the persisted agent id value. Base UI needs root-level items because the
    * popup options are not mounted when the trigger renders its initial value.
@@ -378,7 +378,7 @@ export function getSidebarAgentNameByIcon(icon: SidebarAgentIcon | undefined): s
 }
 
 /**
- * CDXC:CursorCLI 2026-05-19-15:35:
+ * CDXC:AgentProviders 2026-05-19-15:35:
  * Cursor CLI auto-generates conversation titles in the terminal. Include Cursor
  * alongside the other agents whose live terminal titles can drive sidebar cards
  * and be persisted through native terminal-title sync.

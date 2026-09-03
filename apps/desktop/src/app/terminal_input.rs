@@ -32,10 +32,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUITerminalPaste 2026-06-23-09:59:
+        CDXC:Clipboard 2026-06-23-09:59:
         Cmd+V terminal paste is scoped to the shell focus model instead of the body mouse handlers: only the currently focused mounted Agents or command Ghostty surface can receive clipboard bytes. Clipboard contents stay ephemeral, explicit-string-only, and are never logged, persisted, or converted from file paths.
 
-        CDXC:GPUITerminalImagePaste 2026-06-27-10:28:
+        CDXC:Clipboard 2026-06-27-10:28:
         Direct GPUI terminal paste uses the same runtime-only previewable-image setting as macOS before targeting the focused mounted Ghostty surface. Disabled keeps explicit-string-only behavior; enabled converts only validated image file references or raw image bytes into Markdown before any terminal insertion.
         */
         let Some(item) = cx.read_from_clipboard() else {
@@ -104,7 +104,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUITerminalRemoteImagePaste 2026-08-21:
+    CDXC:Clipboard 2026-08-21:
     A remote session's terminal runs on the remote machine, so the local
     "[Image #N](path)" reference a clipboard image normally produces names a
     file the remote agent cannot open. Pasting into a remote terminal therefore
@@ -746,7 +746,7 @@ impl GhostexGpuiApp {
             }
             changed = true;
             /*
-            CDXC:SessionChatDraftHandoff 2026-08-18:
+            CDXC:Drafts 2026-08-18:
             This is the switch a user never asked for: they started an agent by
             typing into a terminal, and the moment it becomes chat-eligible the
             app moves them to Chat. Anything already typed into the CLI composer
@@ -785,7 +785,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUITerminalGpuiEngineFocus 2026-07-04-05:45:
+    CDXC:FocusRouting 2026-07-04-05:45:
     GPUI-engine terminals are GPUI-owned key surfaces inside a main window
     whose AppKit first responder can be parked on a CEF child view (sidebar/
     browser interaction) or a native Ghostty host view. gpui makes its
@@ -804,7 +804,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        // CDXC:SessionChatFocusDiagnostics 2026-08-24: this is the primitive
+        // CDXC:Diagnostics 2026-08-24: this is the primitive
         // that yanks AppKit first responder off any CEF surface (the chat
         // composer included) onto the GPUI root, so record every execution
         // with the responder it is about to displace.
@@ -826,7 +826,7 @@ impl GhostexGpuiApp {
         #[cfg(target_os = "macos")]
         {
             /*
-            CDXC:GPUICompositedTerminalKeyboardOwnership 2026-07-30:
+            CDXC:FocusRouting 2026-07-30:
             App-level shell focus and GPUI's FocusHandle already identify the
             exact composited terminal synchronously. Do not wait for the
             terminal's next rendered prepaint edge to update native keyboard
@@ -846,7 +846,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUITerminalGpuiEngineFocus 2026-07-04-09:10:
+    CDXC:FocusRouting 2026-07-04-09:10:
     Keyboard tab cycling (focusNextSession/focusPreviousSession, the
     cmd+shift+]/[ aliases, and ctrl-tab) mutates the workspace/command tab
     model and app-level shell focus but historically never touched GPUI
@@ -904,7 +904,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUITerminalGpuiEngineFocus 2026-07-04-05:45:
+    CDXC:FocusRouting 2026-07-04-05:45:
     Session create/attach flows request a terminal text focus handoff that
     only the native mount-slot canvas used to drain, so engine-claimed slots
     (which render no native canvas) never received creation-time keyboard
@@ -918,7 +918,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        // CDXC:SessionChatComposerFocusInvariant 2026-08-24: a slot armed
+        // CDXC:SessionChat 2026-08-24: a slot armed
         // before its session entered chat mode must not execute as a focus
         // grab against the chat composer — the terminal it targets is no
         // longer the pane's keyboard owner. Drop it instead of waiting.
@@ -936,7 +936,7 @@ impl GhostexGpuiApp {
         // in flight, or a native-surface slot) must WAIT without blocking the
         // other two families: an early return here previously starved the
         // command/companion drains for as long as one stale agents pending
-        // lingered (CDXC:GPUIWorkspaceSessionFocus 2026-07-11).
+        // lingered (CDXC:FocusRouting 2026-07-11).
         if let Some(slot_id) = self.pending_agents_terminal_text_focus_slot {
             if let Some(view) = self
                 .agents_gpui_engine_terminals
@@ -1045,7 +1045,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:SessionChatFocusDiagnostics 2026-08-24:
+    CDXC:Diagnostics 2026-08-24:
     Arming a terminal text-focus slot is what the render drain later executes
     as a first-responder grab. When it happens while the same session is in
     chat mode it steals keyboard focus from the chat composer, so each arm
@@ -1072,7 +1072,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:SessionChatComposerFocusInvariant 2026-08-24:
+    CDXC:SessionChat 2026-08-24:
     A session whose pane shows the chat surface has no mounted terminal, so a
     terminal text-focus handoff for it can only execute later as a bare
     first-responder grab that yanks the keyboard out of the chat composer
@@ -1216,7 +1216,7 @@ impl GhostexGpuiApp {
         self.pending_agents_terminal_text_focus_slot = None;
         self.sync_agents_terminal_ghostty_surface_focus_with_appkit_handoff(true);
         /*
-        CDXC:SessionChatDraftHandoff 2026-08-24:
+        CDXC:Drafts 2026-08-24:
         A multi-line draft must reach the agent's composer as ONE paste, not as
         N submitted lines, and it already does: these bytes go to
         `ghostty_surface_text`, whose callback is Ghostty's own paste completion
@@ -1625,7 +1625,7 @@ impl GhostexGpuiApp {
         element_bounds: Bounds<Pixels>,
     ) -> Option<Bounds<Pixels>> {
         /*
-        CDXC:GPUITerminalTextInput 2026-06-23-10:45:
+        CDXC:Terminal 2026-06-23-10:45:
         IME candidate-window bounds may use only the current exact Ghostty surface `ime_point` plus the mounted terminal body bounds supplied by GPUI's paint-time input handler. If the focused surface is missing or stale, return None instead of inventing title/path/content/cursor fallbacks.
         */
         #[cfg(target_os = "macos")]
@@ -1731,7 +1731,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIKeyboardRouter 2026-07-24:
+        CDXC:Hotkeys 2026-07-24:
         Native pre-dispatch captures the window and exact keyboard owner before
         queuing an app action. Never bounce the selector through a process-global
         callback or another window's current focus; the target app entity and
@@ -1888,7 +1888,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandDelayedSend 2026-06-25-15:11:
+        CDXC:DelayedSend 2026-06-25-15:11:
         Delayed Send must submit the staged prompt through Ghostty's key path, matching native `sendTerminalEnter`, rather than writing carriage-return text. Use the exact current mounted command slot and the macOS Return keycode/text tuple; if the surface is missing or stale, no other terminal receives the key.
         */
         if self
@@ -1945,7 +1945,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceRenameCommand 2026-06-27-02:27:
+        CDXC:SessionTitles 2026-06-27-02:27:
         Mapped Agents rename submission must use Ghostty's key path for the exact mounted Agents slot, matching native Return delivery. If the slot is stale, hidden, sleeping, missing a runtime id, or owned by a different surface, no other terminal receives a newline or fallback key.
         */
         if self
@@ -2148,7 +2148,7 @@ impl GhostexGpuiApp {
                 surface.send_text_bytes(source_command.as_bytes());
             }
             /*
-            CDXC:GPUICommandPaneActions 2026-06-27-07:54:
+            CDXC:CommandPane 2026-06-27-07:54:
             Mounted reused default Actions mirror native `writeTerminalScript`: stage the private wrapper in a temp script for the exact current command surface, send only the short source command as terminal text, and submit it through the real Return key path so reruns execute immediately without relying on carriage-return text or a deferred launch payload.
             */
             self.send_return_key_to_mounted_command_terminal_surface(slot_id, cx)
@@ -2165,7 +2165,7 @@ impl GhostexGpuiApp {
         slot_id: CommandTerminalBodyMountSlotId,
     ) -> bool {
         /*
-        CDXC:GPUICommandPaneActions 2026-06-27-07:54:
+        CDXC:CommandPane 2026-06-27-07:54:
         Default Action reuse may bypass launch payloads only when the selected reused tab already owns the exact current mounted command Ghostty surface. Missing, stale, sleeping, or unmounted reused tabs must use the exact-slot launch payload path instead of borrowing another terminal surface.
         */
         if !self
@@ -2429,13 +2429,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+        CDXC:CommandPane 2026-06-23-20:04:
         Confirming a pending Agents close validates the exact current pending slot, process-local runtime identity, mounted Ghostty owner, and `needs_confirm_quit` boolean before closing the shell tab through the existing workspace model path. This uses the real GhosttyKit close-confirm query, not a synthetic runtime callback or broad fallback close.
 
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+        CDXC:CommandPane 2026-06-23-20:04:
         Direct user confirmation has the same shell side effects as the callback close path: reconcile process-local runtime ids after model removal, keep Agents focus on the surviving focused pane, scroll its active tab, and persist layout state without touching command/startup maps.
 
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-07:25:
+        CDXC:Workarea 2026-06-26-07:25:
         If the confirmed Agents tab is mapped to a gxserver workspace session, confirmation commits the local shell close immediately; the fixed sidebar lifecycle bridge then receives best-effort provider cleanup without gating tab removal.
         */
         if self
@@ -2541,16 +2541,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+        CDXC:CommandPane 2026-06-23-20:04:
         Confirming a pending command close stays command-local and validates the exact current slot, transient runtime identity, mounted Ghostty owner, and `needs_confirm_quit` boolean before removing the command session through `CommandPaneModel::close_session`. It must not route through Agents/startup state or synthesize a confirmed runtime callback.
 
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+        CDXC:CommandPane 2026-06-23-20:04:
         Command confirmation mirrors the confirmed-callback shell side effects: if sessions remain, keep focus on the command pane and scroll the active command tab; if the pane empties, restore the previous non-command focus before persisting layout state.
 
-        CDXC:GPUITerminalCloseConfirm 2026-06-25-21:12:
+        CDXC:CommandPane 2026-06-25-21:12:
         Direct user confirmation must also share the command close cleanup side effects from callback and tab-close paths. Prune command-owned Delayed Send and Close After Done timers, refresh the sidebar command projection, and repaint immediately after the confirmed command session leaves the model.
 
-        CDXC:GPUICommandPaneResize 2026-06-27-03:21:
+        CDXC:CommandPane 2026-06-27-03:21:
         Direct confirmation can remove the final mounted command tab from the close-confirm surface. Clear command resize hover chrome only after that leaves the command pane empty, matching runtime confirmed-close and process-exit cleanup.
         */
         let confirmed = if self.command_gpui_engine_close_confirms.remove(&slot_id) {

@@ -2,7 +2,7 @@ import type { GxserverSidebarSpacesState } from '@/packages/shared/gxserver-prot
 import { SIDEBAR_PROJECT_COLLECTION_COLORS } from './project-collections';
 
 /*
-CDXC:SidebarSpaces 2026-08-27:
+CDXC:Spaces 2026-08-27:
 A Space is a server-owned saved sidebar filter: a name, an icon id, a color, a
 manual position, and the sidebar members it shows. Members are sidebar project
 collections ("groups") and ungrouped projects, and either may belong to any
@@ -249,7 +249,7 @@ export function deleteSidebarSpace(state: SidebarSpacesState, spaceId: string): 
 }
 
 /**
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * The New/Edit Space dialog reports field values only, so this is where those
  * values become a state change — against whatever state the sidebar holds when
  * the result arrives, never against the snapshot the dialog opened on. A result

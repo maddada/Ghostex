@@ -73,12 +73,12 @@ export function SessionHistoryCard({
     showTerminalSessionIcon ||
     session.isReloading === true;
   /**
-   * CDXC:PreviousSessions 2026-05-13-16:11:
+   * CDXC:Sessions 2026-05-13-16:11:
    * Previous Sessions rows place project metadata and transcript size on the
    * right before Last Active, so the title column stays dedicated to the
    * session title while useful context remains visible during scanning.
    *
-   * CDXC:PreviousSessions 2026-06-09-09:41:
+   * CDXC:Sessions 2026-06-09-09:41:
    * Tagged Previous Sessions rows must advertise the same leading identity
    * state as live sidebar rows. The tag glyph is visible at rest, and hover or
    * keyboard focus reveals the session's agent/terminal icon in that same
@@ -106,12 +106,12 @@ export function SessionHistoryCard({
         data-visible='false'
       >
         {/**
-         * CDXC:PreviousSessions 2026-05-09-17:44
+         * CDXC:Sessions 2026-05-09-17:44
          * History rows are archived restore entries. Render the leading icon
          * as identity only, and never let stale live-session visible/focused
          * state make previous-session cards look like active UI rows.
          *
-         * CDXC:PreviousSessions 2026-05-11-09:04
+         * CDXC:Sessions 2026-05-11-09:04
          * Sidebar search and the modal must show every previous-session button
          * with the same row chrome; active/live highlights are misleading here
          * because these rows restore history instead of representing open UI.
@@ -170,7 +170,7 @@ export function SessionHistoryCard({
           tabIndex={canActivate ? 0 : -1}
         >
           {/**
-           * CDXC:PreviousSessions 2026-06-05-14:21:
+           * CDXC:Sessions 2026-06-05-14:21:
            * Inline Previous Sessions search rows must match project-session row
            * icon placement on both macOS and Electron. Keep the floating
            * identity glyph inside the clickable session button so absolute
@@ -196,7 +196,7 @@ export function SessionHistoryCard({
             trailingPrefix={
               <>
                 {/**
-                 * CDXC:SessionForkFamilies 2026-08-28:
+                 * CDXC:SessionFork 2026-08-28:
                  * The branch badge shares the project-label column instead of
                  * claiming a fourth trailing slot, because that slot's grid
                  * columns are fixed widths the transcript size and Last Active
@@ -226,7 +226,7 @@ export function SessionHistoryCard({
             trailingSuffix={
               <div className='session-history-status-slot'>
                 {/**
-                 * CDXC:PreviousSessions 2026-09-01:
+                 * CDXC:Sessions 2026-09-01:
                  * Quick Access Sessions keeps the lifecycle marker in this
                  * trailing column. Delete replaces that same cell on hover so
                  * the X is not a separate floating control over the dot.

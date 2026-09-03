@@ -74,7 +74,7 @@ pub(crate) fn gpui_cef_html_entry_url(env_var: &str, entry_file_name: &str) -> R
     }
 
     /*
-    CDXC:GPUIWindowsAppModalBundle 2026-08-04:
+    CDXC:PlatformSupport 2026-08-04:
     Packaged Windows and Linux builds stage every first-party CEF entry in
     dist/sidebar beside the executable, just like sidebar_url's packaged
     lookup. Resolve that directory before the compile-time checkout path so an

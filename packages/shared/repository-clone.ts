@@ -20,7 +20,7 @@ const REPOSITORY_BROWSER_PATH_STOP_SEGMENTS = new Set([
 ]);
 
 /**
- * CDXC:AddRepository 2026-05-29-11:45:
+ * CDXC:AddProject 2026-05-29-11:45:
  * The Clone Repository modal accepts pasted clone commands, owner/repo shorthand,
  * HTTPS URLs, SSH scp URLs, and host/path strings. Normalize the input once so
  * cloning and destination-folder naming do not depend on the exact paste style.
@@ -81,7 +81,7 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
 }
 
 /*
-CDXC:AddProjectCloneReview 2026-08-22:
+CDXC:AddProject 2026-08-22:
 The unified Add Project confirmation step accepts an optional branch name.
 Empty means Git uses the repository default branch, usually main or master;
 typed names must be valid ref-like branch names before Clone & Add is enabled.

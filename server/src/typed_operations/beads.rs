@@ -219,7 +219,7 @@ pub(crate) fn build_beads_command_with_executable(
         ),
         "listAllLabels" => {
             /*
-            CDXC:ProjectBoardLabels 2026-06-19-14:38:
+            CDXC:ProjectBoard 2026-06-19-14:38:
             Beads label vocabulary requests must share the board list read path instead of calling `label list-all`, because the board list output already contains the labels needed by the UI and avoids the slower issue-by-issue inventory path.
             */
             ProcessCommand::new(bd_executable_path, vec!["list", "--all", "--json"], &cwd)
@@ -340,7 +340,7 @@ pub(crate) async fn ensure_beads_git_hooks(
     context: &TypedOperationContext,
 ) -> Result<Value, TypedOperationError> {
     /*
-    CDXC:WorktreeBeads 2026-06-22-01:09:
+    CDXC:ProjectBoard 2026-06-22-01:09:
     The Rust port must install the same Ghostex-managed Beads hooks as the TypeScript server. Generated hooks live under the common Git directory, call the resolved machine-installed bd by absolute path, pin BEADS_DIR to `bd where --json`, and are written before core.hooksPath is pointed at them.
     */
     if !Path::new(&context.cwd).join(".beads").is_dir() {
@@ -546,7 +546,7 @@ fn normalize_beads_action(input: Option<&Value>) -> Result<String, TypedOperatio
 }
 
 /*
-CDXC:ProjectBoardCustomColumns 2026-08-21:
+CDXC:ProjectBoard 2026-08-21:
 Beads owns the set of valid statuses: a board can define its own through
 `bd config set status.custom`, so a fixed list here was rejecting real statuses
 before bd ever saw them and made custom board columns undraggable. Validate the
@@ -891,7 +891,7 @@ pub(crate) fn derive_beads_label_counts(issues: &[Value]) -> Vec<BeadsLabelCount
 
 fn compare_beads_label_locale_order(left: &str, right: &str) -> Ordering {
     /*
-    CDXC:ProjectBoardLabels 2026-06-19-14:44:
+    CDXC:ProjectBoard 2026-06-19-14:44:
     TypeScript sorts derived Beads labels with `localeCompare`. Keep Rust's common ASCII label ordering aligned without adding an ICU dependency to this typed-operation path; uncommon Unicode labels still fall back to deterministic string ordering after the ASCII-compatible pass.
     */
     let primary = compare_label_primary_order(left, right);

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# CDXC:GPUILinuxX11Backend 2026-07-04:
+# CDXC:PlatformSupport 2026-07-04:
 # Linux packaging skeleton for the GPUI app, mirroring the shape of
 # build-windows-app.ps1: build the sidebar bundle, build both Rust binaries,
 # then stage a flat CEF-conventional layout.
-# CDXC:GPUILinuxX11Backend 2026-07-05: device-verified on Ubuntu 26.04 —
+# CDXC:PlatformSupport 2026-07-05: device-verified on Ubuntu 26.04 —
 # builds, stages, and the staged app launches with working CEF sidebar and
 # local gxserver. Deliberately not yet covered here (macOS-script parity
 # items to port as Linux support matures): completion sound assets, CLI

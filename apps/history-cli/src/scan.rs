@@ -15,20 +15,20 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 /*
-CDXC:GhostexHistoryScan 2026-06-25-19:49:
+CDXC:PromptSearch 2026-06-25-19:49:
 ghostex-history should reuse Zehn's knowledge of local agent storage locations while rendering full sessions instead of individual prompt search hits.
 Scan Codex, Claude, Pi, Cursor, and Grok JSONL histories directly from the user home folder; keep opencode out of v1 because its SQLite source needs a separate transcript adapter.
 
-CDXC:GhostexHistoryScan 2026-06-25-20:01:
+CDXC:PromptSearch 2026-06-25-20:01:
 The list view should match Codex's active-session picker instead of an archival dump.
 Skip archived Codex rollouts by default, dedupe repeated session ids, and read only a small prefix for list metadata so full transcript parsing happens when a row is opened.
 For Cursor, load metadata only for session ids that have transcript files because local acp-sessions folders can be much larger than the visible history list.
 
-CDXC:GhostexHistoryScan 2026-06-25-19:49:
+CDXC:PromptSearch 2026-06-25-19:49:
 The v1 transcript intentionally omits tool outputs and tool-result messages.
 Persist only a concise tool-call block with the tool name so later work can decide how to display bulky command output without making the first viewer unusable.
 
-CDXC:GhostexHistoryScan 2026-06-25-20:33:
+CDXC:PromptSearch 2026-06-25-20:33:
 Only user-authored prompts belong in the v1 transcript.
 Drop injected environment/setup records, unwrap Grok user_query tags, and keep Grok assistant reasoning plus tool_calls so each source maps to the same user/thinking/tool/response block model.
 */

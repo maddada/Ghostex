@@ -26,7 +26,7 @@ pub struct SessionChatTailFileResult {
     pub malformed_record_count: usize,
     pub oversized_record_count: usize,
     /*
-    CDXC:SessionChatCore 2026-08-19:
+    CDXC:SessionChat 2026-08-19:
     Prompts still sitting in the agent's queue at `consumed_to`, oldest first,
     as `(normalized text, message id)`. The follower seeds the append stream
     with these after every snapshot: `rebase` clears the forward state, so
@@ -35,7 +35,7 @@ pub struct SessionChatTailFileResult {
     */
     pub outstanding_queued_prompts: Vec<(String, String)>,
     /*
-    CDXC:SessionChatRewind 2026-09-02:
+    CDXC:SessionChat 2026-09-02:
     `uuid` of the newest ACTIVE-branch row in the window. The follower seeds its
     append stream with it: a prompt that names something else as its parent is a
     rewind, and the pruned window that answers it can only come from a fresh
@@ -153,7 +153,7 @@ pub fn read_session_chat_transcript_tail_file(
     let mut cursor = consumed_to - u64::from(trailing[0] == b'\n');
 
     /*
-    CDXC:SessionChatRewind 2026-09-02:
+    CDXC:SessionChat 2026-09-02:
     Claude's tree needs the rows ABOVE this window to decide the fate of the
     rows inside it, so a paginated read starts from the boundary state the page
     above established (`session_chat_branch`). The live tail of the file has

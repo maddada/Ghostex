@@ -5,13 +5,13 @@ import {
 } from './sidebar-commands';
 
 /**
- * CDXC:ProjectActions 2026-05-19-12:00:
+ * CDXC:Projects 2026-05-19-12:00:
  * Sidebar Actions (terminal/browser command buttons) are owned per project, not
  * globally. Each project stores its own command definitions, display order, and
  * deleted default-action ids so switching projects swaps the Actions panel,
  * command palette section, action-slot hotkeys, and titlebar Actions list.
  *
- * CDXC:ProjectActions 2026-05-19-17:10:
+ * CDXC:Projects 2026-05-19-17:10:
  * Worktree projects share the parent project's Actions store key so every
  * worktree for the same repo uses one command list.
  */

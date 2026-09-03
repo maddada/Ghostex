@@ -16,7 +16,7 @@ export const DEFAULT_WORKSPACE_THEME_COLOR = '#2f6feb';
 const MAX_WORKSPACE_THEME_COLOR_HISTORY = 8;
 
 /**
- * CDXC:WorkspaceTheme 2026-05-05-02:58
+ * CDXC:Theming 2026-05-05-02:58
  * Workspaces can carry an optional custom theme color selected from the Theme
  * context menu. Keep persisted values and the recent-color palette as validated
  * hex colors so the UI can inject them into CSS variables without accepting
@@ -88,7 +88,7 @@ export function normalizeWorkspaceProjectIcon(value: unknown): WorkspaceProjectI
 }
 
 /**
- * CDXC:WorkspaceConfig 2026-04-28-01:19
+ * CDXC:Icons 2026-04-28-01:19
  * Workspace icons are no longer image-only. Persist a typed icon so users can
  * choose first-class Tabler glyphs while existing saved PNG/SVG data URLs keep
  * rendering through the image variant after upgrade.
@@ -101,7 +101,7 @@ export function normalizeWorkspaceProjectIconDataUrl(value: unknown): string | u
 }
 
 /**
- * CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+ * CDXC:Icons 2026-07-29 (discovered icons):
  * The data URL a gxserver publishes for an icon it discovered inside a project's
  * checkout (`GxserverPresentationProject.discoveredIconDataUrl`).
  *
@@ -130,7 +130,7 @@ export function normalizeDiscoveredProjectIconDataUrl(value: unknown): string | 
 }
 
 /**
- * CDXC:ProjectIcons 2026-05-11-01:50
+ * CDXC:Icons 2026-05-11-01:50
  * Project icons need one shared React/native source so macOS notifications and
  * future React titlebar project chrome render the same user-selected image
  * instead of each surface inventing separate icon lookup rules.

@@ -176,11 +176,11 @@ const FIRST_LAUNCH_SIDEBAR_PRESETS = FIRST_LAUNCH_SIDEBAR_PRESET_ORDER.flatMap((
 });
 
 /*
- * CDXC:FirstLaunchSetup 2026-05-31-07:15:
+ * CDXC:Onboarding 2026-05-31-07:15:
  * ZMU-72: The mobile download button must match README.md's stable React Native
  * Android release URL without per-version README edits.
  *
- * CDXC:FirstLaunchSetup 2026-06-16-01:04:
+ * CDXC:Onboarding 2026-06-16-01:04:
  * Android download buttons must use GitHub's latest-release asset redirect so the first-launch setup never points at an older tagged APK after a new stable release ships.
  */
 const FIRST_LAUNCH_ANDROID_APK_URL = GHOSTEX_ANDROID_APK_URL;
@@ -206,7 +206,7 @@ const FIRST_LAUNCH_CLI_MOBILE_BENEFITS: readonly FirstLaunchMobileBenefit[] = [
   },
 ];
 /*
- * CDXC:FirstLaunchSetup 2026-08-24:
+ * CDXC:Onboarding 2026-08-24:
  * The 2026-08-24 onboarding redesign replaced the video/announcement pages with
  * a branching flow: Welcome (use cases) -> Extensions (title-bar view toggles) ->
  * either Agents (install guides, only when no agent CLI exists) or Install
@@ -605,7 +605,7 @@ function getVisibleFirstLaunchSetupPage(
 }
 
 /**
- * CDXC:FirstLaunchSetup 2026-05-26-06:23:
+ * CDXC:Onboarding 2026-05-26-06:23:
  * First launch setup is the production onboarding flow, and Storybook must
  * mount this same component with mocked native calls instead of maintaining a
  * separate prototype. The first page introduces Ghostex, uses generated
@@ -613,72 +613,72 @@ function getVisibleFirstLaunchSetupPage(
  * notifications for In Progress / Needs Attention states and automatic
  * first-message session titles.
  *
- * CDXC:FirstLaunchSetup 2026-05-26-07:14:
+ * CDXC:Onboarding 2026-05-26-07:14:
  * The intro page should read as an app setup screen, not a marketing landing
  * page. Use a two-column body with intro copy and benefits on the left and the
  * README-derived workspace screenshot on the right, then a bordered hook setup
  * panel below so install actions and agent readiness stay prominent without a
  * full-width tinted band or scattered chips.
  *
- * CDXC:FirstLaunchSetup 2026-05-26-07:22:
+ * CDXC:Onboarding 2026-05-26-07:22:
  * Hook setup actions belong inside the bordered agent-status panel so the
  * install action is visually tied to the exact agent cards it updates. Do not
  * show a separate readiness summary line; grouped agent headers already expose
  * the counts, and refresh should be an icon-only control.
  *
- * CDXC:FirstLaunchSetup 2026-05-26-07:27:
+ * CDXC:Onboarding 2026-05-26-07:27:
  * Remove the repeated Recommended Setup copy from the intro page and consolidate
  * Refresh, Install Hooks, Skip, and Continue in one footer action row. The agent
  * card panel should only show installation state while the footer owns decisions.
  *
- * CDXC:FirstLaunchSetup 2026-05-26-07:43:
+ * CDXC:Onboarding 2026-05-26-07:43:
  * The first page should open directly on the product promise without a redundant
  * "First launch" eyebrow below the modal title. The headline should frame setup
  * as integrating Ghostex with the user's agents.
  *
- * CDXC:FirstLaunchSetup 2026-05-26-07:46:
+ * CDXC:Onboarding 2026-05-26-07:46:
  * The intro description should make hook installation the immediate setup task
  * and introduce the feature list as the reason those hooks are required.
  *
- * CDXC:FirstLaunchSetup 2026-05-26-07:48:
+ * CDXC:Onboarding 2026-05-26-07:48:
  * The product preview image should align with the feature list, not the headline,
  * so the intro copy reads as one full-width setup prompt above the visual row.
  *
- * CDXC:FirstLaunchSetup 2026-05-26-15:53:
+ * CDXC:Onboarding 2026-05-26-15:53:
  * The second first-launch page explains Ghostex CLI setup for the React Native
  * Android client and links to its stable GitHub Releases APK.
  *
- * CDXC:FirstLaunchSetup 2026-05-26-17:12:
+ * CDXC:Onboarding 2026-05-26-17:12:
  * The CLI page renders native command status and describes `gx` as usable only
  * when Ghostex owns that alias.
  *
- * CDXC:CliInstall 2026-06-07-13:53:
+ * CDXC:Cli 2026-06-07-13:53:
  * The first-launch CLI page must not show Install CLI or Refresh controls.
  * Production startup auto-links the app-bundled CLI, so onboarding should teach
  * why ghostex/gx are useful instead of making CLI setup look manual.
  *
- * CDXC:BrowserAgentControl 2026-05-26-22:17:
+ * CDXC:Browser 2026-05-26-22:17:
  * The bundled skills page should expose the Ghostex Browser Use skill after CLI
  * setup, because agents need local instructions for `ghostex browser mcp`, CEF
  * control, console logs, snapshots, screenshots, and form interactions.
  *
- * CDXC:BrowserAgentControl 2026-05-27-01:59:
+ * CDXC:Browser 2026-05-27-01:59:
  * Browser control setup should teach the `ghostex browser ...` namespace
  * because "browser" is now the durable CLI keyword for agent-facing embedded
  * CEF control. The explicit skill install button therefore uses
  * `ghostex browser install-skill` instead of the older top-level alias.
  *
- * CDXC:FirstLaunchSetup 2026-05-27-02:41:
+ * CDXC:Onboarding 2026-05-27-02:41:
  * Tips & Tricks is no longer a separate modal. The first-launch modal is the
  * single app-teaching surface, so it includes every guide page from the old
  * Tips & Tricks flow after the required hooks and CLI/browser setup pages.
  *
- * CDXC:FirstLaunchSetup 2026-05-27-03:30:
+ * CDXC:Onboarding 2026-05-27-03:30:
  * The third page teaches Ghostex Browser Use as the agent-facing entry point for
  * embedded CEF panes. The fourth page teaches Cua Driver separately for native
  * desktop app control without exposing a scary shell-first setup.
  *
- * CDXC:IntegrationsSetup 2026-05-27-04:17:
+ * CDXC:RemotePairing 2026-05-27-04:17:
  * Ghostex Browser Use, hooks, and Ghostex Computer Use are optional onboarding
  * integrations. If an integration is missing, Continue must show a warning
  * first and only advance after the user confirms they want to proceed without
@@ -686,69 +686,69 @@ function getVisibleFirstLaunchSetupPage(
  * the hook warning. The Ghostex CLI itself is app-installed and should not be a
  * first-launch warning branch.
  *
- * CDXC:ComputerAgentControl 2026-05-27-06:58:
+ * CDXC:Extensions 2026-05-27-06:58:
  * Desktop Control setup must install Cua Driver and the `$ghostex-computer-use`
  * wrapper skill. Treat Desktop Control as incomplete until both are present, so
  * users do not finish onboarding with native-app automation installed but
  * undiscoverable by agents.
  *
- * CDXC:SkillConsolidation 2026-08-24:
+ * CDXC:AgentSkills 2026-08-24:
  * The bundled skills page installs `$ghostex-cli`, the help-first entry-point
  * skill. The old agent-orchestration, manage-automations, and find-prev-session
  * skills were folded into `ghostex --help`, so agents learn pane/session
  * commands, automations, and prompt history through CLI discovery instead of
  * per-domain skills.
  *
- * CDXC:GenerateTitleSkill 2026-05-27-07:28:
+ * CDXC:AgentSkills 2026-05-27-07:28:
  * The bundled skills page installs `$ghostex-auto-rename-session` so every Ghostex
  * agent session can generate a title under 47 characters and submit
  * `/rename <title>` in its own prompt.
  *
- * CDXC:GenerateTitleSkill 2026-06-09-17:49:
+ * CDXC:AgentSkills 2026-06-09-17:49:
  * Generated title skills should submit the staged rename through Ghostex's
  * native Enter bridge so macOS matches the Delayed Send key path.
  *
- * CDXC:CodexSessionMove 2026-06-26-13:24:
+ * CDXC:AgentSkills 2026-06-26-13:24:
  * The first-launch bundled-skills page should install `$ghostex-move-codex-session`
  * with the other app-shipped skills so agents can explain the fork-into-folder
  * Codex workflow without users manually adding a local skill.
  *
- * CDXC:FirstLaunchWelcome 2026-05-27-05:04:
+ * CDXC:Onboarding 2026-05-27-05:04:
  * First launch should start with a candid product welcome before setup tasks.
  * The page explains Ghostex as an intuitive Agent Development Environment that
  * combines Ghostty-backed terminals with Codex-app UX, states why native
  * terminals and Chromium increase complexity, and invites users to Discord for
  * support, questions, and contributions.
  *
- * CDXC:FirstLaunchWelcome 2026-05-27-05:39:
+ * CDXC:Onboarding 2026-05-27-05:39:
  * The welcome page is now the first setup page, so the footer must not show a
  * self-targeting Back button or Skip button until the user advances into actual
  * setup tasks.
  *
- * CDXC:FirstLaunchWelcome 2026-05-27-05:55:
+ * CDXC:Onboarding 2026-05-27-05:55:
  * The first page's Discord CTA should be centered and use the official SVGL
  * Discord mark inline rather than as a bundled image URL so the native app shell
  * cannot render it as an empty image placeholder. The CTA sits centered in the
  * remaining body space between the note card and footer.
  *
- * CDXC:FirstLaunchWelcome 2026-05-27-07:42:
+ * CDXC:Onboarding 2026-05-27-07:42:
  * The first-page headline should be short enough to stay on one line at modal
  * width: "Fast Ghostty terminals, Codex inspired Features!" Keep the explanatory
  * subtitle at 18px medium weight, and put each card icon beside its heading to
  * reduce vertical height.
  *
- * CDXC:FirstLaunchPreferences 2026-05-29-15:31:
+ * CDXC:Onboarding 2026-05-29-15:31:
  * First launch should include a compact defaults page for the highest-impact
  * settings before optional integrations. The page writes to the same persisted
  * settings model as Settings: sidebar preset in Recommended / Minimal / Codex /
  * Detailed order, default prompt agent, lid-close keep-awake, Accept All, macOS
  * attention notifications, and completion sound.
  *
- * CDXC:FirstLaunchPreferences 2026-05-31-07:10:
+ * CDXC:Onboarding 2026-05-31-07:10:
  * ZMU-71: "Keep awake when lid is closed" maps to keepAwakePreventLidSleep on
  * this defaults page and must stay listed in FIRST_LAUNCH_PREFERENCES_MAIN_SETTING_KEYS.
  *
- * CDXC:FirstLaunchSetup 2026-05-31-07:15:
+ * CDXC:Onboarding 2026-05-31-07:15:
  * ZMU-72: First-launch external links must use openExternalUrl from the native
  * sidebar host because webview anchor clicks do not open the browser. The CLI page
  * mobile benefit rows use title plus subtitle layout, the README stable Android APK
@@ -760,13 +760,13 @@ function getVisibleFirstLaunchSetupPage(
  * dedicated skills page so users explicitly choose Browser Use, Computer Use,
  * Agent Orchestration, and Generate Title with a short explanation for each one.
  *
- * CDXC:FirstLaunchPreferences 2026-06-04-21:02:
+ * CDXC:Onboarding 2026-06-04-21:02:
  * New users need the same first-prompt title-generation agent choice available
  * in Settings before their first automatic title job runs. Keep the first-time
  * modal wired to the shared Settings fields so Codex, Cursor, Claude, Grok
  * Build, and Custom stay consistent across onboarding and Settings.
  *
- * CDXC:FirstLaunchPreferences 2026-06-13-03:28:
+ * CDXC:Onboarding 2026-06-13-03:28:
  * The first-launch sidebar-style row must put Recommended on the left and use
  * the shared default settings so new installs open with Recommended selected.
  * Keep Minimal, Codex, and Detailed after it for the existing density ramp.
@@ -812,7 +812,7 @@ export function FirstLaunchSetupModal({
   const [requestedPage, setRequestedPage] = useState<FirstLaunchSetupPage>(initialPage);
   const activePage = getVisibleFirstLaunchSetupPage(requestedPage, visiblePages);
   /*
-   * CDXC:FirstLaunchSetup 2026-08-24:
+   * CDXC:Onboarding 2026-08-24:
    * Settings writes from this modal must compose. The `settings` prop only
    * updates after a native round trip, so two quick writes built from the prop
    * would silently drop the first one. Every write goes through this ref so
@@ -1316,7 +1316,7 @@ export function FirstLaunchSetupModal({
 
 function createFirstLaunchPluginsDraft(settings: ghostexSettings): Record<FirstLaunchPluginKey, boolean> {
   /*
-   * CDXC:FirstLaunchSetup 2026-08-24:
+   * CDXC:Onboarding 2026-08-24:
    * A brand-new install has every view tab visible (all hidden flags false), so
    * the extensions step starts from the recommended set instead: Browser and Docs
    * on, Code, Kanban, and Automate off. An install where any tab was already
@@ -1663,7 +1663,7 @@ function FirstLaunchProjectPage({
   titleAndCommitAgents: readonly FirstLaunchSidebarAgent[];
 }) {
   /*
-   * CDXC:FirstLaunchSetup 2026-08-24:
+   * CDXC:Onboarding 2026-08-24:
    * The footer's Add 1st project action opens the native folder dialog. The
    * picked absolute path returns as a firstLaunchProjectFolderPicked host
    * message and immediately registers the project plus its first session.
@@ -1867,7 +1867,7 @@ function FirstLaunchPreferencesPage({
     ? FIRST_LAUNCH_PROMPT_AGENT_OPTIONS
     : [
         /*
-         * CDXC:GxserverAgentSettings 2026-06-19-08:58:
+         * CDXC:AgentProviders 2026-06-19-08:58:
          * First-launch preferences must display a gxserver-owned custom or
          * currently unavailable Default Prompt Agent as unavailable instead of
          * visually falling back to Codex. Other preference saves should preserve
@@ -2030,7 +2030,7 @@ function FirstLaunchPreferencesPage({
         </article>
 
         {/*
-         * CDXC:FirstLaunchPreferences 2026-05-31-07:10:
+         * CDXC:Onboarding 2026-05-31-07:10:
          * ZMU-71: expose lid-close keep-awake on the first-time defaults page so
          * installs can opt in before enabling Keep Awake from the titlebar.
          */}
@@ -2266,13 +2266,13 @@ function FirstLaunchCliPage({
   const isInstalled = ghostexCliStatus?.installed === true;
   const isChecking = ghostexCliStatusLoading && !ghostexCliStatus;
   /**
-   * CDXC:CliInstall 2026-06-07-13:53:
+   * CDXC:Cli 2026-06-07-13:53:
    * First launch should present the Ghostex CLI as included with the macOS app.
    * Production startup auto-repairs ghostex/gx commands to the bundled
    * Resources/CLI runtime, so onboarding must explain what the commands unlock
    * instead of showing install or refresh controls.
    *
-   * CDXC:CliInstall 2026-06-12-09:31:
+   * CDXC:Cli 2026-06-12-09:31:
    * Startup repair now installs wrapper commands instead of app-bundled
    * symlinks, but onboarding copy stays focused on the user-facing command
    * names rather than the implementation detail.

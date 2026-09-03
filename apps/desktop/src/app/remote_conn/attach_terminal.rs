@@ -155,7 +155,7 @@ impl GhostexGpuiApp {
         };
         let Some(pane_id) = self.agents_workspace.pane_id_for_session(session_id) else {
             /*
-            CDXC:GPUIRemoteWorkspaceProjectKey 2026-07-30:
+            CDXC:RemoteMachines 2026-07-30:
             The mapped tab lives in the remote project's own workspace model.
             While another project's model is live its absence proves nothing;
             forgetting the mapping here would strand the parked tab and stack a
@@ -260,7 +260,7 @@ impl GhostexGpuiApp {
             return;
         }
         /*
-        CDXC:GPUIRemoteWorkspaceProjectKey 2026-07-30:
+        CDXC:RemoteMachines 2026-07-30:
         Activate the remote project's own Agents workspace model before any
         tab lookup or creation. The per-project layout swap (2026-07-23)
         parks the outgoing model and clears the one-shot startup launch

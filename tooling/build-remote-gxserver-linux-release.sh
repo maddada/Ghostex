@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# CDXC:ReleaseAutomation 2026-07-02-14:10:
+# CDXC:Release 2026-07-02-14:10:
 # The 5.4.0 release lost most of its controllable time rediscovering the macOS
 # cross-build recipe for the Ubuntu remote gxserver packages (Zig CC/AR
 # wrappers, Rust-style --target argument stripping, split Zig toolchains for
@@ -204,7 +204,7 @@ zig_version_of() {
 # upstream/main (Zig 0.16), so a single 0.16 binary serves everything. Resolve it
 # explicitly instead of trusting PATH order.
 #
-# CDXC:AgentHistorySearch 2026-08-20: the 0.16 toolchain used to exist for zehn
+# CDXC:PromptSearch 2026-08-20: the 0.16 toolchain used to exist for zehn
 # as well. Zehn is Rust now, so 0.16 is here for zmx plus the cc/ar wrappers.
 resolve_zig_016() {
 	local candidate

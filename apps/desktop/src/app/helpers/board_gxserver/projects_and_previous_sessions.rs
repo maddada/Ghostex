@@ -13,7 +13,7 @@ use crate::*;
 #[allow(dead_code)] // no caller: gxserver project settings are consumed through the sidebar runtime bridge instead
 pub(crate) fn gpui_project_settings_projects_from_gxserver() -> Vec<serde_json::Value> {
     /*
-    CDXC:GPUISettingsProjectMetadata 2026-06-24-11:59:
+    CDXC:Projects 2026-06-24-11:59:
     Settings project rows in GPUI must come from real local gxserver project domain data, falling back only to the presentation snapshot when `/api/listProjects` is unavailable or lacks usable rows. Do not synthesize paths, names, worktree metadata, or Beads settings from UI labels, session titles, terminal cwd, or local filesystem guesses.
     */
     let domain_projects = gpui_gxserver_domain_projects(Duration::from_secs(2));
@@ -136,7 +136,7 @@ pub(crate) fn gpui_normal_gxserver_project_row_by_id<'a>(
     project_id: &str,
 ) -> Option<&'a serde_json::Map<String, serde_json::Value>> {
     /*
-    CDXC:GPUIRecentProjects 2026-06-25-21:36:
+    CDXC:Projects 2026-06-25-21:36:
     Project Settings metadata writes must reject stale or direct ids that resolve only to explicit parked `/api/listProjects` rows. Skip only boolean `isRecentProject: true`; false, missing, and non-boolean flags remain normal Settings metadata targets, while Recent Project actions keep using `/api/listRecentProjects`.
     */
     let project_id = gpui_trimmed_nonempty_str(Some(project_id))?;
@@ -258,7 +258,7 @@ pub(crate) fn gpui_gxserver_search_result_to_previous_session_item_with_options(
     project_name_prefix: Option<&str>,
 ) -> Option<serde_json::Value> {
     /*
-    CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
+    CDXC:Sessions 2026-06-24-11:53:
     Previous-session rows returned to React must stay contract-shaped and metadata-only. Mirror the existing GPUI TypeScript projection from gxserver search results, including project/session restore identity and title/provider fields, but do not forward raw command text, stdout/stderr, workspace paths, URLs, tokens, gxserver responses, or archived session records.
     */
     let result = result.as_object()?;
@@ -307,7 +307,7 @@ pub(crate) fn gpui_gxserver_search_result_to_previous_session_item_with_options(
     );
     item.insert("column".to_string(), serde_json::Value::Number(0.into()));
     /*
-    CDXC:SessionForkFamilies 2026-08-28:
+    CDXC:SessionFork 2026-08-28:
     Fork shape is derived by the daemon that owns the registry, so the bridge
     only forwards it. `forkBranchCount` drives the branch badge and, together
     with the family ids, keeps the shared title-based dedupe from merging two
@@ -514,7 +514,7 @@ pub(crate) fn gpui_read_gxserver_presentation_snapshot() -> Result<serde_json::V
 }
 
 /*
-CDXC:GPUIResourcesDevServers 2026-07-26:
+CDXC:Resources 2026-07-26:
 Project the daemon presentation snapshot into the shared titlebar
 `TitlebarResourceGroup` contract so Resources sees every project that owns live
 sessions, not only the mounted panes of the active project. Session membership

@@ -8,13 +8,13 @@ import type { ResolvedOpenTarget, TitlebarMode, TitlebarOpenTargetsSettings, Tit
 
 export function normalizeTitlebarMode(candidate: unknown): TitlebarMode {
   /**
-   * CDXC:ModeSwitcher 2026-05-15-18:20:
+   * CDXC:Navigation 2026-05-15-18:20:
    * The top titlebar mode must mirror the workarea mode restored by the sidebar
    * at launch and after each mode transition. Treat the sidebar/native payload
    * as authoritative so a restored Source, Browser, Kanban, Automate, or Docs
    * pane cannot leave the segmented control highlighted on Agents.
    *
-   * CDXC:ModeSwitcher 2026-05-15-18:30:
+   * CDXC:Navigation 2026-05-15-18:30:
    * User clicks still need optimistic local mode selection so the shared-layout
    * pill animates immediately while slow Source/Browser/Kanban/Automate/Docs surfaces load. Clear
    * that optimistic value when sidebar state arrives so startup restore and
@@ -35,7 +35,7 @@ export function resolveInitialTitlebarMode(bootstrap: Record<string, unknown>): 
     return explicitMode;
   }
   /*
-  CDXC:ProjectSidebarOwnership 2026-06-02-12:29:
+  CDXC:StateSync 2026-06-02-12:29:
   The titlebar must not infer startup mode from the old native-sidebar-projects.json payload. gxserver owns shared project/session inventory now, while the macOS window owns the explicit active mode passed in bootstrap state.
   */
   return 'agents';
@@ -90,7 +90,7 @@ export function resolveVisibleOpenTargets(
         return undefined;
       }
       /**
-       * CDXC:ReactTitlebar 2026-05-11-02:03
+       * CDXC:Titlebar 2026-05-11-02:03
        * The titlebar menu shows only persisted installed built-ins plus custom
        * targets. Hidden ids are applied before this step, so startup detection
        * cannot re-add an editor the user turned off in Settings.
@@ -134,7 +134,7 @@ export function getLastActionCommandStorageKey(
     return undefined;
   }
   /**
-   * CDXC:TitlebarActions 2026-05-11-02:46
+   * CDXC:Titlebar 2026-05-11-02:46
    * Moving Actions from the sidebar header to the titlebar keeps the same
    * project-scoped primary-action behavior: the split button's left side runs
    * the last chosen action for the active project, not a global last action.

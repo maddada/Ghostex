@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatWorkingStrip 2026-08-30:
+CDXC:SessionChat 2026-08-30:
 Whimsical gerunds for the pinned working strip. One is picked at random when a
 working stint begins and stays for the whole stint, so the strip doesn't churn
 words mid-turn.

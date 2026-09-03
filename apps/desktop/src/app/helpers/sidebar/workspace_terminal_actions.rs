@@ -19,13 +19,13 @@ pub(crate) fn store_latest_gpui_project_snapshot_from_sidebar_contract_json(
     text: &str,
 ) -> Result<GpuiProjectSnapshotStoreResult, GpuiProjectSnapshotContractError> {
     /*
-    CDXC:GPUIProjectSidebarBridge 2026-06-22-19:32:
+    CDXC:CefRuntime 2026-06-22-19:32:
     The live CEF sidebar bridge may update only the in-memory latest active-project snapshot after the strict contract parser succeeds. Malformed payloads leave the prior snapshot untouched, and the snapshot remains non-persistent.
 
-    CDXC:GPUIProjectSidebarBridge 2026-06-22-19:44:
+    CDXC:CefRuntime 2026-06-22-19:44:
     Once stored, the latest valid sidebar snapshot becomes the App runtime availability source; the env bridge is only the fallback before any valid sidebar payload arrives. The store helper itself still does not log raw JSON or project details and does not coerce active mode without the App context.
 
-    CDXC:GPUIProjectSidebarBridge 2026-06-23-06:53:
+    CDXC:CefRuntime 2026-06-23-06:53:
     The store helper returns an explicit change result so bridge callers can no-op duplicate valid payloads. Parse and validate exactly as before, preserve the previous snapshot on errors, and replace the in-memory snapshot only after the parsed snapshot differs; do not add project/path/name heuristics, fallbacks, persistence, or logging of raw contract data.
     */
     let snapshot = gpui_project_snapshot_from_sidebar_contract_json(text)?;
@@ -257,7 +257,7 @@ pub(crate) fn gpui_sidebar_workspace_terminal_rename_command_from_value(
     GpuiGxserverPresentationFocusStateContractError,
 > {
     /*
-    CDXC:GPUIWorkspaceRenameCommand 2026-06-27-02:27:
+    CDXC:SessionTitles 2026-06-27-02:27:
     The fixed renderer payload must contain only version/type, raw local gxserver project/session ids, one already-trimmed bounded title, and an optional literal command selector. Reject extra keys, remote or combined ids, missing ids, untrimmed/empty/oversized/control-character titles, paths, free-text command fields, stdout/stderr, terminal content, tokens, and raw renderer envelopes before any terminal surface is consulted.
     */
     let object = gpui_gxserver_focus_contract_object(value)?;

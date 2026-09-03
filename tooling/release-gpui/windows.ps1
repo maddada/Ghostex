@@ -1,4 +1,4 @@
-# CDXC:WindowsReleasePhases 2026-09-02:
+# CDXC:Release 2026-09-02:
 # -Phase lets the release workflow run this script as two watched steps so the
 # Rust compile no longer waits on the gxserver job whose tarball only the
 # packaging half reads:
@@ -240,7 +240,7 @@ if (-not (Test-Path $InstallerLauncher)) {
     throw "Windows build did not produce the Ghostex installer launcher"
 }
 
-# CDXC:WindowsSeamlessInstaller 2026-08-16:
+# CDXC:PlatformSupport 2026-08-16:
 # Velopack's Setup.exe correctly supports update and same-version repair, but
 # it pauses on an "already installed" confirmation before doing either. Keep
 # the signed Velopack setup as the transactional inner installer and bundle it

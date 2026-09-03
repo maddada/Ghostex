@@ -84,7 +84,7 @@ export function createEmptyTicketFormDraft(): TicketFormDraft {
 }
 
 /*
- * CDXC:ProjectBoardTitleGeneration 2026-06-21-16:56:
+ * CDXC:ProjectBoard 2026-06-21-16:56:
  * Empty-title Kanban tickets must appear with a useful deterministic draft title immediately, while prompt-agent title generation runs later as background polish.
  * Keep the draft short enough for the board's title column so replacing it with the generated title does not require a full board reload.
  */
@@ -324,10 +324,10 @@ export function prioritizeDependencyTickets(tickets: BoardTicket[]): BoardTicket
 
 export function hasProjectBoardImagePastePayload(clipboardData: DataTransfer): boolean {
   /**
-   * CDXC:ProjectBoardImagePaste 2026-05-28-08:18:
+   * CDXC:Clipboard 2026-05-28-08:18:
    * Image paste detection must stay synchronous so the caller prevents the browser's default data-URI Markdown insertion before native resolves the clipboard to a durable image path.
    *
-   * CDXC:ProjectBoardImagePaste 2026-05-28-08:27:
+   * CDXC:Clipboard 2026-05-28-08:27:
    * New Project Board image pastes should persist a path, not a base64 payload. If the clipboard has a file or path, native returns that path; if it only has bitmap data, native saves the bitmap under the resolved Ghostex image directory like the rich prompt editor and returns the saved path.
    */
   const files = [...clipboardData.files];

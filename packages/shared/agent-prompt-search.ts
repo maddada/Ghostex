@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 Wire contract for the Find surface — the GUI for `gx f`. gxserver keeps one warm
 prompt index (the same zehn scanner, matcher, and favorites file the terminal
 picker uses) and answers these four RPCs from it.

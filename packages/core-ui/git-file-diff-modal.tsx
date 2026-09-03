@@ -33,7 +33,7 @@ export function GitFileDiffModal({ draft, isOpen, onClose, theme = 'dark-1' }: G
   const isDarkTheme = getSidebarThemeVariant(theme) === 'dark';
 
   /*
-   * CDXC:TitlebarGit 2026-05-25-10:16:
+   * CDXC:Git 2026-05-25-10:16:
    * The standalone file diff modal uses a sticky file header, monospaced patch rows, and addition/deletion coloring while staying inside Ghostex's existing modal host.
    */
   return (
@@ -79,7 +79,7 @@ export function GitFileDiffModal({ draft, isOpen, onClose, theme = 'dark-1' }: G
 
 function getSidebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
   /**
-   * CDXC:SidebarTheme 2026-06-15-01:43:
+   * CDXC:Theming 2026-06-15-01:43:
    * Git diff modals share the app modal theme contract: Dark 1/Dark 2 use
    * dark shadcn mode, while Light removes the dark class and uses light tokens.
    */
@@ -208,17 +208,17 @@ export function GitFileDiffPanel({
   );
 
   /*
-   * CDXC:TitlebarGit 2026-06-05-20:59:
+   * CDXC:Git 2026-06-05-20:59:
    * Commit review now embeds file diffs in the right side of the widened review modal instead of opening a second modal. Keep diff display controls behind a single overflow menu so Unified, Split, and Hide whitespace do not compete with the selected file path for header space.
    *
-   * CDXC:TitlebarGit 2026-06-08-04:07:
+   * CDXC:Git 2026-06-08-04:07:
    * Diff display controls use a direct icon-control pattern:
    * one tooltip button toggles unified/split, one toggles line wrapping, and one
    * toggles whitespace-only changes. The commit modal can host those controls
    * in its file header while the standalone file diff keeps the same controls
    * above its patch surface.
    *
-   * CDXC:TitlebarGit 2026-06-08-04:47:
+   * CDXC:Git 2026-06-08-04:47:
    * Side-by-side diff mode must force line wrapping so each half stays readable
    * in the commit and standalone diff panes. Keep the wrap button disabled in
    * split view and explain the forced state in its tooltip.
@@ -380,7 +380,7 @@ const DIFF_SYNTAX_PRIMITIVE_TYPES = new Set([
 ]);
 
 /*
- * CDXC:TitlebarGit 2026-06-08-04:20:
+ * CDXC:Git 2026-06-08-04:20:
  * Commit review diffs need visible syntax coloring in both the inline commit
  * diff and standalone file diff without replacing the existing split/unified
  * row model. Tokenize each rendered patch row so the diff layout, wrapping,

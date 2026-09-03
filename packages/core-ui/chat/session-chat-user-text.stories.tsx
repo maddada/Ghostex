@@ -126,7 +126,7 @@ export const TypedText: StoryObj = {
 };
 
 /*
- * CDXC:SessionChatRewind 2026-09-02:
+ * CDXC:SessionChat 2026-09-02:
  * The same transcript with the rewind action available: hovering a prompt row
  * shows "Rewind to here" next to Copy, and confirming opens the dialog. The
  * mock call always refuses so the story also shows the daemon's refusal line

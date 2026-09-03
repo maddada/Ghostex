@@ -11,11 +11,11 @@ use std::io::Write;
 use std::path::PathBuf;
 
 /*
-CDXC:GhostexHistoryCli 2026-06-25-20:43:
+CDXC:PromptSearch 2026-06-25-20:43:
 The scriptable --list mode is a companion to the alt-screen viewer for quick filtering and smoke checks.
 Treat closed stdout pipes as normal termination so commands like ghostex-history --list | head do not report a panic.
 
-CDXC:GhostexHistoryCli 2026-06-25-21:54:
+CDXC:PromptSearch 2026-06-25-21:54:
 Ctrl+R resume should follow Zehn's agent command matrix and accept-all option shape.
 Codex and Claude always use their required permission flags. Expose
 --accept-all/--no-accept-all on ghostex-history so Ghostex-owned launchers can

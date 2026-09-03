@@ -37,7 +37,7 @@ describe('agent hook status source', () => {
      * hooks and bundled Ghostex skills, with hook cleanup routed through
      * gxserver and skill cleanup handled by the native bundled-skill catalog.
      *
-     * CDXC:AgentHookSettings 2026-08-19-11:20:
+     * CDXC:AgentHooks 2026-08-19-11:20:
      * Hook removal is per-agent from each hook row and all-at-once from the
      * Agent Hooks section, so the host must forward the selected agentIds
      * instead of always uninstalling every provider.

@@ -105,16 +105,16 @@ struct DebuggingModeCache {
 }
 
 /*
-CDXC:GxserverLogs 2026-06-14-20:37:
+CDXC:Diagnostics 2026-06-14-20:37:
 Persistent Rust logs must be safe for support bundles. Persist explicit warn/error entries and failure-like structured diagnostics unconditionally. Every routine entry must use `log_routine` with an explicit diagnostic scenario, and writes require both Debugging Mode and that unexpired scenario. Rotate before append at the TypeScript size/count, and sanitize at the JSONL writer boundary so future call sites cannot leak paths, URLs, command text, stdout/stderr, tokens, or user-owned names.
 
-CDXC:GxserverLogs 2026-06-19-14:45:
+CDXC:Diagnostics 2026-06-19-14:45:
 Rust logger startup must match TypeScript support-bundle retention: schedule a one-minute delayed cleanup, keep only the active or newest gxserver JSONL split file, delete older rotations, and trim the retained file to 25,000 lines without logging cleanup failures back into the same file.
 
-CDXC:GxserverLogs 2026-06-19-18:44:
+CDXC:Diagnostics 2026-06-19-18:44:
 Retention rewrites the retained JSONL file, so append, rotation, and prune must share a per-log-file writer lock. Do not replace this with stale temp-and-rename pruning unless concurrent appends are blocked or merged before the rewrite commits.
 
-CDXC:GxserverLogs 2026-06-22-09:57:
+CDXC:Diagnostics 2026-06-22-09:57:
 Area 36 privacy review requires persistent server logs to stay metadata-only even when future call sites accidentally pass prompts, environment maps, or uppercase-scheme URLs through structured details. Keep those redactions at the JSONL writer boundary so hook, clone, typed-operation, and lifecycle diagnostics cannot persist user content.
 */
 impl GxserverLogger {
@@ -341,7 +341,7 @@ struct LogQueryRead {
 }
 
 /*
-CDXC:GxserverLogs 2026-06-19-14:45:
+CDXC:Diagnostics 2026-06-19-14:45:
 `/api/queryLogs` is a read-only local support API over the resolved Ghostex gxserver log. Match the TypeScript request filters, default/maximum limits, reverse/order aliasing, malformed-line tolerance, and bounded head/tail scanning so clients do not scrape support logs directly.
 */
 pub fn query_gxserver_logs(

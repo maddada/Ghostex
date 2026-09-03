@@ -44,7 +44,7 @@ describe('hasKnownSidebarProjectInventory', () => {
 
   test('counts settings and recent project inventory without rendered project groups', () => {
     /*
-     * CDXC:SidebarProjectsEmptyState 2026-06-30-03:25:
+     * CDXC:Projects 2026-06-30-03:25:
      * Once a user has added or parked projects, the Projects section should use
      * the compact "No projects" empty copy during search/display transitions
      * instead of flashing the first-project onboarding block.

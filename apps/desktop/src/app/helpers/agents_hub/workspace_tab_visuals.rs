@@ -170,7 +170,7 @@ pub(crate) fn agent_terminal_tab_status_inactive_opacity(
 /// Blocking pane overlay shown while gxserver generates a session's
 /// first-prompt title, ported from the managed AppKit pane overlay.
 ///
-/// CDXC:GPUISessionTitleOverlay 2026-07-26:
+/// CDXC:SessionTitles 2026-07-26:
 /// While Ghostex generates a session title the terminal pane shows a centered
 /// dimming overlay with white medium-weight status text and a smaller dim
 /// Escape hint. The overlay is a normal absolutely-positioned child of the

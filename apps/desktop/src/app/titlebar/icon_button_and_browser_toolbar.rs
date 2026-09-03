@@ -69,23 +69,23 @@ impl GhostexGpuiApp {
                     cx.stop_propagation();
                     if id == "settings" {
                         /*
-                        CDXC:GPUITitlebarAppModalHost 2026-06-24-11:09:
+                        CDXC:AppModal 2026-06-24-11:09:
                         The GPUI titlebar Settings glyph owns the app-modal menu for Settings, Hotkeys, and Command Palette. Keep the menu as OS-owned NativeMenu actions that all route to the shared React modal host, rather than leaving Hotkeys or Command Palette without a titlebar path or adding GPUI-local placeholder UI.
 
-                            CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
+                            CDXC:Sessions 2026-06-24-11:53:
                             The same Settings glyph menu owns Previous Sessions access so the GPUI titlebar opens the production shared modal and its gxserver bridge, not a separate GPUI-local history picker.
 
                             */
                         this.show_titlebar_settings_menu(event.position, window, cx);
                     } else if id == "keep-awake" {
                         /*
-                        CDXC:GPUITitlebarKeepAwake 2026-06-24-13:16:
+                        CDXC:KeepAwake 2026-06-24-13:16:
                         Keep Awake titlebar clicks open the OS-owned duration menu instead of toggling caffeinate directly. Runtime start/stop stays inside menu actions so users can choose the same shared duration semantics as macOS.
                         */
                         this.show_gpui_keep_awake_menu(event.position, window, cx);
                     } else if id == "resources" {
                         /*
-                        CDXC:GPUIResourcesTitlebar 2026-07-08:
+                        CDXC:Resources 2026-07-08:
                         The visible Resources titlebar glyph opens the shared
                         React titlebar-host Resources panel in the app-owned
                         anchored dropdown. React owns live process polling while
@@ -100,13 +100,13 @@ impl GhostexGpuiApp {
                         this.show_gpui_titlebar_git_menu(None, window, cx);
                     } else if id == "open-project" {
                         /*
-                        CDXC:GPUITitlebarOpenIn 2026-06-24-12:50:
+                        CDXC:Titlebar 2026-06-24-12:50:
                         Left-click Open In launches the active runtime target for the explicit active project path only. If GPUI does not have `in_memory_project_path` from the sidebar contract, show private-data-free feedback and do not infer a path from display names, ids, labels, filesystem probing, or git metadata.
                         */
                         this.open_active_project_with_active_open_target(window, cx);
                     } else if id == "actions" {
                         /*
-                        CDXC:GPUITitlebarActions 2026-06-24-14:24:
+                        CDXC:Titlebar 2026-06-24-14:24:
                         Left-click Actions runs the selected/last configured sidebar action when GPUI has one, otherwise the first configured action, and opens Settings > Actions when no configured action is available. Browser actions use the GPUI Browser CEF path, terminal actions use command-pane launch payloads, and this handler must not shell out, log private details, or create overlay UI.
                         */
                         this.run_active_gpui_titlebar_action(window, cx);
@@ -126,7 +126,7 @@ impl GhostexGpuiApp {
                         this.show_gpui_open_targets_menu(None, window, cx);
                     } else if id == "resources" {
                         /*
-                        CDXC:GPUIResourcesTitlebar 2026-07-08:
+                        CDXC:Resources 2026-07-08:
                         Right-click uses the same React Resources dropdown as
                         primary click so the full resource controls share one
                         titlebar-host surface and one native action bridge.
@@ -176,19 +176,19 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         /*
-        CDXC:GPUIBrowserToolbar 2026-06-14-17:42:
+        CDXC:Browser 2026-06-14-17:42:
         The GPUI browser pane needs the same address toolbar as the macOS app, implemented only with GPUI chrome: a black row, stateless Back/Forward/Reload controls with no Back/Forward history toggles, a lock-or-globe address field that restores the current URL on empty commits, and the browser right-control group while preserving non-empty address commits inside the embedded CEF browser. Toolbar actions use the same full-height segmented button chrome as tab-bar actions.
 
-        CDXC:GPUIBrowserToolbar 2026-06-15-01:52:
+        CDXC:Browser 2026-06-15-01:52:
         GitHub disallows the injected feedback tool, so the GPUI toolbar must render the feedback button disabled on github.com pages and expose the tooltip "This site disallows using this tool" instead of letting the user start an unsupported tool action.
 
-        CDXC:GPUIBrowserToolbar 2026-06-22-08:08:
+        CDXC:Browser 2026-06-22-08:08:
         Browser Back and Forward controls must read their enabled state from the selected loaded tab's existing CEF surface and must no-op when that surface cannot navigate. Reload must call CEF `reload()` on the selected loaded surface instead of loading the shell URL again, so Chromium keeps ownership of history, POST/cache behavior, and address-only placeholder tabs remain unloaded.
 
-        CDXC:GPUIBrowserToolbar 2026-06-22-11:50:
+        CDXC:Browser 2026-06-22-11:50:
         The right-side Browser controls follow current macOS parity: zoom reset appears only when the active CEF surface is zoomed, the feedback button launches Agentation, History and Profile remain OS NativeMenus, DevTools toggles through the active CEF surface, and the removed Appearance control does not reserve toolbar space or hit area.
 
-        CDXC:GPUIBrowserFeedback 2026-06-23-11:04:
+        CDXC:Browser 2026-06-23-11:04:
         The Browser feedback toolbar starts Agentation through CEF main-frame JavaScript injection. Keep github.com and *.github.com disabled before injection, and keep the toolbar surface status private by showing only bounded page-data-free notifications for missing CEF surfaces or frames.
         */
         let address_value = self.browser_tabs.address_value_for_pane(pane_id);
@@ -234,7 +234,7 @@ impl GhostexGpuiApp {
             .pane_history_rows(pane_id, BROWSER_HISTORY_MENU_MAX_ROWS)
             .is_empty();
         /*
-        CDXC:GPUIBrowserMediaPermissions 2026-07-27:
+        CDXC:Browser 2026-07-27:
         A remembered Block would otherwise be unrecoverable: the page just
         fails and no prompt returns. Show a reset control exactly while the
         active tab's origin has a stored microphone/camera answer, so the site

@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatPiBlockingScreens 2026-08-31:
+CDXC:AgentScreenDetection 2026-08-31:
 Pi TUI audit against earendil-works/pi 853a80d2. Pi does not have a built-in
 command/edit approval layer. Instead, ordinary prompt input becomes unavailable
 whenever `interactive-mode.ts` replaces `editorContainer` with one of these

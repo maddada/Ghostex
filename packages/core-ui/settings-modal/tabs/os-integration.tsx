@@ -51,7 +51,7 @@ export function OSIntegrationSettingsTab({
         {shouldShowSettingsSection(search.sections.defaults) ? (
           <SettingsSection title='Defaults'>
             {/*
-             * CDXC:OSIntegration 2026-05-27-18:06:
+             * CDXC:OsIntegration 2026-05-27-18:06:
              * Ghostex registers as an available macOS editor and script handler
              * at install/build time, but Settings is the only place that changes
              * default editor, terminal-link, or script-runner ownership.
@@ -143,7 +143,7 @@ export function OSIntegrationSettingsTab({
                   {statusItems.length > 0 ? (
                     <div className='grid gap-2 rounded-none border border-destructive/30 bg-destructive/5 p-3 text-xs text-muted-foreground'>
                       {/*
-                       * CDXC:OSIntegration 2026-06-24-15:10:
+                       * CDXC:OsIntegration 2026-06-24-15:10:
                        * Settings must account for shared Launch Services status items without exposing raw OSStatus values or native paths. Show generic repair guidance and sanitized target/extension labels so the same UI works for Swift and GPUI senders.
                        */}
                       <div className='flex items-start gap-2'>

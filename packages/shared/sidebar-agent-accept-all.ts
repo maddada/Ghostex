@@ -6,7 +6,7 @@ import {
 } from './sidebar-agents';
 
 /**
- * CDXC:SidebarAgents 2026-06-02-22:23:
+ * CDXC:AgentLauncher 2026-06-02-22:23:
  * The sidebar keeps only the Accept All mode type and support detection needed
  * for Settings UI. gxserver owns runtime flag insertion, stripping, and command
  * shaping so macOS, CLI, TUI, mobile, and remote clients cannot diverge.
@@ -14,7 +14,7 @@ import {
 export type AgentAcceptAllMode = 'inherit' | 'enabled' | 'disabled';
 
 /**
- * CDXC:SidebarAgents 2026-06-11-17:08:
+ * CDXC:AgentLauncher 2026-06-11-17:08:
  * Accept All selects must render the user-facing option label while collapsed,
  * not the raw mode key. Base UI needs root item metadata before the popup is
  * mounted, so keep the labels next to the mode type and reuse them in Settings
@@ -42,13 +42,13 @@ export type AgentAcceptAllRuntimeConfigSpec = {
 export type AgentAcceptAllSpec = AgentAcceptAllFlagSpec | AgentAcceptAllRuntimeConfigSpec;
 
 /**
- * CDXC:SidebarAgents 2026-05-19-10:05:
+ * CDXC:AgentLauncher 2026-05-19-10:05:
  * Flags were verified from each vendor CLI `--help` on 2026-05-19. Antigravity
  * CLI (`agy`) uses `--dangerously-skip-permissions` for Accept All. Factory Droid
  * interactive mode has no skip flag; only `droid exec` exposes
  * `--skip-permissions-unsafe`, so the default `droid` launcher stays unsupported.
  *
- * CDXC:SidebarAgents 2026-06-09-14:22:
+ * CDXC:AgentLauncher 2026-06-09-14:22:
  * OpenCode TUI does not expose a permission-bypass CLI flag. Keep it supported
  * through gxserver's runtime permission config path so macOS Settings can show
  * the same Accept All control without claiming the stored command gets a flag.
@@ -92,7 +92,7 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
     canonicalFlag: '--yolo',
   },
   /**
-   * CDXC:SidebarAgents 2026-08-27:
+   * CDXC:AgentLauncher 2026-08-27:
    * Devin does expose a permission bypass, but it is the two-token
    * `--permission-mode bypass` form. This spec shape only describes single
    * tokens, so a spec here could be appended but never matched, deduped, or
@@ -101,7 +101,7 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
    */
   devin: null,
   /**
-   * CDXC:SidebarAgents 2026-05-19-10:05:
+   * CDXC:AgentLauncher 2026-05-19-10:05:
    * Factory Droid only documents permission bypass on `droid exec`, not the
    * interactive `droid` command used by the built-in launcher.
    */
@@ -125,7 +125,7 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
   kiro: null,
   omp: null,
   /**
-   * CDXC:SidebarAgents 2026-08-27:
+   * CDXC:AgentLauncher 2026-08-27:
    * OpenClaude is a Claude-shaped fork down to its hook contract and its
    * `~/.openclaude/settings.json`, and it takes Claude's permission-bypass
    * flag verbatim, so it gets Claude's spec instead of its own dialect.

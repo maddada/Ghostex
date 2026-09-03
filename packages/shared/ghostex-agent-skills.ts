@@ -36,7 +36,7 @@ export type BundledGhostexAgentSkill = {
 };
 
 /**
- * CDXC:TrycuaPrerequisite 2026-08-24:
+ * CDXC:Extensions 2026-08-24:
  * User-facing surfaces say "Trycua", never the `trycua/cua` repository slug or
  * an internal component name, so the prerequisite reads as one product the user
  * installs once.
@@ -50,11 +50,11 @@ export const GHOSTEX_TRYCUA_PRODUCT_NAME = 'Trycua';
  * shared catalog so onboarding, settings, and status checks describe the same
  * bundled skills without hiding them behind CLI installation.
  *
- * CDXC:CodexSessionMove 2026-06-26-13:24:
+ * CDXC:AgentSkills 2026-06-26-13:24:
  * Bundle the Codex session-move guidance as its own installable skill so first
  * launch and Settings can install it with the app's other agent-facing skills.
  *
- * CDXC:BoardAssociateSession 2026-08-24:
+ * CDXC:ProjectBoard 2026-08-24:
  * The Project Board beads skill shipped in the bundle with no way to install it,
  * so agents never learned to put the session they are working in on the card.
  * It belongs in this catalog like every other bundled skill.

@@ -16,7 +16,7 @@ use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
 
 /*
-CDXC:SessionChatMobileLongPoll 2026-07-31:
+CDXC:Mobile 2026-07-31:
 Session/transcript state resolved fresh from SQLite plus a change fingerprint
 (transcript stat + prompt + lifecycle). The fingerprint lets SSH-only clients
 (Ghostex mobile) long-poll readSessionChat instead of subscribing to
@@ -28,7 +28,7 @@ path while it still exists on disk.
 */
 pub(crate) struct SessionChatReadResolution {
     agent: Option<String>,
-    /// CDXC:DraftSessions 2026-08-28: the session's own `agentId`, not the
+    /// CDXC:Drafts 2026-08-28: the session's own `agentId`, not the
     /// transcript family `agent` above.
     session_agent_id: Option<String>,
     terminal_agent: Option<String>,
@@ -40,7 +40,7 @@ pub(crate) struct SessionChatReadResolution {
     stored_prompt: Option<String>,
     transcript_path: Option<std::path::PathBuf>,
     /*
-    CDXC:SessionChatQueueCarriage 2026-08-21: the Ghostex prompt queue and the
+    CDXC:SessionChat 2026-08-21: the Ghostex prompt queue and the
     synced composer draft, resolved on the SAME connection the rest of this
     state comes from. Folded into the fingerprint below, without which a mobile
     client — which synthesizes its frames from long-polled reads — would never
@@ -48,7 +48,7 @@ pub(crate) struct SessionChatReadResolution {
     */
     queue: crate::session_chat_queue::SessionChatQueueSnapshot,
     /*
-    CDXC:DraftSessions 2026-08-28: the agents this session may still be switched
+    CDXC:Drafts 2026-08-28: the agents this session may still be switched
     to, resolved from the project's agent configuration. `Some` ONLY while the
     session is a draft — its absence is what tells the composer to hide the
     "Agents" section — and folded into the fingerprint below so a long-polling
@@ -56,7 +56,7 @@ pub(crate) struct SessionChatReadResolution {
     */
     available_agents: Option<Value>,
     /*
-    CDXC:SwitchAccount 2026-09-03: the same-family accounts a PROMPTED session
+    CDXC:AgentProviders 2026-09-03: the same-family accounts a PROMPTED session
     can be resumed under, for the composer's "Switch Account" submenu. `None`
     on drafts (they have the agent switcher) and when nothing is compatible.
     In the fingerprint for the same reason `available_agents` is: an SSH-only
@@ -85,7 +85,7 @@ pub(crate) fn resolve_session_chat_read_state(
         })?;
     let agent = session_chat_agent_for_session(&session);
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     The session's OWN launch agent id, which `agent` above is not: that one is
     the transcript family, so a project custom agent built on Claude reports
     `claude` there and is indistinguishable from Claude itself. The composer's
@@ -151,7 +151,7 @@ pub(crate) fn resolve_session_chat_read_state(
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     agent.hash(&mut hasher);
-    // CDXC:DraftSessions 2026-08-28: a switch between two agents of the SAME
+    // CDXC:Drafts 2026-08-28: a switch between two agents of the SAME
     // transcript family moves only this value, and the composer has to follow it.
     session_agent_id.hash(&mut hasher);
     terminal_agent.hash(&mut hasher);
@@ -178,7 +178,7 @@ pub(crate) fn resolve_session_chat_read_state(
         }
     }
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-19:
+    CDXC:AgentScreenDetection 2026-08-19:
     CACHED notice identity only — kind plus the human text, never `detectedAt`
     and never the raw screen (both churn every probe). This loop runs every
     500ms per long-poller, so it reads the detector cache and the watchdog map
@@ -191,7 +191,7 @@ pub(crate) fn resolve_session_chat_read_state(
         None => 0u8.hash(&mut hasher),
     }
     /*
-    CDXC:SessionChatAppCommands 2026-08-23:
+    CDXC:SessionChat 2026-08-23:
     Ids only, and in-memory only — this term must wake an SSH-only long-poller
     when Ghostex renames its session out from under it, without costing the
     500ms loop a spawn or a query.
@@ -199,7 +199,7 @@ pub(crate) fn resolve_session_chat_read_state(
     crate::session_chat_app_command::session_chat_app_commands_identity(project_id, session_id)
         .hash(&mut hasher);
     /*
-    CDXC:SessionChatTerminalActivity 2026-08-22:
+    CDXC:AgentScreenDetection 2026-08-22:
     The progress row DOES hash its numbers, unlike the notice above. A notice
     that says the same thing must not churn the fingerprint; a progress bar that
     moved is the only reason to re-read at all, and an SSH-only client with no
@@ -216,7 +216,7 @@ pub(crate) fn resolve_session_chat_read_state(
         None => 0u8.hash(&mut hasher),
     }
     /*
-    CDXC:SessionChatAgentFleet 2026-08-23:
+    CDXC:AgentScreenDetection 2026-08-23:
     Everything a fleet row shows EXCEPT its clock. Split differently from the
     progress row above, which hashes all of its numbers: a fleet clock moves
     every second for as long as the agent runs, so hashing it would make this
@@ -235,7 +235,7 @@ pub(crate) fn resolve_session_chat_read_state(
         }
         None => 0u8.hash(&mut hasher),
     }
-    // CDXC:SessionChatAgentTasks 2026-09-03: every task's id, subject and
+    // CDXC:SessionChat 2026-09-03: every task's id, subject and
     // status. A status flip is what wakes a long poller; there are no clocks.
     match screen.tasks {
         Some(tasks) => {
@@ -254,7 +254,7 @@ pub(crate) fn resolve_session_chat_read_state(
         .and_then(|prompt| serde_json::to_string(prompt).ok())
         .hash(&mut hasher);
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     Queue revision + draft updatedAt. This is load-bearing for Ghostex mobile:
     it has no /api/events socket and rebuilds its frames from long-polled
     readSessionChat results, so a queue or draft change that does not move the
@@ -263,7 +263,7 @@ pub(crate) fn resolve_session_chat_read_state(
     */
     queue.revision().hash(&mut hasher);
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     Already-materialised value, no extra query. It has to be in the fingerprint
     because an SSH-only client rebuilds its frames from long-polled reads: the
     field going away is how it learns the draft was promoted and the "Agents"
@@ -297,7 +297,7 @@ pub(crate) fn resolve_session_chat_read_state(
 }
 
 /*
-CDXC:SessionChatCore 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Read-path endpoint: reverse tail read of the resolved transcript. A missing
 transcript on a RUNNING session reports status "starting" (never an error) —
 the agent CLI can take seconds to minutes to flush its first JSONL line, and
@@ -415,7 +415,7 @@ pub(crate) async fn handle_read_session_chat_http(
     // removed. Current readers guarantee the flag describes the filtered page.
     result.insert("hasMoreExact".to_string(), json!(true));
     /*
-    CDXC:SessionChatQueueCarriage 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     `queue` is written on EVERY readSessionChat answer, including the early
     "unsupported"/"starting" returns below, because its presence — even as an
     empty array — is the capability probe a client uses to decide whether to
@@ -424,7 +424,7 @@ pub(crate) async fn handle_read_session_chat_http(
     */
     queue.insert_into(&mut result);
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     Written on EVERY answer for a draft, including the early "unsupported" /
     "starting" returns below — a draft's CLI is usually still booting, which is
     exactly when the user reaches for the agent switcher. Absent on a promoted
@@ -455,9 +455,9 @@ pub(crate) async fn handle_read_session_chat_http(
     */
     if lifecycle_running {
         /*
-        CDXC:SessionChatReadDetectionDeadline 2026-08-24:
+        CDXC:AgentScreenDetection 2026-08-24:
         Bounded exactly like the follower's seed probe
-        (CDXC:SessionChatSeedDetection), with the same value, for the same
+        (CDXC:AgentScreenDetection), with the same value, for the same
         reason: the capture's own socket read timeout is 5s, so a daemon that
         accepts the connection and never answers would hold the transcript
         answer hostage for it. The transcript is the product of this endpoint;
@@ -490,7 +490,7 @@ pub(crate) async fn handle_read_session_chat_http(
             result.insert("selectedOptions".to_string(), detected.to_value());
         }
         /*
-        CDXC:SessionChatTerminalNotices 2026-08-19:
+        CDXC:AgentScreenDetection 2026-08-19:
         Same capture, same 5s cache, same running-only gate: a stopped session
         has no live screen to classify. Followerless clients (mobile long-poll)
         get watchdog notices here, which is why the merge happens on the read
@@ -504,7 +504,7 @@ pub(crate) async fn handle_read_session_chat_http(
             result.insert("terminalNotice".to_string(), notice.to_value());
         }
         /*
-        CDXC:SessionChatAppCommands 2026-08-23: commands Ghostex itself typed
+        CDXC:SessionChat 2026-08-23: commands Ghostex itself typed
         into this session. Inside the running gate with the screen-derived
         fields because a stopped session is not one anything is renaming, and
         on the read path as well as the frames so a followerless mobile client
@@ -516,7 +516,7 @@ pub(crate) async fn handle_read_session_chat_http(
             &session_id,
         );
         /*
-        CDXC:SessionChatTerminalActivity 2026-08-22: same capture, same cache.
+        CDXC:AgentScreenDetection 2026-08-22: same capture, same cache.
         Ordinary activity is live only during the main turn, but Claude's
         background-shell footer deliberately remains live after that turn is
         ready. Omitted means the client clears its progress row.
@@ -529,20 +529,20 @@ pub(crate) async fn handle_read_session_chat_http(
             result.insert("terminalActivity".to_string(), activity.to_value());
         }
         /*
-        CDXC:SessionChatAgentFleet 2026-08-23: same capture, same cache — but no
+        CDXC:AgentScreenDetection 2026-08-23: same capture, same cache — but no
         running gate. Sub-agents outlive the turn that spawned them, so
         an idle main agent is exactly when this is worth reading.
         */
         if let Some(fleet) = detection.fleet.as_ref() {
             result.insert("agentFleet".to_string(), fleet.to_value());
         }
-        // CDXC:SessionChatAgentTasks 2026-09-03: same detection, no gate of
+        // CDXC:SessionChat 2026-09-03: same detection, no gate of
         // any kind: the store on disk is the list, working or idle.
         if let Some(tasks) = detection.tasks.as_ref() {
             result.insert("agentTasks".to_string(), tasks.to_value());
         }
         /*
-        CDXC:SessionChatScreenProbed 2026-08-22: same capture again. Followerless
+        CDXC:AgentScreenDetection 2026-08-22: same capture again. Followerless
         clients need the "detection has run" bit for exactly the reason follower
         clients do — telling a pill that is still loading from one whose agent
         simply never names a model.
@@ -552,7 +552,7 @@ pub(crate) async fn handle_read_session_chat_http(
         }
     } else {
         /*
-        CDXC:SessionChatScreenProbed 2026-08-22: a session that is not running
+        CDXC:AgentScreenDetection 2026-08-22: a session that is not running
         has no screen, so detection is skipped entirely above — but the answer
         ("nothing to read") is settled, not pending. Saying so keeps a stopped
         session's pills from sitting under a loading skeleton forever.
@@ -587,7 +587,7 @@ pub(crate) async fn handle_read_session_chat_http(
     };
 
     /*
-    CDXC:SessionChatCore 2026-08-01:
+    CDXC:SessionChat 2026-08-01:
     The reported (epoch, seq) must be COHERENT with the bytes in `messages`.
     Sampling the stream before the file read let a resyncing client land at a
     seq whose frames carried rows this read never saw: the client then believed
@@ -610,7 +610,7 @@ pub(crate) async fn handle_read_session_chat_http(
                 });
             };
             /*
-            CDXC:SessionChatForkStitch 2026-08-28:
+            CDXC:SessionFork 2026-08-28:
             Scroll-back follows a `codex fork` lineage across rollout files. Any
             other agent, and any Codex rollout without a `forked_from_id`, takes
             the untouched single-file read inside this helper.
@@ -638,7 +638,7 @@ pub(crate) async fn handle_read_session_chat_http(
     let read_outcome = match read_outcome {
         Ok(Ok(stitched)) => {
             /*
-            CDXC:SessionChatForkStitch 2026-08-28: lineage of the rollout this
+            CDXC:SessionFork 2026-08-28: lineage of the rollout this
             chat is reading, present only when it was opened by `codex fork`.
             Emitted next to the page so a client can label the boundary rows the
             stitched page carries.

@@ -132,7 +132,7 @@ function SelectContent({
           data-align-trigger={alignItemWithTrigger}
           className={cn(
             /*
-             * CDXC:ScrollFades 2026-06-19-14:16:
+             * CDXC:DesignSystem 2026-06-19-14:16:
              * Select popups can scroll in settings, filters, and project-board
              * forms. Keep their overflow cue consistent with the sidebar's
              * Codex-style scroll-container fade.

@@ -81,7 +81,7 @@ function sortRecentProjectsByClosedAt(projects: readonly SidebarRecentProject[])
 
 function groupRecentProjectsByDay(projects: readonly SidebarRecentProject[]): RecentProjectsDayGroup[] {
   /*
-   * CDXC:RecentProjects 2026-07-17-04:12:
+   * CDXC:Projects 2026-07-17-04:12:
    * Recent Projects groups by the day each project was closed, using the same
    * day-label format as the Reopen a Session modal. Rows are sorted most
    * recently closed first, so the newest day group leads and rows inside each
@@ -199,7 +199,7 @@ export function RecentProjectRow({
       </AppTooltip>
       <span className='recent-projects-row-end'>
         {/**
-         * CDXC:RecentProjects 2026-09-01:
+         * CDXC:Projects 2026-09-01:
          * The open-state dot and the hover remove control share this trailing
          * column so remove is centered on the dots in the rest of the list.
          */}

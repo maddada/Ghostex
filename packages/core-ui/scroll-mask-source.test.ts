@@ -14,7 +14,7 @@ function sourceBetween(start: string, end: string): string {
 describe('scroll mask source', () => {
   test('keeps scroll-linked animations off Base UI popup lifecycle elements', () => {
     /*
-     * CDXC:ProjectBoardDropdowns 2026-06-20-04:38:
+     * CDXC:ProjectBoard 2026-06-20-04:38:
      * Kanban dropdown popups must not keep a scroll-linked fade animation on the same element Base UI watches for close animation completion, or selecting an option can leave the popup mounted and visible.
      */
     const scrollTimelineBlock = sourceBetween('@supports (animation-timeline: scroll()) {', '@utility scroll-mask {');

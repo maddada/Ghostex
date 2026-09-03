@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 Bake the SHIPPING marketing version into the gxserver binary, mirroring
 `apps/desktop/build.rs`.
 

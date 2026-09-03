@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The publisher refusal matrix (§9) as executable specification.
  *
  * These tests exercise the exact decisions `assemble.mjs` makes before it tags,

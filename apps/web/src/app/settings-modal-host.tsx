@@ -7,7 +7,7 @@ import type { OpenSettingsModalDetail } from './action-events';
 import { readWebSettings, writeWebSettings } from './web-settings';
 
 /*
- * CDXC:Tailcat 2026-08-31:
+ * CDXC:RemotePairing 2026-08-31:
  * The tailcat sidecar is supervised by the daemon serving this page, so the
  * Remote page's Tailcat section talks to the local machine connection. The
  * identity is stable so the panel's status poll is not restarted per render.

@@ -83,7 +83,7 @@ pub(crate) fn gpui_session_attention_notification_candidates(
     next: &GpuiSidebarSessionStatusIndicatorsState,
 ) -> Vec<GpuiSessionAttentionNotificationCandidate> {
     /*
-    CDXC:GPUISettingsNotifications 2026-06-26-06:56:
+    CDXC:Notifications 2026-06-26-06:56:
     Attention notification detection is an edge detector over the sanitized status model, not a payload replay or count watcher. A row is eligible only when its bounded session id was absent from the previous attention set and the next row itself carries a bounded title/project title already accepted by the parser.
     */
     let previous_attention_session_ids = previous
@@ -122,10 +122,10 @@ pub(crate) fn gpui_menu_bar_status_item_visible_state(
     state: &GpuiSidebarSessionStatusIndicatorsState,
 ) -> Option<GpuiMenuBarStatusItemState> {
     /*
-    CDXC:GPUIMenuBarStatusItem 2026-06-26-05:42:
+    CDXC:StatusPet 2026-06-26-05:42:
     Match the macOS menu-bar visibility rule in pure Rust before calling AppKit: the saved hideMenuBarSessionStatusIndicators setting removes the status item, attention/working counts suppress the available count, and an idle available badge appears only when no action-state count is visible.
 
-    CDXC:GPUIMenuBarStatusItem 2026-06-26-05:44:
+    CDXC:StatusPet 2026-06-26-05:44:
     Current macOS parity keeps the menu-bar item visible when the saved hide setting is false, even with zero sessions, because the button is the Running Agents dropdown target. Represent the empty case as an available-style count of 0.
     */
     if state.hide_menu_bar_indicators {
@@ -149,10 +149,10 @@ pub(crate) fn gpui_sidebar_native_app_shot_prompt_from_json(
     text: &str,
 ) -> Result<GpuiSidebarNativeAppShotPromptMessage, ()> {
     /*
-    CDXC:GPUIAppShots 2026-06-25-23:28:
+    CDXC:AppShots 2026-06-25-23:28:
     App Shot prompt insertion is a strictly allowlisted session contract. Accept only version/type, one bounded gxserver presentation session id, and the already formatted prompt string; reject generic action names, paths as separate fields, command/stdout/stderr data, NULs, and oversized payloads before terminal ownership is consulted.
 
-    CDXC:GPUIAppShots 2026-06-26-04:27:
+    CDXC:AppShots 2026-06-26-04:27:
     Remote App Shot insertion may identify only a machine-scoped `remote:<machine>:session:<project>:<session>` row. The parser must still reject malformed remote ids and any renderer-provided path, SSH, URL, token, command, output, or terminal text fields.
     */
     let value = serde_json::from_str::<serde_json::Value>(text).map_err(|_| ())?;

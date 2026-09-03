@@ -130,7 +130,7 @@ pub(crate) fn gpui_previous_sessions_result_message(
     remote_sources: Vec<GpuiRemotePreviousSessionSource>,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
+    CDXC:Sessions 2026-06-24-11:53:
     GPUI Previous Sessions loads real local gxserver history through `/api/listPreviousSessions` with the same bounded previous-only params as the TypeScript sidebar runtime. The response is a transient `previousSessionsResult` sidebarState payload so the shared modal clears loading without replacing the stored hydrate snapshot, and transport/token/network/parser failures return an empty contract-shaped result without logging private daemon data.
     */
     let local_page = gpui_list_previous_sessions_from_gxserver(&request).unwrap_or_default();
@@ -255,7 +255,7 @@ fn gpui_session_transcript_size_target_from_value(
 }
 
 /*
-CDXC:QuickAccessSessionSizes 2026-08-27:
+CDXC:Sessions 2026-08-27:
 The modal requests only rows that enter its scroll viewport. Keep that lazy
 batch machine-scoped here: local ids go to the local daemon, remote ids go to
 their owning daemon, and the modal receives only its opaque row key plus byte
@@ -483,7 +483,7 @@ pub(crate) fn gpui_stashed_prompts_result_message(
     project_id: Option<&str>,
 ) -> serde_json::Value {
     /*
-    CDXC:StashedPrompts 2026-07-29:
+    CDXC:SavedPrompts 2026-07-29:
     The Prompts modal loads stashed prompt-editor saves through the local
     gxserver `/api/listStashedPrompts` endpoint; a projectId param scopes the
     answer to that project plus its worktree family server-side. The rows are
@@ -510,7 +510,7 @@ pub(crate) fn gpui_stashed_prompts_result_message(
         .filter(serde_json::Value::is_array)
         .unwrap_or_else(|| serde_json::Value::Array(Vec::new()));
     /*
-    CDXC:StashedPromptTags 2026-08-23:
+    CDXC:SavedPrompts 2026-08-23:
     The tag catalogue rides on the same answer as the prompts so the modal's
     pill rail and its row chips paint together.
     */
@@ -528,7 +528,7 @@ pub(crate) fn gpui_stashed_prompts_result_message(
 }
 
 /*
-CDXC:StashedPromptTags 2026-08-23:
+CDXC:SavedPrompts 2026-08-23:
 Tag create/rename and delete both answer with the whole refreshed catalogue,
 because a create can resolve onto a tag that already exists and a delete
 invalidates assignments the modal is still holding. Tag names are user-authored
@@ -995,7 +995,7 @@ pub(crate) fn gpui_restore_previous_session_from_history_id(
     remote_sources: &[GpuiRemotePreviousSessionSource],
 ) -> Option<GpuiPreviousSessionRestoreResult> {
     /*
-    CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
+    CDXC:Sessions 2026-06-24-11:53:
     Restore/delete commands from the shared Previous Sessions modal are local gxserver mutations only when the modal row carries the canonical `gxserver:<projectId>:<sessionId>` identity created by this projection. Restore creates a replacement workspace terminal with `restoredFromSessionId`, then removes the stopped history row only after create succeeds; unavailable gxserver or malformed history ids remain silent no-ops rather than fake success.
     */
     if let Some(reference) = gpui_remote_previous_session_reference_from_history_id(history_id) {
@@ -1046,7 +1046,7 @@ pub(crate) fn gpui_restore_remote_previous_session(
     remote_source: &GpuiRemotePreviousSessionSource,
 ) -> Option<GpuiPreviousSessionRestoreResult> {
     /*
-    CDXC:GPUIRemotePreviousSessions 2026-07-04-14:15:
+    CDXC:RemoteMachines 2026-07-04-14:15:
     App-modal remote previous-session restore follows the SidebarApp runtime:
     recreate the workspace session on the owning remote gxserver, copy only
     metadata fields from that remote gxserver's previous-session row, then
@@ -1129,7 +1129,7 @@ pub(crate) fn gpui_close_daemon_session_and_refresh_state(
     let error_message = match (project_id, session_id) {
         (Some(project_id), Some(session_id)) => {
             /*
-            CDXC:GPUIDaemonSessionsModal 2026-06-24-12:00:
+            CDXC:Sessions 2026-06-24-12:00:
             Running Sessions can close only gxserver-owned rows whose modal payload carries both project/workspace id and session id. Use `/api/transitionSession` with `close` instead of `/api/removeSession` so gxserver owns provider shutdown and lifecycle history, while malformed ids or transport failures refresh the list with an honest error and no fake success.
             */
             if gpui_gxserver_rpc_result(
@@ -1163,7 +1163,7 @@ pub(crate) fn gpui_daemon_sessions_state_message(
     _focused_session_id: Option<&str>,
 ) -> serde_json::Value {
     /*
-    CDXC:GPUIDaemonSessionsModal 2026-06-24-12:00:
+    CDXC:Sessions 2026-06-24-12:00:
     GPUI Running Sessions state is built from real local gxserver health and
     `/api/readPresentationSnapshot` only. If gxserver, auth, health, or
     presentation is unavailable, return the shared daemonSessionsState shape

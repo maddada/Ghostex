@@ -44,10 +44,10 @@ impl GhostexGpuiApp {
         };
 
         /*
-        CDXC:GPUICommandPaneControls 2026-06-25-12:13:
+        CDXC:CommandPane 2026-06-25-12:13:
         New Terminal is command-tab chrome, not a fixed panel action. Render it inline after the command tab run so expanded titlebars and the collapsed strip mirror macOS command chrome while reusing the existing command-placeholder creation path.
 
-        CDXC:GPUICommandPaneControls 2026-06-25-14:44:
+        CDXC:CommandPane 2026-06-25-14:44:
         Native command tab-add chrome uses `setTabBarIconChrome`, so its #0e0e0e background and #cfcfcf plus tint are stable in normal, hover, and active states. Do not leave the inline New Terminal button transparent until hover.
         */
         div()
@@ -112,10 +112,10 @@ impl GhostexGpuiApp {
             CommandPaneStickyActiveTabEdge::Trailing => ManagedTooltipPlacement::Left,
         };
         /*
-        CDXC:GPUICommandTabOverflow 2026-06-25-13:34:
+        CDXC:CommandPane 2026-06-25-13:34:
         Render native Show Active Tab as a real 30px command-role button at the clipped tab-strip edge. It owns only one inner border, uses stable command icon-button chrome, and scrolls the existing active tab instead of creating a decorative reveal slot.
 
-        CDXC:GPUICommandTabOverflow 2026-06-25-18:51:
+        CDXC:CommandPane 2026-06-25-18:51:
         Native overlays the Show Active Tab button on the tab viewport edge instead of reserving flex width. Position GPUI's proxy absolutely before tab-add/fixed panel controls so clipped tabs keep the same available viewport width as macOS.
         */
         div()
@@ -323,7 +323,7 @@ impl GhostexGpuiApp {
                 MouseButton::Left,
                 cx.listener(move |_this, _event: &MouseDownEvent, window, cx| {
                     /*
-                    CDXC:GPUICommandTabClose 2026-06-25-14:04:
+                    CDXC:CommandPane 2026-06-25-14:04:
                     Native inline tab Close records the clicked action on mouse-down but invokes the close only on mouse-up if the close control still owns the pointer. GPUI command close chrome should consume down without tearing down the tab early.
                     */
                     window.prevent_default();
@@ -373,7 +373,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandTabChrome 2026-06-25-13:11:
+        CDXC:CommandPane 2026-06-25-13:11:
         macOS command-tab close controls are draw-time hover chrome. Track the hovered command tab separately from command model state so hover can reveal one absolute close affordance without changing selection, persistence, tab order, or title layout.
         */
         if hovered {
@@ -397,7 +397,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandPaneResize 2026-06-25-13:19:
+        CDXC:CommandPane 2026-06-25-13:19:
         Native resize rails reveal a white hover line only after a 50ms delay and fade it over 180ms, scoped to the exact rail under the pointer. Keep GPUI command resize hover as runtime chrome state separate from command-pane layout, drag, and persistence.
         */
         if hovered {
@@ -477,19 +477,19 @@ impl GhostexGpuiApp {
         };
 
         /*
-        CDXC:GPUICommandPaneControls 2026-06-24-07:33:
+        CDXC:CommandPane 2026-06-24-07:33:
         Visible command-pane chrome copy should describe command actions instead of placeholder internals. This source-only control stays non-launching and private-detail-free: it creates only the existing command shell entry without terminal/CEF runtime work, command text, or output.
 
-        CDXC:GPUICommandPaneControls 2026-06-25-12:05:
+        CDXC:CommandPane 2026-06-25-12:05:
         Collapsed command-strip chrome keeps New Terminal inline with the tab run and keeps Expand in the fixed panel cluster, but omits Pin/Unpin because macOS hidden command tabs expose expand-only panel actions. Panel mode mutation stays scoped to expanded titlebars so a hidden strip cannot flip pinned/floating state before opening.
 
-        CDXC:GPUICommandPaneControls 2026-06-25-12:13:
+        CDXC:CommandPane 2026-06-25-12:13:
         The fixed command-pane action cluster excludes New Terminal because macOS renders creation as an inline tab-run plus button. Keep this cluster panel-scoped so collapsed chrome has only Expand while expanded titlebars have Pin/Unpin plus the single Minimize affordance.
 
-        CDXC:GPUICommandPaneControls 2026-06-25-12:26:
+        CDXC:CommandPane 2026-06-25-12:26:
         Native visible command panels publish exactly Pin/Unpin Commands Panel plus closeCommandsPanel, rendered as the Minimize chevron. Do not add a second `x` minimize button to expanded GPUI command titlebars.
 
-        CDXC:GPUICommandPaneControls 2026-06-25-13:47:
+        CDXC:CommandPane 2026-06-25-13:47:
         Native command-panel action buttons are normal titlebar button frames, not a padded cluster: keep buttons contiguous, flat, stable-colored, and apply the 8px trailing inset only in expanded command titlebars.
         */
         h_flex()

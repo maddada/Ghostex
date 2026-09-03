@@ -4,7 +4,7 @@ import { createAgentsHubExternalEditorCommand } from './agents-hub-editor-comman
 describe('createAgentsHubExternalEditorCommand', () => {
   test('opens VS Code-compatible editors on the containing folder with the file focused', () => {
     /**
-     * CDXC:AgentsHub 2026-05-16-07:23:
+     * CDXC:AgentLauncher 2026-05-16-07:23:
      * The Agents Hub Code button should launch VS Code-style editors with the file's folder as the workspace and the selected file focused via --goto.
      */
     expect(

@@ -1,4 +1,4 @@
-# CDXC:GPUIWindowsBringup 2026-07-04:
+# CDXC:PlatformSupport 2026-07-04:
 # Windows packaging skeleton for the GPUI app, mirroring the shape of
 # build-macos-app.sh: build the sidebar bundle, build both Rust binaries,
 # then stage a flat CEF-conventional layout. Written best-effort from macOS
@@ -41,7 +41,7 @@ $ReleaseVersion = if ($env:GHOSTEX_GPUI_MARKETING_VERSION) {
 if ($ReleaseArch -notin @("x64", "arm64")) {
     throw "GHOSTEX_WINDOWS_ARCH must be x64 or arm64, got $ReleaseArch"
 }
-# CDXC:WindowsReleasePhases 2026-09-02: tooling/release-gpui/windows.ps1 runs
+# CDXC:Release 2026-09-02: tooling/release-gpui/windows.ps1 runs
 # this script in two watched release steps. "compile" stops after step 2 and
 # "stage" skips steps 1-2 (reusing that compile's dist/ and target/ output);
 # unset runs everything, which is what every other caller does.

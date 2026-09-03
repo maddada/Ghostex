@@ -214,7 +214,7 @@ pub(crate) fn gpui_visible_open_targets_from_settings(
     settings: &serde_json::Map<String, serde_json::Value>,
 ) -> Vec<GpuiOpenTarget> {
     /*
-    CDXC:GPUITitlebarOpenIn 2026-06-24-12:50:
+    CDXC:Titlebar 2026-06-24-12:50:
     GPUI titlebar Open In consumes the same shared Settings fields as React: hidden built-in ids, availability resolved ids/commands/app names, and normalized custom targets. Finder/Open Folder remains always available unless hidden, custom targets follow built-ins, and no project path, command text, URL, stdout/stderr, or user content is logged or persisted here.
     */
     let hidden_ids = gpui_open_target_hidden_ids(settings.get("workspaceOpenTargetHiddenIds"));
@@ -415,7 +415,7 @@ pub(crate) fn gpui_launch_open_target(
     project_path: &Path,
 ) -> Result<(), String> {
     /*
-    CDXC:GPUITitlebarOpenIn 2026-06-24-12:50:
+    CDXC:Titlebar 2026-06-24-12:50:
     Open In launch is bounded native process behavior: Finder/Open Folder uses the fixed OS opener, command targets use `/usr/bin/env` argv without shell splitting, macOS app-name launches use `/usr/bin/open -a`, child stdio is suppressed, and user paths/commands/errors are not copied into notifications or logs.
     */
     match &target.launch {

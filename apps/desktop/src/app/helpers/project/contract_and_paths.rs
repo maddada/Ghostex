@@ -296,7 +296,7 @@ pub(crate) fn next_available_gpui_local_workspace_lifecycle_request_id_in_range(
     mut is_pending: impl FnMut(u64) -> bool,
 ) -> Option<(u64, u64)> {
     /*
-    CDXC:GPUIWorkspaceLifecycle 2026-06-26-23:44:
+    CDXC:Workarea 2026-06-26-23:44:
     Rust-to-sidebar Sleep/Wake acks are matched only by request id, so id allocation must never overwrite a still-pending request after wraparound. Local-first Close also receives an id for its ignored cleanup acknowledgement. Skip live pending ids and fail dispatch only if the bounded id space is exhausted.
     */
     let request_id_max = request_id_max.max(1);

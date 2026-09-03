@@ -73,7 +73,7 @@ pub(crate) fn project_board_clipboard_image_path(
     clipboard_item: Option<&ClipboardItem>,
 ) -> Result<String, String> {
     /*
-    CDXC:GPUIProjectBoardImagePaste 2026-06-24-11:03:
+    CDXC:Clipboard 2026-06-24-11:03:
     Kanban image paste through CEF should preserve the native Project Board contract: return a durable path reference, not base64 Markdown. Existing image file references stay as paths; GPUI image clipboard bytes are saved under the resolved Ghostex image directory with their declared image format and returned as the same display path convention.
     */
     let item = clipboard_item

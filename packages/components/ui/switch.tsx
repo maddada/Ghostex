@@ -15,7 +15,7 @@ function Switch({
       data-size={size}
       className={cn(
         /*
-         * CDXC:UnifiedToggle 2026-08-24:
+         * CDXC:DesignSystem 2026-08-24:
          * One toggle shape app-wide: a 6px track with a 4px thumb instead of a
          * full pill. Surface sheets restate these radii where legacy unlayered
          * rules would otherwise rewrite them; keep all three in sync.

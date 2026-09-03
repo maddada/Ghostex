@@ -129,14 +129,14 @@ impl<'a> DomainRepository<'a> {
 
     pub fn list_recent_projects(&self) -> DomainResult<Vec<Value>> {
         /*
-        CDXC:GPUIRecentProjects 2026-06-24-12:27:
+        CDXC:Projects 2026-06-24-12:27:
         Recent Projects are explicit parked gxserver projects. Return only
         path-bearing rows marked `isRecentProject` and compute sessionCount
         from the domain sessions table; do not infer recency from presentation
         labels, inactive lifecycle states, shell titles, stdout, commands, or
         filesystem scans.
 
-        CDXC:ProjectVisibility 2026-06-30-21:23:
+        CDXC:Projects 2026-06-30-21:23:
         Hidden/system projects are not user workspaces and must not leak through
         the Recent Projects drawer. Keep Remote Attach carrier rows durable for
         session ownership while excluding them from every active or recent
@@ -196,7 +196,7 @@ impl<'a> DomainRepository<'a> {
 
     pub fn close_project_to_recent(&self, project_id: &str) -> DomainResult<Value> {
         /*
-        CDXC:GPUIRecentProjects 2026-06-24-12:38:
+        CDXC:Projects 2026-06-24-12:38:
         GPUI Close Project is a producer-side park mutation, not a generic project update. The daemon must verify the trusted project id still exists, require a stored path so `/api/listRecentProjects` can expose only real path-bearing rows, and stamp `recentClosedAt` with server time instead of accepting renderer-supplied timestamps.
         */
         let current = self.get_project(project_id)?.ok_or_else(|| {
@@ -281,10 +281,10 @@ impl<'a> DomainRepository<'a> {
         create_params.insert("name".to_string(), Value::String(name.clone()));
         let projects = self.list_projects()?;
         /*
-        CDXC:WorktreeProjectRegistration 2026-06-22-00:35:
+        CDXC:Worktrees 2026-06-22-00:35:
         Rust gxserver must preserve the TypeScript Add Worktree/Add Project path-registration contract. When /api/addProjectPath receives a linked Git worktree path, detect the already registered main checkout and store worktree metadata under that canonical parent project ID; if the path was registered earlier without metadata, repair that existing row in place so the macOS sidebar groups it exactly like the old server.
 
-        CDXC:ProjectVisibility 2026-06-30-21:23:
+        CDXC:Projects 2026-06-30-21:23:
         Project visibility and system-project roles belong to gxserver, because mobile, CLI, GPUI, and macOS all read project/session inventory from the daemon. `/api/addProjectPath` must repair an existing path row when a producer marks it hidden/system, otherwise old Remote Attach carrier rows can keep leaking into non-macOS project lists.
         */
         let worktree = detect_registered_git_worktree_metadata(&projects, &path, &name);

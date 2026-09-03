@@ -23,7 +23,7 @@ pub(crate) fn gpui_remote_attach_terminal_process_command(
     ssh_port: Option<u16>,
 ) -> String {
     /*
-    CDXC:GPUIRemoteAttachReconnect 2026-08-13:
+    CDXC:RemoteMachines 2026-08-13:
     Remote-attach terminals must never degrade to a vanilla local shell when
     the SSH transport drops (lid close, wifi loss, captive portal, transit).
     The launch wrapper keeps the pane attached to the remote session by
@@ -72,7 +72,7 @@ pub(crate) fn gpui_remote_attach_terminal_process_command(
         "}",
     ];
     /*
-    CDXC:GPUIRemoteAttachReconnect 2026-08-14:
+    CDXC:RemoteMachines 2026-08-14:
     Probe polling stays at a flat 2s so a returning link reconnects within
     ~2 seconds; only the probe runs while the network is down (one cheap
     process + one packet), so this cadence cannot flood anything. The backoff
@@ -92,7 +92,7 @@ pub(crate) fn gpui_remote_attach_terminal_process_command(
         "}",
     ];
     /*
-    CDXC:GPUIRemoteAttachReconnect 2026-08-14:
+    CDXC:RemoteMachines 2026-08-14:
     The attach command's stderr is streamed live through tee while also being
     captured so each reconnect attempt can be classified. An SSH transport
     authentication rejection never rapid-retries: it backs off hard for three

@@ -25,7 +25,7 @@ pub(crate) fn workspace_pane_body_drop_zone(
     position: gpui::Point<Pixels>,
 ) -> WorkspaceDropZone {
     /*
-    CDXC:GPUIWorkspaceDragDrop 2026-07-08:
+    CDXC:Workarea 2026-07-08:
     Agents pane-body drops mirror native `paneDropPlacement`: classify against local pane coordinates with 24% edge bands, horizontal edges winning corners by check order, and top/bottom mapped to GPUI's visual coordinate system.
     */
     let width = bounds.size.width.as_f32();
@@ -56,10 +56,10 @@ pub(crate) fn command_pane_body_drop_zone(
     position: gpui::Point<Pixels>,
 ) -> WorkspaceDropZone {
     /*
-    CDXC:GPUICommandPane 2026-06-22-06:13:
+    CDXC:CommandPane 2026-06-22-06:13:
     Command-pane drag/drop supports horizontal edge split intent while enforcing command-only layout rules. Left and right edge zones split command tab groups horizontally; center, top, and bottom all group into the target command group so vertical command splits are not created.
 
-    CDXC:GPUICommandPaneDragDrop 2026-06-25-19:44:
+    CDXC:CommandPane 2026-06-25-19:44:
     Native `commandPaneDropPlacement` uses only command-body horizontal geometry: widths at or below one pixel return center, local X <= 24% splits left, local X >= 76% splits right, and every vertical position stays a center group drop. Do not route through workspace pane drop math here because its min/max edge-band clamp and top/bottom competition are workspace-only behavior.
     */
     let width = bounds.size.width.as_f32();
@@ -106,10 +106,10 @@ pub(crate) fn transfer_command_placeholder_to_workspace_with_source_close(
     mut close_source: impl FnMut(&mut CommandPaneModel, CommandPaneGroupId, CommandSessionId) -> bool,
 ) -> Option<(WorkspacePaneId, TerminalSessionId)> {
     /*
-    CDXC:GPUICommandWorkspaceTransfer 2026-06-22-15:55:
+    CDXC:Workarea 2026-06-22-15:55:
     Command-to-Agents transfer is transactional at the placeholder model boundary. Validate the source command tab, insert the selected Mounting Agents shell session first, then remove the command session through normal command close semantics so the last command tab collapses the command pane only after Agents insertion succeeds.
 
-    CDXC:GPUICommandWorkspaceTransfer 2026-06-25-19:28:
+    CDXC:Workarea 2026-06-25-19:28:
     Command-to-Agents body drops must roll back the newly inserted Mounting Agents placeholder if command-session removal fails after insertion. Restore the previous Agents focus and active tab while preserving the command source, and keep the transfer title-only with no command text, stdout/stderr, paths, process state, libghostty state, or terminal content crossing surfaces.
     */
     let source_has_session = command_pane
@@ -173,10 +173,10 @@ pub(crate) fn transfer_command_placeholder_to_workspace_tab_strip_with_source_cl
     mut close_source: impl FnMut(&mut CommandPaneModel, CommandPaneGroupId, CommandSessionId) -> bool,
 ) -> Option<(WorkspacePaneId, TerminalSessionId)> {
     /*
-    CDXC:GPUICommandWorkspaceTransfer 2026-06-22-16:04:
+    CDXC:Workarea 2026-06-22-16:04:
     Tab-strip command-to-Agents drops must be transactional at the shell model boundary: validate the command source, insert the selected Mounting Agents shell session at the requested tab-strip index first, then remove the command source through existing close semantics so final command sessions collapse only after the Agents tab exists. If command close fails after insertion, remove the inserted Agents session instead of leaving a duplicate shell tab.
 
-    CDXC:GPUICommandWorkspaceTransfer 2026-06-25-19:28:
+    CDXC:Workarea 2026-06-25-19:28:
     Command-to-Agents tab-strip rollback must preserve the exact pre-transfer Agents tab order, active tab, and focus when command removal fails after a successful index insert. The inserted placeholder is the only rolled-back Agents state, and the command source remains a command-pane placeholder without moving command text, stdout/stderr, paths, process state, libghostty state, or terminal content.
     */
     let source_has_session = command_pane
@@ -224,7 +224,7 @@ pub(crate) fn rollback_command_to_workspace_insert(
     focus_mode_pane_before: Option<WorkspacePaneId>,
 ) {
     /*
-    CDXC:GPUICommandWorkspaceTransfer 2026-06-25-19:28:
+    CDXC:Workarea 2026-06-25-19:28:
     A failed command-source removal must undo only the just-created Agents placeholder. Bypass the normal final-tab close guard only for this rollback path, then restore the previous Agents selection/focus so a failed cross-surface move leaves no duplicate shell tab and no implied runtime/content transfer.
     */
     if !agents_workspace.close_tab(inserted_pane_id, inserted_session_id)
@@ -291,10 +291,10 @@ pub(crate) fn rollback_workspace_to_command_insert(
     snapshot: CommandPaneTransferRollbackSnapshot,
 ) {
     /*
-    CDXC:GPUICommandPaneDragDrop 2026-06-25-19:45:
+    CDXC:CommandPane 2026-06-25-19:45:
     Agents-to-command rollback must undo only the just-created command placeholder after Agents source removal fails. Restore command-pane mode, focused group, and per-group active tabs so body and tab-strip drops leave command group order/session ids intact while preserving all Agents runtime/content state on the Agents side.
 
-    CDXC:GPUICommandPaneDragDrop 2026-06-26-04:43:
+    CDXC:CommandPane 2026-06-26-04:43:
     Rollback must also restore the previous command Focus group after a placeholder insert activates or clears Focus, because failed Agents source close leaves the prior command-pane visibility contract in force.
     */
     let _ = command_pane.close_session(inserted_group_id, inserted_session_id);
@@ -345,7 +345,7 @@ pub(crate) fn transfer_workspace_placeholder_to_command_pane_with_source_close(
     mut close_source: impl FnMut(&mut WorkspaceModel, WorkspacePaneId, TerminalSessionId) -> bool,
 ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
     /*
-    CDXC:GPUICommandPaneDragDrop 2026-06-25-19:45:
+    CDXC:CommandPane 2026-06-25-19:45:
     Agents-to-command body drops are transactional at the placeholder boundary. Preflight the Agents final-root transfer guard, insert only a command title placeholder, then close the Agents source; if that close fails, remove only the inserted command placeholder and restore prior command-pane selection/focus without moving command text, terminal content, paths, process state, libghostty state, stdout/stderr, or Agents runtime content.
     */
     if !agents_workspace.can_transfer_tab_to_command_pane(source_pane_id, source_session_id) {
@@ -399,13 +399,13 @@ pub(crate) fn transfer_workspace_placeholder_to_command_tab_strip_with_source_cl
     mut close_source: impl FnMut(&mut WorkspaceModel, WorkspacePaneId, TerminalSessionId) -> bool,
 ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
     /*
-    CDXC:GPUICommandPaneDragDrop 2026-06-22-16:18:
+    CDXC:CommandPane 2026-06-22-16:18:
     Agents-to-command tab-strip transfer is transactional at the placeholder shell boundary. Validate the visible Agents source and final-root transfer guard first, insert the command placeholder at the requested index, then close the Agents source; if that final close fails, remove the inserted command placeholder so the shell does not duplicate the tab.
 
-    CDXC:GPUICommandPaneDragDrop 2026-06-25-19:45:
+    CDXC:CommandPane 2026-06-25-19:45:
     Failed Agents source close after a command tab-strip insert must restore the prior command-pane mode, focused group, and active tab for every existing command group. The inserted command placeholder is the only rolled-back command state; Agents runtime/content state remains untouched on the Agents side.
 
-    CDXC:GPUICommandPaneDragDrop 2026-06-26-04:43:
+    CDXC:CommandPane 2026-06-26-04:43:
     Successful tab-strip insertion relies on the command model insertion path to clear Focus when the target group is outside current Focus; failed source close then restores the rollback snapshot, including `focus_mode_group`.
     */
     if !agents_workspace.can_transfer_tab_to_command_pane(source_pane_id, source_session_id) {

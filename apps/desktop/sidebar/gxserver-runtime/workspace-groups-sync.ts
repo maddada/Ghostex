@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -55,7 +55,7 @@ import { orderProjectsWithWorktrees } from '@/packages/shared/project-worktree-o
 import type { SidebarProjectWorktreeMetadata } from '@/packages/shared/session-grid-contract';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeWorkspaceGroupMethods` — because deriving them would make
@@ -99,7 +99,7 @@ export interface GpuiSidebarRuntimeWorkspaceGroupMethods {
 
 export const gpuiSidebarRuntimeWorkspaceGroupMethods = {
   /*
-  CDXC:GPUIWorkspaceGroups 2026-07-02-03:49:
+  CDXC:Workarea 2026-07-02-03:49:
   GPUI sidebar named groups are a client-owned project overlay until gxserver exposes durable grouped workspace state.
   Route only local project/session ids through create, rename, close, move, and reorder operations; remote groups stay out of this path and localStorage mirrors macOS grouped workspace semantics.
   */
@@ -109,7 +109,7 @@ export const gpuiSidebarRuntimeWorkspaceGroupMethods = {
   },
 
   /*
-  CDXC:WorkspaceSessionGroups 2026-07-12-00:00:
+  CDXC:Sessions 2026-07-12-00:00:
   gxserver now keeps a durable copy of this overlay so iOS/Android render the
   same named groups and ordering. localStorage stays the instant-edit source;
   the server copy is a debounced write-through so group editing never waits on
@@ -171,7 +171,7 @@ export const gpuiSidebarRuntimeWorkspaceGroupMethods = {
   },
 
   /*
-  CDXC:SidebarProjectCollections 2026-07-18-00:00:
+  CDXC:Projects 2026-07-18-00:00:
   Colored "Group N" project collections mirror the workspace-groups sync shape,
   but SidebarApp owns the localStorage overlay and the editing UI, so this
   runtime only relays: sidebar `updateSidebarProjectCollections` commands are
@@ -281,7 +281,7 @@ export const gpuiSidebarRuntimeWorkspaceGroupMethods = {
   },
 
   /*
-  CDXC:SidebarSpaces 2026-08-27:
+  CDXC:Spaces 2026-08-27:
   Spaces relay exactly like project collections: SidebarApp owns the editing UI
   and sends the whole normalized Space document, this runtime debounces it into
   a gxserver write-through, and server state (startup snapshot, live

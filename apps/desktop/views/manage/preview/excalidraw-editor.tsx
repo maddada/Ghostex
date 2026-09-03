@@ -79,10 +79,10 @@ export function ManageExcalidrawEditor({
           const nextSignature = createExcalidrawSceneSignature(elements, appState, filesForSave);
           const nextContent = serializeExcalidrawFile(data, elements, appState, filesForSave);
           /*
-           * CDXC:ManageDrawings 2026-06-20-06:14:
+           * CDXC:Docs 2026-06-20-06:14:
            * Excalidraw can emit a normalized scene while hydrating initialData. Accept that as the canvas baseline instead of marking the file dirty before the user edits the drawing.
            *
-           * CDXC:ManageDrawings 2026-06-20-06:35:
+           * CDXC:Docs 2026-06-20-06:35:
            * The drawing editor should compare element versions, file ids, and persisted view state before saving. Excalidraw may call onChange repeatedly with equivalent scene data, so duplicate callbacks must not churn draft content or dirty state.
            */
           if (!hasAcceptedInitialSceneRef.current) {
@@ -110,7 +110,7 @@ export function ManageExcalidrawEditor({
 
 export function handleManageExcalidrawKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
   /*
-   * CDXC:ManageDrawingRedoHotkey 2026-08-08:
+   * CDXC:Docs 2026-08-08:
    * Excalidraw intentionally binds Ctrl+Y only on Windows, but Docs promises
    * Command+Y as redo on macOS. Invoke the mounted editor's own stable redo
    * action button so the upstream history remains the sole owner of the
@@ -134,7 +134,7 @@ export function handleManageExcalidrawKeyDown(event: ReactKeyboardEvent<HTMLDivE
 
 export function suppressManageExcalidrawToolKeyBeep(event: ReactKeyboardEvent<HTMLDivElement>): void {
   /*
-   * CDXC:ManageDrawings 2026-06-28-05:12:
+   * CDXC:Docs 2026-06-28-05:12:
    * In macOS WKWebView, Excalidraw's unmodified 1-4 tool shortcuts can still reach AppKit as unhandled keyDown events and play the failure beep. Prevent the native default on the Manage wrapper while allowing propagation to Excalidraw, and skip editable targets so text editing can still type numbers.
    */
   if (

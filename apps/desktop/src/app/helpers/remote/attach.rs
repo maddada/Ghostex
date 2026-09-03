@@ -54,10 +54,10 @@ pub(crate) fn gpui_prepare_remote_attach_terminal_plan(
     interactive_attach: bool,
 ) -> Result<GpuiRemoteAttachTerminalPlan, String> {
     /*
-    CDXC:GPUIRemoteAttach 2026-06-24-19:06:
+    CDXC:RemoteMachines 2026-06-24-19:06:
     Remote attach validates session/project ownership through the Rust-owned gxserver tunnel before creating a GPUI terminal. The interactive pane runs the authoritative attach command returned by that validation over a fresh SSH connection; asking the remote CLI to resolve the same ids again would repeat its full session-inventory RPC sequence before input becomes available. The human-facing copy command remains `ghostex attach`, and renderer text, gxserver bearer tokens, remote paths, stdout/stderr, and daemon bodies are never logged or copied to CEF.
 
-    CDXC:RemoteProjectActions 2026-08-29:
+    CDXC:RemoteMachines 2026-08-29:
     `wake_session` and `interactive_attach` answer different questions and must
     stay separate. The first picks the RPC that resolves attach metadata: wake
     for a session whose provider may be asleep, plain metadata for one whose
@@ -166,7 +166,7 @@ pub(crate) fn gpui_create_remote_project_workspace_terminal(
 > {
     let create_started = Instant::now();
     /*
-    CDXC:GPUIRemoteNewTerminal 2026-08-20:
+    CDXC:RemoteMachines 2026-08-20:
     Ctrl+G in a remote pane can only reach that machine's code-server prompt
     editor when the daemon serving the session understands the selector. The
     remote runs the gxserver package this app installed for it, which can predate
@@ -280,7 +280,7 @@ pub(crate) fn gpui_prepare_remote_resume_clipboard_command(
     reference: &GpuiRemoteAttachSessionReference,
 ) -> Result<String, String> {
     /*
-    CDXC:GPUIRemoteAttach 2026-06-24-19:06:
+    CDXC:RemoteMachines 2026-06-24-19:06:
     Copy Remote Resume asks the owning remote gxserver for its agent resume plan and wraps only the returned copy command in a saved-machine SSH command. The renderer supplies no command text or cwd, and Rust must not log the plan, cwd, SSH target, stdout/stderr, token, or daemon body.
     */
     let result = gpui_remote_gxserver_rpc_result(
@@ -367,7 +367,7 @@ pub(crate) fn gpui_remote_ssh_shell_command(
 
 pub(crate) fn gpui_noninteractive_login_shell_remote_command(command: &str) -> String {
     /*
-    CDXC:GPUIRemoteAttach 2026-08-15:
+    CDXC:RemoteMachines 2026-08-15:
     gxserver returns an authoritative attach program with absolute daemon and
     zmx paths. Starting that program must load login PATH state, but it must not
     source the user's interactive zsh configuration before zmx owns the PTY.

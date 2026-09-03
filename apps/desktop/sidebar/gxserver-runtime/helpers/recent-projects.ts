@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -69,7 +69,7 @@ export function createGpuiRemoteRecentProjects(
   settings: ghostexSettings
 ): SidebarRecentProject[] {
   /*
-  CDXC:GPUIRemoteProjects 2026-06-27-19:37:
+  CDXC:RemoteMachines 2026-06-27-19:37:
   Remote Recent Projects are GPUI-client-local parking rows. Keep ids
   machine-scoped and reconcile display fields from a live remote presentation
   when connected, but do not call the remote daemon's recent endpoints or share
@@ -129,7 +129,7 @@ export function createGpuiRemoteRecentProjects(
 }
 
 /*
-CDXC:RemoteGroupReorder 2026-07-12:
+CDXC:RemoteMachines 2026-07-12:
 Per-machine remote project group order is app-client presentation state, like
 the remote recent-projects list: the remote gxserver keeps publishing its own
 group order and this map only reorders the projection locally. Persist only
@@ -190,7 +190,7 @@ export function writeStoredGpuiRemoteLastSeenPresentations(
   presentationsByMachineId: ReadonlyMap<string, GxserverPresentationSnapshot>
 ): void {
   /*
-  CDXC:GPUIRemoteLastSeen 2026-07-12:
+  CDXC:RemoteMachines 2026-07-12:
   Last-seen remote presentations are the same sanitized snapshots the sidebar
   already renders (project titles/paths, session titles, states). Persisting
   them app-client-locally lets disconnected machines keep their faded project
@@ -244,7 +244,7 @@ export function writeStoredGpuiRemoteRecentProjects(
       })
     );
     /*
-    CDXC:GPUIRemoteProjects 2026-06-27-19:37:
+    CDXC:RemoteMachines 2026-06-27-19:37:
     GPUI remote recent rows are app-client state. Persist only machine id,
     remote project id, title/path needed for the disconnected drawer, timestamp,
     and count; do not persist tokens, SSH hosts, usernames, command text,
@@ -297,7 +297,7 @@ export function normalizeStoredGpuiRemoteRecentProjects(
 }
 
 /*
-CDXC:GPUIRemoteProjects 2026-06-27-21:59:
+CDXC:RemoteMachines 2026-06-27-21:59:
 The GPUI start build runs through Vite/Rolldown, whose transformer accepts readonly array shorthand and ReadonlyArray<T> but rejects `readonly Array<T>`. Keep this helper input in ReadonlyArray<T> form so Remote Recent Projects packaging does not break local GPUI startup.
 */
 export function groupGpuiRemoteRecentProjectsByMachine(
@@ -338,7 +338,7 @@ export function countGpuiRemotePresentationProjectSessions(
 
 export function compareGpuiRecentProjectsByClosedAt(left: SidebarRecentProject, right: SidebarRecentProject): number {
   /*
-  CDXC:GPUIRecentProjects 2026-06-25-19:22:
+  CDXC:Projects 2026-06-25-19:22:
   Native `compareRecentProjectsByClosedAt` only sorts parsed close time descending. The Recent Projects drawer contract does not include gxserver `updatedAt`, so GPUI must not invent title or id tie-breaks; stable sort preserves producer order for equal timestamps.
   */
   return gpuiRecentProjectClosedAtMillis(right) - gpuiRecentProjectClosedAtMillis(left);

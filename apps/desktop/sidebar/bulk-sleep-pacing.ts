@@ -14,7 +14,7 @@ export type GpuiSidebarBulkSleepPacingOptions = {
 type GpuiSidebarBulkSleepOperation<Target> = (target: Target, index: number) => Promise<void> | void;
 
 /*
-CDXC:GPUIBulkSleep 2026-06-27-02:05:
+CDXC:SessionSleep 2026-06-27-02:05:
 GPUI bulk sleep must mirror native sidebar pacing by sleeping one target at a time and waiting 350ms between attempts. Return only aggregate counts so failed operations cannot leak session ids, titles, paths, commands, URLs, or user text through helper results.
 */
 export async function runGpuiSidebarBulkSleepPaced<Target>(

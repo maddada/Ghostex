@@ -205,7 +205,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUISessionChatSurface 2026-08-02:
+        CDXC:SessionChat 2026-08-02:
         Chat mode swaps this companion slot's terminal body for the same
         per-session chat surface the Agents workspace shows in the same slot;
         the terminal mount parks exactly like an Agents tab in
@@ -762,7 +762,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIProjectEditor 2026-06-22-05:49:
+        CDXC:CodeEditor 2026-06-22-05:49:
         The project-editor companion boundary is a real reserved layout region between sibling panes. The visible divider is the resize/reset hit target; it persists shell-only companion sizing and does not use invisible overlays or root-level hit-test routing.
         */
         let hover_line_offset =

@@ -14,7 +14,7 @@ pub(crate) struct CefSurface {
 
 impl CefSurface {
     /*
-    CDXC:GPUICefBrowserCreateFallible 2026-07-11:
+    CDXC:CefRuntime 2026-07-11:
     CEF child-browser creation can fail transiently (CreateBrowserSync
     returns null while a fresh per-profile request context is still
     initializing asynchronously). Surface construction is therefore fallible
@@ -139,7 +139,7 @@ impl CefSurface {
         runtime_settings: cef::SidebarRuntimeSettingsSnapshot,
     ) {
         /*
-        CDXC:GPUIProjectSidebarBridge 2026-06-23-06:57:
+        CDXC:CefRuntime 2026-06-23-06:57:
         The GPUI sidebar needs a callable post-load refresh path for strict debug/beta gates plus the saved shared Settings object without adding a broad settings watcher or event bus. Keep this as a narrow CEF surface forwarder so future callers can target only the sidebar main frame.
         */
         self.browser
@@ -151,7 +151,7 @@ impl CefSurface {
         gxserver_bootstrap: Option<cef::SidebarGxserverBootstrap>,
     ) {
         /*
-        CDXC:GPUISidebarGxserverBootstrap 2026-06-24-11:17:
+        CDXC:ServerDaemon 2026-06-24-11:17:
         Sidebar bootstrap refreshes use the existing CEF surface wrapper only for the sidebar main frame. This forwards an app-owned snapshot to the private browser-to-renderer message path and must not call generic JavaScript injection, touch Browser/workarea/modal CEF surfaces, persist tokens, log URLs/tokens/paths/titles, or synthesize fallback gxserver data.
         */
         self.browser
@@ -163,7 +163,7 @@ impl CefSurface {
         gxserver_bootstrap: Option<cef::SidebarGxserverBootstrap>,
     ) {
         /*
-        CDXC:GPUISessionChatSurface 2026-07-31:
+        CDXC:SessionChat 2026-07-31:
         Session Chat surfaces refresh their bootstrap through the dedicated
         chat process message, with the same non-logging/no-persistence scope
         as the sidebar refresh above.
@@ -240,7 +240,7 @@ impl CefSurface {
         self.browser.paste()
     }
 
-    /// CDXC:GPUITutorialVideoFullscreen 2026-08-18: forwards one host-side "f"
+    /// CDXC:Onboarding 2026-08-18: forwards one host-side "f"
     /// key press (see the CEF backend for why injected JavaScript cannot put
     /// the tutorial player in fullscreen).
     pub(crate) fn send_fullscreen_toggle_key(&self) {
@@ -263,7 +263,7 @@ impl CefSurface {
 
     pub(crate) fn inject_feedback_tool_script(&mut self, script: &str) -> bool {
         /*
-        CDXC:GPUIBrowserFeedback 2026-06-23-11:04:
+        CDXC:Browser 2026-06-23-11:04:
         Toolbar feedback injection goes through the tab-owned CEF surface so Browser wake/focus, GitHub disablement, and loaded-surface ownership stay in GPUI's normal Browser path. CEF main-frame execution is fire-and-forget; a false result means only that no main frame was available, not that page-side feedback completed.
         */
         self.browser.execute_java_script_in_main_frame(script)
@@ -271,13 +271,13 @@ impl CefSurface {
 
     pub(crate) fn execute_app_owned_script(&mut self, script: &str) -> bool {
         /*
-        CDXC:GPUIProjectWorkareaCefBridge 2026-06-24-11:03:
+        CDXC:CefRuntime 2026-06-24-11:03:
         Project-workarea response dispatch uses the same app-owned CEF main-frame execution boundary as Browser tooling. Callers pass only generated event-dispatch scripts built from serialized app responses; the CEF wrapper does not log script bodies, page URLs, file contents, board payloads, cookies, tokens, or paths.
 
-        CDXC:GPUITitlebarAppModalHost 2026-06-24-11:09:
+        CDXC:AppModal 2026-06-24-11:09:
         The GPUI app-modal window also uses this app-owned script boundary to dispatch serialized modal-host CustomEvents into the bundled React modal host. Keep callers responsible for generated first-party event scripts only, with no arbitrary page injection, raw bridge payload logging, WebKit fallback, or placeholder modal UI.
 
-        CDXC:GPUIRemoteMachines 2026-06-24-16:48:
+        CDXC:RemoteMachines 2026-06-24-16:48:
         GPUI remote-machine status, sanitized request responses, and presentation refreshes use the same first-party script boundary to dispatch sidebar-only CustomEvents. Callers must serialize only app-owned event payloads and never inject tokens, SSH details, command text, URLs, paths, daemon bodies, or renderer-provided scripts.
         */
         self.browser.execute_java_script_in_main_frame(script)
@@ -288,7 +288,7 @@ impl CefSurface {
         message: &serde_json::Value,
     ) -> bool {
         /*
-        CDXC:GPUIExtensionRemoteUrlSurface 2026-08-28:
+        CDXC:Extensions 2026-08-28:
         Outbound bridge dispatch injects the app-owned context payload as script
         source in the page's own world, and a remote `server.url` page could
         define `__ghostexExtensionBridgeReceive` itself to read it. Surfaces
@@ -442,7 +442,7 @@ impl Element for CefElement {
         let surface_id = self.surface_id.clone();
         window.on_mouse_event(move |event: &gpui::MouseDownEvent, phase, window, cx| {
             /*
-            CDXC:GPUICefFocusRouting 2026-06-14-16:45:
+            CDXC:FocusRouting 2026-06-14-16:45:
             The CEF child view owns normal web-page input behavior after it is clicked. Focus a GPUI handle with a CEF key context before restoring CEF focus so page text fields receive command-key shortcuts such as Cmd+A instead of leaving the GPUI address bar as the action target.
             */
             if phase.bubble()

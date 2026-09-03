@@ -346,7 +346,7 @@ export const Integrations: Story = {
 };
 
 /*
- * CDXC:TrycuaPrerequisite 2026-08-24:
+ * CDXC:Extensions 2026-08-24:
  * The pre-install state is the one the layout has to teach: one Trycua step
  * with the exact command it runs, then the skills that depend on it.
  */
@@ -359,7 +359,7 @@ export const Projects: Story = {
 };
 
 /*
- * CDXC:ModalRedesign 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * Review stories for the Codex restyle. Hotkeys is the densest list surface in
  * Settings (recorder chips, per-row reset buttons), Agents is the densest
  * management surface (cards, row actions, section header actions), and Theming

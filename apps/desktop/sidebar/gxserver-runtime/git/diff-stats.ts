@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines) into git/. This
 slice covers the background Git-polling driver and project diff-stats
 methods. See `index.ts` for how the runtime's Git methods are recombined.
@@ -50,7 +50,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     this.gitPollingTimeoutIds.clear();
     const targets = this.getVisibleProjectDiffStatsRefreshTargets();
     /*
-    CDXC:SidebarDiffStatsChurn 2026-08-16:
+    CDXC:Git 2026-08-16:
     The cycle stretches past the base interval once the sidebar renders more
     project rows than the interval can hold at the capped probe rate, so a
     sidebar with 100+ rows polls each row less often instead of probing many
@@ -78,7 +78,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
   },
 
   /*
-  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  CDXC:Git 2026-08-16:
   Poll only projects that currently render a sidebar group header, instead of
   every registered local project plus every project of every connected remote
   machine. Diff stats exist purely for those headers, so the rendered group
@@ -138,7 +138,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     void this.refreshProjectDiffStats(target.project);
     if (this.activeProjectId === target.project.projectId) {
       /*
-      CDXC:SidebarGitMemo 2026-07-29:
+      CDXC:Git 2026-07-29:
       This background cycle runs every 15s and can land on the same instant as a
       project switch. Local Git probes stay on their 15s cadence, but the
       GitHub CLI probe defers so this loop cannot reintroduce a `gh pr view`
@@ -161,7 +161,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
     }
     this.pendingProjectDiffRefreshProjectIds.add(projectId);
     /*
-    CDXC:SidebarDiffStatsChurn 2026-08-16:
+    CDXC:Git 2026-08-16:
     Background polls must be invisible unless the numbers actually change:
     the old pre-probe `isLoading: true` republish plus the post-probe
     republish meant every poll of every project rebuilt and re-sent the whole
@@ -311,7 +311,7 @@ export const gpuiSidebarRuntimeGitDiffStatsMethods = {
   },
 
   /*
-  CDXC:SidebarDiffStatsChurn 2026-08-16:
+  CDXC:Git 2026-08-16:
   Diff stats live inside the group projection (projectContext.editor), but a
   changed +/- count for one project must not rebuild and re-send all groups:
   with 40+ groups the old full `publishRemotePresentationPatch` here ran many

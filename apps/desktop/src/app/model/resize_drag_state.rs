@@ -6,7 +6,7 @@
 use crate::*;
 
 /*
-CDXC:GPUICommandPaneSide 2026-08-16:
+CDXC:CommandPane 2026-08-16:
 One drag state serves both docks: the bottom rail tracks pointer Y against the
 panel height, the right divider tracks pointer X against the panel width. The
 side is captured at mouse-down so a Settings save mid-drag cannot re-interpret

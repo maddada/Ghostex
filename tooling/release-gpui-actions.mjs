@@ -347,7 +347,7 @@ function validateRequiredSecrets(options, secrets) {
 }
 
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Show the operator what the release will actually do before anything is
  * dispatched. This is the same planner the `prepare` job runs, with the same
  * scope, so the preview equals reality unless origin/main moves — which is
@@ -421,7 +421,7 @@ if ((command === 'start' || command === 'amend') && requiresGpuiReferenceContrac
   run('node', ['tooling/release-gpui/check-ghostty-zig-pin.mjs'], { capture: false });
 }
 /*
- * CDXC:ReleaseLocalTestGate 2026-08-19:
+ * CDXC:Release 2026-08-19:
  * `release:test` is ~11 seconds of pure source assertions on an already
  * installed tree, and it is the single gate most likely to trip on a normal
  * release: it pins CSS selectors, component source, and workflow shapes that

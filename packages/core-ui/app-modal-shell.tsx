@@ -11,9 +11,9 @@ import {
 import { cn } from '@/packages/components/utils';
 
 /**
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * One shell for every Ghostex app modal, so the Codex-style modal language
- * (established by Session Automations, CDXC:CodexModalRestyle 2026-08-24) is
+ * (established by Session Automations, CDXC:AppModal 2026-08-24) is
  * owned in exactly one place: this component plus the `.gx-app-modal` rules in
  * styles/modals.css. Modals compose their body from the shared shadcn
  * primitives (Card, Field, Input, Select, Switch, Textarea) inside this shell;

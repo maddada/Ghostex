@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /*
-CDXC:GxserverRustPort 2026-06-14-20:01:
+CDXC:RepoStructure 2026-06-14-20:01:
 Phase 0 needs a reusable black-box compatibility harness before the Rust daemon owns API behavior. Keep TypeScript as the fixture source, normalize dynamic runtime fields, and run the same minimal lifecycle, health, protocol-gate, status, WebSocket, and stop checks against TypeScript or a future Rust binary.
 */
 
@@ -378,7 +378,7 @@ async function main(runOptions) {
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-14-22:52:
+CDXC:RepoStructure 2026-06-14-22:52:
 Phase 3 compatibility must exercise durable project/session state and read-only presentation inventory through public RPC endpoints, not Rust internals. Keep the fixture metadata-only and path-normalized so it can compare TypeScript and Rust without leaking user workspace names or terminal content.
 */
 async function runPhase3DomainChecks({ homeDir, observations, token }) {
@@ -897,7 +897,7 @@ async function runPhase3DomainChecks({ homeDir, observations, token }) {
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-15-09:55:
+CDXC:RepoStructure 2026-06-15-09:55:
 Phase 4 compatibility exercises the event hub through the public WebSocket and HTTP contracts. Keep the suite on the explicit dev port so packaged Ghostex can keep 58744, and compare only metadata-safe presentation and renderer-command envelopes.
 */
 async function runPhase4EventChecks({ homeDir, observations, token }) {
@@ -1019,7 +1019,7 @@ async function runPhase4EventChecks({ homeDir, observations, token }) {
     );
 
     /*
-    CDXC:GxserverPresentationEvents 2026-06-22-04:30:
+    CDXC:StateSync 2026-06-22-04:30:
     Renderer command subscriptions are ordered like TypeScript's WebSocket set. A later renderer-capable subscription must not steal commands from the first open renderer client, otherwise native command ownership can flip when secondary clients subscribe.
     */
     const secondRendererSocket = await openEventSocket(token);
@@ -1202,7 +1202,7 @@ async function runPhase4EventChecks({ homeDir, observations, token }) {
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-15-18:06:
+CDXC:RepoStructure 2026-06-15-18:06:
 Phase 5 compatibility must exercise real public lifecycle and session-I/O endpoints on the explicit dev port without stopping the packaged daemon on 58744. Keep observations metadata-only and normalize repo/home paths because zmx command strings include Ghostex-managed artifact paths and per-run auth-token locations.
 */
 async function runPhase5ZmxChecks({ homeDir, observations, token }) {
@@ -1665,7 +1665,7 @@ async function runPhase5ZmxChecks({ homeDir, observations, token }) {
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-16-10:00:
+CDXC:RepoStructure 2026-06-16-10:00:
 Phase 6 compatibility covers agent settings, launch/resume planning, rename/title/status ingestion, hook setup surfaces, and log privacy through public RPCs on the explicit dev port. Record stable metadata-only projections so fixtures do not include prompts, terminal titles, hook payload bodies, or local absolute paths.
 */
 async function runPhase6AgentChecks({ homeDir, observations, paths, token }) {
@@ -2195,13 +2195,13 @@ async function runPhase6AgentChecks({ homeDir, observations, paths, token }) {
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-16-00:49:
+CDXC:RepoStructure 2026-06-16-00:49:
 Phase 7 compatibility exercises typed Git/GitHub/worktree/Beads operations and repository clone jobs through public RPCs on the explicit dev port. Use isolated repositories and stubbed clone/GitHub tools so the suite never reaches the network, never shells against arbitrary user paths, and can compare TypeScript and Rust without touching the packaged daemon on 58744.
 
-CDXC:GxserverCompatContainment 2026-06-22-09:47:
+CDXC:RepoStructure 2026-06-22-09:47:
 Compat fixture generation must be safe to run on developer machines. Build the target process environment from an explicit allowlist, keep HOME/TMP/XDG/Git config under the temp home, and make command shims fail closed so old TypeScript fixtures and new Rust comparisons cannot inherit real tokens, proxy settings, SSH sockets, user profile paths, or network-capable Git/GitHub/agent commands.
 
-CDXC:GxserverCompatLogs 2026-06-22-10:01:
+CDXC:RepoStructure 2026-06-22-10:01:
 Area 36 privacy applies to persistent compat artifacts too. Tool invocation JSONL should keep only metadata booleans and counts, never raw argv, cwd, clone destinations, paths, URLs, command text, environment values, or secrets.
 */
 async function prepareCompatSandbox(homeDir, runOptions) {
@@ -2846,7 +2846,7 @@ async function runTargetCommand(target, args, env, timeoutMs) {
 
 function createTargetEnv(homeDir, runOptions) {
   /*
-  CDXC:GxserverRustPort 2026-06-14-21:58:
+  CDXC:RepoStructure 2026-06-14-21:58:
   Compatibility runs may target an explicitly selected loopback port while the packaged daemon owns 58744. Pass the port through a dev-scoped environment variable only when --port is explicit so product defaults remain unchanged and startup never silently falls back to another daemon.
   */
   const sandboxPaths = runOptions.sandboxPaths ?? getCompatSandboxPaths(homeDir);
@@ -2887,7 +2887,7 @@ function createGitSetupEnv(homeDir, runOptions) {
 
 function resolveCompatShell() {
   /*
-  CDXC:GxserverUbuntu 2026-06-23-07:52:
+  CDXC:PlatformSupport 2026-06-23-07:52:
   The compat harness must exercise the same server code on macOS and Ubuntu. Keep zsh when present for mac parity, but use bash/sh on Linux sandboxes so tests do not fail before gxserver can prove platform-neutral behavior.
   */
   const candidates = (

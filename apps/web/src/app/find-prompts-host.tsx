@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearchModal 2026-08-23:
+CDXC:PromptSearch 2026-08-23:
 Search by Prompt is an app-level modal, matching Settings, rather than a mode
 that replaces the focused workspace pane. The transport remains scoped to the
 active project's machine, while result focus reuses the existing workspace

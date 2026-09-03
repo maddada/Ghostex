@@ -84,7 +84,7 @@ pub(crate) fn gpui_sidebar_command_metadata_write_from_command(
 ) -> Result<GpuiSidebarCommandMetadataWrite, String> {
     let active_project_id = active_project_id.unwrap_or_default();
     /*
-    CDXC:GlobalActions 2026-08-01-19:00:
+    CDXC:AgentLauncher 2026-08-01-19:00:
     Global and Project Action writes carry the identical payload and differ only
     in which list they land in, so they share one parser and one set of
     validation rules. Parsing them separately is how the two lists would start

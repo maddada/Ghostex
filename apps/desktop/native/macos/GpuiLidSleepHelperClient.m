@@ -21,7 +21,7 @@ static NSString *GhostexGpuiLidSleepHelperLabel(void) {
   NSString *bundleIdentifier = NSBundle.mainBundle.bundleIdentifier;
   if (bundleIdentifier.length == 0) {
     /*
-     CDXC:GPUIBundleIdentity 2026-06-28-16:18:
+     CDXC:Release 2026-06-28-16:18:
      The fallback GPUI bundle id must match the packager's stable product
      identity because the privileged lid-sleep helper label is derived from this
      value when Bundle.main lacks metadata.
@@ -115,7 +115,7 @@ static NSURL *GhostexGpuiLidSleepWriteInstallerScript(
       stringWithFormat:@"/Library/LaunchDaemons/%@.plist", helperLabel];
 
   /*
-   CDXC:GPUITitlebarKeepAwake 2026-06-26-00:09:
+   CDXC:KeepAwake 2026-06-26-00:09:
    GPUI closed-lid Keep Awake uses the same root-owned installer contract as the
    Swift app: install the staged helper, write a helper config with bundle
    id/path/designated requirement, then bootstrap the LaunchDaemon. Keep all raw
@@ -322,7 +322,7 @@ static int32_t GhostexGpuiLidSleepCallSetEnabled(BOOL enabled) {
 int32_t GhostexGpuiSetLidSleepPreventionEnabled(int32_t enabled,
                                                 int32_t installIfNeeded) {
   /*
-   CDXC:GPUITitlebarKeepAwake 2026-06-26-00:09:
+   CDXC:KeepAwake 2026-06-26-00:09:
    Only GPUI's first closed-lid enable may request administrator-approved helper
    installation. Heartbeat and disable paths use the already-installed XPC
    helper and must never invoke the installer or prompt for credentials.

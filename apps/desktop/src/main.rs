@@ -2,7 +2,7 @@
 #![recursion_limit = "256"]
 
 /*
-CDXC:GPUIBuildSchemaPayloads 2026-06-28-17:09:
+CDXC:Build 2026-06-28-17:09:
 GPUI still has schema-sized privacy-boundary serde_json::json! payloads outside the removed project-workarea proof chain. Keep the crate recursion limit high enough for those explicit payloads while runtime behavior is owned by direct gates.
 */
 mod app;
@@ -169,7 +169,7 @@ fn main() {
         terminal_environment::remove_color_disabling_from_current_process();
         terminal_environment::remove_session_identity_from_current_process();
         /*
-        CDXC:GPUIUserToolPath 2026-07-24:
+        CDXC:OsIntegration 2026-07-24:
         LaunchServices gives packaged macOS apps a system-only PATH. Normalize
         it once at the process boundary so CLI status, bundled-skill installs,
         Cua Driver checks, and other fixed local-tool actions see the same
@@ -199,7 +199,7 @@ fn main() {
     #[cfg(target_os = "linux")]
     force_gpui_x11_backend_for_windowed_cef();
     /*
-    CDXC:GPUIWindowsBringup 2026-07-25:
+    CDXC:PlatformSupport 2026-07-25:
     Windowed CEF children are normal child HWNDs. GPUI's DirectComposition
     top-level uses WS_EX_NOREDIRECTIONBITMAP, so DWM cannot composite those
     children and browser/sidebar surfaces remain black. Force GPUI's normal
@@ -246,7 +246,7 @@ fn main() {
         // dispatch through the focused window's normal action chain.
         cx.set_menus(ghostex_gpui_main_menus_for_source_focus(false));
         /*
-        CDXC:GPUISourceViewHotkeyPassthrough 2026-08-03:
+        CDXC:Hotkeys 2026-08-03:
         Do not bind Cmd+A in CEF_KEY_CONTEXT. Source must receive the original
         trusted chord so Monaco can run its editor-owned Select All command;
         Browser and other CEF surfaces keep their native AppKit selectAll:
@@ -362,10 +362,10 @@ fn main() {
         };
 
         /*
-        CDXC:GPUICefStartup 2026-06-14-13:10:
+        CDXC:CefRuntime 2026-06-14-13:10:
         CEF is mandatory for the GPUI shell, but CEF surfaces need an actual GPUI platform window before they attach native AppKit children. Create the GPUI window first, then let the CEF bridge wait for non-zero layout bounds before creating browser hosts.
 
-        CDXC:GPUICefStartup 2026-06-14-13:09:
+        CDXC:CefRuntime 2026-06-14-13:09:
         CEF startup must run after GPUI completes the first frame because initializing native Chromium children during root construction can stall the GPUI launch path without producing helper processes. Schedule CEF surface creation on the next frame, then explicitly refresh the window so the sidebar and browser elements enter the normal GPUI layout pass.
         */
         let main_window = cx
@@ -456,14 +456,14 @@ fn main() {
                         if !window.is_window_active() {
                             app.close_gpui_titlebar_popup(None, window, cx);
                             /*
-                            CDXC:GPUISidebarPointerTracking 2026-08-02:
+                            CDXC:Sidebar 2026-08-02:
                             Pointer-moved events stop arriving once the window is
                             no longer active, so the last crossing the observer saw
                             may have been an enter. Report the pointer as outside
                             and close any open sidebar context menu, the same way
                             leaving for another app closes a native menu.
 
-                            CDXC:GPUISidebarPointerTracking 2026-08-20:
+                            CDXC:Sidebar 2026-08-20:
                             Route the "outside" report through the AppKit observer
                             instead of writing the page flag here. This used to
                             call `dispatch_gpui_sidebar_pointer_inside(false)`
@@ -484,7 +484,7 @@ fn main() {
                             }
                         } else {
                             /*
-                            CDXC:GPUISidebarPointerTracking 2026-08-20:
+                            CDXC:Sidebar 2026-08-20:
                             Coming back active is the other half: the pointer can
                             already be sitting on a session row, and a pointer that
                             does not move produces no event to recompute from, so
@@ -512,7 +512,7 @@ fn main() {
             .expect("failed to open GPUI window");
         let main_window_id = main_window.window_id();
         /*
-        CDXC:GPUIWindowsMainWindowQuit 2026-08-02:
+        CDXC:PlatformSupport 2026-08-02:
         The main workspace window owns application lifetime. App-modal, toast,
         and titlebar child windows can still be registered when the user closes
         the workspace, so waiting for `cx.windows()` to become empty leaves a
@@ -552,7 +552,7 @@ pub(crate) fn linux_inherited_wayland_display() -> Option<&'static str> {
 #[cfg(target_os = "linux")]
 fn force_gpui_x11_backend_for_windowed_cef() {
     /*
-    CDXC:GPUILinuxX11Backend 2026-07-04:
+    CDXC:PlatformSupport 2026-07-04:
     Linux v1 runs the whole app as an X11 client (XWayland on Wayland
     desktops): CEF child-browser windows can only be reparented into an X11
     window, and that constraint is app-wide because the host GPUI window
@@ -651,7 +651,7 @@ fn reconcile_gpui_managed_ghostty_config() {
     let snapshot = shared_settings::shared_sidebar_settings_snapshot();
     let settings = snapshot.gpui_terminal_engine_settings();
     /*
-    CDXC:GPUITerminalRemoteTuiCopy 2026-08-06:
+    CDXC:Clipboard 2026-08-06:
     Older Ghostex managed blocks set `mouse-shift-capture = always`. When a
     full-screen application enables mouse reporting, that sends Shift-drag to
     the PTY too, leaving no gesture that can create the local selection Cmd-C

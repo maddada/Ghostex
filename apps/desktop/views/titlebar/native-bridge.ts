@@ -25,12 +25,12 @@ export function postNative(command: NativeTitlebarCommand): void {
 
 export function setTitlebarNativePointerInside(isInside: boolean): void {
   /*
-   * CDXC:ReactTitlebar 2026-06-10-23:44:
+   * CDXC:Titlebar 2026-06-10-23:44:
    * AppKit owns the effective titlebar hit boundary because the WKWebView spans
    * the window for portals. Store native pointer ownership on the body for
    * bridge state only; this flag must not own titlebar hover visibility.
    *
-   * CDXC:TooltipLifecycle 2026-06-13-02:30:
+   * CDXC:Tooltips 2026-06-13-02:30:
    * Do not use this flag as a titlebar tooltip or hover gate. AppKit can leave
    * the flag false until a titlebar click updates strip ownership, so titlebar
    * tooltips must rely on normal CSS hover and local tooltip state instead.
@@ -40,7 +40,7 @@ export function setTitlebarNativePointerInside(isInside: boolean): void {
 
 export function setTitlebarWindowFocused(isFocused: boolean): void {
   /*
-   * CDXC:ReactTitlebar 2026-06-20-17:10:
+   * CDXC:Titlebar 2026-06-20-17:10:
    * AppKit owns the key-window state for titlebar chrome. React keeps the
    * existing body dataset bridge so titlebar CSS can track active/inactive
    * windows without adding new native hit-test or routing behavior.
@@ -87,24 +87,24 @@ export function postTitlebarSidebarCommand(
   app-modal sidebarCommand bridge so the native sidebar remains the owner of
   authenticated gxserver requests and hook-status state publication.
 
-  CDXC:CliInstall 2026-06-07-15:26:
+  CDXC:Cli 2026-06-07-15:26:
   Tips & Tricks CLI notices must use the native sidebar's real PATH inspection
   instead of probing from the isolated titlebar webview.
 
-  CDXC:TipsAndTricks 2026-06-16-08:17:
+  CDXC:Onboarding 2026-06-16-08:17:
   Tips & Tricks header actions should launch Features and setup
   flow through the sidebar command bridge because the native sidebar owns app
   modal presentation.
 
-  CDXC:GhostexTutorialVideo 2026-06-18-05:31:
+  CDXC:Onboarding 2026-06-18-05:31:
   The Features action now opens the tutorial video modal through the sidebar
   command bridge, leaving the old Highlighted Features modal unused.
 
-  CDXC:TipsAndTricks 2026-06-16-19:42:
+  CDXC:Onboarding 2026-06-16-19:42:
   The Changelog header action should reuse the sidebar browser-pane command so
   the releases page opens in the current project as a new browser session.
 
-  CDXC:TitlebarGit 2026-06-16-18:41:
+  CDXC:Git 2026-06-16-18:41:
   Opening the titlebar Git menu should request fresh Git stats through the
   sidebar-owned bridge before showing the dropdown, including right-click opens.
   */
@@ -116,7 +116,7 @@ export function postTitlebarSidebarCommand(
 
 export function closeAppModalFromTitlebarNavigation(area: string): void {
   /*
-   * CDXC:SettingsDismissal 2026-06-15-14:07:
+   * CDXC:Settings 2026-06-15-14:07:
    * Titlebar mode switches and titlebar action runners should dismiss the
    * workspace-scoped Settings child window before they change workarea state or
    * run commands. Send the normal app-modal close message through the native
@@ -131,13 +131,13 @@ export function appendTitlebarActionCrashDebugLog(
   details?: unknown
 ): void {
   /**
-   * CDXC:TitlebarActions 2026-05-15-17:23:
+   * CDXC:Titlebar 2026-05-15-17:23:
    * Terminal action button crashes need a breadcrumb from the isolated React
    * titlebar before the native-sidebar command runner receives the click.
    * Persist this trace outside the normal debug-toggle filter so a repro that
    * exits the app still leaves the selected action id and project context.
    *
-   * CDXC:GxserverLogs 2026-06-15-20:39:
+   * CDXC:Diagnostics 2026-06-15-20:39:
    * actionCrashTrace is a breadcrumb namespace, not severity. Keep the first
    * titlebar hop only while the native.terminal.focus scenario is enabled so
    * routine action clicks do not persist as normal-mode crash warnings.
@@ -158,13 +158,13 @@ export function appendTitlebarModeSwitchDebugLog(
   details: Record<string, unknown> = {}
 ): void {
   /**
-   * CDXC:ModeSwitcherDiagnostics 2026-06-15-00:21:
+   * CDXC:Diagnostics 2026-06-15-00:21:
    * Agents, Source, Browser, Kanban, and Manage titlebar clicks need the same first-hop
    * timing breadcrumbs. Send only enum-like mode state, booleans, safe ids,
    * and monotonic timestamps while the native.mode.switcher scenario is enabled; never
    * include project names, paths, URLs, titles, commands, or user text.
    *
-   * CDXC:DiagnosticsSettings 2026-06-27-22:07:
+   * CDXC:Diagnostics 2026-06-27-22:07:
    * First-hop titlebar mode-switch breadcrumbs must follow the same exact
    * scenario allowlist as the native writer so Debugging Mode can show debug UI
    * without enabling routine persistent logs.
@@ -190,7 +190,7 @@ export function appendTitlebarChromeResponsivenessDebugLog(
   details: Record<string, unknown> = {}
 ): void {
   /*
-   * CDXC:ChromeResponsivenessDiagnostics 2026-06-30-23:52:
+   * CDXC:Diagnostics 2026-06-30-23:52:
    * Heavy lag and blank chrome repros need first-hop titlebar timing from the
    * isolated React titlebar. Gate routine breadcrumbs behind the targeted
    * native.chrome.responsiveness scenario and send only counts, timings,
@@ -274,7 +274,7 @@ export function runNativeKeepAwakeLidSleepPrevention(
 
 export function syncKeepAwakeRuntimeToMainTitlebar(syncState: KeepAwakeRuntimeSyncState): void {
   /*
-   * CDXC:TitlebarKeepAwake 2026-06-23-19:36:
+   * CDXC:KeepAwake 2026-06-23-19:36:
    * Keep Awake menu actions run inside a native child WKWebView. Relay the committed runtime state back to the main titlebar explicitly so the titlebar icon changes immediately instead of depending on cross-webview localStorage events.
    */
   postNative({

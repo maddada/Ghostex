@@ -46,7 +46,7 @@ const ADD_PROJECT_PROVIDER_UNAVAILABLE_HINT =
 export const ADD_PROJECT_DEFAULT_BROWSE_PATH = '~/';
 
 /*
- * CDXC:AddProjectRootBrowse 2026-08-19:
+ * CDXC:AddProject 2026-08-19:
  * Home is the default starting point, but external volumes and system folders
  * live outside it (`/Volumes` on macOS, `/mnt` and `/media` on Linux), and the
  * browser can only walk down from wherever it starts. The root entry gives that
@@ -225,7 +225,7 @@ export function addProjectEmptyStateMessage(input: AddProjectEmptyStateInput): s
 }
 
 /*
- * CDXC:AddProjectNewFolder 2026-08-18:
+ * CDXC:AddProject 2026-08-18:
  * The new-folder step reuses the dialog's single input, so the list area is
  * where the pending folder is spelled out in full. It names the parent the
  * folder lands in, because the typed name alone never shows that.

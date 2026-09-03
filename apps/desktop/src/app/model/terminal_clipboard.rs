@@ -6,16 +6,16 @@
 use crate::*;
 
 /*
-CDXC:GPUITerminalPaste 2026-06-23-09:59:
+CDXC:Clipboard 2026-06-23-09:59:
 Terminal paste may read the platform clipboard only at the command-action boundary and may forward only explicit string entries to the exact focused mounted Ghostty surface. Do not use ClipboardItem::text here because it can synthesize local file paths from external-path entries; path, image, metadata-only, and empty clipboard data must no-op without logging, persistence, or fallback text.
 
-CDXC:GPUITerminalClipboard 2026-06-23-19:07:
+CDXC:Clipboard 2026-06-23-19:07:
 Runtime clipboard drains may use the app-thread standard clipboard only after the caller has re-fetched the exact currently mounted Ghostty surface owner from the Agents or command surface map. The handoff reads through the explicit-string boundary used by Cmd+V, writes only runtime-provided text as a new string ClipboardItem, leaves selection clipboard unsupported by Ghostty runtime config, and does not log, persist, inspect, or store clipboard content beyond the closure call.
 
-CDXC:GPUICommandTerminalClipboard 2026-06-27-04:10:
+CDXC:Clipboard 2026-06-27-04:10:
 Command runtime clipboard drains need source-level regression evidence that requester identity comes from still-mounted command owners, not focused-shell fallback. Keep authorization as the intersection of a snapped owner key and the current mounted-owner map before any app-thread clipboard read or runtime-text write can run.
 
-CDXC:GPUITerminalImagePaste 2026-06-27-10:23:
+CDXC:Clipboard 2026-06-27-10:23:
 GPUI command-pane paste needs a pure normalization helper that keeps Paste previewable images disabled behavior identical to explicit-string-only paste, but when enabled converts only validated local image file references or raw clipboard image bytes into numbered Markdown links. Do not call ClipboardItem::text, do not synthesize non-image paths, and do not persist anything except saved raw image bytes under the resolved Ghostex image directory.
 */
 pub(crate) fn terminal_clipboard_paste_text(
@@ -143,7 +143,7 @@ pub(crate) fn terminal_clipboard_saved_image_markdown_text(item: &ClipboardItem)
 }
 
 /*
-CDXC:GPUITerminalRemoteImagePaste 2026-08-21:
+CDXC:Clipboard 2026-08-21:
 The remote paste route needs the clipboard image *before* it is written
 anywhere, because a remote terminal's reference has to point at a file on the
 remote machine. This extractor keeps the exact acceptance order the local

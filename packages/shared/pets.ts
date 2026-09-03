@@ -7,14 +7,14 @@ export type PetOption = {
 };
 
 /*
- * CDXC:PetControlsVisibility 2026-07-21:
+ * CDXC:StatusPet 2026-07-21:
  * Keep the pet implementation available for a possible return, but hide its
  * sidebar-menu and Settings controls while the feature is out of the product UI.
  */
 export const PET_CONTROLS_VISIBLE = false;
 
 /*
-CDXC:PetSelection 2026-05-21-10:23:
+CDXC:StatusPet 2026-05-21-10:23:
 Boo is bundled from the verified CodexPetHub pet asset and is the first-install
 default pet. Keep the pet metadata static in-app data; the package contributes
 only a spritesheet and descriptive fields, not executable behavior.

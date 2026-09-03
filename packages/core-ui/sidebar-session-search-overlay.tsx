@@ -70,16 +70,16 @@ export function SidebarSessionSearchField({
       data-empty-space-blocking='true'
     >
       {/*
-       * CDXC:SearchInputs 2026-06-04-02:59:
+       * CDXC:DesignSystem 2026-06-04-02:59:
        * Settings and Previous Sessions search fields must reuse the Mac sidebar search affordance: show the search icon on the right while empty, then replace it with an X button that clears the typed query and keeps focus in the field.
        *
-       * CDXC:SearchInputs 2026-06-04-03:11:
+       * CDXC:DesignSystem 2026-06-04-03:11:
        * Daemon search surfaces use this same field, and Escape on a focused non-empty field must clear the query the same way as the X button instead of moving focus or closing the surrounding surface.
        *
-       * CDXC:SearchInputs 2026-06-13-15:59:
+       * CDXC:DesignSystem 2026-06-13-15:59:
        * Some modal search rows own a real filter action at the right edge. Let callers replace the decorative idle Search icon with that button while preserving the shared clear-X behavior and input focus handling.
        *
-       * CDXC:SettingsSearch 2026-06-25-21:21:
+       * CDXC:Settings 2026-06-25-21:21:
        * Settings search keeps this shared query-change focus behavior only when
        * the Settings modal says no editable field already owns typing focus.
        */}
@@ -96,7 +96,7 @@ export function SidebarSessionSearchField({
           className={['group-title-input session-search-input', inputClassName].filter(Boolean).join(' ')}
           onBlur={() => {
             /**
-             * CDXC:SidebarSearch 2026-05-08-11:49
+             * CDXC:Sidebar 2026-05-08-11:49
              * In combined mode, an empty Search sessions field is only a
              * transient replacement for the Search nav button. Any focus-away
              * action should restore the button automatically, while typed

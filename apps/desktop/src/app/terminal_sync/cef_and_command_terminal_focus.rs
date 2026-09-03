@@ -20,10 +20,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITerminalClipboard 2026-06-23-19:07:
+        CDXC:Clipboard 2026-06-23-19:07:
         Command runtime clipboard handoff mirrors Agents ownership rules: only exact command mount keys from the current surface map can authorize app-thread standard clipboard access for queued owner-local Ghostty requests. Focus is never requester identity, reads stay explicit-string-only, writes forward only runtime-provided text, and stale/missing surfaces naturally keep their queued operations unreachable.
 
-        CDXC:GPUITerminalImagePaste 2026-06-27-10:28:
+        CDXC:Clipboard 2026-06-27-10:28:
         Command-pane runtime clipboard reads use the same runtime previewable-image setting and normalization as Agents terminals, keeping image Markdown parity per mounted owner without focused-surface requester fallback.
         */
         let paste_previewable_images_enabled =
@@ -282,7 +282,7 @@ impl GhostexGpuiApp {
         ) {
             Ok(sidebar) => {
                 /*
-                CDXC:GPUISidebarPointerTracking 2026-08-02:
+                CDXC:Sidebar 2026-08-02:
                 Hand the sidebar's CEF child view to the AppKit sendEvent
                 observer so pointer crossings of its frame, and mouse-downs
                 outside it, become the page's hover-suppression and
@@ -302,7 +302,7 @@ impl GhostexGpuiApp {
                 // once after CEF has had time to settle; on a second failure
                 // keep the app alive without the sidebar instead of the
                 // previous process abort
-                // (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
+                // (CDXC:CefRuntime 2026-07-11).
                 support_logs::append(
                     support_logs::GpuiSupportLog::CrashReports,
                     "gpui.cefSurface.createFailed",
@@ -342,31 +342,31 @@ impl GhostexGpuiApp {
 
     pub(crate) fn update_active_mode_cef_child_visibility(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUIProjectEditor 2026-06-22-05:49:
+        CDXC:CodeEditor 2026-06-22-05:49:
         Browser tab CEF surfaces may show only in Browser mode. Kanban, Automate, and Manage use the separate project-workarea CEF surface map and visibility gate, so Browser CEF child views must still hide under Source, Kanban, Automate, Manage, and Agents instead of sitting underneath non-browser editor panes.
 
-        CDXC:GPUIBrowserTabs 2026-06-22-06:59:
+        CDXC:Browser 2026-06-22-06:59:
         Per-tab Browser CEF entities must never visually overlap each other or other project-editor modes. Visibility is derived from Browser mode plus rendered Browser leaves' active loaded tab ids, so inactive tab views and all Browser views outside Browser mode are hidden at the native child-view boundary.
 
-        CDXC:GPUIProjectEditorLifecycle 2026-06-22-07:30:
+        CDXC:CodeEditor 2026-06-22-07:30:
         Browser project-editor sleep is shell-level for this slice: sleeping hides all Browser CEF child views but does not delete Browser tab metadata or CEF surface entities. Waking Browser mode uses the existing selected-tab sync path plus rendered-leaf visibility so existing active loaded surfaces can show again.
 
-        CDXC:GPUIBrowserDragDrop 2026-06-22-07:41:
+        CDXC:Browser 2026-06-22-07:41:
         Browser tab drags must hide native CEF child surfaces for the whole drag, not only while hovering a valid drop target. GPUI keeps the drag feedback in normal tab-strip layout, while eligible rendered Browser leaf surfaces are restored through this same visibility gate when the drag drops or is canceled.
 
-        CDXC:GPUICommandPaneDrag 2026-06-22-08:01:
+        CDXC:CommandPane 2026-06-22-08:01:
         Command-pane tab drags can run while Browser mode remains active underneath the command panel, so any active command tab drag must hide every Browser CEF child surface through the same visibility gate used by Browser tab drags. Drop and root mouse-up cancellation restore eligible rendered Browser leaf surfaces by clearing the command drag flag, without overlays, hit-test rerouting, or changing command-only drag/drop semantics.
 
-        CDXC:GPUIBrowserSplits 2026-06-22-09:55:
+        CDXC:Browser 2026-06-22-09:55:
         Browser split parity requires all rendered Browser leaves to show their own active loaded CEF surface when that surface already exists. Visibility is a set of BrowserTabIds derived from rendered leaves; this keeps Browser sleep, non-Browser modes, Browser tab drags, and command-tab drags hiding every surface while avoiding CEF creation for restored or inactive tabs that have not been materialized yet.
 
-        CDXC:GPUIBrowserLifecycle 2026-06-23-11:32:
+        CDXC:Browser 2026-06-23-11:32:
         Runtime visibility now routes through BrowserRuntimeSurfacePolicy so the hide/hold/restored-placeholder decision is centralized and reviewable. The sync loop only toggles existing tab-owned CEF entities; it never creates restored loaded tab surfaces or tears down hidden ones.
 
-        CDXC:GPUIBrowserLifecycle 2026-06-23-14:30:
+        CDXC:Browser 2026-06-23-14:30:
         Keep this loop limited to set_visible on existing Browser surfaces. Browser sleep, non-Browser mode, Browser tab drags, and command-tab drags hide-and-hold; deeper CEF suspend/teardown and restored-surface recreation remain deferred decisions, not fallback behavior in the visibility path.
 
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+        CDXC:Workarea 2026-06-24-10:12:
         The same active-mode visibility pass also hides or shows already-owned Source/Kanban/Automate/Manage runtime CEF child views. It does not create project-workarea surfaces, issue URLs, use temporary pages, use WKWebView/WebKit, or allow hidden CEF views to sit under placeholders.
         */
         let visible_tab_ids = browser_runtime_visible_surface_tab_ids(
@@ -383,7 +383,7 @@ impl GhostexGpuiApp {
         }
         self.update_project_workarea_runtime_cef_surface_visibility(cx);
         /*
-        CDXC:GPUISessionChatSurface 2026-08-19:
+        CDXC:SessionChat 2026-08-19:
         Session Chat is a CEF child view gated on exactly the same inputs as
         the Browser and project-workarea surfaces: active mode, mode
         wakefulness, companion visibility, and the tab-drag flags. Every mode

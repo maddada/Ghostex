@@ -13,7 +13,7 @@ pub(crate) struct GpuiPendingSessionChatImageSave {
 
 impl GhostexGpuiApp {
     /*
-    CDXC:GPUISessionChatImageSave 2026-09-02:
+    CDXC:SessionChat 2026-09-02:
     Chat images often exceed the app-modal bridge's one-message 1 MiB bound.
     Keep that security boundary intact and transfer the already-base64 image in
     ordered 256 KiB messages instead. The native side caps the assembled

@@ -259,7 +259,7 @@ pub(crate) async fn run_process_command(
         }
     };
     /*
-    CDXC:GPUISidebarGit 2026-07-24-17:38:
+    CDXC:Git 2026-07-24-17:38:
     Git porcelain status uses the first two columns as data, including a
     leading space for an unstaged change. Preserve stdout exactly for those
     commands so the first path is not shifted left and truncated before the
@@ -449,7 +449,7 @@ fn home_dir() -> PathBuf {
 
 pub(crate) fn normalize_path_string(path: PathBuf) -> String {
     /*
-    CDXC:GxserverProjectPaths 2026-06-22-09:35:
+    CDXC:Projects 2026-06-22-09:35:
     Typed-operation projectPath, worktreePath, setupCommandProjectPath, and Beads directory checks must match TypeScript `path.resolve` syntax normalization. Collapse `.` and `..` without canonicalizing symlinks so registered-root equality and containment stay lexical while selected paths still get filesystem validation at the operation boundary.
     */
     let path = if path.is_absolute() {

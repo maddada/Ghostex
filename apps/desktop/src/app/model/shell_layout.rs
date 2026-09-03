@@ -48,7 +48,7 @@ impl GpuiShellLayoutState {
         command_default_height_px: f32,
     ) -> Self {
         /*
-        CDXC:GPUIWorkspaceTabsParity 2026-07-05:
+        CDXC:CommandPane 2026-07-05:
         Production GPUI Agents tabs are reconciled from the sidebar's live
         active-project session group. Start empty so gxserver-connected runs
         never expose the old demo "first slice" sessions before the sidebar
@@ -127,25 +127,25 @@ impl GpuiShellLayoutState {
         command_default_height_px: f32,
     ) -> Option<Self> {
         /*
-        CDXC:GPUIWorkspacePersistence 2026-06-22-06:29:
+        CDXC:Workarea 2026-06-22-06:29:
         GPUI layout persistence is scoped to placeholder shell state only: titlebar mode, tab/split ids, active selections, focus/Focus mode, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, command pane mode/height/tree, Browser tab shell ids with sanitized URLs, project-editor companion sizing, project-editor awake/sleeping recency state, and the single `petOverlayActivitiesVisible` boolean. Do not persist pet activity payloads, titles, paths, raw settings JSON, terminal content, command text, stdout/stderr, user paths, project paths, tokens, cookies, secrets, raw page titles, favicon URLs, raw browser query strings, or private user content.
 
-        CDXC:GPUIWorkspacePersistence 2026-06-22-06:29:
+        CDXC:Workarea 2026-06-22-06:29:
         Restoring corrupted or absent GPUI shell state should use the current placeholder defaults because the persisted file is optional app state. This fallback is limited to invalid state-file input and should not mask runtime errors in live layout mutation code.
 
-        CDXC:GPUIWorkspacePersistence 2026-06-22-07:54:
+        CDXC:Workarea 2026-06-22-07:54:
         Command-pane focus restoration persists only the previous non-command focus enum and stable pane/mode id, sharing the same validation path as shellFocus so stale panes, hidden companions, and inactive project-editor modes fall back to the current mode's default surface.
 
-        CDXC:GPUIProjectSidebarBridge 2026-07-04-01:00:
+        CDXC:CefRuntime 2026-07-04-01:00:
         Restored active mode coercion uses caller-supplied project-context availability, preferring the live sidebar project snapshot when one has been accepted. Docs/Manage titlebar selection is not hidden behind the debuggingMode/showBetaFeatures gate; projectless contexts still coerce project-scoped modes back to Agents.
 
-        CDXC:GPUIBrowserProfiles 2026-06-23-11:14:
+        CDXC:Browser 2026-06-23-11:14:
         Restored GPUI Browser profile state is limited to generated numeric profile ids plus the active id. Browser tabs restore their validated numeric profile id independently, falling back to the active generated profile only for older shell state, without persisting profile names, local profile directories, cookies, credentials, history, page titles, query strings, fragments, command text, or user browser data.
 
-        CDXC:GPUIWorkspaceStateMigration 2026-06-23-13:04:
+        CDXC:Workarea 2026-06-23-13:04:
         Phase 10 cleanup must migrate the original unversioned GPUI shell-state shape instead of dropping safe user layout state. Accept only that known layout object shape, keep Browser profiles defaulted when the old file has no profile block, and continue rejecting unknown future versions so migration cannot become fallback parsing for arbitrary or private data.
 
-        CDXC:GPUIWorkspaceStateMigration 2026-06-23-13:11:
+        CDXC:Workarea 2026-06-23-13:11:
         Current-version shell state must match the current writer-owned schema instead of partially defaulting missing or malformed sections. The optional state-file fallback still happens at `load_or_default`, but v1 restore itself now fails closed unless the explicit legacy migration path applies.
         */
         let restore_version = gpui_workspace_shell_state_restore_version(object)?;
@@ -169,7 +169,7 @@ impl GpuiShellLayoutState {
             .get("agentsWorkspace")
             .and_then(workspace_model_from_shell_state)?;
         /*
-        CDXC:GPUIWorkspaceSessionReattach 2026-07-10:
+        CDXC:Workarea 2026-07-10:
         The macOS workspace persists each canonical gxserver session identity
         with its local pane-layout record. GPUI must restore the equivalent
         bounded P/G-to-shell mapping before the first sidebar hydrate; otherwise
@@ -193,7 +193,7 @@ impl GpuiShellLayoutState {
             .map(str::to_string)
             .or_else(|| sole_local_workspace_mapping_project_id(&local_workspace_session_mappings));
         /*
-        CDXC:GPUIRemoteWorkspaceSessionReattach 2026-08-06:
+        CDXC:RemoteMachines 2026-08-06:
         Remote Agents tabs persist the same canonical tab-to-shell identity as
         local tabs, additionally bounded by the saved-machine id. This contains
         no SSH target, path, title, command, token, or terminal content. Files
@@ -210,7 +210,7 @@ impl GpuiShellLayoutState {
             None => HashMap::new(),
         };
         /*
-        CDXC:GPUISessionChatViewPersistence 2026-07-31:
+        CDXC:SessionChat 2026-07-31:
         The last-used surface (terminal vs chat) per Agents session survives
         app restarts. Optional writer-owned schema growth (files written before
         this slice still restore); ids are validated against the restored
@@ -261,7 +261,7 @@ impl GpuiShellLayoutState {
             command_default_height_px,
         )?;
         /*
-        CDXC:GPUICommandPanePerProject 2026-07-10:
+        CDXC:CommandPane 2026-07-10:
         Per-project command-pane fields are optional writer-owned schema growth
         so files written before this slice still restore. `commandPane` stays
         the live panel for `commandPaneProjectId`; `commandPanesByProject`
@@ -382,7 +382,7 @@ impl GpuiShellLayoutState {
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
         /*
-        CDXC:GPUIProjectViewMemory 2026-08-07:
+        CDXC:Navigation 2026-08-07:
         Same key gate as the parked workspaces: accept a plain local project id
         or a machine-scoped remote key, and drop anything else so a malformed
         entry cannot resurrect a view for a project this app cannot address.

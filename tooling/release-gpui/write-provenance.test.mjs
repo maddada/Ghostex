@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * The per-product provenance writer is the contract between every build job and
  * the publisher, so these tests pin the shape it produces and, more importantly,
  * every case where it must refuse: a manifest whose bytes moved, a product the

@@ -13,7 +13,7 @@ const gxserverRoot = path.dirname(scriptPath);
 const repoRoot = path.resolve(gxserverRoot, '..');
 
 /*
- * CDXC:RemoteMinimalDeps 2026-07-13:
+ * CDXC:RemotePairing 2026-07-13:
  * Remote hosts must not need a specific glibc/libstdc++ floor, so the Rust
  * binaries (gxserver, ghostex) build against musl and link
  * statically, matching the already-static zmx (Zig musl).
@@ -71,7 +71,7 @@ async function main() {
   }
 
   /*
-   * CDXC:RemoteUbuntuPackaging 2026-06-29-18:58:
+   * CDXC:RemotePairing 2026-06-29-18:58:
    * Ubuntu remote installs need x64 and arm64 server packages from the same packaging entry point. Keep the default host-arch build for existing single-arch CI, and add explicit --arch all so release builders can produce both deterministic build/remote-gxserver-linux/<arch>/package outputs before macOS and GPUI staging.
    */
   for (const arch of arches) {
@@ -137,18 +137,18 @@ async function buildLinuxPackageForArch({ arch, options }) {
      * can upload it over SSH and start the same Rust control plane without PATH
      * fallbacks.
      *
-     * CDXC:RemoteUbuntuPackaging 2026-06-29-19:45:
+     * CDXC:RemotePairing 2026-06-29-19:45:
      * Release automation must reject stale prebuilt Linux packages. Record the
      * source git revision and dirty-state in build-identity.json so macOS
      * releases can prove x64 and arm64 Ubuntu payloads were built from the
      * commit being released before staging them into the app bundle.
      *
-     * CDXC:RemoteUbuntuTui 2026-08-23:
+     * CDXC:RemotePairing 2026-08-23:
      * The vendored ghostex-tui terminal app was removed from the repository, so
      * the remote package no longer builds or stages `bin/ghostex-tui`. A herdr
      * plugin replaces it (spec in docs/2026-08-23/tui2-herdr-plugin/).
      *
-     * CDXC:ZmxGridVisibility 2026-09-03:
+     * CDXC:Zmx 2026-09-03:
      * zmx is a submodule, so a zmx-only change (wire tags, grid policy) leaves
      * the superproject HEAD untouched until the gitlink bump lands. Record the
      * submodule's own revision and dirty state too so the Linux freshness check
@@ -211,7 +211,7 @@ async function buildPackage({ config, outputDir, workRoot }) {
 
   const { ghostexBin, gxserverBin } = await buildGxserver(config);
   /*
-   * CDXC:AgentHistorySearch 2026-08-20:
+   * CDXC:PromptSearch 2026-08-20:
    * zehn used to be built here with its own pinned Zig 0.16 toolchain. It is now
    * a Rust crate inside gxserver, so the Linux remote package needs exactly one
    * Zig toolchain. Since the zmx fork was re-ported onto upstream/main, that one
@@ -230,7 +230,7 @@ async function buildPackage({ config, outputDir, workRoot }) {
   await copyExecutable(zmxBin, path.join(binsDir, 'zmx'), 'zmx');
 
   /*
-   * CDXC:RemoteMinimalDeps 2026-07-13:
+   * CDXC:RemotePairing 2026-07-13:
    * The remote package used to ship portless, an npm-style package.json
    * manifest, dist/protocol JS/type exports, and the Node ghostex CLI under
    * CLI/. Portless is a macOS launchd-only feature the Linux daemon never
@@ -249,7 +249,7 @@ async function buildPackage({ config, outputDir, workRoot }) {
 }
 
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 The marketing version server/build.rs bakes into the binary. The gxserver crate's
 own Cargo version is the placeholder 0.1.0 and has never tracked releases, so
 without this every remote package would report the same `server_version` forever.
@@ -312,7 +312,7 @@ async function validateLinuxPackage(packageDir, config) {
   }
 
   /*
-   * CDXC:LinuxRuntimePackaging 2026-07-18:
+   * CDXC:PlatformSupport 2026-07-18:
    * gxserver-generated managed attach commands require zmx's
    * --require-existing contract. Reject a mixed package at build time instead
    * of letting an older zmx parse the flag as a session name and make Android

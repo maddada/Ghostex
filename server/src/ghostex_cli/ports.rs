@@ -11,7 +11,7 @@ use crate::ghostex_cli::{
 use crate::portless::listener_discovery::{read_all_tcp_listeners, TcpListenerDetail};
 
 /*
-CDXC:GhostexPorts 2026-09-02:
+CDXC:Resources 2026-09-02:
 The mobile Web preview picker runs `ghostex ports --json` over SSH and forwards
 the port the user taps, so this verb lists every listening TCP socket on the
 machine, not only the ones a Ghostex session started. It reads the same

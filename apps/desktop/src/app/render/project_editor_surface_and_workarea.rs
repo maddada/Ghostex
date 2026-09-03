@@ -61,7 +61,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+        CDXC:Workarea 2026-06-24-10:12:
         Real Source, Kanban, Automate, and Manage CEF panes render as normal-layout GPUI children only after the app-owned slot already has a CefSurface and the corresponding gate permits placeholder replacement. Focus uses the existing project-editor surface path; no overlay, hidden child view, hit-test routing, WKWebView/WebKit path, temporary page, or fallback URL is involved.
         */
         let mode = slot_key.titlebar_mode();
@@ -180,25 +180,25 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUISourceWorkarea 2026-06-23-12:16:
+        CDXC:CodeEditor 2026-06-23-12:16:
         Source has its own render dispatch instead of sharing the generic Kanban/Automate/Manage placeholder branch. Source must not synthesize readiness from project paths, URLs, localhost values, or native constants.
 
-        CDXC:GPUISourceWorkarea 2026-06-23-12:25:
+        CDXC:CodeEditor 2026-06-23-12:25:
         The normal sidebar project payload can provide sourceWorkareaId, but missing or malformed Source identity remains a placeholder-only block. Do not recover by inventing Source ids or readiness from paths, titles, fixture names, group ids, filesystem probes, URLs, or localhost constants.
 
-        CDXC:GPUISourceWorkarea 2026-06-23-14:41:
+        CDXC:CodeEditor 2026-06-23-14:41:
         Loading and load-failed Source code-server states may alter only the static placeholder title/message. Runtime states still cannot create fallback URLs, logs, overlays, or private shell-state fields from the render path.
 
-        CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
+        CDXC:Workarea 2026-06-29-00:02:
         Source readiness messages no longer make the runtime available. Only the app-owned code-server state for the current explicit project target can drive loading/error placeholder copy, and only a direct runtime URL plus owned CEF surface can replace the placeholder.
 
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+        CDXC:Workarea 2026-06-24-10:12:
         Source now checks the permanent app-owned CEF surface map first. When a real Source runtime URL has already produced an owned CefSurface and the gate permits replacement, render returns that normal-layout CEF child; otherwise the placeholder remains because real URL/process/surface authority is still absent.
 
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-28-17:09:
+        CDXC:Workarea 2026-06-28-17:09:
         Source render no longer constructs source-proof CEF/code-server objects. The placeholder changes only when the direct runtime URL gate plus an owned normal-layout CefSurface already exist for the current explicit project.
 
-        CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
+        CDXC:Workarea 2026-06-29-00:02:
         Source placeholder loading/error copy now comes only from the app-owned code-server runtime target for the current sidebar snapshot. Legacy Source readiness messages are compatibility no-ops and cannot make Source ready or failed.
         */
         let slot_key = ProjectWorkareaCefSurfaceSlotKey::Source;
@@ -214,13 +214,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+        CDXC:Workarea 2026-06-24-10:12:
         Kanban now checks the permanent app-owned CEF surface map first. When a real Kanban runtime URL has already produced an owned CefSurface and the gate permits replacement, render returns that normal-layout CEF child; otherwise the placeholder remains because real navigable URL authority is absent.
 
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-28-17:09:
+        CDXC:Workarea 2026-06-28-17:09:
         Kanban render no longer builds source-proof CEF mount objects. The placeholder changes only when the direct bundled runtime URL gate plus an owned normal-layout CefSurface already exist for the current explicit project.
 
-        CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
+        CDXC:Workarea 2026-06-29-00:02:
         Kanban has no readiness store in the render path. If the direct URL/owned-CEF gate cannot produce a surface, render the static Kanban placeholder and let the active awake runtime edge try creation.
         */
         let slot_key = ProjectWorkareaCefSurfaceSlotKey::Kanban;
@@ -237,7 +237,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIAutomateWorkarea 2026-07-04-23:18:
+        CDXC:Automations 2026-07-04-23:18:
         Automate uses the bundled Kanban/tasks page as a first-party CEF workarea with `surface=automations`, matching macOS. It may replace the placeholder only through the same direct runtime URL plus owned CEF surface gate as Kanban; Quick/projectless contexts and missing Automate identity stay on the static placeholder.
         */
         let slot_key = ProjectWorkareaCefSurfaceSlotKey::Automate;
@@ -254,13 +254,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+        CDXC:Workarea 2026-06-24-10:12:
         Manage now checks the permanent app-owned CEF surface map first. When a real Manage runtime URL has already produced an owned CefSurface and the CEF/file-bridge gate permits replacement, render returns that normal-layout CEF child; otherwise the placeholder remains because real navigable URL and file-bridge authority are absent.
 
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-28-17:09:
+        CDXC:Workarea 2026-06-28-17:09:
         Manage render no longer builds source-proof CEF/file-bridge mount objects. The placeholder changes only when the direct bundled runtime URL gate plus an owned normal-layout CefSurface already exist; file operations remain owned by the separate sanitized Manage bridge path.
 
-        CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
+        CDXC:Workarea 2026-06-29-00:02:
         Manage has no readiness/file-proof store in the render path. If the direct URL/owned-CEF gate cannot produce a surface, render the static Manage placeholder while first-party file requests remain handled by the project-workarea CEF bridge.
         */
         let slot_key = ProjectWorkareaCefSurfaceSlotKey::Manage;

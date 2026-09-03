@@ -61,9 +61,9 @@ export function HotkeysSettingsTab({
   const hotkeySectionFrameRef = useRef<number | undefined>(undefined);
   /**
    * CDXC:Hotkeys 2026-05-13-16:05
-   * Superseded by CDXC:SettingsNavigation 2026-06-24-22:16.
+   * Superseded by CDXC:Settings 2026-06-24-22:16.
    *
-   * CDXC:SettingsNavigation 2026-06-24-22:16:
+   * CDXC:Settings 2026-06-24-22:16:
    * Hotkey section refs and search results are owned by SettingsModal so the
    * shared sidebar can expand Hotkeys and jump into its internal sections.
    * The same top search query filters General and Hotkeys instead of keeping a
@@ -98,7 +98,7 @@ export function HotkeysSettingsTab({
 
   const scheduleHotkeySectionMeasurement = (viewport: HTMLElement) => {
     /*
-     * CDXC:SettingsPerformance 2026-06-29-00:40:
+     * CDXC:Settings 2026-06-29-00:40:
      * Hotkeys uses the same active-section measurement as General Settings.
      * Keep scroll handlers cheap by measuring section rects once per animation
      * frame instead of on every scroll event.

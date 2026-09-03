@@ -12,7 +12,7 @@ const repoRoot = path.resolve(webRoot, '..', '..');
 const monacoVsSource = path.join(repoRoot, 'node_modules', 'monaco-editor', 'min', 'vs');
 
 /*
- * CDXC:SessionChatMonaco 2026-08-01:
+ * CDXC:PromptEditor 2026-08-01:
  * The session-chat composer loads Monaco at runtime via the AMD loader from
  * /monaco/vs (no ESM import anywhere in the repo). Serve min/vs straight
  * from node_modules in dev and copy it into dist for production, instead of

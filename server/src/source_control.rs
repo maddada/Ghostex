@@ -10,7 +10,7 @@ use tokio::{process::Command, time::timeout};
 use crate::repository_clone::canonical_repository_lookup_url;
 
 /*
-CDXC:AddProjectDialog 2026-07-30:
+CDXC:AddProject 2026-07-30:
 The Add Project dialog offers "clone from GitHub / GitLab" rows, and whether
 those rows are usable is a property of the MACHINE the project would land on,
 not of the client. gxserver therefore owns provider discovery and repository
@@ -529,7 +529,7 @@ fn normalize_repository_input(
         ));
     }
     /*
-    CDXC:AddProjectCloneInput 2026-08-03:
+    CDXC:AddProject 2026-08-03:
     The GitHub source accepts the same paste formats as Clone Repository. Parse
     commands, shorthand, browser URLs, HTTPS URLs, and SSH URLs into one clone
     URL before handing the positional repository argument to `gh repo view`.

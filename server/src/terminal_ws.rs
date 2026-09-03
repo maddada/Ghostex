@@ -383,7 +383,7 @@ fn write_pty(mut writer: Box<dyn Write + Send>, mut input_rx: mpsc::Receiver<Vec
 }
 
 /*
-CDXC:TerminalWsVisibility 2026-09-03:
+CDXC:Zmx 2026-09-03:
 Web clients keep a session's xterm mounted (socket open) while it is parked
 behind another tab or under the chat view, so a plain detach never happens
 and the hidden client would keep clamping the shared zmx grid to its own

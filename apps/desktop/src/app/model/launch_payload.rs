@@ -86,10 +86,10 @@ impl AgentsTerminalStartupLaunchPayloadSource {
         terminal_ghostty_surface::GhosttySurfaceConfigRequestError,
     > {
         /*
-        CDXC:GPUITerminalStartupLaunchPayloadSource 2026-06-23-04:00:
+        CDXC:Terminal 2026-06-23-04:00:
         GPUI startup launch payloads may enter only through this exact runtime/session/startup-slot key and must be validated before a startup config request receives a Ghostty launch payload; terminal titles, status labels, project names, workspace paths, sidebar labels, delayed-send flags, and fallback project detection are never parsed into launch values.
 
-        CDXC:GPUIRemoteAttach 2026-06-24-19:06:
+        CDXC:RemoteMachines 2026-06-24-19:06:
         Remote attach is now a production explicit launch source, but the payload is inserted by Rust after resolving a saved remote machine and gxserver attach metadata. The source map remains process-local and must not persist or derive commands from renderer text, project/session titles, paths, tokens, stdout/stderr, or terminal content.
         */
         self.explicit_payloads_by_startup_key
@@ -122,7 +122,7 @@ impl AgentsTerminalStartupLaunchPayloadSource {
         completion_intent: AgentsTerminalStartupCompletionIntent,
     ) {
         /*
-        CDXC:GPUITerminalStartupRuntimeFailure 2026-06-23-04:46:
+        CDXC:Terminal 2026-06-23-04:46:
         Failed or stale startup completion must retire exact explicit launch payload data on every platform. The real metadata producer is macOS-only today, but the shared Failed-result boundary must not leave cwd, command, env, or initial-input payloads in runtime memory after the matching startup intent is complete.
         */
         self.explicit_payloads_by_startup_key.remove(
@@ -185,7 +185,7 @@ impl AgentsTerminalLaunchPayloadSource {
         payload: AgentsTerminalExplicitLaunchPayload,
     ) {
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-27-13:25:
+        CDXC:FocusRouting 2026-06-27-13:25:
         Sidebar-attached local gxserver sessions start awake like macOS by feeding the daemon-built attach command directly to the exact Running Agents mount slot. Store it only under the process-local runtime id plus body slot, consume it once during Ghostty config, and never derive launch data from titles, paths, renderer labels, logs, terminal content, or fallback focus.
         */
         self.explicit_payloads_by_agents_key.insert(
@@ -264,7 +264,7 @@ pub(crate) struct ProjectEditorCompanionTerminalLaunchPayloadSourceKey {
 }
 
 /*
-CDXC:GPUIProjectEditorCompanionAttach 2026-07-06:
+CDXC:CodeEditor 2026-07-06:
 The project-editor companion pane displays an existing zmx-backed workspace
 session by attaching its own zmx client, mirroring how mobile clients mirror a
 session; it must never mount a default shell for a slot without a daemon-built
@@ -406,7 +406,7 @@ impl CommandTerminalLaunchPayloadSource {
         payload: CommandTerminalExplicitLaunchPayload,
     ) {
         /*
-        CDXC:GPUITitlebarActions 2026-06-24-14:24:
+        CDXC:Titlebar 2026-06-24-14:24:
         Titlebar terminal Actions are allowed to feed command text only through the command-terminal launch-payload boundary for the exact command-pane mount slot they create. Keep the payload process-local and keyed by command runtime identity plus body slot; do not persist it, log it, infer it from labels/paths, or run it from the titlebar handler.
         */
         self.explicit_payloads_by_command_key.insert(
@@ -423,10 +423,10 @@ impl CommandTerminalLaunchPayloadSource {
         terminal_ghostty_surface::GhosttySurfaceConfigRequestError,
     > {
         /*
-        CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:59:
+        CDXC:Terminal 2026-06-27-04:59:
         Command terminal launch data now has explicit current producers for titlebar/command-palette terminal Actions and plain command-terminal project cwd. Payloads remain exact-slot, one-shot, process-local startup inputs keyed by command runtime identity plus body slot; never parse or infer launch cwd, command, env, initial input, or wait policy from shell state, command titles, project names, display paths, logs, stdout/stderr, terminal content, delayed-send state, fallbacks, or helper detection.
 
-        CDXC:GPUICommandTerminalLaunchPayloadSource 2026-06-27-04:47:
+        CDXC:Terminal 2026-06-27-04:47:
         Explicit command launch payloads are one-shot startup inputs. Remove the exact slot/runtime key before conversion so Action/plain command startup payloads cannot be reattached by a later remount; invalid payloads are also consumed and pruned without fallback.
         */
         self.explicit_payloads_by_command_key
@@ -518,7 +518,7 @@ impl AgentsTerminalCloseConfirmState {
         >,
     ) -> bool {
         /*
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-05:39:
+        CDXC:CommandPane 2026-06-23-05:39:
         Mounted Running Agents close-confirm state is runtime-only and keyed by the exact current body mount slot plus process-local surface owner identity. Confirmation-needed callbacks move into this map once, while stale, inactive, mismatched, startup, command, shell JSON, launch payload, log, path, command text, stdout/stderr, tty, pid, token, and terminal content data stay out of the boundary. Final-root confirmations are allowed because macOS-style close can leave an empty workspace pane after the user confirms.
         */
         let mut changed = self.prune_stale(workspace, runtime_sessions, running_surface_owners);
@@ -557,7 +557,7 @@ impl AgentsTerminalCloseConfirmState {
             return false;
         };
         /*
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+        CDXC:CommandPane 2026-06-23-20:04:
         Confirming an Agents close now follows upstream Ghostty's source contract: after an exact pending/current/runtime/surface match and a true `needs_confirm_quit` query, remove only that shell tab through `WorkspaceModel::close_tab` and clear only the matching prompt. Do not request another close, synthesize callbacks, touch startup/command state, or use fallback broad removal.
         */
         let Some(current) = pending_agents_terminal_close_confirm_for_slot(
@@ -688,7 +688,7 @@ impl CommandTerminalCloseConfirmState {
         >,
     ) -> bool {
         /*
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-05:39:
+        CDXC:CommandPane 2026-06-23-05:39:
         Mounted command close-confirm state is command-pane-only runtime state keyed by the command body mount slot and its transient surface owner identity. It must never touch Agents workspace maps, Agents runtime sessions, startup maps, shell JSON, launch payloads, logs, command text, paths, env, stdout/stderr, tty, pid, tokens, or terminal content.
         */
         let mut changed = self.prune_stale(command_pane, command_surface_owners);
@@ -725,7 +725,7 @@ impl CommandTerminalCloseConfirmState {
             return false;
         };
         /*
-        CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+        CDXC:CommandPane 2026-06-23-20:04:
         Confirming a command close validates the exact pending command slot, transient runtime identity, mounted surface owner, and `needs_confirm_quit` boolean before closing through `CommandPaneModel::close_session`. The command prompt clear is local to that slot and never routes through Agents/startup state or runtime callback synthesis.
         */
         let Some(current) = pending_command_terminal_close_confirm_for_slot(

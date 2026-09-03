@@ -5,7 +5,7 @@ import type { OpenSidebarSpaceEditorModalDetail } from './action-events';
 import type { WebSidebarRuntime } from '../sidebar-runtime/sidebar-runtime';
 
 /*
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * The web half of the New/Edit Space dialog. The shared sidebar opens it through
  * the app-modal bridge exactly as it does in the desktop app; the web shim turns
  * that into the window event this host listens for.

@@ -31,7 +31,7 @@ export type BeadConversationLink = {
   sessionPersistenceName?: string;
   sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
   /**
-   * CDXC:ProjectBoardBeads 2026-08-07:
+   * CDXC:ProjectBoard 2026-08-07:
    * The project the Ghostex session belongs to, which is not always the
    * project row storing the link: a bead can be worked from a sibling project
    * while its card lives here. Recorded explicitly on new links so resolving
@@ -45,14 +45,14 @@ export type BeadConversationLink = {
 export type ProjectBoardAgentOption = {
   agentId: string;
   /**
-   * CDXC:PromptAgents 2026-05-29-10:53:
+   * CDXC:AgentLauncher 2026-05-29-10:53:
    * Project-board title generation runs through the board bridge, so the
    * board state must carry the configured prompt-agent command as well as the id.
    *
-   * CDXC:PromptAgents 2026-06-01-12:23:
+   * CDXC:AgentLauncher 2026-06-01-12:23:
    * The command carried here is the gxserver launch-plan command, not the raw stored command, so Accept All policy is still resolved in gxserver before the board bridge starts title generation.
    *
-   * CDXC:PromptAgents 2026-06-02-15:18:
+   * CDXC:AgentLauncher 2026-06-02-15:18:
    * Shared conversation-link types must not describe Beads execution as native-owned. The board bridge carries UI request data; gxserver owns Beads command construction and execution.
    */
   command?: string;
@@ -70,7 +70,7 @@ export type ProjectBoardConversationLinkView = BeadConversationLink & {
   isFocused?: boolean;
   isLive?: boolean;
   /**
-   * CDXC:ProjectBoardBeads 2026-08-07:
+   * CDXC:ProjectBoard 2026-08-07:
    * The Ghostex session row is gone from restorable history, but the agent
    * conversation it worked can still be resumed from the row's own agent
    * identity, so the card offers Resume instead of a dead affordance.
@@ -211,7 +211,7 @@ export function createBeadConversationLinkId(projectId: string, beadId: string, 
 }
 
 /*
- * CDXC:ProjectBoardBeads 2026-08-07:
+ * CDXC:ProjectBoard 2026-08-07:
  * Beads rewrites every issue id when a board's issue prefix is reconciled
  * (zmux-95421485 becomes ghostex-95421485), but a persisted link keeps the id
  * it was written with. Matching links to a bead by the trailing issue id keeps
@@ -249,7 +249,7 @@ export function selectBeadConversationLinks<TLink>(index: ReadonlyMap<string, TL
 }
 
 /*
- * CDXC:ProjectBoardBeads 2026-08-07:
+ * CDXC:ProjectBoard 2026-08-07:
  * One Beads board can be mounted by several project rows — a checkout and its
  * worktree, or the same folder registered twice — and every row keeps its own
  * beadConversationLinks. Links are read across the rows that share a board so
@@ -300,7 +300,7 @@ export function selectBeadConversationLinkStoreProjects<TProject extends BeadCon
 }
 
 /*
- * CDXC:ProjectBoardBeads 2026-08-07:
+ * CDXC:ProjectBoard 2026-08-07:
  * gxserver names a zmx session "{serverId}-{projectId}-{sessionId}", which is
  * the only record older links carry of the project their session belongs to.
  * Links written from now on store that project explicitly; this parser keeps

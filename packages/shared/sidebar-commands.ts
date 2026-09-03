@@ -22,7 +22,7 @@ export const DEFAULT_SIDEBAR_COMMANDS = [
 export const DEFAULT_BROWSER_ACTION_URL = 'http://localhost:5173';
 export const DEFAULT_BROWSER_LAUNCH_URL = 'https://www.google.com';
 /**
- * CDXC:RemoteSetup 2026-09-03:
+ * CDXC:RemotePairing 2026-09-03:
  * The Android build ships as an APK on the latest GitHub release, so every
  * surface that offers it (first-launch setup, the Remote Setup modal's install
  * popover and its QR) points at GitHub's latest-release redirect and never at
@@ -34,7 +34,7 @@ export const GHOSTEX_ANDROID_APK_URL =
 export const GHOSTEX_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
 
 /**
- * CDXC:ProjectActions 2026-05-19-17:10:
+ * CDXC:Projects 2026-05-19-17:10:
  * Default terminal actions ship without a configured command. Surfaces that show
  * the runnable target use this label until the user saves a command.
  */
@@ -54,7 +54,7 @@ export function getSidebarCommandPreviewLabel(command: SidebarCommandButton): st
 export type DefaultSidebarCommandId = (typeof DEFAULT_SIDEBAR_COMMANDS)[number]['commandId'];
 export type SidebarActionType = 'browser' | 'terminal';
 /**
- * CDXC:GlobalActions 2026-08-07:
+ * CDXC:AgentLauncher 2026-08-07:
  * Which Actions list a run-by-id selector names. Global and project Actions are
  * separate id spaces, so a selector carrying only an id is ambiguous once a
  * surface can run either. Absent means project, which keeps every sender that
@@ -65,7 +65,7 @@ export type SidebarCommandRunMode = 'default' | 'debug';
 export type SidebarCommandLinkTarget = 'integrated' | 'external';
 
 /**
- * CDXC:ProjectActions 2026-07-31-12:00:
+ * CDXC:Projects 2026-07-31-12:00:
  * Terminal actions can open saved links alongside running their command, so a
  * dev-server action can start the server and surface its localhost URL in one
  * click. Each link picks the integrated browser pane or the system browser.
@@ -95,7 +95,7 @@ export type StoredSidebarCommand = {
   commandId: string;
   icon?: SidebarCommandIcon;
   /**
-   * CDXC:ProjectActions 2026-06-17-07:40:
+   * CDXC:Projects 2026-06-17-07:40:
    * Legacy storage may still contain per-action icon colors from older Mac app
    * builds. Keep this input field decodable, but normalization strips it so
    * titlebar Action buttons cannot persist or render custom icon colors.
@@ -106,7 +106,7 @@ export type StoredSidebarCommand = {
   name: string;
   playCompletionSound: boolean;
   /**
-   * CDXC:ProjectActions 2026-08-01:
+   * CDXC:Projects 2026-08-01:
    * Actions flagged showOnProjectRow render as inline icon buttons on their
    * project's sidebar row beside the built-in header actions. Older saved
    * records lack the field; normalization defaults it to false so existing
@@ -191,7 +191,7 @@ export function createSidebarCommandButtons(
 }
 
 /**
- * CDXC:GlobalActions 2026-08-01:
+ * CDXC:AgentLauncher 2026-08-01:
  * Global Actions have no built-in members — dev/build/test/setup are
  * project-scoped — so the stored rows are the entire list. That removes the
  * whole default-resurrection and tombstone branch that project actions need,
@@ -218,7 +218,7 @@ export function normalizeStoredSidebarCommands(candidate: unknown): StoredSideba
   }
 
   /**
-   * CDXC:ProjectActions 2026-06-17-07:40:
+   * CDXC:Projects 2026-06-17-07:40:
    * Mac app updates must not drop existing titlebar Actions because older saved
    * records still carry the removed per-action icon color field or lack newer
    * optional fields. Treat iconColor as legacy input only, infer browser

@@ -77,13 +77,13 @@ export function WorktreeDeleteModal({
   }, [draft.canDeleteLocalBranch, draft.remoteBranchExists]);
 
   /*
-   * CDXC:WorktreeDelete 2026-06-02-13:41:
+   * CDXC:Worktrees 2026-06-02-13:41:
    * Delete Worktree must be a full-window confirmation modal. Dirty worktrees
    * show the gxserver-provided Git status summary and offer Commit, which
    * switches to the existing commit review modal; clean worktrees show a green
    * checkmark instead of an empty status block.
    *
-   * CDXC:WorktreeDelete 2026-06-10-22:56:
+   * CDXC:Worktrees 2026-06-10-22:56:
    * Branch deletion is an explicit opt-in after checkout removal. Keep local
    * and origin-branch checkboxes unchecked by default, disabled when native did
    * not verify the target branch, and include selected branch cleanup in the
@@ -218,7 +218,7 @@ export function WorktreeDeleteModal({
 
 function getSidebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
   /**
-   * CDXC:SidebarTheme 2026-06-15-01:43:
+   * CDXC:Theming 2026-06-15-01:43:
    * Worktree delete confirmation is part of the app-modal family, so Light
    * removes the dark class while Dark 1 and Dark 2 keep dark shadcn mode.
    */

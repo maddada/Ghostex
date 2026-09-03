@@ -128,7 +128,7 @@ pub(crate) fn normalize_terminal_title(title: Option<&str>) -> Option<String> {
 
 pub(crate) fn is_leading_terminal_title_status_marker(ch: char) -> bool {
     /*
-    CDXC:GxserverSessionTitles 2026-06-29-01:21:
+    CDXC:SessionTitles 2026-06-29-01:21:
     Factory Droid terminal titles can prefix visible session names with the U+26EC status marker.
     Presentation must strip the marker for existing stored rows too, because sidebar copy/details reads displayTitle before the raw durable title.
     */

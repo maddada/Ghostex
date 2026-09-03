@@ -8,7 +8,7 @@ use crate::ghostex_cli::rpc::{ghostex_home, project_id_from_global_ref, CliError
 use crate::ghostex_cli::{actions, selector, sessions};
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI session lifecycle + polling commands
 (scripts/ghostex-cli.mjs lines 5570-5879): kill/sleep/wake (sessionActionCommand),
 fork-session, focus, read-text, wait-for-text, and send-message. wait-for-text is
@@ -143,7 +143,7 @@ pub fn focus_smart_session_command(args: &[String]) -> CliResult<()> {
     let flags = parsed.flags;
     let list = sessions::fetch_session_list(&flags, false)?;
     /*
-    CDXC:AgentHistoryFocus 2026-08-07-09:18:
+    CDXC:PromptSearch 2026-08-07-09:18:
     Zehn owns agent-history selection while Ghostex owns live workspace identity. Let `ghostex focus` resolve an exact agent conversation id to its live Ghostex session, and give `--if-running` a distinct exit code so Zehn resumes only when no live owner exists—not when focus delivery itself fails.
     */
     let session = if let Some(agent_session_id) = flags.text("agentSessionId") {

@@ -13,10 +13,10 @@ pub(crate) enum WorkspaceTabActionIcon {
 }
 
 /*
-CDXC:GPUIAgentsTabChrome 2026-06-22-17:07:
+CDXC:CommandPane 2026-06-22-17:07:
 Agents workspace tab chrome is focus-invariant: pane focus may change pane borders and keyboard ownership, but tab-bar visuals derive only from a tab's presentation lifecycle, semantic status, and active membership inside its own tab group.
 
-CDXC:GPUIAgentsTabChrome 2026-06-22-17:27:
+CDXC:CommandPane 2026-06-22-17:27:
 Selected Agents tabs use selected chrome even when their terminal lifecycle is sleeping, mounting, failed startup, restored/unmounted, or popped out. Workspace tab fill and title colors mirror the native AppKit tab strip: selected tabs use the active white overlay, and all inactive tabs share the inactive overlay while lifecycle state moves to the trailing status slot or placeholder badge.
 */
 #[derive(Clone, Copy, PartialEq, Eq)]

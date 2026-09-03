@@ -189,7 +189,7 @@ export interface UseSessionChatOptions {
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 Ghostex's own prompt queue (plan 016) and the cross-client composer draft. The
 hook owns both because both arrive on the same frames the transcript does.
 
@@ -255,7 +255,7 @@ export interface UseSessionChatResult {
    */
   selectedOptions: SessionChatDetectedOptions | null;
   /*
-  CDXC:SessionChatTerminalNotices 2026-08-19:
+  CDXC:AgentScreenDetection 2026-08-19:
   Blocking/failed terminal state gxserver classified off the agent's screen (or
   the send watchdog). Follows `prompt` semantics: a frame that can carry it and
   does not means CLEARED, so this drops back to null on its own.
@@ -287,7 +287,7 @@ export interface UseSessionChatResult {
   agent: string | null;
   agentSessionId: string | null;
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   The draft-only agent switcher's two inputs, and the only chat state that is
   carried by READ RESULTS ALONE: no frame type has a field for either, so they
   are folded in `refresh`/seed reads and left untouched by every frame. Null
@@ -296,7 +296,7 @@ export interface UseSessionChatResult {
   */
   availableAgents: readonly SessionChatAvailableAgent[] | null;
   /**
-   * CDXC:SwitchAccount 2026-09-03:
+   * CDXC:AgentProviders 2026-09-03:
    * The same-family accounts a PROMPTED session can be resumed under, carried
    * by reads exactly like `availableAgents`. Null when nothing is compatible.
    */
@@ -353,7 +353,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const [agent, setAgent] = useState<string | null>(null);
   const [agentSessionId, setAgentSessionId] = useState<string | null>(null);
   /*
-  CDXC:DraftSessions 2026-08-28: read-result-only state (see the doc on
+  CDXC:Drafts 2026-08-28: read-result-only state (see the doc on
   UseSessionChatResult.availableAgents). Both are set from a read and from
   nothing else, so an omission on a read is authoritative: the session is not
   (or is no longer) a draft.
@@ -378,18 +378,18 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // selectedOptions) — the server only stops sending it once the state is gone.
   const [terminalNotice, setTerminalNotice] = useState<SessionChatTerminalNotice | null>(null);
   /*
-  CDXC:SessionChatTerminalActivity 2026-08-22: structured on-screen progress
+  CDXC:AgentScreenDetection 2026-08-22: structured on-screen progress
   (compaction), carried and cleared exactly like the notice above. Claude's
   current `⏺` line is split into transient reasoning history below instead.
   */
   const [terminalActivity, setTerminalActivity] = useState<SessionChatTerminalActivity | null>(null);
-  // CDXC:SessionChatAgentFleet 2026-08-23: carried and cleared exactly like the
+  // CDXC:AgentScreenDetection 2026-08-23: carried and cleared exactly like the
   // activity row above; the strip's clocks tick locally off `detectedAt`.
   const [agentFleet, setAgentFleet] = useState<SessionChatAgentFleet | null>(null);
-  // CDXC:SessionChatAgentTasks 2026-09-03: carried and cleared like the fleet.
+  // CDXC:SessionChat 2026-09-03: carried and cleared like the fleet.
   const [agentTasks, setAgentTasks] = useState<SessionChatAgentTasks | null>(null);
   /*
-  CDXC:SessionChatAppCommands 2026-08-23: commands Ghostex typed into the agent
+  CDXC:SessionChat 2026-08-23: commands Ghostex typed into the agent
   itself. NOT prompt semantics — a frame that omits them leaves what we have,
   because the server retires them on its own TTL and an omission is far more
   often "this frame had nothing to add" than "that rename never happened".
@@ -403,7 +403,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // one" rule leaves the same phrase standing several times in a row.
   const [terminalStatusMessages, setTerminalStatusMessages] = useState<readonly SessionChatMessage[]>([]);
   /*
-  CDXC:SessionChatScreenProbed 2026-08-22: "gxserver has read this screen",
+  CDXC:AgentScreenDetection 2026-08-22: "gxserver has read this screen",
   carried by read results and by snapshot/replaced/state frames. Latched rather
   than cleared-on-omission: unlike the notice and the activity row, this is not
   a description of the screen that can stop being true, and an older daemon
@@ -419,7 +419,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const [queuePrompts, setQueuePrompts] = useState<readonly SessionChatQueuedPrompt[] | null>(null);
   /*
   Latest synced composer draft. An OMITTED draft means unchanged, NOT cleared
-  (see CDXC:SessionChatQueueCarriage) — so this only ever moves forward, and a
+  (see CDXC:SessionChat) — so this only ever moves forward, and a
   clear arrives as an explicit empty `content`.
   */
   const [syncedDraft, setSyncedDraft] = useState<SessionChatDraft | null>(null);
@@ -477,7 +477,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   /** Transport that last seeded the view state; gates the session-identity wipe. */
   const seededTransportRef = useRef<SessionChatTransport | null>(null);
   /*
-  CDXC:DraftAgentSwitch 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   The launch agent id the last read carried, so a read can tell "this draft is
   now running a different agent CLI" from "this is the first read". A ref, not
   the state above, because the comparison happens inside the fold itself.
@@ -602,7 +602,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   );
 
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   Folded from READ RESULTS ONLY — snapshot/replaced/state frames have no field
   for either value, so folding them in `applyAuthoritative` (which frames also
   go through) would clear the switcher on the next frame. An omission on a read
@@ -621,7 +621,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setSwitchableAgents(result.switchableAgents?.length ? result.switchableAgents : null);
       setSessionAgentId(nextSessionAgentId);
       /*
-      CDXC:DraftAgentSwitch 2026-08-28:
+      CDXC:Drafts 2026-08-28:
       A draft that came back running a DIFFERENT agent CLI has no detected
       options any more: the model, effort and mode this chat is holding belong
       to the CLI that was just replaced. Both are dropped here rather than left
@@ -799,7 +799,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       // capability from scratch is what keeps a mixed old/new daemon honest.
       setQueuePrompts(null);
       setSyncedDraft(null);
-      // CDXC:DraftSessions 2026-08-28: another session's draft agent list must
+      // CDXC:Drafts 2026-08-28: another session's draft agent list must
       // never tick a row (or offer a switch) for this one.
       setAvailableAgents(null);
       setSwitchableAgents(null);
@@ -1162,7 +1162,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     error,
     hasKnownAgentSession: agentSessionId !== null,
     /*
-    CDXC:DraftAgentSwitch 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     `availableAgents` is the daemon's own draft marker (it is sent for a draft
     and for nothing else), so its presence is what keeps an agent switch from
     unmounting this pane. See selectSessionChatViewState.

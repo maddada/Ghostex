@@ -39,14 +39,14 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIDesktopControlSettings 2026-08-09:
+        CDXC:Extensions 2026-08-09:
         Installing or updating Trycua can take minutes and prints useful
         progress. Run it in a real command-pane terminal tab so the user can
         watch the official installer/updater instead of staring at a silent
         Settings spinner. The tab opens without stealing typing focus like
         every other command Action.
 
-        CDXC:TrycuaPrerequisite 2026-08-24:
+        CDXC:Extensions 2026-08-24:
         Windows and Linux run the same command-pane installer instead of opening
         a downloads page, so the Settings button matches the command Settings
         shows on every desktop platform.
@@ -123,7 +123,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIQuickAccessSessions 2026-08-08:
+        CDXC:Sessions 2026-08-08:
         The reusable app-modal hydrate is settings-oriented and intentionally
         carries no session groups. Read the authoritative gxserver presentation
         off the UI thread when the Sessions page opens, project it into the
@@ -187,7 +187,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsGhosttyConfig 2026-06-24-12:24:
+        CDXC:Terminal 2026-06-24-12:24:
         Apply/reset Ghostty actions must mirror macOS by updating the visible shared Settings keys and merging the bounded managed Ghostty config file. They may not accept a React-provided config path, create a fallback file after failure, or claim live embedded reload because GPUI has no safe Ghostty app config reload/update FFI yet.
         */
         let mut settings_object = shared_settings::shared_sidebar_settings_snapshot()
@@ -249,7 +249,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn open_gpui_ghostty_config_file(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUISettingsGhosttyConfig 2026-06-24-12:24:
+        CDXC:Terminal 2026-06-24-12:24:
         The Settings config-file button should open the bounded selected Ghostty config path. Prepare only that path, create an empty file if it is missing, avoid surfacing raw paths in status/toast copy, and report failure honestly instead of opening a parent folder or a second fallback config file.
         */
         let path = match shared_settings::prepare_ghostty_config_file_for_open() {
@@ -341,7 +341,7 @@ impl GhostexGpuiApp {
             let _ = this.update_in(cx, |this, window, cx| match result {
                 Ok(pending) => {
                     /*
-                    CDXC:DisabledPluginRouting 2026-08-23:
+                    CDXC:Extensions 2026-08-23:
                     "Open in built-in editor" names the Code view, so with Code
                     turned off in Settings → Customize there is nothing to open
                     it in. Hand back the resolved path instead of registering
@@ -390,7 +390,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIAgentsHubBridge 2026-06-24-12:26:
+        CDXC:AgentLauncher 2026-06-24-12:26:
         Agents Hub saves are real file writes, but the writer boundary must validate the selected file against the current catalog-derived allowlist before touching disk. Do not trust React-provided paths, log file content, create fallback draft stores, or claim success without refreshing the shared modal state.
         */
         let Some(file_path) = command

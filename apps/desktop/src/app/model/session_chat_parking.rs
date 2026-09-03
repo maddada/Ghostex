@@ -4,7 +4,7 @@
 use crate::*;
 
 /*
-CDXC:GPUISessionChatSurfacePerProject 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 Inactive project workspaces keep their live chat pages beside their parked shell
 models, exactly like `ParkedAgentsTerminalRuntime` keeps their terminal owners.
 Dropping the `Entity<CefSurface>` closes the Chromium browser, so a project
@@ -29,7 +29,7 @@ pub(crate) struct ParkedAgentsChatRuntime {
 
 impl ParkedAgentsChatRuntime {
     /*
-    CDXC:GPUISessionChatSurfaceEviction 2026-08-24 (extended 2026-08-26):
+    CDXC:SessionChat 2026-08-24 (extended 2026-08-26):
     Parked pages hold the same RAM as live hidden ones, so they age out on the
     same clock rather than living until the app quits. Each parked surface
     carried its hidden stamp into the park, and the project it belongs to

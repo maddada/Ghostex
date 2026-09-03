@@ -13,7 +13,7 @@ use crate::presentation::read_runtime_text;
 impl<'a> DomainRepository<'a> {
     pub fn read_app_user_data(&self) -> DomainResult<Value> {
         /*
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
+        CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompts hydrate through one gxserver-owned product-data
         snapshot. Return only the exact shared React fields and do not derive
         values from GPUI product-state files, presentation labels, terminal
@@ -24,7 +24,7 @@ impl<'a> DomainRepository<'a> {
 
     pub fn save_pinned_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         /*
-        CDXC:GxserverAppUserData 2026-06-24-13:30:
+        CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompt saves mirror the existing SidebarPinnedPrompt behavior:
         create or update by promptId, preserve createdAt, stamp updatedAt on
         save, normalize empty titles from content, and treat an empty content
@@ -82,7 +82,7 @@ impl<'a> DomainRepository<'a> {
 
     pub fn save_stashed_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         /*
-        CDXC:StashedPrompts 2026-07-29-00:00:
+        CDXC:SavedPrompts 2026-07-29-00:00:
         Stash saves are fired best-effort by the prompt-editor CLI after every
         save-and-close, so the same text can arrive repeatedly. Re-saving
         content that already exists for the same project bumps that row's
@@ -132,7 +132,7 @@ impl<'a> DomainRepository<'a> {
             return Ok(json!({ "created": false, "prompt": prompt }));
         }
         /*
-        CDXC:StashedPromptAgentSession 2026-08-24:
+        CDXC:SavedPrompts 2026-08-24:
         Stamp the agent CONVERSATION the prompt was stashed from, read from the
         session row the caller named. The session row can be renamed, closed, or
         replaced by a resume later; the conversation id survives all of that (and
@@ -258,7 +258,7 @@ impl<'a> DomainRepository<'a> {
 
     pub fn list_stashed_prompts(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         /*
-        CDXC:StashedPrompts 2026-07-29-00:00:
+        CDXC:SavedPrompts 2026-07-29-00:00:
         The default modal scope is "this project and its worktrees". Current
         worktree sessions already carry the parent projectId, and legacy
         worktree checkouts registered as their own project carry
@@ -299,7 +299,7 @@ impl<'a> DomainRepository<'a> {
             })
             .collect::<Vec<_>>();
         /*
-        CDXC:StashedPromptTags 2026-08-23:
+        CDXC:SavedPrompts 2026-08-23:
         The modal needs the tag catalogue and every row's assignments in the
         same paint as the prompts, otherwise the pill rail and the row chips
         render a frame apart and the counts visibly jump. One list call answers
@@ -327,7 +327,7 @@ impl<'a> DomainRepository<'a> {
             })
             .collect::<Vec<_>>();
         /*
-        CDXC:StashedPromptAgentSession 2026-08-24:
+        CDXC:SavedPrompts 2026-08-24:
         The whole session registry is read ONCE here, not per row, and every
         prompt is resolved against it: rows saved before 0026 have no stored
         conversation id and inherit their origin session's, and a row whose
@@ -348,7 +348,7 @@ impl<'a> DomainRepository<'a> {
     }
 
     /*
-    CDXC:StashedPromptTags 2026-08-23:
+    CDXC:SavedPrompts 2026-08-23:
     Create or rename a tag. Names are compared case-insensitively so a second
     "Release" cannot shadow the first in the rail; a colliding create returns
     the tag that already exists instead of erroring, because the user's intent
@@ -424,7 +424,7 @@ impl<'a> DomainRepository<'a> {
     }
 
     /*
-    CDXC:StashedPromptTags 2026-08-23:
+    CDXC:SavedPrompts 2026-08-23:
     Deleting a tag unfiles every prompt that carried it (the link rows cascade)
     and never deletes a prompt. Builtin tags stay because app-owned filing
     behavior and controls rely on their stable identities.
@@ -456,7 +456,7 @@ impl<'a> DomainRepository<'a> {
     }
 
     /*
-    CDXC:StashedPromptTags 2026-08-23:
+    CDXC:SavedPrompts 2026-08-23:
     One prompt's whole tag set is replaced in a single call rather than
     toggled one link at a time: the modal already knows the set it wants, and a
     replace cannot drift out of sync the way a stream of toggles can when two
@@ -487,7 +487,7 @@ impl<'a> DomainRepository<'a> {
     }
 
     /*
-    CDXC:StashedPromptAgentSession 2026-08-24 (successor re-key):
+    CDXC:SavedPrompts 2026-08-24 (successor re-key):
     Same durability contract as `rekey_session_agent_note`: when the daemon
     adopts a successor conversation id, every stash filed against the dead id
     moves with it, or the prompts silently drop out of their thread's scope.
@@ -543,7 +543,7 @@ impl<'a> DomainRepository<'a> {
     }
 
     /*
-    CDXC:GlobalActions 2026-08-01-16:00:
+    CDXC:AgentLauncher 2026-08-01-16:00:
     Global Actions are daemon-owned rather than project-owned, so every client
     reads one list instead of a per-project column. Rows come back in sortOrder
     with commandId as the tiebreak, so two actions saved in the same tick still
@@ -897,7 +897,7 @@ fn create_unique_stashed_prompt_id(db: &Connection) -> DomainResult<String> {
 const COMBINED_SESSION_ID_PREFIX: &str = "combined-session:";
 
 /*
-CDXC:StashedPromptAgentSession 2026-08-24:
+CDXC:SavedPrompts 2026-08-24:
 Two writers reach this table with two different id vocabularies: chat and the
 CLI send RAW gxserver ids, while the Saved Prompts modal historically sent the
 presentation's COMBINED id (`combined-session:<enc projectId>:<enc sessionId>`),
@@ -970,7 +970,7 @@ fn hex_digit_value(byte: u8) -> Option<u8> {
 }
 
 /*
-CDXC:StashedPromptAgentSession 2026-08-24:
+CDXC:SavedPrompts 2026-08-24:
 Resolution order per row, against one snapshot of the sessions registry:
 1. the stored conversation id, else the origin session's current one (that is
    how rows written before 0026 get an association at all);
@@ -1069,7 +1069,7 @@ fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Val
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
     /*
-    CDXC:StashedPromptAgentSession 2026-08-24:
+    CDXC:SavedPrompts 2026-08-24:
     Every emitted row carries RAW gxserver ids, whatever shape the writer
     stored (see `normalize_stashed_prompt_session_ref`), so a client can key a
     stash against the sessions it already knows without re-parsing combined
@@ -1080,7 +1080,7 @@ fn stashed_prompt_json_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Val
     */
     let (project_id, session_id) = normalize_stashed_prompt_session_ref(project_id, session_id);
     /*
-    CDXC:StashedPrompts 2026-07-29:
+    CDXC:SavedPrompts 2026-07-29:
     Stash rows label their origin project with the same icon priority as the
     sidebar. Publish the user-selected identity fields plus the cached icon
     discovered from the repository; the client ranks those fields and falls
@@ -1141,7 +1141,7 @@ fn read_stashed_prompt_row(db: &Connection, prompt_id: &str) -> DomainResult<Opt
         .optional()
         .map_err(sql_error)?;
     /*
-    CDXC:StashedPromptTags 2026-08-23:
+    CDXC:SavedPrompts 2026-08-23:
     Every single-row read carries tagIds for the same reason the list does: the
     modal merges this row straight into its state, and a row that arrived
     without its assignments would blank that prompt's chips on save.
@@ -1189,7 +1189,7 @@ fn normalize_stashed_prompt_tag_name(name: &str) -> DomainResult<String> {
 }
 
 /*
-CDXC:StashedPromptTags 2026-08-23:
+CDXC:SavedPrompts 2026-08-23:
 Tag colors are interpolated straight into CSS by every client, so the daemon
 stores only a literal `#rrggbb` and rejects anything else rather than letting a
 crafted value become a style expression downstream.

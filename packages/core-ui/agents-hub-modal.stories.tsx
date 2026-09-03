@@ -460,7 +460,7 @@ const meta = {
   },
   render: () => (
     /**
-     * CDXC:AgentsHub 2026-05-13-08:08:
+     * CDXC:AgentLauncher 2026-05-13-08:08:
      * The default story opens the Skills tab because left-card tree clipping was reported there and needs a stable visual regression target.
      */
     <AgentsHubModalStory initialTab='skills' />
@@ -476,7 +476,7 @@ export const Skills: Story = {};
 export const ProfileTooltip: Story = {
   render: () => (
     /**
-     * CDXC:AgentsHub 2026-05-15-15:49:
+     * CDXC:AgentLauncher 2026-05-15-15:49:
      * The tooltip story opens the MDs tab with a linked Claude work profile so profile tooltip spacing, path wrapping, and target-arrow layout can be inspected against the real profile-link content shape.
      */
     <AgentsHubModalStory initialTab='mds' />
@@ -486,7 +486,7 @@ export const ProfileTooltip: Story = {
 export const ConfigsWithSelectedFile: Story = {
   render: () => (
     /*
-     * CDXC:AgentsHubRedesign 2026-08-24:
+     * CDXC:AgentLauncher 2026-08-24:
      * The Configs tab auto-expands its groups, so this story is the review
      * target for the redesigned raised group cards, the nested file tree, the
      * accent-highlighted selected file row, and the profile chips.
@@ -498,7 +498,7 @@ export const ConfigsWithSelectedFile: Story = {
 export const EmptyCatalog: Story = {
   render: () => (
     /*
-     * CDXC:AgentsHubRedesign 2026-08-24:
+     * CDXC:AgentLauncher 2026-08-24:
      * Empty-state chrome (list pane and editor frame with no selection) has to
      * read as the same quiet panel surface as the populated modal.
      */

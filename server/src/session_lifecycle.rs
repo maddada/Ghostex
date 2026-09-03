@@ -12,7 +12,7 @@ use crate::{
 };
 
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 Server side of Sidebar V2's settle/snooze inbox. The Ghostex
 client twin lives in `packages/shared/sidebar-v2-lifecycle.ts` and this module must agree
 with it field for field.
@@ -81,7 +81,7 @@ pub struct SessionLifecycleSweepOptions {
     /// `None` disables inactivity auto-settle entirely.
     pub auto_settle_after_days: Option<f64>,
     /*
-    CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+    CDXC:Git 2026-07-29-00:00:
     The second auto-settle trigger: a session whose branch's pull request is
     merged or closed is finished work, so it settles IMMEDIATELY instead of
     waiting out the inactivity window. See
@@ -94,7 +94,7 @@ pub struct SessionLifecycleSweepOptions {
 }
 
 /*
-CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+CDXC:Git 2026-07-29-00:00:
 PR-driven auto-settle deliberately has no setting of its own. It is enabled
 exactly when the inactivity window is: Sidebar V2 is selected AND the user has
 not switched auto-settle off with `sidebarAutoSettleAfterDays: null`. A user who
@@ -142,7 +142,7 @@ pub fn read_sweep_auto_settle_after_days(paths: &GxserverPaths) -> Option<f64> {
 }
 
 /*
-CDXC:SidebarV2DataGate 2026-07-29:
+CDXC:StateSync 2026-07-29:
 The same settings read, answering the other question every Sidebar V2 server-side
 data pass has to ask first: is this machine on V2 at all?
 
@@ -1170,7 +1170,7 @@ mod tests {
     }
 
     /*
-    CDXC:SidebarV2DataGate 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     The gate the Sidebar V2 data passes (git status, `origin` remote, project
     icons) read once per pass. It answers from the SAME settings file and the
     SAME `is_sidebar_v2_selected` rule as the auto-settle window above, so a
@@ -1300,7 +1300,7 @@ mod tests {
     }
 
     /*
-    CDXC:SidebarV2GitStatus 2026-07-29-00:00:
+    CDXC:Git 2026-07-29-00:00:
     The pull-request trigger settles finished work the moment the forge says it
     is finished — no inactivity wait — while an open (or draft, which resolves to
     open) pull request and an unknown one leave the row exactly where it is.

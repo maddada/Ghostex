@@ -43,7 +43,7 @@ export const SIDEBAR_THEME_SETTING_OPTIONS: ReadonlyArray<{
   value: SidebarThemeSetting;
 }> = [
   /**
-   * CDXC:SidebarTheme 2026-06-15-02:29:
+   * CDXC:Theming 2026-06-15-02:29:
    * The Settings theme dropdown is disabled while themes are coming soon.
    * Keep the persisted value concrete as Dark 2, but use the friendly label
    * Dark Gray so the disabled control matches the current app chrome.
@@ -111,7 +111,7 @@ export const SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS: ReadonlyArray<{
 ];
 
 /**
- * CDXC:SidebarSpaces 2026-08-28:
+ * CDXC:Spaces 2026-08-28:
  * The Spaces feature switch is a boolean rendered as a combined button, so its
  * two segments are named once here for both the settings row and settings
  * search.
@@ -179,11 +179,11 @@ export const KEEP_AWAKE_DURATION_OPTIONS: ReadonlyArray<{
   value: KeepAwakeDurationMinutes;
 }> = [
   /**
-   * CDXC:TitlebarKeepAwake 2026-05-28-19:28:
+   * CDXC:KeepAwake 2026-05-28-19:28:
    * The keep-awake menu should stay intentionally small: indefinite, two hours,
    * five hours, and the runtime Allow Sleep Now action are the complete user-facing duration set.
    *
-   * CDXC:TitlebarKeepAwake 2026-06-15-01:25:
+   * CDXC:KeepAwake 2026-06-15-01:25:
    * Dropdown settings must never expose an empty selected value. The indefinite keep-awake duration uses explicit friendly copy so Settings and the title-bar menu both render a readable option label.
    */
   { label: 'Until turned off', value: 0 },
@@ -236,7 +236,7 @@ export const PROMPT_EDITOR_BACKEND_OPTIONS: ReadonlyArray<{
   value: PromptEditorBackend;
 }> = [
   /**
-   * CDXC:PromptEditorBackend 2026-06-30-00:08:
+   * CDXC:PromptEditor 2026-06-30-00:08:
    * Ctrl+G Settings should be a two-choice dropdown: use the bundled Monaco prompt editor or leave $EDITOR/$VISUAL to the user's machine defaults. gte install/use and custom command controls are intentionally absent.
    */
   { label: 'Monaco editor', value: 'monaco' },
@@ -248,7 +248,7 @@ export const GHOSTTY_THEME_SETTING_OPTIONS: ReadonlyArray<{
   value: string;
 }> = [
   /**
-   * CDXC:TerminalThemeSettings 2026-04-29-09:32
+   * CDXC:Theming 2026-04-29-09:32
    * Users may already manage Ghostty themes directly in their Ghostty config.
    * The sentinel value lets ghostex leave any existing `theme` line untouched
    * until the user deliberately chooses a bundled theme from this modal.

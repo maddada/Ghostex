@@ -17,7 +17,7 @@ use serde_json::Value;
 use crate::ghostex_cli::rpc::{CliError, CliResult, GXSERVER_LOCAL_API_HOST};
 
 /*
-CDXC:Tailcat 2026-09-01:
+CDXC:RemotePairing 2026-09-01:
 The CLI's ssh transport forwards a port with `ssh -N -L`. tailcat has no
 equivalent listener mode — its client is a one-connection stdio pipe
 (`tailcat <address-blob> <port>`) — so the forwarder is owned here: one

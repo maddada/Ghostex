@@ -31,7 +31,7 @@ export function displayAgentName(agentLabel?: string | null): string | null {
 }
 
 /*
-CDXC:DraftAgentSwitch 2026-08-28:
+CDXC:Drafts 2026-08-28:
 One rendered agent identity. Switching a draft's agent CLI replaces the logo
 and the headline under the user, so the outgoing identity stays mounted for one
 fade while the incoming one fades in. At most two layers ever exist: the
@@ -53,7 +53,7 @@ export function NewSessionWelcome({
   showTitle = true,
 }: {
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   A draft's own agent row, when the read state has one. A project custom agent
   has no entry in the default agent table, so its name and brand artwork can
   only come from the daemon's list — without them a custom agent's draft would

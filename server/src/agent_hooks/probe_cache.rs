@@ -8,7 +8,7 @@ use std::{
 use super::probing::{probe_login_shell_path_entries, resolve_command_path};
 
 /*
-CDXC:GxserverAgentHookProbeCache 2026-09-01:
+CDXC:AgentHooks 2026-09-01:
 `readAgentHookStatus` is awaited before every agent-session launch, and each
 call ran two subprocess round trips per provider CLI: an interactive login
 shell (`zsh -lic`) to derive the user's PATH, then a `command -v` probe in the

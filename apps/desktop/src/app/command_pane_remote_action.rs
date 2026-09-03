@@ -35,7 +35,7 @@ impl GhostexGpuiApp {
         reference: GpuiRemoteAttachSessionReference,
     ) {
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         A command tab has exactly one daemon identity. This one lives on the
         remote machine, so the local key and zmx name are cleared with the same
         gesture that installs it — a tab that carried both would be attached
@@ -57,7 +57,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         The remote Action tab owns the `commands`-surface session it created on
         the remote daemon, so closing the tab closes that session, exactly like
         a local Action tab kills its local zmx session. Rerunning an Action
@@ -99,7 +99,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         Running a remote project's terminal Action reuses the remote attach path
         end to end: the owning daemon creates the session row and starts its zmx
         provider with the Action command, and this app attaches to it over the
@@ -107,7 +107,7 @@ impl GhostexGpuiApp {
         supplies the machine, token, SSH details, or the attach command; only the
         trusted HUD Action title and command reach the tunnel.
 
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         The terminal itself belongs in the command pane, not the Agents
         workspace: a terminal Action is a command-pane run on every other
         project, and where the command happens to execute is not a reason for
@@ -142,7 +142,7 @@ impl GhostexGpuiApp {
         };
 
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         A remote Action never reruns inside an existing tab. The local idle-reuse
         path writes the next command into the mounted shell, but here that shell
         is an SSH attach to the *previous* remote session: the text would be
@@ -187,7 +187,7 @@ impl GhostexGpuiApp {
             session_id,
         };
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         Claim the attach before yielding. The command-terminal sync pass mounts
         any rendered slot that has no launch payload by starting a *local*
         gxserver attach for it, so an unclaimed remote Action tab would race a
@@ -277,7 +277,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         A restored remote Action tab reattaches to the session it already owns
         on the remote machine, so its history survives a restart the same way a
         local Action tab's zmx session does. Its machine is connected
@@ -361,7 +361,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         The command tab mounts the authoritative SSH attach command as its own
         process, so it also owns the saved-password askpass helper for as long
         as that process runs — dropping the handle deletes the temp script and
@@ -444,7 +444,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         A remote Action tab dragged into the Agents workspace keeps the same
         live SSH attach, so its remote identity and askpass helper move to the
         workspace-side owners rather than being dropped — otherwise the command
@@ -482,7 +482,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:RemoteProjectActions 2026-08-29:
+        CDXC:RemoteMachines 2026-08-29:
         The remote mirror of `promote_transferred_gxserver_session_surface_in_background`:
         the moved tab is already live, so the surface update runs off the UI
         thread while the session is held out of sidebar-driven reconciliation.

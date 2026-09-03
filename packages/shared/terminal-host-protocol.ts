@@ -1,5 +1,5 @@
 /**
- * CDXC:Daemon-lifecycle 2026-04-25-09:25
+ * CDXC:Terminal 2026-04-25-09:25
  * This protocol shape is retained for serialized terminal snapshots. The native
  * macOS host now owns terminal process creation and rendering.
  */

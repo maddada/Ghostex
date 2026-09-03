@@ -10,25 +10,25 @@ pub const REPO_RELATIVE_GHOSTTYKIT_HEADER: &str =
 pub const REPO_RELATIVE_GHOSTTYKIT_ARCHIVE: &str = "../../.dependencies/ghostty/macos/GhosttyKit.xcframework/macos-arm64_x86_64/ghostty-internal.a";
 
 /*
-CDXC:GPUIGhosttyKitAdapter 2026-06-22-20:35:
+CDXC:Terminal 2026-06-22-20:35:
 Phase 2 GPUI terminal parity needs a compile-safe boundary to the real GhosttyKit/libghostty C ABI before any native terminal surface is mounted. This module may declare real exported types and functions plus non-logging path availability helpers, but it must not synthesize project/session/process state, terminal content, command text, fallback surfaces, logging, persistence, overlays, or hidden hit regions.
 
-CDXC:GPUIGhosttyKitAdapter 2026-06-23-04:13:
+CDXC:Terminal 2026-06-23-04:13:
 Startup readiness can only observe real GhosttyKit surface metadata through exact ABI declarations for exited state, foreground-pid presence, and tty-name presence. The FFI layer exposes `ghostty_string_s` plus its free function but does not interpret, persist, log, or print raw tty names or process ids.
 
-CDXC:GPUITerminalInputABI 2026-06-23-05:53:
+CDXC:Terminal 2026-06-23-05:53:
 Slice 135 adds only the existing embedded Ghostty input ABI needed by future real terminal event forwarding. The Rust declarations mirror the generated GhosttyKit header and must not invent close-confirm symbols, translate GPUI events, log input payloads, persist terminal text, or route native hit testing.
 
-CDXC:GPUITerminalMouseForwarding 2026-06-23-08:32:
+CDXC:Terminal 2026-06-23-08:32:
 Mouse input slices must use named Ghostty header values for action and button identity so GPUI callers do not encode libghostty ABI numbers as magic constants while forwarding only sanitized primitive event state.
 
-CDXC:GPUITerminalClipboard 2026-06-23-10:33:
+CDXC:Clipboard 2026-06-23-10:33:
 Clipboard blocker parity needs named Ghostty header values for standard/selection clipboards and paste/OSC 52 requests so runtime callbacks can stay explicitly disabled without magic numbers or touching raw clipboard content.
 
-CDXC:GPUITerminalClipboard 2026-06-23-12:11:
+CDXC:Clipboard 2026-06-23-12:11:
 Runtime clipboard reads are asynchronous in embedded Ghostty and completion requires a concrete surface. Bind the completion export for a future surface-scoped handoff, but keep callbacks disabled until GPUI can prove the requesting surface before any app-thread clipboard access.
 
-CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+CDXC:CommandPane 2026-06-23-20:04:
 Slice 237 uses the real embedded GhosttyKit `ghostty_surface_needs_confirm_quit` ABI as the close-confirm evidence source. GPUI must bind the boolean query and `ghostty_surface_request_close` directly, and must not invent a separate confirm-close symbol, persist process data, log terminal content, or expose command/path/runtime details.
 */
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -548,19 +548,19 @@ pub mod ffi {
     }
 
     /*
-    CDXC:GPUIGhosttyKitAdapter 2026-06-22-20:35:
+    CDXC:Terminal 2026-06-22-20:35:
     These declarations bind GPUI to the real exported GhosttyKit/libghostty symbols only. Later runtime slices may call them after native mount-slot ownership is ready; this boundary itself must stay inert and must not add speculative link flags, fake surfaces, terminal processes, command text, fallback mounts, or persistent diagnostics.
 
-    CDXC:GPUIGhosttyKitAdapter 2026-06-23-04:49:
+    CDXC:Terminal 2026-06-23-04:49:
     Running Agents close parity needs the exported `ghostty_surface_request_close` ABI so GPUI can ask Ghostty to run its normal close flow before shell-tab removal. Keep this as a direct symbol binding only; close state belongs to the process-memory surface owner, not to persistent logs or shell state.
 
-    CDXC:GPUITerminalInputABI 2026-06-23-05:53:
+    CDXC:Terminal 2026-06-23-05:53:
     Input parity starts as ABI scaffolding only. Bind the upstream embedded Ghostty surface input exports exactly, leave GPUI key/mouse/IME translation for a later slice, and avoid direct action-string bridges unless a future requirement can keep action payloads out of diagnostics.
 
-    CDXC:GPUITerminalCloseConfirm 2026-06-23-20:04:
+    CDXC:CommandPane 2026-06-23-20:04:
     The close-confirm contract is source-side evidence for the real `ghostty_surface_needs_confirm_quit` query plus direct model removal after user consent. This boundary exposes only a redacted boolean and must not add a fake confirm ABI, command/process logging, shell-state fields, or fallback close behavior.
 
-    CDXC:GPUILinuxX11Backend 2026-07-05:
+    CDXC:PlatformSupport 2026-07-05:
     The exported GhosttyKit/libghostty symbols exist only in the macOS static
     archive (apps/desktop/build.rs links GhosttyKit on macOS alone; Windows/Linux get
     libghostty-vt only, by design). The ABI types above stay cross-platform so

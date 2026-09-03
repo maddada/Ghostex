@@ -14,7 +14,7 @@ function sourceBetween(source: string, start: string, end: string): string {
 describe('command icon picker source', () => {
   test('closes the popover before parent editor state updates', () => {
     /*
-     * CDXC:SidebarActions 2026-06-19-19:52:
+     * CDXC:AgentLauncher 2026-06-19-19:52:
      * Settings action icon selection must close the portaled Popover before
      * updating parent editor state so re-renders cannot leave the picker owning
      * focus.

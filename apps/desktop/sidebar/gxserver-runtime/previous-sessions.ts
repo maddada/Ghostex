@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -18,7 +18,7 @@ import type { GxserverPresentationSearchResponse } from '@/packages/shared/gxser
 import type { SidebarPreviousSessionItem, SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimePreviousSessionMethods` — because deriving them would make
@@ -87,7 +87,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
         ),
       ]);
       /*
-      CDXC:GPUIRemotePreviousSessions 2026-06-24-17:19:
+      CDXC:RemoteMachines 2026-06-24-17:19:
       Previous-session list/search combines local gxserver rows with connected remote gxserver rows, but remote history ids are machine-prefixed so restore/delete can route back through Rust's tunnel owner. Keep only the current result page in memory and do not persist remote metadata in GPUI.
       */
       const remoteItems = remoteResponses.flatMap((response, index) =>
@@ -169,10 +169,10 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       return;
     }
     /*
-    CDXC:GPUIRemotePreviousSessions 2026-06-24-17:19:
+    CDXC:RemoteMachines 2026-06-24-17:19:
     Restoring remote history recreates a real workspace session on the owning remote gxserver and then removes the stopped history row from that same machine. GPUI does not create a local terminal, synthesize resume commands, or trust visible previous-session labels as operation ids.
 
-    CDXC:GPUIRemoteAttach 2026-06-24-19:06:
+    CDXC:RemoteMachines 2026-06-24-19:06:
     When remote previous-session restore returns a new gxserver session id, GPUI may immediately ask Rust to attach that exact restored id through the same native remote terminal action as a direct session click. If gxserver does not return the new id, the restore remains server-only instead of guessing from labels or the old history id.
     */
     try {

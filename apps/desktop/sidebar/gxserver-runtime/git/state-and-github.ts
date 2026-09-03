@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines) into git/. This
 slice covers the titlebar Git menu state, the local/remote Git state
 refresh pipeline, and the GitHub (`gh`) state probe. See `index.ts` for how
@@ -106,7 +106,7 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     }
     this.lastGitRefreshProjectId = project.projectId;
     /*
-    CDXC:SidebarGitMemo 2026-07-29:
+    CDXC:Git 2026-07-29:
     Project switching is on the critical path of terminal attach: every RPC this
     fires competes with the attach RPCs on the same daemon. A project the user
     switched away from seconds ago has not changed on disk, so publish its
@@ -193,7 +193,7 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
     message: Extract<SidebarToExtensionMessage, { type: 'refreshGitState' }>
   ): Promise<void> {
     /*
-    CDXC:GPUISidebarGit 2026-06-24-21:26:
+    CDXC:Git 2026-06-24-21:26:
     Reused Git controls can refresh from a scoped local or remote project row. Resolve that owner before reading Git state; unscoped callers keep the active-project behavior, but scoped remote rows must never refresh the active local project by accident.
     */
     const explicitScope = Boolean(message.groupId?.trim() || message.projectId?.trim());
@@ -276,7 +276,7 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
       }
 
       /*
-      CDXC:SidebarGitMemo 2026-07-29:
+      CDXC:Git 2026-07-29:
       `deferGitHub` keeps the two `gh` subprocesses (one of them a network call
       with a 120s server-side timeout) out of the burst a project switch fires.
       The switch publishes local Git state with the last known GitHub answer
@@ -341,7 +341,7 @@ export const gpuiSidebarRuntimeGitStateAndGithubMethods = {
         });
       }
       /*
-      CDXC:SidebarGitMemo 2026-07-29:
+      CDXC:Git 2026-07-29:
       A failed probe is not a cacheable answer. Drop any memoized entry so the
       next switch re-probes instead of republishing a state gxserver could no
       longer confirm.

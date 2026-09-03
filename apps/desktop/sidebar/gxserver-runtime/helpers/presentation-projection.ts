@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -45,7 +45,7 @@ export function createGpuiPresentationProjectProjectionMetadata({
 }): GpuiPresentationProjectProjectionMetadata {
   const chatProjectIds = new Set<string>();
   /*
-  CDXC:GPUIRecentProjects 2026-06-27-19:37:
+  CDXC:Projects 2026-06-27-19:37:
   GPUI must match the macOS sidebar split: parked Recent Projects belong only in the React Recent Projects drawer, never in the main Projects list. Hide ids from both the domain project flag and the authoritative `/api/listRecentProjects` endpoint so presentation snapshots cannot briefly resurrect parked projects as normal groups.
   */
   const hiddenProjectIds = new Set(
@@ -131,7 +131,7 @@ export function mergeGpuiPresentationProjectOverlay(
 }
 
 /*
-CDXC:SidebarV2ProjectIcons 2026-07-29:
+CDXC:Icons 2026-07-29:
 The TYPED project icon, from the same gxserver identity metadata as the image
 data URL above it. Most Ghostex projects carry a Tabler glyph plus a color
 rather than an uploaded image, so a sidebar that only receives `iconDataUrl`
@@ -144,7 +144,7 @@ export function gpuiPresentationProjectIcon(project: GxserverProjectDomainState)
 
 export function gpuiPresentationProjectIconDataUrl(project: GxserverProjectDomainState): string | undefined {
   /*
-  CDXC:GPUISettingsNotifications 2026-06-26-07:22:
+  CDXC:Notifications 2026-06-26-07:22:
   Session-attention icon parity must source images only from gxserver project identity metadata already normalized for workspace project appearance. Do not infer icons from project paths, URLs, titles, sessions, browser favicons, logs, command output, or renderer-local state.
   */
   const identityIcon = project.identityIcon;
@@ -180,7 +180,7 @@ export function isGpuiPresentationChatProjectPath(value: unknown): boolean {
     return false;
   }
   /*
-  CDXC:GPUISidebarProjectClassification 2026-06-24-22:51:
+  CDXC:Projects 2026-06-24-22:51:
   Match macOS chat-project detection by storage root instead of display title. `~/ghostex/chats`, `~/.ghostex[-variant]/chats`, and host-provided Ghostex homes such as repo-local `.active/chats` are projectless Chats containers; arbitrary projects named "Chat ..." are not.
   */
   return (
@@ -300,7 +300,7 @@ export function createGpuiSidebarGroupsPatch(
   return {
     groupOrder: nextGroups.map((group) => group.groupId),
     /*
-    CDXC:SidebarDiffStatsChurn 2026-08-16:
+    CDXC:Git 2026-08-16:
     The SidebarApp store merges patch groups by groupId and leaves untouched
     groups alone, so a patch only needs the groups that actually changed.
     Sending all groups on every publish forced the renderer to re-normalize

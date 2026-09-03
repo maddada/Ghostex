@@ -1,5 +1,5 @@
 /*
- * CDXC:SettingsModalSplit 2026-08-23:
+ * CDXC:RepoStructure 2026-08-23:
  * Hotkeys-page search memos plus the derived hotkey section refs, visible
  * sections, and section scrolling. The three useMemo calls stay adjacent and in
  * their original order, so this hook must keep being called from the same spot
@@ -55,7 +55,7 @@ export function useHotkeySettings({
       searchQuery: settingsSearchQuery,
     });
     /*
-     * CDXC:SettingsSearch 2026-07-22-00:00:
+     * CDXC:Settings 2026-07-22-00:00:
      * A query matching the Hotkeys page title (e.g. "hotkeys") should reveal
      * the whole page, mirroring how section-title matches reveal their rows.
      */

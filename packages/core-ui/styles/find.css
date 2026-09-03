@@ -1,5 +1,5 @@
 /*
- * CDXC:AgentHistorySearch 2026-08-20:
+ * CDXC:PromptSearch 2026-08-20:
  * Shared Find surface (sidebar/find/) — the GUI for `gx f`. Like the Session
  * Chat sheet, this file keeps only what Tailwind utilities cannot express
  * per-host: the match-highlight color token and the gpui page shell's height

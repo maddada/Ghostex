@@ -45,7 +45,7 @@ pub(crate) fn gpui_create_local_project_workspace_agent(
         &serde_json::json!({
             "agentId": agent_id,
             /*
-            CDXC:DraftSessions 2026-08-28:
+            CDXC:Drafts 2026-08-28:
             The Windows project-header agent launch is the same promptless
             sidebar create as the macOS/Linux CEF path, so it creates a draft
             row too. The attach step below starts the provider, so the agent CLI
@@ -179,7 +179,7 @@ pub(crate) fn gpui_create_local_project_workspace_terminal_with_launch(
 }
 
 /*
-CDXC:GPUIRemoteNewTerminal 2026-08-18:
+CDXC:RemoteMachines 2026-08-18:
 `open_gpui_remote_attach_terminal` serves two different intents and they need
 different completion rules. Attaching a session that already existed must not
 yank the workspace back if the user focused something else while the SSH plan
@@ -190,7 +190,7 @@ exactly what made the sidebar project-header Create Terminal button look inert.
 */
 pub(crate) fn gpui_uninstall_bundled_agent_skills() -> Result<String, String> {
     /*
-    CDXC:GPUISettingsAgentSkills 2026-06-24-12:56:
+    CDXC:AgentSkills 2026-06-24-12:56:
     The bundled skill uninstall action is intentionally narrower than a generic skills cleanup. Remove only the catalog-owned shared Ghostex skill names under `~/.agents/skills`, handle missing folders as already-uninstalled state, and do not follow React-provided paths or delete other user/system skills.
     */
     let mut removed_count = 0usize;

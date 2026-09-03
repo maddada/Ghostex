@@ -120,7 +120,7 @@ export function BundledAgentSkillsPanel({
       {BUNDLED_AGENT_SKILL_TIER_SECTIONS.map((section) => {
         const tierSkills = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === section.tier);
         /*
-         * CDXC:TrycuaPrerequisite 2026-08-24:
+         * CDXC:Extensions 2026-08-24:
          * Trycua is one install shared by every skill that drives the machine,
          * so it gets one card per tier and the skills that depend on it are
          * nested under that card. Repeating the install control inside each
@@ -251,7 +251,7 @@ function BundledAgentSkillRow({
               <FieldTitle className='text-sm'>{skill.name}</FieldTitle>
               {skill.requiresCuaDriver ? (
                 /*
-                 * CDXC:TrycuaPrerequisite 2026-08-24:
+                 * CDXC:Extensions 2026-08-24:
                  * The dependency stays legible on each skill row even after the
                  * install control moved up to the shared Trycua card, and turns
                  * into a warning while Trycua is still missing.
@@ -329,7 +329,7 @@ function BundledAgentSkillRow({
  * here instead of letting the user find out when an agent first tries to click
  * something.
  *
- * CDXC:TrycuaPrerequisite 2026-08-24:
+ * CDXC:Extensions 2026-08-24:
  * One card for the one Trycua install, shown above the skills that depend on
  * it. It shows the exact command the host will run so the install is never a
  * black box, and the button runs that same command in a command-pane terminal.

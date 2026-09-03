@@ -58,7 +58,7 @@ describe('gxserver presentation sidebar projection', () => {
   });
 
   /*
-  CDXC:SidebarV2Lifecycle 2026-07-29:
+  CDXC:StateSync 2026-07-29:
   Settle/snooze is server-owned state that the sidebar only renders. If the
   projection drops a field, the V2 shelves silently go empty and the bug looks
   like a UI regression, so the copy-through is pinned here.
@@ -101,7 +101,7 @@ describe('gxserver presentation sidebar projection', () => {
   });
 
   /*
-  CDXC:SidebarV2Git 2026-07-29:
+  CDXC:Git 2026-07-29:
   Only gxserver can run git in a session's cwd, so a dropped field here would
   silently empty the card's branch/PR line with no other symptom. The
   copy-through is pinned, including the null branch a detached HEAD reports.
@@ -231,7 +231,7 @@ describe('gitRemoteOriginUrl projection', () => {
   });
 
   /*
-  CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+  CDXC:StateSync 2026-07-29 (P5 fix round):
   The repository root travels the same way. Sidebar V2's "Repository + path"
   mode is derived from it, so a projection that dropped it would leave the mode
   inert no matter what the daemon probed.
@@ -255,7 +255,7 @@ describe('gitRemoteOriginUrl projection', () => {
   });
 
   /*
-  CDXC:SidebarV2ProjectIcons 2026-07-29:
+  CDXC:Icons 2026-07-29:
   The TYPED project icon is the one most Ghostex projects actually have (a
   Tabler glyph with a color); a projection that carried only `iconDataUrl`
   showed those projects a generic folder in every sidebar surface.
@@ -274,7 +274,7 @@ describe('gitRemoteOriginUrl projection', () => {
   });
 
   /*
-  CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+  CDXC:Icons 2026-07-29 (discovered icons):
   The icon gxserver discovered inside the checkout rides the presentation
   PROJECT, not the host overlay, so it also reaches projects on remote machines
   (which have no local overlay at all). It must arrive beside the user's icon

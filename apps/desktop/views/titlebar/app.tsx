@@ -147,7 +147,7 @@ export function App() {
   );
   const [readTipIds, setReadTipIds] = useState<Set<string>>(() => readStoredTitlebarTipIds());
   /*
-   * CDXC:ReactTitlebar 2026-06-11-13:22:
+   * CDXC:Titlebar 2026-06-11-13:22:
    * Dropdown content now lives in native child windows, so the main titlebar
    * WKWebView must never publish a below-titlebar overlay-open state or trigger
    * the workspace interaction shield.
@@ -161,7 +161,7 @@ export function App() {
   const previousKeepAwakeWorkingSessionCountRef = useRef(projectState.keepAwake.workingSessionCount);
   const [resourceProcesses, setResourceProcesses] = useState<ResourceProcess[]>([]);
   /*
-   * CDXC:SidebarCollapse 2026-06-20-17:10:
+   * CDXC:Sidebar 2026-06-20-17:10:
    * The macOS titlebar Toggle Sidebar control should be a plain Tabler sidebar
    * glyph instead of the former blue traffic-light dot. Mirror the configured
    * sidebar placement so left sidebars use IconLayoutSidebar and right sidebars
@@ -171,14 +171,14 @@ export function App() {
   const keepAwakeFeatureEnabled = projectState.keepAwake.featureEnabled === true;
   const [resourceServers, setResourceServers] = useState<ResourceListeningServer[]>([]);
   /*
-   * CDXC:TitlebarResources 2026-06-11-18:13:
+   * CDXC:Resources 2026-06-11-18:13:
    * The native Resources child panel should not render zero-memory or missing-session rows while the first `ps` snapshot is still loading.
    * Track first-sample readiness separately from the process array so an intentionally empty process sample can render, while AppKit keeps the child window hidden until the first real sample is committed.
    */
   const [resourceProcessSnapshotReady, setResourceProcessSnapshotReady] = useState(false);
   const [collapsedResourceKeys, setCollapsedResourceKeys] = useState<Set<string>>(() => {
     /**
-     * CDXC:TitlebarResources 2026-06-12-23:33:
+     * CDXC:Resources 2026-06-12-23:33:
      * Resource section containers stay visible; only individual row disclosures
      * collapse. Session and browser rows encode their default collapsed state by
      * omitting their expanded keys, so the explicit override set starts empty.
@@ -193,7 +193,7 @@ export function App() {
   const resourcesOpenCollapseSeededRef = useRef(false);
   const titlebarEventLoopLastLogAtRef = useRef(0);
   /*
-   * CDXC:TitlebarResources 2026-07-02-05:36:
+   * CDXC:Resources 2026-07-02-05:36:
    * refreshResources must keep a stable identity across project-state pushes.
    * When it depended on projectState.diagnosticLogging, the state hydrate that
    * arrives right after the Resources child panel loads re-ran the poll effect,
@@ -276,11 +276,11 @@ export function App() {
   }, []);
   const openHighlightedFeaturesFromTips = useCallback(() => {
     /*
-     * CDXC:TipsAndTricks 2026-06-16-08:17:
+     * CDXC:Onboarding 2026-06-16-08:17:
      * The Tips & Tricks header should send users to the replayable highlighted
      * features modal instead of exposing a bulk "Read all" action.
      *
-     * CDXC:GhostexTutorialVideo 2026-06-18-05:31:
+     * CDXC:Onboarding 2026-06-18-05:31:
      * The Tips modal Video button should open the tutorial video modal. Leave the
      * old Highlighted Features modal unused instead of deleting its implementation.
      */
@@ -288,13 +288,13 @@ export function App() {
   }, []);
   const viewGhostexGuideFromTips = useCallback(() => {
     /*
-     * CDXC:TipsAndTricks 2026-06-16-10:04:
+     * CDXC:Onboarding 2026-06-16-10:04:
      * The Tips & Tricks header should send users to Video with a filled star
      * action and to the setup guide through a Setup action. Keep the
      * sidebar-owned workspace welcome bridge as the guide entry point because
      * that surface owns setup and onboarding repair.
      *
-     * CDXC:TipsAndTricks 2026-06-18-04:53:
+     * CDXC:Onboarding 2026-06-18-04:53:
      * The setup action label should be the shorter "Setup" copy so the header
      * can also fit Docs, Video, and Updates without truncating action text.
      */
@@ -310,7 +310,7 @@ export function App() {
     }
     if (action.type === 'openSettings') {
       /*
-       * CDXC:TipsAndTricks 2026-06-28-08:00:
+       * CDXC:Onboarding 2026-06-28-08:00:
        * Clickable Ghostex skill tips should open Settings > Integrations with
        * the skill name searched so users land on the install/configure detail
        * instead of a generic setup page.
@@ -327,7 +327,7 @@ export function App() {
   }, []);
   const openChangelogFromTips = useCallback(() => {
     /*
-     * CDXC:TipsAndTricks 2026-06-16-19:42:
+     * CDXC:Onboarding 2026-06-16-19:42:
      * The Tips & Tricks header should expose the release changelog on the far
      * right and open it as a normal current-project browser session.
      */
@@ -336,7 +336,7 @@ export function App() {
   const syncKeepAwakeRuntimeState = useCallback((syncState: KeepAwakeRuntimeSyncState | undefined) => {
     if (syncState && Object.prototype.hasOwnProperty.call(syncState, 'runtime')) {
       /*
-       * CDXC:TitlebarKeepAwake 2026-06-23-19:36:
+       * CDXC:KeepAwake 2026-06-23-19:36:
        * Native child dropdowns send the committed Keep Awake runtime directly into the main titlebar bridge. Treat an explicit null runtime as a committed stop so stale localStorage in another WKWebView cannot keep the titlebar icon active.
        */
       setKeepAwakeRuntime(syncState.runtime ?? undefined);
@@ -381,15 +381,15 @@ export function App() {
   const showTitlebarDropdownPanel = useCallback(
     (kind: TitlebarDropdownPanelKind, anchor: HTMLElement, options: { closeWhenAlreadyOpen?: boolean } = {}) => {
       /*
-       * CDXC:ReactTitlebar 2026-06-11-23:20:
+       * CDXC:Titlebar 2026-06-11-23:20:
        * Native child-window dropdown triggers should behave like normal menu
        * buttons: requesting the already-open panel closes it instead of
        * reopening or repositioning the same child window.
        *
-       * CDXC:TitlebarKeepAwake 2026-06-15-23:25:
+       * CDXC:KeepAwake 2026-06-15-23:25:
        * Keep Awake is a dropdown launcher, not a direct start/stop toggle.
        *
-       * CDXC:TitlebarKeepAwake 2026-06-15-23:25:
+       * CDXC:KeepAwake 2026-06-15-23:25:
        * Clicking Keep Awake again while its dropdown is open should close the
        * menu like the other titlebar dropdown triggers.
        */
@@ -400,7 +400,7 @@ export function App() {
       const anchorElement = anchor.closest<HTMLElement>('[data-titlebar-dropdown-anchor]') ?? anchor;
       const rect = anchorElement.getBoundingClientRect();
       /*
-       * CDXC:ReactTitlebar 2026-06-11-13:22:
+       * CDXC:Titlebar 2026-06-11-13:22:
        * Dropdown content must open as a native child window, not as Radix content
        * portaled below the titlebar WKWebView. Send only the titlebar-strip anchor
        * rectangle so Swift owns screen placement while React keeps rendering the
@@ -442,7 +442,7 @@ export function App() {
         return;
       }
       /*
-       * CDXC:ReactTitlebar 2026-06-13-14:08:
+       * CDXC:Titlebar 2026-06-13-14:08:
        * Blank titlebar drag should use normal DOM event ownership instead of
        * native coordinate hit regions. Interactive controls stop here by their
        * element semantics; passive titlebar text and empty background ask the
@@ -457,7 +457,7 @@ export function App() {
       }
       if (nativeDropdownOpen) {
         /*
-         * CDXC:ReactTitlebar 2026-06-23-19:36:
+         * CDXC:Titlebar 2026-06-23-19:36:
          * Clicking blank titlebar chrome while a native child dropdown is open should dismiss that dropdown instead of starting a window drag. Keep this in the titlebar DOM mouse handler so AppKit does not need broad click rerouting or overlapping hit-test regions.
          */
         event.preventDefault();
@@ -473,7 +473,7 @@ export function App() {
   useEffect(() => {
     const suppressTitlebarWebviewContextMenu = (event: MouseEvent) => {
       /**
-       * CDXC:TitlebarContextMenu 2026-05-15-18:21:
+       * CDXC:ContextMenus 2026-05-15-18:21:
        * Right-clicking titlebar buttons, menus, labels, or project text must
        * not expose WKWebView's native Reload menu. The titlebar has no editable
        * text fields, so suppress the webview default for the whole isolated
@@ -495,11 +495,11 @@ export function App() {
     const narrowTitlebarMedia = window.matchMedia('(max-width: 619.98px)');
     const closeMenusHiddenAtNarrowWidth = () => {
       /**
-       * CDXC:ReactTitlebar 2026-05-29-16:05:
+       * CDXC:Titlebar 2026-05-29-16:05:
        * App widths below 620px hide the top-right Tips, Resources, and Keep
        * Awake controls.
        *
-       * CDXC:ReactTitlebar 2026-06-11-13:22:
+       * CDXC:Titlebar 2026-06-11-13:22:
        * Those dropdowns are native child panels now, so close the panel when its
        * trigger leaves the visible titlebar instead of keeping an orphan window.
        */
@@ -533,7 +533,7 @@ export function App() {
       return;
     }
     /**
-     * CDXC:ReactTitlebar 2026-06-13-13:33:
+     * CDXC:Titlebar 2026-06-13-13:33:
      * Native owns the titlebar as an exact WKWebView strip, while React owns
      * controls through normal DOM layout. Do not measure DOM hit rectangles for
      * AppKit; only publish strip-level overlay lifecycle state.
@@ -566,12 +566,12 @@ export function App() {
       return;
     }
     /**
-     * CDXC:SessionFocusMode 2026-05-26-22:47:
+     * CDXC:FocusMode 2026-05-26-22:47:
      * The Exit focus button is conditional titlebar chrome. Publish the strip
      * lifecycle state after titlebar layout settles so native receives a fresh
      * titlebar document signal without DOM-region measuring.
      *
-     * CDXC:AutoUpdate 2026-06-08-18:21:
+     * CDXC:Release 2026-06-08-18:21:
      * The update button appears after native Sparkle appcast probes, so
      * updateAvailable must also republish the strip lifecycle state.
      */
@@ -607,7 +607,7 @@ export function App() {
       return;
     }
     /*
-     * CDXC:TooltipLifecycle 2026-06-13-02:30:
+     * CDXC:Tooltips 2026-06-13-02:30:
      * Native titlebar pointer-leave may hide a currently visible tooltip, but
      * DOM pointer movement inside the titlebar must immediately restore hover
      * eligibility. This keeps native tracking as cleanup, not a persistent gate
@@ -661,7 +661,7 @@ export function App() {
     }
     return () => {
       /**
-       * CDXC:ReactTitlebar 2026-05-25-10:09:
+       * CDXC:Titlebar 2026-05-25-10:09:
        * Native workspace shielding must clear when the titlebar host unmounts
        * or reloads. Publish an explicit closed overlay state instead of making
        * Swift infer it from stale DOM geometry.
@@ -677,13 +677,13 @@ export function App() {
     window.__ghostex_TITLEBAR__ = {
       closeOpenDropdowns: () => {
         /**
-         * CDXC:ReactTitlebar 2026-05-16-20:01:
+         * CDXC:Titlebar 2026-05-16-20:01:
          * Native app content lives outside this titlebar WKWebView, so Radix
          * cannot observe normal outside clicks in the workspace/sidebar. Expose
          * one explicit close hook that AppKit can call before routing the click
          * to the real app surface behind an open dropdown.
          *
-         * CDXC:ReactTitlebar 2026-06-11-13:22:
+         * CDXC:Titlebar 2026-06-11-13:22:
          * Titlebar dropdowns are now native child windows, so this bridge closes
          * the panel window instead of toggling in-document Radix menu state.
          */
@@ -695,7 +695,7 @@ export function App() {
       syncKeepAwakeRuntime: syncKeepAwakeRuntimeState,
       setLastActionCommandId: (commandId) => {
         /*
-         * CDXC:TitlebarActions 2026-06-16-18:31:
+         * CDXC:Titlebar 2026-06-16-18:31:
          * Quick Actions run from the native dropdown panel must immediately
          * become the main titlebar button action. The dropdown is a separate
          * WKWebView, so native relays the chosen command id back into the main
@@ -716,7 +716,7 @@ export function App() {
     }
     if (typeof window.__ghostex_PENDING_TITLEBAR_UPDATE_AVAILABLE__ === 'boolean') {
       /**
-       * CDXC:AutoUpdate 2026-06-08-18:21:
+       * CDXC:Release 2026-06-08-18:21:
        * Native may detect an app update before this React bridge exists. Apply
        * the latest pending native boolean immediately after bridge installation
        * so the titlebar download button appears during startup instead of only
@@ -728,13 +728,13 @@ export function App() {
     }
     if (typeof window.__ghostex_PENDING_TITLEBAR_UPDATE_DOWNLOADING__ === 'boolean') {
       /**
-       * CDXC:AutoUpdate 2026-06-13-17:52:
+       * CDXC:Release 2026-06-13-17:52:
        * Native may start the Sparkle download before this React bridge exists.
        * Apply the pending boolean immediately so the titlebar button begins
        * showing download state as soon as the document can render the current
        * updater state.
        *
-       * CDXC:AutoUpdate 2026-06-30-22:18:
+       * CDXC:Release 2026-06-30-22:18:
        * Apply the pending nullable progress ratio with the downloading boolean
        * so titlebar reloads preserve the circular fill and hover percent.
        */
@@ -787,7 +787,7 @@ export function App() {
       return;
     }
     /*
-     * CDXC:ChromeResponsivenessDiagnostics 2026-06-30-23:52:
+     * CDXC:Diagnostics 2026-06-30-23:52:
      * When the titlebar buttons stop responding, the isolated titlebar React
      * event loop may have stalled before WebKit terminates. Sample coarse timer
      * drift only while the targeted diagnostic scenario is enabled, and throttle
@@ -891,17 +891,17 @@ export function App() {
       return;
     }
     /**
-     * CDXC:TitlebarResources 2026-05-16-16:08:
+     * CDXC:Resources 2026-05-16-16:08:
      * The Resources dropdown should show live process CPU and memory without a
      * native push channel. Poll `ps` only while the wide dropdown is open so
      * the compact titlebar does not spend idle work on hidden diagnostics.
      *
-     * CDXC:TitlebarResources 2026-06-07-16:20:
+     * CDXC:Resources 2026-06-07-16:20:
      * Hidden Resources UI should hold no sampled process table and should never
      * stack overlapping `ps` runs. Treat each open as a generation so slow native
      * process replies cannot repopulate closed-menu state.
      *
-     * CDXC:TitlebarResources 2026-06-11-18:13:
+     * CDXC:Resources 2026-06-11-18:13:
      * Each native dropdown open clears readiness so AppKit waits for the current
      * first process sample before revealing the Resources child window.
      */
@@ -926,7 +926,7 @@ export function App() {
       return;
     }
     /*
-     * CDXC:TitlebarResources 2026-06-11-18:13:
+     * CDXC:Resources 2026-06-11-18:13:
      * The native Resources panel is loaded offscreen until React has committed
      * the first real process snapshot. Report readiness from an effect so AppKit
      * orders the child window onscreen after the non-loading content is painted.
@@ -947,7 +947,7 @@ export function App() {
       return;
     }
     /**
-     * CDXC:TitlebarResources 2026-06-13-02:02:
+     * CDXC:Resources 2026-06-13-02:02:
      * Each Resources modal open should begin with every expandable item row
      * collapsed, then show the expand action because all rows are collapsed.
      * Do this once per open in a layout effect after the dynamic process
@@ -1002,7 +1002,7 @@ export function App() {
 
   const openSidebarActionsSettings = () => {
     /*
-    CDXC:ProjectActions 2026-06-15-15:29:
+    CDXC:Projects 2026-06-15-15:29:
     Empty or unconfigured titlebar Actions clicks should open Settings on the Actions page instead of showing the removed standalone Configure Action modal.
     */
     closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarActionsSettings');
@@ -1039,7 +1039,7 @@ export function App() {
 
   const runGitAction = (action: SidebarGitAction) => {
     /*
-     * CDXC:TitlebarGit 2026-06-16-18:41:
+     * CDXC:Git 2026-06-16-18:41:
      * If the Commits row shows no remote delta, a stale titlebar child-window
      * click should be inert instead of starting an unnecessary pull/push flow.
      */
@@ -1051,7 +1051,7 @@ export function App() {
   };
   const openTitlebarSettingsMenuSettings = () => {
     /*
-     * CDXC:SidebarTopChrome 2026-06-29-01:43:
+     * CDXC:Sidebar 2026-06-29-01:43:
      * The visible Settings menu moved from the titlebar into the sidebar shortcut row. Keep this titlebar-panel compatibility route on the same app-modal host so any existing native child-window path still opens Settings as the native modal surface.
      */
     closeAppModalFromTitlebarNavigation('SettingsDismissal:titlebarSettingsMenu');
@@ -1101,13 +1101,13 @@ export function App() {
 
   const focusResourceSession = (sessionId: string) => {
     /**
-     * CDXC:TitlebarResources 2026-05-28-10:39:
+     * CDXC:Resources 2026-05-28-10:39:
      * Resources rows need a direct Focus action so users can jump from process
      * diagnostics to the owning session without using the sidebar. Close the
      * dropdown after forwarding the durable combined session id to the sidebar
      * owner, which already handles cross-project and sleeping-session focus.
      *
-     * CDXC:TitlebarResources 2026-06-13-02:13:
+     * CDXC:Resources 2026-06-13-02:13:
      * Focus must visibly leave Resources after dispatching the sidebar focus
      * command. The native child window otherwise stays open over the newly
      * focused workspace, making a successful focus request look inert.
@@ -1122,20 +1122,20 @@ export function App() {
       return;
     }
     /**
-     * CDXC:TitlebarResources 2026-05-21-16:38:
+     * CDXC:Resources 2026-05-21-16:38:
      * Any Quit action in the resource manager should immediately mark the row
      * as closing and move it below active resources. Sidebar-owned terminal
      * sessions sleep through sidebar state so their cards remain resumable;
      * non-terminal panes and detached process bundles still use their resource
      * cleanup paths.
      *
-     * CDXC:TitlebarResources 2026-05-23-10:46:
+     * CDXC:Resources 2026-05-23-10:46:
      * The resource manager must not rely on sidebar sleep as the only kill
      * mechanism. It also terminates the PIDs currently shown in the dropdown so
      * row Quit, group Quit, and Sleep All actually release RAM while the
      * sidebar keeps durable terminal sessions.
      *
-     * CDXC:TitlebarResources 2026-06-22-00:30:
+     * CDXC:Resources 2026-06-22-00:30:
      * Server Stop rows should interrupt only listener-backed server process trees.
      * They intentionally skip sidebar session/project close commands so the
      * terminal that launched the server remains available after the port stops.
@@ -1244,7 +1244,7 @@ export function App() {
         await stopKeepAwake({ suppressAutoStart: false });
       }
       /**
-       * CDXC:TitlebarKeepAwake 2026-05-28-19:28:
+       * CDXC:KeepAwake 2026-05-28-19:28:
        * The normal keep-awake button should prevent idle sleep and AC system sleep.
        * Lid-close sleep is controlled by the separate Settings toggle because macOS does not treat it as a regular caffeinate idle-sleep assertion.
        */
@@ -1288,7 +1288,7 @@ export function App() {
     }
     const runKeepAwakeCommand = (command: TitlebarKeepAwakeCommand) => {
       /*
-       * CDXC:SidebarTopChrome 2026-06-29-01:43:
+       * CDXC:Sidebar 2026-06-29-01:43:
        * Keep Awake moved from the titlebar trigger strip into the sidebar shortcut row. Keep this bridge as the only sidebar entry point so the titlebar host remains the single owner of caffeinate start/stop and runtime sync.
        */
       if (command.action === 'stop') {
@@ -1339,7 +1339,7 @@ export function App() {
 
   const openGhostexCliSettings = () => {
     /**
-     * CDXC:CliInstall 2026-06-07-15:26:
+     * CDXC:Cli 2026-06-07-15:26:
      * The CLI-not-accessible Tips notice should deep-link to Settings where
      * Repair CLI lives, so the notice is actionable without adding titlebar
      * install controls.
@@ -1381,7 +1381,7 @@ export function App() {
       syncKeepAwakeRuntimeState(event instanceof CustomEvent ? (event.detail as KeepAwakeRuntimeSyncState) : undefined);
     };
     /*
-     * CDXC:TitlebarKeepAwake 2026-06-15-10:12:
+     * CDXC:KeepAwake 2026-06-15-10:12:
      * The keep-awake dropdown renders in a native child titlebar window. Runtime changes from that child must update the main titlebar immediately and explicit Don't keep awake must suppress launch/display auto-start for this app run until the user starts keep-awake again.
      */
     window.addEventListener('storage', handleStorage);
@@ -1394,7 +1394,7 @@ export function App() {
 
   useEffect(() => {
     /*
-     * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+     * CDXC:Settings 2026-06-28-07:41:
      * Keep Awake is gated by Enable Experimental Features. If the user turns it
      * off while caffeinate is running, stop the hidden runtime instead of
      * leaving a titlebar-invisible power assertion active.
@@ -1425,7 +1425,7 @@ export function App() {
 
   useEffect(() => {
     /*
-     * CDXC:TitlebarKeepAwake 2026-06-23-08:20:
+     * CDXC:KeepAwake 2026-06-23-08:20:
      * Working-session keep-awake is optional, but once enabled it should cover the active Working period plus 20 minutes afterward so users have time to reply before the Mac can sleep.
      */
     const previousWorkingSessionCount = previousKeepAwakeWorkingSessionCountRef.current;
@@ -1464,7 +1464,7 @@ export function App() {
 
   useEffect(() => {
     /*
-     * CDXC:TitlebarKeepAwake 2026-06-23-08:20:
+     * CDXC:KeepAwake 2026-06-23-08:20:
      * If no manual keep-awake period is running, active Delayed Send timers should still prevent laptop sleep so the scheduled Enter can fire. Manual Keep Awake, especially Until turned off, takes precedence because automatic holds only start when no runtime exists and only stop runtimes they started.
      */
     if (!keepAwakeFeatureEnabled) {
@@ -1657,24 +1657,24 @@ export function App() {
   };
 
   /**
-   * CDXC:ProjectBrowserTabs 2026-06-13-00:12:
+   * CDXC:Browser 2026-06-13-00:12:
    * The top project browser mode is now user-facing Browser mode. Keep it
    * disabled only for Quick/projectless contexts; real projects without a
    * GitHub remote still open Browser mode with Google as the first tab so the
    * control is always useful without showing an app-created about:blank page.
    *
-   * CDXC:ProjectBrowserTabs 2026-06-16-12:02:
+   * CDXC:Browser 2026-06-16-12:02:
    * Browser + tabs follow the same destination rule: project GitHub remote when available, otherwise Google.
    */
   const browserModeDisabledReason = projectState.projectIsQuick ? 'Switch to a project to access this view' : undefined;
   /*
-   * CDXC:ModeSwitcher 2026-06-08-18:39:
+   * CDXC:Navigation 2026-06-08-18:39:
    * Quick sessions are projectless work areas, so Kanban should be unavailable
    * there for the same active-context reason as Browser mode. Disable the
    * titlebar tab/button before click dispatch instead of opening an empty
    * project-board surface.
    *
-   * CDXC:ModeSwitcher 2026-06-16-16:00:
+   * CDXC:Navigation 2026-06-16-16:00:
    * Disabled Browser and Kanban mode tabs should explain the project-context
    * requirement directly on hover. Use one shared message for Quick sessions so
    * users know switching to a project unlocks those views.
@@ -1772,18 +1772,18 @@ export function App() {
   const shouldShowCompanionToggleButton =
     activeMode !== 'agents' && projectState.editorIsOpen && !projectState.editorIsSleeping;
   /*
-   * CDXC:TitlebarModeTabs 2026-05-31-12:00:
+   * CDXC:Navigation 2026-05-31-12:00:
    * macOS titlebar mode switcher labels use title case (Agents, Source, Browser, Kanban, Automate, Docs), not all-caps, so the segmented control reads like navigation chrome rather than shouting labels.
    *
-   * CDXC:Manage 2026-06-20-04:36:
+   * CDXC:Docs 2026-06-20-04:36:
    * Manage is a project-scoped file browser workarea and should sit beside Kanban in the same titlebar segmented control instead of being hidden under a menu.
    *
-   * CDXC:TitlebarManage 2026-06-28-06:16:
+   * CDXC:Docs 2026-06-28-06:16:
    * Manage is no longer beta or debugging-only chrome. Always show it in the
    * titlebar mode list and keep only the project-context disabled reason for
    * Quick sessions.
    *
-   * CDXC:TitlebarDocs 2026-06-28-06:24:
+   * CDXC:Docs 2026-06-28-06:24:
    * The user-facing titlebar name for the Manage-backed project document
    * surface is Docs. Keep the stable internal "manage" mode id so persisted
    * pane state and native bridge messages remain compatible.
@@ -1791,7 +1791,7 @@ export function App() {
    * CDXC:Automations 2026-06-30-11:05:
    * Automations are a first-class titlebar workarea named Automate. Opening Automate uses its own project-editor mode so project automations no longer make the titlebar look like it switched to Kanban.
    *
-   * CDXC:TitlebarModeTabs 2026-06-30-12:55:
+   * CDXC:Navigation 2026-06-30-12:55:
    * Kanban must appear before Automate in the macOS titlebar mode switcher, preserving the project-management flow before scheduled automation while keeping Docs last.
    */
   const configuredTitlebarModes = [
@@ -1863,7 +1863,7 @@ export function App() {
 
   useEffect(() => {
     /**
-     * CDXC:SidebarTheme 2026-06-15-01:43:
+     * CDXC:Theming 2026-06-15-01:43:
      * The titlebar runs in its own WKWebView, so mirror the resolved sidebar
      * theme onto body for shared CSS tokens. This keeps the titlebar strip and
      * native child-window dropdown panels aligned with Dark 1, Dark 2, and
@@ -1883,26 +1883,26 @@ export function App() {
     const titlebarGradientColors = getSidebarTitlebarGradientColors(projectState.customSidebarTitlebarBackgroundColor);
     const titlebarBackground = `linear-gradient(90deg, ${titlebarGradientColors.titlebarLeft} 0%, ${titlebarGradientColors.titlebarLeft} ${TITLEBAR_GRADIENT_BLEND_START_PERCENT}%, ${titlebarGradientColors.titlebarRight} 100%)`;
     /**
-     * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
+     * CDXC:Theming 2026-06-15-11:24:
      * The React titlebar is a separate WKWebView from the sidebar. Apply the
      * experimental custom chrome colors only in this titlebar host; dropdown
      * panels reuse this bundle but must continue using normal dropdown/theme
      * tokens instead of the sidebar/titlebar override.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
+     * CDXC:Theming 2026-06-15-13:22:
      * Foreground is derived from the background before it reaches this state;
      * the titlebar host should not expose or preserve a separate foreground
      * choice.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-15-15:01:
+     * CDXC:Theming 2026-06-15-15:01:
      * Custom titlebar separators darken as the slider-selected background gets
      * lighter, but only inside the real titlebar host.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
+     * CDXC:Theming 2026-06-19-12:33:
      * The titlebar should start with the sidebar gradient's top color and
      * use a separate surface token for the gradient paint.
      *
-     * CDXC:SidebarTitlebarColors 2026-06-19-13:26:
+     * CDXC:Theming 2026-06-19-13:26:
      * Keep the titlebar's left 40% on the sidebar top stop so it blends with
      * the sidebar edge, then fade to the sidebar bottom stop at the right.
      * The titlebar gradient should now darken across the strip rather than
@@ -2150,24 +2150,24 @@ export function parseTitlebarHexRgbColor(color: string): TitlebarRgbColor | unde
 
 export function getTitlebarButtonSeparatorColorForBackground(backgroundColor: string): string {
   /**
-   * CDXC:SidebarTitlebarColors 2026-06-15-15:01:
+   * CDXC:Theming 2026-06-15-15:01:
    * When the experimental sidebar/titlebar background gets lighter, titlebar
    * button separators should get darker so the chrome reads as deliberate lines
    * instead of faint raised rows.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-16:03:
+   * CDXC:Theming 2026-06-15-16:03:
    * A 90 contrast background made the previous separator curve nearly match
    * the background. Darken separators much faster as the background lightens so
    * the button dividers stay visible throughout the 85-100 slider range.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-16-15:52:
+   * CDXC:Theming 2026-06-16-15:52:
    * The 93 contrast + white tint default computes to #141414. The previous
    * curve crossed over there and returned #151515, making 1px titlebar button
    * separators disappear. Keep very dark backgrounds on the subtle lighter
    * separator curve, then switch to the dark divider floor once the background
    * reaches the new default range.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-19-12:33:
+   * CDXC:Theming 2026-06-19-12:33:
    * The titlebar now paints a horizontal gradient but separators use the solid
    * left stop. Keep very dark left stops on a lighter divider floor so
    * separators between titlebar items stay visible instead of blending into the

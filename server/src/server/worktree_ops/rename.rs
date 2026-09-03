@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 Renaming a worktree is a multi-step git + database mutation, so it lives behind
 ONE endpoint for exactly the reason `deleteWorktreeProject` does: the rollback
 must not depend on a renderer that may not survive the operation. The order is
@@ -32,7 +32,7 @@ pub(crate) struct RenameWorktreeProjectPlan {
     pub(crate) worktree_branch: Option<String>,
     pub(crate) worktree_path: String,
     /*
-    CDXC:WorktreeRename 2026-08-10:
+    CDXC:Worktrees 2026-08-10:
     The same folder can be spelled two ways on macOS — `/tmp/rt-old` and
     `/private/tmp/rt-old` — and nothing forces a session's stored `cwd` to use
     the spelling the project row happens to carry. Rebasing compares strings, so
@@ -116,7 +116,7 @@ pub(crate) fn normalize_rename_worktree_project_params(
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 The daemon re-validates the typed name with the same nine rules the sidebar field
 enforces (`packages/shared/worktree-rename-name.ts`), because the field is a courtesy and
 this is the boundary. Rules 1-6 are gxserver's existing ref policy; 7-9 are the
@@ -200,7 +200,7 @@ pub(crate) fn prepare_rename_worktree_project_plan(
     )?;
 
     /*
-    CDXC:WorktreeRename 2026-08-09-18:40:
+    CDXC:Worktrees 2026-08-09-18:40:
     The typed operation scopes every worktree command to "inside the parent's
     family directory" and compares paths LEXICALLY, by design — it collapses
     `.`/`..` but deliberately does not resolve symlinks. So two rows that
@@ -266,7 +266,7 @@ pub(crate) fn prepare_rename_worktree_project_plan(
             .into());
         }
         /*
-        CDXC:WorktreeRename 2026-08-10:
+        CDXC:Worktrees 2026-08-10:
         These two probes exist to refuse early, with a sentence the user can act
         on, and they are not authoritative. `worktree_is_locked` matches
         `worktree_path` against what `git worktree list --porcelain` prints, and
@@ -339,7 +339,7 @@ pub(crate) async fn rename_worktree_project_from_plan(
 ) -> std::result::Result<Value, RenameWorktreeProjectError> {
     let current_branch = resolve_renamed_worktree_branch_name(&plan).await?;
     /*
-    CDXC:WorktreeRename 2026-08-10:
+    CDXC:Worktrees 2026-08-10:
     "Nothing to rename" cannot be decided from the checkbox alone. Asking to
     rename the branch to the name it already has, on a folder that is already
     correct, is a request to change nothing — and reporting success for that
@@ -357,7 +357,7 @@ pub(crate) async fn rename_worktree_project_from_plan(
     if plan.moves_folder {
         if let Err(error) = move_worktree_project_checkout(&plan).await {
             /*
-            CDXC:WorktreeRename 2026-08-09-18:40:
+            CDXC:Worktrees 2026-08-09-18:40:
             The branch rename is the only step that already landed, and it is
             trivially reversible, so undo it before reporting the move failure.
             A user who sees "could not rename" must not then discover their
@@ -365,7 +365,7 @@ pub(crate) async fn rename_worktree_project_from_plan(
             */
             if let (Some(from), Some(to)) = (current_branch.as_deref(), renamed_branch.as_deref()) {
                 /*
-                CDXC:WorktreeRename 2026-08-10:
+                CDXC:Worktrees 2026-08-10:
                 The undo is the only thing standing between the user and the
                 state the comment above forbids, so a failed undo is exactly the
                 case worth recording. Dropping it left the branch renamed, the
@@ -499,7 +499,7 @@ pub(crate) async fn move_worktree_project_checkout(
         return Ok(());
     }
     /*
-    CDXC:WorktreeRename 2026-08-09-18:40:
+    CDXC:Worktrees 2026-08-09-18:40:
     git's stderr never reaches the user (typed-operation results are bounded by
     contract), so translate the two refusals that are actionable and fall back to
     a plain sentence for everything else. Submodules are re-checked here as well
@@ -553,7 +553,7 @@ pub(crate) fn is_locked_worktree_refusal(result: &Value) -> bool {
 }
 
 /*
-CDXC:WorktreeRename 2026-08-09-18:40:
+CDXC:Worktrees 2026-08-09-18:40:
 Everything that mirrors the worktree's location has to move with it in one pass,
 because the alternative is a sidebar row pointing at a folder that no longer
 exists — worse than not having the feature. The full list, each traced rather
@@ -594,7 +594,7 @@ pub(crate) fn apply_renamed_worktree_project_state(
         })?;
     let project_id = plan.params.project_id.as_str();
     /*
-    CDXC:WorktreeRename 2026-08-10:
+    CDXC:Worktrees 2026-08-10:
     The folder has already moved by the time any of this runs, so these rows are
     the only remaining description of where it went — and the list above only has
     value whole. Written one statement at a time, a session write that failed

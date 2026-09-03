@@ -19,7 +19,7 @@ export const CODE_REFS = {
   modalOpen: 'apps/desktop/src/app/modals.rs:966 open_gpui_app_modal_window',
   modalReady: 'apps/desktop/src/app/window/modal_host.rs:159 GpuiAppModalHost::receive_bridge_message',
   nonReactHost: 'apps/desktop/src/app/model/app_modal_kind.rs GpuiAppModalKind::uses_react_modal_host',
-  tutorialVideoUrl: 'apps/desktop/src/app/consts.rs:665 GHOSTEX_TUTORIAL_VIDEO_URL (CDXC:GPUITutorialVideo)',
+  tutorialVideoUrl: 'apps/desktop/src/app/consts.rs:665 GHOSTEX_TUTORIAL_VIDEO_URL (CDXC:Onboarding)',
   persistState:
     'apps/desktop/src/app/helpers/os_cli/app_state_persistence.rs:253 persist_gpui_first_run_onboarding_state',
   portlessCheck:

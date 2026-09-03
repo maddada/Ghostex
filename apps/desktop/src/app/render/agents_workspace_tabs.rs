@@ -34,13 +34,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIWorkspaceTabs 2026-06-22-05:18:
+        CDXC:Workarea 2026-06-22-05:18:
         Agents terminal panes need native-style tab chrome before libghostty mounts: every pane keeps an always-visible tab bar, tab selection colors stay tied to active tab state instead of pane focus, horizontal overflow remains scrollable, and right-side pane actions stay in the tab chrome instead of overlapping terminal bodies.
 
-        CDXC:GPUIAgentsPaneActions 2026-06-22-06:39:
+        CDXC:CommandPane 2026-06-22-06:39:
         Agents pane action chrome mirrors the native compact tab-bar cluster: fixed New Terminal, New Browser Tab, and pane overflow controls live at the far right. Split, rotate, and merge actions stay in the overflow menu rather than occupying fixed tab-bar slots.
 
-        CDXC:GPUIAgentsMergeAllTabs 2026-06-22-13:17:
+        CDXC:CommandPane 2026-06-22-13:17:
         Merge All Tabs lives in the Agents pane overflow after Split Sideways, Split Downwards, and Rotate Panes Clockwise, matching the native pane titlebar ordering while keeping command terminals in the separate command-pane action set.
         */
         let scroll_handle = self.workspace_tab_scroll_handle(leaf.pane_id);
@@ -199,7 +199,7 @@ impl GhostexGpuiApp {
                 MouseButton::Middle,
                 cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
                     /*
-                    CDXC:GPUIAgentsTabClose 2026-07-10:
+                    CDXC:CommandPane 2026-07-10:
                     Agents tabs must own button-2 like command and Browser
                     tabs. Consume the press without selecting or starting a
                     drag, then close the exact clicked tab on mouse-up through
@@ -323,7 +323,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUIWorkspaceTabEndGap 2026-08-03:
+        CDXC:Workarea 2026-08-03:
         The end-of-strip drop target is interaction chrome, not permanent tab
         spacing. Keep its 24px normal-layout target while either supported tab
         drag is active, but collapse it at rest so the final workspace tab is
@@ -508,7 +508,7 @@ impl GhostexGpuiApp {
                 MouseButton::Left,
                 cx.listener(move |_this, _event: &MouseDownEvent, window, cx| {
                     /*
-                    CDXC:GPUIAgentsWorkspaceTabs 2026-06-26-06:57:
+                    CDXC:Workarea 2026-06-26-06:57:
                     Native inline Agents tab Close records pointer ownership on mouse-down and performs close on mouse-up. Consume the down event here so tab selection/drag does not start under the close affordance, but keep teardown out of mouse-down.
                     */
                     window.prevent_default();
@@ -537,7 +537,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUISessionChatSurface 2026-08-02:
+        CDXC:SessionChat 2026-08-02:
         The Terminal/Chat toggle lives in the floating top-right cluster over
         the surface itself: the terminal's agent-action overlay in terminal
         view, and the chat page's own in-DOM cluster in chat view (a
@@ -545,7 +545,7 @@ impl GhostexGpuiApp {
         chrome hosts no toggle.
         */
         /*
-        CDXC:GlobalActions 2026-08-01-16:00:
+        CDXC:AgentLauncher 2026-08-01-16:00:
         The cluster no longer has a fixed button count: users hide built-in
         buttons they do not use, and Global Actions render as extra icons here.
         Width is therefore derived from what is actually drawn instead of the
@@ -605,7 +605,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GlobalActions 2026-08-01-16:00:
+    CDXC:AgentLauncher 2026-08-01-16:00:
     A Global Action button carries only the id back to the sidebar runtime,
     which resolves the trusted saved definition and runs it through the existing
     Action bridge — the same selector-shaped path the Command Palette uses. No

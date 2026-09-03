@@ -105,10 +105,10 @@ pub(crate) fn gpui_powershell_single_quote(value: &str) -> String {
 
 pub(crate) fn gpui_command_action_execution_text(command: &str, run_id: &str) -> String {
     /*
-    CDXC:GPUICommandPane 2026-06-24-23:36:
+    CDXC:CommandPane 2026-06-24-23:36:
     GPUI command-pane Actions need the same hidden process-command shape as the macOS app: wrap the saved command in a function, preserve the user's output as the visible terminal result, then return to an interactive login shell instead of pasting the wrapper into the prompt or closing the pane.
 
-    CDXC:GPUICommandPane 2026-06-24-23:36:
+    CDXC:CommandPane 2026-06-24-23:36:
     The wrapper stamps only safe command lifecycle fields into the env-provided session-state file before and after the action. That file is how GPUI can clear a reused command-pane tab from Working back to Idle without parsing terminal output, titles, command text, cwd, env, or stdout/stderr.
     */
     let working_stamp = gpui_command_action_status_stamp_text("working", run_id, "0");
@@ -151,7 +151,7 @@ pub(crate) fn gpui_command_action_status_stamp_text(
     exit_code: &str,
 ) -> String {
     /*
-    CDXC:GPUICommandPaneActions 2026-06-26-06:18:
+    CDXC:CommandPane 2026-06-26-06:18:
     Command Action status stamps must keep macOS parity by writing a replacement file beside the session-state file with shell process uniqueness before atomically moving it into place. Do not use a shared fixed temp file because concurrent command/status writers can clobber the idle stamp that drives completion sound.
     */
     let status = gpui_shell_single_quote(status);
@@ -245,7 +245,7 @@ pub(crate) fn gpui_command_action_mounted_terminal_script_text(
     status_file_path: &Path,
 ) -> String {
     /*
-    CDXC:GPUICommandPaneActions 2026-06-27-07:54:
+    CDXC:CommandPane 2026-06-27-07:54:
     Mounted reused default Actions need the same wrapper text as a created Action launch payload, but it belongs in a private staged script so the interactive shell sees only a short source command. Keep the status-file path inside process-local script/env setup and out of sidebar bridges, shell-state JSON, logs, and command titles.
     */
     format!(
@@ -254,7 +254,7 @@ pub(crate) fn gpui_command_action_mounted_terminal_script_text(
     )
 }
 
-// CDXC:GPUILinuxX11Backend 2026-07-05: staged mounted-Action scripts are
+// CDXC:PlatformSupport 2026-07-05: staged mounted-Action scripts are
 // plain POSIX (temp script + 0600/0700 permissions + `. path; rm path`), and
 // the mounted GPUI-engine terminal branch that consumes them is
 // cross-platform, so the staging helpers are unix-wide rather than
@@ -265,7 +265,7 @@ pub(crate) fn gpui_command_action_staged_mounted_script_source_command(
     status_file_path: &Path,
 ) -> Option<String> {
     /*
-    CDXC:GPUICommandPaneActions 2026-06-27-07:54:
+    CDXC:CommandPane 2026-06-27-07:54:
     Native `writeTerminalScript` parity for mounted Action reuse stages the full wrapper in a temp script and submits `. script; rm script` through the current interactive shell. The staged command carries only the temp script path, not command text, run ids, status-file paths, cwd/env values, terminal output, or persisted shell metadata.
     */
     let script_path = gpui_command_action_staged_mounted_script_path();
@@ -327,7 +327,7 @@ pub(crate) fn gpui_command_action_should_insert_launch_payload(
     wrote_to_mounted_reuse: bool,
 ) -> bool {
     /*
-    CDXC:GPUICommandPaneActions 2026-06-27-07:54:
+    CDXC:CommandPane 2026-06-27-07:54:
     Native default Action routing has two mutually exclusive execution paths: mounted idle reuse writes to the current command surface and never queues startup data, while created or unmounted Action tabs receive an exact-slot launch payload for their first mount. A failed mounted write must not become a hidden later launch payload for the same live shell.
     */
     match selection_kind {
@@ -400,7 +400,7 @@ pub(crate) fn gpui_command_action_status_from_file(
 }
 
 /*
-CDXC:SidebarBrowserTabReveal 2026-08-18:
+CDXC:Browser 2026-08-18:
 The reveal payload names the tab in Rust's own vocabulary (project id + tab id).
 Turning that into the sidebar's session id belongs to the sidebar runtime, which
 is the code that builds those rows in the first place.

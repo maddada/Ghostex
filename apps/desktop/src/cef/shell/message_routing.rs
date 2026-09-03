@@ -38,7 +38,7 @@ pub(crate) enum SidebarBridgeEventKind {
 
 impl SidebarBridgeEventKind {
     /*
-    CDXC:GPUISidebarPassiveMouseFocus 2026-07-22:
+    CDXC:FocusRouting 2026-07-22:
     Almost every sidebar bridge function forwards to the app handler in
     main.rs. SidebarEditableFocus is the one exception: it is a native
     first-responder transfer for the sending browser itself, so the CEF
@@ -115,7 +115,7 @@ pub(crate) enum BrowserPopupDispatchPolicy {
 
 impl BrowserPopupDispatchPolicy {
     /*
-    CDXC:GPUIBrowserRuntimePolicy 2026-06-23-12:48:
+    CDXC:Browser 2026-06-23-12:48:
     The CEF backend must mirror the shell popup policy before crossing into GPUI app state. Non-empty target URLs dispatch the shell-owned Browser tab path; empty targets are handled inside CEF with no shell callback, no address-only tab, no content transfer fallback, no filesystem/browser-store access, and no URL/title/page logging.
     */
     pub(crate) fn for_target_url(target_url: &str) -> Self {
@@ -139,7 +139,7 @@ pub(crate) fn browser_popup_target_url_for_shell(target_url: Option<&CefString>)
 }
 
 /*
-CDXC:GPUIBrowserLinkNewTab 2026-08-18:
+CDXC:Browser 2026-08-18:
 Middle-click and Cmd/Ctrl-click link opens never reach OnBeforePopup: Chromium
 routes them through RequestHandler::OnOpenURLFromTab with the disposition the
 gesture asked for. Map exactly the new-browser dispositions onto the existing
@@ -370,7 +370,7 @@ pub enum BrowserPageMetadataEvent {
 pub type BrowserPageMetadataHandler = StdRc<dyn Fn(BrowserPageMetadataEvent)>;
 
 /*
-CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+CDXC:Onboarding 2026-08-18:
 Third-party surfaces that carry no Ghostex bridge (today only the tutorial
 video modal, which loads the YouTube watch page as its top-level document) can
 still need a host-side action once their page is really on screen. This
@@ -381,7 +381,7 @@ its main frame" edge.
 pub type PageLoadEndHandler = StdRc<dyn Fn()>;
 
 /*
-CDXC:GPUIBrowserMediaPermissions 2026-07-27:
+CDXC:Browser 2026-07-27:
 Alloy-style CEF denies every `getUserMedia()` call outright when the client
 installs no permission handler, so Browser panes reported "permission denied"
 without ever asking the user. Device microphone/camera requests are forwarded
@@ -641,40 +641,40 @@ pub(crate) fn install_sidebar_project_context_v8_bridge(
     gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
 ) {
     /*
-    CDXC:GPUIProjectSidebarBridge 2026-06-23-18:29:
+    CDXC:CefRuntime 2026-06-23-18:29:
     The renderer-side sidebar bridge exposes only fixed typed string-payload functions for active-project context, Source readiness, Browser readiness, project-workarea readiness, Manage operation requests, sidebar-native side-effect requests, gxserver focus-state hints, and workspace terminal focus and rename requests, plus `window.ghostexGpui.runtimeSettings` with strict debuggingMode/showBetaFeatures booleans and the saved shared Settings object. It does not expose generic message names, event buses, filesystem/project detection, trusted file paths, URL/title inspection, arbitrary logging, persistence, or fallback project inference.
 
-    CDXC:GPUIProjectSidebarBridge 2026-06-23-06:57:
+    CDXC:CefRuntime 2026-06-23-06:57:
     Initial install publishes runtime settings through an already-registered `window.ghostexGpui.onRuntimeSettingsChanged(settings)` callback because the sidebar runtime can mount before CEF's load-end install message. If install wins the race, the runtime reads the installed object directly. Later refreshes use a second private browser-to-renderer CEF message with the same callback contract. This keeps ordinary Browser tabs out of the sidebar bridge and avoids a generic event/settings bus.
 
-    CDXC:GPUISettingsSidebarHandoff 2026-06-24-11:22:
+    CDXC:Settings 2026-06-24-11:22:
     The runtimeSettings object also carries the saved shared Settings object for the sidebar renderer to normalize with the shared TypeScript schema. This remains a narrow sidebar-owned handoff: the CEF boundary accepts only the serialized object already read by GPUI, parses it into one V8 object property, and does not expose a generic settings API, persistence hook, logging path, URL/title state, command text, tokens, or fallback project inference.
 
-    CDXC:GPUISidebarGxserverBootstrap 2026-06-24-11:17:
+    CDXC:ServerDaemon 2026-06-24-11:17:
     The same sidebar-only private install message may set `window.ghostexGpui.gxserverBootstrap` from real local gxserver facts: loopback base URL, bearer token, protocol version, stable client id, and optional gxserver ids only when app state already owns them. Do not derive ids from paths, titles, fixtures, shell placeholders, Browser tabs, terminal state, logs, persistence, or fallback project detection.
 
-    CDXC:GPUISidebarGxserverFocusState 2026-06-24-21:07:
+    CDXC:FocusRouting 2026-06-24-21:07:
     The focus-state bridge is a fixed sidebar-only string payload used to return React-owned gxserver presentation session ids to Rust for bootstrap replay. It must remain separate from native path actions and must not carry paths, titles, command text, terminal contents, tokens, daemon response bodies, or renderer-derived labels.
 
-    CDXC:GPUIWorkspaceSessionFocus 2026-06-26-06:08:
+    CDXC:FocusRouting 2026-06-26-06:08:
     The workspace terminal focus bridge is fixed-function and sidebar-only. It may carry only the gxserver project/session ids React already focused so Rust can select or materialize the matching Agents tab from gxserver attach metadata; it must not accept labels, commands, paths, terminal contents, daemon responses, or generic terminal IPC.
 
-    CDXC:GPUIWorkspaceRenameCommand 2026-06-27-02:27:
+    CDXC:SessionTitles 2026-06-27-02:27:
     Workspace terminal rename parity adds one fixed sidebar-only bridge function for the already-trimmed rename title plus gxserver project/session ids. CEF still exposes no generic terminal-text sender, command bus, cwd/path authority, logging path, renderer-selected target surface, or fallback terminal IPC.
 
-    CDXC:GPUICommandPane 2026-06-24-23:17:
+    CDXC:CommandPane 2026-06-24-23:17:
     The sidebar command-action bridge is a fixed-function handoff for the shared SidebarApp `runSidebarCommand` message. It may carry the selected gxserver HUD action fields to app Rust, but it must not expose generic IPC, filesystem/project discovery, logs, persistence, terminal content, stdout/stderr, or renderer-side execution authority.
 
-    CDXC:GPUICommandPane 2026-06-26-00:05:
+    CDXC:CommandPane 2026-06-26-00:05:
     Terminal Actions may include the terminal-only `closeTerminalOnExit` boolean in the fixed command-action JSON so GPUI can match macOS close-on-exit behavior. Browser Actions must not use that flag, and CEF still forwards only the bounded sidebar payload string for Rust-side strict parsing.
 
-    CDXC:GPUIAppShots 2026-06-25-23:28:
+    CDXC:AppShots 2026-06-25-23:28:
     The App Shot prompt bridge is fixed-function and sidebar-only. It may carry only the validated gxserver presentation session id and the already formatted app-owned prompt string; screenshot paths are not accepted as separate authority and the bridge is not a generic terminal text IPC.
 
-    CDXC:GPUIAppShots 2026-06-26-04:27:
+    CDXC:AppShots 2026-06-26-04:27:
     Remote App Shot insertion still uses this fixed bridge shape. Renderer code may identify only the existing machine-scoped remote session row; Rust owns mounted-surface verification and must not receive SSH details, paths, URLs, tokens, commands, output, or terminal content.
 
-    CDXC:GPUIStatusPetOverlay 2026-06-26-04:38:
+    CDXC:StatusPet 2026-06-26-04:38:
     Status indicator and pet overlay updates are fixed sidebar-only functions on this namespace. They may carry bounded enum/count/boolean/size/pet-id/project-id/session-id/order/title fields for GPUI-owned presentation and click routing, but no generic native-event bus, menu-bar status-item emulation, paths, URLs, commands, stdout/stderr, tokens, or terminal content.
     */
     let Some(context) = context else {
@@ -785,7 +785,7 @@ pub(crate) fn update_sidebar_gxserver_bootstrap_v8_bridge(
     }
 
     /*
-    CDXC:GPUISidebarGxserverBootstrap 2026-06-24-11:17:
+    CDXC:ServerDaemon 2026-06-24-11:17:
     Post-load gxserver bootstrap refresh is a narrow sidebar bridge update, not a generic host event bus or JavaScript injection channel. It can replace only `window.ghostexGpui.gxserverBootstrap` and call the fixed optional `onGxserverBootstrapChanged(bootstrap)` callback, so token availability changes reach the React runtime while Browser/workarea/modal CEF clients remain outside the token path.
     */
     let Some(bootstrap_object) =

@@ -15,10 +15,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITerminalClipboard 2026-06-23-19:07:
+        CDXC:Clipboard 2026-06-23-19:07:
         Agents runtime clipboard handoff is authorized by exact mounted surface ownership, not focus. The drain snapshots current Agents mount keys, re-gets the still-mounted owner on the app thread, enables only standard clipboard for owner-local queued Ghostty requests, reads only explicit string entries, and writes only runtime-provided text without logging, persistence, selection clipboard support, or fallback requester inference.
 
-        CDXC:GPUITerminalImagePaste 2026-06-27-10:28:
+        CDXC:Clipboard 2026-06-27-10:28:
         Runtime Ghostty clipboard reads share the direct-paste previewable-image normalization so menu/Cmd paste and runtime clipboard requests convert the same validated image inputs while preserving the disabled setting as explicit-string-only.
         */
         let paste_previewable_images_enabled =

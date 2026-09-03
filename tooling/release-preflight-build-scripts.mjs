@@ -6,7 +6,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 /*
- CDXC:ReleaseAutomation 2026-09-02-12:40:
+ CDXC:Release 2026-09-02-12:40:
  Release 8.5.0's first Actions run failed 21 minutes into the Android job because
  `bun run build:mobile-chat` could not load `esbuild`. The local preflight never
  ran that script, so nothing before dispatch could have caught it. This stage runs

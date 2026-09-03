@@ -2,7 +2,7 @@ export const SIDEBAR_COLLAPSE_STATE_DEBUG_EVENT_PREFIX = 'sidebar.collapseState.
 
 export function hashSidebarCollapseDebugId(value: string): string {
   /*
-   * CDXC:SidebarCollapseDiagnostics 2026-06-02-23:52:
+   * CDXC:Diagnostics 2026-06-02-23:52:
    * Collapse-state diagnostics need to correlate the same sidebar group across
    * read/write/toggle events without writing project names, workspace paths,
    * browser URLs, command text, or secrets into persistent support logs.

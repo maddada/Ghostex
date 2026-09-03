@@ -1,5 +1,5 @@
 /**
- * CDXC:ProjectBoardRedesign 2026-08-23:
+ * CDXC:ProjectBoard 2026-08-23:
  * Shared Storybook canvas for the Codex-style Project Board redesign
  * (Automate, Kanban, Docs). Carries the #0e0e0e page theme tokens plus the
  * Storybook-only shims: the preview loads the full sidebar CSS bundle whose
@@ -29,7 +29,7 @@ export const PAGE_THEME: CSSProperties & Record<string, string> = {
   '--ring': 'oklch(0.556 0 0)',
   '--radius': '8px',
   /*
-   * CDXC:AccentColor 2026-08-24:
+   * CDXC:Theming 2026-08-24:
    * Mirror the shipped default accent so redesign stories keep rendering the
    * accent text that now reads from --ghostex-accent.
    */
@@ -47,7 +47,7 @@ export const PAGE_SCOPED_CSS = `
   .pb-redesign * {
     font-family: Inter Variable, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
   }
-  /* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
+  /* CDXC:DesignSystem 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
   .pb-redesign [data-slot="switch"] {
     border-radius: 6px;
   }

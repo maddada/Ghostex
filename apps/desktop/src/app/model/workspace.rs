@@ -29,13 +29,13 @@ impl WorkspaceModel {
         }
     }
 
-    #[allow(dead_code)] // no caller: the CDXC:GPUIWorkspaceLifecycle sample workspace is not built at startup any more
+    #[allow(dead_code)] // no caller: the CDXC:Workarea sample workspace is not built at startup any more
     pub(crate) fn first_slice_default() -> Self {
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-22-05:23:
+        CDXC:Workarea 2026-06-22-05:23:
         Agents terminal tabs need explicit user-facing presentation states before the runtime lifecycle exists. Running, sleeping, mounting, failed startup, restored/unmounted, and popped-out placeholder sessions stay in the same tab/split layout tree so tab selection can show the correct body state without deleting, waking, or hiding sessions.
 
-        CDXC:GPUIAgentsTabStatus 2026-06-22-23:52:
+        CDXC:SessionStatus 2026-06-22-23:52:
         The default GPUI Agents workspace must visibly exercise non-idle semantic running-tab indicators while terminal bodies remain black placeholders: working, attention, and Delayed Send. Idle running tabs render without a status dot; lifecycle placeholder samples remain separate from running activity.
         */
         let terminal_sessions = vec![
@@ -98,7 +98,7 @@ impl WorkspaceModel {
             .collect();
 
         /*
-        CDXC:GPUIWorkspaceLayout 2026-06-22-05:11:
+        CDXC:Workarea 2026-06-22-05:11:
         Agents mode needs a GPUI-owned terminal workspace model before libghostty is mounted. Seed multiple terminal sessions into one tab group so ordinary sessions preserve tab order, active tab, and pane ownership instead of creating implicit split panes.
         */
         Self {
@@ -184,7 +184,7 @@ impl WorkspaceModel {
         &self,
     ) -> Vec<AgentsTerminalStartupRecord> {
         /*
-        CDXC:GPUITerminalStartupBoundary 2026-06-22-23:50:
+        CDXC:Terminal 2026-06-22-23:50:
         Only rendered Agents leaves whose selected shell session is startup-eligible Mounting are startup candidates. Inactive tabs, hidden Focus-mode leaves, Running mount slots, failed placeholders, sleeping/restored/popped-out placeholders before activation, sleeping wake and popped-out reattach activations, restored presentation-only Mounting sessions, and missing-session tabs must not create startup records, duplicate popped-out runtimes, or real mount slots. Explicit restored-unmounted activation is the materialization exception and enters the existing startup pipeline.
         */
         self.rendered_leaf_order()
@@ -207,7 +207,7 @@ impl WorkspaceModel {
         &self,
     ) -> Vec<AgentsTerminalStartupBodySlotId> {
         /*
-        CDXC:GPUITerminalStartupGeometry 2026-06-23-00:10:
+        CDXC:Terminal 2026-06-23-00:10:
         Startup body slots identify only visible selected startup-eligible Mounting Agents terminal bodies for runtime launch preparation. They intentionally do not reuse `AgentsTerminalBodyMountSlotId`, because real Ghostty mount slots, Running host maps, and surface owners must remain restricted to visible selected Running sessions. Explicit restored-unmounted materialization may get a startup body slot; sleeping wake, popped-out reattach, and restored presentation-only Mounting after restart must not get hidden startup hosts.
         */
         self.rendered_leaf_order()
@@ -229,7 +229,7 @@ impl WorkspaceModel {
         &self,
     ) -> Vec<AgentsTerminalBodyMountSlotId> {
         /*
-        CDXC:GPUTerminalParkedOwnerReattach 2026-06-23-19:41:
+        CDXC:Terminal 2026-06-23-19:41:
         Parked-owner reattach geometry is recorded only for visible selected Mounting Agents bodies that are not startup-eligible. This keeps sleeping wake and popped-out reattach out of startup maps while giving the runtime owner-transfer path the current body rectangle it needs before it can honestly move an exact parked owner back to Running.
         */
         let rendered_leaf_order = self.rendered_leaf_order();
@@ -283,7 +283,7 @@ impl WorkspaceModel {
 
     pub(crate) fn rendered_terminal_body_mount_slots(&self) -> Vec<AgentsTerminalBodyMountSlotId> {
         /*
-        CDXC:GPUILibghosttyMountBoundary 2026-06-22-22:45:
+        CDXC:Terminal 2026-06-22-22:45:
         The pure all-visible mount-slot rule returns every rendered Agents leaf whose selected tab is Running. Focus mode hides leaves by narrowing rendered_leaf_order, inactive tabs never appear here, and the helper remains model-only so rendering cannot invent fallback surfaces or persisted runtime ids.
         */
         let rendered_leaf_order = self.rendered_leaf_order();
@@ -405,16 +405,16 @@ impl WorkspaceModel {
         session_id: TerminalSessionId,
     ) -> bool {
         /*
-        CDXC:GPUIAgentsTerminalActivation 2026-06-22-23:33:
+        CDXC:SessionSleep 2026-06-22-23:33:
         Agents terminal tab selection must not auto-wake sleeping/restored/popped-out sessions or auto-retry failed startup sessions, but activating the selected placeholder body or card button should move those presentations into Mounting so wake, materialize, reattach, and retry stay honest pending runtime-startup states. Existing Running sessions remain Running, Mounting remains pending, and this slice must not launch a process, synthesize terminal success, persist runtime data, or create terminal content.
 
-        CDXC:GPUITerminalActivationRuntimeGuard 2026-06-23-18:00:
+        CDXC:Terminal 2026-06-23-18:00:
         Sleep and popped-out activation are not new-terminal startup and must stay blocked from hidden startup host/surface creation. Slice 236 handles them only through exact parked-owner transfer, while failed startup retry and explicit restored-unmounted materialization are the placeholder activations that may reuse the startup pipeline.
 
-        CDXC:GPUITerminalStartupRetryIdentity 2026-06-23-18:19:
+        CDXC:Terminal 2026-06-23-18:19:
         The durable workspace model marks explicit failed-startup retry and restored-unmounted materialization as startup-eligible Mounting. Process-local retry attempt id rotation belongs to the app/runtime helper and remains limited to failed-startup retry so shell state never owns or persists runtime ids.
 
-        CDXC:GPUITerminalRestoredMaterialization 2026-06-23-19:26:
+        CDXC:Terminal 2026-06-23-19:26:
         Explicit restored-unmounted activation materializes through startup-eligible Mounting using the durable shell session's existing process-local runtime id. It must not rotate a retry runtime id, and tab selection alone remains presentation-only.
         */
         if self.session(session_id).is_none() {
@@ -463,7 +463,7 @@ impl WorkspaceModel {
 
     pub(crate) fn cycle_tab_in_pane(&mut self, pane_id: WorkspacePaneId, reverse: bool) -> bool {
         /*
-        CDXC:GPUIKeyboardFocus 2026-06-22-06:02:
+        CDXC:FocusRouting 2026-06-22-06:02:
         Shell tab cycling must operate inside the focused Agents tab group and include sleeping, mounting, failed-startup, restored/unmounted, and popped-out placeholders as ordinary tabs. Cycling changes only the active tab id; it must not wake, mount, materialize, retry, or reattach placeholder sessions.
         */
         let Some(leaf) = self.find_leaf_mut(pane_id) else {
@@ -475,10 +475,10 @@ impl WorkspaceModel {
     #[allow(dead_code)] // no caller: tab closing goes through the id-addressed close paths
     pub(crate) fn close_active_tab(&mut self) -> bool {
         /*
-        CDXC:GPUIKeyboardFocus 2026-06-22-06:02:
+        CDXC:FocusRouting 2026-06-22-06:02:
         Closing an Agents placeholder tab is shell state only in this slice. Remove the active tab from the focused tab group, select a neighbor when possible, and collapse an emptied split branch.
 
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-05:23:
+        CDXC:Workarea 2026-06-26-05:23:
         GPUI Agents close must match the macOS workspace: closing the last visible terminal is a real close that leaves an empty workspace pane instead of preserving a fake sleeping or final-root terminal.
         */
         let pane_id = self.focused_pane;
@@ -524,7 +524,7 @@ impl WorkspaceModel {
         session_id: TerminalSessionId,
     ) -> bool {
         /*
-        CDXC:GPUIAgentsWorkspaceTabs 2026-06-26-06:57:
+        CDXC:Workarea 2026-06-26-06:57:
         Direct Agents tab close mirrors native pane-tab close: select the clicked tab before removal so inactive tab close elects the right sibling, then left sibling, from the close target instead of from a previously active tab. Scoped Close Right/Left/Others keep their no-focus native menu semantics and call `close_tab` directly.
         */
         if !self.session_belongs_to_pane(pane_id, session_id) {
@@ -540,7 +540,7 @@ impl WorkspaceModel {
         session_id: TerminalSessionId,
     ) -> Option<TerminalSessionId> {
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-07:25:
+        CDXC:Workarea 2026-06-26-07:25:
         GPUI must tell the sidebar runtime which pane-local session should become focused after a direct native tab Close. Simulate the existing direct-close reducer on a clone so the asynchronous sidebar cleanup receives the same right-then-left or surviving-pane target that the local workspace applies immediately.
         */
         let mut next = self.clone();
@@ -558,7 +558,7 @@ impl WorkspaceModel {
         scope: AgentsWorkspaceTabCloseScope,
     ) -> Vec<TerminalSessionId> {
         /*
-        CDXC:GPUIAgentsTabContextMenu 2026-06-26-06:57:
+        CDXC:ContextMenus 2026-06-26-06:57:
         Agents tab context-menu close scopes resolve only inside the clicked workspace pane tab group, matching macOS paneLayout behavior. The resolver uses ids only and never crosses split panes, command tabs, Browser tabs, project-editor surfaces, titles, paths, command text, terminal output, or persisted gxserver metadata.
         */
         let Some(leaf) = self.find_leaf(pane_id) else {
@@ -595,7 +595,7 @@ impl WorkspaceModel {
         scope: AgentsWorkspaceTabSleepScope,
     ) -> Vec<TerminalSessionId> {
         /*
-        CDXC:GPUIAgentsTabSleep 2026-06-26-06:57:
+        CDXC:SessionSleep 2026-06-26-06:57:
         Agents tab Sleep scopes use the same pane-local sibling list as native pane tabs. Sleeping tabs remain in the layout, so the resolver returns ids only and leaves lifecycle mutation, mounted-owner parking, and focus replacement to the explicit sleep path.
         */
         let Some(leaf) = self.find_leaf(pane_id) else {
@@ -651,7 +651,7 @@ impl WorkspaceModel {
         }
 
         /*
-        CDXC:GPUIAgentsTabSleep 2026-06-26-06:57:
+        CDXC:SessionSleep 2026-06-26-06:57:
         Agents Sleep is a shell lifecycle mutation that parks the current terminal owner through the existing Sleeping presentation state. Preserve delayed-send intent but clear visible work/attention activity, and never create startup launch payloads, fallback Running state, command text, paths, terminal output, logs, or persistent gxserver transition data from this model helper.
         */
         session.set_presentation_state_with_startup_eligibility(next_state, false);
@@ -667,7 +667,7 @@ impl WorkspaceModel {
         slept_session_id: TerminalSessionId,
     ) -> bool {
         /*
-        CDXC:GPUIAgentsTabSleep 2026-06-26-06:57:
+        CDXC:SessionSleep 2026-06-26-06:57:
         Direct native pane-tab Sleep uses the clicked tab group as transition origin: if the active clicked tab goes sleeping, choose the next awake right sibling, then left sibling, and leave all-sleeping groups selected on the sleeping placeholder. Sibling scoped Sleep rows intentionally do not retarget focus.
         */
         let Some(replacement_session_id) =
@@ -691,7 +691,7 @@ impl WorkspaceModel {
         slept_session_id: TerminalSessionId,
     ) -> Option<TerminalSessionId> {
         /*
-        CDXC:GPUIWorkspaceLifecycle 2026-06-26-07:25:
+        CDXC:Workarea 2026-06-26-07:25:
         Direct native tab Sleep uses pane-tab transition origin only when the slept tab is currently active, then selects the next awake right sibling before left siblings. Keep this pure helper shared with the sidebar lifecycle bridge so Rust reports the same replacement target it will later apply locally.
         */
         let leaf = self.find_leaf(pane_id)?;
@@ -732,7 +732,7 @@ impl WorkspaceModel {
         session_id: TerminalSessionId,
     ) -> bool {
         /*
-        CDXC:GPUICommandPaneDragDrop 2026-06-26-05:23:
+        CDXC:CommandPane 2026-06-26-05:23:
         Closing the final Agents tab is allowed for real close parity, but Agents-to-command transfers still require a surviving Agents tab or pane so the transaction cannot move the whole workspace into the command panel.
         */
         let Some(leaf) = self.find_leaf(pane_id) else {
@@ -763,10 +763,10 @@ impl WorkspaceModel {
         session_id: TerminalSessionId,
     ) -> bool {
         /*
-        CDXC:GPUIFocusMode 2026-06-22-17:00:
+        CDXC:FocusMode 2026-06-22-17:00:
         Agents workspace tab double-click parity must select and focus the clicked tab group before changing Focus mode. The first double-click zooms that pane when it has a visible non-sleeping placeholder, a second double-click exits, and sleeping-only panes remain selected/focused without waking or materializing terminals.
 
-        CDXC:GPUIFocusMode 2026-06-22-17:00:
+        CDXC:FocusMode 2026-06-22-17:00:
         If this helper is invoked for a different pane while Focus mode is active, keep the existing toggle semantics: select the requested tab first, then clear Focus mode instead of jumping directly into a different zoomed pane.
         */
         if !self.session_belongs_to_pane(pane_id, session_id) {
@@ -790,7 +790,7 @@ impl WorkspaceModel {
 
     pub(crate) fn toggle_focus_mode(&mut self) -> bool {
         /*
-        CDXC:GPUIFocusMode 2026-06-22-06:02:
+        CDXC:FocusMode 2026-06-22-06:02:
         Agents Focus mode is a reversible in-memory zoom of the focused rendered tab group. It stores only the focused pane id, renders that leaf as the workspace body, and toggles back to the unmodified split tree; sleeping-only panes do not count toward Focus-mode availability.
         */
         if self.focus_mode_pane.take().is_some() {
@@ -835,7 +835,7 @@ impl WorkspaceModel {
 
     pub(crate) fn normalize_workspace_tree(&mut self) -> bool {
         /*
-        CDXC:GPUIAgentsWorkspaceNormalize 2026-07-08:
+        CDXC:Workarea 2026-07-08:
         Agents split layout normalization is a model invariant, not render filtering. Prune tabs whose shell sessions no longer exist, collapse empty leaves by unwrapping their split branch, repair stale active/focus ids, and keep the single empty leaf only for the whole-empty workspace baseline.
         */
         let valid_session_ids = self
@@ -1015,10 +1015,10 @@ impl WorkspaceModel {
         requested_pane_id: WorkspacePaneId,
     ) -> Option<TerminalSessionId> {
         /*
-        CDXC:GPUIAgentsTerminalLifecycle 2026-06-22-23:33:
+        CDXC:Terminal 2026-06-22-23:33:
         New Agents terminal tabs are selected shell-owned Mounting sessions until a real terminal runtime has started. The tab, pane focus, and shell id are created immediately for layout parity, but no fake Running state, libghostty mount, process launch, command text, stdout/stderr, terminal content, or runtime id persistence is allowed.
 
-        CDXC:GPUIFocusedNewTabs 2026-07-25:
+        CDXC:FocusMode 2026-07-25:
         Cmd+T and the clicked-pane new-terminal control share this model
         mutation. Tab position is stable and user-owned, so a new terminal is
         appended to the end of the target pane's tab strip instead of being
@@ -1052,7 +1052,7 @@ impl WorkspaceModel {
         agent_icon: Option<&'static str>,
     ) -> Option<(WorkspacePaneId, TerminalSessionId)> {
         /*
-        CDXC:GPUIWorkspaceSessionFocus 2026-06-27-13:25:
+        CDXC:FocusRouting 2026-06-27-13:25:
         Local gxserver sidebar session attach is not a new-terminal startup placeholder. Create the selected Agents tab as Running immediately so the normal visible Ghostty mount-slot path can attach the daemon session without showing the Mounting card or persisting a fake pending state.
         */
         let pane_id = self.resolve_action_pane_id(requested_pane_id)?;
@@ -1109,7 +1109,7 @@ impl WorkspaceModel {
         placement: AgentsWorkspaceNewTerminalPlacement,
     ) -> Option<WorkspacePaneId> {
         /*
-        CDXC:GPUIRegisteredQuickTerminals 2026-08-07:
+        CDXC:CommandPane 2026-08-07:
         Remote gxserver presentation can publish a newly-created session before
         its SSH attach plan returns. Reconciliation necessarily gives that row
         a temporary tab owner, but quick-create placement is still owned by the
@@ -1184,7 +1184,7 @@ impl WorkspaceModel {
         &mut self,
     ) -> (WorkspacePaneId, TerminalSessionId) {
         /*
-        CDXC:GPUIAgentsTerminalLifecycle 2026-06-22-23:33:
+        CDXC:Terminal 2026-06-22-23:33:
         Full-width secondary terminal creation must append below the whole Agents workspace, not split the clicked pane. Keep the existing split/tab tree intact as the top branch, create a new bottom-row leaf with one selected Mounting terminal, focus that leaf, and clear Agents Focus mode so the row is visible without creating fake Running state, command-pane sessions, processes, libghostty surfaces, command text, stdout/stderr, or terminal content.
         */
         let session_id = self.allocate_session_id();
@@ -1219,7 +1219,7 @@ impl WorkspaceModel {
 
     pub(crate) fn merge_all_tabs_into_pane(&mut self, requested_pane_id: WorkspacePaneId) -> bool {
         /*
-        CDXC:GPUIAgentsMergeAllTabs 2026-06-22-13:17:
+        CDXC:CommandPane 2026-06-22-13:17:
         Merge All Tabs collapses the Agents workspace split root into the clicked or focused pane id while preserving every existing Agents terminal tab/session id and presentation state in tree-render order. Single-pane layouts no-op; multi-pane merges clear Focus mode because the pane geometry no longer exists, and command-pane sessions are intentionally outside this model.
         */
         let Some(target_pane_id) = self.resolve_action_pane_id(requested_pane_id) else {
@@ -1269,7 +1269,7 @@ impl WorkspaceModel {
         remote_attach_sessions: &mut HashMap<GpuiRemoteAttachSessionKey, TerminalSessionId>,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceTabsParity 2026-07-05:
+        CDXC:CommandPane 2026-07-05:
         The Agents tab tree mirrors the active SidebarApp group. The sidebar
         owns filtering and order; Rust only maps projected gxserver ids to
         local shell session ids, removes tabs absent from the projection, and
@@ -1425,7 +1425,7 @@ impl WorkspaceModel {
             };
             let before_tabs = leaf.tab_group.tabs.clone();
             /*
-            CDXC:GPUIWorkspaceTabsParity 2026-07-25:
+            CDXC:CommandPane 2026-07-25:
             Tab position inside a pane is owned by the Agents workspace, not by
             the sidebar projection. The sidebar reorders its rows as sessions
             report activity, so re-sorting mounted tabs by that projection made
@@ -1508,10 +1508,10 @@ impl WorkspaceModel {
 
     pub(crate) fn rotate_panes_clockwise(&mut self) -> bool {
         /*
-        CDXC:GPUIAgentsRotatePanes 2026-06-26-06:57:
+        CDXC:CommandPane 2026-06-26-06:57:
         Native Agents Rotate Panes Clockwise is a pure split-tree transform: recursively swap horizontal and vertical axes, reverse vertical branches while inverting their ratios, and preserve leaf pane ids, tab order, active tabs, focused pane, and terminal presentation records. Single-leaf workspaces no-op, and command-pane state stays outside this model.
 
-        CDXC:GPUIAgentsRotatePanes 2026-06-26-06:57:
+        CDXC:CommandPane 2026-06-26-06:57:
         Existing Agents geometry mutations clear Focus mode when the visible split layout changes. Rotation follows that rule after a multi-leaf transform so the rotated pane tree is immediately visible while the selected focused pane id remains stable for follow-up actions.
         */
         if self.leaf_order().len() <= 1 {
@@ -1530,7 +1530,7 @@ impl WorkspaceModel {
         new_leaf_first: bool,
     ) -> Option<(WorkspacePaneId, TerminalSessionId)> {
         /*
-        CDXC:GPUIAgentsTerminalLifecycle 2026-06-22-23:33:
+        CDXC:Terminal 2026-06-22-23:33:
         Agents explicit split controls must offer parity for Split Right and Split Below from the pane tab chrome. Each control creates a new split leaf with a selected Mounting terminal, uses the existing split tree and persistence path, and clears Focus mode only so the newly created pane is visible without adding fake Running state, overlays, native hit-test routing, libghostty mounts, or real process creation.
         */
         let target_pane_id = self.resolve_action_pane_id(requested_pane_id)?;
@@ -1574,7 +1574,7 @@ impl WorkspaceModel {
         zone: WorkspaceDropZone,
     ) -> Option<(WorkspacePaneId, TerminalSessionId)> {
         /*
-        CDXC:GPUICommandWorkspaceTransfer 2026-06-22-23:33:
+        CDXC:Workarea 2026-06-22-23:33:
         Command-pane tabs dropped onto an Agents pane body become selected Mounting Agents shell sessions with the command tab's visible title. Center drops group into the target pane, edge drops use normal Agents split semantics, and this remains shell state only: no command process, terminal content, stdout/stderr, libghostty mount/remount, fake Running state, overlay, or hidden hit region is transferred.
         */
         match zone {
@@ -1610,7 +1610,7 @@ impl WorkspaceModel {
         title: String,
     ) -> Option<(WorkspacePaneId, TerminalSessionId)> {
         /*
-        CDXC:GPUICommandWorkspaceTransfer 2026-06-22-23:33:
+        CDXC:Workarea 2026-06-22-23:33:
         Command tabs dropped on an Agents tab strip insert a new Mounting Agents shell session at the visible tab boundary or end target, select it, and focus that Agents pane. This is still a placeholder boundary: only the visible command title crosses surfaces, with no process, command text, stdout/stderr, terminal content, libghostty mount/remount, fake Running state, real Source/Kanban/Automate/Manage surface, overlay, hidden hit region, or native/root hit-test routing.
         */
         self.find_leaf(target_pane_id)?;
@@ -1692,7 +1692,7 @@ impl WorkspaceModel {
         insertion_index: usize,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceDragDrop 2026-06-22-05:31:
+        CDXC:Workarea 2026-06-22-05:31:
         Same-strip Agents tab drops are reorder-only. They must stay inside the source tab group, keep the dragged session identity, and leave the session presentation record untouched so sleeping, restored, mounting, and popped-out placeholders survive the reorder.
         */
         let Some(leaf) = self.find_leaf_mut(pane_id) else {
@@ -1752,7 +1752,7 @@ impl WorkspaceModel {
         zone: WorkspaceDropZone,
     ) -> bool {
         /*
-        CDXC:GPUIWorkspaceDragDrop 2026-06-22-05:31:
+        CDXC:Workarea 2026-06-22-05:31:
         Pane-body Agents tab drops use an in-memory layout mutation only in this slice: center drops group into the target tab group, while left/right/top/bottom edge drops create a new leaf beside the target and remove the dragged tab from its source. Empty source leaves are collapsed immediately so the split tree remains renderable without persistence, command-pane drag/drop, browser CEF drag behavior, or real wake/mount work.
         */
         if matches!(zone, WorkspaceDropZone::Center) {
@@ -1826,7 +1826,7 @@ impl WorkspaceModel {
 
     pub(crate) fn collapse_empty_leaf(&mut self, pane_id: WorkspacePaneId) {
         /*
-        CDXC:GPUIAgentsCloseFocus 2026-06-22-10:23:
+        CDXC:CommandPane 2026-06-22-10:23:
         Closing the only Agents tab in a split pane must choose the next keyboard target from the pre-collapse sibling branch, while same-pane closes keep the right-then-left tab selection owned by WorkspaceTabGroup::remove_session. Sibling-branch candidates are scored before the broader pane geometry fallback so nested layouts match native close-focus behavior.
         */
         let replacement_focus = workspace_close_focus_replacement_leaf_id(&self.root, pane_id);

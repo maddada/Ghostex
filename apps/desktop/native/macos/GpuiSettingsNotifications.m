@@ -55,7 +55,7 @@ int32_t GhostexGpuiSaveRemoteSshPassword(const char *remoteMachineId,
                                          const uint8_t *passwordBytes,
                                          size_t passwordLength) {
   /*
-   CDXC:GPUIRemoteMachinesSettings 2026-06-24-13:36:
+   CDXC:RemoteMachines 2026-06-24-13:36:
    GPUI Remote Machine password parity uses the same macOS Keychain
    service/account contract as Swift: service
    `com.madda.ghostex.remote-ssh-password`, account `remoteMachineId`, and
@@ -63,7 +63,7 @@ int32_t GhostexGpuiSaveRemoteSshPassword(const char *remoteMachineId,
    never through shell arguments, persistent logs, settings JSON, stdout/stderr,
    URLs, paths, hostnames, usernames, or command text.
 
-   CDXC:GPUIRemoteMachinesSettings 2026-06-24-13:36:
+   CDXC:RemoteMachines 2026-06-24-13:36:
    Non-empty saves must match `RemoteGxserverClient.storeSshPasswordInKeychain`:
    delete the existing service/account generic-password item first, treat
    missing items as a clean pre-add state, then add a new item with
@@ -111,7 +111,7 @@ int32_t GhostexGpuiCopyRemoteSshPassword(const char *remoteMachineId,
                                          size_t passwordCapacity,
                                          size_t *passwordLength) {
   /*
-   CDXC:GPUIRemoteSshPasswordAskpass 2026-08-03:
+   CDXC:RemotePairing 2026-08-03:
    Read the SSH password through Security.framework in the signed Ghostex
    process that owns the Keychain item. The SSH askpass child must not shell
    out to `/usr/bin/security`: that executable has a different Keychain access
@@ -168,7 +168,7 @@ int32_t GhostexGpuiSaveRemoteGxserverToken(const char *remoteMachineId,
                                            const uint8_t *tokenBytes,
                                            size_t tokenLength) {
   /*
-   CDXC:GPUIRemoteMachinesSettings 2026-06-24-14:34:
+   CDXC:RemoteMachines 2026-06-24-14:34:
    GPUI Remote gxserver reconnect stores the daemon token in the same macOS
    Keychain service/account contract as Swift: service
    `com.madda.ghostex.remote-gxserver-token`, account `remoteMachineId`,
@@ -177,7 +177,7 @@ int32_t GhostexGpuiSaveRemoteGxserverToken(const char *remoteMachineId,
    beyond connect status, stdout/stderr, URLs, paths, hostnames, usernames, or
    command text.
 
-   CDXC:GPUIRemoteMachinesSettings 2026-07-21-03:20:
+   CDXC:RemoteMachines 2026-07-21-03:20:
    Replace an existing token in place so Keychain preserves the item's access
    control owner. Local GPUI builds moved from `/Applications/GhostexGPUI.app`
    to `/Applications/Ghostex.app`; deleting an item created at the former path
@@ -259,7 +259,7 @@ int32_t GhostexGpuiSaveRemoteGxserverToken(const char *remoteMachineId,
     didReceiveNotificationResponse:(UNNotificationResponse *)response
              withCompletionHandler:(void (^)(void))completionHandler {
   /*
-   CDXC:GPUISettingsNotifications 2026-06-26-06:56:
+   CDXC:Notifications 2026-06-26-06:56:
    GPUI session attention banner clicks pass only the notification-owned session
    id back to Rust. Copy the C string for the synchronous callback and do not
    persist or log notification titles, bodies, project names, paths, URLs,
@@ -429,7 +429,7 @@ static NSURL *GhostexGpuiApplySessionAttentionIconAttachment(
     UNMutableNotificationContent *content, const char *iconDataUrl,
     NSString *identifier) {
   /*
-   CDXC:GPUISettingsNotifications 2026-06-26-07:22:
+   CDXC:Notifications 2026-06-26-07:22:
    Match Swift session-attention icon parity for GPUI: only a bounded data:image
    base64 URL may become a temporary 128x128 PNG notification attachment.
    Attachment failures still deliver the banner without fabricating a fallback
@@ -461,7 +461,7 @@ static NSURL *GhostexGpuiApplySessionAttentionIconAttachment(
 static void GhostexGpuiRemoveDeliveredSessionAttentionNotificationLater(
     NSString *identifier, NSURL *attachmentURL) {
   /*
-   CDXC:GPUISettingsNotifications 2026-06-26-06:56:
+   CDXC:Notifications 2026-06-26-06:56:
    Session attention banners should be temporary like the Swift host: after
    successful delivery, remove the delivered notification and any temp
    project-icon attachment after 12 seconds so ignored or swiped banners do not
@@ -509,7 +509,7 @@ GhostexGpuiNotificationAuthorizationStatusFromSettings(
 
 int32_t GhostexGpuiGetNotificationAuthorizationStatus(void) {
   /*
-   CDXC:GPUISettingsNotifications 2026-06-24-12:44:
+   CDXC:Notifications 2026-06-24-12:44:
    GPUI Settings reads macOS notification authorization through
    UserNotifications instead of reporting a stubbed unavailable state. Keep this
    shim status-only and privacy-neutral: no persistent logs, no raw errors, and
@@ -538,7 +538,7 @@ int32_t GhostexGpuiGetNotificationAuthorizationStatus(void) {
 
 int32_t GhostexGpuiRequestNotificationAuthorization(void) {
   /*
-   CDXC:GPUISettingsNotifications 2026-06-24-12:44:
+   CDXC:Notifications 2026-06-24-12:44:
    The Settings permission button may request only alert authorization and only
    when macOS reports notDetermined. Denied permission remains a system-settings
    repair flow; GPUI must not fake success or attempt to override Notification
@@ -573,7 +573,7 @@ int32_t GhostexGpuiRequestNotificationAuthorization(void) {
 
 int32_t GhostexGpuiDeliverSettingsTestNotification(void) {
   /*
-   CDXC:GPUISettingsNotifications 2026-06-24-12:44:
+   CDXC:Notifications 2026-06-24-12:44:
    Test agent task completion should emit exactly one generic macOS banner with
    no notification sound when Settings enables macOS attention notifications.
    This is not session notification routing: do not attach project icons,
@@ -637,13 +637,13 @@ int32_t GhostexGpuiDeliverSessionAttentionNotification(
     const char *sessionId, const char *title, const char *body,
     const char *iconDataUrl) {
   /*
-   CDXC:GPUISettingsNotifications 2026-06-26-06:56:
+   CDXC:Notifications 2026-06-26-06:56:
    Real GPUI session attention notifications use UserNotifications directly from
    the sanitized Rust status model. Content is limited to bounded session title
    and project-title-or-Ghostex body, sound remains nil, and the click payload
    is only the bounded session id used by the existing sidebar focus route.
 
-   CDXC:GPUISettingsNotifications 2026-06-26-07:22:
+   CDXC:Notifications 2026-06-26-07:22:
    The optional project icon is part of the same sanitized attention candidate
    and may only reach this delivery function as a nullable bounded data:image
    URL. It is converted to a temp PNG attachment by the GPUI-owned helper;

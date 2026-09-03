@@ -20,7 +20,7 @@ pub fn decode_codex_transcript_line(line: &str, fallback_id: &str) -> Option<Ses
 }
 
 /*
-CDXC:SessionChatCore 2026-08-01:
+CDXC:SessionChat 2026-08-01:
 The `message` response item is DELIBERATELY not decoded. A Codex rollout carries
 every visible turn twice: once as `event_msg`/`user_message`+`agent_message` and
 once as `response_item`/`message`. Measured over 4,881 local rollouts spanning
@@ -166,7 +166,7 @@ fn codex_event_message(
         Some("agent_message") => extract_string(payload.get("message"))
             .map(|text| transcript_message(SessionChatRole::Assistant, vec![text_block(text)])),
         /*
-        CDXC:SessionChatCore 2026-08-07:
+        CDXC:SessionChat 2026-08-07:
         Newer Codex builds (observed with gpt-5.6 rollouts, 2026-08) STOPPED
         writing the `user_message`/`agent_message` event lane entirely; visible
         turns instead arrive as `item_completed` events whose `item` is a
@@ -234,7 +234,7 @@ fn codex_event_message(
                 });
             }
             /*
-            CDXC:SessionChatCore 2026-08-23:
+            CDXC:SessionChat 2026-08-23:
             Compaction is a thread item, not a message, and it carries no
             content of its own — the whole record is its type. Codex keeps the
             summarised turns in the rollout, so without this row the chat gives
@@ -366,7 +366,7 @@ fn codex_summary_text(summary: Option<&Value>) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatGrokUpdates 2026-08-22:
+CDXC:AgentProviders 2026-08-22:
 Grok keeps two logs per session and chat follows the SECOND one.
 
 `chat_history.jsonl` is the persisted conversation, rewritten only when a model

@@ -180,7 +180,7 @@ export function hasCollapsedManageAncestor(path: string, collapsedDirectoryPaths
 }
 
 /**
- * CDXC:DocsSidebar 2026-06-30-21:39:
+ * CDXC:Docs 2026-06-30-21:39:
  * Docs file search must keep each matching row's existing parent folders visible so nested matches retain folder context, while nonmatching siblings stay hidden and the user's collapsed-folder state remains unchanged outside search mode.
  */
 export function filterManageEntriesForSearch(
@@ -336,11 +336,11 @@ export function createInitialArtifactContent(kind: ManageArtifactKind): string {
 
 export function createDefaultHtmlDocument(): string {
   /*
-   * CDXC:ManageDefaultHtml 2026-06-28-07:17:
+   * CDXC:Docs 2026-06-28-07:17:
    * The default HTML document is user-facing onboarding copy, not a blank placeholder. It should teach users to ask an agent for a polished explanatory HTML page, then review and annotate exact rendered sections with Agentation.
    * Keep the document self-contained with inline dark-mode styles and no scripts so it remains portable, while Manage now preserves author styles for real HTML rendering.
    *
-   * CDXC:ManageHtmlAgentation 2026-06-28-07:58:
+   * CDXC:Docs 2026-06-28-07:58:
    * The starter copy should describe Agentation as an idle bottom-left control on open. Users explicitly start feedback mode from Agentation only when they are ready to annotate.
    */
   return [

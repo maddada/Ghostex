@@ -8,7 +8,7 @@ use crate::resume_lookup::{
 };
 
 /*
-CDXC:SessionHistoryTitleSource 2026-07-29:
+CDXC:SessionTitles 2026-07-29:
 Rename-modal "Generate Name" with an empty title needs the session's recent
 user-sent messages as the generation source. Agent hooks already persist the
 provider session identity (`agentSessionId`, and for Claude the transcript
@@ -48,7 +48,7 @@ pub fn agent_supports_session_history_title_source(agent: Option<&str>) -> bool 
 }
 
 /*
-CDXC:SessionChatAntigravity 2026-09-03:
+CDXC:AgentProviders 2026-09-03:
 Antigravity's hooks carry the conversation id and the step log path but never
 the prompt text, so the hook receiver reads the first prompt from the log
 itself (the `USER_INPUT` step is appended the moment the user submits, before

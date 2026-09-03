@@ -328,7 +328,7 @@ fn git_pull_fast_forward_plans_ff_only_command() {
 #[test]
 fn git_list_branches_plans_structured_branch_command() {
     /*
-    CDXC:WorktreeBaseBranch 2026-06-24-11:32:
+    CDXC:Worktrees 2026-06-24-11:32:
     Add Worktree branch selection must use a typed Git action that lists
     local and remote-tracking branch refs without exposing a generic shell.
     */
@@ -494,7 +494,7 @@ fn worktree_move_builds_a_git_worktree_move_command() {
 #[test]
 fn worktree_move_rejects_an_existing_destination() {
     /*
-    CDXC:WorktreeRename 2026-08-09-18:40:
+    CDXC:Worktrees 2026-08-09-18:40:
     This is the regression test for the worst failure mode in the rename
     feature. `git worktree move A B` with B already present exits 0 and
     nests the worktree at B/A, so the operation "succeeds" while the folder
@@ -594,7 +594,7 @@ fn worktree_rename_branch_builds_a_git_branch_dash_m_command() {
 #[test]
 fn unsupported_worktree_actions_are_still_rejected() {
     /*
-    CDXC:WorktreeRename 2026-08-09-18:40:
+    CDXC:Worktrees 2026-08-09-18:40:
     The rename feature widened the worktree allowlist. Prove it is still an
     allowlist and did not become a wildcard.
     */

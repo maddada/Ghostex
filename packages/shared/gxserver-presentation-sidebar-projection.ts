@@ -44,7 +44,7 @@ export type GxserverPresentationCloseAfterDoneProjection = {
 export type GxserverPresentationSidebarProjectOverlay = {
   editor?: NonNullable<SidebarSessionGroup['projectContext']>['editor'];
   /*
-  CDXC:SidebarV2ProjectIcons 2026-07-29:
+  CDXC:Icons 2026-07-29:
   The typed project icon rides beside the image-only `iconDataUrl` because a
   Tabler glyph plus a color is the icon most Ghostex projects actually have.
   Hosts that only know about image icons keep publishing `iconDataUrl` and
@@ -132,7 +132,7 @@ export type GxserverPresentationSidebarGroupInput = {
 };
 
 /*
-CDXC:GxserverPresentationParity 2026-06-24-10:45:
+CDXC:StateSync 2026-06-24-10:45:
 GPUI must render gxserver sessions through the same React sidebar contract as macOS. This shared projection maps gxserver presentation snapshots into sidebar groups without AppKit, filesystem, browser, or native pane ownership; platform wrappers may join local resource state through explicit overlay inputs.
 */
 export function createGxserverPresentationSidebarGroups(
@@ -297,7 +297,7 @@ export function createGxserverPresentationSidebarGroup({
     canRemoveProject,
     editor: projectOverlay?.editor ?? createIdleGxserverPresentationProjectEditorState(project.projectId),
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     Carried straight through, including the absent-vs-null distinction: the
     daemon owns the probe and the client owns the normalization. Spreading only
     when the key is present keeps "not probed" from being flattened into
@@ -305,14 +305,14 @@ export function createGxserverPresentationSidebarGroup({
     */
     ...(project.gitRemoteOriginUrl === undefined ? {} : { gitRemoteOriginUrl: project.gitRemoteOriginUrl }),
     /*
-    CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+    CDXC:StateSync 2026-07-29 (P5 fix round):
     The repository root rides through the same way, and for the same reason:
     the daemon owns the probe, the client owns the interpretation. It has no
     null state, so an absent key is simply not spread.
     */
     ...(project.gitRepositoryRootPath === undefined ? {} : { gitRepositoryRootPath: project.gitRepositoryRootPath }),
     /*
-    CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+    CDXC:Icons 2026-07-29 (discovered icons):
     The icon the project's own repository ships, straight off the presentation
     project. It rides BESIDE the overlay's user-chosen icon rather than merging
     into it, because the renderer resolves them in a fixed order (user IMAGE,
@@ -388,7 +388,7 @@ export function createGxserverPresentationSidebarSession({
     agentSessionId: presentation.agentSessionId ?? localSession?.agentSessionId,
     alias: presentation.title,
     /*
-    CDXC:SessionForkFamilies 2026-08-28:
+    CDXC:SessionFork 2026-08-28:
     Fork lineage is derived by the daemon that owns the registry, so this is a
     straight forward of what it published. A daemon that predates fork awareness
     sends nothing and the row simply has no branch badge.
@@ -402,14 +402,14 @@ export function createGxserverPresentationSidebarSession({
     closeAfterDoneRemainingMs: closeAfterDone?.remainingMs,
     column: index % GRID_COLUMN_COUNT,
     /*
-    CDXC:SidebarV2 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     gxserver already stamps every presentation session with `createdAt`; carry
     it through so the V2 inbox can hold a position-stable creation order
     instead of inferring one from first-seen client state.
     */
     createdAt: presentation.createdAt,
     /*
-    CDXC:SidebarV2Worktree 2026-07-29:
+    CDXC:Worktrees 2026-07-29:
     The session's cwd IS its worktree in V2's model, so the inbox needs it to
     tell a managed `ghostex/…` checkout from a session in the project root and
     to name the folder its cleanup prompt would remove.
@@ -422,13 +422,13 @@ export function createGxserverPresentationSidebarSession({
     sendWhenAllProjectSessionsStopActive: delayedSend?.sendWhenAllProjectSessionsStopActive === true ? true : undefined,
     sendWhenAgentStopsActive: delayedSend?.sendWhenAgentStopsActive === true ? true : undefined,
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     The queued-prompt count is daemon-owned, exactly like the Delayed Send
     countdown above it, so it is copied straight through. Anything that is not
     a positive number collapses to `undefined` so a `0` or a garbled value from
     an unknown daemon can never render an empty badge.
 
-    CDXC:SessionChatPromptQueue 2026-08-21-b:
+    CDXC:SessionChat 2026-08-21-b:
     The count now includes `failed` rows, and the failed tally rides with it so
     the badge can turn red. The two are projected independently on purpose: a
     daemon that predates the failed tally still badges yellow with a correct
@@ -445,7 +445,7 @@ export function createGxserverPresentationSidebarSession({
     displayTitle: presentation.displayTitle,
     displayTitleTooltip: presentation.displayTitleTooltip,
     /*
-    CDXC:SidebarV2Git 2026-07-29:
+    CDXC:Git 2026-07-29:
     Git/PR state is probed server-side from the session cwd, so it is copied
     through by reference exactly like the lifecycle fields: undefined stays
     undefined, and the card simply has no branch line for a session (or a
@@ -453,7 +453,7 @@ export function createGxserverPresentationSidebarSession({
     */
     gitStatus: presentation.gitStatus,
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     Draft-ness is server-owned and PRESENT-ONLY, so it is copied through by
     reference: `true` stays `true`, anything else (including the `undefined` a
     daemon that predates drafts publishes) stays absent. Never normalize it to a
@@ -481,7 +481,7 @@ export function createGxserverPresentationSidebarSession({
     sessionKind: presentation.kind === 'agent' ? 'terminal' : presentation.kind,
     sessionTag: presentation.sessionTag,
     /*
-    CDXC:SessionAgentNotes 2026-08-24:
+    CDXC:SessionNotes 2026-08-24:
     The note is daemon-owned and keyed by the provider conversation id, so it is
     copied straight through like `sessionTag`. A blank or whitespace-only value
     collapses to `undefined` so a row can never carry an "empty note" that would
@@ -492,7 +492,7 @@ export function createGxserverPresentationSidebarSession({
       typeof presentation.stashedPromptCount === 'number' && presentation.stashedPromptCount > 0
         ? Math.floor(presentation.stashedPromptCount)
         : undefined,
-    // CDXC:SwitchAccount 2026-09-03: daemon-resolved, copied through; an empty
+    // CDXC:AgentProviders 2026-09-03: daemon-resolved, copied through; an empty
     // list collapses to absent so the submenu is hidden rather than blank.
     switchableAgents:
       presentation.switchableAgents && presentation.switchableAgents.length > 0
@@ -503,7 +503,7 @@ export function createGxserverPresentationSidebarSession({
     sessionPersistenceProvider: presentation.sessionPersistenceProvider,
     sessionRoutingId: resolveSessionRoutingId?.(projectId, presentation.sessionId),
     /*
-    CDXC:SidebarV2Lifecycle 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     Settle/snooze state is server-owned, so it is copied through verbatim
     (undefined stays undefined) instead of being defaulted here. A daemon that
     predates the lifecycle publishes none of these fields, and the V2 partition
@@ -542,7 +542,7 @@ export function providerSessionStateForGxserverPresentation(
   presentation: Pick<GxserverPresentationSession, 'lifecycleState' | 'providerSessionState'>
 ): NonNullable<SidebarSessionItem['providerSessionState']> {
   /*
-  CDXC:GxserverPresentation 2026-06-24-10:45:
+  CDXC:StateSync 2026-06-24-10:45:
   Provider liveness is a shared gxserver presentation concept, while platform panes are optional overlays. Resolve the daemon-published provider state here so macOS and GPUI cards agree on zmx/tmux/zellij liveness before any local resource override is applied.
   */
   if (presentation.providerSessionState) {

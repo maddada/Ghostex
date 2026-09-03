@@ -33,7 +33,7 @@ export function getSessionTitleGenerationCommandPreview(
   switch (agent) {
     case 'codex':
       /*
-      CDXC:SessionTitleSettings 2026-06-07-01:57:
+      CDXC:SessionTitles 2026-06-07-01:57:
       Settings must preview the same internal Codex title-generation command gxserver runs. Include `--ephemeral` so users see that generated titles do not create restorable Codex sessions.
       */
       return createSessionTitleGenerationHereDocPreview(

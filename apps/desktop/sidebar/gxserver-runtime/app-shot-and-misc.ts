@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -74,7 +74,7 @@ import type { SidebarCommandButton } from '@/packages/shared/sidebar-commands';
 import { isSidebarCommandConfigured, isSidebarCommandRunMode } from '@/packages/shared/sidebar-commands';
 
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 The method signatures below are copied verbatim from the original class body.
 They exist as a standalone interface — rather than being derived from
 `typeof gpuiSidebarRuntimeAppShotAndMiscMethods` — because deriving them would make
@@ -192,7 +192,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       return;
     }
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-05:07:
+    CDXC:StatusPet 2026-06-26-05:07:
     Visible GPUI status activation, and later pet activation, must re-enter the sidebar runtime's existing focusSession route. Keep this as a fixed callback with one bounded session id so local focus stays local, remote focus uses the reviewed remote native action path, and Rust never creates or wakes unrelated sessions for indicator clicks.
     */
     void this.focusSession(activation.sessionId, {
@@ -207,7 +207,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       return;
     }
     /*
-    CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+    CDXC:StatusPet 2026-06-26-06:05:
     Running Agents project rows should behave like focusing the matching sidebar project group. Reuse local focusProjectId or the remote group projection plus the normal presentation publish instead of creating a native-only project switch path, and accept only the bounded project id from Rust.
     */
     const remoteProject = parseGpuiRemotePresentationProjectId(activation.projectId);
@@ -226,7 +226,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       return;
     }
     /*
-    CDXC:GPUIMenuBarStatusItem 2026-06-26-06:05:
+    CDXC:StatusPet 2026-06-26-06:05:
     Running Agents session rows should behave like sidebar session-card clicks. Normalize raw local gxserver ids into the existing project-scoped presentation id when needed, then reuse focusSession so local clicks update presentation focus and post WorkspaceTerminalFocus back to Rust for terminal selection/materialization.
     */
     const sessionId = gpuiMenuBarStatusSessionFocusRoutingId(activation.projectId, activation.sessionId);
@@ -299,10 +299,10 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     prompt: string
   ): Promise<{ ok: true } | { description: string; ok: false }> {
     /*
-    CDXC:GPUIAppShots 2026-06-25-23:28:
+    CDXC:AppShots 2026-06-25-23:28:
     GPUI App Shots mirror macOS target order for local sessions: reuse the last successful local App Shot target for 60 seconds when it is still a live local agent row, otherwise use the focused/visible local agent row, and create a default prompt-agent session only when the exact local insert bridge declines. Keep command-pane, sleeping, stale, non-agent, and sidebar-only rows out of insertion.
 
-    CDXC:GPUIAppShots 2026-06-26-04:27:
+    CDXC:AppShots 2026-06-26-04:27:
     Existing-session App Shot targeting now accepts live remote agent rows by their machine-scoped presentation session id, but only as an insertion request to Rust. React must not wake, materialize, or open remote attach tabs for App Shots; Rust may write only when that exact remote attach surface is already mounted.
     */
     const targetSession = this.resolveNativeAppShotTargetSession();
@@ -595,7 +595,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     rendererCommand: GxserverRendererCommand
   ): Record<string, unknown> {
     /*
-    CDXC:GxserverRendererCommands 2026-06-27-05:51:
+    CDXC:CefRuntime 2026-06-27-05:51:
     gxserver `runCommand` and `clickButton(kind:"command")` must launch the same trusted project Action button as native. Treat renderer payloads as selectors only; command text, URLs, close-on-exit normalization, completion-sound preference, cwd/env, paths, output, and logs must come from the live HUD command and fixed Rust command-action bridge.
     */
     const commandId = normalizeNonEmptyString(rawCommandId)?.trim();
@@ -700,7 +700,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     payload: Record<string, unknown>
   ): GpuiRendererCommandResolvedSession | undefined {
     /*
-    CDXC:GxserverRendererCommands 2026-06-27-02:05:
+    CDXC:CefRuntime 2026-06-27-02:05:
     gxserver renderer commands can target local sessions with raw project/session ids in `sessionTarget`, while the reused GPUI SidebarApp renders combined `combined-session:<project>:<session>` ids. Resolve those raw ids to the same combined sidebar id before invoking runtime focus logic, and keep the command result bounded to ids/status rather than paths, titles, command text, URLs, tokens, terminal output, or renderer payload echoes.
     */
     const target = readGpuiRendererCommandSessionTarget(payload);
@@ -760,7 +760,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
   },
 
   /*
-  CDXC:NavigationHistory 2026-08-19:
+  CDXC:Navigation 2026-08-19:
   Trail stops are recorded from the SAME projection the titlebar label reads,
   so "where the user is" can never disagree between the label and Back. A stop
   needs a real project: Quick/projectless and the synthetic Chats collection
@@ -838,7 +838,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
   ): void {
     /*
-    CDXC:NavigationHistory 2026-08-19:
+    CDXC:Navigation 2026-08-19:
     Availability only. The native arrows have no hover tooltip, so sending the
     destination labels would wake the bridge — and a titlebar repaint check —
     every time a back/forward target's title changed, for pixels that cannot
@@ -869,7 +869,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       postAppModalHostMessage(createAppToastRequest(level, title, options.description), 'AppModals:gpuiAppShotToast');
     } catch {
       /*
-      CDXC:GPUIAppShots 2026-06-25-23:07:
+      CDXC:AppShots 2026-06-25-23:07:
       App Shots user feedback must not depend on toast-host availability and must not log raw app names, window titles, image paths, project paths, command text, terminal content, URLs, or tokens when presentation is unavailable.
       */
     }
@@ -1006,7 +1006,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       commandId: command.commandId,
       name: command.name,
       /*
-      CDXC:GPUICommandPane 2026-06-27-07:54:
+      CDXC:CommandPane 2026-06-27-07:54:
       `runSidebarCommand` reaches the launch bridge only after GPUI rebuilds it as a selector-shaped object. Forward an own, validated runMode only for terminal Actions so Rust can create the visible debug workspace terminal like macOS while all other launch metadata stays resolved from the trusted HUD command.
       */
       ...(command.actionType === 'terminal' &&
@@ -1017,7 +1017,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       ...(command.actionType === 'terminal'
         ? {
             /*
-            CDXC:GPUICommandPane 2026-06-27-07:54:
+            CDXC:CommandPane 2026-06-27-07:54:
             GPUI command-pane Action launches must match native `runNativeSidebarCommand`: default command-pane runtime forces terminal close-on-exit off even when trusted saved/HUD Action definitions preserve older close-on-exit metadata. Renderer `runSidebarCommand` messages cannot supply this field, and Browser Actions must continue omitting the terminal-only boolean.
             */
             closeTerminalOnExit: false,
@@ -1054,7 +1054,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       return false;
     }
     /*
-    CDXC:GPUICommandPalette 2026-06-27-08:11:
+    CDXC:CommandPalette 2026-06-27-08:11:
     Shared SidebarApp and Command Palette hotkey rows emit `runGhostexHotkeyAction` through the reused GPUI runtime, not directly to Rust. Forward only the fixed action-id selector so Open Commands Panel, focused-pane routes, Settings, and modal hotkeys share Rust's native dispatcher without renderer-owned session ids, paths, command text, URLs, or launch metadata.
     */
     if (
@@ -1098,7 +1098,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     const payload = JSON.stringify({
       commandId: normalizedCommandId,
       /*
-      CDXC:GPUICommandPane 2026-06-27-05:59:
+      CDXC:CommandPane 2026-06-27-05:59:
       `endSidebarCommandRun` is a separate fixed GPUI bridge from Action launch because Rust only needs the selected command id to close the mapped command-pane run. Rebuild the payload here so renderer command text, URLs, close-on-exit flags, cwd/env, paths, logs, output, status-file paths, and run ids never cross the run-end bridge.
       */
       type: GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_TYPE,
@@ -1121,7 +1121,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     message: Extract<SidebarToExtensionMessage, { type: 'updateSettingsPatch' }>
   ): void {
     /*
-    CDXC:SidebarV2 2026-07-29:
+    CDXC:StateSync 2026-07-29:
     Sidebar-origin settings writes (sidebar version, Group by Project, remote
     machine ordering) are real Settings saves, so they take the same route the
     Settings modal uses: the app-modal host bridge installed on the GPUI sidebar
@@ -1140,7 +1140,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     message: Extract<SidebarToExtensionMessage, { type: 'openExternalUrl' }>
   ): void {
     /*
-    CDXC:SidebarDiscord 2026-08-07:
+    CDXC:Sidebar 2026-08-07:
     The shared sidebar's external links must enter the same native command
     route as Settings and first-launch links. The GPUI sidebar adapter used to
     drop openExternalUrl as unsupported after the React click had already
@@ -1157,7 +1157,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
 
   openAppModal(this: GpuiSidebarRuntime, modal: 'firstLaunchSetup' | 'settings' | 'watchGhostexVideo'): void {
     /*
-    CDXC:GPUISidebarAppModalBridge 2026-06-24-11:40:
+    CDXC:AppModal 2026-06-24-11:40:
     Sidebar-origin Settings, first-launch welcome, and tutorial-video requests in GPUI must use the shared app-modal host bridge installed by the CEF sidebar surface. Do not fork Settings React UI, duplicate modal state, or route these first-party modals through fixture/sidebar-only alternate paths.
     */
     try {

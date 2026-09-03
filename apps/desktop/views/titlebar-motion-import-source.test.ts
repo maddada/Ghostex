@@ -11,7 +11,7 @@ const allSources = [entrySource, ...titlebarModuleSources];
 describe('titlebar host motion import source', () => {
   test('does not import motion/react', () => {
     /*
-     * CDXC:ModeSwitcher 2026-06-15-20:07:
+     * CDXC:Navigation 2026-06-15-20:07:
      * The titlebar host must not pull the Motion runtime into the titlebar
      * bundle. The animated mode pill was replaced by an instant active state,
      * so keep this bundle-weight guard even though the mode switcher itself is

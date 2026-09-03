@@ -160,7 +160,7 @@ printf '%s\n%s\n' "$ghostex_data_dir" "$ghostex_state_dir"
 
     pub(super) fn ghostex_cli_status() -> Result<WindowsWslGhostexCliStatus, String> {
         /*
-        CDXC:GPUIWindowsCliStatus 2026-08-10:
+        CDXC:PlatformSupport 2026-08-10:
         Windows terminals and gxserver live in the selected WSL2 distribution,
         so Settings must inspect that distribution's app-managed package and
         public CLI links. The Win32 process PATH/HOME describe the CEF shell,
@@ -748,7 +748,7 @@ exec "$node" "$repo_root/out/node/entry.js" \
 
     pub(super) fn windows_path_for_wsl_path(path: &Path) -> Result<PathBuf, String> {
         /*
-        CDXC:GPUIWindowsDocsWslPath 2026-08-09:
+        CDXC:PlatformSupport 2026-08-09:
         Windows project paths are authoritative paths inside the selected WSL2
         distribution. Docs performs filesystem operations in the native GPUI
         process, so translate that exact WSL path through the retained

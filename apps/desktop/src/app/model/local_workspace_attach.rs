@@ -80,7 +80,7 @@ pub(crate) fn gpui_local_workspace_lifecycle_request_is_pending(
     request: &GpuiLocalWorkspaceLifecycleRequest,
 ) -> bool {
     /*
-    CDXC:GPUIWorkspaceLifecycle 2026-06-27-00:33:
+    CDXC:Workarea 2026-06-27-00:33:
     Pending mapped Sleep/Wake requests must de-dupe only exact native mutations. Direct/scoped Sleep, replacement focus, and pane origin carry different macOS tab semantics, so session/action-only de-dupe can apply the wrong UX when a second request races an async SidebarApp ack. Close is local-first and never enters this pending set.
     */
     requests.values().any(|pending| pending == request)

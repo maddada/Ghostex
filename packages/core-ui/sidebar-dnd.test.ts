@@ -248,7 +248,7 @@ describe('getSidebarSessionDropTargetAtPoint', () => {
 
   test('should resolve row center and lower half after, and upper half before', () => {
     /*
-     * CDXC:SidebarDragDrop 2026-06-19-11:12:
+     * CDXC:Sidebar 2026-06-19-11:12:
      * Session drag/drop indicators split every hovered row by its midpoint so
      * the line is always visible: upper half before, center/lower half after.
      */

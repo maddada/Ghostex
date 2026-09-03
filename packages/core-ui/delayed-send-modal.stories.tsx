@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DelayedSendModal, type DelayedSendModalProps } from './delayed-send-modal';
 
 /**
- * CDXC:CodexModalRestyle 2026-08-24:
+ * CDXC:AppModal 2026-08-24:
  * The Session Automations dialog (opened from the "Delayed Actions" menu item)
  * is a one-shot native fit-height modal in the desktop app, so it has no
  * in-app inspection surface. These stories mount it against the Codex-style

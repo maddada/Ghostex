@@ -9,7 +9,7 @@ pub fn prepare_application() {}
 
 pub fn initialize(_cx: &gpui::App) -> Result<()> {
     /*
-    CDXC:GPUICefPlatformBackend 2026-06-14-12:06:
+    CDXC:CefRuntime 2026-06-14-12:06:
     GPUI is macOS-first today, but the app structure must make Linux and Windows CEF support a platform backend decision instead of mixing platform checks into UI code. Builds for OSes without a cef platform adapter fail explicitly until their CEF child-window implementations are added.
     */
     anyhow::bail!("GPUI CEF has no platform adapter for this OS")
@@ -48,7 +48,7 @@ pub enum BrowserPageMetadataEvent {
 
 pub type BrowserPageMetadataHandler = Rc<dyn Fn(BrowserPageMetadataEvent)>;
 
-/// CDXC:GPUITutorialVideoFullscreen 2026-08-18: API mirror of the CEF
+/// CDXC:Onboarding 2026-08-18: API mirror of the CEF
 /// main-frame load-end callback used by bridge-less third-party surfaces.
 pub type PageLoadEndHandler = Rc<dyn Fn()>;
 
@@ -144,13 +144,13 @@ pub type AppModalHostBridgeEventHandler = Rc<dyn Fn(AppModalHostBridgeEvent)>;
 #[derive(Clone, Debug)]
 pub struct ManageDocsResourceScope;
 
-/// CDXC:DocsRootDirectory 2026-08-09: parity with the CEF scope, whose mounted
+/// CDXC:Docs 2026-08-09: parity with the CEF scope, whose mounted
 /// Docs roots and their allowed relative roots are resolved together, lazily,
 /// off the main thread.
 type ManageDocsLocalRootResolver =
     Arc<dyn Fn() -> Option<Vec<ManageDocsResourceRoot>> + Send + Sync>;
 
-/// CDXC:DocsRootAdditive 2026-08-09: parity with the CEF scope's mount record.
+/// CDXC:Docs 2026-08-09: parity with the CEF scope's mount record.
 #[derive(Clone)]
 pub struct ManageDocsResourceRoot {
     pub allowed_relative_roots: Vec<String>,
@@ -226,7 +226,7 @@ impl CefBrowser {
 
     pub fn focus(&self) {
         /*
-        CDXC:GPUIBrowserBackendParity 2026-06-23-12:48:
+        CDXC:Browser 2026-06-23-12:48:
         Non-macOS CEF is still an explicit unsupported backend, but the stub must keep the same public Browser runtime API as macOS so shared GPUI source can express focus handoff without platform-specific UI branches. This no-op does not create a fallback browser, synthetic focus, logging, persistence, or native hit routing.
         */
     }
@@ -239,7 +239,7 @@ impl CefBrowser {
 
     pub fn send_fullscreen_toggle_key(&self) {
         /*
-        CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+        CDXC:Onboarding 2026-08-18:
         API mirror of the macOS/Windows/Linux host-side "f" key press that puts
         the tutorial video player in fullscreen. This no-op must not synthesize
         input, inject JavaScript, or pretend a CEF renderer exists.
@@ -261,7 +261,7 @@ impl CefBrowser {
         _gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
     ) {
         /*
-        CDXC:GPUISidebarGxserverBootstrap 2026-06-24-11:17:
+        CDXC:ServerDaemon 2026-06-24-11:17:
         Non-macOS CEF remains explicitly unsupported, but its Rust API mirrors the macOS sidebar gxserver bootstrap refresh surface so shared GPUI code can compile when platform backends are added. This no-op must not create fallback gxserver data, expose tokens, log, persist, or pretend a CEF renderer exists.
         */
     }
@@ -271,7 +271,7 @@ impl CefBrowser {
         _gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
     ) {
         /*
-        CDXC:GPUISessionChatSurface 2026-07-31:
+        CDXC:SessionChat 2026-07-31:
         API mirror of the macOS Session Chat bootstrap refresh; same no-op
         rules as the sidebar bootstrap stub above.
         */

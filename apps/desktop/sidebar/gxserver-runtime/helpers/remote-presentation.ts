@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -62,7 +62,7 @@ export function createGpuiRemotePresentationSidebarGroups({
   visibleSessionIds?: ReadonlySet<string>;
 }): SidebarSessionGroup[] {
   /*
-  CDXC:GPUIRemoteMachines 2026-06-24-16:48:
+  CDXC:RemoteMachines 2026-06-24-16:48:
   GPUI remote machine sections must render only saved machines with Rust-delivered gxserver presentation snapshots. Prefix every project/session id with the machine id so reused SidebarApp rows cannot collide with local gxserver rows or another remote machine, while tokens, SSH hosts, usernames, key paths, and remote URLs stay outside renderer state.
   */
   return settings.remoteMachines.flatMap((machine) => {
@@ -174,7 +174,7 @@ export function createGpuiRemotePresentationSidebarGroups({
           canScheduleDelayedSend: session.sessionKind === 'terminal',
           canToggleCloseAfterDone: session.sessionKind === 'terminal',
           /*
-          CDXC:GPUIRemoteVisibleFallback 2026-08-15:
+          CDXC:RemoteMachines 2026-08-15:
           Mirror the local-group override in createSidebarGroups: the shared
           projection's first-row visible fallback must not survive into
           remote groups. Whenever a remote project became active, it marked
@@ -196,7 +196,7 @@ export function orderGpuiRemotePresentationGroups<Group extends { projectId: str
   storedProjectIdOrder: readonly string[] | undefined
 ): Group[] {
   /*
-  CDXC:RemoteGroupReorder 2026-07-12:
+  CDXC:RemoteMachines 2026-07-12:
   Apply the machine's gxserver-owned project order as a stable sort. The caller
   supplies the legacy app-local overlay only when an older snapshot has no
   workspaceGroups field. Known ids render in stored order, and new projects
@@ -220,7 +220,7 @@ export function isGpuiRemoteProjectClosedToRecent(
   recentProjectsByMachineId: ReadonlyMap<string, readonly GxserverRecentProjectDomainState[]> | undefined
 ): boolean {
   /*
-  CDXC:GPUIRemoteProjects 2026-06-27-19:37:
+  CDXC:RemoteMachines 2026-06-27-19:37:
   Connected remote presentation projects render under their saved-machine sections, while client-parked remote projects render only as machine-scoped rows in Recent Projects. Filter the remote machine projection with GPUI's app-local recent list instead of mutating the remote gxserver project state.
   */
   return (recentProjectsByMachineId?.get(machineId) ?? []).some((project) => project.projectId === projectId);
@@ -341,7 +341,7 @@ export function isGpuiSessionChatEventMessage(
   value: Record<string, unknown>
 ): value is Record<string, unknown> & GxserverSessionChatEvent {
   /*
-  CDXC:SessionChatCore 2026-07-31:
+  CDXC:SessionChat 2026-07-31:
   Shape validator for the four sessionChat* event frames, matching the
   presentation-frame validator pattern: identity + epoch/seq cursors must be
   present before a handler sees the frame. Message-array payloads are trusted

@@ -1,7 +1,7 @@
 import { GHOSTEX_ANDROID_APK_URL, GHOSTEX_DISCORD_URL } from '@/packages/shared/sidebar-commands';
 
 /*
- * CDXC:RemoteSetup 2026-09-03:
+ * CDXC:RemotePairing 2026-09-03:
  * The install popover shows and QR-encodes the short website link, which the
  * website redirects to the latest-release APK on GitHub
  * (`GHOSTEX_ANDROID_APK_URL`, kept here as the redirect's target for reference).

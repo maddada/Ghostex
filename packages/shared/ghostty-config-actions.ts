@@ -1,12 +1,12 @@
 export const GHOSTTY_SETTINGS_DOCS_URL = 'https://ghostty.org/docs/config/reference';
 
 /**
- * CDXC:GhosttySettings 2026-04-30-01:48
+ * CDXC:Terminal 2026-04-30-01:48
  * Settings users need one-click Ghostty defaults, ghostex recommended settings,
  * docs, and direct config-file access. Keep the managed key list explicit for
  * older native hosts while new hosts replace only Ghostex's marked block.
  *
- * CDXC:GhosttyDefaults 2026-05-22-12:29:
+ * CDXC:Terminal 2026-05-22-12:29:
  * The recommended config block should match the new default Ghostex terminal
  * profile, including the requested split, SSH integration, clipboard,
  * scrollback, mouse-scroll, and JetBrains Mono variable-weight settings.

@@ -39,13 +39,13 @@ pub struct AgentEndpointOutput {
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-16-10:00:
+CDXC:RepoStructure 2026-06-16-10:00:
 Phase 6 moves agent policy, launch/resume planning, passive title/status ingestion, and fork planning into Rust while keeping the TypeScript RPC shape. These handlers mutate only durable session metadata and never log raw titles, prompts, hook payloads, or command output.
 
-CDXC:GxserverAgentSettings 2026-06-19-13:59:
+CDXC:AgentProviders 2026-06-19-13:59:
 Agent settings parity uses the TypeScript metadata key `agents.settings.v1` and stores Default Prompt Agent beside global Accept All. Normalize the prompt-agent id at the daemon boundary by trimming whitespace, falling back to `codex`, and capping it to 120 chars without validating against a client-local agent registry.
 
-CDXC:GxserverAgentSettings 2026-06-22-07:33:
+CDXC:AgentProviders 2026-06-22-07:33:
 Agent settings persistence must match TypeScript gxserver exactly: read and write only `agents.settings.v1`. Legacy or sidebar-local keys are not daemon settings and must not make `/api/readAgentSettings` report persisted values.
 */
 pub fn dispatch_agent_endpoint(
@@ -105,7 +105,7 @@ pub fn dispatch_agent_endpoint(
             fork_session(repository, &lifecycle, db, context)?
         }
         /*
-        CDXC:DraftSessions 2026-08-28:
+        CDXC:Drafts 2026-08-28:
         Drafts-only agent switching. Grouped with fork above because it has the
         same shape: an agent-policy decision that has to reach into zmx to kill
         and restart a provider, so it needs the same zmx context.
@@ -119,7 +119,7 @@ pub fn dispatch_agent_endpoint(
             switch_draft_agent(repository, db, params, context)?
         }
         /*
-        CDXC:SwitchAccount 2026-09-03:
+        CDXC:AgentProviders 2026-09-03:
         Prompted-session account switching. Only a row rewrite: the client's
         Full Reload cycles the provider afterwards, so no zmx context is needed.
         */

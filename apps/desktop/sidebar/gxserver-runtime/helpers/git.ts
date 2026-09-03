@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-22:
+CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
@@ -306,7 +306,7 @@ export function parseGpuiSidebarGitCommitMessage(message: string): {
 }
 
 /*
-CDXC:GPUISidebarGit 2026-06-24-16:11:
+CDXC:Git 2026-06-24-16:11:
 Blank commit-message generation in GPUI mirrors the native background prompt
 support set. Built-in agents that do not expose a safe headless prompt mode
 must fail explicitly, while configured non-default custom agents may use their
@@ -318,7 +318,7 @@ export function supportsGpuiBackgroundCommitMessageGeneration(agent: SidebarAgen
 
 export function gpuiUserVisibleGitErrorMessage(error: unknown, fallback: string): string {
   /*
-  CDXC:GPUISidebarGit 2026-07-11-05:08:
+  CDXC:Git 2026-07-11-05:08:
   The gxserver client already converts daemon failures into bounded,
   user-facing Error messages. Preserve those messages at the Git mutation
   boundary so stale reviews, unavailable agents, and generation failures do

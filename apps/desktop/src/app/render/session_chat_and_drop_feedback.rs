@@ -28,7 +28,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         /*
-        CDXC:GPUISessionChatSurface 2026-07-31:
+        CDXC:SessionChat 2026-07-31:
         Chat owns the same normal-layout workspace body rectangle as a
         terminal: a per-session CefSurface child
         plus ordinary placeholder layout children. No terminal mount canvas,
@@ -185,7 +185,7 @@ impl GhostexGpuiApp {
         zone: WorkspaceDropZone,
     ) -> AnyElement {
         /*
-        CDXC:GPUIWorkspaceDragDrop 2026-06-22-05:31:
+        CDXC:Workarea 2026-06-22-05:31:
         Drag feedback for Agents pane-body drops must be visible but non-interactive. Render the center group or edge split indication as a normal child inside the pane body instead of adding transparent overlap, root hit-test shields, or window-level mouse routing.
         */
         let feedback = div()

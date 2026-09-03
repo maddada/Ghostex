@@ -5,7 +5,7 @@ use crate::domain::DomainStateError;
 use super::*;
 
 /*
-CDXC:GxserverPresentationSearch 2026-06-22-06:27:
+CDXC:Sessions 2026-06-22-06:27:
 Search parity with TypeScript depends on JavaScript-like parameter truthiness, Unicode lowercasing, and title trust filters because Previous Sessions uses these metadata rows as its restore surface. Keep malformed or non-restorable titles out of search history instead of letting generic paths, commands, or G-session IDs become previous-session results.
 */
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -141,7 +141,7 @@ pub(crate) fn search_previous_sessions(
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     /*
-    CDXC:PreviousSessions 2026-06-19-14:30:
+    CDXC:Sessions 2026-06-19-14:30:
     Rust listPreviousSessions must be the same previous-only restore surface as TypeScript: exclude active rows and command-pane sessions, keep pinned/favorite/tagged history, return closedAt, and rank by provider close time instead of last activity or metadata edits.
     */
     let limit = normalize_limit(params.get("limit"));
@@ -152,7 +152,7 @@ pub(crate) fn search_previous_sessions(
     let project_id_filter = normalize_project_id_filter(params.get("projectId"));
     let tags = normalize_session_tags(params.get("sessionTags"))?;
     /*
-    CDXC:SessionForkFamilies 2026-08-28:
+    CDXC:SessionFork 2026-08-28:
     Built over EVERY registry row, before any candidate filtering: the row that
     supersedes a closed ancestor is very often an ACTIVE session, which this
     surface would otherwise never look at, and the ancestor would stay listed

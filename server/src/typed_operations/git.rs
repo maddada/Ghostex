@@ -106,7 +106,7 @@ pub(crate) fn build_git_command(
             .with_result_args(vec!["branch", "-d", "--", "<branch>"])
         }
         /*
-        CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+        CDXC:Worktrees 2026-07-29-00:00:
         Rolling back a half-created worktree session, and force-removing a
         worktree the user chose to discard, both have to delete a branch that
         `git branch -d` refuses because it is unmerged — which is exactly the
@@ -144,7 +144,7 @@ pub(crate) fn build_git_command(
         }
         "diffCached" => ProcessCommand::new("git", vec!["diff", "--cached"], cwd),
         /*
-        CDXC:GPUISidebarGit 2026-06-24-16:11:
+        CDXC:Git 2026-06-24-16:11:
         GPUI blank commit-message generation needs staged diff text for exactly
         the review-approved file set. Keep this as an allowlisted cached-diff
         action with path validation and redacted file-count command metadata
@@ -261,7 +261,7 @@ pub(crate) fn build_git_command(
         ),
         "listBranches" => {
             /*
-            CDXC:WorktreeBaseBranch 2026-06-24-11:32:
+            CDXC:Worktrees 2026-06-24-11:32:
             Add Worktree needs an explicit base-branch picker. Keep branch
             discovery inside the gxserver typed Git boundary, include local and
             remote-tracking refs, and parse structured metadata server-side so
@@ -332,14 +332,14 @@ pub(crate) fn build_git_command(
         }
         "pullFastForward" => {
             /*
-            CDXC:GitOperations 2026-06-19-14:38:
+            CDXC:Git 2026-06-19-14:38:
             The titlebar remote-sync workflow must update the current branch only through Git's fast-forward pull contract. Rust keeps the typed operation to `git pull --ff-only` so merge, rebase, dirty-worktree, and divergent-history failures remain visible to callers instead of being hidden by fallback behavior.
             */
             ProcessCommand::new("git", vec!["pull", "--ff-only"], cwd)
         }
         "push" => ProcessCommand::new("git", vec!["push"], cwd),
         /*
-        CDXC:GPUIRemoteGit 2026-06-24-17:47:
+        CDXC:Git 2026-06-24-17:47:
         Remote GPUI push parity must not send renderer-observed branch names as mutation authority. Push the current HEAD to origin with upstream tracking so gxserver/Git derive the branch from the checked-out repository state.
         */
         "pushSetUpstreamCurrent" => ProcessCommand::new(

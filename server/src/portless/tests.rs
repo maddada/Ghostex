@@ -1082,7 +1082,7 @@ fn portless_routine_operational_logs_are_debug_gated_while_warnings_persist() {
 #[test]
 fn portless_state_update_logs_do_not_persist_forbidden_raw_values() {
     /*
-    CDXC:PortlessLogging 2026-06-23-04:45:
+    CDXC:Portless 2026-06-23-04:45:
     Phase 17 tests must prove Portless persisted diagnostics do not carry raw project/worktree names, paths, full URLs, hostnames, command text, env values, tokens, secrets, stdout, or stderr. The log helper accepts only enum/count/boolean/protocol state, so the test scans both success and warning entries for those forbidden values and field names.
     */
     let temp = tempfile::tempdir().expect("tempdir");
@@ -1758,7 +1758,7 @@ fn desired_routes_are_temporary_and_tied_to_live_listener_input() {
 #[test]
 fn protocol_status_payload_serializes_only_metadata_and_local_native_action_requirements() {
     /*
-    CDXC:PortlessProtocol 2026-06-23-00:25:
+    CDXC:Portless 2026-06-23-00:25:
     Phase 12 status payloads must tell React which Portless setup action is relevant while keeping all privileged actions unavailable in gxserver metadata. The native sidebar may enable them only for local Mac admin bridge execution.
     */
     let payload = portless_status_payload_from_record(
@@ -1816,7 +1816,7 @@ fn protocol_status_payload_serializes_only_metadata_and_local_native_action_requ
 #[test]
 fn protocol_route_previews_join_desired_routes_to_stable_ids_without_pids_or_urls() {
     /*
-    CDXC:PortlessProtocol 2026-06-23-00:25:
+    CDXC:Portless 2026-06-23-00:25:
     Route previews are presentation metadata, not Portless file contents. Carry protocol, hostname, port, stable project/session ids, and primary/additional kind so UI can render links later without full URLs, pids, raw paths, command text, or process output.
     */
     let listeners = vec![
@@ -1881,7 +1881,7 @@ fn protocol_route_previews_join_desired_routes_to_stable_ids_without_pids_or_url
 #[test]
 fn presentation_payload_includes_assigned_domains_without_live_listeners() {
     /*
-    CDXC:PortlessSettings 2026-06-23-04:02:
+    CDXC:Portless 2026-06-23-04:02:
     Assigned domains are persisted slug metadata, not a live listener view.
     The Settings UI needs these hostnames for stopped projects/worktrees
     while route previews remain limited to currently detected dev servers.
@@ -1954,7 +1954,7 @@ fn presentation_payload_includes_assigned_domains_without_live_listeners() {
 #[test]
 fn presentation_payload_marks_disabled_without_running_listener_detection() {
     /*
-    CDXC:PortlessProtocol 2026-06-23-00:25:
+    CDXC:Portless 2026-06-23-00:25:
     Disabled Portless should render as explicit presentation metadata with no route previews and without probing live listeners, because disabled setup is a user-visible state rather than a listener-discovery failure.
     */
     let temp = tempfile::tempdir().expect("tempdir");

@@ -1,5 +1,5 @@
 /*
- * CDXC:ReleaseChangeAwarePlanning 2026-08-13:
+ * CDXC:Release 2026-08-13:
  * Content fingerprints for release products, computed from the git index at the
  * source commit. Deterministic across runners: it never looks at the working
  * tree, build output, timestamps, or the network, and gitlinks contribute their

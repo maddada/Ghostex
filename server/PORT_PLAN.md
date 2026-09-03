@@ -1,11 +1,11 @@
 <!--
-CDXC:GxserverRustPort 2026-06-14-19:22:
+CDXC:RepoStructure 2026-06-14-19:22:
 The GXserver Rust port must be planned in a new gxserver-rs codebase after inspecting the existing TypeScript implementation. Existing TypeScript behavior is the expected contract unless a later requirement explicitly changes it.
 
-CDXC:GxserverRustPort 2026-06-14-19:22:
+CDXC:RepoStructure 2026-06-14-19:22:
 Rollout should be side-by-side compatibility first, keep gxserver/protocol/index.ts as the protocol source of truth initially, and add real app/CLI opt-in early while TypeScript remains the default until Rust reaches parity.
 
-CDXC:GxserverRustPort 2026-06-14-21:44:
+CDXC:RepoStructure 2026-06-14-21:44:
 The user approved using an explicit alternate local development/compatibility port so Rust and TypeScript validation can proceed while the packaged Ghostex daemon owns 127.0.0.1:58744. Keep 58744 as the production/default protocol contract, use the alternate port only when explicitly selected for development or compatibility runs, and do not silently fall back between Rust and TypeScript.
 -->
 

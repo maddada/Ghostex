@@ -25,7 +25,7 @@ export function publishExportTranscriptStatus(detail: ExportTranscriptStatusDeta
 }
 
 /*
-CDXC:GxserverFirstUserInputDraft 2026-08-20:
+CDXC:Drafts 2026-08-20:
 Plan 015 §7: the follow-up conversation is never given a prompt on the user's
 behalf. gxserver types this draft into the new session's composer once and never
 submits it, so all we stage is a mention of the exported markdown. The trailing

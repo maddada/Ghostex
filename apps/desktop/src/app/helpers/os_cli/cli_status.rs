@@ -113,7 +113,7 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
 
 pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> serde_json::Value {
     /*
-    CDXC:GPUISettingsStatusBridge 2026-06-24-11:36:
+    CDXC:StatusPet 2026-06-24-11:36:
     GPUI Settings must answer CLI/status refreshes with the shared React contract so integration rows stop loading. The read-only GPUI probe may inspect PATH, fixed Ghostex-owned skill paths, the app bundle/local CEF resources, and Cua Driver presence, but it must not run installers, repair commands, permission prompts, or log raw paths.
     */
     let (probe, probe_error) = match gpui_ghostex_cli_probe() {
@@ -218,7 +218,7 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
                 "Ghostex Move Codex Session skill is not installed.".to_string()
             });
             /*
-            CDXC:GPUIDesktopControlSettings 2026-06-24-13:14:
+            CDXC:Extensions 2026-06-24-13:14:
             Desktop Control readiness in Settings requires both Cua Driver and the Ghostex Computer Use skill. GPUI status refreshes must probe Cua Driver privacy grants read-only with `prompt:false`, parse the two boolean contract fields, and keep permission detail generic instead of forwarding raw command output.
             */
             parts.push(if desktop_control_installed {
@@ -243,7 +243,7 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
         "cuaDriverAccessibilityPermissionGranted": cua_permission_status.accessibility_granted,
         "cuaDriverInstalled": cua_driver_installed,
         /*
-        CDXC:TrycuaPrerequisite 2026-08-24:
+        CDXC:Extensions 2026-08-24:
         Settings shows the exact command its Install Trycua button runs, so the
         command string is published by the host that owns it instead of being
         guessed per platform in React.

@@ -71,7 +71,7 @@ const PREVIOUS_SESSIONS_BY_FIXTURE: Partial<Record<SidebarStoryFixture, SidebarH
     }),
   ],
   /**
-   * CDXC:SidebarSearch 2026-05-08-12:16
+   * CDXC:Sidebar 2026-05-08-12:16
    * Combined-reference Storybook fixtures need real previous-session search
    * hits so spacing between project matches and Previous Sessions can be
    * reproduced without synthetic DOM injection. Keep at least 40 matching
@@ -129,8 +129,8 @@ function isCombinedReferenceFixture(fixture: SidebarStoryFixture): boolean {
 
 function createCombinedStorySettings(currentSettings: SidebarStoryCurrentSettings | undefined): ghostexSettings {
   /**
-   * CDXC:StorybookSettings 2026-05-08-16:45
-   * CDXC:SidebarLayout 2026-05-13-08:11
+   * CDXC:DesignSystem 2026-05-08-16:45
+   * CDXC:Sidebar 2026-05-13-08:11
    * Storybook sidebar scenarios inherit the user's current ghostex settings
    * snapshot when available. Combined/reference sidebar is now the only target
    * surface, so the fixture no longer needs to force a mode setting.

@@ -4,7 +4,7 @@ use std::{
 };
 
 /*
-CDXC:GxserverUbuntu 2026-06-23-07:52:
+CDXC:PlatformSupport 2026-06-23-07:52:
 Ubuntu packaging must share the macOS gxserver resource contract instead of adding PATH fallbacks. Resolve bundled Node, Portless, and tool roots from package-relative layouts first, then keep development-only source candidates explicit for local validation.
 */
 pub fn code_server_node_candidates() -> Vec<PathBuf> {

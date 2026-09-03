@@ -145,7 +145,7 @@ pub(crate) fn gpui_pet_overlay_animation_frame_for_motion_preference(
     reduce_motion_enabled: bool,
 ) -> GpuiPetOverlayAnimationFrame {
     /*
-    CDXC:GPUIStatusPetOverlay 2026-06-26-07:31:
+    CDXC:StatusPet 2026-06-26-07:31:
     Reduce Motion must freeze the pet on a deterministic frame for the current semantic state while preserving the existing animated frame cadence when the OS setting is off. Keep this pure so ticker gating and frame choice can be verified without launching GPUI.
     */
     if reduce_motion_enabled {

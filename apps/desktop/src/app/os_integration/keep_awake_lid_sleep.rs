@@ -30,7 +30,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarKeepAwake 2026-06-26-00:09:
+        CDXC:KeepAwake 2026-06-26-00:09:
         `keepAwakePreventLidSleep` is active only while GPUI owns a live Keep Awake runtime. Enable through the privileged helper once per runtime with installation allowed, refresh the helper lease by heartbeat, and disable with no installer prompt when Settings hides the control, the setting flips off, the runtime stops, or the app exits.
         */
         let action = {

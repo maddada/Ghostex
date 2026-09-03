@@ -1,5 +1,5 @@
 /*
-CDXC:GxserverRuntimeSplit 2026-08-23:
+CDXC:RepoStructure 2026-08-23:
 Directory split of gxserver-runtime/git.ts (~3,251 lines) into git/. This
 slice covers merging a worktree into main (plus the conflict-agent launch
 and multiple-commits release flow) and the commit review modal's changed-file
@@ -101,7 +101,7 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
       branch,
     });
     /*
-    CDXC:SidebarGitMemo 2026-07-29:
+    CDXC:Git 2026-07-29:
     Direct merge is the one Git flow whose writes land in a project other than
     the one the user is looking at: everything here mutates the *parent* repo
     while the flow only ever re-reads the worktree project. `runGitAction`
@@ -198,7 +198,7 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
     const requestId = `gpui-git-action-${Date.now().toString(36)}`;
     const hasCommit = gitState.hasWorkingTreeChanges;
     /*
-    CDXC:GPUISidebarGit 2026-06-24-15:22:
+    CDXC:Git 2026-06-24-15:22:
     GPUI commit review stores the gxserver-derived changed-file list with the request id. Later modal selections and diff clicks may only reference those paths, so CEF cannot stage or inspect arbitrary renderer-supplied paths.
     Treat the modal's all-selected case as that stored review list instead of a fresh unbounded add-all, so files created after review opens cannot slip into the confirmed commit.
     */
@@ -365,7 +365,7 @@ export const gpuiSidebarRuntimeGitWorktreeMergeAndReviewMethods = {
     message: Extract<SidebarToExtensionMessage, { type: 'openSidebarGitChangedFile' }>
   ): Promise<void> {
     /*
-    CDXC:GPUISidebarGit 2026-06-24-21:26:
+    CDXC:Git 2026-06-24-21:26:
     Changed-file IDE opens reuse the shared SidebarApp file row. GPUI sends Rust only the gxserver project id and a normalized relative file candidate already present in the current HUD or review request; Rust remains authoritative and re-validates the file against gxserver before resolving an absolute path.
     Scoped non-review opens must re-read the owning local or remote gxserver project instead of using the active local HUD file list, so remote rows cannot open stale or cross-project file candidates.
     */

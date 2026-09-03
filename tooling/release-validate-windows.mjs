@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
- * CDXC:WindowsValidationIsNotAGate 2026-09-01 (supersedes the gate half of
- * CDXC:ReleaseChangeAwarePlanning 2026-08-30):
+ * CDXC:Release 2026-09-01 (supersedes the gate half of
+ * CDXC:Release 2026-08-30):
  * Manual, opt-in Windows compile check. NOT a gate, and NOT part of any release.
  *
  * `release-gpui-validate.yml` used to run as a job inside the release workflow,

@@ -5,7 +5,7 @@ import {
 } from '@/packages/shared/gxserver-protocol';
 
 /**
- * CDXC:RemoteSetup 2026-09-03:
+ * CDXC:RemotePairing 2026-09-03:
  * The Remote Setup modal talks to the gxserver that serves the page it runs in:
  * the desktop modal host through its injected bootstrap, the web app through
  * its local machine connection. The caller hands in the callback; when no

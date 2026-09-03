@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatHermesBlockingScreens 2026-08-31:
+CDXC:AgentScreenDetection 2026-08-31:
 Hermes Agent audit against nousresearch/hermes-agent a9c783f2 (v0.20.6).
 Hermes ships two independent terminal interfaces, and both replace or hide the
 ordinary composer while they own input:
