@@ -37,8 +37,7 @@ export function sessionChatCardDismissKey(prompt: SessionChatInteractivePrompt |
   if (prompt.kind === 'question') {
     return `question:${prompt.questions.length}:${prompt.questions[0]?.question ?? ''}`;
   }
-  const title = `Allow ${prompt.tool}?`;
-  return `approval:${title}:${prompt.summary ?? ''}`;
+  return `approval:${prompt.tool}:${prompt.summary ?? ''}`;
 }
 
 const DELIVERY_FAILED_NOTICE = "Couldn't deliver the answer — switch to Terminal View to answer there.";
@@ -98,6 +97,7 @@ function CardHeader({
   label,
   onDismiss,
   onToggleCollapsed,
+  uppercase = true,
 }: {
   collapsed?: boolean;
   collapsedSummary?: string;
@@ -105,12 +105,14 @@ function CardHeader({
   label: string;
   onDismiss?: () => void;
   onToggleCollapsed?: () => void;
+  uppercase?: boolean;
 }) {
   const labelRow = (
     <>
       <span
         className={cn(
-          'text-[11px] font-semibold tracking-widest text-muted-foreground uppercase',
+          'text-[11px] font-semibold text-muted-foreground',
+          uppercase ? 'tracking-widest uppercase' : 'tracking-wide',
           onToggleCollapsed && 'group-hover/header:text-foreground'
         )}
       >
@@ -386,9 +388,13 @@ export function SessionChatInteractiveCard({
     return (
       <CardShell kind='approval'>
         <CardPanel>
-          <CardHeader label='Pending approval' {...(readOnly ? {} : { onDismiss: dismiss })} />
-          <div className='min-w-0 px-4 pt-1 pb-3.5 sm:px-5'>
-            <p className='text-sm text-foreground/90'>{`Allow ${prompt.tool}?`}</p>
+          <CardHeader
+            label='Approval Request'
+            uppercase={false}
+            {...(readOnly ? {} : { onDismiss: dismiss })}
+          />
+          <div className='min-w-0 px-5 pt-1 pb-3.5'>
+            <p className='text-sm text-foreground/90'>Allow this command?</p>
             {prompt.summary ? (
               <div className='mt-3 min-w-0 rounded-lg border border-border/65 bg-background/70 p-3'>
                 <pre className='max-h-40 min-w-0 overflow-auto font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]'>
