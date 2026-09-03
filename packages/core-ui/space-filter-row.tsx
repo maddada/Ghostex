@@ -464,13 +464,25 @@ export function SpaceFilterRow({
       swipeGestureEndTimerRef.current = window.setTimeout(resetGesture, SPACE_SWIPE_GESTURE_END_DELAY_MS);
     };
     /*
-     * Machine tabs guarantee that this scroll viewport contains exactly one
-     * active machine surface and therefore one mounted Space row. Bind the
-     * gesture to the whole owning viewport instead of individual project nodes,
-     * so headers, empty-state padding, and every row are equally swipeable.
+     * Machine tabs guarantee that this sidebar contains exactly one active
+     * machine surface and therefore one mounted Space row. Bind the gesture to
+     * the whole sidebar page instead of individual project nodes or the list's
+     * scroll viewport, so headers, the empty area below the last session, and
+     * every row are equally swipeable.
+     *
+     * CDXC:SidebarSpaceSwipe 2026-09-03:
+     * The previous bound was the `.session-groups-content` scroll viewport,
+     * which left the sidebar space outside it — the region under a short
+     * list — inert to the gesture. The sidebar shell is the page's root for
+     * every host (desktop CEF page and the web app's sidebar column), so a
+     * swipe anywhere over the sidebar now behaves exactly like one over a
+     * session row.
      */
-    const scrollViewport = rowElement?.closest<HTMLElement>('.session-groups-content');
-    const belongsToActiveScroller = (target: Element): boolean => scrollViewport?.contains(target) === true;
+    const swipeSurface =
+      rowElement?.closest<HTMLElement>('.native-sidebar-shell') ??
+      rowElement?.closest<HTMLElement>('.session-groups-panel') ??
+      undefined;
+    const belongsToActiveScroller = (target: Element): boolean => swipeSurface?.contains(target) === true;
     const handleWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.shiftKey || document.body.dataset.sidebarTooltipsSuppressed === 'true') {
         return;
@@ -489,7 +501,7 @@ export function SpaceFilterRow({
       const targetBelongsToActiveScroller =
         (pointTarget ? belongsToActiveScroller(pointTarget) : false) ||
         (eventTarget ? belongsToActiveScroller(eventTarget) : false) ||
-        scrollViewport?.matches(':hover') === true;
+        swipeSurface?.matches(':hover') === true;
       if (!targetBelongsToActiveScroller) {
         return;
       }
