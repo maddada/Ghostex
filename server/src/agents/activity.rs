@@ -280,10 +280,46 @@ pub(crate) fn ingest_agent_hook_event(
             activity_update = Some(update);
         } else {
             activity_reason = "stale-activity-event".to_string();
-            // Stale events persist nothing, so no prompt/activity change
-            // reached disk.
-            session_chat_prompt_changed = false;
             session_chat_activity_changed = false;
+            /*
+            CDXC:SessionChatQuestionCardLifecycle 2026-09-03:
+            Staleness orders ACTIVITY transitions: an event older than the
+            last transition must not move the activity backwards. The card
+            is not ordered by that clock — it is scoped to one tool call by
+            next_session_chat_prompt_setting — so a question that arrives
+            "stale" (its PreToolUse hook raced a subagent's hook or the
+            question's own permission Notification, both of which bump
+            lastChangedAt) is still the question the terminal is showing.
+            Dropping it here left the chat with no card at all, because the
+            hook is the only live source for a pending Claude question.
+            Persist the prompt alone onto the stored activity object.
+            */
+            if session_chat_prompt_changed {
+                let mut runtime_settings = object_field(&session, "runtimeSettings");
+                let mut stored_activity = runtime_settings
+                    .get("agentActivity")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                if let Some(activity_object) = stored_activity.as_object_mut() {
+                    match session_chat_prompt_after.as_deref() {
+                        Some(prompt_json) => {
+                            activity_object
+                                .insert("sessionChatPrompt".to_string(), json!(prompt_json));
+                        }
+                        None => {
+                            activity_object.remove("sessionChatPrompt");
+                        }
+                    }
+                }
+                runtime_settings.insert("agentActivity".to_string(), stored_activity);
+                let mut session_update = lifecycle_update(lifecycle);
+                session_update.insert(
+                    "runtimeSettings".to_string(),
+                    Value::Object(runtime_settings),
+                );
+                session = repository.update_session(&session_update)?;
+                changed = true;
+            }
         }
     }
     /*
@@ -422,8 +458,11 @@ pub(crate) fn carry_session_chat_prompt(session: &Value, activity: &mut Value) {
 }
 
 /// Prompt disposition for one hook event: derive (AskUserQuestion-ish tool
-/// input on a non-post-tool event, or PermissionRequest) → replace; post-tool
-/// / Stop / SessionEnd / idle transition → clear; anything else → keep.
+/// input on a non-post-tool event, or PermissionRequest) → replace; the asking
+/// call's own post-tool event / Stop / SessionEnd / idle transition → clear;
+/// anything else — including post-tool events of OTHER tool calls, which a
+/// background subagent keeps producing under the lead session's id — → keep.
+/// See CDXC:SessionChatQuestionCardLifecycle in session_chat_interactive.rs.
 pub(crate) fn next_session_chat_prompt_setting(
     previous: Option<&str>,
     params: &Map<String, Value>,
@@ -437,15 +476,38 @@ pub(crate) fn next_session_chat_prompt_setting(
         .get("toolName")
         .or_else(|| params.get("tool_name"))
         .and_then(Value::as_str);
+    let tool_use_id = params
+        .get("toolUseId")
+        .or_else(|| params.get("tool_use_id"))
+        .and_then(Value::as_str);
     let tool_input = params.get("toolInput").or_else(|| params.get("tool_input"));
     if let Some(prompt) =
         crate::session_chat::derive_session_chat_prompt(tool_name, tool_input, event_name)
     {
-        return serde_json::to_string(&prompt)
+        return serde_json::to_string(&prompt.with_tool_use_id(tool_use_id.map(str::to_string)))
             .ok()
             .or_else(|| previous.map(str::to_string));
     }
-    if crate::session_chat::should_clear_session_chat_prompt(event_name, Some(next_activity)) {
+    let stored = previous.and_then(crate::session_chat::parse_stored_session_chat_prompt);
+    let clear = match stored.as_ref() {
+        Some(stored) => crate::session_chat::session_chat_prompt_clear_decision(
+            Some(stored),
+            crate::session_chat::SessionChatPromptClearEvent {
+                event_name,
+                next_activity: Some(next_activity),
+                tool_name,
+                tool_use_id,
+                idle_input_notification: params.get("notificationKind").and_then(Value::as_str)
+                    == Some("idleInput"),
+            },
+        ),
+        // Unparsable stored text has no tool identity to scope on: the
+        // tool-blind rule decides, so it cannot linger forever.
+        None => {
+            crate::session_chat::should_clear_session_chat_prompt(event_name, Some(next_activity))
+        }
+    };
+    if clear {
         return None;
     }
     previous.map(str::to_string)
@@ -644,6 +706,9 @@ pub(crate) fn first_prompt_claim_strategy(agent_name: Option<&str>) -> Option<&'
         // See first_prompt_auto_title_strategy: this agent names its own
         // sessions and the metadata sync adopts those names.
         Some("hermes-agent") => Some("agentAutoTitle"),
+        // See first_prompt_auto_title_strategy: this agent names its own
+        // conversations and the metadata sync adopts those names.
+        Some("antigravity") => Some("agentAutoTitle"),
         Some("pi") => Some("generateTitleAndName"),
         Some("omp") => Some("generateTitleAndName"),
         _ => None,
@@ -684,6 +749,8 @@ pub(crate) fn is_first_prompt_claim_generic_title(
         "terminal session",
         "agent",
         "agent session",
+        "antigravity cli",
+        "antigravity cli session",
         "claude",
         "claude code",
         "claude session",

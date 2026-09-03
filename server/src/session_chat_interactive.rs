@@ -46,12 +46,40 @@ pub struct SessionChatQuestion {
 pub enum SessionChatInteractivePrompt {
     Question {
         questions: Vec<SessionChatQuestion>,
+        /// The hook's `tool_use_id` for the call that asked, when the hook
+        /// payload carried one (Claude's PreToolUse does). The post-tool event
+        /// that retires the card is matched on it, so a subagent's tool traffic
+        /// in the same session cannot retire a question it did not ask.
+        #[serde(rename = "toolUseId", default, skip_serializing_if = "Option::is_none")]
+        tool_use_id: Option<String>,
     },
     Approval {
         tool: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         summary: Option<String>,
+        #[serde(rename = "toolUseId", default, skip_serializing_if = "Option::is_none")]
+        tool_use_id: Option<String>,
     },
+}
+
+impl SessionChatInteractivePrompt {
+    pub fn with_tool_use_id(mut self, id: Option<String>) -> Self {
+        let id = id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        match &mut self {
+            SessionChatInteractivePrompt::Question { tool_use_id, .. }
+            | SessionChatInteractivePrompt::Approval { tool_use_id, .. } => *tool_use_id = id,
+        }
+        self
+    }
+
+    pub fn tool_use_id(&self) -> Option<&str> {
+        match self {
+            SessionChatInteractivePrompt::Question { tool_use_id, .. }
+            | SessionChatInteractivePrompt::Approval { tool_use_id, .. } => tool_use_id.as_deref(),
+        }
+    }
 }
 
 /// Rust mirror of packages/shared/session-chat.ts `SessionChatQuestionSelection`.
@@ -376,6 +404,7 @@ pub fn detect_cursor_question_prompt(
             recommended: None,
             options,
         }],
+        tool_use_id: None,
     })
 }
 
@@ -400,13 +429,17 @@ pub fn derive_session_chat_prompt(
         && tool_input.is_some_and(|value| !value.is_null())
     {
         let questions = parse_session_chat_questions(Some(tool_name), tool_input?)?;
-        return Some(SessionChatInteractivePrompt::Question { questions });
+        return Some(SessionChatInteractivePrompt::Question {
+            questions,
+            tool_use_id: None,
+        });
     }
     if event_name == Some("PermissionRequest") {
         let summary = summarize_approval_input(tool_input);
         return Some(SessionChatInteractivePrompt::Approval {
             tool: tool_name.to_string(),
             summary: (!summary.is_empty()).then_some(summary),
+            tool_use_id: None,
         });
     }
     None
@@ -416,6 +449,10 @@ pub fn derive_session_chat_prompt(
 /// prompt; other events leave it alone (the contract's clear rule — narrower
 /// than the upstream overwrite-on-every-event rule, so unrelated working events cannot
 /// drop a still-pending card).
+///
+/// This is the tool-blind rule: it answers for hook scripts that forward no
+/// tool identity. Hook ingest uses `session_chat_prompt_clear_decision`, which
+/// scopes post-tool events to the call that asked.
 pub fn should_clear_session_chat_prompt(
     event_name: Option<&str>,
     next_activity: Option<&str>,
@@ -430,6 +467,87 @@ pub fn should_clear_session_chat_prompt(
         normalize_hook_event_name(event_name.unwrap_or_default()).as_str(),
         "stop" | "session_end" | "idle"
     )
+}
+
+/// One hook event's view of a stored prompt, for `session_chat_prompt_clear_decision`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SessionChatPromptClearEvent<'a> {
+    pub event_name: Option<&'a str>,
+    pub next_activity: Option<&'a str>,
+    pub tool_name: Option<&'a str>,
+    pub tool_use_id: Option<&'a str>,
+    /// Claude's 60-second "waiting for your input" reminder
+    /// (`notificationKind: idleInput`), which settles ACTIVITY to idle.
+    pub idle_input_notification: bool,
+}
+
+/*
+CDXC:SessionChatQuestionCardLifecycle 2026-09-03:
+Whether a hook event retires the stored card, given the card it would retire.
+
+Claude Code runs the PreToolUse/PostToolUse hooks of every background subagent
+under the LEAD session's id, so while the lead sits on an AskUserQuestion the
+session keeps receiving post-tool events for Bash/Read/Grep calls the subagents
+make. The tool-blind rule above treated each of those as "the tool finished"
+and dropped the card within a second of the PreToolUse hook storing it — and
+because Claude does not flush a pending tool call to its transcript, nothing
+could bring the card back. Observed 2026-09-03: two multi-select questions
+visible in the terminal, neither ever shown in Session Chat, both with a
+background agent working the same session.
+
+A post-tool event therefore retires the card only when it is the asking call's
+own completion: same `tool_use_id` when both sides carry one, otherwise the
+same tool (an ask-tool for a question card, the approved tool for an approval
+card). A post-tool event with no tool identity at all keeps the old behaviour,
+because a hook script that forwards nothing cannot be scoped.
+
+Claude's idle-input reminder is a statement about the input line, not about
+the question: the question IS what the input is waiting on. It moves activity
+to idle and must not take the card with it; a cancelled question retires
+through its transcript tool result instead.
+*/
+pub fn session_chat_prompt_clear_decision(
+    stored: Option<&SessionChatInteractivePrompt>,
+    event: SessionChatPromptClearEvent<'_>,
+) -> bool {
+    let Some(stored) = stored else {
+        return false;
+    };
+    if is_post_tool_hook_event(event.event_name) {
+        return post_tool_event_resolves_prompt(stored, event.tool_name, event.tool_use_id);
+    }
+    if event.idle_input_notification {
+        return false;
+    }
+    if event.next_activity == Some("idle") {
+        return true;
+    }
+    matches!(
+        normalize_hook_event_name(event.event_name.unwrap_or_default()).as_str(),
+        "stop" | "session_end" | "idle"
+    )
+}
+
+/// Whether a post-tool event for `tool_name`/`tool_use_id` is the completion
+/// of the call that produced `stored`.
+pub fn post_tool_event_resolves_prompt(
+    stored: &SessionChatInteractivePrompt,
+    tool_name: Option<&str>,
+    tool_use_id: Option<&str>,
+) -> bool {
+    let tool_use_id = tool_use_id.map(str::trim).filter(|value| !value.is_empty());
+    if let (Some(event_id), Some(stored_id)) = (tool_use_id, stored.tool_use_id()) {
+        return event_id == stored_id;
+    }
+    let Some(tool_name) = tool_name.map(str::trim).filter(|value| !value.is_empty()) else {
+        return true;
+    };
+    match stored {
+        SessionChatInteractivePrompt::Question { .. } => is_ask_user_question_tool(tool_name),
+        SessionChatInteractivePrompt::Approval { tool, .. } => {
+            normalize_session_chat_tool_name(tool) == normalize_session_chat_tool_name(tool_name)
+        }
+    }
 }
 
 pub fn parse_stored_session_chat_prompt(stored: &str) -> Option<SessionChatInteractivePrompt> {
@@ -481,8 +599,13 @@ impl SessionChatTranscriptPromptState {
                         if is_ask_user_question_tool(name) =>
                     {
                         self.answered = false;
-                        self.pending = parse_session_chat_questions(Some(name), input)
-                            .map(|questions| SessionChatInteractivePrompt::Question { questions });
+                        self.pending =
+                            parse_session_chat_questions(Some(name), input).map(|questions| {
+                                SessionChatInteractivePrompt::Question {
+                                    questions,
+                                    tool_use_id: None,
+                                }
+                            });
                         self.last_question = self.pending.clone();
                     }
                     SessionChatBlock::ToolResult { .. } => {
@@ -528,7 +651,7 @@ pub fn scan_transcript_prompt_state(
 /// Question texts of a question prompt, in order. `None` for approvals.
 fn session_chat_prompt_question_texts(prompt: &SessionChatInteractivePrompt) -> Option<Vec<&str>> {
     match prompt {
-        SessionChatInteractivePrompt::Question { questions } => Some(
+        SessionChatInteractivePrompt::Question { questions, .. } => Some(
             questions
                 .iter()
                 .map(|question| question.question.as_str())

@@ -2598,8 +2598,9 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                 // that rejects every answer.
                 .or_else(|| transcript_pending_question_prompt(&target.session))
                 .or(screen_prompt);
-            let Some(crate::session_chat::SessionChatInteractivePrompt::Question { questions }) =
-                stored_prompt
+            let Some(crate::session_chat::SessionChatInteractivePrompt::Question {
+                questions, ..
+            }) = stored_prompt
             else {
                 return domain_error_response(
                     endpoint_path,

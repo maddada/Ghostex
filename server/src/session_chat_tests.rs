@@ -527,7 +527,7 @@ mod tests {
         let derived = resolve_session_chat_prompt(None, &pending).expect("card derives");
         assert!(matches!(
             derived,
-            SessionChatInteractivePrompt::Question { ref questions } if questions.len() == 1
+            SessionChatInteractivePrompt::Question { ref questions, .. } if questions.len() == 1
         ));
 
         // Its tool result landing means it was answered (possibly in the
@@ -546,6 +546,7 @@ mod tests {
                     recommended: None,
                     options: Vec::new(),
                 }],
+                tool_use_id: None,
             }),
             &answered,
         )
@@ -555,6 +556,7 @@ mod tests {
         let approval = SessionChatInteractivePrompt::Approval {
             tool: "Bash".to_string(),
             summary: None,
+            tool_use_id: None,
         };
         assert_eq!(
             resolve_session_chat_prompt(Some(approval.clone()), &answered),
@@ -618,6 +620,7 @@ mod tests {
                 recommended: None,
                 options: Vec::new(),
             }],
+            tool_use_id: None,
         };
         // Different question ⇒ kept (this was the regression: it was retired).
         assert_eq!(
@@ -635,6 +638,7 @@ mod tests {
                 recommended: None,
                 options: Vec::new(),
             }],
+            tool_use_id: None,
         };
         assert!(resolve_session_chat_prompt(Some(same_stored), &transcript).is_none());
     }
