@@ -2,6 +2,10 @@
 // lines, itself moved verbatim out of main.rs) into descriptively named
 // modules; pure move, no logic changes. Cluster: command-pane leaf chrome (pane titlebar, bottom reservation, floating reserved bar) and the command-pane tab strip/tab element.
 
+use gpui::div;
+use gpui::prelude::FluentBuilder as _;
+use gpui::px;
+use gpui::relative;
 use gpui::AnyElement;
 use gpui::AppContext as _;
 use gpui::FontWeight;
@@ -14,10 +18,6 @@ use gpui::ParentElement as _;
 use gpui::ScrollWheelEvent;
 use gpui::StatefulInteractiveElement as _;
 use gpui::Styled as _;
-use gpui::div;
-use gpui::prelude::FluentBuilder as _;
-use gpui::px;
-use gpui::relative;
 use gpui_component::h_flex;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
@@ -145,7 +145,7 @@ impl GhostexGpuiApp {
                 MouseButton::Left,
                 cx.listener(move |this, _event: &MouseDownEvent, _window, cx| {
                     /*
-                    CDXC:GPUICommandPaneFocus 2026-06-26-00:00:
+                    CDXC:FocusRouting 2026-06-26-00:00:
                     Expanded command titlebar chrome clicks should match native `focusTerminal` by focusing the clicked command group and revealing that same group's active command tab in both expanded and collapsed strips. Resolve the activated session from the clicked group instead of using first-group fallback so Attention acknowledgement stays scoped to the clicked command session.
                     */
                     if !this.command_pane.focus_group(group_id) {
@@ -289,7 +289,7 @@ impl GhostexGpuiApp {
         height: f32,
     ) -> AnyElement {
         /*
-        CDXC:GPUICommandPaneFloating 2026-06-25-18:19:
+        CDXC:CommandPane 2026-06-25-18:19:
         Expanded floating command panels need the native reserved bottom footprint as plain command-panel chrome. Do not render tabs, plus, Expand, Pin/Unpin, or Minimize controls in this bottom reservation; those controls live in the floating panel itself.
         */
         div()
@@ -335,8 +335,11 @@ impl GhostexGpuiApp {
             command_pane_sticky_active_tab_trailing_inset(false, show_tab_add_button);
 
         /*
-        CDXC:GPUICommandPaneControls 2026-06-25-12:32:
-        Native minimized command panels are command tab chrome only: the panel frame starts after a 4px left margin and does not prepend a separate "Command" label block before the tabs. Keep the right edge flush so Expand has the same horizontal placement as Minimize.
+        CDXC:CommandPane 2026-06-25-12:32:
+        Native minimized command panels are command tab chrome only: the panel frame does not prepend a separate "Command" label block before the tabs. Keep the right edge flush so Expand has the same horizontal placement as Minimize.
+
+        CDXC:CommandPane 2026-09-03:
+        The collapsed strip must line up with the expanded titlebar so minimizing does not move the first tab or drop the panel's left edge line. The expanded leaf draws a 1px side edge plus a 2px group border before its tab bar, so the strip draws the same 1px side edge and a 2px inner pad instead of a plain 4px margin, which shifted the tabs right by 1px and lost the edge line.
         */
         h_flex()
             .id("ghostex-gpui-command-pane-collapsed-strip-row")
@@ -345,6 +348,8 @@ impl GhostexGpuiApp {
             .w_full()
             .items_center()
             .overflow_hidden()
+            .border_t_1()
+            .border_color(command_pane_panel_separator_color())
             .bg(command_pane_strip_color())
             .child(
                 h_flex()
@@ -355,10 +360,11 @@ impl GhostexGpuiApp {
                     .h_full()
                     .items_center()
                     .overflow_hidden()
-                    .border_t_1()
-                    .border_color(command_pane_panel_separator_color())
+                    .border_l_1()
+                    .border_color(command_pane_side_edge_color())
                     .bg(command_pane_strip_color())
-                    .ml(px(COMMAND_PANE_COLLAPSED_STRIP_LEFT_MARGIN))
+                    .pl(px(COMMAND_PANE_COLLAPSED_STRIP_LEFT_MARGIN
+                        - COMMAND_PANE_COLLAPSED_STRIP_LEFT_EDGE_WIDTH))
                     .mr(px(COMMAND_PANE_COLLAPSED_STRIP_RIGHT_MARGIN))
                     .child(
                         h_flex()
@@ -468,7 +474,7 @@ impl GhostexGpuiApp {
                 )
             });
         /*
-        CDXC:GPUIWindowsCommandTitles 2026-08-04:
+        CDXC:PlatformSupport 2026-08-04:
         Command-pane titles are owned by the command model: plain terminals use
         Command Terminal, Actions use their configured title, and Rename edits
         that same field. A live shell OSC title describes the process/window;
@@ -617,7 +623,7 @@ impl GhostexGpuiApp {
                 MouseButton::Middle,
                 cx.listener(move |this, _event: &MouseUpEvent, window, cx| {
                     /*
-                    CDXC:GPUICommandTabClose 2026-06-25-14:01:
+                    CDXC:CommandPane 2026-06-25-14:01:
                     Command tabs mirror native AppKit tab buttons: button-2 is owned by the clicked tab and closes it on mouse-up through the normal command close path, without selecting the tab or creating separate session teardown behavior.
                     */
                     window.prevent_default();

@@ -16,7 +16,7 @@ pub(crate) static GPUI_APP_QUIT_IN_PROGRESS: AtomicBool = AtomicBool::new(false)
 pub(crate) const GPUI_SESSION_CHAT_DRAFT_TRANSFER_TIMEOUT: Duration = Duration::from_secs(30);
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 The terminal view's "Queued: N" chip needs the queue size for the handful of
 sessions actually on screen in terminal mode. gxserver publishes the same count
 as `queuedPromptCount` on its presentation snapshot, which the sidebar runtime
@@ -30,7 +30,7 @@ pub(crate) const GPUI_SESSION_CHAT_QUEUE_COUNT_POLL_INTERVAL: Duration = Duratio
 pub(crate) const GPUI_SESSION_CHAT_QUEUE_COUNT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /*
-CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+CDXC:SessionChat 2026-08-24:
 Every chat-mode session owns a full Chromium page, and those pages stay alive
 behind whatever pane is on screen. A workspace with many chat sessions therefore
 pays renderer RAM for surfaces nobody has looked at in a long time. A surface
@@ -171,7 +171,7 @@ pub(crate) const TITLEBAR_PROJECT_CONTEXT_DISABLED_REASON: &str =
     "Switch to a project to access this view";
 
 /*
-CDXC:GPUTitlebarAvailability 2026-08-20:
+CDXC:Titlebar 2026-08-20:
 Source (Code) has no working remote runtime yet: code-server is launched on this
 machine against a local path, so a machine-scoped remote project would open the
 wrong tree. Disable the tab for remote projects through the same availability
@@ -398,7 +398,7 @@ pub(crate) const GPUI_SIDEBAR_GLOBAL_ACTIONS_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.globalActions";
 
 /*
-CDXC:GlobalActions 2026-08-01-16:00:
+CDXC:AgentLauncher 2026-08-01-16:00:
 The tab strip draws at most this many Global Actions. The cap keeps the action
 cluster from crowding out the tabs themselves on a narrow pane, and it bounds
 the bridge payload the same way the status-indicator bridge bounds its rows.
@@ -707,7 +707,7 @@ pub(crate) const APP_MODAL_HOST_CEF_PROFILE_ID: &str = "app-modal";
 pub(crate) const APP_MODAL_HOST_ID: &str = "ghostex-gpui-app-modal-host";
 
 /*
-CDXC:GPUITutorialVideo 2026-08-13:
+CDXC:Onboarding 2026-08-13:
 YouTube rejects an iframe embedded by the file:// modal host because that
 request cannot carry the HTTP referrer identity required by the player. Keep
 the tutorial in the normal native child window, but load the watch page as its
@@ -715,7 +715,7 @@ top-level CEF document so playback follows the same working path as Browser.
 */
 pub(crate) const GHOSTEX_TUTORIAL_VIDEO_URL: &str = "https://www.youtube.com/watch?v=APdP-j5n4Mw";
 
-/// CDXC:GPUITutorialVideoFullscreen 2026-08-18: the watch page reports
+/// CDXC:Onboarding 2026-08-18: the watch page reports
 /// main-frame load-end before its player has installed keyboard shortcuts, so
 /// the host-side fullscreen key press waits this long after that edge.
 pub(crate) const GPUI_TUTORIAL_VIDEO_FULLSCREEN_KEY_DELAY: Duration = Duration::from_millis(1500);
@@ -766,7 +766,7 @@ pub(crate) const APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_WIDTH: f32 = 560.0
 pub(crate) const APP_MODAL_HOST_MISSING_PROJECT_FOLDER_WINDOW_HEIGHT: f32 = 360.0;
 
 /*
- * CDXC:ExportTranscript 2026-08-20:
+ * CDXC:TranscriptExport 2026-08-20:
  * The export result dialog is a compact confirmation: a path, an agent select,
  * and three buttons. It opens on the Rename Session width and lets the one-shot
  * `contentHeightMeasured` fit shrink the frame to whatever it actually rendered.
@@ -776,11 +776,11 @@ pub(crate) const APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_WIDTH: f32 = 570
 pub(crate) const APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_HEIGHT: f32 = 420.0;
 
 /*
- * CDXC:GPUIAppModalSizes 2026-07-26-07:20:
+ * CDXC:AppModal 2026-07-26-07:20:
  * The measured Rename Session dialog is 431px tall, so the historic 428px frame
  * cropped its bottom edge by a few pixels.
  *
- * CDXC:GPUIAppModalFitHeight 2026-07-28:
+ * CDXC:AppModal 2026-07-28:
  * Compact modal-host dialogs now report their rendered height once per open
  * and the child window fits to it, so this constant is only the pre-measure
  * frame. It matches the measured default Rename Session dialog instead of the
@@ -790,7 +790,7 @@ pub(crate) const APP_MODAL_HOST_EXPORT_TRANSCRIPT_RESULT_WINDOW_HEIGHT: f32 = 42
 pub(crate) const APP_MODAL_HOST_RENAME_SESSION_WINDOW_HEIGHT: f32 = 440.0;
 
 /*
- * CDXC:GPUIAppModalFitHeight 2026-07-28:
+ * CDXC:AppModal 2026-07-28:
  * Bounds for the one-shot `contentHeightMeasured` window fit. The floor keeps
  * a broken measurement from collapsing the window below a usable dialog; the
  * ceiling keeps it inside the smallest supported display height.
@@ -800,7 +800,7 @@ pub(crate) const APP_MODAL_HOST_FIT_CONTENT_MIN_WINDOW_HEIGHT: f32 = 200.0;
 pub(crate) const APP_MODAL_HOST_FIT_CONTENT_MAX_WINDOW_HEIGHT: f32 = 850.0;
 
 /*
- * CDXC:GPUIAppModalSizes 2026-07-26-07:20:
+ * CDXC:AppModal 2026-07-26-07:20:
  * Every app-modal child window is a fitted, non-resizable frame. The compact
  * form and list modals below were measured against the real modal-host React
  * dialogs (rendered from the shipped bundle at the candidate window size), so
@@ -826,7 +826,7 @@ pub(crate) const APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH: f32 = 560.
 pub(crate) const APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT: f32 = 380.0;
 
 /*
-CDXC:RemoteSetup 2026-09-03:
+CDXC:RemotePairing 2026-09-03:
 Remote Setup opens on a frame tall enough for both sections; the one-shot
 fit-height pass then sizes the child window down to what React rendered.
 */
@@ -850,7 +850,7 @@ pub(crate) const APP_MODAL_HOST_UPDATE_AVAILABLE_WINDOW_HEIGHT: f32 = 560.0;
  * (machines, sources, browse list, clone destination) and a fitted frame would
  * freeze it at whichever step opened first.
  *
- * CDXC:AddProjectChrome 2026-07-31:
+ * CDXC:AddProject 2026-07-31:
  * The dialog now fills this window edge to edge (search field at the top,
  * shortcut footer on the bottom edge, list scrolling in between), so the frame
  * is sized to the tallest common step instead of the old 520px box that left a
@@ -908,7 +908,7 @@ pub(crate) const TITLEBAR_POPUP_READING_HEADER_BUTTON_ICON_SIZE: f32 = 16.0;
 pub(crate) const TITLEBAR_POPUP_VERTICAL_OFFSET: f32 = 6.0;
 
 /*
-CDXC:GPUITitlebarPopupContentHeight 2026-07-09:
+CDXC:Titlebar 2026-07-09:
 The titlebar popup NSPanels are sized before opening, so their height math
 must mirror gpui-component PopupMenu layout exactly or the last menu rows get
 clipped: the popover root adds a 1px border on each side, the items column
@@ -1030,70 +1030,70 @@ pub(crate) const BROWSER_FEEDBACK_AGENTATION_REACT_DOM_CLIENT_MODULE_URL: &str =
 pub(crate) const PROJECT_EDITOR_COMPANION_RESTORE_ICON: &str = "titlebar/chevron-right.svg";
 
 /*
-CDXC:GPUIWorkspacePresentation 2026-06-22-06:24:
+CDXC:Workarea 2026-06-22-06:24:
 GPUI workspace chrome should match the macOS workspace shell constants: terminal tab bars are 36px high, workspace tabs stay in the 170-175px macOS width band, command titlebars and collapsed strips are 26px high, and divider/resize rails remain real layout siblings around 5px with 1px visual separators.
 
-CDXC:GPUIWorkspacePresentation 2026-06-22-06:24:
+CDXC:Workarea 2026-06-22-06:24:
 The command panel stores an in-memory height ratio, but its default and double-click reset derive from the shared command-pane default-height setting when that fits within the 5%-90% available-content clamp. Project-editor companions default to roughly 32% of the editor area with a practical minimum and persist resize/reset mutations through the GPUI shell state.
 
-CDXC:GPUICommandPane 2026-06-25-11:29:
+CDXC:CommandPane 2026-06-25-11:29:
 GPUI command-pane initial height, missing persisted height, and double-click reset must honor the same Settings.commandsPanelDefaultHeightPx value as the macOS app. Keep the Rust side on the shared 125px default and 40px-600px setting clamp so changing the Workspace setting affects future opens/resets without rewriting explicit persisted ratios.
 
-CDXC:GPUIAgentsTerminalLifecycle 2026-06-22-23:33:
+CDXC:Terminal 2026-06-22-23:33:
 Full-width secondary terminal creation is a distinct Agents shell action from pane-local Split Below. It wraps the entire existing Agents workspace tree as the top branch, appends a selected Mounting terminal in a bottom row, and keeps startup honest without fake Running state, libghostty mount, process launch, command text, stdout/stderr, or terminal content.
 
-CDXC:GPUIAgentsPaneActions 2026-06-22-11:15:
+CDXC:CommandPane 2026-06-22-11:15:
 The far-right Agents pane overflow is a NativeMenu scoped to the clicked pane id. It exposes pane/layout actions only, omits per-tab close commands, dispatches GPUI actions through the root render tree, and reuses the existing placeholder-only shell mutations without overlapping GPUI panels, hidden hit regions, libghostty mounts, terminal processes, command text, or terminal content.
 
-CDXC:GPUIAgentsMergeAllTabs 2026-06-22-13:17:
+CDXC:CommandPane 2026-06-22-13:17:
 Merge All Tabs is Agents-workspace-only parity. The pane menu and Ctrl+Shift+M flatten only the Agents split tree into one clicked or focused tab group, preserve terminal placeholder ids and presentation states, select the target pane's active session when possible, clear Focus mode because split geometry is removed, and never merge command-pane, Browser, Source, Kanban, Manage, project-editor, libghostty, process, command text, or terminal content state.
 
-CDXC:GPUIAgentsTabContextMenu 2026-06-22-11:19:
+CDXC:ContextMenus 2026-06-22-11:19:
 Agents tab right-click context menus are separate from the far-right pane overflow: they are NativeMenus scoped to the clicked pane/session ids, expose only Select Tab and Close Tab, and keep pane/layout actions out of per-tab menus.
 
-CDXC:GPUIBrowserTabContextMenu 2026-06-22-11:27:
+CDXC:ContextMenus 2026-06-22-11:27:
 Browser tab right-click context menus are NativeMenus scoped to the clicked Browser pane id and Browser tab id. They expose only Select Tab and Close Tab, reuse the existing Browser selection and close semantics, and must not include pane split/layout, toolbar, history, project-editor, overlay, hidden hit-region, or hit-test-routing behavior.
 
-CDXC:GPUIBrowserPaneActions 2026-06-22-13:46:
+CDXC:Browser 2026-06-22-13:46:
 The far-right Browser pane overflow is a NativeMenu scoped to the clicked Browser pane id. It exposes pane/layout actions only, omits per-tab close/select plus toolbar/history/profile/devtools commands, and creates address-only Browser tabs through the existing Browser sync path so split panes do not load new CEF surfaces.
 
-CDXC:GPUIBrowserPaneExternalOpen 2026-08-12:
+CDXC:Browser 2026-08-12:
 The Browser pane overflow starts with Open in External Browser, followed by a
 separator before its pane/layout actions. The typed action resolves the clicked
 pane's active tab at dispatch time and sends only a validated HTTP(S) URL to the
 existing OS-default-browser opener.
 
-    CDXC:GPUICommandTabContextMenu 2026-06-22-11:31:
+    CDXC:ContextMenus 2026-06-22-11:31:
     Command-pane tab right-click context menus are NativeMenus scoped to the clicked command group and command session. They expose scoped close rows while tab selection and collapsed-strip expansion stay on left-click tab activation.
 
-    CDXC:GPUICommandTabContextMenu 2026-06-27-05:07:
+    CDXC:ContextMenus 2026-06-27-05:07:
     Command-tab context menus must stay outside Action process ownership: run-start metadata, status-file polling, completion feedback, and exit cleanup own live Action status, while menu actions may only select/sleep/close the scoped tab without inspecting command text, output, paths, env, logs, status-file contents, Browser/CEF state, overlays, hidden hit regions, or hit-test routing.
 
-    CDXC:GPUICommandTabContextMenu 2026-06-25-14:13:
+    CDXC:ContextMenus 2026-06-25-14:13:
     AppKit command tabs receive panel actions in their titlebar action model, and `primaryTabContextMenuActions` keeps only per-session actions that are present in that model before Sleep/Close scopes. Keep GPUI command-tab context menus tab-scoped and leave Pin/Unpin plus Minimize on the fixed command-panel action buttons.
 
-    CDXC:GPUICommandTabContextMenu 2026-06-27-01:49:
+    CDXC:ContextMenus 2026-06-27-01:49:
     Native command-panel sessions expose only fixed panel action payloads, so Swift `primaryTabContextMenuActions` produces no Rename Session, Delayed Send, or Close After Done block for command-tab right-click. GPUI command-tab menus must start with eligible Focus only, then scoped Sleep/Close rows, while focused command-palette and modal actions keep their separate routes.
 
-        CDXC:GPUIBrowserHistoryMenu 2026-06-22-11:38:
+        CDXC:Browser 2026-06-22-11:38:
         Browser History is an OS-owned NativeMenu opened from the toolbar History button, not Back/Forward dropdown chrome or an in-layout GPUI panel. The menu derives labels from sanitized URL history through the existing URL display helper, carries only the target history index in a typed action, and creates a new loaded Browser tab only after the user selects a row.
 
-        CDXC:GPUITabOverflowReveal 2026-06-22-12:09:
+        CDXC:CommandPane 2026-06-22-12:09:
         Browser and command tab bars need the same sticky edge affordance as Agents when the active tab is clipped by horizontal overflow. Render the affordance as fixed-width, visible, non-interactive sibling chrome between the scrollable tab strip and the fixed control cluster; do not use overlays, hidden hit regions, hit-test routing, or synthetic coordinate routing.
 
-        CDXC:GPUICommandTabOverflow 2026-06-25-13:30:
+        CDXC:CommandPane 2026-06-25-13:30:
         Command tabs no longer use the permanent workspace-style edge reveal. Native command chrome only shows a conditional active-tab proxy when horizontal overflow clips the active command tab.
 
-        CDXC:GPUIFocusedNewTabs 2026-06-22-23:33:
+        CDXC:FocusMode 2026-06-22-23:33:
         Cmd+T and Cmd+N parity places keyboard-created and clicked-pane new terminal/browser tabs immediately after the active tab in the target split pane. Cmd+T is shell-focus scoped: focused Agents panes in Agents mode add Mounting startup placeholders, while focused command panes add command placeholders to the focused command group. Cmd+N switches and wakes Browser because existing Browser popup and toolbar commands already select Browser through the Browser sync path.
 
-        CDXC:GPUIFocusedSplits 2026-06-25-16:05:
+        CDXC:FocusMode 2026-06-25-16:05:
         Cmd+D and Cmd+Shift+D are focused terminal split hotkeys in the placeholder shell. Agents focus in Agents mode creates Mounting startup placeholders to the right or below the focused Agents pane; command-pane focus must match native by treating both hotkeys as horizontal command splits beside the focused command group.
 
-        CDXC:GPUICommandPaneDragDrop 2026-06-22-13:05:
+        CDXC:CommandPane 2026-06-22-13:05:
         Agents workspace tabs can be dragged into an expanded command-pane group body as a placeholder transfer. The command pane gets a command-only placeholder session with the same visible title, the Agents tab is removed only when that move would not empty the final root Agents leaf, command drops keep center grouping plus left/right horizontal splits, and no libghostty mount, real process, command text, stdout/stderr, overlay, hidden hit region, or hit-test routing is introduced.
 
-        CDXC:GPUICommandPaneDragDrop 2026-06-22-16:18:
+        CDXC:CommandPane 2026-06-22-16:18:
         Agents workspace tabs can also be dragged to an expanded command-pane tab-strip boundary or end target. This creates a command-only placeholder tab with the visible Agents title at the exact requested command tab index, focuses/expands that command group, then removes the Agents source only after insertion succeeds; it never transfers libghostty state, terminal content, command text, process state, Source/Kanban/Automate/Manage surfaces, CEF state, overlays, hidden hit regions, or native/root hit-test routing.
         */
 pub(crate) const WORKSPACE_TAB_BAR_HEIGHT: f32 = 36.0;
@@ -1168,27 +1168,33 @@ pub(crate) const COMMAND_PANE_TAB_BAR_HEIGHT: f32 = 26.0;
 
 pub(crate) const COMMAND_PANE_STRIP_HEIGHT: f32 = 26.0;
 
-pub(crate) const COMMAND_PANE_COLLAPSED_STRIP_LEFT_MARGIN: f32 = 4.0;
+/*
+CDXC:CommandPane 2026-09-03:
+The collapsed strip's left inset equals the expanded leaf's 1px side edge plus its 2px group border, so tabs sit at the same x whether the panel is minimized or not. The edge width is the part of that inset painted as the left border line.
+*/
+pub(crate) const COMMAND_PANE_COLLAPSED_STRIP_LEFT_MARGIN: f32 = 3.0;
+
+pub(crate) const COMMAND_PANE_COLLAPSED_STRIP_LEFT_EDGE_WIDTH: f32 = 1.0;
 
 pub(crate) const COMMAND_PANE_COLLAPSED_STRIP_RIGHT_MARGIN: f32 = 0.0;
 
 /*
-CDXC:GPUICommandPaneFloating 2026-06-25-18:07:
+CDXC:CommandPane 2026-06-25-18:07:
 Native floating command panels reserve the collapsed-strip footprint, then inset the expanded floating panel by 25px from the workspace edges above that footprint. Keep the inset in normal absolute layout so the floating panel does not become a full-width pinned panel clone.
 
-CDXC:GPUICommandPaneFloating 2026-06-25-18:19:
+CDXC:CommandPane 2026-06-25-18:19:
 The reserved floating bottom footprint is plain command-panel chrome, not the interactive collapsed tab strip.
 */
 pub(crate) const COMMAND_PANE_FLOATING_MARGIN: f32 = 25.0;
 
 /*
-CDXC:GPUICommandPaneLayout 2026-06-25-18:14:
+CDXC:CommandPane 2026-06-25-18:14:
 Native command-panel chrome owns the full panel frame. Keep the trailing command content inset by one logical pixel while the leading pane edge stays flush with the workspace pane boundary.
 */
 pub(crate) const COMMAND_PANE_OUTER_CONTENT_RIGHT_INSET: f32 = 1.0;
 
 /*
-CDXC:GPUICommandTabOverflow 2026-06-25-13:30:
+CDXC:CommandPane 2026-06-25-13:30:
 Native command tab strips do not render a permanent decorative edge reveal. Their overflow affordance is the conditional 30px Show Active Tab proxy when the active tab is clipped below 60px visible, using a 12px reveal scroll margin.
 */
 pub(crate) const COMMAND_PANE_STICKY_ACTIVE_TAB_BUTTON_SIZE: f32 = 30.0;
@@ -1200,7 +1206,7 @@ pub(crate) const COMMAND_PANE_ACTIVE_TAB_REVEAL_SCROLL_MARGIN: f32 = 12.0;
 pub(crate) const COMMAND_PANE_ACTIVE_TAB_REVEAL_MINIMUM_VISIBLE_WIDTH: f32 = 60.0;
 
 /*
-CDXC:GPUICommandTabScrolling 2026-06-25-13:45:
+CDXC:CommandPane 2026-06-25-13:45:
 Native command tab strips keep direct horizontal scrolling native, ignore precise vertical trackpad gestures, and amplify non-precision vertical wheel ticks by 18x with a 96px minimum so mouse wheels traverse overflowing command tabs quickly.
 */
 pub(crate) const COMMAND_PANE_VERTICAL_WHEEL_TAB_SCROLL_MULTIPLIER: f32 = 18.0;
@@ -1208,13 +1214,13 @@ pub(crate) const COMMAND_PANE_VERTICAL_WHEEL_TAB_SCROLL_MULTIPLIER: f32 = 18.0;
 pub(crate) const COMMAND_PANE_MINIMUM_DISCRETE_VERTICAL_WHEEL_TAB_SCROLL_DELTA: f32 = 96.0;
 
 /*
-CDXC:GPUICommandTabDoubleClick 2026-06-25-13:50:
+CDXC:CommandPane 2026-06-25-13:50:
 Native pane titlebars reserve empty command tab chrome for double-click New Terminal when a real tab/add/control was not hit. Use the native 34px preferred target width, keep the 24px minimum as an asserted contract, and route only double-clicks through terminal creation.
 */
 pub(crate) const COMMAND_PANE_EMPTY_TITLEBAR_DOUBLE_CLICK_TARGET_WIDTH: f32 = 34.0;
 
 /*
-CDXC:GPUICommandPaneControls 2026-06-25-18:46:
+CDXC:CommandPane 2026-06-25-18:46:
 Native command titlebars hide the inline New Terminal button when it would squeeze the tab viewport below the compact double-click target. Preserve at least the 56px native empty-titlebar viewport before spending 26px on the command add button.
 */
 pub(crate) const COMMAND_PANE_MINIMUM_VISIBLE_TAB_VIEWPORT_WIDTH_WITH_DOUBLE_CLICK_TARGET: f32 =
@@ -1223,7 +1229,7 @@ pub(crate) const COMMAND_PANE_MINIMUM_VISIBLE_TAB_VIEWPORT_WIDTH_WITH_DOUBLE_CLI
 pub(crate) const COMMAND_PANE_TAB_ADD_BUTTON_GAP: f32 = 0.0;
 
 /*
-CDXC:GPUICommandTabSizing 2026-06-25-13:32:
+CDXC:CommandPane 2026-06-25-13:32:
 Native command tabs fit equally inside the available command tab viewport, clamped from 72px to 160px, and the collapsed command-panel bar uses the same command-role tab sizing as expanded command titlebars. Do not keep separate fixed expanded/collapsed tab widths.
 */
 pub(crate) const COMMAND_PANE_TAB_MIN_WIDTH: f32 = 72.0;
@@ -1234,13 +1240,13 @@ pub(crate) const COMMAND_PANE_TAB_END_DROP_TARGET_WIDTH: f32 =
     COMMAND_PANE_EMPTY_TITLEBAR_DOUBLE_CLICK_TARGET_WIDTH;
 
 /*
-CDXC:GPUICommandTabTypography 2026-06-25-13:25:
+CDXC:CommandPane 2026-06-25-13:25:
 Native command tabs keep the compact old command typography for both active and inactive tabs: 11pt semibold text with stable light color. Do not reuse workspace-style inactive dimming or active-state font-weight changes for command chrome.
 */
 pub(crate) const COMMAND_PANE_TAB_TITLE_FONT_SIZE: f32 = 11.0;
 
 /*
-CDXC:GPUICommandTabChrome 2026-06-25-13:11:
+CDXC:CommandPane 2026-06-25-13:11:
 Native command tabs reveal the inline close affordance only while the owning tab is hovered. Keep the close frame at the native 20px size, 4px from the trailing edge, flat-cornered, and out of tab flex layout so hover does not remeasure the title.
 */
 pub(crate) const COMMAND_PANE_TAB_CLOSE_SIZE: f32 = 20.0;
@@ -1253,22 +1259,22 @@ pub(crate) const COMMAND_PANE_TAB_CLOSE_TOP_OFFSET: f32 =
 pub(crate) const COMMAND_PANE_TAB_CLOSE_CORNER_RADIUS: f32 = 0.0;
 
 /*
-CDXC:GPUICommandTabChrome 2026-06-25-14:01:
+CDXC:CommandPane 2026-06-25-14:01:
 Native command-tab close chrome uses the same stable #0e0e0e icon-button background and #cfcfcf stroked X as command tab-bar buttons. Render an icon inside the hover-only 20px frame instead of a lowercase text x with hover-only background.
 */
 pub(crate) const COMMAND_PANE_TAB_CLOSE_ICON_SIZE: f32 = 10.0;
 
 /*
-CDXC:GPUICommandTabSeparators 2026-06-25-14:17:
+CDXC:CommandPane 2026-06-25-14:17:
 Native command tab separators are explicit 1px white/10% trailing fills on command tabs that have a following command tab. Do not rely on a right border because the last tab must not draw separator chrome.
 */
 pub(crate) const COMMAND_PANE_TAB_SEPARATOR_WIDTH: f32 = 1.0;
 
 /*
-CDXC:GPUICommandTabBackground 2026-06-25-14:36:
+CDXC:CommandPane 2026-06-25-14:36:
 Native command tabs use the AppKit pane-tab compositing base (#050608) with white overlays: 13% for active command tabs and 6% for inactive command tabs. Hover reveals close chrome only; it does not brighten the tab fill.
 
-CDXC:GPUICommandTabSleepVisuals 2026-06-25-14:39:
+CDXC:SessionSleep 2026-06-25-14:39:
 Inactive sleeping command tabs use the native parked-tab visual treatment: keep selected sleeping tabs visually selected, but reduce inactive sleeping tab fill to a 3.2% white overlay and dim its title by 48%.
 */
 pub(crate) const COMMAND_PANE_TAB_BACKGROUND_BASE_RED: u8 = 0x05;
@@ -1286,7 +1292,7 @@ pub(crate) const COMMAND_PANE_TAB_SLEEPING_INACTIVE_OVERLAY_ALPHA: f32 = 0.032;
 pub(crate) const COMMAND_PANE_TAB_TITLE_SLEEPING_INACTIVE_ALPHA_MULTIPLIER: f32 = 0.48;
 
 /*
-CDXC:GPUICommandTabStatus 2026-06-25-13:18:
+CDXC:SessionStatus 2026-06-25-13:18:
 Native command tabs reserve a trailing status slot for working, attention, and Delayed Send. Working/attention render as 8px circular fills 9px from the trailing edge; Delayed Send renders a 14px clock centered on that slot; all status chrome is hidden while hover close chrome is visible, but title reservation stays stable.
 */
 pub(crate) const COMMAND_PANE_TAB_STATUS_INDICATOR_SIZE: f32 = 8.0;
@@ -1316,7 +1322,7 @@ pub(crate) const COMMAND_PANE_TAB_DELAYED_SEND_ICON_TOP_OFFSET: f32 =
 pub(crate) const COMMAND_PANE_TAB_TITLE_TRAILING_PADDING: f32 = 8.0;
 
 /*
-CDXC:GPUICommandPaneControls 2026-06-25-12:29:
+CDXC:CommandPane 2026-06-25-12:29:
 Native command-panel action buttons use the full 26px command titlebar height as their button frame. Keep GPUI fixed command-panel controls square to the tab-bar height so Pin/Unpin and Minimize/Expand occupy the same normal-layout region as macOS.
 */
 pub(crate) const COMMAND_PANE_CONTROL_BUTTON_SIZE: f32 = COMMAND_PANE_TAB_BAR_HEIGHT;
@@ -1324,7 +1330,7 @@ pub(crate) const COMMAND_PANE_CONTROL_BUTTON_SIZE: f32 = COMMAND_PANE_TAB_BAR_HE
 pub(crate) const COMMAND_PANE_CONTROL_ICON_SIZE: f32 = 14.0;
 
 /*
-CDXC:GPUICommandPaneControls 2026-06-25-13:47:
+CDXC:CommandPane 2026-06-25-13:47:
 Command-panel action buttons are contiguous full-height 26px frames with no inter-button gap, no wrapper left border, and flat corners. Expanded and collapsed titlebars keep the visibility frame flush trailing, and both chevrons use the same asymmetric icon padding so their horizontal placement matches.
 */
 pub(crate) const COMMAND_PANE_CONTROL_BUTTON_GAP: f32 = 0.0;
@@ -1352,7 +1358,7 @@ pub(crate) const COMMAND_PANE_MIN_HEIGHT_RATIO: f32 = 0.05;
 pub(crate) const COMMAND_PANE_MAX_HEIGHT_RATIO: f32 = 0.90;
 
 /*
-CDXC:GPUICommandPaneSide 2026-08-16:
+CDXC:CommandPane 2026-08-16:
 A right-docked command pane sizes by a workspace-width ratio instead of the
 bottom pane's height ratio. The default is a constant fraction rather than a
 second Settings value; the vertical resize rail and its double-click reset are
@@ -1366,13 +1372,13 @@ pub(crate) const COMMAND_PANE_MIN_WIDTH_RATIO: f32 = 0.10;
 pub(crate) const COMMAND_PANE_MAX_WIDTH_RATIO: f32 = 0.90;
 
 /*
-CDXC:GPUICommandSleepingPlaceholder 2026-06-25-14:49:
+CDXC:SessionSleep 2026-06-25-14:49:
 Sleeping command-pane bodies should mirror native AppKit placeholders: black body, centered medium 13px wake text, and the exact "Press Any Key to Wake" affordance only when click-to-wake placeholders are enabled.
 
-CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+CDXC:SessionSleep 2026-06-27-00:22:
 Native `SleepingPanePlaceholderContentView` measures the wake label from the exact command body: max width is body width minus 8, max height is body height minus 16, nonpositive max dimensions hide the label, text wraps by character, width is ceil(measured width)+8 clamped to the max, height is ceil(measured height) with an 18px minimum clamped to the max, and the frame is centered in the body.
 
-CDXC:GPUICommandSleepingPlaceholder 2026-06-27-00:22:
+CDXC:SessionSleep 2026-06-27-00:22:
 The GPUI wake label must be paint-only body chrome inside the normal command body canvas so it cannot own hit testing, keyboard routing, persistence, logs, or fallback geometry. Existing body click/key wake handlers remain the only wake behavior.
 */
 pub(crate) const COMMAND_PANE_SLEEPING_PLACEHOLDER_WAKE_LABEL: &str = "Press Any Key to Wake";
@@ -1392,13 +1398,13 @@ pub(crate) const GPUI_KEEP_AWAKE_LID_SLEEP_HEARTBEAT_INTERVAL: Duration = Durati
 pub(crate) const GPUI_KEEP_AWAKE_WORKING_SESSION_GRACE: Duration = Duration::from_secs(20 * 60);
 
 /*
-CDXC:GPUICommandDelayedSend 2026-06-25-15:42:
+CDXC:DelayedSend 2026-06-25-15:42:
 Native command terminals show an active Delayed Send countdown as a centered terminal-body badge, not only as tab chrome. Match the AppKit badge typography, color, padding, and minimum size inside the existing command body element without adding an interactive overlay.
 
-CDXC:GPUICommandDelayedSend 2026-06-25-19:13:
+CDXC:DelayedSend 2026-06-25-19:13:
 Native `delayedSendLabelFrame` hides the terminal-body badge when the exact body is 48px wide or smaller, or 32px tall or smaller, then centers the fitted badge while clamping it to body width minus 32px and body height minus 24px. GPUI must keep that rule as exact-body geometry evidence and must not infer visibility from cached command-group bounds.
 
-CDXC:GPUICommandDelayedSend 2026-06-27-00:07:
+CDXC:DelayedSend 2026-06-27-00:07:
 The rendered GPUI body badge must use the same exact body bounds as native during paint, not a flex overlay with minimum body dimensions. Keep the badge as private-data-safe canvas chrome inside the command body so it cannot own input or route hit testing.
 */
 pub(crate) const COMMAND_PANE_DELAYED_SEND_BADGE_FONT_SIZE: f32 = 23.0;
@@ -1438,7 +1444,7 @@ pub(crate) const GPUI_AGENTS_SEND_WHEN_STOPPED_STABILITY_DURATION: Duration =
 pub(crate) const GPUI_AGENTS_SEND_WHEN_STOPPED_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 /*
-CDXC:GPUITerminalReturnKey 2026-06-27-02:27:
+CDXC:Terminal 2026-06-27-02:27:
 Programmatic Return delivery is allowed only through exact mounted Ghostty surfaces that already passed their target-specific owner checks. Reuse the native macOS Return key tuple for command Delayed Send and mapped Agents rename commands instead of writing newline text or using the currently focused terminal as fallback.
 */
 pub(crate) const GPUI_TERMINAL_RETURN_KEYCODE: u32 = 36;
@@ -1462,7 +1468,7 @@ pub(crate) const COMMAND_PANE_GHOSTTY_KEY_ACTION_PRESS: ghostty_kit::ffi::ghostt
 pub(crate) const COMMAND_PANE_CLOSE_AFTER_DONE_DELAY: Duration = Duration::from_secs(3 * 60);
 
 /*
-CDXC:GPUICommandFocusedSessionActions 2026-06-25-14:56:
+CDXC:FocusMode 2026-06-25-14:56:
 The GPUI command pane should honor the shared native default for Sleep Focused Session. GPUI key strings use `alt` for macOS Option, so keep this constant aligned with the shared `alt+shift+s` default.
 */
 pub(crate) const SLEEP_FOCUSED_SESSION_DEFAULT_KEY: &str = "alt-shift-s";
@@ -1555,7 +1561,7 @@ pub(crate) const GPUI_NATIVE_TITLEBAR_TIPS: &[GpuiNativeTitlebarTip] = &[
 ];
 
 /*
-CDXC:GPUIProjectSwitchCoalescing 2026-07-29:
+CDXC:Navigation 2026-07-29:
 Rapid sidebar clicking across projects used to stack one complete project
 switch per click. Each switch parks the outgoing Agents model and destroys the
 whole process-local runtime graph (terminal runtimes, Ghostty/engine surfaces,
@@ -1579,7 +1585,7 @@ pub(crate) const WORKSPACE_RENAME_COMMAND_MOUNT_RETRY_INTERVAL: Duration =
 pub(crate) const WORKSPACE_RENAME_COMMAND_SUBMIT_DELAY: Duration = Duration::from_millis(1_000);
 
 /*
-CDXC:GPUIWorkspaceRenameCommand 2026-08-26:
+CDXC:SessionTitles 2026-08-26:
 gxserver's measured clear-burst law, mirrored for the local rename command
 (`build_agent_tui_clear_input` in server/src/session_chat_send.rs): kill toward
 the start (Ctrl+U) 2 * (lines + slack) - 1 times, then the same count toward the
@@ -1599,16 +1605,16 @@ pub(crate) const AGENT_TUI_CLEAR_INPUT_LINE: &str = "\u{15}";
 pub(crate) const AGENT_TUI_CLEAR_INPUT_FORWARD: &str = "\u{b}";
 
 /*
-CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:02:
+CDXC:Workarea 2026-06-29-00:02:
 Source, Kanban, Automate, and Manage no longer keep sidebar readiness/proof stores beside the direct runtime gates. Source placeholder copy comes from the app-owned code-server launch state, while real Source/Kanban/Automate/Manage replacement is authorized only by `project_workarea_runtime_url_for_slot` plus an owned normal-layout CEF surface.
 
-CDXC:GPUIProjectWorkareaRuntimeCleanup 2026-06-29-00:15:
+CDXC:Workarea 2026-06-29-00:15:
 Owned Source/Kanban/Automate/Manage CEF surfaces must also match the current direct runtime URL identity before reuse or visibility. A valid URL for a different active project is not authority to keep a stale slot-owned surface alive.
 */
 pub(crate) const SOURCE_CODE_SERVER_EDITOR_HOST: &str = "127.0.0.1";
 
 /*
-CDXC:GPUISourceRuntime 2026-06-28-04:05:
+CDXC:CodeEditor 2026-06-28-04:05:
 GPUI Source must not bind the macOS app's 3775 listener or share its code-server
 profile. The macOS header click lag was caused by a GPUI-owned 3775 listener, so
 GPUI owns a separate localhost port and storage name while keeping all project
