@@ -65,7 +65,7 @@ import type {
   SidebarGhostexFolderStatsMessage,
   SidebarPluginSettingsStatusMessage,
   SidebarOSIntegrationStatusMessage,
-  // CDXC:AppIconPicker 2026-06-25-21:50: App Icon state flows to Settings through the modal-state relay.
+  // CDXC:Icons 2026-06-25-21:50: App Icon state flows to Settings through the modal-state relay.
   SidebarAppIconStateMessage,
   SidebarToExtensionMessage,
 } from '@/packages/shared/session-grid-contract';
@@ -123,10 +123,10 @@ type AppModalKind =
   | 'firstLaunchSetup';
 
 /*
- * CDXC:GPUIAppModalScroll 2026-07-26-07:55:
+ * CDXC:AppModal 2026-07-26-07:55:
  * GPUI injects this host id into every app-modal child window it owns.
  *
- * CDXC:GPUIAppModalFitHeight 2026-07-28:
+ * CDXC:AppModal 2026-07-28:
  * GPUI now consumes the same one-shot `contentHeightMeasured` message as macOS
  * and fits its child window to the measured dialog height once per open. The
  * frame stays fixed after that fit, so the fixed-window stylesheet caps below
@@ -135,7 +135,7 @@ type AppModalKind =
 const GPUI_APP_MODAL_HOST_ID = 'gpui';
 
 /*
- * CDXC:AppModals 2026-06-30-16:08:
+ * CDXC:AppModal 2026-06-30-16:08:
  * Centered compact native child-window modals should size to their rendered
  * React dialog once, before native presents the panel. Keep Settings out of
  * this path because it remains a user-resizable fixed-size native window.
@@ -161,7 +161,7 @@ const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, s
 };
 
 /*
- * CDXC:AppModals 2026-06-30-16:08:
+ * CDXC:AppModal 2026-06-30-16:08:
  * Most measured dialogs are centered, so setting the native window to their
  * element height puts the React shell at y=0. Top-aligned modals keep an
  * intentional WebView inset, so include that inset in the one-shot height.
@@ -197,7 +197,7 @@ type AgentHookStatusMessage = Extract<ExtensionToSidebarMessage, { type: 'agentH
 type GhostexCliStatusMessage = Extract<ExtensionToSidebarMessage, { type: 'ghostexCliStatus' }>;
 type OSIntegrationStatusMessage = Extract<ExtensionToSidebarMessage, { type: 'osIntegrationStatus' }>;
 type PluginSettingsStatusMessage = Extract<ExtensionToSidebarMessage, { type: 'pluginSettingsStatus' }>;
-// CDXC:AppIconPicker 2026-06-25-21:50: App Icon state message threaded through modal state into Settings.
+// CDXC:Icons 2026-06-25-21:50: App Icon state message threaded through modal state into Settings.
 type AppIconStateMessage = Extract<ExtensionToSidebarMessage, { type: 'appIconState' }>;
 
 type AppModalHostMessage =
@@ -206,7 +206,7 @@ type AppModalHostMessage =
       agentIcon?: SidebarAgentIcon;
       agentId?: string;
       agentName?: string;
-      /** CDXC:ExportTranscript 2026-08-20: see ExportTranscriptResultModalState. */
+      /** CDXC:TranscriptExport 2026-08-20: see ExportTranscriptResultModalState. */
       canReveal?: boolean;
       path?: string;
       closeAfterDoneActive?: boolean;
@@ -218,7 +218,7 @@ type AppModalHostMessage =
       supportsSendWhenAgentStops?: boolean;
       initialTitle?: string;
       initialQuery?: string;
-      /** CDXC:SessionAgentNotes 2026-08-24: see SessionNoteModalState. */
+      /** CDXC:SessionNotes 2026-08-24: see SessionNoteModalState. */
       initialNote?: string;
       sessionTitle?: string;
       message?: string;
@@ -237,7 +237,7 @@ type AppModalHostMessage =
       initialRemoteMachineId?: string;
       initialRemoteSection?: SettingsRemoteSection;
       initialSection?: MainSettingsInitialSectionId;
-      /** CDXC:StashedPromptSessionAssociation 2026-08-24: see StashedPromptsModalState. */
+      /** CDXC:SavedPrompts 2026-08-24: see StashedPromptsModalState. */
       initialScope?: StashedPromptsScope;
       initialSearchQuery?: string;
       initialTab?: SettingsModalTab;
@@ -249,7 +249,7 @@ type AppModalHostMessage =
       memberProjectId?: string;
       modal: AppModalKind;
       /**
-       * CDXC:SidebarSpaces 2026-08-27:
+       * CDXC:Spaces 2026-08-27:
        * `create`/`edit` belong to the Space editor; the two portless values are
        * that dialog's own modes. They share the field because the modal-open
        * message is one flat record keyed by `modal`.
@@ -260,7 +260,7 @@ type AppModalHostMessage =
       requestId?: string;
       sessionAgentIcon?: string;
       sessionId?: string;
-      /** CDXC:SidebarSpaces 2026-08-27: see SidebarSpaceEditorModalState. */
+      /** CDXC:Spaces 2026-08-27: see SidebarSpaceEditorModalState. */
       spaceColor?: string;
       spaceIcon?: string;
       spaceId?: string;
@@ -356,7 +356,7 @@ type AppModalHostMessage =
     }
   | {
       /*
-       * CDXC:ExportTranscriptOptions 2026-08-24:
+       * CDXC:TranscriptExport 2026-08-24:
        * The sidebar runtime's answer to `runExportSessionTranscript`: the
        * export finished (path is on the machine that owns the transcript) or
        * failed with the daemon's structured message. Moves the open Export
@@ -381,7 +381,7 @@ type RenameSessionModalState = {
 };
 
 /*
- * CDXC:SessionAgentNotes 2026-08-24:
+ * CDXC:SessionNotes 2026-08-24:
  * The session-note editor's open payload. `initialNote` is the note the sidebar
  * row was already rendering, so the dialog opens filled in without a round
  * trip; `projectId` is an optional scope hint the runtime may use to route the
@@ -395,7 +395,7 @@ type SessionNoteModalState = {
 };
 
 /*
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * The New/Edit Space dialog's open payload. `remoteMachineId` is the only
  * routing token that crosses this boundary — it names the gxserver that owns
  * the Space — and the optional member id carries the group/project that opened
@@ -449,12 +449,12 @@ type RecentProjectsModalState = {
 };
 
 /*
- * CDXC:StashedPrompts 2026-07-29:
+ * CDXC:SavedPrompts 2026-07-29:
  * The session Prompts modal carries the launching session's project scope and
  * the terminal session the selected prompt is inserted back into. Both are
  * optional so the modal can open in all-projects browse mode.
  *
- * CDXC:StashedPromptSessionAssociation 2026-08-24:
+ * CDXC:SavedPrompts 2026-08-24:
  * `initialScope` is the launcher's pinned origin filter. It stays optional so
  * an opener with no opinion lets the modal choose its own default.
  */
@@ -465,7 +465,7 @@ type StashedPromptsModalState = {
 };
 
 /*
- * CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
+ * CDXC:TranscriptExport 2026-08-20 / CDXC:TranscriptExport 2026-08-24:
  * The Export Transcript dialog. It opens on its include-toggle options stage;
  * the export runs only when the user confirms it, and the sidebar runtime
  * answers with `exportSessionTranscriptResult`, which moves `stage` to
@@ -505,7 +505,7 @@ type MissingProjectFolderModalState = {
 };
 
 /**
- * CDXC:AppToasts 2026-06-03-16:12:
+ * CDXC:AppModal 2026-06-03-16:12:
  * macOS and crossplatform app-modal toasts should sit 23px higher than
  * Sonner's 24px bottom default, so progress notices stay clear of lower app
  * chrome while preserving the bottom-center stack behavior.
@@ -571,7 +571,7 @@ const vscode: WebviewApi = {
       console.debug('[ghostex-app-modal-host] sidebarCommand', redactAppModalDebugMessage(message));
     }
     /**
-     * CDXC:AppModals 2026-06-13-01:09:
+     * CDXC:AppModal 2026-06-13-01:09:
      * Previous Sessions no longer sends agent-prompt search commands, but modal
      * commands still cross this full-window host before native dispatch. Keep a
      * single debug boundary for restore, delete, and direct text-search commands.
@@ -621,7 +621,7 @@ function postAppModalDebugLog(event: string, details: AppModalDebugDetails) {
     return;
   }
   /*
-   * CDXC:SettingsModalDiagnostics 2026-06-20-05:38:
+   * CDXC:Diagnostics 2026-06-20-05:38:
    * Settings and setup modal diagnostics must stay limited to lifecycle
    * booleans, revisions, timings, modal ids, and safe enum-like metadata.
    */
@@ -689,7 +689,7 @@ function isFirstLaunchSetupModalKind(modal: AppModalKind | undefined): boolean {
 
 function shouldApplySidebarStateBeforeModalOpen(modal: AppModalKind | undefined): boolean {
   /*
-   * CDXC:FirstLaunchSetup 2026-06-29-13:46:
+   * CDXC:Onboarding 2026-06-29-13:46:
    * First-launch setup reads the same hydrated Settings store as the Settings
    * modal. Apply the native sidebar snapshot before setting activeModal so the
    * child-window setup flow cannot stay blank behind its native backdrop while
@@ -700,7 +700,7 @@ function shouldApplySidebarStateBeforeModalOpen(modal: AppModalKind | undefined)
 
 function getSettingsInitialTab(modal: AppModalKind | undefined): SettingsModalTab {
   /**
-   * CDXC:UnifiedSettings 2026-05-09-15:30
+   * CDXC:Settings 2026-05-09-15:30
    * Existing entry points still request their historic modal kind, but the
    * app-modal host now routes Settings, Agents, Actions, and Hotkeys into one
    * tabbed Settings dialog so users have a single configuration surface.
@@ -721,7 +721,7 @@ function getSettingsInitialTab(modal: AppModalKind | undefined): SettingsModalTa
 }
 
 /**
- * CDXC:SettingsNavigation 2026-08-19-00:00:
+ * CDXC:Settings 2026-08-19-00:00:
  * Settings deep links carry a tab id over the app-modal host message. Validate
  * it against the single canonical tab list instead of a hand-maintained copy,
  * which silently dropped newer pages such as Extensions (`extensions`) and made
@@ -1178,7 +1178,7 @@ function AppModalHost() {
     ghostexFolderStats,
     osIntegrationStatus,
     pluginSettingsStatus,
-    // CDXC:AppIconPicker 2026-06-25-21:50: Pull relayed App Icon state for the Settings modal.
+    // CDXC:Icons 2026-06-25-21:50: Pull relayed App Icon state for the Settings modal.
     appIconState,
     portlessSetup,
     settingsInitialSection,
@@ -1236,7 +1236,7 @@ function AppModalHost() {
     settings?.defaultPromptAgentId
   );
   /*
-   * CDXC:GxserverAgentSettings 2026-06-19-08:58:
+   * CDXC:AgentProviders 2026-06-19-08:58:
    * The modal store starts with DEFAULT_ghostex_SETTINGS before the native
    * hydrate arrives. Keep Settings and First Launch closed until revision > 0
    * so their full-setting save messages cannot seed gxserver-owned Default
@@ -1278,14 +1278,14 @@ function AppModalHost() {
     portlessSetup,
   });
   /*
-  CDXC:PreviousSessions 2026-08-07:
+  CDXC:Sessions 2026-08-07:
   The native app-modal host is hidden until React posts `presented`. Previous
   Sessions delays that signal until its first gxserver history query resolves;
   command-palette time preloads the same retained result so switching tabs can
   present immediately without a loading or premature empty state.
   */
   /*
-   * CDXC:SettingsModalStuckBlank 2026-06-20-23:02:
+   * CDXC:Settings 2026-06-20-23:02:
    * Settings must not send native `presented` from the generic modal-ready path
    * while the actual Settings component is still closed on revision 0. Tie
    * Settings-family presentation to the same hydrated renderability condition
@@ -1299,7 +1299,7 @@ function AppModalHost() {
     (activeModal !== 'previousSessions' || isPreviousSessionsInitialLoadReady) &&
     (activeModal !== 'recentProjects' || isRecentProjectsInitialLoadReady);
   /*
-   * CDXC:SettingsModalDiagnostics 2026-06-20-20:24:
+   * CDXC:Diagnostics 2026-06-20-20:24:
    * Settings presented diagnostics must not add sidebar revision or hydration
    * fields to the `presented` effect dependencies, because that would re-send
    * native presented messages on ordinary sidebar updates. Keep the latest safe
@@ -1388,7 +1388,7 @@ function AppModalHost() {
       return;
     }
     /*
-     * CDXC:FirstLaunchSetupDiagnostics 2026-06-29-22:08:
+     * CDXC:Diagnostics 2026-06-29-22:08:
      * Setup can feel slow before it ever becomes visible because native waits
      * for React renderability before presenting the child NSPanel. Log each
      * distinct setup renderability state with no settings values or user text.
@@ -1456,7 +1456,7 @@ function AppModalHost() {
     }
 
     /*
-     * CDXC:PromptAgents 2026-05-29-10:53:
+     * CDXC:AgentLauncher 2026-05-29-10:53:
      * Per-modal prompt-agent choices are temporary overrides. When the global
      * Settings default prompt agent changes, clear every modal override so Git
      * commit review and Rename Generate Name immediately show the new default.
@@ -1494,12 +1494,12 @@ function AppModalHost() {
   }, [activeModal]);
 
   /**
-   * CDXC:AppModals 2026-05-08-09:00
+   * CDXC:AppModal 2026-05-08-09:00
    * Native should unhide the transparent modal webview only after the requested
    * modal has enough state to render. This prevents a blank overlay flash while
    * sidebar state is still syncing into the app-modal host.
    *
-   * CDXC:AppModals 2026-06-30-16:08:
+   * CDXC:AppModal 2026-06-30-16:08:
    * Approved compact native-window modals send their fitted React dialog height
    * once before `presented`, so AppKit can resize the child window without
    * later height churn while the user interacts with the form.
@@ -1568,7 +1568,7 @@ function AppModalHost() {
       }
 
       /**
-       * CDXC:AppModalContextMenu 2026-05-15-18:15:
+       * CDXC:ContextMenus 2026-05-15-18:15:
        * Right-clicking modal backdrops, blank modal chrome, or modal buttons
        * must not expose WKWebView's native Reload menu. Suppress the webview
        * default while a modal is active, but keep editable fields eligible for
@@ -1638,12 +1638,12 @@ function AppModalHost() {
       return;
     }
     /**
-     * CDXC:FirstLaunchSetup 2026-05-26-17:12:
+     * CDXC:Onboarding 2026-05-26-17:12:
      * The production first-launch modal should reflect the app-bundled CLI that
      * native auto-links on startup. Request native PATH inspection when the setup
      * flow opens and render Storybook through the same status prop.
      *
-     * CDXC:FirstLaunchSetup 2026-05-27-02:41:
+     * CDXC:Onboarding 2026-05-27-02:41:
      * Tips & Tricks now opens the first-launch modal, so the legacy modal id must
      * receive the same CLI status request while old menu messages are still in use.
      */
@@ -1654,7 +1654,7 @@ function AppModalHost() {
   useEffect(() => {
     document.body.dataset.sidebarTheme = theme;
     /**
-     * CDXC:AccentColor 2026-08-24:
+     * CDXC:Theming 2026-08-24:
      * Modals read their accent from --ghostex-accent, so publish the setting
      * onto the modal host body alongside the workspace theme variables. Before
      * the HUD settings arrive the normalized default is the correct value.
@@ -1823,6 +1823,7 @@ function AppModalHost() {
           vscode.postMessage({ type: 'openExternalUrl', url });
         }}
         rpc={gpuiBootstrapRemoteSetupRpc()}
+        tailscaleEnabled={(settings ?? DEFAULT_ghostex_SETTINGS).remoteTailscaleEnabled}
       />
       <RemoteProjectPickerModal
         initialQuery={remoteProjectPicker?.initialQuery}
@@ -2163,13 +2164,13 @@ function AppModalHost() {
        * owns the agent, first prompt, and image attachment drafts before submit,
        * while gxserver owns the branch/worktree mutation and returned project.
        *
-       * CDXC:GPUIWorktrees 2026-06-24-14:06:
+       * CDXC:Worktrees 2026-06-24-14:06:
        * Open Existing mode shares the worktree first-prompt controls. Blank
        * prompt submits remain project-open-only; non-blank prompts carry the
        * user-selected agent and prompt alongside the selected worktree path so
        * native and GPUI receivers can start the actual agent session.
        *
-       * CDXC:WorktreeBaseBranch 2026-06-24-11:32:
+       * CDXC:Worktrees 2026-06-24-11:32:
        * Create New mode must send the selected base branch through the sidebar
        * command so the worktree starts from the chosen branch instead of the
        * currently checked-out HEAD.
@@ -2312,7 +2313,7 @@ function AppModalHost() {
         }}
         onOpenAccessibilityPreferences={() => {
           /**
-           * CDXC:AccessibilityPermissions 2026-05-27-07:24
+           * CDXC:OsIntegration 2026-05-27-07:24
            * The settings modal button should open macOS Accessibility settings
            * directly for desktop integrations without enabling any removed
            * IDE attachment behavior.
@@ -2388,7 +2389,7 @@ function AppModalHost() {
         osIntegrationStatusLoading={osIntegrationStatusLoading}
         pluginSettingsStatus={pluginSettingsStatus}
         pluginSettingsStatusLoading={pluginSettingsStatusLoading}
-        // CDXC:AppIconPicker 2026-06-25-21:50: Prop-driven App Icon state for Settings (mirrors osIntegrationStatus).
+        // CDXC:Icons 2026-06-25-21:50: Prop-driven App Icon state for Settings (mirrors osIntegrationStatus).
         appIconState={appIconState}
       />
       <DiscoverGhostexModal isOpen={activeModal === 'discoverGhostex'} onClose={closeModal} theme={theme} />
@@ -2468,7 +2469,7 @@ function AppModalHost() {
         }}
         onFinishFirstLaunch={({ agentId, path }) => {
           /*
-          CDXC:FirstLaunchSetup 2026-08-24:
+          CDXC:Onboarding 2026-08-24:
           Add 1st project registers the folder chosen by the footer action and
           starts the first session in it. Rust forwards this to the sidebar
           runtime over the workspaceFolderPicked chain, which owns project
@@ -2491,7 +2492,7 @@ function AppModalHost() {
       <SessionRenameModal
         agents={agents}
         /*
-        CDXC:SessionHistoryTitleSource 2026-07-29:
+        CDXC:SessionTitles 2026-07-29:
         Empty-title Generate Name summarizes the session's recent transcript
         user messages through gxserver. Only the gpui host routes renameSession
         through the gxserver runtime that supports the empty-text generate
@@ -2521,7 +2522,7 @@ function AppModalHost() {
         promptAgentId={resolvedRenamePromptAgentId}
       />
       {/*
-      CDXC:SessionAgentNotes 2026-08-24:
+      CDXC:SessionNotes 2026-08-24:
       Saving posts the shared `setSessionNote` sidebar command exactly the way
       Rename posts `renameSession`: the dialog reports the typed text and the
       session it belongs to, and the sidebar runtime owns the daemon call and
@@ -2547,7 +2548,7 @@ function AppModalHost() {
         sessionTitle={sessionNote?.sessionTitle}
       />
       {/*
-      CDXC:SidebarSpaces 2026-08-27:
+      CDXC:Spaces 2026-08-27:
       New/Edit Space. The dialog reports field values only; the sidebar runtime
       forwards them to SidebarApp, which is the one place that owns the Space
       document and can apply an edit to the CURRENT one. That is the same
@@ -2596,7 +2597,7 @@ function AppModalHost() {
         }}
       />
       {/*
-      CDXC:ExportTranscript 2026-08-20 / CDXC:ExportTranscriptOptions 2026-08-24:
+      CDXC:TranscriptExport 2026-08-20 / CDXC:TranscriptExport 2026-08-24:
       Copy Path is settled inside the dialog; the export itself, Reveal, and
       Start New Conversation are host side effects, so they leave through the
       same sidebarCommand boundary every other modal action uses. Neither
@@ -2666,16 +2667,16 @@ function AppModalHost() {
         theme={theme}
       />
       {/*
-       * CDXC:AppToasts 2026-05-21-12:21:
+       * CDXC:AppModal 2026-05-21-12:21:
        * Native/sidebar status feedback should appear as dark Ghostex toasts,
        * not Sonner's bright default surface, so non-blocking Delayed Send and
        * worktree/git notices stay visually consistent with the dark app chrome.
        *
-       * CDXC:AppModals 2026-05-28-13:52:
+       * CDXC:AppModal 2026-05-28-13:52:
        * Toast overlay chrome should use the same background family as modal
        * and menu overlays instead of the older #181818 surface.
        *
-       * CDXC:SidebarTheme 2026-06-15-01:43:
+       * CDXC:Theming 2026-06-15-01:43:
        * Toasts inherit --app-modal-background so Dark 1, Dark 2, and Light
        * keep transient modal-host feedback on the selected app surface.
        */}
@@ -2697,7 +2698,7 @@ function AppModalHost() {
 }
 
 /**
- * CDXC:AppModals 2026-04-26-15:10
+ * CDXC:AppModal 2026-04-26-15:10
  * Sidebar-owned modals must render from a full-window host so settings and
  * other management dialogs center over the whole application instead of being
  * constrained by the narrow sidebar WKWebView.
@@ -2742,7 +2743,7 @@ function useModalStateFromNative() {
   const [ghostexFolderStats, setGhostexFolderStats] = useState<SidebarGhostexFolderStatsMessage>();
   const [osIntegrationStatus, setOSIntegrationStatus] = useState<OSIntegrationStatusMessage>();
   const [pluginSettingsStatus, setPluginSettingsStatus] = useState<PluginSettingsStatusMessage>();
-  // CDXC:AppIconPicker 2026-06-25-21:50: Latest native App Icon state passed to Settings.
+  // CDXC:Icons 2026-06-25-21:50: Latest native App Icon state passed to Settings.
   const [appIconState, setAppIconState] = useState<AppIconStateMessage>();
   const [settingsInitialSection, setSettingsInitialSection] = useState<MainSettingsInitialSectionId>();
   const [settingsInitialRemoteMachineId, setSettingsInitialRemoteMachineId] = useState<string>();
@@ -2779,7 +2780,7 @@ function useModalStateFromNative() {
     setGhostexFolderStats(undefined);
     setOSIntegrationStatus(undefined);
     setPluginSettingsStatus(undefined);
-    // CDXC:AppIconPicker 2026-06-25-21:50: Drop stale App Icon state when the modal closes.
+    // CDXC:Icons 2026-06-25-21:50: Drop stale App Icon state when the modal closes.
     setAppIconState(undefined);
     setAgentsHubCatalog(undefined);
     setAgentsHubFileContent(undefined);
@@ -2794,7 +2795,7 @@ function useModalStateFromNative() {
 
   const closeModal = useCallback(() => {
     /**
-     * CDXC:AppModals 2026-05-22-16:55:
+     * CDXC:AppModal 2026-05-22-16:55:
      * Modal controls such as Previous Sessions Escape and the X button must
      * dismiss the React dialog immediately, then notify native to hide the
      * transparent modal-host WKWebView. Do not require the native echo before
@@ -2814,7 +2815,7 @@ function useModalStateFromNative() {
   }, []);
 
   /*
-   * CDXC:ExportTranscriptOptions 2026-08-24:
+   * CDXC:TranscriptExport 2026-08-24:
    * The Export button's stage move. The sidebar runtime answers with
    * `exportSessionTranscriptResult`, which lands the dialog on done/failed.
    */
@@ -2839,13 +2840,13 @@ function useModalStateFromNative() {
           const shouldApplyInlineSidebarState = shouldApplySidebarStateBeforeModalOpen(message.modal);
           if (shouldApplyInlineSidebarState && hasInlineSidebarStateMessage) {
             /*
-             * CDXC:SettingsModalStuckBlank 2026-06-20-23:02:
+             * CDXC:Settings 2026-06-20-23:02:
              * Settings opens must apply the native window's latest sidebar
              * snapshot before setting activeModal. This keeps Debugging Mode,
              * revision, and settings data in the modal host before React decides
              * whether the Settings component can actually render.
              *
-             * CDXC:FirstLaunchSetup 2026-06-29-13:46:
+             * CDXC:Onboarding 2026-06-29-13:46:
              * The first-launch setup modal uses the same hydrated settings store,
              * so it must receive the inline native snapshot before activeModal is
              * set and before native waits for the React presented acknowledgement.
@@ -2885,7 +2886,7 @@ function useModalStateFromNative() {
           }
           if (isFirstLaunchSetupModalKind(message.modal)) {
             /*
-             * CDXC:FirstLaunchSetupDiagnostics 2026-06-29-22:08:
+             * CDXC:Diagnostics 2026-06-29-22:08:
              * Capture the setup open boundary after any inline sidebar-state
              * hydrate has applied so a slow repro can tell whether React already
              * has settings state before renderability waits begin.
@@ -2940,7 +2941,7 @@ function useModalStateFromNative() {
               : undefined
           );
           /*
-           * CDXC:SessionAgentNotes 2026-08-24:
+           * CDXC:SessionNotes 2026-08-24:
            * Set alongside the other payload-only modals rather than inside the
            * open-message if/else chain below: the dialog validates nothing of
            * its own, so every non-sessionNote open simply clears it. A note
@@ -3049,7 +3050,7 @@ function useModalStateFromNative() {
             setWorktreeRename(undefined);
           } else if (message.modal === 'sidebarSpaceEditor') {
             /*
-             * CDXC:SidebarSpaces 2026-08-27:
+             * CDXC:Spaces 2026-08-27:
              * Edit mode has to name a Space; create mode must not, or Save would
              * patch whichever Space id happened to be left on the message.
              */
@@ -3143,7 +3144,7 @@ function useModalStateFromNative() {
               throw new Error('Remote project picker request is missing machine details.');
             }
             /*
-             * CDXC:RemoteProjectPicker 2026-06-03-00:18:
+             * CDXC:RemoteMachines 2026-06-03-00:18:
              * Remote machine Add Project opens in the full-window modal host
              * with the selected machine carried as immutable request state.
              * Directory browsing remains machine-scoped through native so the
@@ -3308,7 +3309,7 @@ function useModalStateFromNative() {
             setGhostexFolderStats(undefined);
             setSettingsInitialSection(typeof message.initialSection === 'string' ? message.initialSection : undefined);
             /**
-             * CDXC:SessionPersistence 2026-06-04-02:52:
+             * CDXC:Workarea 2026-06-04-02:52:
              * Titlebar Tips notices can open Settings directly to a searchable
              * tab and pre-fill the query with a setting name. Carry that state
              * through the full-window modal host instead of requiring titlebar
@@ -3371,7 +3372,7 @@ function useModalStateFromNative() {
 
         if (message.type === 'exportSessionTranscriptResult') {
           /*
-           * CDXC:ExportTranscriptOptions 2026-08-24:
+           * CDXC:TranscriptExport 2026-08-24:
            * Answers only the dialog that asked: the runtime posts this while
            * the Export Transcript dialog sits on its exporting stage, so a
            * result arriving after the user closed it is dropped.
@@ -3428,12 +3429,12 @@ function useModalStateFromNative() {
            * CDXC:Worktrees 2026-06-02-15:27:
            * Git and worktree command execution belongs to gxserver after the ownership split. The app-modal host owns only the visible toast surface, so gxserver-backed progress feedback appears over the full Ghostex window without stealing focus from terminal panes.
            *
-           * CDXC:GitActionModel 2026-05-30-05:34:
+           * CDXC:Git 2026-05-30-05:34:
            * Long-running Git actions and agent workflows need persistent status
            * toasts. Reuse Sonner ids so native can update a running toast to a
            * success or error state instead of stacking transient progress notices.
            *
-           * CDXC:GitActionToasts 2026-05-30-06:39:
+           * CDXC:Git 2026-05-30-06:39:
            * Persistent Git/worktree toasts need an explicit spinner, error
            * toasts need a red-tinted surface, and success toasts need a subtle
            * green tint so users can distinguish completion states even when the
@@ -3540,7 +3541,7 @@ function useModalStateFromNative() {
             setPluginSettingsStatus(message.message);
             return;
           }
-          // CDXC:AppIconPicker 2026-06-25-21:50: Route relayed App Icon state into Settings modal state.
+          // CDXC:Icons 2026-06-25-21:50: Route relayed App Icon state into Settings modal state.
           if (isAppIconStateMessage(message.message)) {
             setAppIconState(message.message);
             return;
@@ -3568,7 +3569,7 @@ function useModalStateFromNative() {
       'AppModals:ready'
     );
     /*
-     * CDXC:AppModals 2026-06-11-19:46:
+     * CDXC:AppModal 2026-06-11-19:46:
      * Native child windows reuse modal-host.html for the app modal family.
      */
     return () => {
@@ -3614,7 +3615,7 @@ function useModalStateFromNative() {
     ghostexFolderStats,
     osIntegrationStatus,
     pluginSettingsStatus,
-    // CDXC:AppIconPicker 2026-06-25-21:50: Expose App Icon state to the modal component.
+    // CDXC:Icons 2026-06-25-21:50: Expose App Icon state to the modal component.
     appIconState,
     settingsInitialSection,
     settingsInitialRemoteMachineId,
@@ -3646,12 +3647,12 @@ function isPluginSettingsStatusMessage(message: unknown): message is SidebarPlug
   );
 }
 
-// CDXC:AppIconPicker 2026-06-25-21:50: Narrow relayed sidebarState payloads to the App Icon contract.
+// CDXC:Icons 2026-06-25-21:50: Narrow relayed sidebarState payloads to the App Icon contract.
 function isAppIconStateMessage(message: unknown): message is SidebarAppIconStateMessage {
   return Boolean(message && typeof message === 'object' && 'type' in message && message.type === 'appIconState');
 }
 
-// CDXC:StashedPromptSessionAssociation 2026-08-24: Narrow a launcher-pinned origin filter to the modal's scope vocabulary.
+// CDXC:SavedPrompts 2026-08-24: Narrow a launcher-pinned origin filter to the modal's scope vocabulary.
 function isStashedPromptsScope(value: unknown): value is StashedPromptsScope {
   return value === 'all' || value === 'project' || value === 'session';
 }
@@ -3663,12 +3664,12 @@ function isStashedPromptsTransientMessage(message: unknown): message is Extract<
   }
 > {
   /*
-   * CDXC:StashedPrompts 2026-07-29:
+   * CDXC:SavedPrompts 2026-07-29:
    * Stashed-prompt query answers are transient sidebarState payloads. Forward
    * them to the Prompts modal as window messages instead of storing prompt
    * bodies in the reusable modal-host hydrate snapshot.
    *
-   * CDXC:StashedPromptTags 2026-08-24:
+   * CDXC:SavedPrompts 2026-08-24:
    * The two tag answers belong in the same relay. They were missing, so every
    * tag mutation made from the GPUI modal host — create, delete, file a prompt
    * under a tag — was answered into a window message the modal never received:
@@ -3690,7 +3691,7 @@ function isPreviousSessionsResultMessage(
   message: unknown
 ): message is Extract<ExtensionToSidebarMessage, { type: 'previousSessionsResult' }> {
   /*
-  CDXC:PreviousSessionsModal 2026-06-01-22:01:
+  CDXC:Sessions 2026-06-01-22:01:
   The full-window Previous Sessions modal lives in the app modal host WebView, while gxserver previous-session queries are requested through the native sidebar bridge. Forward the result as a normal window message so the shared modal component receives the same response path it uses inside the sidebar WebView.
   */
   return Boolean(
@@ -3702,7 +3703,7 @@ function isSessionTranscriptSizesResultMessage(
   message: unknown
 ): message is Extract<ExtensionToSidebarMessage, { type: 'sessionTranscriptSizesResult' }> {
   /*
-  CDXC:QuickAccessSessionSizes 2026-08-28:
+  CDXC:Sessions 2026-08-28:
   Transcript sizes are transient answers owned by PreviousSessionsModal, not
   persistent sidebar store state. Relay them through the modal window just like
   the paged previous-session result so the request can leave its loading state.
@@ -3870,7 +3871,7 @@ if (window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow') {
   document.documentElement.classList.add('app-modal-host-native-window-document');
   document.body.classList.add('app-modal-host-native-window-body');
   /*
-   * CDXC:GPUIAppModalScroll 2026-07-26-07:55:
+   * CDXC:AppModal 2026-07-26-07:55:
    * GPUI child windows fit to the one-shot measured dialog height and then
    * keep that frame for the rest of the open. Mark that host so the
    * stylesheet can bound growable regions (long pasted rename text, long

@@ -79,6 +79,7 @@ export const RemoteSetup: Story = {
         isOpen
         onClose={noop}
         onOpenExternalUrl={noop}
+        tailscaleEnabled
         rpc={async (path) => {
           if (path === '/api/remoteAccessStatus') {
             return {

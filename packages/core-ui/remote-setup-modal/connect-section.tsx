@@ -17,7 +17,7 @@ function openRemoteSettings(section: SettingsRemoteSection): void {
 }
 
 /**
- * CDXC:RemoteSetup 2026-09-03:
+ * CDXC:RemotePairing 2026-09-03:
  * Connect does everything the Easy Connect card promises: it reads SSH access,
  * enables it when it is off (one admin prompt, since Easy Connect carries SSH),
  * turns Easy Connect on, then hands off to Settings → Remote focused on the
@@ -36,7 +36,18 @@ async function connectEasyConnect(rpc: RemoteSetupRpc): Promise<void> {
   await rpc('/api/updateTailcatState', { kind: 'setEnabled', enabled: true });
 }
 
-export function ConnectSection({ rpc }: { rpc: RemoteSetupRpc | undefined }) {
+/**
+ * CDXC:RemotePairing 2026-09-03 DECISION:
+ * User: "please add a toggle for tailscale. if tailscale is disabled …" (cut off); assumed reading: a path the user switched off in Settings → Remote is not offered here either, so the Tailscale option is hidden rather than shown as off.
+ */
+export function ConnectSection({
+  rpc,
+  tailscaleEnabled,
+}: {
+  rpc: RemoteSetupRpc | undefined;
+  /** Settings.remoteTailscaleEnabled. */
+  tailscaleEnabled: boolean;
+}) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string>();
   const mountedRef = useRef(true);
@@ -123,34 +134,36 @@ export function ConnectSection({ rpc }: { rpc: RemoteSetupRpc | undefined }) {
           </Button>
         </div>
       </div>
-      <div className='remote-setup-option-card remote-setup-option-tailscale'>
-        <div className='remote-setup-option-head'>
-          <span className='remote-setup-option-icon'>
-            <IconShield aria-hidden='true' size={18} stroke={1.7} />
-          </span>
-          <div className='remote-setup-option-text'>
-            <div className='remote-setup-option-title'>
-              Tailscale
-              <span className='remote-setup-badge'>If you already use it</span>
-            </div>
-            <div className='remote-setup-option-sub'>
-              Your device joins your tailnet and connects over SSH. Best when Tailscale is already on both devices.
+      {tailscaleEnabled ? (
+        <div className='remote-setup-option-card remote-setup-option-tailscale'>
+          <div className='remote-setup-option-head'>
+            <span className='remote-setup-option-icon'>
+              <IconShield aria-hidden='true' size={18} stroke={1.7} />
+            </span>
+            <div className='remote-setup-option-text'>
+              <div className='remote-setup-option-title'>
+                Tailscale
+                <span className='remote-setup-badge'>If you already use it</span>
+              </div>
+              <div className='remote-setup-option-sub'>
+                Your device joins your tailnet and connects over SSH. Best when Tailscale is already on both devices.
+              </div>
             </div>
           </div>
+          <div className='remote-setup-option-foot'>
+            <span className='remote-setup-muted'>You&apos;ll type the host, user and password on the device</span>
+            <Button
+              className='remote-setup-tailscale-instructions-button'
+              onClick={() => openRemoteSettings('tailscale')}
+              size='sm'
+              type='button'
+              variant='outline'
+            >
+              Show instructions
+            </Button>
+          </div>
         </div>
-        <div className='remote-setup-option-foot'>
-          <span className='remote-setup-muted'>You&apos;ll type the host, user and password on the device</span>
-          <Button
-            className='remote-setup-tailscale-instructions-button'
-            onClick={() => openRemoteSettings('tailscale')}
-            size='sm'
-            type='button'
-            variant='outline'
-          >
-            Show instructions
-          </Button>
-        </div>
-      </div>
+      ) : null}
     </section>
   );
 }

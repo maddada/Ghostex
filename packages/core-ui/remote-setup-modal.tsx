@@ -20,10 +20,12 @@ export type RemoteSetupModalProps = {
   onOpenExternalUrl: (url: string) => void;
   /** gxserver RPC for this page's local daemon; undefined disables Connect. */
   rpc: RemoteSetupRpc | undefined;
+  /** Settings.remoteTailscaleEnabled; off hides the Tailscale option. */
+  tailscaleEnabled: boolean;
 };
 
 /**
- * CDXC:RemoteSetup 2026-09-03:
+ * CDXC:RemotePairing 2026-09-03:
  * The sidebar menu's "Mobile & Remote" entry. Two numbered sections at the
  * same level: get the Ghostex app (Android APK, iPhone via TestFlight), then
  * connect it to this computer (Easy Connect, recommended; Tailscale if you
@@ -33,7 +35,7 @@ export type RemoteSetupModalProps = {
  * the scroll container once the Android popover grows the content past the
  * fitted window.
  */
-export function RemoteSetupModal({ isOpen, onClose, onOpenExternalUrl, rpc }: RemoteSetupModalProps) {
+export function RemoteSetupModal({ isOpen, onClose, onOpenExternalUrl, rpc, tailscaleEnabled }: RemoteSetupModalProps) {
   return (
     <AppModalShell className='remote-setup-modal' isOpen={isOpen} onClose={onClose} showCloseButton width={560}>
       <AppModalColumn>
@@ -47,7 +49,7 @@ export function RemoteSetupModal({ isOpen, onClose, onOpenExternalUrl, rpc }: Re
         </AppModalHeader>
         <AppModalStack className='remote-setup-modal-body'>
           <GetAppSection onOpenExternalUrl={onOpenExternalUrl} />
-          <ConnectSection rpc={rpc} />
+          <ConnectSection rpc={rpc} tailscaleEnabled={tailscaleEnabled} />
         </AppModalStack>
       </AppModalColumn>
     </AppModalShell>

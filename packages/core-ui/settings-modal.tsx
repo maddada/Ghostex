@@ -200,7 +200,7 @@ function getInitialSettingsModalTab(
    * non-default entry point such as Hotkeys still opens its requested tab, then
    * that tab becomes the remembered choice for later ordinary Settings opens.
    *
-   * CDXC:SettingsNavigation 2026-06-29-17:54:
+   * CDXC:Settings 2026-06-29-17:54:
    * Ordinary Settings opens should also restore the last closed Settings tab
    * from durable macOS settings storage after an app relaunch. Explicit entry
    * points still win so menu actions and deep links land on the requested page.
@@ -246,7 +246,7 @@ export type SettingsModalProps = {
   initialSection?: MainSettingsInitialSectionId;
   initialSearchQuery?: string;
   initialRemoteMachineId?: string;
-  /** CDXC:RemoteSetup 2026-09-03: Remote tab card to scroll to (consumed by the Remote tab). */
+  /** CDXC:RemotePairing 2026-09-03: Remote tab card to scroll to (consumed by the Remote tab). */
   initialRemoteSection?: SettingsRemoteSection;
   initialTab?: SettingsModalTab;
   isOpen: boolean;
@@ -272,7 +272,7 @@ export type SettingsModalProps = {
   onPlayCompletionSound?: (sound: CompletionSoundSetting) => void;
   onRequestMacOSNotificationPermission?: () => void;
   /*
-   * CDXC:AgentHookSettings 2026-08-28:
+   * CDXC:AgentHooks 2026-08-28:
    * Settings installs hooks for one agent from its roster row and for the whole
    * supported set from the toolbar, so install takes the same optional agentIds
    * the uninstall side and the native message contract already carry.
@@ -307,7 +307,7 @@ export type SettingsModalProps = {
   osIntegrationStatusLoading?: boolean;
   pluginSettingsStatus?: SidebarPluginSettingsStatusMessage;
   pluginSettingsStatusLoading?: boolean;
-  // CDXC:AppIconPicker 2026-06-25-21:50: Native App Icon state arrives prop-driven via the modal-state relay.
+  // CDXC:Icons 2026-06-25-21:50: Native App Icon state arrives prop-driven via the modal-state relay.
   appIconState?: SidebarAppIconStateMessage;
   /** Hosts without a native App Icon subsystem hide the section entirely. */
   appIconPickerUnavailable?: boolean;
@@ -375,7 +375,7 @@ export function SettingsModal({
   osIntegrationStatusLoading = false,
   pluginSettingsStatus,
   pluginSettingsStatusLoading = false,
-  // CDXC:AppIconPicker 2026-06-25-21:50: Prop-driven App Icon state replaces direct host-event listeners.
+  // CDXC:Icons 2026-06-25-21:50: Prop-driven App Icon state replaces direct host-event listeners.
   appIconState,
   appIconPickerUnavailable = false,
 }: SettingsModalProps) {
@@ -383,7 +383,7 @@ export function SettingsModal({
   const normalizedInitialSettings = normalizeghostexSettings(settings);
   const [draft, setDraft] = useState<ghostexSettings>(normalizedInitialSettings);
   /*
-   * CDXC:SettingsAdvanced 2026-06-28-18:14:
+   * CDXC:Settings 2026-06-28-18:14:
    * Show Advanced must use the persisted settings draft as its single source of
    * truth. A separate React state can initialize before native settings hydrate
    * and make the switch look disabled again when Settings reopens.
@@ -438,7 +438,7 @@ export function SettingsModal({
   const sidebarSectionRef = useRef<HTMLDivElement>(null);
   const themingSectionRef = useRef<HTMLDivElement>(null);
   const chatSectionRef = useRef<HTMLDivElement>(null);
-  // CDXC:AppIconPicker 2026-06-25-21:50: Anchor ref so the App Icon section participates in Settings nav scrolling.
+  // CDXC:Icons 2026-06-25-21:50: Anchor ref so the App Icon section participates in Settings nav scrolling.
   const appIconSectionRef = useRef<HTMLDivElement>(null);
   const sidebarTagsSectionRef = useRef<HTMLDivElement>(null);
   const soundsSectionRef = useRef<HTMLDivElement>(null);
@@ -451,7 +451,7 @@ export function SettingsModal({
   const hotkeySessionSlotsSectionRef = useRef<HTMLDivElement>(null);
   const hasRequestedStorageStatsRef = useRef(false);
   /**
-   * CDXC:AppIconPicker 2026-06-25-21:50:
+   * CDXC:Icons 2026-06-25-21:50:
    * The App Icon picker is prop-driven: native pushes appIconState through the
    * modal-state relay (mirroring osIntegrationStatus), so this component only
    * holds the local error string and the in-flight pending selection. The
@@ -474,7 +474,7 @@ export function SettingsModal({
   };
   const shouldFocusSettingsSearchInput = useCallback((inputElement: HTMLInputElement): boolean => {
     /*
-     * CDXC:SettingsSearch 2026-06-25-21:21:
+     * CDXC:Settings 2026-06-25-21:21:
      * The visible Settings search field may prefill from deep links and
      * printable-key capture, but it must never steal typing focus from an
      * already-focused input, textarea, select, or contenteditable field,
@@ -501,7 +501,7 @@ export function SettingsModal({
   }, [isFirstLaunchSetup, shouldFocusSettingsSearchInput]);
   const scheduleMainSettingsSectionMeasurement = (viewport: HTMLElement) => {
     /*
-     * CDXC:SettingsPerformance 2026-06-29-00:40:
+     * CDXC:Settings 2026-06-29-00:40:
      * General Settings is long, and section tracking reads layout for every
      * visible section. Batch that work to one requestAnimationFrame per scroll
      * frame so raw scroll events only persist scrollTop and stay lightweight.
@@ -616,13 +616,13 @@ export function SettingsModal({
     }
     const nextQuery = initialSearchQuery.trim();
     /**
-     * CDXC:SessionPersistence 2026-06-04-02:52:
+     * CDXC:Workarea 2026-06-04-02:52:
      * Titlebar Tips notices can deep-link into Settings by opening a searchable
      * tab and pre-filling the search box with the setting label. Seed the
      * correct tab-specific query instead of typing through the DOM so repeated
      * opens land on the intended control without depending on focus timing.
      *
-     * CDXC:SettingsNavigation 2026-06-24-22:16:
+     * CDXC:Settings 2026-06-24-22:16:
      * Settings has one top search field for the sidebar-driven modal. Seed the
      * shared Settings query for every non-first-launch entry point so Hotkeys
      * and General use the same search state.
@@ -661,22 +661,22 @@ export function SettingsModal({
       return;
     }
     /**
-     * CDXC:SettingsNavigation 2026-05-26-18:47:
+     * CDXC:Settings 2026-05-26-18:47:
      * During one app session, reopening Settings should return to the same tab
      * and scroll position the user left. Keep that state in module memory so it
      * survives modal remounts.
      *
-     * CDXC:SettingsNavigation 2026-06-29-17:54:
+     * CDXC:Settings 2026-06-29-17:54:
      * App relaunch should also restore the last closed Settings location from
      * persisted settings, while in-memory state remains the fastest source for
      * repeated opens during the same app run.
      *
-     * CDXC:SettingsSearch 2026-05-26-18:47:
+     * CDXC:Settings 2026-05-26-18:47:
      * When a searchable Settings tab opens, ordinary typing should enter the
      * active tab's search box even if Radix focus starts on a tab, button, or
      * another non-text control. Text fields and recorders keep their own input.
      *
-     * CDXC:SettingsSearch 2026-06-19-16:53:
+     * CDXC:Settings 2026-06-19-16:53:
      * Settings search must not steal printable keys from a focused Settings
      * text field during native settings round-trips. Check both the key event
      * target and the document active element before forwarding a character to
@@ -708,14 +708,14 @@ export function SettingsModal({
       return;
     }
     /**
-     * CDXC:CuaDriverPlugins 2026-08-09:
+     * CDXC:Extensions 2026-08-09:
      * Integrations owns CLI, skill, Trycua lifecycle, and macOS permission
      * state. Probe only while that page is active.
      *
-     * CDXC:AgentHookSettings 2026-08-19-11:20:
+     * CDXC:AgentHooks 2026-08-19-11:20:
      * Hook install, per-agent status, and hook removal all live in Settings -> Agents, so Integrations no longer probes hook status at all.
      *
-     * CDXC:ComputerAgentControl 2026-05-27-06:58:
+     * CDXC:Extensions 2026-05-27-06:58:
      * Settings should present the public skill names Ghostex Browser Use and Ghostex Computer Use.
      */
     if (!ghostexCliStatus && !ghostexCliStatusLoading) {
@@ -969,7 +969,7 @@ export function SettingsModal({
           >
             <DialogHeader className='ghostex-modal-heading-bar'>
               {/*
-               * CDXC:SettingsWindow 2026-06-25-17:05:
+               * CDXC:Settings 2026-06-25-17:05:
                * Native Settings windows already show "Ghostex Settings" in the
                * AppKit titlebar. Do not duplicate a visible "Settings" heading in
                * React; keep a hidden DialogTitle so the dialog remains named for
@@ -1005,26 +1005,26 @@ export function SettingsModal({
               ) : null}
               <div className='settings-modal-main-column'>
                 {/*
-                 * CDXC:UnifiedSettings 2026-05-09-15:30
+                 * CDXC:Settings 2026-05-09-15:30
                  * Settings is the single configuration surface for app controls,
                  * terminal controls, Agents, Actions, Open In, and Hotkeys.
                  *
-                 * CDXC:SettingsNavigation 2026-06-12-04:13:
+                 * CDXC:Settings 2026-06-12-04:13:
                  * Ghostty terminal settings are merged into the main Settings page
                  * so one Settings search covers app settings and terminal settings.
                  *
-                 * CDXC:SettingsNavigation 2026-06-15-03:06:
+                 * CDXC:Settings 2026-06-15-03:06:
                  * OS Integration should be the final Settings tab because default
                  * app-handler actions are less frequently used than daily app,
                  * integration, remote, project, hotkey, agent, action, and Open In
                  * controls.
                  *
-                 * CDXC:SettingsNavigation 2026-06-15-20:48:
+                 * CDXC:Settings 2026-06-15-20:48:
                  * The first navigation label should read General so the modal
                  * title can own the Settings name while the page label describes
                  * its general app and terminal preference content.
                  *
-                 * CDXC:SettingsNavigation 2026-06-24-22:16:
+                 * CDXC:Settings 2026-06-24-22:16:
                  * Top-level Settings tabs belong in the left sidebar, while one
                  * global search field stays at the top of the content column.
                  */}
@@ -1055,18 +1055,18 @@ export function SettingsModal({
                   {/* CDXC:Settings 2026-04-26-10:43: The settings dialog lives inside a
               narrow sidebar webview, so the Radix scroll area needs an explicit
               height instead of letting Dialog crop an auto-height viewport. */}
-                  {/* CDXC:UnifiedSettings 2026-05-09-17:08: The Settings dialog is now a
+                  {/* CDXC:Settings 2026-05-09-17:08: The Settings dialog is now a
               tabbed surface with variable header height. The active tab owns
               the remaining vertical space so the dialog never clips the bottom
               of a fixed-height scroll area. */}
-                  {/* CDXC:SettingsNavigation 2026-05-13-08:05:
-              Superseded by CDXC:SettingsNavigation 2026-06-24-22:16.
+                  {/* CDXC:Settings 2026-05-13-08:05:
+              Superseded by CDXC:Settings 2026-06-24-22:16.
 
-              CDXC:SettingsNavigation 2026-06-12-04:13:
+              CDXC:Settings 2026-06-12-04:13:
               Terminal sections share this navigator with app settings so search
               and section jumps operate on one main Settings page.
 
-              CDXC:SettingsNavigation 2026-06-24-22:16:
+              CDXC:Settings 2026-06-24-22:16:
               General section jumps now come from the shared Settings sidebar
               outside this tab panel, while this panel owns only scrollable
               General settings content. */}
@@ -1087,7 +1087,7 @@ export function SettingsModal({
                           </SettingsSection>
                         ) : null}
                         {/*
-                         * CDXC:SettingsNavigation 2026-08-24:
+                         * CDXC:Settings 2026-08-24:
                          * Keep every General sidebar group's child sections
                          * contiguous and in MAIN_SETTINGS_SUBSECTION_NAVIGATION
                          * order. Interleaving groups makes adjacent rail links
@@ -1096,7 +1096,7 @@ export function SettingsModal({
                          */}
                         {mainSubsectionVisible('sidebar', settingsSearch.sidebar) ? (
                           <SettingsSection sectionRef={sidebarSectionRef} title='Sidebar'>
-                            {/* CDXC:SidebarSettingsPresets 2026-06-12-07:10: Preset is the first Sidebar setting so users can apply Codex, Minimal, Detailed, or Recommended sidebar UI defaults before tuning individual controlled settings. */}
+                            {/* CDXC:Settings 2026-06-12-07:10: Preset is the first Sidebar setting so users can apply Codex, Minimal, Detailed, or Recommended sidebar UI defaults before tuning individual controlled settings. */}
                             {mainSettingVisible(settingsSearch.sidebar, 'sidebarSettingsPreset') ? (
                               <SidebarPresetField
                                 activePresetId={activeSidebarSettingsPresetId}
@@ -1117,7 +1117,7 @@ export function SettingsModal({
                               />
                             ) : null}
                             {/*
-                             * CDXC:SidebarSpaces 2026-08-28:
+                             * CDXC:Spaces 2026-08-28:
                              * Spaces is off until the user asks for it, so the switch sits
                              * directly under Project group style where the other sidebar
                              * structure controls are.
@@ -1132,7 +1132,7 @@ export function SettingsModal({
                               />
                             ) : null}
                             {/*
-                             * CDXC:SidebarSettingsPresets 2026-06-30-22:22:
+                             * CDXC:Settings 2026-06-30-22:22:
                              * Users need every preset-mutated setting directly under the preset selector so applying Recommended, Codex, Minimal, or Detailed has an inspectable effect without hunting through Session Cards, Project rows, or Status Indicators.
                              */}
                             {mainSettingVisible(settingsSearch.sidebar, 'showProjectIcons') ? (
@@ -1207,7 +1207,7 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('hideMenuBarSessionStatusIndicators', !checked)}
                               />
                             ) : null}
-                            {/* CDXC:SidebarPlacement 2026-05-06-17:32: Sidebar side remains
+                            {/* CDXC:Sidebar 2026-05-06-17:32: Sidebar side remains
                   near the top of Sidebar settings so users can move the
                   sidebar to the right side without discovering the hotkey. */}
                             {mainSettingVisible(settingsSearch.sidebar, 'sidebarSide') ? (
@@ -1223,7 +1223,7 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.sidebar, 'sidebarDefaultWidthPx') ? (
                               <>
                                 {/*
-                                 * CDXC:SidebarChrome 2026-06-05-04:40:
+                                 * CDXC:Sidebar 2026-06-05-04:40:
                                  * This setting changes only the explicit double-click reset target for the sidebar resize handle. App restart must keep restoring the last persisted sidebar width from native/Electron chrome state.
                                  */}
                                 <SliderNumberField
@@ -1291,7 +1291,7 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.sidebar, 'projectSessionListCollapsedCount') ? (
                               <>
                                 {/*
-                                 * CDXC:ProjectSessionLists 2026-06-10-13:39:
+                                 * CDXC:Projects 2026-06-10-13:39:
                                  * The project-header Show less button should preserve the old six-row default while letting users raise the collapsed project-session count, such as ten rows, without changing the per-project Show more / Show less state model.
                                  */}
                                 <SliderNumberField
@@ -1309,7 +1309,7 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'agentManagerZoomPercent') ? (
                               /*
-                               * CDXC:SidebarInterface 2026-06-16-18:19:
+                               * CDXC:Sidebar 2026-06-16-18:19:
                                * Keep the persisted agentManagerZoomPercent key for compatibility, but label the Settings control as Sidebar Interface Size because it changes the visible sidebar interface scale.
                                */
                               <SliderNumberField
@@ -1326,7 +1326,7 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'createSessionOnSidebarDoubleClick') ? (
                               /*
-                               * CDXC:SidebarSessions 2026-08-26:
+                               * CDXC:Sessions 2026-08-26:
                                * Creating sessions from empty space and renaming sessions from
                                * cards are both low-frequency double-click preferences, so both
                                * live behind Show Advanced.
@@ -1374,7 +1374,7 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('sessionCards', settingsSearch.sessionCards) ? (
                           <SettingsSection sectionRef={sessionCardsSectionRef} title='Session Cards'>
-                            {/* CDXC:SidebarSessionAgentIcons 2026-06-29-23:58: Users need a Session Cards toggle for colored agent brand artwork while the default sidebar remains monochrome and favorite rows no longer gold-tint agent logos. CDXC:SidebarSessionAgentIcons 2026-06-30-22:40: The colored agent icon setting must also color the selected-agent launcher icon so the Mac sidebar picker and session cards use the same agent identity mode. */}
+                            {/* CDXC:Icons 2026-06-29-23:58: Users need a Session Cards toggle for colored agent brand artwork while the default sidebar remains monochrome and favorite rows no longer gold-tint agent logos. CDXC:Icons 2026-06-30-22:40: The colored agent icon setting must also color the selected-agent launcher icon so the Mac sidebar picker and session cards use the same agent identity mode. */}
                             {mainSettingVisible(settingsSearch.sessionCards, 'useColoredSessionAgentIcons') ? (
                               <ToggleField
                                 checked={draft.useColoredSessionAgentIcons}
@@ -1387,7 +1387,7 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.sessionCards, 'showSessionCloseContextMenuAction') ? (
                               <>
                                 {/*
-                                 * CDXC:SidebarContextMenu 2026-06-10-13:58:
+                                 * CDXC:ContextMenus 2026-06-10-13:58:
                                  * Session context menus should hide the destructive Close item by default. Place this opt-in directly above the command-copy opt-in because both settings reveal advanced context-menu actions.
                                  */}
                                 <ToggleField
@@ -1428,41 +1428,41 @@ export function SettingsModal({
                         {mainSubsectionVisible('theming', settingsSearch.theming) ? (
                           <SettingsSection sectionRef={themingSectionRef} title='Theming'>
                             {/*
-                  CDXC:SettingsTheming 2026-06-15-21:35:
+                  CDXC:Theming 2026-06-15-21:35:
                   General settings needs Theming in the second group, separate
                   from Sidebar layout controls.
 
-                  CDXC:SettingsTheming 2026-06-16-01:35:
+                  CDXC:Theming 2026-06-16-01:35:
                   Theming remains a distinct section on the General settings
                   page so theme-related controls scan separately from Sidebar
                   layout controls.
 
-                  CDXC:SettingsTheming 2026-06-16-08:58:
+                  CDXC:Theming 2026-06-16-08:58:
                   Theme selection is not ready for the Settings UI. Hide the
                   dropdown control and show a simple "Light theme coming soon"
                   message while keeping all Theming rows visible without Show
                   Advanced.
 
-                  CDXC:SidebarTitlebarColors 2026-06-15-13:22:
+                  CDXC:Theming 2026-06-15-13:22:
                   Users should only pick the sidebar/titlebar background. The
                   foreground is derived automatically from that background so
                   light and dark custom colors keep readable chrome.
 
-                  CDXC:SidebarTitlebarColors 2026-06-15-13:45:
+                  CDXC:Theming 2026-06-15-13:45:
                   Replace the freeform background color picker with a constrained
                   contrast slider. The slider outputs calibrated dark
                   backgrounds so sidebar row states remain predictable.
 
-                  CDXC:SidebarTitlebarColors 2026-06-15-15:01:
+                  CDXC:Theming 2026-06-15-15:01:
                   Limit the contrast slider to 85-100 because lower values made
                   custom sidebar chrome too gray.
 
-                  CDXC:SidebarTitlebarColors 2026-06-15-15:15:
+                  CDXC:Theming 2026-06-15-15:15:
                   Call the user-facing control Contrast while keeping the stored
                   background darkness key stable for existing settings and native
                   startup compatibility.
 
-                  CDXC:SidebarTitlebarColors 2026-06-15-15:28:
+                  CDXC:Theming 2026-06-15-15:28:
                   Add Background Tint as a web-only color picker. Do not use
                   input[type=color], because macOS replaces that with a native
                   color panel instead of the in-app picker requested here.
@@ -1503,12 +1503,12 @@ export function SettingsModal({
                               />
                             ) : null}
                             {/*
-                  CDXC:AccentColor 2026-08-24:
+                  CDXC:Theming 2026-08-24:
                   The accent color drives --ghostex-accent on every React
                   surface, so it uses the same web color picker as Background
                   Tint instead of a native input[type=color].
 
-                  CDXC:AccentColor 2026-08-30:
+                  CDXC:Theming 2026-08-30:
                   Accent Color is an advanced Theming row. It also colors the
                   up-arrow markers on advanced Settings rows.
                 */}
@@ -1535,7 +1535,7 @@ export function SettingsModal({
                         ) : null}
 
                         {/*
-                         * CDXC:AppIconPicker 2026-06-28-06:05:
+                         * CDXC:Icons 2026-06-28-06:05:
                          * The advanced App Icon section is a custom-image control, not a bundled preset picker. Show one preview, one Select Image action, and an inline X on the custom preview to restore the default icon; omit separate reset and folder-reveal actions so the flow stays direct.
                          */}
                         {mainSubsectionVisible('appIcon', settingsSearch.appIcon) ? (
@@ -1647,20 +1647,20 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('browser', settingsSearch.browser) ? (
                           <SettingsSection sectionRef={browserSectionRef} title='Browser'>
-                            {/* CDXC:BrowserPanes 2026-05-27-07:24: Settings no longer exposes Chrome Canary attachment. Browser actions always open in workspace browser panes, leaving this section focused on pane behavior controls. */}
+                            {/* CDXC:Browser 2026-05-27-07:24: Settings no longer exposes Chrome Canary attachment. Browser actions always open in workspace browser panes, leaving this section focused on pane behavior controls. */}
                             {mainSettingVisible(settingsSearch.browser, 'webLinkOpenTarget') ? (
                               /*
-                               * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
+                               * CDXC:Navigation 2026-07-02-13:05:
                                * Command-clicked terminal web links route into the project
                                * Browser view by default, and the in-app toast points users at
                                * this control. Keep it a normal visible Browser setting so the
                                * toast's "change in settings" hint stays discoverable.
                                *
-                               * CDXC:GPUISessionChatLinks 2026-08-18:
+                               * CDXC:SessionChat 2026-08-18:
                                * The same control also routes web links clicked in session chat,
                                * so one Browser setting covers every agent-sent web link.
                                *
-                               * CDXC:WebLinkOpenTarget 2026-08-19:
+                               * CDXC:Navigation 2026-08-19:
                                * Detected dev-server rows read it too. This replaced a Browser
                                * toggle plus a Dev Servers dropdown that answered the same
                                * question with opposite defaults; a select rather than a toggle
@@ -1685,7 +1685,7 @@ export function SettingsModal({
                             title='Dev Servers'
                           >
                             {/*
-                             * CDXC:TerminalDevServers 2026-06-23-19:22:
+                             * CDXC:Resources 2026-06-23-19:22:
                              * Dev-server settings are terminal-adjacent app behavior. Keep detection, one launch destination, and ignored port rules together so users can tune server discovery without editing terminal emulator config or managing individual browser targets.
                              */}
                             {mainSettingVisible(
@@ -1717,7 +1717,7 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('editor', settingsSearch.editor) ? (
                           <SettingsSection sectionRef={editorSectionRef} title='Editor'>
-                            {/* CDXC:EditorPanes 2026-06-08-20:12: Embedded code-server panes
+                            {/* CDXC:CodeEditor 2026-06-08-20:12: Embedded code-server panes
                   use Ghostex-owned bundled editor settings by default so the
                   macOS VS Code surface starts on Dark 2026. This toggle opts
                   into linking local VS Code settings, while the Insiders
@@ -1795,18 +1795,18 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('terminal', settingsSearch.terminal) ? (
                           <SettingsSection sectionRef={ghosttyTerminalSectionRef} title='Terminal'>
-                            {/* CDXC:TerminalSettings 2026-04-26-18:36: Terminal settings in
+                            {/* CDXC:Terminal 2026-04-26-18:36: Terminal settings in
                   ghostex edit the shared Ghostty config file, so users must see
                   that external Ghostty windows receive the same values and can
                   reload them with Ghostty's normal config shortcut.
 
-                  CDXC:SettingsNavigation 2026-06-12-04:13:
+                  CDXC:Settings 2026-06-12-04:13:
                   Ghostty terminal controls live in the main Settings page so
                   the Settings search box finds app and terminal controls in one
                   pass. */}
                             {mainSettingVisible(settingsSearch.terminal, 'ghosttySettingsActions') ? (
                               <>
-                                {/* CDXC:TerminalSettings 2026-06-23-05:48:
+                                {/* CDXC:Terminal 2026-06-23-05:48:
                       The shared-config notice is informational, not a warning, so
                       it uses the neutral Info box pattern (muted border/background
                       plus an info icon) instead of any colored alert tint, matching
@@ -2007,7 +2007,7 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'terminalPaneHorizontalPaddingPx') ? (
                               /*
-                               * CDXC:TerminalPanePadding 2026-06-25-21:27:
+                               * CDXC:Terminal 2026-06-25-21:27:
                                * Horizontal terminal padding is a native pane content inset,
                                * not spacing between split panes. Keep the slider integer-pixel
                                * based. The 16px default matches Chat's horizontal content inset.
@@ -2026,7 +2026,7 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'terminalPaneVerticalPaddingPx') ? (
                               /*
-                               * CDXC:TerminalPanePadding 2026-06-25-21:27:
+                               * CDXC:Terminal 2026-06-25-21:27:
                                * Vertical terminal padding uses the same native content inset as
                                * horizontal padding while leaving pane titlebars, split dividers,
                                * and terminal chrome in their existing frames.
@@ -2077,7 +2077,7 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'showSessionIdInTerminalPanes') ? (
                               /*
-                               * CDXC:SessionPersistence 2026-05-23-00:50:
+                               * CDXC:Workarea 2026-05-23-00:50:
                                * The pane-local provider/session label is useful for zmx/tmux/zellij
                                * attach context. The label renderer still requires each terminal pane
                                * to have provider metadata before showing text.
@@ -2092,7 +2092,7 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'showNotificationOnTerminalBell') ? (
                               /*
-                               * CDXC:TerminalBellAttention 2026-07-01-01:13:
+                               * CDXC:Notifications 2026-07-01-01:13:
                                * Terminal bell notifications belong with Terminal settings because
                                * the event originates from shell/PTY behavior, not agent completion
                                * audio. Keep the setting off by default so failed zsh completion
@@ -2108,12 +2108,12 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'promptEditorBackend') ? (
                               /**
-                               * CDXC:PromptEditorBackend 2026-05-11-14:38
+                               * CDXC:PromptEditor 2026-05-11-14:38
                                * Ctrl+G prompt editing can render through the native WebKit
                                * Monaco editor or leave the terminal's machine-level editor
                                * settings untouched.
                                *
-                               * CDXC:PromptEditorBackend 2026-06-30-00:08:
+                               * CDXC:PromptEditor 2026-06-30-00:08:
                                * The Settings dropdown must only offer Monaco and "Use default
                                * from this machine"; remove gte install/use and custom command
                                * controls from this surface.
@@ -2131,7 +2131,7 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('terminalBehavior', settingsSearch.terminalBehavior) ? (
                           <SettingsSection sectionRef={ghosttyBehaviorSectionRef} title='Terminal Behavior'>
-                            {/* CDXC:TerminalBehaviorSettings 2026-04-29-09:32: Expose the
+                            {/* CDXC:Terminal 2026-04-29-09:32: Expose the
                   Ghostty settings users commonly tune: scrollback memory,
                   copy-on-select, close confirmation, clipboard safety,
                   pointer hiding, and native scrollbar visibility. These
@@ -2226,7 +2226,7 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('terminalScrolling', settingsSearch.terminalScrolling) ? (
                           <SettingsSection sectionRef={ghosttyScrollingSectionRef} title='Terminal Scrolling'>
-                            {/* CDXC:TerminalScrollSettings 2026-04-29-08:56: Ghostty
+                            {/* CDXC:Terminal 2026-04-29-08:56: Ghostty
                   scroll speed is controlled by mouse-scroll-multiplier.
                   Precision and discrete devices need separate controls because
                   Ghostty defaults trackpads to 1 and notched wheels to 3.
@@ -2285,7 +2285,7 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('autoSleep', settingsSearch.autoSleep) ? (
                           <SettingsSection sectionRef={autoSleepSectionRef} title='Auto Sleep'>
-                            {/* CDXC:AutoSleep 2026-05-28-08:32: Auto Sleep controls belong in one Settings section so VS Code, Git, Project, Manage, browser, and agent sessions can be tuned independently without hiding the relationship between the policies. */}
+                            {/* CDXC:SessionSleep 2026-05-28-08:32: Auto Sleep controls belong in one Settings section so VS Code, Git, Project, Manage, browser, and agent sessions can be tuned independently without hiding the relationship between the policies. */}
                             {mainSettingVisible(settingsSearch.autoSleep, 'autoSleepCodeEditorIdleMinutes') ? (
                               <SelectField
                                 description='Choose when inactive VS Code panes sleep, or turn Auto Sleep off.'
@@ -2521,7 +2521,7 @@ export function SettingsModal({
                                 value={draft.completionSound}
                               />
                             ) : null}
-                            {/* CDXC:SessionAttentionNotifications 2026-05-10-16:46:
+                            {/* CDXC:Notifications 2026-05-10-16:46:
                   Attention banners are separate from completion sounds because
                   users may want clickable macOS routing without audible alerts. */}
                             {mainSettingVisible(settingsSearch.sounds, 'showMacOSAttentionNotifications') ? (
@@ -2538,7 +2538,7 @@ export function SettingsModal({
                                 }}
                               />
                             ) : null}
-                            {/* CDXC:SessionAttentionNotifications 2026-05-11-01:14:
+                            {/* CDXC:Notifications 2026-05-11-01:14:
                   The Settings test button must run the real completion alert
                   path while the adjacent macOS button handles denied or muted
                   system notification permission outside ghostex settings. */}
@@ -2577,20 +2577,20 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.beta, 'showBetaFeatures') ? (
                               <>
                                 {/*
-                                 * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+                                 * CDXC:Settings 2026-06-28-07:41:
                                  * The Experimental section must keep a current visible
                                  * inventory of every surface enabled by Enable Experimental
                                  * Features. Update this list whenever a new experimental
                                  * Settings tab, titlebar button, or browser address-bar
                                  * control is added or removed.
                                  *
-                                 * CDXC:TitlebarKeepAwake 2026-06-19-13:13:
+                                 * CDXC:KeepAwake 2026-06-19-13:13:
                                  * Keep Awake belongs in the Experimental inventory because
                                  * the Power settings section, titlebar button, and titlebar
                                  * runtime automation stay hidden until Enable Experimental
                                  * Features is enabled.
                                  *
-                                 * CDXC:GPUIAutomateStable 2026-07-26:
+                                 * CDXC:Automations 2026-07-26:
                                  * GPUI has graduated project Automate from this gate. The
                                  * shared macOS host still inventories Automate here, while
                                  * GPUI lists only the Quick Automations Overview preview.
@@ -2656,10 +2656,10 @@ export function SettingsModal({
                             {debuggingSettingVisible('showSessionCommandCopyActions') ? (
                               <>
                                 {/*
-                                 * CDXC:SidebarContextMenu 2026-06-09-23:17:
+                                 * CDXC:ContextMenus 2026-06-09-23:17:
                                  * Copy resume and Copy attach command are advanced session-card context-menu utilities. Keep both hidden unless this Settings toggle is enabled so the default menu stays focused on normal session actions.
                                  *
-                                 * CDXC:DebuggingSettings 2026-06-15-21:34:
+                                 * CDXC:Diagnostics 2026-06-15-21:34:
                                  * Command copy actions are support-oriented session-card context-menu controls and should appear in the bottom Debugging section rather than the everyday Session Cards section.
                                  */}
                                 <ToggleField
@@ -2674,10 +2674,10 @@ export function SettingsModal({
                             {debuggingSettingVisible('showSessionDetailsCopyAction') ? (
                               <>
                                 {/*
-                                 * CDXC:SidebarContextMenu 2026-06-11-23:08:
+                                 * CDXC:ContextMenus 2026-06-11-23:08:
                                  * Copy details is separate from command-copy actions because it copies metadata, not executable shell commands. Keep it opt-in so users choose when session ids and project paths appear in context menus.
                                  *
-                                 * CDXC:DebuggingSettings 2026-06-15-21:34:
+                                 * CDXC:Diagnostics 2026-06-15-21:34:
                                  * Copy details can expose support metadata in the context menu, so Settings groups it with Debugging rather than normal session-card appearance controls.
                                  */}
                                 <ToggleField
@@ -2798,10 +2798,14 @@ export function SettingsModal({
                           'settings:remoteMachines'
                         )
                       }
+                      onTailscaleEnabledChange={(remoteTailscaleEnabled) =>
+                        applySettingsPatch({ remoteTailscaleEnabled })
+                      }
                       remoteMachines={draft.remoteMachines}
                       search={extraSettingsTabSearches.remote}
                       searchEmptyState={settingsSearchEmptyState}
                       tailcatRpc={tailcatRpc}
+                      tailscaleEnabled={draft.remoteTailscaleEnabled}
                       vscode={vscode}
                     />
                   </TabsContent>
@@ -3006,7 +3010,7 @@ function SettingsSidebarNavigation({
             >
               <div className='settings-sidebar-page-row' data-expanded={String(expanded)}>
                 {/*
-                 * CDXC:SettingsNavigation 2026-06-29-21:45:
+                 * CDXC:Settings 2026-06-29-21:45:
                  * Expandable Settings sidebar headers must expand and collapse from the full visible header, not only from the disclosure chevron, because the row highlight presents the icon, label, and chevron as one control.
                  */}
                 <TabsTrigger
@@ -3087,7 +3091,7 @@ function SettingsSidebarNavigation({
                           ) : null}
                         </div>
                         {/*
-                         * CDXC:SettingsNavigation 2026-08-24:
+                         * CDXC:Settings 2026-08-24:
                          * Expansion is explicit navigation state, independent
                          * from the scroll-active section. This keeps an opened
                          * third-level list stable while scroll tracking updates
@@ -3120,7 +3124,7 @@ function SettingsSidebarNavigation({
         })}
       </TabsList>
       {/*
-       * CDXC:SettingsNavigation 2026-06-24-22:16:
+       * CDXC:Settings 2026-06-24-22:16:
        * The sidebar owns both top-level Settings pages and expandable section
        * links, while Show Advanced remains pinned to the bottom of that same
        * rail instead of returning to header chrome.
