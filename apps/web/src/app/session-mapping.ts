@@ -37,6 +37,15 @@ export function presentationSessionToWorkspaceSession(
     ...(typeof session.queuedPromptFailedCount === 'number' && session.queuedPromptFailedCount > 0
       ? { queuedPromptFailedCount: session.queuedPromptFailedCount }
       : {}),
+    ...(session.switchableAgents && session.switchableAgents.length > 0
+      ? {
+          switchableAgents: session.switchableAgents.map((row) => ({
+            agentId: row.agentId,
+            icon: row.icon,
+            name: row.name,
+          })),
+        }
+      : {}),
     ...(typeof session.stashedPromptCount === 'number' && session.stashedPromptCount > 0
       ? { stashedPromptCount: session.stashedPromptCount }
       : {}),

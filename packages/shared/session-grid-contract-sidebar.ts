@@ -306,6 +306,14 @@ export type SidebarSessionPrState = NonNullable<SidebarSessionGitStatus['prState
  * another cannot. A false/absent flag renders identically to a session that
  * simply has no `gitStatus`.
  */
+/** One account a session row can be switched to (see `SidebarSessionItem.switchableAgents`). */
+export type SidebarSwitchableSessionAgent = {
+  agentId: string;
+  baseAgentId: string;
+  icon: string;
+  name: string;
+};
+
 export type SidebarSessionItem = {
   kind?: 'browser' | 'workspace';
   sessionKind?: 'browser' | 'terminal';
@@ -365,6 +373,13 @@ export type SidebarSessionItem = {
   sessionNote?: string;
   /** Saved prompts associated with this agent conversation; absent at zero. */
   stashedPromptCount?: number;
+  /**
+   * CDXC:SwitchAccount 2026-09-03:
+   * The same-family agent configurations (accounts) this session can be
+   * resumed under, projected straight from gxserver. Absent when there is
+   * nothing to switch to, which hides the "Switch Account" submenu.
+   */
+  switchableAgents?: readonly SidebarSwitchableSessionAgent[];
   /**
    * CDXC:PinnedSessions 2026-05-28-12:04:
    * Sidebar rows carry project-local pin state so the React display sorter can
@@ -1225,7 +1240,7 @@ export type SidebarGhostexFolderStatsMessage = {
 export type SidebarPluginSettingsItem = {
   canReinstall: boolean;
   errorMessage?: string;
-  id: 'code' | 'kanban' | 'cef';
+  id: 'code' | 'cef';
   sizeBytes: number;
   status:
     'installed' | 'notInstalled' | 'checking' | 'downloading' | 'verifying' | 'installing' | 'finishing' | 'failed';
@@ -1876,19 +1891,6 @@ export type SidebarToExtensionMessage =
     }
   | {
       /**
-       * CDXC:Mobile 2026-06-16-00:45:
-       * The top-sidebar Mobile entry opens Ghostex's download page as a Chromium
-       * browser pane under Chats, matching Plugins' fixed-destination
-       * projectless browser-chat behavior while avoiding the active project.
-       *
-       * CDXC:Mobile 2026-06-16-01:23:
-       * Mobile should use the canonical download URL rather than the GitHub
-       * README anchor so mobile setup starts from the product site.
-       */
-      type: 'openMobileBrowserChat';
-    }
-  | {
-      /**
        * CDXC:Automations 2026-06-29-15:55:
        * The top-sidebar Automations entry now opens the project Automation page backed by server, but keep the old toast message in the contract for older native bundles during the cutover.
        */
@@ -2524,6 +2526,17 @@ export type SidebarToExtensionMessage =
   | {
       type: 'fullReloadSession';
       sessionId: string;
+    }
+  | {
+      /**
+       * CDXC:SwitchAccount 2026-09-03:
+       * Resume this session under another same-family agent configuration
+       * (`agentId` is one of the row's `switchableAgents`): the runtime asks
+       * gxserver to rewrite the launch identity, then full-reloads the session.
+       */
+      type: 'switchSessionAgent';
+      sessionId: string;
+      agentId: string;
     }
   | {
       /**

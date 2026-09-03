@@ -1032,12 +1032,19 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
         label: 'Close After Done',
         shortcut: shortcut('closeAfterDone'),
       },
+      { id: 'fork', label: 'Fork Session', shortcut: shortcut('forkSession') },
       {
         id: 'fullReload',
         label: 'Full reload',
         shortcut: shortcut('reloadSession'),
       },
-      { id: 'fork', label: 'Fork Session', shortcut: shortcut('forkSession') },
+      /*
+      CDXC:SwitchAccount 2026-09-03:
+      Listed without rows: the shared chat view fills them from the daemon's
+      `switchableAgents` on the read state and hides the row when there are
+      none. The pick comes back as the value and rides to Rust with the id.
+      */
+      { id: 'switchAccount', label: 'Switch Account' },
       {
         id: 'promptEditor',
         label: 'Prompt editor',
@@ -1064,7 +1071,8 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
         shortcut: shortcut('exportTranscript'),
       },
     ],
-    onAction: (id) => postSessionChatHostAction(id),
+    onAction: (id, value) =>
+      postSessionChatHostAction(id, id === 'switchAccount' && value ? { agentId: value } : undefined),
   };
 }
 

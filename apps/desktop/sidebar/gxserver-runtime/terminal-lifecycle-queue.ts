@@ -320,6 +320,10 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       this.openSessionNoteEditor(sessionId);
       return;
     }
+    if (request.action === 'switchSessionAgent') {
+      await this.switchSessionAgent(sessionId, request.agentId);
+      return;
+    }
     await this.fullReloadSession(sessionId);
   },
 

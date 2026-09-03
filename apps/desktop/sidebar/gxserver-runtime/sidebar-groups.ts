@@ -594,6 +594,16 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
         ...(typeof session.stashedPromptCount === 'number' && session.stashedPromptCount > 0
           ? { stashedPromptCount: Math.floor(session.stashedPromptCount) }
           : {}),
+        // CDXC:SwitchAccount 2026-09-03: present-only, daemon-resolved rows.
+        ...(session.switchableAgents && session.switchableAgents.length > 0
+          ? {
+              switchableAgents: session.switchableAgents.map((row) => ({
+                agentId: row.agentId,
+                icon: row.icon,
+                name: row.name,
+              })),
+            }
+          : {}),
         // CDXC:DraftAgentSwitch 2026-08-28: present-only, so a non-draft row
         // publishes exactly what it published before drafts existed.
         ...(session.isDraft === true ? { isDraft: true } : {}),

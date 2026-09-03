@@ -19,6 +19,7 @@ import {
   IconPlayerPlay,
   IconRefresh,
   IconSparkles,
+  IconSwitchHorizontal,
   IconTag,
   IconX,
 } from '@tabler/icons-react';
@@ -41,6 +42,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { getSidebarSessionLifecycleState, type SidebarSessionItem } from '../shared/session-grid-contract';
+import { SessionChatHostActionAgentIcon } from './chat/session-chat-host-action-agent-icon';
 import { resolveSessionChatTranscriptAgent } from '../shared/session-chat';
 import { getEnabledVisibleSidebarSessionTagSections, type SidebarSessionTagListItem } from '../shared/session-tags';
 import { buildSidebarSessionDetailsClipboardText } from '../shared/session-details-copy';
@@ -148,7 +150,7 @@ type SessionContextMenuAction = {
   key: string;
   label: string;
   onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
-  submenu?: 'advanced' | 'session-tags';
+  submenu?: 'advanced' | 'session-tags' | 'switch-account';
 };
 
 export type SidebarSessionSelectionChangeRequest = {
@@ -718,6 +720,7 @@ export function SortableSessionCard({
   const canFocusMode = sessionGroup?.canFocusMode === true;
   const [tagSubmenuPosition, setTagSubmenuPosition] = useState<ContextMenuPosition>();
   const [advancedSubmenuPosition, setAdvancedSubmenuPosition] = useState<ContextMenuPosition>();
+  const [switchAccountSubmenuPosition, setSwitchAccountSubmenuPosition] = useState<ContextMenuPosition>();
   const [completionFlashRunId, setCompletionFlashRunId] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const aliasHeadingRef = useRef<HTMLDivElement>(null);
@@ -951,6 +954,7 @@ export function SortableSessionCard({
     setContextMenuPosition(undefined);
     setTagSubmenuPosition(undefined);
     setAdvancedSubmenuPosition(undefined);
+    setSwitchAccountSubmenuPosition(undefined);
   }, [session.alias, session.sessionId]);
 
   useEffect(() => {
@@ -1274,6 +1278,7 @@ export function SortableSessionCard({
         })();
     setTagSubmenuPosition(undefined);
     setAdvancedSubmenuPosition(undefined);
+    setSwitchAccountSubmenuPosition(undefined);
     setContextMenuSessionIdsBelow(nextSessionIdsBelow);
     setContextMenuSleepableSessionIdsBelow(nextSleepableSessionIdsBelow);
     setContextMenuSelectedSessionIds(shouldOpenBulkContextMenu ? nextSelectedSessionIds : EMPTY_SESSION_IDS);
@@ -1525,6 +1530,42 @@ export function SortableSessionCard({
     });
   };
 
+  /*
+  CDXC:SwitchAccount 2026-09-03:
+  Advanced > Switch Account opens a third-level submenu of the daemon-resolved
+  same-family accounts (`session.switchableAgents`); picking one asks the
+  runtime to rewrite the row's agent and full-reload it. Positioned like the
+  Advanced submenu itself: centred in the sidebar, beside the clicked row.
+  */
+  const switchableAgents = session.switchableAgents ?? [];
+  const canSwitchAccount = canFullReloadSession && switchableAgents.length > 0;
+  const openSwitchAccountSubmenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (switchAccountSubmenuPosition) {
+      setSwitchAccountSubmenuPosition(undefined);
+      return;
+    }
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const submenuWidth = 204;
+    const submenuHeight = CONTEXT_MENU_VERTICAL_PADDING_PX + switchableAgents.length * CONTEXT_MENU_ITEM_HEIGHT_PX;
+    setSwitchAccountSubmenuPosition({
+      x: getCenteredSidebarMenuX(submenuWidth),
+      y: Math.max(
+        CONTEXT_MENU_MARGIN_PX,
+        Math.min(bounds.bottom + 4, window.innerHeight - submenuHeight - CONTEXT_MENU_MARGIN_PX)
+      ),
+    });
+  };
+  const requestSwitchSessionAgent = (agentId: string) => {
+    setContextMenuPosition(undefined);
+    setAdvancedSubmenuPosition(undefined);
+    setSwitchAccountSubmenuPosition(undefined);
+    vscode.postMessage({
+      agentId,
+      sessionId: session.sessionId,
+      type: 'switchSessionAgent',
+    });
+  };
+
   const canCreateSessionGroupFromSession = sessionGroup?.canCreateSessionGroup === true;
 
   const requestCreateSessionGroupFromSession = () => {
@@ -1673,6 +1714,7 @@ export function SortableSessionCard({
     setContextMenuPosition(undefined);
     setTagSubmenuPosition(undefined);
     setAdvancedSubmenuPosition(undefined);
+    setSwitchAccountSubmenuPosition(undefined);
     setContextMenuSelectedSessionIds(EMPTY_SESSION_IDS);
   };
 
@@ -1783,6 +1825,7 @@ export function SortableSessionCard({
       return;
     }
     setAdvancedSubmenuPosition(undefined);
+    setSwitchAccountSubmenuPosition(undefined);
     const bounds = event.currentTarget.getBoundingClientRect();
     const submenuWidth = 204;
     const submenuHeight =
@@ -1977,6 +2020,16 @@ export function SortableSessionCard({
       onClick: requestToggleCloseAfterDone,
     });
   }
+  if (canForkSession) {
+    advancedSessionActions.push({
+      icon: <IconGitFork aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'fork',
+      label: 'Fork',
+      onClick: requestForkSession,
+    });
+  }
+  // Full reload sits directly above Switch Account, which is Full reload under
+  // another same-family agent configuration; both sit above Handoff / Export.
   if (canFullReloadSession) {
     advancedSessionActions.push({
       icon: <IconRefresh aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
@@ -1985,12 +2038,13 @@ export function SortableSessionCard({
       onClick: requestFullReloadSession,
     });
   }
-  if (canForkSession) {
+  if (canSwitchAccount) {
     advancedSessionActions.push({
-      icon: <IconGitFork aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'fork',
-      label: 'Fork',
-      onClick: requestForkSession,
+      icon: <IconSwitchHorizontal aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'switch-account',
+      label: 'Switch Account',
+      onClick: openSwitchAccountSubmenu,
+      submenu: 'switch-account',
     });
   }
   if (canExportTranscript) {
@@ -2115,6 +2169,7 @@ export function SortableSessionCard({
   const openAdvancedSubmenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (advancedSubmenuPosition) {
       setAdvancedSubmenuPosition(undefined);
+      setSwitchAccountSubmenuPosition(undefined);
       return;
     }
     setTagSubmenuPosition(undefined);
@@ -2683,6 +2738,7 @@ export function SortableSessionCard({
             setContextMenuPosition(undefined);
             setTagSubmenuPosition(undefined);
             setAdvancedSubmenuPosition(undefined);
+            setSwitchAccountSubmenuPosition(undefined);
             setContextMenuSelectedSessionIds(EMPTY_SESSION_IDS);
           }}
           vscode={vscode}
@@ -2835,16 +2891,61 @@ export function SortableSessionCard({
                         key={action.key}
                         className={`session-context-menu-item${action.danger ? ' session-context-menu-item-danger' : ''}`}
                         onClick={(event) => action.onClick(event)}
+                        aria-expanded={
+                          action.submenu === 'switch-account' ? Boolean(switchAccountSubmenuPosition) : undefined
+                        }
+                        aria-haspopup={action.submenu ? 'menu' : undefined}
                         role='menuitem'
                         type='button'
                       >
                         {action.icon}
                         {action.label}
+                        {action.submenu ? (
+                          <IconChevronRight
+                            aria-hidden='true'
+                            className='session-context-menu-trailing-icon'
+                            size={14}
+                            stroke={1.8}
+                          />
+                        ) : null}
                       </button>
                     ))}
                   </div>
                 </Fragment>
               ))}
+            </div>,
+            document.body
+          )
+        : null}
+      {contextMenuPosition && advancedSubmenuPosition && switchAccountSubmenuPosition && !isProjectSessionListMoreRow
+        ? createPortal(
+            <div
+              aria-label='Switch Account'
+              className='session-context-menu session-tag-submenu session-switch-account-submenu'
+              data-empty-space-blocking='true'
+              onClick={(event) => event.stopPropagation()}
+              role='menu'
+              style={{
+                left: `${switchAccountSubmenuPosition.x}px`,
+                top: `${switchAccountSubmenuPosition.y}px`,
+                zIndex: 'var(--sidebar-context-menu-submenu-z-index, 301)',
+              }}
+            >
+              <div className='session-context-menu-section'>
+                {switchableAgents.map((row) => (
+                  <button
+                    aria-label={`Switch to ${row.name}`}
+                    className='session-context-menu-item session-switch-account-item'
+                    key={row.agentId}
+                    onClick={() => requestSwitchSessionAgent(row.agentId)}
+                    role='menuitem'
+                    type='button'
+                  >
+                    <SessionChatHostActionAgentIcon icon={row.icon} />
+                    <span className='session-tag-menu-item-label'>{row.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>,
             document.body
           )
@@ -3011,7 +3112,8 @@ function supportsResumeCommandCopy(session: SidebarSessionItem): boolean {
     session.agentIcon === 'gemini' ||
     session.agentIcon === 'opencode' ||
     session.agentIcon === 'pi' ||
-    session.agentIcon === 'cursor-cli'
+    session.agentIcon === 'cursor-cli' ||
+    session.agentIcon === 'antigravity-cli'
   );
 }
 
@@ -3036,8 +3138,15 @@ function supportsGeneratedName(session: SidebarSessionItem): boolean {
    * once the first user message has been captured. The native rename path
    * already switches Pi to `/name <title>`, so the menu gate should include Pi
    * instead of creating a Pi-only title-generation command.
+   *
+   * Antigravity takes `/rename <title>`, the default rename command.
    */
-  return session.agentIcon === 'codex' || session.agentIcon === 'claude' || session.agentIcon === 'pi';
+  return (
+    session.agentIcon === 'codex' ||
+    session.agentIcon === 'claude' ||
+    session.agentIcon === 'pi' ||
+    session.agentIcon === 'antigravity-cli'
+  );
 }
 
 function supportsDelayedSendMenuAction(session: SidebarSessionItem, isRemoteSession: boolean): boolean {
@@ -3112,7 +3221,15 @@ function supportsFullReload(session: SidebarSessionItem): boolean {
    * CDXC:CursorCLI 2026-05-20-08:20:
    * Cursor cards can full-reload through stored chat UUIDs or trusted titles
    * resolved from the local Cursor chat store for the active project.
+   *
+   * CDXC:SessionChatAntigravity 2026-09-03:
+   * Antigravity resumes only by conversation id (`agy --conversation <id>`),
+   * which its hooks report; without one a reload could only start a fresh
+   * conversation, so the card shows Full reload once the id is captured.
    */
+  if (session.agentIcon === 'antigravity-cli') {
+    return Boolean(session.agentSessionId?.trim());
+  }
   return (
     session.agentIcon === 'codex' ||
     session.agentIcon === 'claude' ||

@@ -96,7 +96,9 @@ export function normalizeGpuiWorkspaceTerminalRuntimeAction(
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  if (Object.keys(record).some((key) => !['action', 'projectId', 'sessionId', 'type', 'version'].includes(key))) {
+  if (
+    Object.keys(record).some((key) => !['action', 'agentId', 'projectId', 'sessionId', 'type', 'version'].includes(key))
+  ) {
     return undefined;
   }
   if (
@@ -115,7 +117,8 @@ export function normalizeGpuiWorkspaceTerminalRuntimeAction(
     record.action === 'exportTranscript' ||
     record.action === 'forkSession' ||
     record.action === 'fullReloadSession' ||
-    record.action === 'openSessionNote'
+    record.action === 'openSessionNote' ||
+    record.action === 'switchSessionAgent'
       ? record.action
       : undefined;
   const projectId = normalizeNonEmptyString(record.projectId)?.trim();
@@ -127,6 +130,16 @@ export function normalizeGpuiWorkspaceTerminalRuntimeAction(
     !gpuiLocalWorkspaceLifecycleProjectIdAllowed(projectId) ||
     !gpuiLocalWorkspaceLifecycleSessionIdAllowed(sessionId)
   ) {
+    return undefined;
+  }
+  if (action === 'switchSessionAgent') {
+    const agentId = normalizeNonEmptyString(record.agentId)?.trim();
+    if (!agentId) {
+      return undefined;
+    }
+    return { action, agentId, projectId, sessionId };
+  }
+  if (record.agentId !== undefined) {
     return undefined;
   }
   return { action, projectId, sessionId };

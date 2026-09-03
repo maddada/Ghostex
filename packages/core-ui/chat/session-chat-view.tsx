@@ -1143,12 +1143,35 @@ export function SessionChatView({
   */
   const draftAwareHostActions = useMemo(() => {
     const actions = hostActions?.actions;
-    if (!isDraft || !hostActions || !actions) {
+    if (!hostActions || !actions) {
       return hostActions;
     }
-    const kept = actions.filter((action) => !DRAFT_HIDDEN_HOST_ACTION_IDS.has(action.id));
-    return kept.length === actions.length ? hostActions : { ...hostActions, actions: kept };
-  }, [hostActions, isDraft]);
+    /*
+    CDXC:SwitchAccount 2026-09-03:
+    The host lists "Switch Account" as a plain row; its rows are the daemon's
+    `switchableAgents` off the read state, which only this view holds. A host
+    that already supplied rows (the web terminal bar builds them from the
+    presentation) keeps its own. No compatible account hides the row entirely.
+    */
+    const accountItems = (chat.switchableAgents ?? []).map((row) => ({
+      icon: row.icon,
+      id: row.agentId,
+      label: row.name,
+    }));
+    let changed = false;
+    const kept = actions.flatMap((action) => {
+      if (isDraft && DRAFT_HIDDEN_HOST_ACTION_IDS.has(action.id)) {
+        changed = true;
+        return [];
+      }
+      if (action.id === 'switchAccount' && action.items === undefined) {
+        changed = true;
+        return accountItems.length > 0 ? [{ ...action, items: accountItems }] : [];
+      }
+      return [action];
+    });
+    return changed ? { ...hostActions, actions: kept } : hostActions;
+  }, [chat.switchableAgents, hostActions, isDraft]);
 
   // Typing anywhere in the pane lands in the composer (§11.1): a single
   // printable character without Ctrl/Meta is redirected; unmodified

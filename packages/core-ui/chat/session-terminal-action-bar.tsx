@@ -26,6 +26,7 @@ import {
   IconPencil,
   IconRefresh,
   IconStackPush,
+  IconSwitchHorizontal,
   type Icon as TablerIcon,
 } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -38,9 +39,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import { AppTooltip } from '../app-tooltip';
+import { SessionChatHostActionAgentIcon } from './session-chat-host-action-agent-icon';
 import type { SessionChatHostAction, SessionChatHostActions } from './session-chat-host-actions';
 
 /**
@@ -52,7 +57,7 @@ import type { SessionChatHostAction, SessionChatHostActions } from './session-ch
 const BAR_OWNED_HOST_ACTION_IDS = new Set(['attachPath', 'promptEditor', 'stashPrompt', 'stashedPrompts']);
 
 /** Per-session lifecycle actions, shown under the menu's "Agent" heading. */
-const AGENT_HOST_ACTION_IDS = new Set(['fork', 'fullReload', 'rename', 'sleep']);
+const AGENT_HOST_ACTION_IDS = new Set(['fork', 'fullReload', 'rename', 'sleep', 'switchAccount']);
 
 const HOST_ACTION_ICONS: Record<string, TablerIcon> = {
   closeAfterDone: IconClock,
@@ -61,6 +66,7 @@ const HOST_ACTION_ICONS: Record<string, TablerIcon> = {
   fork: IconGitBranch,
   fullReload: IconRefresh,
   rename: IconPencil,
+  switchAccount: IconSwitchHorizontal,
 };
 
 // Copied verbatim from apps/desktop/assets/titlebar/moon.svg (the same glyph the
@@ -148,13 +154,30 @@ export function SessionTerminalActionBar({
     }
     hostActions.onAction?.(action.id);
   };
-  const hostActionMenuItem = (action: SessionChatHostAction) => (
-    <DropdownMenuItem key={action.id} onClick={() => runHostAction(action)}>
-      {hostActionIcon(action.id)}
-      {action.label}
-      {action.shortcut ? <DropdownMenuShortcut>{action.shortcut}</DropdownMenuShortcut> : null}
-    </DropdownMenuItem>
-  );
+  const hostActionMenuItem = (action: SessionChatHostAction) =>
+    action.items ? (
+      // CDXC:SwitchAccount 2026-09-03: same submenu shape as the chat composer's.
+      <DropdownMenuSub key={action.id}>
+        <DropdownMenuSubTrigger>
+          {hostActionIcon(action.id)}
+          {action.label}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className='w-56'>
+          {action.items.map((item) => (
+            <DropdownMenuItem key={item.id} onClick={() => hostActions.onAction?.(action.id, item.id)}>
+              <SessionChatHostActionAgentIcon icon={item.icon} />
+              <span className='truncate'>{item.label}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ) : (
+      <DropdownMenuItem key={action.id} onClick={() => runHostAction(action)}>
+        {hostActionIcon(action.id)}
+        {action.label}
+        {action.shortcut ? <DropdownMenuShortcut>{action.shortcut}</DropdownMenuShortcut> : null}
+      </DropdownMenuItem>
+    );
   const findAction = (id: string) => hostActionList.find((action) => action.id === id);
   const promptEditorAction = findAction('promptEditor');
   const stashedPromptsAction = findAction('stashedPrompts');
@@ -164,7 +187,10 @@ export function SessionTerminalActionBar({
   const closeAfterDoneHostAction = findAction('closeAfterDone');
   const foldedHostActions = hostActionList.filter(
     (action) =>
-      action.id !== 'delayedActions' && action.id !== 'closeAfterDone' && !BAR_OWNED_HOST_ACTION_IDS.has(action.id)
+      action.id !== 'delayedActions' &&
+      action.id !== 'closeAfterDone' &&
+      !BAR_OWNED_HOST_ACTION_IDS.has(action.id) &&
+      (action.items === undefined || action.items.length > 0)
   );
   const agentHostActions = foldedHostActions.filter((action) => AGENT_HOST_ACTION_IDS.has(action.id));
   const otherHostActions = foldedHostActions.filter((action) => !AGENT_HOST_ACTION_IDS.has(action.id));

@@ -30,7 +30,6 @@ import {
   type SidebarAgentButton,
 } from '@/packages/shared/sidebar-agents';
 import { type RemoteMachineSettings, type ghostexSettings } from '@/packages/shared/ghostex-settings';
-import { GHOSTEX_MOBILE_DOWNLOAD_URL } from '@/packages/shared/sidebar-commands';
 import { readWebSettings } from '../app/web-settings';
 import {
   normalizeWorkspaceProjectIcon,
@@ -524,9 +523,6 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
       case 'createChat':
         await createQuickSession('terminal');
         return;
-      case 'openMobileBrowserChat':
-        window.open(GHOSTEX_MOBILE_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
-        return;
       case 'createSessionInGroup':
         await createSession(message.groupId);
         return;
@@ -534,6 +530,28 @@ export function createWebSidebarRuntime(): WebSidebarRuntime {
         const target = parseSidebarSessionId(message.sessionId);
         if (target) {
           await lifecycleRpc(target, message.sleeping ? '/api/sleepSession' : '/api/wakeSession');
+        }
+        return;
+      }
+      case 'fullReloadSession': {
+        const target = parseSidebarSessionId(message.sessionId);
+        if (target) {
+          await lifecycleRpc(target, '/api/sleepSession');
+          await lifecycleRpc(target, '/api/wakeSession');
+        }
+        return;
+      }
+      case 'switchSessionAgent': {
+        // CDXC:SwitchAccount 2026-09-03: rewrite the row's agent on the owning
+        // daemon, then Full reload it so the wake resumes with the new command.
+        const target = parseSidebarSessionId(message.sessionId);
+        if (target) {
+          await rpcForMachine(target.machineId, '/api/switchSessionAgent', {
+            ...lifecycleParams(target),
+            agentId: message.agentId,
+          });
+          await lifecycleRpc(target, '/api/sleepSession');
+          await lifecycleRpc(target, '/api/wakeSession');
         }
         return;
       }

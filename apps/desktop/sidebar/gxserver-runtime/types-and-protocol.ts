@@ -429,6 +429,13 @@ export type GpuiActiveWorkspaceTabSessionPayload = {
   hasSessionNote?: boolean;
   stashedPromptCount?: number;
   /*
+  CDXC:SwitchAccount 2026-09-03:
+  The daemon-resolved accounts this session can be resumed under, so the native
+  terminal action bar can render the "Switch Account" submenu without any Rust
+  knowledge of project agent configuration. PRESENT-ONLY: absent means none.
+  */
+  switchableAgents?: readonly { agentId: string; icon: string; name: string }[];
+  /*
   CDXC:DraftAgentSwitch 2026-08-28:
   The session is a draft (no first prompt yet), copied from the projected
   sidebar row. Rust needs it because a draft is chat-eligible WITHOUT an
@@ -735,6 +742,18 @@ export type GpuiSessionAttentionTarget =
 export type GpuiWorkspaceTerminalRuntimeActionPayload =
   | {
       action: 'exportTranscript' | 'forkSession' | 'fullReloadSession' | 'openSessionNote';
+      projectId: string;
+      sessionId: string;
+    }
+  | {
+      /**
+       * CDXC:SwitchAccount 2026-09-03:
+       * Rust-origin Switch Account (terminal action bar, chat composer). The
+       * agent id is one of the rows the runtime itself forwarded to Rust on the
+       * tab session's `switchableAgents`.
+       */
+      action: 'switchSessionAgent';
+      agentId: string;
       projectId: string;
       sessionId: string;
     }

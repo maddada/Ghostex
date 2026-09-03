@@ -1088,9 +1088,6 @@ export class GpuiSidebarRuntime {
       case 'openBrowserChat':
         this.openQuickBrowserTab();
         return;
-      case 'openMobileBrowserChat':
-        this.openMobileBrowserChat();
-        return;
       case 'openBrowserPaneInGroup':
         this.openBrowserPaneInGroup(message.groupId);
         return;
@@ -1164,6 +1161,9 @@ export class GpuiSidebarRuntime {
       case 'fullReloadSession':
       case 'restartSession':
         await this.fullReloadSession(message.sessionId);
+        return;
+      case 'switchSessionAgent':
+        await this.switchSessionAgent(message.sessionId, message.agentId);
         return;
       case 'fullReloadProjectZmxSessions':
         await this.fullReloadProjectZmxSessions(message.groupId);

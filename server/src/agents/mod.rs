@@ -9,6 +9,7 @@ pub mod launch_plan;
 pub mod resume_plan;
 pub mod session_state_ingest;
 pub mod settings;
+pub mod switch_account;
 pub mod terminal_title;
 #[cfg(test)]
 mod tests;
@@ -25,5 +26,6 @@ pub(crate) use launch_plan::*;
 pub(crate) use resume_plan::*;
 pub(crate) use session_state_ingest::*;
 pub(crate) use settings::*;
+pub(crate) use switch_account::*;
 pub(crate) use terminal_title::*;
 pub(crate) use title_reconcile::*;

@@ -55,6 +55,14 @@ pub(crate) struct SessionChatReadResolution {
     client learns about a promotion (or a project agent edit) without a reload.
     */
     available_agents: Option<Value>,
+    /*
+    CDXC:SwitchAccount 2026-09-03: the same-family accounts a PROMPTED session
+    can be resumed under, for the composer's "Switch Account" submenu. `None`
+    on drafts (they have the agent switcher) and when nothing is compatible.
+    In the fingerprint for the same reason `available_agents` is: an SSH-only
+    client learns about a project agent edit through the long-polled read.
+    */
+    switchable_agents: Option<Value>,
     fingerprint: String,
 }
 
@@ -109,6 +117,10 @@ pub(crate) fn resolve_session_chat_read_state(
     } else {
         None
     };
+    let switchable_agents = repository
+        .get_project(project_id)?
+        .as_ref()
+        .and_then(|project| crate::agents::switchable_session_agents_value(project, &session));
     drop(session);
     drop(repository);
     drop(db);
@@ -261,6 +273,10 @@ pub(crate) fn resolve_session_chat_read_state(
         .as_ref()
         .map(Value::to_string)
         .hash(&mut hasher);
+    switchable_agents
+        .as_ref()
+        .map(Value::to_string)
+        .hash(&mut hasher);
     let fingerprint = format!("{:016x}", hasher.finish());
 
     Ok(SessionChatReadResolution {
@@ -275,6 +291,7 @@ pub(crate) fn resolve_session_chat_read_state(
         transcript_path,
         queue,
         available_agents,
+        switchable_agents,
         fingerprint,
     })
 }
@@ -373,6 +390,7 @@ pub(crate) async fn handle_read_session_chat_http(
         transcript_path,
         queue,
         available_agents,
+        switchable_agents,
         fingerprint,
     } = resolution;
 
@@ -414,6 +432,9 @@ pub(crate) async fn handle_read_session_chat_http(
     */
     if let Some(available_agents) = available_agents.clone() {
         result.insert("availableAgents".to_string(), available_agents);
+    }
+    if let Some(switchable_agents) = switchable_agents.clone() {
+        result.insert("switchableAgents".to_string(), switchable_agents);
     }
     if let Some(session_agent_id) = session_agent_id.as_deref() {
         result.insert("sessionAgentId".to_string(), json!(session_agent_id));

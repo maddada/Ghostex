@@ -130,6 +130,21 @@ async function runChatAgentAction(session: WorkspaceSession, actionId: string, v
       await rpcForMachine(session.machineId, '/api/sleepSession', lifecycleParams);
       await rpcForMachine(session.machineId, '/api/wakeSession', lifecycleParams);
       return;
+    case 'switchAccount': {
+      /*
+      CDXC:SwitchAccount 2026-09-03:
+      `value` is the picked row's agent id. The daemon rewrites the row's launch
+      identity; the sleep/wake that follows is Full reload, whose wake resumes
+      the same conversation with the new agent's command.
+      */
+      if (!value) {
+        return;
+      }
+      await rpcForMachine(session.machineId, '/api/switchSessionAgent', { ...lifecycleParams, agentId: value });
+      await rpcForMachine(session.machineId, '/api/sleepSession', lifecycleParams);
+      await rpcForMachine(session.machineId, '/api/wakeSession', lifecycleParams);
+      return;
+    }
     case 'exportTranscript': {
       /*
       CDXC:ExportTranscriptOptions 2026-08-24:
@@ -173,10 +188,21 @@ export function createWebSessionHostActions(
       { id: 'sleep', label: 'Sleep' },
       { id: 'delayedActions', label: 'Delayed actions' },
       { id: 'closeAfterDone', label: 'Close After Done' },
+      { id: 'fork', label: 'Fork Session' },
       // Sentence case, matching the desktop hosts' labels so the same menu row
       // reads the same on every surface.
       { id: 'fullReload', label: 'Full reload' },
-      { id: 'fork', label: 'Fork Session' },
+      /*
+      CDXC:SwitchAccount 2026-09-03:
+      Rows come from the presentation so the terminal bar (which has no chat
+      read state) can render them; the chat view keeps them as supplied. An
+      empty list hides the row on both surfaces.
+      */
+      {
+        id: 'switchAccount',
+        items: (session.switchableAgents ?? []).map((row) => ({ icon: row.icon, id: row.agentId, label: row.name })),
+        label: 'Switch Account',
+      },
       { id: 'exportTranscript', label: 'Handoff / Export' },
     ],
     onAction: (id, value) => {

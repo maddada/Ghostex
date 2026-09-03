@@ -169,6 +169,18 @@ pub(crate) fn project_presentation_session(
         "agentSessionPath",
         read_runtime_text(session, "agentSessionPath"),
     );
+    /*
+    CDXC:SwitchAccount 2026-09-03:
+    The accounts this session can be resumed under, resolved by the daemon that
+    owns the project so every surface (sidebar context menu, terminal action
+    bar, chat composer) renders the same rows. ABSENT when there is nothing to
+    switch to, which is also what a daemon predating the feature publishes.
+    */
+    if let Some(switchable_agents) =
+        crate::agents::switchable_session_agents_value(project, session)
+    {
+        output.insert("switchableAgents".to_string(), switchable_agents);
+    }
     if activity == "attention" {
         output.insert(
             "attention".to_string(),

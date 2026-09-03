@@ -5,12 +5,28 @@
 // object (chat-main.tsx, the web session chat host) should not pull either
 // component into their bundle.
 
+/** One row of a submenu host action (see `SessionChatHostAction.items`). */
+export interface SessionChatHostActionItem {
+  /** Passed back to onAction as the value when the row is picked. */
+  id: string;
+  label: string;
+  /** Sidebar agent icon id (`claude`, `codex`, …) drawn beside the label. */
+  icon?: string;
+}
+
 export interface SessionChatHostAction {
   /** Host-defined action id, passed back verbatim to onAction. */
   id: string;
   label: string;
   /** Formatted effective shortcut shown beside the label in the tooltip. */
   shortcut?: string;
+  /**
+   * CDXC:SwitchAccount 2026-09-03:
+   * When set, the action renders as a submenu of these rows and picking one
+   * calls `onAction(action.id, item.id)`. An empty list hides the action, so a
+   * host can always list "Switch Account" and let the rows decide.
+   */
+  items?: readonly SessionChatHostActionItem[];
   /**
    * When set, picking the action swaps its control row for an inline text
    * field (e.g. Rename); onAction receives the submitted value as its second

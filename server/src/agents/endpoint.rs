@@ -118,6 +118,12 @@ pub fn dispatch_agent_endpoint(
             })?;
             switch_draft_agent(repository, db, params, context)?
         }
+        /*
+        CDXC:SwitchAccount 2026-09-03:
+        Prompted-session account switching. Only a row rewrite: the client's
+        Full Reload cycles the provider afterwards, so no zmx context is needed.
+        */
+        "/api/switchSessionAgent" => switch_session_agent(repository, db, params)?,
         "/api/requestSessionRename" => {
             let lifecycle = read_lifecycle(params)?;
             let result = request_session_rename(repository, &lifecycle, params, home_dir)?;

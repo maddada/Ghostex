@@ -227,7 +227,18 @@ export interface SessionChatQuestion {
 }
 
 export type SessionChatInteractivePrompt =
-  { kind: 'question'; questions: SessionChatQuestion[] } | { kind: 'approval'; tool: string; summary?: string };
+  | {
+      kind: 'question';
+      questions: SessionChatQuestion[];
+      /**
+       * The hook's tool_use_id of the asking call, when the hook payload
+       * carried one. gxserver retires the card on that call's own post-tool
+       * event only, so a subagent's tool traffic in the same session cannot
+       * retire it. Informational for clients.
+       */
+      toolUseId?: string;
+    }
+  | { kind: 'approval'; tool: string; summary?: string; toolUseId?: string };
 
 /** One answer per question, by 0-based option indices plus optional free text. */
 export interface SessionChatQuestionSelection {
@@ -372,8 +383,10 @@ export interface SessionChatTerminalNotice {
 /*
 CDXC:SessionChatTerminalActivity 2026-08-22:
 Live work the agent CLI reports on its terminal before transcript JSONL catches
-up. `claude-status` is the current `⏺ …` assistant line and becomes transient
-reasoning history in the client; `shells-running` remains one bottom activity
+up. `claude-status` is the current `⏺ …` assistant line (its first paragraph,
+re-joined from the wrapped rows) and becomes transient reasoning history in the
+client; `claude-tool` is a `⏺` row with the `⎿` output gutter under it, i.e. a
+tool call, shown as live work only; `shells-running` remains one bottom activity
 row only while Claude shows its background-shell status; `compacting` is
 structured progress:
 
@@ -391,7 +404,7 @@ numbers move. Carried by read results and by snapshot/replaced/state frames with
 learns the work finished.
 */
 export interface SessionChatTerminalActivity {
-  /** Open set (`compacting`, `claude-status`, `shells-running`). */
+  /** Open set (`compacting`, `claude-status`, `claude-tool`, `shells-running`). */
   kind: string;
   /** Agent-facing wording, without the spinner glyph or the clock. */
   label: string;
@@ -634,6 +647,13 @@ export interface GxserverReadSessionChatResult {
    * because chat cannot read a transcript it has no decoder for.
    */
   availableAgents?: SessionChatAvailableAgent[];
+  /**
+   * CDXC:SwitchAccount 2026-09-03:
+   * The same-family agent configurations (accounts) a PROMPTED session can be
+   * resumed under, for the composer's "Switch Account" submenu. Absent on
+   * drafts, when nothing is compatible, and on daemons predating the feature.
+   */
+  switchableAgents?: SessionChatAvailableAgent[];
   /**
    * CDXC:DraftSessions 2026-08-28:
    * The session's own launch agent id, which `agent` above is NOT: that one is
@@ -936,6 +956,7 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
    * both fields, so clients must fold them only when either property exists.
    */
   availableAgents?: SessionChatAvailableAgent[];
+  switchableAgents?: SessionChatAvailableAgent[];
   sessionAgentId?: string;
   agentSessionId?: string;
 }

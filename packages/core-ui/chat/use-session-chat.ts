@@ -295,6 +295,12 @@ export interface UseSessionChatResult {
   promoted by its first Send, whose next read simply stops carrying them.
   */
   availableAgents: readonly SessionChatAvailableAgent[] | null;
+  /**
+   * CDXC:SwitchAccount 2026-09-03:
+   * The same-family accounts a PROMPTED session can be resumed under, carried
+   * by reads exactly like `availableAgents`. Null when nothing is compatible.
+   */
+  switchableAgents: readonly SessionChatAvailableAgent[] | null;
   /** The session's own launch agent id (never the transcript family). */
   sessionAgentId: string | null;
   /**
@@ -353,6 +359,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   (or is no longer) a draft.
   */
   const [availableAgents, setAvailableAgents] = useState<readonly SessionChatAvailableAgent[] | null>(null);
+  const [switchableAgents, setSwitchableAgents] = useState<readonly SessionChatAvailableAgent[] | null>(null);
   const [sessionAgentId, setSessionAgentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -602,11 +609,16 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   is the promotion signal and clears both.
   */
   const applyDraftAgentCarriage = useCallback(
-    (result: { availableAgents?: SessionChatAvailableAgent[]; sessionAgentId?: string }): void => {
+    (result: {
+      availableAgents?: SessionChatAvailableAgent[];
+      sessionAgentId?: string;
+      switchableAgents?: SessionChatAvailableAgent[];
+    }): void => {
       const nextSessionAgentId = result.sessionAgentId ?? null;
       const previousSessionAgentId = sessionAgentIdRef.current;
       sessionAgentIdRef.current = nextSessionAgentId;
       setAvailableAgents(result.availableAgents ?? null);
+      setSwitchableAgents(result.switchableAgents?.length ? result.switchableAgents : null);
       setSessionAgentId(nextSessionAgentId);
       /*
       CDXC:DraftAgentSwitch 2026-08-28:
@@ -790,6 +802,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       // CDXC:DraftSessions 2026-08-28: another session's draft agent list must
       // never tick a row (or offer a switch) for this one.
       setAvailableAgents(null);
+      setSwitchableAgents(null);
       setSessionAgentId(null);
       // Another session's agent id must not read as an agent SWITCH on this
       // one's first read (which would wipe the detection that read carried).
@@ -835,7 +848,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         SSH host synthesizes snapshots from reads and deliberately owns them,
         including `undefined` on promotion so stale draft controls are cleared.
         */
-        if ('availableAgents' in event || 'sessionAgentId' in event) {
+        if ('availableAgents' in event || 'sessionAgentId' in event || 'switchableAgents' in event) {
           applyDraftAgentCarriage(event);
         }
         return;
@@ -1463,6 +1476,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     selectedOptions,
     send,
     status,
+    switchableAgents,
     terminalNotice,
     terminalActivity,
     agentFleet,

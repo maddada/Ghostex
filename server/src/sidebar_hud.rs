@@ -1617,6 +1617,15 @@ fn is_default_sidebar_agent_id(agent_id: &str) -> bool {
         .any(|agent| agent.agent_id == agent_id)
 }
 
+/// The built-in name and icon of a default agent family, for surfaces that
+/// must label a family row the project never customised (Switch Account's
+/// "Claude" row on a session that currently runs a custom Claude configuration).
+pub(crate) fn default_sidebar_agent_identity(
+    agent_id: &str,
+) -> Option<(&'static str, &'static str)> {
+    default_sidebar_agent_by_id(agent_id).map(|agent| (agent.name, agent.icon))
+}
+
 fn default_sidebar_agent_by_id(agent_id: &str) -> Option<&'static DefaultSidebarAgent> {
     DEFAULT_SIDEBAR_AGENTS
         .iter()

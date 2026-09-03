@@ -155,6 +155,12 @@ const TERMINAL_AGENT_BAR_FULL_RELOAD_ICON: &str = "titlebar/refresh.svg";
 const TERMINAL_AGENT_BAR_STASHED_PROMPTS_ICON: &str = "titlebar/stack-push.svg";
 const TERMINAL_AGENT_BAR_CHAT_VIEW_ICON: &str = "titlebar/message-circle.svg";
 const TERMINAL_AGENT_BAR_EXPORT_TRANSCRIPT_ICON: &str = "titlebar/file-export.svg";
+const TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON: &str = "titlebar/user-circle.svg";
+const TERMINAL_AGENT_BAR_SUBMENU_CHEVRON_ICON: &str = "titlebar/chevron-left.svg";
+/// The Switch Account flyout: opens to the LEFT of the menu (the menu hugs the
+/// pane's right edge), bottom-aligned with it, slightly wider for agent names.
+const TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_WIDTH: f32 = 220.0;
+const TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_GAP: f32 = 4.0;
 const TERMINAL_AGENT_BAR_COPY_SESSION_ID_ICON: &str = "titlebar/copy.svg";
 
 /// Which pane surface a bar belongs to. Both show Agents workspace sessions and
@@ -201,6 +207,11 @@ pub(crate) enum TerminalAgentBarAction {
     Sleep,
     Fork,
     FullReload,
+    /// CDXC:SwitchAccount 2026-09-03: opens the same-family account flyout
+    /// instead of emitting a terminal event; the pick is dispatched to the
+    /// sidebar runtime with the agent id. Hidden when the session has no
+    /// compatible account.
+    SwitchAccount,
     ExportTranscript,
 }
 
@@ -222,6 +233,7 @@ impl TerminalAgentBarAction {
             Self::Sleep => "sleep",
             Self::Fork => "fork",
             Self::FullReload => "full-reload",
+            Self::SwitchAccount => "switch-account",
             Self::ExportTranscript => "export-transcript",
         }
     }
@@ -248,6 +260,7 @@ impl TerminalAgentBarAction {
             Self::Sleep => ("Sleep", "sleepFocusedSession"),
             Self::Fork => ("Fork Session", "forkSession"),
             Self::FullReload => ("Full reload", "reloadSession"),
+            Self::SwitchAccount => ("Switch Account", ""),
             Self::ExportTranscript => ("Handoff / Export", "exportTranscript"),
         }
     }
@@ -269,6 +282,7 @@ impl TerminalAgentBarAction {
             Self::Sleep => TERMINAL_AGENT_BAR_SLEEP_ICON,
             Self::Fork => TERMINAL_AGENT_BAR_FORK_ICON,
             Self::FullReload => TERMINAL_AGENT_BAR_FULL_RELOAD_ICON,
+            Self::SwitchAccount => TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON,
             Self::ExportTranscript => TERMINAL_AGENT_BAR_EXPORT_TRANSCRIPT_ICON,
         }
     }
@@ -300,6 +314,7 @@ impl TerminalAgentBarAction {
             | Self::AttachPath
             | Self::Maximize
             | Self::PromptEditor
+            | Self::SwitchAccount
             | Self::VerboseMode => None,
         }
     }
@@ -323,8 +338,11 @@ const TERMINAL_AGENT_BAR_MENU_ROWS: &[Option<TerminalAgentBarAction>] = &[
     None,
     Some(TerminalAgentBarAction::Rename),
     Some(TerminalAgentBarAction::Sleep),
-    Some(TerminalAgentBarAction::FullReload),
     Some(TerminalAgentBarAction::Fork),
+    // Full reload sits directly above Switch Account, which is Full reload
+    // under another same-family agent configuration; both above Handoff.
+    Some(TerminalAgentBarAction::FullReload),
+    Some(TerminalAgentBarAction::SwitchAccount),
     None,
     Some(TerminalAgentBarAction::ExportTranscript),
 ];
@@ -683,9 +701,18 @@ impl GhostexGpuiApp {
             ])
             .occlude();
 
+        let switchable_agents = self
+            .agents_sidebar_session_for_terminal(session_id)
+            .map(|session| session.switchable_agents.clone())
+            .unwrap_or_default();
         for row in TERMINAL_AGENT_BAR_MENU_ROWS {
             match row {
                 Some(action) => {
+                    if *action == TerminalAgentBarAction::SwitchAccount
+                        && switchable_agents.is_empty()
+                    {
+                        continue;
+                    }
                     if let Some(heading) = terminal_agent_bar_menu_group_heading(*action) {
                         menu = menu.child(terminal_agent_bar_menu_group_label(heading));
                     }
@@ -697,6 +724,14 @@ impl GhostexGpuiApp {
                     menu = menu.child(terminal_agent_bar_menu_separator());
                 }
             }
+        }
+        if self.agents_terminal_action_bar_account_submenu_open && !switchable_agents.is_empty() {
+            menu = menu.child(self.render_terminal_agent_bar_account_submenu(
+                session_id,
+                &switchable_agents,
+                suffix,
+                cx,
+            ));
         }
 
         menu.into_any_element()
@@ -710,10 +745,12 @@ impl GhostexGpuiApp {
         self.agents_terminal_action_bar_menu_session =
             (self.agents_terminal_action_bar_menu_session != Some(session_id))
                 .then_some(session_id);
+        self.agents_terminal_action_bar_account_submenu_open = false;
         cx.notify();
     }
 
     pub(crate) fn close_terminal_agent_action_bar_menu(&mut self, cx: &mut gpui::Context<Self>) {
+        self.agents_terminal_action_bar_account_submenu_open = false;
         if self
             .agents_terminal_action_bar_menu_session
             .take()
@@ -721,6 +758,111 @@ impl GhostexGpuiApp {
         {
             cx.notify();
         }
+    }
+
+    /// The Switch Account flyout: one row per compatible account. Picking one
+    /// closes the menu and hands the agent id to the sidebar runtime, which
+    /// asks gxserver to rewrite the row and then runs its Full reload.
+    fn render_terminal_agent_bar_account_submenu(
+        &self,
+        session_id: TerminalSessionId,
+        switchable_agents: &[GpuiSwitchableSessionAgent],
+        suffix: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let mut submenu = div()
+            .id(format!(
+                "ghostex-gpui-terminal-agent-bar-account-submenu-{suffix}"
+            ))
+            .absolute()
+            .right(px(
+                TERMINAL_AGENT_BAR_MENU_WIDTH + TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_GAP
+            ))
+            .bottom_0()
+            .w(px(TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_WIDTH))
+            .flex()
+            .flex_col()
+            .p(px(5.0))
+            .rounded(px(10.0))
+            .border_1()
+            .border_color(rgb(TERMINAL_AGENT_BAR_MENU_BORDER))
+            .bg(rgb(TERMINAL_AGENT_BAR_MENU_BACKGROUND))
+            .shadow(vec![
+                BoxShadow::new(
+                    px(0.0),
+                    px(10.0),
+                    Rgba {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.45,
+                    }
+                    .into(),
+                )
+                .blur_radius(px(22.0)),
+            ])
+            .occlude();
+        for (index, agent) in switchable_agents.iter().enumerate() {
+            let agent_id = agent.agent_id.clone();
+            let icon = agent
+                .icon
+                .and_then(workspace_tab_agent_icon_path)
+                .map(|icon_path| {
+                    svg()
+                        .flex_shrink_0()
+                        .size(px(TERMINAL_AGENT_BAR_MENU_ICON_SIZE))
+                        .path(icon_path)
+                        .text_color(rgb(workspace_tab_agent_icon_accent_color(
+                            agent.icon.unwrap_or_default(),
+                        )))
+                        .into_any_element()
+                })
+                .unwrap_or_else(|| {
+                    terminal_agent_bar_icon(
+                        TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON,
+                        TERMINAL_AGENT_BAR_MENU_ICON_SIZE,
+                        TERMINAL_AGENT_BAR_ICON_COLOR,
+                    )
+                });
+            submenu = submenu.child(
+                h_flex()
+                    .id(format!(
+                        "ghostex-gpui-terminal-agent-bar-account-{index}-{suffix}"
+                    ))
+                    .w_full()
+                    .items_center()
+                    .gap(px(9.0))
+                    .px(px(9.0))
+                    .py(px(6.0))
+                    .rounded(px(7.0))
+                    .cursor_default()
+                    .text_size(px(13.0))
+                    .text_color(rgb(TERMINAL_AGENT_BAR_MENU_TEXT_COLOR))
+                    .hover(|this| this.bg(rgb(TERMINAL_AGENT_BAR_HOVER_BACKGROUND)))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
+                            window.prevent_default();
+                            cx.stop_propagation();
+                            this.close_terminal_agent_action_bar_menu(cx);
+                            let _ = this.dispatch_gpui_workspace_terminal_switch_account(
+                                session_id, &agent_id, cx,
+                            );
+                            cx.notify();
+                        }),
+                    )
+                    .child(icon)
+                    .child(
+                        div()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_ellipsis()
+                            .child(agent.name.clone()),
+                    ),
+            );
+        }
+        submenu.into_any_element()
     }
 
     /// Every bar control runs through here. The pane is focused first because
@@ -737,6 +879,14 @@ impl GhostexGpuiApp {
     ) {
         if action == TerminalAgentBarAction::ToggleMenu {
             self.toggle_terminal_agent_action_bar_menu(session_id, cx);
+            return;
+        }
+        // The Switch Account row only opens its flyout; the menu stays up so
+        // the account rows have somewhere to be.
+        if action == TerminalAgentBarAction::SwitchAccount {
+            self.agents_terminal_action_bar_account_submenu_open =
+                !self.agents_terminal_action_bar_account_submenu_open;
+            cx.notify();
             return;
         }
         self.close_terminal_agent_action_bar_menu(cx);
@@ -1070,6 +1220,15 @@ impl GhostexGpuiApp {
                         .text_color(rgb(TERMINAL_AGENT_BAR_SESSION_ID_COLOR))
                         .child(shortcut),
                 )
+            })
+            .when(action == TerminalAgentBarAction::SwitchAccount, |this| {
+                // Submenu affordance; points left because that is where the
+                // flyout opens.
+                this.child(terminal_agent_bar_icon(
+                    TERMINAL_AGENT_BAR_SUBMENU_CHEVRON_ICON,
+                    12.0,
+                    TERMINAL_AGENT_BAR_SESSION_ID_COLOR,
+                ))
             })
             .into_any_element()
     }

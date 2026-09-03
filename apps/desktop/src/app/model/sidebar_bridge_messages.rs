@@ -5,6 +5,16 @@
 
 use crate::*;
 
+/// One account a session can be resumed under, as published by the owning
+/// gxserver on the presentation session and forwarded verbatim by the sidebar
+/// runtime (CDXC:SwitchAccount 2026-09-03). `icon` is the sidebar agent icon id.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GpuiSwitchableSessionAgent {
+    pub(crate) agent_id: String,
+    pub(crate) icon: Option<&'static str>,
+    pub(crate) name: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) activity: AgentTerminalActivity,
@@ -24,6 +34,9 @@ pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) presentation_state: TerminalSessionPresentationState,
     pub(crate) has_session_note: bool,
     pub(crate) stashed_prompt_count: u64,
+    /// Empty when there is no compatible account, which hides the terminal
+    /// action bar's "Switch Account" row.
+    pub(crate) switchable_agents: Vec<GpuiSwitchableSessionAgent>,
     pub(crate) title: String,
 }
 

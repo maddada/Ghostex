@@ -250,16 +250,57 @@ impl GhostexGpuiApp {
         key: &GpuiLocalWorkspaceSessionKey,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        self.dispatch_gpui_workspace_session_key_runtime_action_with_agent(action, key, None, cx)
+    }
+
+    /// CDXC:SwitchAccount 2026-09-03: Switch Account from the terminal action
+    /// bar or the chat composer, addressed like Fork / Full reload but carrying
+    /// the picked agent id, which the runtime forwards to
+    /// `/api/switchSessionAgent` before running its Full reload.
+    pub(crate) fn dispatch_gpui_workspace_terminal_switch_account(
+        &mut self,
+        shell_session_id: TerminalSessionId,
+        agent_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(key) = self
+            .local_workspace_session_mappings
+            .iter()
+            .find_map(|(key, mapped)| (*mapped == shell_session_id).then(|| key.clone()))
+        else {
+            return false;
+        };
+        self.dispatch_gpui_workspace_session_key_runtime_action_with_agent(
+            "switchSessionAgent",
+            &key,
+            Some(agent_id),
+            cx,
+        )
+    }
+
+    fn dispatch_gpui_workspace_session_key_runtime_action_with_agent(
+        &mut self,
+        action: &str,
+        key: &GpuiLocalWorkspaceSessionKey,
+        agent_id: Option<&str>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
         let Some(sidebar) = self.sidebar.clone() else {
             return false;
         };
-        let message = serde_json::json!({
+        let mut message = serde_json::json!({
             "action": action,
             "projectId": key.project_id,
             "sessionId": key.session_id,
             "type": GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_TYPE,
             "version": GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_VERSION,
         });
+        if let (Some(agent_id), Some(object)) = (agent_id, message.as_object_mut()) {
+            object.insert(
+                "agentId".to_string(),
+                serde_json::Value::String(agent_id.to_string()),
+            );
+        }
         let script = gpui_workspace_terminal_runtime_action_script(&message);
         sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }

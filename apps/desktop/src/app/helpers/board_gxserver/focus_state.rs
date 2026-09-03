@@ -169,6 +169,8 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             "hasSessionNote",
             "sessionId",
             "stashedPromptCount",
+            // CDXC:SwitchAccount 2026-09-03: present-only, daemon-resolved rows.
+            "switchableAgents",
             "title",
         ],
     )?;
@@ -227,6 +229,20 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             .filter(|count| *count <= 200)
             .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?,
     };
+    let switchable_agents = match object.get("switchableAgents") {
+        None | Some(serde_json::Value::Null) => Vec::new(),
+        Some(value) => {
+            let rows = value
+                .as_array()
+                .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?;
+            if rows.len() > 64 {
+                return Err(GpuiGxserverPresentationFocusStateContractError::MalformedField);
+            }
+            rows.iter()
+                .map(gxserver_switchable_session_agent_from_value)
+                .collect::<Result<Vec<_>, _>>()?
+        }
+    };
     let presentation_state = if is_sleeping {
         TerminalSessionPresentationState::Sleeping
     } else {
@@ -266,7 +282,30 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
         presentation_state,
         has_session_note,
         stashed_prompt_count,
+        switchable_agents,
         title,
+    })
+}
+
+fn gxserver_switchable_session_agent_from_value(
+    value: &serde_json::Value,
+) -> Result<GpuiSwitchableSessionAgent, GpuiGxserverPresentationFocusStateContractError> {
+    let object = gpui_gxserver_focus_contract_object(value)?;
+    reject_unexpected_gxserver_focus_contract_keys(object, &["agentId", "icon", "name"])?;
+    let bounded_text =
+        |key: &str| -> Result<String, GpuiGxserverPresentationFocusStateContractError> {
+            let text = json_string_field(object, key)
+                .map(str::trim)
+                .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?;
+            if text.is_empty() || text.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS {
+                return Err(GpuiGxserverPresentationFocusStateContractError::MalformedField);
+            }
+            Ok(text.to_string())
+        };
+    Ok(GpuiSwitchableSessionAgent {
+        agent_id: bounded_text("agentId")?,
+        icon: gpui_sidebar_agent_icon(json_string_field(object, "icon")),
+        name: bounded_text("name")?,
     })
 }
 

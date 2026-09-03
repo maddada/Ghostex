@@ -15,6 +15,7 @@ import {
   IconPencil,
   IconRefresh,
   IconStackPush,
+  IconSwitchHorizontal,
   IconTerminal2,
   type Icon as TablerIcon,
 } from '@tabler/icons-react';
@@ -29,12 +30,16 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu';
 import { cn } from '@/packages/components/utils';
 import type { GxserverReadSessionTerminalTailResult } from '@/packages/shared/gxserver-protocol';
 import { AppTooltip } from '../app-tooltip';
 import { formatSidebarHotkeyLabel } from '../hotkey-label';
+import { SessionChatHostActionAgentIcon } from './session-chat-host-action-agent-icon';
 import type { SessionChatHostAction, SessionChatHostActions } from './session-chat-host-actions';
 import { sessionChatSummaryToggleHotkey } from './session-chat-summary-override';
 import { formatSessionTerminalTailPreview, useSessionTerminalTail } from './use-session-terminal-tail';
@@ -46,7 +51,7 @@ import { formatSessionTerminalTailPreview, useSessionTerminalTail } from './use-
 const COMPOSER_MENU_EXCLUDED_HOST_ACTION_IDS = new Set(['attachPath', 'promptEditor', 'stashPrompt', 'stashedPrompts']);
 
 /** Per-session lifecycle actions, shown under the menu's "Agent" heading. */
-const AGENT_HOST_ACTION_IDS = new Set(['fork', 'fullReload', 'rename', 'sleep']);
+const AGENT_HOST_ACTION_IDS = new Set(['fork', 'fullReload', 'rename', 'sleep', 'switchAccount']);
 
 const HOST_ACTION_ICONS: Record<string, TablerIcon> = {
   closeAfterDone: IconClock,
@@ -55,6 +60,7 @@ const HOST_ACTION_ICONS: Record<string, TablerIcon> = {
   fork: IconGitBranch,
   fullReload: IconRefresh,
   rename: IconPencil,
+  switchAccount: IconSwitchHorizontal,
 };
 
 // Copied verbatim from apps/desktop/assets/titlebar/moon.svg (the same glyph the
@@ -217,13 +223,34 @@ export function SessionChatComposerActions({
     }
     hostActions?.onAction?.(action.id);
   };
-  const hostActionMenuItem = (action: SessionChatHostAction) => (
-    <DropdownMenuItem key={action.id} onClick={() => runHostAction(action)}>
-      {hostActionIcon(action.id)}
-      {action.label}
-      {showShortcutLabels && action.shortcut ? <DropdownMenuShortcut>{action.shortcut}</DropdownMenuShortcut> : null}
-    </DropdownMenuItem>
-  );
+  const hostActionMenuItem = (action: SessionChatHostAction) =>
+    action.items ? (
+      /*
+      CDXC:SwitchAccount 2026-09-03:
+      A submenu action (Switch Account) opens its rows the way the model pill's
+      "Switch Agent CLI" does; picking a row hands the row id back as the value.
+      */
+      <DropdownMenuSub key={action.id}>
+        <DropdownMenuSubTrigger>
+          {hostActionIcon(action.id)}
+          {action.label}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className='w-56'>
+          {action.items.map((item) => (
+            <DropdownMenuItem key={item.id} onClick={() => hostActions?.onAction?.(action.id, item.id)}>
+              <SessionChatHostActionAgentIcon icon={item.icon} />
+              <span className='truncate'>{item.label}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    ) : (
+      <DropdownMenuItem key={action.id} onClick={() => runHostAction(action)}>
+        {hostActionIcon(action.id)}
+        {action.label}
+        {showShortcutLabels && action.shortcut ? <DropdownMenuShortcut>{action.shortcut}</DropdownMenuShortcut> : null}
+      </DropdownMenuItem>
+    );
   /*
   The host's Delayed Actions entry and the composer's own open the same surface,
   so only one of them may render. The host's is preferred as the click target
@@ -236,7 +263,9 @@ export function SessionChatComposerActions({
     (action) =>
       action.id !== 'delayedActions' &&
       action.id !== 'closeAfterDone' &&
-      !COMPOSER_MENU_EXCLUDED_HOST_ACTION_IDS.has(action.id)
+      !COMPOSER_MENU_EXCLUDED_HOST_ACTION_IDS.has(action.id) &&
+      // A submenu with nothing to pick is hidden rather than shown empty.
+      (action.items === undefined || action.items.length > 0)
   );
   const agentHostActions = foldedHostActions.filter((action) => AGENT_HOST_ACTION_IDS.has(action.id));
   const otherHostActions = foldedHostActions.filter((action) => !AGENT_HOST_ACTION_IDS.has(action.id));

@@ -492,6 +492,12 @@ export function createGxserverPresentationSidebarSession({
       typeof presentation.stashedPromptCount === 'number' && presentation.stashedPromptCount > 0
         ? Math.floor(presentation.stashedPromptCount)
         : undefined,
+    // CDXC:SwitchAccount 2026-09-03: daemon-resolved, copied through; an empty
+    // list collapses to absent so the submenu is hidden rather than blank.
+    switchableAgents:
+      presentation.switchableAgents && presentation.switchableAgents.length > 0
+        ? presentation.switchableAgents
+        : undefined,
     sessionNumber: String(index + 1),
     sessionPersistenceName: presentation.zmxName,
     sessionPersistenceProvider: presentation.sessionPersistenceProvider,

@@ -41,6 +41,12 @@ export interface WorkspaceSession {
   queuedPromptFailedCount?: number;
   /** Saved prompts associated with this provider conversation. */
   stashedPromptCount?: number;
+  /**
+   * CDXC:SwitchAccount 2026-09-03:
+   * Daemon-resolved same-family accounts this session can be resumed under;
+   * the terminal bar's "Switch Account" rows. Absent when none.
+   */
+  switchableAgents?: readonly { agentId: string; icon: string; name: string }[];
   /** Terminal↔chat body toggle; defaults to "terminal" when absent. */
   sessionSurfaceMode?: SessionSurfaceMode;
 }

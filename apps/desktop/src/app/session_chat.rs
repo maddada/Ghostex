@@ -539,6 +539,25 @@ impl GhostexGpuiApp {
             );
             return;
         }
+        /*
+        CDXC:SwitchAccount 2026-09-03:
+        Switch Account carries the picked agent id, so it is not a plain
+        `TerminalAgentActionRequest`; it takes the same sidebar-runtime route
+        the terminal bar's submenu takes, and the runtime does the daemon call
+        plus the Full reload.
+        */
+        if action == "switchAccount" {
+            let Some(agent_id) = message
+                .get("agentId")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|agent_id| !agent_id.is_empty())
+            else {
+                return;
+            };
+            let _ = self.dispatch_gpui_workspace_terminal_switch_account(session_id, agent_id, cx);
+            return;
+        }
         let request = match action {
             "rename" => TerminalAgentActionRequest::Rename,
             "sleep" => TerminalAgentActionRequest::Sleep,

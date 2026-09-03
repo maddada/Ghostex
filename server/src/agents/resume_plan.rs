@@ -517,7 +517,7 @@ pub(crate) fn build_agent_resume_fallback_command(input: &AgentResumeInput) -> O
 /// declares (custom config icon first, then the session's launch icon), using
 /// the same icon-to-id mapping as accept-all resolution. An unresolvable id is
 /// returned unchanged so it still fails `restorable_agent_id` explicitly.
-fn resume_agent_family_id(
+pub(crate) fn resume_agent_family_id(
     agent_id: Option<String>,
     agent_config: &Map<String, Value>,
     launch_settings: &Map<String, Value>,
