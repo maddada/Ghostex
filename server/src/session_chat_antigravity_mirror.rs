@@ -122,7 +122,7 @@ const USER_REQUEST_CLOSE: &str = "</USER_REQUEST>";
 
 /// The prompt the user typed, without the harness's metadata envelope. A
 /// record with no envelope is taken whole.
-fn antigravity_user_text(content: &str) -> String {
+pub(crate) fn antigravity_user_text(content: &str) -> String {
     let Some(start) = content.find(USER_REQUEST_OPEN) else {
         return content.trim().to_string();
     };

@@ -255,7 +255,7 @@ export type StoredSidebarAgent = {
 export function sidebarAgentIconSupportsSessionHistoryTitleGeneration(
   icon: SidebarAgentIcon | string | undefined
 ): boolean {
-  return icon === 'claude' || icon === 'codex' || icon === 'cursor-cli';
+  return icon === 'claude' || icon === 'codex' || icon === 'cursor-cli' || icon === 'antigravity-cli';
 }
 
 export function createSidebarAgentSelectItems(

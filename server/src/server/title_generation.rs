@@ -1174,7 +1174,7 @@ pub(crate) async fn handle_generate_session_title_http(
                     DomainStateError {
                         code: "invalidParams",
                         message:
-                            "generateSessionTitle requires text for this agent; only Claude Code, Codex, and Cursor CLI sessions can generate from recent messages."
+                            "generateSessionTitle requires text for this agent; only Claude Code, Codex, Cursor CLI, and Antigravity CLI sessions can generate from recent messages."
                                 .to_string(),
                     },
                 );
@@ -1534,6 +1534,10 @@ pub(crate) fn first_prompt_auto_title_strategy(agent_name: Option<&str>) -> Opti
     match normalize_agent_name(agent_name).as_deref() {
         Some("claude") => Some("sendBareRenameCommand"),
         Some("codex") => Some("agentAutoTitle"),
+        // Names every conversation itself about a second after the first
+        // prompt and writes it to `annotations/<id>.pbtxt`, the same file its
+        // `/rename` rewrites; the metadata sync adopts both.
+        Some("antigravity") => Some("agentAutoTitle"),
         // Names its own sessions in its state database, in two stages, and the
         // metadata sync adopts both. Generating a second title here would race
         // that with a worse name.
@@ -1615,6 +1619,8 @@ pub(crate) fn is_generic_agent_session_title(
         "terminal session",
         "agent",
         "agent session",
+        "antigravity cli",
+        "antigravity cli session",
         "claude",
         "claude code",
         "claude session",

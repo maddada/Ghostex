@@ -35,6 +35,7 @@ pub fn recent_session_user_prompts(
         return Vec::new();
     };
     match agent {
+        "antigravity" => antigravity_user_prompts(&lines),
         "claude" => claude_user_prompts(&lines),
         "codex" => codex_user_prompts(&lines),
         "cursor" => cursor_user_prompts(&lines),
@@ -43,7 +44,20 @@ pub fn recent_session_user_prompts(
 }
 
 pub fn agent_supports_session_history_title_source(agent: Option<&str>) -> bool {
-    matches!(agent, Some("claude" | "codex" | "cursor"))
+    matches!(agent, Some("antigravity" | "claude" | "codex" | "cursor"))
+}
+
+/*
+CDXC:SessionChatAntigravity 2026-09-03:
+Antigravity's hooks carry the conversation id and the step log path but never
+the prompt text, so the hook receiver reads the first prompt from the log
+itself (the `USER_INPUT` step is appended the moment the user submits, before
+`PreInvocation` fires). Same extractor as the title source below.
+*/
+pub(crate) fn first_antigravity_user_prompt(transcript_path: &str) -> Option<String> {
+    let path = expand_home(transcript_path.trim());
+    let lines = read_lines_lossy(&path)?;
+    antigravity_user_prompts(&lines).into_iter().next()
 }
 
 pub(crate) fn resolve_session_transcript_path(
@@ -64,6 +78,9 @@ pub(crate) fn resolve_session_transcript_path(
         .map(str::trim)
         .filter(|value| !value.is_empty())?;
     match agent {
+        "antigravity" => {
+            crate::session_chat_antigravity_mirror::find_antigravity_transcript(session_id)
+        }
         "claude" => find_claude_transcript(session_id),
         "codex" => find_codex_transcript(session_id),
         "cursor" => find_cursor_transcript(session_id),
@@ -140,6 +157,30 @@ fn newest_file(candidates: Vec<PathBuf>) -> Option<PathBuf> {
             .and_then(|metadata| metadata.modified())
             .unwrap_or(SystemTime::UNIX_EPOCH)
     })
+}
+
+/// Antigravity step log: `USER_EXPLICIT` / `USER_INPUT` steps whose `content`
+/// wraps the typed prompt in `<USER_REQUEST>` beside harness metadata tags.
+fn antigravity_user_prompts(lines: &[String]) -> Vec<String> {
+    let mut prompts: Vec<String> = Vec::new();
+    for line in lines {
+        let Some(item) = parse_json_line(line) else {
+            continue;
+        };
+        if item.get("source").and_then(Value::as_str) != Some("USER_EXPLICIT")
+            || item.get("type").and_then(Value::as_str) != Some("USER_INPUT")
+        {
+            continue;
+        }
+        let Some(content) = item.get("content").and_then(Value::as_str) else {
+            continue;
+        };
+        let text = crate::session_chat_antigravity_mirror::antigravity_user_text(content);
+        if !text.is_empty() {
+            prompts.push(text);
+        }
+    }
+    prompts
 }
 
 fn claude_user_prompts(lines: &[String]) -> Vec<String> {

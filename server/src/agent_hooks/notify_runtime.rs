@@ -94,6 +94,25 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         payload.get("input"),
         nested_get(&payload, &["prompt", "text"]),
     ]);
+    /*
+    CDXC:SessionChatAntigravity 2026-09-03:
+    Antigravity's hook payloads name no event and carry no prompt: every event
+    is `{conversationId, transcriptPath, modelName, …}` plus a `toolCall` or an
+    `invocationNum`. The step log it names already holds the submitted prompt
+    by the time the first hook fires, so the prompt is read from there, and
+    its presence is what marks the event as a prompt event.
+    */
+    let prompt = prompt.or_else(|| {
+        (agent_key == "antigravity")
+            .then(|| {
+                transcript_path
+                    .as_deref()
+                    .and_then(crate::agent_transcripts::first_antigravity_user_prompt)
+            })
+            .flatten()
+    });
+    let prompt_event =
+        is_prompt_event(&event_name) || (agent_key == "antigravity" && prompt.is_some());
 
     ensure_state_default(&mut state, "status", "idle");
     if read_state_string(&state, "statusUpdatedAt").is_none() {
@@ -138,7 +157,7 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         update_hook_status(&mut state, &next_activity);
     }
 
-    if is_prompt_event(&event_name) {
+    if prompt_event {
         if let Some(prompt) = prompt
             .clone()
             .filter(|prompt| is_actual_user_message_prompt(prompt))
@@ -437,6 +456,13 @@ fn post_gxserver_hook_event(
     */
     if let Some(tool_name) = first_string([payload.get("tool_name"), payload.get("toolName")]) {
         params.insert("toolName".to_string(), json!(tool_name));
+    }
+    // The call id pairs a PostToolUse with the PreToolUse that stored a
+    // question/approval card, so only the asking call's completion retires it
+    // (CDXC:SessionChatQuestionCardLifecycle 2026-09-03).
+    if let Some(tool_use_id) = first_string([payload.get("tool_use_id"), payload.get("toolUseId")])
+    {
+        params.insert("toolUseId".to_string(), json!(tool_use_id));
     }
     /*
     CDXC:SessionChatPromptQueue 2026-08-24:

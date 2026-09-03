@@ -207,6 +207,17 @@ pub(crate) enum AgentMetadataTitleSource {
         agent_session_id: String,
         state_db_path: PathBuf,
     },
+    /*
+    CDXC:SessionChatAntigravity 2026-09-03:
+    Antigravity names every conversation itself about a second after the first
+    prompt and writes `title:"…"` to `annotations/<conversationId>.pbtxt`
+    under its app data dir; its `/rename <name>` rewrites the same file. That
+    file is the only live copy of the name (the summaries database is written
+    after the CLI exits), so it is the record the sidebar follows.
+    */
+    AntigravityAnnotation {
+        annotation_path: PathBuf,
+    },
 }
 
 impl AgentMetadataTitleSource {
@@ -217,6 +228,7 @@ impl AgentMetadataTitleSource {
                 index_paths.iter().map(PathBuf::as_path).collect()
             }
             Self::HermesStateDb { state_db_path, .. } => vec![state_db_path.as_path()],
+            Self::AntigravityAnnotation { annotation_path } => vec![annotation_path.as_path()],
         }
     }
 }
@@ -236,6 +248,9 @@ pub(crate) fn read_agent_metadata_title(
         AgentMetadataTitleSource::HermesStateDb {
             agent_session_id, ..
         } => read_hermes_state_db_title(&agent_session_id),
+        AgentMetadataTitleSource::AntigravityAnnotation { annotation_path } => {
+            read_antigravity_annotation_title(&annotation_path)
+        }
     }
 }
 
@@ -286,6 +301,17 @@ pub(crate) fn agent_metadata_title_source(
             Some(AgentMetadataTitleSource::HermesStateDb {
                 agent_session_id: agent_session_id.to_string(),
                 state_db_path: crate::session_chat_hermes::hermes_state_db_path(),
+            })
+        }
+        Some("antigravity")
+            if crate::session_chat_antigravity_mirror::is_safe_antigravity_session_id(
+                agent_session_id,
+            ) =>
+        {
+            Some(AgentMetadataTitleSource::AntigravityAnnotation {
+                annotation_path: crate::session_chat_antigravity_mirror::antigravity_app_data_dir()
+                    .join("annotations")
+                    .join(format!("{agent_session_id}.pbtxt")),
             })
         }
         _ => None,
@@ -465,6 +491,70 @@ pub(crate) fn read_hermes_state_db_title(agent_session_id: &str) -> Option<Agent
         title,
         updated_at: None,
     })
+}
+
+/// `title:"…"` from the annotation text proto. The value is a proto string
+/// literal, so the usual backslash escapes are decoded; a file without a
+/// title field (or with an empty one) means the conversation has no name yet.
+pub(crate) fn read_antigravity_annotation_title(
+    annotation_path: &Path,
+) -> Option<AgentMetadataTitle> {
+    let text = fs::read_to_string(annotation_path).ok()?;
+    let raw = parse_pbtxt_string_field(&text, "title")?;
+    let title = normalize_metadata_title(Some(&Value::String(raw)))?;
+    let modified_ns = fs::metadata(annotation_path)
+        .ok()
+        .and_then(|metadata| metadata.modified().ok())
+        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    Some(AgentMetadataTitle {
+        agent_session_id: None,
+        provider: "antigravity-annotation",
+        record_revision: Some(format!(
+            "{}:{modified_ns}",
+            annotation_path.to_string_lossy()
+        )),
+        title,
+        updated_at: None,
+    })
+}
+
+fn parse_pbtxt_string_field(text: &str, field: &str) -> Option<String> {
+    let mut rest = text;
+    loop {
+        let start = rest.find(field)?;
+        let after = &rest[start + field.len()..];
+        let boundary_ok = start == 0
+            || !rest[..start]
+                .chars()
+                .next_back()
+                .is_some_and(|previous| previous.is_ascii_alphanumeric() || previous == '_');
+        let after_trimmed = after.trim_start();
+        if boundary_ok && after_trimmed.starts_with(':') {
+            let value = after_trimmed[1..].trim_start();
+            let quote = value.chars().next()?;
+            if quote != '"' && quote != '\'' {
+                return None;
+            }
+            let mut decoded = String::new();
+            let mut chars = value[1..].chars();
+            while let Some(character) = chars.next() {
+                match character {
+                    '\\' => match chars.next()? {
+                        'n' => decoded.push('\n'),
+                        't' => decoded.push('\t'),
+                        'r' => decoded.push('\r'),
+                        other => decoded.push(other),
+                    },
+                    character if character == quote => return Some(decoded),
+                    other => decoded.push(other),
+                }
+            }
+            return None;
+        }
+        rest = after;
+    }
 }
 
 /*
