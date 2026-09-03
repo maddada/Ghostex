@@ -28,7 +28,7 @@ import type {
 } from './types';
 
 export const ADD_PROJECT_STORY_LOCAL_MACHINE: AddProjectMachineOption = {
-  description: 'This Mac',
+  description: 'This computer',
   label: 'Local',
   machineId: 'local',
   platform: 'MacIntel',

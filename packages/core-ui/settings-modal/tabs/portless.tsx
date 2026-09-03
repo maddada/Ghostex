@@ -184,7 +184,7 @@ export function PortlessSettingsAdminActionButton({
   const disabled = availability?.available !== true;
   const disabledReason =
     availability?.unavailableReason === 'localMacOnly'
-      ? 'This action is available only on the local Mac.'
+      ? 'This action is available only on this computer.'
       : availability?.unavailableReason === 'setupNotGhostexOwned'
         ? 'Ghostex can’t change a setup it doesn’t own.'
         : 'No setup change is needed right now.';

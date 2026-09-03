@@ -35,7 +35,7 @@ export const PORTLESS_SETUP_MODAL_COPY: Record<PortlessSetupModalMode, PortlessS
   },
   standaloneReconfigure: {
     body: [
-      'Portless is already installed on this Mac. Ghostex needs to manage the Portless background proxy so it can create stable domains for your projects and worktrees.',
+      'Portless is already installed on this computer. Ghostex needs to manage the Portless background proxy so it can create stable domains for your projects and worktrees.',
       "Reconfiguring will point Portless at Ghostex's state directory. You can cancel, or disable Portless in Settings if you do not want Ghostex to show this again.",
     ],
     dismissLabel: 'Cancel',

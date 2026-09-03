@@ -179,7 +179,7 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
       },
       {
         key: 'keepAwakeAllowDisplaySleep',
-        subtitle: 'Keep the Mac awake but allow the display to turn off.',
+        subtitle: 'Keep the computer awake but allow the display to turn off.',
         title: 'Allow display sleep',
       },
       {
@@ -200,7 +200,7 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
       },
       {
         key: 'keepAwakeWhileWorkingSessions',
-        subtitle: 'Keep the Mac awake while sessions are working and for 20 minutes after.',
+        subtitle: 'Keep the computer awake while sessions are working and for 20 minutes after.',
         title: 'Keep awake for working sessions',
       },
       {
@@ -430,7 +430,8 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
       },
       {
         key: 'accentColor',
-        subtitle: 'Highlight color for accent text, status highlights, and advanced-setting markers. This color is used minimally in the app.',
+        subtitle:
+          'Highlight color for accent text, status highlights, and advanced-setting markers. This color is used minimally in the app.',
         title: 'Accent Color',
       },
       {
