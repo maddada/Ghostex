@@ -1744,7 +1744,17 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
   white-space: nowrap;
 }
 
+/*
+ * CDXC:SidebarMachineTabCounts 2026-09-03:
+ * The tab reuses the group header's count markers, whose colors are custom
+ * properties the header defines on its `.group-collapsed-status-counts`
+ * wrapper. This wrapper is not that class, so it must define the same
+ * properties itself; without them the markers inherited the tab's gray text
+ * instead of orange for working and blue for attention.
+ */
 .reference-sidebar-machine-tab-status {
+  --project-status-attention-color: var(--done-attention-color, #95d7f6);
+  --project-status-working-color: #f8ad07;
   align-items: center;
   display: inline-flex;
   flex: none;

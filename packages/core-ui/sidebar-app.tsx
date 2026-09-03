@@ -93,6 +93,7 @@ import {
   applyEnabledRemoteMachineOrder,
 } from '../shared/ghostex-settings';
 import { SIDEBAR_PROJECT_JUMP_EVENT, type SidebarProjectJumpEventDetail } from '../shared/sidebar-project-jump';
+import { GHOSTEX_DISCORD_URL } from '../shared/sidebar-commands';
 import {
   readRenderedSidebarSessionSlotIds,
   readRenderedSidebarSessionSlots,
@@ -211,8 +212,6 @@ export type SidebarAppProps = {
   vscode: WebviewApi;
   windowScopeId?: string;
 };
-
-const GHOSTEX_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
 
 /**
  * CDXC:SidebarBrowserTabReveal 2026-08-18:
@@ -1557,15 +1556,29 @@ export function SidebarApp({
       ),
     [effectiveGroupIds, effectiveSessionIdsByGroup, groupsById, sessionsById]
   );
-  const referenceProjectsSectionSessionSummary = useMemo(
-    () =>
-      getSidebarSectionSessionSummary(
-        displayedReferenceProjectGroupIds,
-        displayedWorkspaceSessionIdsByGroup,
-        sessionsById
-      ),
-    [displayedReferenceProjectGroupIds, displayedWorkspaceSessionIdsByGroup, sessionsById]
-  );
+  /*
+   * CDXC:SidebarMachineTabCounts 2026-09-03:
+   * The machine tab reports the whole machine, not the sidebar body: every
+   * group that belongs to the machine counts, whatever the selected Space,
+   * search query, tag filter, or hidden state leaves visible below. Groups are
+   * split by their remote machine context, so the local machine is everything
+   * without one (minus the synthetic gxserver-unavailable row).
+   */
+  const machineWideSessionSummariesByMachineId = useMemo(() => {
+    const groupIdsByMachineId: Record<string, string[]> = {};
+    for (const groupId of effectiveGroupIds) {
+      if (groupId === SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID) {
+        continue;
+      }
+      const machineId = groupsById[groupId]?.remoteMachineContext?.machineId ?? LOCAL_SIDEBAR_MACHINE_TAB_ID;
+      (groupIdsByMachineId[machineId] ??= []).push(groupId);
+    }
+    const next: Record<string, SidebarSectionSessionSummary> = {};
+    for (const [machineId, groupIds] of Object.entries(groupIdsByMachineId)) {
+      next[machineId] = getSidebarSectionSessionSummary(groupIds, effectiveSessionIdsByGroup, sessionsById);
+    }
+    return next;
+  }, [effectiveGroupIds, effectiveSessionIdsByGroup, groupsById, sessionsById]);
   const projectCollectionIdByProjectId = useMemo(() => {
     const next = new Map<string, string>();
     for (const collection of projectCollections.collections) {
@@ -1832,13 +1845,6 @@ export function SidebarApp({
         visibleProjectGroupIds.has(groupId)
     );
   }, [displayedReferenceProjectGroupIds, displayedWorkspaceGroupIds, groupsById, remoteProjectGroupIdsByMachineId]);
-  const remoteSectionSessionSummariesByMachineId = useMemo(() => {
-    const next: Record<string, SidebarSectionSessionSummary> = {};
-    for (const [machineId, groupIds] of Object.entries(remoteProjectGroupIdsByMachineId)) {
-      next[machineId] = getSidebarSectionSessionSummary(groupIds, displayedWorkspaceSessionIdsByGroup, sessionsById);
-    }
-    return next;
-  }, [displayedWorkspaceSessionIdsByGroup, remoteProjectGroupIdsByMachineId, sessionsById]);
   const remoteMachines = (settings?.remoteMachines ?? []).filter(isRemoteMachineEnabledInSidebar);
   /*
    * CDXC:RemoteMachines 2026-08-08:
@@ -1887,7 +1893,7 @@ export function SidebarApp({
     const localTab: SidebarMachineTabItem = {
       id: LOCAL_SIDEBAR_MACHINE_TAB_ID,
       label: 'Local',
-      sessionSummary: referenceProjectsSectionSessionSummary,
+      sessionSummary: machineWideSessionSummariesByMachineId[LOCAL_SIDEBAR_MACHINE_TAB_ID],
     };
     return [
       localTab,
@@ -1918,16 +1924,15 @@ export function SidebarApp({
             connectionState === 'disconnected' || connectionState === 'failed'
               ? () => reconnectRemoteMachine(machine.id)
               : undefined,
-          sessionSummary: remoteSectionSessionSummariesByMachineId[machine.id],
+          sessionSummary: machineWideSessionSummariesByMachineId[machine.id],
         };
       }),
     ];
   }, [
-    referenceProjectsSectionSessionSummary,
+    machineWideSessionSummariesByMachineId,
     remoteMachineRuntimeStatuses,
     remoteMachineStatusMessages,
     remoteMachines,
-    remoteSectionSessionSummariesByMachineId,
   ]);
   /*
    * A stored tab whose machine was removed (or was never saved on this host)
@@ -3293,7 +3298,7 @@ export function SidebarApp({
     openPreviousSessions,
     openReferenceAgentsHub,
     openReferenceAutomations,
-    openReferenceMobile,
+    openReferenceRemoteSetup,
     searchPreviousSessionsByPrompt,
     setActiveSessionsSortMode,
     toggleActiveSessionsSortMode,
@@ -3455,7 +3460,7 @@ export function SidebarApp({
               vscode.postMessage({ type: 'openExternalUrl', url: GHOSTEX_DISCORD_URL });
             }}
             onOpenHotkeys={openHotkeys}
-            onOpenMobile={openReferenceMobile}
+            onOpenRemoteSetup={openReferenceRemoteSetup}
             onOpenPowerSettings={openKeepAwakePowerSettings}
             onOpenPreviousSessions={openPreviousSessions}
             onOpenSettings={openSidebarSettings}
