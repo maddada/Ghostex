@@ -1,27 +1,33 @@
 /*
-CDXC:SessionChatTerminalActivity 2026-09-02:
+CDXC:SessionChatTerminalActivity 2026-09-03:
 Claude's `⏺` status rows as transient chat history, and how the transcript
 retires them. The rows exist because the same text can take a while to reach
 the JSONL transcript, so the terminal is the earliest place the chat can read
 it from. They are only ever a stand-in: the moment the transcript carries the
 same turn, the transient row must go, or the reader sees the sentence twice.
 
-Exact text equality used to be the only retirement rule, and it failed in three
-ordinary cases, each of which left a permanent near-duplicate row:
+Two structural facts make retirement deterministic without guessing at
+Claude's wording:
 
-  - the terminal wraps at its width, so a captured status was a cut prefix of
-    the transcript's sentence;
-  - the terminal renders markdown while the transcript stores it, so `**bold**`
-    and bold never compared equal;
-  - a `⏺` row also announces each tool call by its description, which the
-    transcript keeps inside the tool-call input rather than as prose.
+  - gxserver publishes a status as the message's FIRST PARAGRAPH, re-joined
+    from its wrapped rows and stopped at the first blank row (a tool row, a
+    collapsed "Ran 6 shell commands" summary and a second paragraph all sit
+    under the bullet with the same indent, so nothing past the blank can be
+    trusted to be prose). The label is therefore always a prefix of the
+    transcript's text once markdown decoration and whitespace are normalized
+    away, and a prefix match retires it.
+  - Claude Code appends its transcript in order. A status was painted before
+    gxserver sampled it, so its own transcript row is older than any row the
+    agent produced after that sample. Once the transcript holds a row newer
+    than the sample and the status still has no match, its row can never
+    arrive: it was a tool call whose bullet was read before the `⎿` gutter
+    appeared, or a line Claude repainted. That bounds every row's life to
+    "until the agent's next transcript entry" and needs no knowledge of what
+    the row was.
 
-The rules here compare on a rendered-text normalization, accept a prefix as the
-same status (a status is a snapshot of a sentence still being painted), and
-retire tool descriptions against the transcript's tool-call blocks. Rows that
-still could not be reconciled are cleared when the NEXT turn starts, never when
-the current one ends: a turn's transcript may still be catching up at that
-moment, and clearing then would make the text vanish and reappear.
+Tool-call rows (`claude-tool`) never become history at all: the transcript
+writes the call with its result, and the screen paints the description in a
+different form ("Reading …" for "Read …") than the transcript stores.
 */
 
 import type { SessionChatMessage, SessionChatTerminalActivity } from '../../shared/session-chat';
@@ -95,19 +101,15 @@ export function mergeSessionChatTerminalStatus(
   return [...current, transient];
 }
 
-/** A `⏺ Read(path)`-shaped status: the tool name and whatever Claude showed of its arguments. */
-function toolHeader(text: string): { name: string; args: string } | null {
-  const match = /^([A-Za-z][\w-]*)\((.*)\)$/su.exec(text);
-  return match ? { name: match[1], args: sessionChatTerminalStatusText(match[2]) } : null;
-}
-
 interface TranscriptEvidence {
+  /** Normalized text of every transcript turn. */
   texts: string[];
-  toolInputs: string[];
+  /** The newest transcript row's timestamp, whatever its role. */
+  latestTimestamp: number | null;
 }
 
 function transcriptEvidence(transcript: readonly SessionChatMessage[]): TranscriptEvidence {
-  const evidence: TranscriptEvidence = { texts: [], toolInputs: [] };
+  const evidence: TranscriptEvidence = { texts: [], latestTimestamp: null };
   for (const message of transcript) {
     if (message.source !== 'transcript') {
       continue;
@@ -116,64 +118,14 @@ function transcriptEvidence(transcript: readonly SessionChatMessage[]): Transcri
     if (text) {
       evidence.texts.push(text);
     }
-    for (const block of message.blocks) {
-      if (block.type !== 'tool-call') {
-        continue;
-      }
-      const input = block.input;
-      if (input && typeof input === 'object') {
-        const description = (input as { description?: unknown }).description;
-        if (typeof description === 'string' && description.trim()) {
-          evidence.texts.push(sessionChatTerminalStatusText(description));
-        }
-      }
-      try {
-        evidence.toolInputs.push(sessionChatTerminalStatusText(JSON.stringify(input) ?? ''));
-      } catch {
-        // A non-serializable input simply contributes no argument evidence.
-      }
+    if (
+      message.timestamp !== null &&
+      (evidence.latestTimestamp === null || message.timestamp > evidence.latestTimestamp)
+    ) {
+      evidence.latestTimestamp = message.timestamp;
     }
   }
   return evidence;
-}
-
-/** Enough of a tool argument to be a meaningful match rather than a stray word. */
-const TOOL_ARGS_MATCH_MIN_LENGTH = 8;
-
-function isReconciled(text: string, evidence: TranscriptEvidence): boolean {
-  if (evidence.texts.some((candidate) => candidate === text || candidate.startsWith(text))) {
-    return true;
-  }
-  /*
-  A tool header is matched on its arguments only, never on the tool name: an
-  earlier Bash call in the transcript says nothing about whether THIS one has
-  landed, and the name-only rule would retire the in-flight call precisely
-  while the transcript is behind. Short arguments (`Bash(ls)`) stay until the
-  next turn starts rather than risk matching a stray substring.
-  */
-  const header = toolHeader(text);
-  return (
-    header !== null &&
-    header.args.length >= TOOL_ARGS_MATCH_MIN_LENGTH &&
-    evidence.toolInputs.some((input) => input.includes(header.args))
-  );
-}
-
-/**
- * When the transcript last saw a user prompt. Everything the terminal painted
- * before that prompt belongs to a turn whose transcript is complete by now.
- */
-function latestTranscriptPromptTimestamp(transcript: readonly SessionChatMessage[]): number | null {
-  let latest: number | null = null;
-  for (const message of transcript) {
-    if (message.source !== 'transcript' || message.role !== 'user' || message.timestamp === null) {
-      continue;
-    }
-    if (latest === null || message.timestamp > latest) {
-      latest = message.timestamp;
-    }
-  }
-  return latest;
 }
 
 /** The transient rows the transcript has not caught up with yet. */
@@ -185,11 +137,11 @@ export function unreconciledSessionChatTerminalStatuses(
     return [];
   }
   const evidence = transcriptEvidence(transcript);
-  const promptTimestamp = latestTranscriptPromptTimestamp(transcript);
   return statuses.filter((status) => {
-    if (promptTimestamp !== null && status.timestamp !== null && status.timestamp < promptTimestamp) {
+    if (evidence.latestTimestamp !== null && status.timestamp !== null && status.timestamp < evidence.latestTimestamp) {
       return false;
     }
-    return !isReconciled(messageText(status), evidence);
+    const text = messageText(status);
+    return !evidence.texts.some((candidate) => candidate === text || candidate.startsWith(text));
   });
 }

@@ -57,6 +57,13 @@ pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
 /// Claude Code's current assistant status, not yet flushed to transcript JSONL.
 pub const SESSION_CHAT_ACTIVITY_CLAUDE_STATUS: &str = "claude-status";
 
+/// The `⏺` row of a Claude Code tool call: the row has the `⎿` output gutter
+/// directly under it. Shown as live work only, never as chat history — the
+/// transcript writes the call itself once its result lands, and the screen
+/// paints the description in a different form ("Reading …" for "Read …")
+/// than the transcript stores, so the row could never be matched against it.
+pub const SESSION_CHAT_ACTIVITY_CLAUDE_TOOL: &str = "claude-tool";
+
 /// Cursor Agent's live reasoning/composition row before its transcript flushes.
 pub const SESSION_CHAT_ACTIVITY_CURSOR_THINKING: &str = "cursor-thinking";
 
@@ -512,8 +519,8 @@ on rows indented by two spaces, and a scan that reads only the marker row
 publishes a label cut mid-sentence. The client showed that cut prefix next to
 the transcript's full sentence for the rest of the session, because a prefix
 never text-matches the sentence it was cut from. Keeping `indent` and
-`after_blank` lets the detector re-join exactly the rows that belong to the
-status line and nothing below it.
+`after_blank` lets the detector re-join exactly the wrapped rows and nothing
+below them.
 */
 struct ScreenRow {
     /// Trimmed text, exactly what `normalized_screen_lines` would hold.
@@ -555,43 +562,60 @@ const CLAUDE_STATUS_CONTINUATION_INDENT: usize = 2;
 /// starts the tool block, so it ends the status text.
 const CLAUDE_TOOL_OUTPUT_MARKER: char = '⎿';
 
-/// A row that opens a markdown list item keeps its own line when re-joined, so
-/// the list survives instead of running into the sentence above it.
-fn starts_list_item(text: &str) -> bool {
-    if text.starts_with("- ") || text.starts_with("* ") || text.starts_with("• ") {
-        return true;
-    }
-    let digits = text.trim_start_matches(|ch: char| ch.is_ascii_digit());
-    digits.len() < text.len() && (digits.starts_with(". ") || digits.starts_with(") "))
+/// A `⏺` row read across its wrapped extent.
+struct ClaudeStatusExtent {
+    /// The row's text with its wrapped continuation rows joined back on.
+    label: String,
+    /// The `⎿` gutter sits directly under the extent: this is a tool call.
+    opens_tool_block: bool,
 }
 
 /*
-The whole status Claude painted, re-joined from its wrapped rows. Continuation
-rows are the indented ones directly below the `⏺` row; a paragraph break inside
-the message survives as one, so the label reads like the message rather than
-one run-on line. The text stops at the first row that is not indented (the
-separator, the prompt, a tip, the statusline), at another marker row, or at the
-`⎿` gutter that opens a tool block.
+CDXC:SessionChatTerminalActivity 2026-09-03:
+Only rows that are physically contiguous with the `⏺` row are part of it. A
+blank row ends the status even though what follows is indented the same way,
+because Claude paints everything that belongs to the turn under that bullet
+with the same two-space indent:
+
+    ⏺ Found a lead in the daemon log: the visible claim arrives, then a hidden
+      claim follows within the same second.
+
+      Running cd /Users/madda/dev/_active/Ghostex; rg -n "zmx_c…
+      ⎿  $ cd /Users/madda/dev/_active/Ghostex; rg -n …
+
+      Ran 6 shell commands
+
+The in-flight tool row (whose own bullet blinks on and off), the collapsed
+"Ran 6 shell commands" summary, and a second paragraph of the message are
+indistinguishable by layout. Joining past the blank once swallowed the tool row
+into the status, which then never matched the transcript's sentence and
+produced a fresh near-duplicate for every tool that followed. Stopping at the
+blank makes the label the message's first paragraph: always a prefix of the
+transcript text, so the client can retire it by prefix and never needs to
+guess what the indented rows below were.
 */
-fn joined_claude_status_line(rows: &[ScreenRow], index: usize) -> String {
+fn claude_status_extent(rows: &[ScreenRow], index: usize) -> ClaudeStatusExtent {
     let mut label = rows[index].text.clone();
-    for row in &rows[index + 1..] {
-        if row.indent < CLAUDE_STATUS_CONTINUATION_INDENT
+    let mut next = index + 1;
+    while let Some(row) = rows.get(next) {
+        if row.after_blank
+            || row.indent < CLAUDE_STATUS_CONTINUATION_INDENT
             || row.text.starts_with(CLAUDE_TOOL_OUTPUT_MARKER)
             || activity_from_line(&row.text).is_some()
         {
             break;
         }
-        label.push_str(if row.after_blank {
-            "\n\n"
-        } else if starts_list_item(&row.text) {
-            "\n"
-        } else {
-            " "
-        });
+        label.push(' ');
         label.push_str(&row.text);
+        next += 1;
     }
-    label
+    let opens_tool_block = rows
+        .get(next)
+        .is_some_and(|row| !row.after_blank && row.text.starts_with(CLAUDE_TOOL_OUTPUT_MARKER));
+    ClaudeStatusExtent {
+        label,
+        opens_tool_block,
+    }
 }
 
 /// `Some` while the agent is painting a live line this build understands.
@@ -643,8 +667,12 @@ pub fn detect_session_chat_terminal_activity(
             // Re-read the status from its whole wrapped extent, so the clock
             // and parenthetical metadata are stripped from the real end of
             // the text rather than from the end of its first row.
-            if let Some(joined) = activity_from_line(&joined_claude_status_line(&rows, index)) {
+            let extent = claude_status_extent(&rows, index);
+            if let Some(joined) = activity_from_line(&extent.label) {
                 activity = joined;
+            }
+            if extent.opens_tool_block {
+                activity.kind = SESSION_CHAT_ACTIVITY_CLAUDE_TOOL;
             }
         }
         return Some(activity);

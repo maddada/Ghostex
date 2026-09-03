@@ -381,10 +381,10 @@ const STATUS_TONE_ICON: Record<SessionChatStatusTone, { Icon: typeof IconCheck; 
 function StatusRow({ label, tone = 'ok' }: { label: string; tone?: SessionChatStatusTone }) {
   const { Icon, className } = STATUS_TONE_ICON[tone];
   return (
-    <div className='inline-flex max-w-full min-w-0 items-center gap-2 rounded-full border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground'>
-      {/* Tone badge: a badge-tier glyph in a tinted round. This round is off
-          the marker axis, so it takes the ramp's smallest tier — the semantic
-          size only made the pill taller without aligning it to anything. */}
+    <div className='inline-flex max-w-full min-w-0 items-start gap-2 rounded-2xl border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground'>
+      {/* Tone badge: a badge-tier glyph in a tinted round, top-aligned with
+          the first text line so multi-line rows keep it at the top left. The
+          row's corner radius matches the user message bubble (1rem). */}
       <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full', className)}>
         <Icon aria-hidden='true' className='ghostex-chat-glyph-badge' />
       </span>
