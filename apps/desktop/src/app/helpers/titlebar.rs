@@ -285,7 +285,7 @@ pub(crate) fn gpui_read_native_resource_processes() -> Vec<GpuiNativeResourcePro
     let mut processes =
         gpui_parse_native_resource_processes(&String::from_utf8_lossy(&output.stdout), |pid| pid);
     /*
-    CDXC:GPUITitlebarResources 2026-08-19-12:10:
+    CDXC:Resources 2026-08-19-12:10:
     `ps rss` is resident-set size, which charges every shared page to each
     process that maps it. The app runs one CEF helper per surface and they all
     map the same ~76 MB Chromium framework, so summing rss over the process
@@ -1362,7 +1362,7 @@ pub(crate) fn titlebar_background() -> Hsla {
 }
 
 /*
-CDXC:GPUITitlebarGradient 2026-07-22:
+CDXC:Theming 2026-07-22:
 The titlebar strip paints the sidebar's shared gradient stops horizontally
 (left = darker sidebar top stop, right = lighter sidebar bottom stop) so the
 chrome reads as one continuous surface. Solid consumers (popup borders, modal
@@ -1395,7 +1395,7 @@ pub(crate) fn titlebar_active_segment_color() -> Hsla {
 }
 
 /*
-CDXC:GPUITitlebarDropdownChrome 2026-07-09:
+CDXC:Titlebar 2026-07-09:
 All titlebar dropdown surfaces (the Git/Actions/Open In popup menus and the
 Tips/Resources CEF reading panels) share one chrome spec after visual review:
 #0e0e0e background, 1px #303030 border, 2px corner radius.
@@ -1647,7 +1647,7 @@ pub(crate) fn resolved_custom_sidebar_titlebar_background(
 
 pub(crate) fn command_pane_titlebar_separator_color() -> Hsla {
     /*
-    CDXC:GPUICommandPaneChrome 2026-06-25-13:19:
+    CDXC:CommandPane 2026-06-25-13:19:
     Native command titlebar separators use `calibratedWhite:0.54 alpha:0.24`, which is lighter and more translucent than the inactive command pane outline.
     */
     rgb(0x8a8a8a).opacity(0.24).into()
@@ -1657,7 +1657,7 @@ pub(crate) fn titlebar_project_label_from_latest_sidebar_snapshot(
     latest_snapshot: Option<&GpuiProjectSnapshot>,
 ) -> String {
     /*
-    CDXC:GPUITitlebarProjectLabel 2026-06-22-19:57:
+    CDXC:Titlebar 2026-06-22-19:57:
     The titlebar label is runtime-only sidebar state: use the latest valid snapshot display name and show the static Ghostex label before any valid sidebar payload arrives. Do not read env vars, repo folders, .git metadata, workspace names, fixture names, paths, URLs, sidebar titles, persisted state, or logs to infer the label.
     */
     latest_snapshot
@@ -1667,7 +1667,7 @@ pub(crate) fn titlebar_project_label_from_latest_sidebar_snapshot(
 
 pub(crate) fn cef_parent_native_view(window: &mut Window) -> Result<*mut std::ffi::c_void> {
     /*
-    CDXC:GPUICefPlatformSeam 2026-07-04:
+    CDXC:CefRuntime 2026-07-04:
     Windowed CEF parents its child views on the GPUI window's native handle:
     the root NSView on macOS, the top-level HWND on Windows, and the X11
     window id on Linux (gpui's X11 backend hands out an Xcb handle; the Xlib
@@ -1706,7 +1706,7 @@ pub(crate) fn normalize_address(value: &str) -> Option<String> {
         return Some(format!("https://{trimmed}"));
     }
     /*
-    CDXC:GPUIBrowserToolbar 2026-06-14-17:42:
+    CDXC:Browser 2026-06-14-17:42:
     The GPUI address field should resolve committed non-empty text the same way as the macOS browser toolbar: explicit schemes are kept, local hosts use http, domain-like text uses https, and free text becomes an in-pane Google search. Empty commits are not normalized; the toolbar restores the current tab URL and returns focus to page content.
     */
     Some(format!(
@@ -1844,7 +1844,7 @@ pub(crate) fn gpui_titlebar_resources_project_editor_kind(
 }
 
 /*
-CDXC:WebLinkOpenTarget 2026-08-19:
+CDXC:Navigation 2026-08-19:
 The titlebar Resources list needs the merged web-link destination as a string
 for its own payload, so route it through the same snapshot accessor that owns
 the legacy-key precedence instead of reading the raw field a second time.
@@ -1890,10 +1890,10 @@ pub(crate) fn gpui_titlebar_project_state_update_from_sidebar_state_payload(
 
 pub(crate) fn gpui_app_modal_unsupported_settings_command_noop(command_type: &str) -> bool {
     /*
-    CDXC:GPUISettingsStatusBridge 2026-06-24-11:36:
+    CDXC:StatusPet 2026-06-24-11:36:
     GPUI Settings status/action requests that affect visible loading state must send an explicit contract-shaped response instead of disappearing here. Keep this matcher only for non-loading actions whose production GPUI bridge is still absent, and do not claim success for installers, Launch Services, Ghostty config, preferences panes, or sound previews.
 
-    CDXC:GPUISettingsActionBridge 2026-06-24-11:59:
+    CDXC:Settings 2026-06-24-11:59:
     Worker 7 removed the remaining non-privileged Settings action commands from this matcher. New GPUI Settings commands should either perform a bounded action, refresh a visible status, or return an explicit unsupported status/toast instead of being added here by default.
     */
     let _ = command_type;
@@ -1902,7 +1902,7 @@ pub(crate) fn gpui_app_modal_unsupported_settings_command_noop(command_type: &st
 
 pub(crate) fn gpui_open_url(url: &'static str) -> Result<(), String> {
     /*
-    CDXC:GPUISettingsActionBridge 2026-06-24-11:59:
+    CDXC:Settings 2026-06-24-11:59:
     Settings URL actions in GPUI are bounded to hardcoded product URLs from Rust. Do not accept React-provided URLs, shell commands, environment values, or user paths for docs/System Settings opens.
     */
     gpui_spawn_os_open(std::ffi::OsStr::new(url))
@@ -2066,7 +2066,7 @@ pub(crate) fn gpui_titlebar_resource_session_from_presentation(
     });
     let value_object = value.as_object_mut()?;
     /*
-    CDXC:StashedPromptSessionAssociation 2026-08-24:
+    CDXC:SavedPrompts 2026-08-24:
     Carry gxserver's provider conversation id onto the projected row. App-modal
     surfaces that hydrate from this Quick Access projection (Saved Prompts, for
     one) need it to tell which rows belong to the conversation they were opened
@@ -2218,7 +2218,7 @@ pub(crate) fn gpui_presentation_session_to_daemon_session_item(
         ),
     );
     /*
-    CDXC:GPUIDaemonSessionsModal 2026-06-24-12:00:
+    CDXC:Sessions 2026-06-24-12:00:
     gxserver presentation does not currently expose terminal dimensions. Keep cols/rows as explicit zero values in GPUI Running Sessions until a real dimensions contract exists instead of inventing 80x24 or reading terminal/private process state.
     */
     item.insert("cols".to_string(), serde_json::Value::Number(0.into()));
@@ -2282,7 +2282,7 @@ pub(crate) enum GpuiTitlebarActionLinkTarget {
 }
 
 /*
-CDXC:ProjectActions 2026-07-31-12:00:
+CDXC:Projects 2026-07-31-12:00:
 Terminal Actions can carry saved links that open alongside the command run, so a
 dev-server Action starts the server and surfaces its localhost URL in one click.
 Each link targets the project's integrated Browser tab or the OS default browser.
@@ -2352,7 +2352,7 @@ impl GpuiTitlebarAction {
 
     pub(crate) fn command_title(&self) -> String {
         /*
-        CDXC:GPUICommandPane 2026-06-25-11:42:
+        CDXC:CommandPane 2026-06-25-11:42:
         Command-pane Action tabs must use the same visible title rule as macOS: normalized Action name first, otherwise the normalized command text truncated to 20 characters. Do not substitute command ids for unnamed terminal Actions because title-owned reuse and duplicate-title checks depend on this user-facing Action title.
         */
         gpui_normalized_sidebar_command_title(Some(&self.name))
@@ -2385,10 +2385,10 @@ pub(crate) fn gpui_titlebar_actions_for_active_project_id(
     active_project_id: Option<&str>,
 ) -> Vec<GpuiTitlebarAction> {
     /*
-    CDXC:GPUITitlebarActions 2026-06-24-14:24:
+    CDXC:Titlebar 2026-06-24-14:24:
     The visible GPUI titlebar Actions control must run the same sidebar/gxserver-projected command definitions that Settings and the SidebarApp expose. Read only the shared `hud.commands` contract shape from gxserver-derived project metadata, keep command text and URLs in memory for immediate Browser/command-terminal routing, and never infer actions from paths, git state, labels, env, terminal titles, or filesystem probes.
 
-    CDXC:SidebarHudContract 2026-06-24-20:34:
+    CDXC:AgentLauncher 2026-06-24-20:34:
     Titlebar Actions consume `/api/readSidebarHud` so active-project command scoping comes from the production gxserver contract rather than the GPUI app-modal Rust mirror.
     */
     let commands = gpui_sidebar_hud_from_gxserver(Duration::from_secs(2), active_project_id)
@@ -2567,16 +2567,16 @@ pub(crate) fn titlebar_mode_switcher_items(
     availability: ProjectScopedWorkareaAvailability,
 ) -> Vec<TitlebarModeSwitcherItem> {
     /*
-    CDXC:GPUTitlebarAvailability 2026-07-04-01:00:
+    CDXC:Titlebar 2026-07-04-01:00:
     The GPUI titlebar mode list mirrors macOS Quick/projectless presentation: Agents and Source are always visible and selectable; Browser, Kanban, Automate, and Docs stay visible but disabled in Quick context. Activation, hotkeys, restored active mode, and persisted active mode delegate to the same context availability helper.
 
-    CDXC:GPUIProjectScopedWorkareaAvailability 2026-06-22-18:00:
+    CDXC:Workarea 2026-06-22-18:00:
     Kanban, Automate, and Docs must be unavailable without a project, and GPUI currently shares Browser's Quick/projectless disablement through the same titlebar contract. Until a real GPUI project/sidebar snapshot exists, keep GHOSTEX_GPUI_PROJECT_IS_QUICK isolated behind GpuiProjectContext and pass a typed ProjectScopedWorkareaAvailability into mode lists and action guards instead of adding git/path heuristics or fallback project detection.
 
-    CDXC:GPUIProjectScopedWorkareaAvailability 2026-06-22-19:44:
+    CDXC:Workarea 2026-06-22-19:44:
     Runtime App titlebar mode lists, activation guards, and active-mode coercion prefer the latest valid in-memory sidebar project snapshot when available. The fallback availability is supplied by the caller so app runtime code can choose its current strict source without persisting or logging raw snapshot details.
 
-    CDXC:GPUIProjectSidebarBridge 2026-07-04-01:00:
+    CDXC:CefRuntime 2026-07-04-01:00:
     App-owned titlebar mode lists and active-mode fallback receive fallback availability from the current project context, but Docs/Manage titlebar visibility is unconditional and only project context can disable it.
     */
     availability.titlebar_mode_switcher_items()
@@ -2587,9 +2587,74 @@ pub(crate) struct GpuiExtensionViewPresentation {
     pub(crate) server_is_static: bool,
 }
 
+#[derive(Clone)]
+pub(crate) struct GpuiCustomView {
+    pub(crate) enabled: bool,
+    pub(crate) id: ExtensionId,
+    pub(crate) title: String,
+    pub(crate) url: String,
+}
+
+pub(crate) fn gpui_custom_views_from_settings() -> Vec<GpuiCustomView> {
+    shared_settings::shared_sidebar_settings_snapshot()
+        .object()
+        .get("customViews")
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|value| {
+            let object = value.as_object()?;
+            let id = object.get("id")?.as_str()?.trim();
+            if !id.starts_with("custom-view-") {
+                return None;
+            }
+            let id = ExtensionId::new(id)?;
+            let title = object.get("name")?.as_str()?.trim();
+            let url = object.get("url")?.as_str()?.trim();
+            let (scheme, rest) = url.split_once("://")?;
+            let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+            if title.is_empty()
+                || !matches!(scheme, "http" | "https")
+                || authority.is_empty()
+                || url.chars().any(char::is_whitespace)
+            {
+                return None;
+            }
+            Some(GpuiCustomView {
+                enabled: object
+                    .get("enabled")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true),
+                id,
+                title: title.to_string(),
+                url: url.to_string(),
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn gpui_custom_view(id: ExtensionId) -> Option<GpuiCustomView> {
+    gpui_custom_views_from_settings()
+        .into_iter()
+        .find(|view| view.id == id)
+}
+
+pub(crate) fn gpui_enabled_custom_view(id: ExtensionId) -> Option<GpuiCustomView> {
+    gpui_custom_view(id).filter(|view| view.enabled)
+}
+
 pub(crate) fn gpui_extension_view_presentation(
     id: ExtensionId,
 ) -> Option<GpuiExtensionViewPresentation> {
+    if let Some(view) = gpui_custom_view(id) {
+        if !view.enabled {
+            return None;
+        }
+        return Some(GpuiExtensionViewPresentation {
+            title: view.title,
+            server_is_static: false,
+        });
+    }
     let payload_dir = shared_settings::ghostex_storage_paths()
         .extensions_dir()
         .join("installed")
@@ -2629,7 +2694,7 @@ pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(
 }
 
 /*
-CDXC:DisabledPluginRouting 2026-08-23:
+CDXC:Extensions 2026-08-23:
 Toasts and menus name a workarea the way Settings → Customize does, which is
 not always the way the enum does: `Source` is "Code" and `Manage` is "Docs"
 everywhere the user can read it.

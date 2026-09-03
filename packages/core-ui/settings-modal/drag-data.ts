@@ -8,6 +8,11 @@ export type SettingsCommandDragData = {
   kind: 'settings-command';
 };
 
+export type SettingsCustomViewDragData = {
+  kind: 'settings-custom-view';
+  viewId: string;
+};
+
 export type SettingsSidebarTagListItemDragData = {
   itemId: string;
   kind: 'settings-sidebar-tag-list-item';
@@ -56,6 +61,29 @@ export function getSettingsCommandDragData(candidate: unknown): SettingsCommandD
   return {
     commandId: data.commandId,
     kind: 'settings-command',
+  };
+}
+
+export function createSettingsCustomViewDragData(viewId: string): SettingsCustomViewDragData {
+  return {
+    kind: 'settings-custom-view',
+    viewId,
+  };
+}
+
+export function getSettingsCustomViewDragData(candidate: unknown): SettingsCustomViewDragData | undefined {
+  if (!hasData(candidate)) {
+    return undefined;
+  }
+
+  const data = candidate.data;
+  if (!isObjectRecord(data) || data.kind !== 'settings-custom-view' || typeof data.viewId !== 'string') {
+    return undefined;
+  }
+
+  return {
+    kind: 'settings-custom-view',
+    viewId: data.viewId,
   };
 }
 

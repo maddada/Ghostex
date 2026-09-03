@@ -6,6 +6,7 @@ import { type ghostexHotkeySettings } from '../ghostex-hotkeys';
 import { type CustomWorkspaceOpenTarget, type WorkspaceOpenTargetAvailability } from '../workspace-open-targets';
 import { type PetId } from '../pets';
 import { type SidebarSessionTagListItem } from '../session-tags';
+import { type GhostexCustomView } from './custom-views';
 import { type DiagnosticLoggingSettings } from './diagnostic-logging';
 import { type RemoteMachineSettings } from './remote-machines';
 import { type SettingsModalNavigationState } from './settings-modal-navigation';
@@ -18,7 +19,7 @@ export type TerminalBackgroundImageFit = 'cover' | 'contain' | 'stretch' | 'natu
 export type TerminalViewWidthMode = 'full' | 'match-chat' | 'custom';
 export type PortlessProtocol = 'https' | 'http';
 /**
- * CDXC:WebLinkOpenTarget 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * One answer to "where does a web link Ghostex opens land". Command-clicked
  * terminal links, session chat links, and detected dev-server rows all read
  * this single target instead of the old split between a Browser toggle and a
@@ -95,7 +96,7 @@ export type AppShotsHotkey = 'both-command' | 'both-shift' | 'both-option' | 'do
 export type KeepAwakeDurationMinutes = 0 | 120 | 300;
 export type AutoSleepIdleMinutes = 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300;
 /**
- * CDXC:AccentColor 2026-08-24:
+ * CDXC:Theming 2026-08-24:
  * The Codex-style redesign paints its accent text (Automate "Active", unread
  * counts, and upcoming modal accents) from a single user-configurable color.
  * The default is a lighter sky tone than the original hardcoded #38bdf8 so
@@ -150,16 +151,16 @@ export function clampTerminalPanePaddingPx(value: number): number {
 }
 
 /**
- * CDXC:Branding 2026-05-12-07:35
+ * CDXC:Icons 2026-05-12-07:35
  * Public app copy uses Ghostex, and public terminal commands use `ghostex`
  * with `gx` as the short alias. The codebase can keep ghostex in type names,
  * storage/protocol keys, file paths, and implementation identifiers.
  *
- * CDXC:Branding 2026-05-26-15:11
+ * CDXC:Icons 2026-05-26-15:11
  * New installs should expose `gx` instead of the older `gtx` command, and setup
  * should not claim `gx` when another tool already owns that binary name.
  *
- * CDXC:Branding 2026-05-15-11:54
+ * CDXC:Icons 2026-05-15-11:54
  * The project rename now applies to source-facing identifiers, docs, scripts,
  * config, release metadata, and native project paths. Preserve each existing
  * casing style while using Ghostex, ghostex, or GHOSTEX consistently.
@@ -173,24 +174,24 @@ export type ghostexSettings = {
   appShotsHotkey: AppShotsHotkey;
   appShotsMetadataEnabled: boolean;
   /**
-   * CDXC:GxserverAgentSettings 2026-06-02-22:23:
+   * CDXC:AgentProviders 2026-06-02-22:23:
    * This field is the sidebar render cache for gxserver-owned global Accept All
    * settings. Settings UI can display and edit it, but gxserver persists the
    * canonical value and applies each agent's runtime permission-bypass mode.
    *
-   * CDXC:GxserverAgentSettings 2026-06-09-14:22:
+   * CDXC:AgentProviders 2026-06-09-14:22:
    * OpenCode Accept All is runtime config rather than a CLI flag, so settings
    * copy and storage must describe the policy without promising flag insertion.
    */
   agentAcceptAllEnabled: boolean;
   agentManagerZoomPercent: number;
   /**
-   * CDXC:PromptAgents 2026-05-28-07:15:
+   * CDXC:AgentLauncher 2026-05-28-07:15:
    * Automated prompt flows such as Git helper prompts, project board Start Work,
    * and worktree first prompts need one user-selected default agent instead of
    * hardcoding Codex in each launcher.
    *
-   * CDXC:GxserverAgentSettings 2026-06-19-08:58:
+   * CDXC:AgentProviders 2026-06-19-08:58:
    * gxserver now owns the canonical Default Prompt Agent alongside global
    * Accept All. Keep this field as the sidebar's synchronous render cache so
    * Settings can draw immediately from startup snapshots and gxserver update
@@ -198,13 +199,13 @@ export type ghostexSettings = {
    */
   defaultPromptAgentId: string;
   /**
-   * CDXC:GxserverSessionTitle 2026-06-04-08:24:
+   * CDXC:SessionTitles 2026-06-04-08:24:
    * First-prompt session-title generation is gxserver-owned, but Settings owns
    * which headless agent command should produce those titles. Keep this scoped
    * away from Default Prompt Agent so changing title generation does not alter
    * Git prompts, worktree starts, or project-board prompts.
    *
-   * CDXC:GxserverSessionTitle 2026-06-04-22:44:
+   * CDXC:SessionTitles 2026-06-04-22:44:
    * The selector includes Grok Build and its Composer 2.5 command preview, so
    * users can see the exact headless CLI command Ghostex will send before
    * automatic first-prompt session naming runs.
@@ -212,19 +213,19 @@ export type ghostexSettings = {
   sessionTitleGenerationAgent: SessionTitleGenerationAgent;
   customSessionTitleGenerationCommand: string;
   /**
-   * CDXC:TerminalLinkInAppBrowser 2026-07-02-13:05:
+   * CDXC:Navigation 2026-07-02-13:05:
    * Command-clicked http/https terminal links open as tabs in the project
    * Browser view by default. Pointing this at the system default browser
    * restores handing web links to it. File paths and non-web schemes always
    * keep the external NSWorkspace route regardless of this setting.
    *
-   * CDXC:GPUISessionChatLinks 2026-08-18:
+   * CDXC:SessionChat 2026-08-18:
    * Web links clicked in session chat follow the same switch, so this is the
    * single answer to "where do agent-sent web links open". Chat file links
    * still open in Docs or Code, and Shift+click still forces the system
    * default browser while the target is the internal browser.
    *
-   * CDXC:WebLinkOpenTarget 2026-08-19:
+   * CDXC:Navigation 2026-08-19:
    * Detected dev-server rows read this too, replacing the separate Dev Servers
    * open-target dropdown. Migrated from the legacy openTerminalLinksInApp
    * boolean, which wins over the legacy dev-server target when both persist,
@@ -236,26 +237,26 @@ export type ghostexSettings = {
   /** Preferred workarea for HTML file links clicked in session chat. */
   htmlFileOpenView: ChatFileOpenView;
   /**
-   * CDXC:SettingsAdvanced 2026-06-28-08:01:
+   * CDXC:Settings 2026-06-28-08:01:
    * Show Advanced is a persisted Settings browsing preference. When users enable
    * advanced rows, keep that density enabled across app restarts until they
    * explicitly turn it off again.
    */
   showAdvancedSettings: boolean;
   /**
-   * CDXC:SettingsNavigation 2026-06-29-17:54:
+   * CDXC:Settings 2026-06-29-17:54:
    * Closing Settings should persist the user's current Settings page and
    * scroll offsets so relaunching the macOS app can reopen Settings at the
    * exact spot they left, while explicit deep links can still override it.
    *
-   * CDXC:SettingsNavigation 2026-06-30-04:47:
+   * CDXC:Settings 2026-06-30-04:47:
    * Persist page navigation as the user moves through Settings because the
    * native AppKit close button can tear down the child window before React's
    * dialog-close callback runs.
    */
   settingsModalNavigation: SettingsModalNavigationState;
   /**
-   * CDXC:ExperimentalFeatures 2026-06-28-07:41:
+   * CDXC:Settings 2026-06-28-07:41:
    * Enable Experimental Features is the user-facing name for this persisted
    * showBetaFeatures key. Experimental surfaces stay hidden by default, while
    * Agents Hub remains outside this gate and visible in the sidebar.
@@ -289,7 +290,7 @@ export type ghostexSettings = {
   codeServerUseVscodeInsidersUserConfig: boolean;
   customDefaultEditorCommand: string;
   /**
-   * CDXC:AppIconPicker 2026-06-25-21:50: Persisted id of the selected Dock /
+   * CDXC:Icons 2026-06-25-21:50: Persisted id of the selected Dock /
    * app-switcher icon. Empty string means the default bundled app icon. The
    * value is a filename living in the native icons folder; native confirms the
    * selection via an appIconState ok event before the sidebar persists it.
@@ -298,15 +299,15 @@ export type ghostexSettings = {
   defaultEditorCommand: DefaultEditorCommand;
   hideProjectHeaderDiffStats: boolean;
   /**
-   * CDXC:DocsSidebar 2026-06-30-19:47:
+   * CDXC:Docs 2026-06-30-19:47:
    * The Docs sidebar scans ./docs, ./artifacts, ./ai, and ./tmp recursively, plus those same folder names one level down, plus root artifacts by default. Users can add comma-separated project-relative folder roots from global Projects settings. Trim spaces around each folder name while preserving spaces inside names such as "my documents".
    *
-   * CDXC:DocsRootAdditive 2026-08-09:
+   * CDXC:Docs 2026-08-09:
    * These folders are project-root-relative, always. A configured Docs directory is mounted as an ADDITIONAL top-level folder that always shows its whole tree, so it is never narrowed by this list (round 2 briefly made it a narrowing control for that root; additive mounting replaced that).
    */
   manageAdditionalDocsFolders: string;
   /**
-   * CDXC:GlobalProjectDefaults 2026-08-02:
+   * CDXC:Projects 2026-08-02:
    * Global Defaults for the three per-project fields on the Projects settings
    * page. A project keeps overriding the default whenever its own value is
    * non-empty; an empty project value now falls back here before falling back
@@ -317,11 +318,11 @@ export type ghostexSettings = {
   globalBeadsDisplayKey: string;
   globalBeadsDirectory: string;
   /**
-   * CDXC:DocsRootDirectory 2026-08-09:
+   * CDXC:Docs 2026-08-09:
    * Absolute folder Docs shows IN ADDITION to the project's own docs when a
    * project sets no Docs directory of its own.
    *
-   * CDXC:DocsRootAdditive 2026-08-09:
+   * CDXC:Docs 2026-08-09:
    * It never replaces the project's docs — README.md, CLAUDE.md, docs/, and the
    * configured Docs folders all keep listing, and this folder is added beside
    * them as one top-level node named after itself. Empty adds nothing.
@@ -349,7 +350,7 @@ export type ghostexSettings = {
    */
   sleepSessionWhenParking: boolean;
   /**
-   * CDXC:AnonymousAnalytics 2026-08-26:
+   * CDXC:Telemetry 2026-08-26:
    * File-level opt-out for the anonymous PostHog usage analytics gxserver
    * sends. Default true. gxserver reads this key straight out of
    * native-sidebar-settings.json and treats an absent key as enabled. There is
@@ -360,7 +361,7 @@ export type ghostexSettings = {
   analyticsEnabled: boolean;
   debuggingMode: boolean;
   /**
-   * CDXC:DiagnosticsSettings 2026-06-27-22:07:
+   * CDXC:Diagnostics 2026-06-27-22:07:
    * Debugging Mode no longer acts as the broad disk-logging switch. Routine
    * persistent diagnostics are controlled by explicit scenario ids so users can
    * enable one repro area, such as GPUI app modals or macOS terminal focus,
@@ -372,7 +373,7 @@ export type ghostexSettings = {
   showProjectIcons: boolean;
   hideSessionAgentIconUntilHover: boolean;
   /**
-   * CDXC:SidebarSessionAgentIcons 2026-06-29-23:58:
+   * CDXC:Icons 2026-06-29-23:58:
    * Session-card agent logos are monochrome by default for compatibility, but
    * Settings needs an independent toggle for colored brand artwork. Favorite
    * state must not recolor the agent logo to gold.
@@ -382,33 +383,33 @@ export type ghostexSettings = {
   showCloseButtonOnSessionCards: boolean;
   hideLastActiveTimeOnSessionCards: boolean;
   /**
-   * CDXC:SidebarContextMenu 2026-06-10-13:58:
+   * CDXC:ContextMenus 2026-06-10-13:58:
    * The destructive single-session Close context-menu item is advanced chrome.
    * Hide it by default and expose it through an explicit Session Cards setting
    * so context menus stay focused unless users opt into close-from-menu actions.
    */
   showSessionCloseContextMenuAction: boolean;
   /**
-   * CDXC:SidebarContextMenu 2026-06-09-23:17:
+   * CDXC:ContextMenus 2026-06-09-23:17:
    * Session context menus should hide Copy resume and Copy attach command by default because they expose raw shell-command utilities. Settings owns a single opt-in that reveals both actions for users who intentionally copy commands into external terminals.
    */
   showSessionCommandCopyActions: boolean;
   /**
-   * CDXC:SidebarContextMenu 2026-06-11-23:08:
+   * CDXC:ContextMenus 2026-06-11-23:08:
    * Copy details is an explicit session-card context-menu opt-in. Keep it hidden
    * by default because it copies project/session metadata, including paths and
    * provider ids, into the system clipboard.
    */
   showSessionDetailsCopyAction: boolean;
   /**
-   * CDXC:SessionTagFilters 2026-06-13-17:50:
+   * CDXC:Sessions 2026-06-13-17:50:
    * Settings owns the sidebar tag-filter presentation list: users can reorder
    * tags, move separators, hide rows, or disable selectable tag filters without
    * changing the durable session tag values stored on sessions.
    */
   sidebarSessionTagListItems: readonly SidebarSessionTagListItem[];
   /**
-   * CDXC:AutoSleep 2026-05-28-08:06:
+   * CDXC:SessionSleep 2026-05-28-08:06:
    * Auto Sleep is a settings-owned policy for retiring idle VS Code, Git,
    * Project, Manage, browser, and agent sessions through their native sleep paths.
    * Keep each surface independently configurable so users can preserve existing
@@ -429,14 +430,14 @@ export type ghostexSettings = {
   keepAwakeDeactivateOnUserSwitch: boolean;
   keepAwakeDefaultDurationMinutes: KeepAwakeDurationMinutes;
   /**
-   * CDXC:TitlebarKeepAwake 2026-06-23-08:20:
+   * CDXC:KeepAwake 2026-06-23-08:20:
    * Users can opt into a Mac power hold while any session is Working, with the titlebar runtime extending that hold for a short reply window after work stops.
    */
   keepAwakeWhileWorkingSessions: boolean;
   keepAwakePreventLidSleep: boolean;
   hideKeepAwakeTitlebarControl: boolean;
   /**
-   * CDXC:GlobalActions 2026-08-01:
+   * CDXC:AgentLauncher 2026-08-01:
    * The Agents tab strip ships New Terminal and New Browser Tab buttons. Users
    * who run those from Global Actions or hotkeys can hide either one to make
    * room in the strip. The pane overflow button is deliberately not hideable —
@@ -474,7 +475,7 @@ export type ghostexSettings = {
   /** Delay before sidebar hover tooltips appear. */
   sidebarTooltipDelayMs: number;
   /**
-   * CDXC:SidebarChrome 2026-06-05-04:40:
+   * CDXC:Sidebar 2026-06-05-04:40:
    * The sidebar default width is the reset target for a double-click on the
    * sidebar drag handle in Electron and native macOS. Restart hydration must
    * continue using the last persisted sidebarWidth so changing this default
@@ -482,14 +483,14 @@ export type ghostexSettings = {
    */
   sidebarDefaultWidthPx: number;
   /**
-   * CDXC:ProjectSessionLists 2026-06-13-01:06:
+   * CDXC:Projects 2026-06-13-01:06:
    * The project header Show less action keeps a configurable number of project sessions visible. Default to ten visible sessions so active projects stay scannable before switching back to Show more.
    */
   projectSessionListCollapsedCount: number;
   /** Visual treatment for user-created project groups in the shared sidebar. */
   sidebarProjectGroupStyle: SidebarProjectGroupStyle;
   /**
-   * CDXC:SidebarSpaces 2026-08-28:
+   * CDXC:Spaces 2026-08-28:
    * Spaces (saved per-gxserver sidebar filters) are opt-in. gxserver keeps
    * owning the Space document regardless, so this only decides whether the
    * sidebar renders the Space row, filters by a Space, and offers the Spaces
@@ -497,12 +498,12 @@ export type ghostexSettings = {
    */
   sidebarSpacesEnabled: boolean;
   /**
-   * CDXC:ProjectHotkeys 2026-06-15-11:12:
+   * CDXC:Hotkeys 2026-06-15-11:12:
    * Jump to Project shortcuts should reveal the target project row when it was collapsed, because the keyboard action is also a navigation intent in the visible Projects sidebar area.
    */
   expandCollapsedProjectsOnJump: boolean;
   /**
-   * CDXC:ProjectHotkeys 2026-06-15-11:12:
+   * CDXC:Hotkeys 2026-06-15-11:12:
    * Some users want a project jump to reveal only the target project header plus the configured Show less slice after auto-expanding a collapsed project. Keep that secondary behavior opt-in and only meaningful when auto-expand is enabled.
    */
   showLessForExpandedProjectJumps: boolean;
@@ -522,31 +523,31 @@ export type ghostexSettings = {
    */
   sessionChatVerboseMode: boolean;
   /**
-   * CDXC:SidebarTitlebarColors 2026-06-15-11:24:
+   * CDXC:Theming 2026-06-15-11:24:
    * Custom chrome colors are scoped to the sidebar and native titlebar only.
    * Keep these separate from theme tokens so modals, dropdowns, and the
    * disabled theme selector keep using Dark Gray/Dark 2 defaults.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-13:22:
+   * CDXC:Theming 2026-06-15-13:22:
    * Settings still carries a foreground field for compatibility with native
    * layout payloads and older stored settings, but normalization derives it
    * from the background instead of preserving user-entered foreground values.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-13:45:
+   * CDXC:Theming 2026-06-15-13:45:
    * Users now tune the custom sidebar/titlebar background through a contrast
    * slider. Keep the background color field as the computed dark protocol
    * value, not as a user-editable setting.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-15:15:
+   * CDXC:Theming 2026-06-15-15:15:
    * The user-facing Settings control is named Contrast, but this protocol keeps
    * its darkness key so stored settings and native payloads remain compatible.
    *
-   * CDXC:SidebarTitlebarColors 2026-06-15-15:28:
+   * CDXC:Theming 2026-06-15-15:28:
    * Tint is stored as a separate web-picker color and folded into the computed
    * background hex. The native/sidebar consumers still receive one final
    * background color, preserving their existing contract.
    *
-   * CDXC:SettingsTheming 2026-06-15-21:35:
+   * CDXC:Theming 2026-06-15-21:35:
    * The old custom sidebar/titlebar contrast toggle is retired from Settings.
    * Keep this compatibility field enabled after normalization so visible
    * Theming controls apply without a hidden or experimental gate.
@@ -556,7 +557,7 @@ export type ghostexSettings = {
   customSidebarTitlebarBackgroundDarknessPercent: number;
   customSidebarTitlebarBackgroundColor: string;
   /**
-   * CDXC:AccentColor 2026-08-24:
+   * CDXC:Theming 2026-08-24:
    * Hex accent color published to every React surface as --ghostex-accent.
    */
   accentColor: string;
@@ -584,7 +585,7 @@ export type ghostexSettings = {
   /** Apply the narrower terminal width to command pane terminals too. */
   terminalWidthApplyToCommandPaneTerminals: boolean;
   /**
-   * CDXC:TerminalPanePadding 2026-06-25-21:27:
+   * CDXC:Terminal 2026-06-25-21:27:
    * Terminal pane padding is app layout, not a Ghostty config key. Store
    * separate horizontal and vertical pixel values so Settings can inset every
    * native terminal surface while preserving the pane titlebar, borders,
@@ -601,7 +602,7 @@ export type ghostexSettings = {
   terminalClipboardTrimTrailingSpaces: boolean;
   terminalClipboardPasteProtection: boolean;
   /**
-   * CDXC:TerminalImagePaste 2026-06-08-13:32:
+   * CDXC:Clipboard 2026-06-08-13:32:
    * Terminal image paste is app-owned behavior, not a Ghostty config key. Keep a
    * default-on setting so users can opt out of Cmd+V/Ctrl+V converting clipboard
    * images into previewable Markdown links that also render in Cmd-hover terminal
@@ -611,13 +612,13 @@ export type ghostexSettings = {
   terminalMouseHideWhileTyping: boolean;
   terminalScrollbar: GhosttyScrollbar;
   /**
-   * CDXC:TerminalDevServers 2026-06-23-19:22:
+   * CDXC:Resources 2026-06-23-19:22:
    * Dev-server discovery is app-owned terminal behavior, not a terminal emulator config key. Persist detection, a single open-target choice, and ignored ports with the main settings contract so Terminal settings stay focused on opening in the user's system browser or the internal browser instead of exposing per-browser checkboxes.
    */
   terminalDevServerDetectionEnabled: boolean;
   terminalDevServerIgnoredPortRules: readonly string[];
   /**
-   * CDXC:PortlessSettings 2026-06-22-22:35:
+   * CDXC:Portless 2026-06-22-22:35:
    * Portless is a global app contract, not project state. Keep one default-on toggle and one protocol setting so every project/worktree shares the same local proxy mode without per-project enablement keys.
    */
   portlessEnabled: boolean;
@@ -627,13 +628,14 @@ export type ghostexSettings = {
   workspaceActivePaneBorderColor: string;
   workspaceBackgroundColor: string;
   /**
-   * CDXC:SleepingPanePlaceholders 2026-06-13-01:44:
+   * CDXC:SessionSleep 2026-06-13-01:44:
    * Sleeping native pane tabs should select their original split pane without
    * starting Ghostty immediately. Keep click-to-wake enabled by default so
    * users can inspect stable black placeholders and wake only by clicking the
    * pane body.
    */
   clickToWakeSleepingSessions: boolean;
+  customViews: GhostexCustomView[];
   customWorkspaceOpenTargets: CustomWorkspaceOpenTarget[];
   workspaceOpenTargetAvailability: WorkspaceOpenTargetAvailability;
   workspaceOpenTargetHiddenIds: string[];
@@ -644,7 +646,14 @@ export type ghostexSettings = {
    */
   remoteMachines: RemoteMachineSettings[];
   /**
-   * CDXC:CommandsPanel 2026-05-30-10:05:
+   * CDXC:RemotePairing 2026-09-03 DECISION:
+   * User: "please add a toggle for tailscale. if tailscale is disabled" (the sentence was cut off).
+   * Whether the Tailscale pairing path is offered at all. Easy Connect's switch talks to gxserver (`/api/updateTailcatState`) because the daemon runs the sidecar; Tailscale is only a checklist and a QR, so its switch is a settings-only client flag with no server counterpart.
+   * Off: the Settings → Remote card stays collapsed and dimmed with an Off badge, its QR is not rendered, and the Remote Setup modal hides the Tailscale option.
+   */
+  remoteTailscaleEnabled: boolean;
+  /**
+   * CDXC:CommandPane 2026-05-30-10:05:
    * Opening the command pane (F12, sidebar button) and double-clicking its top
    * resize rail must restore this pixel height, clamped to the same 5%-90%
    * workspace limits enforced during drag resize.

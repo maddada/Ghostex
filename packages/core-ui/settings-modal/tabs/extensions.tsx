@@ -3,9 +3,10 @@
  * Settings has one Extensions page. The "Official Extensions" section is the
  * features Ghostex ships itself, backed by the inverted `*Hidden` settings keys
  * in `GHOSTEX_OFFICIAL_EXTENSIONS`; below it the same page embeds the real
- * extension store and installed list. Both read as one family of cards, which
- * is why the official rows reuse the `.extensions-*` panel skin instead of the
- * stacked settings-field layout the other Settings pages use.
+ * extension store and installed list, followed by user-defined URL views. All
+ * three read as one family of cards, which is why the official and custom rows
+ * reuse the `.extensions-*` panel skin instead of the stacked settings-field
+ * layout the other Settings pages use.
  *
  * Opening an extension's details replaces the whole page (not just the store
  * section), and the list scroll position is restored on the way back.
@@ -13,8 +14,11 @@
  * This replaced the old "Customize" page (tab id `plugins`) and the standalone
  * Extensions app modal.
  */
-import { useLayoutEffect, useMemo, useRef, type ReactNode, type UIEvent } from 'react';
+import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
+import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
 import { cn } from '@/packages/components/utils';
+import { Button } from '@/packages/components/ui/button';
 import { Switch } from '@/packages/components/ui/switch';
 import {
   IconBolt,
@@ -24,10 +28,14 @@ import {
   IconFileText,
   IconFolderOpen,
   IconGitCommit,
+  IconGripVertical,
   IconInfoCircle,
+  IconPencil,
   IconPlayerPlay,
+  IconPlus,
   IconPuzzle,
   IconRefresh,
+  IconTrash,
   IconWorld,
   type Icon as TablerIcon,
 } from '@tabler/icons-react';
@@ -42,11 +50,24 @@ import {
   type SidebarPluginSettingsItem,
   type SidebarPluginSettingsStatusMessage,
 } from '../../../shared/session-grid-contract';
-import { type ghostexSettings } from '../../../shared/ghostex-settings';
+import {
+  CUSTOM_VIEW_ID_PREFIX,
+  normalizeCustomViewUrl,
+  normalizeGhostexCustomViews,
+  type GhostexCustomView,
+  type ghostexSettings,
+} from '../../../shared/ghostex-settings';
 import { type WebviewApi } from '../../webview-api';
 import { ExtensionsBrowserDetail, ExtensionsBrowserList, useExtensionsBrowserState } from '../../extensions-modal';
 import { createExtensionsModalTransport } from '../../extensions-modal/transport';
-import { SettingButton, SettingsNativeScrollArea, SettingsSection } from '../fields';
+import { createSettingsCustomViewDragData, getSettingsCustomViewDragData, moveId } from '../drag-data';
+import {
+  SettingButton,
+  SettingsInput,
+  SettingsNativeScrollArea,
+  SettingsSection,
+  setSettingsSortableRowElement,
+} from '../fields';
 import {
   SettingsTabSearch,
   hasVisibleSettingsSearchResult,
@@ -55,6 +76,13 @@ import {
 } from '../search';
 
 export type OfficialExtensionSettingKey = GhostexOfficialExtensionSettingsKey;
+type ExtensionPageSettingKey = OfficialExtensionSettingKey | 'customViews';
+
+type CustomViewEditorState = {
+  draft: Pick<GhostexCustomView, 'name' | 'url'>;
+  error?: string;
+  id?: string;
+};
 
 const GHOSTEX_EXTENSIONS_REPO_URL = 'https://github.com/maddada/ghostex-extensions';
 
@@ -97,7 +125,7 @@ export function ExtensionsSettingsTab({
   isActive: boolean;
   onRequestStatus?: () => void;
   onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem['id']) => void;
-  onUpdateSetting: <K extends OfficialExtensionSettingKey>(key: K, value: ghostexSettings[K]) => void;
+  onUpdateSetting: <K extends ExtensionPageSettingKey>(key: K, value: ghostexSettings[K]) => void;
   search: SettingsTabSearch;
   searchEmptyState?: ReactNode;
   settings: ghostexSettings;
@@ -105,6 +133,7 @@ export function ExtensionsSettingsTab({
   statusLoading: boolean;
   vscode?: WebviewApi;
 }) {
+  const [customViewEditor, setCustomViewEditor] = useState<CustomViewEditorState>();
   const statusById = new Map(status?.plugins.map((plugin) => [plugin.id, plugin]));
   const cef = statusById.get('cef');
   /*
@@ -117,6 +146,63 @@ export function ExtensionsSettingsTab({
   const browser = useExtensionsBrowserState({ active: isActive && Boolean(transport), transport });
   const detailOpen = Boolean(transport) && browser.detailOpen;
   const showOfficial = (key: string) => shouldShowSetting(search.sections.official, key);
+
+  const updateCustomViews = (customViews: GhostexCustomView[]) => {
+    onUpdateSetting('customViews', normalizeGhostexCustomViews(customViews));
+  };
+
+  const handleCustomViewDragEnd = ((event) => {
+    if (event.canceled || !isSortableOperation(event.operation)) {
+      return;
+    }
+
+    const { source, target } = event.operation;
+    const sourceData = source ? getSettingsCustomViewDragData(source) : undefined;
+    if (!source || !sourceData) {
+      return;
+    }
+
+    const targetIndex = 'index' in source && typeof source.index === 'number' ? source.index : target?.index;
+    if (targetIndex == null || source.initialIndex === targetIndex) {
+      return;
+    }
+
+    const reorderedIds = moveId(
+      settings.customViews.map((view) => view.id),
+      source.initialIndex,
+      targetIndex
+    );
+    const viewById = new Map(settings.customViews.map((view) => [view.id, view]));
+    updateCustomViews(reorderedIds.flatMap((id) => (viewById.get(id) ? [viewById.get(id)!] : [])));
+  }) satisfies DragDropEventHandlers['onDragEnd'];
+
+  const saveCustomView = () => {
+    if (!customViewEditor) return;
+    const name = customViewEditor.draft.name.trim();
+    const url = normalizeCustomViewUrl(customViewEditor.draft.url);
+    if (!name) {
+      setCustomViewEditor({ ...customViewEditor, error: 'Enter a name for the titlebar tab.' });
+      return;
+    }
+    if (!url) {
+      setCustomViewEditor({ ...customViewEditor, error: 'Enter a complete HTTP or HTTPS URL.' });
+      return;
+    }
+    const customView: GhostexCustomView = {
+      enabled: customViewEditor.id
+        ? (settings.customViews.find((view) => view.id === customViewEditor.id)?.enabled ?? true)
+        : true,
+      id: customViewEditor.id ?? `${CUSTOM_VIEW_ID_PREFIX}${Date.now().toString(36)}`,
+      name,
+      url,
+    };
+    updateCustomViews(
+      customViewEditor.id
+        ? settings.customViews.map((view) => (view.id === customViewEditor.id ? customView : view))
+        : [...settings.customViews, customView]
+    );
+    setCustomViewEditor(undefined);
+  };
 
   /*
    * CDXC:Extensions 2026-08-30:
@@ -232,10 +318,191 @@ export function ExtensionsSettingsTab({
                 <ExtensionsBrowserList state={browser} />
               </SettingsSection>
             ) : null}
+
+            {shouldShowSettingsSection(search.sections.customViews) ? (
+              <SettingsSection
+                actions={
+                  <SettingButton
+                    disabled={Boolean(customViewEditor)}
+                    disabledReason='Finish editing the current custom view first.'
+                    onClick={() => setCustomViewEditor({ draft: { name: '', url: '' } })}
+                    type='button'
+                    variant='ghost'
+                  >
+                    <IconPlus aria-hidden='true' data-icon='inline-start' />
+                    Add view
+                  </SettingButton>
+                }
+                description='Add, arrange, and toggle titlebar views that open HTTP or HTTPS pages inside Ghostex.'
+                descriptionClassName='pb-2'
+                title='Custom Views'
+              >
+                <DragDropProvider onDragEnd={handleCustomViewDragEnd}>
+                  <div className='extensions-group divide-y overflow-hidden'>
+                    {settings.customViews.map((view, index) =>
+                      customViewEditor?.id === view.id ? (
+                        <CustomViewEditor
+                          editor={customViewEditor}
+                          key={view.id}
+                          onCancel={() => setCustomViewEditor(undefined)}
+                          onChange={setCustomViewEditor}
+                          onSave={saveCustomView}
+                        />
+                      ) : (
+                        <CustomViewRow
+                          index={index}
+                          key={view.id}
+                          onEdit={() => setCustomViewEditor({ draft: { name: view.name, url: view.url }, id: view.id })}
+                          onEnabledChange={(enabled) =>
+                            updateCustomViews(
+                              settings.customViews.map((candidate) =>
+                                candidate.id === view.id ? { ...candidate, enabled } : candidate
+                              )
+                            )
+                          }
+                          onRemove={() =>
+                            updateCustomViews(settings.customViews.filter((candidate) => candidate.id !== view.id))
+                          }
+                          view={view}
+                        />
+                      )
+                    )}
+                    {customViewEditor && !customViewEditor.id ? (
+                      <CustomViewEditor
+                        editor={customViewEditor}
+                        onCancel={() => setCustomViewEditor(undefined)}
+                        onChange={setCustomViewEditor}
+                        onSave={saveCustomView}
+                      />
+                    ) : settings.customViews.length === 0 ? (
+                      <div className='px-4 py-5 text-center text-[13px] font-normal text-muted-foreground'>
+                        No custom views yet.
+                      </div>
+                    ) : null}
+                  </div>
+                </DragDropProvider>
+              </SettingsSection>
+            ) : null}
           </>
         )}
       </div>
     </SettingsNativeScrollArea>
+  );
+}
+
+function CustomViewRow({
+  index,
+  onEdit,
+  onEnabledChange,
+  onRemove,
+  view,
+}: {
+  index: number;
+  onEdit: () => void;
+  onEnabledChange: (enabled: boolean) => void;
+  onRemove: () => void;
+  view: GhostexCustomView;
+}) {
+  const sortable = useSortable({
+    accept: 'settings-custom-view',
+    data: createSettingsCustomViewDragData(view.id),
+    group: 'settings-custom-views',
+    id: view.id,
+    index,
+    type: 'settings-custom-view',
+  });
+  const { handleRef, isDragging } = sortable;
+
+  const setRowRef = (element: HTMLDivElement | null) => {
+    setSettingsSortableRowElement(sortable, element);
+  };
+
+  return (
+    <div
+      className='extensions-row group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors'
+      data-dragging={String(Boolean(isDragging))}
+      ref={setRowRef}
+    >
+      <Button aria-label={`Reorder ${view.name}`} ref={handleRef} size='icon-sm' type='button' variant='ghost'>
+        <IconGripVertical aria-hidden='true' />
+      </Button>
+      <span
+        aria-hidden='true'
+        className={cn('size-1.5 shrink-0 rounded-full', view.enabled ? 'bg-emerald-400/80' : 'bg-white/20')}
+      />
+      <span
+        aria-hidden='true'
+        className='extensions-icon flex size-9 shrink-0 items-center justify-center p-1.5 text-[#b9b9b9]'
+      >
+        <IconWorld className='size-4' />
+      </span>
+      <div className='min-w-0 flex-1'>
+        <span className='block truncate text-sm font-normal text-foreground'>{view.name}</span>
+        <p className='mt-0.5 truncate text-[13px] font-normal leading-relaxed text-foreground/75'>{view.url}</p>
+      </div>
+      <div className='flex shrink-0 items-center gap-1'>
+        <Button aria-label={`Edit ${view.name}`} onClick={onEdit} size='icon-sm' type='button' variant='ghost'>
+          <IconPencil aria-hidden='true' className='size-4' />
+        </Button>
+        <Button aria-label={`Remove ${view.name}`} onClick={onRemove} size='icon-sm' type='button' variant='ghost'>
+          <IconTrash aria-hidden='true' className='size-4' />
+        </Button>
+        <div className='ml-1 flex shrink-0 items-center gap-2'>
+          <span className='text-xs font-normal text-muted-foreground'>{view.enabled ? 'On' : 'Off'}</span>
+          <Switch
+            aria-label={`${view.enabled ? 'Disable' : 'Enable'} ${view.name}`}
+            checked={view.enabled}
+            onCheckedChange={onEnabledChange}
+            size='sm'
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CustomViewEditor({
+  editor,
+  onCancel,
+  onChange,
+  onSave,
+}: {
+  editor: CustomViewEditorState;
+  onCancel: () => void;
+  onChange: (editor: CustomViewEditorState) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className='flex flex-col gap-3 px-3 py-3'>
+      <SettingsInput
+        aria-label='Custom view name'
+        autoFocus
+        onChange={(event) =>
+          onChange({ ...editor, draft: { ...editor.draft, name: event.currentTarget.value }, error: undefined })
+        }
+        placeholder='Titlebar name'
+        value={editor.draft.name}
+      />
+      <SettingsInput
+        aria-invalid={Boolean(editor.error)}
+        aria-label='Custom view URL'
+        onChange={(event) =>
+          onChange({ ...editor, draft: { ...editor.draft, url: event.currentTarget.value }, error: undefined })
+        }
+        placeholder='https://example.com'
+        type='url'
+        value={editor.draft.url}
+      />
+      {editor.error ? <p className='text-xs font-normal text-destructive'>{editor.error}</p> : null}
+      <div className='flex justify-end gap-2'>
+        <Button onClick={onCancel} type='button' variant='ghost'>
+          Cancel
+        </Button>
+        <Button onClick={onSave} type='button'>
+          {editor.id ? 'Save changes' : 'Add view'}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -251,7 +518,7 @@ function OfficialExtensionList({
   extensions: readonly GhostexOfficialExtension[];
   label: string;
   onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem['id']) => void;
-  onUpdateSetting: <K extends OfficialExtensionSettingKey>(key: K, value: ghostexSettings[K]) => void;
+  onUpdateSetting: <K extends ExtensionPageSettingKey>(key: K, value: ghostexSettings[K]) => void;
   settings: ghostexSettings;
   showOfficial: (key: string) => boolean;
   statusById: ReadonlyMap<SidebarPluginSettingsItem['id'], SidebarPluginSettingsItem>;

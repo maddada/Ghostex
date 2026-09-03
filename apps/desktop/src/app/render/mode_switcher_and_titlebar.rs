@@ -28,7 +28,7 @@ use crate::app::model::*;
 use crate::*;
 
 /*
-CDXC:GPUITitlebarDoubleClick 2026-08-23:
+CDXC:Titlebar 2026-08-23:
 GPUI paints the whole titlebar strip itself, so AppKit's own titlebar view
 never sees a double click there and the standard macOS zoom gesture silently
 did nothing. Forward it to the platform window, which honours the user's
@@ -62,18 +62,32 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         /*
-        CDXC:GPUITitlebar 2026-06-14-16:47:
+        CDXC:Titlebar 2026-06-14-16:47:
         The GPUI titlebar mirrors the macOS app: native traffic lights, passive project identity, full-width mode tabs for Agents/Source/Browser/Kanban/Automate/Docs, a compact mode dropdown below 1050px, and right-side icon buttons.
 
-        CDXC:GPUTitlebarAvailability 2026-07-04-01:00:
+        CDXC:Titlebar 2026-07-04-01:00:
         Quick/projectless GPUI contexts keep Agents and Source selectable, keep Browser, Kanban, Automate, and Docs visible but disabled, and use the same availability helper for tabs, the compact dropdown, hotkeys, restore, and persistence.
 
-        CDXC:GPUITitlebarParity 2026-06-22-19:39:
+        CDXC:Titlebar 2026-06-22-19:39:
         The GPUI titlebar must match the current macOS titlebar chrome: the sidebar toggle is a flat Tabler layout-sidebar glyph instead of the older blue circular chevron, and the right controls are the same project/window actions as macOS: Tips, Resources, Git, Actions, and Open In. Settings and Keep Awake live in sidebar shortcut chrome, not this titlebar strip.
         */
-        let show_mode_switcher = !self.titlebar_mode_switcher_items().is_empty();
+        let mode_switcher_items = self.titlebar_mode_switcher_items();
+        let show_mode_switcher = !mode_switcher_items.is_empty();
+        let extension_mode_width = mode_switcher_items
+            .iter()
+            .filter_map(|item| {
+                let TitlebarMode::Extension(id) = item.mode else {
+                    return None;
+                };
+                let label = gpui_extension_view_presentation(id)
+                    .map(|presentation| presentation.title)
+                    .unwrap_or_else(|| id.as_str().to_string());
+                Some((label.chars().count() as f32 * 7.5 + 28.0).max(70.0))
+            })
+            .sum::<f32>();
         let use_compact_mode_dropdown = show_mode_switcher
-            && window.bounds().size.width.as_f32() < TITLEBAR_COMPACT_MODE_WIDTH_THRESHOLD;
+            && window.bounds().size.width.as_f32()
+                < TITLEBAR_COMPACT_MODE_WIDTH_THRESHOLD + extension_mode_width;
         let titlebar = div()
             .id("ghostex-gpui-titlebar")
             .relative()
@@ -178,7 +192,7 @@ impl GhostexGpuiApp {
                 this.child(self.render_titlebar_update_button(cx))
             })
             /*
-            CDXC:NavigationHistory 2026-08-19:
+            CDXC:Navigation 2026-08-19:
             Back/Forward sit LEFT of the project name, next to the sidebar
             toggle. Placing them after the name made them slide horizontally
             every time the active project's title changed length, which is
@@ -223,10 +237,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         /*
-        CDXC:GPUITitlebarParity 2026-06-22-19:39:
+        CDXC:Titlebar 2026-06-22-19:39:
         The visible sidebar toggle should match the macOS React titlebar's current flat layout-sidebar icon. Keep its 29px GPUI hit target 7px away from the native traffic lights (widened from 3px on 2026-08-23; macOS only, Windows/Linux keep their own frame). This margin is the left edge of the whole project slot, so it also sets where Back/Forward and the project name start. Do not render the old blue circular chevron visual.
 
-        CDXC:GPUISidebarCollapse 2026-06-26-10:04:
+        CDXC:Sidebar 2026-06-26-10:04:
         The GPUI titlebar sidebar button toggles the same in-shell collapsed chrome state as Cmd+B and the shared command-palette action. Collapse hides the sidebar and divider siblings without writing sidebarWidth, so the user's expanded width is restored on the next toggle.
 
         Windows and Linux do not have traffic lights to clear. Their collapse
@@ -385,7 +399,7 @@ impl GhostexGpuiApp {
     ) -> impl IntoElement {
         let is_active = is_available && self.active_mode == mode;
         /*
-        CDXC:GPUTitlebarAvailability 2026-07-04-01:00:
+        CDXC:Titlebar 2026-07-04-01:00:
         Disabled Quick/projectless tabs remain normal titlebar segments with a hover reason and no separate hit target. Browser, Kanban, Automate, and Docs share the native disabled reason while click handling still calls the central availability guard before changing active workspace mode.
         */
         div()

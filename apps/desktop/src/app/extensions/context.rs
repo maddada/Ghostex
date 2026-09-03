@@ -95,7 +95,15 @@ impl GhostexGpuiApp {
             .project_workarea_runtime_cef_surfaces
             .iter()
             .filter_map(|(slot, owned)| {
-                matches!(slot, ProjectWorkareaCefSurfaceSlotKey::Extension(_))
+                let ProjectWorkareaCefSurfaceSlotKey::Extension(id) = slot else {
+                    return None;
+                };
+                if gpui_custom_view(*id).is_some() {
+                    return None;
+                }
+                self.extensions_snapshot
+                    .installed
+                    .contains_key(id.as_str())
                     .then(|| owned.surface.clone())
             })
             .collect::<Vec<_>>();

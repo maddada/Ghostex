@@ -37,16 +37,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarAppModalHost 2026-06-24-10:42:
+        CDXC:AppModal 2026-06-24-10:42:
         GPUI titlebar Settings, Hotkeys, and Command Palette actions must open the shared React app-modal host in a real GPUI CEF window. The route reuses the macOS modal ids and latest Settings-compatible sidebar hydrate, with no duplicated React modal UI, WebKit/WKWebView, transparent overlay, hidden hit-test region, synthetic mouse routing, or generic fallback surface.
 
-        CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
+        CDXC:Sessions 2026-06-24-11:53:
         Previous Sessions joins the same GPUI-owned CEF app-modal window path as Settings, Hotkeys, and Command Palette. The titlebar route must open the shared React modal component directly and let its gxserver-backed query resolve through sidebarCommand responses, not duplicated GPUI UI, overlays, hit-test routing, or stored hydrate rewrites.
 
-        CDXC:GPUISettingsEntryModals 2026-06-24-12:22:
+        CDXC:Settings 2026-06-24-12:22:
         Configure Agents, Configure Actions, and Open Targets are Settings-modal entry points in the shared React host. GPUI must preserve their modal ids, attach the latest Settings-compatible sidebar hydrate, and reuse this production CEF app-modal route instead of adding duplicate React UI, stubs, fallback routing, overlays, or hidden hit regions.
 
-        CDXC:GPUIAgentsHubModal 2026-06-24-12:26:
+        CDXC:AgentLauncher 2026-06-24-12:26:
         Agents Hub opens through this same CEF app-modal host so command-palette bridge requests and titlebar menu actions present the existing shared React modal. Its catalog/content are separate sidebarCommand responses and should not be bundled into the open message.
         */
         let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
@@ -344,7 +344,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandTabContextMenu 2026-06-25-17:37:
+        CDXC:ContextMenus 2026-06-25-17:37:
         Delayed Send from a clicked command tab is session-scoped like native, but GPUI can only execute the later Return through a visible mounted command body. Selecting, expanding, and waking the clicked tab before opening the modal is the normal-layout equivalent of targeting that native command session.
         */
         if !self.command_pane_tab_exists(group_id, session_id) {
@@ -383,13 +383,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUICommandTabContextMenu 2026-06-25-18:33:
+        CDXC:ContextMenus 2026-06-25-18:33:
         Legacy clicked-tab action handlers focus the clicked terminal before Rename and Close After Done dispatch. Select and focus the clicked GPUI command tab without expanding a collapsed strip so the action target becomes the command-pane focus while left-click remains the only hidden-open gesture.
 
-        CDXC:GPUICommandAttention 2026-06-25-19:58:
+        CDXC:Notifications 2026-06-25-19:58:
         Primary clicked-tab context actions use that same focus path, so they acknowledge only the clicked Attention command session before opening Rename or toggling Close After Done.
 
-        CDXC:GPUICommandTabContextMenu 2026-06-27-01:55:
+        CDXC:ContextMenus 2026-06-27-01:55:
         Command-tab right-click no longer exposes these retained handlers because native command-panel payloads are panel-only. Keep the helper for non-menu command-tab dispatch paths without reintroducing visible primary menu rows.
         */
         if command_pane_tab_context_session_action_focus_policy(action)
@@ -565,7 +565,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUITitlebarTips 2026-06-24-23:17:
+        CDXC:Onboarding 2026-06-24-23:17:
         The GPUI info glyph opens the shared React `titlebar-host.html?ghostexTitlebarPanel=tips` document inside an app-owned anchored overlay whose top edge is TITLEBAR_HEIGHT. Because the rendered child is a native CEF view, dropdown state changes must explicitly show/hide the CEF surface instead of relying on GPUI paint removal.
         */
         if open {
@@ -638,7 +638,7 @@ impl GhostexGpuiApp {
             Err(error) => {
                 // Same user-visible handling as a missing bundle; the next
                 // dropdown open retries creation
-                // (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
+                // (CDXC:CefRuntime 2026-07-11).
                 support_logs::append(
                     support_logs::GpuiSupportLog::CrashReports,
                     "gpui.cefSurface.createFailed",
@@ -673,7 +673,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIResourcesTitlebar 2026-07-08:
+        CDXC:Resources 2026-07-08:
         The GPUI Resources glyph now opens the shared React
         `titlebar-host.html?ghostexTitlebarPanel=resources` document inside the
         same strict app-owned anchored overlay as Tips. Each open creates a fresh
@@ -708,7 +708,7 @@ impl GhostexGpuiApp {
             self.titlebar_resources_panel_ready = false;
             self.titlebar_resources_panel_open = true;
             /*
-            CDXC:GPUIResourcesTitlebarCrash 2026-07-09:
+            CDXC:Resources 2026-07-09:
             CEF can drain the main dispatch queue while synchronously creating
             a child browser. Do that work in a foreground task before
             re-entering `app.update`; otherwise a queued GPUI task can run
@@ -722,7 +722,7 @@ impl GhostexGpuiApp {
             cx.notify();
 
             /*
-            CDXC:GPUIResourcesInstantOpen 2026-07-13:
+            CDXC:Resources 2026-07-13:
             Commit the open/loading state for a complete frame before creating
             the fresh Resources CEF browser. CreateBrowserSync may spend one or
             two seconds initializing its request context; running it in the
@@ -796,7 +796,7 @@ impl GhostexGpuiApp {
                     Err(error) => {
                         // The dropdown stays empty for this open; the next
                         // open re-runs creation
-                        // (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
+                        // (CDXC:CefRuntime 2026-07-11).
                         support_logs::append(
                             support_logs::GpuiSupportLog::CrashReports,
                             "gpui.cefSurface.createFailed",
@@ -850,7 +850,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIResourcesDevServers 2026-07-26:
+        CDXC:Resources 2026-07-26:
         Read the daemon's presentation snapshot off the main thread once per
         Resources open and project it into the shared titlebar resource-group
         contract. A stale open generation drops the result instead of pushing an
@@ -1037,7 +1037,7 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
 
         /*
-        CDXC:GPUIResourcesDevServers 2026-07-26:
+        CDXC:Resources 2026-07-26:
         The mounted-pane group stays the authority for this window's live
         sessions (activity, pane state, delayed-send countdowns). Every other
         project, and every session of the active project that is not mounted
@@ -1142,13 +1142,19 @@ impl GhostexGpuiApp {
                 continue;
             };
             let mode = slot_key.titlebar_mode();
+            let title = match mode {
+                TitlebarMode::Extension(id) => gpui_extension_view_presentation(id)
+                    .map(|presentation| presentation.title)
+                    .unwrap_or_else(|| id.as_str().to_string()),
+                mode => mode.display_label().to_string(),
+            };
             tabs.push(serde_json::json!({
                 "browserId": owned_surface.surface.read(cx).browser_identifier(),
                 "id": format!("project-editor:{project_id}:{}", slot_key.privacy_label()),
                 "isActive": self.active_mode == mode,
                 "kind": gpui_titlebar_resources_project_editor_kind(*slot_key),
                 "projectId": project_id,
-                "title": mode.display_label(),
+                "title": title,
                 "url": owned_surface.runtime_url.clone().into_cef_url(),
             }));
         }
@@ -1194,7 +1200,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:AnonymousAnalytics 2026-08-26:
+        CDXC:Telemetry 2026-08-26:
         This launcher is the single entry point for every app-modal open route
         (titlebar actions, hotkeys, command palette, sidebar bridge messages), so
         Find, the Extensions store, and Settings report `surface.opened` from
@@ -1237,7 +1243,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:StashedPrompts 2026-08-08:
+    CDXC:SavedPrompts 2026-08-08:
     Saved Prompts is reachable from the global Quick Access tabs, whose React
     message intentionally carries no project/session authority. Recover only
     the currently focused LOCAL Agents mapping already owned by Rust so a row
@@ -1281,22 +1287,22 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsModalHost 2026-06-24-10:58:
+        CDXC:Settings 2026-06-24-10:58:
         Settings, Hotkeys, and Command Palette app-modal requests share this one GPUI-owned CEF window launcher so titlebar clicks and sidebar bridge messages cannot diverge into duplicate UI, temporary stubs, hidden overlays, or broad hit-test routing.
 
-        CDXC:GPUIPreviousSessionsModal 2026-06-24-11:53:
+        CDXC:Sessions 2026-06-24-11:53:
         Previous Sessions app-modal requests share this launcher so titlebar/menu actions and modal-host open messages use one CEF window owner, while gxserver result messages remain transient sidebarState events owned by the command bridge.
 
-        CDXC:GPUISettingsEntryModals 2026-06-24-12:22:
+        CDXC:Settings 2026-06-24-12:22:
         Settings sub-entry modal ids must share this launcher so bridge opens, command-palette commands, and titlebar actions all hydrate the same shared Settings modal while letting the React host choose the initial tab from the modal id.
 
-        CDXC:GPUIAgentsHubModal 2026-06-24-12:26:
+        CDXC:AgentLauncher 2026-06-24-12:26:
         Agents Hub shares the launcher and receives the normal sidebar hydrate for settings-backed UI labels, but its filesystem catalog is not stored in that hydrate. The shared React Hub requests a fresh metadata catalog after open and then selected file content on demand through sidebarCommand.
 
-        CDXC:GPUIAppModalReturnFocus 2026-06-25-22:13:
+        CDXC:FocusRouting 2026-06-25-22:13:
         Command-pane app modals need the same dismissal focus contract as native child windows. Capture only a runtime command group/session return target at modal open, then restore that exact command tab on close if it still exists; do not persist modal payloads, titles, command text, paths, URLs, stdout/stderr, or fallback to another command group.
 
-        CDXC:GPUILoggingRemoval 2026-06-28-17:06:
+        CDXC:Diagnostics 2026-06-28-17:06:
         GPUI app-modal open/retry behavior stays functional, but runtime log writers and diagnostic breadcrumbs are intentionally removed until a future requirement adds a narrower diagnostics surface.
         */
         if reset_ready_retry {
@@ -1327,7 +1333,7 @@ impl GhostexGpuiApp {
                 .unwrap_or(false);
             if !window_configuration_matches {
                 /*
-                CDXC:GPUIAppModalWindowSizing 2026-07-22:
+                CDXC:AppModal 2026-07-22:
                 The reusable React host cannot reuse native window options
                 across a resizable/fixed-size transition. In particular, a
                 Command Palette window carries the generic 520px minimum width,
@@ -1424,7 +1430,7 @@ impl GhostexGpuiApp {
         };
         let event_handler = self.app_modal_host_bridge_event_handler(cx);
         /*
-        CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+        CDXC:Onboarding 2026-08-18:
         Only the tutorial video window loads a third-party page as its own
         document, and it is the only modal that needs a host-side action once
         that page is up. Every bridged modal keeps its React ready handshake
@@ -1581,7 +1587,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn clear_lost_gpui_app_modal_window_handle(&mut self) {
         /*
-        CDXC:GPUIAppModalReturnFocus 2026-06-25-22:25:
+        CDXC:FocusRouting 2026-06-25-22:25:
         A failed GPUI app-modal window update means the runtime handle no longer owns a close lifecycle, so clear the paired command return-focus target with the stale handle to prevent a later modal close from consuming it.
         */
         self.app_modal_window = None;
@@ -1595,7 +1601,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIAppModalNativeClose 2026-07-12:
+        CDXC:AppModal 2026-07-12:
         A modal window closed through native window chrome does not send the
         React `close` bridge message. End the matching native open attempt at
         GPUI's actual window lifecycle boundary so its pending CEF-ready
@@ -1675,7 +1681,7 @@ impl GhostexGpuiApp {
         }
         self.restore_gpui_app_modal_command_return_focus_if_needed(cx);
         /*
-        CDXC:GPUIPortlessPromptDeferral 2026-08-18:
+        CDXC:Portless 2026-08-18:
         A modal dismissed from React takes the window handle here instead of
         reaching the native-close path, so the deferred Portless prompt has to
         be resumed from this ownership boundary as well.
@@ -1710,7 +1716,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsGhosttyConfig 2026-06-24-12:24:
+        CDXC:Terminal 2026-06-24-12:24:
         Normal GPUI `updateSettings` saves should write generated Ghostty managed terminal settings only when a config-backed terminal value changed. The current GPUI GhosttyKit wrapper has load/create surface FFI but no safe live reload/update API, so this write affects Ghostty's config file, external Ghostty reloads, and future/recreated GPUI surfaces without claiming live embedded terminal reload.
         */
         if ghostty_config_backed_setting_keys_changed.is_empty() {
@@ -1741,7 +1747,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-11:39:
+        CDXC:AgentProviders 2026-06-24-11:39:
         GPUI matches macOS for agent launch policy: shared Settings is the local render cache, while local gxserver owns inherited Accept All and Default Prompt Agent behavior for launchers across clients. After a successful Settings save, post the current two gxserver-owned values only when either changed, and keep token/network/parser failures silent so unavailable gxserver never creates fake daemon state or rolls back the saved local cache.
         */
         if previous_agent_settings == next_agent_settings {
@@ -1772,7 +1778,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-12:14:
+        CDXC:AgentProviders 2026-06-24-12:14:
         GPUI startup/open-time hydration must match macOS migration semantics for gxserver-owned agent policy. Read `/api/readAgentSettings`; if gxserver has no persisted row, seed it once from current shared Settings, otherwise treat daemon values as canonical and refresh the local render cache through the central settings service without logging tokens, response bodies, paths, commands, or user content.
         */
         if self.gxserver_agent_settings_reconciliation_in_flight {
@@ -1803,7 +1809,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> serde_json::Value {
         /*
-        CDXC:GPUISettingsEntryModals 2026-06-24-12:22:
+        CDXC:Settings 2026-06-24-12:22:
         Any shared Settings entry point can show agent-owned controls after the React host selects its initial tab. Reconcile gxserver-owned agent policy before hydrating Settings, Hotkeys, Configure Agents, Configure Actions, and Open Targets so entry-specific modal ids do not drift from the canonical Settings route.
         */
         if modal.is_settings_modal_entry() {
@@ -1835,7 +1841,7 @@ impl GhostexGpuiApp {
         mut message: serde_json::Value,
     ) -> serde_json::Value {
         /*
-        CDXC:GPUICommandPane 2026-06-25-10:50:
+        CDXC:CommandPane 2026-06-25-10:50:
         App-modal sidebar hydrates must carry the same command-session indicators as the live GPUI sidebar HUD. Reuse the sanitized command-pane summary and gxserver command rows; never compute from command text, paths, status-file paths, terminal output, logs, or persisted shell-state JSON.
         */
         let commands = message
@@ -1860,7 +1866,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-12:14:
+        CDXC:AgentProviders 2026-06-24-12:14:
         Startup/open hydration may finish after the user saves Settings. Apply daemon canonical values only if the shared render cache still matches the local values used for the read/seed decision; a newer save uses the existing save-time gxserver sync path instead of being overwritten by a stale startup response.
         */
         if shared_settings::shared_sidebar_settings_snapshot().gxserver_agent_settings()
@@ -1880,7 +1886,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsGxserverAgentPolicy 2026-06-24-11:39:
+        CDXC:AgentProviders 2026-06-24-11:39:
         gxserver read/update responses are canonical for inherited agent launch policy. If the daemon reports either agent setting differently than the current GPUI render cache, persist those canonical values through the central shared Settings service and refresh the modal/sidebar runtime state again instead of writing a separate cache or logging private daemon details.
         */
         let latest_settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
@@ -1904,7 +1910,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsPersistence 2026-06-24-11:19:
+        CDXC:Settings 2026-06-24-11:19:
         After a successful Settings save or gxserver startup/open canonical sync, GPUI refreshes only the settings-dependent runtime state it owns today: app-modal hydrate/sidebarState, sidebar debug/beta booleans through the existing CEF runtime-settings path, project-workarea CEF visibility, project-editor auto-sleep scheduling, supported embedded Ghostty request-map settings, gxserver-owned agent-policy reconciliation, and central-service render reads such as the Browser feedback/profile toolbar controls. This is not full settings fan-out; many action bridges, code-server sync, live Ghostty config reloads, and broad future side effects remain outside this path.
         */
         self.reschedule_project_editor_auto_sleep_if_policy_changed_from_shared_settings(
@@ -1916,6 +1922,8 @@ impl GhostexGpuiApp {
         refresh_gpui_visual_settings(settings_snapshot);
         self.refresh_sidebar_runtime_settings_from_shared_settings(settings_snapshot, cx);
         self.coerce_active_mode_to_available_project_context(cx);
+        self.prune_project_workarea_runtime_cef_surfaces_for_current_gates(cx);
+        self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
         #[cfg(target_os = "macos")]
         self.refresh_terminal_ghostty_surface_config_requests_from_shared_settings(
             settings_snapshot,
@@ -2040,7 +2048,7 @@ impl GhostexGpuiApp {
         settings_snapshot: &shared_settings::SharedSidebarSettingsSnapshot,
     ) {
         /*
-        CDXC:GPUITerminalSettings 2026-06-24-11:27:
+        CDXC:Terminal 2026-06-24-11:27:
         `updateSettings` fan-out refreshes the GPUI-owned Ghostty request maps so subsequent Agents, command, and startup surface creations use the saved supported terminal settings. Existing live Ghostty surfaces are not reloaded here because this runtime path does not yet expose a safe config-reload/apply contract; do not fake reload by dropping running terminals or logging raw settings.
         */
         let terminal_config =
@@ -2088,7 +2096,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsStatusBridge 2026-06-24-11:36:
+        CDXC:StatusPet 2026-06-24-11:36:
         Settings status/action responses are transient `sidebarState` messages to the shared React modal host. They must clear modal loading states without replacing the stored full hydrate snapshot used when the app-modal host becomes ready or a Settings save rehydrates the modal.
         */
         let Some(handle) = self.app_modal_window.clone() else {
@@ -2193,7 +2201,7 @@ impl GhostexGpuiApp {
     }
 
     /*
-    CDXC:GPUIRemoteNewTerminal 2026-08-20:
+    CDXC:RemoteMachines 2026-08-20:
     Toasts sent to the app-modal host only render while a modal window is open,
     because that host IS the modal window. Sidebar and tab-strip actions run with
     no modal up, so their failures were dropped on the floor and the click looked
@@ -2320,7 +2328,7 @@ impl GhostexGpuiApp {
     /// duplicate cookies or site storage in shell state here.
     pub(crate) fn flush_gpui_quit_persistence(&mut self, cx: &mut gpui::Context<Self>) {
         /*
-        CDXC:GPUICommandPaneQuitPersistence 2026-07-10:
+        CDXC:Workarea 2026-07-10:
         App teardown closes the local GPUI/Ghostty renderer that is attached to
         each command zmx session. That renderer exit is not a terminal-session
         exit: command providers and their processes must remain alive so the

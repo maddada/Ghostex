@@ -99,6 +99,12 @@ export {
 } from './ghostex-settings/presets';
 export { DEFAULT_ghostex_SETTINGS } from './ghostex-settings/defaults';
 export {
+  CUSTOM_VIEW_ID_PREFIX,
+  normalizeCustomViewUrl,
+  normalizeGhostexCustomViews,
+  type GhostexCustomView,
+} from './ghostex-settings/custom-views';
+export {
   WEB_LINK_OPEN_TARGET_OPTIONS,
   CHAT_FILE_OPEN_VIEW_OPTIONS,
   SIDEBAR_THEME_SETTING_OPTIONS,

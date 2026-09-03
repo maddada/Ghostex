@@ -70,13 +70,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+        CDXC:Workarea 2026-06-24-10:12:
         The real CEF surface map is active app-level ownership, not proof-only evidence. Refresh may prune already-owned Source/Kanban/Automate/Manage CefSurface entities when their safe gate disappears, but it still cannot create a surface, issue or store a URL, synthesize fallback navigation, mount hidden/offscreen views, use WKWebView/WebKit, or persist/log private runtime data.
 
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-28-17:09:
+        CDXC:Workarea 2026-06-28-17:09:
         The old slot, URL-issuance, startup-readiness, and owner-gate proof maps are removed from runtime state. Refresh now only prunes already-owned project workarea CefSurface entities whose current explicit project context can no longer provide a direct runtime URL.
 
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-29-00:15:
+        CDXC:Workarea 2026-06-29-00:15:
         Refresh must also prune already-owned surfaces whose stored runtime URL identity differs from the current direct runtime URL so a valid new project cannot inherit the previous project's slot-owned CEF view.
         */
         self.prune_project_workarea_runtime_cef_surfaces_for_current_gates(cx)
@@ -87,7 +87,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUISourceRuntime 2026-06-24-23:17:
+        CDXC:CodeEditor 2026-06-24-23:17:
         Source startup is lazy and visible-workarea scoped. Selecting or focusing awake Source may launch the shared code-server process in the background, but CEF creation still waits for the runtime readiness result and an authorized folder URL; no hidden Source CEF prewarm, fallback localhost adoption, persistent URL storage, or renderer-provided path is allowed.
         */
         if self.source_code_server_runtime.state == SourceCodeServerRuntimeLaunchState::Installing {
@@ -504,6 +504,12 @@ impl GhostexGpuiApp {
     }
 
     fn extension_view_runtime_url(&self, id: ExtensionId) -> Option<ProjectWorkareaRealRuntimeUrl> {
+        if let Some(custom_view) = gpui_custom_view(id) {
+            if !custom_view.enabled {
+                return None;
+            }
+            return ProjectWorkareaRealRuntimeUrl::from_authorized_runtime_url(custom_view.url);
+        }
         let extension = self.installed_extension_view(id)?;
         let presentation = gpui_extension_view_presentation(id)?;
         if presentation.server_is_static {
@@ -527,6 +533,14 @@ impl GhostexGpuiApp {
         let title = gpui_extension_view_presentation(id)
             .map(|presentation| presentation.title)
             .unwrap_or_else(|| id.as_str().to_string());
+        if gpui_custom_view(id).is_some() {
+            return ProjectEditorPlaceholderSignature {
+                mode,
+                title: Some(format!("Opening {title}…")),
+                message: String::new(),
+                actions: Vec::new(),
+            };
+        }
         let (title, message) = match extension_view_runtime_state(id) {
             Some(ExtensionViewRuntimeState::Failed(error)) => {
                 (Some(format!("{title} could not start")), error)
@@ -731,10 +745,10 @@ impl GhostexGpuiApp {
         slot_key: ProjectWorkareaCefSurfaceSlotKey,
     ) -> bool {
         /*
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-11:03:
+        CDXC:Workarea 2026-06-24-11:03:
         Runtime placeholder replacement now follows real navigable CEF URL authority, not the retired proof-only owner gates. Kanban, Automate, and Manage can replace placeholders only when the current explicit project snapshot can issue a first-party bundled CEF URL.
 
-        CDXC:GPUISourceRuntime 2026-06-24-23:17:
+        CDXC:CodeEditor 2026-06-24-23:17:
         Source joins this same replacement edge only after the app-owned code-server runtime has reached the ready state for the current explicit sidebar project target. The URL may be used immediately for CefSurface creation but is not retained in shell state, logs, or proof JSON.
         */
         self.project_workarea_runtime_url_for_slot(slot_key)
@@ -746,7 +760,9 @@ impl GhostexGpuiApp {
         slot_key: ProjectWorkareaCefSurfaceSlotKey,
     ) -> Option<ProjectWorkareaRealRuntimeUrl> {
         if let ProjectWorkareaCefSurfaceSlotKey::Extension(id) = slot_key {
-            self.latest_sidebar_project_snapshot.as_ref()?;
+            if gpui_custom_view(id).is_none() {
+                self.latest_sidebar_project_snapshot.as_ref()?;
+            }
             return self.extension_view_runtime_url(id);
         }
         let snapshot = self.latest_sidebar_project_snapshot.as_ref()?;
@@ -827,7 +843,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> Option<Entity<CefSurface>> {
         /*
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+        CDXC:Workarea 2026-06-24-10:12:
         Project-workarea CEF creation happens only at the visible replacement edge after the slot gate already permits placeholder replacement and a real runtime URL value has been supplied. This avoids hidden/offscreen preparatory mounts and keeps URL values out of app shell state while still using the existing CefSurface child-view wrapper for Source, Kanban, Automate, and Manage.
         */
         if self.sidebar.is_none()
@@ -869,7 +885,7 @@ impl GhostexGpuiApp {
                 gpui_remote_project_reference_from_project_id(active_project_id)
             {
                 /*
-                CDXC:RemoteProjectDocs 2026-08-06:
+                CDXC:Docs 2026-08-06:
                 A remote project path belongs to its gxserver and must never be
                 installed as a local CEF resource scope. Keep the synthetic
                 Docs origin, but back it with a fixed project-id resource loader
@@ -894,14 +910,14 @@ impl GhostexGpuiApp {
                 )))
             } else {
                 /*
-                CDXC:DocsRootDirectory 2026-08-09:
+                CDXC:Docs 2026-08-09:
                 Docs resources resolve against the same configurable roots the
                 Docs bridge uses, through the one shared resolver. The lookup is
                 deferred into the scope's resolver because reading the project's
                 Docs directory talks to the daemon, which must never run on the
                 main thread while a CEF surface is being created.
 
-                CDXC:DocsRootAdditive 2026-08-09: both mounts come out of that
+                CDXC:Docs 2026-08-09: both mounts come out of that
                 same deferred lookup — the project root serving docs/ and the
                 configured Docs folders, and the mounted Docs directory serving
                 its whole tree behind its reserved path segment.
@@ -961,27 +977,53 @@ impl GhostexGpuiApp {
         };
         let creation_result = match slot_key {
             ProjectWorkareaCefSurfaceSlotKey::Extension(id) => {
-                let extension = self.installed_extension_view(id)?;
-                let bridge_surface = extension
-                    .bridge_surface_spec()
-                    .filter(|surface| surface.matches_url(&url))
-                    .or_else(|| extension.bridge_surface_spec_for_url(&url));
-                let Some(bridge_surface) = bridge_surface else {
-                    return None;
-                };
-                CefSurface::try_new_extension(
-                    surface_id,
-                    parent_ns_view,
-                    url,
-                    profile,
-                    CEF_DARK_PREPAINT_BACKGROUND_COLOR,
-                    false,
-                    surface_background,
-                    true,
-                    bridge_surface,
-                    self.extension_view_bridge_event_handler(slot_key, cx),
-                    cx,
-                )
+                if gpui_custom_view(id).is_some() {
+                    CefSurface::try_new(
+                        surface_id,
+                        parent_ns_view,
+                        url,
+                        profile,
+                        CEF_DARK_PREPAINT_BACKGROUND_COLOR,
+                        true,
+                        surface_background,
+                        None,
+                        true,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        cx,
+                    )
+                } else {
+                    let extension = self.installed_extension_view(id)?;
+                    let bridge_surface = extension
+                        .bridge_surface_spec()
+                        .filter(|surface| surface.matches_url(&url))
+                        .or_else(|| extension.bridge_surface_spec_for_url(&url));
+                    let Some(bridge_surface) = bridge_surface else {
+                        return None;
+                    };
+                    CefSurface::try_new_extension(
+                        surface_id,
+                        parent_ns_view,
+                        url,
+                        profile,
+                        CEF_DARK_PREPAINT_BACKGROUND_COLOR,
+                        false,
+                        surface_background,
+                        true,
+                        bridge_surface,
+                        self.extension_view_bridge_event_handler(slot_key, cx),
+                        cx,
+                    )
+                }
             }
             _ => CefSurface::try_new(
                 surface_id,
@@ -1011,7 +1053,7 @@ impl GhostexGpuiApp {
             Ok(surface) => surface,
             Err(error) => {
                 // Ensure-style reconcile: skip this pass, retried on the next
-                // workarea sync (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
+                // workarea sync (CDXC:CefRuntime 2026-07-11).
                 support_logs::append(
                     support_logs::GpuiSupportLog::CrashReports,
                     "gpui.cefSurface.createFailed",
@@ -1036,10 +1078,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-11:03:
+        CDXC:Workarea 2026-06-24-11:03:
         Workarea CEF surface materialization is active-workarea-only. The app creates Kanban/Automate/Manage CefSurface entities only when CEF is initialized, the workarea is selected and awake, and a real bundled runtime URL can be issued from the current explicit sidebar snapshot; it does not prewarm hidden surfaces or synthesize Source/code-server URLs.
 
-        CDXC:GPUISourceRuntime 2026-06-24-23:17:
+        CDXC:CodeEditor 2026-06-24-23:17:
         Source uses the same active-workarea-only materialization edge, with one extra predecessor: ensure the shared code-server runtime is launching or ready before asking the URL gate for a Source CefSurface. Until the app-owned runtime reaches ready, this method leaves Source on its loading/error placeholder instead of creating an about:blank or dead localhost surface.
         */
         let mut changed = false;
@@ -1188,7 +1230,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUIProjectWorkareaRuntimeCefSurfaces 2026-06-24-10:12:
+        CDXC:Workarea 2026-06-24-10:12:
         Source, Kanban, Automate, and Manage CEF visibility is derived from the active awake workarea plus the same replacement gate used by rendering. The loop only toggles already-owned CEF child views; it does not create missing surfaces, issue URLs, synthesize fallback pages, overlap project panes, or persist/log private runtime details.
         */
         let surface_slot_keys = self
@@ -1214,7 +1256,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn titlebar_mode_available(&self, mode: TitlebarMode) -> bool {
         /*
-        CDXC:DisabledPluginRouting 2026-08-23:
+        CDXC:Extensions 2026-08-23:
         A workarea turned off in Settings → Customize is not just missing its
         titlebar tab: it is a place the shell must never route to. Folding the
         Customize gate into the single availability predicate closes that off
@@ -1228,10 +1270,14 @@ impl GhostexGpuiApp {
         */
         let available = match mode {
             TitlebarMode::Extension(id) => {
-                self.project_scoped_workarea_availability()
-                    .titlebar_mode_available(mode)
-                    && self.installed_extension_view(id).is_some()
-                    && gpui_extension_view_presentation(id).is_some()
+                if gpui_custom_view(id).is_some() {
+                    gpui_enabled_custom_view(id).is_some()
+                } else {
+                    self.project_scoped_workarea_availability()
+                        .titlebar_mode_available(mode)
+                        && self.installed_extension_view(id).is_some()
+                        && gpui_extension_view_presentation(id).is_some()
+                }
             }
             _ => self
                 .project_scoped_workarea_availability()
@@ -1253,7 +1299,7 @@ impl GhostexGpuiApp {
             .into_iter()
             .filter(|item| !gpui_titlebar_mode_hidden_from_settings(item.mode))
             .collect::<Vec<_>>();
-        let extension_available = self
+        let installed_extension_available = self
             .project_scoped_workarea_availability()
             .project_context
             .has_project_scoped_workareas();
@@ -1268,19 +1314,30 @@ impl GhostexGpuiApp {
             })
             .filter_map(|extension| {
                 let id = ExtensionId::new(&extension.id)?;
+                if gpui_custom_view(id).is_some() {
+                    return None;
+                }
                 let title = gpui_extension_view_presentation(id)?.title;
-                Some((title, id))
+                Some((title, id, installed_extension_available))
             })
             .collect::<Vec<_>>();
         extension_modes.sort_by(|left, right| left.0.cmp(&right.0));
+        items.extend(extension_modes.into_iter().map(|(_, id, is_available)| {
+            TitlebarModeSwitcherItem {
+                mode: TitlebarMode::Extension(id),
+                is_available,
+                disabled_reason: (!is_available)
+                    .then_some(TITLEBAR_PROJECT_CONTEXT_DISABLED_REASON),
+            }
+        }));
         items.extend(
-            extension_modes
+            gpui_custom_views_from_settings()
                 .into_iter()
-                .map(|(_, id)| TitlebarModeSwitcherItem {
-                    mode: TitlebarMode::Extension(id),
-                    is_available: extension_available,
-                    disabled_reason: (!extension_available)
-                        .then_some(TITLEBAR_PROJECT_CONTEXT_DISABLED_REASON),
+                .filter(|view| view.enabled)
+                .map(|view| TitlebarModeSwitcherItem {
+                    mode: TitlebarMode::Extension(view.id),
+                    is_available: true,
+                    disabled_reason: None,
                 }),
         );
         if items.len() == 1 && items[0].mode == TitlebarMode::Agents {
@@ -1294,7 +1351,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:GPUIProjectScopedWorkareaAvailability 2026-06-22-19:44:
+        CDXC:Workarea 2026-06-22-19:44:
         Runtime GPUI workarea availability now prefers the latest valid in-memory sidebar project snapshot and uses the strict env bridge only before the sidebar reports. When a project-context update disables the active project-scoped mode, fall back through the existing Agents route, hide Browser CEF through the normal visibility gate, and persist only shell mode/focus state without writing project names, paths, ids, URLs, raw JSON, tokens, cookies, or user content.
         */
         let next_active_mode = self.available_titlebar_mode_or_agents(self.active_mode);
@@ -1313,7 +1370,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn ensure_tab_scroll_handles_for_current_layout(&mut self) {
         /*
-        CDXC:GPUITabOverflowReveal 2026-06-22-12:30:
+        CDXC:CommandPane 2026-06-22-12:30:
         Native tab overflow parity needs runtime-only ScrollHandles for Agents pane tab strips, Browser pane tab strips, expanded command group tab strips, and the collapsed command strip. Selection, keyboard cycling, close-neighbor selection, new-tab creation, and drag/drop moves should reveal the active item with scroll_to_item(active index) without persisting scroll offsets or adding overlays, hidden hit regions, hit-test routing, synthetic coordinate routing, or broad layout overlap.
         */
         let workspace_pane_ids = self.agents_workspace.leaf_order();
@@ -1403,7 +1460,7 @@ impl GhostexGpuiApp {
         command_pane: &CommandPaneModel,
     ) -> Option<(CommandPaneGroupId, CommandSessionId)> {
         /*
-        CDXC:GPUICommandTabOverflow 2026-06-26-00:39:
+        CDXC:CommandPane 2026-06-26-00:39:
         Focused command active-tab reveal is responder-like: resolve only the live `focused_group` active session and no-op when `focused_group` is stale, so expanded and collapsed reveal never fall back to the first command group.
         */
         command_pane.focused_group_active_session_id()
@@ -1492,16 +1549,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUICommandTabOverflow 2026-06-25-13:34:
+        CDXC:CommandPane 2026-06-25-13:34:
         Clicking Show Active Tab should reveal the already-selected command tab in the current scroll strip. This is navigation state and must not mutate tab order, session identity, action metadata, command text, or logs.
 
-        CDXC:GPUICommandTabOverflow 2026-06-25-18:56:
+        CDXC:CommandPane 2026-06-25-18:56:
         Native `performStickyActiveTabButton` scrolls existing tab geometry directly; it does not route through tab action dispatch or select a different session.
 
-        CDXC:GPUICommandTabOverflow 2026-06-25-21:50:
+        CDXC:CommandPane 2026-06-25-21:50:
         The GPUI command-pane overflow proxy must focus the command pane/group that owns the clipped active tab before revealing it. This remains a real button click path, not a hidden overlay or hit-test route, and it must not select another tab, change drag/drop state, or mutate command session identity.
 
-        CDXC:GPUICommandTabOverflow 2026-06-25-21:56:
+        CDXC:CommandPane 2026-06-25-21:56:
         Native `performStickyActiveTabButton` calls `centerActiveTabInTabStrip`, so Show Active Tab should center the clipped active tab when scroll bounds allow. Keep the softer native-margin reveal helper for ordinary focus/selection scrolling, not this explicit proxy action.
         */
         if self.command_pane.focus_group(group_id) {

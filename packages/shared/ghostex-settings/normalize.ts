@@ -16,6 +16,7 @@ import {
 import { normalizePetId } from '../pets';
 import { normalizeSidebarSessionTagListItems } from '../session-tags';
 import { DEFAULT_ghostex_SETTINGS } from './defaults';
+import { normalizeGhostexCustomViews } from './custom-views';
 import { normalizeDiagnosticLoggingSettings } from './diagnostic-logging';
 import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
@@ -122,7 +123,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     DEFAULT_ghostex_SETTINGS.customSidebarTitlebarBackgroundColor
   );
   /**
-   * CDXC:SidebarTitlebarColors 2026-06-16-14:28:
+   * CDXC:Theming 2026-06-16-14:28:
    * Missing Settings should use the explicit 95 contrast default instead of
    * reverse-mapping the default background hex, because that reverse mapping
    * cannot exactly invert the slider's channel curve. Only valid legacy saved
@@ -151,7 +152,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     customSidebarTitlebarBackgroundTintColor
   );
   /**
-   * CDXC:AccentColor 2026-08-24:
+   * CDXC:Theming 2026-08-24:
    * The accent color is a plain hex color like the sidebar/titlebar colors, so
    * it uses the same six-digit hex normalization and falls back to the default
    * sky tone when the stored value is not a usable color.
@@ -180,7 +181,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readNumber(source, 'agentManagerZoomPercent', DEFAULT_ghostex_SETTINGS.agentManagerZoomPercent)
     ),
     /**
-     * CDXC:PromptAgents 2026-05-28-07:15:
+     * CDXC:AgentLauncher 2026-05-28-07:15:
      * Keep the selected default prompt agent as a plain agent id so built-in,
      * reordered, hidden-restored, and custom agents can all be selected without
      * coupling settings normalization to the runtime agent registry.
@@ -202,20 +203,20 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     markdownFileOpenView,
     htmlFileOpenView,
     /**
-     * CDXC:SettingsAdvanced 2026-06-28-08:01:
+     * CDXC:Settings 2026-06-28-08:01:
      * Persist the Show Advanced density switch with other Settings so advanced
      * rows stay visible after a restart until the user disables the switch.
      */
     showAdvancedSettings: readBoolean(source, 'showAdvancedSettings', DEFAULT_ghostex_SETTINGS.showAdvancedSettings),
     /**
-     * CDXC:SettingsNavigation 2026-06-29-17:54:
+     * CDXC:Settings 2026-06-29-17:54:
      * Restart restore reads Settings location from the shared settings file, so
      * normalize active tab and scroll offsets at the storage boundary before
      * React uses them to choose the initial Settings surface.
      */
     settingsModalNavigation: normalizeSettingsModalNavigationState(source.settingsModalNavigation),
     /**
-     * CDXC:BetaFeatures 2026-06-16-13:08:
+     * CDXC:Settings 2026-06-16-13:08:
      * Normalize the beta gate as a strict boolean so stale or malformed settings
      * cannot expose beta-only OS Integration or other experimental surfaces.
      */
@@ -256,7 +257,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.openInTitlebarButtonHidden
     ),
     /**
-     * CDXC:EditorPanes 2026-06-08-20:12:
+     * CDXC:CodeEditor 2026-06-08-20:12:
      * Normalize the code-server VS Code settings-link toggles on every read so
      * missing values use the bundled editor defaults while explicit local VS
      * Code settings choices remain persisted.
@@ -277,12 +278,12 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     customDefaultEditorCommand: normalizeCustomDefaultEditorCommand(
       readString(source, 'customDefaultEditorCommand', DEFAULT_ghostex_SETTINGS.customDefaultEditorCommand)
     ),
-    // CDXC:AppIconPicker 2026-06-25-21:50: Coerce stored app icon source id to a trimmed string, defaulting to the bundled icon.
+    // CDXC:Icons 2026-06-25-21:50: Coerce stored app icon source id to a trimmed string, defaulting to the bundled icon.
     appIconSourceId: normalizeAppIconSourceId(
       readString(source, 'appIconSourceId', DEFAULT_ghostex_SETTINGS.appIconSourceId)
     ),
     /**
-     * CDXC:ProjectDiffStats 2026-05-16-08:46:
+     * CDXC:Git 2026-05-16-08:46:
      * Missing project-header visibility now follows the Codex preset, which
      * hides git line deltas unless the user selects Detailed or changes this
      * setting directly.
@@ -295,7 +296,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     manageAdditionalDocsFolders: normalizeManageAdditionalDocsFolders(
       readString(source, 'manageAdditionalDocsFolders', DEFAULT_ghostex_SETTINGS.manageAdditionalDocsFolders)
     ),
-    // CDXC:GlobalProjectDefaults 2026-08-02: Global Defaults for the Projects page fields.
+    // CDXC:Projects 2026-08-02: Global Defaults for the Projects page fields.
     globalWorktreeCommand: normalizeGlobalWorktreeCommand(
       readString(source, 'globalWorktreeCommand', DEFAULT_ghostex_SETTINGS.globalWorktreeCommand)
     ),
@@ -309,7 +310,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readString(source, 'globalDocsDirectory', DEFAULT_ghostex_SETTINGS.globalDocsDirectory)
     ),
     /**
-     * CDXC:ProjectDiffStats 2026-05-15-14:33:
+     * CDXC:Git 2026-05-15-14:33:
      * Missing or invalid older settings must keep project-header git stats in
      * the quieter default that hides the changed-file count.
      */
@@ -350,7 +351,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     ),
     showProjectIcons: readBoolean(source, 'showProjectIcons', DEFAULT_ghostex_SETTINGS.showProjectIcons),
     /**
-     * CDXC:SidebarSessions 2026-05-16-08:46:
+     * CDXC:Sessions 2026-05-16-08:46:
      * Missing session-card icon visibility now follows the Codex preset, which
      * hides agent icons until hover unless the user selects Detailed or changes
      * this setting directly.
@@ -366,7 +367,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.useColoredSessionAgentIcons
     ),
     /**
-     * CDXC:BrowserPanes 2026-05-28-07:38:
+     * CDXC:Browser 2026-05-28-07:38:
      * Missing browser-favicon visibility should follow the sidebar preset
      * independently from the older agent-icon hover-only setting so browser
      * page identity does not disappear just because agent logos are quiet.
@@ -382,7 +383,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.showCloseButtonOnSessionCards
     ),
     /**
-     * CDXC:SidebarSessions 2026-05-15-08:57
+     * CDXC:Sessions 2026-05-15-08:57
      * Older settings files should preserve the current session-card timestamp
      * behavior. Explicit true hides only the Last Active label, not the code
      * project header's separate git additions/deletions summary.
@@ -409,7 +410,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     ),
     sidebarSessionTagListItems: normalizeSidebarSessionTagListItems(source.sidebarSessionTagListItems),
     /**
-     * CDXC:AutoSleep 2026-05-28-08:06:
+     * CDXC:SessionSleep 2026-05-28-08:06:
      * Normalize Auto Sleep policy independently from keep-awake so Mac power
      * assertions and Ghostex session retirement can be configured separately.
      */
@@ -498,11 +499,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.keepAwakePreventLidSleep
     ),
     /**
-     * CDXC:TitlebarKeepAwake 2026-05-27-07:32:
+     * CDXC:KeepAwake 2026-05-27-07:32:
      * Normalize the hide preference independently from the caffeinate rules so
      * hiding titlebar chrome does not rewrite existing power automation settings.
      *
-     * CDXC:TitlebarKeepAwake 2026-06-19-13:13:
+     * CDXC:KeepAwake 2026-06-19-13:13:
      * Keep the persisted hide preference independent from the beta gate because
      * the titlebar bridge computes effective visibility from both settings.
      */
@@ -522,7 +523,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.hideTabStripNewBrowserButton
     ),
     /**
-     * CDXC:SessionAttentionNotifications 2026-05-10-16:46
+     * CDXC:Notifications 2026-05-10-16:46
      * Older settings files should opt into macOS attention notifications, and
      * explicit false must be preserved for users who disable system banners.
      */
@@ -539,7 +540,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     petOverlayEnabled: readBoolean(source, 'petOverlayEnabled', DEFAULT_ghostex_SETTINGS.petOverlayEnabled),
     selectedPetId: normalizePetId(readString(source, 'selectedPetId', DEFAULT_ghostex_SETTINGS.selectedPetId)),
     /**
-     * CDXC:SessionPersistence 2026-05-23-00:50:
+     * CDXC:Workarea 2026-05-23-00:50:
      * Older settings should normalize the session-id overlay preference from
      * the canonical default while preserving explicit user choices.
      * The native pane still suppresses the actual label unless that terminal is
@@ -557,7 +558,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       source['preferredAgentInterfaceOverrides']
     ),
     /**
-     * CDXC:SidebarPlacement 2026-05-06-17:32
+     * CDXC:Sidebar 2026-05-06-17:32
      * Persist only the supported AppKit chrome sides. Unknown values normalize
      * to the default left placement so the native layout never receives an
      * unsupported sidebar position.
@@ -577,7 +578,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readNumber(source, 'sidebarDefaultWidthPx', DEFAULT_ghostex_SETTINGS.sidebarDefaultWidthPx)
     ),
     /**
-     * CDXC:ProjectSessionLists 2026-06-13-01:06:
+     * CDXC:Projects 2026-06-13-01:06:
      * Missing settings should use the current ten-session Show less behavior, while explicit numeric values tune how many project sessions remain visible before the header toggle offers Show more.
      */
     projectSessionListCollapsedCount: clampProjectSessionListCollapsedCount(
@@ -640,7 +641,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readString(source, 'windowsWslDistribution', DEFAULT_ghostex_SETTINGS.windowsWslDistribution)
     ),
     /**
-     * CDXC:TerminalTypographySettings 2026-04-29-09:32
+     * CDXC:Terminal 2026-04-29-09:32
      * Font family is a raw Ghostty font-family string so users can type any
      * installed font from `ghostty +list-fonts`. Empty means ghostex leaves an
      * existing Ghostty font-family line or Ghostty's platform default in charge.
@@ -662,7 +663,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.terminalFontWeight
     ),
     /**
-     * CDXC:TerminalThemeSettings 2026-04-29-09:32
+     * CDXC:Theming 2026-04-29-09:32
      * Ghostty themes are exact strings. Preserve only bundled theme names from
      * the settings list, or an empty unmanaged value that keeps an existing
      * user-authored Ghostty `theme` line outside ghostex control.
@@ -706,7 +707,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.terminalWidthApplyToCommandPaneTerminals
     ),
     /**
-     * CDXC:TerminalPanePadding 2026-06-25-21:27:
+     * CDXC:Terminal 2026-06-25-21:27:
      * Missing settings use the same 16px horizontal inset as Chat. Explicit
      * values are integer pixels clamped to the Settings slider range so native
      * layout receives bounded inner padding without adding spacing between
@@ -719,7 +720,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readNumber(source, 'terminalPaneVerticalPaddingPx', DEFAULT_ghostex_SETTINGS.terminalPaneVerticalPaddingPx)
     ),
     /**
-     * CDXC:TerminalScrollSettings 2026-04-29-08:56
+     * CDXC:Terminal 2026-04-29-08:56
      * Ghostty exposes mouse wheel speed through mouse-scroll-multiplier with
      * separate precision and discrete device prefixes. Store both values so
      * trackpads and notched mouse wheels can be tuned independently while
@@ -753,7 +754,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.terminalScrollToBottomWhenTyping
     ),
     /**
-     * CDXC:TerminalBehaviorSettings 2026-04-29-09:32
+     * CDXC:Terminal 2026-04-29-09:32
      * Common Ghostty terminal behavior settings are persisted with the same
      * practical UI ranges and enum values that the settings modal exposes,
      * then written as documented Ghostty config keys by the native host.
@@ -771,7 +772,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readString(source, 'terminalConfirmCloseSurface', DEFAULT_ghostex_SETTINGS.terminalConfirmCloseSurface)
     ),
     /**
-     * CDXC:TerminalBehaviorSettings 2026-04-29-09:32
+     * CDXC:Terminal 2026-04-29-09:32
      * Clipboard cleanup/protection and mouse/scrollbar visibility mirror
      * Ghostty's documented defaults unless the user changes them in ghostex.
      */
@@ -799,10 +800,10 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readString(source, 'terminalScrollbar', DEFAULT_ghostex_SETTINGS.terminalScrollbar)
     ),
     /**
-     * CDXC:TerminalDevServers 2026-06-23-19:22:
+     * CDXC:Resources 2026-06-23-19:22:
      * Dev-server settings normalize in the app layer because they are not Ghostty keys. Canonicalize ignored port rules to sorted, merged strings.
      *
-     * CDXC:WebLinkOpenTarget 2026-08-19:
+     * CDXC:Navigation 2026-08-19:
      * The launch choice moved to webLinkOpenTarget, which absorbs both the legacy dev-server target and its older per-browser default.
      */
     terminalDevServerDetectionEnabled: readBoolean(
@@ -814,7 +815,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       source.terminalDevServerIgnoredPortRules
     ),
     /**
-     * CDXC:PortlessSettings 2026-06-22-22:35:
+     * CDXC:Portless 2026-06-22-22:35:
      * Portless normalization accepts only explicit booleans and lowercase http/https. Missing, legacy, string-boolean, and invalid values fall back to enabled HTTPS without preserving project-scoped Portless keys.
      */
     portlessEnabled: readBoolean(source, 'portlessEnabled', DEFAULT_ghostex_SETTINGS.portlessEnabled),
@@ -836,7 +837,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
         DEFAULT_ghostex_SETTINGS.workspaceActivePaneBorderColor
       ).trim() || DEFAULT_ghostex_SETTINGS.workspaceActivePaneBorderColor,
     /**
-     * CDXC:WorkspaceLayout 2026-04-28-06:08
+     * CDXC:Workarea 2026-04-28-06:08
      * Users can choose the background visible behind terminal panes. Persist a
      * normalized CSS color string so the React workspace and native AppKit
      * workspace render the same color instead of hardcoding dark gray.
@@ -849,8 +850,9 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'clickToWakeSleepingSessions',
       DEFAULT_ghostex_SETTINGS.clickToWakeSleepingSessions
     ),
+    customViews: normalizeGhostexCustomViews(source.customViews),
     /**
-     * CDXC:TitlebarOpenIn 2026-05-11-00:22
+     * CDXC:Titlebar 2026-05-11-00:22
      * Settings owns which titlebar Open In targets are shown. Normalize on read
      * so the React titlebar can trust the persisted custom commands and hidden
      * built-in ids sent through native layout sync.
@@ -860,6 +862,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     workspaceOpenTargetHiddenIds: normalizeWorkspaceOpenTargetHiddenIds(source.workspaceOpenTargetHiddenIds),
     workspacePaneGap: 0,
     remoteMachines: normalizeRemoteMachineSettings(source.remoteMachines),
+    remoteTailscaleEnabled: readBoolean(
+      source,
+      'remoteTailscaleEnabled',
+      DEFAULT_ghostex_SETTINGS.remoteTailscaleEnabled
+    ),
     commandsPanelDefaultHeightPx: clampCommandsPanelDefaultHeightPx(
       readNumber(source, 'commandsPanelDefaultHeightPx', DEFAULT_ghostex_SETTINGS.commandsPanelDefaultHeightPx)
     ),
@@ -885,14 +892,14 @@ export function applySidebarSettingsPreset(
 
 export function normalizeManageAdditionalDocsFolders(value: string | undefined): string {
   /*
-   * CDXC:DocsSidebar 2026-06-30-19:47:
+   * CDXC:Docs 2026-06-30-19:47:
    * The Projects setting is typed as comma-separated text because folder names may contain spaces. Settings normalizes on every keystroke, so preserve the user's draft text here and let native trim comma boundaries and reject unsafe path shapes when scanning.
    */
   return (value ?? '').replace(/\0/gu, '').replace(/\r?\n/gu, ', ').slice(0, 1_000);
 }
 
 /*
- * CDXC:GlobalProjectDefaults 2026-08-02:
+ * CDXC:Projects 2026-08-02:
  * Each Global Default normalizes exactly like the per-project field it backs, so
  * a value that is valid globally is also valid when a project stores it. The
  * worktree cap matches the 16384-byte limit gxserver enforces on the project
@@ -915,7 +922,7 @@ export function normalizeGlobalBeadsDirectory(value: string | undefined): string
 }
 
 /*
- * CDXC:DocsRootDirectory 2026-08-09:
+ * CDXC:Docs 2026-08-09:
  * The Docs directory normalizes exactly like the Beads directory it sits next
  * to: one absolute folder path, trimmed, with no embedded NULs.
  */
@@ -962,7 +969,7 @@ function normalizeCustomDefaultEditorCommand(value: string | undefined): string 
 }
 
 /*
- * CDXC:AppIconPicker 2026-06-26-23:42:
+ * CDXC:Icons 2026-06-26-23:42:
  * Empty string means default icon; otherwise the persisted id must remain a
  * filename-only value that round-trips exactly after native confirms it. Reject
  * invalid/path-like ids instead of slicing or otherwise rewriting them.
@@ -989,7 +996,7 @@ function normalizeDefaultPromptAgentId(value: string | undefined): string {
 }
 
 /*
- * CDXC:WebLinkOpenTarget 2026-08-19:
+ * CDXC:Navigation 2026-08-19:
  * Two settings answered "where does this web link open" and could disagree:
  * the Browser toggle openTerminalLinksInApp (default on) and the Dev Servers
  * dropdown terminalDevServerOpenTarget (default system browser). They merge

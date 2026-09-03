@@ -21,7 +21,7 @@ export function getMostlyVisibleSettingsSectionId<SectionId extends string>(
   sections: readonly SettingsSectionMeasurementItem<SectionId>[]
 ): SectionId | undefined {
   /*
-   * CDXC:SettingsNavigation 2026-06-15-22:28:
+   * CDXC:Settings 2026-06-15-22:28:
    * Settings and Hotkeys section sidebars must track the section that occupies
    * the largest share of the scroll viewport so the highlighted nav item
    * follows reading position while users scroll long settings pages.
@@ -156,7 +156,7 @@ export function getSettingsSectionSearch(
       { name: 'options', weight: 0.2 },
     ],
     /**
-     * CDXC:SettingsSearch 2026-05-13-16:05
+     * CDXC:Settings 2026-05-13-16:05
      * Search should be useful without feeling random. A lower Fuse threshold
      * keeps section/settings/hotkey results close to the user's query instead
      * of surfacing weak fuzzy matches from unrelated settings.
@@ -223,7 +223,7 @@ export type SearchableExtraSettingsTabId =
 export type ExtraSettingsTabSearches = Record<SearchableExtraSettingsTabId, SettingsTabSearch>;
 
 /**
- * CDXC:SettingsSearch 2026-07-22-00:00:
+ * CDXC:Settings 2026-07-22-00:00:
  * The one global Settings search field must find settings on every Settings
  * page, not only General and Hotkeys. Non-General pages keep their own static
  * search definitions here so the sidebar can filter pages to those with
@@ -338,7 +338,7 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
       {
         id: 'agentList',
         /*
-         * CDXC:AgentHookSettings 2026-08-28:
+         * CDXC:AgentHooks 2026-08-28:
          * The Agents tab has one roster card: hook setup, per-agent default
          * view, and launcher management are rows and panels inside it, so their
          * search entries live on that one section instead of a separate Agent
@@ -449,6 +449,17 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           },
         ],
         title: 'Extensions Store',
+      },
+      {
+        id: 'customViews',
+        settings: [
+          {
+            key: 'customViews',
+            subtitle: 'Add, arrange, and toggle named HTTP or HTTPS pages as titlebar workareas.',
+            title: 'Custom Views',
+          },
+        ],
+        title: 'Custom Views',
       },
     ],
     title: 'Extensions',
@@ -633,6 +644,11 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         id: 'tailscale',
         settings: [
           {
+            key: 'tailscaleEnabled',
+            subtitle: 'Offer the Tailscale path; off keeps its card collapsed and hides it from Remote Setup.',
+            title: 'Tailscale on or off',
+          },
+          {
             key: 'tailscaleSteps',
             subtitle: 'Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone.',
             title: 'Tailscale checklist',
@@ -650,8 +666,9 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         settings: [
           {
             key: 'addMachine',
-            subtitle: 'Saved SSH machines appear as separate sidebar sections.',
-            title: 'Add remote machine',
+            subtitle:
+              'Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections.',
+            title: 'Add a machine',
           },
           {
             key: 'showInSidebar',
