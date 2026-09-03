@@ -315,7 +315,7 @@ fn default_gxserver_root() -> PathBuf {
 fn gxserver_root_from_executable_path(executable_path: &Path) -> Option<PathBuf> {
     /*
     CDXC:GxserverToolchain 2026-06-21-13:59:
-    The macOS app launches gxserver from Web/gxserver/bin/gxserver while the process current directory is not the package root. Resolve bundled zmx/bd from the running executable's package root first so Rust starts with the same app resources the TypeScript daemon used.
+    The macOS app launches gxserver from Web/gxserver/bin/gxserver while the process current directory is not the package root. Resolve bundled zmx from the running executable's package root first so Rust starts with the same app resources the TypeScript daemon used.
     */
     let parent = executable_path.parent()?;
     if parent.file_name().and_then(|name| name.to_str()) != Some("bin") {

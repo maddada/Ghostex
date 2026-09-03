@@ -60,12 +60,6 @@ jobs:
         with:
           fetch-depth: 0
           submodules: false
-      - uses: actions/checkout@v6
-        with:
-          repository: steveyegge/beads
-          ref: 672d942083a1fd0c8603fa1e77620c58ba9d47c8
-          fetch-depth: 1
-          path: build/pinned-beads-source
       - name: Resolve dependency cache keys
         id: cache_keys
         run: |
@@ -108,10 +102,6 @@ jobs:
       - name: Install sccache
         id: sccache
         uses: mozilla-actions/sccache-action@v0.0.11
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: build/pinned-beads-source/go.mod
-          cache-dependency-path: build/pinned-beads-source/go.sum
       - name: Install native build dependencies
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
@@ -131,17 +121,7 @@ jobs:
         run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 tooling/release-gpui/prepare-references.sh
       - name: Pre-fetch Zig package dependencies
         run: tooling/release-gpui/fetch-zig-deps.sh zmx
-      - name: Build pinned embedded-Dolt Beads
-        run: |
-          node tooling/build-pinned-beads-release.mjs \
-            --source-root build/pinned-beads-source \
-            --platform linux \
-            --arch "${{ inputs.arch }}" \
-            --output "$RUNNER_TEMP/ghostex-pinned-beads/bd"
       - name: Build remote runtime
-        env:
-          GHOSTEX_BEADS_PREBUILT_BINARY: ${{ runner.temp }}/ghostex-pinned-beads/bd
-          GHOSTEX_REQUIRE_BEADS_SMOKE: '1'
         run: |
           tooling/build-remote-gxserver-linux-release.sh --arch "${{ inputs.arch }}"
           OUTPUT="build/release-gpui/${{ inputs.version }}/gxserver-linux-${{ inputs.arch }}"

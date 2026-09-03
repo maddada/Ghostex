@@ -15,12 +15,7 @@ DMG_NAME="ghostex-$VERSION-arm64.dmg"
 	echo "Preserved signed DMG is missing: $INPUT/$DMG_NAME" >&2
 	exit 1
 }
-[[ -f "$INPUT/bd-darwin-arm64.tar.gz" ]] || {
-	echo "Preserved bd package is missing" >&2
-	exit 1
-}
 cp "$INPUT/$DMG_NAME" "$OUTPUT/$DMG_NAME"
-cp "$INPUT/bd-darwin-arm64.tar.gz" "$OUTPUT/bd-darwin-arm64.tar.gz"
 DMG="$OUTPUT/$DMG_NAME"
 
 xcrun stapler validate "$DMG"
@@ -77,5 +72,5 @@ JS
 	printf '%s' "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_ROOT/bin/sign_update" --ed-key-file - --verify "$DMG" "$SIGNATURE"
 fi
 
-release_gpui_write_manifest "$OUTPUT" macos-arm64 "$VERSION" "$DMG" "$OUTPUT/bd-darwin-arm64.tar.gz"
+release_gpui_write_manifest "$OUTPUT" macos-arm64 "$VERSION" "$DMG"
 printf 'Finalized notarized GPUI macOS payload in %s\n' "$OUTPUT"

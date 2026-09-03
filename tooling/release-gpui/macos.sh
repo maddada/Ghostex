@@ -203,8 +203,7 @@ phase_stage_runtime() {
 			"$REPO_ROOT/apps/desktop/runtime/macos/CLI/ghostex" \
 			"$REPO_ROOT/build/on-demand-components/components.json" \
 			"$REPO_ROOT/build/on-demand-assets/$VERSION/gxserver-linux-x64.tar.gz" \
-			"$REPO_ROOT/build/on-demand-assets/$VERSION/gxserver-linux-arm64.tar.gz" \
-			"$REPO_ROOT/build/on-demand-assets/$VERSION/bd-darwin-arm64.tar.gz"; do
+			"$REPO_ROOT/build/on-demand-assets/$VERSION/gxserver-linux-arm64.tar.gz"; do
 			[[ -e "$required_path" ]] || {
 				echo "Prepared macOS runtime is missing $required_path" >&2
 				exit 1
@@ -223,9 +222,6 @@ phase_stage_runtime() {
 			GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE="$CODE_SERVER_LINUX_ARM64_ARCHIVE" \
 			GHOSTEX_CODE_SERVER_COMPONENT_VERSION="$CODE_SERVER_COMPONENT_VERSION" \
 			GHOSTEX_ON_DEMAND_ASSETS=1 \
-			GHOSTEX_REQUIRE_BEADS_SMOKE=1 \
-			GHOSTEX_CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
-			GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
 			GHOSTEX_GPUI_MARKETING_VERSION="$VERSION" \
 			"$REPO_ROOT/apps/desktop/scripts/prepare-macos-runtime.sh"
 	fi
@@ -353,21 +349,19 @@ phase_dmg() {
 	done
 	release_gpui_assert_dmg_budget "$DMG"
 
-	for name in gxserver-linux-x64.tar.gz gxserver-linux-arm64.tar.gz bd-darwin-arm64.tar.gz; do
+	for name in gxserver-linux-x64.tar.gz gxserver-linux-arm64.tar.gz; do
 		[[ -f "$ON_DEMAND_ROOT/$name" ]] || {
 			echo "Missing on-demand asset: $name" >&2
 			exit 1
 		}
 	done
-	cp "$ON_DEMAND_ROOT/bd-darwin-arm64.tar.gz" "$OUTPUT/bd-darwin-arm64.tar.gz"
 
 	if [[ "$MACOS_STAGE" == "build-sign" ]]; then
 		release_gpui_write_manifest \
 			"$OUTPUT" \
 			macos-arm64-signed \
 			"$VERSION" \
-			"$DMG" \
-			"$OUTPUT/bd-darwin-arm64.tar.gz"
+			"$DMG"
 		printf 'Built signed, unstapled GPUI macOS payload in %s\n' "$OUTPUT"
 		exit 0
 	fi
@@ -437,7 +431,6 @@ JS
 	fi
 
 	ASSETS=("$DMG")
-	ASSETS+=("$OUTPUT/bd-darwin-arm64.tar.gz")
 	MANIFEST_PATH="$APP_PATH/Contents/Resources/Web/on-demand-resources.json" \
 		ASSET_PATH="$ON_DEMAND_ROOT" node <<'JS'
 const { createHash } = require("node:crypto");

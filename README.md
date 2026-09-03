@@ -32,7 +32,7 @@ Latest download: [macOS Apple Silicon DMG](https://maddada.com/download/macos-ar
 
 > **The Windows app is a beta intended for WSL2 workflows only and may still have bugs.** Install and use it with an existing WSL2 distribution; native Windows shell workflows are not the intended setup yet. Please report problems on the [Ghostex Discord](https://discord.gg/df7b3G92CS).
 
-Latest downloads: [Windows x64](https://maddada.com/download/windows-x64) · [Windows ARM64](https://maddada.com/download/windows-arm64). Ghostex manages its terminals, gxserver, and Source editor inside the selected WSL2 distribution.
+Latest downloads: [Windows x64](https://maddada.com/download/windows-x64) · [Windows ARM64](https://maddada.com/download/windows-arm64). Ghostex manages its terminals, gxserver, and Source editor inside the selected WSL2 distribution. The Kanban board needs the Beads `bd` CLI installed inside that same distribution (see the Kanban section below).
 
 Starting with 7.0.0, Windows installations receive automatic updates from GitHub Releases. If you installed a 6.x Windows beta, install the 7.0.0 Setup EXE once to move to the new updater; later releases can be downloaded and applied from inside Ghostex.
 
@@ -121,6 +121,15 @@ No more uneditable "[Pasted 50+ lines]" text! Press F1 for all commands.
 
 Put all your thoughts here then let an orchestrator agent manage subagents to tackle them<br/>
 (Ghostex supports cross Agent CLI orchestration, your Claude Code can launch and steer Codex agents!)
+
+The board drives the [Beads](https://github.com/gastownhall/beads) `bd` CLI installed on the
+machine that runs the project: macOS, Linux, a remote machine, or your WSL2 distribution.
+Ghostex does not bundle it. Install or update it there with the official installer, or let
+the board's "Install or Update Beads" action run it for you:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/install.sh | bash
+```
 
 <img width="1200" alt="image" src="https://github.com/user-attachments/assets/85543937-85f1-4171-b2d0-6ee7264beddd" />
 
@@ -281,5 +290,5 @@ Ghostex builds on open source work from these projects and communities:
 - [vvterm](https://github.com/vivy-company/vvterm) — source of terminal ideas ported into the mobile app
 - [Termux](https://github.com/termux/termux-app) — Android terminal components ported into the mobile app
 - [Pierre Computer Company](https://github.com/pierrecomputer/pierre) — diffs and file rendering components
-- [Beads](https://github.com/steveyegge/beads) by [Steve Yegge](https://github.com/steveyegge) — kanban project board
+- [Beads](https://github.com/gastownhall/beads) by [Steve Yegge](https://github.com/steveyegge) — kanban project board
 - [Beads Viewer](https://github.com/Dicklesworthstone/beads_viewer) by [doodlestein](https://github.com/Dicklesworthstone) — kanban view reference

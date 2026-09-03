@@ -44,7 +44,6 @@ export const REGRESSION_VALUE = 'value';
 const GXSERVER_BUILD_SCRIPT = 'tooling/build-remote-gxserver-linux-release.sh';
 const RESUMABLE_DRIVER = 'tooling/release-resumable.mjs';
 const BUILD_SCRIPT_BASENAME = 'build-remote-gxserver-linux-release.sh';
-const BEADS_SMOKE_ENV = 'GHOSTEX_REQUIRE_BEADS_SMOKE';
 const STAGE_ADVANCE_COMMAND = 'stage-package-and-advance';
 const ARM64_NATIVE_RUNNER = 'ubuntu-24.04-arm';
 
@@ -170,47 +169,6 @@ export function gxserverLinuxWorkflowAssertions(arch) {
     },
     {
       ...shared,
-      contract: [{ file: GXSERVER_BUILD_SCRIPT, literal: BEADS_SMOKE_ENV }],
-      id: `gxserver-linux-${arch}/beads-smoke-gate`,
-      requirement: `the build step sets ${BEADS_SMOKE_ENV} to 1`,
-      verify(document) {
-        const build = jobSteps(document, 'build');
-        if (!build) {
-          return stale(`${file} has no jobs.build; the assertion navigates by that job name.`);
-        }
-        const matches = stepsRunning(build.steps, BUILD_SCRIPT_BASENAME);
-        if (matches.length === 0) {
-          return stale(
-            `${file} has no jobs.build step running ${BUILD_SCRIPT_BASENAME}, so the step this env var belongs to cannot be located.`
-          );
-        }
-        const missing = [];
-        const wrong = [];
-        for (const [index, step] of matches.entries()) {
-          const env = step.env && typeof step.env === 'object' ? step.env : {};
-          if (!Object.hasOwn(env, BEADS_SMOKE_ENV)) {
-            missing.push(describeStep(step, index));
-            continue;
-          }
-          // Parsed, so `1`, `'1'`, and `"1"` are the same value by construction.
-          if (String(env[BEADS_SMOKE_ENV]).trim() !== '1') {
-            wrong.push(`${describeStep(step, index)} sets ${JSON.stringify(env[BEADS_SMOKE_ENV])}`);
-          }
-        }
-        if (missing.length > 0) {
-          return regressed(
-            REGRESSION_ABSENT,
-            `${missing.join(', ')} builds the package without ${BEADS_SMOKE_ENV}, so the packaged Beads embedded-Dolt smoke test is not required.`
-          );
-        }
-        if (wrong.length > 0) {
-          return regressed(REGRESSION_VALUE, `${wrong.join('; ')}; expected 1.`);
-        }
-        return ok(`${BEADS_SMOKE_ENV}=1`);
-      },
-    },
-    {
-      ...shared,
       contract: [{ file: RESUMABLE_DRIVER, literal: STAGE_ADVANCE_COMMAND }],
       id: `gxserver-linux-${arch}/stage-and-advance`,
       requirement: `the stage job advances durable release state with ${STAGE_ADVANCE_COMMAND}`,
@@ -251,7 +209,7 @@ export function gxserverLinuxWorkflowAssertions(arch) {
         if (runsOn !== ARM64_NATIVE_RUNNER) {
           return regressed(
             REGRESSION_VALUE,
-            `jobs.build runs on ${JSON.stringify(runsOn)}, not the native ARM64 runner ${ARM64_NATIVE_RUNNER}; the packaged Beads smoke test needs real ARM64 hardware.`
+            `jobs.build runs on ${JSON.stringify(runsOn)}, not the native ARM64 runner ${ARM64_NATIVE_RUNNER}; the musl cargo build must run on real ARM64 hardware.`
           );
         }
         return ok(ARM64_NATIVE_RUNNER);

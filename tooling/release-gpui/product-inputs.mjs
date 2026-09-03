@@ -26,7 +26,6 @@ export const TOOLCHAIN = Object.freeze({
   androidPlatform: 'android-36',
   bun: '1.4.0',
   dotnet: '8.0.x',
-  goVersionFile: 'build/pinned-beads-source/go.mod',
   java: '17.0.19+10',
   node: '24.13.1',
   ripgrepPackageVersion: '1.17.1',
@@ -45,14 +44,6 @@ export const TOOLCHAIN = Object.freeze({
    * re-ported onto upstream/main (Zig 0.16), which was the last 0.15 consumer.
    */
   zig: '0.16.0',
-});
-
-/* Mirrors tooling/beads-release.mjs; asserted equal in product-inputs.test.mjs. */
-export const BEADS_PINS = Object.freeze({
-  packageId: '1.1.0-672d942083a1-schema54',
-  schemaVersion: '54',
-  sourceRevision: '672d942083a1fd0c8603fa1e77620c58ba9d47c8',
-  version: '1.1.0',
 });
 
 /* Mirrors CODE_SERVER_COMPONENT_IDENTITY_REVISION; asserted equal in the tests. */
@@ -172,9 +163,6 @@ const GXSERVER_PATHSPECS = Object.freeze([
   { pathspec: ':(exclude)packages/find/target' },
   { pathspec: '.dependencies/zmx' },
   { pathspec: 'tooling/build-remote-gxserver-linux-release.sh' },
-  { pathspec: 'tooling/beads-release.mjs' },
-  { pathspec: 'tooling/build-pinned-beads-release.mjs' },
-  { pathspec: 'tooling/smoke-test-packaged-beads.mjs' },
   { pathspec: 'tooling/release-ghostex.mjs' },
   { pathspec: 'tooling/release-gpui/prepare-references.sh' },
   /*
@@ -183,13 +171,6 @@ const GXSERVER_PATHSPECS = Object.freeze([
    * these bytes.
    */
   { pathspec: '.github/workflows/release-gpui-gxserver.yml' },
-]);
-
-/* §4.4: the pinned Beads payload, shared by gxserver Linux and the macOS bd tarball. */
-const BEADS_PATHSPECS = Object.freeze([
-  { pathspec: 'tooling/beads-release.mjs' },
-  { pathspec: 'tooling/build-pinned-beads-release.mjs' },
-  { pathspec: 'tooling/smoke-test-packaged-beads.mjs' },
 ]);
 
 function windowsArtifacts(version, arch) {
@@ -220,9 +201,6 @@ function gxserverProduct(arch) {
     signing: { mode: 'unsigned' },
     values: {
       arch,
-      beadsPackageId: BEADS_PINS.packageId,
-      beadsPinnedRef: BEADS_PINS.sourceRevision,
-      goVersionFile: TOOLCHAIN.goVersionFile,
       zig: TOOLCHAIN.zig,
     },
     versionStamped: false,
@@ -330,22 +308,6 @@ function wslProduct(arch) {
  * compose into the products that embed or seal them (§3.4 part 3).
  */
 const COMPOSED_NODES = {
-  beads: {
-    composedFrom: [],
-    id: 'beads',
-    kind: 'payload',
-    pathspecs: BEADS_PATHSPECS,
-    values: {
-      beadsPackageId: BEADS_PINS.packageId,
-      beadsPinnedRef: BEADS_PINS.sourceRevision,
-      beadsSchemaVersion: BEADS_PINS.schemaVersion,
-      beadsVersion: BEADS_PINS.version,
-      /* bd-darwin-arm64.tar.gz is Developer-ID signed inside prepare-macos-runtime.sh. */
-      codesignIdentity: 'developer-id',
-      goVersionFile: TOOLCHAIN.goVersionFile,
-    },
-    versionStamped: false,
-  },
   cef: {
     /*
      * §4.3: the component identity is CEF_VERSION, which is a pure function of
@@ -448,8 +410,8 @@ const PRODUCT_LIST = [
   wslProduct('x64'),
   wslProduct('arm64'),
   {
-    artifacts: (version) => [`ghostex-${version}-arm64.dmg`, 'bd-darwin-arm64.tar.gz'],
-    composedFrom: ['gxserver-linux-x64', 'gxserver-linux-arm64', 'code-server', 'cef', 'beads'],
+    artifacts: (version) => [`ghostex-${version}-arm64.dmg`],
+    composedFrom: ['gxserver-linux-x64', 'gxserver-linux-arm64', 'code-server', 'cef'],
     id: 'macos-arm64',
     kind: 'product',
     pathspecs: [

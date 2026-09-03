@@ -69,7 +69,6 @@ jobs:
           GHOSTEX_RELEASE_AUTOMATION_ROOT: ${{ github.workspace }}/.release-automation
           GHOSTEX_RELEASE_REPO_ROOT: ${{ github.workspace }}
           GHOSTEX_RELEASE_SOURCE_SHA: ${{ inputs.source_sha }}
-          GHOSTEX_REQUIRE_BEADS_SMOKE: '1'
         run: |
           .release-automation/tooling/build-remote-gxserver-linux-release.sh --arch arm64
           OUTPUT="build/release-gpui/${{ inputs.version }}/gxserver-linux-arm64"

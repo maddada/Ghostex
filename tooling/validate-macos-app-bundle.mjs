@@ -77,14 +77,7 @@ export async function validateMacosAppBundle({
     await validateBundledCodeServerRuntime({ arch, resourcesRoot, expectedNodePtyPrebuild });
   }
   await validateBundledPortlessRuntime({ arch, resourcesRoot });
-  await validateBundledResourceShape({
-    allowMissingOptionalResources,
-    arch,
-    capabilities,
-    onDemandManifest,
-    releaseManifest,
-    resourcesRoot,
-  });
+  await validateBundledResourceShape({ arch, onDemandManifest, releaseManifest, resourcesRoot });
 }
 
 function expectedNodePtyPrebuildForArch(arch) {
@@ -315,46 +308,19 @@ async function validateBundledGhostexEditorHelper({ appPath, arch }) {
   await assertMachOContainsArch(editorExecutable, arch);
 }
 
-async function validateBundledResourceShape({
-  allowMissingOptionalResources,
-  arch,
-  capabilities,
-  onDemandManifest,
-  releaseManifest,
-  resourcesRoot,
-}) {
+async function validateBundledResourceShape({ arch, onDemandManifest, releaseManifest, resourcesRoot }) {
   const sharedZmx = path.join(resourcesRoot, 'bin', 'zmx');
-  const sharedBd = path.join(resourcesRoot, 'bin', 'bd');
-  const gxserverBd = path.join(resourcesRoot, 'gxserver', 'bin', 'bd');
   await assertRequiredPaths(arch, 'shared zmx binary', [sharedZmx]);
   await assertMachOContainsArch(sharedZmx, arch);
   if (releaseManifest) {
-    await validateOnDemandResourceShape({ arch, onDemandManifest: releaseManifest, resourcesRoot, sharedBd });
+    await validateOnDemandResourceShape({ arch, onDemandManifest: releaseManifest, resourcesRoot });
   } else if (onDemandManifest) {
-    await validateLegacyOnDemandResourceShape({ arch, onDemandManifest, resourcesRoot, sharedBd });
-  } else if (
-    shouldValidateOptionalResource({
-      allowMissingOptionalResources,
-      capabilities,
-      markerPath: sharedBd,
-      resourceName: 'beads',
-    })
-  ) {
-    await assertRequiredPaths(arch, 'shared Beads binary', [sharedBd]);
-    await assertMachOContainsArch(sharedBd, arch);
-  }
-  if (existsSync(gxserverBd)) {
-    const gxserverBdStat = await lstat(gxserverBd);
-    if (gxserverBdStat.size > 1024 * 1024) {
-      throw new MacosAppBundleValidationError(
-        `${arch} app duplicates the large Beads binary at Web/gxserver/bin/bd; gxserver should use the shared Web/bin/bd launcher/resource.`
-      );
-    }
+    await validateLegacyOnDemandResourceShape({ arch, onDemandManifest, resourcesRoot });
   }
 }
 
-async function validateLegacyOnDemandResourceShape({ arch, onDemandManifest, resourcesRoot, sharedBd }) {
-  const requiredAssetKeys = ['gxserver-linux-x64', 'gxserver-linux-arm64', 'bd-darwin-arm64'];
+async function validateLegacyOnDemandResourceShape({ arch, onDemandManifest, resourcesRoot }) {
+  const requiredAssetKeys = ['gxserver-linux-x64', 'gxserver-linux-arm64'];
   for (const assetKey of requiredAssetKeys) {
     const asset = onDemandManifest.assets?.[assetKey];
     if (!asset?.name || !/^[0-9a-f]{64}$/.test(asset?.sha256 ?? '')) {
@@ -364,7 +330,6 @@ async function validateLegacyOnDemandResourceShape({ arch, onDemandManifest, res
     }
   }
   await validateVersionedOnDemandPayloadAbsence({ arch, resourcesRoot });
-  await validateBdLauncher({ arch, onDemandManifest, sharedBd });
 }
 
 async function readOnDemandResourceManifest(resourcesRoot) {
@@ -385,12 +350,10 @@ async function readOnDemandResourceManifest(resourcesRoot) {
 /*
  CDXC:OnDemandAssets 2026-07-02-14:10:
  On-demand release bundles replace the embedded Ubuntu remote gxserver
- payloads and the 127 MB Beads binary with a sealed checksum manifest plus a
- download-on-first-use bd launcher. Validation must prove that shape: no
- leftover fat payloads, a launcher whose baked-in checksum matches the sealed
- manifest, and complete 64-hex checksums for every published asset.
+ payloads with a sealed checksum manifest. Validation must prove that shape: no
+ leftover fat payloads and complete 64-hex checksums for every published asset.
  */
-async function validateOnDemandResourceShape({ arch, onDemandManifest, resourcesRoot, sharedBd }) {
+async function validateOnDemandResourceShape({ arch, onDemandManifest, resourcesRoot }) {
   try {
     validateMacosReleaseOnDemandManifest(onDemandManifest);
   } catch (error) {
@@ -398,7 +361,7 @@ async function validateOnDemandResourceShape({ arch, onDemandManifest, resources
       `${arch} app has an invalid sealed on-demand manifest v2: ${error instanceof Error ? error.message : String(error)}`
     );
   }
-  const requiredAssetKeys = ['gxserver-linux-x64', 'gxserver-linux-arm64', 'bd-darwin-arm64'];
+  const requiredAssetKeys = ['gxserver-linux-x64', 'gxserver-linux-arm64'];
   for (const assetKey of requiredAssetKeys) {
     const asset = onDemandManifest.assets?.[assetKey];
     if (!asset?.name || !/^[0-9a-f]{64}$/.test(asset?.sha256 ?? '')) {
@@ -445,7 +408,6 @@ async function validateOnDemandResourceShape({ arch, onDemandManifest, resources
   }
 
   await validateVersionedOnDemandPayloadAbsence({ arch, resourcesRoot });
-  await validateBdLauncher({ arch, onDemandManifest, sharedBd });
 }
 
 async function validateVersionedOnDemandPayloadAbsence({ arch, resourcesRoot }) {
@@ -455,22 +417,6 @@ async function validateVersionedOnDemandPayloadAbsence({ arch, resourcesRoot }) 
         `${arch} app declares on-demand assets but still embeds Web/${staleDir}.`
       );
     }
-  }
-}
-
-async function validateBdLauncher({ arch, onDemandManifest, sharedBd }) {
-  await assertRequiredPaths(arch, 'on-demand Beads launcher', [sharedBd]);
-  const launcher = await readFile(sharedBd, 'utf8').catch(() => '');
-  if (!launcher.startsWith('#!')) {
-    throw new MacosAppBundleValidationError(
-      `${arch} app declares on-demand assets but Web/bin/bd is not the launcher script.`
-    );
-  }
-  const bdSha = onDemandManifest.assets['bd-darwin-arm64'].sha256;
-  if (!launcher.includes(bdSha)) {
-    throw new MacosAppBundleValidationError(
-      `${arch} Web/bin/bd launcher checksum does not match the sealed on-demand manifest (${bdSha}).`
-    );
   }
 }
 

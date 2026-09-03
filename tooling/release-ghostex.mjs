@@ -116,23 +116,16 @@ const remoteGxserverLinuxPackageConfigs = [
  npm-style package.json manifest, or dist/protocol exports; nothing on the
  remote host consumes them and version identity lives in build-identity.json.
  */
-const remoteGxserverLinuxRequiredPackageResources = [
-  'bin/gxserver',
-  'bin/zmx',
-  'bin/bd',
-  'bin/ghostex',
-  'build-identity.json',
-];
+const remoteGxserverLinuxRequiredPackageResources = ['bin/gxserver', 'bin/zmx', 'bin/ghostex', 'build-identity.json'];
 
 /*
  CDXC:OnDemandAssets 2026-07-02-14:10:
- Public releases stop embedding the two Ubuntu remote gxserver payloads and the
- large macOS Beads binary inside the DMG. The app build stages a sealed
- checksum manifest instead, and the release publishes the three tarballs as
- version-pinned GitHub release assets the app downloads on first use. The DMG
- shrinks by roughly a quarter while remote installs keep the Mac-then-scp flow.
+ Public releases stop embedding the two Ubuntu remote gxserver payloads inside
+ the DMG. The app build stages a sealed checksum manifest instead, and the
+ release publishes the two tarballs as version-pinned GitHub release assets the
+ app downloads on first use. Remote installs keep the Mac-then-scp flow.
  */
-const onDemandAssetNames = ['gxserver-linux-x64.tar.gz', 'gxserver-linux-arm64.tar.gz', 'bd-darwin-arm64.tar.gz'];
+const onDemandAssetNames = ['gxserver-linux-x64.tar.gz', 'gxserver-linux-arm64.tar.gz'];
 
 /*
  CDXC:ReleaseAutomation 2026-07-02-14:10:
@@ -1552,14 +1545,6 @@ async function validateOnDemandAssetStaging(version, entry) {
   if (bundleManifest.version !== version) {
     throw new ReleaseError(
       `${entry.arch} on-demand manifest records version ${bundleManifest.version}, expected ${version}.`
-    );
-  }
-
-  const bdLauncher = path.join(webRoot, 'bin', 'bd');
-  const launcherHead = (await readFile(bdLauncher, 'utf8').catch(() => '')).slice(0, 512);
-  if (!launcherHead.startsWith('#!')) {
-    throw new ReleaseError(
-      `${entry.arch} app bundle must ship Web/bin/bd as the on-demand launcher script, not the full Beads binary.`
     );
   }
 

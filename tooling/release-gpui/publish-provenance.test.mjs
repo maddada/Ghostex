@@ -287,10 +287,7 @@ describe('publisher refusal matrix', () => {
   test('refuses a version-stamped product whose record claims an older product version', () => {
     const plan = planFor();
     const reuse = {
-      artifacts: [
-        { name: `ghostex-${VERSION}-arm64.dmg`, sha256: 'a'.repeat(64), size: 10 },
-        { name: 'bd-darwin-arm64.tar.gz', sha256: 'b'.repeat(64), size: 10 },
-      ],
+      artifacts: [{ name: `ghostex-${VERSION}-arm64.dmg`, sha256: 'a'.repeat(64), size: 10 }],
       originSourceSha: repo.head,
       productVersion: VERSION,
       runId: 31501234567,
@@ -312,10 +309,7 @@ describe('publisher refusal matrix', () => {
   test('refuses a version-stamped product the plan authorized from another release tag', () => {
     const plan = planFor();
     const reuse = {
-      artifacts: [
-        { name: `ghostex-${VERSION}-arm64.dmg`, sha256: 'a'.repeat(64), size: 10 },
-        { name: 'bd-darwin-arm64.tar.gz', sha256: 'b'.repeat(64), size: 10 },
-      ],
+      artifacts: [{ name: `ghostex-${VERSION}-arm64.dmg`, sha256: 'a'.repeat(64), size: 10 }],
       originSourceSha: repo.head,
       productVersion: '7.6.0',
       runId: 31501234567,

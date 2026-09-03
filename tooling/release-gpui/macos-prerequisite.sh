@@ -66,9 +66,6 @@ runtime)
 		GHOSTEX_ON_DEMAND_CODE_SERVER_LINUX_ARM64_ARCHIVE="$CODE_SERVER_LINUX_ARM64_ARCHIVE" \
 		GHOSTEX_CODE_SERVER_COMPONENT_VERSION="$CODE_SERVER_COMPONENT_VERSION" \
 		GHOSTEX_ON_DEMAND_ASSETS=1 \
-		GHOSTEX_REQUIRE_BEADS_SMOKE=1 \
-		GHOSTEX_CODE_SIGN_IDENTITY="${GHOSTEX_CODE_SIGN_IDENTITY:-Developer ID Application: Mohamad Youssef (KTKP595G3B)}" \
-		GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG=--timestamp \
 		GHOSTEX_GPUI_MARKETING_VERSION="$VERSION" \
 		"$REPO_ROOT/apps/desktop/scripts/prepare-macos-runtime.sh"
 	for required_path in \
@@ -77,8 +74,7 @@ runtime)
 		"apps/desktop/runtime/macos/CLI/ghostex" \
 		"build/on-demand-components/components.json" \
 		"build/on-demand-assets/$VERSION/gxserver-linux-x64.tar.gz" \
-		"build/on-demand-assets/$VERSION/gxserver-linux-arm64.tar.gz" \
-		"build/on-demand-assets/$VERSION/bd-darwin-arm64.tar.gz"; do
+		"build/on-demand-assets/$VERSION/gxserver-linux-arm64.tar.gz"; do
 		[[ -e "$REPO_ROOT/$required_path" ]] || {
 			echo "Prepared runtime is missing $required_path" >&2
 			exit 1

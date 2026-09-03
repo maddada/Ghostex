@@ -331,7 +331,7 @@ pub(crate) fn gpui_bundled_remote_gxserver_package_is_compatible(
     package_dir: &Path,
     target: &GpuiRemoteInstallTarget,
 ) -> bool {
-    for relative_path in ["bin/gxserver", "bin/zmx", "bin/bd"] {
+    for relative_path in ["bin/gxserver", "bin/zmx"] {
         if !gpui_is_file(&package_dir.join(relative_path)) {
             return false;
         }
@@ -344,7 +344,7 @@ pub(crate) fn gpui_bundled_remote_gxserver_package_is_compatible(
     // Node entrypoint are stale. Linux remote packages no longer ship a Node
     // runtime at all.
     let arch = target.normalized_arch();
-    for relative_path in ["bin/gxserver", "bin/ghostex", "bin/zmx", "bin/bd"] {
+    for relative_path in ["bin/gxserver", "bin/ghostex", "bin/zmx"] {
         let path = package_dir.join(relative_path);
         if gpui_is_macho_binary(&path) || !gpui_is_elf_binary(&path, Some(arch.as_str())) {
             return false;

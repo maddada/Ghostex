@@ -77,8 +77,6 @@ const FIXTURE_FILES = {
     null,
     2
   )}\n`,
-  'tooling/beads-release.mjs': 'export const BEADS_VERSION = "1.1.0";\n',
-  'tooling/build-pinned-beads-release.mjs': '// beads\n',
   'tooling/build-remote-gxserver-linux-release.sh': '#!/usr/bin/env bash\n',
   'tooling/release-ghostex.mjs': '// remote package\n',
   'tooling/release-gpui/android.sh': '#!/usr/bin/env bash\n',
@@ -107,7 +105,6 @@ const FIXTURE_FILES = {
   'tooling/release-gpui/windows.ps1': '# windows\n',
   'tooling/release-gpui/wsl-runtime.sh': '#!/usr/bin/env bash\n',
   'tooling/release-mobile/android.sh': '#!/usr/bin/env bash\n',
-  'tooling/smoke-test-packaged-beads.mjs': '// smoke\n',
   'tooling/validate-macos-app-bundle.mjs': '// bundle\n',
   'packages/shared/ghostex-settings.ts': 'export const settings = {};\n',
   'packages/core-ui/sidebar-app.tsx': 'export const SidebarApp = () => null;\n',

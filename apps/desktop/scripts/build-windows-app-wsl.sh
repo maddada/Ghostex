@@ -533,18 +533,6 @@ stage_current_wsl_runtime_archive() {
 		echo "The base WSL runtime archive does not contain bin/gxserver." >&2
 		exit 1
 	fi
-	if [[ -n "${GHOSTEX_WINDOWS_WSL_BEADS_BINARY:-}" ]]; then
-		if [[ ! -x "$GHOSTEX_WINDOWS_WSL_BEADS_BINARY" ]]; then
-			echo "Configured WSL Beads binary is not executable: $GHOSTEX_WINDOWS_WSL_BEADS_BINARY" >&2
-			exit 1
-		fi
-		cp "$GHOSTEX_WINDOWS_WSL_BEADS_BINARY" "$package_dir/bin/bd"
-		chmod 755 "$package_dir/bin/bd"
-	elif [[ ! -x "$package_dir/bin/bd" ]]; then
-		echo "The base WSL runtime archive does not contain executable bin/bd." >&2
-		exit 1
-	fi
-	node "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs" "$package_dir/bin/bd"
 	cp "$WSL_GXSERVER_CURRENT_BIN" "$package_dir/bin/gxserver"
 	cp "$WSL_ZMX_CURRENT_BIN" "$package_dir/bin/zmx"
 	chmod 755 "$package_dir/bin/gxserver"
@@ -559,7 +547,7 @@ stage_current_wsl_runtime_archive() {
 	current_fingerprint="sha256:$(
 		{
 			printf '%s\0' "$base_identity"
-			sha256sum "$package_dir/bin/gxserver" "$package_dir/bin/zmx" "$package_dir/bin/bd"
+			sha256sum "$package_dir/bin/gxserver" "$package_dir/bin/zmx"
 		} | sha256sum | awk '{print $1}'
 	)"
 	source_revision="$(git -C "$REPO_ROOT" rev-parse HEAD)"

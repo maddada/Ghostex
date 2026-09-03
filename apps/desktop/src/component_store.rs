@@ -13,8 +13,6 @@ use sha2::{Digest as _, Sha256};
 
 #[cfg(target_os = "linux")]
 use std::io::Write as _;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt as _;
 #[cfg(target_os = "macos")]
 use std::process::{Command, Stdio};
 
@@ -129,9 +127,8 @@ pub struct InstalledComponent {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ReleaseAssetCachePayload<'a> {
+pub enum ReleaseAssetCachePayload {
     DownloadArchive,
-    ExtractedExecutable(&'a str),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -809,7 +806,7 @@ impl ComponentStore {
     pub fn query_release_asset_cache(
         &self,
         asset_key: &str,
-        payload: ReleaseAssetCachePayload<'_>,
+        payload: ReleaseAssetCachePayload,
     ) -> Result<CachedReleaseAsset, String> {
         let asset =
             self.manifest.assets.get(asset_key).ok_or_else(|| {
@@ -818,10 +815,6 @@ impl ComponentStore {
         let cache_dir = legacy_asset_cache_root()?.join(&self.manifest.version);
         let path = match payload {
             ReleaseAssetCachePayload::DownloadArchive => cache_dir.join(&asset.name),
-            ReleaseAssetCachePayload::ExtractedExecutable(name) => {
-                require_cache_file_name(name)?;
-                cache_dir.join(name)
-            }
         };
         let size_bytes = path
             .metadata()
@@ -831,9 +824,6 @@ impl ComponentStore {
             .unwrap_or(0);
         let cached = match payload {
             ReleaseAssetCachePayload::DownloadArchive => size_bytes == asset.bytes,
-            ReleaseAssetCachePayload::ExtractedExecutable(_) => {
-                cached_executable_is_ready(&path, size_bytes)
-            }
         };
         Ok(CachedReleaseAsset {
             asset_key: asset_key.to_string(),
@@ -848,7 +838,7 @@ impl ComponentStore {
     pub fn remove_release_asset_cache(
         &self,
         asset_key: &str,
-        payload: ReleaseAssetCachePayload<'_>,
+        payload: ReleaseAssetCachePayload,
     ) -> Result<bool, String> {
         let cached = self.query_release_asset_cache(asset_key, payload)?;
         if !cached.path.exists() {
@@ -2232,8 +2222,6 @@ fn prune_temporary_install_artifacts(version_root: &Path) {
         if !name.starts_with(".download-")
             && !name.starts_with(".install-")
             && !name.starts_with(".previous-")
-            && !name.starts_with(".bd-download-")
-            && !name.starts_with(".bd-extract-")
         {
             continue;
         }
@@ -2346,27 +2334,6 @@ fn require_identifier(value: &str, label: &str) -> Result<(), String> {
             "Malformed sealed on-demand manifest: {label} must be an identifier"
         ))
     }
-}
-
-fn require_cache_file_name(value: &str) -> Result<(), String> {
-    if value.is_empty() || Path::new(value).components().count() != 1 || matches!(value, "." | "..")
-    {
-        return Err("Release asset cache file name must be a single file name".to_string());
-    }
-    Ok(())
-}
-
-fn cached_executable_is_ready(path: &Path, size_bytes: u64) -> bool {
-    if size_bytes == 0 {
-        return false;
-    }
-    #[cfg(unix)]
-    return path
-        .metadata()
-        .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false);
-    #[cfg(not(unix))]
-    return true;
 }
 
 fn valid_identifier(value: &str) -> bool {

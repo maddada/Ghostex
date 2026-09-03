@@ -6,8 +6,6 @@ const CODE_SERVER_COMPONENT: &str = "code-server";
 const CEF_COMPONENT: &str = "cef";
 const GXSERVER_LINUX_X64_ASSET: &str = "gxserver-linux-x64";
 const GXSERVER_LINUX_ARM64_ASSET: &str = "gxserver-linux-arm64";
-const BD_DARWIN_ARM64_ASSET: &str = "bd-darwin-arm64";
-static BUNDLED_BEADS_VERSION: OnceLock<Result<String, String>> = OnceLock::new();
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PluginsModalStatus {
@@ -75,7 +73,6 @@ enum PluginsModalAction {
     ShowKanbanViewTab,
     RemoveGxserverX64,
     RemoveGxserverArm64,
-    RemoveBd,
 }
 
 impl PluginsModalAction {
@@ -87,9 +84,7 @@ impl PluginsModalAction {
             Self::ShowCodeViewTab => "Show Code view tab",
             Self::HideKanbanViewTab => "Hide Kanban view tab",
             Self::ShowKanbanViewTab => "Show Kanban view tab",
-            Self::RemoveGxserverX64 | Self::RemoveGxserverArm64 | Self::RemoveBd => {
-                "Remove cached copy"
-            }
+            Self::RemoveGxserverX64 | Self::RemoveGxserverArm64 => "Remove cached copy",
         }
     }
 }
@@ -204,11 +199,6 @@ impl GpuiPluginsModalWindow {
                 component_store::ReleaseAssetCachePayload::DownloadArchive,
                 cx,
             ),
-            PluginsModalAction::RemoveBd => self.remove_cached_asset(
-                BD_DARWIN_ARM64_ASSET,
-                component_store::ReleaseAssetCachePayload::ExtractedExecutable("bd"),
-                cx,
-            ),
         };
 
         match result {
@@ -231,8 +221,7 @@ impl GpuiPluginsModalWindow {
                         Some((false, "The Kanban view tab is visible again.".to_string()))
                     }
                     PluginsModalAction::RemoveGxserverX64
-                    | PluginsModalAction::RemoveGxserverArm64
-                    | PluginsModalAction::RemoveBd => Some((
+                    | PluginsModalAction::RemoveGxserverArm64 => Some((
                         false,
                         "Cached copy removed. It will download again on next use.".to_string(),
                     )),
@@ -246,7 +235,7 @@ impl GpuiPluginsModalWindow {
     fn remove_cached_asset(
         &self,
         asset_key: &str,
-        payload: component_store::ReleaseAssetCachePayload<'static>,
+        payload: component_store::ReleaseAssetCachePayload,
         cx: &mut gpui::Context<Self>,
     ) -> Result<(), String> {
         self.main_app
@@ -620,7 +609,6 @@ impl GhostexGpuiApp {
                     }
                 }
             }
-            "kanban" => self.reinstall_beads_plugin(cx),
             "cef" => self.reinstall_cef_plugin(cx),
             _ => {}
         }
@@ -676,27 +664,6 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    fn reinstall_beads_plugin(&mut self, cx: &mut gpui::Context<Self>) {
-        if self.plugin_settings_action_progress.contains_key("kanban") {
-            return;
-        }
-        let generation = self.begin_plugin_settings_action(
-            "kanban",
-            component_store::ComponentStoreProgressPhase::Downloading,
-            cx,
-        );
-        let background = cx.background_executor().clone();
-        cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move { reinstall_beads_runtime() })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                this.finish_plugin_settings_action("kanban", generation, result, cx);
-            });
-        })
-        .detach();
-    }
-
     fn reinstall_cef_plugin(&mut self, cx: &mut gpui::Context<Self>) {
         if self.plugin_settings_action_progress.contains_key("cef") {
             return;
@@ -741,7 +708,7 @@ impl GhostexGpuiApp {
     fn remove_cached_plugin_asset(
         &mut self,
         asset_key: &str,
-        payload: component_store::ReleaseAssetCachePayload<'static>,
+        payload: component_store::ReleaseAssetCachePayload,
         cx: &mut gpui::Context<Self>,
     ) -> Result<bool, String> {
         let Some(store) = on_demand_component_store()? else {
@@ -778,15 +745,26 @@ fn plugins_modal_snapshot(app: &GhostexGpuiApp) -> PluginsModalSnapshot {
         PluginsModalAction::RemoveGxserverArm64,
         &mut warning,
     ));
-    let mut beads_row = beads_row(store.as_ref(), &mut warning);
-    beads_row.actions.push(
-        if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Kanban) {
-            PluginsModalAction::ShowKanbanViewTab
-        } else {
-            PluginsModalAction::HideKanbanViewTab
-        },
-    );
-    rows.push(beads_row);
+    /*
+    CDXC:SystemBeadsOnly 2026-09-03:
+    Ghostex no longer ships or downloads Beads; the board resolves the `bd`
+    installed on the machine. This row only owns the Kanban view tab toggle.
+    */
+    rows.push(PluginsModalRow {
+        actions: vec![
+            if gpui_titlebar_mode_hidden_from_settings(TitlebarMode::Kanban) {
+                PluginsModalAction::ShowKanbanViewTab
+            } else {
+                PluginsModalAction::HideKanbanViewTab
+            },
+        ],
+        description: "Project board view. Uses the Beads CLI (bd) installed on this machine.",
+        id: "kanban",
+        name: "Kanban",
+        size_bytes: 0,
+        status: PluginsModalStatus::Installed,
+        version: String::new(),
+    });
     PluginsModalSnapshot { rows, warning }
 }
 
@@ -907,7 +885,6 @@ pub(super) fn plugin_settings_status_message(app: &GhostexGpuiApp) -> serde_json
     let store = store_result.ok().flatten();
     let rows = [
         ("code", code_server_row(app, store.as_ref(), &mut warning)),
-        ("kanban", beads_row(store.as_ref(), &mut warning)),
         ("cef", cef_row(store.as_ref(), &mut warning)),
     ];
     let plugins = rows
@@ -925,12 +902,6 @@ pub(super) fn plugin_settings_status_message(app: &GhostexGpuiApp) -> serde_json
                     .as_ref()
                     .and_then(|store| store.component(CODE_SERVER_COMPONENT))
                     .is_some(),
-                "kanban" => {
-                    store
-                        .as_ref()
-                        .is_some_and(|store| store.has_release_asset(BD_DARWIN_ARM64_ASSET))
-                        && bundled_beads_launcher_path().is_some()
-                }
                 "cef" => store
                     .as_ref()
                     .and_then(|store| store.component(CEF_COMPONENT))
@@ -972,133 +943,6 @@ fn plugin_settings_status_wire(status: PluginsModalStatus) -> (&'static str, Str
         },
     };
     (wire, status.label())
-}
-
-fn bundled_beads_launcher_path() -> Option<PathBuf> {
-    let executable = env::current_exe().ok()?;
-    let executable_dir = executable.parent()?;
-    let candidates = [
-        executable_dir.join("../Resources/Web/bin/bd"),
-        executable_dir.join("resources/Web/bin/bd"),
-        executable_dir.join("Web/bin/bd"),
-    ];
-    candidates.into_iter().find(|path| path.is_file())
-}
-
-fn beads_row(
-    store: Option<&component_store::ComponentStore>,
-    warning: &mut Option<String>,
-) -> PluginsModalRow {
-    if store.is_some() {
-        return release_asset_row(
-            store,
-            BD_DARWIN_ARM64_ASSET,
-            "Beads (bd)",
-            "Project board command-line runtime, downloaded on first board use.",
-            component_store::ReleaseAssetCachePayload::ExtractedExecutable("bd"),
-            PluginsModalAction::RemoveBd,
-            warning,
-        );
-    }
-
-    let description = "Project board command-line runtime bundled with development builds.";
-    let Some(path) = bundled_beads_launcher_path() else {
-        return PluginsModalRow {
-            actions: Vec::new(),
-            description,
-            id: BD_DARWIN_ARM64_ASSET,
-            name: "Beads (bd)",
-            size_bytes: 0,
-            status: PluginsModalStatus::NotInstalled,
-            version: String::new(),
-        };
-    };
-    let size_bytes = component_store::path_size_bytes(&path).unwrap_or(0);
-    match bundled_beads_version(&path) {
-        Ok(version) => PluginsModalRow {
-            actions: Vec::new(),
-            description,
-            id: BD_DARWIN_ARM64_ASSET,
-            name: "Beads (bd)",
-            size_bytes,
-            status: PluginsModalStatus::Installed,
-            version,
-        },
-        Err(error) => {
-            set_first_warning(warning, error);
-            PluginsModalRow {
-                actions: Vec::new(),
-                description,
-                id: BD_DARWIN_ARM64_ASSET,
-                name: "Beads (bd)",
-                size_bytes,
-                status: PluginsModalStatus::Failed,
-                version: String::new(),
-            }
-        }
-    }
-}
-
-fn bundled_beads_version(path: &Path) -> Result<String, String> {
-    BUNDLED_BEADS_VERSION
-        .get_or_init(|| read_bundled_beads_version(path))
-        .clone()
-}
-
-fn read_bundled_beads_version(path: &Path) -> Result<String, String> {
-    let output = Command::new(path)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| format!("Could not read the bundled Project board version: {error}"))?;
-    if !output.status.success() {
-        return Err("The bundled Project board runtime did not report its version.".to_string());
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let version = stdout
-        .trim()
-        .strip_prefix("bd version ")
-        .and_then(|value| value.split_whitespace().next())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            "The bundled Project board runtime reported an invalid version.".to_string()
-        })?;
-    Ok(version.to_string())
-}
-
-fn reinstall_beads_runtime() -> Result<(), String> {
-    let store = on_demand_component_store()?
-        .ok_or_else(|| "The sealed Project board component manifest is unavailable.".to_string())?;
-    if !store.has_release_asset(BD_DARWIN_ARM64_ASSET) {
-        return Err("This Ghostex build does not define the Project board component.".to_string());
-    }
-    store.remove_release_asset_cache(
-        BD_DARWIN_ARM64_ASSET,
-        component_store::ReleaseAssetCachePayload::ExtractedExecutable("bd"),
-    )?;
-    let launcher = bundled_beads_launcher_path()
-        .ok_or_else(|| "The Project board component launcher is unavailable.".to_string())?;
-    let status = Command::new(launcher)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|error| {
-            format!("Could not start the Project board component installer: {error}")
-        })?;
-    if !status.success() {
-        return Err(
-            "The Project board component could not be downloaded and verified.".to_string(),
-        );
-    }
-    let cached = store.query_release_asset_cache(
-        BD_DARWIN_ARM64_ASSET,
-        component_store::ReleaseAssetCachePayload::ExtractedExecutable("bd"),
-    )?;
-    cached.cached.then_some(()).ok_or_else(|| {
-        "The Project board component installer finished without a verified runtime.".to_string()
-    })
 }
 
 fn cef_row(
@@ -1172,7 +1016,7 @@ fn release_asset_row(
     asset_key: &'static str,
     name: &'static str,
     description: &'static str,
-    payload: component_store::ReleaseAssetCachePayload<'static>,
+    payload: component_store::ReleaseAssetCachePayload,
     remove_action: PluginsModalAction,
     warning: &mut Option<String>,
 ) -> PluginsModalRow {

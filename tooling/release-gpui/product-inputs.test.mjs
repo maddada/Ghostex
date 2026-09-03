@@ -2,7 +2,6 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import {
-  BEADS_PINS,
   CODE_SERVER_IDENTITY_REVISION,
   COMPONENT_IDS,
   IGNORED_FOR_RELEASE,
@@ -18,7 +17,6 @@ import {
 } from './product-inputs.mjs';
 import { createGitTreeReader, normalizePathspec } from './fingerprint.mjs';
 import { defaultScope } from './product-inputs.mjs';
-import { BEADS_PACKAGE_ID, BEADS_SCHEMA_VERSION, BEADS_SOURCE_REVISION, BEADS_VERSION } from '../beads-release.mjs';
 import { CODE_SERVER_COMPONENT_IDENTITY_REVISION } from './code-server-component-identity.mjs';
 
 const reader = createGitTreeReader({ repoRoot: process.cwd() });
@@ -84,10 +82,7 @@ describe('release product input map', () => {
 
   test('matches the publisher artifact-name contract', () => {
     const version = '7.8.0';
-    expect(productDefinition('macos-arm64').artifacts(version)).toEqual([
-      'ghostex-7.8.0-arm64.dmg',
-      'bd-darwin-arm64.tar.gz',
-    ]);
+    expect(productDefinition('macos-arm64').artifacts(version)).toEqual(['ghostex-7.8.0-arm64.dmg']);
     expect(productDefinition('linux-deb-x64').artifacts(version)).toEqual(['ghostex_7.8.0_amd64.deb']);
     expect(productDefinition('linux-rpm-x64').artifacts(version)).toEqual(['ghostex-7.8.0-1.x86_64.rpm']);
     expect(productDefinition('linux-tar-x64').artifacts(version)).toEqual(['ghostex-7.8.0-linux-x64.tar.zst']);
@@ -185,7 +180,6 @@ describe('release product input map', () => {
       'gxserver-linux-arm64',
       'code-server',
       'cef',
-      'beads',
     ]);
     expect(productDefinition('linux-deb-x64').composedFrom).toEqual(['gxserver-linux-x64', 'code-server', 'cef']);
     /* Rule 6: every desktop package stages the platform's on-demand code-server component. */
@@ -269,7 +263,6 @@ describe('pinned toolchain values track the workflows', () => {
     expect(macos).toContain(`RIPGREP_VERSION: ${TOOLCHAIN.ripgrepVersion}`);
     expect(macos).toContain(`RIPGREP_PACKAGE_VERSION: ${TOOLCHAIN.ripgrepPackageVersion}`);
     expect(macos).toContain(`RIPGREP_SHA256: ${TOOLCHAIN.ripgrepSha256}`);
-    expect(macos).toContain(`go-version-file: ${TOOLCHAIN.goVersionFile}`);
     expect(windows).toContain(`dotnet-version: ${TOOLCHAIN.dotnet}`);
     expect(windows).toContain(`vpk --version ${TOOLCHAIN.vpk}`);
     expect(android).toContain(`node-version: ${TOOLCHAIN.node}`);
@@ -314,11 +307,7 @@ describe('pinned toolchain values track the workflows', () => {
     expect(() => checkGhosttyZigPin({ minimum: readZmxMinimumZig(), pin: TOOLCHAIN.zig, source: 'zmx' })).not.toThrow();
   });
 
-  test('Beads and code-server identity pins match their source of truth', () => {
-    expect(BEADS_PINS.version).toBe(BEADS_VERSION);
-    expect(BEADS_PINS.sourceRevision).toBe(BEADS_SOURCE_REVISION);
-    expect(BEADS_PINS.schemaVersion).toBe(String(BEADS_SCHEMA_VERSION));
-    expect(BEADS_PINS.packageId).toBe(BEADS_PACKAGE_ID);
+  test('code-server identity pin matches its source of truth', () => {
     expect(CODE_SERVER_IDENTITY_REVISION).toBe(CODE_SERVER_COMPONENT_IDENTITY_REVISION);
   });
 });

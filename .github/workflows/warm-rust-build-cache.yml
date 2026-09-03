@@ -47,8 +47,8 @@ name: Warm the Rust build cache
 # nearly every push anyway) and can never be served a placeholder-version
 # object. Third-party crates never see the variable and hit normally.
 #
-# What is deliberately NOT mirrored, because none of it reaches cargo: Beads
-# (Go) builds, code-server npm installs, ripgrep seeding, signing, notarization,
+# What is deliberately NOT mirrored, because none of it reaches cargo:
+# code-server npm installs, ripgrep seeding, signing, notarization,
 # artifact awaits/downloads, packaging, attestation, uploads, the Windows
 # wedged-runner watchdog (a wedge here just times the job out and the next push
 # retries), and `fetch-depth: 0` (nothing in the compile reads git history).
@@ -488,9 +488,7 @@ jobs:
   # build, package staging) because its cargo invocation carries the musl
   # cross-link env (CC_*/AR_* Zig wrappers, CARGO_TARGET_*_LINKER=rust-lld,
   # CARGO_TARGET_*_RUSTFLAGS) that sccache keys on; re-deriving that env here
-  # would be the drift this workflow exists to avoid. Without
-  # GHOSTEX_BEADS_PREBUILT_BINARY the script stages the pinned Beads release
-  # archive (a verified download, no Go build).
+  # would be the drift this workflow exists to avoid.
   gxserver_linux_x64:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -504,15 +502,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      # Same pinned Beads source as release-gpui-gxserver.yml. The packaging
-      # script rejects a stock (CGO_ENABLED=0) bd release binary, so the warm
-      # job must hand it the same embedded-Dolt build the release job uses.
-      - uses: actions/checkout@v6
-        with:
-          repository: steveyegge/beads
-          ref: 672d942083a1fd0c8603fa1e77620c58ba9d47c8
-          fetch-depth: 1
-          path: build/pinned-beads-source
       - name: Resolve dependency cache keys
         id: cache_keys
         run: |
@@ -544,10 +533,6 @@ jobs:
       - name: Install sccache
         id: sccache
         uses: mozilla-actions/sccache-action@v0.0.11
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: build/pinned-beads-source/go.mod
-          cache-dependency-path: build/pinned-beads-source/go.sum
       - name: Install native build dependencies
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
@@ -569,17 +554,7 @@ jobs:
         run: tooling/release-gpui/fetch-zig-deps.sh zmx
       # Same entry point, cwd, and --arch as the release job's "Build remote
       # runtime" step (minus its tarball/manifest wrap-up).
-      - name: Build pinned embedded-Dolt Beads
-        run: |
-          node tooling/build-pinned-beads-release.mjs \
-            --source-root build/pinned-beads-source \
-            --platform linux \
-            --arch x64 \
-            --output "$RUNNER_TEMP/ghostex-pinned-beads/bd"
       - name: Build remote runtime
-        env:
-          GHOSTEX_BEADS_PREBUILT_BINARY: ${{ runner.temp }}/ghostex-pinned-beads/bd
-          GHOSTEX_REQUIRE_BEADS_SMOKE: '1'
         run: tooling/build-remote-gxserver-linux-release.sh --arch x64
       - name: Report sccache statistics
         if: ${{ always() && steps.sccache.conclusion == 'success' }}
@@ -607,15 +582,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: false
-      # Same pinned Beads source as release-gpui-gxserver.yml. The packaging
-      # script rejects a stock (CGO_ENABLED=0) bd release binary, so the warm
-      # job must hand it the same embedded-Dolt build the release job uses.
-      - uses: actions/checkout@v6
-        with:
-          repository: steveyegge/beads
-          ref: 672d942083a1fd0c8603fa1e77620c58ba9d47c8
-          fetch-depth: 1
-          path: build/pinned-beads-source
       - name: Resolve dependency cache keys
         id: cache_keys
         run: |
@@ -647,10 +613,6 @@ jobs:
       - name: Install sccache
         id: sccache
         uses: mozilla-actions/sccache-action@v0.0.11
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: build/pinned-beads-source/go.mod
-          cache-dependency-path: build/pinned-beads-source/go.sum
       - name: Install native build dependencies
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
@@ -670,17 +632,7 @@ jobs:
         run: GHOSTEX_RELEASE_SKIP_GPUI_REFERENCES=1 tooling/release-gpui/prepare-references.sh
       - name: Pre-fetch Zig package dependencies
         run: tooling/release-gpui/fetch-zig-deps.sh zmx
-      - name: Build pinned embedded-Dolt Beads
-        run: |
-          node tooling/build-pinned-beads-release.mjs \
-            --source-root build/pinned-beads-source \
-            --platform linux \
-            --arch arm64 \
-            --output "$RUNNER_TEMP/ghostex-pinned-beads/bd"
       - name: Build remote runtime
-        env:
-          GHOSTEX_BEADS_PREBUILT_BINARY: ${{ runner.temp }}/ghostex-pinned-beads/bd
-          GHOSTEX_REQUIRE_BEADS_SMOKE: '1'
         run: tooling/build-remote-gxserver-linux-release.sh --arch arm64
       - name: Report sccache statistics
         if: ${{ always() && steps.sccache.conclusion == 'success' }}

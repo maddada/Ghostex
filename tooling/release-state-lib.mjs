@@ -54,7 +54,7 @@ export function releaseContracts(version) {
       'macos-arm64',
       {
         architecture: 'arm64',
-        assets: [`ghostex-${version}-arm64.dmg`, 'bd-darwin-arm64.tar.gz'],
+        assets: [`ghostex-${version}-arm64.dmg`],
         dependencies: ['gxserver-linux-x64', 'gxserver-linux-arm64'],
         label: 'macOS',
         workflow: 'release-build-macos.yml',

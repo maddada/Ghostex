@@ -21,7 +21,7 @@ tar plus a shell to bootstrap. The listener stop shells out to ss/lsof exactly
 like the old script so setup does not gain new privileges or dependencies.
 */
 
-const REMOTE_TOOL_NAMES: [&str; 4] = ["gxserver", "ghostex", "zmx", "bd"];
+const REMOTE_TOOL_NAMES: [&str; 3] = ["gxserver", "ghostex", "zmx"];
 
 pub fn run_setup(args: Vec<String>) -> Result<()> {
     #[cfg(not(unix))]
@@ -180,6 +180,17 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
         }
     }
     /*
+    CDXC:SystemBeadsOnly 2026-09-03:
+    Ghostex no longer ships Beads. Earlier releases linked the package's bin/bd
+    into ~/.local/bin on remote SSH hosts and inside WSL, so those hosts keep a
+    dangling `bd` symlink into a Ghostex release directory once the package
+    stops carrying it. Remove only that symlink: a real file, or a link that
+    points outside the install root, is the user's own Beads install.
+    */
+    if let Some(local_bin) = &local_bin {
+        remove_stale_ghostex_bd_link(&local_bin.join("bd"), &options.install_root);
+    }
+    /*
     CDXC:GhostexRustCli 2026-07-13:
     bin/ghostex is the native Rust CLI shipped in the package (it replaced the
     Node CLI wrapper + CLI/ghostex-cli.mjs). The tool loop above already
@@ -201,6 +212,38 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
     }
     println!("gxserver setup complete: {}", release_dir.display());
     Ok(())
+}
+
+#[cfg(unix)]
+fn remove_stale_ghostex_bd_link(link_path: &Path, install_root: &Path) {
+    if !link_path.is_symlink() {
+        return;
+    }
+    let Ok(target) = fs::read_link(link_path) else {
+        return;
+    };
+    let target = if target.is_absolute() {
+        target
+    } else {
+        link_path
+            .parent()
+            .map(|parent| parent.join(&target))
+            .unwrap_or(target)
+    };
+    /*
+    The link is usually dangling by now (the release dir it pointed into is
+    gone), so compare the raw target as well as its canonical form against both
+    spellings of the install root.
+    */
+    let resolved = fs::canonicalize(&target).unwrap_or_else(|_| target.clone());
+    let canonical_root =
+        fs::canonicalize(install_root).unwrap_or_else(|_| install_root.to_path_buf());
+    let points_into_install_root = [&target, &resolved]
+        .iter()
+        .any(|path| path.starts_with(install_root) || path.starts_with(&canonical_root));
+    if points_into_install_root {
+        let _ = fs::remove_file(link_path);
+    }
 }
 
 #[cfg(unix)]

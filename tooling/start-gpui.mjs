@@ -95,11 +95,10 @@ const windowsCodeServerNames = windowsCodeServerIdentity
   : undefined;
 /*
 CDXC:WindowsWslRuntimeCache 2026-08-09:
-The gxserver release asset keeps the same filename across Ghostex releases. A
-single architecture-only cache therefore reused an older CGO-disabled bd after
-the release pipeline began shipping the corrected embedded-Dolt build. Scope
-the cache to the immutable Ghostex release tag so a version can only consume
-the WSL runtime published with that version.
+The gxserver release asset keeps the same filename across Ghostex releases, so
+an architecture-only cache could reuse a stale runtime from an earlier release.
+Scope the cache to the immutable Ghostex release tag so a version can only
+consume the WSL runtime published with that version.
 */
 const windowsWslArchive = targetsWindows
   ? explicitWindowsWslArchive

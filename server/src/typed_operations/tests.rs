@@ -669,10 +669,10 @@ fn beads_board_rejects_explicit_row_and_response_limits() {
 fn beads_hook_script_matches_typescript_contract() {
     let script = build_ghostex_beads_git_hook_script(
         "pre-commit",
-        "/tmp/Ghostex Resources/bin/bd",
+        "/usr/local/bin/bd",
         "/tmp/project/.beads",
     );
-    assert!(script.contains("BD_BIN='/tmp/Ghostex Resources/bin/bd'"));
+    assert!(script.contains("BD_BIN='/usr/local/bin/bd'"));
     assert!(script.contains("BEADS_DIR_VALUE='/tmp/project/.beads'"));
     assert!(script.contains("HOOK_NAME='pre-commit'"));
     assert!(script.contains("export BEADS_DIR=\"$BEADS_DIR_VALUE\""));
@@ -689,13 +689,13 @@ fn beads_hook_script_matches_typescript_contract() {
 async fn ensure_beads_hooks_installs_scripts_in_common_git_directory() {
     let dir = tempdir().unwrap();
     let repo = dir.path().join("repo");
-    let app_bin = dir.path().join("app-web").join("bin");
-    let bd = app_bin.join("bd");
+    let system_bin = dir.path().join("system-bin");
+    let bd = system_bin.join("bd");
     let beads_dir = repo.join(".beads");
     let hook_log = dir.path().join("hook.log");
     fs::create_dir_all(&repo).unwrap();
     fs::create_dir_all(&beads_dir).unwrap();
-    fs::create_dir_all(&app_bin).unwrap();
+    fs::create_dir_all(&system_bin).unwrap();
     run_git(["init"], &repo);
     fs::write(
         &bd,

@@ -101,7 +101,7 @@ case "$(printf '%s' "$GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES" | tr '[:up
 	GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=0
 	;;
 esac
-# CDXC:OnDemandAssets 2026-07-02-14:10: Release app bundles stop embedding the Ubuntu remote gxserver payloads and the macOS Beads binary. In this mode the build tars those payloads into build/on-demand-assets/<version>/, seals their checksums into Web/on-demand-resources.json inside the signed app, and ships Web/bin/bd as a download-on-first-use launcher. Dev builds keep bundling everything locally, so this stays a release-only mode.
+# CDXC:OnDemandAssets 2026-07-02-14:10: Release app bundles stop embedding the Ubuntu remote gxserver payloads. In this mode the build tars those payloads into build/on-demand-assets/<version>/ and seals their checksums into Web/on-demand-resources.json inside the signed app. Dev builds keep bundling everything locally, so this stays a release-only mode.
 GHOSTEX_ON_DEMAND_ASSETS="${GHOSTEX_ON_DEMAND_ASSETS:-0}"
 case "$(printf '%s' "$GHOSTEX_ON_DEMAND_ASSETS" | tr '[:upper:]' '[:lower:]')" in
 1 | true | yes | on)
@@ -111,7 +111,7 @@ case "$(printf '%s' "$GHOSTEX_ON_DEMAND_ASSETS" | tr '[:upper:]' '[:lower:]')" i
 	GHOSTEX_ON_DEMAND_ASSETS=0
 	;;
 esac
-# CDXC:ContributorStart 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source resources are absent. Beads is a checksum-pinned release artifact rather than a source submodule input.
+# CDXC:ContributorStart 2026-06-22-23:23: `bun run start` should stay stable for full maintainer checkouts while allowing contributor clones that omit optional submodules. Enable missing-optional-submodule skips only for local starts by default; release and direct strict builds must keep failing when Source resources are absent.
 GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES="${GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES:-${GHOSTEX_LOCAL_START:-0}}"
 case "$(printf '%s' "$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" | tr '[:upper:]' '[:lower:]')" in
 1 | true | yes | on)
@@ -124,7 +124,6 @@ esac
 
 APP_CAPABILITY_SHARED_NODE_RUNTIME=false
 APP_CAPABILITY_SOURCE_EDITOR=false
-APP_CAPABILITY_BEADS=false
 APP_CAPABILITY_ZMX=true
 APP_OPTIONAL_RESOURCE_NOTES=()
 
@@ -269,20 +268,6 @@ node_pty_prebuilds_match_arch() {
 		done < <(find "$prebuilds_dir" -mindepth 1 -maxdepth 1 -type d -print0)
 	done < <(find "$root" -path '*/node_modules/node-pty/prebuilds' -type d -print0)
 	return 0
-}
-
-write_gxserver_shared_bd_launcher() {
-	local launcher_path="$1"
-	mkdir -p "$(dirname "$launcher_path")"
-	# CDXC:ReleaseBundleSize 2026-06-08-19:49: Ghostex already ships the arch-specific Beads CLI once at Web/bin/bd. Keep gxserver's historical bin/bd entry as a tiny launcher to that shared app resource so Project board commands keep working without bundling the large bd binary twice.
-	cat >"$launcher_path" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-HERE="$(cd "$(dirname "$0")" && pwd)"
-APP_BD="$HERE/../../bin/bd"
-exec "$APP_BD" "$@"
-EOF
-	chmod 755 "$launcher_path"
 }
 
 path_identity() {
@@ -1124,72 +1109,6 @@ EOF
 	GXSERVER_RUST_BIN="$output_path"
 }
 
-stage_beads_release_if_needed() {
-	local output_path="$REPO_ROOT/build/$GHOSTEX_MACOS_ARCH/beads/bd"
-	local release_arch build_digest
-	case "$GHOSTEX_MACOS_ARCH" in
-	arm64)
-		release_arch="arm64"
-		;;
-	x86_64)
-		echo "The pinned schema-v54 Beads artifact is published for macOS arm64 only; x86_64 packaging is unsupported." >&2
-		exit 1
-		;;
-	esac
-	if [[ -n "${GHOSTEX_BEADS_PREBUILT_BINARY:-}" ]]; then
-		if [[ ! -x "$GHOSTEX_BEADS_PREBUILT_BINARY" ]]; then
-			echo "Pinned native-CGO Beads binary is missing or not executable: $GHOSTEX_BEADS_PREBUILT_BINARY" >&2
-			exit 1
-		fi
-		mkdir -p "$(dirname "$output_path")"
-		cp "$GHOSTEX_BEADS_PREBUILT_BINARY" "$output_path"
-		chmod 755 "$output_path"
-		if ! binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
-			echo "Pinned native-CGO Beads binary does not contain the required $GHOSTEX_MACOS_ARCH Mach-O slice: $output_path" >&2
-			exit 1
-		fi
-		return 0
-	fi
-	build_digest="$(fingerprint_inputs \
-		--value "beads-schema54-672d942083a1-v1" \
-		--value "target=darwin/$release_arch" \
-		--path "$REPO_ROOT/tooling/beads-release.mjs" \
-		--path "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs")"
-	if cache_matches "beads-$GHOSTEX_MACOS_ARCH" "$build_digest" "$output_path"; then
-		if binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH" &&
-			"$output_path" version 2>/dev/null | grep -Eq '^bd version 1\.1\.0 .*672d942'; then
-			echo "Pinned schema-v54 Beads artifact is current; skipping download."
-			return 0
-		fi
-		echo "Beads cache is stale for $GHOSTEX_MACOS_ARCH; restaging the schema-v54 artifact."
-	fi
-
-	mkdir -p "$(dirname "$output_path")"
-	node "$REPO_ROOT/tooling/beads-release.mjs" \
-		--platform darwin \
-		--arch "$release_arch" \
-		--output "$output_path"
-	if ! binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
-		echo "Pinned Beads artifact does not contain the required $GHOSTEX_MACOS_ARCH Mach-O slice: $output_path" >&2
-		exit 1
-	fi
-	write_cache_stamp "beads-$GHOSTEX_MACOS_ARCH" "$build_digest"
-}
-
-smoke_test_staged_beads() {
-	local binary_path="$1"
-	local host_arch
-	host_arch="$(uname -m)"
-	if [[ "$host_arch" == "$GHOSTEX_MACOS_ARCH" ]]; then
-		node "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs" "$binary_path"
-	elif [[ "${GHOSTEX_REQUIRE_BEADS_SMOKE:-0}" == "1" ]]; then
-		echo "GHOSTEX_REQUIRE_BEADS_SMOKE=1 requires a native $GHOSTEX_MACOS_ARCH macOS runner; current host is $host_arch." >&2
-		exit 1
-	else
-		echo "Skipping execution smoke for cross-architecture Beads artifact $GHOSTEX_MACOS_ARCH on $host_arch; checksum and Mach-O shape were verified."
-	fi
-}
-
 gxserver_rust_package_supports_macos_arch() {
 	local target_dir="$1"
 	local binary_path
@@ -1198,12 +1117,6 @@ gxserver_rust_package_supports_macos_arch() {
 		"$target_dir/bin/ghostex" \
 		"$target_dir/bin/zmx"; do
 		if ! binary_supports_macos_arch "$binary_path" "$GHOSTEX_MACOS_ARCH"; then
-			return 1
-		fi
-	done
-	for binary_path in \
-		"$WEB_DIR/bin/bd"; do
-		if [[ -e "$binary_path" ]] && ! binary_supports_macos_arch "$binary_path" "$GHOSTEX_MACOS_ARCH"; then
 			return 1
 		fi
 	done
@@ -1355,17 +1268,14 @@ This package uses the bundled native gxserver executable in `bin/gxserver` and d
 - `bin/gxserver stop`: stop only the gxserver control plane; zmx sessions are not killed.
 - `bin/gxserver stop-all`: kill gxserver-tracked zmx sessions, then stop the control plane.
 
-The package includes Ghostex's pinned zmx artifact plus the checksum-verified schema-v54 Beads `bd` artifact in `bin/`. Project board operations require the bundled `bd`; shell-installed `bd` is intentionally ignored so Ghostex and agent workflows share one pinned Beads binary.
+The package includes Ghostex's pinned zmx artifact in `bin/`.
 EOF
 }
 
 write_gxserver_package_build_identity() {
 	local target_dir="$1"
 	local package_version="$2"
-	local beads_version
-	beads_version="$("$WEB_DIR/bin/bd" version 2>/dev/null | sed -n 's/^bd version \([^ ]*\).*/\1/p')"
-	GXSERVER_PACKAGE_BEADS_VERSION="$beads_version" \
-		GXSERVER_PACKAGE_DIR="$target_dir" \
+	GXSERVER_PACKAGE_DIR="$target_dir" \
 		GXSERVER_PACKAGE_VERSION="$package_version" \
 		"$GXSERVER_NODE_BIN" <<'JS'
 const { createHash } = require("node:crypto");
@@ -1374,7 +1284,6 @@ const { join, relative, sep } = require("node:path");
 
 const targetDir = process.env.GXSERVER_PACKAGE_DIR;
 const version = process.env.GXSERVER_PACKAGE_VERSION;
-const beadsVersion = process.env.GXSERVER_PACKAGE_BEADS_VERSION;
 const hash = createHash("sha256");
 
 function walk(dir) {
@@ -1405,7 +1314,6 @@ writeFileSync(
 	join(targetDir, "build-identity.json"),
 	`${JSON.stringify({
 		buildIdentity: `gxserver:${version}:${fingerprint}`,
-		beadsVersion,
 		fingerprint,
 		packageVersion: version,
 	}, null, 2)}\n`,
@@ -1419,7 +1327,7 @@ package_gxserver_rust_package() {
 	local rust_bin="$2"
 	local package_version="$3"
 	# CDXC:GxserverRustPackaging 2026-06-22-16:17: Local and release macOS builds no longer keep the deleted gxserver/ TypeScript source tree. Assemble the Rust daemon package directly from server, packages/shared/gxserver-protocol.ts, and app-owned tool binaries so `bun run start` never cds into gxserver/ for the default packaged daemon.
-	# CDXC:ContributorStart 2026-06-22-23:23: zmx remains required. Beads is always staged from the checksum-pinned schema-compatible release artifact before this package is assembled.
+	# CDXC:ContributorStart 2026-06-22-23:23: zmx remains required.
 	rm -rf "$package_dir"
 	mkdir -p "$package_dir/bin"
 	cp "$rust_bin" "$package_dir/bin/gxserver"
@@ -1429,9 +1337,6 @@ package_gxserver_rust_package() {
 	cp "${rust_bin%/*}/ghostex" "$package_dir/bin/ghostex"
 	cp "$WEB_DIR/bin/zmx" "$package_dir/bin/zmx"
 	chmod 755 "$package_dir/bin/gxserver" "$package_dir/bin/ghostex" "$package_dir/bin/zmx"
-	if [[ -x "$WEB_DIR/bin/bd" ]]; then
-		write_gxserver_shared_bd_launcher "$package_dir/bin/bd"
-	fi
 	stage_gxserver_protocol_exports "$package_dir"
 	write_gxserver_rust_package_manifest "$package_dir" "$package_version"
 	write_gxserver_rust_package_readme "$package_dir"
@@ -1445,8 +1350,7 @@ validate_remote_gxserver_linux_package() {
 	for required_path in \
 		"bin/gxserver" \
 		"bin/ghostex" \
-		"bin/zmx" \
-		"bin/bd"; do
+		"bin/zmx"; do
 		if [[ ! -e "$package_dir/$required_path" ]]; then
 			echo "Remote gxserver $package_label package is missing required resource: $required_path" >&2
 			return 1
@@ -1454,8 +1358,7 @@ validate_remote_gxserver_linux_package() {
 	done
 	for required_path in \
 		"bin/gxserver" \
-		"bin/zmx" \
-		"bin/bd"; do
+		"bin/zmx"; do
 		file_output="$(file "$package_dir/$required_path")"
 		if [[ "$file_output" == *"Mach-O"* ]]; then
 			echo "Remote gxserver $package_label package contains a macOS binary at $required_path; Linux packages must not ship Mach-O payloads." >&2
@@ -1516,7 +1419,7 @@ stage_remote_gxserver_linux_package_if_configured() {
 		printf '%s\n' "$validation_output" >&2
 		exit 1
 	fi
-	# CDXC:RemoteMachines 2026-06-23-09:46: macOS app bundles may stage Linux remote gxserver packages only from explicit prebuilt directories. Validate required gxserver/zmx/bd/Node/Portless/CLI resources and require Linux ELF payloads before copying to Web/gxserver-linux-* so the installer never uploads the host Darwin package to Ubuntu.
+	# CDXC:RemoteMachines 2026-06-23-09:46: macOS app bundles may stage Linux remote gxserver packages only from explicit prebuilt directories. Validate required gxserver/zmx/Node/Portless/CLI resources and require Linux ELF payloads before copying to Web/gxserver-linux-* so the installer never uploads the host Darwin package to Ubuntu.
 	#
 	# CDXC:RemoteMachines 2026-06-23-10:07: The Ubuntu package builder writes build/remote-gxserver-linux/<arch>/package by default. Auto-stage that deterministic output when it exists so release/local app packaging can include the already-built Linux package without requiring another env var or rebuilding it in the macOS app pass.
 	rm -rf "$target_dir"
@@ -1553,91 +1456,9 @@ resolve_on_demand_linux_package_source() {
 	printf '%s\n' "$source_dir"
 }
 
-write_on_demand_bd_launcher() {
-	local launcher_path="$1"
-	local version="$2"
-	local asset_name="$3"
-	local asset_sha="$4"
-	# CDXC:OnDemandAssets 2026-07-02-14:10: This launcher replaces the large Beads binary in release bundles. It downloads the version-pinned bd asset from the app's own GitHub release on first Project board use, verifies the checksum baked in at build time (sealed by app codesigning), caches per app version, and execs the cached binary. The gxserver package's bin/bd launcher resolves here, so every bd consumer shares this one path.
-	cat >"$launcher_path" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-GHOSTEX_BD_VERSION="$version"
-GHOSTEX_BD_ASSET="$asset_name"
-GHOSTEX_BD_SHA256="$asset_sha"
-EOF
-	cat >>"$launcher_path" <<'EOF'
-if [[ -n "${GHOSTEX_ON_DEMAND_CACHE_DIR:-}" ]]; then
-	CACHE_ROOT="$GHOSTEX_ON_DEMAND_CACHE_DIR"
-else
-	case "${GHOSTEX_HOME:-}" in
-		/*) CACHE_ROOT="${GHOSTEX_HOME%/}/on-demand" ;;
-		*)
-			case "${XDG_DATA_HOME:-}" in
-				/*) CACHE_ROOT="${XDG_DATA_HOME%/}/ghostex/on-demand" ;;
-				*) CACHE_ROOT="$HOME/.local/share/ghostex/on-demand" ;;
-			esac
-			;;
-	esac
-fi
-CACHE_DIR="$CACHE_ROOT/$GHOSTEX_BD_VERSION"
-BD_BIN="$CACHE_DIR/bd"
-DOWNLOAD_URL="${GHOSTEX_ON_DEMAND_BASE_URL:-https://github.com/maddada/Ghostex/releases/download}/v$GHOSTEX_BD_VERSION/$GHOSTEX_BD_ASSET"
-if [[ ! -x "$BD_BIN" ]]; then
-	mkdir -p "$CACHE_DIR"
-	LOCK_DIR="$CACHE_DIR/.bd-download-lock"
-	acquired=0
-	for _ in $(seq 1 300); do
-		if mkdir "$LOCK_DIR" 2>/dev/null; then
-			acquired=1
-			break
-		fi
-		if [[ -x "$BD_BIN" ]]; then
-			break
-		fi
-		sleep 1
-	done
-	if [[ ! -x "$BD_BIN" ]]; then
-		if [[ "$acquired" != "1" ]]; then
-			rm -rf "$LOCK_DIR"
-			mkdir -p "$LOCK_DIR"
-			acquired=1
-		fi
-		echo "Ghostex: downloading the Project board component ($GHOSTEX_BD_ASSET) for first use..." >&2
-		TMP_TAR="$CACHE_DIR/.bd-download-$$.tar.gz"
-		TMP_EXTRACT="$CACHE_DIR/.bd-extract-$$"
-		cleanup() {
-			rm -rf "$TMP_TAR" "$TMP_EXTRACT"
-			if [[ "$acquired" == "1" ]]; then
-				rm -rf "$LOCK_DIR"
-			fi
-		}
-		trap cleanup EXIT
-		if ! /usr/bin/curl -fsSL --retry 2 -o "$TMP_TAR" "$DOWNLOAD_URL"; then
-			echo "Ghostex: could not download $DOWNLOAD_URL. The Project board needs one download from github.com per app version." >&2
-			exit 69
-		fi
-		echo "$GHOSTEX_BD_SHA256  $TMP_TAR" | /usr/bin/shasum -a 256 -c - >/dev/null
-		rm -rf "$TMP_EXTRACT"
-		mkdir -p "$TMP_EXTRACT"
-		/usr/bin/tar -xzf "$TMP_TAR" -C "$TMP_EXTRACT"
-		/usr/bin/xattr -d com.apple.quarantine "$TMP_EXTRACT/bd" 2>/dev/null || true
-		chmod 755 "$TMP_EXTRACT/bd"
-		mv -f "$TMP_EXTRACT/bd" "$BD_BIN"
-		cleanup
-		trap - EXIT
-	elif [[ "$acquired" == "1" ]]; then
-		rm -rf "$LOCK_DIR"
-	fi
-fi
-exec "$BD_BIN" "$@"
-EOF
-	chmod 755 "$launcher_path"
-}
-
 stage_on_demand_release_assets() {
-	local version asset_dir x64_source arm64_source bd_stage_dir
-	local x64_sha arm64_sha bd_sha component_manifest
+	local version asset_dir x64_source arm64_source
+	local x64_sha arm64_sha component_manifest
 	local -a manifest_args
 	if [[ "$GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES" != "1" ]]; then
 		echo "GHOSTEX_ON_DEMAND_ASSETS=1 is a release-only mode and requires GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1." >&2
@@ -1645,14 +1466,6 @@ stage_on_demand_release_assets() {
 	fi
 	if [[ "$GHOSTEX_MACOS_ARCH" != "arm64" ]]; then
 		echo "GHOSTEX_ON_DEMAND_ASSETS=1 supports only arm64 release builds." >&2
-		exit 1
-	fi
-	if [[ -z "${GHOSTEX_CODE_SIGN_IDENTITY:-}" ]]; then
-		echo "GHOSTEX_ON_DEMAND_ASSETS=1 requires GHOSTEX_CODE_SIGN_IDENTITY so the downloadable bd binary is Developer ID signed before upload." >&2
-		exit 1
-	fi
-	if [[ ! -x "$WEB_DIR/bin/bd" ]]; then
-		echo "GHOSTEX_ON_DEMAND_ASSETS=1 requires the staged Beads release binary at Web/bin/bd before launcher replacement." >&2
 		exit 1
 	fi
 
@@ -1686,26 +1499,13 @@ stage_on_demand_release_assets() {
 		COPYFILE_DISABLE=1 /usr/bin/tar -czf "$asset_dir/gxserver-linux-arm64.tar.gz" -C "$arm64_source" .
 	fi
 
-	bd_stage_dir="$(mktemp -d /tmp/ghostex-bd-asset-XXXXXX)"
-	cp "$WEB_DIR/bin/bd" "$bd_stage_dir/bd"
-	chmod 755 "$bd_stage_dir/bd"
-	# The bd binary leaves the codesigned app bundle, so it must carry its own
-	# Developer ID signature for Gatekeeper-adjacent policy checks after the
-	# launcher unpacks it outside the bundle.
-	/usr/bin/codesign --force --options runtime "${GHOSTEX_CODE_SIGN_TIMESTAMP_FLAG:---timestamp}" --sign "$GHOSTEX_CODE_SIGN_IDENTITY" "$bd_stage_dir/bd"
-	smoke_test_staged_beads "$bd_stage_dir/bd"
-	COPYFILE_DISABLE=1 /usr/bin/tar -czf "$asset_dir/bd-darwin-arm64.tar.gz" -C "$bd_stage_dir" bd
-	rm -rf "$bd_stage_dir"
-
 	x64_sha="$(/usr/bin/shasum -a 256 "$asset_dir/gxserver-linux-x64.tar.gz" | awk '{print $1}')"
 	arm64_sha="$(/usr/bin/shasum -a 256 "$asset_dir/gxserver-linux-arm64.tar.gz" | awk '{print $1}')"
-	bd_sha="$(/usr/bin/shasum -a 256 "$asset_dir/bd-darwin-arm64.tar.gz" | awk '{print $1}')"
 
 	GHOSTEX_ODA_VERSION="$version" \
 		GHOSTEX_ODA_ASSET_DIR="$asset_dir" \
 		GHOSTEX_ODA_X64_SHA="$x64_sha" \
 		GHOSTEX_ODA_ARM64_SHA="$arm64_sha" \
-		GHOSTEX_ODA_BD_SHA="$bd_sha" \
 		node -e '
 		const fs = require("fs");
 		const path = require("path");
@@ -1714,7 +1514,6 @@ stage_on_demand_release_assets() {
 		const entries = [
 			{ key: "gxserver-linux-x64", name: "gxserver-linux-x64.tar.gz", sha256: env.GHOSTEX_ODA_X64_SHA },
 			{ key: "gxserver-linux-arm64", name: "gxserver-linux-arm64.tar.gz", sha256: env.GHOSTEX_ODA_ARM64_SHA },
-			{ key: "bd-darwin-arm64", name: "bd-darwin-arm64.tar.gz", sha256: env.GHOSTEX_ODA_BD_SHA },
 		].map((entry) => {
 			const filePath = path.join(assetDir, entry.name);
 			return { ...entry, bytes: fs.statSync(filePath).size, path: filePath };
@@ -1749,9 +1548,8 @@ stage_on_demand_release_assets() {
 	node "$REPO_ROOT/tooling/release-gpui/on-demand-manifest.mjs" validate-macos \
 		--manifest "$WEB_DIR/on-demand-resources.json"
 
-	write_on_demand_bd_launcher "$WEB_DIR/bin/bd" "$version" "bd-darwin-arm64.tar.gz" "$bd_sha"
 	rm -rf "$WEB_DIR/gxserver-linux-x64" "$WEB_DIR/gxserver-linux-arm64"
-	echo "On-demand release assets ready: x64=$x64_sha arm64=$arm64_sha bd=$bd_sha"
+	echo "On-demand release assets ready: x64=$x64_sha arm64=$arm64_sha"
 }
 
 package_gxserver_if_needed() {
@@ -1760,9 +1558,8 @@ package_gxserver_if_needed() {
 	# GPUI bundles the native Rust gxserver package used by standalone installs.
 	# TypeScript daemon packaging is intentionally unsupported.
 	#
-	# CDXC:LocalStartFast 2026-06-07-16:23: gxserver packaging should skip work when gxserver runtime sources, package metadata, packager code, bundled zmx/bd binaries, and generated protocol inputs are unchanged.
+	# CDXC:LocalStartFast 2026-06-07-16:23: gxserver packaging should skip work when gxserver runtime sources, package metadata, packager code, the bundled zmx binary, and generated protocol inputs are unchanged.
 	#
-	# CDXC:ProjectBoardBeads 2026-06-08-10:46: Package the full checksum-verified schema-v54 Beads CLI with gxserver so Project/Kanban opens without PATH setup. The active macOS release target is arm64 and receives its matching signed binary.
 	# Rust packaging preserves generated TypeScript protocol exports for web
 	# consumers, but the daemon and public CLI are native executables.
 	package_dir="$BUILD_CACHE_DIR/gxserver-rs/server-package"
@@ -1783,13 +1580,12 @@ package_gxserver_if_needed() {
 		--path "$GXSERVER_RS_ROOT/src" \
 		--path "$GXSERVER_RS_ROOT/Cargo.toml" \
 		--path "$GXSERVER_RS_ROOT/Cargo.lock" \
-		--path "$WEB_DIR/bin/zmx" \
-		--path "$WEB_DIR/bin/bd")"
+		--path "$WEB_DIR/bin/zmx")"
 	local cache_outputs=("$target_dir/build-identity.json" "$target_dir/bin/gxserver" "$target_dir/dist/protocol/index.js" "$target_dir/dist/protocol/index.d.ts")
 	cache_outputs+=("$target_dir/bin/ghostex")
 	if cache_matches "gxserver-package-$GHOSTEX_MACOS_ARCH" "$package_digest" "${cache_outputs[@]}" &&
 		gxserver_package_supports_macos_arch "$target_dir"; then
-		# CDXC:GxserverPackaging 2026-06-08-16:23: Web/gxserver is also shared across dual-architecture release passes. Do not accept a cache hit unless the staged gxserver, zmx, and bd binaries match the requested architecture, or Intel and arm64 DMGs can silently inherit the previous pass's native artifacts.
+		# CDXC:GxserverPackaging 2026-06-08-16:23: Web/gxserver is also shared across dual-architecture release passes. Do not accept a cache hit unless the staged gxserver and zmx binaries match the requested architecture, or Intel and arm64 DMGs can silently inherit the previous pass's native artifacts.
 		echo "gxserver package is current; skipping package rebuild."
 		return 0
 	fi
@@ -1798,11 +1594,6 @@ package_gxserver_if_needed() {
 	package_gxserver_rust_package "$package_dir" "$rust_bin" "$package_version"
 	rm -rf "$target_dir"
 	cp -R "$package_dir" "$target_dir"
-	if [[ -x "$WEB_DIR/bin/bd" ]]; then
-		write_gxserver_shared_bd_launcher "$target_dir/bin/bd"
-	else
-		rm -f "$target_dir/bin/bd"
-	fi
 	write_cache_stamp "gxserver-package-$GHOSTEX_MACOS_ARCH" "$package_digest"
 }
 
@@ -1817,7 +1608,6 @@ write_build_capabilities_manifest() {
 	fi
 	GHOSTEX_CAP_SHARED_NODE_RUNTIME="$APP_CAPABILITY_SHARED_NODE_RUNTIME" \
 		GHOSTEX_CAP_SOURCE_EDITOR="$APP_CAPABILITY_SOURCE_EDITOR" \
-		GHOSTEX_CAP_BEADS="$APP_CAPABILITY_BEADS" \
 		GHOSTEX_CAP_ZMX="$APP_CAPABILITY_ZMX" \
 		GHOSTEX_CAP_ALLOW_MISSING_OPTIONAL="$GHOSTEX_ALLOW_MISSING_OPTIONAL_SUBMODULES" \
 		GHOSTEX_CAP_NOTES="$notes_payload" \
@@ -1842,7 +1632,6 @@ writeFileSync(
     generatedBy: "prepare-macos-runtime.sh",
     optionalSubmodulesMayBeMissing: bool("GHOSTEX_CAP_ALLOW_MISSING_OPTIONAL"),
     resources: {
-      beads: bool("GHOSTEX_CAP_BEADS"),
       sharedNodeRuntime: bool("GHOSTEX_CAP_SHARED_NODE_RUNTIME"),
       sourceEditor: bool("GHOSTEX_CAP_SOURCE_EDITOR"),
       zmx: bool("GHOSTEX_CAP_ZMX"),
@@ -2009,12 +1798,7 @@ rm -rf "$WEB_DIR/bin"
 mkdir -p "$WEB_DIR/bin"
 cp "$ZMX_ROOT/zig-out/bin/zmx" "$WEB_DIR/bin/zmx"
 chmod 755 "$WEB_DIR/bin/zmx"
-# CDXC:ContributorStart 2026-06-22-23:23: Optional contributor submodules should be packaged when present and strict, but absent optional checkouts should only disable their feature in local starts. Keep zmx above as the hard terminal/persistence dependency; gate Source independently so one missing feature cannot remove the rest of the app shell. Beads is staged independently from its verified official release archive.
-stage_beads_release_if_needed
-cp "$REPO_ROOT/build/$GHOSTEX_MACOS_ARCH/beads/bd" "$WEB_DIR/bin/bd"
-chmod 755 "$WEB_DIR/bin/bd"
-smoke_test_staged_beads "$WEB_DIR/bin/bd"
-APP_CAPABILITY_BEADS=true
+# CDXC:ContributorStart 2026-06-22-23:23: Optional contributor submodules should be packaged when present and strict, but absent optional checkouts should only disable their feature in local starts. Keep zmx above as the hard terminal/persistence dependency; gate Source independently so one missing feature cannot remove the rest of the app shell.
 if [[ -n "$CODE_SERVER_ROOT" ]]; then
 	if [[ "$GHOSTEX_ON_DEMAND_ASSETS" == "1" ]] && published_code_server_component_asset; then
 		echo "Skipping local code-server packaging because its immutable macOS component is already published."

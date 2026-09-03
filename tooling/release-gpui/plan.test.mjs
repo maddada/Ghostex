@@ -251,12 +251,12 @@ describe('Scenario D — Windows-only fix after a partial failure', () => {
 });
 
 /*
- * The pinned Beads payload is embedded in both gxserver packages and signed into
- * the macOS bd tarball, so moving the pin has to invalidate all three. It is the
+ * The gxserver build script is an input of both gxserver packages, which the
+ * macOS DMG embeds, so changing it has to invalidate all three. It is the
  * clearest example of composition doing its job: nothing under `apps/desktop/**` moved,
  * yet the DMG must be rebuilt.
  */
-describe('Beads pin change', () => {
+describe('gxserver build script change', () => {
   /*
    * The fixture repository is shared and mutated in sequence, so this suite
    * commits from `beforeAll` (which runs after every earlier suite's tests) and
@@ -267,31 +267,31 @@ describe('Beads pin change', () => {
   let movedCommit;
   let sourceRun;
   beforeAll(() => {
-    const previousCommit = repo.commit('checkpoint before the beads pin move');
+    const previousCommit = repo.commit('checkpoint before the gxserver build script change');
     baselineRelease = baselineAt(previousCommit, '7.8.0');
     sourceRun = sourceRunFromPlan({
       headSha: previousCommit,
       plan: planAt(previousCommit, { version: '7.8.0' }),
       version: '7.8.0',
     });
-    repo.write('tooling/beads-release.mjs', 'export const BEADS_VERSION = "1.2.0";\n');
-    movedCommit = repo.commit('move the pinned beads release');
+    repo.write('tooling/build-remote-gxserver-linux-release.sh', '#!/usr/bin/env bash\nset -euo pipefail\n');
+    movedCommit = repo.commit('change the gxserver build script');
   });
 
-  test('rebuilds both gxserver packages and names the pin file', () => {
+  test('rebuilds both gxserver packages and names the script', () => {
     const plan = planAt(movedCommit, { baselines: [baselineRelease], version: '7.8.0' });
     for (const product of ['gxserver-linux-x64', 'gxserver-linux-arm64']) {
       expect(plan.products[product].action).toBe('build');
-      expect(plan.products[product].reason).toMatch(/tooling\/beads-release\.mjs/u);
+      expect(plan.products[product].reason).toMatch(/tooling\/build-remote-gxserver-linux-release\.sh/u);
     }
-    /* Android never embeds Beads, so it stays reusable. */
+    /* Android never embeds gxserver, so it stays reusable. */
     expect(plan.products.android.action).toBe('reuse');
   });
 
-  test('rebuilds macOS because it signs the bd payload and embeds both gxservers', () => {
+  test('rebuilds macOS because it embeds both gxservers', () => {
     const plan = planAt(movedCommit, { reuseFromRunId: sourceRun.runId, sourceRun, version: '7.8.0' });
     expect(plan.products['macos-arm64'].action).toBe('build');
-    expect(plan.products['macos-arm64'].reason).toMatch(/embedded .*beads|embedded .*gxserver-linux-x64/u);
+    expect(plan.products['macos-arm64'].reason).toMatch(/embedded .*gxserver-linux-x64/u);
   });
 });
 

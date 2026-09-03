@@ -43,10 +43,7 @@ function androidRecord(overrides = {}) {
 function macosRecord(overrides = {}) {
   return buildProductProvenance({
     action: 'built',
-    artifacts: [
-      { name: 'ghostex-7.8.0-arm64.dmg', sha256: digestA, size: 268435456 },
-      { name: 'bd-darwin-arm64.tar.gz', sha256: digestB, size: 4096 },
-    ],
+    artifacts: [{ name: 'ghostex-7.8.0-arm64.dmg', sha256: digestA, size: 268435456 }],
     fingerprint: digestA,
     inputs,
     originRunId: 31644067583,
