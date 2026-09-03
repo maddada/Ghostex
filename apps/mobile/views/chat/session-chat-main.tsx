@@ -752,6 +752,8 @@ function snapshotEventFromRead(result: GxserverReadSessionChatResult): GxserverS
     poll wakes when an agent starts, finishes, or changes task.
     */
     ...(result.agentFleet !== undefined ? { agentFleet: result.agentFleet } : {}),
+    // CDXC:SessionChatAgentTasks 2026-09-03: Claude's task list, same rule.
+    ...(result.agentTasks !== undefined ? { agentTasks: result.agentTasks } : {}),
     /*
     CDXC:SessionChatAppCommands 2026-08-23: commands Ghostex typed into the
     agent. Same pass-through, and the phone needs it most — it is the client

@@ -307,6 +307,14 @@ pub struct SessionChatTerminalDetection {
     third: it must never cost a spawn.
     */
     pub fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>,
+    /*
+    CDXC:SessionChatAgentTasks 2026-09-03: Claude's task list, read from its
+    on-disk task store rather than the screen. It rides in the same detection
+    because the detector is the one periodic reader every publisher already
+    consults; unlike the screen readings it needs no capture, so a failed
+    capture neither clears it nor makes it stale.
+    */
+    pub tasks: Option<crate::session_chat_agent_tasks::SessionChatAgentTasks>,
     /// True when a usable (non-truncated) screen backed this detection. It is
     /// the ONLY case where `notice: None` means "the screen is clean" — a failed
     /// or capped capture must never retire a notice.
@@ -1616,25 +1624,46 @@ pub fn detect_session_chat_terminal_state(
     let transcript = agent.and_then(|agent| {
         read_session_chat_transcript_selection(repository, project_id, session_id, agent)
     });
-    let statusline = (agent == Some(SessionChatOptionAgent::Claude))
+    // The hooks record Claude's own session id and transcript path on the
+    // session row; both the statusline sidecar and the task store hang off them.
+    let (claude_session_id, claude_session_path) = (agent == Some(SessionChatOptionAgent::Claude))
         .then(|| {
-            let agent_session_id = repository
+            repository
                 .get_session(project_id, session_id)
                 .ok()
                 .flatten()
-                .and_then(|session| {
-                    session
-                        .get("runtimeSettings")
-                        .and_then(|runtime| runtime.get("agentSessionId"))
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                });
+        })
+        .flatten()
+        .map(|session| {
+            let runtime_text = |key: &str| {
+                session
+                    .get("runtimeSettings")
+                    .and_then(|runtime| runtime.get(key))
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string)
+            };
+            (
+                runtime_text("agentSessionId"),
+                runtime_text("agentSessionPath"),
+            )
+        })
+        .unwrap_or((None, None));
+    let statusline = (agent == Some(SessionChatOptionAgent::Claude))
+        .then(|| {
             read_session_chat_statusline_selection(
                 hook_state_directory,
-                agent_session_id.as_deref(),
+                claude_session_id.as_deref(),
             )
         })
         .flatten();
+    // CDXC:SessionChatAgentTasks 2026-09-03: disk, not screen, so it is read
+    // whether or not the capture below succeeds.
+    let tasks = crate::session_chat_agent_tasks::read_session_chat_agent_tasks(
+        claude_session_id.as_deref(),
+        claude_session_path.as_deref(),
+    );
     let capture =
         crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id).ok();
     let terminal = agent
@@ -1699,6 +1728,7 @@ pub fn detect_session_chat_terminal_state(
         notice,
         activity,
         fleet,
+        tasks,
         captured: screen.is_some(),
         attempted,
     }
@@ -2512,6 +2542,7 @@ pub(crate) struct CachedSessionChatScreenState {
     pub(crate) notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
     pub(crate) activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     pub(crate) fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>,
+    pub(crate) tasks: Option<crate::session_chat_agent_tasks::SessionChatAgentTasks>,
     /// CDXC:SessionChatScreenProbed 2026-08-22: whether the cache entry these
     /// came from was backed by a whole capture at all.
     pub(crate) probed: bool,
@@ -2524,6 +2555,7 @@ impl CachedSessionChatScreenState {
             notice: self.notice.as_ref(),
             activity: self.activity.as_ref(),
             fleet: self.fleet.as_ref(),
+            tasks: self.tasks.as_ref(),
             probed: self.probed,
         }
     }
@@ -2534,7 +2566,7 @@ pub(crate) fn cached_session_chat_screen_state(
     project_id: &str,
     session_id: &str,
 ) -> CachedSessionChatScreenState {
-    let (prompt, screen_notice, activity, fleet, probed) = state
+    let (prompt, screen_notice, activity, fleet, tasks, probed) = state
         .session_chat_option_cache
         .lock()
         .ok()
@@ -2547,6 +2579,7 @@ pub(crate) fn cached_session_chat_screen_state(
                         entry.value.notice.clone(),
                         entry.value.activity.clone(),
                         entry.value.fleet.clone(),
+                        entry.value.tasks.clone(),
                         entry.value.attempted,
                     )
                 })
@@ -2561,6 +2594,7 @@ pub(crate) fn cached_session_chat_screen_state(
         ),
         activity,
         fleet,
+        tasks,
         probed,
     }
 }
@@ -2627,7 +2661,7 @@ pub(crate) fn session_chat_terminal_notice_publisher(
     let session_id = session_id.to_string();
     Arc::new(move || {
         let key = session_observer_key(&project_id, &session_id);
-        let (options, prompt, screen_notice, activity, fleet, captured) = option_cache
+        let (options, prompt, screen_notice, activity, fleet, tasks, captured) = option_cache
             .lock()
             .ok()
             .and_then(|cache| {
@@ -2638,6 +2672,7 @@ pub(crate) fn session_chat_terminal_notice_publisher(
                         entry.value.notice.clone(),
                         entry.value.activity.clone(),
                         entry.value.fleet.clone(),
+                        entry.value.tasks.clone(),
                         entry.value.attempted,
                     )
                 })
@@ -2661,6 +2696,7 @@ pub(crate) fn session_chat_terminal_notice_publisher(
                 notice: notice.as_ref(),
                 activity: activity.as_ref(),
                 fleet: fleet.as_ref(),
+                tasks: tasks.as_ref(),
                 probed: captured,
             },
         );
@@ -2750,6 +2786,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
         );
         let mut published_activity = cached.activity;
         let mut published_fleet = cached.fleet;
+        let mut published_tasks = cached.tasks;
         let mut published_prompt = cached.prompt;
         for delay_ms in crate::session_chat_options::SESSION_CHAT_OPTION_REDETECT_DELAYS_MS {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
@@ -2780,11 +2817,17 @@ pub(crate) fn schedule_session_chat_option_redetect(
                     detection.fleet.as_ref(),
                     published_fleet.as_ref(),
                 );
+            // Disk-backed, so no capture gate: the store is authoritative on its own.
+            let tasks_changed = !crate::session_chat_agent_tasks::same_session_chat_agent_tasks(
+                detection.tasks.as_ref(),
+                published_tasks.as_ref(),
+            );
             let prompt_changed = detection.captured && detection.prompt != published_prompt;
             if !options_changed
                 && !notice_changed
                 && !activity_changed
                 && !fleet_changed
+                && !tasks_changed
                 && !prompt_changed
             {
                 continue;
@@ -2800,6 +2843,9 @@ pub(crate) fn schedule_session_chat_option_redetect(
             }
             if fleet_changed {
                 published_fleet = detection.fleet;
+            }
+            if tasks_changed {
+                published_tasks = detection.tasks;
             }
             if prompt_changed {
                 published_prompt = detection.prompt;
@@ -2817,6 +2863,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
                     notice: published_notice.as_ref(),
                     activity: published_activity.as_ref(),
                     fleet: published_fleet.as_ref(),
+                    tasks: published_tasks.as_ref(),
                     probed: detection.attempted,
                 },
             );

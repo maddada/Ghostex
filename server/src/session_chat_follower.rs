@@ -464,6 +464,13 @@ pub struct SessionChatScreenState<'a> {
     */
     pub fleet: Option<&'a crate::session_chat_agent_fleet::SessionChatAgentFleet>,
     /*
+    CDXC:SessionChatAgentTasks 2026-09-03: Claude's task list from its on-disk
+    store. Not a screen reading, but it travels with them because every
+    producer of a state frame restates this whole value, and the panel needs
+    the same omitted ⇒ CLEARED rule (the store is deleted with the session).
+    */
+    pub tasks: Option<&'a crate::session_chat_agent_tasks::SessionChatAgentTasks>,
+    /*
     CDXC:SessionChatScreenProbed 2026-08-22:
     True once a WHOLE screen capture has actually been read for this session.
 
@@ -490,6 +497,9 @@ pub(crate) fn insert_screen_state(
     }
     if let Some(fleet) = screen.fleet {
         frame.insert("agentFleet".to_string(), fleet.to_value());
+    }
+    if let Some(tasks) = screen.tasks {
+        frame.insert("agentTasks".to_string(), tasks.to_value());
     }
     if screen.probed {
         frame.insert("screenProbed".to_string(), Value::Bool(true));
@@ -953,6 +963,10 @@ pub async fn run_session_chat_follower(
     it is the only thing telling the user work is still running.
     */
     let mut published_fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet> = None;
+    // CDXC:SessionChatAgentTasks 2026-09-03: the task list last published.
+    // Compared whole; a task flipping to completed is exactly the change the
+    // panel exists to show.
+    let mut published_tasks: Option<crate::session_chat_agent_tasks::SessionChatAgentTasks> = None;
     // CDXC:SessionChatScreenProbed 2026-08-22: latched, not sampled. It answers
     // "has detection run for this session yet", so a later capture failure (the
     // session stopped, the daemon went away) must not put the composer back
@@ -1090,6 +1104,10 @@ pub async fn run_session_chat_follower(
                         detection.fleet.as_ref(),
                         published_fleet.as_ref(),
                     )
+                    || !crate::session_chat_agent_tasks::same_session_chat_agent_tasks(
+                        detection.tasks.as_ref(),
+                        published_tasks.as_ref(),
+                    )
                     || (detection.attempted && !published_screen_probed);
                 if !emitted_starting || starting_changed {
                     emit_state_frame(
@@ -1106,6 +1124,7 @@ pub async fn run_session_chat_follower(
                             notice: detection.notice.as_ref(),
                             activity: activity.as_ref(),
                             fleet: detection.fleet.as_ref(),
+                            tasks: detection.tasks.as_ref(),
                             probed: published_screen_probed || detection.attempted,
                         },
                     );
@@ -1115,6 +1134,7 @@ pub async fn run_session_chat_follower(
                     published_notice = detection.notice;
                     published_activity = activity;
                     published_fleet = detection.fleet;
+                    published_tasks = detection.tasks;
                     published_screen_probed = published_screen_probed || detection.attempted;
                     emitted_starting = true;
                 }
@@ -1247,6 +1267,7 @@ pub async fn run_session_chat_follower(
                         notice: snapshot_detection.notice.as_ref(),
                         activity: snapshot_activity.as_ref(),
                         fleet: snapshot_detection.fleet.as_ref(),
+                        tasks: snapshot_detection.tasks.as_ref(),
                         probed: published_screen_probed || snapshot_detection.attempted,
                     },
                 );
@@ -1257,6 +1278,7 @@ pub async fn run_session_chat_follower(
                 published_notice = snapshot_detection.notice;
                 published_activity = snapshot_activity;
                 published_fleet = snapshot_detection.fleet;
+                published_tasks = snapshot_detection.tasks;
                 published_prompt = prompt;
                 published_working = live.working;
                 published_state_valid = true;
@@ -1405,6 +1427,7 @@ pub async fn run_session_chat_follower(
                         notice: published_notice.as_ref(),
                         activity: published_activity.as_ref(),
                         fleet: published_fleet.as_ref(),
+                        tasks: published_tasks.as_ref(),
                         probed: published_screen_probed,
                     },
                 );
@@ -1557,6 +1580,12 @@ pub async fn run_session_chat_follower(
                         detection.fleet.as_ref(),
                         published_fleet.as_ref(),
                     );
+                // CDXC:SessionChatAgentTasks 2026-09-03: no capture gate, the
+                // store on disk is authoritative whether or not the screen read.
+                let tasks_changed = !crate::session_chat_agent_tasks::same_session_chat_agent_tasks(
+                    detection.tasks.as_ref(),
+                    published_tasks.as_ref(),
+                );
                 let detected_prompt =
                     resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt)
                         .or_else(|| detection.prompt.clone());
@@ -1566,6 +1595,7 @@ pub async fn run_session_chat_follower(
                     || notice_changed
                     || activity_changed
                     || fleet_changed
+                    || tasks_changed
                     || prompt_changed
                     || probed_changed
                 {
@@ -1580,6 +1610,9 @@ pub async fn run_session_chat_follower(
                     }
                     if fleet_changed {
                         published_fleet = detection.fleet;
+                    }
+                    if tasks_changed {
+                        published_tasks = detection.tasks;
                     }
                     if prompt_changed {
                         published_prompt = detected_prompt;
@@ -1603,6 +1636,7 @@ pub async fn run_session_chat_follower(
                             notice: published_notice.as_ref(),
                             activity: published_activity.as_ref(),
                             fleet: published_fleet.as_ref(),
+                            tasks: published_tasks.as_ref(),
                             probed: published_screen_probed,
                         },
                     );

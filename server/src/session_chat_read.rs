@@ -223,6 +223,19 @@ pub(crate) fn resolve_session_chat_read_state(
         }
         None => 0u8.hash(&mut hasher),
     }
+    // CDXC:SessionChatAgentTasks 2026-09-03: every task's id, subject and
+    // status. A status flip is what wakes a long poller; there are no clocks.
+    match screen.tasks {
+        Some(tasks) => {
+            for task in &tasks.tasks {
+                task.id.hash(&mut hasher);
+                task.subject.hash(&mut hasher);
+                task.status.hash(&mut hasher);
+                task.blocked_by.hash(&mut hasher);
+            }
+        }
+        None => 0u8.hash(&mut hasher),
+    }
     screen
         .prompt
         .as_ref()
@@ -501,6 +514,11 @@ pub(crate) async fn handle_read_session_chat_http(
         */
         if let Some(fleet) = detection.fleet.as_ref() {
             result.insert("agentFleet".to_string(), fleet.to_value());
+        }
+        // CDXC:SessionChatAgentTasks 2026-09-03: same detection, no gate of
+        // any kind: the store on disk is the list, working or idle.
+        if let Some(tasks) = detection.tasks.as_ref() {
+            result.insert("agentTasks".to_string(), tasks.to_value());
         }
         /*
         CDXC:SessionChatScreenProbed 2026-08-22: same capture again. Followerless

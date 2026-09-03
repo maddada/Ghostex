@@ -14,6 +14,7 @@ import type {
   GxserverReadSessionChatResult,
   GxserverSessionChatEvent,
   SessionChatAgentFleet,
+  SessionChatAgentTasks,
   SessionChatAppCommand,
   SessionChatAvailableAgent,
   SessionChatDetectedOptions,
@@ -272,6 +273,11 @@ export interface UseSessionChatResult {
    */
   agentFleet: SessionChatAgentFleet | null;
   /**
+   * Claude's task list, read from its on-disk task store, with the same
+   * cleared-on-omission rule. Never gated on `working`.
+   */
+  agentTasks: SessionChatAgentTasks | null;
+  /**
    * True once gxserver has actually read this session's screen. Latched: a
    * later frame that omits it does NOT unset it, because "we have looked" does
    * not stop being true. The option pills use it to decide between a loading
@@ -373,6 +379,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // CDXC:SessionChatAgentFleet 2026-08-23: carried and cleared exactly like the
   // activity row above; the strip's clocks tick locally off `detectedAt`.
   const [agentFleet, setAgentFleet] = useState<SessionChatAgentFleet | null>(null);
+  // CDXC:SessionChatAgentTasks 2026-09-03: carried and cleared like the fleet.
+  const [agentTasks, setAgentTasks] = useState<SessionChatAgentTasks | null>(null);
   /*
   CDXC:SessionChatAppCommands 2026-08-23: commands Ghostex typed into the agent
   itself. NOT prompt semantics — a frame that omits them leaves what we have,
@@ -531,6 +539,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         terminalActivity?: SessionChatTerminalActivity;
         /** Sub-agents on screen; omitted ⇒ cleared. */
         agentFleet?: SessionChatAgentFleet;
+        /** Claude's task list; omitted ⇒ cleared. */
+        agentTasks?: SessionChatAgentTasks;
         /** Commands Ghostex sent; omitted ⇒ unchanged, never cleared. */
         appCommands?: SessionChatAppCommand[];
         /** gxserver has read the screen; latched, never cleared by omission. */
@@ -568,6 +578,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setTerminalNotice(result.terminalNotice ?? null);
       applyTerminalActivity(result.terminalActivity);
       setAgentFleet(result.agentFleet ?? null);
+      setAgentTasks(result.agentTasks ?? null);
       if (result.appCommands) {
         setAppCommands(result.appCommands);
       }
@@ -881,6 +892,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setTerminalNotice(event.terminalNotice ?? null);
       applyTerminalActivity(event.terminalActivity);
       setAgentFleet(event.agentFleet ?? null);
+      setAgentTasks(event.agentTasks ?? null);
       if (event.appCommands) {
         setAppCommands(event.appCommands);
       }
@@ -1454,6 +1466,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     terminalNotice,
     terminalActivity,
     agentFleet,
+    agentTasks,
     screenProbed,
     view,
     working,

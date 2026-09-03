@@ -91,6 +91,7 @@ import { SessionChatMonacoInput } from './session-chat-monaco-input';
 import { SessionChatPlainInput } from './session-chat-plain-input';
 import { sessionChatImageTargetForHref, useSessionChatImageViewer } from './session-chat-image-viewer';
 import { SessionChatAgentFleetStrip } from './session-chat-agent-fleet-strip';
+import { SessionChatAgentTasksPanel } from './session-chat-agent-tasks-panel';
 import { SessionChatQueueRows } from './session-chat-queue-rows';
 import { SessionChatComposerActions } from './session-chat-composer-actions';
 import { SessionChatComposerNotReadyNotice } from './session-chat-composer-not-ready';
@@ -110,6 +111,7 @@ import {
 import type { SessionChatDraftController, SessionChatQueueController } from './use-session-chat';
 import type {
   SessionChatAgentFleet,
+  SessionChatAgentTasks,
   SessionChatDraft,
   SessionChatQueuedPrompt,
   SessionChatSkill,
@@ -362,6 +364,14 @@ export interface SessionChatComposerProps {
   nothing at all.
   */
   agentFleet?: SessionChatAgentFleet | null;
+  /*
+  CDXC:SessionChatAgentTasks 2026-09-03:
+  Claude's task list from its on-disk store. Also ABOVE the container, for the
+  same reason as the fleet: it is the agent's plan, not the user's input. It
+  sits above the fleet strip because the plan outlives any one sub-agent.
+  Null/absent renders nothing at all.
+  */
+  agentTasks?: SessionChatAgentTasks | null;
 }
 
 interface PastedImagePreview {
@@ -520,6 +530,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
   function SessionChatComposer(
     {
       agentFleet,
+      agentTasks,
       diagnosticLog,
       disabled = false,
       draftSync,
@@ -2047,6 +2058,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           ) : sendError ? (
             <FieldError className='px-2'>{sendError}</FieldError>
           ) : null}
+          <SessionChatAgentTasksPanel tasks={agentTasks ?? null} />
           <SessionChatAgentFleetStrip fleet={agentFleet ?? null} />
           {incomingDraft ? (
             <div className='ghostex-chat-draft-conflict' role='status'>

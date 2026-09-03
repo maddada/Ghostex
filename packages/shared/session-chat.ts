@@ -491,6 +491,37 @@ export interface SessionChatAgentFleet {
   detectedAt: string;
 }
 
+/*
+CDXC:SessionChatAgentTasks 2026-09-03:
+The task list Claude Code keeps for a session through its TaskCreate /
+TaskUpdate tools, the block the CLI pins under its transcript and folds with
+ctrl+t. The CURRENT list lives only in the CLI's on-disk task store
+(`~/.claude/tasks/<session id>/<n>.json`), which gxserver reads
+(server/src/session_chat_agent_tasks.rs) so the chat shows what the terminal
+shows. Carried by read results and by snapshot/replaced/state frames with
+`prompt` semantics: omitted ⇒ CLEARED. Never gated on the agent working: a
+finished turn leaves its list behind, and that is exactly when the user reads
+it to see what is left.
+*/
+export type SessionChatAgentTaskStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface SessionChatAgentTask {
+  /** The CLI's own task number, also its file name. */
+  id: string;
+  subject: string;
+  /** Present-continuous label the CLI paints while the task runs. */
+  activeForm?: string;
+  /** Verbatim from the store; anything unknown renders as pending. */
+  status: SessionChatAgentTaskStatus | string;
+  /** Ids of tasks that must finish before this one can start. */
+  blockedBy?: string[];
+}
+
+export interface SessionChatAgentTasks {
+  /** CLI numbering order, never empty: no tasks means no list at all. */
+  tasks: SessionChatAgentTask[];
+}
+
 // ---------------------------------------------------------------------------
 // /api/readSessionChat
 // ---------------------------------------------------------------------------
@@ -561,6 +592,8 @@ export interface GxserverReadSessionChatResult {
   appCommands?: SessionChatAppCommand[];
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
+  /** Claude's task list from its on-disk store. Omitted ⇒ cleared. */
+  agentTasks?: SessionChatAgentTasks;
   /**
    * True once gxserver has actually read this session's screen. Unlike every
    * other screen-derived field here, it does NOT describe what was found — it
@@ -871,6 +904,8 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
   appCommands?: SessionChatAppCommand[];
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
+  /** Claude's task list from its on-disk store. Omitted ⇒ cleared. */
+  agentTasks?: SessionChatAgentTasks;
   /**
    * True once gxserver has actually read this session's screen. Unlike every
    * other screen-derived field here, it does NOT describe what was found — it
@@ -942,6 +977,8 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
   appCommands?: SessionChatAppCommand[];
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
+  /** Claude's task list from its on-disk store. Omitted ⇒ cleared. */
+  agentTasks?: SessionChatAgentTasks;
   /**
    * True once gxserver has actually read this session's screen. Unlike every
    * other screen-derived field here, it does NOT describe what was found — it
@@ -987,6 +1024,8 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
   appCommands?: SessionChatAppCommand[];
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
+  /** Claude's task list from its on-disk store. Omitted ⇒ cleared. */
+  agentTasks?: SessionChatAgentTasks;
   /**
    * True once gxserver has actually read this session's screen. Unlike every
    * other screen-derived field here, it does NOT describe what was found — it

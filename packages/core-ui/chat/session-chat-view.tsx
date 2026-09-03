@@ -1561,6 +1561,7 @@ export function SessionChatView({
                     ) : null}
                     <SessionChatComposer
                       agentFleet={chat.agentFleet}
+                      agentTasks={chat.agentTasks}
                       {...(diagnosticLog ? { diagnosticLog } : {})}
                       disabled={!composerEnabled}
                       draftSync={chat.draft}
