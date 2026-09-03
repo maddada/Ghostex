@@ -8,7 +8,20 @@
   - Switch Account: a Claude or Codex session can be resumed under another account of the same agent family from the terminal action bar, the chat composer menu, or the sidebar card.
   - Antigravity CLI is a Chat View agent: its transcripts are followed, model and effort are read from the terminal footer, thinking stays visible as narration, its hooks are installed, and its own conversation names become session titles.
   - Only a terminal you are looking at sizes a session: hidden chat views and background clients rest at 200 columns, so agent CLIs stop truncating lines in Chat View and a hidden pane no longer pins the daemon narrow. Installing this release restarts every live zmx session once; agents resume from their saved commands.
+  - Custom Views: add any number of named HTTP or HTTPS pages in Settings → Extensions, drag them into the order you want, and turn one off without losing its name and URL. Each enabled view becomes its own titlebar mode tab and opens in its own isolated page.
+  - Codex model and effort are set from the chat pills: the pills list Codex's models, efforts and Fast mode the way Claude's do, and Ghostex drives Codex's own picker in the session terminal because Codex has no command form for it. Installing the hooks also adds a status line that names the model, so the pills are filled in before the first turn.
 - Minor
+  - The chat box is never locked. When a send is refused because input is held by another device, a question is waiting, or a mode switch is in flight, the draft stays editable and a red toast says why instead of the text box going read-only.
+  - Settings → Remote stacks Easy Connect and Tailscale as expandable cards, so only one QR code is ever in front of you, and each path has its own on/off switch. Turning Tailscale off also hides it from the Mobile & Remote setup. Saved machines move to a compact grid and are edited in their own dialog.
+  - A Codex session keeps the title Codex generates for it: Ghostex waits for Codex's own name and only steps in when that never lands, so a session no longer settles on the first few words of your prompt. A custom agent's default session name no longer blocks auto-naming either.
+  - Dismissing a terminal notice in Chat View makes it stay dismissed; a banner that missed one screen probe used to reappear every few seconds.
+  - Clicking a fork's earlier thread now opens it: a stopped ancestor is woken in place first, which keeps the fork family intact.
+  - Sleep on a session card sends the running session to sleep instead of waking it.
+  - nix-darwin computers find their own tools again: sessions keep the PATH their login shell builds instead of the app's, and Ghostex also looks in the Nix profile directories for `claude`, `bd` and `gx` (GitHub issue #118).
+  - Queued prompts that Claude Code submits together no longer stay on screen labelled Queued, and the pane stops showing a stale working spinner after the reply lands.
+  - Minimizing an Agents panel no longer nudges the first tab sideways or drops the panel's left edge line.
+  - Usage analytics record which OS a phone or browser connects from, and which agent CLI a custom agent actually runs, instead of collapsing every custom agent into one bucket.
+  - Product copy across the desktop, web and Android apps drops em dashes for punctuation that reads naturally.
   - Claude Code questions now stay in Chat View while background subagents work in the same session; previously a subagent's tool traffic retired the card within a second.
   - Claude's task list shows above the composer, context window usage appears in the composer, and a Claude statusLine command keeps the model and effort pills live.
   - Chat View retires terminal status rows by their first paragraph and transcript recency, approval cards no longer repeat the tool name, the context meter Compact button is simpler, option pill menus stay anchored while a choice loads, and the transcript selection toolbar stays one pill on mobile.
