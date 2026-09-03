@@ -14,18 +14,11 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/packages/com
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/packages/components/ui/tooltip';
 import { IconChevronDown, IconFolderOpen } from '@tabler/icons-react';
-import { type SidebarPortlessState, type SidebarProjectSettingsItem } from '../../../shared/session-grid-contract';
-import { type PortlessProtocol, type ghostexSettings } from '../../../shared/ghostex-settings';
-import { type NativePortlessAdminAction } from '../../../shared/native-ghostty-host-protocol';
+import { type SidebarProjectSettingsItem } from '../../../shared/session-grid-contract';
+import { type ghostexSettings } from '../../../shared/ghostex-settings';
 import { type WebviewApi } from '../../webview-api';
 import { SettingsInput, SettingsTextarea } from '../fields';
 import { SettingsTabSearch, hasVisibleSettingsSearchResult, shouldShowSettingsSection } from '../search';
-import {
-  PORTLESS_SETTINGS_VISIBLE,
-  PortlessGlobalSettingsPanel,
-  createPortlessSettingsAdminRequestId,
-  getProjectPortlessDomainSummaries,
-} from './portless';
 
 /*
  * CDXC:GlobalProjectDefaults 2026-08-02:
@@ -53,9 +46,6 @@ export function ProjectsSettingsPanel({
   onGlobalDocsDirectoryChange,
   onGlobalWorktreeCommandChange,
   onManageAdditionalDocsFoldersChange,
-  onPortlessEnabledChange,
-  onPortlessProtocolChange,
-  portless,
   projects,
   search,
   searchEmptyState,
@@ -67,9 +57,6 @@ export function ProjectsSettingsPanel({
   onGlobalDocsDirectoryChange: (value: string) => void;
   onGlobalWorktreeCommandChange: (value: string) => void;
   onManageAdditionalDocsFoldersChange: (value: string) => void;
-  onPortlessEnabledChange: (checked: boolean) => void;
-  onPortlessProtocolChange: (protocol: PortlessProtocol) => void;
-  portless?: SidebarPortlessState;
   projects: SidebarProjectSettingsItem[];
   search: SettingsTabSearch;
   searchEmptyState?: ReactNode;
@@ -136,24 +123,6 @@ export function ProjectsSettingsPanel({
     setProjectSelectorQuery('');
   };
 
-  const runPortlessSettingsAdminAction = (action: NativePortlessAdminAction) => {
-    const requestId = createPortlessSettingsAdminRequestId(action);
-    if (action === 'remove') {
-      vscode?.postMessage({
-        action,
-        requestId,
-        type: 'runPortlessSettingsAdminAction',
-      });
-      return;
-    }
-    vscode?.postMessage({
-      action,
-      protocol: settings.portlessProtocol,
-      requestId,
-      type: 'runPortlessSettingsAdminAction',
-    });
-  };
-
   const saveCommand = () => {
     if (!selectedProject) {
       return;
@@ -201,27 +170,16 @@ export function ProjectsSettingsPanel({
   return (
     <div className='settings-tab-scroll'>
       {/*
-       * CDXC:PortlessSettings 2026-06-23-03:47:
-       * Projects settings starts with global Portless controls because the
-       * background proxy and HTTP/HTTPS mode are app-wide settings. Keep
-       * generated project and worktree domains read-only here; slug editing and
-       * reset actions belong to a later phase.
+       * CDXC:RemotePairing 2026-09-03:
+       * The Portless global panel no longer renders here (it was already hidden
+       * behind PORTLESS_SETTINGS_VISIBLE); tabs/portless.tsx and the
+       * portlessSetup modal kind remain for a separate removal.
        *
        * CDXC:Worktrees 2026-05-18-23:07:
        * Main projects can store a setup command that runs inside every new worktree before the selected agent receives the first prompt. Keep worktree projects out of this list because they inherit from their parent project.
        */}
       <div className='projects-settings-layout'>
         {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
-        {PORTLESS_SETTINGS_VISIBLE ? (
-          <PortlessGlobalSettingsPanel
-            domainSummaries={getProjectPortlessDomainSummaries(projects, selectedProject, portless)}
-            onAdminAction={runPortlessSettingsAdminAction}
-            onEnabledChange={onPortlessEnabledChange}
-            onProtocolChange={onPortlessProtocolChange}
-            portless={portless}
-            settings={settings}
-          />
-        ) : null}
         {shouldShowSettingsSection(search.sections.docs) ? (
           <Card className='settings-project-command-card'>
             <CardContent className='flex flex-col gap-4 p-4'>

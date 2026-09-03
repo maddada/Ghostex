@@ -598,11 +598,13 @@ describe('settings modal source', () => {
     expect(selectedProjectEditor).not.toContain('<IconTrash');
   });
 
-  test('places Portless global settings above the Projects selector', () => {
+  test('keeps Portless global settings out of the Projects tab', () => {
     /*
-     * CDXC:PortlessSettings 2026-06-23-03:47:
-     * Phase 14 puts app-wide Portless controls at the top of Settings ->
-     * Projects, before the project selector and selected-project fields.
+     * CDXC:PortlessSettings 2026-06-23-03:47 / CDXC:RemotePairing 2026-09-03:
+     * Phase 14 put app-wide Portless controls at the top of Settings ->
+     * Projects. The panel was later hidden behind PORTLESS_SETTINGS_VISIBLE and
+     * its gated render plus the dead portless props were removed from the
+     * Projects tab; tabs/portless.tsx stays until its own removal.
      */
     const projectsPanel = sourceFrom(settingsModalProjectsTabSource, 'function ProjectsSettingsPanel');
     const settingsModalProjectsTab = sourceBetween(
@@ -611,20 +613,19 @@ describe('settings modal source', () => {
       '</TabsContent>'
     );
 
-    expect(projectsPanel.indexOf('<PortlessGlobalSettingsPanel')).toBeGreaterThanOrEqual(0);
-    expect(projectsPanel.indexOf('<PortlessGlobalSettingsPanel')).toBeLessThan(
-      projectsPanel.indexOf("className='projects-settings-selector'")
-    );
-    expect(settingsModalProjectsTab).toContain('portless={portless}');
+    expect(projectsPanel).not.toContain('<PortlessGlobalSettingsPanel');
+    expect(settingsModalProjectsTabSource).not.toContain("from './portless'");
+    expect(projectsPanel).toContain("className='projects-settings-selector'");
+    expect(settingsModalProjectsTab).not.toContain('portless={portless}');
     expect(settingsModalStylesSource).toContain('.settings-projects-global-settings');
   });
 
-  test('wires Portless defaults through normalized global settings', () => {
+  test('keeps the Portless panel defaults wired to normalized global settings', () => {
     /*
      * CDXC:PortlessSettings 2026-06-23-03:47:
-     * The Projects tab should use the global settings defaults from
-     * normalizeghostexSettings: Portless enabled and HTTPS protocol until the
-     * user changes those app-wide settings.
+     * The retained Portless panel still reads the global settings defaults
+     * from normalizeghostexSettings (Portless enabled and HTTPS protocol) even
+     * though the Projects tab no longer mounts it.
      */
     const settingsModalProjectsTab = sourceBetween(
       settingsModalSource,
@@ -637,12 +638,8 @@ describe('settings modal source', () => {
       'function PortlessSettingsAdminActionButton'
     );
 
-    expect(settingsModalProjectsTab).toContain(
-      "onPortlessEnabledChange={(checked) => updateDraft('portlessEnabled', checked)}"
-    );
-    expect(settingsModalProjectsTab).toContain(
-      "onPortlessProtocolChange={(protocol) => updateDraft('portlessProtocol', protocol)}"
-    );
+    expect(settingsModalProjectsTab).not.toContain('onPortlessEnabledChange');
+    expect(settingsModalProjectsTab).not.toContain('onPortlessProtocolChange');
     expect(globalPanel).toContain('checked={settings.portlessEnabled}');
     expect(globalPanel).toContain('value={settings.portlessProtocol}');
     expect(settingsModalPortlessTabSource).toContain("{ label: 'HTTPS', value: 'https' }");
@@ -663,9 +660,9 @@ describe('settings modal source', () => {
       "type: 'postponePortlessSetupPrompt'"
     );
 
-    expect(projectsPanel).toContain("type: 'runPortlessSettingsAdminAction'");
-    expect(projectsPanel).toContain("action === 'remove'");
-    expect(projectsPanel).toContain('protocol: settings.portlessProtocol');
+    // CDXC:RemotePairing 2026-09-03: the Projects tab no longer posts Portless
+    // admin actions; the sidebar command contract is unchanged.
+    expect(projectsPanel).not.toContain("type: 'runPortlessSettingsAdminAction'");
     expect(settingsModalPortlessTabSource).toContain('onClick={() => onEnabledChange(false)}');
     expect(settingsModalPortlessTabSource).toContain("remove: 'Remove background proxy'");
     expect(sharedSettingsCommand).toContain('action: NativePortlessAdminInstallAction;');
