@@ -7,9 +7,9 @@ use crate::{domain::DomainStateError, paths::GxserverPaths};
 use super::codex_trust::{codex_hook_trust_status_for_paths, CodexHookTrustStatus};
 use super::config::{hook_format, HookDefinition, HookFormat, HookPaths, HOOK_DEFINITIONS};
 use super::install::{
-    inspect_agent_hook_installation, install_agent_hook, install_notify_hook,
-    is_notify_hook_current, migrate_hook_session_sidecars, notify_hook_state_directory,
-    repair_agent_hook_paths, uninstall_agent_hook,
+    antigravity_ghostex_hook_disabled, claude_all_hooks_disabled, inspect_agent_hook_installation,
+    install_agent_hook, install_notify_hook, is_notify_hook_current, migrate_hook_session_sidecars,
+    notify_hook_state_directory, repair_agent_hook_paths, uninstall_agent_hook,
 };
 use super::plugin_sources::command_for_agent;
 use super::probing::{
@@ -285,21 +285,17 @@ fn read_hook_status(
     let provider_current = inspection.current_hook_installed;
     let ghostex_hook_present = inspection.ghostex_hook_present;
     /*
-    CDXC:CodexHookTrust 2026-09-02:
-    A Codex hook is only "installed" once Codex will actually RUN it, which
-    needs its trust record next to the file. Missing trust reads as
-    updateRequired so the Update Hooks button repairs it, and the detail says
-    why instead of the generic "repair" wording.
+    CDXC:CodexHookTrust 2026-09-02 / CDXC:AgentHookRunGates 2026-09-03:
+    A hook is only "installed" once its CLI will actually RUN it. Codex needs
+    its trust record next to the file, Antigravity and Claude carry an off
+    switch outside the hook entries. Any closed gate reads as updateRequired
+    so the Update Hooks button repairs what it can, and the detail says why
+    instead of the generic "repair" wording.
     */
-    let codex_trust = (definition.agent_id == "codex" && ghostex_hook_present).then(|| {
-        codex_hook_trust_status_for_paths(
-            &provider_paths,
-            hook_paths,
-            &command_for_agent(definition, &hook_paths.notify_hook_path),
-        )
-    });
-    let codex_trusted = codex_trust.map_or(true, |trust| trust == CodexHookTrustStatus::Trusted);
-    let hook_installed = notify_current && provider_current && codex_trusted;
+    let run_gate = ghostex_hook_present
+        .then(|| hook_run_gate(definition, hook_paths, &provider_paths))
+        .flatten();
+    let hook_installed = notify_current && provider_current && run_gate.is_none();
     let status = if !cli_installed {
         "cliMissing"
     } else if hook_installed {
@@ -318,7 +314,7 @@ fn read_hook_status(
             hook_paths,
             status,
             notify_current,
-            codex_trust,
+            run_gate,
             paths.first().map(String::as_str),
         ),
         "hookInstalled": hook_installed,
@@ -327,12 +323,49 @@ fn read_hook_status(
     }))
 }
 
+/// A provider-side switch that stops an otherwise current Ghostex hook from
+/// running. `None` means the provider will run the hook.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HookRunGate {
+    CodexUntrusted,
+    CodexDisabled,
+    AntigravityDisabled,
+    ClaudeAllHooksDisabled,
+}
+
+fn hook_run_gate(
+    definition: &HookDefinition,
+    hook_paths: &HookPaths,
+    provider_paths: &[std::path::PathBuf],
+) -> Option<HookRunGate> {
+    match definition.agent_id {
+        "codex" => match codex_hook_trust_status_for_paths(
+            provider_paths,
+            hook_paths,
+            &command_for_agent(definition, &hook_paths.notify_hook_path),
+        ) {
+            CodexHookTrustStatus::Trusted => None,
+            CodexHookTrustStatus::Untrusted => Some(HookRunGate::CodexUntrusted),
+            CodexHookTrustStatus::Disabled => Some(HookRunGate::CodexDisabled),
+        },
+        "antigravity" => provider_paths
+            .iter()
+            .any(|path| antigravity_ghostex_hook_disabled(&read_file_text(path)))
+            .then_some(HookRunGate::AntigravityDisabled),
+        "claude" | "openclaude" => provider_paths
+            .iter()
+            .any(|path| claude_all_hooks_disabled(&read_file_text(path)))
+            .then_some(HookRunGate::ClaudeAllHooksDisabled),
+        _ => None,
+    }
+}
+
 fn hook_detail(
     definition: &HookDefinition,
     hook_paths: &HookPaths,
     status: &str,
     notify_current: bool,
-    codex_trust: Option<CodexHookTrustStatus>,
+    run_gate: Option<HookRunGate>,
     first_path: Option<&str>,
 ) -> String {
     let display = display_path(
@@ -347,14 +380,22 @@ fn hook_detail(
     match status {
         "cliMissing" => format!("{} was not found on PATH.", definition.cli_command),
         "installed" => format!("Installed in {display}"),
-        "updateRequired" if codex_trust == Some(CodexHookTrustStatus::Untrusted) => {
+        "updateRequired" if run_gate == Some(HookRunGate::CodexUntrusted) => {
             "Codex has not trusted the Ghostex hooks yet, so it skips them. Run Update Hooks to approve them."
                 .to_string()
         }
-        "updateRequired" if codex_trust == Some(CodexHookTrustStatus::Disabled) => {
+        "updateRequired" if run_gate == Some(HookRunGate::CodexDisabled) => {
             "The Ghostex hooks are disabled in Codex (/hooks). Run Update Hooks to enable them."
                 .to_string()
         }
+        "updateRequired" if run_gate == Some(HookRunGate::AntigravityDisabled) => {
+            "The Ghostex hook is disabled in Antigravity (\"enabled\": false in hooks.json). Run Update Hooks to enable it."
+                .to_string()
+        }
+        "updateRequired" if run_gate == Some(HookRunGate::ClaudeAllHooksDisabled) => format!(
+            "All hooks are switched off in {display} (disableAllHooks), so {} never runs the Ghostex hooks. Remove that setting to enable them.",
+            if definition.agent_id == "openclaude" { "OpenClaude" } else { "Claude" }
+        ),
         "updateRequired" if notify_current => format!("Run Update Hooks to repair {display}"),
         "updateRequired" => format!(
             "Run Update Hooks to update {}",

@@ -632,6 +632,57 @@ pub(crate) fn read_json_object(text: &str) -> Value {
     }
 }
 
+/*
+CDXC:AgentHookRunGates 2026-09-03:
+An installed hook is only useful when its CLI will RUN it, and two chat agents
+carry a switch, outside the hook entries themselves, that silently turns the
+Ghostex hooks off while every file-shape check still passes:
+
+  * Antigravity: `"enabled": false` on the `ghostex` named hook in
+    `~/.gemini/config/hooks.json` disables all of its handlers (agy's own
+    hooks.json spec).
+  * Claude / OpenClaude: `"disableAllHooks": true` in settings.json switches
+    off every hook, Ghostex's included.
+
+Both read as "update required" so Settings and the launch guard stop
+reporting a hook that never fires. The Antigravity switch sits on a
+Ghostex-owned object, so an explicit Install/Update lifts it; the Claude
+switch is the user's global choice over ALL their hooks and is only reported,
+never rewritten.
+*/
+pub(crate) fn antigravity_ghostex_hook_disabled(text: &str) -> bool {
+    read_json_object(text)
+        .get("ghostex")
+        .and_then(|hook| hook.get("enabled"))
+        .and_then(Value::as_bool)
+        == Some(false)
+}
+
+pub(crate) fn claude_all_hooks_disabled(text: &str) -> bool {
+    read_json_object(text)
+        .get("disableAllHooks")
+        .and_then(Value::as_bool)
+        == Some(true)
+}
+
+fn enable_antigravity_ghostex_hook(
+    config_path: &Path,
+    definition: &HookDefinition,
+) -> Result<bool, DomainStateError> {
+    let current_text = read_file_text(config_path);
+    if !antigravity_ghostex_hook_disabled(&current_text) {
+        return Ok(false);
+    }
+    ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
+    let mut data = read_json_object(&current_text);
+    let Some(hook) = data.get_mut("ghostex").and_then(Value::as_object_mut) else {
+        return Ok(false);
+    };
+    hook.remove("enabled");
+    write_json_file(config_path, &data)?;
+    Ok(true)
+}
+
 pub(crate) fn write_json_file(path: &Path, data: &Value) -> Result<(), DomainStateError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(io_error)?;
@@ -690,6 +741,12 @@ pub(crate) fn install_agent_hook(
             for config_path in config_paths {
                 merge_json_hook(&config_path, definition, hook_paths, &command)?;
                 installed_paths.push(path_string(&config_path));
+                // CDXC:AgentHookRunGates 2026-09-03: the same explicit click
+                // lifts an `"enabled": false` the user put on the Ghostex
+                // named hook in Antigravity; startup repair never does.
+                if definition.agent_id == "antigravity" {
+                    enable_antigravity_ghostex_hook(&config_path, definition)?;
+                }
                 // CDXC:CodexHookTrust 2026-09-02: an explicit install is the
                 // user's approval of the Ghostex hooks, so record it where Codex
                 // reads it or Codex never runs them.
