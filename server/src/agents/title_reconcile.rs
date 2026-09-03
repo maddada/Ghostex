@@ -17,6 +17,50 @@ pub(crate) struct AgentMetadataTitle {
     updated_at: Option<String>,
 }
 
+impl AgentMetadataTitle {
+    pub(crate) fn title(&self) -> &str {
+        &self.title
+    }
+}
+
+/*
+CDXC:SessionTitles 2026-09-03:
+Codex 0.152 names a new thread in two steps. When the first user message
+completes it immediately writes a provisional thread_name to
+session_index.jsonl: the whitespace-collapsed prompt cut to 36 characters
+(`THREAD_TITLE_MAX_CHARS` in codex-rs `tui/src/app/thread_title.rs`). It then
+starts a hidden temporary thread to generate the real title and applies that
+only if the thread is still named exactly the provisional string. On this
+machine that hidden step silently failed for about one session in five on
+2026-09-03, and Ghostex, which had handed first-prompt naming to Codex
+entirely, adopted the truncated prompt as the permanent title. This predicate
+lets the first-prompt auto-title job tell the provisional name from a real
+one, so Ghostex can wait for Codex and step in only when Codex never finished.
+The 36-character prefix is deliberately matched on the raw prompt, not on
+Ghostex's filler-stripped normalized prompt, because Codex truncates the text
+it was given.
+*/
+pub(crate) const CODEX_PROVISIONAL_THREAD_NAME_MAX_CHARS: usize = 36;
+
+pub(crate) fn is_codex_provisional_thread_name(
+    first_prompt: Option<&str>,
+    thread_name: &str,
+) -> bool {
+    let Some(first_prompt) = first_prompt else {
+        return false;
+    };
+    let collapsed = first_prompt
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let expected = collapsed
+        .chars()
+        .take(CODEX_PROVISIONAL_THREAD_NAME_MAX_CHARS)
+        .collect::<String>();
+    let thread_name = thread_name.trim();
+    !expected.is_empty() && (thread_name == expected || thread_name == expected.trim())
+}
+
 pub(crate) struct AgentTitleReconcileResult {
     pub(crate) changed: bool,
     pub(crate) metadata_title_found: bool,
@@ -180,7 +224,7 @@ pub(crate) fn reconcile_agent_metadata_title(
 }
 
 /*
-CDXC:GxserverAgentTitles 2026-08-18:
+CDXC:SessionTitles 2026-08-18:
 A rename of an agent session is only confirmed once the Agent CLI writes the
 new name into its own session metadata, so every agent Ghostex renames through
 `/rename` needs a reader here. Codex publishes `thread_name` in the shared
@@ -208,7 +252,7 @@ pub(crate) enum AgentMetadataTitleSource {
         state_db_path: PathBuf,
     },
     /*
-    CDXC:SessionChatAntigravity 2026-09-03:
+    CDXC:AgentProviders 2026-09-03:
     Antigravity names every conversation itself about a second after the first
     prompt and writes `title:"…"` to `annotations/<conversationId>.pbtxt`
     under its app data dir; its `/rename <name>` rewrites the same file. That
@@ -345,7 +389,7 @@ pub(crate) fn agent_metadata_title_revision(home_dir: &Path, session: &Value) ->
 }
 
 /*
-CDXC:GxserverAgentTitles 2026-08-18:
+CDXC:SessionTitles 2026-08-18:
 Claude Code rewrites its `custom-title` state record on every turn, so the
 current name always sits within the last few kilobytes of a live transcript.
 Scan a bounded tail window rather than the whole file: these transcripts reach
@@ -558,7 +602,7 @@ fn parse_pbtxt_string_field(text: &str, field: &str) -> Option<String> {
 }
 
 /*
-CDXC:GxserverAgentTitles 2026-08-22:
+CDXC:SessionTitles 2026-08-22:
 Plain `codex` launches do not always expose their active rollout through argv,
 an open file descriptor, or a hook before the user renames the session. A
 pending rename still has an exact, independently written confirmation: Codex

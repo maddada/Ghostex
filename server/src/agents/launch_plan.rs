@@ -28,7 +28,7 @@ pub(crate) fn build_project_agent_launch_plan(
 }
 
 /*
-CDXC:GxserverCrudParity 2026-06-22-05:39:
+CDXC:ServerApi 2026-06-22-05:39:
 `createAgentSession` is a CRUD endpoint, but its durable row is shaped by the same project agent config and persisted agent settings as TypeScript gxserver. Build the launch plan before repository insertion so listSessions/readProjectStatus return the same launchSettings and runtimeSettings immediately after creation.
 */
 pub(crate) fn create_agent_session_params_for_project(
@@ -80,7 +80,7 @@ pub(crate) fn create_agent_session_params_for_project(
         && !has_launch_command
     {
         /*
-        CDXC:GPUIRemoteSessions 2026-06-24-17:19:
+        CDXC:RemoteMachines 2026-06-24-17:19:
         Remote GPUI starts send only the selected agent id and require gxserver to resolve the command from remote project metadata or built-in defaults. Reject commandless launches so unknown custom agent ids do not create inert sessions that look successful.
         */
         return Err(DomainStateError::bad_request(
@@ -122,7 +122,7 @@ pub(crate) fn create_agent_session_params_for_project(
         );
     }
     /*
-    CDXC:GxserverFirstUserInputDraft 2026-08-20:
+    CDXC:Drafts 2026-08-20:
     Arm the draft here, at creation, so only sessions that were created with one
     can ever consume it. A draft that is missing or blank leaves no marker and
     no key behind.
@@ -146,7 +146,7 @@ pub(crate) fn create_agent_session_params_for_project(
         }
     }
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     Arm the draft marker in the same place the first-input draft above is armed,
     and for the same reason: only a session created as a draft can ever be one.
     See `agents/drafts.rs` for what the marker means and where it is removed.
@@ -194,10 +194,6 @@ pub(crate) fn create_agent_session_params_for_project(
     normalized
         .entry("lifecycleState".to_string())
         .or_insert_with(|| Value::String("running".to_string()));
-    normalized.insert(
-        "runtimeSettings".to_string(),
-        Value::Object(runtime_settings),
-    );
     if read_text(&normalized, "title").is_none() {
         normalized.insert(
             "title".to_string(),
@@ -206,7 +202,32 @@ pub(crate) fn create_agent_session_params_for_project(
                 normalized.get("agentId").and_then(Value::as_str),
             )),
         );
+        /*
+        CDXC:SessionTitles 2026-09-03:
+        The launcher's default title is `<agent display name> Session`, and for
+        a custom agent that name is whatever the user typed ("Claude 71"). The
+        first-prompt auto-title gates only knew the built-in spellings ("Claude
+        Session", "Codex Session"), so a custom agent's default title counted
+        as a real, user-chosen title and the session was never auto-named.
+        Stamp the default as a placeholder, the same source the live-identity
+        promotion already uses for this title, so the gates can recognise it
+        without a list of names.
+        */
+        if !runtime_settings
+            .get("titleSource")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            runtime_settings.insert(
+                "titleSource".to_string(),
+                Value::String("placeholder".to_string()),
+            );
+        }
     }
+    normalized.insert(
+        "runtimeSettings".to_string(),
+        Value::Object(runtime_settings),
+    );
     Ok(normalized)
 }
 

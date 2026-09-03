@@ -10,7 +10,7 @@ use std::fs;
 #[test]
 fn renderer_command_actions_include_generated_title_rename() {
     /*
-    CDXC:GenerateTitleSkill 2026-06-17-17:02:
+    CDXC:AgentSkills 2026-06-17-17:02:
     Rust gxserver must accept the same renderer `renameCommand` action as the TypeScript daemon so a full cutover keeps Claude Code generated-title renames on the native Enter path.
     */
     assert!(RENDERER_COMMAND_ACTIONS.contains(&"renameCommand"));
@@ -122,7 +122,7 @@ fn missing_zmx_agent_without_restore_plan_is_not_kept_running() {
 #[test]
 fn renderer_command_actions_keep_only_renderer_owned_mobile_timer_actions() {
     /*
-    CDXC:GxserverDelayedSends 2026-08-17:
+    CDXC:DelayedSend 2026-08-17:
     Delayed Send now enters first-class daemon endpoints. Keeping the old
     renderer actions would arm a second timer in whichever desktop client
     happened to be connected.
@@ -296,7 +296,7 @@ fn project_status_agent_title_polling_predicate_matches_typescript() {
 #[test]
 fn renderer_command_payload_adds_structured_session_target() {
     /*
-    CDXC:GxserverRendererCommands 2026-06-21-19:22:
+    CDXC:CefRuntime 2026-06-21-19:22:
     Rust gxserver must normalize renderer-command payloads from any client so macOS receives a project-scoped session target and does not have to match raw G ids against combined sidebar presentation ids.
     */
     let payload = Map::from_iter([
@@ -331,13 +331,13 @@ fn first_prompt_auto_title_decides_provider_strategy_and_filters_meta_prompts() 
         Some("Please can you help me fix flaky tests."),
         false,
     );
-    assert!(!decision.should_run);
+    assert!(decision.should_run);
     assert_eq!(
         decision.normalized_prompt.as_deref(),
         Some("fix flaky tests")
     );
-    assert_eq!(decision.reason, "agentAutoTitle");
-    assert_eq!(decision.strategy, Some("agentAutoTitle"));
+    assert_eq!(decision.reason, "eligible");
+    assert_eq!(decision.strategy, Some("awaitAgentAutoTitle"));
 
     let claude = json!({
         "agentId": "claude",
@@ -583,7 +583,7 @@ async fn read_project_status_route_returns_project_sessions_and_missing_errors()
 }
 
 /*
-CDXC:GlobalActions 2026-08-07:
+CDXC:AgentLauncher 2026-08-07:
 Only the caller reads this response. The sidebar row that renders Global
 Actions lives in another surface that refetches the HUD when the daemon
 announces a change and never polls it, so a Global Action write has to
@@ -1538,7 +1538,7 @@ async fn delete_worktree_project_route_removes_clean_checkout_and_local_branch()
 #[tokio::test]
 async fn renaming_a_worktree_updates_the_project_path_and_every_session_cwd() {
     /*
-    CDXC:WorktreeRename 2026-08-09-18:40:
+    CDXC:Worktrees 2026-08-09-18:40:
     The lockstep contract. A rename that moves the folder but leaves the
     database describing the old one is worse than no feature: the sidebar row
     points at a dead path, `start_session_provider` refuses to start anything
@@ -1694,7 +1694,7 @@ async fn renaming_a_worktree_updates_the_project_path_and_every_session_cwd() {
 #[test]
 fn a_session_cwd_recorded_through_the_resolved_path_form_still_follows_the_move() {
     /*
-    CDXC:WorktreeRename 2026-08-10:
+    CDXC:Worktrees 2026-08-10:
     Nothing forces a session's stored `cwd` to use the same spelling of a
     folder that the project row happens to carry, and on macOS every path
     under `/tmp` or `/var` has two: `/tmp/rt-old` and `/private/tmp/rt-old`.
@@ -1749,7 +1749,7 @@ fn a_session_cwd_recorded_through_the_resolved_path_form_still_follows_the_move(
 #[tokio::test]
 async fn renaming_a_worktree_refuses_a_taken_folder_and_a_taken_branch() {
     /*
-    CDXC:WorktreeRename 2026-08-09-18:40:
+    CDXC:Worktrees 2026-08-09-18:40:
     Both refusals must land BEFORE anything is touched, and both must say
     which name is in the way. The folder case is the important one: with the
     destination already present, `git worktree move` exits 0 and nests the
@@ -1858,7 +1858,7 @@ async fn renaming_a_worktree_refuses_a_taken_folder_and_a_taken_branch() {
     assert_eq!(body["message"], json!("Nothing to rename."));
 
     /*
-    CDXC:WorktreeRename 2026-08-10:
+    CDXC:Worktrees 2026-08-10:
     Asking to rename the branch to the name it already carries, on a folder
     that is already correct, changes nothing — and reporting success for it
     tells the user something happened. The checkbox being ticked is not
@@ -1892,7 +1892,7 @@ async fn renaming_a_worktree_refuses_a_taken_folder_and_a_taken_branch() {
 #[tokio::test]
 async fn renaming_explains_a_worktree_registered_through_a_different_path_form() {
     /*
-    CDXC:WorktreeRename 2026-08-09-18:40:
+    CDXC:Worktrees 2026-08-09-18:40:
     Reproduces a real failure from manual testing on macOS: the project was
     registered as `/tmp/rt` while its worktree resolved to
     `/private/tmp/rt-old`, because `git worktree list` reports the symlink-

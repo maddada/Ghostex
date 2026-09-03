@@ -162,13 +162,13 @@ fn first_prompt_claim_decision_matches_provider_strategy_and_prompt_normalizatio
         false,
         false,
     );
-    assert!(!decision.should_run);
-    assert_eq!(decision.reason, "agentAutoTitle");
+    assert!(decision.should_run);
+    assert_eq!(decision.reason, "eligible");
     assert_eq!(
         decision.normalized_prompt.as_deref(),
         Some("fix the sidebar")
     );
-    assert_eq!(decision.strategy, Some("agentAutoTitle"));
+    assert_eq!(decision.strategy, Some("awaitAgentAutoTitle"));
 
     let claude = json!({
         "agentId": "claude",
@@ -1692,7 +1692,7 @@ fn live_process_identity_claims_codex_id_observed_before_process_promotion() {
 }
 
 #[test]
-fn live_process_identity_replaces_wsl_shell_title_and_defers_to_codex_auto_title() {
+fn live_process_identity_replaces_wsl_shell_title_and_claims_codex_auto_title_job() {
     let (temp, db) = open_test_database();
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
@@ -1780,7 +1780,13 @@ fn live_process_identity_replaces_wsl_shell_title_and_defers_to_codex_auto_title
     )
     .expect("hook result");
 
-    assert_eq!(result.get("reason"), Some(&json!("activity-updated")));
+    // CDXC:SessionTitles 2026-09-03: the first Codex prompt now
+    // claims the auto-title job, which waits for Codex's own title before
+    // generating one; the title itself is untouched at claim time.
+    assert_eq!(
+        result.get("reason"),
+        Some(&json!("first-prompt-auto-title-claimed"))
+    );
     let hooked_session = result.get("session").expect("hooked session");
     assert_eq!(hooked_session.get("title"), Some(&json!("Codex Session")));
     assert_eq!(
@@ -1788,7 +1794,7 @@ fn live_process_identity_replaces_wsl_shell_title_and_defers_to_codex_auto_title
             .get("runtimeSettings")
             .and_then(Value::as_object)
             .and_then(|settings| settings.get("gxserverFirstPromptAutoTitleStatus")),
-        None
+        Some(&json!("running"))
     );
 }
 
@@ -2542,7 +2548,7 @@ fn codex_stop_hook_enters_attention_from_working() {
 }
 
 /*
-CDXC:SessionChatIdentity 2026-08-02:
+CDXC:SessionIdentity 2026-08-02:
 The Session Chat successor detector asks this predicate which sessions could
 still be tailing an agent conversation. The registry keeps every session ever
 created (3487 stopped rows on the machine the chat-identity bug was debugged

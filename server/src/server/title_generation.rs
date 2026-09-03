@@ -1,4 +1,5 @@
 use super::*;
+use crate::agents::is_codex_provisional_thread_name;
 
 pub(crate) fn schedule_agent_title_metadata_check(
     state: AppState,
@@ -6,7 +7,7 @@ pub(crate) fn schedule_agent_title_metadata_check(
     session_id: String,
 ) {
     /*
-    CDXC:GxserverAgentTitles 2026-06-21-15:35:
+    CDXC:SessionTitles 2026-06-21-15:35:
     Agent CLI renames are accepted asynchronously after Ghostex submits `/rename`. Match TypeScript gxserver's three-second trailing metadata check so Rust promotes the agent's own session-metadata title (Codex `thread_name`, Claude `custom-title`) and broadcasts a presentation delta after the CLI writes it.
     */
     tokio::spawn(async move {
@@ -172,7 +173,7 @@ pub(crate) fn fork_initial_rename_target(
 
 pub(crate) fn schedule_fork_initial_rename(state: AppState, target: ForkInitialRenameTarget) {
     /*
-    CDXC:GxserverForkTitles 2026-07-11:
+    CDXC:SessionFork 2026-07-11:
     Fork provider startup already owns the resumed CLI process. Wait for its
     composer, then submit the provisional `Fork: <old title>` through zmx's
     separate text/Enter path. Pi uses `/name`, Hermes Agent uses `/title`, and
@@ -181,7 +182,7 @@ pub(crate) fn schedule_fork_initial_rename(state: AppState, target: ForkInitialR
     If the user has already sent the fork's first prompt, its generated-title
     job wins and this provisional rename is skipped.
 
-    CDXC:SessionChatComposerReady 2026-08-26: this used to be a blind four-second
+    CDXC:SessionChat 2026-08-26: this used to be a blind four-second
     sleep. A rename typed before the composer exists is not merely lost — the
     slash command lands as literal text in whatever screen IS up.
     */
@@ -213,7 +214,7 @@ pub(crate) fn schedule_fork_initial_rename(state: AppState, target: ForkInitialR
             return;
         }
         let command = agent_session_title_command(Some(&target.agent_name), &target.title);
-        // CDXC:SessionChatAppCommands 2026-08-23: see the auto-title dispatch.
+        // CDXC:SessionChat 2026-08-23: see the auto-title dispatch.
         crate::session_chat_app_command::record_session_chat_app_command(
             &target.project_id,
             &target.session_id,
@@ -274,7 +275,7 @@ pub(crate) struct FirstUserInputDraftTarget {
 }
 
 /*
-CDXC:GxserverFirstUserInputDraft 2026-08-20:
+CDXC:Drafts 2026-08-20:
 A session created with `runtimeSettings.firstUserInputDraft` gets that text
 typed into its agent CLI composer once, and never sent. The claim happens
 synchronously while the provider start is still being answered — the marker
@@ -340,14 +341,14 @@ pub(crate) fn update_first_user_input_draft_status(
 
 pub(crate) fn schedule_first_user_input_draft(state: AppState, target: FirstUserInputDraftTarget) {
     /*
-    CDXC:GxserverFirstUserInputDraft 2026-08-20:
+    CDXC:Drafts 2026-08-20:
     Same readiness window the fork's initial rename uses: the provider start
     owns a freshly launched CLI whose composer is not accepting input yet. The
     draft then goes through zmx's text path with `submit: false`, so no Enter
     and no trailing carriage return is ever produced — the composer keeps the
     text staged for the user to write around.
 
-    CDXC:SessionChatComposerReady 2026-08-26: the readiness window is now a real
+    CDXC:SessionChat 2026-08-26: the readiness window is now a real
     composer wait rather than a blind four-second sleep. Staging a draft into a
     trust dialog types the user's text at it and then discards it on the next
     repaint, with nothing anywhere to recover it from.
@@ -370,7 +371,7 @@ pub(crate) fn schedule_first_user_input_draft(state: AppState, target: FirstUser
         };
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
         /*
-        CDXC:SessionChatLaunchDraft 2026-09-02:
+        CDXC:Drafts 2026-09-02:
         The marker was claimed (`typing`) before this wait, and a Chat launch
         may have taken the draft for the chat composer in the meantime
         (`claim_first_user_input_draft_for_chat`). Re-read it here so a draft
@@ -420,7 +421,7 @@ pub(crate) fn schedule_first_user_input_draft(state: AppState, target: FirstUser
 }
 
 /*
-CDXC:SessionChatLaunchDraft 2026-09-02:
+CDXC:Drafts 2026-09-02:
 The Chat-side half of the first-input draft. A session that opens straight in
 Chat (Default Agent View = Chat, or a Handoff / Export conversation for a Chat
 user) must find the staged text in the CHAT composer, not typed into the
@@ -534,13 +535,13 @@ pub(crate) fn schedule_first_prompt_auto_title_job(
     attempt_id: String,
 ) {
     /*
-    CDXC:GxserverSessionTitle 2026-06-21-19:26:
+    CDXC:SessionTitles 2026-06-21-19:26:
     Rust server must finish the same first-prompt auto-title flow as TypeScript gxserver after hooks claim a job: decide eligibility centrally, generate or stage the provider rename command, and persist applied/skipped/failed status.
 
-    CDXC:GxserverSessionTitle 2026-07-02-15:10:
+    CDXC:SessionTitles 2026-07-02-15:10:
     gxserver submits the staged rename command itself with a separate zmx `\r` write instead of asking clients to send a native Enter on the running→applied presentation transition. Client-side submission only worked for currently visible native panes: `sessions[sessionId]` has no Ghostty surface for background/automation-started sessions, so their staged `/rename` sat unsubmitted in the agent composer forever. A separate PTY-level CR after a settle delay is a real Enter keypress to agent prompt editors (a CR appended to the same text payload is treated as a pasted newline), works for invisible panes, remote daemons, and GPUI, and removes the fragile transition-observation race entirely.
 
-    CDXC:GxserverSessionTitle 2026-08-03:
+    CDXC:SessionTitles 2026-08-03:
     A cancelled prompt can be explicitly submitted again with identical text.
     Bind every spawned job to its claim attempt so the cancelled subprocess
     cannot apply or fail the replacement job after it eventually exits.
@@ -615,10 +616,37 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         return Ok(());
     }
 
-    let title = if matches!(
-        decision.strategy,
-        Some("generateTitleAndRename" | "generateTitleAndName")
-    ) {
+    let awaits_agent_auto_title = decision.strategy == Some("awaitAgentAutoTitle");
+    if awaits_agent_auto_title {
+        match wait_for_codex_auto_title(
+            &state,
+            &project_id,
+            &session_id,
+            &attempt_id,
+            prompt.as_deref(),
+        )
+        .await?
+        {
+            CodexAutoTitleWait::Named => {
+                mark_first_prompt_auto_title_skipped(
+                    &state,
+                    &project_id,
+                    &session_id,
+                    &attempt_id,
+                    "agentAutoTitle",
+                );
+                return Ok(());
+            }
+            CodexAutoTitleWait::Superseded => return Ok(()),
+            CodexAutoTitleWait::Missing => {}
+        }
+    }
+
+    let title = if awaits_agent_auto_title
+        || matches!(
+            decision.strategy,
+            Some("generateTitleAndRename" | "generateTitleAndName")
+        ) {
         Some(
             generate_first_prompt_session_title(
                 &state,
@@ -641,7 +669,7 @@ pub(crate) async fn run_first_prompt_auto_title_job(
     };
     let uses_bare_rename = decision.strategy == Some("sendBareRenameCommand");
     /*
-    CDXC:FirstPromptRealMessage 2026-08-28:
+    CDXC:SessionTitles 2026-08-28:
     A bare `/rename` asks Claude to name the session from the conversation, so
     submitting it before the conversation holds a real user message makes
     Claude name the session after startup noise — `/model` and `/effort` local
@@ -679,6 +707,21 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         ) {
             return Ok(());
         }
+        // CDXC:SessionTitles 2026-09-03: Codex's own title may have
+        // landed while Ghostex's generation ran. Its name wins; do not
+        // overwrite it with a second one.
+        if awaits_agent_auto_title
+            && codex_has_generated_thread_name(&state, &latest_session, prompt.as_deref())
+        {
+            mark_first_prompt_auto_title_skipped(
+                &state,
+                &project_id,
+                &session_id,
+                &attempt_id,
+                "agentAutoTitle",
+            );
+            return Ok(());
+        }
         let title_metadata_baseline = uses_bare_rename
             .then(|| {
                 crate::agents::agent_metadata_title_observation(
@@ -688,7 +731,7 @@ pub(crate) async fn run_first_prompt_auto_title_job(
             })
             .flatten();
         /*
-        CDXC:SessionChatSerializedWriters 2026-08-24:
+        CDXC:SessionChat 2026-08-24:
         Command text, settle, and Enter are ONE queued job. They used to be two
         separate zmx dispatches around a bare `tokio::time::sleep`, which is
         exactly the shape that let this job's bytes land inside another
@@ -703,7 +746,7 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         sitting unsent in the user's composer. The re-check below still gates
         everything that is persisted.
 
-        CDXC:SessionChatSerializedWriters 2026-08-26:
+        CDXC:SessionChat 2026-08-26:
         The command lands on the SAME composer line the user types into, so the
         job opens with the measured clear burst every other writer of that line
         uses — as its own write, followed by the settle, because a burst glued
@@ -742,7 +785,7 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         )
         .map_err(|_| ())?;
         /*
-        CDXC:SessionChatAppCommands 2026-08-23:
+        CDXC:SessionChat 2026-08-23:
         Recorded beside the dispatch rather than inside the zmx path, because
         the same path also carries the Ctrl+U draft kill and the bare `\r`
         submit, and neither is something to tell the reader about. Codex writes
@@ -766,11 +809,11 @@ pub(crate) async fn run_first_prompt_auto_title_job(
     }
 
     /*
-    CDXC:GxserverSessionTitle 2026-07-02-15:10:
+    CDXC:SessionTitles 2026-07-02-15:10:
     The staged command is submitted by a separate zmx `\r` write after a settle
     delay so agent prompt editors read it as a real Enter keypress rather than
     as part of a pasted payload. Both writes and the delay between them are now
-    steps of the queued job above (CDXC:SessionChatSerializedWriters); this wait
+    steps of the queued job above (CDXC:SessionChat); this wait
     mirrors that delay so the status/title below is persisted only once the
     submit has had its window, and the database handle is reopened after it
     because rusqlite connections cannot be held across await points.
@@ -836,8 +879,75 @@ pub(crate) async fn run_first_prompt_auto_title_job(
     Ok(())
 }
 
+pub(crate) enum CodexAutoTitleWait {
+    /// Codex wrote a real thread name (or the user named the session); Ghostex
+    /// has nothing to add.
+    Named,
+    /// A newer attempt owns the session now.
+    Superseded,
+    /// The wait ran out with only Codex's provisional first-words name (or no
+    /// name at all) in session_index.jsonl.
+    Missing,
+}
+
+/// Whether Codex's session index holds a thread name for this session that is
+/// not the provisional 36-character prefix of `first_prompt`. A title the user
+/// set through Ghostex counts as named as well.
+pub(crate) fn codex_has_generated_thread_name(
+    state: &AppState,
+    session: &Value,
+    first_prompt: Option<&str>,
+) -> bool {
+    if read_runtime_text(session, "titleSource").as_deref() == Some("user") {
+        return true;
+    }
+    crate::agents::read_agent_metadata_title(&state.paths.home_dir, session).is_some_and(
+        |metadata_title| !is_codex_provisional_thread_name(first_prompt, metadata_title.title()),
+    )
+}
+
 /*
-CDXC:FirstPromptRealMessage 2026-08-28:
+CDXC:SessionTitles 2026-09-03:
+Give Codex's hidden title thread its window before Ghostex generates anything.
+The index is read directly rather than through the session row so the check
+does not depend on the once-a-second metadata sync having run, and the
+database handle is dropped before every await (rusqlite connections cannot be
+held across await points).
+*/
+async fn wait_for_codex_auto_title(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    attempt_id: &str,
+    first_prompt: Option<&str>,
+) -> Result<CodexAutoTitleWait, ()> {
+    let deadline = Instant::now() + Duration::from_millis(GXSERVER_CODEX_AUTO_TITLE_WAIT_MS);
+    loop {
+        {
+            let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
+            let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+            let Some(session) = repository
+                .get_session(project_id, session_id)
+                .map_err(|_| ())?
+            else {
+                return Ok(CodexAutoTitleWait::Superseded);
+            };
+            if !is_current_first_prompt_auto_title_attempt(&session, attempt_id) {
+                return Ok(CodexAutoTitleWait::Superseded);
+            }
+            if codex_has_generated_thread_name(state, &session, first_prompt) {
+                return Ok(CodexAutoTitleWait::Named);
+            }
+        }
+        if Instant::now() >= deadline {
+            return Ok(CodexAutoTitleWait::Missing);
+        }
+        tokio::time::sleep(Duration::from_millis(GXSERVER_CODEX_AUTO_TITLE_POLL_MS)).await;
+    }
+}
+
+/*
+CDXC:SessionTitles 2026-08-28:
 The transcript is the source of truth for "the user actually said something":
 `recent_session_user_prompts` already filters out `<command-name>` wrappers,
 tool results, and staged slash commands, so a `/model` or `/effort` exchange
@@ -1066,7 +1176,7 @@ pub(crate) fn schedule_delta_for_ids(state: &AppState, project_id: &str, session
 }
 
 /*
-CDXC:ManualSessionTitleGeneration 2026-07-29:
+CDXC:SessionTitles 2026-07-29:
 Rename-modal "Generate Name" reuses the first-prompt auto-title machinery for
 an existing session: the same generation agent command summarizes the pasted
 text into a short title, the same `gxserverFirstPromptAutoTitleStatus:
@@ -1158,7 +1268,7 @@ pub(crate) async fn handle_generate_session_title_http(
             Err(error) => return domain_error_response(endpoint_path, request_id, error),
         };
         /*
-        CDXC:SessionHistoryTitleSource 2026-07-29:
+        CDXC:SessionTitles 2026-07-29:
         An empty `text` asks the job to summarize the session's recent
         transcript user prompts. Only agents with a known local transcript
         format support that, so other agents keep requiring pasted text.
@@ -1275,7 +1385,7 @@ pub(crate) async fn run_manual_session_title_generation_job(
         return Ok(());
     }
     /*
-    CDXC:SessionHistoryTitleSource 2026-07-29:
+    CDXC:SessionTitles 2026-07-29:
     Empty text means "name this session from what the user recently asked it".
     Resolve the provider transcript via the hook-captured session identity and
     summarize the last few visible user prompts; failing to find any is a real
@@ -1313,7 +1423,7 @@ pub(crate) async fn run_manual_session_title_generation_job(
             return Ok(());
         }
         /*
-        CDXC:SessionChatSerializedWriters 2026-08-24:
+        CDXC:SessionChat 2026-08-24:
         Clear the composer, stage the rename command, and submit it — as ONE
         queued job. These were separate zmx dispatches spread across
         `tokio::time::sleep`s, and the first of them is a composer kill: landing
@@ -1324,7 +1434,7 @@ pub(crate) async fn run_manual_session_title_generation_job(
         that used to gate the Enter; a staged `/rename …` left unsent would be
         worse than submitting it. The re-check below still gates persistence.
 
-        CDXC:SessionChatSerializedWriters 2026-08-26:
+        CDXC:SessionChat 2026-08-26:
         The clear is the measured burst now, and there is no Ctrl+Y restore.
         Constraint: the command must reach an EMPTY composer, multi-line drafts
         included. The single Ctrl+U this job used to send kills one logical
@@ -1372,7 +1482,7 @@ pub(crate) async fn run_manual_session_title_generation_job(
         )
         .map_err(|_| ())?;
         /*
-        CDXC:SessionChatAppCommands 2026-08-23:
+        CDXC:SessionChat 2026-08-23:
         Recorded beside the dispatch rather than inside the zmx path, because
         the same path also carries the Ctrl+U draft kill and the bare `\r`
         submit, and neither is something to tell the reader about. Codex writes
@@ -1496,14 +1606,25 @@ pub(crate) fn decide_first_prompt_auto_title(
     }
     if strategy == Some("agentAutoTitle") {
         /*
-        Codex 0.150 persists its own first-turn title in session_index.jsonl.
+        These agents persist their own first-turn title in their metadata.
         The metadata sync task adopts that canonical name, so Ghostex must not
         start a second model request or inject `/rename <generated title>`.
         */
         return decision(Some(prompt), "agentAutoTitle", false, strategy);
     }
     let current_title = read_session_text(session, "title");
+    // CDXC:SessionTitles 2026-09-03: the adopted provisional Codex
+    // name is not a real title and must not count as non-generic.
+    let is_codex_provisional_title = strategy == Some("awaitAgentAutoTitle")
+        && current_title
+            .as_deref()
+            .is_some_and(|title| is_codex_provisional_thread_name(raw_prompt, title));
+    // CDXC:SessionTitles 2026-09-03: see the claim gate.
+    let is_placeholder_title =
+        read_runtime_text(session, "titleSource").as_deref() == Some("placeholder");
     if !fork_first_prompt_rearmed
+        && !is_codex_provisional_title
+        && !is_placeholder_title
         && !is_terminal_auto_working_directory_title(session)
         && !is_generic_agent_session_title(agent_name.as_deref(), current_title.as_deref())
     {
@@ -1533,7 +1654,16 @@ pub(crate) fn first_prompt_agent_name(session: &Value) -> Option<String> {
 pub(crate) fn first_prompt_auto_title_strategy(agent_name: Option<&str>) -> Option<&'static str> {
     match normalize_agent_name(agent_name).as_deref() {
         Some("claude") => Some("sendBareRenameCommand"),
-        Some("codex") => Some("agentAutoTitle"),
+        /*
+        CDXC:SessionTitles 2026-09-03:
+        Codex names the thread itself from the first user turn, so Ghostex
+        must not race it with a second model request. But its generated title
+        is applied by a hidden helper thread that fails silently now and then,
+        leaving the 36-character provisional prompt prefix as the name. The job
+        therefore waits for Codex's real title and generates its own `/rename`
+        only when the provisional name is all Codex ever wrote.
+        */
+        Some("codex") => Some("awaitAgentAutoTitle"),
         // Names every conversation itself about a second after the first
         // prompt and writes it to `annotations/<id>.pbtxt`, the same file its
         // `/rename` rewrites; the metadata sync adopts both.
@@ -1666,7 +1796,7 @@ pub(crate) fn normalize_first_prompt_title_prompt(prompt: Option<&str>) -> Optio
 }
 
 /*
-CDXC:GxserverSessionTitle 2026-06-22-08:12:
+CDXC:SessionTitles 2026-06-22-08:12:
 First-prompt title eligibility must be decided before Rust claims a background job, using the same prompt-normalization and slash-command rules as TypeScript gxserver. Repeated polite prefixes are stripped only for title generation, while slash-command suppression scans the original prompt by line so short command prompts never enter the title job.
 */
 pub(crate) fn strip_first_prompt_title_prefixes(value: &str) -> &str {
@@ -2002,7 +2132,7 @@ pub(crate) fn clamp_generated_session_title_length(value: &str) -> String {
 }
 
 /*
-CDXC:GxserverSessionTitle 2026-06-22-07:21:
+CDXC:SessionTitles 2026-06-22-07:21:
 TypeScript title caps use JavaScript string length and slice semantics, so Rust must count UTF-16 code units rather than Unicode scalar values for first-prompt source text and generated session titles. Rust strings cannot store lone surrogate halves; when a JS slice would expose one, use the replacement character that Node writes at the UTF-8 boundary.
 */
 pub(crate) fn js_string_length(text: &str) -> usize {
@@ -2033,7 +2163,7 @@ pub(crate) fn internal_prompt_generation_environment(
     home_dir: &std::path::Path,
 ) -> Vec<(String, String)> {
     /*
-    CDXC:GxserverPromptGeneration 2026-06-24-16:11:
+    CDXC:SessionTitles 2026-06-24-16:11:
     Background title and commit-message generation must not inherit active
     Ghostex session identity. Clear session-binding variables and mark the
     process as internal so installed agent hooks do not attach generated prompt

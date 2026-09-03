@@ -262,7 +262,7 @@ pub(crate) struct ZmxTitleObserverTask {
 }
 
 /*
-CDXC:SessionChatCore 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Session Chat transcript followers mirror the zmx title-observer lifecycle
 (sync from presentation deltas, boot sync, shutdown stop-all) but are ALSO
 refcounted by live /api/events subscribers: the tail-follow task runs only
@@ -279,7 +279,7 @@ pub(crate) struct SessionChatFollowerEntry {
     pub(crate) stream: Arc<crate::session_chat::SessionChatStream>,
     pub(crate) resnapshot: Arc<tokio::sync::Notify>,
     /*
-    CDXC:SessionChatFollowerLiveness 2026-08-24:
+    CDXC:AgentScreenDetection 2026-08-24:
     Progress the running task publishes for itself, because `task.is_finished()`
     cannot tell a healthy follower apart from one wedged in an inline await.
     Replaced on every respawn (see `sync_session_chat_follower_for_session`).
@@ -289,7 +289,7 @@ pub(crate) struct SessionChatFollowerEntry {
 
 const GXSERVER_AGENT_TITLE_METADATA_DEBOUNCE_MS: u64 = 3_000;
 /*
-CDXC:SessionChatComposerReady 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 These two were flat `sleep(4s)` calls: the provider had just launched a CLI, and
 four seconds was the guess for when its composer would exist. Both numbers were
 wrong in both directions — an idle claude is ready in well under a second, while
@@ -310,7 +310,7 @@ const GXSERVER_FIRST_PROMPT_STAGED_COMMAND_SUBMIT_DELAY_MS: u64 = 300;
 const GXSERVER_FIRST_PROMPT_TITLE_SOURCE_MAX_LENGTH: usize = 250;
 const GXSERVER_GENERATED_SESSION_TITLE_MAX_LENGTH: usize = 39;
 /*
-CDXC:SessionHistoryTitleSource 2026-07-29:
+CDXC:SessionTitles 2026-07-29:
 Empty-title Generate Name summarizes the last few transcript user prompts
 instead of one pasted blob. Recent messages carry the naming signal, so the
 budget is per-message with a wider overall cap than the single-prompt source.
@@ -319,6 +319,18 @@ const GXSERVER_SESSION_HISTORY_TITLE_SOURCE_MESSAGE_COUNT: usize = 5;
 const GXSERVER_SESSION_HISTORY_TITLE_SOURCE_MESSAGE_MAX_LENGTH: usize = 400;
 const GXSERVER_SESSION_HISTORY_TITLE_SOURCE_MAX_LENGTH: usize = 2200;
 const GXSERVER_FIRST_PROMPT_TITLE_GENERATION_TIMEOUT_MS: u64 = 30_000;
+/*
+CDXC:SessionTitles 2026-09-03:
+How long the first-prompt job gives Codex to replace its provisional
+first-words thread name with its own generated title before Ghostex generates
+one and submits `/rename`. Codex's hidden title thread lands three to five
+seconds after the prompt when it works; the window is several times that so a
+slow model never produces two competing renames, and short enough that a
+session Codex failed to name is not left showing the truncated prompt for
+long.
+*/
+const GXSERVER_CODEX_AUTO_TITLE_WAIT_MS: u64 = 20_000;
+const GXSERVER_CODEX_AUTO_TITLE_POLL_MS: u64 = 1_000;
 const GXSERVER_COMMIT_MESSAGE_GENERATION_TIMEOUT_MS: u64 = 120_000;
 const GXSERVER_SESSION_STATE_SIDECAR_MAX_BYTES: u64 = 1024 * 1024;
 
@@ -335,7 +347,7 @@ const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "openPaths",
     "restartSession",
     /*
-    CDXC:GenerateTitleSkill 2026-06-17-17:02:
+    CDXC:AgentSkills 2026-06-17-17:02:
     Generated-title `ghostex rename-command` now enters gxserver as a renderer command so macOS can submit Claude Code `/rename <title>` with a real native Enter event instead of zmx carriage-return text. Keep Rust's action allow-list in lockstep with the TypeScript daemon before full cutover.
     */
     "renameCommand",
@@ -360,10 +372,10 @@ const WORKTREE_BRANCH_RENAME_SWEEP_INTERVAL: Duration =
     Duration::from_secs(worktree_sessions::WORKTREE_BRANCH_RENAME_SWEEP_INTERVAL_SECONDS);
 
 /*
-CDXC:GxserverRustPort 2026-06-14-20:37:
+CDXC:RepoStructure 2026-06-14-20:37:
 Phase 1 must be a real foreground daemon, not a mock harness. Startup creates TypeScript-compatible auth, config, identity, SQLite, runtime metadata, logs directory, local HTTP listener, health/control endpoints, and the minimal event stream needed by Phase 0 compatibility.
 
-CDXC:GxserverLifecycle 2026-06-22-04:53:
+CDXC:ServerDaemon 2026-06-22-04:53:
 Foreground Rust startup must own the selected loopback port like TypeScript: reuse the same build, stop and replace a same-protocol build mismatch, and surface protocol mismatches before binding so selected-port failures are explicit instead of falling through to generic EADDRINUSE.
 */
 pub async fn run_gxserver_foreground(
@@ -416,7 +428,7 @@ pub async fn run_gxserver_foreground(
     let auth = ensure_gxserver_auth_token(&paths)?;
     let logger = Arc::new(GxserverLogger::new(paths.clone()));
     /*
-    CDXC:SkillConsolidation 2026-08-24:
+    CDXC:AgentSkills 2026-08-24:
     Older Ghostex builds installed skills that are now folded into the CLI
     help. Clean up unmodified shipped copies on every launch so user machines
     converge on the consolidated skill set without manual steps.
@@ -496,7 +508,7 @@ pub async fn run_gxserver_foreground(
         zmx_title_observers: Arc::new(Mutex::new(HashMap::new())),
     });
     /*
-    CDXC:GxserverRustBuild 2026-06-24-20:22:
+    CDXC:Build 2026-06-24-20:22:
     The JSON RPC catch-all needs the raw Request so server can preserve the
     TypeScript protocol/auth/body gate order for every endpoint, including app
     user data. Use Axum's service fallback instead of the Handler extractor path
@@ -548,14 +560,14 @@ pub async fn run_gxserver_foreground(
         session_chat_queue_publisher_factory(&state),
     );
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     A queued prompt left in `sending` is ambiguous after a restart — the bytes
     may already have reached the agent — so it is retired as `failed` with an
     explicit reason and waits for the user. Never silently re-sent.
     */
     let _ = crate::session_chat_queue::recover_session_chat_queue_after_restart(&paths);
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     The queue scheduler is built HERE rather than beside the other runtimes
     because its three handles all close over the finished `Arc<AppState>`: the
     internal chat send (so a queued prompt inherits the per-session send mutex),
@@ -574,7 +586,7 @@ pub async fn run_gxserver_foreground(
     )
     .start(shutdown_tx.subscribe());
     /*
-    CDXC:ZmxWireCycle 2026-08-23:
+    CDXC:ZmxWireGeneration 2026-08-23:
     An app or remote-package update replaces the bundled zmx binary underneath
     daemons that keep running the code of the binary that started them, and the
     two ends of a broken IPC tag contract cannot talk at all — the user sees
@@ -588,7 +600,7 @@ pub async fn run_gxserver_foreground(
         cycle_wire_incompatible_zmx_session_daemons(&repository, &logger, &metadata.server_id);
     }
     /*
-    CDXC:Tailcat 2026-09-01:
+    CDXC:RemotePairing 2026-09-01:
     The tailcat sidecar is a child of THIS daemon, so a restart has to bring it
     back from persisted state rather than leaving remote access silently down
     until someone reopens Settings.
@@ -603,7 +615,7 @@ pub async fn run_gxserver_foreground(
     let worktree_branch_rename_task = spawn_worktree_branch_rename_task(&state);
     let session_chat_follower_sync_task = spawn_session_chat_follower_sync_task(&state);
     /*
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     Analytics exists only in the long-running daemon. Starting it here rather
     than in `AppState` construction is what keeps one-shot `ghostex` CLI verbs
     — which build no server loop — completely silent.
@@ -764,7 +776,7 @@ async fn route_http(
     let endpoint = endpoint_for(&path);
 
     /*
-    CDXC:GxserverProtocol 2026-06-22-04:10:
+    CDXC:ServerApi 2026-06-22-04:10:
     Rust routing must preserve TypeScript's protocol gate order: CORS/OPTIONS is answered before minimal health, auth, method, body, and protocol checks. Unknown or WebSocket-only OPTIONS requests therefore return the HTTP-endpoint 404 envelope instead of the generic endpoint lookup message.
     */
     if method == Method::OPTIONS {
@@ -1031,7 +1043,7 @@ async fn route_http(
             &body_json,
             |repository, db, params, _| {
                 /*
-                CDXC:GPUIRecentProjects 2026-06-24-12:38:
+                CDXC:Projects 2026-06-24-12:38:
                 GPUI's reused SidebarApp sends the same close-vs-remove command split as macOS. Close parks the canonical gxserver project with a server timestamp and broadcasts a presentation removal for active groups; remove remains the hard-delete endpoint.
                 */
                 let project_id = read_project_id(params)?;
@@ -1054,7 +1066,7 @@ async fn route_http(
             &body_json,
             |repository, db, params, _| {
                 /*
-                CDXC:GPUIRecentProjects 2026-06-24-12:27:
+                CDXC:Projects 2026-06-24-12:27:
                 GPUI restores Recent Projects through gxserver project ids.
                 The daemon clears explicit parked state and publishes the
                 project presentation update; clients must not reconstruct rows
@@ -1104,7 +1116,7 @@ async fn route_http(
                     DomainStateError::not_found(format!("Project {project_id} does not exist."))
                 })?;
                 /*
-                CDXC:ProjectStatusParity 2026-06-22-06:21:
+                CDXC:Projects 2026-06-22-06:21:
                 readProjectStatus is a polling project-status read, but TypeScript gxserver repairs live zmx process identity before returning the project/session graph and schedules agent metadata title checks for eligible sessions. Keep those side effects here instead of treating the endpoint as a plain repository read so Rust clients receive the same status projection.
                 */
                 let sessions = repository.list_sessions(Some(project_id.as_str()))?;
@@ -1207,7 +1219,7 @@ async fn route_http(
             handle_rename_worktree_project_http(&state, endpoint.path, request_id, &body_json).await
         }
         /*
-        CDXC:SidebarV2Worktrees 2026-07-29-00:00:
+        CDXC:Worktrees 2026-07-29-00:00:
         Sidebar V2's worktree flow. Unlike `createProjectWorktree`, these
         endpoints never register the worktree as a project: the checkout is an
         attribute of one session (its cwd), and the branch shown on the card
@@ -1267,7 +1279,7 @@ async fn route_http(
             |repository, db, params, _| {
                 let project_id = read_optional_project_id(params)?;
                 /*
-                CDXC:GxserverActiveOnlySessionList 2026-09-01:
+                CDXC:StateSync 2026-09-01:
                 A registry accumulates stopped agent history forever — thousands
                 of rows on a working machine — and every one of them was
                 hydrated, serialized, and shipped on each poll even though the
@@ -1302,7 +1314,7 @@ async fn route_http(
                     }
                 };
                 /*
-                CDXC:GxserverSessionSyncOneList 2026-09-01:
+                CDXC:StateSync 2026-09-01:
                 One `list_sessions` feeds all three sync passes and the
                 response. The passes can mutate rows, so re-read only when one
                 of them reports an actual change.
@@ -1373,7 +1385,7 @@ async fn route_http(
             },
         ),
         /*
-        CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+        CDXC:StateSync 2026-07-29-00:00:
         Sidebar V2's settle/snooze commands. Guards live in
         `session_lifecycle` so a stale or raced client cannot park working or
         blocked-on-you work behind a settle, and every real change emits a
@@ -1459,7 +1471,7 @@ async fn route_http(
             |repository, db, params, _| {
                 let session = repository.remove_session(params)?;
                 /*
-                CDXC:DraftSessions 2026-08-28:
+                CDXC:Drafts 2026-08-28:
                 Removing a DRAFT also kills its background agent CLI. The row
                 being deleted is the last thing that pointed at that zmx daemon,
                 so deleting a draft would otherwise leave an orphaned CLI running
@@ -1482,7 +1494,7 @@ async fn route_http(
                 )?;
                 if removed_a_draft {
                     /*
-                    CDXC:DraftSessions 2026-08-28:
+                    CDXC:Drafts 2026-08-28:
                     A quick chat's draft was created inside a throwaway
                     `~/ghostex/chats` workspace made for it alone, so deleting
                     the draft has to collect that workspace too or the sidebar
@@ -1516,7 +1528,7 @@ async fn route_http(
             &body_json,
             |repository, db, _, server_id| {
                 /*
-                CDXC:GxserverSessionSyncOneList 2026-09-01:
+                CDXC:StateSync 2026-09-01:
                 One `list_sessions` feeds all three sync passes and the
                 snapshot projection. The passes can mutate rows, so re-read
                 only when one of them reports an actual change.
@@ -1554,7 +1566,7 @@ async fn route_http(
             &body_json,
             |repository, _, params, _| {
                 /*
-                CDXC:SidebarHudContract 2026-06-24-20:34:
+                CDXC:AgentLauncher 2026-06-24-20:34:
                 GPUI Settings and SidebarApp read normalized launcher/action HUD rows through gxserver so app-modal Rust does not hand-mirror the shared TypeScript projection. The response is derived only from project domain metadata and carries no paths, project names, prompts, tokens, stdout/stderr, daemon bodies, or renderer payload authority.
                 */
                 let projects = repository.list_projects()?;
@@ -1565,7 +1577,7 @@ async fn route_http(
                     .filter(|value| !value.is_empty());
                 let mut hud = read_sidebar_hud(&projects, active_project_id);
                 /*
-                CDXC:MobileSidebarHud 2026-07-12-00:00:
+                CDXC:AgentLauncher 2026-07-12-00:00:
                 React Native Android renders agent-launcher and quick-action buttons for
                 every visible project at once, so the mobile CLI transport asks
                 for per-project command rows in one round trip instead of one
@@ -1573,7 +1585,7 @@ async fn route_http(
                 */
                 apply_commands_by_project_if_requested(&mut hud, &projects, params);
                 /*
-                CDXC:GlobalActions 2026-08-01-16:00:
+                CDXC:AgentLauncher 2026-08-01-16:00:
                 Global Actions live in their own daemon table rather than in
                 project metadata, so they are attached here instead of inside
                 read_sidebar_hud, which stays a pure projection of project rows.
@@ -1599,7 +1611,7 @@ async fn route_http(
             &body_json,
             |repository, db, params, _| {
                 /*
-                CDXC:SidebarHudSettingsMutation 2026-06-24-20:54:
+                CDXC:AgentLauncher 2026-06-24-20:54:
                 Settings mutation RPCs write through the production project repository after gxserver normalizes the narrow agent/action intent. Return refreshed HUD rows and updated project rows so GPUI clients do not reparse raw metadata or log command text, URLs, project names, paths, prompts, tokens, stdout/stderr, daemon bodies, or renderer payload contents.
                 */
                 let projects = repository.list_projects()?;
@@ -1607,7 +1619,7 @@ async fn route_http(
                 let hud_active_project_id = mutation.hud_active_project_id;
                 let mut item_ids = mutation.item_ids;
                 /*
-                CDXC:GlobalActions 2026-08-01-16:00:
+                CDXC:AgentLauncher 2026-08-01-16:00:
                 A reorder response must echo the order the daemon actually
                 stored — the sidebar treats itemIds as the confirmation for its
                 optimistic reorder and falls back to an empty list without it.
@@ -1632,11 +1644,11 @@ async fn route_http(
                     updated_projects.push(project);
                 }
                 /*
-                CDXC:GlobalActions 2026-08-01-16:00:
+                CDXC:AgentLauncher 2026-08-01-16:00:
                 A Global Action write touches no project row, so it schedules no
                 projectUpdated presentation delta.
 
-                CDXC:GlobalActions 2026-08-07:
+                CDXC:AgentLauncher 2026-08-07:
                 It announces itself with its own event instead. Only the caller
                 sees the refreshed HUD this response carries; every other live
                 surface learns about HUD changes from a broadcast, and none of
@@ -1693,7 +1705,7 @@ async fn route_http(
                     hud.insert("globalCommands".to_string(), global_commands);
                 }
                 /*
-                CDXC:ProjectActions 2026-08-01:
+                CDXC:Projects 2026-08-01:
                 Clients that render per-project quick actions (GPUI sidebar rows)
                 replace their whole HUD snapshot with this response, so the
                 mutation mirrors readSidebarHud's opt-in commandsByProject block.
@@ -1714,7 +1726,7 @@ async fn route_http(
             },
         ),
         /*
-        CDXC:NavigationHistory 2026-08-19:
+        CDXC:Navigation 2026-08-19:
         Titlebar Back/Forward is one daemon-owned trail of previously active
         sessions and projects, shared by the gpui desktop titlebar and the web
         titlebar — see `navigation_history`. These three calls carry only
@@ -1759,7 +1771,7 @@ async fn route_http(
             &body_json,
             |_, db, params, _| {
                 /*
-                CDXC:WorkspaceSessionGroups 2026-07-12-00:00:
+                CDXC:Sessions 2026-07-12-00:00:
                 GPUI write-through-syncs its whole normalized named-group overlay
                 after each local edit. Bump the presentation revision and broadcast
                 a dedicated event so snapshot pollers (mobile via CLI) and live
@@ -1795,7 +1807,7 @@ async fn route_http(
             &body_json,
             |_, db, params, _| {
                 /*
-                CDXC:SidebarProjectCollections 2026-07-18-00:00:
+                CDXC:Projects 2026-07-18-00:00:
                 Editors write-through-sync the whole normalized project-collection
                 overlay after each local edit. Bump the presentation revision and
                 broadcast a dedicated event so snapshot pollers (mobile via CLI)
@@ -1865,7 +1877,7 @@ async fn route_http(
             &body_json,
             |_, db, params, _| {
                 /*
-                CDXC:SidebarSpaces 2026-08-27:
+                CDXC:Spaces 2026-08-27:
                 Space editors write-through-sync the whole normalized Space
                 document after each local edit, exactly like the project
                 collections beside them. Bump the presentation revision and
@@ -1962,7 +1974,7 @@ async fn route_http(
             },
         ),
         /*
-        CDXC:StashedPromptTags 2026-08-23:
+        CDXC:SavedPrompts 2026-08-23:
         The Saved Prompts tag catalogue is daemon-owned like the prompts
         themselves, so every client filters the same rail instead of keeping a
         private list that drifts per machine.
@@ -1996,7 +2008,7 @@ async fn route_http(
             |repository, _, params, _| repository.set_stashed_prompt_tags(params),
         ),
         /*
-        CDXC:SessionAgentNotes 2026-08-24:
+        CDXC:SessionNotes 2026-08-24:
         A saved note changes what the sidebar row renders (the note dot and the
         hover tooltip), so the save schedules the same presentation delta
         `/api/updateSession` does instead of asking every client to refetch.
@@ -2046,7 +2058,7 @@ async fn route_http(
             |repository, _, params, _| repository.read_session_agent_note(params),
         ),
         /*
-        CDXC:MobileKeepAwake 2026-08-19:
+        CDXC:KeepAwake 2026-08-19:
         A client that is ATTACHED to a session (Ghostex mobile, over its SSH CLI
         bridge) renews a keep-awake lease here so this machine's Auto Sleep sweep
         cannot retire a terminal somebody is actually looking at. The lease lives
@@ -2075,7 +2087,7 @@ async fn route_http(
             |_, db, params, server_id| list_previous_sessions(db, server_id, params),
         ),
         /*
-        CDXC:SessionForkFamilies 2026-08-28:
+        CDXC:SessionFork 2026-08-28:
         Previous Sessions hides a closed row once something continues from it, so
         the branch a user forked away from can vanish from every list. This is how
         a client gets the whole family back, ancestors included, to offer a switch
@@ -2094,6 +2106,7 @@ async fn route_http(
         | "/api/readAgentResumePlan"
         | "/api/forkSession"
         | "/api/switchDraftAgent"
+        | "/api/switchSessionAgent"
         | "/api/requestSessionRename"
         | "/api/cancelFirstPromptAutoTitle"
         | "/api/ingestSessionStateEvent"
@@ -2154,12 +2167,12 @@ async fn route_http(
                         DomainStateError::bad_request("Project has no filesystem path.")
                     })?;
                 /*
-                CDXC:DocsRootDirectory 2026-08-09:
+                CDXC:Docs 2026-08-09:
                 Docs reads the project's own folder plus its configured Docs
                 directory (then the Global Default). Resolving here keeps
                 `run_project_docs_action` taking a plain root.
 
-                CDXC:DocsRootAdditive 2026-08-09: a bad Docs directory no longer
+                CDXC:Docs 2026-08-09: a bad Docs directory no longer
                 fails the request. It comes back as one unavailable mount inside
                 the listing, so the project's own docs still show and the panel
                 still names the path that could not be opened.
@@ -2225,13 +2238,22 @@ async fn route_http(
             handle_interrupt_session_chat_http(&state, endpoint.path, request_id, &body_json)
         }
         /*
-        CDXC:SessionChatRewind 2026-09-02:
+        CDXC:SessionChat 2026-09-02:
         Held open for the whole drive rather than queued-and-acknowledged: the
         answer a caller needs is whether Claude Code ACCEPTED the rewind, and
         that is only knowable once the driver has watched the dialog close.
         */
         "/api/rewindSessionChat" => {
             crate::session_chat_rewind::handle_rewind_session_chat_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
+        "/api/selectSessionChatModel" => {
+            crate::session_chat_codex_picker::handle_select_session_chat_model_http(
                 &state,
                 endpoint.path,
                 request_id,
@@ -2258,7 +2280,7 @@ async fn route_http(
         | "/api/setSessionChatDraft" => {
             handle_session_chat_queue_http(&state, endpoint.path, request_id, &body_json).await
         }
-        // CDXC:DraftCrashSafety 2026-08-28: the boot-time draft-cache
+        // CDXC:Drafts 2026-08-28: the boot-time draft-cache
         // reconcile read; see list_session_chat_drafts_value.
         "/api/listSessionChatDrafts" => handle_domain_http(
             &state,
@@ -2270,7 +2292,7 @@ async fn route_http(
             },
         ),
         /*
-        CDXC:SessionChatComposerReady 2026-08-26:
+        CDXC:SessionChat 2026-08-26:
         The evidence read behind a `composerNotReady` refusal. Domain-shaped
         because everything it needs is one session row plus one screen capture,
         and the capture is a direct socket read measured in single-digit
@@ -2366,7 +2388,7 @@ async fn route_http(
         "/api/control/stopAll" => {
             broadcast_server_stopping(&state);
             /*
-            CDXC:StopAllKillsSessions 2026-08-28:
+            CDXC:SessionSleep 2026-08-28:
             Kill the tracked zmx sessions BEFORE answering and before the
             shutdown broadcast, so the reported counts are real and the kills
             cannot race the control plane's own teardown. The kill loop runs

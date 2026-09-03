@@ -131,7 +131,7 @@ pub(crate) fn ingest_agent_hook_event(
         params.get("agentName"),
     );
     /*
-    CDXC:SessionChatPromptQueue 2026-08-24:
+    CDXC:SessionChat 2026-08-24:
     The notify hook tags Claude's 60s "waiting for your input" reminder with
     notificationKind=idleInput. That reminder is proof the CLI is idle at its
     prompt, not a completion or request for user action, so it must never enter
@@ -223,7 +223,7 @@ pub(crate) fn ingest_agent_hook_event(
         );
         let mut update = compute_activity_update(&session, &activity_params, None);
         /*
-        CDXC:SessionChatSend 2026-07-31:
+        CDXC:SessionChat 2026-07-31:
         Session Chat interactive-prompt capture. compute_activity_update
         rebuilds agentActivity from a fixed struct, so the stored
         sessionChatPrompt must be explicitly re-attached (kept, replaced, or
@@ -282,7 +282,7 @@ pub(crate) fn ingest_agent_hook_event(
             activity_reason = "stale-activity-event".to_string();
             session_chat_activity_changed = false;
             /*
-            CDXC:SessionChatQuestionCardLifecycle 2026-09-03:
+            CDXC:AgentScreenDetection 2026-09-03:
             Staleness orders ACTIVITY transitions: an event older than the
             last transition must not move the activity backwards. The card
             is not ordered by that clock — it is scoped to one tool call by
@@ -323,7 +323,7 @@ pub(crate) fn ingest_agent_hook_event(
         }
     }
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     The PRECISE half of draft promotion, and the reason the activity-based half
     above can stay conservative. `UserPromptSubmit` — or any hook carrying the
     prompt text itself — is positive evidence that the USER prompted this agent,
@@ -397,7 +397,7 @@ pub(crate) fn ingest_agent_hook_event(
         Value::Bool(session_chat_prompt_changed),
     );
     /*
-    CDXC:SessionChatCore 2026-08-01:
+    CDXC:SessionChat 2026-08-01:
     Session Chat's working indicator has no other source: the transcript can
     only ever SETTLE a spinner (a completed assistant row), never start one,
     because the first transcript row of a turn lands seconds after the agent
@@ -434,7 +434,7 @@ pub(crate) fn session_chat_prompt_setting(session: &Value) -> Option<String> {
 }
 
 /*
-CDXC:SessionChatCore 2026-08-01:
+CDXC:SessionChat 2026-08-01:
 Re-attach the stored Session Chat prompt to a freshly computed agentActivity
 object. compute_activity_update rebuilds the object from the fixed
 ActivityState struct, which does not know the key, so every non-hook activity
@@ -462,7 +462,7 @@ pub(crate) fn carry_session_chat_prompt(session: &Value, activity: &mut Value) {
 /// call's own post-tool event / Stop / SessionEnd / idle transition → clear;
 /// anything else — including post-tool events of OTHER tool calls, which a
 /// background subagent keeps producing under the lead session's id — → keep.
-/// See CDXC:SessionChatQuestionCardLifecycle in session_chat_interactive.rs.
+/// See CDXC:AgentScreenDetection in session_chat_interactive.rs.
 pub(crate) fn next_session_chat_prompt_setting(
     previous: Option<&str>,
     params: &Map<String, Value>,
@@ -541,7 +541,7 @@ pub(crate) fn claim_first_prompt_auto_title(
     };
     let mut runtime_settings = object_field(session, "runtimeSettings");
     /*
-    CDXC:GxserverForkTitles 2026-07-11:
+    CDXC:SessionFork 2026-07-11:
     A fork's initial `Fork: …` CLI rename is provisional, not the first-prompt
     generated name. Remove the defensive auto-title bit when the fork's first
     real prompt is claimed, while keeping the fork marker through the async
@@ -587,10 +587,10 @@ pub(crate) struct FirstPromptAutoTitleClaimDecision {
 }
 
 /*
-CDXC:GxserverSessionTitle 2026-06-22-08:12:
+CDXC:SessionTitles 2026-06-22-08:12:
 Rust must match TypeScript gxserver's first-prompt claim boundary, not only the later background job. Claim only supported providers with generic titles and real user prompts, and skip meta and slash-command prompts without setting `running`.
 
-CDXC:GxserverSessionTitle 2026-08-03:
+CDXC:SessionTitles 2026-08-03:
 Escape cancels one title-generation attempt, not every later submission of the
 same prompt. A fresh explicit UserPromptSubmit may therefore re-arm identical
 cancelled text, while passive sidecar, lifecycle, and later hook replays remain
@@ -658,14 +658,25 @@ pub(crate) fn decide_first_prompt_auto_title_claim(
         return first_prompt_claim_decision(Some(normalized), "slashCommand", false, strategy);
     }
     if strategy == Some("agentAutoTitle") {
-        // Codex 0.150 owns first-turn naming; metadata reconciliation adopts it.
+        // These agents own first-turn naming; metadata reconciliation adopts it.
         return first_prompt_claim_decision(Some(normalized), "agentAutoTitle", false, strategy);
     }
+    // CDXC:SessionTitles 2026-09-03: Codex's provisional first-words
+    // name may already have been adopted as the title by the time the claim
+    // runs; it is not a real title and must not block the job.
+    let current_title = read_text_value(session, "title");
+    let is_codex_provisional_title = strategy == Some("awaitAgentAutoTitle")
+        && current_title
+            .as_deref()
+            .is_some_and(|title| is_codex_provisional_thread_name(prompt, title));
+    // CDXC:SessionTitles 2026-09-03: a placeholder title is the
+    // launcher's default, whatever its spelling, and never blocks the claim.
+    let is_placeholder_title =
+        read_text_from_map(&runtime_settings, "titleSource").as_deref() == Some("placeholder");
     if !fork_first_prompt_rearmed
-        && !is_first_prompt_claim_generic_title(
-            agent_name.as_deref(),
-            read_text_value(session, "title").as_deref(),
-        )
+        && !is_codex_provisional_title
+        && !is_placeholder_title
+        && !is_first_prompt_claim_generic_title(agent_name.as_deref(), current_title.as_deref())
     {
         return first_prompt_claim_decision(
             Some(normalized),
@@ -702,7 +713,9 @@ pub(crate) fn first_prompt_claim_agent_name(
 pub(crate) fn first_prompt_claim_strategy(agent_name: Option<&str>) -> Option<&'static str> {
     match normalize_first_prompt_claim_agent_name(agent_name).as_deref() {
         Some("claude") => Some("sendBareRenameCommand"),
-        Some("codex") => Some("agentAutoTitle"),
+        // See first_prompt_auto_title_strategy: Codex names the thread itself
+        // and Ghostex only steps in when its generated title never lands.
+        Some("codex") => Some("awaitAgentAutoTitle"),
         // See first_prompt_auto_title_strategy: this agent names its own
         // sessions and the metadata sync adopts those names.
         Some("hermes-agent") => Some("agentAutoTitle"),
@@ -978,7 +991,7 @@ pub(crate) fn normalize_agent_hook_activity(
         return None;
     }
     /*
-    CDXC:AgentHookStatus 2026-06-22-08:31:
+    CDXC:AgentHooks 2026-06-22-08:31:
     Server-side hook ingestion must use provider event semantics before trusting
     sidecar status. Codex Stop is an authoritative completed-turn boundary, so
     it enters attention; SessionEnd still clears the session to idle. Keeping
@@ -1000,7 +1013,7 @@ pub(crate) fn normalize_agent_hook_activity(
             return Some("idle".to_string());
         }
         /*
-        CDXC:SessionChatPromptQueue 2026-08-24:
+        CDXC:SessionChat 2026-08-24:
         SessionStart is the only hook Claude Code fires when /compact or /clear
         finishes; the UserPromptSubmit that submitted the command set "working"
         and no Stop follows, which left the session — and the prompt-queue
