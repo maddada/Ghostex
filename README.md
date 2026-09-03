@@ -74,7 +74,18 @@ Please join and post in the iOS channel to get the app.
 
 ## Gallery
 
-### Built-in IDE
+### Terminal-backed Chat GUI!
+
+You can't click on images in the terminal, editing long prompts really sucks, and typing is slow when you're sshing on a slow connection. But the terminal is more powerful than chat interfaces and gets all the features first.
+
+The Solution is here! Render the same session as a CLI or a Chat GUI.
+Toggle between the two with a single hotkey or click!
+
+<img width="400" alt="48380" src="https://github.com/user-attachments/assets/fc050d47-1627-4d6c-9f17-2175b6412ab4" />
+
+<img width="400" alt="48382" src="https://github.com/user-attachments/assets/6db91470-b859-4a09-873b-45e0947560ac" />
+
+### Built-in IDE (Optional extension)
 
 Loads on demand for working with markdown, reviewing code, and checking PRs. <br/>
 Supports all extensions. Sleeps when not in use to same resources (configurable).
@@ -99,17 +110,6 @@ Comes with Annotations, Chrome Devtools MCP for Agents, Profiles.<br />
 
 <img width="1200" alt="image" src="https://github.com/user-attachments/assets/ce9fbe6b-8c2b-41f1-88f6-67d8254846e5" />
 
-### Terminal-backed Chat GUI!
-
-You can't click on images in the terminal, editing long prompts really sucks, and typing is slow when you're sshing on a slow connection. But the terminal is more powerful than chat interfaces and gets all the features first.
-
-The Solution is here! Render the same session as a CLI or a Chat GUI.
-Toggle between the two with a single hotkey or click!
-
-<img width="400" alt="48380" src="https://github.com/user-attachments/assets/fc050d47-1627-4d6c-9f17-2175b6412ab4" />
-
-<img width="400" alt="48382" src="https://github.com/user-attachments/assets/6db91470-b859-4a09-873b-45e0947560ac" />
-
 ### Rich Prompt Editor with Ctrl+G
 
 Edit your agent prompts with full hotkeys support and image previews! <br />
@@ -117,7 +117,7 @@ No more uneditable "[Pasted 50+ lines]" text! Press F1 for all commands.
 
 <img width="2048" height="1221" alt="2026-06-23_CleanShot_15-47-56" src="https://github.com/user-attachments/assets/6f1db19e-20c2-456c-bb91-8dc3309b4c4b" />
 
-### Kanban board based on beads!
+### Kanban board based on beads (Optional extension)
 
 Put all your thoughts here then let an orchestrator agent manage subagents to tackle them<br/>
 (Ghostex supports cross Agent CLI orchestration, your Claude Code can launch and steer Codex agents!)
@@ -133,7 +133,7 @@ curl -fsSL https://raw.githubusercontent.com/gastownhall/beads/main/scripts/inst
 
 <img width="1200" alt="image" src="https://github.com/user-attachments/assets/85543937-85f1-4171-b2d0-6ee7264beddd" />
 
-### Docs view for working with HTML/MD/Excalidraw!
+### Docs view for working with HTML/MD/Excalidraw! (Optional extension)
 
 #### Collaborate with your agent on HTML prototypes, mockups, and explainers! Annotations system included!
 
