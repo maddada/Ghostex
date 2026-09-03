@@ -46,7 +46,8 @@ pub(crate) const GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER: Duration =
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_EVICT_POLL_INTERVAL: Duration = Duration::from_secs(60);
 
 #[cfg(target_os = "linux")]
-pub(crate) static GPUI_LINUX_WINDOW_ICON: OnceLock<Arc<image::RgbaImage>> = OnceLock::new();
+pub(crate) static GPUI_LINUX_WINDOW_ICON: std::sync::OnceLock<Arc<image::RgbaImage>> =
+    std::sync::OnceLock::new();
 
 #[cfg(target_os = "macos")]
 pub(crate) static GPUI_KEYBOARD_ROUTER_NEXT_WINDOW_ID: AtomicU64 = AtomicU64::new(1);
