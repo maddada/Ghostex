@@ -339,6 +339,25 @@ pub struct TerminalSnapshot {
     pub palette: [Rgb; 256],
 }
 
+/// Mirrors `RESTING_GRID_COLS` in `.dependencies/zmx` and must stay equal:
+/// it is the column count the zmx daemon rests at while no attached client
+/// is displaying, and the width a hidden client keeps its local grid at.
+pub const ZMX_RESTING_GRID_COLS: u16 = 200;
+
+/// In-band sequence the zmx attach client consumes from its stdin (never
+/// forwarded to the shell): "this client is displaying; take the grid at
+/// rows x cols".
+pub fn zmx_client_visible_sequence(rows: u16, cols: u16) -> String {
+    format!("\x1b]1337;ZMX_VISIBLE={rows},{cols}\x07")
+}
+
+/// In-band sequence telling the zmx attach client "this client is not
+/// displaying; my local grid is rows x cols; hand the grid to whoever is
+/// displaying, or rest wide".
+pub fn zmx_client_hidden_sequence(rows: u16, cols: u16) -> String {
+    format!("\x1b]1337;ZMX_HIDDEN={rows},{cols}\x07")
+}
+
 /// A live terminal: spawned child on a PTY, libghostty-vt state, background
 /// pump threads, and snapshot access. Owned by the UI-side consumer.
 pub struct TerminalModel {
@@ -880,6 +899,14 @@ impl TerminalModel {
         self.size = (cols, rows);
         self.cell_size_px = (cell_width_px, cell_height_px);
         Ok(())
+    }
+
+    /// Resize the grid keeping the current cell pixel sizes, for callers
+    /// that change the cell grid without a layout pass (a parked terminal
+    /// resting at the zmx daemon's wide grid).
+    pub fn resize_grid(&mut self, cols: u16, rows: u16) -> anyhow::Result<()> {
+        let (cell_width_px, cell_height_px) = self.cell_size_px;
+        self.resize(cols, rows, cell_width_px, cell_height_px)
     }
 
     /// Grid size in cells as `(cols, rows)`.

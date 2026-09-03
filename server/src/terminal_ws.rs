@@ -310,7 +310,11 @@ async fn run_terminal_socket(
                         }
                     }
                     Some(Ok(Message::Text(text))) => {
-                        handle_control_message(&master, text.as_str());
+                        if let Some(bytes) = handle_control_message(&master, text.as_str()) {
+                            if input_tx.send(bytes).await.is_err() {
+                                break;
+                            }
+                        }
                     }
                     Some(Ok(Message::Ping(bytes))) => {
                         if socket_sender.send(Message::Pong(bytes)).await.is_err() {
@@ -378,25 +382,42 @@ fn write_pty(mut writer: Box<dyn Write + Send>, mut input_rx: mpsc::Receiver<Vec
     }
 }
 
-fn handle_control_message(master: &Box<dyn MasterPty + Send>, text: &str) {
+/*
+CDXC:TerminalWsVisibility 2026-09-03:
+Web clients keep a session's xterm mounted (socket open) while it is parked
+behind another tab or under the chat view, so a plain detach never happens
+and the hidden client would keep clamping the shared zmx grid to its own
+size. `{"type":"visibility","hidden":bool,"cols":..,"rows":..}` resizes this
+pty exactly like `resize` and then feeds the zmx attach client the in-band
+`ZMX_HIDDEN` / `ZMX_VISIBLE` sequence at that same grid, which zmx consumes
+(never forwarding it to the shell) to hand the grid to whichever client is
+actually displaying, or rest wide when none is. The sequence goes through the
+pty writer channel so it is ordered with the client's own input bytes.
+Returns the bytes to write, if any; the socket loop owns the channel.
+*/
+fn handle_control_message(master: &Box<dyn MasterPty + Send>, text: &str) -> Option<Vec<u8>> {
     let Ok(value) = serde_json::from_str::<Value>(text) else {
-        return;
+        return None;
     };
-    if value.get("type").and_then(Value::as_str) != Some("resize") {
-        return;
-    }
-    let Some(cols) = json_dimension(&value, "cols") else {
-        return;
+    let hidden = match value.get("type").and_then(Value::as_str)? {
+        "resize" => None,
+        "visibility" => Some(value.get("hidden").and_then(Value::as_bool)?),
+        _ => return None,
     };
-    let Some(rows) = json_dimension(&value, "rows") else {
-        return;
-    };
+    let cols = json_dimension(&value, "cols")?;
+    let rows = json_dimension(&value, "rows")?;
     let _ = master.resize(PtySize {
         rows,
         cols,
         pixel_width: 0,
         pixel_height: 0,
     });
+    hidden.map(|hidden| zmx_visibility_sequence(hidden, rows, cols))
+}
+
+fn zmx_visibility_sequence(hidden: bool, rows: u16, cols: u16) -> Vec<u8> {
+    let key = if hidden { "ZMX_HIDDEN" } else { "ZMX_VISIBLE" };
+    format!("\x1b]1337;{key}={rows},{cols}\x07").into_bytes()
 }
 
 fn json_dimension(value: &Value, key: &str) -> Option<u16> {

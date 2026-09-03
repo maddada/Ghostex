@@ -5,8 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { BEADS_PACKAGE_ID, stageBeadsRelease } from '../tooling/beads-release.mjs';
-import { smokeTestPackagedBeads } from '../tooling/smoke-test-packaged-beads.mjs';
 import { execFile, spawn } from 'node:child_process';
 
 const execFileAsync = promisify(execFile);
@@ -18,8 +16,7 @@ const repoRoot = path.resolve(gxserverRoot, '..');
  * CDXC:RemoteMinimalDeps 2026-07-13:
  * Remote hosts must not need a specific glibc/libstdc++ floor, so the Rust
  * binaries (gxserver, ghostex) build against musl and link
- * statically, matching the already-static zmx (Zig musl). bd is the
- * checksum-verified schema-compatible Beads binary with embedded Dolt support.
+ * statically, matching the already-static zmx (Zig musl).
  */
 const archConfigs = {
   x64: {
@@ -118,12 +115,17 @@ async function buildLinuxPackageForArch({ arch, options }) {
     const config = {
       ...archConfig,
       arch,
-      beadsVersion: BEADS_PACKAGE_ID,
       packageVersion: options.packageVersion || (await gxserverPackageVersion()),
       rustTarget: options.rustTarget || archConfig.rustTarget,
       sourceDirty: await gitSourceDirty(repoRoot),
       sourceRevision: await gitOutput(repoRoot, ['rev-parse', 'HEAD'], 'unknown'),
       zmxRoot: path.resolve(repoRoot, options.zmxRoot || '.dependencies/zmx'),
+      zmxSourceDirty: await gitSourceDirty(path.resolve(repoRoot, options.zmxRoot || '.dependencies/zmx')),
+      zmxSourceRevision: await gitOutput(
+        path.resolve(repoRoot, options.zmxRoot || '.dependencies/zmx'),
+        ['rev-parse', 'HEAD'],
+        'unknown'
+      ),
       zmxZigBin,
       zigTarget: options.zigTarget || archConfig.zigTarget,
     };
@@ -131,9 +133,7 @@ async function buildLinuxPackageForArch({ arch, options }) {
     /*
      * CDXC:RemoteMachines 2026-06-23-10:07:
      * Ubuntu install must be a first-run package, not an on-host source build.
-     * Build server and zmx and stage the pinned
-     * schema-compatible bd release artifact into one package
-     * directory so the macOS app
+     * Build server and zmx into one package directory so the macOS app
      * can upload it over SSH and start the same Rust control plane without PATH
      * fallbacks.
      *
@@ -147,6 +147,12 @@ async function buildLinuxPackageForArch({ arch, options }) {
      * The vendored ghostex-tui terminal app was removed from the repository, so
      * the remote package no longer builds or stages `bin/ghostex-tui`. A herdr
      * plugin replaces it (spec in docs/2026-08-23/tui2-herdr-plugin/).
+     *
+     * CDXC:ZmxGridVisibility 2026-09-03:
+     * zmx is a submodule, so a zmx-only change (wire tags, grid policy) leaves
+     * the superproject HEAD untouched until the gitlink bump lands. Record the
+     * submodule's own revision and dirty state too so the Linux freshness check
+     * cannot accept a package built from stale zmx sources.
      */
     await buildPackage({ config, outputDir, workRoot });
     console.log(`Remote gxserver Linux ${arch} package written to ${outputDir}`);
@@ -218,24 +224,10 @@ async function buildPackage({ config, outputDir, workRoot }) {
     workRoot,
     zigBin: config.zmxZigBin,
   });
-  const bdBin = path.join(workRoot, 'bd');
-  const prebuiltBeadsBinary = process.env.GHOSTEX_BEADS_PREBUILT_BINARY?.trim();
-  if (prebuiltBeadsBinary) {
-    await access(prebuiltBeadsBinary);
-    await cp(prebuiltBeadsBinary, bdBin);
-    await chmod(bdBin, 0o755);
-  } else {
-    await stageBeadsRelease({
-      arch: config.arch,
-      outputPath: bdBin,
-      platform: 'linux',
-    });
-  }
 
   await copyExecutable(gxserverBin, path.join(binsDir, 'gxserver'), 'gxserver');
   await copyExecutable(ghostexBin, path.join(binsDir, 'ghostex'), 'ghostex');
   await copyExecutable(zmxBin, path.join(binsDir, 'zmx'), 'zmx');
-  await copyExecutable(bdBin, path.join(binsDir, 'bd'), 'bd');
 
   /*
    * CDXC:RemoteMinimalDeps 2026-07-13:
@@ -304,11 +296,11 @@ async function buildZigTool({ binName, root, target, workRoot, zigBin }) {
 }
 
 async function validateLinuxPackage(packageDir, config) {
-  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/bd'];
+  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx'];
   for (const relativePath of requiredFiles) {
     await assertFile(path.join(packageDir, relativePath), relativePath);
   }
-  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/bd']) {
+  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx']) {
     const fullPath = path.join(packageDir, relativePath);
     if (!(await isElf(fullPath))) {
       throw new Error(`Linux remote package expected an ELF binary at ${relativePath}.`);
@@ -331,16 +323,6 @@ async function validateLinuxPackage(packageDir, config) {
   if (!zmxBytes.includes(Buffer.from('--require-existing'))) {
     throw new Error('Linux remote package zmx does not support the required --require-existing attach contract.');
   }
-
-  const hostCanRunBd = process.platform === 'linux' && normalizeArch(process.arch) === config.arch;
-  if (hostCanRunBd) {
-    await smokeTestPackagedBeads(path.join(packageDir, 'bin', 'bd'));
-  } else if (process.env.GHOSTEX_REQUIRE_BEADS_SMOKE === '1') {
-    throw new Error(
-      `GHOSTEX_REQUIRE_BEADS_SMOKE=1 requires a native ${config.arch} Linux runner; ` +
-        `current host is ${process.platform}/${process.arch}.`
-    );
-  }
 }
 
 async function writeBuildIdentity(packageDir, version, config = {}) {
@@ -353,10 +335,11 @@ async function writeBuildIdentity(packageDir, version, config = {}) {
       {
         buildIdentity: `gxserver:${version}:${fingerprint}`,
         fingerprint,
-        beadsVersion: config.beadsVersion || BEADS_PACKAGE_ID,
         packageVersion: version,
         sourceDirty: Boolean(config.sourceDirty),
         sourceRevision: config.sourceRevision || 'unknown',
+        zmxSourceDirty: Boolean(config.zmxSourceDirty),
+        zmxSourceRevision: config.zmxSourceRevision || 'unknown',
       },
       null,
       2

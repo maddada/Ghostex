@@ -17,6 +17,12 @@ import './session-terminal.css';
 
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 30;
+/*
+A hidden client rests at zmx's wide grid so it never clamps the columns of
+whichever client is actually displaying the session; the local xterm is
+resized to match so its grid equals the one announced to zmx.
+*/
+const HIDDEN_COLS = 200;
 const TERMINAL_FONT_FAMILY =
   '"JetBrainsMono Nerd Font", "JetBrains Mono", "SFMono-Regular", "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
 const SEARCH_DECORATIONS: NonNullable<ISearchOptions['decorations']> = {
@@ -40,6 +46,12 @@ export interface SessionTerminalProps extends Omit<HTMLAttributes<HTMLDivElement
   autoFocus?: boolean;
   baseUrl: string;
   customKeyEventHandler?(event: KeyboardEvent): boolean;
+  /**
+   * True while the terminal stays mounted but is not displayed (parked behind
+   * another tab, or under the chat view). The socket stays open; the client
+   * announces itself hidden to zmx and stops fitting to its container.
+   */
+  hidden?: boolean;
   onError?(error: TerminalWsClientError): void;
   onExit?(message: GxserverTerminalWsExitMessage): void;
   onReady?(message: GxserverTerminalWsReadyMessage): void;
@@ -122,6 +134,7 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
     baseUrl,
     className,
     customKeyEventHandler,
+    hidden = false,
     onError,
     onExit,
     onReady,
@@ -134,6 +147,9 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
   const containerRef = useRef<HTMLDivElement>(null);
   const searchAddonRef = useRef<SearchAddon>(null);
   const terminalRef = useRef<Terminal>(null);
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
+  const applyVisibilityRef = useRef<(hidden: boolean) => void>(null);
   const callbacksRef = useRef({
     autoFocus,
     customKeyEventHandler,
@@ -218,12 +234,22 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
     terminalRef.current = terminal;
     searchAddonRef.current = searchAddon;
 
-    const fit = () => {
+    const measure = () => {
       if (container.clientWidth > 0 && container.clientHeight > 0) {
         fitAddon.fit();
       }
     };
-    fit();
+    // Container-driven fits only apply while displayed; a hidden terminal
+    // holds the wide grid it announced to zmx until it is shown again.
+    const fit = () => {
+      if (!hiddenRef.current) {
+        measure();
+      }
+    };
+    measure();
+    if (hiddenRef.current) {
+      terminal.resize(HIDDEN_COLS, terminal.rows);
+    }
 
     const client = new TerminalWsClient({
       authToken,
@@ -245,12 +271,25 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
     });
     const dataSubscription = terminal.onData((data) => client.sendInput(data));
     const resizeSubscription = terminal.onResize(({ cols, rows }) => client.resize(cols, rows));
+    const applyVisibility = (nextHidden: boolean) => {
+      if (nextHidden) {
+        terminal.resize(HIDDEN_COLS, terminal.rows);
+      } else {
+        measure();
+      }
+      client.setVisibility(nextHidden, { cols: terminal.cols, rows: terminal.rows });
+    };
+    applyVisibilityRef.current = applyVisibility;
+    if (hiddenRef.current) {
+      client.setVisibility(true, { cols: terminal.cols, rows: terminal.rows });
+    }
     const resizeObserver = new ResizeObserver(fit);
     resizeObserver.observe(container);
     const initialFitFrame = window.requestAnimationFrame(fit);
 
     return () => {
       window.cancelAnimationFrame(initialFitFrame);
+      applyVisibilityRef.current = null;
       resizeObserver.disconnect();
       dataSubscription.dispose();
       resizeSubscription.dispose();
@@ -261,6 +300,15 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
       terminal.dispose();
     };
   }, [authToken, baseUrl, projectId, sessionId]);
+
+  const mountedHiddenRef = useRef(hidden);
+  useEffect(() => {
+    if (mountedHiddenRef.current === hidden) {
+      return;
+    }
+    mountedHiddenRef.current = hidden;
+    applyVisibilityRef.current?.(hidden);
+  }, [hidden]);
 
   return (
     <div

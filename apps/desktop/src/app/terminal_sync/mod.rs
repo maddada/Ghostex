@@ -11,6 +11,8 @@ pub(crate) mod cef_and_command_terminal_focus;
 pub(crate) mod companion_terminal_surface_sync;
 pub(crate) mod gpui_engine_terminal_attachment;
 pub(crate) mod gpui_engine_terminal_sync;
+pub(crate) mod gpui_engine_terminal_visibility;
+pub(crate) use gpui_engine_terminal_visibility::*;
 pub(crate) mod prompt_editor;
 pub(crate) mod terminal_search;
 pub(crate) mod terminal_surface_host_sync;

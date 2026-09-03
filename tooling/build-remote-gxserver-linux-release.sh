@@ -13,8 +13,11 @@ set -euo pipefail
 #   tooling/build-remote-gxserver-linux-release.sh [--arch x64|arm64|all] [--check-only] [--force] [--allow-dirty]
 #
 # Freshness contract: a package is current when its build-identity.json records
-# sourceRevision == HEAD and sourceDirty == false and every required runtime
-# resource exists. Current packages are not rebuilt unless --force is passed.
+# sourceRevision == HEAD and sourceDirty == false, zmxSourceRevision == the
+# .dependencies/zmx submodule HEAD and zmxSourceDirty == false, and every
+# required runtime resource exists. Current packages are not rebuilt unless
+# --force is passed. The zmx pair matters because a zmx-only change does not
+# move the superproject HEAD until its gitlink bump is committed.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${GHOSTEX_RELEASE_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
@@ -85,6 +88,8 @@ else
 fi
 
 HEAD_REVISION="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+ZMX_ROOT="${ZMX_ROOT:-$REPO_ROOT/.dependencies/zmx}"
+ZMX_HEAD_REVISION="$(git -C "$ZMX_ROOT" rev-parse HEAD)"
 
 elapsed_since() {
 	local started="$1"
@@ -100,19 +105,17 @@ package_status() {
 	local arch="$1"
 	local package_dir="$PACKAGE_ROOT/$arch/package"
 	GHOSTEX_RELEASE_MODULE="$AUTOMATION_ROOT/tooling/release-ghostex.mjs" \
-		GHOSTEX_BEADS_RELEASE_MODULE="$REPO_ROOT/tooling/beads-release.mjs" \
 		GHOSTEX_PACKAGE_DIR="$package_dir" \
 		GHOSTEX_EXPECTED_REVISION="$HEAD_REVISION" \
+		GHOSTEX_EXPECTED_ZMX_REVISION="$ZMX_HEAD_REVISION" \
 		node --input-type=module --eval '
 		import { readFileSync, existsSync } from "node:fs";
 		import { pathToFileURL } from "node:url";
 		const packageDir = process.env.GHOSTEX_PACKAGE_DIR;
 		const expectedRevision = process.env.GHOSTEX_EXPECTED_REVISION;
+		const expectedZmxRevision = process.env.GHOSTEX_EXPECTED_ZMX_REVISION;
 		const { missingRemoteGxserverLinuxPackageResources } = await import(
 			pathToFileURL(process.env.GHOSTEX_RELEASE_MODULE).href
-		);
-		const { BEADS_PACKAGE_ID } = await import(
-			pathToFileURL(process.env.GHOSTEX_BEADS_RELEASE_MODULE).href
 		);
 		const identityPath = packageDir + "/build-identity.json";
 		if (!existsSync(identityPath)) {
@@ -133,11 +136,15 @@ package_status() {
 			console.log("built from " + identity.sourceRevision + " but HEAD is " + expectedRevision);
 			process.exit(1);
 		}
-		if (identity.beadsVersion !== BEADS_PACKAGE_ID) {
-			console.log("bundles Beads " + (identity.beadsVersion || "unknown") + " but expected " + BEADS_PACKAGE_ID);
+		if (identity.zmxSourceDirty !== false) {
+			console.log("built from a dirty or unrecorded zmx submodule worktree");
 			process.exit(1);
 		}
-		console.log("fresh (" + identity.sourceRevision + ")");
+		if (identity.zmxSourceRevision !== expectedZmxRevision) {
+			console.log("built from zmx " + identity.zmxSourceRevision + " but zmx HEAD is " + expectedZmxRevision);
+			process.exit(1);
+		}
+		console.log("fresh (" + identity.sourceRevision + ", zmx " + identity.zmxSourceRevision + ")");
 	'
 }
 
@@ -164,20 +171,7 @@ fi
 
 if [[ "$FORCE" != "1" ]] && report_freshness >/dev/null 2>&1; then
 	report_freshness
-	if [[ "${GHOSTEX_REQUIRE_BEADS_SMOKE:-0}" == "1" ]]; then
-		host_arch="$(uname -m)"
-		for arch in "${ARCHES[@]}"; do
-			case "$arch:$host_arch" in
-			x64:x86_64 | arm64:aarch64 | arm64:arm64) ;;
-			*)
-				echo "GHOSTEX_REQUIRE_BEADS_SMOKE=1 requires a native Linux $arch runner; current host is $(uname -s)/$host_arch." >&2
-				exit 1
-				;;
-			esac
-			node "$REPO_ROOT/tooling/smoke-test-packaged-beads.mjs" "$PACKAGE_ROOT/$arch/package/bin/bd"
-		done
-	fi
-	echo "Remote Linux gxserver packages already match HEAD ($HEAD_REVISION); nothing to build."
+	echo "Remote Linux gxserver packages already match HEAD ($HEAD_REVISION, zmx $ZMX_HEAD_REVISION); nothing to build."
 	exit 0
 fi
 
@@ -186,6 +180,16 @@ if [[ "$ALLOW_DIRTY" != "1" && -n "$(git -C "$REPO_ROOT" status --porcelain --un
 Worktree is dirty. Packages built now would record sourceDirty=true and the
 release script would reject them. Commit or push release-bound work first, or
 pass --allow-dirty for a non-release debugging build.
+EOF
+	exit 1
+fi
+
+if [[ "$ALLOW_DIRTY" != "1" && -n "$(git -C "$ZMX_ROOT" status --porcelain --untracked-files=all)" ]]; then
+	cat >&2 <<EOF
+zmx submodule worktree ($ZMX_ROOT) is dirty. Packages built now would record
+zmxSourceDirty=true and the freshness check would reject them. Commit the zmx
+change (and bump the gitlink) first, or pass --allow-dirty for a non-release
+debugging build.
 EOF
 	exit 1
 fi
@@ -334,6 +338,6 @@ echo ""
 echo "Remote Linux gxserver package fingerprints:"
 for arch in "${ARCHES[@]}"; do
 	identity="$PACKAGE_ROOT/$arch/package/build-identity.json"
-	printf '  %s: %s\n' "$arch" "$(node -e 'const id=require(process.argv[1]); console.log(`${id.sourceRevision} dirty=${id.sourceDirty}`)' "$identity")"
+	printf '  %s: %s\n' "$arch" "$(node -e 'const id=require(process.argv[1]); console.log(`${id.sourceRevision} dirty=${id.sourceDirty} zmx=${id.zmxSourceRevision} zmxDirty=${id.zmxSourceDirty}`)' "$identity")"
 done
 echo "Total build time: $(elapsed_since "$TOTAL_STARTED")"

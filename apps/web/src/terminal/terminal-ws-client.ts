@@ -124,6 +124,13 @@ export class TerminalWsClient {
   private resizeTimer: ReturnType<typeof setTimeout> | null = null;
   private socket: WebSocket | null = null;
   private terminalOutcomeReceived = false;
+  /*
+  The last announced visibility, re-sent after every (re)connect because a
+  fresh `zmx attach` starts out as a displaying client; `visibilityPending`
+  is set whenever the server has not yet heard the current value.
+  */
+  private visibility: { hidden: boolean; size: TerminalSize } | null = null;
+  private visibilityPending = false;
   private wantsConnection = true;
 
   constructor(private readonly options: TerminalWsClientOptions) {
@@ -163,6 +170,29 @@ export class TerminalWsClient {
     }, RESIZE_COALESCE_MS);
   }
 
+  /**
+   * Tell gxserver whether this client is displaying the session. The server
+   * resizes the pty to `size` and hands zmx the matching ZMX_HIDDEN /
+   * ZMX_VISIBLE sequence, so `size` is the grid the local xterm now has: the
+   * real fitted size when visible, 200 columns wide when hidden. It supersedes
+   * any coalesced resize still waiting to be flushed.
+   */
+  setVisibility(hidden: boolean, size: TerminalSize): void {
+    const nextSize = {
+      cols: requireTerminalDimension(size.cols, 'cols'),
+      rows: requireTerminalDimension(size.rows, 'rows'),
+    };
+    this.visibility = { hidden, size: nextSize };
+    this.visibilityPending = true;
+    this.currentSize = nextSize;
+    this.pendingSize = null;
+    if (this.resizeTimer) {
+      clearTimeout(this.resizeTimer);
+      this.resizeTimer = null;
+    }
+    this.flushVisibility();
+  }
+
   close(): void {
     this.wantsConnection = false;
     this.ready = false;
@@ -198,6 +228,7 @@ export class TerminalWsClient {
     this.ready = false;
     this.terminalOutcomeReceived = false;
     this.lastSentSize = { ...this.currentSize };
+    this.visibilityPending = this.visibility !== null;
 
     socket.onmessage = (event) => {
       if (this.socket !== socket) {
@@ -243,6 +274,7 @@ export class TerminalWsClient {
       this.ready = true;
       this.reconnectAttempt = 0;
       this.options.onReady?.(message);
+      this.flushVisibility();
       this.flushResize();
       return;
     }
@@ -265,6 +297,17 @@ export class TerminalWsClient {
     if (socket.readyState < WebSocket.CLOSING) {
       socket.close(1002, 'invalid terminal protocol');
     }
+  }
+
+  private flushVisibility(): void {
+    const visibility = this.visibility;
+    const socket = this.socket;
+    if (!this.visibilityPending || !visibility || !socket || socket.readyState !== WebSocket.OPEN || !this.ready) {
+      return;
+    }
+    socket.send(JSON.stringify({ ...visibility.size, hidden: visibility.hidden, type: 'visibility' }));
+    this.lastSentSize = visibility.size;
+    this.visibilityPending = false;
   }
 
   private flushResize(): void {

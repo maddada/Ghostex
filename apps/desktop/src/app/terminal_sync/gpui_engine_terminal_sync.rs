@@ -162,6 +162,7 @@ impl GhostexGpuiApp {
 
         self.sync_gpui_engine_first_prompt_input_suppression(cx);
         self.sync_gpui_engine_search_totals(cx);
+        self.sync_agents_gpui_engine_terminal_zmx_visibility(cx);
     }
 
     /*

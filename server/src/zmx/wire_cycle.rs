@@ -7,7 +7,6 @@ use std::{
 };
 
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 
 use crate::{
     domain::{DomainRepository, DomainStateError},
@@ -28,30 +27,33 @@ cannot talk at all: `zmx attach` renders a blank pane and every new-tag request
 is ignored. Replacing the binary in place (the rsync install, `gxserver setup`
 on a remote) makes this the normal upgrade path, not an edge case.
 
-The only deterministic signal for "which code is this daemon running" is the
-identity of the binary that spawned it, so every provider start stamps the
-zmx executable's identity into the session's persisted providerState, and
-startup cycles every live daemon whose stamp is not the current binary's. A
-live daemon with NO stamp predates this feature and is by definition
-pre-wire-break, so it is cycled too — that one-time migration is the reason
-this ships.
+Cycling a daemon kills the agent running inside it: the PTY hangs up, the
+agent CLI dies mid-turn, and only its conversation comes back through the
+saved resume command — background subagents and jobs do not.
 
-The stamp must identify the CODE, not the signing event. The macOS build
-Developer-ID re-signs the bundled zmx on every `bun run start`, and a CMS
-signature embeds the signing time plus a secure timestamp, so a whole-file
-hash differs on every rebuild even when zmx itself is byte-identical — which
-made this pass kill every live session on every dev restart. On macOS the
-stamp is therefore the Mach-O CodeDirectory hash (cdhash), which covers the
-code pages, identifier, entitlements, and team but not the CMS blob, so
-re-signing unchanged code yields the same stamp. Unsigned and non-Mach-O
-binaries (the Linux remote package) fall back to the whole-file sha256, which
-is stable there because nothing rewrites them after the build.
+CDXC:ZmxWireGeneration 2026-09-03:
+The first version of this pass stamped the IDENTITY of the spawning binary
+(cdhash on macOS, sha256 elsewhere) and cycled on any difference. That
+conflates "the code changed" with "the wire broke": on 2026-09-03 three zmx
+rebuilds that only ADDED tags (Visibility=26, GridInfo=27, which old daemons
+drop through their `_` arm) cycled 57 sessions in one day, several with agents
+mid-task. The stamp is now the explicit wire-generation number zmx declares
+(`WIRE_GENERATION` in `.dependencies/zmx/src/ipc.zig`, printed by
+`zmx version` as `wire_generation\t<n>`). A daemon is cycled only when the
+generation it was spawned with differs from the bundled binary's, so an
+additive or internal zmx change installs without touching live sessions, and
+the rules for when to bump the number live next to the constant.
 
-Detection never probes: a busy daemon that misses an IPC timeout must not be
-mistaken for an incompatible one. Comparing stamps also handles the reverse
-skew (an older gxserver meeting daemons a newer one spawned) without either
-side knowing which is newer, which is why this stores binary IDENTITY rather
-than a version number.
+Migration: a session stamped by the binary-identity scheme (`zmxBinaryStamp`)
+was spawned by a binary from 2026-08-23 or later, and every such binary speaks
+generation 1, so it counts as generation 1 rather than being cycled again. A
+live daemon with NO stamp at all predates the renumbering and is cycled once,
+as before.
+
+Detection never probes the daemon: a busy daemon that misses an IPC timeout
+must not be mistaken for an incompatible one. Comparing recorded and current
+generations also handles the reverse skew (an older gxserver meeting daemons a
+newer one spawned) without either side knowing which is newer.
 
 Cycling leaves the session exactly as an auto-sleep would, so the existing
 restore machinery — the wake-on-open pass, `/api/wakeSession` spawning the
@@ -59,90 +61,119 @@ provider server-side, the saved agent resume commands in the launch script —
 brings it back with its conversation intact. Nothing is eagerly respawned here.
 */
 
-/// `providerState` key holding the identity of the zmx binary that spawned the
-/// live daemon behind this session.
-pub(crate) const ZMX_BINARY_STAMP_KEY: &str = "zmxBinaryStamp";
+/// `providerState` key holding the wire generation of the zmx binary that
+/// spawned the live daemon behind this session.
+pub(crate) const ZMX_WIRE_GENERATION_KEY: &str = "zmxWireGeneration";
+
+/// `providerState` key of the retired binary-identity stamp. Still read so a
+/// daemon stamped by the old scheme is recognised as generation 1, and removed
+/// whenever a session's provider state is rewritten.
+pub(crate) const LEGACY_ZMX_BINARY_STAMP_KEY: &str = "zmxBinaryStamp";
+
+/// The generation every binary carrying a legacy identity stamp speaks. See
+/// `WIRE_GENERATION` in `.dependencies/zmx/src/ipc.zig`.
+const LEGACY_STAMP_WIRE_GENERATION: u32 = 1;
+
+/// Line key `zmx version` prints the generation under.
+const ZMX_VERSION_WIRE_GENERATION_KEY: &str = "wire_generation";
+
+/// `zmx version` is a local, non-blocking print; anything slower is a wedged
+/// shell, not a slow binary.
+const ZMX_VERSION_TIMEOUT_MS: u64 = 5_000;
 
 /// How long a directly signalled daemon gets to exit before it is escalated,
 /// and again before the cycle is reported as failed.
 #[cfg(unix)]
 const ZMX_DAEMON_TERMINATION_GRACE: Duration = Duration::from_millis(2_000);
 
-struct ZmxBinaryStamp {
+struct ZmxWireGenerationCacheEntry {
     executable_path: String,
     length: u64,
     modified: Option<SystemTime>,
-    stamp: String,
+    wire_generation: u32,
 }
 
-static ZMX_BINARY_STAMP_CACHE: Mutex<Option<ZmxBinaryStamp>> = Mutex::new(None);
+static ZMX_WIRE_GENERATION_CACHE: Mutex<Option<ZmxWireGenerationCacheEntry>> = Mutex::new(None);
 
-/// Identity of the zmx binary at `zmx_executable_path`, stable across gxserver
-/// restarts. `None` only when the file cannot be read at all, in which case no
-/// caller may conclude anything about a daemon's provenance.
-pub(crate) fn current_zmx_binary_stamp(zmx_executable_path: &str) -> Option<String> {
+/// Wire generation declared by the zmx binary at `zmx_executable_path`, cached
+/// until the file changes. `None` when the binary cannot be run or predates
+/// the `wire_generation` line, in which case no caller may conclude anything
+/// about a daemon's compatibility.
+pub(crate) fn current_zmx_wire_generation(zmx_executable_path: &str) -> Option<u32> {
     let metadata = fs::metadata(zmx_executable_path).ok()?;
     let length = metadata.len();
     let modified = metadata.modified().ok();
-    let mut cache = ZMX_BINARY_STAMP_CACHE.lock().ok()?;
+    let mut cache = ZMX_WIRE_GENERATION_CACHE.lock().ok()?;
     if let Some(cached) = cache.as_ref() {
         if cached.executable_path == zmx_executable_path
             && cached.length == length
             && cached.modified == modified
         {
-            return Some(cached.stamp.clone());
+            return Some(cached.wire_generation);
         }
     }
-    let stamp = compute_zmx_binary_stamp(zmx_executable_path)?;
-    *cache = Some(ZmxBinaryStamp {
+    let wire_generation = read_zmx_wire_generation(zmx_executable_path)?;
+    *cache = Some(ZmxWireGenerationCacheEntry {
         executable_path: zmx_executable_path.to_string(),
         length,
         modified,
-        stamp: stamp.clone(),
+        wire_generation,
     });
-    Some(stamp)
+    Some(wire_generation)
 }
 
-/// Signature-invariant identity of the binary: the cdhash where the file
-/// carries a code signature, the whole-file sha256 otherwise.
-fn compute_zmx_binary_stamp(zmx_executable_path: &str) -> Option<String> {
-    if let Some(code_directory_hash) = macos_code_directory_hash(zmx_executable_path) {
-        return Some(format!("cdhash:{code_directory_hash}"));
-    }
-    let mut file = fs::File::open(zmx_executable_path).ok()?;
-    let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher).ok()?;
-    Some(format!("sha256:{:x}", hasher.finalize()))
-}
-
-/// CodeDirectory hash of a signed Mach-O, from `codesign --display`. `None`
-/// for unsigned or non-Mach-O files, and everywhere but macOS.
-#[cfg(target_os = "macos")]
-fn macos_code_directory_hash(zmx_executable_path: &str) -> Option<String> {
-    let output = Command::new("/usr/bin/codesign")
-        .args(["--display", "--verbose=3", zmx_executable_path])
-        .stdin(Stdio::null())
-        .output()
-        .ok()?;
-    if !output.status.success() {
+/// Runs `zmx version` through the same profile-free shell spawn as the probe
+/// reads, so a Windows host reaches its WSL-side binary the same way.
+fn read_zmx_wire_generation(zmx_executable_path: &str) -> Option<u32> {
+    let script = format!(
+        "unset ZMX_SESSION ZMX_SESSION_PREFIX\nexec {} version",
+        shell_quote(zmx_executable_path)
+    );
+    let result = run_zmx_probe_script(
+        script,
+        ZmxCommandOptions {
+            timeout_ms: Some(ZMX_VERSION_TIMEOUT_MS),
+            ..ZmxCommandOptions::default()
+        },
+    )
+    .ok()?;
+    if result.exit_code != 0 {
         return None;
     }
-    // codesign prints the display details on stderr.
-    let details = String::from_utf8_lossy(&output.stderr);
-    details.lines().find_map(|line| {
-        let value = line.trim().strip_prefix("CDHash=")?.trim();
-        (!value.is_empty() && value.chars().all(|character| character.is_ascii_hexdigit()))
-            .then(|| value.to_ascii_lowercase())
+    parse_zmx_wire_generation(&result.stdout)
+}
+
+/// Extracts `wire_generation\t<n>` from `zmx version` output. Missing line or
+/// non-numeric value means the binary predates the generation scheme.
+pub(crate) fn parse_zmx_wire_generation(version_output: &str) -> Option<u32> {
+    version_output.lines().find_map(|line| {
+        let (key, value) = line.split_once('\t')?;
+        if key.trim() != ZMX_VERSION_WIRE_GENERATION_KEY {
+            return None;
+        }
+        value.trim().parse::<u32>().ok()
     })
 }
 
-#[cfg(not(target_os = "macos"))]
-fn macos_code_directory_hash(_zmx_executable_path: &str) -> Option<String> {
-    None
+/// Generation recorded on a session, or `None` for a daemon started before any
+/// stamp existed. A legacy binary-identity stamp resolves to generation 1.
+fn recorded_zmx_wire_generation(session: &Value) -> Option<u32> {
+    let provider_state = session.get("providerState").and_then(Value::as_object)?;
+    if let Some(generation) = provider_state
+        .get(ZMX_WIRE_GENERATION_KEY)
+        .and_then(Value::as_u64)
+    {
+        return u32::try_from(generation).ok();
+    }
+    provider_state
+        .get(LEGACY_ZMX_BINARY_STAMP_KEY)
+        .and_then(Value::as_str)
+        .filter(|stamp| !stamp.is_empty())
+        .map(|_| LEGACY_STAMP_WIRE_GENERATION)
 }
 
 /// Provider state for a session whose daemon this gxserver just started, with
-/// the spawning binary's identity recorded. Every provider start must go
+/// the spawning binary's wire generation recorded. Every provider start must go
 /// through here: an unstamped live daemon is cycled on the next startup.
 pub(crate) fn started_provider_state_patch(
     session: &Value,
@@ -150,20 +181,24 @@ pub(crate) fn started_provider_state_patch(
     zmx_executable_path: &str,
 ) -> Result<Map<String, Value>, DomainStateError> {
     let mut provider_state = provider_state_patch(session, probe)?;
-    match current_zmx_binary_stamp(zmx_executable_path) {
-        Some(stamp) => {
-            provider_state.insert(ZMX_BINARY_STAMP_KEY.to_string(), Value::String(stamp));
+    provider_state.remove(LEGACY_ZMX_BINARY_STAMP_KEY);
+    match current_zmx_wire_generation(zmx_executable_path) {
+        Some(wire_generation) => {
+            provider_state.insert(
+                ZMX_WIRE_GENERATION_KEY.to_string(),
+                Value::from(wire_generation),
+            );
         }
         None => {
-            provider_state.remove(ZMX_BINARY_STAMP_KEY);
+            provider_state.remove(ZMX_WIRE_GENERATION_KEY);
         }
     }
     Ok(provider_state)
 }
 
-/// Terminates every live daemon this gxserver owns that a different zmx binary
-/// spawned, and leaves its session sleeping so the ordinary wake path restores
-/// it. Runs before the listener starts serving so no client can attach to a
+/// Terminates every live daemon this gxserver owns that a zmx of a different
+/// wire generation spawned, and leaves its session sleeping so the ordinary
+/// wake path restores it. Runs before the listener starts serving so no client can attach to a
 /// daemon that is about to be cycled.
 pub(crate) fn cycle_wire_incompatible_zmx_session_daemons(
     repository: &DomainRepository<'_>,
@@ -173,18 +208,18 @@ pub(crate) fn cycle_wire_incompatible_zmx_session_daemons(
     let Ok(zmx) = require_zmx() else {
         return;
     };
-    let Some(current_stamp) = current_zmx_binary_stamp(&zmx.executable_path) else {
+    let Some(current_generation) = current_zmx_wire_generation(&zmx.executable_path) else {
         let _ = logger.log(GxserverLogInput {
             level: LogLevel::Warn,
-            event: "zmxBinaryStampUnreadable".to_string(),
+            event: "zmxWireGenerationUnreadable".to_string(),
             server_id: Some(server_id.to_string()),
             request_id: None,
             client: None,
             duration_ms: None,
             error: Some(
-                "The bundled zmx binary could not be read, so daemons spawned by an older zmx cannot be identified and none were cycled.".to_string(),
+                "The bundled zmx binary did not report a wire generation, so daemons spawned by an incompatible zmx cannot be identified and none were cycled.".to_string(),
             ),
-            details: None,
+            details: Some(json!({ "zmxExecutablePath": zmx.executable_path })),
         });
         return;
     };
@@ -207,13 +242,8 @@ pub(crate) fn cycle_wire_incompatible_zmx_session_daemons(
         if zmx_session_daemon_socket_present(&zmx_name) != Some(true) {
             continue;
         }
-        let recorded_stamp = session
-            .get("providerState")
-            .and_then(Value::as_object)
-            .and_then(|provider_state| provider_state.get(ZMX_BINARY_STAMP_KEY))
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        if recorded_stamp.as_deref() == Some(current_stamp.as_str()) {
+        let recorded_generation = recorded_zmx_wire_generation(&session);
+        if recorded_generation == Some(current_generation) {
             continue;
         }
         // A closed session keeps its terminal state; only a session that can be
@@ -235,13 +265,11 @@ pub(crate) fn cycle_wire_incompatible_zmx_session_daemons(
             target_lifecycle,
         );
         let details = json!({
-            "currentZmxBinaryStamp": current_stamp,
+            "currentZmxWireGeneration": current_generation,
             "lifecycleState": target_lifecycle,
             "projectId": project_id,
             "providerSessionId": zmx_name,
-            "recordedZmxBinaryStamp": recorded_stamp
-                .clone()
-                .unwrap_or_else(|| "none".to_string()),
+            "recordedZmxWireGeneration": recorded_generation,
             "sessionId": session_id,
             "termination": outcome.as_deref().unwrap_or("failed"),
         });
@@ -258,13 +286,13 @@ pub(crate) fn cycle_wire_incompatible_zmx_session_daemons(
             duration_ms: None,
             error: match &outcome {
                 Ok(_) => Some(format!(
-                    "This session's terminal was started by a different zmx binary than the one Ghostex now bundles, so the two cannot talk. It was put to sleep and will be restored the next time it is opened. ({})",
-                    recorded_stamp
-                        .map(|stamp| format!("started by {stamp}"))
+                    "This session's terminal was started by a zmx that speaks a different wire generation than the one Ghostex now bundles (generation {current_generation}), so the two cannot talk. It was put to sleep and will be restored the next time it is opened. ({})",
+                    recorded_generation
+                        .map(|generation| format!("started with generation {generation}"))
                         .unwrap_or_else(|| "started before Ghostex recorded which zmx built a session".to_string()),
                 )),
                 Err(error) => Some(format!(
-                    "This session's terminal was started by a different zmx binary than the one Ghostex now bundles and could not be stopped, so it may render blank until it is closed: {error}"
+                    "This session's terminal was started by a zmx that speaks a different wire generation than the one Ghostex now bundles (generation {current_generation}) and could not be stopped, so it may render blank until it is closed: {error}"
                 )),
             },
             details: Some(details),

@@ -186,7 +186,7 @@ Search these app-owned areas first by task:
 - Session grid, prompts, agent metadata, workspace/project state, contracts, shared tests: `packages/shared/`, then the consuming surface in `packages/core-ui/`, `apps/desktop/sidebar/`, `apps/desktop/views/`, `apps/mobile/views/`, or `server/src/`.
 - Server, remote protocol, hooks, authentication, remote setup: `server/src/`, `packages/shared/`, `tooling/`. The server crate is heavily modularized: `server/src/server/` (HTTP/WS core in `mod.rs` plus per-concern submodules), `server/src/agents/`, the flat `server/src/session_chat_*.rs` family, `server/src/domain/`, `server/src/zmx/`, `server/src/typed_operations/`, `server/src/portless/`, and `server/src/agent_hooks/`. Crate name is `gxserver`; it builds the `gxserver` and `ghostex` binaries.
 - Extensions: start with `server/src/extensions/` for registry, install, serving, lifecycle, API, and CLI behavior; `apps/desktop/src/app/extensions/` for desktop hosting, bridge context, and launch routing; `packages/core-ui/extensions-modal/` for Store and Installed UI; and `packages/shared/ghostex-extensions.ts` for the shared contract. Search `/Users/madda/dev/_active/Ghostex-extensions` only for extension manifests, authoring/publishing tooling, or example-extension code.
-- zmx behavior: `.dependencies/zmx/src/` + `.dependencies/zmx/test/`. This is the deliberate exception to the `.dependencies/**` exclusion — Ghostex edits it.
+- zmx behavior: `.dependencies/zmx/src/` + `.dependencies/zmx/test/`. This is the deliberate exception to the `.dependencies/**` exclusion — Ghostex edits it. The canonical contract for the Ghostex private OSCs (`ZMX_REFRESH`, `ZMX_VISIBLE=<rows>,<cols>`, `ZMX_HIDDEN=<rows>,<cols>`) is `appendClientInputMessages` in `.dependencies/zmx/src/loop.zig`; the four emitters — `apps/desktop/src/terminal_model.rs`, `server/src/terminal_ws.rs`, `apps/web/src/terminal/session-terminal.tsx`, `apps/mobile/app/src/terminal/zmxDisplay.ts` — must keep byte-identical sequences and a 200-column constant equal to `RESTING_GRID_COLS` in `.dependencies/zmx/src/ipc.zig`.
 - Prompt-history search (`gx f`, the Find surface): `packages/find/` for the engine, `server/src/agent_prompt_search.rs` for the API, `packages/core-ui/find/` for the shared UI.
 - Mobile app work: `apps/mobile/` is the only active mobile app and releases Android through the React Native/Expo project in `apps/mobile/app` (a git submodule). Its embedded chat and find pages are `apps/mobile/views/chat/` and `apps/mobile/views/find/`, bundled by `bun run build:mobile-chat` / `bun run build:mobile-find`. The retired native iOS and Termux-fork Android repositories live under `/Users/madda/dev/_active/ghostex-deprecated/` and must not be restored as active release inputs.
 - Assets, sounds, icons, and release tooling: `media/`, `apps/desktop/assets/`, `packages/core-ui/assets/`, `tooling/`, and `tooling/release-gpui/`.
@@ -235,6 +235,80 @@ does not any more. Prompt-history search is the `packages/find/` Rust crate
 - The GUI (`packages/core-ui/find/`) and `gx f` share the same scanner, matcher,
   Codex cache, and favorites file, so a prompt starred in one is starred in the
   other. Anything that would make them rank or star differently is a bug.
+
+### Changing zmx: the wire generation and the wire-cycle pass
+
+A zmx daemon keeps running the code of the binary that spawned it, and the
+bundled zmx client talks to it over a private IPC tag contract
+(`.dependencies/zmx/src/ipc.zig`). When that contract breaks (tags renumbered,
+a payload layout changed, an existing tag given a new meaning), a new client
+and a surviving old daemon cannot talk at all: `zmx attach` shows a blank pane
+and every request is ignored. gxserver therefore runs a **wire-cycle pass** on
+every startup (`cycle_wire_incompatible_zmx_session_daemons` in
+`server/src/zmx/wire_cycle.rs`, called from `server/src/server/mod.rs`):
+
+- zmx declares the generation of the contract it speaks as `WIRE_GENERATION`
+  in `ipc.zig`, printed by `zmx version` as a `wire_generation\t<n>` line.
+  Every provider start records that number in the session's `providerState`
+  (`zmxWireGeneration`).
+- On startup, every live daemon whose recorded generation differs from the
+  bundled binary's (or that has no record at all) is killed via `zmx kill`,
+  then SIGTERM/SIGKILL, and marked sleeping. The session is restored lazily
+  through the ordinary wake-on-open path with its saved agent resume command
+  (`claude --resume …`, etc.). The log event is
+  `zmxIncompatibleSessionDaemonCycled` in
+  `~/.local/state/ghostex/logs/gxserver.jsonl`.
+- A daemon whose generation matches is left alone no matter how different its
+  binary is. Rebuilding, re-signing, and reinstalling zmx with an unchanged
+  generation cycles nothing.
+- **Cycling kills the agent running inside the session.** Killing the daemon
+  hangs up the PTY, so a Claude Code / Codex process dies mid-turn. The resume
+  brings the conversation back, but in-flight background subagents, background
+  Bash jobs, and unfinished tool calls are lost. Before 2026-09-03 the pass
+  compared binary identity instead, and three additive zmx rebuilds in one day
+  cycled 57 sessions, several with agents mid-task; that is why the generation
+  number exists.
+- Sessions stamped by the retired binary-identity scheme (`zmxBinaryStamp`)
+  count as generation 1, since every binary since the 2026-08-23 tag
+  renumbering speaks it. Do not "clean up" that migration.
+
+What this means when you edit zmx:
+
+- **Bump `WIRE_GENERATION` exactly when an old daemon can no longer serve a
+  new client**: a `Tag` value renumbered or removed, the payload layout of an
+  existing tag changed (`Resize`, `Visibility`, the `Init` header, a JSON
+  reply a client parses strictly), an existing tag given a new meaning, or a
+  client that starts to _require_ a reply to a new tag without a
+  compatibility probe. The bump is the whole mechanism; you do not add
+  cycling code. Update the frozen-tag tests in `ipc.zig`, the
+  `CDXC:ZmxWireGeneration` comment there with the date and what moved, and
+  every emitter listed under "zmx behavior" in the search routing above.
+- **Do not bump for additive or internal changes**: a new tag old daemons drop
+  through their `_` arm while clients tolerate the silence (`Visibility`,
+  `GridInfo` are the models), a daemon-side bug fix, a log line, a
+  performance change, or an upstream merge that leaves the framing alone. If
+  the new client needs an answer from the daemon, do what `SendAcked` does:
+  probe first, and treat no reply as "old daemon", so the change stays
+  additive.
+- **A bump restarts every live session on the next `bun run start`.** Say so
+  in your report, check `ghostex sessions` for `running` entries as in the
+  commit rules below, and let the user pick a quiet moment to install.
+  Sessions whose agent is idle lose nothing but a resume; sessions mid-task
+  lose background work.
+- **Never skip the stamp or bypass the pass** with an env switch, a build
+  flag, or by leaving `wire_generation` out of `zmx version`. A binary that
+  does not print the line makes gxserver log `zmxWireGenerationUnreadable`
+  and cycle nothing, which turns the next real wire break into blank panes.
+- Verify with `zmx version` from `.dependencies/zmx/zig-out/bin/zmx` and run
+  `zig build test` inside `.dependencies/zmx` before shipping the binary. On
+  macOS the plain Zig build can fail inside libc++ with an `INFINITY` error
+  from the current SDK; `prepare-macos-runtime.sh` builds through an SDK
+  overlay and an `xcrun` shim to work around it, so build the way it does
+  rather than patching the SDK.
+- `gx server stop` stops only the control plane and leaves daemons running;
+  `gx server stop-all` kills every tracked zmx session. Neither is a substitute
+  for the wire-cycle pass and neither should be used to "test" a zmx change on
+  a machine with live agents.
 
 ### Don't write any tests at all except if explicitly asked to do so by the user
 
@@ -325,7 +399,7 @@ Storybook stories or product code:
 
 ### Project board beads workflow
 
-When working from a Ghostex Project board ticket, use the `bd` CLI installed in the environment running that project—macOS, Linux, or the selected WSL distribution—and move the bead through the project swimlanes instead of leaving it in `open`/Todo. Ghostex's Kanban runtime uses this same system binary, so do not depend on a separate `gx bd` wrapper or a bundled Ghostex copy. If `bd` is missing or a board command fails, ask the user to install or update to the latest Beads release in that same environment before continuing.
+When working from a Ghostex Project board ticket, use the `bd` CLI installed in the environment running that project—macOS, Linux, or the selected WSL distribution—and move the bead through the project swimlanes instead of leaving it in `open`/Todo. Ghostex's Kanban runtime uses this same system binary, so do not depend on a separate `gx bd` wrapper or a bundled Ghostex copy. Ghostex does not bundle, download, or symlink `bd` on any platform (the packaged copy and the remote/WSL `~/.local/bin/bd` symlink were removed on 2026-09-03), so a missing `bd` is always a machine-install task, never a Ghostex asset repair. If `bd` is missing or a board command fails, ask the user to install or update to the latest Beads release in that same environment before continuing.
 
 - Put your session on the card: `gx board associate <id>` — run this first, with no
   other arguments, whenever you are asked to work a bead. It links the session you are

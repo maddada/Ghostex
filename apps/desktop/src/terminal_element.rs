@@ -615,6 +615,11 @@ pub struct TerminalView {
     hovered_link: Option<HoveredLink>,
     /// Active in-terminal find, if open.
     search: Option<TerminalSearch>,
+    /// Set by the app's zmx visibility sync when this terminal becomes (or
+    /// starts) displayed; the next prepaint writes `ZMX_VISIBLE` after the
+    /// real grid resize so the claim carries the grid the slot actually has
+    /// (CDXC:GpuiEngineTerminalVisibility 2026-09-03).
+    pending_zmx_visible_announce: bool,
 }
 
 impl TerminalView {
@@ -715,6 +720,7 @@ impl TerminalView {
             hover_cell: None,
             hovered_link: None,
             search: None,
+            pending_zmx_visible_announce: false,
         }
     }
 
@@ -724,6 +730,35 @@ impl TerminalView {
 
     pub fn model_mut(&mut self) -> &mut TerminalModel {
         &mut self.model
+    }
+
+    /// Ask the next prepaint to announce `ZMX_VISIBLE` with the grid it
+    /// settles on. Called when the terminal becomes a displayed slot.
+    pub fn request_zmx_visible_announce(&mut self) {
+        self.pending_zmx_visible_announce = true;
+    }
+
+    /// True between a visible request and the prepaint that claims the real
+    /// grid: until then `model().size()` is still the parked resting width and
+    /// must not be reported to the daemon as a displayed size.
+    pub fn zmx_visible_announce_pending(&self) -> bool {
+        self.pending_zmx_visible_announce
+    }
+
+    /// Resize the cell grid outside a layout pass, keeping the cell pixel
+    /// sizes the last prepaint established. Used to park a hidden terminal
+    /// at the zmx resting width; the next prepaint of a displayed slot
+    /// resizes back to the real bounds. Cancels a pending visible announce:
+    /// a parked terminal must not claim the grid.
+    pub fn resize_grid(&mut self, cols: u16, rows: u16, cx: &mut Context<Self>) {
+        self.pending_zmx_visible_announce = false;
+        if (cols, rows) == self.model.size() {
+            return;
+        }
+        let _ = self.model.resize_grid(cols, rows);
+        self.row_cache.clear();
+        self.refresh_snapshot();
+        cx.notify();
     }
 
     pub fn paste_requires_confirmation(&mut self, text: &str) -> bool {
@@ -2222,6 +2257,16 @@ impl TerminalView {
             let _ = self.model.resize(cols, rows, cell_width_px, cell_height_px);
             self.row_cache.clear();
             self.refresh_snapshot();
+        }
+        if self.pending_zmx_visible_announce {
+            // The grid above is the real one for this displayed slot, so the
+            // visibility claim carries it (CDXC:GpuiEngineTerminalVisibility
+            // 2026-09-03).
+            self.pending_zmx_visible_announce = false;
+            let (cols, rows) = self.model.size();
+            let _ = self.model.write_input(
+                crate::terminal_model::zmx_client_visible_sequence(rows, cols).as_bytes(),
+            );
         }
 
         if self.update_scroll_button_visibility() {

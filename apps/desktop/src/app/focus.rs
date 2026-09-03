@@ -1380,6 +1380,11 @@ impl GhostexGpuiApp {
         {
             return;
         }
+        // A parked or just-surfacing engine grid is the zmx resting width,
+        // not a displayed size (CDXC:GpuiEngineTerminalVisibility 2026-09-03).
+        if !self.agents_gpui_engine_terminal_zmx_grid_is_displayed(slot_id.session_id, cx) {
+            return;
+        }
         let session_name = self
             .agents_workspace
             .session(slot_id.session_id)
@@ -1441,6 +1446,10 @@ impl GhostexGpuiApp {
         let Some(slot_id) = self.project_editor_companion_terminal_slot_for_mode(mode) else {
             return;
         };
+        // Same gate as the Agents slot: never hand the daemon a parked grid.
+        if !self.agents_gpui_engine_terminal_zmx_grid_is_displayed(slot_id.session_id, cx) {
+            return;
+        }
         let session_name = self
             .agents_workspace
             .session(slot_id.session_id)

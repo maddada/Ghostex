@@ -54,6 +54,7 @@ use crate::app::element::*;
 use crate::app::helpers::*;
 use crate::app::hotkeys::*;
 use crate::app::model::*;
+use crate::app::terminal_sync::GpuiEngineTerminalAnnouncedVisibility;
 use crate::app::window::*;
 use crate::*;
 
@@ -554,6 +555,9 @@ pub struct GhostexGpuiApp {
     /// second bar's menu closes the first, exactly like the chat composer's
     /// dropdown.
     pub(crate) agents_terminal_action_bar_menu_session: Option<TerminalSessionId>,
+    /// The open ⋯ menu's "Switch Account" flyout is showing. Reset whenever
+    /// the menu itself closes or moves to another session.
+    pub(crate) agents_terminal_action_bar_account_submenu_open: bool,
     /// A companion-pane maximize route waiting for the matching Agents bar's
     /// minimize action to restore its exact project view and companion slot.
     pub(crate) terminal_agent_bar_companion_focus_return:
@@ -1020,6 +1024,12 @@ pub struct GhostexGpuiApp {
         HashMap<TerminalSessionId, terminal_gpui_engine::GpuiEngineTerminalRecord>,
     pub(crate) command_gpui_engine_terminals:
         HashMap<CommandSessionId, terminal_gpui_engine::GpuiEngineTerminalRecord>,
+    /// Last zmx visibility claim (visible/hidden plus the announced grid)
+    /// per Agents engine terminal, so parked clients rest at the daemon's
+    /// wide grid instead of pinning it narrow
+    /// (CDXC:GpuiEngineTerminalVisibility 2026-09-03). Runtime-only.
+    pub(crate) agents_gpui_engine_terminal_zmx_visibility:
+        HashMap<TerminalSessionId, GpuiEngineTerminalAnnouncedVisibility>,
     /// Pending close confirmations for GPUI-engine slots. Kept separate from
     /// the native Ghostty close-confirm state machines because engine
     /// liveness is checked at close-request time instead of via runtime
