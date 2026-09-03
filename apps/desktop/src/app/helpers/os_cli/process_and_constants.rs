@@ -349,7 +349,17 @@ pub(crate) const GPUI_MACOS_SCREEN_RECORDING_PREFERENCES_URL: &str =
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
 pub(crate) const GPUI_MACOS_NOTIFICATION_SETTINGS_URL: &str =
     "x-apple.systempreferences:com.apple.Notifications-Settings.extension";
-pub(crate) const GPUI_GHOSTEX_CLI_WRAPPER_MARKER: &str = "CDXC:Cli 2026-06-12-09:31";
+/// CDXC:Cli 2026-09-03 WHY:
+/// This value is the on-disk ownership stamp written into the public `ghostex`
+/// and `gx` wrappers and read back to tell a Ghostex wrapper from a foreign
+/// command of the same name, so it is a compatibility contract with every
+/// wrapper already on a user's machine, not a comment tag. The 2026-09-03 area
+/// rename swept it to `CDXC:Cli` here and in the Homebrew cask template, which
+/// would have made CLI repair and `brew upgrade` treat their own wrappers as
+/// foreign. Changing it means accepting both spellings for at least one
+/// release.
+/// SEE-ALSO: the cask body and `validateGhostexCask` in tooling/release-ghostex.mjs.
+pub(crate) const GPUI_GHOSTEX_CLI_WRAPPER_MARKER: &str = "CDXC:CliInstall 2026-06-12-09:31";
 pub(crate) const GPUI_GTE_INSTALL_ACTION_ID: &str = "installGte";
 pub(crate) const GPUI_GTE_HOMEBREW_INSTALL_SCRIPT: &str = concat!(
     "if command -v brew >/dev/null 2>&1; then BREW=$(command -v brew); ",

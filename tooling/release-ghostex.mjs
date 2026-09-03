@@ -2697,6 +2697,18 @@ async function updateHomebrew(version, artifacts, options) {
  * clear provenance/quarantine xattrs from the wrappers because replaced
  * symlinks can carry policy metadata into the new files on some macOS builds.
  *
+ * CDXC:Cli 2026-09-03 WHY:
+ * The literal `CDXC:CliInstall 2026-06-12-09:31` in the cask body below is NOT
+ * a comment tag. It is the on-disk ownership stamp the cask writes into
+ * HOMEBREW_PREFIX/bin/{ghostex,gx} and reads back to tell its own wrapper from
+ * a foreign command of the same name, so it is a compatibility contract with
+ * every wrapper already installed on a user's machine. The 2026-09-03 area
+ * rename swept it to `CDXC:Cli` in this file while the live tap and every
+ * installed wrapper still carried the old spelling; preflight then read its own
+ * wrapper as a foreign binary and `brew upgrade ghostex` would have failed with
+ * "already exists" for every existing user. Renaming it requires accepting both
+ * spellings for at least one release, not a search and replace.
+ *
  * CDXC:Release 2026-06-14-09:07:
  * The Ghostex tap cask is owned release output, so render it from this canonical
  * template instead of regex-normalizing whatever shape is currently in the tap.
@@ -2755,7 +2767,7 @@ function renderGhostexCask({ version, sha256 }) {
 
         command_target = command_path.symlink? ? command_path.readlink.to_s : command_path.to_s
         command_content = command_path.file? ? command_path.read : ""
-        if command_content.include?("CDXC:Cli 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
+        if command_content.include?("CDXC:CliInstall 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
           next
         end
         next if command_target.include?("ghostex.app/Contents/Resources/CLI/#{command}")
@@ -2782,7 +2794,7 @@ function renderGhostexCask({ version, sha256 }) {
         command_path.delete
       elsif command_path.exist?
         command_content = command_path.file? ? command_path.read : ""
-        if command_content.include?("CDXC:Cli 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
+        if command_content.include?("CDXC:CliInstall 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
           command_path.delete
         end
       end
@@ -2790,7 +2802,7 @@ function renderGhostexCask({ version, sha256 }) {
       command_path.write <<~EOS
         #!/bin/bash
         set -euo pipefail
-        # CDXC:Cli 2026-06-12-09:31: Public PATH commands live outside Ghostex.app so macOS does not directly execute app-bundled shell scripts during policy assessment.
+        # CDXC:CliInstall 2026-06-12-09:31: Public PATH commands live outside Ghostex.app so macOS does not directly execute app-bundled shell scripts during policy assessment.
         exec "#{cli_binary}" "$@"
       EOS
       command_path.chmod 0755
@@ -2806,7 +2818,7 @@ function renderGhostexCask({ version, sha256 }) {
       next if !command_path.exist? || !command_path.file?
 
       command_content = command_path.read
-      if command_content.include?("CDXC:Cli 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
+      if command_content.include?("CDXC:CliInstall 2026-06-12-09:31") && (command_content.include?("ghostex-cli.mjs") || command_content.include?("/Resources/CLI/ghostex"))
         command_path.delete
       end
     end
@@ -2833,7 +2845,7 @@ function validateGhostexCask(cask, { version, sha256 }) {
     'preflight do',
     'postflight do',
     'uninstall_preflight do',
-    'CDXC:Cli 2026-06-12-09:31',
+    'CDXC:CliInstall 2026-06-12-09:31',
     'exec "#{cli_binary}" "$@"',
   ]) {
     if (!cask.includes(required)) {
