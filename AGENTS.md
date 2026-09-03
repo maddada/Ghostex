@@ -285,6 +285,44 @@ its story) when the look must change:
   never raise it back to `ring-ring/50` or `/30`. Surfaces that deliberately
   have no ring (the modal tab rails) stay ringless.
 
+### UX mockups: one HTML file per screen, annotation-friendly classes
+
+When asked to mock up a UI or a flow, build it as static HTML, not as
+Storybook stories or product code:
+
+- **Location**: `docs/<today's date, YYYY-MM-DD>/<topic>/`, for example
+  `docs/2026-09-03/mobile-setup/`. One folder per mockup topic.
+- **One screen per file.** Each screen or state the user should react to is its
+  own `.html` file (`mobile-03-scan.html`, `desktop-remote-settings.html`), plus
+  an `index.html` hub that links every screen in flow order. Shared styles and
+  scripts go in `shared.css` / `shared.js` in the same folder. Show a phone
+  or desktop frame on the left and short design notes on the right; keep the
+  page full width.
+- **Name everything the user might point at.** The user gives feedback by
+  selecting elements, and the feedback arrives as a CSS selector path. Generic
+  paths like `.rows > .row` or `.steps > .step` are useless, so add a
+  descriptive class or data attribute to every landmark: each device frame
+  (`data-screen="scan-found-tailscale"`), each card (`.easy-connect-card`,
+  `.tailscale-card`), each row or step (`.remote-login-row`,
+  `.step-scan-tailscale-code`, `.adv-served-ports`), each primary button
+  (`.connect-btn`, `.save-and-connect-btn`), each sheet or popover
+  (`.tailscale-password-sheet`, `.android-install-popover`), and each notes
+  block (`.notes-what-changed`). Put the descriptive class on the element the
+  user would click, not on an inner wrapper. Add a short selector cheat sheet
+  to `index.html`.
+- **Copy rules.** Ghostex runs on macOS, Linux and Windows, so product copy
+  says "computer" (or the machine's name), never "Mac", and describes
+  platform features neutrally ("SSH access", with the per-OS name in a
+  parenthetical only where the user has to go and find it). Feature names
+  are the user-facing ones ("Easy Connect", not "Tailcat").
+- **Match the app's look.** Use the desktop app's Kanban / Automate visual
+  language (near-black page, `#161616` panels, `#1d1d1d` cards, hairline
+  borders, 8px controls / 12px sections) unless told otherwise.
+- **Verify by rendering.** Screenshot the pages with headless Chrome before
+  reporting, and fix clipping, overflow and collapsed flex children.
+- Mockups are documentation: they do not touch product code, and the folder is
+  committed like any other `docs/` folder.
+
 ### Project board beads workflow
 
 When working from a Ghostex Project board ticket, use the `bd` CLI installed in the environment running that project—macOS, Linux, or the selected WSL distribution—and move the bead through the project swimlanes instead of leaving it in `open`/Todo. Ghostex's Kanban runtime uses this same system binary, so do not depend on a separate `gx bd` wrapper or a bundled Ghostex copy. If `bd` is missing or a board command fails, ask the user to install or update to the latest Beads release in that same environment before continuing.
