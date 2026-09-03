@@ -126,13 +126,26 @@ pub(crate) fn apply_session_state_update(
         .agent_id
         .clone()
         .or_else(|| read_text_value(&session, "agentId"));
+    let stored_runtime_settings = object_field(&session, "runtimeSettings");
     let mut runtime_settings = apply_session_identity_runtime_settings(
         &current_identity,
         &identity,
-        object_field(&session, "runtimeSettings"),
+        stored_runtime_settings.clone(),
         identity_update_source,
         session_launch_agent_provider_id(&session),
     );
+    if let Some(dropped_activity) = stored_runtime_settings
+        .get("agentActivity")
+        .filter(|_| runtime_settings.get("agentActivity").is_none())
+    {
+        log_identity_dropped_agent_activity(
+            lifecycle,
+            identity_update_source,
+            &current_identity,
+            &identity,
+            dropped_activity,
+        );
+    }
     insert_truthy_from_params(
         &mut runtime_settings,
         params,
@@ -497,14 +510,30 @@ pub(crate) fn resolve_stored_session_identity(session: &Value) -> ResolvedIdenti
         runtime_settings: runtime_settings.clone(),
         startup_text: None,
     });
-    let transcript_path_identity = resolve_session_identity(&IdentityInput {
-        agent_id: None,
-        agent_name: None,
-        agent_session_id: read_text_from_map(&runtime_settings, "agentSessionId"),
-        agent_session_path: read_text_from_map(&runtime_settings, "agentSessionPath"),
-        runtime_settings: Map::new(),
-        startup_text: None,
-    });
+    /*
+    CDXC:CustomAgentIdentityFlap 2026-09-03:
+    The transcript path only names the CLI FAMILY (`~/.claude/…jsonl` →
+    "claude"), while the stored id may be a sidebar CONFIGURATION of that
+    family (`custom-claude-…`). Merging the raw family over the stored id made
+    the row's own identity disagree with every later observation, which
+    `align_observed_identity_with_launch_profile` maps back onto the custom
+    id: each hook and live-process pass then saw an agent change, dropped
+    agentActivity (and the transcript path), the next hook re-created it, and
+    custom Claude sessions flapped working→idle on every tool call (observed
+    live 2026-09-03). Align the path-derived identity with the launch profile
+    first, exactly as hook and process observations already are.
+    */
+    let transcript_path_identity = align_observed_identity_with_launch_profile(
+        session,
+        resolve_session_identity(&IdentityInput {
+            agent_id: None,
+            agent_name: None,
+            agent_session_id: read_text_from_map(&runtime_settings, "agentSessionId"),
+            agent_session_path: read_text_from_map(&runtime_settings, "agentSessionPath"),
+            runtime_settings: Map::new(),
+            startup_text: None,
+        }),
+    );
     merge_observed_session_identity(&transcript_path_identity, &stored_identity)
 }
 
@@ -559,6 +588,56 @@ pub(crate) fn apply_session_identity_runtime_settings(
         runtime_settings.remove("agentActivity");
     }
     runtime_settings
+}
+
+static IDENTITY_LOGGER: std::sync::OnceLock<crate::logging::GxserverLogger> =
+    std::sync::OnceLock::new();
+
+/*
+Unconditional (not scenario-gated): dropping a live activity record is the one
+identity side effect a user can see (a working session shows idle) and it left
+no trace at all when it misfired on 2026-09-03, so it had to be found by
+sampling the SQLite row. Records ids and activity state only — never a
+transcript path.
+*/
+fn log_identity_dropped_agent_activity(
+    lifecycle: &LifecycleParams,
+    source: SessionIdentityUpdateSource,
+    current_identity: &ResolvedIdentity,
+    next_identity: &ResolvedIdentity,
+    dropped_activity: &Value,
+) {
+    let logger = IDENTITY_LOGGER.get_or_init(|| {
+        crate::logging::GxserverLogger::new(crate::paths::get_gxserver_paths(None))
+    });
+    let source = match source {
+        SessionIdentityUpdateSource::Lifecycle => "lifecycle",
+        SessionIdentityUpdateSource::LiveProcess => "liveProcess",
+        SessionIdentityUpdateSource::Passive => "passive",
+        SessionIdentityUpdateSource::TerminalTitle => "terminalTitle",
+    };
+    let _ = logger.log(crate::logging::GxserverLogInput {
+        level: crate::logging::LogLevel::Warn,
+        event: "sessionIdentity.agentActivityDropped".to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(
+            "An identity update dropped this session's activity record because the agent appeared to change."
+                .to_string(),
+        ),
+        details: Some(json!({
+            "activity": dropped_activity.get("activity").and_then(Value::as_str),
+            "activityAgentName": dropped_activity.get("agentName").and_then(Value::as_str),
+            "currentAgentId": current_identity.agent_id,
+            "nextAgentId": next_identity.agent_id,
+            "projectId": lifecycle.project_id,
+            "sessionId": lifecycle.session_id,
+            "source": source,
+            "workingSource": dropped_activity.get("workingSource").and_then(Value::as_str),
+        })),
+    });
 }
 
 pub(crate) fn read_agent_activity_agent_id(value: Option<&Value>) -> Option<String> {
