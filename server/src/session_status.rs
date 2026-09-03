@@ -660,6 +660,25 @@ fn is_trusted_spinner_stop_title(
     if previous_signal.as_ref().map(|signal| signal.state.as_str()) != Some("working") {
         return false;
     }
+    /*
+    CDXC:CursorReadyTitle 2026-09-03:
+    Cursor Agent writes "<chat> - ✅ Ready" only once its loop has ended, so
+    the Ready title that replaces the same chat's "<chat> - ⏳ Working ···"
+    is as authoritative as its stop hook. The hook post can be lost (the
+    notify helper gives gxserver 1.5s and drops the event on timeout), and
+    without this rule an explicit hook-driven working state then survives
+    forever because no other Cursor title signal is allowed to end it.
+    */
+    if agent_name == Some("cursor")
+        && is_cursor_ready_title(&title)
+        && previous
+            .last_title
+            .as_deref()
+            .map(cursor_title_chat_name)
+            .is_some_and(|previous_chat| previous_chat == cursor_title_chat_name(&title))
+    {
+        return true;
+    }
     let previous_signature =
         create_title_activity_signature(previous.last_title.as_deref(), previous_signal.as_ref());
     let current_signal = TitleStatusSignal {
@@ -1166,16 +1185,46 @@ fn get_cursor_title_state(title: &str, allow_agent_hint_match: bool) -> Option<&
     (allow_agent_hint_match && has_cursor_keyword).then_some("idle")
 }
 
+fn is_cursor_ready_title(title: &str) -> bool {
+    normalize_spaces(title).ends_with("\u{2705} Ready")
+}
+
+/// The chat name in front of Cursor's " - ⏳ Working ···" / " - ✅ Ready"
+/// status suffix, or the whole title when it carries no such suffix.
+fn cursor_title_chat_name(title: &str) -> String {
+    let normalized = normalize_spaces(title);
+    let end = normalized
+        .find("\u{23f3} Working")
+        .or_else(|| normalized.find("\u{2705} Ready"))
+        .unwrap_or(normalized.len());
+    normalized[..end]
+        .trim_end()
+        .strip_suffix('-')
+        .unwrap_or(&normalized[..end])
+        .trim()
+        .to_string()
+}
+
 trait CursorTitleExt {
     fn ends_with_working_suffix(&self) -> bool;
 }
 
 impl CursorTitleExt for str {
+    /*
+    CDXC:CursorReadyTitle 2026-09-03:
+    Cursor's spinner cycles "⏳ Working ···", ".··", "..·", "...", so the
+    suffix is the marker followed by any mix of dots and middle dots. The old
+    check matched only the "..." frame, which left most working titles
+    unclassified and the Ready-title stop below without a working baseline.
+    */
     fn ends_with_working_suffix(&self) -> bool {
-        let Some(prefix) = self.strip_suffix('.') else {
-            return self.ends_with("\u{23f3} Working ·") || self.ends_with("\u{23f3} Working .");
+        const MARKER: &str = "\u{23f3} Working";
+        let Some(index) = self.rfind(MARKER) else {
+            return false;
         };
-        prefix.ends_with("\u{23f3} Working ") || prefix.ends_with("\u{23f3} Working .")
+        self[index + MARKER.len()..]
+            .chars()
+            .all(|ch| matches!(ch, ' ' | '.' | '\u{b7}'))
     }
 }
 
