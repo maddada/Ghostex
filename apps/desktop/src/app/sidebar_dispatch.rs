@@ -1777,6 +1777,10 @@ impl GhostexGpuiApp {
             .flex_shrink_0()
             .w(px(SIDEBAR_DIVIDER_WIDTH))
             .h_full()
+            // The body row sits 1px under the titlebar so panes can own
+            // their top edge; carry the titlebar hairline across the divider.
+            .border_t_1()
+            .border_color(titlebar_button_border_color())
             .cursor_ew_resize()
             .bg(workspace_background_color())
             .on_hover(cx.listener(|this, hovered, _, cx| {
