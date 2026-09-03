@@ -1020,6 +1020,20 @@ fn to_cli_session(
         &[p("delayedSendRemainingLabel")],
     );
     /*
+     * CDXC:MobileDelayedSendCountdown 2026-09-03:
+     * The remaining label above is a snapshot from the moment of the poll. A
+     * client that only polls every few seconds needs the absolute deadline to
+     * tick the countdown from its own clock between polls, exactly like the
+     * desktop sidebar does from the presentation delta. Absent for the
+     * "waiting for agent(s)" triggers, whose countdown starts only once the
+     * ten-second stability window opens.
+     */
+    insert_js(
+        &mut map,
+        "delayedSendDeadlineAt",
+        &[p("delayedSendDeadlineAt")],
+    );
+    /*
      * CDXC:SessionChatPromptQueue 2026-08-21-b:
      * The phone's session-list badge reads these two off the mobile summary, so
      * the inventory has to forward them from the presentation snapshot the same
@@ -1934,6 +1948,40 @@ fn to_mobile_session_summary(session: &Value) -> Value {
      */
     insert_js(&mut map, "sessionNote", &[s("sessionNote")]);
     insert_js(&mut map, "agentSessionId", &[s("agentSessionId")]);
+    /*
+     * CDXC:MobileDelayedSendCountdown 2026-09-03:
+     * Same SECOND-whitelist trap once more: `to_cli_session` forwarded the
+     * Delayed Send and Close After Done projections for a long time, but this
+     * compactor never named them, so a timer armed from the desktop sidebar
+     * never reached the phone's session row or its Session Automations dialog.
+     * `delayedSendRemainingLabel` paints the yellow clock and the trailing
+     * countdown, `delayedSendDeadlineAt` lets the row tick that countdown
+     * between polls, the two `sendWhen*Active` flags preselect the dialog's
+     * trigger, and `closeAfterDone` paints the pastel-red clock. All absent
+     * means "no timer", which is also what a daemon without the projections
+     * publishes.
+     */
+    insert_js(
+        &mut map,
+        "delayedSendRemainingLabel",
+        &[s("delayedSendRemainingLabel")],
+    );
+    insert_js(
+        &mut map,
+        "delayedSendDeadlineAt",
+        &[s("delayedSendDeadlineAt")],
+    );
+    insert_js(
+        &mut map,
+        "sendWhenAgentStopsActive",
+        &[s("sendWhenAgentStopsActive")],
+    );
+    insert_js(
+        &mut map,
+        "sendWhenAllProjectSessionsStopActive",
+        &[s("sendWhenAllProjectSessionsStopActive")],
+    );
+    insert_js(&mut map, "closeAfterDone", &[s("closeAfterDone")]);
     insert_js(&mut map, "sortOrder", &[s("sortOrder")]);
     insert_js(&mut map, "status", &[s("status")]);
     insert_js(&mut map, "surface", &[s("surface")]);
