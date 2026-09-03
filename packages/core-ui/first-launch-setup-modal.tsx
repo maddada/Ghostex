@@ -68,7 +68,9 @@ import {
   type BundledGhostexAgentSkillId,
 } from '../shared/ghostex-agent-skills';
 import { DEFAULT_SIDEBAR_AGENTS } from '../shared/sidebar-agents';
+import { GHOSTEX_ANDROID_APK_URL, GHOSTEX_DISCORD_URL } from '../shared/sidebar-commands';
 import { AgentHookBenefits } from './agent-hook-benefits';
+import { openAppModal } from './app-modal-host-bridge';
 import { getBrandAgentLogoStyle } from './agent-logos';
 import type { WebviewApi } from './webview-api';
 
@@ -181,15 +183,15 @@ const FIRST_LAUNCH_SIDEBAR_PRESETS = FIRST_LAUNCH_SIDEBAR_PRESET_ORDER.flatMap((
  * CDXC:FirstLaunchSetup 2026-06-16-01:04:
  * Android download buttons must use GitHub's latest-release asset redirect so the first-launch setup never points at an older tagged APK after a new stable release ships.
  */
-const FIRST_LAUNCH_ANDROID_APK_URL = 'https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk';
-const FIRST_LAUNCH_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
+const FIRST_LAUNCH_ANDROID_APK_URL = GHOSTEX_ANDROID_APK_URL;
+const FIRST_LAUNCH_DISCORD_URL = GHOSTEX_DISCORD_URL;
 const FIRST_LAUNCH_TUTORIAL_VIDEO_WATCH_URL = 'https://www.youtube.com/watch?v=APdP-j5n4Mw';
 const FIRST_LAUNCH_RELEASES_URL = 'https://github.com/maddada/ghostex/releases';
 
 const FIRST_LAUNCH_CLI_MOBILE_BENEFITS: readonly FirstLaunchMobileBenefit[] = [
   {
     icon: IconDeviceMobile,
-    text: 'Open the same agent sessions from the React Native Android app when you are away from the Mac.',
+    text: 'Open the same agent sessions from the Ghostex Android app when you are away from your computer.',
     title: 'Live Remote Sessions',
   },
   {
@@ -395,7 +397,7 @@ const FIRST_LAUNCH_GUIDE_PAGES: readonly FirstLaunchGuidePage[] = [
         'ghostex browser open https://example.com',
       ],
       subtitle:
-        'Make sure Ghostex Embedded Browser Use is installed on your Mac. If it is not ready yet, install the skill below.',
+        'Make sure Ghostex Embedded Browser Use is installed on this computer. If it is not ready yet, install the skill below.',
     },
     icon: IconBrowser,
     items: [
@@ -527,10 +529,10 @@ const FIRST_LAUNCH_GUIDE_PAGES: readonly FirstLaunchGuidePage[] = [
   {
     action: {
       description:
-        'After you SSH into the Mac that is running Ghostex, list sessions and attach by the alias shown in the table.',
+        'After you SSH into the computer that is running Ghostex, list sessions and attach by the alias shown in the table.',
       eyebrow: 'Remote session commands',
       snippet: [
-        '# For CLI debugging, connect to your Mac over Tailscale',
+        '# For CLI debugging, connect to your computer over Tailscale',
         'ssh madda@my-mac',
         '',
         '# List Ghostex sessions and note the left-column alias',
@@ -552,7 +554,7 @@ const FIRST_LAUNCH_GUIDE_PAGES: readonly FirstLaunchGuidePage[] = [
     items: [
       {
         icon: IconWorld,
-        text: 'Install Tailscale on the Mac and phone, sign into the same tailnet, then enable SSH into the Mac.',
+        text: 'Install Tailscale on the computer and phone, sign into the same tailnet, then enable SSH access on the computer.',
         title: 'Tailscale SSH',
       },
       {
@@ -562,17 +564,17 @@ const FIRST_LAUNCH_GUIDE_PAGES: readonly FirstLaunchGuidePage[] = [
       },
       {
         icon: IconTerminal2,
-        text: "Install the Ghostex React Native APK, add the Mac's Tailscale name or IP, and connect with your SSH credentials.",
+        text: "Install the Ghostex Android app, add the computer's Tailscale name or IP, and connect with your SSH credentials.",
         title: 'Ghostex Android',
       },
       {
         icon: IconMoon,
-        text: 'Keep the Mac awake while remote so your phone can reach it through Tailscale.',
-        title: 'Keep Mac awake',
+        text: 'Keep the computer awake while remote so your phone can reach it through Tailscale.',
+        title: 'Keep the computer awake',
       },
       {
         icon: IconStack,
-        text: 'Keep Ghostex open on the Mac so gx can list live sessions; zmx, tmux, or zellij keeps the terminal session itself durable.',
+        text: 'Keep Ghostex open on the computer so gx can list live sessions; zmx, tmux, or zellij keeps the terminal session itself durable.',
         title: 'Live session list',
       },
     ],
@@ -2034,7 +2036,7 @@ function FirstLaunchPreferencesPage({
          */}
         <FirstLaunchCheckboxSetting
           checked={settings.keepAwakePreventLidSleep}
-          description='When Keep Awake is on, keep the Mac reachable after closing the lid.'
+          description='When Keep Awake is on, keep the computer reachable after closing the lid.'
           icon={IconMoon}
           label='Keep awake when lid is closed'
           onChange={(checked) => updateSetting('keepAwakePreventLidSleep', checked)}
@@ -2331,7 +2333,22 @@ function FirstLaunchCliPage({
             variant='outline'
           >
             <IconBrandAndroid aria-hidden='true' size={16} />
-            React Native Android APK
+            Ghostex Android app
+          </Button>
+          {/*
+           * CDXC:RemotePairing 2026-09-03:
+           * Pairing the phone is the Remote Setup modal's job (get the app, then
+           * connect it to this computer), so the mobile step hands off to it
+           * instead of describing SSH by hand.
+           */}
+          <Button
+            className='first-launch-setup-app-link-button'
+            onClick={() => openAppModal({ modal: 'remoteSetup', type: 'open' })}
+            type='button'
+            variant='outline'
+          >
+            <IconDeviceMobile aria-hidden='true' size={16} />
+            Connect your phone
           </Button>
         </div>
       </section>

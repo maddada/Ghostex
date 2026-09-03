@@ -22,11 +22,16 @@ export const DEFAULT_SIDEBAR_COMMANDS = [
 export const DEFAULT_BROWSER_ACTION_URL = 'http://localhost:5173';
 export const DEFAULT_BROWSER_LAUNCH_URL = 'https://www.google.com';
 /**
- * CDXC:Mobile 2026-06-16-01:23:
- * Sidebar Mobile opens the product site so download routing stays on ghostex.dev
- * instead of a GitHub README anchor.
+ * CDXC:RemoteSetup 2026-09-03:
+ * The Android build ships as an APK on the latest GitHub release, so every
+ * surface that offers it (first-launch setup, the Remote Setup modal's install
+ * popover and its QR) points at GitHub's latest-release redirect and never at
+ * a tagged download. The Discord invite lives beside it because the iPhone
+ * build is TestFlight-by-request through Discord.
  */
-export const GHOSTEX_MOBILE_DOWNLOAD_URL = 'https://ghostex.dev';
+export const GHOSTEX_ANDROID_APK_URL =
+  'https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk';
+export const GHOSTEX_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
 
 /**
  * CDXC:ProjectActions 2026-05-19-17:10:

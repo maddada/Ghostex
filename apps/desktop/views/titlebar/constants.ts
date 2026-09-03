@@ -9,7 +9,7 @@ import type { TitlebarDropdownPanelKind, TitlebarDropdownPanelSize } from './typ
  */
 export const GHOSTEX_CHANGELOG_URL = 'https://github.com/maddada/ghostex/releases';
 export const GHOSTEX_DOCS_URL = 'https://ghostex.dev/docs';
-export const GHOSTEX_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
+export { GHOSTEX_DISCORD_URL } from '@/packages/shared/sidebar-commands';
 export const TITLEBAR_GRADIENT_BLEND_START_PERCENT = 40;
 export const DEFAULT_CODE_SERVER_RESOURCE_PORT = 3775;
 

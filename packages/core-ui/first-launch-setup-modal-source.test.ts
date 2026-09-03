@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
+import { GHOSTEX_ANDROID_APK_URL } from '../shared/sidebar-commands';
 
 const firstLaunchSetupModalSource = readFileSync(new URL('./first-launch-setup-modal.tsx', import.meta.url), 'utf8');
 const sidebarStylesSource = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
@@ -117,10 +118,11 @@ describe('first launch setup modal source', () => {
       'const FIRST_LAUNCH_DISCORD_URL'
     );
 
-    expect(androidDownloadUrlDefinition).toContain(
+    expect(androidDownloadUrlDefinition).toContain('GHOSTEX_ANDROID_APK_URL');
+    expect(GHOSTEX_ANDROID_APK_URL).toBe(
       'https://github.com/maddada/Ghostex/releases/latest/download/ghostex-android.apk'
     );
-    expect(androidDownloadUrlDefinition).not.toMatch(/releases\/download\/v\d/u);
+    expect(GHOSTEX_ANDROID_APK_URL).not.toMatch(/releases\/download\/v\d/u);
   });
 
   test('preserves unavailable gxserver-owned default prompt agents on the preferences page', () => {

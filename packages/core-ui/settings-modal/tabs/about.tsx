@@ -4,8 +4,8 @@ import { type WebviewApi } from '../../webview-api';
 import packageJson from '../../../../package.json';
 import { SettingsNativeScrollArea } from '../fields';
 import { SettingsTabSearch, hasVisibleSettingsSearchResult } from '../search';
+import { GHOSTEX_DISCORD_URL } from '@/packages/shared/sidebar-commands';
 
-export const GHOSTEX_DISCORD_URL = 'https://discord.gg/df7b3G92CS';
 export const GHOSTEX_GITHUB_URL = 'https://github.com/maddada/Ghostex';
 export const GHOSTEX_SPONSOR_URL = 'https://github.com/sponsors/maddada';
 
