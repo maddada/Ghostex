@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { IconCheck, IconCopy } from '@tabler/icons-react';
 import { Button } from '@/packages/components/ui/button';
 import { QrCode } from '@/packages/components/ui/qr-code';
-import { REMOTE_SETUP_ANDROID_INSTALL_URL, REMOTE_SETUP_ANDROID_INSTALL_URL_LABEL } from './constants';
+import { GHOSTEX_ANDROID_INSTALL_URL, GHOSTEX_ANDROID_INSTALL_URL_LABEL } from './constants';
 
 const ANDROID_INSTALL_STEPS: readonly string[] = [
   'On the phone, open the link and download ghostex-android.apk.',
@@ -29,18 +29,18 @@ export function AndroidInstallPopover({ id }: { id: string }) {
           alt='QR code for the Ghostex Android download'
           className='remote-setup-android-qr'
           size={112}
-          value={REMOTE_SETUP_ANDROID_INSTALL_URL}
+          value={GHOSTEX_ANDROID_INSTALL_URL}
         />
         <div className='remote-setup-android-popover-text'>
           <div className='remote-setup-android-popover-title'>Install on your Android phone</div>
           <div className='remote-setup-android-link-row'>
-            <span className='remote-setup-android-link' title={REMOTE_SETUP_ANDROID_INSTALL_URL}>
-              {REMOTE_SETUP_ANDROID_INSTALL_URL_LABEL}
+            <span className='remote-setup-android-link' title={GHOSTEX_ANDROID_INSTALL_URL}>
+              {GHOSTEX_ANDROID_INSTALL_URL_LABEL}
             </span>
             <Button
               aria-label='Copy the Android download link'
               onClick={() => {
-                void navigator.clipboard.writeText(REMOTE_SETUP_ANDROID_INSTALL_URL).then(() => setCopied(true));
+                void navigator.clipboard.writeText(GHOSTEX_ANDROID_INSTALL_URL).then(() => setCopied(true));
               }}
               size='icon-xs'
               type='button'
@@ -62,7 +62,10 @@ export function AndroidInstallPopover({ id }: { id: string }) {
           </li>
         ))}
       </ol>
-      <div className='remote-setup-muted'>Updates: the app tells you when a newer release is on GitHub.</div>
+      <div className='remote-setup-muted'>
+        Updates: the app checks GitHub for newer releases. Settings → Updates downloads the new APK and opens the
+        installer.
+      </div>
     </div>
   );
 }
