@@ -12,7 +12,7 @@ pub(crate) struct GpuiAppModalHostWindow {
     pending_messages: Vec<serde_json::Value>,
     presented_modal: Option<GpuiAppModalKind>,
     /*
-    CDXC:GPUITutorialVideoFullscreen 2026-08-18:
+    CDXC:Onboarding 2026-08-18:
     "f" toggles the YouTube player's fullscreen state, so the host-side key
     press is sent at most once per window. Page-internal navigations can raise
     several main-frame load-end edges, and the modal host outlives them.
@@ -20,7 +20,7 @@ pub(crate) struct GpuiAppModalHostWindow {
     tutorial_video_fullscreen_key_sent: bool,
     // None when CEF browser creation failed; the host window then never
     // reports ready and the existing app-modal ready-timeout retry/close
-    // flow recovers (CDXC:GPUICefBrowserCreateFallible 2026-07-11).
+    // flow recovers (CDXC:CefRuntime 2026-07-11).
     pub(crate) surface: Option<Entity<CefSurface>>,
 }
 
@@ -102,16 +102,23 @@ impl GpuiAppModalHostWindow {
                 None,
                 None,
                 /*
-                CDXC:SettingsExtensionsTab 2026-08-30:
+                CDXC:Extensions 2026-08-30:
                 The extensions store's registry/catalog transport reads
                 `window.ghostexGpui.gxserverBootstrap`, so the bootstrap
                 follows the surface: it moved from the retired
                 `extensionsBrowser` modal onto Settings, which now hosts the
                 Extensions tab.
+                CDXC:RemotePairing 2026-09-03:
+                The Remote Setup modal's Connect button calls gxserver through
+                the same bootstrap; without it the page renders Connect
+                disabled with "server connection unavailable", so the modal
+                must be in this allowlist.
                 */
                 matches!(
                     modal,
-                    GpuiAppModalKind::FindPrompts | GpuiAppModalKind::Settings
+                    GpuiAppModalKind::FindPrompts
+                        | GpuiAppModalKind::Settings
+                        | GpuiAppModalKind::RemoteSetup
                 )
                 .then_some(sidebar_gxserver_bootstrap)
                 .flatten(),
@@ -148,7 +155,7 @@ impl GpuiAppModalHostWindow {
         })
     }
 
-    /// CDXC:GPUITutorialVideoFullscreen 2026-08-18: entering fullscreen needs a
+    /// CDXC:Onboarding 2026-08-18: entering fullscreen needs a
     /// trusted key press from the host (see `CefBrowser::send_fullscreen_toggle_key`),
     /// and it must happen once, only while the tutorial video is the presented
     /// modal.
@@ -233,7 +240,7 @@ impl GpuiAppModalHostWindow {
             }
             Some("contentHeightMeasured") => {
                 /*
-                CDXC:GPUIAppModalFitHeight 2026-07-28:
+                CDXC:AppModal 2026-07-28:
                 Compact modal-host dialogs measure their rendered React dialog
                 once per open and report it (macOS resizes its child window to
                 that height; GPUI previously ignored the message, leaving large
@@ -287,7 +294,7 @@ impl GpuiAppModalHostWindow {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:GPUISettingsPersistence 2026-06-24-11:14:
+        CDXC:Settings 2026-06-24-11:14:
         An open GPUI app-modal host must receive the saved sidebar hydrate snapshot after `updateSettings` succeeds, matching macOS publish-to-modal behavior. Update the stored latest snapshot and dispatch `sidebarState` only through the modal host's existing app-owned CEF script channel; do not create overlays, hidden views, global input routing, or a second Settings state channel.
         */
         self.latest_sidebar_state_message = sidebar_state_message;

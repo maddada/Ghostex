@@ -34,15 +34,24 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
   );
 }
 
+/**
+ * CDXC:AppModal 2026-09-03 WHY:
+ * Base UI drops the Backdrop of a dialog that opens inside another open dialog (`DialogBackdrop` renders only when `forceRender || !nested`), so a dialog nested in Settings got no overlay at all and its outside-click target was the bare Settings page.
+ * `nested` opts back in: it force-renders the backdrop and stamps it `data-nested` so the stylesheet can tell it apart from the window-root dialog (the Popup already carries Base UI's own `data-nested`).
+ * SEE-ALSO: `.app-modal-host-native-window-body` rules in packages/core-ui/styles/modals.css, which paint only the window-root dialog as the window itself.
+ */
 function DialogContent({
   className,
   children,
+  nested = false,
   onEscapeKeyDown,
   onKeyDownCapture,
   onOpenAutoFocus,
   showCloseButton = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
+  /** Set when this dialog opens on top of another open dialog and needs its own backdrop. */
+  nested?: boolean;
   onEscapeKeyDown?: (event: React.KeyboardEvent<HTMLElement>) => void;
   onOpenAutoFocus?: (event: { preventDefault: () => void }) => void;
   showCloseButton?: boolean;
@@ -53,7 +62,7 @@ function DialogContent({
 
   return (
     <DialogPortal>
-      <DialogOverlay />
+      {nested ? <DialogOverlay data-nested='' forceRender /> : <DialogOverlay />}
       <DialogPrimitive.Popup
         data-slot='dialog-content'
         className={cn(

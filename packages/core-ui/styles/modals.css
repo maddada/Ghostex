@@ -9,28 +9,28 @@
 }
 
 /**
- * CDXC:AppModals 2026-04-26-15:10
+ * CDXC:AppModal 2026-04-26-15:10
  * The native full-window modal host uses the sidebar modal components without
  * the sidebar shell. Keep that host transparent and restore full viewport width
  * so dialogs are centered over the app instead of sized for sidebar chrome.
  *
- * CDXC:AppModals 2026-06-11-19:59:
+ * CDXC:AppModal 2026-06-11-19:59:
  * Native child-window modals need their modal-host document background to
  * match the AppKit panel color so the area behind reused React components does
  * not show a transparent or themed sidebar layer.
  *
- * CDXC:AppModals 2026-06-11-20:28:
+ * CDXC:AppModal 2026-06-11-20:28:
  * The native modal window background must be consistent across every web layer
  * behind React components. Apply it to html/body/root plus Radix and legacy
  * modal shells so older story/frame defaults cannot show through.
  *
- * CDXC:AppModals 2026-06-11-20:43:
+ * CDXC:AppModal 2026-06-11-20:43:
  * Native modal windows should not show a darker #050505 halo around the React
  * component. Paint the viewport gutter, overlay, outer dialog border, and
  * shadcn shadow/ring area as the same background so transparent pixels and
  * default dialog chrome are visually invisible against the AppKit window.
  *
- * CDXC:SidebarTheme 2026-06-15-01:43:
+ * CDXC:Theming 2026-06-15-01:43:
  * Modal chrome follows --app-modal-background so Dark 1 uses #191919, Dark 2
  * preserves #0e0e0e, and Light lets shadcn modal content use light surfaces.
  */
@@ -61,7 +61,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:AppModals 2026-06-30-16:08:
+ * CDXC:AppModal 2026-06-30-16:08:
  * Approved compact native child-window modals measure their actual React
  * dialog once. Their modal host body/root must be intrinsic-height containers
  * during that first render; Settings keeps the legacy viewport-sized root.
@@ -72,8 +72,15 @@ html:has(body.app-modal-host-native-window-body) {
   min-height: fit-content;
 }
 
-.app-modal-host-native-window-body [data-slot='dialog-overlay'],
-.app-modal-host-native-window-body [data-slot='dialog-content'],
+/*
+ * CDXC:AppModal 2026-09-03 WHY:
+ * In a native child window the window-root dialog IS the window, so its backdrop and edge are painted in the window colour.
+ * A dialog nested inside that dialog (Settings → Remote's machine editor) is a floating dialog again: it keeps the shared dimmed backdrop, hairline border, and shadow, so every rule here excludes `[data-nested]`.
+ * Before this exclusion the nested dialog inherited a window-coloured border and a window-coloured overlay and read as borderless with no dimming.
+ * SEE-ALSO: `nested` on DialogContent in packages/components/ui/dialog.tsx.
+ */
+.app-modal-host-native-window-body [data-slot='dialog-overlay']:where(:not([data-nested])),
+.app-modal-host-native-window-body [data-slot='dialog-content']:where(:not([data-nested])),
 .app-modal-host-native-window-body .confirm-modal-root,
 .app-modal-host-native-window-body .confirm-modal-backdrop,
 .app-modal-host-native-window-body .confirm-modal {
@@ -81,12 +88,12 @@ html:has(body.app-modal-host-native-window-body) {
   background-color: var(--app-modal-background) !important;
 }
 
-.app-modal-host-native-window-body [data-slot='dialog-overlay'] {
+.app-modal-host-native-window-body [data-slot='dialog-overlay']:where(:not([data-nested])) {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
 
-.app-modal-host-native-window-body [data-slot='dialog-content'],
+.app-modal-host-native-window-body [data-slot='dialog-content']:where(:not([data-nested])),
 .app-modal-host-native-window-body .confirm-modal {
   border-color: var(--app-modal-background) !important;
   box-shadow: none !important;
@@ -111,7 +118,7 @@ html:has(body.app-modal-host-native-window-body) {
  * list already owns its own scrolling.
  */
 /*
- * CDXC:AddProjectChrome 2026-07-31:
+ * CDXC:AddProject 2026-07-31:
  * In the child window the dialog IS the window, so it fills the frame edge to
  * edge: a centered 576px dialog inside a 640px window left an invisible gutter
  * on both sides, and an auto-height dialog left dead space under the footer.
@@ -142,7 +149,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /**
- * CDXC:AppModalCursor 2026-05-15-19:54:
+ * CDXC:AppModal 2026-05-15-19:54:
  * Until the macOS WKWebView-over-native cursor flicker has a root fix, every
  * text-editing surface inside app modals should keep the default arrow cursor.
  * This includes legacy inputs, shadcn inputs, textareas, contenteditable boxes,
@@ -156,18 +163,18 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /**
- * CDXC:AppModals 2026-04-26-15:47
+ * CDXC:AppModal 2026-04-26-15:47
  * Full-app modal overlays should preserve terminal readability behind dialogs:
  * no backdrop blur, and a 65% dark scrim so settings and configuration
  * dialogs read as focused modal surfaces without changing their content
  * layout.
  *
- * CDXC:AppModals 2026-05-11-08:14
+ * CDXC:AppModal 2026-05-11-08:14
  * Settings and settings-launched dialogs need a stronger shared backdrop when
  * shown. Apply the same dark overlay to legacy confirm-modal backdrops and
  * shadcn/Radix dialog overlays because the app modal host mixes both stacks.
  *
- * CDXC:AppModals 2026-05-11-10:06
+ * CDXC:AppModal 2026-05-11-10:06
  * Modal backdrops should be 15 percentage points darker than the previous 50%
  * scrim. Use 65% black across legacy and shadcn modal overlays.
  */
@@ -183,7 +190,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /**
- * CDXC:AppModals 2026-05-08-06:18
+ * CDXC:AppModal 2026-05-08-06:18
  * Native opens the full-window WKWebView as a presentation layer. Let AppKit
  * perform the reveal and keep React dialogs at their final visual state so
  * Settings does not flash through Radix's initial opacity/zoom animation.
@@ -209,12 +216,12 @@ html:has(body.app-modal-host-native-window-body) {
   background: var(--app-modal-background);
   border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
   /*
-   * CDXC:AppModals 2026-05-16-08:10:
+   * CDXC:AppModal 2026-05-16-08:10:
    * Legacy React modal background shells must match the Settings modal
    * background radius so confirm, picker, previous-session, and management
    * dialogs share the same outer corner geometry as Radix dialogs.
    *
-   * CDXC:AppModals 2026-05-28-13:52:
+   * CDXC:AppModal 2026-05-28-13:52:
    * All legacy confirm-modal shells should use var(--app-modal-background) so previous-session,
    * first-message, and confirmation dialogs match Settings.
    */
@@ -260,7 +267,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * Missing Project Folder now renders inside AppModalShell, so its chrome (shell
  * width, heading row, footer button tones) comes from `.gx-app-modal`. Only the
  * body layout of its one section card is modal-specific.
@@ -314,7 +321,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .configure-actions-modal {
   gap: 14px;
-  /* CDXC:AppModals 2026-05-08-11:28
+  /* CDXC:AppModal 2026-05-08-11:28
      Configure Actions and Configure Agents list dialogs must follow the same
      Settings typography proportions as their editor dialogs: 20px dialog
      titles, 14px primary row/control text, and smaller metadata. Scope the
@@ -340,7 +347,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /**
- * CDXC:SidebarActions 2026-05-06-04:36
+ * CDXC:AgentLauncher 2026-05-06-04:36
  * Configure Actions should fit its content and show readable action names.
  * Keep it as a compact list manager instead of nesting the sidebar card/grid,
  * and use direct row clicks for editing so context menus are not required.
@@ -504,17 +511,17 @@ html:has(body.app-modal-host-native-window-body) {
 
 .previous-sessions-modal {
   /**
-   * CDXC:PreviousSessions 2026-05-09-17:44
+   * CDXC:Sessions 2026-05-09-17:44
    * Previous Sessions must read as an extension of the sidebar, not a separate
    * card surface. Use the same sidebar background token and reference row
    * variables that sidebar session buttons use.
    *
-   * CDXC:PreviousSessions 2026-05-13-16:11:
+   * CDXC:Sessions 2026-05-13-16:11:
    * The modal needs more horizontal room now that each history row keeps the
    * project name on the right before Last Active instead of floating it above
    * the title. Keep it 30% wider than the previous 420px picker.
    *
-   * CDXC:PreviousSessions 2026-06-13-02:00:
+   * CDXC:Sessions 2026-06-13-02:00:
    * The browse-only Previous Sessions modal should use tighter chrome on every
    * edge after the footer actions were removed. Keep the bottom inset smallest,
    * remove the now-empty footer grid row, and align the top-right close button
@@ -522,7 +529,7 @@ html:has(body.app-modal-host-native-window-body) {
    * full content width. The close button should use the same 32px transparent
    * toolbar treatment as the tag filter control.
    *
-   * CDXC:PreviousSessions 2026-06-13-15:59:
+   * CDXC:Sessions 2026-06-13-15:59:
    * The close button now follows Rename Session's shadcn Button treatment, while the tag filter moved inside the search field so the browse toolbar keeps equal left and right input edges.
    */
   --previous-sessions-modal-padding-bottom: 4px;
@@ -552,7 +559,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .app-modal-host-native-window-body .confirm-modal-root:has(.previous-sessions-modal) {
   /*
-   * CDXC:PreviousSessions 2026-06-17-12:02:
+   * CDXC:Sessions 2026-06-17-12:02:
    * The macOS Previous Sessions child window has fixed spare vertical room for result growth. Anchor the picker content to the top instead of inheriting the shared centered confirm-modal overlay placement when the current result list is short.
    */
   align-items: start;
@@ -561,11 +568,11 @@ html:has(body.app-modal-host-native-window-body) {
 
 .app-modal-host-body .previous-sessions-modal {
   /**
-   * CDXC:PreviousSessions 2026-04-28-05:36
+   * CDXC:Sessions 2026-04-28-05:36
    * Previous Sessions is a scanning picker, not a management workspace. Keep
    * the full-window native modal slim enough to read like the sidebar version.
    *
-   * CDXC:PreviousSessions 2026-05-13-16:11:
+   * CDXC:Sessions 2026-05-13-16:11:
    * Widen only enough to support right-side project metadata plus Last Active
    * without turning the picker into a broad management dialog.
    */
@@ -585,13 +592,13 @@ html:has(body.app-modal-host-native-window-body) {
 
 .app-modal-host-native-window-body .previous-sessions-modal {
   /*
-   * CDXC:PreviousSessions 2026-06-11-20:39:
+   * CDXC:Sessions 2026-06-11-20:39:
    * The native Previous Sessions child window is sized to the 546px React
    * component plus the modal host's 12px viewport padding. Let the picker use
    * the fitted window height instead of the old 80vh cap, which centered a
    * smaller React modal inside an oversized native window.
    *
-   * CDXC:AppModals 2026-06-30-16:08:
+   * CDXC:AppModal 2026-06-30-16:08:
    * Previous Sessions is part of the one-shot native fit-height list, but long
    * histories still need a visible-window cap so the result list owns overflow
    * instead of asking AppKit for an unbounded child-window height.
@@ -609,7 +616,7 @@ html:has(body.app-modal-host-native-window-body) {
   display: grid;
   gap: 0;
   /*
-   * CDXC:PreviousSessions 2026-08-26:
+   * CDXC:Sessions 2026-08-26:
    * The scope and tag filters sit in their own row under the search field, like
    * Saved Prompts. Keep the toolbar as one full-width column so the input and
    * the filter row both have equal modal-edge spacing on the left and right.
@@ -649,7 +656,7 @@ html:has(body.app-modal-host-native-window-body) {
 .previous-sessions-search-input:focus,
 .previous-sessions-search-shell:focus-within .previous-sessions-search-input {
   /*
-   * CDXC:PreviousSessions 2026-06-15-11:26:
+   * CDXC:Sessions 2026-06-15-11:26:
    * The Previous Sessions search box should use the Settings search focus treatment: a white input border with no outer ring. Keep the same color visible while child controls occupy focus so the modal still reads as search-focused.
    */
   border-color: #fff;
@@ -671,7 +678,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .previous-sessions-tag-filter-menu {
   /*
-   * CDXC:PreviousSessions 2026-06-05-18:39:
+   * CDXC:Sessions 2026-06-05-18:39:
    * The tag filter dropdown is portaled out of the modal because Previous
    * Sessions clips its content area. Keep the menu fixed above the modal layer
    * so the filter button can show all grouped tag sections.
@@ -683,7 +690,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .app-modal-host-body .previous-sessions-tag-filter-menu {
   /*
-   * CDXC:PreviousSessions 2026-06-05-19:23:
+   * CDXC:Sessions 2026-06-05-19:23:
    * The full-window native modal host lowers generic session context menus to
    * its local overlay stack. Previous Sessions tag filters are portaled to the
    * body and must stay above the modal/backdrop, otherwise the button appears
@@ -778,7 +785,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:RecentProjects 2026-07-17-03:52:
+ * CDXC:Projects 2026-07-17-03:52:
  * Recent Projects rows must read like Reopen a Session rows, not sidebar
  * section headers. The rows own their layout with dedicated classes instead of
  * reusing sidebar group/section chrome, so the uppercase letter-spaced section
@@ -840,7 +847,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .recent-projects-row-end {
   /*
-   * CDXC:RecentProjects 2026-09-01:
+   * CDXC:Projects 2026-09-01:
    * Close/remove sits in the same 6px trailing column as the open-state dot,
    * matching Quick Access Sessions. The control is centered on that column so
    * it replaces the dot instead of sitting beside it.
@@ -949,7 +956,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * View 1st Message renders through AppModalShell, so the surface, radius,
  * hairlines, typography, and the raised textarea skin come from
  * `.gx-app-modal`. Only the sizing that is unique to that writing surface
@@ -957,7 +964,7 @@ html:has(body.app-modal-host-native-window-body) {
  */
 
 /*
- * CDXC:FirstMessage 2026-06-30-16:08:
+ * CDXC:Sessions 2026-06-30-16:08:
  * First Message is measured once for a native fit-height child window, so the
  * textarea's own minimum height defines the dialog instead of a percentage of
  * the WebView viewport.
@@ -1070,10 +1077,10 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:SettingsDensity 2026-06-15-20:53:
+ * CDXC:Settings 2026-06-15-20:53:
  * Main Settings rows should keep explanatory copy out of the default layout to reduce crowding. Reserve a small info target beside the label, reveal it on row hover or focus, and constrain the right-side tooltip to a readable 350px max width.
  *
- * CDXC:SettingsAdvanced 2026-06-16-10:40:
+ * CDXC:Settings 2026-06-16-10:40:
  * Advanced settings use a light blue up-arrow icon instead of the former text tag. Keep it directly before the hover-only info button so advanced state and row details read as one compact label action group.
  */
 .settings-row-advanced-button,
@@ -1161,7 +1168,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .command-config-modal-shadcn {
   /*
-   * CDXC:AppModals 2026-05-28-13:52:
+   * CDXC:AppModal 2026-05-28-13:52:
    * Shadcn editor/config dialogs that do not opt into ghostex-settings-shadcn
    * still need the unified var(--app-modal-background) modal background.
    */
@@ -1169,7 +1176,7 @@ html:has(body.app-modal-host-native-window-body) {
   background-color: var(--app-modal-background);
   color-scheme: dark;
   font-family: var(--app-font-family, var(--vscode-font-family, ui-sans-serif, system-ui));
-  /* CDXC:AppModals 2026-05-08-11:26
+  /* CDXC:AppModal 2026-05-08-11:26
      Configure action and Configure agent must use the same typography scale as
      Settings: 20px titles and 14px form/control text. The editor modals share
      this class, so keep their scoped overrides in sync with Settings instead
@@ -1181,7 +1188,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .command-config-modal-shadcn [data-slot='dialog-title'] {
-  /* CDXC:CodexModalRestyle 2026-08-24:
+  /* CDXC:AppModal 2026-08-24:
      The Codex-style modal language drops bold chrome everywhere: dialog titles
      render at the regular weight and small section labels stop above 500. */
   font-family: inherit;
@@ -1219,7 +1226,7 @@ html:has(body.app-modal-host-native-window-body) {
 .command-config-modal-shadcn .command-icon-picker-search:is(:focus, :focus-visible),
 .command-config-modal-shadcn .command-icon-picker-trigger:is(:focus, :focus-visible) {
   /*
-   * CDXC:ModalTextFocus 2026-06-15-11:30:
+   * CDXC:AppModal 2026-06-15-11:30:
    * Text fields and textareas in app modals should match Settings search focus:
    * reuse the input border as a white focus outline and suppress the shadcn
    * outer ring so editable text controls do not read as active terminal panes.
@@ -1271,45 +1278,45 @@ html:has(body.app-modal-host-native-window-body) {
 
 .gx-app-modal.git-commit-modal-shadcn {
   /**
-   * CDXC:TitlebarGit 2026-05-25-07:40:
-   * Superseded by CDXC:UnifiedAppModal 2026-08-26.
+   * CDXC:Git 2026-05-25-07:40:
+   * Superseded by CDXC:AppModal 2026-08-26.
    *
-   * CDXC:TitlebarGit 2026-05-29-18:40:
+   * CDXC:Git 2026-05-29-18:40:
    * Commit, push, PR, and publishing review dialogs must fit their content
    * instead of inheriting the tall Settings modal height. Keep only a viewport
    * max-height so long file lists or message drafts scroll inside the dialog.
    *
-   * CDXC:TitlebarGit 2026-05-29-18:57:
+   * CDXC:Git 2026-05-29-18:57:
    * The initial commit review view should not clip the bottom of the commit
    * message textarea. Use a little more available viewport height before the
    * body becomes scrollable.
    *
-   * CDXC:TitlebarGit 2026-06-05-20:59:
+   * CDXC:Git 2026-06-05-20:59:
    * The commit review modal needs more width and height so the existing commit
    * controls can stay on the left while selected file diffs and diff display
    * controls live on the right without opening a second stacked modal.
    *
-   * CDXC:TitlebarGit 2026-06-08-04:20:
+   * CDXC:Git 2026-06-08-04:20:
    * The commit review panes should use compact source review density:
    * the message editor grows until its bottom aligns with the right diff pane,
    * file/diff scrollbars are floating 5px hover-only thumbs that do not reserve
    * layout, and file paths/code use the same SF Mono-oriented stack.
    *
-   * CDXC:TitlebarGit 2026-06-08-04:47:
+   * CDXC:Git 2026-06-08-04:47:
    * The file list should behave like a narrow source-control rail while the
    * selected-file diff gets most of the horizontal room for side-by-side review.
    *
-   * CDXC:TitlebarGit 2026-06-08-09:41:
+   * CDXC:Git 2026-06-08-09:41:
    * The commit modal should open without a visible title/subtitle row. Anchor
    * the close button to the modal corner, make the file-list region larger than
    * the commit-message editor, and keep the left review stack exactly as tall
    * as the right diff card.
    *
-   * CDXC:TitlebarGit 2026-06-08-13:41:
+   * CDXC:Git 2026-06-08-13:41:
    * Hide the commit modal close control so users exit commit review through
    * the explicit footer actions instead of an extra top-right dismissal button.
    *
-   * CDXC:UnifiedAppModal 2026-08-26:
+   * CDXC:AppModal 2026-08-26:
    * Commit review is an AppModalShell like every other app modal: the #0e0e0e
    * surface, 12px radius, hairline edges, 32px controls, and outline pill
    * footer actions all come from `.gx-app-modal`. Only the two-pane review
@@ -1325,7 +1332,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * Commit review is not one of the one-shot fit-height modals: its native child
  * window is sized by the app, and the dialog fills it edge to edge. Qualify
  * this with the modal class so it outranks the shell's fit-content native-host
@@ -1380,7 +1387,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-commit-modal-textarea {
   /*
-   * CDXC:TitlebarGit 2026-06-08-04:20:
+   * CDXC:Git 2026-06-08-04:20:
    * The commit-message editor is elastic inside the left review column so its
    * bottom aligns with the right diff pane. Keep manual resize disabled; long
    * commit text scrolls inside the editor instead of changing modal geometry.
@@ -1420,17 +1427,17 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-commit-files-panel {
   /*
-   * CDXC:TitlebarGit 2026-06-08-04:07:
+   * CDXC:Git 2026-06-08-04:07:
    * The commit file panel no longer has a separate "Files" label. Keep the
    * branch summary compact so the file tree starts higher and matches the
    * the intended review density.
    *
-   * CDXC:TitlebarGit 2026-06-19-15:43:
+   * CDXC:Git 2026-06-19-15:43:
    * The branch header should be plain text without the visible "Branch" label
    * or a branch-name card. Move Select and Show All into the bottom file footer
    * so the file tree header stays visually quiet.
    *
-   * CDXC:UnifiedAppModal 2026-08-26:
+   * CDXC:AppModal 2026-08-26:
    * The file rail is a shell section card: #161616 panel, hairline edge, 12px
    * section radius.
    */
@@ -1544,12 +1551,12 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-commit-files-list {
   /*
-   * CDXC:TitlebarGit 2026-06-08-04:07:
+   * CDXC:Git 2026-06-08-04:07:
    * File and diff scrolling should expose a quiet 5px transparent gutter only
    * on hover/focus, using a thin scrollbar without the previous
    * scroll-mask overflow fade at the top and bottom of the panes.
    *
-   * CDXC:TitlebarGit 2026-06-08-04:20:
+   * CDXC:Git 2026-06-08-04:20:
    * The same 5px scrollbar needs to float over content instead of reserving
    * layout space when it appears. Keep native scrollbar dimensions stable and
    * make only the thumb color change on hover/focus.
@@ -1676,12 +1683,12 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-commit-prompt-agent-select {
   /**
-   * CDXC:PromptAgents 2026-05-29-18:29:
+   * CDXC:AgentLauncher 2026-05-29-18:29:
    * The commit review prompt-agent selector belongs in the footer next to the
    * generated commit actions and should stay compact at 160px without a visible
    * field label.
    *
-   * CDXC:PromptAgents 2026-05-29-18:57:
+   * CDXC:AgentLauncher 2026-05-29-18:57:
    * The selector should sit on the left side of the footer while the commit
    * action buttons stay on the right, and its trigger height should match the
    * footer button height in the same row (now the shell's 32px control scale).
@@ -1777,7 +1784,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * Commit review has five footer actions plus the agent select, so its row keeps
  * sized pills instead of the shell's equal-width full-bleed footer grid. The
  * pill skin itself still comes from `.gx-app-modal-action-button`.
@@ -1789,13 +1796,13 @@ html:has(body.app-modal-host-native-window-body) {
 
 .worktree-delete-modal-shadcn {
   /**
-   * CDXC:WorktreeDelete 2026-05-28-07:46:
+   * CDXC:Worktrees 2026-05-28-07:46:
    * The delete-worktree confirmation mirrors the Settings/git review modal surface but stays narrower because it only presents the delete question and a git-status summary.
    *
-   * CDXC:WorktreeDelete 2026-05-28-09:29:
+   * CDXC:Worktrees 2026-05-28-09:29:
    * Delete confirmation must fit its content when the worktree is clean or only has a few changed files. Do not inherit the tall Settings dialog height; constrain only the status area when the summary is long.
    *
-   * CDXC:WorktreeDelete 2026-06-10-22:56:
+   * CDXC:Worktrees 2026-06-10-22:56:
    * Branch cleanup is an opt-in part of the destructive confirmation. Show the
    * local and origin branch checkboxes as compact rows inside the same modal,
    * with disabled explanatory copy when native did not verify a branch target.
@@ -1972,7 +1979,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .worktree-rename-modal-shadcn {
   /**
-   * CDXC:WorktreeRename 2026-08-09-18:40:
+   * CDXC:Worktrees 2026-08-09-18:40:
    * Rename Worktree is a compact one-field dialog in the same app-modal family
    * as Delete Worktree, so it shares that surface but sizes to its own content:
    * a name field, a live folder/branch preview, one checkbox, and however many
@@ -2126,10 +2133,10 @@ html:has(body.app-modal-host-native-window-body) {
 
 .git-file-diff-modal-shadcn {
   /*
-   * CDXC:TitlebarGit 2026-05-25-10:16:
+   * CDXC:Git 2026-05-25-10:16:
    * File diffs opened from the commit review tree need a larger full-window modal than the commit form, matching the rich prompt editor's app-modal layer while leaving enough room for dense patch inspection.
    *
-   * CDXC:TitlebarGit 2026-06-08-04:20:
+   * CDXC:Git 2026-06-08-04:20:
    * Standalone file diffs share the same floating 5px hover scrollbar and
    * SF Mono patch typography as the inline commit diff.
    */
@@ -2460,11 +2467,11 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:CommandIcons 2026-04-28-05:23:
+ * CDXC:Icons 2026-04-28-05:23:
  * Icon dropdown search must remain visible while browsing the expanded Tabler
  * set; only the option list scrolls.
  *
- * CDXC:SidebarActions 2026-05-15-14:24:
+ * CDXC:AgentLauncher 2026-05-15-14:24:
  * The action icon menu is a shadcn Command inside a Popover. Keep the Command
  * input pinned at the top and let Radix size the popover to the trigger so the
 	 * selector still reads like a dropdown in the configuration form.
@@ -2504,7 +2511,7 @@ html:has(body.app-modal-host-native-window-body) {
 .command-icon-picker-option[data-checked='true'],
 .command-icon-picker-option[data-selected='true'] {
   /*
-   * CDXC:SettingsDropdowns 2026-06-16-17:05:
+   * CDXC:Settings 2026-06-16-17:05:
    * The Settings action icon dropdown should highlight hovered, focused, and
    * selected options with the same unsaturated gray as app context menus
    * instead of mixing in the active theme accent.
@@ -2562,12 +2569,12 @@ html:has(body.app-modal-host-native-window-body) {
 
 .ghostex-app-toast {
   /**
-   * CDXC:GitActionToasts 2026-05-30-06:39:
+   * CDXC:Git 2026-05-30-06:39:
    * Persistent Git/worktree toasts show a top-right spinner while the action is
    * still running. Error and success toasts keep subtle tinted shadows so final
    * states are visually distinct from normal dark status toasts.
    *
-   * CDXC:AppToasts 2026-06-02-21:10:
+   * CDXC:AppModal 2026-06-02-21:10:
    * Sonner owns toast `::after` while the stack expands on hover. App toast
    * spinner chrome must not use that pseudo-element, because Sonner resizes it
    * into a full-width hover spacer and any Ghostex border on it appears as a
@@ -2588,7 +2595,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .ghostex-app-toast-persistent::before {
   /*
-   * CDXC:AppToasts 2026-05-30-06:04:
+   * CDXC:AppModal 2026-05-30-06:04:
    * Persistent worktree and Git toasts need a fully rounded loading spinner.
    * Use a masked SVG arc with round stroke caps instead of a border-top spinner,
    * because border segments render square ends that look like an angular bracket.
@@ -2624,7 +2631,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * Rename Session and Session Note now render through AppModalShell, so their
  * chrome (surface, radius, padding, footer buttons) comes from `.gx-app-modal`.
  * Clone Repository still uses the legacy `.session-rename-modal-shadcn` chrome,
@@ -2633,24 +2640,24 @@ html:has(body.app-modal-host-native-window-body) {
  */
 .session-rename-modal-shadcn:not(.gx-app-modal) {
   /**
-   * CDXC:SidebarRename 2026-05-09-17:25
+   * CDXC:Sessions 2026-05-09-17:25
    * Rename Session must use the same shadcn dialog controls and typography as
    * Settings. Keep the textarea compact by default while still allowing longer
    * pasted naming text to expand, and expose separate Cancel, Rename, and
    * Generate Name actions.
    *
-   * CDXC:SidebarRename 2026-06-12-05:05:
+   * CDXC:Sessions 2026-06-12-05:05:
    * The macOS Rename Session dialog needs a 20px wider React surface and 15px
    * less horizontal content padding so the textarea and controls have more
    * usable width without increasing the fixed 400px native height.
    *
-   * CDXC:SidebarRename 2026-06-13-12:00:
+   * CDXC:Sessions 2026-06-13-12:00:
    * The shared shadcn dialog padding left too much air above the title and below
    * the action row. Keep the 24px-equivalent horizontal inset (9px padding atop
    * the centered native-window gutter) but tighten the top/bottom inset so the
    * compact rename dialog reads as a focused prompt instead of a roomy panel.
    *
-   * CDXC:SidebarRename 2026-06-13-12:30:
+   * CDXC:Sessions 2026-06-13-12:30:
    * With the action buttons stacked in the sub-640px native window, 16px
    * top/bottom padding still pushed the content past the fixed window height and
    * forced an inner scrollbar. Drop the vertical inset to 8px so the title and
@@ -2668,14 +2675,14 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:ExportTranscriptOptions 2026-08-24:
+ * CDXC:TranscriptExport 2026-08-24:
  * The Export Transcript dialog keeps quiet 12px/500 section labels, list rows
  * in a bordered rounded container, and one control scale for the footer and
  * the agent select. The path is the one piece of content that can be
  * arbitrarily long, so it wraps at path separators instead of widening the
  * dialog.
  *
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * The dialog surface, radius, title/description type, control skin, and footer
  * pills now come from `.gx-app-modal` (AppModalShell). Only the export-specific
  * layout below remains per-modal; the dialog width is the shell's `width` prop.
@@ -2819,7 +2826,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:ExportTranscriptOptions 2026-08-24:
+ * CDXC:TranscriptExport 2026-08-24:
  * The native child window fits itself to the dialog once, at the options
  * stage, and never resizes again. Reserve enough height there for the two-part
  * done stage (copy path, then continue with an agent) so the stage change
@@ -2850,7 +2857,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .session-rename-modal-shadcn [data-slot='dialog-close'] {
   /*
-   * CDXC:SidebarRename 2026-06-13-12:45:
+   * CDXC:Sessions 2026-06-13-12:45:
    * Align the close button with the tightened modal insets so it lines up with
    * the title row and the content's right edge instead of the default p-6
    * offset.
@@ -2861,7 +2868,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .session-rename-modal-shadcn:not(.gx-app-modal) [data-slot='dialog-footer'] [data-slot='button']:disabled {
   /*
-   * CDXC:SidebarRename 2026-06-13-12:00:
+   * CDXC:Sessions 2026-06-13-12:00:
    * A disabled Generate Name/Rename action should not read as a half-faded
    * solid primary block. Use a quiet flat surface with muted text and border so
    * the unavailable state looks intentional and legible on the var(--app-modal-background) modal.
@@ -2874,7 +2881,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .session-rename-modal-shadcn:not(.gx-app-modal) [data-slot='dialog-footer'] [data-slot='button']:not(:disabled) {
   /*
-   * CDXC:SidebarRename 2026-06-13-13:30:
+   * CDXC:Sessions 2026-06-13-13:30:
    * Rename and (when text is long enough to enable it) Generate Name are the
    * dialog's primary actions, so render them as solid white buttons with dark
    * text instead of the muted secondary/primary tints.
@@ -2892,7 +2899,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .app-modal-host-native-window-body .session-rename-modal-shadcn {
   /*
-   * CDXC:SidebarRename 2026-06-13-13:00:
+   * CDXC:Sessions 2026-06-13-13:00:
    * The native child window is a fixed height, so centering a shorter dialog
    * left a large gutter above the title/close row and below the action row that
    * read as much more than 24px. Fill the window and own a flat 24px edge inset
@@ -2900,7 +2907,7 @@ html:has(body.app-modal-host-native-window-body) {
    * title/close row sits 24px from the top and the bottom button sits 24px from
    * the bottom, with no inner scroll.
    *
-   * CDXC:AppModals 2026-06-30-16:08:
+   * CDXC:AppModal 2026-06-30-16:08:
    * Compact native-window modals now measure the rendered dialog once and ask
    * AppKit to fit the child window to that height. Keep this shell full width,
    * but stop stretching it to 100vh so Rename Session and Clone Repository can
@@ -2945,11 +2952,11 @@ html:has(body.app-modal-host-native-window-body) {
 
 .add-repository-modal-shadcn {
   /**
-   * CDXC:AddRepository 2026-05-29-11:45:
+   * CDXC:AddProject 2026-05-29-11:45:
    * Clone Repository copies Rename Session's compact modal chrome, with a
    * slightly wider body for the folder picker row and inline clone errors.
    *
-   * CDXC:AddRepository 2026-06-24-10:35:
+   * CDXC:AddProject 2026-06-24-10:35:
    * Clone Repository must keep repository, folder, new-folder, branch, option,
    * and inline error rows in normal vertical flow. It reuses Rename Session
    * chrome, but its multi-field form must not inherit Rename Session's
@@ -2973,19 +2980,19 @@ html:has(body.app-modal-host-native-window-body) {
 
 .worktree-create-modal-shadcn {
   /*
-   * CDXC:WorktreeModal 2026-06-12-11:10:
+   * CDXC:Worktrees 2026-06-12-11:10:
    * Add Worktree in the macOS native child window must have exactly 17px total
    * edge padding. The native WKWebView has no separate content inset, so the
    * native-window override below fills the WebView and makes this React dialog
    * the single owner of the 17px padding instead of stacking it with the shared
    * shadcn p-6 and 100vw - 2rem width cap.
    *
-   * CDXC:WorktreeModal 2026-06-13-18:39:
+   * CDXC:Worktrees 2026-06-13-18:39:
    * Add Worktree now uses Rename Session's top-right close X instead of a
    * footer Cancel button. Keep the native-window top and bottom insets at 17px
    * so the title row and footer read as one fitted child-window surface.
    *
-   * CDXC:WorktreeBaseBranch 2026-06-24-11:32:
+   * CDXC:Worktrees 2026-06-24-11:32:
    * Create New mode now includes a required Base branch selector. Keep it on
    * the same full-width select treatment as Agent and Existing worktree so the
    * added control does not resize or overlap the compact native child window.
@@ -2996,7 +3003,7 @@ html:has(body.app-modal-host-native-window-body) {
 .app-modal-host-native-window-body .worktree-create-modal-shadcn {
   box-sizing: border-box;
   /*
-   * CDXC:WorktreeModal 2026-06-30-16:08:
+   * CDXC:Worktrees 2026-06-30-16:08:
    * Add Worktree reports its rendered dialog height to AppKit once. Keep the
    * native child-window width and 17px edge inset, but use intrinsic vertical
    * sizing so Create New mode can include every control and action without
@@ -3015,11 +3022,11 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:PortlessSetupModal 2026-06-23-13:42:
+ * CDXC:Portless 2026-06-23-13:42:
  * Portless setup uses the compact app-modal child-window surface rather than an
  * AppKit alert, with three explicit actions.
  *
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * All of that chrome — width, native fit-height shell, copy typography, and the
  * equal-width action row — now comes from the shared `.gx-app-modal` rules
  * below. `.portless-setup-modal-body` survives only as the fit-height scroll
@@ -3027,9 +3034,9 @@ html:has(body.app-modal-host-native-window-body) {
  */
 
 /**
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * One source of truth for the Codex-style app-modal design language that
- * shipped on Session Automations (CDXC:CodexModalRestyle 2026-08-24): a
+ * shipped on Session Automations (CDXC:AppModal 2026-08-24): a
  * #0e0e0e window, #161616 section panels, #1d1d1d raised controls, hairline
  * rgba(255,255,255,0.08) edges, 12px sections / 8px controls / 6px menu items,
  * one 32px control height, no bold weights, and full-width paired outline
@@ -3136,7 +3143,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:ModalTextFocus 2026-06-15-11:30:
+ * CDXC:AppModal 2026-06-15-11:30:
  * Text fields and textareas in app modals reuse the input border as a white
  * focus outline and suppress the shadcn outer ring so editable text controls
  * do not read as active terminal panes.
@@ -3148,7 +3155,7 @@ html:has(body.app-modal-host-native-window-body) {
   outline: none;
 }
 
-/* CDXC:UnifiedToggle 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
+/* CDXC:DesignSystem 2026-08-24: one app-wide toggle shape (6px track, 4px thumb). */
 .gx-app-modal [data-slot='switch'] {
   border-radius: 6px !important;
 }
@@ -3243,7 +3250,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:SidebarSpaces 2026-08-27:
+ * CDXC:Spaces 2026-08-27:
  * The New/Edit Space dialog. It reuses the shared icon picker, so the only
  * dialog-local shape is the inline color strip: the same palette the group color
  * menu offers, laid out as swatches rather than a list because the dialog shows
@@ -3329,13 +3336,13 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /**
- * CDXC:SessionAutomations 2026-08-02:
+ * CDXC:Automations 2026-08-02:
  * Delayed Send and Close After Done are two automations for one session, so
  * the shared gpui/web dialog presents them as compact cards with explicit
  * enabled switches. A single trigger selector owns the mutually-exclusive
  * send modes, and the duration fields only appear for the delay mode.
  *
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * All of the Session Automations chrome (tokens, card/control/switch skins,
  * typography, footer buttons, native fit-height shell) moved to the shared
  * `.gx-app-modal` rules above; only delayed-send-specific layout remains here.
@@ -3434,7 +3441,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .add-repository-options-row {
   /*
-   * CDXC:AddRepository 2026-06-01-10:28:
+   * CDXC:AddProject 2026-06-01-10:28:
    * Clone scope controls should be visible together in one row under the folder
    * chooser, unchecked by default, without competing with the primary Clone &
    * Add action. Keep the layout compact and allow labels to shrink before they
@@ -3546,7 +3553,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:SessionAgentNotes 2026-08-24:
+ * CDXC:SessionNotes 2026-08-24:
  * The note dialog reuses Rename Session's chrome, but a note is a paragraph
  * rather than a title, so its field opens taller. The native child window owns
  * a full-height layout below so the editor can grow between its header and
@@ -3558,18 +3565,18 @@ html:has(body.app-modal-host-native-window-body) {
 
 .worktree-create-mode-toggle {
   /*
-   * CDXC:WorktreeProjectRegistration 2026-06-01-20:59:
+   * CDXC:Worktrees 2026-06-01-20:59:
    * Add Worktree has two explicit modes: create a fresh checkout or open an
    * existing Git worktree. Keep the mode switch compact while the shared
    * prompt/agent controls stay available for both modes; only base-branch
    * selection is create-only.
    *
-   * CDXC:GPUIWorktrees 2026-06-24-14:06:
+   * CDXC:Worktrees 2026-06-24-14:06:
    * GPUI reuses this modal for Open Existing agent starts, so the layout must
    * not depend on GPUI-only controls or hide the shared first-prompt draft.
    */
   /*
-   * CDXC:SegmentedControl 2026-08-24:
+   * CDXC:DesignSystem 2026-08-24:
    * The two modes are one shared SegmentedControl now, so the row is a single
    * strip whose segments split the width instead of two gapped buttons.
    */
@@ -3607,11 +3614,11 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-tab-scroll {
   /*
-   * CDXC:SettingsLayout 2026-06-16-08:12:
+   * CDXC:Settings 2026-06-16-08:12:
    * Settings tabs without a left section rail should still center their content
    * in the same 770px readable column used by General and Hotkeys.
    *
-   * CDXC:SettingsLayout 2026-07-22-00:00:
+   * CDXC:Settings 2026-07-22-00:00:
    * All Settings pages share one content column: --settings-content-max-width
    * wide with the standard inline gutter outside it, matching the search field
    * and the settings-page-width pages.
@@ -3635,13 +3642,13 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:ProjectSettings 2026-06-14-17:29:
+ * CDXC:Projects 2026-06-14-17:29:
  * Project-specific settings need a single top selector instead of a long
  * always-visible project list. The trigger shows the current path, while the
  * Popover/Command menu keeps all project paths searchable without taking over
  * the tab layout.
  *
- * CDXC:ProjectSettings 2026-06-15-03:07:
+ * CDXC:Projects 2026-06-15-03:07:
  * The selector menu should read as the same control as its trigger, so size the
  * Popover/Command surface from Base UI's anchor width instead of a fixed menu
  * cap that can appear narrower than the Settings dropdown.
@@ -3674,7 +3681,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .projects-settings-selector-trigger[data-popup-open] {
   /*
-   * CDXC:ProjectSettings 2026-06-19-12:22:
+   * CDXC:Projects 2026-06-19-12:22:
    * Opening the Projects dropdown should not tint the selector with the current
    * app accent. Keep the active dropdown trigger neutral so it matches the
    * Settings surface instead of reading blue in dark themes.
@@ -3756,7 +3763,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-projects-global-settings {
   /*
-   * CDXC:PortlessSettings 2026-06-23-03:47:
+   * CDXC:Portless 2026-06-23-03:47:
    * Settings -> Projects starts with app-wide Portless controls and read-only
    * assigned-domain summaries before project-specific fields. Keep this as one
    * full-width settings section, not nested inside the selected-project editor.
@@ -3922,10 +3929,16 @@ html:has(body.app-modal-host-native-window-body) {
 
 /*
  * CDXC:RemotePairing 2026-09-03:
- * Settings -> Remote: two path cards side by side (Easy Connect, Tailscale),
- * the saved-machine grid, then one Advanced collapsible. Cards use the same
- * bordered-section language as the rest of Settings; the QR block keeps the
- * light QR tile from squeezing the copy beside it.
+ * Settings -> Remote: the two path cards (Easy Connect, Tailscale) stacked
+ * full width as an accordion, the compact saved-machine grid, then one
+ * Advanced collapsible. Cards use the same bordered-section language as the
+ * rest of Settings; the QR block keeps the light QR tile from squeezing the
+ * copy beside it.
+ *
+ * CDXC:RemotePairing 2026-09-03 DECISION:
+ * User: Easy Connect and Tailscale sit "above each other vertically in that
+ * section, not next to each other", as expandable cards. One column, no
+ * breakpoint; the header row is the only thing a collapsed card shows.
  */
 .settings-remote-from-phone,
 .settings-remote-machines {
@@ -3934,26 +3947,17 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .settings-remote-path-cards {
-  align-items: start;
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (max-width: 860px) {
-  .settings-remote-path-cards {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .settings-remote-path-card {
   background: color-mix(in srgb, var(--app-card-active) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
   display: grid;
-  gap: 10px;
   min-width: 0;
   outline: none;
-  padding: 12px;
 }
 
 .settings-remote-path-card:focus-visible {
@@ -3965,17 +3969,69 @@ html:has(body.app-modal-host-native-window-body) {
   align-items: center;
   display: flex;
   gap: 12px;
-  justify-content: space-between;
+  padding-right: 12px;
+}
+
+/* The header button is the accordion handle; the enable switch is its sibling so it never toggles expansion. */
+.settings-remote-path-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  gap: 10px;
+  min-height: 48px;
+  min-width: 0;
+  outline: none;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.settings-remote-path-toggle:hover {
+  background: color-mix(in srgb, var(--app-card-active) 30%, transparent);
+}
+
+.settings-remote-path-toggle:focus-visible {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ring) 40%, transparent);
+}
+
+.settings-remote-path-chevron {
+  color: var(--app-muted);
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+}
+
+/* A path switched off (Tailscale) dims like a hidden machine tile and its header stops being an accordion handle. */
+.settings-remote-path-card[data-disabled] .settings-remote-path-toggle {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.settings-remote-path-card[data-disabled] .settings-remote-path-toggle:hover {
+  background: transparent;
+}
+
+.settings-remote-path-body {
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
 }
 
 .settings-remote-path-title {
-  align-items: center;
   color: var(--app-foreground);
-  display: flex;
+  flex: none;
   font-size: 13px;
   font-weight: 600;
-  gap: 8px;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-remote-path-icon {
@@ -3999,7 +4055,7 @@ html:has(body.app-modal-host-native-window-body) {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: -4px;
+  min-width: 0;
 }
 
 .settings-remote-tag,
@@ -4494,70 +4550,150 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:RemoteMachines 2026-06-12-04:11:
- * Saved remote machine cards should sit two per row in the Remote tab, with a small gutter between machines, so multiple machines are scannable without each card consuming the full modal width.
- *
- * CDXC:RemoteMachines 2026-06-12-04:28:
- * The empty Remote machines placeholder follows the same half-width grid slot as a saved machine instead of spanning the row, preserving the two-column rhythm even before any machines are saved.
+ * CDXC:RemotePairing 2026-09-03 DECISION:
+ * User: the machines area shows "4 compact cards" like the mobile Machines
+ * list, the first one "Add a machine". Four columns at the modal's normal
+ * width, two on narrow hosts; each tile is the mobile MachineCard row (icon
+ * tile, name, how-line) with the Show-in-sidebar switch where the phone has
+ * its chevron. This supersedes the 2026-06-12 two-per-row editable cards.
  */
-.settings-remote-machine-list {
-  align-items: start;
+.settings-remote-machine-grid {
+  display: grid;
   gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-@media (max-width: 720px) {
-  .settings-remote-machine-list {
-    grid-template-columns: minmax(0, 1fr);
+@media (max-width: 760px) {
+  .settings-remote-machine-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-/*
- * CDXC:RemoteMachines 2026-06-12-05:42:
- * The empty placeholder fills the grid slot beside the add-machine card, so it stretches to that card's height and centers a dashed-bordered "No machines yet" prompt — the Remote tab reads as two equal halves before any machine exists, not a small box above a wide form.
- */
-.settings-remote-machine-empty {
+.settings-remote-machine-tile {
   align-items: center;
-  align-self: stretch;
-  background: color-mix(in srgb, var(--app-card-active) 22%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--app-border) 90%, transparent);
-  border-radius: 0;
+  background: color-mix(in srgb, var(--app-card-active) 38%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
   display: flex;
-  flex-direction: row;
-  gap: 12px;
-  justify-content: center;
-  min-height: 132px;
-  padding: 16px;
+  gap: 8px;
+  min-height: 60px;
+  min-width: 0;
+  padding-right: 10px;
 }
 
-.settings-remote-machine-empty-icon {
-  align-items: center;
-  background: color-mix(in srgb, var(--app-card-active) 55%, transparent);
-  color: color-mix(in srgb, var(--app-muted) 80%, var(--app-foreground) 20%);
-  display: flex;
-  flex-shrink: 0;
-  height: 34px;
-  justify-content: center;
-  width: 34px;
+.settings-remote-machine-tile[data-hidden] .settings-remote-machine-tile-main {
+  opacity: 0.55;
 }
 
-.settings-remote-machine-empty-text {
+.settings-remote-machine-add-tile {
+  border-style: dashed;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  outline: none;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.settings-remote-machine-tile-main {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  gap: 10px;
+  min-width: 0;
+  outline: none;
+  padding: 10px 0 10px 12px;
+  text-align: left;
+}
+
+.settings-remote-machine-add-tile:hover,
+.settings-remote-machine-tile:has(.settings-remote-machine-tile-main:hover) {
+  background: color-mix(in srgb, var(--app-card-active) 58%, transparent);
+}
+
+.settings-remote-machine-add-tile:focus-visible,
+.settings-remote-machine-tile:has(.settings-remote-machine-tile-main:focus-visible) {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+
+.settings-remote-machine-tile-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--app-card-active) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
+  color: color-mix(in srgb, var(--app-muted) 70%, var(--app-foreground) 30%);
+  display: inline-flex;
+  flex: none;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.settings-remote-machine-tile-text {
   display: grid;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
-.settings-remote-machine-empty-title {
-  color: var(--app-foreground);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.2;
+.settings-remote-machine-tile-title,
+.settings-remote-machine-tile-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.settings-remote-machine-empty-hint {
+.settings-remote-machine-tile-title {
+  color: var(--app-foreground);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.settings-remote-machine-tile-detail {
   color: var(--app-muted);
   font-size: 11px;
-  line-height: 1.45;
+}
+
+.settings-remote-machine-tile-switch {
+  flex: none;
+}
+
+/*
+ * CDXC:RemotePairing 2026-09-03 DECISION:
+ * User: "please give this modal that appears a border and make it rounded like the remote page cards. the modal is appearing without a border which looks bad".
+ * The edge is the machine tile's border token; the 12px section radius (the tiles' radius) and the settings shell surface come from the `.ghostex-settings-shadcn[data-slot='dialog-content']` rule in styles.css, which this selector out-weighs only for the border.
+ */
+.ghostex-settings-shadcn.settings-remote-machine-dialog[data-slot='dialog-content'] {
+  border: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
+}
+
+.settings-remote-machine-dialog {
+  gap: 12px;
+  max-width: calc(100% - 2rem);
+  padding: 16px;
+  width: 32rem;
+}
+
+/* The fields scroll inside the dialog so the title and the action row stay reachable in the fixed modal window. */
+.settings-remote-machine-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.settings-remote-machine-dialog-footer {
+  align-items: center;
+}
+
+.settings-remote-machine-dialog-remove {
+  margin-right: auto;
 }
 
 .settings-management-row {
@@ -4593,7 +4729,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-project-command-card {
   /*
-   * CDXC:ProjectSettings 2026-06-15-03:07:
+   * CDXC:Projects 2026-06-15-03:07:
    * Dark 2 Settings should not show a separate card-colored rectangle behind
    * the Projects editor; keep this repeated settings surface transparent like
    * the main Settings section cards.
@@ -4604,7 +4740,7 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:GlobalProjectDefaults 2026-08-02:
+ * CDXC:Projects 2026-08-02:
  * The Inherited badge sits inline after a project field name to mark that the
  * field is currently taking its value from Global Defaults. Keep it quiet: it
  * reports state, it is not an action, so it must not compete with the field
@@ -4626,52 +4762,8 @@ html:has(body.app-modal-host-native-window-body) {
 
 /*
  * CDXC:RemoteMachines 2026-06-08-19:12:
- * Saved remote machine cards need a quiet summary header, compact SSH fields, and hover-revealed delete controls so the Remote tab matches Agents/Actions management styling in the settings modal.
- *
- * CDXC:RemoteMachines 2026-06-24-10:49:
- * New and saved machine cards must use the same title/subtitle header rhythm
- * and password-help line count so cards in the two-column Remote grid resolve
- * to the same height instead of the add card looking shorter.
+ * Remote machine fields stay compact so the edit dialog matches Agents/Actions management styling in the settings modal.
  */
-.settings-remote-machine-card {
-  background: color-mix(in srgb, var(--app-card-active) 38%, transparent);
-  border: 1px solid color-mix(in srgb, var(--app-border) 92%, transparent);
-  border-radius: 0;
-  gap: 0;
-  overflow: hidden;
-  padding-block: 0;
-}
-
-.settings-remote-machine-summary {
-  align-items: center;
-  background: color-mix(in srgb, var(--app-card-active) 58%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
-  display: flex;
-  gap: 10px;
-  padding: 10px 12px;
-}
-
-.settings-remote-machine-add-summary {
-  padding-block: 10px;
-}
-
-.settings-remote-machine-add-icon {
-  align-items: center;
-  background: color-mix(in srgb, var(--app-card-active) 70%, transparent);
-  color: color-mix(in srgb, var(--app-muted) 70%, var(--app-foreground) 30%);
-  display: flex;
-  height: 36px;
-  justify-content: center;
-  width: 36px;
-}
-
-.settings-remote-machine-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-}
-
 .settings-remote-machine-fields {
   gap: 12px;
 }
@@ -4740,10 +4832,6 @@ and error text instead of the muted description tone.
 
 .settings-remote-machine-code-rejected {
   color: color-mix(in srgb, #f87171 82%, var(--app-foreground) 18%);
-}
-
-.settings-remote-machine-add-actions {
-  margin-top: 4px;
 }
 
 .settings-remote-machine-install-actions {
@@ -4836,7 +4924,7 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * The remote install prompt's width, body typography, and action row now come
  * from the shared `.gx-app-modal` rules. Only the inline monospace chips for
  * the install path and the exposed binaries are specific to this modal;
@@ -4853,7 +4941,7 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:RemoteProjectPicker 2026-06-24-21:09:
+ * CDXC:RemoteMachines 2026-06-24-21:09:
  * Worktree Add Project should sit at the top of the native child window instead
  * of vertically centering in the available panel. Keep the command surface inset
  * equally from the top, left, and right, and give the path input visible inline
@@ -4882,7 +4970,7 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:AppModals 2026-07-01-01:19:
+ * CDXC:AppModal 2026-07-01-01:19:
  * Compact native child-window modals are measured once before AppKit presents
  * them, so user edits after open must not grow the React shell beyond the
  * locked native window. Keep headers and actions stable by capping only the
@@ -4954,13 +5042,13 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:SettingsRoundness 2026-06-16-08:22:
+ * CDXC:Settings 2026-06-16-08:22:
  * Bespoke Settings tab surfaces do not all use shadcn data-slot attributes.
  * Apply the same small settings-scoped radii here so Remote, Projects, and
  * management rows match the central Settings control radius without changing
  * non-Settings modals.
  *
- * CDXC:SettingsRoundness 2026-06-16-08:33:
+ * CDXC:Settings 2026-06-16-08:33:
  * Keep these bespoke Settings surfaces tied to the subtle radius tokens:
  * 2px compact, 3px normal, 7px large, and adaptive 7px/10%.
  */
@@ -4991,8 +5079,7 @@ and error text instead of the muted description tone.
     .settings-management-row,
     .settings-modal-section,
     .settings-project-command-card,
-    .settings-remote-machine-card,
-    .settings-remote-machine-empty,
+    .settings-remote-machine-tile,
     .settings-remote-machine-input,
     .settings-project-command-textarea
   ) {
@@ -5003,19 +5090,17 @@ and error text instead of the muted description tone.
   :is(
     .projects-settings-selector-icon,
     .projects-settings-selector-option[data-slot='command-item'] > svg:first-child,
-    .settings-remote-machine-add-icon,
-    .settings-remote-machine-empty-icon
+    .settings-remote-machine-tile-icon
   ) {
   border-radius: var(--settings-radius-adaptive);
 }
 
-.ghostex-settings-shadcn
-  :is(.settings-project-command-card, .settings-remote-machine-card, .settings-remote-machine-empty) {
+.ghostex-settings-shadcn :is(.settings-project-command-card, .settings-remote-machine-tile) {
   border-radius: var(--settings-radius-section);
 }
 
 /*
- * CDXC:GPUIAppModalScroll 2026-07-26-07:55:
+ * CDXC:AppModal 2026-07-26-07:55:
  * GPUI app-modal child windows fit once to the measured dialog height at open
  * and keep that frame afterwards. A dialog that grows after open (long
  * pasted rename text, a long worktree prompt, a long inline error) therefore
@@ -5029,7 +5114,7 @@ and error text instead of the muted description tone.
  * regions there would report a clamped height and shrink the native panel.
  */
 /*
- * CDXC:GPUIAppModalClose 2026-07-28:
+ * CDXC:AppModal 2026-07-28:
  * GPUI app-modal dialogs live in their own native child windows that already
  * carry window close controls, and Escape dismisses them. The in-dialog X
  * button duplicated that affordance and sat inside the dialog's dead space, so
@@ -5065,7 +5150,7 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:GPUIRenameTextareaScroll 2026-07-29:
+ * CDXC:Sessions 2026-07-29:
  * Rename Session is a compact form, so its Session name editor owns all
  * overflow itself. Override the shared Textarea's `field-sizing: content`
  * behavior and lock the editor to its initial 80px height; additional lines
@@ -5197,7 +5282,7 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:ModalRedesign 2026-08-24 — Add Project & Add Worktree
+ * CDXC:AppModal 2026-08-24 — Add Project & Add Worktree
  *
  * Both dialogs join the shared modal language: #0e0e0e shell with a hairline
  * border and 12px radius, #161616 raised fields with 8px corners, 6px list
@@ -5221,7 +5306,7 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:AddProjectChrome 2026-08-26:
+ * CDXC:AddProject 2026-08-26:
  * The path bar owns the only rounded corners in the strip. Clipping it means the
  * flush action buttons inherit exactly the bar's 8px outer corners instead of
  * poking square edges past them, so the whole row reads as one radius family.
@@ -5344,7 +5429,7 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:SegmentedControl 2026-08-24:
+ * CDXC:DesignSystem 2026-08-24:
  * The mode switch is the shared SegmentedControl, which carries its own
  * container hairline, flat segments, and raised selected fill. Only the modal's
  * selected fill is restated here so the strip reads on the #161616 sheet.
@@ -5356,7 +5441,7 @@ and error text instead of the muted description tone.
 /* Extensions --------------------------------------------------------------- */
 
 /*
- * CDXC:UnifiedAppModal 2026-08-26:
+ * CDXC:AppModal 2026-08-26:
  * Extensions is a large management surface rather than a 460px sheet, so it
  * opts into the shared `.gx-app-modal` chrome (12px window, #0e0e0e surface,
  * hairline edges, 8px pills, 16px/400 title, 13px descriptions) and restates
@@ -5490,7 +5575,7 @@ and error text instead of the muted description tone.
 }
 
 /*
- * CDXC:RemoteSetup 2026-09-03:
+ * CDXC:RemotePairing 2026-09-03:
  * Remote Setup (sidebar menu → Mobile & Remote). Two numbered sections, a rows
  * panel for the app downloads with an in-modal Android install popover, and
  * two option cards for the connect paths. Everything sits on the shared
