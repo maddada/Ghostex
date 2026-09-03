@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §1):
+CDXC:Telemetry 2026-08-27 (addendum v2, §1):
 `distinct_id` resolution. This used to be "SHA-256 of the install's serverId",
 which counted one human with a laptop AND a desktop as two people. The chain
 below prefers an id that is stable across a person's machines, and falls back to

@@ -26,7 +26,7 @@ pub mod web;
 use rpc::{CliError, CliResult};
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Rust replacement for scripts/ghostex-cli.mjs. The dispatch table, bare-`ghostex`
 desktop launch, VS Code-style bare-path open, help gating, and the JSON error
 shape (`{ error, ok: false }` + exit 1 when --json) are preserved verbatim so
@@ -163,6 +163,7 @@ fn is_known_command(name: &str) -> bool {
         "k",
         "sleep",
         "hold-sessions-awake",
+        "client-hello",
         "wake",
         "focus",
         "floating-editor",
@@ -388,7 +389,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             args,
         ),
         /*
-        CDXC:AddProjectDialog 2026-07-30:
+        CDXC:AddProject 2026-07-30:
         The Add Project flow's four gxserver reads/writes are exposed as CLI
         verbs so Ghostex mobile can run the same daemon-owned logic over SSH
         that gpui and the web app reach over the wire protocol.
@@ -456,7 +457,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             run_bridge_action("renameSession", Parser::Rename, fail_on_not_ok, args)
         }
         /*
-        CDXC:MobileAgentActions 2026-08-01:
+        CDXC:Mobile 2026-08-01:
         Agent-aware rename for clients that only reach gxserver through this
         CLI (Ghostex mobile over SSH). `rename-session` writes the title with
         updateSession; this verb goes through the agent rename request so the
@@ -470,7 +471,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             args,
         ),
         /*
-        CDXC:MobileKeepAwake 2026-08-19:
+        CDXC:KeepAwake 2026-08-19:
         Ghostex mobile has no HTTP path to gxserver, so the keep-awake lease is a
         CLI verb it SSH-execs on a timer while its attached tabs are on screen.
         */
@@ -480,6 +481,16 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             fail_on_not_ok,
             args,
         ),
+        /*
+        CDXC:Telemetry 2026-09-03:
+        The mobile app's analytics hello. The phone reaches gxserver only through
+        this CLI over SSH, so its "I connected, on this OS, at this version" ping
+        is a verb rather than the loopback POST the desktop makes. It is
+        fire-and-forget on the phone side and never fails the caller: the daemon
+        validates the body against the closed taxonomy and drops what it does not
+        recognise.
+        */
+        "client-hello" => run_bridge_action("recordClientEvent", Parser::ClientHello, plain, args),
         "sleep-session" => run_bridge_action(
             "sleepSession",
             Parser::SessionBoolean("sleeping"),
@@ -488,7 +499,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         ),
         "tag-session" => run_bridge_action("tagSession", Parser::SessionTag, plain, args),
         /*
-        CDXC:SessionAgentNotes 2026-08-24:
+        CDXC:SessionNotes 2026-08-24:
         Clients that reach gxserver only through this CLI (Ghostex mobile over
         SSH) read and write the per-conversation note here. `read` and `save`
         are explicit subactions so the note text can never be mistaken for a
@@ -536,14 +547,14 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "send-message" | "message" | "msg" => wait::send_message_command(args),
         "read-text" | "read-messages" | "read-thread" => wait::read_session_text_command(args),
         /*
-        CDXC:SessionChatMobileCli 2026-07-31:
+        CDXC:Mobile 2026-07-31:
         Session Chat over SSH for Ghostex mobile: the chat endpoints as CLI
         verbs, mirroring the Add Project pattern. read-session-chat carries
         the --wait-ms/--fingerprint long-poll pair for transcript tailing
         without an /api/events socket.
         */
         /*
-        CDXC:AgentHistorySearch 2026-08-20:
+        CDXC:PromptSearch 2026-08-20:
         Find over SSH for Ghostex mobile: the four Find endpoints as CLI verbs,
         mirroring the Session Chat pattern above. Rows are addressed by their
         stable `--key`, so a phone can act on a result it listed minutes ago.
@@ -606,7 +617,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             args,
         ),
         /*
-        CDXC:SessionChatRewind 2026-09-02:
+        CDXC:SessionChat 2026-09-02:
         The terminal-side way to exercise the rewind driver without the chat UI:
         it takes the same transcript row id the chat surface would send.
         */
@@ -626,7 +637,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             args,
         ),
         /*
-        CDXC:SessionChatPromptQueue 2026-08-21:
+        CDXC:SessionChat 2026-08-21:
         Ghostex mobile has no HTTP path to gxserver, so the queue and draft
         endpoints are CLI verbs the phone SSH-execs, exactly like the rest of
         Session Chat. Rows are always addressed by the `--prompt-id` the daemon
@@ -673,7 +684,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             args,
         ),
         /*
-        CDXC:ExportTranscript 2026-08-20:
+        CDXC:TranscriptExport 2026-08-20:
         The transcript lives on the machine the agent runs on, so the CLI only
         ships the selector and prints the daemon's absolute export path; mobile
         and external orchestrators reuse this verb over SSH.

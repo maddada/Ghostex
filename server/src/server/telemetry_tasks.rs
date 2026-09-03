@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 The `AppState`-shaped edge of `crate::telemetry`. The telemetry crate module is
 deliberately free of server types (it is called from domain writes, extension
 lifecycle, and HTTP handlers alike), so the two places that need `AppState` —
@@ -46,8 +46,7 @@ fn collect_heartbeat_snapshot(
 ) -> Option<crate::telemetry::heartbeat::HeartbeatSnapshot> {
     let db = open_gxserver_database(&state.paths).ok()?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let (project_count, session_count, running_session_count, agents_used) =
-        crate::telemetry::heartbeat::collect_domain_counts(&repository);
+    let counts = crate::telemetry::heartbeat::collect_domain_counts(&repository);
     let agent_settings = crate::agents::read_agent_settings(&db)
         .ok()
         .map(Value::Object);
@@ -59,10 +58,11 @@ fn collect_heartbeat_snapshot(
     */
     let extension_count = state.extension_registry.list().ok()?.len();
     Some(crate::telemetry::heartbeat::HeartbeatSnapshot {
-        project_count,
-        session_count,
-        running_session_count,
-        agents_used,
+        project_count: counts.project_count,
+        session_count: counts.session_count,
+        running_session_count: counts.running_session_count,
+        agents_used: counts.agents_used,
+        custom_agent_executables: counts.custom_agent_executables,
         default_agent: crate::telemetry::heartbeat::default_agent_from_settings(
             agent_settings.as_ref(),
         ),

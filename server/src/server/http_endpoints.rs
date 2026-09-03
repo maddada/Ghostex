@@ -1,7 +1,7 @@
 use super::*;
 
 /*
-CDXC:ProjectActions 2026-08-01:
+CDXC:Projects 2026-08-01:
 Both the HUD read and the HUD settings mutation answer the same opt-in
 `includeAllProjectCommands` request, because clients that render per-project
 quick actions replace their whole HUD snapshot from either response. Keep the
@@ -29,7 +29,7 @@ pub(crate) fn apply_commands_by_project_if_requested(
 }
 
 /*
-CDXC:GxserverLogs 2026-06-19-14:45:
+CDXC:Diagnostics 2026-06-19-14:45:
 Rust must route `/api/queryLogs` instead of returning milestone `notImplemented`. Keep the TypeScript RPC envelope and local authenticated gates while returning only sanitized JSONL entries already present in the support log file.
 */
 pub(crate) fn handle_query_logs_http(
@@ -72,7 +72,7 @@ pub(crate) fn handle_portless_state_http(
     body: &Value,
 ) -> RoutedResponse {
     /*
-    CDXC:PortlessFailureUX 2026-06-23-04:28:
+    CDXC:Portless 2026-06-23-04:28:
     Native-sidebar reports only enum-like Portless settings/admin outcomes to
     server. The daemon persists setup recovery state, clears route files
     for Disable/remove, and returns refreshed metadata without paths, command
@@ -155,11 +155,11 @@ pub(crate) fn handle_portless_state_http(
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-14-22:38:
+CDXC:RepoStructure 2026-06-14-22:38:
 Phase 3 Rust domain endpoints must share the TypeScript RPC envelope, durable SQLite database, and error-status mapping. Keep routing synchronous and explicit here so unsupported lifecycle/provider endpoints still return milestone notImplemented instead of silently mutating partial state.
 */
 /*
-CDXC:MobileKeepAwake 2026-08-19:
+CDXC:KeepAwake 2026-08-19:
 `/api/holdSessionsAwake` takes ONE list so a phone tailing several attached tabs
 renews every hold in a single SSH round trip instead of one exec per tab.
 
@@ -175,7 +175,7 @@ pub(crate) fn hold_sessions_awake(
     let holder_id =
         session_keep_awake::normalize_holder_id(params.get("holderId").and_then(Value::as_str));
     /*
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     The mobile app reaches gxserver over SSH through the `ghostex` CLI, which
     sends no client header of its own, so its keep-awake holder id (`mobile-…`,
     minted in `apps/mobile/app/src/terminal/keepAwake.ts`) is the only signal on
@@ -183,9 +183,14 @@ pub(crate) fn hold_sessions_awake(
     the holder id itself is an opaque routing key and never leaves the machine.
     Throttled to one per hour per client kind by the emitter, which matters here
     because keep-awake leases renew continuously.
+
+    Since 2026-09-03 the app also sends an explicit `ghostex client-hello` with
+    its OS and version on every connect, BEFORE it can attach a tab, so on a
+    current app this emitter is absorbed by the hello's throttle window. It stays
+    for phones running an older app, which send no hello at all.
     */
     if holder_id.starts_with("mobile-") {
-        crate::telemetry::client_connected("mobile");
+        crate::telemetry::client_connected("mobile", crate::telemetry::ClientPlatform::default());
     }
     let ttl_ms = session_keep_awake::normalize_ttl_ms(params.get("ttlMs").and_then(Value::as_i64));
     let release = params.get("release").and_then(Value::as_bool) == Some(true);
@@ -238,7 +243,7 @@ pub(crate) fn hold_sessions_awake(
 }
 
 /*
-CDXC:BoardAssociateSession 2026-08-24:
+CDXC:ProjectBoard 2026-08-24:
 Linking a running session to a card takes the same gate as start-work: the gate
 serializes every write to a bead's conversation links, so an associate call and
 a concurrent dispatch cannot both decide what the card's links are. Nothing is
@@ -317,7 +322,7 @@ pub(crate) async fn handle_board_associate_session_http(
 }
 
 /*
-CDXC:BoardStartWork 2026-08-07:
+CDXC:ProjectBoard 2026-08-07:
 The daemon-owned Project Board "Start work" dispatch. The whole
 resolve → reuse-check → create → link sequence runs while holding the
 process-wide start-work gate, so two concurrent calls for one bead serialize
@@ -385,7 +390,7 @@ pub(crate) async fn handle_board_start_work_http(
     };
     if let Some((project_id, session_id)) = outcome.created_session.clone() {
         /*
-        CDXC:ZmxLifecycleOffRuntime 2026-09-01:
+        CDXC:Zmx 2026-09-01:
         The provider start below is a full zmx/launchd materialization, so it
         belongs on the blocking pool like every other lifecycle dispatch rather
         than on an executor worker.
@@ -501,7 +506,7 @@ pub(crate) fn create_quick_project_params(
     params: &Map<String, Value>,
 ) -> std::result::Result<Map<String, Value>, DomainStateError> {
     /*
-    CDXC:GPUIQuickActions 2026-07-11:
+    CDXC:AgentLauncher 2026-07-11:
     Quick actions must mirror macOS by creating a real projectless workspace
     under ~/ghostex/chats before creating its first terminal or agent. Keep the
     filesystem authority in gxserver, which already owns the authenticated
@@ -578,7 +583,7 @@ pub(crate) async fn handle_automation_http(
     body: &Value,
 ) -> RoutedResponse {
     /*
-    CDXC:GxserverAutomations 2026-06-29-15:55:
+    CDXC:Automations 2026-06-29-15:55:
     Automation RPCs are first-class gxserver endpoints now. Route them through the modular automation runtime instead of `/api/dispatchRendererCommand` so CLI, macOS, and remote clients do not depend on a native sidebar renderer being connected.
     */
     match handle_automation_endpoint(&state.automation_runtime, &endpoint_path, body).await {
@@ -649,7 +654,7 @@ pub(crate) async fn handle_repository_clone_http(
 }
 
 /*
-CDXC:AddProjectDialog 2026-07-30:
+CDXC:AddProject 2026-07-30:
 Provider discovery and repository lookup shell out to `gh`/`glab`, so they run
 on the async route like the clone endpoints do. The probe cwd is the daemon's
 own home directory unless the caller names an existing one, which keeps the

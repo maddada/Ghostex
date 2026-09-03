@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 The scheduler half of the Ghostex chat prompt queue. `session_chat_queue.rs`
 owns storage, the endpoints and the frame carriage; this module owns the clock
 that decides WHEN a queued row is allowed to reach the agent.
@@ -99,7 +99,7 @@ pub type SessionChatQueueNoticeReader =
     Arc<dyn Fn(&str, &str) -> Option<SessionChatTerminalNotice> + Send + Sync>;
 
 /*
-CDXC:SessionChatComposerReady 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 The session's last known composer verdict, injected the same way. Read from the
 cache only — a tick must never spawn a capture — so a session nobody has probed
 reads `Unknown` and the queue behaves exactly as it did before this feature.
@@ -313,7 +313,7 @@ impl SessionChatQueueRuntime {
                 }
             }
             /*
-            CDXC:SessionChatComposerReady 2026-08-26:
+            CDXC:SessionChat 2026-08-26:
             No input box on screen ⇒ HOLD, and deliberately not the `blocked`
             treatment above. A blocking notice is a state only the user can
             leave — a trust dialog waits forever for a keypress — so failing the
@@ -541,7 +541,7 @@ fn runtime_text(session: &Value, key: &str) -> Option<String> {
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 THE internal chat-message send. `/api/sendSessionChatMessage` is one caller;
 the prompt queue ("Send now" and the scheduler) is the other, which is why it
 lives here instead of inside the HTTP handler. Everything a chat send needs
@@ -573,7 +573,7 @@ pub(crate) async fn send_session_chat_message_internal(
         crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
             .or_else(|| agent.clone());
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-19:
+    CDXC:AgentScreenDetection 2026-08-19:
     Sample where the transcript ends BEFORE the message is enqueued: everything
     written past this offset is a candidate for "the agent recorded it". Sampling
     afterwards would race the agent's own write. This is the only work the
@@ -582,7 +582,7 @@ pub(crate) async fn send_session_chat_message_internal(
     does not cover.
     */
     /*
-    CDXC:SessionChatTerminalPicker 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     Claude Code's resume-usage picker owns the input line when a large session
     is resumed. This send used to answer it automatically ("Resume full session
     as-is") before typing, which was wrong twice over: the summary-vs-full
@@ -599,7 +599,7 @@ pub(crate) async fn send_session_chat_message_internal(
     them.
     */
     /*
-    CDXC:SessionChatComposerReady 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     Terminal capture must use the concrete CLI identity, not the normalized
     transcript family. Omp shares Pi's transcript decoder but paints different
     composer and statusline chrome, so folding it to Pi here loses both screen
@@ -626,7 +626,7 @@ pub(crate) async fn send_session_chat_message_internal(
         });
     }
     /*
-    CDXC:SessionChatComposerReady 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     The positive gate. Everything above is "is a screen we RECOGNISE in the
     way?"; this is "did the CLI paint an input box at all?". It catches the
     states no notice rule covers — a CLI still booting, an auth screen shipped
@@ -685,7 +685,7 @@ pub(crate) async fn send_session_chat_message_internal(
     .await
     {
         /*
-        CDXC:SessionChatTerminalNotices 2026-08-19:
+        CDXC:AgentScreenDetection 2026-08-19:
         The case this feature exists for — the agent CLI in this pane is dead —
         fails HERE, not at the delivery watchdog: zmx refuses the clear or paste,
         or the terminal screen proves that the paste never landed, so the user
@@ -713,7 +713,7 @@ pub(crate) async fn send_session_chat_message_internal(
                 );
             }
         }
-        // CDXC:SessionChatComposerReady 2026-08-26: the in-worker wait raises
+        // CDXC:SessionChat 2026-08-26: the in-worker wait raises
         // the same code the pre-send gate does, so a client has one case to
         // handle whichever of the two caught it.
         if error.composer_not_ready() {
@@ -728,7 +728,7 @@ pub(crate) async fn send_session_chat_message_internal(
         });
     }
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-19:
+    CDXC:AgentScreenDetection 2026-08-19:
     The bytes reached zmx, which says nothing about the agent having received
     them: a message typed into a login screen, a trust dialog or a shell where
     the CLI already exited is accepted and lost. The watchdog verifies delivery
@@ -743,12 +743,13 @@ pub(crate) async fn send_session_chat_message_internal(
         );
     }
     /*
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     Counted after the bytes reached zmx and only on the success path, so a
-    refused send is not reported as a prompt. The COUNT and the agent id are all
-    that leave; the prompt text is not in scope for the emitter and cannot be.
+    refused send is not reported as a prompt. The COUNT and the resolved agent
+    are all that leave; the prompt text is not in scope for the emitter and
+    cannot be.
     */
-    crate::telemetry::prompt_sent(agent.as_deref(), prompt_source);
+    crate::telemetry::prompt_sent(&target.session, prompt_source);
     /*
     An option command changes what the statusline reports: read it back. It is
     also NOT a user prompt — Ghostex itself typed it on the user's behalf when
@@ -765,7 +766,7 @@ pub(crate) async fn send_session_chat_message_internal(
             text,
         );
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     THE chat half of the draft promotion choke point. Both callers reach the
     agent through this one function — the user's composer and the prompt queue's
     scheduler — so clearing the marker here covers every Ghostex-delivered first
@@ -791,7 +792,7 @@ pub(crate) async fn send_session_chat_message_internal(
     retire_sent_session_chat_draft(state, &target.project_id, &target.session_id, text);
     // A `/compact` is NOT re-read here: the follower's transcript-keyed probe
     // burst covers it for chat-sent and terminal-typed commands alike
-    // (CDXC:SessionChatCompactingStatus), and a second publisher of the same
+    // (CDXC:AgentScreenDetection), and a second publisher of the same
     // activity only let a later follower frame overwrite what this one showed.
     if is_option_readback_command {
         schedule_session_chat_option_redetect(
@@ -805,7 +806,7 @@ pub(crate) async fn send_session_chat_message_internal(
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 Dispatch-only glue for the Ghostex chat prompt queue. Storage, validation and
 the endpoint bodies live in session_chat_queue.rs; server.rs supplies only the
 three things that module deliberately does not know about — the state-database
@@ -954,14 +955,14 @@ pub(crate) fn broadcast_session_chat_queue_state(
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 The sidebar's queued-prompt badge reads `queuedPromptCount` off the presentation
 projection, NOT off the chat frame — the sidebar renders every session from that
 snapshot and holds no per-session chat subscription. A queue change on an
 otherwise idle session produces no other delta, so without this publish the badge
 would only appear whenever some unrelated event happened to fire.
 
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 `/api/setSessionChatDraft` rides the same publish, which is what keeps a DRAFT
 session's sidebar title following the user's typing on every client: the draft
 display title is a presentation overlay read from `session_chat_drafts`, so the
@@ -991,7 +992,7 @@ fn promote_draft_session_after_send(state: &AppState, project_id: &str, session_
 }
 
 /*
-CDXC:SessionChatDraftRetireOnSend 2026-09-02:
+CDXC:Drafts 2026-09-02:
 The server half of "a sent message never comes back as a draft". Reached only
 after the bytes were accepted, from both callers of the internal send (the
 composer and the queue scheduler), so every Ghostex-delivered prompt retires the
@@ -1046,7 +1047,7 @@ pub(crate) fn publish_session_chat_queue_presentation_delta(
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 The delivery handle the queue module (and the scheduler in
 session_chat_queue_runtime.rs) holds. It closes over the daemon state so those
 modules never learn about AppState, zmx names, or the send watchdog, and every
@@ -1108,7 +1109,7 @@ pub(crate) fn session_chat_queue_publisher_factory(
 }
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 The scheduler's view of "is this terminal able to take a prompt at all". It
 reads the SAME resolved notice the chat card shows — the cached screen
 classification merged with the send watchdog's verdict — and never triggers a
@@ -1123,7 +1124,7 @@ pub(crate) fn session_chat_queue_notice_reader(
     })
 }
 
-/// CDXC:SessionChatComposerReady 2026-08-26: the composer half of the same
+/// CDXC:SessionChat 2026-08-26: the composer half of the same
 /// view, under the same no-spawn rule.
 pub(crate) fn session_chat_queue_composer_reader(
     state: &Arc<AppState>,

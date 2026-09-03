@@ -1,5 +1,5 @@
 /*
-CDXC:GhostexRustCli 2026-07-14:
+CDXC:Cli 2026-07-14:
 The native Rust CLI owns these user-facing help contracts. Keep focused help
 discoverable from the top-level output because agents and installed skills use
 it to choose supported gxserver paths without inspecting implementation code.
@@ -99,6 +99,10 @@ pub fn usage() -> String {
         format_help_command(
             "hold-sessions-awake --sessions-json <json> [--ttl-ms <n>] [--holder-id <id>] [--release] [--json]",
             "Keep attached sessions out of a client's Auto Sleep sweep while a remote client is viewing them",
+        ),
+        format_help_command(
+            "client-hello --client mobile --os <android|ios> [--os-version <v>] [--app-version <v>] [--json]",
+            "Report a mobile client attach (OS and app version only) to the machine's usage analytics",
         ),
         format_help_command(
             "saved-prompts <action> --payload-json json --json",

@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 The PostHog batch transport. Deliberately the dumbest part of the system: it
 takes an already-validated batch and posts it, and every failure is a debug log
 and a return value. Telemetry must never crash the daemon, never block startup,

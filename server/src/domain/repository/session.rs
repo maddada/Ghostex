@@ -73,7 +73,7 @@ impl<'a> DomainRepository<'a> {
             .map_err(sql_error)?;
         self.record_id_allocation("session", &project_id, &session_id, &timestamp)?;
         /*
-        CDXC:AnonymousAnalytics 2026-08-26:
+        CDXC:Telemetry 2026-08-26:
         The one INSERT INTO sessions in the crate, so every route that creates a
         session — chat, terminal, worktree, fork, board worker, automation —
         counts exactly once here, with no per-caller instrumentation to keep in
@@ -82,11 +82,11 @@ impl<'a> DomainRepository<'a> {
         Only AGENT sessions are reported. A plain terminal has no `agentId`, and
         emitting those as `custom` would swamp the agent-CLI distribution this
         event exists to measure with rows that carry no agent at all. Unknown
-        (user-authored) agent ids still collapse to `custom` inside the emitter,
-        so the id itself never leaves the machine.
+        (user-authored) agent ids are resolved by the executable of their base
+        command inside the emitter, so the id itself never leaves the machine.
         */
-        if let Some(agent_id) = read_optional_text(session.get("agentId")) {
-            crate::telemetry::session_started(Some(&agent_id));
+        if read_optional_text(session.get("agentId")).is_some() {
+            crate::telemetry::session_started(&session);
         }
         Ok(session)
     }
@@ -190,7 +190,7 @@ impl<'a> DomainRepository<'a> {
         let session_ids = normalize_session_order_ids(params.get("sessionIds"))?;
         let updated_at = now_iso();
         /*
-        CDXC:SidebarOrdering 2026-06-22-05:50:
+        CDXC:Sessions 2026-06-22-05:50:
         updateSessionOrder is one manual sidebar-order write in TypeScript gxserver. If a later session ID is missing or SQLite rejects a row, earlier sidebarOrder and updatedAt writes must roll back instead of leaving a partially reordered sidebar.
         */
         self.db
@@ -239,7 +239,7 @@ impl<'a> DomainRepository<'a> {
     }
 
     /*
-    CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+    CDXC:StateSync 2026-07-29-00:00:
     Settle/snooze is written through this narrow statement instead of
     `update_session` so the guarded lifecycle RPCs stay the only way to change
     it: a generic `/api/updateSession` body can never smuggle a settle past the
@@ -324,7 +324,7 @@ impl<'a> DomainRepository<'a> {
     }
 
     /*
-    CDXC:GxserverSlimSessionQueries 2026-09-01:
+    CDXC:StateSync 2026-09-01:
     `list_sessions` hydrates all thirty session fields and parses six JSON
     columns per row, which is hundreds of milliseconds on a registry with a few
     thousand rows. Callers that consume a narrow slice of the row get their own

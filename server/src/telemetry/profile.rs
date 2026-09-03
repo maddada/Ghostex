@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §3):
+CDXC:Telemetry 2026-08-27 (addendum v2, §3):
 The profile properties that ride EVERY event: `interface`,
 `default_agent`, `project_bucket`, `identity_source` — so the PostHog UI can
 break any event down by "what kind of install is this?" without a HogQL join.

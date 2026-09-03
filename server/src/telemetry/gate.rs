@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 The single opt-out chokepoint. Consulted at CAPTURE and again at FLUSH, so a
 user who turns analytics off mid-run both stops producing events and discards
 whatever is already queued — the queue is dropped, never drained on the way out.
@@ -31,7 +31,7 @@ const SETTINGS_CACHE_TTL: Duration = Duration::from_secs(5);
 pub const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
 
 /*
-CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §3):
+CDXC:Telemetry 2026-08-27 (addendum v2, §3):
 Everything this module reads out of the settings file, in ONE struct.
 
 The `interface` profile property rides every event and comes from the same JSON

@@ -8,7 +8,7 @@ use crate::ghostex_cli::rpc::{self, CliError, CliResult};
 use crate::ghostex_cli::{selector, sessions};
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's bridgeAction/resolvedSessionBridgeAction
 wrappers, sendGxserverCliAction (the action → gxserver endpoint switch), the
 renderer-command dispatch helpers, and every parse* payload parser. Payload
@@ -65,7 +65,7 @@ pub enum Parser {
     SessionBoolean(&'static str),
     SessionTag,
     /*
-    CDXC:SessionAgentNotes 2026-08-24:
+    CDXC:SessionNotes 2026-08-24:
     Session selector plus `--note`. The note is a user-authored body, so it
     travels as its own CLI argument (SSH quoting keeps it away from the
     selector) and is never printed anywhere but the JSON result.
@@ -92,7 +92,7 @@ pub enum Parser {
     /// session selector plus one serialized Session Chat key name.
     SessionChatKey,
     /*
-    CDXC:AgentHistorySearch 2026-08-20:
+    CDXC:PromptSearch 2026-08-20:
     Find over SSH for Ghostex mobile. `AgentPromptSearch` carries the query and
     filters; `AgentPromptRef` carries the stable prompt key that every follow-up
     call addresses a result by.
@@ -105,7 +105,7 @@ pub enum Parser {
     /// session selector plus `--message-id` for rewindSessionChat.
     SessionChatRewind,
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     Queue rows are addressed by the `--prompt-id` the daemon handed out, never
     by a list position, so a phone acting on a row minutes after it rendered
     still lands on the prompt it displayed.
@@ -117,11 +117,14 @@ pub enum Parser {
     /// session selector plus `--content` and `--client-id` for the synced draft.
     SessionChatDraft,
     /*
-    CDXC:MobileKeepAwake 2026-08-19:
+    CDXC:KeepAwake 2026-08-19:
     `--sessions-json` carries the whole attached-tab set in one exec so a phone
     renewing several holds costs one SSH round trip, not one per tab.
     */
     KeepSessionsAwake,
+    /// `--client mobile --os <android|ios> [--os-version <v>] [--app-version <v>]`
+    /// for the analytics hello (`/api/recordClientEvent`).
+    ClientHello,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -154,7 +157,7 @@ pub fn run_bridge_action(
         };
     let result = send_gxserver_cli_action(action, &payload, &bridge_flags)?;
     /*
-    CDXC:AndroidRemoteSessions 2026-05-17-14:24:
+    CDXC:Mobile 2026-05-17-14:24:
     Android remote actions use SSH exit status to decide whether to show
     recovery UI. Android-facing bridge commands such as rename-session must
     convert `{ ok: false }` bridge replies into a nonzero CLI exit.
@@ -186,7 +189,7 @@ pub fn run_resolved_session_bridge_action(
         None => None,
     };
     /*
-    CDXC:CliSessionSelectors 2026-06-04-03:20:
+    CDXC:Cli 2026-06-04-03:20:
     gxserver session ids are project-scoped. Selector-backed bridge actions
     must carry the resolved projectId with the sessionId so remote and mobile
     clients reconnect through the same S/P/G zmx route instead of addressing
@@ -217,7 +220,7 @@ pub fn run_resolved_session_bridge_action(
 /// sendGxserverCliAction: hard-cutover action → gxserver endpoint switch.
 pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) -> CliResult<Value> {
     /*
-    CDXC:GxserverCliCutover 2026-05-30-15:15:
+    CDXC:Cli 2026-05-30-15:15:
     gx/ghostex remains the user CLI, but hard-cutover commands must talk to
     gxserver instead of the macOS app bridge. Renderer-only commands still
     enter through a gxserver API endpoint so auth, protocol, remote access,
@@ -241,6 +244,9 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "lookupRepository" => rpc::call_gxserver_rpc("/api/lookupRepository", payload, flags),
         "cloneRepository" => clone_repository_and_wait(payload, flags),
         "holdSessionsAwake" => rpc::call_gxserver_rpc("/api/holdSessionsAwake", payload, flags),
+        "recordClientEvent" => {
+            rpc::call_gxserver_flat_body("/api/recordClientEvent", payload, flags)
+        }
         "removeProject" => rpc::call_gxserver_rpc("/api/removeProject", payload, flags),
         "restoreRecentProject" => {
             rpc::call_gxserver_rpc("/api/restoreRecentProject", payload, flags)
@@ -286,7 +292,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             rpc::call_gxserver_rpc("/api/requestSessionRename", &params, flags)
         }
         /*
-        CDXC:SessionAgentNotes 2026-08-24:
+        CDXC:SessionNotes 2026-08-24:
         Ghostex mobile has no HTTP path to gxserver, so the session-note pair is
         exposed as CLI verbs the phone SSH-execs, exactly like the Session Chat
         endpoints below. The daemon resolves the note's agent session id itself,
@@ -351,7 +357,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "rewindSessionChat" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             /*
-            CDXC:SessionChatRewind 2026-09-02:
+            CDXC:SessionChat 2026-09-02:
             The daemon holds this request while it drives the agent's rewind
             dialog and verifies every step against the screen, which is several
             six-second waits in the worst case, so the default 15s RPC timeout
@@ -433,7 +439,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             rpc::call_gxserver_rpc("/api/cancelDelayedSend", &params, flags)
         }
         /*
-        CDXC:MobileCloseAfterDone 2026-08-17:
+        CDXC:Sessions 2026-08-17:
         Close After Done remains owned by the connected sidebar renderer, so
         the mobile CLI forwards its existing command payload instead of
         pretending that it is an unsupported CLI action. Delayed Send uses the
@@ -469,7 +475,7 @@ fn dispatch_gxserver_renderer_command(
     flags: &Flags,
 ) -> CliResult<Value> {
     /*
-    CDXC:GxserverRendererCommands 2026-06-21-19:22:
+    CDXC:CefRuntime 2026-06-21-19:22:
     Renderer commands may target sessions by gxserver's raw project-scoped id,
     while the macOS sidebar can render combined project/session ids. Carry a
     structured `sessionTarget` whenever projectId/sessionId are present so the
@@ -529,7 +535,7 @@ fn send_gxserver_rename_command(payload: &Value, flags: &Flags) -> CliResult<Val
     }
     let params = with_resolved_gxserver_session_params(payload, flags)?;
     /*
-    CDXC:GenerateTitleSkill 2026-06-17-16:17:
+    CDXC:AgentSkills 2026-06-17-16:17:
     Claude Code leaves `/rename <title>` staged when Enter is sent as zmx text.
     Route generated-title renames through the native renderer command so the
     macOS host sends the same real `sendTerminalEnter` event used before the
@@ -765,7 +771,7 @@ fn create_gxserver_quick_terminal(payload: &Value, flags: &Flags) -> CliResult<V
 
 fn create_gxserver_chat_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
     /*
-    CDXC:MobileQuickSessions 2026-07-18:
+    CDXC:Mobile 2026-07-18:
     Mobile Quick "+" must mirror the GPUI Quick header: create a fresh
     projectless chat workspace through gxserver's createQuickProject, then
     create the initial terminal session inside it through the ordinary
@@ -816,7 +822,7 @@ fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
     }
     params.insert("kind".to_string(), json!("terminal"));
     /*
-    CDXC:GxserverSessionTitle 2026-06-23-08:40:
+    CDXC:SessionTitles 2026-06-23-08:40:
     Mobile and CLI create-session callers may provide first-message input, but
     server must remain the owner of first-prompt auto-name generation.
     Pass the prompt through as runtime metadata and startup text instead of
@@ -845,7 +851,7 @@ fn create_gxserver_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
         return Ok(created);
     }
     /*
-    CDXC:GxserverCliSessionStart 2026-07-04-17:05:
+    CDXC:Cli 2026-07-04-17:05:
     `ghostex create-session --start` mirrors `create-agent`: gxserver rows are
     created lazily and the zmx provider only materializes once something starts
     it, so `send-text`/`send-message`/`read-text` fail with "session does not
@@ -877,7 +883,7 @@ fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> CliResult<Va
         ));
     }
     /*
-    CDXC:GxserverCliAgents 2026-06-19-15:55:
+    CDXC:Cli 2026-06-19-15:55:
     `ghostex create-agent` is a spawn command for automation and agent
     orchestration, not just a row-creation helper. After creating the gxserver
     session, immediately ask gxserver to materialize the zmx provider so
@@ -888,7 +894,7 @@ fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> CliResult<Va
     params.insert("agentId".to_string(), json!(agent_id));
     params.insert("projectId".to_string(), json!(project_id));
     /*
-    CDXC:GxserverFirstUserInputDraft 2026-08-20:
+    CDXC:Drafts 2026-08-20:
     `--first-input-draft` is the opposite of a first user message: gxserver
     types the text into the new agent's composer once the provider starts and
     never submits it, so SSH-only clients can hand the user a mention such as
@@ -944,7 +950,7 @@ fn start_created_session_provider(created: Value, flags: &Flags) -> CliResult<Va
 }
 
 /*
-CDXC:AddProjectDialog 2026-07-30:
+CDXC:AddProject 2026-07-30:
 `ghostex clone-repository` is the blocking front end to gxserver's clone JOB
 endpoints, because Ghostex mobile drives the Add Project flow over one SSH exec
 and cannot hold a polling loop of its own. The daemon still owns the clone, the
@@ -1070,7 +1076,7 @@ fn with_resolved_gxserver_session_params(payload: &Value, flags: &Flags) -> CliR
         return Ok(params);
     }
     /*
-    CDXC:GxserverSessionLifecycle 2026-05-31-08:45:
+    CDXC:Sessions 2026-05-31-08:45:
     React Native Android, the gx TUI, and plain `gx` lifecycle commands send stable
     `--session-id G...` selectors from `ghostex sessions --json`. gxserver
     lifecycle RPCs require projectId too, so resolve bare session ids through
@@ -1146,11 +1152,12 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         Parser::SessionChatQueueOrder => parse_session_chat_queue_order(rest, flags)?,
         Parser::SessionChatDraft => parse_session_chat_draft(rest, flags)?,
         Parser::KeepSessionsAwake => parse_keep_sessions_awake(flags)?,
+        Parser::ClientHello => parse_client_hello(flags)?,
     })
 }
 
 /*
-CDXC:SessionChatMobileCli 2026-07-31:
+CDXC:Mobile 2026-07-31:
 Ghostex mobile has no HTTP path to gxserver, so the Session Chat endpoints are
 exposed as CLI verbs the phone SSH-execs, exactly like the Add Project flow.
 `read-session-chat` carries the long-poll pair (--wait-ms + --fingerprint): the
@@ -1158,7 +1165,7 @@ daemon holds the request until the chat fingerprint changes, which is how the
 phone tails a conversation without an /api/events socket.
 */
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 Prompt history lives on the machine that ran the agent, so Ghostex mobile
 reaches Find the same way it reaches chat: these verbs SSH-exec on that machine
 and forward to the daemon's own endpoints. Every follow-up verb addresses a
@@ -1406,11 +1413,53 @@ fn parse_session_chat_draft(rest: &[String], flags: &Flags) -> CliResult<Value> 
 }
 
 /*
-CDXC:MobileKeepAwake 2026-08-19:
+CDXC:KeepAwake 2026-08-19:
 The payload is deliberately a list of `{projectId, sessionId}` pairs the caller
 already knows from `ghostex sessions --json --mobile-summary`, so no lease
 renewal has to re-resolve a bare session id through the daemon inventory.
 */
+/*
+The body is the flat `{"event", "properties"}` shape `/api/recordClientEvent`
+reads, not the `{"params"}` envelope. Only `client_os` is required here; the
+daemon re-validates every field against its taxonomy and decides what is sent.
+*/
+fn parse_client_hello(flags: &Flags) -> CliResult<Value> {
+    let client = flags.text("client").unwrap_or_default();
+    if client.trim() != "mobile" {
+        return Err(CliError::Other(
+            "client-hello requires --client mobile.".to_string(),
+        ));
+    }
+    let os = flags.text("os").unwrap_or_default();
+    if os.trim().is_empty() {
+        return Err(CliError::Other(
+            "client-hello requires --os <android|ios>.".to_string(),
+        ));
+    }
+    let mut properties = Map::new();
+    properties.insert(
+        "client_os".to_string(),
+        Value::String(os.trim().to_string()),
+    );
+    set_or_remove(
+        &mut properties,
+        "client_os_version",
+        flag_json(flags, "osVersion"),
+    );
+    set_or_remove(
+        &mut properties,
+        "client_app_version",
+        flag_json(flags, "appVersion"),
+    );
+    let mut map = Map::new();
+    map.insert(
+        "event".to_string(),
+        Value::String("client.connected".to_string()),
+    );
+    map.insert("properties".to_string(), Value::Object(properties));
+    Ok(Value::Object(map))
+}
+
 fn parse_keep_sessions_awake(flags: &Flags) -> CliResult<Value> {
     let sessions_text = flags.text("sessionsJson").unwrap_or_default();
     if sessions_text.trim().is_empty() {
@@ -1603,7 +1652,7 @@ fn parse_project(rest: &[String], flags: &Flags) -> Value {
 
 fn parse_project_move(rest: &[String], flags: &Flags) -> Value {
     /*
-    CDXC:AndroidSidebar 2026-05-18-16:13:
+    CDXC:Mobile 2026-05-18-16:13:
     Ghostex Android reorders project groups through the Mac CLI, not local
     phone state. The desktop sidebar remains the source of truth and later
     inventory calls return the persisted order to mobile.
@@ -1627,7 +1676,7 @@ fn parse_project_move(rest: &[String], flags: &Flags) -> Value {
 fn parse_project_path(rest: &[String], flags: &Flags) -> Value {
     let mut map = Map::new();
     /*
-    CDXC:AddProjectDialog 2026-07-30:
+    CDXC:AddProject 2026-07-30:
     Ghostex mobile speaks the CLI, not the wire protocol, so the Add Project
     flow's "create this folder and add it" affordance reaches gxserver as
     `add-project --create-if-missing`. The flag is only sent when the caller
@@ -1750,7 +1799,7 @@ fn parse_session_selector(rest: &[String], flags: &Flags) -> Map<String, Value> 
 
 fn parse_rename(rest: &[String], flags: &Flags) -> Value {
     /*
-    CDXC:AndroidRemoteSessions 2026-05-17-13:23:
+    CDXC:Mobile 2026-05-17-13:23:
     Ghostex Android invokes remote rename through `ghostex rename-session
     --session-id <id> --title <title> --json` so SSH quoting can keep the
     stable session id and user-entered title as separate CLI arguments.
@@ -1764,7 +1813,7 @@ fn parse_rename(rest: &[String], flags: &Flags) -> Value {
 }
 
 /*
-CDXC:MobileAgentActions 2026-08-01:
+CDXC:Mobile 2026-08-01:
 `/api/requestSessionRename` takes the rename-session payload plus the agent
 identity hints and a title source. `titleSource` defaults to "user" here so
 mobile does not have to send it on every rename; gxserver applies the same
@@ -1889,7 +1938,7 @@ fn parse_session_tag(rest: &[String], flags: &Flags) -> CliResult<Value> {
 }
 
 /*
-CDXC:SessionAgentNotes 2026-08-24:
+CDXC:SessionNotes 2026-08-24:
 `ghostex session-note save --session-id <id> --note <text> --json` keeps the
 stable session id and the user-entered note as separate CLI arguments, exactly
 like `rename-session` does with `--title`, so SSH quoting never has to reunite
@@ -2096,7 +2145,7 @@ fn parse_open_path_target(value: &Value, wait: bool) -> Value {
     target.insert("raw".to_string(), json!(raw));
     if wait {
         /*
-        CDXC:OSIntegration 2026-05-27-18:06:
+        CDXC:OsIntegration 2026-05-27-18:06:
         `ghostex edit --wait` waits for a concrete opened editor item, so each
         target carries a stable per-command wait token across the native
         bridge.
@@ -2175,7 +2224,7 @@ fn parse_wait_for(rest: &[String], flags: &Flags) -> Value {
 
 fn parse_sidebar_project_collections_state(rest: &[String], flags: &Flags) -> CliResult<Value> {
     /*
-    CDXC:SidebarProjectCollections 2026-07-18-00:00:
+    CDXC:Projects 2026-07-18-00:00:
     Mobile edits durable sidebar project collections by SSH-exec'ing `ghostex
     update-sidebar-project-collections --state-json '<json>'` for a full
     read-modify-write of the collections state. The CLI passes the whole state
@@ -2208,7 +2257,7 @@ fn parse_sidebar_project_collections_state(rest: &[String], flags: &Flags) -> Cl
 
 fn parse_sidebar_spaces_state(rest: &[String], flags: &Flags) -> CliResult<Value> {
     /*
-    CDXC:SidebarSpaces 2026-08-27:
+    CDXC:Spaces 2026-08-27:
     Mobile edits durable sidebar Spaces by SSH-exec'ing `ghostex
     update-sidebar-spaces --state-json '<json>'` for a full read-modify-write of
     the Space document, exactly like the project-collections command beside it.

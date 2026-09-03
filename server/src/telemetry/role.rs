@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 The durable "this install is a remote helper" marker.
 
 `GHOSTEX_ANALYTICS_ROLE=remote` alone cannot carry this rule. A gxserver on an

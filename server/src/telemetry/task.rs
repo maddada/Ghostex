@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 The two background tasks, spawned ONLY from the long-running server loop
 alongside the other background tasks. A one-shot `ghostex` CLI verb never calls
 `telemetry::init`, so it never has a handle, never queues, and never starts a
@@ -126,7 +126,7 @@ where
         return;
     }
     /*
-    CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §3):
+    CDXC:Telemetry 2026-08-27 (addendum v2, §3):
     Collect BEFORE the due-check, and refresh the per-event profile fields from
     the result, because those two things run on different schedules. The
     heartbeat EVENT is due at most once a day; the `project_bucket` /

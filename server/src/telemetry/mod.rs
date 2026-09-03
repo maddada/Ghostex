@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 Anonymous PostHog analytics. Spec: `docs/2026-08-26/anonymous-analytics/PLAN.md`.
 
 ALL analytics egress in Ghostex happens here, in gxserver. The desktop, web, and
@@ -23,12 +23,14 @@ Layout:
 - `heartbeat`— daily snapshot collection.
 - `state`    — durable `analytics.state.v1` metadata row.
 - `client_events` — `/api/recordClientEvent` body handling.
+- `client_platform` — web client OS family from the User-Agent.
 */
 
 pub mod base;
 pub mod capture;
 pub mod client;
 pub mod client_events;
+pub mod client_platform;
 pub mod gate;
 pub mod heartbeat;
 pub mod identity;
@@ -41,7 +43,7 @@ pub mod taxonomy;
 
 pub use capture::{
     client_connected, extension_installed, extension_uninstalled, prompt_sent,
-    prompt_source_for_diagnostic_input_source, session_started,
+    prompt_source_for_diagnostic_input_source, session_started, ClientPlatform,
 };
 pub use client_events::record_client_event;
 pub use gate::is_enabled;

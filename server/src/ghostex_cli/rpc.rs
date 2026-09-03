@@ -33,7 +33,7 @@ const GXSERVER_SSH_TUNNEL_IDLE_KILL_MS: u64 = 500;
 const GXSERVER_TAILCAT_DEFAULT_REMOTE_PORT: u16 = GXSERVER_LOCAL_API_PORT;
 
 /*
-CDXC:GhostexRustCli 2026-07-13:
+CDXC:Cli 2026-07-13:
 Faithful port of the Node CLI's gxserver RPC layer: local target via
 the resolved Ghostex state directory, named connection profiles from
 the resolved Ghostex config directory (direct/tailscale URL or ssh:// with a
@@ -241,10 +241,31 @@ pub fn call_gxserver_rpc(pathname: &str, params: &Value, flags: &Flags) -> CliRe
     request_gxserver_rpc(&target, pathname, params, flags)
 }
 
+/// Like `call_gxserver_rpc`, but posts `body` as-is instead of wrapping it in
+/// the `{"params", "protocolVersion"}` envelope. For the few endpoints that read
+/// a flat body, such as `/api/recordClientEvent`.
+pub fn call_gxserver_flat_body(pathname: &str, body: &Value, flags: &Flags) -> CliResult<Value> {
+    let target = resolve_gxserver_server_target(flags, body)?;
+    request_gxserver_body(&target, pathname, body, flags)
+}
+
 pub fn request_gxserver_rpc(
     target: &Target,
     pathname: &str,
     params: &Value,
+    flags: &Flags,
+) -> CliResult<Value> {
+    let body = json!({
+        "params": params,
+        "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+    });
+    request_gxserver_body(target, pathname, &body, flags)
+}
+
+fn request_gxserver_body(
+    target: &Target,
+    pathname: &str,
+    body: &Value,
     flags: &Flags,
 ) -> CliResult<Value> {
     let _tunnel = ensure_gxserver_tunnel_for_rpc(target, flags)?;
@@ -252,10 +273,6 @@ pub fn request_gxserver_rpc(
         .number("timeout")
         .or_else(|| flags.number("timeoutMs"))
         .unwrap_or(15_000.0);
-    let body = json!({
-        "params": params,
-        "protocolVersion": GXSERVER_PROTOCOL_VERSION,
-    });
     let request = ureq::post(&format!("{}{}", target.base_url, pathname))
         .set("authorization", &format!("Bearer {}", target.token))
         .set("content-type", "application/json")
@@ -412,7 +429,7 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
         return resolve_gxserver_profile_target(&profile, flags);
     }
     /*
-    CDXC:Tailcat 2026-09-01:
+    CDXC:RemotePairing 2026-09-01:
     The inline form requires the explicit `tailcat:` prefix. Address blobs
     start with "tc" and are otherwise opaque, so sniffing a bare blob would
     make any connection profile whose name starts with "tc" unreachable.
@@ -453,7 +470,7 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
 }
 
 /*
-CDXC:GxserverDevPort 2026-08-20:
+CDXC:ServerDaemon 2026-08-20:
 The daemon already lets a compat/dev run move its loopback listener with
 GHOSTEX_GXSERVER_DEV_PORT (see `config::read_selected_local_api_port`). The CLI
 hardcoded 58744, so `gx` against such a daemon silently talked to the packaged
@@ -1077,7 +1094,7 @@ fn ensure_gxserver_tailcat_tunnel_for_rpc(
 }
 
 /*
-CDXC:Tailcat 2026-09-01:
+CDXC:RemotePairing 2026-09-01:
 The ssh arm can check and start the remote daemon because ssh gives it a shell.
 tailcat gives only a TCP pipe, so this arm brings up the forwarder and waits for
 health on the same schedule as ssh; a remote gxserver that is down stays a

@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 Durable telemetry state, in the `metadata` table under `analytics.state.v1`,
 mirroring the `agents.settings.v1` read/write pair in
 `server/src/agents/settings.rs`.

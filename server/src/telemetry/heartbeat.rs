@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 The daily `heartbeat`: the one event that answers "how many people use Ghostex,
 and what does a typical install look like". Everything in it is a COUNT or an
 ENUM read from state gxserver already owns — never a name, a path, or an id.
@@ -34,6 +34,10 @@ pub struct HeartbeatSnapshot {
     pub session_count: usize,
     pub running_session_count: usize,
     pub agents_used: Vec<&'static str>,
+    /// Executables of the user's custom agents that map to no catalog agent.
+    /// Sorted, deduplicated, and capped, so the list can never be a fingerprint
+    /// of how many custom agents someone has.
+    pub custom_agent_executables: Vec<String>,
     pub default_agent: &'static str,
     pub preferred_interface: &'static str,
     pub extension_count: usize,
@@ -42,7 +46,7 @@ pub struct HeartbeatSnapshot {
 }
 
 /*
-CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §2):
+CDXC:Telemetry 2026-08-27 (addendum v2, §2):
 The person properties. `$set` (overwrite), never `$set_once`, so the person page
 always shows what the install looks like TODAY rather than on the day it first
 reported.
@@ -131,6 +135,10 @@ pub fn emit(snapshot: &HeartbeatSnapshot) {
                 "agents_used",
                 PropertyValue::EnumList(snapshot.agents_used.clone()),
             ),
+            (
+                "custom_agent_executables",
+                PropertyValue::TokenList(snapshot.custom_agent_executables.clone()),
+            ),
             ("default_agent", PropertyValue::Enum(snapshot.default_agent)),
             (
                 "preferred_interface",
@@ -154,9 +162,15 @@ pub fn emit(snapshot: &HeartbeatSnapshot) {
 
 /// Counts from the domain tables. Recent projects are the user-visible project
 /// list (hidden and carrier rows already excluded by `list_recent_projects`).
-pub fn collect_domain_counts(
-    repository: &DomainRepository<'_>,
-) -> (usize, usize, usize, Vec<&'static str>) {
+pub struct DomainCounts {
+    pub project_count: usize,
+    pub session_count: usize,
+    pub running_session_count: usize,
+    pub agents_used: Vec<&'static str>,
+    pub custom_agent_executables: Vec<String>,
+}
+
+pub fn collect_domain_counts(repository: &DomainRepository<'_>) -> DomainCounts {
     let project_count = repository
         .list_recent_projects()
         .map(|projects| projects.len())
@@ -174,6 +188,7 @@ pub fn collect_domain_counts(
         })
         .count();
     let mut agents_used: BTreeSet<&'static str> = BTreeSet::new();
+    let mut custom_agent_executables: BTreeSet<String> = BTreeSet::new();
     for session in &sessions {
         let Some(agent_id) = session.get("agentId").and_then(Value::as_str) else {
             continue;
@@ -181,14 +196,22 @@ pub fn collect_domain_counts(
         if agent_id.trim().is_empty() {
             continue;
         }
-        agents_used.insert(taxonomy::normalize_agent_id(Some(agent_id)));
+        let report = super::capture::session_agent_report(session);
+        agents_used.insert(report.agent);
+        if let Some(executable) = report.executable {
+            custom_agent_executables.insert(executable);
+        }
     }
-    (
+    DomainCounts {
         project_count,
         session_count,
         running_session_count,
-        agents_used.into_iter().collect(),
-    )
+        agents_used: agents_used.into_iter().collect(),
+        custom_agent_executables: custom_agent_executables
+            .into_iter()
+            .take(taxonomy::MAX_TOKEN_LIST_LENGTH)
+            .collect(),
+    }
 }
 
 /// The interface setting plus the remote-machine COUNT, read straight out of

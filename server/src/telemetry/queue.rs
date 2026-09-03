@@ -1,5 +1,5 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 The process-global telemetry handle and its bounded queue.
 
 Global rather than a field on `AppState` for two reasons. First, emitters live in

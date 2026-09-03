@@ -52,14 +52,25 @@ pub(crate) fn handle_web_bootstrap(
         }
     };
     /*
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     `/api/webBootstrap` is the browser handshake — it is how the web app gets
     its auth token, and nothing else calls it — so a successful one is the
     definitive "a web client attached" signal. The emitter throttles to one per
     hour per client kind, which is what keeps a reloading tab from counting as
-    a hundred users.
+    a hundred users. The browser's OS family rides along (see
+    `telemetry::client_platform`); the User-Agent itself is never sent.
     */
-    crate::telemetry::client_connected("web");
+    let client_os = headers
+        .get(header::USER_AGENT)
+        .and_then(|value| value.to_str().ok())
+        .map(crate::telemetry::client_platform::platform_from_user_agent);
+    crate::telemetry::client_connected(
+        "web",
+        crate::telemetry::ClientPlatform {
+            os: client_os,
+            ..Default::default()
+        },
+    );
     routed_json(
         endpoint_path,
         StatusCode::OK,

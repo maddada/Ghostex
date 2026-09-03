@@ -51,7 +51,7 @@ pub(crate) fn log_temporary_zmx_input_write(
     }
     let title_flow = source.contains("title");
     /*
-    CDXC:SessionChatVerifyPaste 2026-08-24: chat's queue writes are recorded
+    CDXC:Clipboard 2026-08-24: chat's queue writes are recorded
     whatever they carry. A lost message's paste body and its Enter contain no
     listed control byte, so the control-byte filter used to drop exactly the
     two entries a delivery report needs — the sequence left no trace at all.
@@ -88,7 +88,7 @@ pub(crate) fn log_temporary_zmx_input_write(
 }
 
 /*
-CDXC:GPUIWindowsTerminalStartup 2026-07-26:
+CDXC:PlatformSupport 2026-07-26:
 Windows GPUI quick terminals use one daemon-owned create/start/attach-plan
 operation. A newly allocated gxserver session id is never reused, so its zmx
 name cannot already own a provider and probing it before and after startup only
@@ -346,7 +346,7 @@ pub(crate) fn append_zmx_endpoint_error_context(error: &mut ZmxEndpointError, co
 }
 
 /*
-CDXC:GxserverRustPort 2026-06-15-18:06:
+CDXC:RepoStructure 2026-06-15-18:06:
 Phase 5 Rust must own zmx-backed lifecycle and session I/O through Ghostex-managed zmx artifacts only. Keep command builders explicit, pass user send text through stdin, cap subprocess output, and never add PATH fallback or automatic listener-port fallback.
 */
 pub fn dispatch_zmx_lifecycle_endpoint(
@@ -375,7 +375,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 && wake_requires_session_provider_start(&attach)
             {
                 /*
-                CDXC:GxserverZmxLifecycle 2026-07-12-15:10:
+                CDXC:Zmx 2026-07-12-15:10:
                 Wake must revive the provider itself, not just flip lifecycleState to
                 "running". Headless wakers (ghostex CLI and React Native Android) never follow up
                 with /api/startSessionProvider, so a wake that only writes the DB leaves
@@ -390,7 +390,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                     provider_params.insert("startupText".to_string(), json!(startup_text));
                 }
                 /*
-                CDXC:ZmxWakeProbeReuse 2026-09-01:
+                CDXC:Zmx 2026-09-01:
                 `create_attach_session_metadata` probed this exact session
                 milliseconds ago and got `missing` — that IS the condition that
                 brought us here — so the provider start does not re-probe it,
@@ -511,7 +511,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 }
             }
             /*
-            CDXC:MobileKeepAwake 2026-08-19:
+            CDXC:KeepAwake 2026-08-19:
             An AUTOMATIC sleep (a client's "Sleep inactive agents" sweep) loses to
             a live keep-awake lease, because the sweeping client cannot see that a
             phone is attached to this terminal. The decision belongs here rather
@@ -522,7 +522,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
             The lifecycle guard above still rejects a stale request whose
             target is no longer running.
 
-            CDXC:SessionChatPromptQueue 2026-08-21: a session holding queued chat
+            CDXC:SessionChat 2026-08-21: a session holding queued chat
             prompts declines the same way. The scheduler can only deliver into a
             RUNNING session, so letting an inactivity sweep retire one would park
             the user's queued text until they happened to wake the session again.
@@ -551,7 +551,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                     });
                 }
                 /*
-                CDXC:AutoSleepNeverActive 2026-08-22:
+                CDXC:SessionSleep 2026-08-22:
                 A session that has never been active has never been prompted:
                 `lastActiveAt` is written only when a session enters working or
                 attention. An inactivity sweep has no idle time to measure on
@@ -563,7 +563,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                 client's sweep gets the same answer. A user-triggered Sleep
                 bypasses this inactivity-only decline.
 
-                CDXC:DraftSessions 2026-08-28:
+                CDXC:Drafts 2026-08-28:
                 A DRAFT is the one never-active session that IS safe to sleep,
                 and the one it matters most for: it is by definition unprompted,
                 so it would otherwise be the only session class that can never
@@ -611,7 +611,7 @@ pub fn dispatch_zmx_lifecycle_endpoint(
 
 /// Screen-state read for one session, by repository identity.
 ///
-/// CDXC:SessionChatTerminalNotices 2026-08-19: the truncation flag travels with
+/// CDXC:AgentScreenDetection 2026-08-19: the truncation flag travels with
 /// the text now. A capture that hit the cap lost its TAIL — the live screen —
 /// so screen-state readers must not conclude anything from it.
 pub(crate) fn read_zmx_session_history_capture(
@@ -629,7 +629,7 @@ pub(crate) fn read_zmx_session_history_capture(
 }
 
 /*
-CDXC:SessionChatSerializedWriters 2026-08-24:
+CDXC:SessionChat 2026-08-24:
 One `/api/sendSessionText` or `/api/sendSessionEnter` call, resolved against the
 repository BEFORE anything is awaited — a rusqlite handle cannot be held across
 an await point, and the awaited variant needs the queue's answer.
@@ -711,7 +711,7 @@ impl ZmxQueuedSessionWrite {
 }
 
 /*
-CDXC:SessionChatSerializedWriters 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 `/api/sendSessionMessage` — the automation prompt, the worktree first prompt,
 the fork rename, the remote rename, and `gx sendMessage` — is the last writer of
 the session's TUI input line that bypassed the per-session queue. It wrote its
@@ -769,7 +769,7 @@ impl ZmxQueuedSessionMessage {
     }
 
     /*
-    CDXC:GxserverSendMessageSubmit 2026-07-04-17:02:
+    CDXC:SessionChat 2026-07-04-17:02:
     Submit must be a separate zmx send after a short settle delay, never a
     trailing \r inside the same stdin burst. Bracketed-paste TUIs (Claude Code
     and similar composers) treat a \r that arrives in the same paste burst as
@@ -843,7 +843,7 @@ impl ZmxQueuedSessionMessage {
     }
 
     /*
-    CDXC:AnonymousAnalytics 2026-08-26:
+    CDXC:Telemetry 2026-08-26:
     `/api/sendSessionMessage` carries two very different things: real user
     prompts (automation runs, the worktree first prompt, `gx sendMessage`) and
     gxserver's own non-prompt writes (auto-title generation, the fork rename,
@@ -858,10 +858,7 @@ impl ZmxQueuedSessionMessage {
         else {
             return;
         };
-        crate::telemetry::prompt_sent(
-            self.session.get("agentId").and_then(Value::as_str),
-            prompt_source,
-        );
+        crate::telemetry::prompt_sent(&self.session, prompt_source);
     }
 }
 
@@ -935,7 +932,7 @@ pub fn dispatch_zmx_session_interaction_endpoint(
             Ok(Value::Object(output))
         }
         /*
-        CDXC:SessionChatSerializedWriters 2026-08-24: these two write raw bytes
+        CDXC:SessionChat 2026-08-24: these two write raw bytes
         into the session's TUI input line, which is the same line an in-flight
         Session Chat send owns from its clear burst until its Enter, so they go
         through that per-session queue instead of straight to the pty. This
@@ -1010,7 +1007,7 @@ pub(crate) fn send_result(
 }
 
 /*
-CDXC:GxserverSessionIO 2026-06-22-07:09:
+CDXC:ServerApi 2026-06-22-07:09:
 sendSessionText, sendSessionMessage, and sendSessionEnter report `textLength` through the TypeScript API contract. Count UTF-16 code units like JavaScript `string.length` while keeping send limits and `textBytes` byte-based.
 */
 fn js_string_length(text: &str) -> usize {
@@ -1018,7 +1015,7 @@ fn js_string_length(text: &str) -> usize {
 }
 
 /*
-CDXC:SessionChatSend 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Session Chat's server-side send queue reuses the exact zmx stdin path the
 sendSession* endpoints use (`zmx send <session>` reading raw payload bytes
 from stdin) instead of growing a second pty-write mechanism. One call = one

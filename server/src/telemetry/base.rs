@@ -1,9 +1,9 @@
 /*
-CDXC:AnonymousAnalytics 2026-08-26:
+CDXC:Telemetry 2026-08-26:
 Machine/build properties every event carries, resolved once at init and cloned
 onto each capture so no emitter can forget one.
 
-CDXC:AnonymousAnalytics 2026-08-27 (addendum v2, §2):
+CDXC:Telemetry 2026-08-27 (addendum v2, §2):
 `$process_person_profile: false` is GONE. Events are now identified, so PostHog
 builds a person record per `distinct_id` — which is the point, since
 `distinct_id` became per-human (`telemetry::identity`) and person profiles are
