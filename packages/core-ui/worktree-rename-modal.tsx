@@ -52,7 +52,7 @@ export type WorktreeRenameModalProps = {
 };
 
 /*
- * CDXC:WorktreeRename 2026-08-09-18:40:
+ * CDXC:Worktrees 2026-08-09-18:40:
  * One field, three effects: the folder becomes `<ParentFolder>-<slug>`, the
  * project label follows it, and the branch takes the typed name verbatim when
  * the checkbox is on. The live preview exists because those three are not the
@@ -60,7 +60,7 @@ export type WorktreeRenameModalProps = {
  * `feat-kanban-assignee` — and a user who cannot see that mapping cannot predict
  * what they are about to do to their filesystem.
  *
- * CDXC:WorktreeRename 2026-08-09-18:40:
+ * CDXC:Worktrees 2026-08-09-18:40:
  * The branch checkbox is opt-in rather than automatic because renaming a branch
  * that is already pushed silently breaks the user's next `git push` with an
  * error that never mentions Ghostex. It defaults on only for branches gxserver
@@ -169,11 +169,11 @@ export function WorktreeRenameModal({ draft, isOpen, onCancel, onRename, theme =
                 />
                 <FieldDescription className='worktree-rename-preview'>
                   <span className='worktree-rename-preview-line'>
-                    Folder: <code>{nextFolderName || '—'}</code>
+                    Folder: <code>{nextFolderName || 'Not set'}</code>
                   </span>
                   {renameBranch ? (
                     <span className='worktree-rename-preview-line'>
-                      Branch: <code>{trimmedName || '—'}</code>
+                      Branch: <code>{trimmedName || 'Not set'}</code>
                     </span>
                   ) : null}
                 </FieldDescription>
@@ -221,7 +221,7 @@ export function WorktreeRenameModal({ draft, isOpen, onCancel, onRename, theme =
 }
 
 /*
- * CDXC:WorktreeRename 2026-08-10:
+ * CDXC:Worktrees 2026-08-10:
  * Reopening the dialog must be lossless. The folder can only ever hold the
  * slugged name, so a worktree on `feat/kanban-assignee` lives in
  * `<Parent>-feat-kanban-assignee` — and prefilling from the FOLDER handed back
@@ -239,7 +239,7 @@ function resolveWorktreeRenameInitialName(draft: WorktreeRenameModalDraft): stri
 }
 
 /*
- * CDXC:WorktreeRename 2026-08-09-18:40:
+ * CDXC:Worktrees 2026-08-09-18:40:
  * These two refusals are pure computations over data the draft already carries,
  * so they answer while the user types instead of after they submit. Everything
  * that needs the filesystem or git — the destination already existing on disk, a
@@ -270,7 +270,7 @@ function resolveWorktreeRenameCollisionError({
 }
 
 /*
- * CDXC:WorktreeRename 2026-08-10:
+ * CDXC:Worktrees 2026-08-10:
  * The draft carries the project path exactly as it is registered, and on Windows
  * that is `C:\Users\me\repo`. Splitting on "/" alone found no separator there and
  * produced `/feat-name`, which matches no main checkout and no registered
@@ -287,7 +287,7 @@ function joinRenameParentDirectory(parentProjectPath: string, folderName: string
 
 function getSidebarThemeVariant(theme: SidebarTheme): 'dark' | 'light' {
   /**
-   * CDXC:SidebarTheme 2026-06-15-01:43:
+   * CDXC:Theming 2026-06-15-01:43:
    * Worktree rename is part of the app-modal family, so Light removes the dark
    * class while Dark 1 and Dark 2 keep dark shadcn mode.
    */

@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatAgentFleet 2026-08-23:
+CDXC:AgentScreenDetection 2026-08-23:
 The sub-agents Claude is running, lifted off its terminal screen and put where
 the chat can see them. gxserver parses the block the CLI pins below its
 statusline (server/src/session_chat_agent_fleet.rs); nothing about it reaches
@@ -98,7 +98,7 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
                   className='ghostex-chat-agent-fleet-task'
                   // Names the agent as well as the task: under a narrow pane the
                   // name column is hidden and this is the only way back to it.
-                  title={agent.task ? `${agent.name} — ${agent.task}` : agent.name}
+                  title={agent.task ? `${agent.name}: ${agent.task}` : agent.name}
                 >
                   {agent.task ?? ''}
                 </span>

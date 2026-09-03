@@ -7,7 +7,7 @@ import type { WebviewApi } from '../webview-api';
 import type { SidebarSectionSessionSummary } from './types';
 
 /*
- * CDXC:SidebarMachineTabs 2026-08-28:
+ * CDXC:RemoteMachines 2026-08-28:
  * The machine strip is the sidebar's top-level switch: one tab for the local
  * machine plus one per saved remote machine, and the body below renders only the
  * selected machine's projects. It uses the app's single segmented single-select
@@ -20,7 +20,7 @@ import type { SidebarSectionSessionSummary } from './types';
  * machine still reports that something needs the user. Awake idle sessions do
  * not produce a tab count.
  *
- * CDXC:SidebarProjectMenu 2026-09-02:
+ * CDXC:ContextMenus 2026-09-02:
  * The remote machine header is gone, so its connection control lives here: a
  * remote tab's cloud glyph is the control. It spins while connecting or
  * installing, turns red on failure with the host's sanitized reason as the
@@ -28,7 +28,7 @@ import type { SidebarSectionSessionSummary } from './types';
  * whenever the machine is not connected. The tooltip is the tab's own so it
  * survives the narrow, truncating layout.
  *
- * CDXC:SidebarMachineTabMenu 2026-09-02:
+ * CDXC:RemoteMachines 2026-09-02:
  * Right-clicking a remote tab opens a small menu: Hide Machine flips that
  * machine's "Show in sidebar" setting off (the same switch the Remote settings
  * tab exposes), and Configure Machines opens that settings tab. The Local tab
@@ -166,7 +166,7 @@ export function SidebarMachineTabs({
             }
             render={
               <SidebarFixedTooltipButton
-                tooltip={item.connectionLabel ? `${item.label} — ${item.connectionLabel}` : item.label}
+                tooltip={item.connectionLabel ? `${item.label}: ${item.connectionLabel}` : item.label}
                 tooltipSide='bottom'
               />
             }

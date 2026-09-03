@@ -36,7 +36,7 @@ const SESSION_RENAME_GENERATE_NAME_THRESHOLD = 70;
 export type SessionRenameModalProps = {
   agents?: SidebarAgentButton[];
   /**
-   * CDXC:SessionHistoryTitleSource 2026-07-29:
+   * CDXC:SessionTitles 2026-07-29:
    * When the host supports it (gpui + claude/codex/cursor sessions), Generate
    * Name works without typed input: an empty or unchanged name submits an
    * empty title with shouldGenerateTitle so the controller summarizes the
@@ -90,7 +90,7 @@ export function SessionRenameModal({
   }, [initialTitle, isOpen]);
 
   /**
-   * CDXC:SidebarRename 2026-06-13-12:00
+   * CDXC:Sessions 2026-06-13-12:00
    * Opening Rename Session should drop the caret into the name field with the
    * existing title fully selected so the user can immediately type a
    * replacement. Own the initial focus through the dialog's initialFocus hook
@@ -98,7 +98,7 @@ export function SessionRenameModal({
    * afterward), and keep a requestAnimationFrame pass as a fallback for hosts
    * where initialFocus runs before the textarea has its value.
    *
-   * CDXC:SidebarRename 2026-06-15-01:27:
+   * CDXC:Sessions 2026-06-15-01:27:
    * Rename Session now opens in a hidden native child-window host that becomes
    * key after React has already rendered and reported `presented`. Re-run the
    * same focus/select request across the native window-focus boundary, but stop
@@ -156,7 +156,7 @@ export function SessionRenameModal({
   const trimmedTitle = title.trim();
   const directRenameTitle = normalizeSessionRenameTitle(title);
   /**
-   * CDXC:SidebarRename 2026-05-09-17:25
+   * CDXC:Sessions 2026-05-09-17:25
    * Long pasted rename text must stay in the input so the user can edit or
    * cancel it. Once the entered text is longer than 70 characters, Enter
    * becomes a Generate Name submit and explicitly asks the controller to
@@ -164,7 +164,7 @@ export function SessionRenameModal({
    */
   const canGenerateTitle = trimmedTitle.length > SESSION_RENAME_GENERATE_NAME_THRESHOLD;
   /**
-   * CDXC:SessionHistoryTitleSource 2026-07-29:
+   * CDXC:SessionTitles 2026-07-29:
    * The name field opens prefilled with the current title, so "the user wrote
    * nothing" means the field is empty or still exactly the initial title. In
    * that state Generate Name submits an empty title and the controller names
@@ -201,14 +201,14 @@ export function SessionRenameModal({
     }
 
     /**
-     * CDXC:SidebarRename 2026-05-09-17:25
+     * CDXC:Sessions 2026-05-09-17:25
      * The native full-window modal host must preserve the reference rename
      * behavior where pressing Enter immediately submits the existing
      * renameSession command path. Bind Enter at the input so WKWebView
      * form-submission differences cannot leave the modal inert, but route
      * entered text longer than 70 characters to Generate Name.
      *
-     * CDXC:PromptAgents 2026-05-29-10:53:
+     * CDXC:AgentLauncher 2026-05-29-10:53:
      * Generate Name exposes a plain agent dropdown so users can choose the
      * prompt agent per modal without changing the global default. The host
      * remembers that modal choice and resets it when Settings default changes.
@@ -247,7 +247,7 @@ export function SessionRenameModal({
           <AppModalTitle>Rename Session</AppModalTitle>
           <AppModalDescription>
             {canGenerateNameFromSessionHistory
-              ? "Rename directly, or Generate Name from longer text — leave the name unchanged to generate from the session's recent messages."
+              ? "Rename directly, or Generate Name from longer text; leave the name unchanged to generate from the session's recent messages."
               : 'Rename directly or generate a name from longer text.'}
           </AppModalDescription>
         </AppModalHeader>

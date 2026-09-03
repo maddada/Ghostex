@@ -53,7 +53,7 @@ import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import type { WebviewApi } from './webview-api';
 
 /*
- * CDXC:StashedPromptSessionAssociation 2026-08-24:
+ * CDXC:SavedPrompts 2026-08-24:
  * Saved prompts are durably tied to the agent conversation they were stashed
  * from, so the library can be narrowed to the project or the conversation the
  * modal was opened for instead of only ever listing everything.
@@ -84,7 +84,7 @@ const TOOLTIP_LINE_COUNT = 30;
 const STASH_PROMPT_HINT = "Press Option + S while you're using an agent to stash your prompt (Local only for now)";
 
 /*
- * CDXC:StashedPromptTags 2026-08-23:
+ * CDXC:SavedPrompts 2026-08-23:
  * New tags pick their color from this palette rather than a color input: eight
  * hues that stay legible as a 7px dot, an 18px chip, and a 3px row stripe on
  * the modal's background, which a free-form picker cannot guarantee.
@@ -103,7 +103,7 @@ const STASHED_PROMPT_TAG_COLORS = [
 const MAX_TAG_NAME_LENGTH = 40;
 
 /*
- * CDXC:StashedPromptTags 2026-08-23:
+ * CDXC:SavedPrompts 2026-08-23:
  * The rail filters on three distinct things, so it is a union rather than a
  * nullable tagId: "untagged" is a real selection, not the absence of one, and a
  * sentinel string mixed into the tagId space could one day collide with a tag
@@ -143,7 +143,7 @@ type StashedPromptDayGroup = {
 };
 
 /*
- * CDXC:StashedPrompts 2026-07-29:
+ * CDXC:SavedPrompts 2026-07-29:
  * Search matches on whitespace-collapsed prompt text plus the project name so
  * a query typed with single spaces still finds prompts whose original body
  * uses line breaks or indentation.
@@ -171,7 +171,7 @@ type StashedPromptSessionContext = {
 };
 
 /*
- * CDXC:StashedPromptSessionAssociation 2026-08-24:
+ * CDXC:SavedPrompts 2026-08-24:
  * A prompt belongs to the conversation this modal was opened for when gxserver
  * stamped it with the same `agentSessionId` — that association is re-keyed
  * through provider compaction/resume rewrites, so it outlives the session row
@@ -232,7 +232,7 @@ function groupStashedPromptsByDay(prompts: readonly GxserverStashedPrompt[]): St
 }
 
 /*
- * CDXC:RecoveredDrafts 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * The Recovered view lists the composer's never-sent localStorage drafts (see
  * chat/session-chat-draft-storage.ts) shaped as stash rows, so the same list,
  * day grouping, search, and insert machinery renders both views. Recovered ids
@@ -299,7 +299,7 @@ export function StashedPromptsModal({
   const latestRequestIdRef = useRef<string | undefined>(undefined);
   const latestSaveRequestIdRef = useRef<string | undefined>(undefined);
   /*
-   * CDXC:RecoveredDrafts 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * A save posted from a Recovered row must not run the Add-form's success
    * choreography (closing the editor, clearing the search): the user is
    * triaging a list, not filling a form.
@@ -309,7 +309,7 @@ export function StashedPromptsModal({
   const draftTextareaRef = useRef<HTMLTextAreaElement>(null);
   const promptListRef = useRef<HTMLDivElement>(null);
   /*
-   * CDXC:StashedPromptTags 2026-08-23:
+   * CDXC:SavedPrompts 2026-08-23:
    * The tag menu that opened the create form: 'row' applies the new tag to that
    * prompt on creation, 'rail' switches the filter to it instead.
    */
@@ -322,7 +322,7 @@ export function StashedPromptsModal({
    */
   const pendingTagApplicationRef = useRef<{ name: string; promptId: string | undefined }>(undefined);
   /*
-   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * CDXC:SavedPrompts 2026-08-24:
    * The "default to this session" decision needs the loaded rows, so it runs
    * once per open, on the first list result, and never again — otherwise a
    * later refresh would yank the scope back from under the user.
@@ -330,7 +330,7 @@ export function StashedPromptsModal({
   const hasResolvedDefaultScopeRef = useRef(false);
 
   /*
-   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * CDXC:SavedPrompts 2026-08-24:
    * The `sessionId` prop is the sidebar's combined presentation key, while
    * stash rows carry gxserver's raw ids. Decode once here so scope matching and
    * the save form both speak the daemon's id vocabulary.
@@ -408,7 +408,7 @@ export function StashedPromptsModal({
   }, [isOpen]);
 
   /*
-   * CDXC:RecoveredDrafts 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * Enumerating localStorage is synchronous and also runs the retention pass
    * (five-day expiry), so it happens once per open rather than per render.
    */
@@ -460,7 +460,7 @@ export function StashedPromptsModal({
         return;
       }
       /*
-       * CDXC:StashedPromptTags 2026-08-23:
+       * CDXC:SavedPrompts 2026-08-23:
        * Tag mutations answer with the whole refreshed catalogue. A delete also
        * names the tag it removed so the rows this modal is still holding drop
        * that assignment without a second round trip for the prompt list.
@@ -564,7 +564,7 @@ export function StashedPromptsModal({
     latestRequestIdRef.current = requestId;
     setPrompts(undefined);
     /*
-     * CDXC:StashedPromptSessionAssociation 2026-08-24:
+     * CDXC:SavedPrompts 2026-08-24:
      * The whole library is loaded on every open and narrowed client-side, so
      * switching to the All scope never costs a round trip and the scope counts
      * describe the same set the list is drawn from.
@@ -579,7 +579,7 @@ export function StashedPromptsModal({
   }, [initialScope, isOpen, rawProjectId, vscode]);
 
   /*
-   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * CDXC:SavedPrompts 2026-08-24:
    * Without a launcher-pinned scope the modal opens on this session when it has
    * session context and that scope actually has prompts in it. It never opens
    * on an empty filtered list.
@@ -598,13 +598,13 @@ export function StashedPromptsModal({
   }, [hasSessionScope, initialScope, isOpen, prompts, sessionContext]);
 
   /*
-   * CDXC:StashedPromptTags 2026-08-23:
+   * CDXC:SavedPrompts 2026-08-23:
    * The rail refines the current search rather than replacing it, so pill
    * counts describe the searched set: "3 of what you are looking at is tagged
    * Release", not a standing total that contradicts the visible list.
    */
   /*
-   * CDXC:RecoveredDrafts 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * Recovered draft keys carry only ids, so project names resolve through the
    * sidebar's project vocabulary the modal already builds for its filters.
    */
@@ -631,7 +631,7 @@ export function StashedPromptsModal({
   }, [activePrompts, searchQuery]);
 
   /*
-   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * CDXC:SavedPrompts 2026-08-24:
    * Scope narrows the searched set before the tag rail sees it, so the pill
    * counts keep describing what is actually on screen: search AND scope AND
    * tag, in that order.
@@ -663,7 +663,7 @@ export function StashedPromptsModal({
   );
 
   /*
-   * CDXC:StashedPromptTags 2026-08-23:
+   * CDXC:SavedPrompts 2026-08-23:
    * Whether "No tag" exists is decided by the whole library, not the current
    * search: its count narrows with the query like every other pill, but the
    * pill itself must not blink in and out of the rail as the user types.
@@ -735,7 +735,7 @@ export function StashedPromptsModal({
   };
 
   /*
-   * CDXC:RecoveredDrafts 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * Promotes a recovered draft into the real library through the normal save
    * path, keeping the draft itself in place — recovery must never destroy the
    * only copy of unsent text.
@@ -766,7 +766,7 @@ export function StashedPromptsModal({
   };
 
   /*
-   * CDXC:StashedPromptTags 2026-08-23:
+   * CDXC:SavedPrompts 2026-08-23:
    * Tag toggles paint immediately and are confirmed by the daemon's echo. The
    * star is a one-click control on a list the user is scanning, so waiting a
    * round trip before it fills in reads as a dropped click.
@@ -829,7 +829,7 @@ export function StashedPromptsModal({
   };
 
   /*
-   * CDXC:StashedPromptTags 2026-08-23:
+   * CDXC:SavedPrompts 2026-08-23:
    * Resolve a just-created tag once the refreshed catalogue arrives: file it on
    * the prompt whose menu created it, or make it the active rail filter when it
    * was created from the rail's own "+".
@@ -885,7 +885,7 @@ export function StashedPromptsModal({
       ...(draftTagId === NO_TAG_VALUE ? [] : [draftTagId.slice('tag:'.length)]),
     ];
     /*
-     * CDXC:StashedPromptSessionAssociation 2026-08-24:
+     * CDXC:SavedPrompts 2026-08-24:
      * Post the raw gxserver ids decoded out of the combined presentation key.
      * This form used to store the combined key verbatim, which made its rows
      * name a session gxserver has never heard of; the daemon normalizes stored
@@ -926,7 +926,7 @@ export function StashedPromptsModal({
       }}
     >
       {/*
-        CDXC:StashedPrompts 2026-07-29:
+        CDXC:SavedPrompts 2026-07-29:
         Every prompt-editor save-and-close (Ctrl+G in a session, then Save)
         stashes the composed text in gxserver. This modal is the recall
         surface: the fourth Ghostex Quick Access tab, listing local prompts
@@ -1247,7 +1247,7 @@ type StashedPromptFiltersToolbarProps = {
 };
 
 /*
- * CDXC:StashedPromptTags 2026-08-23:
+ * CDXC:SavedPrompts 2026-08-23:
  * Project and tag filters share one compact toolbar. Dropdowns keep the whole
  * vocabulary reachable without spending two rows, the new-tag action starts
  * the tag selector menu, and Add Prompt remains pinned right.
@@ -1279,7 +1279,7 @@ function StashedPromptFiltersToolbar({
   return (
     <div className='ghostex-stashed-prompt-toolbar'>
       {/*
-        CDXC:RecoveredDrafts 2026-08-28:
+        CDXC:Drafts 2026-08-28:
         The view toggle leads the row, mirroring the Sessions tab's scope
         segmented control. Recovered lists the composer's never-sent drafts, so
         the tag vocabulary and Add Prompt do not apply there and step aside.
@@ -1379,7 +1379,7 @@ function StashedPromptFiltersToolbar({
                         onDeleteTag(tag);
                       }
                     }}
-                    title={tag.isBuiltin ? tag.name : `${tag.name} — right-click to delete this tag`}
+                    title={tag.isBuiltin ? tag.name : `${tag.name}. Right-click to delete this tag.`}
                     value={`tag:${tag.tagId}`}
                   >
                     <span
@@ -1504,7 +1504,7 @@ type StashedPromptRowProps = {
 };
 
 /**
- * CDXC:StashedPrompts 2026-07-29:
+ * CDXC:SavedPrompts 2026-07-29:
  * Saved Prompt rows show the origin project with the sidebar's icon priority:
  * a user-selected image, the repository's discovered icon, a typed glyph,
  * then a folder fallback.
@@ -1560,7 +1560,7 @@ function StashedPromptRow({
     .filter((tag): tag is GxserverStashedPromptTag => tag !== undefined);
   const visibleRowTags = labelTags.filter((tag) => tag.tagId !== GXSERVER_STASHED_PROMPT_TAG_ID);
   /*
-   * CDXC:StashedPromptTags 2026-08-23:
+   * CDXC:SavedPrompts 2026-08-23:
    * The row's left edge carries its first non-Favorites tag color. That stripe
    * is what separates one prompt from the next now that there are no rules
    * between rows: a repeating vertical mark the eye can group by, instead of a
@@ -1568,7 +1568,7 @@ function StashedPromptRow({
    */
   const stripeColor = labelTags[0]?.color;
   /*
-   * CDXC:StashedPromptSessionAssociation 2026-08-24:
+   * CDXC:SavedPrompts 2026-08-24:
    * A prompt is jumpable while gxserver can still name where it came from: the
    * conversation id survives the session row, so either id is enough to open
    * something — waking, restoring, or resuming as needed.
@@ -1580,7 +1580,7 @@ function StashedPromptRow({
       className='ghostex-stashed-prompt-item'
       data-favorite={String(isFavorite)}
       /*
-       * CDXC:StashedPromptTags 2026-08-23:
+       * CDXC:SavedPrompts 2026-08-23:
        * The tag menu is portalled out of this row, so moving the pointer into
        * it ends the row's :hover and empties its :focus-within. Without this
        * flag the action cluster would collapse to display:none, the open
@@ -1772,7 +1772,7 @@ function StashedPromptRow({
             </span>
             <span className='ghostex-stashed-prompt-project-name'>{prompt.projectName ?? 'No project'}</span>
             {/*
-              CDXC:StashedPromptSessionAssociation 2026-08-24:
+              CDXC:SavedPrompts 2026-08-24:
               The origin conversation's current title, not the one it had when
               the prompt was stashed: gxserver resolves it through the
               conversation id, so a renamed or resumed session still reads as
@@ -1817,7 +1817,7 @@ type RecoveredDraftRowProps = {
 };
 
 /*
- * CDXC:RecoveredDrafts 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * A recovered composer draft rendered in the stash row's clothes. It has no
  * tags, no editing, and no server row behind it, so the action cluster is the
  * recovery vocabulary instead: insert (row select), jump to the origin

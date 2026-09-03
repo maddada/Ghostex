@@ -7,7 +7,7 @@
 // CEF bridge, the mobile bridge, and the gpui remote-machine proxy.
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 gxserver owns a per-session queue of prompts the user wrote but does not want
 delivered yet. A server-side scheduler releases ONE row each time the agent
 stops, so the queue drains with every client closed, the phone locked, or the
@@ -49,7 +49,7 @@ export interface SessionChatQueuedPrompt {
 }
 
 /*
-CDXC:SessionChatDraft 2026-08-21:
+CDXC:Drafts 2026-08-21:
 The unsent composer text, synced through gxserver so the same session picked up
 on another device shows what was already typed. Pushed on blur / leaving the
 session / backgrounding — NOT per keystroke. It is a sync channel, not a
@@ -57,7 +57,7 @@ replacement for a host's own local draft cache.
 
 Conflict rule: never clobber. A client that receives a draft with a newer
 `updatedAt`, different `content` and a different `originClientId` shows a
-one-line "Newer draft from another device — Use / Dismiss" bar above the
+one-line "Newer draft from another device: Use / Dismiss" bar above the
 composer instead of overwriting a non-empty local composer.
 */
 export interface SessionChatDraft {
@@ -72,7 +72,7 @@ export interface SessionChatDraft {
 }
 
 /*
-CDXC:SessionChatQueueCarriage 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 `queue` and `draft` ride on GxserverReadSessionChatResult and on the
 snapshot / replaced / state frames. They are NEVER on `appended` frames, which
 only add transcript rows and must stay cheap.

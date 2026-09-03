@@ -13,7 +13,7 @@ use uuid::Uuid;
 const FILE_LIST_MAX_ENTRIES: usize = 1_200;
 const FILE_LIST_MAX_DEPTH: usize = 8;
 /*
-CDXC:DocsRootRecursive 2026-08-09:
+CDXC:Docs 2026-08-09:
 A mounted Docs directory is a notes tree, not a repo, so it gets its own far
 larger bounds. They are still bounds: a directory pointed at a home folder must
 fail loudly naming the cap instead of walking forever or returning a tree that
@@ -29,7 +29,7 @@ const SESSION_CONTEXT_MAX_BYTES: usize = 300_000;
 const DOCS_RELATIVE_PATH: &str = "docs";
 const BUILT_IN_DOCS_RELATIVE_PATHS: &[&str] = &[DOCS_RELATIVE_PATH, "artifacts", "ai", "tmp"];
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 The reserved first path segment that addresses the mounted Docs directory.
 Every other Docs path is project-relative, so one relative path can only ever
 mean one root and no read, save, rename, delete, move, or reveal can resolve
@@ -76,7 +76,7 @@ const IGNORED_DIRECTORY_NAMES: &[&str] = &[
 ];
 
 /*
-CDXC:RemoteProjectDocs 2026-08-06:
+CDXC:Docs 2026-08-06:
 Docs filesystem authority belongs to the gxserver that owns the registered
 project, not to the client displaying it. This project-id-scoped operation is
 the reusable data boundary for GPUI's remote Docs pane and a later web client:
@@ -101,12 +101,12 @@ pub fn run_project_docs_action(root: &ProjectDocsRoot, params: &Map<String, Valu
 }
 
 /*
-CDXC:DocsRootDirectory 2026-08-09:
+CDXC:Docs 2026-08-09:
 The Docs directory is the project's own, then the Docs directory Global Default,
 then none at all. Callers resolve it here so the daemon and its remote clients
 agree on one cascade, and so `run_project_docs_action` keeps taking a plain root.
 
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 A configured directory is mounted IN ADDITION to the project root rather than
 replacing it, so a path that cannot be opened no longer fails the whole panel.
 It becomes an unavailable mount instead: the project's own docs still list and
@@ -152,7 +152,7 @@ fn resolve_project_docs_extra_root(configured: &str) -> ProjectDocsExtraRoot {
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Docs mounts two roots, never one. The project root is always present and keeps
 the docs/-plus-root-artifacts discovery it has always had; a configured Docs
 directory is mounted in addition, as a single top-level folder named after
@@ -448,7 +448,7 @@ fn session_context_prompt(context: DocsContext<'_>, path: Option<&str>) -> Resul
     let unavailable = "Select a file to add to session context.";
     let (target, path, metadata) = docs_action_item(context, path, unavailable)?;
     /*
-    CDXC:DocsRootAdditive 2026-08-09:
+    CDXC:Docs 2026-08-09:
     The prompt names the file the way the Docs tree does — the mount's own name,
     not the reserved routing segment — because this text is read by a human and
     by the agent in the terminal it is pasted into.
@@ -522,7 +522,7 @@ fn project_root(path: &Path) -> Result<PathBuf, String> {
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Docs folders is project-root-relative again, the meaning it had before a custom
 root ever existed. Round 2 made it narrow the custom root instead; with additive
 mounting that is no longer coherent, because the mounted Docs directory always
@@ -729,7 +729,7 @@ fn is_root_artifact(relative_path: &str) -> bool {
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 The mounted Docs directory serves its whole tree, so a path that routed there
 needs no further allowlist: it was already confined to that root by
 canonicalization. Project-root paths keep exactly the allowlist they have
@@ -776,7 +776,7 @@ fn require_same_root(source: &DocsPath<'_>, destination: &DocsPath<'_>) -> Resul
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 The project's own entries come first and are discovered exactly as they have
 always been, so setting a Docs directory can never take the repo's README.md,
 CLAUDE.md, or docs/ away. The mounted Docs directory is appended after them.
@@ -833,13 +833,13 @@ fn project_root_file_entries(root: &Path, context: DocsContext<'_>) -> Result<Ve
 }
 
 /*
-CDXC:DocsRootRecursive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Whole-tree discovery for the mounted Docs directory: it is walked to the bottom
 so a note nested five folders deep in a vault is listed like any other. Files
 are narrowed to the extensions Docs actually renders, because a vault's image
 and attachment folders are not documents.
 
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 The mount is one top-level folder named after the directory, and every failure
 lands on that node's label instead of on the listing: an unopenable directory,
 and the entry and depth caps alike. Losing the whole panel — including the
@@ -883,7 +883,7 @@ fn append_extra_root_entries(entries: &mut Vec<Value>, mount: &DocsExtraMount) {
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-10:
+CDXC:Docs 2026-08-10:
 Every mounted entry carries the name the tree shows it under beside the routing
 address it answers to, for the same reason a preview does: `path` starts with
 the reserved segment, which is an implementation detail no reader asked for, and
@@ -916,7 +916,7 @@ fn unavailable_extra_root_entry(name: &str, error: &str) -> Value {
         "kind": "directory",
         "displayPath": name,
         "modifiedAt": Value::Null,
-        "name": format!("{name} — {error}"),
+        "name": format!("{name}: {error}"),
         "path": EXTRA_ROOT_MOUNT_SEGMENT,
         "size": Value::Null,
     })
@@ -1181,7 +1181,7 @@ fn file_entry(
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Every response carries the path the Docs page addressed, mount segment
 included, never the path relative to whichever root answered. A preview that
 answered with a bare inner path would hand the page an address that means the
@@ -1233,7 +1233,7 @@ fn project_file_preview(context: DocsContext<'_>, path: Option<&str>) -> Result<
     Ok(json!({
         "content": content,
         /*
-        CDXC:DocsRootAdditive 2026-08-09:
+        CDXC:Docs 2026-08-09:
         `path` stays the routing address the page must send back; `displayPath`
         is the same file named the way the tree names it, so the header never
         shows the reserved mount segment. Mirrors gpui/src/main.rs.
@@ -1507,7 +1507,7 @@ fn normalized_relative_path(path: Option<&str>) -> Result<String, String> {
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Confinement is per root and it is the root the path was ROUTED to, so a `..`
 chain or an outward symlink under one mount can never surface inside the other.
 */

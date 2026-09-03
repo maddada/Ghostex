@@ -61,7 +61,7 @@ export const MOCK_SECTIONS: MockSection[] = [
             deletions: 10,
             browserTabs: [
               { kind: 'browser', title: 'Google' },
-              { kind: 'browser', title: 'localhost:6006 — Storybook' },
+              { kind: 'browser', title: 'localhost:6006 (Storybook)' },
             ],
             sessions: [
               { kind: 'session', agent: 'claude', title: 'sidebar-hierarchy-redesign', status: 'running' },

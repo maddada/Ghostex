@@ -40,7 +40,7 @@ export function sessionChatCardDismissKey(prompt: SessionChatInteractivePrompt |
   return `approval:${prompt.tool}:${prompt.summary ?? ''}`;
 }
 
-const DELIVERY_FAILED_NOTICE = "Couldn't deliver the answer — switch to Terminal View to answer there.";
+const DELIVERY_FAILED_NOTICE = "Couldn't deliver the answer. Switch to Terminal View to answer there.";
 const READ_ONLY_NOTICE = 'Switch to Terminal to answer';
 
 export interface SessionChatInteractiveCardProps {

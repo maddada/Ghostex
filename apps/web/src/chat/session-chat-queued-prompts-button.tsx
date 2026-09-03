@@ -36,8 +36,8 @@ export function SessionChatQueuedPromptsButton({
   */
   const hasFailed = failedCount > 0;
   const tooltip = hasFailed
-    ? `${label} — delivery failed, open Chat View to retry`
-    : `${label} — open Chat View to edit them`;
+    ? `${label}: delivery failed. Open Chat View to retry.`
+    : `${label}. Open Chat View to edit them.`;
   return (
     <div className='pointer-events-none absolute left-[13px] top-[13px] z-20 flex'>
       <AppTooltip content={tooltip}>

@@ -194,7 +194,7 @@ pub(crate) fn queue_gpui_first_responder_transition(
     responder: *mut std::ffi::c_void,
 ) {
     /*
-    CDXC:GPUIFirstResponderLifetime 2026-07-11:
+    CDXC:FocusRouting 2026-07-11:
     `responder` arrives +1 retained from the AppKit KVO hook
     (GpuiCefAppKitHooks.m): responder churn is often caused by the teardown
     that deallocates the outgoing responder view, so a raw pointer would be
@@ -242,7 +242,7 @@ pub extern "C" fn GhostexGpuiFirstResponderDidChange(
 }
 
 /*
-CDXC:GPUISidebarPointerTracking 2026-08-02:
+CDXC:Sidebar 2026-08-02:
 The sidebar renderer cannot observe the pointer once it crosses into a native
 sibling (GPUI chrome, a Ghostty terminal host, another CEF pane), so Chromium
 keeps the last hovered row's :hover state — which is what pinned the hover-only
@@ -270,7 +270,7 @@ pub extern "C" fn GhostexGpuiSidebarPointerInsideChanged(inside: bool) {
 }
 
 /*
-CDXC:GPUISidebarSpaceSwipe 2026-08-29:
+CDXC:Spaces 2026-08-29:
 A finger scroll gesture began (NSEventPhaseBegan) inside the sidebar's native
 frame. DOM wheel events cannot distinguish a new physical swipe from the
 momentum tail of the previous one, so the AppKit observer reports the begin and
@@ -317,7 +317,7 @@ pub(crate) fn manage_workarea_runtime_url_from_project_snapshot(
     snapshot: &GpuiProjectSnapshot,
 ) -> Option<ProjectWorkareaRealRuntimeUrl> {
     /*
-    CDXC:GPUIProjectWorkareaRuntimeCefBundles 2026-06-24-11:03:
+    CDXC:CefRuntime 2026-06-24-11:03:
     Manage runtime URL authority is the bundled first-party CEF page plus explicit project/manage identity only. The project root stays in the Rust bridge from the in-memory sidebar snapshot, so the Manage page URL remains pathless while CEF replaces the old WKWebView runtime surface.
     */
     if !snapshot.feature_availability.manage || snapshot.is_quick_projectless {
@@ -461,8 +461,8 @@ pub(crate) fn manage_files_bridge_result(
     a general project browser. The project root's listing walks the docs/
     folder, configured additional Docs folders, and root
     Markdown/HTML/Excalidraw artifacts; a configured Docs directory is mounted
-    ALONGSIDE it and walks its whole tree (CDXC:DocsRootAdditive,
-    CDXC:DocsRootRecursive). Either way
+    ALONGSIDE it and walks its whole tree (CDXC:Docs,
+    CDXC:Docs). Either way
     read/stat/save/rename/duplicate/delete/createFolder/move all validate against
     the allowlist of the root the path was routed to, and text previews carry the
     Git HEAD baseline for meo's gutter. Every response's rootName is the fixed
@@ -630,7 +630,7 @@ pub(crate) fn manage_session_context_prompt(
     path: Option<&str>,
 ) -> Result<String, String> {
     /*
-    CDXC:ManageFileActions 2026-08-08:
+    CDXC:Docs 2026-08-08:
     Session-context staging reads only a validated Docs file, caps it before
     and after the read, rejects binary/non-UTF-8 content, and formats a fenced
     relative-path block. The CEF response strips this private prompt before
@@ -639,7 +639,7 @@ pub(crate) fn manage_session_context_prompt(
     let unavailable = "Select a file to add to session context.";
     let (target, path, metadata) = manage_docs_action_item(context, path, unavailable)?;
     /*
-    CDXC:DocsRootAdditive 2026-08-09:
+    CDXC:Docs 2026-08-09:
     The prompt names the file the way the Docs tree does — the mount's own name,
     not the reserved routing segment — because this text is read by a human and
     by the agent in the terminal it is pasted into.
@@ -735,7 +735,7 @@ impl ManageDocsPath<'_> {
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Mirrors `docs_path` in `server/src/project_docs.rs`. Reserved mount segments
 route configured and chat-authorized roots; every other path is project-relative.
 One Docs address can therefore only ever mean one root.
@@ -933,7 +933,7 @@ fn manage_nested_built_in_docs_relative_paths(root: &Path) -> Vec<String> {
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Mirrors `scan_roots` in `server/src/project_docs.rs`. Docs folders is
 project-root-relative again, the meaning it had before a custom root existed:
 built-in Docs folders plus each configured folder. Round 2 made it narrow the
@@ -1030,7 +1030,7 @@ pub(crate) fn manage_is_root_artifact_file_relative_path(relative_path: &str) ->
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 The configured Docs directory serves its whole tree. A chat-authorized mount
 serves supported document types from the explicitly selected file's folder.
 Project-root paths keep exactly the allowlist they have always had.
@@ -1150,13 +1150,13 @@ pub(crate) fn manage_validate_request_identity(
 }
 
 /*
-CDXC:DocsRootDirectory 2026-08-09:
+CDXC:Docs 2026-08-09:
 The ONE place the local Docs roots are resolved: the project's own Docs
 directory, then the Docs directory Global Default. Every local Docs caller (the
 CEF files bridge and the Docs resource scope) goes through here, so the cascade
 exists once.
 
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 The project root is ALWAYS mounted; a configured Docs directory is mounted in
 addition to it, never instead of it. Blank is the only value that inherits, and
 a configured path that is missing, is not a folder, or is not absolute is
@@ -1207,7 +1207,7 @@ pub(crate) fn manage_docs_extra_root_name(configured: &str) -> String {
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 The persistent project/configured roots mirror `DocsRoots` in
 `server/src/project_docs.rs`; `chat` is one runtime-only folder explicitly
 authorized by a file click. The configured mount carries either its location
@@ -1305,7 +1305,7 @@ pub(crate) fn manage_files_bridge_error_response(
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 The project's own entries come first and are discovered exactly as they have
 always been, so setting a Docs directory can never take the repo's README.md,
 CLAUDE.md, or docs/ away. The mounted Docs directory is appended after them.
@@ -1374,13 +1374,13 @@ pub(crate) fn manage_project_directory(root: &Path, relative_path: &str) -> Opti
 }
 
 /*
-CDXC:DocsRootRecursive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Mirrors `append_extra_root_entries` in `server/src/project_docs.rs`, so the
 local Docs pane and a remote project's Docs pane list the same tree. The mounted
 Docs directory is walked to the bottom and files are narrowed to the extensions
 Docs renders.
 
-CDXC:DocsRootAdditive 2026-08-09: every failure lands on the mount node's label
+CDXC:Docs 2026-08-09: every failure lands on the mount node's label
 instead of on the listing — an unopenable directory, and the entry and depth caps
 alike. Losing the whole panel, including the project's own README.md, because a
 vault is too deep is the one thing this must not do, and a tree that silently
@@ -1431,7 +1431,7 @@ pub(crate) fn manage_append_docs_extra_root_entries(
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-10:
+CDXC:Docs 2026-08-10:
 Mirrors `name_extra_root_tree_entries` in server/src/project_docs.rs: every
 mounted entry carries the name the tree shows it under beside the routing
 address it answers to, so the reserved segment never reaches Copy Path or text
@@ -1466,12 +1466,16 @@ pub(crate) fn manage_unavailable_docs_extra_root_entry(
     name: &str,
     error: &str,
 ) -> serde_json::Value {
+    /*
+    CDXC:Copy 2026-09-03:
+    User decision: Ghostex-owned user-facing copy in the desktop, web, and mobile apps uses no em dashes; use punctuation that preserves the sentence's natural reading instead.
+    */
     serde_json::json!({
         "depth": 0,
         "kind": "directory",
         "displayPath": name,
         "modifiedAt": serde_json::Value::Null,
-        "name": format!("{name} — {error}"),
+        "name": format!("{name}: {error}"),
         "path": MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT,
         "size": serde_json::Value::Null,
     })
@@ -1719,7 +1723,7 @@ pub(crate) fn manage_append_project_file_entries(
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Every response carries the path the Docs page addressed, mount segment included,
 never the path relative to whichever root answered. A preview that answered with
 a bare inner path would hand the page an address that means the project root
@@ -1779,7 +1783,7 @@ pub(crate) fn manage_project_file_preview(
     Ok(serde_json::json!({
         "content": content,
         /*
-        CDXC:DocsRootAdditive 2026-08-09:
+        CDXC:Docs 2026-08-09:
         `path` stays the routing address the page must send back; `displayPath`
         is the same file named the way the tree names it, so the header never
         shows the reserved mount segment.
@@ -2305,7 +2309,7 @@ pub(crate) fn manage_git_baseline_payload(
 }
 
 /*
-CDXC:DocsRootAdditive 2026-08-09:
+CDXC:Docs 2026-08-09:
 Confinement is per root, and it is the root the path was ROUTED to, so a `..`
 chain or an outward symlink under one mount can never surface inside the other.
 */

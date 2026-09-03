@@ -1,5 +1,5 @@
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 The Find surface — a GUI for `gx f`. Item placement follows the terminal picker
 (query and hint strip on top, two-line results in the middle, the selected
 prompt and its metadata at the bottom), while the type, color, spacing, and
@@ -472,7 +472,7 @@ export function FindPromptsView({ acceptAll, hostActions, onReady, transport }: 
         ) : (
           <>
             <div className='flex shrink-0 items-baseline gap-2 px-3 pb-1 pt-2 text-[11px] text-muted-foreground'>
-              <span className='min-w-0 flex-1 truncate'>{selectedRow?.project || '—'}</span>
+              <span className='min-w-0 flex-1 truncate'>{selectedRow?.project || 'No project'}</span>
               <span className='shrink-0 tabular-nums'>
                 {find.matched === 0 ? 0 : find.selection + 1}/{find.matched}
               </span>

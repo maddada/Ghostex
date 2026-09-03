@@ -21,7 +21,7 @@ import { SettingsInput, SettingsTextarea } from '../fields';
 import { SettingsTabSearch, hasVisibleSettingsSearchResult, shouldShowSettingsSection } from '../search';
 
 /*
- * CDXC:GlobalProjectDefaults 2026-08-02:
+ * CDXC:Projects 2026-08-02:
  * A project field is "inherited" only while the project's own value is empty and
  * a Global Default exists to take its place. The badge marks that state next to
  * the field name, and the caller shows the inherited value as the input's
@@ -74,7 +74,7 @@ export function ProjectsSettingsPanel({
   const [beadsDirectory, setBeadsDirectory] = useState(selectedProject?.beadsDirectory ?? '');
   const [docsDirectory, setDocsDirectory] = useState(selectedProject?.docsDirectory ?? '');
   /*
-   * CDXC:GlobalProjectDefaults 2026-08-02:
+   * CDXC:Projects 2026-08-02:
    * Track inheritance against the live draft text rather than the saved project
    * value so the badge disappears the moment the user starts typing an override
    * and returns when they clear the field again.
@@ -184,11 +184,11 @@ export function ProjectsSettingsPanel({
           <Card className='settings-project-command-card'>
             <CardContent className='flex flex-col gap-4 p-4'>
               {/*
-              CDXC:DocsSidebar 2026-06-30-11:42:
+              CDXC:Docs 2026-06-30-11:42:
               Docs folder scanning is a global Projects setting, not selected-project metadata. Keep it above the project selector and accept comma-separated project-relative folder names so entries like "plans, my documents, folders/folder name" scan matching folders under each project root.
               Give this card an explicit Docs title so users coming from the Docs sidebar shortcut know the folder list controls Docs file discovery.
 
-              CDXC:DocsRootAdditive 2026-08-09:
+              CDXC:Docs 2026-08-09:
               This list is project-relative again. A Docs directory adds its own whole tree beside these folders instead of being narrowed by them, so the copy must not imply the two interact.
             */}
               <div className='settings-management-header-text'>
@@ -222,7 +222,7 @@ export function ProjectsSettingsPanel({
           <Card className='settings-project-command-card'>
             <CardContent className='flex flex-col gap-4 p-4'>
               {/*
-              CDXC:GlobalProjectDefaults 2026-08-02:
+              CDXC:Projects 2026-08-02:
               Global Defaults sits above the project selector because it configures every project at once. Each field mirrors the per-project field of the same name below; a project keeps winning whenever its own value is non-empty, so filling nothing in here leaves every project resolving exactly as it did before.
             */}
               <div className='settings-management-header-text'>
@@ -279,11 +279,11 @@ export function ProjectsSettingsPanel({
                 </Field>
               </FieldGroup>
               {/*
-              CDXC:DocsRootDirectory 2026-08-09:
+              CDXC:Docs 2026-08-09:
               Docs can show any absolute folder, not only the project's own repo
               folder, so a notes vault is browsable from every project.
 
-              CDXC:DocsRootAdditive 2026-08-09:
+              CDXC:Docs 2026-08-09:
               That folder is ADDED to the project's own docs, never swapped in
               for them, and the Docs folders list above stays project-relative.
               Say so here, because "Docs directory" reads like a replacement.
@@ -301,8 +301,8 @@ export function ProjectsSettingsPanel({
                   />
                   <FieldDescription>
                     Extra folder every project's Docs surface shows unless the project sets its own. It is added
-                    alongside that project's own README, CLAUDE.md, docs/ and Docs folders — it never replaces them —
-                    and appears as one top-level folder named after itself. Leave blank to add nothing.
+                    alongside that project's own README, CLAUDE.md, docs/ and Docs folders; it never replaces them. It
+                    appears as one top-level folder named after itself. Leave blank to add nothing.
                   </FieldDescription>
                 </Field>
               </FieldGroup>
@@ -319,13 +319,13 @@ export function ProjectsSettingsPanel({
         ) : (
           <>
             {/*
-             * CDXC:ProjectSettings 2026-06-14-17:29:
+             * CDXC:Projects 2026-06-14-17:29:
              * The Projects settings tab should not render every project as a visible
              * button list. Keep one project selector at the top, open a searchable
              * dropdown of project paths on click, and bind the settings editor below
              * to the selected project.
              *
-             * CDXC:ProjectSettings 2026-06-19-12:11:
+             * CDXC:Projects 2026-06-19-12:11:
              * The Projects settings page edits selected-project metadata only.
              * Do not expose project deletion from this page; removing the standalone
              * trash row keeps destructive project management out of this settings flow.
@@ -406,7 +406,7 @@ export function ProjectsSettingsPanel({
             <Card className='settings-project-command-card'>
               <CardContent className='flex flex-col gap-4 p-4'>
                 {/*
-              CDXC:ProjectSettings 2026-06-15-03:21:
+              CDXC:Projects 2026-06-15-03:21:
               Worktree command is the primary Projects-page setup control, so it should be the first editable project field after selecting a project. Ticket key and Beads directory stay below because they configure board metadata.
             */}
                 <FieldGroup>
@@ -503,12 +503,12 @@ export function ProjectsSettingsPanel({
                   </Button>
                 </div>
                 {/*
-              CDXC:DocsRootDirectory 2026-08-09:
+              CDXC:Docs 2026-08-09:
               Projects settings owns this project's `docsDirectory`: the extra
               folder its Docs surface shows. Leave blank to use the Global
               Default.
 
-              CDXC:DocsRootAdditive 2026-08-09:
+              CDXC:Docs 2026-08-09:
               This project's own docs list either way, so `docsDirectory` only
               ever adds a tree beside them — it never replaces them.
             */}

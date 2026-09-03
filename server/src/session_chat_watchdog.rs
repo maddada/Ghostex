@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Chat sends are fire-and-forget: `write_session_chat_payload` succeeds the moment
 zmx accepts the bytes, so a message typed into a dead login screen, a trust
 dialog or a shell where the agent already exited disappears without a trace.
@@ -26,7 +26,7 @@ Delivery is checked in two tiers because neither alone is complete:
      `queue-operation` enqueue rows (typed while a turn runs) and Codex's
      `response_item` message lane, neither of which the decoders surface.
 
-CDXC:SessionChatTerminalNotices 2026-08-24: a third tier answers the opposite
+CDXC:AgentScreenDetection 2026-08-24: a third tier answers the opposite
 question — not "can delivery be proven?" but "was something ELSE submitted in
 its place?" (`observe_mismatched_input`). It is the only tier with affirmative
 evidence, so it does not wait out the deadline and it is not silenced by the
@@ -82,7 +82,7 @@ const WATCHDOG_RAW_SCAN_MIN_CHARS: usize = 12;
 /// trim and re-wrap, and a partial match still proves the message landed.
 const WATCHDOG_PREFIX_MATCH_PERCENT: usize = 80;
 /*
-CDXC:SessionChatTerminalNotices 2026-08-24:
+CDXC:AgentScreenDetection 2026-08-24:
 Once the transcript has recorded a user turn that is NOT ours AND the agent has
 started answering it, waiting out the rest of the deadline buys nothing: the
 composer has already been submitted past our message. These extra polls exist
@@ -118,7 +118,7 @@ pub type SessionChatWatchdogStateReader =
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Sampled BEFORE the send is enqueued: everything appended to the transcript from
 here on is a candidate for "the message arrived". Sampling afterwards would race
 the agent's own write.
@@ -136,7 +136,7 @@ pub struct SessionChatSendProbe {
     transcript_path: Option<PathBuf>,
     transcript_offset: u64,
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-20:
+    CDXC:AgentScreenDetection 2026-08-20:
     What the CLI itself swallows instead of sending to the model, if anything.
     This watchdog reasons about transcript writes, and an intercepted message
     either lands there in a different shape or never lands at all:
@@ -231,7 +231,7 @@ static SESSION_CHAT_WATCHDOGS: OnceLock<Mutex<HashMap<String, SessionChatWatchdo
     OnceLock::new();
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Starts the watchdog for a completed send. Supersedes the session's previous
 watchdog (abort + generation bump, the same two-layer cancellation the send
 queue uses), and the new task's first act is to retire any notice the previous
@@ -261,7 +261,7 @@ pub fn start_session_chat_send_watchdog(
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 The flagship case never reaches the watchdog above: when the agent CLI is dead
 or was never in the pane, the send fails INSIDE the Ctrl+G preservation
 handshake (or on the zmx write), so the handler returns an error before any
@@ -336,7 +336,7 @@ struct WatchdogCursor {
     /// Where the send happened; the raw scan always re-reads from here.
     base_offset: u64,
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-24:
+    CDXC:AgentScreenDetection 2026-08-24:
     Whether `base_offset` really marks THIS send. The mismatch tier below reads
     every user turn past it as "recorded after the message was typed", so a
     baseline that was never sampled (the transcript resolved only later) or that
@@ -460,7 +460,7 @@ async fn run_session_chat_send_watchdog(
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Both escalations take the same single capture and the same verdict order; they
 differ in how much is already known, and the suppressions below exist only for
 the half that is reasoning from silence.
@@ -473,7 +473,7 @@ enum UndeliveredSendReason {
     /// watch at all) has to win over the alarm.
     TranscriptSilent,
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-24:
+    CDXC:AgentScreenDetection 2026-08-24:
     The terminal took the message and then recorded a DIFFERENT user turn —
     usually an empty one, submitted by the send's trailing Enter before the
     paste had been ingested. Non-delivery is evidenced rather than inferred, so
@@ -490,7 +490,7 @@ enum UndeliveredSendReason {
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 The message is undelivered — the deadline passed with nothing in the transcript,
 the transcript recorded a different prompt in its place, or the send itself
 failed (see `UndeliveredSendReason`). Exactly one
@@ -605,9 +605,9 @@ async fn escalate_undelivered_send(
                 "Claude Code is no longer running in this terminal",
             )
             .with_detail(match reason {
-                UndeliveredSendReason::TranscriptSilent => "Your message was never recorded, and the Claude Code process that owned this session is no longer registered as running — it appears to have exited. Start it again in the terminal before sending more messages.",
-                UndeliveredSendReason::MismatchedInput { .. } => "Your message was not recorded — a different prompt was submitted in its place — and the Claude Code process that owned this session is no longer registered as running. Start it again in the terminal before sending more messages.",
-                UndeliveredSendReason::WriteFailed => "Your message could not be typed into this session, and the Claude Code process that owned it is no longer registered as running — it appears to have exited. Start it again in the terminal before sending more messages.",
+                UndeliveredSendReason::TranscriptSilent => "Your message was never recorded, and the Claude Code process that owned this session is no longer registered as running; it appears to have exited. Start it again in the terminal before sending more messages.",
+                UndeliveredSendReason::MismatchedInput { .. } => "Your message was not recorded. A different prompt was submitted in its place, and the Claude Code process that owned this session is no longer registered as running. Start it again in the terminal before sending more messages.",
+                UndeliveredSendReason::WriteFailed => "Your message could not be typed into this session, and the Claude Code process that owned it is no longer registered as running; it appears to have exited. Start it again in the terminal before sending more messages.",
             })
             .with_screen_tail(screen_tail)
             .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
@@ -631,7 +631,7 @@ async fn escalate_undelivered_send(
         rule also required hook activity at send time), which fired falsely
         whenever the watched transcript file had gone stale under the watchdog.
 
-        CDXC:SessionChatTerminalNotices 2026-08-24: `MismatchedInput` is
+        CDXC:AgentScreenDetection 2026-08-24: `MismatchedInput` is
         excluded, and that exclusion is the whole fix. There the transcript
         recorded a user turn AFTER the send that is not ours and the agent went
         to work on it, so "still working" describes the turn that ATE the send.
@@ -654,7 +654,7 @@ async fn escalate_undelivered_send(
             return;
         }
         /*
-        CDXC:SessionChatTerminalNotices 2026-08-20:
+        CDXC:AgentScreenDetection 2026-08-20:
         The CLI executes this input itself rather than sending it to the model,
         so a silent transcript is its NORMAL outcome — `/usage`, `/model`,
         `!ls` and the rest write nothing a watcher can see, and the records that
@@ -667,7 +667,7 @@ async fn escalate_undelivered_send(
             return;
         }
         /*
-        CDXC:SessionChatTerminalNotices 2026-08-28:
+        CDXC:AgentScreenDetection 2026-08-28:
         Last chance before alarming from silence: re-resolve the transcript and
         scan the tail of every candidate file written since the send. The poll
         loop watches ONE path resolved at send time, and that path can go stale
@@ -687,7 +687,7 @@ async fn escalate_undelivered_send(
             session_chat_delivery_mismatch_notice(submitted_empty, screen_tail)
         }
         /*
-        CDXC:SessionChatTerminalNotices 2026-08-28: this verdict rests on
+        CDXC:AgentScreenDetection 2026-08-28: this verdict rests on
         NOT having observed something, so it is a suggestion, not a failure:
         a yellow "go make sure" card, never a red alarm. The red card is
         reserved for the two verdicts above/below with affirmative evidence.
@@ -722,19 +722,19 @@ async fn escalate_undelivered_send(
 fn undelivered_prefix(reason: UndeliveredSendReason) -> &'static str {
     match reason {
         UndeliveredSendReason::TranscriptSilent => {
-            "Your message was not recorded by the agent — this is what its terminal is showing instead."
+            "Your message was not recorded by the agent. This is what its terminal is showing instead."
         }
         UndeliveredSendReason::MismatchedInput { .. } => {
-            "Your message was not delivered — the agent recorded a different prompt in its place — and this is what its terminal is showing."
+            "Your message was not delivered. The agent recorded a different prompt in its place, and this is what its terminal is showing."
         }
         UndeliveredSendReason::WriteFailed => {
-            "Your message could not be typed into this session's terminal — this is what it is showing instead."
+            "Your message could not be typed into this session's terminal. This is what it is showing instead."
         }
     }
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-28:
+CDXC:AgentScreenDetection 2026-08-28:
 Deadline-time delivery proof that does not trust the send-time path. Resolution
 runs twice — once as the send did (recorded path first) and once by session id
 alone — so a stale recorded path cannot mask the live file the id sweep finds.
@@ -994,7 +994,7 @@ fn normalize_watchdog_text(text: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-24:
+CDXC:AgentScreenDetection 2026-08-24:
 The tiers above answer "did our message arrive?" and can only ever fail to prove
 it. This one answers the sharper question "was something ELSE submitted in its
 place?", which is what actually happened in the incident this exists for: the
@@ -1211,7 +1211,7 @@ fn json_escaped_needle(text: &str) -> Option<String> {
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-20:
+CDXC:AgentScreenDetection 2026-08-20:
 A message the CLI executes itself instead of sending to the model. Both agents
 have exactly two of these, and both use the same two prefixes:
   - `/command` — Claude's local commands and Codex's `SlashCommand` popup, from
@@ -1303,7 +1303,7 @@ enum ClaudeAgentLiveness {
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Every live Claude CLI keeps `~/.claude/sessions/<pid>.json` describing itself
 (pid, sessionId, cwd, status). gxserver knows the session's agentSessionId, so a
 matching record whose pid is gone — or no record at all on a machine that keeps

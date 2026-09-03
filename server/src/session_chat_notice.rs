@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Chat is a transcript projection, so everything an agent TUI paints ONLY on the
 screen is invisible in it: codex's expired-login banner, a workspace-trust
 dialog, a usage-limit countdown, a stream error, the CLI having exited back to a
@@ -29,6 +29,9 @@ Two match windows, per the researched catalog:
 
 Wordings are versioned: remote machines run older agent builds, so every state
 keeps a LIST of signatures ordered newest-first and the first match wins.
+
+CDXC:Copy 2026-09-03:
+User decision: Ghostex-owned user-facing copy in the desktop, web, and mobile apps uses no em dashes; use punctuation that preserves the sentence's natural reading instead.
 */
 
 use std::{
@@ -76,7 +79,7 @@ would silently opt it out of all three.
 */
 pub const SESSION_CHAT_NOTICE_DELIVERY_FAILED: &str = "deliveryFailed";
 /*
-CDXC:SessionChatApiRefusal 2026-08-28:
+CDXC:AgentScreenDetection 2026-08-28:
 The agent's API refused to answer the last message (Claude Code's safeguards
 refusal row). Detected from the session TRANSCRIPT, not the screen — the
 follower spots the recorded refusal row, which is authoritative where a screen
@@ -206,7 +209,7 @@ impl SessionChatTerminalNoticeAction {
 }
 
 /*
-CDXC:SessionChatTerminalPicker 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 Rows of an on-screen picker the chat surface can answer from here. A notice
 that carries them is not just "go look at your terminal": the client renders
 the same option rows the AskUserQuestion card uses and sends the pick back
@@ -320,7 +323,7 @@ impl SessionChatTerminalNotice {
     }
 
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-19:
+    CDXC:AgentScreenDetection 2026-08-19:
     A notice is an INSTANCE, not a sample. The screen keeps saying the same
     thing for as long as the state lasts, so every probe re-classifies it — but
     the client keys its local dismissal on `kind` + `detectedAt`, and the state
@@ -533,7 +536,7 @@ impl NoticeScreen {
     }
 
     /*
-    CDXC:SessionChatTerminalNotices 2026-08-19:
+    CDXC:AgentScreenDetection 2026-08-19:
     Agent TUIs frame their footers with full-width rules that carry no
     information but eat the whole card width. A rule row becomes a blank line —
     the break it was drawing is kept, the wall of glyphs is not — and it does
@@ -748,7 +751,7 @@ struct NoticeRule {
     title: &'static str,
     detail: &'static str,
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     Severity and "blocks input" are DIFFERENT axes and must not be collapsed.
     Severity says how alarming the card looks; this says whether a message
     delivered while the state is up actually reaches the model. A trust dialog
@@ -779,7 +782,7 @@ const CODEX_RULES: &[NoticeRule] = &[
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
         severity: SessionChatTerminalNoticeSeverity::Error,
         title: "Codex login expired",
-        detail: "Codex needs a fresh login on this machine. Open the terminal and run /login — the sign-in flow is interactive, so it cannot be answered from chat.",
+        detail: "Codex needs a fresh login on this machine. Open the terminal and run /login. The sign-in flow is interactive, so it cannot be answered from chat.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -1014,7 +1017,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
         severity: SessionChatTerminalNoticeSeverity::Error,
         title: "Claude Code login expired",
-        detail: "Claude Code needs a fresh login on this machine — open the terminal and run /login.",
+        detail: "Claude Code needs a fresh login on this machine. Open the terminal and run /login.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -1284,7 +1287,7 @@ fn notice_rules(agent: SessionChatOptionAgent) -> &'static [NoticeRule] {
 const ALL_NOTICE_RULES: &[&[NoticeRule]] = &[CODEX_RULES, CLAUDE_RULES];
 
 /*
-CDXC:SessionChatPromptQueue 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 Whether a message delivered right now would actually reach the model, DERIVED
 from the catalog above rather than restated as a second list of kind strings
 that would drift the first time a rule is added. Automated senders — the chat
@@ -1321,7 +1324,7 @@ pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
         SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED => true,
         SESSION_CHAT_NOTICE_PI_INPUT_BLOCKED => true,
         /*
-        CDXC:SessionChatTerminalPicker 2026-08-21: the resume-usage picker owns
+        CDXC:SessionChat 2026-08-21: the resume-usage picker owns
         the input line, and unlike the dialogs in the catalog it does not merely
         swallow a message — its trailing Enter CONFIRMS a row. A send delivered
         into it silently compacts the conversation the user was continuing, so
@@ -1330,13 +1333,13 @@ pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
         */
         SESSION_CHAT_NOTICE_RESUME_PROMPT => true,
         /*
-        CDXC:SessionChatSwitchConfirm 2026-08-29: same shape as the resume
+        CDXC:SessionChat 2026-08-29: same shape as the resume
         picker — a numbered chooser owning the input line, where a digit both
         selects and commits — so a send delivered into it answers the model/
         effort switch instead of reaching the model.
         */
         SESSION_CHAT_NOTICE_SWITCH_CONFIRM_PROMPT => true,
-        // CDXC:SessionChatSessionPaused 2026-08-29: same again — the paused
+        // CDXC:AgentScreenDetection 2026-08-29: same again — the paused
         // chooser owns the input line until a row is picked.
         SESSION_CHAT_NOTICE_SESSION_PAUSED_PROMPT => true,
         _ => ALL_NOTICE_RULES
@@ -1406,7 +1409,7 @@ fn notice_from_rule(
 }
 
 /*
-CDXC:SessionChatTerminalPicker 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 The picker as a notice. `detail` is Claude's OWN prose (the session's age and
 token count, and its usage-limit recommendation) because that is the entire
 basis for the choice — restating it in our words would drop the numbers the
@@ -1419,7 +1422,7 @@ fn notice_from_picker(
 ) -> SessionChatTerminalNotice {
     use crate::session_chat_resume_prompt::SessionChatTerminalPickerKind;
     const PICKER_GUIDANCE: &str =
-        "Claude Code accepts no input until this is answered — pick an option to answer it here.";
+        "Claude Code accepts no input until this is answered. Pick an option to answer it here.";
     let detail = match picker.detail.as_deref() {
         Some(prose) => format!("{prose} {PICKER_GUIDANCE}"),
         None => PICKER_GUIDANCE.to_string(),
@@ -1570,7 +1573,7 @@ fn notice_from_omp_blocking_screen(
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Pure classifier over ONE terminal capture. Rules are evaluated in the catalog's
 precedence order (login > trust > permissions > exited > usage > stream >
 update > onboarding), so the most blocking truth wins when a screen shows two.
@@ -1588,7 +1591,7 @@ pub fn classify_session_chat_terminal_notice(
         return None;
     }
     /*
-    CDXC:SessionChatTerminalPicker 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     The resume-usage picker outranks the whole catalog below it. Every rule
     there can only say "answer this in your terminal"; this one carries the
     rows, so the user answers it from the chat surface they are already on.
@@ -1663,7 +1666,7 @@ pub fn classify_session_chat_terminal_notice(
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Codex queues input typed while a turn runs CLIENT-SIDE: nothing is written to
 the rollout until the turn ends. The send watchdog must consult this before it
 declares a message undelivered, which is why the state is exposed as a
@@ -1684,7 +1687,7 @@ pub fn session_chat_terminal_screen_tail(screen_text: &str) -> Option<String> {
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-24:
+CDXC:AgentScreenDetection 2026-08-24:
 The one delivery verdict that is not reasoning from silence: the agent recorded
 a user turn AFTER the send that is not the message we sent — normally an EMPTY
 one, because the send's trailing Enter submitted the composer before the paste
@@ -1722,7 +1725,7 @@ pub fn session_chat_delivery_mismatch_notice(
 }
 
 /*
-CDXC:SessionChatApiRefusal 2026-08-28:
+CDXC:AgentScreenDetection 2026-08-28:
 The transcript recorded an API refusal row for the last turn (see
 `claude_api_refusal_text`). The detail is the CLI's own recorded explanation
 verbatim — it already names the safeguards, the category tag, the model-switch
@@ -1747,7 +1750,7 @@ pub fn session_chat_api_refusal_notice(recorded_text: String) -> SessionChatTerm
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Watchdog notices (a send that could not be proven delivered) live here rather
 than in the session registry: they describe a moment, not durable state, and a
 daemon restart must not resurrect one. Keyed exactly like the send queues so
@@ -1759,7 +1762,7 @@ struct StoredWatchdogNotice {
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Retirement backstop. A watchdog notice is normally retired by the next send or
 by a later verification, but a session nobody touches again would otherwise keep
 one forever — and "your message from an hour ago never arrived" is noise, not
@@ -1785,7 +1788,7 @@ pub fn set_session_chat_watchdog_notice(
     if let Ok(mut notices) = watchdog_notices().lock() {
         let key = session_chat_notice_key(project_id, session_id);
         /*
-        CDXC:SessionChatTerminalNotices 2026-08-19:
+        CDXC:AgentScreenDetection 2026-08-19:
         Re-publishing the SAME verdict keeps the instance the client already
         knows: its `detectedAt` is that client's dismissal key, and the stored
         age is what expires the instance, so neither may be reset by a repeat.
@@ -1829,7 +1832,7 @@ pub fn clear_session_chat_watchdog_notice(
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Clean-screen retirement. A watchdog verdict about SCREEN state (the login
 screen, the trust dialog, the crashed CLI, a queued input) is only true while
 that screen is up, so the next capture that succeeds whole and classifies to
@@ -1864,7 +1867,7 @@ pub fn retire_session_chat_watchdog_notice_on_clean_screen(
 A watchdog notice normally wins: it is both fresher and more specific than
 whatever the screen classifier read at the same moment.
 
-CDXC:SessionChatTerminalPicker 2026-08-21: an ANSWERABLE screen notice is the
+CDXC:SessionChat 2026-08-21: an ANSWERABLE screen notice is the
 one exception, and it is not a close call. A watchdog notice reports a PAST
 event ("your message could not be proven delivered") and its only advice is to
 go look at the terminal; an answerable picker is the LIVE state that most

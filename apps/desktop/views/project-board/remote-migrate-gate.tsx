@@ -227,7 +227,7 @@ export function ProjectBoardNotice({ message, projectPath }: { message: string; 
     return <RemoteMigrateGateNotice gate={remoteMigrateGate} projectPath={projectPath} />;
   }
   /*
-   * CDXC:ProjectBoardBeadsSchema 2026-08-08:
+   * CDXC:ProjectBoard 2026-08-08:
    * A database/schema failure proves that Beads found a workspace, so generic
    * words such as "database" or ".beads" must never turn it into a `bd init`
    * instruction. Only Beads' explicit missing-workspace messages belong to the
@@ -247,9 +247,13 @@ export function ProjectBoardNotice({ message, projectPath }: { message: string; 
     : isMissingProject
       ? 'Initialize Beads for this project'
       : 'Project board unavailable';
+  /*
+  CDXC:Copy 2026-09-03:
+  User decision: Ghostex-owned user-facing copy in the desktop, web, and mobile apps uses no em dashes; use punctuation that preserves the sentence's natural reading instead.
+  */
   const bodyLines = isMissingBeads
     ? [
-        'Ghostex uses the Beads CLI installed in the environment running this project—macOS, Linux, or the selected WSL distribution.',
+        'Ghostex uses the Beads CLI installed in the environment running this project: macOS, Linux, or the selected WSL distribution.',
         'Install the latest Beads release in that environment and ensure bd is available on its PATH, then refresh the board.',
       ]
     : isMissingProject
@@ -278,10 +282,10 @@ export function ProjectBoardNotice({ message, projectPath }: { message: string; 
           Missing-Beads setup should use the same polished notice shell but stay intentionally terse: one header and two lines below.
           Explain why Beads is required and keep copy/run controls in the single command row.
 
-          CDXC:ProjectBoardSystemBeads 2026-08-12:
+          CDXC:ProjectBoard 2026-08-12:
           Project/Kanban and shell agents intentionally use the same machine-installed `bd`. Missing and command-failure notices therefore direct the operator to install or update Beads instead of repairing Ghostex app resources.
 
-          CDXC:ProjectBoardBeadsCommands 2026-08-14:
+          CDXC:ProjectBoard 2026-08-14:
           Local setup and update commands run visibly in the active project's command pane. The renderer sends only a fixed action selector; Rust owns the command literal and completion refresh.
         */}
         <div className='project-board-notice-icon' aria-hidden='true'>
