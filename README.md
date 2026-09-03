@@ -88,7 +88,7 @@ Toggle between the two with a single hotkey or click!
 ### Built-in IDE (Optional extension)
 
 Loads on demand for working with markdown, reviewing code, and checking PRs. <br/>
-Supports all extensions. Sleeps when not in use to same resources (configurable).
+Supports all extensions. Sleeps when not in use to save resources.
 
 <img width="1200" alt="image" src="https://github.com/user-attachments/assets/986fbece-d0de-4739-8515-f3c2a7437b92" />
 
