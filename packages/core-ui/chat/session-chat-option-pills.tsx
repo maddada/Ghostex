@@ -341,9 +341,16 @@ function PillTrigger({
       {resolvedIconOnly ? null : <IconChevronDown aria-hidden='true' className='size-3 shrink-0' stroke={2} />}
     </DropdownMenuTrigger>
   );
+  /*
+   * The wrapper must not depend on the disabled state. A pill flips to its
+   * skeleton (and disabled) right after a choice is dispatched, while its menu
+   * is still open; toggling the wrapper there remounts the trigger, and the
+   * open Base UI menu keeps positioning against the detached node, which lands
+   * the popup at the window's top corner. Keep the tree shape stable instead.
+   */
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
-      {tooltipWhenDisabled && isDisabled ? <span className='inline-flex'>{trigger}</span> : trigger}
+      {tooltipWhenDisabled ? <span className='inline-flex'>{trigger}</span> : trigger}
     </AppTooltip>
   );
 }
@@ -397,7 +404,7 @@ function PillButton({
   );
   return (
     <AppTooltip content={skeleton ? loadingText : title}>
-      {tooltipWhenDisabled && isDisabled ? <span className='inline-flex'>{button}</span> : button}
+      {tooltipWhenDisabled ? <span className='inline-flex'>{button}</span> : button}
     </AppTooltip>
   );
 }
@@ -1023,7 +1030,6 @@ export function SessionChatSessionOptionPills({
         <SessionChatContextMeter
           compactDisabled={disabled}
           compactDisabledReason={isWorking ? 'Available once the agent is idle.' : null}
-          modelLabel={modelLabel}
           onCompact={() => {
             void onDispatchCommand('/compact');
           }}
