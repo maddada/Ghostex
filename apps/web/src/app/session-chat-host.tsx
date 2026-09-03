@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   GxserverForkSessionResult,
   GxserverSessionRenameRequestResult,
+  GxserverSessionForkBranch,
 } from '@/packages/shared/gxserver-protocol';
 import { resolveSessionChatDisplayAgent, resolveSessionChatTranscriptAgent } from '@/packages/shared/session-chat';
 import { getSidebarAgentIconById } from '@/packages/shared/sidebar-agents';
@@ -77,7 +78,7 @@ async function runChatAgentAction(session: WorkspaceSession, actionId: string, v
         }
       );
       /*
-      CDXC:GPUISidebarRename 2026-07-28 (web chat variant):
+      CDXC:Sessions 2026-07-28 (web chat variant):
       Agent-session renames stay pending until the Agent CLI itself renames,
       so the client must stage `/rename <title>` (Pi: `/name`) into the TUI.
       gpui types it into the mounted terminal; here the session-chat send
@@ -132,7 +133,7 @@ async function runChatAgentAction(session: WorkspaceSession, actionId: string, v
       return;
     case 'switchAccount': {
       /*
-      CDXC:SwitchAccount 2026-09-03:
+      CDXC:AgentProviders 2026-09-03:
       `value` is the picked row's agent id. The daemon rewrites the row's launch
       identity; the sleep/wake that follows is Full reload, whose wake resumes
       the same conversation with the new agent's command.
@@ -147,7 +148,7 @@ async function runChatAgentAction(session: WorkspaceSession, actionId: string, v
     }
     case 'exportTranscript': {
       /*
-      CDXC:ExportTranscriptOptions 2026-08-24:
+      CDXC:TranscriptExport 2026-08-24:
       The action only opens the Export Transcript dialog on its include-toggle
       options stage; ExportTranscriptModalHost runs the daemon call once the
       user confirms and renders the structured result or failure.
@@ -193,7 +194,7 @@ export function createWebSessionHostActions(
       // reads the same on every surface.
       { id: 'fullReload', label: 'Full reload' },
       /*
-      CDXC:SwitchAccount 2026-09-03:
+      CDXC:AgentProviders 2026-09-03:
       Rows come from the presentation so the terminal bar (which has no chat
       read state) can render them; the chat view keeps them as supplied. An
       empty list hides the row on both surfaces.
@@ -239,15 +240,21 @@ export function SessionChatHost({
     [onSwitchToTerminal, session]
   );
   /*
-  CDXC:SessionForkFamilies 2026-08-28:
+  CDXC:SessionFork 2026-08-28:
   Switching branches is the web app's own navigation, so it goes through the
   same focusSession event the sidebar and the Fork action already dispatch: the
   Agents page selects the target and this chat surface is replaced with the
   branch's own. The whole family lives on one machine, so the target keeps this
   session's machineId.
+
+  CDXC:SessionFork 2026-09-03:
+  A STOPPED ancestor is not in the presentation the Agents page resolves the
+  focus event against, so it is woken in place first (`/api/wakeSession`
+  respawns the provider with the saved resume command and re-publishes the row
+  before answering). Same reasoning as the desktop chat host's switch.
   */
   const selectForkBranch = useCallback(
-    (branch: { projectId: string; sessionId: string }): void => {
+    (branch: GxserverSessionForkBranch): void => {
       const detail: GhostexWebFocusSessionDetail = {
         machineId: session.machineId,
         projectId: branch.projectId,
@@ -256,7 +263,16 @@ export function SessionChatHost({
         placementTargetSessionId: session.sessionId,
         source: 'sidebar',
       };
-      window.dispatchEvent(new CustomEvent('ghostex-web:focusSession', { detail }));
+      const wake =
+        branch.lifecycleState === 'stopped'
+          ? rpcForMachine(session.machineId, '/api/wakeSession', {
+              projectId: branch.projectId,
+              sessionId: branch.sessionId,
+            }).then(() => undefined)
+          : Promise.resolve();
+      void wake
+        .then(() => window.dispatchEvent(new CustomEvent('ghostex-web:focusSession', { detail })))
+        .catch(() => undefined);
     },
     [session.machineId, session.sessionId]
   );

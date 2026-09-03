@@ -1,5 +1,5 @@
 /*
-CDXC:SessionForkFamilies 2026-08-28:
+CDXC:SessionFork 2026-08-28:
 The chat's branch switcher. A Codex fork keeps the earlier conversation on the
 session it branched off, and Previous Sessions hides that ancestor once
 something continues from it, so without this control a user who forked can no
@@ -12,6 +12,11 @@ It asks ONCE per session, lazily, and caches the answer for the lifetime of the
 page: the family only changes when a session is forked or retired, both of
 which land the user on a different session key anyway. A daemon or host that
 cannot answer leaves the control unrendered rather than showing an empty menu.
+
+CDXC:SessionFork 2026-09-03:
+Picking a STOPPED branch revives that same registry row (the hosts wake it
+before focusing), so the row says so instead of silently doing nothing. A host
+that cannot switch omits `onSelectBranch` and the rows stay disabled.
 */
 import { IconGitBranch } from '@tabler/icons-react';
 import { useEffect, useState } from 'react';
@@ -21,6 +26,7 @@ import { Button } from '../../components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -123,35 +129,45 @@ export function SessionChatForkBranchSwitcher({
         {branches.length}
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-72 min-w-72'>
-        <DropdownMenuLabel>Branches</DropdownMenuLabel>
-        {branches.map((branch) => {
-          const lastActive = branchLastActiveLabel(branch);
-          return (
-            <DropdownMenuItem
-              disabled={branch.current || !onSelectBranch}
-              key={`${branch.projectId}:${branch.sessionId}`}
-              onClick={() => {
-                if (!branch.current) {
-                  onSelectBranch?.(branch);
-                }
-              }}
-            >
-              <span
-                aria-hidden='true'
-                className={cn('size-1.5 shrink-0 rounded-full', branchLifecycleDotClassName(branch))}
-              />
-              <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
-                <span className='truncate'>{branch.title || 'Untitled session'}</span>
-                <span className='truncate text-[11px] text-muted-foreground'>
-                  {branch.ancestor ? 'Earlier thread' : ''}
-                  {branch.ancestor && lastActive ? ' · ' : ''}
-                  {lastActive}
+        {/*
+        Base UI's GroupLabel needs a Group context and throws (error #31) without one.
+        With no error boundary in the chat page that unmounted the whole transcript.
+        */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Branches</DropdownMenuLabel>
+          {branches.map((branch) => {
+            const lastActive = branchLastActiveLabel(branch);
+            return (
+              <DropdownMenuItem
+                disabled={branch.current || !onSelectBranch}
+                key={`${branch.projectId}:${branch.sessionId}`}
+                onClick={() => {
+                  if (!branch.current) {
+                    onSelectBranch?.(branch);
+                  }
+                }}
+              >
+                <span
+                  aria-hidden='true'
+                  className={cn('size-1.5 shrink-0 rounded-full', branchLifecycleDotClassName(branch))}
+                />
+                <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                  <span className='truncate'>{branch.title || 'Untitled session'}</span>
+                  <span className='truncate text-[11px] text-muted-foreground'>
+                    {[
+                      branch.ancestor ? 'Earlier thread' : '',
+                      branch.lifecycleState === 'stopped' && !branch.current ? 'Resumes when opened' : '',
+                      lastActive,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
                 </span>
-              </span>
-              {branch.current ? <span className='shrink-0 text-[11px] text-muted-foreground'>Current</span> : null}
-            </DropdownMenuItem>
-          );
-        })}
+                {branch.current ? <span className='shrink-0 text-[11px] text-muted-foreground'>Current</span> : null}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
