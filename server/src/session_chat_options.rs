@@ -398,6 +398,7 @@ pub(crate) fn claude_statusline_change_watch(
 /// Agents whose statusline grammar is known.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SessionChatOptionAgent {
+    Antigravity,
     Claude,
     Codex,
     Cursor,
@@ -409,6 +410,7 @@ pub enum SessionChatOptionAgent {
 
 pub fn session_chat_option_agent(agent: Option<&str>) -> Option<SessionChatOptionAgent> {
     match agent.map(str::trim).unwrap_or_default() {
+        "antigravity" | "antigravity-cli" | "agy" => Some(SessionChatOptionAgent::Antigravity),
         "claude" | "openclaude" => Some(SessionChatOptionAgent::Claude),
         "codex" => Some(SessionChatOptionAgent::Codex),
         "cursor" => Some(SessionChatOptionAgent::Cursor),
@@ -935,6 +937,107 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
 }
 
 // ---------------------------------------------------------------------------
+// Antigravity CLI grammar
+//   ? for shortcuts                                    Gemini 3.8 Flash · high
+//   Gemini 3.8 Flash (High)                       (startup banner, same values)
+//
+// CDXC:SessionChatAntigravityOptions 2026-09-03: the footer's right edge is
+// `<model> · <effort>` for the Gemini rows, whose ids are model and effort
+// flattened (`gemini-3.8-flash-high`, see `agy models`), and a bare `<model>`
+// for the rows without an effort slider. The pill values are the catalog's
+// model part, exactly what `antigravityModelCommand` re-flattens when it types
+// `/model` (packages/core-ui/chat/session-chat-session-options.ts). Only names
+// the catalog knows are accepted, so a prose line that ends in `· high` never
+// becomes state.
+// ---------------------------------------------------------------------------
+
+const ANTIGRAVITY_EFFORTS: &[&str] = &["low", "medium", "high"];
+
+/// Display names that do not derive their catalog id from the name alone:
+/// `agy models` folds the fixed reasoning mode into these ids.
+const ANTIGRAVITY_FIXED_MODEL_IDS: &[(&str, &str)] = &[
+    ("Claude Sonnet 4.6", "claude-sonnet-4-6"),
+    ("Claude Opus 4.6", "claude-opus-4-6-thinking"),
+    ("GPT-OSS 120B", "gpt-oss-120b-medium"),
+];
+
+/// `Gemini 3.8 Flash` ⇒ `gemini-3.8-flash`; `Gemini 3.1 Pro` ⇒ `gemini-3.1-pro`.
+fn antigravity_model_id(name: &str) -> Option<String> {
+    if let Some((_, id)) = ANTIGRAVITY_FIXED_MODEL_IDS
+        .iter()
+        .find(|(display, _)| *display == name)
+    {
+        return Some((*id).to_string());
+    }
+    let rest = name.strip_prefix("Gemini")?;
+    let (version, tier) = rest.trim_start().split_once(' ')?;
+    if !is_model_version_suffix(&format!(" {version}")) || !matches!(tier, "Flash" | "Pro") {
+        return None;
+    }
+    Some(name.to_ascii_lowercase().replace(' ', "-"))
+}
+
+/// The model name is right-aligned after the shortcut hint, so it is the text
+/// after the last run of two or more spaces (or the whole segment when the
+/// footer has nothing on its left).
+fn antigravity_trailing_name(segment: &str) -> &str {
+    let trimmed = segment.trim();
+    match trimmed.rfind("  ") {
+        Some(index) => trimmed[index..].trim(),
+        None => trimmed,
+    }
+}
+
+fn match_antigravity_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
+    let segments = line_segments(line);
+    let (name, effort) = match segments.as_slice() {
+        [.., model, effort]
+            if ANTIGRAVITY_EFFORTS.contains(&effort.to_ascii_lowercase().as_str()) =>
+        {
+            (
+                antigravity_trailing_name(model),
+                Some(effort.to_ascii_lowercase()),
+            )
+        }
+        [only] => match only
+            .trim_end()
+            .strip_suffix(')')
+            .and_then(|rest| rest.rsplit_once(" ("))
+        {
+            // Startup banner: `Gemini 3.8 Flash (High)`.
+            Some((name, effort))
+                if ANTIGRAVITY_EFFORTS.contains(&effort.to_ascii_lowercase().as_str()) =>
+            {
+                (
+                    antigravity_trailing_name(name),
+                    Some(effort.to_ascii_lowercase()),
+                )
+            }
+            _ => (antigravity_trailing_name(only), None),
+        },
+        _ => return None,
+    };
+    let value = antigravity_model_id(name)?;
+    Some(SessionChatDetectedSelection {
+        model: Some(SessionChatDetectedChoice {
+            value,
+            label: name.to_string(),
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        effort: effort.map(|effort| SessionChatDetectedChoice {
+            label: effort.clone(),
+            value: effort,
+            source: SessionChatOptionEvidence::Terminal,
+        }),
+        mode: None,
+        context_window: None,
+        terminal_status_line: None,
+        fast: None,
+        context_usage: None,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Pi grammar
 //   0.0%/300k (auto)              claude-fable-5@300k • medium
 //
@@ -1117,6 +1220,14 @@ pub fn detect_session_chat_selection(
     let mut topmost_match: Option<usize> = None;
     for (index, scanned) in scanned_lines.iter().enumerate().rev() {
         match agent {
+            SessionChatOptionAgent::Antigravity => {
+                if let Some(selection) = match_antigravity_statusline(scanned) {
+                    found = selection;
+                    topmost_match = Some(index);
+                    break;
+                }
+                continue;
+            }
             SessionChatOptionAgent::Cursor => {
                 if let Some(selection) = match_cursor_statusline(scanned) {
                     found = selection;
@@ -1188,6 +1299,9 @@ pub fn detect_session_chat_selection(
                             found = selection;
                         }
                     }
+                }
+                SessionChatOptionAgent::Antigravity => {
+                    unreachable!("Antigravity is parsed as a complete statusline")
                 }
                 SessionChatOptionAgent::Cursor => {
                     unreachable!("Cursor is parsed as a complete statusline")
@@ -1522,6 +1636,9 @@ fn read_session_chat_transcript_selection(
         crate::session_chat::resolve_session_chat_transcript_agent(match agent {
             SessionChatOptionAgent::Claude => Some("claude"),
             SessionChatOptionAgent::Codex => Some("codex"),
+            // Antigravity's footer names both values for the whole session,
+            // and its mirrored step log carries no model field.
+            SessionChatOptionAgent::Antigravity => return None,
             SessionChatOptionAgent::Cursor => return None,
             /*
             Grok's statusline is on screen for the whole session and names both
