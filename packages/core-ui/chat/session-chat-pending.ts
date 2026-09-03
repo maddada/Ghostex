@@ -255,19 +255,36 @@ export function advancedSessionChatUserTexts(messages: readonly SessionChatMessa
 
 // --- Rapid-send glue handling -------------------------------------------------
 
+/*
+CDXC:SessionChat 2026-09-03 WHY:
+Two glue shapes reach the transcript. A rapid-send burst lands byte-adjacent
+("joke" + "continue" → "jokecontinue"). Prompts sent while the agent is busy
+are parked in Claude Code's own queue instead, and when the turn ends it pops
+ALL of them and submits them as ONE user row joined by newlines, which the
+whitespace folding above turns into single spaces ("please check …" + "Ghostex
+Session …" → "please check … Ghostex Session …"). Requiring byte adjacency
+alone left both echoes on screen with the Queued label forever, which also
+pinned the pane in the optimistic working state ("Gusting…") after the reply
+had long landed, until a remount wiped the pending list. Every piece is
+trimmed, so an optional single space between pieces is the only separator to
+allow, and it cannot make a real prefix ("hi" vs "history") match.
+*/
 export function countLeadingPendingTextsGluedToUserText(pendingTexts: readonly string[], userText: string): number {
-  let combined = '';
+  let consumed = 0;
   for (let i = 0; i < pendingTexts.length; i += 1) {
     const piece = pendingTexts[i];
     if (!piece) {
       return 0;
     }
-    combined += piece;
-    if (combined === userText) {
-      return i + 1;
+    if (i > 0 && userText.charAt(consumed) === ' ') {
+      consumed += 1;
     }
-    if (!userText.startsWith(combined)) {
+    if (!userText.startsWith(piece, consumed)) {
       return 0;
+    }
+    consumed += piece.length;
+    if (consumed === userText.length) {
+      return i + 1;
     }
   }
   return 0;
@@ -504,7 +521,7 @@ export function sessionChatCommandMarkersAsMessages(
 }
 
 /*
-CDXC:SessionChatAppCommands 2026-08-23:
+CDXC:SessionChat 2026-08-23:
 Commands GHOSTEX typed into the agent (auto-title `/rename`, a fork's
 provisional title). They reuse the marker lane rather than getting a surface of
 their own — it is the same fact, "a command went to the terminal", and only the
