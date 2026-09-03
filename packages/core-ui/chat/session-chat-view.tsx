@@ -57,6 +57,7 @@ import { readStoredSessionChatVerbose, writeStoredSessionChatVerbose } from './s
 import { sessionChatSlashCommandsForAgent, sessionChatSlashHeadingForAgent } from './session-chat-slash-commands';
 import type { SessionChatTransport } from './session-chat-transport';
 import { useSessionChat } from './use-session-chat';
+import { useSessionChatWorkingHold } from './use-session-chat-working-hold';
 
 const INTERACTIVE_TARGET_SELECTOR = [
   'a[href]',
@@ -87,13 +88,13 @@ const LOADING_INDICATOR_DELAY_MS = 600;
 const LOADING_RETRY_DELAY_MS = 12_000;
 
 /*
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 Host actions that mean nothing on a draft. See the filter that uses them.
 */
 const DRAFT_HIDDEN_HOST_ACTION_IDS = new Set(['fork', 'fullReload']);
 
 /*
-CDXC:DraftAgentSwitch 2026-08-28:
+CDXC:Drafts 2026-08-28:
 When to look again after a draft's agent CLI was switched. The endpoint answers
 as soon as it has queued the swap — three interrupts, a settle, then the new
 agent's launch command typed into the same live pane — so the CLI that read
@@ -159,7 +160,7 @@ export interface SessionChatHostComposerBridge {
    */
   stashPrompt?: (content: string, options?: { transient?: boolean }) => Promise<SessionChatStashedPrompt | undefined>;
   /*
-  CDXC:SessionChatStashBadge 2026-08-24:
+  CDXC:SavedPrompts 2026-08-24:
   The two halves of "the prompts stashed from this conversation": how many
   there are, and how to show them. Both are optional and both are gated on the
   host owning a Saved Prompts surface. The count badge plus the empty-draft
@@ -213,7 +214,7 @@ export interface SessionChatViewProps {
   /** Open delayed actions for this session in the host-owned modal. */
   onDelayedActions?: () => void;
   /*
-  CDXC:SessionForkFamilies 2026-08-28:
+  CDXC:SessionFork 2026-08-28:
   Navigates the host to another branch of this conversation, picked in the
   chat's branch switcher. Only the host knows how it selects a session, so a
   host with no way to do it from this surface omits the callback and the
@@ -445,7 +446,7 @@ export function SessionChatView({
     document.body.dataset.sessionChatTheme = theme;
   }, [theme]);
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   Which agent this chat renders as. `agentLabel` is the host's BOOT-TIME value
   (a URL parameter on desktop), and a draft's agent can change under it: picking
   a different agent in the composer's "Agents" section rewrites the session's
@@ -488,13 +489,17 @@ export function SessionChatView({
   user-visible session status still saying "working" — and the transcript
   folding the turn into "Worked for Xs" in that window is exactly the mid-run
   fold flash. So the list also holds on `chat.workingSignal`, the raw live
-  signal, and only settles once BOTH agree the session is quiet. Stop-vs-Send
+  signal, and only settles once BOTH agree the session is quiet — and has
+  stayed quiet for the settle hold, because the live status flaps around turn
+  boundaries and each false blip would flash the fold in and out. Stop-vs-Send
   and the composer keep `chat.working` so they cannot get stuck on a stale
   signal.
   */
-  const transcriptWorking = (chat.view.kind === 'ready' && chat.view.isWorking) || chat.workingSignal;
+  const transcriptWorking = useSessionChatWorkingHold(
+    (chat.view.kind === 'ready' && chat.view.isWorking) || chat.workingSignal
+  );
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   The draft the switcher acts on. `availableAgents` is present only while the
   session IS a draft, so its absence is what hides the "Agents" section on a
   promoted session — and `sessionAgentId` (not the transcript family in
@@ -532,7 +537,7 @@ export function SessionChatView({
     return switchAgent
       ? async (agentId: string): Promise<void> => {
           /*
-          CDXC:DraftAgentSwitch 2026-08-28:
+          CDXC:Drafts 2026-08-28:
           The switch restarts the agent CLI inside the draft's pane, so the
           typed-but-unsent text is persisted BEFORE the request goes out: the
           localStorage copy synchronously, and gxserver's durable copy through
@@ -644,7 +649,7 @@ export function SessionChatView({
   const sessionOptions = useSessionChatSessionOptions({
     agent: resolvedAgentLabel,
     /*
-    CDXC:DraftAgentSwitch 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     Drafts only — `chat.sessionAgentId` is carried for every session, and a
     session that has never been a draft must keep reading the options it
     already stored under the unsuffixed key.
@@ -705,7 +710,7 @@ export function SessionChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyDetectedOptions, detectedAt]);
   /*
-  CDXC:SessionChatStashBadge 2026-08-24:
+  CDXC:SavedPrompts 2026-08-24:
   The stash control carries how many prompts are already stashed from THIS
   conversation, which only the host can answer (it owns the gxserver
   connection). The count is keyed on the provider conversation id so it
@@ -869,7 +874,7 @@ export function SessionChatView({
     return save ? (params: { content: string; path: string }) => save(params) : undefined;
   }, [transport]);
   /*
-  CDXC:SessionChatComposerReady 2026-08-26:
+  CDXC:SessionChat 2026-08-26:
   Evidence read for the composer's `composerNotReady` notice. Bound the same way
   as every other optional transport call here, so a host without the endpoint
   hands the composer nothing and the notice drops its terminal excerpt.
@@ -879,7 +884,7 @@ export function SessionChatView({
     return read ? () => read() : undefined;
   }, [transport]);
   /*
-  CDXC:SessionForkFamilies 2026-08-28:
+  CDXC:SessionFork 2026-08-28:
   The branch switcher's one read. Bound like every other optional transport call
   here, so a host without a route to `/api/sessionForkBranches` hands the
   switcher nothing and it never renders.
@@ -900,7 +905,7 @@ export function SessionChatView({
       : undefined;
   }, [transport]);
   /*
-  CDXC:SessionAgentNotes 2026-08-24:
+  CDXC:SessionNotes 2026-08-24:
   The note is filed under the PROVIDER conversation id, so the control appears
   only once this session has one — before that there is nothing to key a note
   to and gxserver would refuse the save. Both transport methods are required:
@@ -1030,7 +1035,7 @@ export function SessionChatView({
   );
 
   /*
-  CDXC:SessionChatTerminalPicker 2026-08-21:
+  CDXC:SessionChat 2026-08-21:
   A terminal notice carrying rows is a picker that owns the agent CLI's input
   line, so the composer is held shut behind it: a message sent now would be
   typed into the picker and its Enter would confirm whichever row is
@@ -1064,7 +1069,21 @@ export function SessionChatView({
   const [sessionOptionSwitching, setSessionOptionSwitching] = useState(false);
   const composerEnabled = canSend && !terminalChoicePending && !sessionOptionSwitching;
   /*
-  CDXC:SessionChatRewind 2026-09-02:
+  CDXC:SessionChat 2026-09-03:
+  `composerEnabled` gates only the actions that reach the agent (send, queue,
+  rewind). The text box itself is never locked: the composer receives the
+  reason as `sendBlockedReason`, keeps the draft editable, dims Send, and
+  raises a red toast with this sentence when a send is attempted.
+  */
+  const composerSendBlockedReason = !canSend
+    ? 'Input is held by another device.'
+    : terminalChoicePending
+      ? 'Answer the question above first.'
+      : sessionOptionSwitching
+        ? 'Claude is still switching mode. Try again in a moment.'
+        : null;
+  /*
+  CDXC:SessionChat 2026-09-02:
   The transcript's "Rewind to here" action. Three gates, all of which have to
   hold before a prompt row offers it:
     1. the host can reach `/api/rewindSessionChat` (bound like every other
@@ -1084,6 +1103,17 @@ export function SessionChatView({
     return rewind ? (params: { messageId: string }) => rewind(params) : undefined;
   }, [transport]);
   const rewindToMessage = readStateAgent === 'claude' ? rewindSessionChat : undefined;
+  // CDXC:AgentScreenDetection 2026-09-03 WHY: same two gates as the
+  // rewind — a host route to `/api/selectSessionChatModel`, and a Codex
+  // session, the only agent whose picker the daemon knows how to drive.
+  const pickModel = useMemo(() => {
+    const select = transport.selectSessionChatModel?.bind(transport);
+    return select && readStateAgent === 'codex'
+      ? async (params: { model: string; effort: string }) => {
+          await select(params);
+        }
+      : undefined;
+  }, [readStateAgent, transport]);
   /*
   The prompt a rewind took back belongs in the composer: the reader rewound in
   order to say it differently, so they get the text to edit instead of retyping
@@ -1117,7 +1147,7 @@ export function SessionChatView({
       reconcileTypedCommand(text);
       await chatSend(text);
       /*
-      CDXC:DraftSessions 2026-08-28:
+      CDXC:Drafts 2026-08-28:
       A delivered prompt PROMOTES a draft server-side (option commands like
       /model are carved out and do not). Whether it did is only visible on the
       read state — `availableAgents` simply stops being sent — so a send from a
@@ -1132,7 +1162,7 @@ export function SessionChatView({
   );
 
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   Fork and Full reload have nothing to act on while the session is a draft:
   there is no conversation to fork, and no agent run to reload — the CLI has
   never been given a prompt. The action list is host-built and the draft flag is
@@ -1147,7 +1177,7 @@ export function SessionChatView({
       return hostActions;
     }
     /*
-    CDXC:SwitchAccount 2026-09-03:
+    CDXC:AgentProviders 2026-09-03:
     The host lists "Switch Account" as a plain row; its rows are the daemon's
     `switchableAgents` off the read state, which only this view holds. A host
     that already supplied rows (the web terminal bar builds them from the
@@ -1221,18 +1251,13 @@ export function SessionChatView({
 
   const handleDragOverCapture = useCallback(
     (event: DragEvent<HTMLDivElement>): void => {
-      if (
-        (!attachFile && !pickPaths) ||
-        !composerEnabled ||
-        questionActive ||
-        !sessionChatDataTransferHasFiles(event.dataTransfer)
-      ) {
+      if ((!attachFile && !pickPaths) || questionActive || !sessionChatDataTransferHasFiles(event.dataTransfer)) {
         return;
       }
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
     },
-    [attachFile, composerEnabled, pickPaths, questionActive]
+    [attachFile, pickPaths, questionActive]
   );
 
   const handleDropCapture = useCallback(
@@ -1380,7 +1405,7 @@ export function SessionChatView({
               />
               <div className='relative flex min-h-0 flex-1 flex-col'>
                 {/*
-                CDXC:SessionForkFamilies 2026-08-28:
+                CDXC:SessionFork 2026-08-28:
                 The chat has no title bar of its own (desktop draws the title
                 natively, the web app draws it in the workspace chrome), so the
                 branch switcher owns this thin strip above the transcript. It
@@ -1415,7 +1440,7 @@ export function SessionChatView({
                           verboseMode={verbose}
                         />
                         <TranscriptSelectionToolbar
-                          addToChatEnabled={composerEnabled && !questionActive}
+                          addToChatEnabled={!questionActive}
                           containerRef={transcriptRef}
                           onAddToChat={(text) => composerRef.current?.appendText(asMarkdownQuote(text))}
                         />
@@ -1497,10 +1522,7 @@ export function SessionChatView({
                               </ContextMenuItem>
                             ) : null}
                             {transcriptSelection !== '' ? (
-                              <ContextMenuItem
-                                disabled={!composerEnabled || questionActive}
-                                onClick={addTranscriptSelectionToChat}
-                              >
+                              <ContextMenuItem disabled={questionActive} onClick={addTranscriptSelectionToChat}>
                                 <IconBlockquote aria-hidden='true' />
                                 Add to Chat
                               </ContextMenuItem>
@@ -1586,7 +1608,7 @@ export function SessionChatView({
                       agentFleet={chat.agentFleet}
                       agentTasks={chat.agentTasks}
                       {...(diagnosticLog ? { diagnosticLog } : {})}
-                      disabled={!composerEnabled}
+                      sendBlockedReason={composerSendBlockedReason}
                       draftSync={chat.draft}
                       isWorking={chat.working}
                       key={sessionKey}
@@ -1635,6 +1657,7 @@ export function SessionChatView({
                           onDispatchKey={async (key, marker) => {
                             await chat.sendKey?.(key, marker);
                           }}
+                          {...(pickModel ? { onPickModel: pickModel } : {})}
                           onSwitchingChange={setSessionOptionSwitching}
                           {...(onSwitchToTerminalForAgentPicker || hostActions?.onSwitchToTerminal
                             ? {

@@ -1,5 +1,5 @@
 /*
-CDXC:SessionAgentNotes 2026-08-24:
+CDXC:SessionNotes 2026-08-24:
 The chat-side editor for a session's note ("what to do next / when to come back
 here"). It sits in flow directly above the composer rather than in a dialog: the
 note is written while reading the conversation, so covering the transcript to
@@ -226,7 +226,6 @@ export function SessionChatNotePanel({
       {useMonaco ? (
         <div className='ghostex-chat-session-note-editor' onBlur={flushNote}>
           <SessionChatMonacoInput
-            disabled={false}
             fillHeight={false}
             initialValue={valueRef.current}
             onCaretChange={() => undefined}

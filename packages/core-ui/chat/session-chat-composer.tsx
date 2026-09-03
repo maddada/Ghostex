@@ -38,6 +38,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -58,6 +59,7 @@ import {
   ContextMenuTrigger,
 } from '../../components/ui/context-menu';
 import { Field, FieldError } from '../../components/ui/field';
+import { SessionChatSendBlockedToaster, showSessionChatSendBlockedToast } from './session-chat-send-blocked-toast';
 import { AppTooltip } from '../app-tooltip';
 import {
   EMPTY_SESSION_CHAT_COMPOSER_HISTORY,
@@ -124,7 +126,7 @@ export interface SessionChatComposerHandle {
   /** Clear the draft only when it still matches the supplied snapshot. */
   clearDraft: (expected: string) => boolean;
   /*
-  CDXC:DraftAgentSwitch 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   Persist what is in the field RIGHT NOW: the localStorage copy synchronously,
   and gxserver's durable copy through the same debounced sync the composer uses
   everywhere else (the push is a no-op when the server already has this text).
@@ -195,7 +197,15 @@ export interface SessionChatComposerProps {
    * typed text; hosts that never destroy their page omit it.
    */
   onDraftEmptyChange?: (empty: boolean) => void;
-  disabled?: boolean;
+  /**
+   * CDXC:SessionChat 2026-09-03:
+   * Why a message cannot be sent right now, or null when it can. Typing,
+   * pasting, attaching, and every other edit stay possible regardless; only
+   * sending (and queueing, which is a deferred send) is refused, with this
+   * sentence as the red toast's description. There is no `disabled` prop on
+   * purpose: nothing may make the text box read-only.
+   */
+  sendBlockedReason?: string | null;
   isWorking: boolean;
   /** Whether plain Enter sends instead of inserting a newline. */
   sendOnEnter?: boolean;
@@ -340,7 +350,7 @@ export interface SessionChatComposerProps {
   /** Palette used by the chat-owned Monaco prompt input. */
   theme?: SessionChatTheme;
   /*
-  CDXC:SessionChatPromptQueue 2026-08-21:
+  CDXC:SessionChat 2026-08-21:
   Ghostex's own prompt queue (plan 016). Rows render above the input, inside
   this composer's container, and Tab / a long-press on Send add to them. Absent
   — or present with `capabilities.supported === false`, which is what an old
@@ -357,7 +367,7 @@ export interface SessionChatComposerProps {
    */
   draftSync?: SessionChatDraftController;
   /*
-  CDXC:SessionChatAgentFleet 2026-08-23:
+  CDXC:AgentScreenDetection 2026-08-23:
   Sub-agents read off the agent's terminal screen. Rendered ABOVE this
   composer's container, unlike the queue rows above, because it is work the
   agent already owns rather than input the user still owns. Null/absent renders
@@ -365,7 +375,7 @@ export interface SessionChatComposerProps {
   */
   agentFleet?: SessionChatAgentFleet | null;
   /*
-  CDXC:SessionChatAgentTasks 2026-09-03:
+  CDXC:SessionChat 2026-09-03:
   Claude's task list from its on-disk store. Also ABOVE the container, for the
   same reason as the fleet: it is the agent's plan, not the user's input. It
   sits above the fleet strip because the plan outlives any one sub-agent.
@@ -414,7 +424,7 @@ const LINKED_IMAGE_REFERENCE_PATTERN = /\[Image #\d+\]\(([^)\r\n]+)\)/g;
 const SESSION_CHAT_STOP_BUTTON_COOLDOWN_MS = 2_000;
 
 /*
- * CDXC:DraftCrashSafety 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * The per-keystroke localStorage cache is NOT durable: Chromium batches its
  * LevelDB commits and an app quit that skips a clean CEF shutdown (a dev
  * restart, a crash, a force quit) drops everything uncommitted. gxserver's
@@ -532,7 +542,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       agentFleet,
       agentTasks,
       diagnosticLog,
-      disabled = false,
       draftSync,
       fileHeading,
       files,
@@ -560,6 +569,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       optionPills,
       placeholder,
       queue,
+      sendBlockedReason = null,
       sendOnEnter = true,
       sessionKey,
       sessionNoteActive = false,
@@ -601,6 +611,12 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
      */
     const [sendErrorCode, setSendErrorCode] = useState<GxserverRpcErrorCode | null>(null);
     const [stopButtonCoolingDown, setStopButtonCoolingDown] = useState(false);
+    const sendBlocked = sendBlockedReason !== null;
+    const sendBlockedToasterId = useId();
+    /** Raises the red "not sent" toast; every refused send and queue goes through here. */
+    const reportSendBlocked = (): void => {
+      showSessionChatSendBlockedToast(sendBlockedReason ?? '', sendBlockedToasterId);
+    };
     const [contextSelection, setContextSelection] = useState({ end: 0, start: 0 });
     /** A newer draft from another device, waiting behind the Use / Dismiss bar. */
     const [incomingDraft, setIncomingDraft] = useState<SessionChatDraft | null>(null);
@@ -672,7 +688,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           : [],
       [slashCommands, slashDismissed, slashQuery]
     );
-    const slashOpen = slashMatches.length > 0 && !disabled;
+    const slashOpen = slashMatches.length > 0;
     const highlightedIndex = Math.min(slashIndex, Math.max(slashMatches.length - 1, 0));
     const trigger = detectSessionChatComposerTrigger(draft, caret ?? draft.length);
     const skillQuery = trigger?.kind === 'skill' ? trigger.query : null;
@@ -680,14 +696,14 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       () => (skillQuery !== null && !skillDismissed ? filterSessionChatSkills(skills ?? [], skillQuery) : []),
       [skillDismissed, skillQuery, skills]
     );
-    const skillOpen = skillMatches.length > 0 && !disabled && !slashOpen;
+    const skillOpen = skillMatches.length > 0 && !slashOpen;
     const highlightedSkillIndex = Math.min(skillIndex, Math.max(skillMatches.length - 1, 0));
     const fileQuery = trigger?.kind === 'path' ? trigger.query : null;
     const fileMatches = useMemo(
       () => (fileQuery !== null && !fileDismissed ? filterSessionChatFiles(files ?? [], fileQuery) : []),
       [fileDismissed, fileQuery, files]
     );
-    const filePickerActive = fileQuery !== null && !fileDismissed && !disabled && !slashOpen;
+    const filePickerActive = fileQuery !== null && !fileDismissed && !slashOpen;
     // The picker stays up while the host is still listing so "@" never looks
     // dead on the first use of a session, when nothing is cached yet.
     const fileOpen = filePickerActive && (fileMatches.length > 0 || (filesLoading && !files));
@@ -774,7 +790,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     useImperativeHandle(ref, () => ({
       attachDroppedFiles: (data: DataTransfer): boolean => consumeDroppedAttachments(data),
       appendText: (text: string): boolean => {
-        if (disabled || text === '') {
+        if (text === '') {
           return false;
         }
         const input = getInputApi();
@@ -835,9 +851,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       },
       getDraft: () => getInputApi()?.getValue() ?? draftRef.current,
       insertSavedPrompt: (text: string): boolean => {
-        if (disabled) {
-          return false;
-        }
         const input = getInputApi();
         if (!input) {
           pendingSavedPromptRef.current += text;
@@ -846,9 +859,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         return input.insertSavedPrompt(text);
       },
       insertTypedText: (text: string): boolean => {
-        if (disabled) {
-          return false;
-        }
         const input = getInputApi();
         if (!input) {
           pendingInsertTextRef.current += text;
@@ -904,7 +914,11 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     };
 
     const send = (text: string = draft): void => {
-      if (text.trim() === '' || disabled || sendInFlightRef.current) {
+      if (text.trim() === '' || sendInFlightRef.current) {
+        return;
+      }
+      if (sendBlocked) {
+        reportSendBlocked();
         return;
       }
       sendInFlightRef.current = true;
@@ -933,7 +947,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           clearStoredSessionChatDraftIfUnchanged(sessionKey, text);
           setHistory((value) => pushSessionChatComposerHistory(value, text));
           /*
-          CDXC:SessionChatDraftRetireOnSend 2026-09-02:
+          CDXC:Drafts 2026-09-02:
           gxserver retires its own copy of a delivered message, but this
           client still owns what it last pushed: flush the empty composer NOW
           rather than after the typing debounce, so no window is left in which
@@ -954,7 +968,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           // Put the failed message first so retrying still preserves send order.
           restoreComposerText(text);
           /*
-          CDXC:SessionChatComposerReady 2026-08-26:
+          CDXC:SessionChat 2026-08-26:
           `composerNotReady` means the daemon wrote NOTHING — the agent CLI has
           no input box on screen yet (booting, or a trust/auth/setup screen owns
           the terminal). That is a fixable state with a place to go, so it gets
@@ -978,7 +992,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     // mid-turn included. Tab and a long-press on Send are the ONLY gestures that
     // make a queued row.
     const queueCapabilities = queue?.capabilities;
-    const canQueueDraft = queueCapabilities?.canQueue === true && !disabled && draft.trim() !== '';
+    const canQueueDraft = queueCapabilities?.canQueue === true && draft.trim() !== '';
 
     /** Loads text into the field, replacing whatever is there. */
     const loadComposerText = (text: string): void => {
@@ -993,12 +1007,16 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
 
     const queueCurrentDraft = (): void => {
       const controller = queue;
-      if (!controller?.capabilities.canQueue || disabled) {
+      if (!controller?.capabilities.canQueue) {
         return;
       }
       const stored = getInputApi()?.getValue() ?? draftRef.current;
       const text = stored.trim();
       if (text === '') {
+        return;
+      }
+      if (sendBlocked) {
+        reportSendBlocked();
         return;
       }
       setSendError(null);
@@ -1025,7 +1043,11 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
   */
     const editQueuedPrompt = (prompt: SessionChatQueuedPrompt): void => {
       const controller = queue;
-      if (!controller?.capabilities.canEdit || disabled) {
+      if (!controller?.capabilities.canEdit) {
+        return;
+      }
+      if (sendBlocked) {
+        reportSendBlocked();
         return;
       }
       void (async () => {
@@ -1218,7 +1240,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       }
       const composerText = getInputApi()?.getValue() ?? draftRef.current;
       /*
-      CDXC:DraftCrashSafety 2026-08-28:
+      CDXC:Drafts 2026-08-28:
       This client's own synced draft is normally a mute echo — but when it is
       fresher than the stored copy, the stored copy LOST data (the app died
       before Chromium committed the localStorage batch) and gxserver holds the
@@ -1390,7 +1412,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     };
 
     const consumeDroppedAttachments = (data: DataTransfer): boolean => {
-      if (disabled || !sessionChatDataTransferHasFiles(data)) {
+      if (!sessionChatDataTransferHasFiles(data)) {
         return false;
       }
 
@@ -1528,7 +1550,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
 
     /** Returns true when the clipboard held images this composer consumed. */
     const processClipboardData = (data: DataTransfer): boolean => {
-      if (!onPasteImage || disabled) {
+      if (!onPasteImage) {
         return false;
       }
       const files = clipboardImageFiles(data);
@@ -1540,9 +1562,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     };
 
     const pasteClipboardData = (data: DataTransfer): boolean => {
-      if (disabled) {
-        return false;
-      }
       if (processClipboardData(data)) {
         // Images were consumed as attachments; put the caret back in the input
         // so either keyboard paste or the custom menu ends with a ready composer.
@@ -1819,10 +1838,8 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
   */
     const hasSendableDraft = draft.trim() !== '';
     const showStopButton = (isWorking || stopButtonCoolingDown) && !hasSendableDraft;
-    const sendDisabled = disabled || !hasSendableDraft;
     const composerInput = useMonaco ? (
       <SessionChatMonacoInput
-        disabled={disabled}
         fillHeight={maximized}
         initialValue={draft}
         onCaretChange={setCaret}
@@ -1856,7 +1873,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       />
     ) : (
       <SessionChatPlainInput
-        disabled={disabled}
         initialValue={draft}
         invalid={sendError !== null}
         onCaretChange={setCaret}
@@ -1894,6 +1910,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     );
     return (
       <>
+        <SessionChatSendBlockedToaster theme={theme} toasterId={sendBlockedToasterId} />
         {maximized ? (
           <div
             aria-hidden='true'
@@ -2074,10 +2091,8 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           ) : null}
           <div
             className={cn(
-              'ghostex-chat-composer min-w-0 rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20',
-              disabled && 'opacity-60'
+              'ghostex-chat-composer min-w-0 rounded-3xl border border-input bg-card px-4 py-2.5 transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20'
             )}
-            data-disabled={disabled ? 'true' : undefined}
             onBlur={(event) => {
               // focusout bubbles from both input backends. Only a focus move that
               // LEAVES the composer is a "the user stopped typing" moment.
@@ -2152,7 +2167,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
               agent CLI's own queue (SessionChatMessage.queued). */}
             {queueCapabilities?.supported && queue ? (
               <SessionChatQueueRows
-                disabled={disabled}
+                disabled={sendBlocked}
                 prompts={queue.prompts}
                 {...(queueCapabilities.canEdit ? { onEdit: editQueuedPrompt } : {})}
                 {...(queueCapabilities.canRemove
@@ -2203,7 +2218,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                 <ContextMenuContent>
                   <ContextMenuGroup>
                     <ContextMenuItem
-                      disabled={disabled || contextSelection.start === contextSelection.end}
+                      disabled={contextSelection.start === contextSelection.end}
                       onClick={() => copyContextSelection(true)}
                     >
                       <IconCut aria-hidden='true' />
@@ -2216,7 +2231,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                       <IconCopy aria-hidden='true' />
                       Copy
                     </ContextMenuItem>
-                    <ContextMenuItem disabled={disabled} onClick={pasteFromContextMenu}>
+                    <ContextMenuItem onClick={pasteFromContextMenu}>
                       <IconClipboard aria-hidden='true' />
                       Paste
                     </ContextMenuItem>
@@ -2265,7 +2280,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   </>
                 ) : null}
                 <SessionChatComposerActions
-                  disabled={disabled}
+                  sendBlocked={sendBlocked}
                   hasSendableDraft={hasSendableDraft}
                   maximized={maximized}
                   onToggleMaximized={() => {
@@ -2310,9 +2325,12 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   </Button>
                 ) : (
                   <Button
+                    aria-disabled={sendBlocked ? 'true' : undefined}
                     aria-label={canQueueDraft ? 'Send (hold to queue)' : 'Send'}
-                    className='ghostex-chat-send-button size-6'
-                    disabled={sendDisabled}
+                    // A blocked send stays clickable so the tap can explain
+                    // itself with a toast; only an empty draft truly disables it.
+                    className={cn('ghostex-chat-send-button size-6', sendBlocked && 'opacity-50')}
+                    disabled={!hasSendableDraft}
                     onClick={handleSendClick}
                     onContextMenu={(event) => {
                       // A touch long-press otherwise raises the platform callout

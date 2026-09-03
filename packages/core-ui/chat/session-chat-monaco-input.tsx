@@ -124,7 +124,7 @@ const CHAT_MONACO_THEMES: Record<SessionChatTheme, string> = {
 const MIN_INPUT_HEIGHT_PX = 72;
 const MAX_INPUT_HEIGHT_PX = 160;
 /*
-CDXC:ChatComposerQuickInputHeight 2026-08-19:
+CDXC:SessionChat 2026-08-19:
 Monaco's F1 command palette is an overlay widget *inside* the editor, and it
 sizes its list from the editor's layout info. A content-sized composer is a few
 lines tall, so the palette both got clipped by the container and rendered a
@@ -238,7 +238,6 @@ function ensureChatThemes(monaco: MonacoNamespaceLike): void {
 }
 
 export function SessionChatMonacoInput({
-  disabled,
   initialValue,
   onCaretChange,
   onChange,
@@ -251,7 +250,6 @@ export function SessionChatMonacoInput({
   theme,
   vsBaseUrl,
 }: {
-  disabled: boolean;
   /**
    * Maximized composer: stop sizing the editor to its content and let the
    * flex row own the height, so a short draft still gets the full box.
@@ -276,8 +274,6 @@ export function SessionChatMonacoInput({
   const applyHeightRef = useRef<(() => void) | null>(null);
   const clipboardBridgeRef = useRef<MonacoClipboardBridge | null>(null);
   const insertTextRef = useRef<((text: string) => boolean) | null>(null);
-  const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
   const fillHeightRef = useRef(fillHeight);
   fillHeightRef.current = fillHeight;
   const suppressChangeRef = useRef(false);
@@ -573,7 +569,7 @@ export function SessionChatMonacoInput({
               return null;
             }
             const selected = referenceModel.expand(editor.getValue().slice(start, end));
-            if (cut && !disabledRef.current) {
+            if (cut) {
               const range = modelRangeForOffsets(start, end);
               if (range) {
                 editor.executeEdits('ghostex-reference-pill-cut', [{ range, text: '' }]);
@@ -738,10 +734,6 @@ export function SessionChatMonacoInput({
   }, [fillHeight]);
 
   useEffect(() => {
-    editorRef.current?.updateOptions({ readOnly: disabled });
-  }, [disabled]);
-
-  useEffect(() => {
     editorRef.current?.updateOptions({ placeholder });
   }, [placeholder]);
 
@@ -765,7 +757,7 @@ export function SessionChatMonacoInput({
   }, []);
 
   /*
-  CDXC:MonacoPasteCapture 2026-08-01:
+  CDXC:Clipboard 2026-08-01:
   Monaco swallows paste events before they reach ancestors of its hidden
   textarea, so clipboard interception must hook the window capture phase
   (same lesson as the standalone prompt editor). Text enters through the

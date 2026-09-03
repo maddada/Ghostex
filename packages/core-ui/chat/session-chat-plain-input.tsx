@@ -139,7 +139,6 @@ function referencePillCount(editor: HTMLElement): number {
 }
 
 export function SessionChatPlainInput({
-  disabled,
   invalid,
   initialValue,
   onCaretChange,
@@ -149,7 +148,6 @@ export function SessionChatPlainInput({
   placeholder,
   registerApi,
 }: {
-  disabled: boolean;
   invalid: boolean;
   initialValue: string;
   onCaretChange: (caret: number) => void;
@@ -162,8 +160,6 @@ export function SessionChatPlainInput({
   const editorRef = useRef<HTMLDivElement | null>(null);
   const valueRef = useRef(initialValue);
   const composingRef = useRef(false);
-  const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
   const registerApiRef = useRef(registerApi);
   registerApiRef.current = registerApi;
   const callbacksRef = useRef({ onCaretChange, onChange, onPasteData });
@@ -186,7 +182,7 @@ export function SessionChatPlainInput({
 
   const insertText = (text: string): boolean => {
     const editor = editorRef.current;
-    if (!editor || disabledRef.current) {
+    if (!editor) {
       return false;
     }
     const selection = editorSelection(editor);
@@ -295,7 +291,7 @@ export function SessionChatPlainInput({
     const current = canonicalEditorText(editor);
     event.clipboardData.setData('text/plain', current.slice(selection.start, selection.end));
     event.preventDefault();
-    if (!cut || disabled) {
+    if (!cut) {
       return;
     }
     const next = `${current.slice(0, selection.start)}${current.slice(selection.end)}`;
@@ -306,7 +302,7 @@ export function SessionChatPlainInput({
   };
 
   const revealReferenceSource = (event: MouseEvent<HTMLDivElement>): void => {
-    if (event.detail !== 2 || disabled) {
+    if (event.detail !== 2) {
       return;
     }
     const pill =
@@ -336,11 +332,10 @@ export function SessionChatPlainInput({
 
   return (
     <div
-      aria-disabled={disabled ? 'true' : undefined}
       aria-invalid={invalid}
       aria-multiline='true'
       className='ghostex-chat-composer-input ghostex-chat-composer-plain-input max-h-40 min-w-0 flex-1 overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none'
-      contentEditable={!disabled}
+      contentEditable
       data-empty={initialValue === '' ? 'true' : 'false'}
       data-placeholder={placeholder}
       data-session-chat-typing-redirect-ignore='true'

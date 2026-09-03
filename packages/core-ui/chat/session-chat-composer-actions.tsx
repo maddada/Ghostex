@@ -85,7 +85,12 @@ function hostActionIcon(id: string): ReactNode {
 }
 
 interface SessionChatComposerActionsProps {
-  disabled: boolean;
+  /**
+   * CDXC:SessionChat 2026-09-03:
+   * A blocked send only inerts the controls that dispatch to the agent
+   * (Delayed actions). Stash and Attach edit the draft and stay live.
+   */
+  sendBlocked: boolean;
   hasSendableDraft: boolean;
   /**
    * Per-session host actions: the surface switch renders as its own footer
@@ -117,7 +122,7 @@ interface SessionChatComposerActionsProps {
 }
 
 export function SessionChatComposerActions({
-  disabled,
+  sendBlocked,
   hasSendableDraft,
   hostActions,
   maximized,
@@ -163,9 +168,7 @@ export function SessionChatComposerActions({
       onShowStashedPrompts?.();
       return;
     }
-    if (!disabled) {
-      onStash?.();
-    }
+    onStash?.();
   };
   const openSavedPromptsFromContextMenu = (event: ReactMouseEvent<HTMLElement>) => {
     if (!onShowStashedPrompts) {
@@ -226,7 +229,7 @@ export function SessionChatComposerActions({
   const hostActionMenuItem = (action: SessionChatHostAction) =>
     action.items ? (
       /*
-      CDXC:SwitchAccount 2026-09-03:
+      CDXC:AgentProviders 2026-09-03:
       A submenu action (Switch Account) opens its rows the way the model pill's
       "Switch Agent CLI" does; picking a row hands the row id back as the value.
       */
@@ -310,7 +313,7 @@ export function SessionChatComposerActions({
     onDelayedActions || delayedHostAction ? (
       <DropdownMenuItem
         className='whitespace-nowrap'
-        disabled={onDelayedActions ? disabled : false}
+        disabled={onDelayedActions ? sendBlocked : false}
         onClick={onDelayedActions ?? (delayedHostAction ? () => runHostAction(delayedHostAction) : undefined)}
       >
         <IconClockCheck aria-hidden='true' />
@@ -364,7 +367,7 @@ export function SessionChatComposerActions({
   const hasExpandedMenu = hasBaseMenuItems || agentMenuSection !== null || otherHostMenuSection !== null;
 
   /*
-  CDXC:ComposerTerminalReadiness 2026-08-28:
+  CDXC:SessionChat 2026-08-28:
   The Terminal View button doubles as the composer's readiness light. Its tint
   comes from the last terminal tail read (use-session-terminal-tail.ts) and only
   ever takes a color for a *measured* verdict: `unknown`, an uncaptured screen,
@@ -463,7 +466,7 @@ export function SessionChatComposerActions({
               {hasBaseMenuItems ? (
                 <DropdownMenuGroup>
                   {/*
-                  CDXC:ChatMenuGroupLabels 2026-08-26:
+                  CDXC:SessionChat 2026-08-26:
                   The dots menu already names its host-action block "Agent"; the
                   rows above it are chat-surface toggles, so they get the
                   matching "Chat" heading instead of reading as an unlabeled
@@ -510,7 +513,7 @@ export function SessionChatComposerActions({
               <Button
                 aria-label={stashLabel}
                 className='ghostex-chat-footer-control rounded-full'
-                disabled={hasSendableDraft ? disabled : onShowStashedPrompts === undefined}
+                disabled={hasSendableDraft ? false : onShowStashedPrompts === undefined}
                 onClick={stashCurrentPrompt}
                 onContextMenu={openSavedPromptsFromContextMenu}
                 size='icon-sm'
@@ -528,7 +531,6 @@ export function SessionChatComposerActions({
               <Button
                 aria-label='Attach a file or folder'
                 className='ghostex-chat-footer-control rounded-full'
-                disabled={disabled}
                 onClick={onAttach}
                 size='icon-sm'
                 variant='ghost'
@@ -609,7 +611,7 @@ export function SessionChatComposerActions({
                 <AppTooltip content={stashTooltip} side='left'>
                   <DropdownMenuItem
                     aria-label={stashLabel}
-                    disabled={hasSendableDraft ? disabled : onShowStashedPrompts === undefined}
+                    disabled={hasSendableDraft ? false : onShowStashedPrompts === undefined}
                     onClick={stashCurrentPrompt}
                     onContextMenu={openSavedPromptsFromContextMenu}
                   >
@@ -622,7 +624,7 @@ export function SessionChatComposerActions({
                 </AppTooltip>
               ) : null}
               {onAttach ? (
-                <DropdownMenuItem disabled={disabled} onClick={onAttach}>
+                <DropdownMenuItem onClick={onAttach}>
                   <IconPaperclip aria-hidden='true' />
                   Attach a file or folder
                 </DropdownMenuItem>
