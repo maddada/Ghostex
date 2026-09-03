@@ -75,7 +75,6 @@ const OFFICIAL_EXTENSION_ICONS: Record<GhostexOfficialExtensionId, TablerIcon> =
 /** Official entries whose runtime component the app can install or reinstall. */
 const OFFICIAL_EXTENSION_RUNTIME_IDS: Partial<Record<GhostexOfficialExtensionId, SidebarPluginSettingsItem['id']>> = {
   code: 'code',
-  kanban: 'kanban',
 };
 
 const OFFICIAL_VIEW_EXTENSIONS = GHOSTEX_OFFICIAL_EXTENSIONS.filter((entry) => entry.placement === 'view');
