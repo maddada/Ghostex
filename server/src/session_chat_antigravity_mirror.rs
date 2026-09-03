@@ -27,11 +27,17 @@ Its hooks name that file (`transcriptPath`) and the conversation
 
 A planner step carries the model's thinking AND its answer or tool calls in one
 record, while the chat contract decodes one message per line, so the thinking
-would either vanish or render as assistant prose. This module mirrors the raw
-log into a Ghostex-owned jsonl in the gxserver state dir where every step
-becomes one or two rows (`part: reasoning` first, then the message), tool
-results lose their `Created At:` headers, and the older build's stringified
-args are parsed back. The mirror is what the chat pipeline tails; the same
+would vanish. This module mirrors the raw log into a Ghostex-owned jsonl in
+the gxserver state dir where every step becomes one or two rows, tool results
+lose their `Created At:` headers, and the older build's stringified args are
+parsed back.
+
+The thinking is agy's only mid-turn narration (its TUI shows nothing else
+between a prompt and the tool rows), so it is mirrored as the assistant's own
+text (`narration: true`) rather than as a reasoning turn: a reasoning row
+that tool rows attach to collapses to its first line behind a caret, which
+hid the one paragraph that explains what the agent is doing. The narration
+flag keeps the lifecycle decoder from reading that row as the turn's answer. The mirror is what the chat pipeline tails; the same
 freshen-before-read and rename-on-rewrite contract as the Cursor and Hermes
 mirrors applies, so `session_chat_decode_antigravity.rs` stays line-local.
 */
@@ -246,8 +252,11 @@ fn mirror_rows_for_step(line: &str) -> Vec<Value> {
                 extract_string(record.get("thinking")).filter(|text| !text.trim().is_empty())
             {
                 rows.push(row(
-                    "reasoning",
-                    Map::from_iter([("text".into(), Value::from(thinking))]),
+                    "assistant",
+                    Map::from_iter([
+                        ("text".into(), Value::from(thinking)),
+                        ("narration".into(), Value::Bool(true)),
+                    ]),
                 ));
             }
             let tool_calls = antigravity_tool_calls(&record);

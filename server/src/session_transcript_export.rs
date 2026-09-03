@@ -2097,6 +2097,17 @@ fn parse_antigravity_record(builder: &mut TranscriptBuilder, record: &Map<String
         }
         Some("assistant") => {
             let text = flatten_text(record.get("text"));
+            if record.get("narration") == Some(&Value::Bool(true)) {
+                // The agent's thinking, mirrored as narration text for chat;
+                // the export keeps it in the reasoning section.
+                if !text.trim().is_empty() {
+                    builder.push(ExportEntry::new(
+                        TranscriptExportSection::AgentReasoning,
+                        text,
+                    ));
+                }
+                return;
+            }
             if !text.trim().is_empty() {
                 builder.push_dialog(TranscriptExportSection::AgentMessage, text);
             }

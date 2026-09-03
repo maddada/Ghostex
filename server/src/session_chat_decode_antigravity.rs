@@ -3,7 +3,8 @@ Antigravity CLI's chat is read through the Ghostex-owned mirror that
 `session_chat_antigravity_mirror.rs` derives from the CLI's per-conversation
 step log. One mirror row per rendered message, in this shape:
 
-    {"stepIndex": 7, "part": "reasoning", "createdAt": "2026-…", "text": "…"}
+    {"stepIndex": 7, "part": "assistant", "createdAt": "2026-…", "text": "…",
+     "narration": true}
     {"stepIndex": 7, "part": "assistant", "createdAt": "…", "text": "pong",
      "toolCalls": [{"name": "run_command", "args": {"CommandLine": "echo pong"}}]}
     {"stepIndex": 0, "part": "user", "createdAt": "…", "text": "…"}
@@ -11,18 +12,26 @@ step log. One mirror row per rendered message, in this shape:
      "text": "The command exited with code 0.\nOutput:\npong", "isError": true}
 
 `stepIndex` is the CLI's own trajectory index, so ids are stable across mirror
-rewrites; a planner step's reasoning and message rows share it and differ by
-part.
+rewrites; a planner step's narration row (its thinking, see the mirror module
+for why it is assistant text) and message row share it and differ by the
+`narration` flag.
 */
 
 use serde_json::{Map, Value};
 
 use crate::session_chat::*;
 
+fn antigravity_is_narration(record: &Map<String, Value>) -> bool {
+    record.get("narration") == Some(&Value::Bool(true))
+}
+
 fn antigravity_row_id(record: &Map<String, Value>, part: &str, fallback_id: &str) -> String {
     match record.get("stepIndex").and_then(Value::as_u64) {
         Some(step_index) if part == "reasoning" => {
             format!("antigravity-step-{step_index}-reasoning")
+        }
+        Some(step_index) if antigravity_is_narration(record) => {
+            format!("antigravity-step-{step_index}-narration")
         }
         Some(step_index) => format!("antigravity-step-{step_index}"),
         None => fallback_id.to_string(),
@@ -119,7 +128,7 @@ pub fn decode_antigravity_turn_lifecycle(
                 .get("toolCalls")
                 .and_then(Value::as_array)
                 .is_some_and(|tool_calls| !tool_calls.is_empty());
-            if asks_for_tools {
+            if asks_for_tools || antigravity_is_narration(&record) {
                 return None;
             }
             Some(SessionChatTurnLifecycle {
