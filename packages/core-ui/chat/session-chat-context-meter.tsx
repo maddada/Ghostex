@@ -8,10 +8,10 @@ to the Ghostex-installed script (see server/src/agent_hooks/statusline.rs), so
 the ring exists only for Claude sessions and only once that payload arrived.
 */
 
-import { IconArrowsMinimize } from '@tabler/icons-react';
 import { Button } from '../../components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import type { SessionChatContextUsage } from '../../shared/session-chat';
+import { AppTooltip } from '../app-tooltip';
 
 export interface SessionChatContextMeterUsage {
   /** 0–100, or null when Claude reported neither a percentage nor tokens over a window. */
@@ -81,13 +81,11 @@ const OVERLOADED_PERCENTAGE = 90;
 
 export function SessionChatContextMeter({
   usage,
-  modelLabel,
   onCompact,
   compactDisabled,
   compactDisabledReason,
 }: {
   usage: SessionChatContextMeterUsage;
-  modelLabel?: string | null;
   onCompact?: (() => void) | undefined;
   compactDisabled?: boolean;
   compactDisabledReason?: string | null;
@@ -183,27 +181,21 @@ export function SessionChatContextMeter({
             />
           </div>
         ) : null}
-        {modelLabel ? (
-          <div className='text-[11px] text-muted-foreground'>
-            {modelLabel} compacts the conversation automatically as the window fills.
-          </div>
-        ) : null}
+        <div className='text-[11px] text-muted-foreground'>Compacts automatically as the window fills.</div>
         {onCompact ? (
-          <>
-            <Button
-              className='mt-1 w-full justify-center rounded-md'
-              disabled={compactDisabled}
-              onClick={onCompact}
-              size='xs'
-              variant='outline'
-            >
-              <IconArrowsMinimize aria-hidden='true' />
-              Compact context
-            </Button>
-            {compactDisabled && compactDisabledReason ? (
-              <div className='text-[11px] text-muted-foreground'>{compactDisabledReason}</div>
-            ) : null}
-          </>
+          <AppTooltip content={compactDisabled ? compactDisabledReason : null} side='top'>
+            <span className={compactDisabled ? 'mt-1 block w-full cursor-not-allowed' : 'mt-1 block w-full'}>
+              <Button
+                className='w-full justify-center rounded-md'
+                disabled={compactDisabled}
+                onClick={onCompact}
+                size='xs'
+                variant='outline'
+              >
+                Compact context
+              </Button>
+            </span>
+          </AppTooltip>
         ) : null}
       </PopoverContent>
     </Popover>
