@@ -251,7 +251,7 @@ export interface SessionChatQuestionSelection {
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatDetectedOptions 2026-08-01:
+CDXC:AgentScreenDetection 2026-08-01:
 What the agent is ACTUALLY running, read by gxserver from structured transcript
 metadata and, when available, the terminal statusline/footer. The field is
 omitted when neither source proves a value. There is no guessed value.
@@ -264,13 +264,13 @@ export interface SessionChatDetectedChoice {
   /**
    * Evidence source; absent only when talking to an older daemon.
    * `statusline` is the JSON Claude Code pipes to its statusLine command,
-   * stored by the Ghostex-installed script (CDXC:ClaudeStatusline 2026-09-03).
+   * stored by the Ghostex-installed script (CDXC:AgentScreenDetection 2026-09-03).
    */
   source?: 'terminal' | 'transcript' | 'statusline';
 }
 
 /**
- * CDXC:ClaudeStatusline 2026-09-03: how full Claude's context window is, from
+ * CDXC:AgentScreenDetection 2026-09-03 WHY: how full Claude's context window is, from
  * its statusLine payload. Every field is optional there too; the composer's
  * usage ring shows tokens over window size when both exist, else the
  * percentage.
@@ -306,7 +306,7 @@ export interface SessionChatDetectedOptions {
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 State the agent TUI paints only on SCREEN, which a transcript projection can
 never show: an expired login, a workspace-trust dialog, a usage-limit banner, a
 stream error, the CLI having exited — plus the send watchdog's report that a
@@ -327,7 +327,7 @@ export interface SessionChatTerminalNoticeAction {
 }
 
 /*
-CDXC:SessionChatTerminalPicker 2026-08-21:
+CDXC:SessionChat 2026-08-21:
 Rows of an on-screen picker the chat surface can ANSWER, rather than only point
 at — Claude Code's resume-usage chooser ("Resume from summary" / "Resume full
 session as-is" / "Don't ask me again"), which owns the CLI's input line after a
@@ -370,7 +370,11 @@ export interface SessionChatTerminalNotice {
   /** SGR-stripped last visible lines (trimmed, capped ~2000 chars). */
   screenTail?: string;
   source: 'screen' | 'watchdog';
-  /** ISO-8601 millis; also the key a client's local dismissal remembers. */
+  /**
+   * ISO-8601 millis; also the key a client's local dismissal remembers.
+   * gxserver keeps it stable while the same notice is re-detected, including
+   * across short gaps where a banner missed a probe.
+   */
   detectedAt: string;
   actions?: SessionChatTerminalNoticeAction[];
   /**
@@ -381,7 +385,7 @@ export interface SessionChatTerminalNotice {
 }
 
 /*
-CDXC:SessionChatTerminalActivity 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 Live work the agent CLI reports on its terminal before transcript JSONL catches
 up. `claude-status` is the current `⏺ …` assistant line (its first paragraph,
 re-joined from the wrapped rows) and becomes transient reasoning history in the
@@ -417,7 +421,7 @@ export interface SessionChatTerminalActivity {
 }
 
 /*
-CDXC:SessionChatAppCommands 2026-08-23:
+CDXC:SessionChat 2026-08-23:
 Slash commands GHOSTEX typed into the agent without the composer:
 provider-specific first-prompt auto-title jobs and the rename modal stage
 `/rename <title>` (Pi `/name`, Hermes Agent `/title`), while non-Codex forks
@@ -447,7 +451,7 @@ export interface SessionChatAppCommand {
 }
 
 /*
-CDXC:SessionChatAgentFleet 2026-08-23:
+CDXC:AgentScreenDetection 2026-08-23:
 Sub-agents Claude Code is running, which exist ONLY on its terminal
 screen — nothing about them reaches transcript JSONL:
 
@@ -505,7 +509,7 @@ export interface SessionChatAgentFleet {
 }
 
 /*
-CDXC:SessionChatAgentTasks 2026-09-03:
+CDXC:SessionChat 2026-09-03:
 The task list Claude Code keeps for a session through its TaskCreate /
 TaskUpdate tools, the block the CLI pins under its transcript and folds with
 ctrl+t. The CURRENT list lives only in the CLI's on-disk task store
@@ -623,7 +627,7 @@ export interface GxserverReadSessionChatResult {
    * feature omits it, and a client that sees it omitted hides every queue
    * control instead of calling endpoints that will 404.
    * When present, it is authoritative and replaces the client's list.
-   * See CDXC:SessionChatQueueCarriage in ./session-chat-queue.
+   * See CDXC:SessionChat in ./session-chat-queue.
    */
   queue?: SessionChatQueuedPrompt[];
   /**
@@ -635,7 +639,7 @@ export interface GxserverReadSessionChatResult {
    */
   draft?: SessionChatDraft;
   /**
-   * CDXC:DraftSessions 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * The agents this session may still be switched to, resolved by the daemon
    * that owns the project. PRESENT ONLY while the session is a draft: once the
    * first user prompt reaches the agent the session's agent is fixed, so an
@@ -648,14 +652,14 @@ export interface GxserverReadSessionChatResult {
    */
   availableAgents?: SessionChatAvailableAgent[];
   /**
-   * CDXC:SwitchAccount 2026-09-03:
+   * CDXC:AgentProviders 2026-09-03:
    * The same-family agent configurations (accounts) a PROMPTED session can be
    * resumed under, for the composer's "Switch Account" submenu. Absent on
    * drafts, when nothing is compatible, and on daemons predating the feature.
    */
   switchableAgents?: SessionChatAvailableAgent[];
   /**
-   * CDXC:DraftSessions 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * The session's own launch agent id, which `agent` above is NOT: that one is
    * the transcript family, so a project custom agent built on Claude reports
    * `claude` there and cannot be told apart from Claude itself. This is the id
@@ -669,7 +673,7 @@ export interface GxserverReadSessionChatResult {
 }
 
 /**
- * CDXC:DraftSessions 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * One row of the composer's "Agents" section. `agentId` is what
  * `/api/switchDraftAgent` takes; `baseAgentId` is the chat-supported family the
  * agent belongs to (`agentId` itself for a built-in, the custom agent's declared
@@ -747,7 +751,7 @@ export interface GxserverSendSessionChatMessageResult {
 }
 
 /*
-CDXC:SessionChatImagePaste 2026-08-01:
+CDXC:Clipboard 2026-08-01:
 saveSessionChatImage writes composer-pasted image bytes into the Ghostex image directory on
 the machine the session runs on (clients call it over their per-machine RPC,
 so a remote session's image lands on the remote machine). The returned
@@ -769,7 +773,7 @@ export interface GxserverSaveSessionChatImageResult {
 }
 
 /*
-CDXC:SessionChatAttachments 2026-08-02:
+CDXC:SessionChat 2026-08-02:
 saveSessionChatAttachment is the non-image sibling of saveSessionChatImage:
 any file's bytes land in the Ghostex attachment directory on the session's machine and the
 returned absolute path is what the composer interpolates into
@@ -1094,7 +1098,7 @@ export function isSessionChatEventType(type: string): type is GxserverSessionCha
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:AgentHistorySearch 2026-08-20:
+CDXC:PromptSearch 2026-08-20:
 "find" is the Find surface — the GUI for `gx f` — which swaps a session's pane
 body on exactly the same terms as chat: the terminal parks rather than closing,
 and only one surface can own the pane at a time.
