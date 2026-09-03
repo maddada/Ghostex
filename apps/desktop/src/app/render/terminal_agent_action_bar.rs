@@ -553,12 +553,18 @@ impl GhostexGpuiApp {
                 {
                     let agent_name = agent_name.unwrap_or("This agent");
                     state.disabled_reason = Some(format!(
-                        "{agent_name} isn't supported by Ghostex Chat View yet\nOnly Claude, Codex, Cursor, Pi, Omp, Grok, and Hermes are supported\nPlease request other agents on X or the Discord"
+                        "{agent_name} isn't supported by Ghostex Chat View yet\nOnly Claude, Codex, Cursor, Antigravity, Pi, Omp, Grok, and Hermes are supported\nPlease request other agents on X or the Discord"
                     ));
                 } else if !self.agents_session_chat_eligible(session_id) {
+                    // CDXC:AgentHookRunGates 2026-09-03: the session id Chat
+                    // View needs arrives through the agent's Ghostex hook, so
+                    // "not eligible" means that hook has not reported — either
+                    // it is not installed or the CLI is not running it. Say
+                    // that, instead of telling a user whose hooks are installed
+                    // to install them.
                     let agent_name = agent_name.unwrap_or("this agent");
                     state.tooltip_override = Some(format!(
-                        "Install hooks for {agent_name} to enable Chat View\nClick to open Settings > Agents"
+                        "{agent_name} hasn't reported its session to Ghostex yet\nChat View needs the {agent_name} hooks installed and running\nClick to check them in Settings > Agents"
                     ));
                 }
             }
@@ -747,9 +753,9 @@ impl GhostexGpuiApp {
             self.open_gpui_settings_agent_hooks_page(window, cx);
             self.dispatch_gpui_app_modal_toast(
                 "warning",
-                &format!("Install hooks for {agent_name}"),
+                &format!("{agent_name} hasn't reported its session yet"),
                 &format!(
-                    "Install and approve {agent_name} hooks in order for Chat View to work correctly. Resuming and working/done indicators also require hooks."
+                    "Chat View needs the {agent_name} hooks installed, approved, and running. Check their status here. Resuming and working/done indicators also require hooks."
                 ),
                 cx,
             );
