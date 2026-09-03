@@ -76,7 +76,7 @@ const CONTEXT_MENU_ITEM_HEIGHT_PX = 34;
 const CONTEXT_MENU_DIVIDER_HEIGHT_PX = 13;
 const CONTEXT_MENU_VERTICAL_PADDING_PX = 12;
 /*
- * CDXC:SessionMenuGroupLabels 2026-08-26:
+ * CDXC:ContextMenus 2026-08-26:
  * A group heading row: 11px text plus its 4px/2px insets and the section grid
  * gap. Only the pre-render placement estimate uses it; the portal still clamps
  * against the rendered height once the menu exists.
@@ -117,7 +117,7 @@ const DND_SESSION_FRAME_AX_ATTRIBUTES = [...DND_SESSION_CARD_AX_ATTRIBUTES, 'rol
 const EMPTY_SESSION_IDS: readonly string[] = [];
 
 /*
- * CDXC:SidebarDragDrop 2026-07-02-13:05:
+ * CDXC:Sidebar 2026-07-02-13:05:
  * Session rows only reorder vertically, so the drag ghost stays locked to the
  * row's horizontal position instead of following pointer drift sideways.
  */
@@ -210,7 +210,7 @@ export function resolveSessionCardSessionIdsBelow({
   sessionIdsBelowStartIndex?: number;
 }): readonly string[] {
   /*
-   * CDXC:SidebarContextMenu 2026-06-30-02:45:
+   * CDXC:ContextMenus 2026-06-30-02:45:
    * Session-card below actions stay scoped to the group/project-visible order,
    * but large project lists must not slice that order once per rendered row.
    * Keep the shared source list plus the row's next index, then materialize the
@@ -241,7 +241,7 @@ export function getSessionTagSubmenuSections({
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
 }) {
   /*
-   * CDXC:SessionTagFilters 2026-06-15-22:23:
+   * CDXC:Sessions 2026-06-15-22:23:
    * Session-card Tag as menus should use the same enabled-and-visible tag set
    * as sidebar tag filters so default-off tags do not keep appearing in the
    * assignment menu. Include the current tag even when it is hidden so older or
@@ -295,14 +295,14 @@ export type SidebarSessionPointerDownFocusInput = {
 
 export function shouldFocusSidebarSessionOnPointerDown(input: SidebarSessionPointerDownFocusInput): boolean {
   /*
-   * CDXC:SidebarSessionFocus 2026-06-26-06:25:
+   * CDXC:FocusRouting 2026-06-26-06:25:
    * When Double-click session cards to rename is off, normal sidebar session
    * selection should start from the primary pointer-down so users do not wait
    * for a possible second click. Keep modified clicks, auxiliary buttons,
    * overflow placeholders, and Show more rows on their existing click-specific
    * behavior.
    *
-   * CDXC:PinnedSessions 2026-07-01-00:47:
+   * CDXC:Sessions 2026-07-01-00:47:
    * Pinned project sessions remain draggable while the sidebar is sorted by Last Active. If a row can start a drag, do not focus the terminal on pointer-down; focus stealing can cancel WebKit's delayed drag stream before dnd-kit emits dragStart. Non-drag clicks still focus through the normal click handler.
    */
   return (
@@ -330,7 +330,7 @@ function shouldPreventSessionCardDragActivation(
   sourceElement: Element | undefined
 ): boolean {
   /*
-   * CDXC:SidebarMultiSelect 2026-07-02-06:52:
+   * CDXC:Sessions 2026-07-02-06:52:
    * Shift/Cmd/Ctrl pointer-downs are selection and context-menu gestures, never
    * drag starts. If the hold-delay sensor arms on them, dnd-kit captures the
    * pointer to document.body once the delay elapses, the browser retargets the
@@ -346,7 +346,7 @@ function shouldPreventSessionCardDragActivation(
   }
 
   /*
-   * CDXC:PinnedSessions 2026-06-30-11:33:
+   * CDXC:Sessions 2026-06-30-11:33:
    * The floating pin is a button for click-to-pin, but it is also the visible drag affordance users expect for pinned-session reorder in Last Active sorting. Let DnD activate from that button while preserving default interactive blocking for close, delayed-send, links, inputs, and other child controls.
    */
   if (targetElement.closest(SESSION_CARD_PIN_DRAG_HANDLE_SELECTOR)) {
@@ -385,7 +385,7 @@ export function shouldRenameSidebarSessionOnDoubleClick({
   renameSessionOnDoubleClick: boolean;
 }): boolean {
   /*
-   * CDXC:SidebarSessionRename 2026-06-26-06:25:
+   * CDXC:Sessions 2026-06-26-06:25:
    * Session-card double-click is reserved for the explicit rename preference.
    * It must not enter workspace focus mode; Focus stays available as the
    * context-menu command for users who want to zoom a pane tab group.
@@ -414,7 +414,7 @@ export type SidebarSessionContextMenuEligibility = {
   canFullReloadSession: boolean;
   canGenerateSessionTitle: boolean;
   /**
-   * CDXC:SessionAgentNotes 2026-08-24:
+   * CDXC:SessionNotes 2026-08-24:
    * Notes are keyed by the session's provider conversation id, so a row that
    * has not captured one yet has nothing to file a note against.
    */
@@ -441,7 +441,7 @@ export function getSidebarSessionContextMenuEligibility({
   const canUseTerminalAgentMenuAction = isConcreteSessionRow && !isBrowserSession;
 
   /*
-   * CDXC:RemoteSessionMenus 2026-06-30-15:22:
+   * CDXC:RemoteMachines 2026-06-30-15:22:
    * Remote session rows share the local context-menu renderer, but local AppKit and host-timer actions must opt in through explicit row capabilities. Keep ordinary gxserver-backed actions visible from the remote group signal while avoiding frontend guesses for Pop Out Pane, Delayed Send, and Close After Done.
    */
   return {
@@ -462,7 +462,7 @@ export function getSidebarSessionContextMenuEligibility({
     canExportTranscript:
       canUseTerminalAgentMenuAction && hasSession && !isDraftSession && supportsTranscriptExport(session),
     /*
-     * CDXC:DraftSessions 2026-08-28:
+     * CDXC:Drafts 2026-08-28:
      * A draft has no conversation and no prompt yet, so Fork has nothing to
      * fork from and Full reload has nothing to reload into: both would only
      * ever produce an empty agent. Hide them here — the ONE resolver both the
@@ -502,7 +502,7 @@ function isSidebarBrowserSession(session: SidebarSessionItem | undefined): boole
 
 export function createSleepBelowDebugDetails(input: SleepBelowDebugDetailsInput): Record<string, unknown> {
   /*
-   * CDXC:NativeSidebarBulkActions 2026-06-13-12:59:
+   * CDXC:SessionSleep 2026-06-13-12:59:
    * Sleep below lag diagnostics must prove the click path timing without writing
    * session ids, titles, paths, URLs, command text, prompts, or other user-owned
    * content. Keep this payload to counts, enum-like labels, timing, and the
@@ -530,13 +530,13 @@ function roundSleepBelowDebugMs(value: number | undefined): number | undefined {
 }
 
 /**
- * CDXC:SidebarContextMenu 2026-06-07-13:00:
+ * CDXC:ContextMenus 2026-06-07-13:00:
  * Sleep below and Close below can fan out to many native lifecycle messages.
  * Run those targets from scheduled background tasks so the menu click returns
  * immediately, the context menu can dismiss before lifecycle work starts, and
  * the sidebar remains responsive between target operations.
  *
- * CDXC:SidebarContextMenu 2026-06-07-13:09:
+ * CDXC:ContextMenus 2026-06-07-13:09:
  * Bulk lifecycle menu items should still close like normal menu actions. Only
  * the fan-out work runs in the background; menu visibility should not be used
  * as an operation progress indicator.
@@ -568,7 +568,7 @@ export function runSidebarBulkContextMenuActionInBackground(
 
 function postSidebarSessionCloseInBackground(vscode: WebviewApi, sessionId: string): void {
   /*
-  CDXC:LocalFirstSidebar 2026-06-12-06:22:
+  CDXC:StateSync 2026-06-12-06:22:
   Native sidebar message delivery is synchronous in the macOS host. Close clicks must flush the local card removal before asking the host to tear down the terminal or browser runtime, otherwise closeTerminal work can block the same user gesture and make the sidebar feel delayed.
   */
   globalThis.setTimeout(() => {
@@ -611,7 +611,7 @@ function clampContextMenuPosition(
     labelCount * CONTEXT_MENU_GROUP_LABEL_HEIGHT_PX;
   return {
     /*
-     * CDXC:GPUISidebarContextMenuPosition 2026-07-21:
+     * CDXC:ContextMenus 2026-07-21:
      * At the GPUI sidebar's 235px default width and above, session context
      * menus follow the right-click x coordinate just like section, project,
      * and collection menus. The portal still clamps the rendered menu inside
@@ -631,7 +631,7 @@ function clampContextMenuPosition(
 
 function getCenteredSidebarMenuX(menuWidth: number): number {
   /*
-   * CDXC:SidebarContextMenu 2026-06-05-21:23:
+   * CDXC:ContextMenus 2026-06-05-21:23:
    * Session context menus and the Tag as submenu should be horizontally
    * centered in the sidebar webview rather than opening at the pointer x.
    * Clamp against the sidebar viewport so narrow sidebars cap menu width at
@@ -730,12 +730,12 @@ export function SortableSessionCard({
   const lastAgentIconRenderDebugKeyRef = useRef<string | undefined>(undefined);
   const immediateFocusClickSuppressionRef = useRef<{ sessionId: string; timeoutId: number } | undefined>(undefined);
   /*
-  CDXC:RemotePresentation 2026-06-30-00:11:
+  CDXC:RemoteMachines 2026-06-30-00:11:
   Remote session rows need visible lifecycle chrome and a non-debug state tooltip while keeping local session cards unchanged. Derive that from the owning group so the session model does not need a separate remote-only flag.
   */
   const isRemoteSession = Boolean(sessionGroup?.remoteMachineContext);
   /*
-  CDXC:GPUIRemoteLastSeen 2026-07-12:
+  CDXC:RemoteMachines 2026-07-12:
   Stale groups show the last-seen state of a disconnected remote machine.
   Terminal/agent rows have no reachable backing session, so focus clicks are
   inert; browser rows stay clickable because their tabs are local CEF panes.
@@ -784,7 +784,7 @@ export function SortableSessionCard({
   });
   const postMultiSelectDebugLog = useEffectEvent((event: string, details: Record<string, unknown>) => {
     /*
-     * CDXC:SidebarMultiSelect 2026-07-02-07:32:
+     * CDXC:Sessions 2026-07-02-07:32:
      * Shift/Cmd selection repros need per-gesture breadcrumbs that persist
      * regardless of the sidebar Debugging Mode toggle. Post unconditionally;
      * the native.sidebar.refresh diagnostic scenario (Settings > Diagnostic
@@ -861,7 +861,7 @@ export function SortableSessionCard({
     }),
   });
   /*
-   * CDXC:SidebarDragDrop 2026-07-02-13:05:
+   * CDXC:Sidebar 2026-07-02-13:05:
    * The pointer-resolved indicator owned by sidebar-app is the only visual
    * source. Falling back to dnd-kit's rect-overlap isDropTarget state drew a
    * second line that disagreed with the pointer and flickered; the droppable
@@ -1061,7 +1061,7 @@ export function SortableSessionCard({
   useEffect(() => {
     if (sortable.isDragging) {
       /*
-       * CDXC:SidebarMultiSelect 2026-07-02-07:32:
+       * CDXC:Sessions 2026-07-02-07:32:
        * A drag activation during a selection gesture captures the pointer to
        * document.body and retargets the follow-up click away from this row, so
        * the selection click never fires. Persist every drag start so a repro
@@ -1117,7 +1117,7 @@ export function SortableSessionCard({
     lastAgentIconRenderDebugKeyRef.current = debugKey;
 
     /*
-     * CDXC:AgentDetection 2026-04-27-07:43
+     * CDXC:AgentProviders 2026-04-27-07:43
      * Agent identity is confirmed at the native/webview/store boundary. Log
      * the card render decision and actual DOM state so missing sidebar icons
      * can be traced without guessing at CSS or projection state.
@@ -1254,7 +1254,7 @@ export function SortableSessionCard({
   const openContextMenu = (clientY: number, clientX?: number) => {
     const nextSelectedSessionIds = readSelectedSessionIdsForContextMenu();
     /*
-     * CDXC:SidebarMultiSelect 2026-07-01-18:33:
+     * CDXC:Sessions 2026-07-01-18:33:
      * Right-clicking one of several selected sessions should open a bulk action
      * menu for exactly that selected set. Right-clicking outside the selected set
      * returns to the normal single-session menu and clears the transient selection.
@@ -1315,11 +1315,11 @@ export function SortableSessionCard({
 
     setContextMenuPosition(undefined);
     /**
-     * CDXC:AppModals 2026-04-27-14:25
+     * CDXC:AppModal 2026-04-27-14:25
      * Rename must always use the full-window modal host. Missing host is an
      * error, not a reason to show the old squeezed sidebar dialog.
      *
-     * CDXC:SettingsDismissal 2026-06-15-14:07:
+     * CDXC:Settings 2026-06-15-14:07:
      * Opening Rename from a sidebar session row should replace any open
      * Settings workspace modal instead of stacking the rename flow behind it.
      */
@@ -1340,7 +1340,7 @@ export function SortableSessionCard({
 
     setContextMenuPosition(undefined);
     /**
-     * CDXC:SessionAgentNotes 2026-08-24:
+     * CDXC:SessionNotes 2026-08-24:
      * Same modal-host contract as Rename: the note editor is a full-window app
      * modal, and opening it from a row replaces any modal already open instead
      * of stacking behind it. The row hands over the note it is currently
@@ -1362,7 +1362,7 @@ export function SortableSessionCard({
       setContextMenuPosition(undefined);
       if (shouldKeepLastProjectSessionVisibleOnClose) {
         /*
-        CDXC:LocalFirstSidebar 2026-06-01-20:52:
+        CDXC:StateSync 2026-06-01-20:52:
         Closing a project's final sidebar session parks it instead of removing it. Keep the card visible immediately and mark it sleeping locally so the project does not blink out before gxserver publishes the parked-session presentation.
         */
         useSidebarStore.getState().setSessionSleepingLocally(session.sessionId, true);
@@ -1385,7 +1385,7 @@ export function SortableSessionCard({
   const requestCopyAttachCommand = () => {
     setContextMenuPosition(undefined);
     /**
-     * CDXC:SessionPersistence 2026-05-07-20:32
+     * CDXC:Workarea 2026-05-07-20:32
      * Provider-backed tmux/zmx/zellij session cards expose the native attach
      * command alongside resume copying, using the stored provider/name pair
      * rather than the current global Settings provider.
@@ -1424,12 +1424,12 @@ export function SortableSessionCard({
   const requestFocusMode = () => {
     setContextMenuPosition(undefined);
     /**
-     * CDXC:SessionFocusMode 2026-05-23-09:28:
+     * CDXC:FocusMode 2026-05-23-09:28:
      * Context-menu Focus should zoom the clicked session's pane tab group. Route
      * through the controller so it can switch to Agents mode and later restore
      * the prior Code/Browser/Project/Manage surface on unfocus.
      *
-     * CDXC:SessionFocusMode 2026-06-26-06:25:
+     * CDXC:FocusMode 2026-06-26-06:25:
      * Sidebar session double-click no longer enters focus mode. Keep this
      * command behind the explicit Focus menu item so row double-click remains
      * available for rename when that preference is enabled.
@@ -1475,7 +1475,7 @@ export function SortableSessionCard({
 
     setContextMenuPosition(undefined);
     /**
-     * CDXC:CloseAfterDone 2026-06-15-21:00:
+     * CDXC:Sessions 2026-06-15-21:00:
      * Session context menus expose Close After Done directly below Delayed
      * Send. The sidebar sends only the session id; native owns the armed flag,
      * the continuous three-minute Done timer, and the final close behavior.
@@ -1494,7 +1494,7 @@ export function SortableSessionCard({
 
     setContextMenuPosition(undefined);
     /**
-     * CDXC:SessionNaming 2026-05-08-10:54
+     * CDXC:SessionTitles 2026-05-08-10:54
      * Generate Title must summarize the captured 1st user message through the
      * normal renameSession flow. That controller path already owns Codex title
      * generation, Agent CLI sync, and the "Generating title..." card loading
@@ -1531,7 +1531,7 @@ export function SortableSessionCard({
   };
 
   /*
-  CDXC:SwitchAccount 2026-09-03:
+  CDXC:AgentProviders 2026-09-03:
   Advanced > Switch Account opens a third-level submenu of the daemon-resolved
   same-family accounts (`session.switchableAgents`); picking one asks the
   runtime to rewrite the row's agent and full-reload it. Positioned like the
@@ -1920,7 +1920,7 @@ export function SortableSessionCard({
       danger: true,
       icon: <IconX aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
       /*
-       * CDXC:SidebarMultiSelect 2026-07-01-18:33:
+       * CDXC:Sessions 2026-07-01-18:33:
        * Multi-selection is an explicit advanced selection state, so Close selected
        * belongs in the selected-row bulk menu even when the single-row Close item
        * stays behind the Session Cards setting.
@@ -1950,7 +1950,7 @@ export function SortableSessionCard({
         ),
       key: 'sleep',
       label: lifecycleState === 'sleeping' ? 'Wake' : 'Sleep',
-      onClick: () => requestSetSleeping(lifecycleState !== 'running'),
+      onClick: () => requestSetSleeping(lifecycleState === 'running'),
     });
   }
   if (canPinSession) {
@@ -1961,7 +1961,7 @@ export function SortableSessionCard({
         <IconPinned aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
       ),
       /**
-       * CDXC:PinnedSessions 2026-05-28-12:04:
+       * CDXC:Sessions 2026-05-28-12:04:
        * Pinning is a live sidebar-order control, not Favorite. Expose it as its
        * own context-menu action so users can pin any project session without
        * changing previous-session favorites or auto-sleep favorite rules.
@@ -2008,7 +2008,7 @@ export function SortableSessionCard({
   }
   if (canCloseAfterDone) {
     /*
-     * CDXC:CloseAfterDone 2026-06-15-21:00:
+     * CDXC:Sessions 2026-06-15-21:00:
      * Close After Done stays next to Delayed Send. The menu glyph inherits the
      * normal context-menu icon tint. Only the armed session-card status clock
      * uses pastel red.
@@ -2065,7 +2065,7 @@ export function SortableSessionCard({
   }
   if (canGenerateSessionTitle) {
     /**
-     * CDXC:SessionNaming 2026-05-08-10:54
+     * CDXC:SessionTitles 2026-05-08-10:54
      * Claude and Codex thread cards need a direct "Generate Title" action that
      * retitles the session from the saved 1st user message. The action is only
      * useful once that message exists, because the controller intentionally
@@ -2090,7 +2090,7 @@ export function SortableSessionCard({
   }
   if (canFocusMode) {
     /**
-     * CDXC:SessionFocusMode 2026-05-28-12:52:
+     * CDXC:FocusMode 2026-05-28-12:52:
      * Sidebar context-menu Focus should only appear when the group has split panes to zoom.
      * A single pane with multiple tabs still uses normal tab selection, so hiding Focus here keeps the menu aligned with double-click behavior.
      */
@@ -2131,14 +2131,14 @@ export function SortableSessionCard({
   const belowActions: SessionContextMenuAction[] = [];
   if (effectiveSessionIdsBelow.length > 0) {
     /**
-     * CDXC:SidebarContextMenu 2026-06-04-23:40:
+     * CDXC:ContextMenus 2026-06-04-23:40:
      * Session row context menus expose below-scoped lifecycle actions only
      * when the clicked row has visible sessions beneath it. Sleep below targets
      * sleepable terminal, agent, and browser rows, while Close below
      * removes every visible row beneath the clicked session in the current
      * sidebar order.
      *
-     * CDXC:SidebarContextMenu 2026-06-10-10:01:
+     * CDXC:ContextMenus 2026-06-10-10:01:
      * Sleep below is scoped to the clicked session's current project/group, not
      * every rendered row lower in the sidebar. Do not paint rows as sleeping
      * before native/gxserver confirms the zmx provider was actually stopped.
@@ -2209,12 +2209,12 @@ export function SortableSessionCard({
       danger: true,
       icon: <IconX aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
       /**
-       * CDXC:SessionClose 2026-05-11-00:45
+       * CDXC:Sessions 2026-05-11-00:45
        * User-facing session removal language is Close. Keep the
        * destructive action behavior unchanged while making terminal and
        * browser context menus use the same visible verb.
        *
-       * CDXC:SidebarContextMenu 2026-06-10-13:58:
+       * CDXC:ContextMenus 2026-06-10-13:58:
        * The Close menu item is hidden by default and appears only when the
        * Session Cards setting opts into destructive close actions in menus.
        */
@@ -2224,7 +2224,7 @@ export function SortableSessionCard({
     });
   }
   /*
-   * CDXC:SessionMenuGroupLabels 2026-08-26:
+   * CDXC:ContextMenus 2026-08-26:
    * The root menu is unlabeled: Rename/Sleep/Pin/Park/Note/Tag as are the
    * everyday rows, Advanced is the only nested parent, and Close names itself.
    * Group headings live inside Advanced (Session / Copy / Below). The bulk menu
@@ -2256,7 +2256,7 @@ export function SortableSessionCard({
       clearSessionSelection('focusRequest');
     }
     /**
-     * CDXC:SidebarSessionFocus 2026-05-15-20:01:
+     * CDXC:FocusRouting 2026-05-15-20:01:
      * Intermittent sidebar-card clicks can select an existing session through a
      * newly synthesized native split. Persist the DOM click metadata, card
      * focus state, group id, and local-focus decision so a later repro can be
@@ -2287,7 +2287,7 @@ export function SortableSessionCard({
       type: 'sidebarDebugLog',
     });
     /*
-     * CDXC:SidebarSessionFocus 2026-06-08-09:31:
+     * CDXC:FocusRouting 2026-06-08-09:31:
      * Terminal switching should not wait behind local React focus rendering. Keep the forced focus breadcrumb first for native trace correlation, then send the authoritative focusSession command before applying the sidebar highlight locally; the following hydrate reconciles the UI after native focus/layout has started.
      */
     vscode.postMessage({ sessionId: session.sessionId, type: 'focusSession' });
@@ -2430,7 +2430,7 @@ export function SortableSessionCard({
             data-has-agent-icon={String(hasSessionCardIcon)}
             data-dragging={String(Boolean(sortable.isDragging))}
             /*
-             * CDXC:DraftSessions 2026-08-28:
+             * CDXC:Drafts 2026-08-28:
              * Present-only, exactly like the wire field: the attribute exists on
              * a draft and is absent otherwise, so `[data-draft='true']` can dim
              * the title without a `false` value needing its own rule.
@@ -2503,7 +2503,7 @@ export function SortableSessionCard({
 
               if (event.shiftKey || event.metaKey || event.ctrlKey || selectedSessionIds.length > 0) {
                 /*
-                 * CDXC:SidebarMultiSelect 2026-07-02-07:32:
+                 * CDXC:Sessions 2026-07-02-07:32:
                  * The pointer-down breadcrumb pairs with the click breadcrumb:
                  * a pointerDown without a matching click means the browser or
                  * the drag sensor consumed the gesture before the row's
@@ -2523,7 +2523,7 @@ export function SortableSessionCard({
               }
 
               /*
-               * CDXC:SidebarSessionFocus 2026-06-29-02:04:
+               * CDXC:FocusRouting 2026-06-29-02:04:
                * Native must start preserving the existing focused border before WebKit takes first responder, but only session-focus clicks should use that path. Keep the native hit target hot while the pointer is over a real session row, then cancel the handoff when this mouseDown is a child control or modified click instead of a normal row focus action.
                */
               if (!isUnmodifiedPrimarySessionFocusMouseDown) {
@@ -2546,7 +2546,7 @@ export function SortableSessionCard({
                 })
               ) {
                 /*
-                 * CDXC:SidebarSessionFocus 2026-06-27-21:08:
+                 * CDXC:FocusRouting 2026-06-27-21:08:
                  * Simple session-row clicks focus on pointer-down and suppress
                  * the follow-up click. Prevent the default pointer focus only
                  * on that same path so WKWebView does not retake first
@@ -2600,7 +2600,7 @@ export function SortableSessionCard({
               }
 
               /*
-               * CDXC:SidebarMultiSelect 2026-07-02-07:32:
+               * CDXC:Sessions 2026-07-02-07:32:
                * Selection repros must show whether the click event arrived at
                * this row at all and which branch consumed it. Log every
                * modified click, plus plain clicks while a selection exists.
@@ -2705,7 +2705,7 @@ export function SortableSessionCard({
               />
             )}
             {/**
-             * CDXC:SidebarSessions 2026-05-09-16:55
+             * CDXC:Sessions 2026-05-09-16:55
              * Project and chat session cards route the close-on-hover setting
              * through the same shared row across terminal, agent, and
              * browser panes.
@@ -2793,7 +2793,7 @@ export function SortableSessionCard({
                 left: `${tagSubmenuPosition.x}px`,
                 top: `${tagSubmenuPosition.y}px`,
                 /*
-                 * CDXC:SidebarContextMenu 2026-06-09-14:22:
+                 * CDXC:ContextMenus 2026-06-09-14:22:
                  * The Tag as submenu follows the raised sidebar context-menu
                  * stack so adjacent sidebar rows cannot cover the submenu while
                  * users are choosing a session marker.
@@ -2802,12 +2802,12 @@ export function SortableSessionCard({
               }}
             >
               {/*
-               * CDXC:SessionTags 2026-06-05-12:30:
+               * CDXC:Sessions 2026-06-05-12:30:
                * The session context menu exposes `Tag as` as a submenu with the
                * settings-visible tag list. Choosing the current marker clears
                * it so the old Favorite/Unfavorite workflow remains one click deep.
                *
-               * CDXC:SessionTagFilters 2026-06-16-00:05:
+               * CDXC:Sessions 2026-06-16-00:05:
                * Tag context menus should not render Priority, Progress, or Type
                * label rows. Keep the grouped sections and dividers for scan
                * structure without spending vertical space on heading text.
@@ -2960,7 +2960,7 @@ function getSessionRenameInitialTitle(session: SidebarSessionItem): string {
 
 export function canSleepSidebarSession(session: SidebarSessionItem | undefined): boolean {
   /*
-  CDXC:SidebarContextMenu 2026-06-07-13:34:
+  CDXC:ContextMenus 2026-06-07-13:34:
   Sleep below targets every running session, including browser panes. Stopped
   history can remain visible when pinned, tagged, or favorited, but sleeping it
   would reactivate that history as a sleeping sidebar row.
@@ -2970,7 +2970,7 @@ export function canSleepSidebarSession(session: SidebarSessionItem | undefined):
 
 export function canWakeSidebarSession(session: SidebarSessionItem | undefined): boolean {
   /*
-   * CDXC:SidebarMultiSelect 2026-07-01-18:33:
+   * CDXC:Sessions 2026-07-01-18:33:
    * Wake selected mirrors Sleep selected and targets only rows that are
    * actually parked or sleeping, avoiding no-op wake messages for active
    * terminal, agent, and browser sessions.
@@ -2986,7 +2986,7 @@ function getSidebarBulkSessionContextMenuAvailability({
   sessionsById: Record<string, SidebarSessionItem | undefined>;
 }): SidebarBulkSessionContextMenuAvailability {
   /*
-   * CDXC:SidebarMultiSelect 2026-07-01-18:33:
+   * CDXC:Sessions 2026-07-01-18:33:
    * Bulk session context menus should show only actions that can run over the
    * current selected rows without guessing. Filter each action to eligible
    * concrete sessions and let the action handler target exactly that subset.
@@ -3051,7 +3051,7 @@ function getSharedSelectedSidebarSessionTag({
   sessionsById: Record<string, SidebarSessionItem | undefined>;
 }): SidebarSessionTag | undefined {
   /*
-   * CDXC:SidebarMultiSelect 2026-07-01-18:45:
+   * CDXC:Sessions 2026-07-01-18:45:
    * Bulk tag menus must only show a checked tag when every taggable selected
    * session shares that tag. Mixed selections should apply the clicked tag
    * instead of implying the right-clicked row represents the whole selection.
@@ -3097,11 +3097,11 @@ function isRemotePresentationSidebarSessionId(sessionId: string): boolean {
 
 function supportsResumeCommandCopy(session: SidebarSessionItem): boolean {
   /**
-   * CDXC:SessionRestore 2026-04-27-08:04
+   * CDXC:SessionSleep 2026-04-27-08:04
    * Match agent-tiler context-menu visibility: Copy resume is only shown for
    * built-in agents with known resume or resume-selection CLI behavior.
    *
-   * CDXC:CursorCLI 2026-05-20-08:20:
+   * CDXC:AgentProviders 2026-05-20-08:20:
    * Cursor resume uses stored chat UUIDs or a local title lookup fallback, so
    * Cursor CLI cards expose the same copy-resume affordance as Codex and Pi.
    */
@@ -3119,7 +3119,7 @@ function supportsResumeCommandCopy(session: SidebarSessionItem): boolean {
 
 function supportsFork(session: SidebarSessionItem): boolean {
   /**
-   * CDXC:PiAgent 2026-05-08-09:42
+   * CDXC:AgentProviders 2026-05-08-09:42
    * Pi exposes a real `--fork <session>` CLI path once ghostex has captured the
    * Pi session id/path, so Pi cards should show the same one-click Fork action
    * as Codex in the session context menu.
@@ -3133,7 +3133,7 @@ function supportsTranscriptExport(session: SidebarSessionItem): boolean {
 
 function supportsGeneratedName(session: SidebarSessionItem): boolean {
   /**
-   * CDXC:PiAgent 2026-05-08-16:18
+   * CDXC:AgentProviders 2026-05-08-16:18
    * Pi cards should expose the same right-click Generate Title action as Codex
    * once the first user message has been captured. The native rename path
    * already switches Pi to `/name <title>`, so the menu gate should include Pi
@@ -3192,7 +3192,7 @@ function supportsPopOutPaneMenuAction(
 
 function supportsPopOutPane(session: SidebarSessionItem, isBrowserSession: boolean): boolean {
   /**
-   * CDXC:PanePopOut 2026-05-19-10:15:
+   * CDXC:Workarea 2026-05-19-10:15:
    * Sidebar context menus expose pop-out for browser panes and agent terminal
    * sessions. Sleeping sessions dispose their native surface and cannot remain
    * in a detached window.
@@ -3210,19 +3210,19 @@ function supportsPopOutPane(session: SidebarSessionItem, isBrowserSession: boole
 
 function supportsFullReload(session: SidebarSessionItem): boolean {
   /**
-   * CDXC:SessionRestore 2026-04-27-08:04
+   * CDXC:SessionSleep 2026-04-27-08:04
    * Match agent-tiler context-menu visibility: Full reload is only shown for
    * agent sessions that can be recreated and resumed programmatically.
    *
-   * CDXC:PiAgent 2026-05-08-16:18
+   * CDXC:AgentProviders 2026-05-08-16:18
    * Pi has a restorable CLI identity through its captured session id/path, so
    * right-click Full reload should be visible on Pi cards like it is for Codex.
    *
-   * CDXC:CursorCLI 2026-05-20-08:20:
+   * CDXC:AgentProviders 2026-05-20-08:20:
    * Cursor cards can full-reload through stored chat UUIDs or trusted titles
    * resolved from the local Cursor chat store for the active project.
    *
-   * CDXC:SessionChatAntigravity 2026-09-03:
+   * CDXC:AgentProviders 2026-09-03:
    * Antigravity resumes only by conversation id (`agy --conversation <id>`),
    * which its hooks report; without one a reload could only start a fresh
    * conversation, so the card shows Full reload once the id is captured.
