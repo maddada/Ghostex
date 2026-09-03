@@ -19,6 +19,7 @@ import type {
   GxserverReadSessionAgentNoteResult,
   GxserverReadSessionTerminalTailResult,
   GxserverRewindSessionChatResult,
+  GxserverSelectSessionChatModelResult,
   GxserverSessionForkBranchesResult,
 } from '@/packages/shared/gxserver-protocol';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
@@ -115,7 +116,7 @@ export function createSessionChatTransport(
       );
     },
     /*
-    CDXC:SessionChatComposerReady 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     The evidence read behind a `composerNotReady` refusal — the session's own
     machine answers with its composer verdict plus the bottom of the terminal
     screen, which the chat composer shows inside its refusal notice.
@@ -127,7 +128,7 @@ export function createSessionChatTransport(
       });
     },
     /*
-    CDXC:SessionForkFamilies 2026-08-28:
+    CDXC:SessionFork 2026-08-28:
     The branch switcher's fork family. It lands on the session's own machine
     like every other call here, so the branches are the ones that machine's
     registry actually knows about.
@@ -139,7 +140,7 @@ export function createSessionChatTransport(
       });
     },
     /*
-    CDXC:SessionChatRewind 2026-09-02:
+    CDXC:SessionChat 2026-09-02:
     Rewinding drives the agent's own `/rewind` dialog inside the session's
     terminal, so it lands on the session's own machine like every other
     mutation here. The daemon re-snapshots the chat stream after it succeeds,
@@ -152,8 +153,16 @@ export function createSessionChatTransport(
         sessionId,
       });
     },
+    selectSessionChatModel(params) {
+      return rpcForMachine<GxserverSelectSessionChatModelResult>(machineId, '/api/selectSessionChatModel', {
+        effort: params.effort,
+        model: params.model,
+        projectId,
+        sessionId,
+      });
+    },
     /*
-    CDXC:SessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     The Ghostex prompt queue and the synced composer draft (plan 016). Every
     one of these is a plain RPC on the session's own machine, exactly like
     send/answerPrompt above, so a remote session's queue lives on the remote
@@ -203,7 +212,7 @@ export function createSessionChatTransport(
       });
     },
     /*
-    CDXC:SessionAgentNotes 2026-08-24:
+    CDXC:SessionNotes 2026-08-24:
     The session note rides the session's own machine connection like every
     other call here, and gxserver resolves the provider conversation id it is
     filed under from (projectId, sessionId) — this host never sees that key.
@@ -222,7 +231,7 @@ export function createSessionChatTransport(
       });
     },
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     The draft's agent switch runs on the session's own machine, which is where
     the background CLI it kills and relaunches lives. Unconditional: the shared
     UI gates the composer's "Agents" section on the daemon's `availableAgents`
