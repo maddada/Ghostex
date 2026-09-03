@@ -425,10 +425,15 @@ pub(crate) fn gpui_project_beads_title_generation_path(existing: Option<&str>) -
     // macOS `projectBoardNativeProcessPath`: common tool directories lead so
     // agent CLIs resolve even under minimal login-shell PATH files.
     let home = std::env::var("HOME").unwrap_or_default();
+    let user = std::env::var("USER").unwrap_or_default();
     let default_entries = [
         format!("{home}/.local/share/mise/shims"),
         format!("{home}/.local/bin"),
         format!("{home}/.asdf/shims"),
+        format!("{home}/.nix-profile/bin"),
+        format!("/etc/profiles/per-user/{user}/bin"),
+        "/run/current-system/sw/bin".to_string(),
+        "/nix/var/nix/profiles/default/bin".to_string(),
         "/opt/homebrew/bin".to_string(),
         "/opt/homebrew/sbin".to_string(),
         "/usr/local/bin".to_string(),

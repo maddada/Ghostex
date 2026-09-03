@@ -45,7 +45,7 @@ pub(crate) fn run_zmx_start_command(
     script: String,
 ) -> ZmxEndpointResult<ZmxStartOutcome> {
     /*
-    CDXC:ZmxWakeProbeReuse 2026-09-01:
+    CDXC:Zmx 2026-09-01:
     This platform's start is a plain detached `zmx run`, so a zero exit means
     the command was accepted, NOT that the session is registered. Report no
     observation; the caller keeps its authoritative probe.
@@ -59,7 +59,7 @@ pub(crate) fn run_zmx_start_command(
 }
 
 /*
-CDXC:ZmxLaunchdPersistence 2026-08-07:
+CDXC:Zmx 2026-08-07:
 The macOS app and gxserver each have launchd/Background Task Management
 lifecycles that may be replaced during a development rebuild. A detached zmx
 daemon otherwise inherits gxserver's resource coalition, so macOS later kills
@@ -110,7 +110,7 @@ pub(crate) fn run_zmx_start_command(
     }
 
     /*
-    CDXC:ZmxStartPollGranularity 2026-09-01:
+    CDXC:Zmx 2026-09-01:
     The zmx daemon needs roughly 100ms to register after `launchctl kickstart`,
     so the first existence check nearly always misses and a flat 100ms sleep
     then paid the whole interval before the check that would have succeeded
@@ -332,11 +332,30 @@ done
     }
 }
 
+/*
+CDXC:Zmx 2026-09-03:
+The supervisor script must not export gxserver's PATH into the session
+(GitHub issue #118, nix-darwin). gxserver runs under launchd with the
+synthesized tool PATH from the desktop app, while the supervisor's own
+`/bin/zsh` has already run `/etc/zshenv` by the time these exports execute.
+On nix-darwin that file sources `set-environment`, which sets the real PATH
+and exports the guard `__NIX_DARWIN_SET_ENVIRONMENT_DONE=1`; re-exporting
+gxserver's PATH afterwards replaced it, and the `-lic` / `-li` login shells
+downstream saw the guard and never recomputed it. The user ended up with
+Homebrew/volta/mise/asdf/nodenv directories they do not have and no
+`claude`. The login shells own PATH exactly as they do under Terminal.app
+(`/etc/zprofile` path_helper plus the user's profiles); every Ghostex
+binary the scripts run (zmx, gxserver in the notify hook, the prompt-editor
+wrapper) is referenced by absolute path, so nothing in a session needs the
+daemon's PATH. Linux keeps forwarding PATH: there gxserver's PATH is
+inherited, not synthesized, and `/etc/profile` recomputes it in the `-lc`
+script shell.
+*/
 #[cfg(target_os = "macos")]
 fn macos_zmx_launchd_environment_exports() -> String {
     let mut environment = build_gxserver_zmx_child_environment()
         .into_iter()
-        .filter(|(key, _)| is_shell_environment_name(key))
+        .filter(|(key, _)| key != "PATH" && is_shell_environment_name(key))
         .collect::<Vec<_>>();
     environment.sort_by(|left, right| left.0.cmp(&right.0));
     environment
@@ -424,7 +443,7 @@ pub(crate) fn run_zsh_script(
 }
 
 /*
-CDXC:GxserverZmxProbeShell 2026-09-01:
+CDXC:Zmx 2026-09-01:
 The probe/snapshot pipelines (`zmx list`, `zmx kill`, `ps -axo`) never need the
 user's login profile, but they run on every presentation poll. Give them a
 profile-free spawn instead.
@@ -474,7 +493,7 @@ fn run_zsh_script_blocking(
     let mut child = Command::new(&shell.executable)
         .args(shell_args)
         /*
-        CDXC:GxserverTerminalColorEnvironment 2026-07-18:
+        CDXC:ServerDaemon 2026-07-18:
         Command::envs does not remove inherited variables that are absent from
         the supplied map. Clear first so environment_keys_to_strip actually
         removes NO_COLOR and other host-process suppression/session values from
@@ -488,7 +507,7 @@ fn run_zsh_script_blocking(
         .spawn()
         .map_err(|error| error.to_string())?;
     /*
-    CDXC:ZmxSendStdinDelivery 2026-08-24:
+    CDXC:Zmx 2026-08-24:
     `zmx send` reads the payload from this pipe, so a failed or short write
     means the agent gets a truncated prompt or nothing at all while zmx still
     exits 0. Discarding the error here made gxserver report those sends as

@@ -20,7 +20,7 @@ pub(crate) fn gpui_gxserver_rpc_result(
     timeout: Duration,
 ) -> Result<serde_json::Value, String> {
     /*
-    CDXC:GPUISettingsStatusBridge 2026-06-24-11:48:
+    CDXC:StatusPet 2026-06-24-11:48:
     Settings status/actions share the typed-operation transport and may expose only the validated gxserver `result` object to the modal host. Transport, status, envelope, and parse failures stay as local errors so callers can clear loading with explicit empty status payloads without logging private daemon data.
     */
     let (status_code, body) = gxserver_post_typed_operation(endpoint, params, timeout)?;
@@ -34,7 +34,7 @@ pub(crate) fn gpui_update_portless_gxserver_state(
     update: GpuiPortlessStateUpdate,
 ) -> Result<serde_json::Value, String> {
     /*
-    CDXC:GPUISettingsPortlessBridge 2026-06-24-11:48:
+    CDXC:Portless 2026-06-24-11:48:
     Successful Portless state updates return canonical gxserver status and presentation metadata. Parse just enough of that response to refresh the shared app-modal `hud.portless` payload immediately, while transport/parser failures remain silent local `Result` values so unavailable gxserver cannot create fake success or roll back saved Settings.
     */
     let result = gpui_gxserver_rpc_result(
@@ -192,7 +192,7 @@ pub(crate) fn gpui_gxserver_required_tools_available(health: &serde_json::Value)
     };
     // zmx is the one mandatory GPUI daemon companion.
     //
-    // CDXC:AgentHistorySearch 2026-08-20: Zehn used to be gated here too,
+    // CDXC:PromptSearch 2026-08-20: Zehn used to be gated here too,
     // because it was a separate bundled binary a build might not carry. It is
     // now a Rust crate compiled into gxserver, so every daemon that exists can
     // serve prompt-history search and there is nothing left to probe for.
@@ -247,7 +247,7 @@ pub(crate) fn gpui_resolve_local_gxserver_binary() -> Option<PathBuf> {
         if let Some(contents_dir) = current_exe.parent().and_then(Path::parent) {
             candidates.push(contents_dir.join("Resources/Web/gxserver/bin/gxserver"));
         }
-        // CDXC:GPUILinuxX11Backend 2026-07-05: the Linux app is a flat
+        // CDXC:PlatformSupport 2026-07-05: the Linux app is a flat
         // CEF-conventional directory (scripts/build-linux-app.sh), so the
         // bundled gxserver package sits beside the executable instead of
         // under a macOS Contents/Resources tree.
@@ -290,7 +290,7 @@ pub(crate) fn gpui_resolve_local_zmx_binary() -> Option<PathBuf> {
 }
 
 /*
-CDXC:GPUIZmxPersistenceRefresh 2026-07-06:
+CDXC:Zmx 2026-07-06:
 Terminal-content clicks should repair a zmx session that another client
 resized, but a click inside an already-correct pane must not repaint the
 terminal because a repaint scrolls the view to the visible bottom. Mirror
@@ -308,12 +308,22 @@ pub(crate) fn gpui_gxserver_launch_log_path() -> PathBuf {
 
 pub(crate) fn gpui_normalized_user_tool_path(current_path: Option<&str>) -> String {
     /*
-    CDXC:GPUIUserToolPathEntries 2026-07-24:
+    CDXC:OsIntegration 2026-07-24:
     Keep the normal user tool locations used by the GPUI process and its local
     daemon bootstrap in one place. Packaged macOS apps otherwise inherit a
     sparse LaunchServices PATH that cannot see Homebrew-installed Ghostex tools.
+    This PATH is for the app and gxserver only; it is never exported into a
+    terminal session's shell (see CDXC:Zmx).
+    2026-09-03: also search the Nix profile directories (GitHub issue #118) so
+    nix-darwin users' `claude`, `bd`, and `gx` are visible to the app's CLI
+    checks. Every entry is a search candidate; a missing directory is skipped
+    by lookup and costs nothing.
     */
     let home = env::var("HOME")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let user = env::var("USER")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -330,9 +340,15 @@ pub(crate) fn gpui_normalized_user_tool_path(current_path: Option<&str>) -> Stri
             format!("{home}/.local/bin"),
             format!("{home}/.asdf/shims"),
             format!("{home}/.nodenv/shims"),
+            format!("{home}/.nix-profile/bin"),
         ]);
     }
+    if let Some(user) = user.as_deref() {
+        entries.push(format!("/etc/profiles/per-user/{user}/bin"));
+    }
     entries.extend([
+        "/run/current-system/sw/bin".to_string(),
+        "/nix/var/nix/profiles/default/bin".to_string(),
         "/usr/bin".to_string(),
         "/bin".to_string(),
         "/usr/sbin".to_string(),
@@ -366,7 +382,7 @@ pub(crate) fn gpui_launchd_plist_xml_escape(value: &str) -> String {
 }
 
 /*
-CDXC:GPUIGxserverLaunchdJob 2026-07-10:
+CDXC:ServerDaemon 2026-07-10:
 macOS 27 attributes app-spawned processes that outlive the app to the app's
 Background Task Management identity, and the Dock then renders the dim
 "Running in Background" indicator instead of the normal running dot even
@@ -598,7 +614,7 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<(), Stri
 }
 
 /*
-CDXC:QuitWithBackgroundServices 2026-08-28:
+CDXC:OsIntegration 2026-08-28:
 Full teardown behind the "Quit Ghostex & BG Service" menu item. Plain Quit
 leaves gxserver, the zmx session daemons, and the GhostexEditor daemon alive
 on purpose; this path is the explicit opposite: gxserver kills every tracked
