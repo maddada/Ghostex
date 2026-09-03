@@ -780,6 +780,11 @@ impl GhostexGpuiApp {
             .w(px(WORKSPACE_SPLIT_HANDLE_THICKNESS))
             .items_center()
             .justify_center()
+            // The body row sits 1px under the titlebar so panes can own
+            // their top edge; carry the titlebar hairline across the divider
+            // so its full-height line child starts below it.
+            .border_t_1()
+            .border_color(titlebar_button_border_color())
             .cursor_ew_resize()
             .bg(project_editor_companion_divider_background_color())
             .on_hover(cx.listener(move |this, hovered, _, cx| {
