@@ -358,7 +358,8 @@ pub(crate) fn gpui_read_native_resource_processes() -> Vec<GpuiNativeResourcePro
     continue to display and act on each process's real system PID.
     */
     const WINDOWS_PROCESS_ID_BIT: u32 = 1 << 31;
-    static WINDOWS_PROCESS_SYSTEM: OnceLock<Mutex<(System, bool)>> = OnceLock::new();
+    static WINDOWS_PROCESS_SYSTEM: std::sync::OnceLock<Mutex<(System, bool)>> =
+        std::sync::OnceLock::new();
 
     let refresh_kind = ProcessRefreshKind::new()
         .with_cpu()
