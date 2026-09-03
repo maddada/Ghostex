@@ -37,6 +37,7 @@ const MODAL_GROUPS: readonly ModalGroup[] = [
       'Previous Sessions',
       'Projects',
       'Remote gxserver Install',
+      'Remote Setup',
       'Remote Project Picker',
       'Session Note',
       'Session Rename',

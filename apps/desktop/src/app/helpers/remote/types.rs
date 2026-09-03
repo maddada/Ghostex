@@ -112,9 +112,31 @@ pub(crate) fn gpui_remote_connect_overlay_labels(
     }
 }
 
+/*
+CDXC:RemotePairing 2026-09-03:
+How this computer reaches a saved machine. `Ssh` dials `ssh_host` directly.
+`EasyConnect` has no reachable host at all: the machine is addressed by the
+Easy Connect blob from its pairing code, and SSH dials the loopback forwarder
+that `easy_connect_forward.rs` runs for it. For such a machine `ssh_host` /
+`ssh_port` are the forwarder's `127.0.0.1:<port>` while it is running and
+empty / `None` otherwise. An empty host is NOT harmless to ssh (it resolves
+to the local sshd), so `gpui_remote_ssh_dial_refusal` in `ssh_exec.rs`
+refuses it before any argument list is built.
+*/
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GpuiRemoteMachineTransport {
+    Ssh,
+    EasyConnect,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct GpuiRemoteMachineConfig {
     pub(crate) remote_machine_id: String,
+    pub(crate) transport: GpuiRemoteMachineTransport,
+    /// The Easy Connect address blob (`tc…`); present only for `EasyConnect`.
+    pub(crate) easy_connect_address: Option<String>,
+    /// The SSH port the forwarder dials on the far side (from the pairing code, 22 by default).
+    pub(crate) easy_connect_ssh_port: u16,
     pub(crate) ssh_host: String,
     pub(crate) ssh_identity_file: Option<String>,
     pub(crate) ssh_port: Option<u16>,
@@ -125,6 +147,10 @@ pub(crate) struct GpuiRemoteMachineConfig {
 }
 
 impl GpuiRemoteMachineConfig {
+    pub(crate) fn uses_easy_connect(&self) -> bool {
+        self.transport == GpuiRemoteMachineTransport::EasyConnect
+    }
+
     pub(crate) fn ssh_target_host(&self) -> String {
         self.ssh_user
             .as_ref()

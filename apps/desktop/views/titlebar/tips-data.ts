@@ -89,7 +89,7 @@ export const TITLEBAR_TIPS: TitlebarTip[] = [
     title: 'Schedule recurring agent work',
   },
   {
-    body: 'Open More Options in the top right of the sidebar, click "Mobile", then attach the Mobile app to a running agent session.',
+    body: 'Open More Options in the top right of the sidebar, click "Mobile & Remote", then follow the two steps: get the Ghostex app and connect it to this computer.',
     icon: 'resources',
     id: 'continue-session-from-mobile-app',
     title: 'Continue a session from the Mobile app',

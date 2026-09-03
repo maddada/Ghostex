@@ -1,5 +1,6 @@
 import type { GxserverSidebarHudCommandButton } from '@/packages/shared/gxserver-protocol';
-import type { OpenAppModalMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import type { OpenAppModalMessage, SettingsRemoteSection } from '@/packages/core-ui/app-modal-host-bridge';
+import type { SettingsModalTab } from '@/packages/core-ui/settings-modal';
 
 export type OpenRecentProjectsModalDetail = Pick<
   Extract<OpenAppModalMessage, { modal: 'recentProjects' }>,
@@ -68,11 +69,22 @@ export interface RunTitlebarActionDetail {
   projectId: string;
 }
 
+/**
+ * CDXC:RemoteSetup 2026-09-03:
+ * Settings deep-link fields the web shell honours: the tab, and the Remote tab
+ * card the Remote Setup modal hands off to.
+ */
+export interface OpenSettingsModalDetail {
+  initialRemoteSection?: SettingsRemoteSection;
+  initialTab?: SettingsModalTab;
+}
+
 declare global {
   interface WindowEventMap {
     'ghostex-web:closeAppModal': CustomEvent;
     'ghostex-web:exportTranscriptStatus': CustomEvent<ExportTranscriptStatusDetail>;
-    'ghostex-web:openSettingsModal': CustomEvent;
+    'ghostex-web:openRemoteSetupModal': CustomEvent;
+    'ghostex-web:openSettingsModal': CustomEvent<OpenSettingsModalDetail | undefined>;
     'ghostex-web:openAddProjectModal': CustomEvent<OpenAddProjectModalDetail>;
     'ghostex-web:openCommandPane': CustomEvent<{ toggle?: boolean } | undefined>;
     'ghostex-web:openDelayedActionsModal': CustomEvent<OpenDelayedActionsModalDetail>;

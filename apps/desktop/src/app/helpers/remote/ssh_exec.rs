@@ -56,6 +56,10 @@ pub(crate) fn gpui_run_remote_ssh_raw(
     remote_command: &str,
     timeout: Duration,
 ) -> GpuiRemoteProcessResult {
+    let target_arguments = match gpui_remote_ssh_target_arguments(config) {
+        Ok(target_arguments) => target_arguments,
+        Err(message) => return gpui_remote_ssh_refused_process_result(message),
+    };
     let askpass = match gpui_remote_ssh_askpass_script(config) {
         Ok(askpass) => askpass,
         Err(_) => {
@@ -67,7 +71,7 @@ pub(crate) fn gpui_run_remote_ssh_raw(
         }
     };
     let mut arguments = gpui_remote_ssh_client_options(config.has_saved_password);
-    arguments.extend(gpui_remote_ssh_target_arguments(config));
+    arguments.extend(target_arguments);
     arguments.push(remote_command.to_string());
     gpui_run_remote_process(
         "/usr/bin/ssh",
@@ -85,6 +89,10 @@ pub(crate) fn gpui_run_remote_ssh_with_stdin_file_in_execution_target(
     stdin_path: &Path,
     timeout: Duration,
 ) -> GpuiRemoteProcessResult {
+    let target_arguments = match gpui_remote_ssh_target_arguments(config) {
+        Ok(target_arguments) => target_arguments,
+        Err(message) => return gpui_remote_ssh_refused_process_result(message),
+    };
     let askpass = match gpui_remote_ssh_askpass_script(config) {
         Ok(askpass) => askpass,
         Err(_) => {
@@ -96,7 +104,7 @@ pub(crate) fn gpui_run_remote_ssh_with_stdin_file_in_execution_target(
         }
     };
     let mut arguments = gpui_remote_ssh_client_options(config.has_saved_password);
-    arguments.extend(gpui_remote_ssh_target_arguments(config));
+    arguments.extend(target_arguments);
     arguments.push(gpui_remote_command_for_execution_target(
         execution_target,
         remote_command,
@@ -336,7 +344,10 @@ pub(crate) fn gpui_remote_ssh_client_options(has_saved_password: bool) -> Vec<St
 }
 
 #[cfg(target_os = "macos")]
-pub(crate) fn gpui_remote_ssh_target_arguments(config: &GpuiRemoteMachineConfig) -> Vec<String> {
+pub(crate) fn gpui_remote_ssh_target_arguments(
+    config: &GpuiRemoteMachineConfig,
+) -> Result<Vec<String>, String> {
+    gpui_remote_ssh_dial_refusal(config)?;
     let mut arguments = Vec::new();
     if let Some(identity_file) = config.ssh_identity_file.as_ref() {
         arguments.extend(["-i".to_string(), identity_file.clone()]);
@@ -344,12 +355,16 @@ pub(crate) fn gpui_remote_ssh_target_arguments(config: &GpuiRemoteMachineConfig)
     if let Some(port) = config.ssh_port {
         arguments.extend(["-p".to_string(), port.to_string()]);
     }
+    arguments.extend(gpui_remote_ssh_host_key_alias_arguments(config));
     arguments.push(config.ssh_target_host());
-    arguments
+    Ok(arguments)
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn gpui_remote_ssh_target_arguments(config: &GpuiRemoteMachineConfig) -> Vec<String> {
+pub(crate) fn gpui_remote_ssh_target_arguments(
+    config: &GpuiRemoteMachineConfig,
+) -> Result<Vec<String>, String> {
+    gpui_remote_ssh_dial_refusal(config)?;
     let mut arguments = Vec::new();
     if let Some(identity_file) = config.ssh_identity_file.as_ref() {
         arguments.extend(["-i".to_string(), identity_file.clone()]);
@@ -357,8 +372,59 @@ pub(crate) fn gpui_remote_ssh_target_arguments(config: &GpuiRemoteMachineConfig)
     if let Some(port) = config.ssh_port {
         arguments.extend(["-p".to_string(), port.to_string()]);
     }
+    arguments.extend(gpui_remote_ssh_host_key_alias_arguments(config));
     arguments.push(config.ssh_target_host());
-    arguments
+    Ok(arguments)
+}
+
+/*
+CDXC:RemotePairing 2026-09-03:
+`ssh ""` is not a no-op: OpenSSH resolves an empty host to the local sshd
+(`[::1]:22`), so a config without a host — an Easy Connect machine whose
+forwarder is not running, or a corrupted SSH machine — must be refused here,
+before any argument list is built, rather than handed to ssh.
+*/
+pub(crate) fn gpui_remote_ssh_dial_refusal(config: &GpuiRemoteMachineConfig) -> Result<(), String> {
+    if config.ssh_host.trim().is_empty() {
+        return Err(if config.uses_easy_connect() {
+            "The Easy Connect forwarder for that machine is not running. Reconnect the machine first."
+                .to_string()
+        } else {
+            "The saved remote machine has no SSH host.".to_string()
+        });
+    }
+    Ok(())
+}
+
+pub(crate) fn gpui_remote_ssh_refused_process_result(message: String) -> GpuiRemoteProcessResult {
+    GpuiRemoteProcessResult {
+        exit_code: 126,
+        stderr: message,
+        stdout: String::new(),
+    }
+}
+
+/*
+CDXC:RemotePairing 2026-09-03:
+An Easy Connect machine is dialed as `127.0.0.1:<forwarder port>`, and that
+port is not stable across reconnects nor unique across machines. Without an
+alias, `StrictHostKeyChecking=accept-new` would record `[127.0.0.1]:<port>`
+and refuse the next machine (or the same machine after a port change) as a
+changed host key. The alias keys known_hosts by the saved machine instead.
+*/
+pub(crate) fn gpui_remote_ssh_host_key_alias_arguments(
+    config: &GpuiRemoteMachineConfig,
+) -> Vec<String> {
+    if !config.uses_easy_connect() {
+        return Vec::new();
+    }
+    vec![
+        "-o".to_string(),
+        format!(
+            "HostKeyAlias=ghostex-easy-connect-{}",
+            config.remote_machine_id
+        ),
+    ]
 }
 
 pub(crate) fn gpui_login_shell_remote_command(command: &str) -> String {

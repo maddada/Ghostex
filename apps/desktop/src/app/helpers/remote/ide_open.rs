@@ -410,6 +410,7 @@ pub(crate) fn gpui_open_remote_path_in_vscode_remote_ssh(
     if !gpui_remote_ide_path_allowed(remote_path) {
         return Err("Remote IDE open could not resolve a valid remote path.".to_string());
     }
+    gpui_remote_ide_open_easy_connect_refusal(config)?;
     let remote_authority = gpui_vscode_remote_ssh_authority(config)?;
     if !gpui_command_exists_on_path(target.command) {
         return Err("Configured editor is not available for GPUI remote IDE open.".to_string());
@@ -437,6 +438,7 @@ pub(crate) fn gpui_open_remote_path_in_zed_remote_ssh(
     if !gpui_remote_ide_path_allowed(remote_path) {
         return Err("Remote IDE open could not resolve a valid remote path.".to_string());
     }
+    gpui_remote_ide_open_easy_connect_refusal(config)?;
     if config.ssh_identity_file.is_some() {
         return Err(
             "Remote IDE open requires a saved machine that the selected editor can address by host, user, and port."
@@ -459,10 +461,31 @@ pub(crate) fn gpui_open_remote_path_in_zed_remote_ssh(
         .map_err(|_| "Configured editor could not open the remote target.".to_string())
 }
 
+/*
+CDXC:RemotePairing 2026-09-03:
+External editors open remote machines by their own SSH authority. An Easy
+Connect machine has none — its endpoint is this app's loopback forwarder,
+which lives only while the machine is connected and would point the editor at
+127.0.0.1 — so the answer is a plain "not supported" rather than the
+host/port-shape rejection an SSH machine gets.
+*/
+pub(crate) fn gpui_remote_ide_open_easy_connect_refusal(
+    config: &GpuiRemoteMachineConfig,
+) -> Result<(), String> {
+    if config.uses_easy_connect() {
+        return Err(
+            "Opening a remote project in an external editor is not supported over Easy Connect. Add the machine with SSH details to use this."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 pub(crate) fn gpui_zed_remote_ssh_uri(
     config: &GpuiRemoteMachineConfig,
     remote_path: &str,
 ) -> Result<String, String> {
+    gpui_remote_ide_open_easy_connect_refusal(config)?;
     let host = gpui_vscode_remote_ssh_authority_part(config.ssh_host.as_str())
         .ok_or_else(|| "Remote IDE open could not resolve the saved machine host.".to_string())?;
     let user = config
@@ -500,6 +523,7 @@ pub(crate) fn gpui_percent_encode_remote_ssh_path(value: &str) -> String {
 pub(crate) fn gpui_vscode_remote_ssh_authority(
     config: &GpuiRemoteMachineConfig,
 ) -> Result<String, String> {
+    gpui_remote_ide_open_easy_connect_refusal(config)?;
     if config.ssh_identity_file.is_some() || config.ssh_port.is_some() {
         return Err(
             "Remote IDE open requires a saved machine that VS Code Remote-SSH can address by host and user."

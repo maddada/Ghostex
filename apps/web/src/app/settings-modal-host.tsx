@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import type { ghostexSettings } from '@/packages/shared/ghostex-settings';
-import type { TailcatSettingsRpc } from '@/packages/core-ui/settings-modal/tabs/remote-tailcat';
+import type { TailcatSettingsRpc } from '@/packages/core-ui/settings-modal';
 import { getMachineConnection, rpcForMachine } from '../connections/connection-registry';
 import type { WebSidebarRuntime } from '../sidebar-runtime/sidebar-runtime';
+import type { OpenSettingsModalDetail } from './action-events';
 import { readWebSettings, writeWebSettings } from './web-settings';
 
 /*
@@ -20,9 +21,13 @@ const SettingsModal = lazy(() =>
 export function SettingsModalHost({ runtime }: { runtime: WebSidebarRuntime }) {
   const [isOpen, setIsOpen] = useState(false);
   const [settings, setSettings] = useState(readWebSettings);
+  const [openDetail, setOpenDetail] = useState<OpenSettingsModalDetail>();
 
   useEffect(() => {
-    const open = () => setIsOpen(true);
+    const open = (event: WindowEventMap['ghostex-web:openSettingsModal']) => {
+      setOpenDetail(event.detail ?? undefined);
+      setIsOpen(true);
+    };
     const close = () => setIsOpen(false);
     window.addEventListener('ghostex-web:openSettingsModal', open);
     window.addEventListener('ghostex-web:closeAppModal', close);
@@ -46,6 +51,8 @@ export function SettingsModalHost({ runtime }: { runtime: WebSidebarRuntime }) {
     <Suspense fallback={null}>
       <SettingsModal
         appIconPickerUnavailable
+        initialRemoteSection={openDetail?.initialRemoteSection}
+        initialTab={openDetail?.initialTab}
         isOpen
         onChange={save}
         onClose={() => setIsOpen(false)}

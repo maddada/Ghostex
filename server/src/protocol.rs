@@ -722,8 +722,42 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         | "/api/tailcatStatus"
         | "/api/updateTailcatState"
+        /*
+        CDXC:RemotePairing 2026-09-03:
+        The pairing code carries the one-time pairing secret and the login
+        user, and enabling SSH access opens an admin prompt on this machine,
+        so all three stay on the authenticated local listener.
+        */
+        | "/api/remoteAccessStatus"
+        | "/api/enableSshAccess"
+        | "/api/remotePairingCode"
+        /*
+        CDXC:RemotePairing 2026-09-03:
+        Paired-device management edits `~/.ssh/authorized_keys` and the tailcat
+        allow-list, so it stays on the authenticated local listener like the
+        pairing code that created the devices.
+        */
+        | "/api/pairedDevices"
+        | "/api/removePairedDevice"
+        | "/api/pairedDeviceSeen"
         | "/api/queryLogs"
         | "/api/resolveGitRootForPath" => full_local(path),
+        /*
+        CDXC:RemotePairing 2026-09-03:
+        The only unauthenticated write endpoint. A phone registers its SSH key
+        through the Easy Connect tunnel before it holds any gxserver credential,
+        so the bearer gate is off and the one-time pairing secret (hash-compared,
+        single-use, 15-minute TTL, 5 attempts/minute) is the gate instead. It
+        stays FullLocal: only the loopback API listener (and the tunnel that
+        forwards to it) serves it, never the remote listener.
+        */
+        "/api/pairDevice" => descriptor(
+            path,
+            ApiPermission::FullLocal,
+            false,
+            true,
+            Transport::Http,
+        ),
         "/api/updateAuth"
         | "/api/updateListenerConfig"
         | "/api/installTool"

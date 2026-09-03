@@ -9,6 +9,7 @@ pub mod editors;
 pub mod extensions;
 pub mod launchers;
 pub mod output;
+pub mod paired_device;
 pub mod picker;
 pub mod ports;
 pub mod rpc;
@@ -76,6 +77,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "h",
     "history",
     "move-codex-session",
+    "paired-device-seen",
     "ports",
     "quick-actions",
     "saved-prompts",
@@ -216,6 +218,7 @@ fn is_known_command(name: &str) -> bool {
         "tag-session",
         "session-note",
         "saved-prompts",
+        "paired-device-seen",
         "pin-session",
         "delayed-send",
         "close-after-done",
@@ -507,6 +510,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             run_bridge_action(action, parser, fail_on_not_ok, rest)
         }
         "saved-prompts" => saved_prompts::saved_prompts_command(args),
+        "paired-device-seen" => paired_device::paired_device_seen_command(args),
         "pin-session" => {
             run_bridge_action("pinSession", Parser::SessionBoolean("pinned"), plain, args)
         }

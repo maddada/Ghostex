@@ -4,10 +4,12 @@ import type {
   OpenDelayedActionsModalDetail,
   OpenRecentProjectsModalDetail,
   OpenSessionNoteModalDetail,
+  OpenSettingsModalDetail,
   OpenSidebarSpaceEditorModalDetail,
 } from './action-events';
 
 type OpenRecentProjectsModalMessage = Extract<OpenAppModalMessage, { modal: 'recentProjects' }>;
+type OpenSettingsModalMessage = Extract<OpenAppModalMessage, { modal: 'settings' }>;
 
 export function installWebAppModalHostShim(): void {
   window.webkit = {
@@ -77,7 +79,28 @@ function handleAppModalHostMessage(message: unknown): void {
   }
 
   if (message.type === 'open' && message.modal === 'settings') {
-    window.dispatchEvent(new CustomEvent('ghostex-web:openSettingsModal'));
+    /*
+     * The web shell runs one modal host per kind, so a modal that hands off to
+     * Settings (Remote Setup → Connect / Show instructions) must be closed
+     * first or the two dialogs stack.
+     */
+    window.dispatchEvent(new CustomEvent('ghostex-web:closeAppModal'));
+    const settingsMessage = message as OpenSettingsModalMessage;
+    const detail: OpenSettingsModalDetail = {
+      ...(settingsMessage.initialTab ? { initialTab: settingsMessage.initialTab } : {}),
+      ...(settingsMessage.initialRemoteSection ? { initialRemoteSection: settingsMessage.initialRemoteSection } : {}),
+    };
+    window.dispatchEvent(new CustomEvent('ghostex-web:openSettingsModal', { detail }));
+    return;
+  }
+
+  /*
+   * CDXC:RemoteSetup 2026-09-03:
+   * The sidebar menu's Mobile & Remote entry opens the shared Remote Setup
+   * modal; the web shell mounts it in its own host like Settings.
+   */
+  if (message.type === 'open' && message.modal === 'remoteSetup') {
+    window.dispatchEvent(new CustomEvent('ghostex-web:openRemoteSetupModal'));
     return;
   }
 

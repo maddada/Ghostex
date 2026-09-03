@@ -129,9 +129,9 @@ export function useSidebarActions({
     vscode.postMessage({ type: 'openAutomationsPage' });
   };
 
-  const openReferenceMobile = () => {
-    dismissAppModalForSidebarNavigation('SettingsDismissal:mobile');
-    vscode.postMessage({ type: 'openMobileBrowserChat' });
+  const openReferenceRemoteSetup = () => {
+    dismissAppModalForSidebarNavigation('SettingsDismissal:remoteSetup');
+    openAppModal({ modal: 'remoteSetup', type: 'open' });
   };
 
   const openReferenceAgentsHub = () => {
@@ -163,7 +163,7 @@ export function useSidebarActions({
     openPreviousSessions,
     openReferenceAgentsHub,
     openReferenceAutomations,
-    openReferenceMobile,
+    openReferenceRemoteSetup,
     searchPreviousSessionsByPrompt,
     setActiveSessionsSortMode,
     toggleActiveSessionsSortMode,

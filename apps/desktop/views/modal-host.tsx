@@ -25,6 +25,7 @@ import { PortlessSetupModal, type PortlessSetupModalMode } from '@/packages/core
 import { PreviousSessionsModal } from '@/packages/core-ui/previous-sessions-modal';
 import { RecentProjectsModal } from '@/packages/core-ui/recent-projects-modal';
 import { RemoteGxserverInstallModal } from '@/packages/core-ui/remote-gxserver-install-modal';
+import { RemoteSetupModal, gpuiBootstrapRemoteSetupRpc } from '@/packages/core-ui/remote-setup-modal';
 import { RemoteProjectPickerModal } from '@/packages/core-ui/remote-project-picker/remote-project-picker-modal';
 import type { RemoteFilesystemBrowseResult } from '@/packages/core-ui/remote-project-picker/remote-filesystem';
 import {
@@ -73,7 +74,7 @@ import {
   normalizeWorkspaceThemeColor,
 } from '@/packages/shared/workspace-project-appearance';
 import { installAppModalGlobalErrorLogging, logAppModalError } from '@/packages/core-ui/app-modal-error-log';
-import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
+import { postAppModalHostMessage, type SettingsRemoteSection } from '@/packages/core-ui/app-modal-host-bridge';
 import { MissingProjectFolderModal } from '@/packages/core-ui/missing-project-folder-modal';
 import { useSidebarStore } from '@/packages/core-ui/sidebar-store';
 import {
@@ -110,6 +111,7 @@ type AppModalKind =
   | 'firstUserMessage'
   | 'remoteGxserverInstall'
   | 'remoteProjectPicker'
+  | 'remoteSetup'
   | 'renameSession'
   | 'sessionNote'
   | 'settings'
@@ -149,6 +151,7 @@ const ONE_SHOT_NATIVE_FIT_HEIGHT_MODAL_SELECTORS: Partial<Record<AppModalKind, s
   portlessSetup: '.portless-setup-modal-shadcn',
   remoteGxserverInstall: '.remote-gxserver-install-modal',
   remoteProjectPicker: '.remote-project-picker-dialog',
+  remoteSetup: '.remote-setup-modal',
   renameSession: '.session-rename-modal-shadcn',
   renameWorktree: '.worktree-rename-modal-shadcn',
   sessionNote: '.session-note-modal-shadcn',
@@ -232,6 +235,7 @@ type AppModalHostMessage =
       worktreeDeleteDraft?: WorktreeDeleteModalDraft;
       worktreeRenameDraft?: WorktreeRenameModalDraft;
       initialRemoteMachineId?: string;
+      initialRemoteSection?: SettingsRemoteSection;
       initialSection?: MainSettingsInitialSectionId;
       /** CDXC:StashedPromptSessionAssociation 2026-08-24: see StashedPromptsModalState. */
       initialScope?: StashedPromptsScope;
@@ -1179,6 +1183,7 @@ function AppModalHost() {
     portlessSetup,
     settingsInitialSection,
     settingsInitialRemoteMachineId,
+    settingsInitialRemoteSection,
     settingsInitialSearchQuery,
     settingsInitialTabOverride,
   } = useModalStateFromNative();
@@ -1811,6 +1816,14 @@ function AppModalHost() {
         }}
         onCancel={closeModal}
       />
+      <RemoteSetupModal
+        isOpen={activeModal === 'remoteSetup'}
+        onClose={closeModal}
+        onOpenExternalUrl={(url) => {
+          vscode.postMessage({ type: 'openExternalUrl', url });
+        }}
+        rpc={gpuiBootstrapRemoteSetupRpc()}
+      />
       <RemoteProjectPickerModal
         initialQuery={remoteProjectPicker?.initialQuery}
         isOpen={activeModal === 'remoteProjectPicker' && remoteProjectPicker !== undefined}
@@ -2228,6 +2241,7 @@ function AppModalHost() {
         automateIsExperimental={window.__ghostex_APP_MODAL_HOST_ID__ !== 'gpui'}
         initialSection={settingsInitialSection}
         initialRemoteMachineId={settingsInitialRemoteMachineId}
+        initialRemoteSection={settingsInitialRemoteSection}
         initialSearchQuery={settingsInitialSearchQuery}
         initialTab={settingsInitialTab}
         isOpen={isSettingsRenderable}
@@ -2732,6 +2746,7 @@ function useModalStateFromNative() {
   const [appIconState, setAppIconState] = useState<AppIconStateMessage>();
   const [settingsInitialSection, setSettingsInitialSection] = useState<MainSettingsInitialSectionId>();
   const [settingsInitialRemoteMachineId, setSettingsInitialRemoteMachineId] = useState<string>();
+  const [settingsInitialRemoteSection, setSettingsInitialRemoteSection] = useState<SettingsRemoteSection>();
   const [settingsInitialSearchQuery, setSettingsInitialSearchQuery] = useState<string>();
   const [settingsInitialTabOverride, setSettingsInitialTabOverride] = useState<SettingsModalTab>();
   const activeModalRef = useRef<AppModalKind | undefined>(activeModal);
@@ -3313,10 +3328,16 @@ function useModalStateFromNative() {
                 ? message.initialRemoteMachineId
                 : undefined
             );
+            setSettingsInitialRemoteSection(
+              message.initialRemoteSection === 'easyConnect' || message.initialRemoteSection === 'tailscale'
+                ? message.initialRemoteSection
+                : undefined
+            );
             setSettingsInitialTabOverride(isSettingsModalTab(message.initialTab) ? message.initialTab : undefined);
           } else {
             setSettingsInitialSection(undefined);
             setSettingsInitialRemoteMachineId(undefined);
+            setSettingsInitialRemoteSection(undefined);
             setSettingsInitialSearchQuery(undefined);
             setSettingsInitialTabOverride(undefined);
           }
@@ -3597,6 +3618,7 @@ function useModalStateFromNative() {
     appIconState,
     settingsInitialSection,
     settingsInitialRemoteMachineId,
+    settingsInitialRemoteSection,
     settingsInitialSearchQuery,
     settingsInitialTabOverride,
   };
@@ -3820,6 +3842,7 @@ function isModalRenderable({
       return portlessSetup !== undefined;
     case 'previousSessions':
     case 'discoverGhostex':
+    case 'remoteSetup':
     case 'watchGhostexVideo':
     case 'tipsAndTricks':
     case 'firstLaunchSetup':

@@ -67,7 +67,19 @@ pub(crate) fn gpui_connect_remote_gxserver_platform(
             "machineId": config.remote_machine_id,
         }),
     );
+    let uses_easy_connect = config.uses_easy_connect();
+    let remote_machine_id = config.remote_machine_id.clone();
     let result = gpui_connect_remote_gxserver_platform_inner(config, install_approved, progress_tx);
+    /*
+    CDXC:RemotePairing 2026-09-03:
+    A failed Easy Connect attempt must not leave its loopback forwarder
+    registered: the config builder would keep resolving the machine to a
+    dialable `127.0.0.1:<port>` although nothing is connected. The successful
+    forwarder lives until the machine's gxserver connection is terminated.
+    */
+    if uses_easy_connect && !matches!(result.state, GpuiRemoteGxserverConnectState::Connected) {
+        gpui_stop_easy_connect_forward(remote_machine_id.as_str());
+    }
     support_logs::append(
         support_logs::GpuiSupportLog::RemoteGxserverInstall,
         if matches!(result.state, GpuiRemoteGxserverConnectState::Connected) {
@@ -86,6 +98,17 @@ pub(crate) fn gpui_connect_remote_gxserver_platform_inner(
     install_approved: bool,
     progress_tx: Option<mpsc::UnboundedSender<GpuiRemoteGxserverConnectProgress>>,
 ) -> GpuiRemoteGxserverConnectResult {
+    // An Easy Connect machine gets its SSH endpoint here: the forwarder is
+    // started first and every SSH command below dials its loopback port.
+    let config = match gpui_remote_machine_config_with_easy_connect_forward(config) {
+        Ok(config) => config,
+        Err(message) => {
+            return GpuiRemoteGxserverConnectResult::without_connection(
+                GpuiRemoteGxserverConnectState::TunnelFailed,
+                message.as_str(),
+            );
+        }
+    };
     if config.ssh_host.trim().is_empty() || config.remote_machine_id.trim().is_empty() {
         return GpuiRemoteGxserverConnectResult::without_connection(
             GpuiRemoteGxserverConnectState::Invalid,

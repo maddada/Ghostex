@@ -1478,6 +1478,37 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 27;
     "#,
     },
+    Migration {
+        id: "0028_remote_pairing",
+        /*
+        CDXC:RemotePairing 2026-09-03:
+        One live pairing secret, stored only as a hash with its expiry, and
+        the devices that registered through it. The device row keeps the SSH
+        key fingerprint (to find and delete its `authorized_keys` line) and
+        the optional Easy Connect client key (to undo the allow-list entry);
+        `lastSeenAt` is bumped by the phone on each connect.
+        */
+        sql: r#"
+      CREATE TABLE IF NOT EXISTS remote_pairing_secret (
+        stateId TEXT PRIMARY KEY CHECK (stateId <> ''),
+        secretHash TEXT NOT NULL,
+        expiresAt TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS remote_paired_devices (
+        id TEXT PRIMARY KEY CHECK (id <> ''),
+        name TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        sshKeyFingerprint TEXT NOT NULL,
+        tailcatClientKey TEXT,
+        pairedAt TEXT NOT NULL,
+        lastSeenAt TEXT
+      );
+
+      PRAGMA user_version = 28;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1526,10 +1557,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 27);
+        assert_eq!(user_version, 28);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 27);
+        assert_eq!(schema_migration_count(&db), 28);
         assert_eq!(
             explicit_index_names(&db),
             vec![

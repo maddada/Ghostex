@@ -123,6 +123,7 @@ export {
 } from './ghostex-settings/option-tables';
 export {
   type RemoteMachineSettings,
+  type RemoteMachineTransport,
   applyEnabledRemoteMachineOrder,
   isRemoteMachineEnabledInSidebar,
   normalizeRemoteMachineSettings,

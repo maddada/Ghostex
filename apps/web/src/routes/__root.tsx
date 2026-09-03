@@ -10,6 +10,7 @@ import { ExportTranscriptModalHost } from '../app/export-transcript-modal-host';
 import { FindPromptsModalHost } from '../app/find-prompts-host';
 import { RecentProjectsModalHost } from '../app/recent-projects-modal-host';
 import { SessionNoteModalHost } from '../app/session-note-modal-host';
+import { RemoteSetupModalHost } from '../app/remote-setup-modal-host';
 import { SettingsModalHost } from '../app/settings-modal-host';
 import { SpaceEditorModalHost } from '../app/space-editor-modal-host';
 import { TitlebarActions } from '../app/titlebar-actions';
@@ -196,6 +197,7 @@ function GhostexWebShell() {
         <ExportTranscriptModalHost />
         <FindPromptsModalHost />
         <SessionNoteModalHost runtime={runtime} />
+        <RemoteSetupModalHost />
         <SettingsModalHost runtime={runtime} />
         <SpaceEditorModalHost runtime={runtime} />
       </div>

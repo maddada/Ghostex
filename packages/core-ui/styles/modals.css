@@ -3921,27 +3921,90 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 /*
- * CDXC:Tailcat 2026-08-31:
- * The Tailcat panel is the second section on Settings -> Remote and reads like
- * the Portless card: one bordered section, a status badge opposite the heading,
- * and stacked control rows. Pairing material (address + QR) sits in its own
- * block so the monospace blob never squeezes the toggle rows.
+ * CDXC:RemotePairing 2026-09-03:
+ * Settings -> Remote: two path cards side by side (Easy Connect, Tailscale),
+ * the saved-machine grid, then one Advanced collapsible. Cards use the same
+ * bordered-section language as the rest of Settings; the QR block keeps the
+ * light QR tile from squeezing the copy beside it.
  */
-.settings-tailcat-header {
-  align-items: flex-start;
+.settings-remote-from-phone,
+.settings-remote-machines {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-remote-path-cards {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 860px) {
+  .settings-remote-path-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settings-remote-path-card {
+  background: color-mix(in srgb, var(--app-card-active) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  outline: none;
+  padding: 12px;
+}
+
+.settings-remote-path-card:focus-visible {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+
+.settings-remote-path-head {
+  align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
 }
 
-.settings-tailcat-body {
-  display: grid;
-  gap: 10px;
+.settings-remote-path-title {
+  align-items: center;
+  color: var(--app-foreground);
+  display: flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+  min-width: 0;
 }
 
-.settings-tailcat-status-badge {
+.settings-remote-path-icon {
   align-items: center;
   background: color-mix(in srgb, var(--app-card-active) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
+  color: var(--app-muted);
+  display: inline-flex;
+  flex: none;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.settings-remote-path-icon[data-accent] {
+  color: var(--primary);
+}
+
+.settings-remote-badges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.settings-remote-tag,
+.settings-remote-status-badge {
+  align-items: center;
   border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
   color: var(--app-muted);
   display: inline-flex;
@@ -3949,40 +4012,308 @@ html:has(body.app-modal-host-native-window-body) {
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
-  min-height: 24px;
+  min-height: 22px;
   padding: 0 8px;
 }
 
-.settings-tailcat-status-badge[data-status='active'] {
+.settings-remote-tag {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+  color: var(--primary);
+}
+
+.settings-remote-status-badge {
+  background: color-mix(in srgb, var(--app-card-active) 58%, transparent);
+}
+
+.settings-remote-status-badge[data-status='active'] {
   color: color-mix(in srgb, #6ee7b7 78%, var(--app-foreground) 22%);
 }
 
-.settings-tailcat-status-badge[data-status='failed'] {
+.settings-remote-status-badge[data-status='failed'] {
   color: color-mix(in srgb, #f87171 82%, var(--app-foreground) 18%);
 }
 
-.settings-tailcat-status-badge[data-status='needsSetup'] {
+.settings-remote-status-badge[data-status='needsSetup'] {
   color: color-mix(in srgb, #facc15 82%, var(--app-foreground) 18%);
 }
 
-.settings-tailcat-row {
-  align-items: center;
+.settings-remote-ok {
+  color: color-mix(in srgb, #6ee7b7 78%, var(--app-foreground) 22%);
+}
+
+.settings-remote-warn {
+  color: color-mix(in srgb, #facc15 82%, var(--app-foreground) 18%);
+}
+
+.settings-remote-ssh-row {
   background: color-mix(in srgb, var(--app-card-active) 28%, transparent);
   border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  min-height: 48px;
+  display: grid;
+  gap: 4px;
   padding: 10px 12px;
 }
 
-.settings-tailcat-ports-input {
-  flex: 0 0 172px;
+.settings-remote-ssh-row[data-state='off'] {
+  border-color: color-mix(in srgb, #facc15 30%, var(--app-border) 70%);
 }
 
-.settings-tailcat-install,
-.settings-tailcat-pairing,
-.settings-tailcat-keys {
+/* Nested inside a step that already carries the title and detail. */
+.settings-remote-ssh-row[data-compact] {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.settings-remote-ssh-title {
+  align-items: center;
+  color: var(--app-foreground);
+  display: flex;
+  font-size: 12.5px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+.settings-remote-ssh-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.settings-remote-ssh-attempt {
+  margin-top: 4px;
+}
+
+.settings-remote-os-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-remote-os-popover-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.settings-remote-os-popover-title {
+  align-items: center;
+  display: flex;
+  font-size: 12.5px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+.settings-remote-os-popover-steps,
+.settings-remote-steps {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.settings-remote-steps {
+  background: color-mix(in srgb, var(--app-card-active) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
+  padding: 10px 12px;
+}
+
+.settings-remote-step {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+}
+
+.settings-remote-step-number {
+  align-items: center;
+  background: color-mix(in srgb, var(--app-card-active) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
+  border-radius: 999px;
+  color: var(--app-muted);
+  display: inline-flex;
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  height: 20px;
+  justify-content: center;
+  margin-top: 1px;
+  width: 20px;
+}
+
+.settings-remote-step[data-done] .settings-remote-step-number {
+  background: color-mix(in srgb, #6ee7b7 18%, transparent);
+  border-color: color-mix(in srgb, #6ee7b7 40%, transparent);
+  color: color-mix(in srgb, #6ee7b7 78%, var(--app-foreground) 22%);
+}
+
+.settings-remote-step-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-remote-step-title {
+  color: var(--app-foreground);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.settings-remote-qr-block {
+  align-items: start;
+  background: color-mix(in srgb, var(--app-card-active) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 12px;
+}
+
+.settings-remote-qr {
+  background: #f4f4f5;
+  display: inline-flex;
+  flex: none;
+}
+
+.settings-remote-qr-pending {
+  align-items: center;
+  background: color-mix(in srgb, var(--app-card-active) 40%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--app-border) 90%, transparent);
+  height: 168px;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+  width: 168px;
+}
+
+.settings-remote-qr-placeholder {
+  filter: blur(1px);
+  height: 120px;
+  opacity: 0.15;
+  width: 120px;
+}
+
+.settings-remote-qr-meta {
+  color: var(--app-muted);
+  display: grid;
+  font-size: 12px;
+  gap: 6px;
+  line-height: 1.5;
+  min-width: 0;
+}
+
+.settings-remote-qr-meta strong {
+  color: var(--app-foreground);
+}
+
+.settings-remote-qr-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.settings-remote-off-block {
+  align-items: center;
+  background: color-mix(in srgb, var(--app-card-active) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+  display: flex;
+  gap: 14px;
+  padding: 16px;
+}
+
+.settings-remote-off-text {
+  color: var(--app-foreground);
+  display: grid;
+  font-size: 12.5px;
+  gap: 8px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.settings-remote-section-label {
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-remote-paired-devices {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-remote-rows {
+  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
+  display: grid;
+}
+
+.settings-remote-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+.settings-remote-row + .settings-remote-row,
+.settings-remote-row + .settings-remote-field-error,
+.settings-remote-row + .settings-remote-raw-status {
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+}
+
+.settings-remote-row-stacked {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-remote-row-label {
+  align-items: center;
+  color: var(--app-foreground);
+  display: flex;
+  font-size: 12.5px;
+  font-weight: 600;
+  gap: 6px;
+}
+
+.settings-remote-row-value {
+  align-items: center;
+  color: var(--app-muted);
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 12px;
+  gap: 6px;
+  max-width: 60%;
+  min-width: 0;
+}
+
+.settings-remote-mono,
+.settings-remote-command,
+.settings-remote-token,
+.settings-remote-keys-textarea,
+.settings-remote-raw-status,
+.settings-remote-kv-value code {
+  font-family: var(--settings-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
+  font-size: 11px;
+}
+
+.settings-remote-dot {
+  background: color-mix(in srgb, var(--app-muted) 50%, transparent);
+  border-radius: 999px;
+  display: inline-block;
+  height: 8px;
+  width: 8px;
+}
+
+.settings-remote-dot[data-connected] {
+  background: color-mix(in srgb, #6ee7b7 78%, var(--app-foreground) 22%);
+}
+
+.settings-remote-install {
   background: color-mix(in srgb, var(--app-card-active) 18%, transparent);
   border: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
   display: grid;
@@ -3990,79 +4321,123 @@ html:has(body.app-modal-host-native-window-body) {
   padding: 12px;
 }
 
-.settings-tailcat-command-row,
-.settings-tailcat-token-row {
+.settings-remote-command-row {
   align-items: center;
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.settings-tailcat-command,
-.settings-tailcat-token {
+.settings-remote-command,
+.settings-remote-token {
   background: color-mix(in srgb, var(--app-background) 44%, transparent);
   border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
   color: color-mix(in srgb, var(--app-foreground) 88%, var(--app-muted) 12%);
-  font-family: var(--settings-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
-  font-size: 11px;
   min-width: 0;
-  overflow-x: auto;
-  padding: 6px 8px;
+  overflow: hidden;
+  padding: 4px 8px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.settings-tailcat-token {
+.settings-remote-token {
+  max-width: 220px;
+}
+
+.settings-remote-kv {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.settings-remote-kv-key {
+  color: var(--app-muted);
+  flex: none;
+  font-size: 12px;
+}
+
+.settings-remote-kv-value {
+  align-items: center;
+  color: var(--app-foreground);
+  display: inline-flex;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-remote-kv-value code {
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
-.settings-tailcat-pairing-body {
-  align-items: start;
+.settings-remote-manual-values {
   display: grid;
-  gap: 12px;
-  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
 }
 
-.settings-tailcat-qr {
-  background: #f4f4f5;
-  display: block;
-  height: 168px;
-  padding: 0;
-  width: 168px;
-}
-
-.settings-tailcat-keys-toggle {
+.settings-remote-collapsible-toggle {
   justify-content: flex-start;
   justify-self: start;
   padding-inline: 6px;
 }
 
-.settings-tailcat-keys-body {
+.settings-remote-advanced {
   display: grid;
   gap: 8px;
 }
 
-.settings-tailcat-keys-textarea {
-  font-family: var(--settings-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
-  font-size: 11px;
+.settings-remote-advanced-hint {
+  color: var(--app-muted);
+  font-weight: 400;
+  margin-left: 4px;
 }
 
-.settings-tailcat-field-error,
-.settings-tailcat-error {
+.settings-remote-ports-input {
+  flex: 0 0 172px;
+}
+
+.settings-remote-keys-textarea {
+  width: 100%;
+}
+
+.settings-remote-raw-status {
+  color: color-mix(in srgb, var(--app-foreground) 88%, var(--app-muted) 12%);
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  white-space: pre;
+}
+
+.settings-remote-field-error,
+.settings-remote-error {
   color: color-mix(in srgb, #f87171 82%, var(--app-foreground) 18%);
   font-size: 12px;
   line-height: 1.45;
 }
 
-.settings-tailcat-error {
+.settings-remote-field-error {
+  padding: 4px 12px 8px;
+}
+
+.settings-remote-error {
   align-items: flex-start;
   display: flex;
   gap: 8px;
 }
 
-.settings-tailcat-error > svg {
+.settings-remote-error > svg {
   flex: none;
   margin-top: 1px;
+}
+
+.settings-remote-spinner {
+  animation: settings-remote-spin 900ms linear infinite;
+}
+
+@keyframes settings-remote-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /*
@@ -4345,6 +4720,28 @@ html:has(body.app-modal-host-native-window-body) {
   grid-template-columns: minmax(0, 1fr) 5.5rem;
 }
 
+/*
+CDXC:RemotePairing 2026-09-03:
+Easy Connect machines have no host or port field: the user column fills the
+row, and the pasted code's inline verdict is colored like the app's success
+and error text instead of the muted description tone.
+*/
+.settings-remote-machine-user-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-remote-machine-add-mode {
+  margin-bottom: 2px;
+}
+
+.settings-remote-machine-code-accepted {
+  color: color-mix(in srgb, #4ade80 78%, var(--app-foreground) 22%);
+}
+
+.settings-remote-machine-code-rejected {
+  color: color-mix(in srgb, #f87171 82%, var(--app-foreground) 18%);
+}
+
 .settings-remote-machine-add-actions {
   margin-top: 4px;
 }
@@ -4576,14 +4973,19 @@ html:has(body.app-modal-host-native-window-body) {
     .settings-portless-domains,
     .settings-portless-status-badge,
     .settings-portless-status-row,
-    .settings-tailcat-command,
-    .settings-tailcat-install,
-    .settings-tailcat-keys,
-    .settings-tailcat-pairing,
-    .settings-tailcat-qr,
-    .settings-tailcat-row,
-    .settings-tailcat-status-badge,
-    .settings-tailcat-token,
+    .settings-remote-command,
+    .settings-remote-install,
+    .settings-remote-off-block,
+    .settings-remote-os-button,
+    .settings-remote-path-card,
+    .settings-remote-path-icon,
+    .settings-remote-qr-block,
+    .settings-remote-rows,
+    .settings-remote-ssh-row,
+    .settings-remote-status-badge,
+    .settings-remote-steps,
+    .settings-remote-tag,
+    .settings-remote-token,
     .settings-management-help-button,
     .settings-management-icon,
     .settings-management-row,
@@ -5085,4 +5487,317 @@ html:has(body.app-modal-host-native-window-body) {
   font-size: 13px;
   gap: 12px;
   padding: 12px;
+}
+
+/*
+ * CDXC:RemoteSetup 2026-09-03:
+ * Remote Setup (sidebar menu → Mobile & Remote). Two numbered sections, a rows
+ * panel for the app downloads with an in-modal Android install popover, and
+ * two option cards for the connect paths. Everything sits on the shared
+ * `.gx-app-modal` tokens; only the section/row/card geometry is specific.
+ */
+.remote-setup-eyebrow {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.remote-setup-modal-body {
+  gap: 18px;
+}
+
+.remote-setup-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.remote-setup-section-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.remote-setup-section-title {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.remote-setup-section-number,
+.remote-setup-step-number {
+  align-items: center;
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-pill);
+  color: var(--foreground);
+  display: inline-flex;
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+  height: 20px;
+  justify-content: center;
+  width: 20px;
+}
+
+.remote-setup-step-number {
+  height: 18px;
+  width: 18px;
+}
+
+.remote-setup-rows {
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-section);
+  display: flex;
+  flex-direction: column;
+}
+
+.remote-setup-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.remote-setup-row + .remote-setup-row,
+.remote-setup-android-popover + .remote-setup-row {
+  border-top: 1px solid var(--gx-modal-hairline);
+}
+
+.remote-setup-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.remote-setup-row-label {
+  align-items: center;
+  color: var(--foreground);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 6px;
+}
+
+.remote-setup-row-label svg {
+  color: var(--muted-foreground);
+}
+
+.remote-setup-row-detail,
+.remote-setup-muted {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.remote-setup-chevron {
+  transition: transform 120ms ease;
+}
+
+.remote-setup-chevron-open {
+  transform: rotate(180deg);
+}
+
+.remote-setup-android-popover {
+  background: var(--gx-modal-raised);
+  border-top: 1px solid var(--gx-modal-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.remote-setup-android-popover-top {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+}
+
+.remote-setup-android-qr {
+  background: #f4f4f5;
+  border-radius: var(--gx-modal-radius-menu);
+  flex: none;
+  overflow: hidden;
+}
+
+.remote-setup-android-popover-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.remote-setup-android-popover-title {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.remote-setup-android-link-row {
+  align-items: center;
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-control);
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 6px 4px 10px;
+}
+
+.remote-setup-android-link {
+  color: var(--foreground);
+  flex: 1 1 auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-setup-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.remote-setup-step {
+  align-items: flex-start;
+  color: var(--foreground);
+  display: flex;
+  font-size: 12.5px;
+  gap: 8px;
+  line-height: 1.45;
+}
+
+.remote-setup-option-card {
+  background: var(--gx-modal-panel);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-section);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+
+.remote-setup-option-card[data-recommended='true'] {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.remote-setup-option-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+}
+
+.remote-setup-option-icon {
+  align-items: center;
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  border-radius: var(--gx-modal-radius-control);
+  color: var(--foreground);
+  display: inline-flex;
+  flex: none;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.remote-setup-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.remote-setup-option-title {
+  align-items: center;
+  color: var(--foreground);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 500;
+  gap: 8px;
+}
+
+.remote-setup-option-sub {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.remote-setup-tag,
+.remote-setup-badge {
+  border-radius: var(--gx-modal-radius-pill);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 3px 7px;
+}
+
+.remote-setup-tag {
+  background: color-mix(in oklch, var(--primary) 18%, transparent);
+  color: var(--primary);
+}
+
+.remote-setup-badge {
+  background: var(--gx-modal-raised);
+  border: 1px solid var(--gx-modal-hairline);
+  color: var(--muted-foreground);
+}
+
+.remote-setup-option-foot {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.remote-setup-error {
+  color: var(--destructive);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.remote-setup-spinner {
+  animation: remote-setup-spin 900ms linear infinite;
+}
+
+@keyframes remote-setup-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/*
+ * The child window is fitted once to the modal as first rendered (Android
+ * popover closed). Opening the popover afterwards must scroll inside the body
+ * instead of growing past the fixed window.
+ */
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .gx-app-modal.remote-setup-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 100vh;
+  overflow: hidden;
+}
+
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .remote-setup-modal .gx-app-modal-form {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-modal-host-native-window-body[data-app-modal-fit-height='true'] .remote-setup-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }

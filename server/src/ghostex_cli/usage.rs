@@ -65,7 +65,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "android-check [--json]",
-            "Verify this Mac is ready for Ghostex Android",
+            "Verify this computer is ready for Ghostex Android",
         ),
         format_help_command(
             "attach | a [selector]",
@@ -103,6 +103,10 @@ pub fn usage() -> String {
         format_help_command(
             "saved-prompts <action> --payload-json json --json",
             "Read and update the daemon-owned Saved Prompts library",
+        ),
+        format_help_command(
+            "paired-device-seen --device-id <id> --json",
+            "Mark a paired device as connected now (run by the mobile app over SSH)",
         ),
     ]
     .join("\n");

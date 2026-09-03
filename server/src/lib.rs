@@ -28,6 +28,7 @@ pub mod project_docs;
 pub mod project_git_remote;
 pub mod project_icon;
 pub mod protocol;
+pub mod remote_access;
 pub mod repository_clone;
 pub mod resume_lookup;
 pub mod runtime;

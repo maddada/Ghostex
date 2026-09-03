@@ -122,7 +122,7 @@ pub(crate) fn gpui_remote_attach_terminal_plan_from_result(
     let agent_icon = gpui_workspace_attach_agent_icon(attach);
     let title = gpui_workspace_attach_title(attach);
     let clipboard_command =
-        gpui_remote_ghostex_attach_ssh_command(config, &target.execution_target, reference);
+        gpui_remote_ghostex_attach_ssh_command(config, &target.execution_target, reference)?;
     let terminal_remote_command =
         format!("printf '\\033]2;{TEMP_REMOTE_SSH_READY_TITLE}\\007'; {attach_command}");
     let terminal_ssh_command = gpui_remote_ssh_shell_command(
@@ -131,7 +131,7 @@ pub(crate) fn gpui_remote_attach_terminal_plan_from_result(
         terminal_remote_command.as_str(),
         true,
         false,
-    );
+    )?;
     let terminal_command = gpui_remote_attach_terminal_process_command(
         &terminal_ssh_command,
         config.ssh_host.as_str(),
@@ -308,20 +308,20 @@ pub(crate) fn gpui_prepare_remote_resume_clipboard_command(
     let remote_command = cwd
         .map(|cwd| format!("cd {} && {resume_command}", gpui_shell_single_quote(cwd)))
         .unwrap_or_else(|| resume_command.to_string());
-    Ok(gpui_remote_ssh_shell_command(
+    gpui_remote_ssh_shell_command(
         config,
         &target.execution_target,
         remote_command.as_str(),
         false,
         true,
-    ))
+    )
 }
 
 pub(crate) fn gpui_remote_ghostex_attach_ssh_command(
     config: &GpuiRemoteMachineConfig,
     execution_target: &GpuiRemoteExecutionTarget,
     reference: &GpuiRemoteAttachSessionReference,
-) -> String {
+) -> Result<String, String> {
     gpui_remote_ssh_shell_command(
         config,
         execution_target,
@@ -337,13 +337,14 @@ pub(crate) fn gpui_remote_ssh_shell_command(
     remote_command: &str,
     force_tty: bool,
     interactive_login_shell: bool,
-) -> String {
+) -> Result<String, String> {
+    let target_arguments = gpui_remote_ssh_target_arguments(config)?;
     let mut arguments = vec!["ssh".to_string()];
     if force_tty {
         arguments.push("-tt".to_string());
     }
     arguments.extend(gpui_remote_ssh_client_options(config.has_saved_password));
-    arguments.extend(gpui_remote_ssh_target_arguments(config));
+    arguments.extend(target_arguments);
     let command = if interactive_login_shell {
         gpui_remote_command_for_execution_target(execution_target, remote_command)
     } else {
@@ -357,11 +358,11 @@ pub(crate) fn gpui_remote_ssh_shell_command(
         }
     };
     arguments.push(command);
-    arguments
+    Ok(arguments
         .iter()
         .map(|argument| gpui_remote_shell_command_arg(argument))
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(" "))
 }
 
 pub(crate) fn gpui_noninteractive_login_shell_remote_command(command: &str) -> String {

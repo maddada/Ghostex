@@ -4,6 +4,9 @@ import type { GitCommitModalDraft } from './git-commit-modal';
 import type { SettingsModalTab } from './settings-modal';
 import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 
+/** The Settings → Remote cards a deep link can scroll to. */
+export type SettingsRemoteSection = 'easyConnect' | 'tailscale';
+
 export type AppModalKind =
   | 'addProject'
   | 'agentConfig'
@@ -27,6 +30,7 @@ export type AppModalKind =
   | 'firstUserMessage'
   | 'remoteGxserverInstall'
   | 'remoteProjectPicker'
+  | 'remoteSetup'
   | 'delayedSend'
   | 'renameSession'
   | 'sessionNote'
@@ -216,6 +220,13 @@ export type OpenAppModalMessage =
   | {
       initialSearchQuery?: string;
       initialRemoteMachineId?: string;
+      /**
+       * CDXC:RemoteSetup 2026-09-03:
+       * The Remote Setup modal hands off to Settings → Remote scrolled to one
+       * of its two cards (`[data-settings-remote-section=…]`), the same way
+       * `initialRemoteMachineId` scrolls to a machine card.
+       */
+      initialRemoteSection?: SettingsRemoteSection;
       initialTab?: SettingsModalTab;
       modal: 'settings';
       type: 'open';

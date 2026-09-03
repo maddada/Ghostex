@@ -2845,6 +2845,7 @@ fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
         migration: create_gxserver_migration_status(&storage),
         paths,
         presentation_event_sequence,
+        remote_pairing_runtime: crate::remote_access::RemotePairingRuntime::new(),
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),

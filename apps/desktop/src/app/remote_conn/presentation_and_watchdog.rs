@@ -368,11 +368,14 @@ impl GhostexGpuiApp {
         if let Some(mut connection) = self.remote_gxserver_connections.remove(remote_machine_id) {
             connection.terminate();
         }
+        // The Easy Connect forwarder shares the machine's connection lifetime.
+        gpui_stop_easy_connect_forward(remote_machine_id);
     }
 
     pub(crate) fn stop_all_gpui_remote_gxserver_connections(&mut self) {
         for (_, mut connection) in self.remote_gxserver_connections.drain() {
             connection.terminate();
         }
+        gpui_stop_all_easy_connect_forwards();
     }
 }

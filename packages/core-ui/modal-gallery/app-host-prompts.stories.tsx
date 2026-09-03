@@ -7,6 +7,7 @@ import { MissingProjectFolderModal } from '../missing-project-folder-modal';
 import { PortlessSetupModal } from '../portless-setup-modal';
 import { RemoteGxserverInstallModal } from '../remote-gxserver-install-modal';
 import { RemoteProjectPickerModal } from '../remote-project-picker/remote-project-picker-modal';
+import { RemoteSetupModal } from '../remote-setup-modal';
 import { SessionNoteModal } from '../session-note-modal';
 import { SessionRenameModal } from '../session-rename-modal';
 import { UpdateAvailableModal } from '../update-available-modal';
@@ -66,6 +67,37 @@ export const MissingProjectFolder: Story = {
         onRemove={noop}
         projectName='Ghostex'
         projectPath='/Users/story/dev/Ghostex'
+      />
+    </ModalStorySurface>
+  ),
+};
+
+export const RemoteSetup: Story = {
+  render: () => (
+    <ModalStorySurface>
+      <RemoteSetupModal
+        isOpen
+        onClose={noop}
+        onOpenExternalUrl={noop}
+        rpc={async (path) => {
+          if (path === '/api/remoteAccessStatus') {
+            return {
+              computerName: 'Studio',
+              platform: 'macos',
+              ssh: { checkedAt: new Date().toISOString(), detail: null, enabled: true, port: 22 },
+              tailscale: {
+                account: null,
+                installed: false,
+                ip: null,
+                magicDnsName: null,
+                running: false,
+                sshEnabled: null,
+              },
+              username: 'me',
+            };
+          }
+          return {};
+        }}
       />
     </ModalStorySurface>
   ),

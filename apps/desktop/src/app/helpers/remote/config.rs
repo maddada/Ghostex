@@ -21,7 +21,42 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
             .then_some(machine.as_object())
             .flatten()
     })?;
-    let ssh_host = gpui_remote_machine_string_field(machine, "sshHost")?;
+    let transport =
+        if machine.get("transport").and_then(serde_json::Value::as_str) == Some("easyConnect") {
+            GpuiRemoteMachineTransport::EasyConnect
+        } else {
+            GpuiRemoteMachineTransport::Ssh
+        };
+    let easy_connect_address = match transport {
+        GpuiRemoteMachineTransport::EasyConnect => Some(gpui_remote_machine_string_field(
+            machine,
+            "easyConnectAddress",
+        )?),
+        GpuiRemoteMachineTransport::Ssh => None,
+    };
+    let easy_connect_ssh_port = gpui_remote_machine_ssh_port(machine.get("sshPort"))
+        .unwrap_or(GPUI_EASY_CONNECT_DEFAULT_SSH_PORT);
+    /*
+    CDXC:RemotePairing 2026-09-03:
+    An Easy Connect machine's SSH endpoint is the loopback forwarder this app
+    runs for it, so the host and port come from the forwarder registry rather
+    than from Settings. While no forwarder is running the host stays empty;
+    `gpui_remote_ssh_dial_refusal` turns that into an explicit error in every
+    SSH builder, because ssh itself would resolve an empty host to this
+    computer's own sshd.
+    */
+    let (ssh_host, ssh_port) = match transport {
+        GpuiRemoteMachineTransport::Ssh => (
+            gpui_remote_machine_string_field(machine, "sshHost")?,
+            gpui_remote_machine_ssh_port(machine.get("sshPort")),
+        ),
+        GpuiRemoteMachineTransport::EasyConnect => {
+            match gpui_easy_connect_forward_port(remote_machine_id) {
+                Some(port) => (GPUI_EASY_CONNECT_FORWARD_HOST.to_string(), Some(port)),
+                None => (String::new(), None),
+            }
+        }
+    };
     let wsl_distribution = gpui_remote_machine_string_field(machine, "wslDistribution");
     if wsl_distribution
         .as_deref()
@@ -31,10 +66,13 @@ pub(crate) fn gpui_remote_machine_config_from_settings(
     }
     Some(GpuiRemoteMachineConfig {
         remote_machine_id: remote_machine_id.to_string(),
+        transport,
+        easy_connect_address,
+        easy_connect_ssh_port,
         ssh_host,
         ssh_identity_file: gpui_remote_machine_string_field(machine, "sshIdentityFile")
             .map(|path| gpui_expand_remote_identity_file(path.as_str())),
-        ssh_port: gpui_remote_machine_ssh_port(machine.get("sshPort")),
+        ssh_port,
         ssh_user: gpui_remote_machine_string_field(machine, "sshUser"),
         has_saved_password: machine
             .get("sshPasswordSaved")

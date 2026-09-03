@@ -12,7 +12,7 @@ import {
   IconClock,
   IconCloud,
   IconCoffee,
-  IconDeviceMobile,
+  IconDevices,
   IconEdit,
   IconEye,
   IconFileSearch,
@@ -99,7 +99,7 @@ export function SidebarReferenceTopChrome({
   onOpenAutomations,
   onOpenDiscord,
   onOpenHotkeys,
-  onOpenMobile,
+  onOpenRemoteSetup,
   onOpenPowerSettings,
   onOpenPreviousSessions,
   onOpenSettings,
@@ -126,7 +126,7 @@ export function SidebarReferenceTopChrome({
   onOpenAutomations: () => void;
   onOpenDiscord: () => void;
   onOpenHotkeys: () => void;
-  onOpenMobile: () => void;
+  onOpenRemoteSetup: () => void;
   onOpenPowerSettings: () => void;
   onOpenPreviousSessions: () => void;
   onOpenSettings: () => void;
@@ -306,7 +306,7 @@ export function SidebarReferenceTopChrome({
                   dismissSidebarTooltips();
                   setOpenMenu('sortFilter');
                 }}
-                onOpenMobile={() => closeMenuAndRun(onOpenMobile)}
+                onOpenRemoteSetup={() => closeMenuAndRun(onOpenRemoteSetup)}
                 onOpenPreviousSessions={() => closeMenuAndRun(onOpenPreviousSessions)}
                 onOpenSettings={() => closeMenuAndRun(onOpenSettings)}
                 onSearchPreviousSessionsByPrompt={() => closeMenuAndRun(onSearchPreviousSessionsByPrompt)}
@@ -457,7 +457,7 @@ export function SidebarReferenceSettingsDropdown({
   onOpenAutomations,
   onOpenDiscord,
   onOpenHotkeys,
-  onOpenMobile,
+  onOpenRemoteSetup,
   onOpenKeepAwakeMenu,
   onOpenPreviousSessions,
   onOpenSettings,
@@ -476,7 +476,7 @@ export function SidebarReferenceSettingsDropdown({
   onOpenAutomations: () => void;
   onOpenDiscord: () => void;
   onOpenHotkeys: () => void;
-  onOpenMobile: () => void;
+  onOpenRemoteSetup: () => void;
   onOpenKeepAwakeMenu: () => void;
   onOpenPreviousSessions: () => void;
   onOpenSettings: () => void;
@@ -531,7 +531,7 @@ export function SidebarReferenceSettingsDropdown({
       <SidebarReferencePrimaryMenuItem icon={IconUsersGroup} label='Agents Hub' onSelect={onOpenAgentsHub} />
       <SidebarReferencePrimaryMenuItem icon={IconClock} label='Automations Overview' onSelect={onOpenAutomations} />
       <SidebarReferencePrimaryMenuSeparator />
-      <SidebarReferencePrimaryMenuItem icon={IconDeviceMobile} label='Mobile' onSelect={onOpenMobile} />
+      <SidebarReferencePrimaryMenuItem icon={IconDevices} label='Mobile & Remote' onSelect={onOpenRemoteSetup} />
       {PET_CONTROLS_VISIBLE ? (
         <SidebarReferencePrimaryMenuItem icon={IconRobotFace} label='Wake Pet' onSelect={onTogglePetOverlay} />
       ) : null}

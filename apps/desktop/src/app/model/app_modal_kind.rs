@@ -29,6 +29,7 @@ pub(crate) enum GpuiAppModalKind {
     WatchGhostexVideo,
     RemoteGxserverInstall,
     RemoteProjectPicker,
+    RemoteSetup,
     Worktree,
     DeleteWorktree,
     RenameWorktree,
@@ -66,6 +67,7 @@ impl GpuiAppModalKind {
             "watchGhostexVideo" => Some(Self::WatchGhostexVideo),
             "remoteGxserverInstall" => Some(Self::RemoteGxserverInstall),
             "remoteProjectPicker" => Some(Self::RemoteProjectPicker),
+            "remoteSetup" => Some(Self::RemoteSetup),
             "worktree" => Some(Self::Worktree),
             "deleteWorktree" => Some(Self::DeleteWorktree),
             "renameWorktree" => Some(Self::RenameWorktree),
@@ -106,6 +108,7 @@ impl GpuiAppModalKind {
             Self::WatchGhostexVideo => "watchGhostexVideo",
             Self::RemoteGxserverInstall => "remoteGxserverInstall",
             Self::RemoteProjectPicker => "remoteProjectPicker",
+            Self::RemoteSetup => "remoteSetup",
             Self::Worktree => "worktree",
             Self::DeleteWorktree => "deleteWorktree",
             Self::RenameWorktree => "renameWorktree",
@@ -143,6 +146,7 @@ impl GpuiAppModalKind {
             Self::WatchGhostexVideo => "Ghostex Tutorial Video",
             Self::RemoteGxserverInstall => "Ghostex Remote Setup",
             Self::RemoteProjectPicker => "Ghostex Remote Project",
+            Self::RemoteSetup => "Ghostex Mobile & Remote",
             Self::Worktree => "Ghostex Add Worktree",
             Self::DeleteWorktree => "Ghostex Delete Worktree",
             Self::RenameWorktree => "Ghostex Rename Worktree",
@@ -262,6 +266,10 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH),
                 px(APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT),
             ),
+            Self::RemoteSetup => size(
+                px(APP_MODAL_HOST_REMOTE_SETUP_WINDOW_WIDTH),
+                px(APP_MODAL_HOST_REMOTE_SETUP_WINDOW_HEIGHT),
+            ),
             Self::FirstLaunchSetup => size(px(1120.0), px(850.0)),
             Self::WatchGhostexVideo => size(px(1120.0), px(750.0)),
         }
@@ -351,6 +359,7 @@ impl GpuiAppModalKind {
             | Self::RenameSession
             | Self::SessionNote
             | Self::WatchGhostexVideo
+            | Self::RemoteSetup
             | Self::FirstLaunchSetup => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",

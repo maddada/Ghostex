@@ -49,7 +49,7 @@ import {
   createAgentSessionDefaultTitle,
 } from '@/packages/shared/session-grid-contract';
 import { getDefaultSidebarAgentByIcon, type SidebarAgentButton } from '@/packages/shared/sidebar-agents';
-import { DEFAULT_BROWSER_LAUNCH_URL, GHOSTEX_MOBILE_DOWNLOAD_URL } from '@/packages/shared/sidebar-commands';
+import { DEFAULT_BROWSER_LAUNCH_URL } from '@/packages/shared/sidebar-commands';
 
 /*
 CDXC:GxserverRuntimeSplit 2026-08-22:
@@ -70,7 +70,6 @@ export interface GpuiSidebarRuntimeSessionCreateMethods {
   createQuickTerminal(): Promise<void>;
   createQuickAgentSession(agentId: string): Promise<void>;
   openQuickBrowserTab(): void;
-  openMobileBrowserChat(): void;
   openBrowserPaneInGroup(groupId: string): void;
   createSession(groupId?: string | undefined): Promise<void>;
   createProjectTerminal(message: Extract<SidebarToExtensionMessage, { type: 'createProjectTerminal' }>): Promise<void>;
@@ -233,16 +232,6 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
 
   openQuickBrowserTab(this: GpuiSidebarRuntime): void {
     openQuickHeaderBrowserUrl(this, DEFAULT_BROWSER_LAUNCH_URL);
-  },
-
-  openMobileBrowserChat(this: GpuiSidebarRuntime): void {
-    /*
-    CDXC:Mobile 2026-06-16-00:45:
-    Sidebar Mobile is a fixed-destination Quick browser tab, not a project
-    Browser pane, so it reuses the same projectless open-URL origin as Quick
-    Browser.
-    */
-    openQuickHeaderBrowserUrl(this, GHOSTEX_MOBILE_DOWNLOAD_URL);
   },
 
   openBrowserPaneInGroup(this: GpuiSidebarRuntime, groupId: string): void {

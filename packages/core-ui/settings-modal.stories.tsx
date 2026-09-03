@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
-import { SettingsModal } from './settings-modal';
+import { SettingsModal, type TailcatSettingsRpc } from './settings-modal';
 import { DEFAULT_ghostex_SETTINGS, type ghostexSettings } from '../shared/ghostex-settings';
 import { DEFAULT_SIDEBAR_AGENTS } from '../shared/sidebar-agents';
+import { encodeEasyConnectCode, encodeTailscaleCode } from '../shared/ghostex-remote-pairing';
+import type {
+  GxserverPairedDevice,
+  GxserverRemoteAccessStatus,
+  GxserverTailcatStatus,
+} from '../shared/gxserver-protocol';
 import type {
   SidebarAgentHookStatusMessage,
   SidebarGhostexCliStatusMessage,
@@ -54,18 +60,133 @@ const storyProjects: SidebarProjectSettingsItem[] = [
   },
 ];
 
+/**
+ * A scripted gxserver for the Remote tab stories: answers every endpoint the
+ * page polls from in-memory state, so toggles, Turn on SSH access, and Remove
+ * behave like the real daemon without one.
+ */
+function createRemoteStoryRpc({
+  easyConnectEnabled = true,
+  sshEnabled = true,
+}: {
+  easyConnectEnabled?: boolean;
+  sshEnabled?: boolean;
+}): TailcatSettingsRpc {
+  const address = 'tc1q8v3k2m9x7p4r6t8w1y5z2a4c6e8g0j3l5n7q9s1u3w5y7a9c1e3g5i7k9m1o3q5s7u9w1y3';
+  const easyConnect: GxserverTailcatStatus = {
+    allowedClientKeys: [],
+    binaryFound: true,
+    binaryPath: '/Applications/Ghostex.app/Contents/Resources/bin/tailcat',
+    binaryVersion: '0.4.2',
+    enabled: easyConnectEnabled,
+    lastError: null,
+    ports: [22, 58744],
+    running: easyConnectEnabled,
+    token: easyConnectEnabled ? address : null,
+  };
+  const access: GxserverRemoteAccessStatus = {
+    computerName: "Mohamad's Laptop",
+    platform: 'macos',
+    ssh: { checkedAt: new Date().toISOString(), detail: null, enabled: sshEnabled, port: 22 },
+    tailscale: {
+      account: 'madda@github',
+      installed: true,
+      ip: '100.77.81.4',
+      magicDnsName: 'laptop.tail1a2b.ts.net',
+      running: true,
+      sshEnabled: false,
+    },
+    username: 'madda',
+  };
+  let devices: GxserverPairedDevice[] = [
+    {
+      id: 'dev-1',
+      lastSeenAt: new Date().toISOString(),
+      name: 'Pixel 9 Pro',
+      pairedAt: new Date().toISOString(),
+      platform: 'android',
+      sshKeyFingerprint: 'SHA256:aaaa',
+    },
+    {
+      id: 'dev-2',
+      lastSeenAt: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
+      name: 'Studio',
+      pairedAt: '2026-09-01T10:00:00.000Z',
+      platform: 'macos',
+      sshKeyFingerprint: 'SHA256:bbbb',
+    },
+  ];
+  return async (path, params) => {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    switch (path) {
+      case '/api/tailcatStatus':
+        return { status: easyConnect };
+      case '/api/updateTailcatState':
+        if (params.kind === 'setEnabled') {
+          easyConnect.enabled = params.enabled === true;
+          easyConnect.running = easyConnect.enabled;
+          easyConnect.token = easyConnect.enabled ? address : null;
+        } else if (params.kind === 'setPorts' && Array.isArray(params.ports)) {
+          easyConnect.ports = params.ports as number[];
+        } else if (params.kind === 'setAllowedClientKeys' && Array.isArray(params.allowedClientKeys)) {
+          easyConnect.allowedClientKeys = params.allowedClientKeys as string[];
+        }
+        return { status: easyConnect };
+      case '/api/remoteAccessStatus':
+        return access;
+      case '/api/enableSshAccess':
+        access.ssh = { ...access.ssh, checkedAt: new Date().toISOString() };
+        return { message: 'The admin prompt was cancelled.', outcome: 'cancelled', ssh: access.ssh };
+      case '/api/remotePairingCode': {
+        const tailscaleCode = {
+          host: 'laptop.tail1a2b.ts.net',
+          ip: '100.77.81.4',
+          name: access.computerName,
+          port: 22,
+          user: access.username,
+          v: 1 as const,
+        };
+        const easyConnectCode = {
+          address,
+          name: access.computerName,
+          port: 58744,
+          secret: 'story-secret',
+          sshPort: 22,
+          user: access.username,
+          v: 1 as const,
+        };
+        return {
+          ...(easyConnect.enabled
+            ? { easyConnect: { code: easyConnectCode, payload: encodeEasyConnectCode(easyConnectCode) } }
+            : {}),
+          tailscale: { code: tailscaleCode, payload: encodeTailscaleCode(tailscaleCode) },
+        };
+      }
+      case '/api/pairedDevices':
+        return { devices };
+      case '/api/removePairedDevice':
+        devices = devices.filter((device) => device.id !== params.deviceId);
+        return { devices };
+      default:
+        throw new Error(`Story gxserver has no handler for ${path}.`);
+    }
+  };
+}
+
 function SettingsModalStory({
   cuaDriverInstalled,
   cuaPermissionsGranted,
   initialSettings = modalSettings,
   initialTab = 'settings',
   projects,
+  remoteRpc,
 }: {
   cuaDriverInstalled?: boolean;
   cuaPermissionsGranted?: boolean;
   initialSettings?: ghostexSettings;
-  initialTab?: 'settings' | 'integrations' | 'projects' | 'agents' | 'actions' | 'openTargets' | 'hotkeys';
+  initialTab?: 'settings' | 'integrations' | 'projects' | 'agents' | 'actions' | 'openTargets' | 'hotkeys' | 'remote';
   projects?: SidebarProjectSettingsItem[];
+  remoteRpc?: TailcatSettingsRpc;
 }) {
   const [settings, setSettings] = useState<ghostexSettings>(initialSettings);
   const [agentHookStatus, setAgentHookStatus] = useState<SidebarAgentHookStatusMessage>({
@@ -184,6 +305,7 @@ function SettingsModalStory({
         onRequestGhostexCliStatus={() => undefined}
         projects={projects}
         settings={settings}
+        tailcatRpc={remoteRpc}
         theme={settings.sidebarTheme === 'light-orange' ? 'light-orange' : 'dark-blue'}
       />
     </div>
@@ -251,6 +373,25 @@ export const Hotkeys: Story = {
 
 export const Agents: Story = {
   render: () => <SettingsModalStory initialTab='agents' />,
+};
+
+/*
+ * CDXC:RemotePairing 2026-09-03:
+ * Settings -> Remote against a scripted gxserver: Easy Connect running with a
+ * pairing code and two paired devices, Tailscale detected, SSH access on.
+ */
+export const Remote: Story = {
+  render: () => <SettingsModalStory initialTab='remote' remoteRpc={createRemoteStoryRpc({ sshEnabled: true })} />,
+};
+
+export const RemoteSshAccessOff: Story = {
+  render: () => <SettingsModalStory initialTab='remote' remoteRpc={createRemoteStoryRpc({ sshEnabled: false })} />,
+};
+
+export const RemoteEasyConnectOff: Story = {
+  render: () => (
+    <SettingsModalStory initialTab='remote' remoteRpc={createRemoteStoryRpc({ easyConnectEnabled: false })} />
+  ),
 };
 
 export const Theming: Story = {

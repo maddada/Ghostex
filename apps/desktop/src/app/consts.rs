@@ -824,6 +824,15 @@ pub(crate) const APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_WIDTH: f32 = 560.
 
 pub(crate) const APP_MODAL_HOST_REMOTE_GXSERVER_INSTALL_WINDOW_HEIGHT: f32 = 380.0;
 
+/*
+CDXC:RemoteSetup 2026-09-03:
+Remote Setup opens on a frame tall enough for both sections; the one-shot
+fit-height pass then sizes the child window down to what React rendered.
+*/
+pub(crate) const APP_MODAL_HOST_REMOTE_SETUP_WINDOW_WIDTH: f32 = 560.0;
+
+pub(crate) const APP_MODAL_HOST_REMOTE_SETUP_WINDOW_HEIGHT: f32 = 760.0;
+
 pub(crate) const APP_MODAL_HOST_REMOTE_PROJECT_PICKER_WINDOW_WIDTH: f32 = 720.0;
 
 pub(crate) const APP_MODAL_HOST_REMOTE_PROJECT_PICKER_WINDOW_HEIGHT: f32 = 640.0;

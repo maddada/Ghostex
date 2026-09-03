@@ -87,6 +87,7 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
     execution_target: &GpuiRemoteExecutionTarget,
     local_port: u16,
 ) -> Result<GpuiRemoteSpawnedTunnel, String> {
+    let target_arguments = gpui_remote_ssh_target_arguments(config)?;
     let askpass = gpui_remote_ssh_askpass_script(config)?;
     let mut arguments = Vec::new();
     if matches!(execution_target, GpuiRemoteExecutionTarget::PosixHost) {
@@ -99,7 +100,7 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
         "-L".to_string(),
         format!("{local_port}:127.0.0.1:{GPUI_GXSERVER_LOCAL_API_PORT}"),
     ]);
-    arguments.extend(gpui_remote_ssh_target_arguments(config));
+    arguments.extend(target_arguments);
     if let GpuiRemoteExecutionTarget::WindowsWsl { distribution } = execution_target {
         arguments.push(gpui_remote_command_for_windows_wsl(
             Some(distribution.as_str()),

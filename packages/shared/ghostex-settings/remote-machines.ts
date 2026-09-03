@@ -1,9 +1,21 @@
 import { isRecord, readLooseString } from './primitives';
 
+/**
+ * CDXC:RemotePairing 2026-09-03:
+ * How this computer reaches a saved machine. `ssh` (the default when absent)
+ * dials `sshHost` directly; `easyConnect` dials the machine's Easy Connect
+ * address through a loopback forwarder and needs no reachable host. The
+ * Settings add mode for Easy Connect codes ships with the desktop transport.
+ */
+export type RemoteMachineTransport = 'ssh' | 'easyConnect';
+
 export type RemoteMachineSettings = {
   id: string;
   name: string;
   sshHost: string;
+  transport?: RemoteMachineTransport;
+  /** The Easy Connect address blob (`tc…`) scanned or pasted from the other computer's code. */
+  easyConnectAddress?: string;
   sshIdentityFile?: string;
   sshPasswordSaved?: boolean;
   sshPort?: number;
@@ -56,7 +68,10 @@ export function normalizeRemoteMachineSettings(candidate: unknown): RemoteMachin
     }
     const name = readLooseString(item.name).slice(0, 80);
     const sshHost = readLooseString(item.sshHost).slice(0, 200);
-    if (!name || !sshHost) {
+    const easyConnectAddress = normalizeRemoteMachineEasyConnectAddress(item.easyConnectAddress);
+    const transport: RemoteMachineTransport =
+      item.transport === 'easyConnect' && easyConnectAddress ? 'easyConnect' : 'ssh';
+    if (!name || (!sshHost && transport !== 'easyConnect')) {
       continue;
     }
     let id = normalizeRemoteMachineId(item.id);
@@ -82,6 +97,7 @@ export function normalizeRemoteMachineSettings(candidate: unknown): RemoteMachin
       password fields from drafts/imports must be ignored by normalization.
       */
       ...(item.sshPasswordSaved === true ? { sshPasswordSaved: true } : {}),
+      ...(transport === 'easyConnect' ? { transport, easyConnectAddress } : {}),
       ...(item.disabled === true ? { disabled: true } : {}),
       ...(sshIdentityFile ? { sshIdentityFile } : {}),
       ...(sshPort ? { sshPort } : {}),
@@ -90,6 +106,12 @@ export function normalizeRemoteMachineSettings(candidate: unknown): RemoteMachin
     });
   }
   return normalized;
+}
+
+function normalizeRemoteMachineEasyConnectAddress(value: unknown): string {
+  // The same acceptance rule as readPairingCode's `legacyAddress` branch.
+  const address = readLooseString(value).slice(0, 4000);
+  return address.length > 2 && address.startsWith('tc') && !/\s/u.test(address) ? address : '';
 }
 
 function normalizeRemoteMachineWslDistribution(value: unknown): string {

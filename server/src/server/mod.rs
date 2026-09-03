@@ -97,6 +97,7 @@ use crate::{
         ApiPermission, ListenerKind, MigrationStatus, MinimalHealthResponse, RuntimeMetadata,
         ServerHealthResponse, Transport,
     },
+    remote_access::{handle_remote_access_http, RemotePairingRuntime},
     repository_clone::{
         dispatch_repository_clone_endpoint, RepositoryCloneError, RepositoryCloneJobManager,
         RepositoryCloneRuntime,
@@ -237,6 +238,7 @@ pub(crate) struct AppState {
     pub(crate) migration: MigrationStatus,
     pub(crate) paths: GxserverPaths,
     pub(crate) presentation_event_sequence: Arc<Mutex<()>>,
+    pub(crate) remote_pairing_runtime: RemotePairingRuntime,
     pub(crate) repository_clone_jobs: RepositoryCloneJobManager,
     pub(crate) session_chat_followers: Arc<Mutex<HashMap<String, SessionChatFollowerEntry>>>,
     /// Per-session model/effort detection cache (observer key → last detect).
@@ -483,6 +485,7 @@ pub async fn run_gxserver_foreground(
         migration,
         paths: paths.clone(),
         presentation_event_sequence,
+        remote_pairing_runtime: RemotePairingRuntime::new(),
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),
         session_chat_option_cache: Arc::new(Mutex::new(HashMap::new())),
@@ -2304,6 +2307,15 @@ async fn route_http(
         }
         "/api/tailcatStatus" | "/api/updateTailcatState" => {
             handle_tailcat_http(&state, endpoint.path, request_id, &body_json).await
+        }
+        "/api/remoteAccessStatus"
+        | "/api/enableSshAccess"
+        | "/api/remotePairingCode"
+        | "/api/pairedDevices"
+        | "/api/removePairedDevice"
+        | "/api/pairDevice"
+        | "/api/pairedDeviceSeen" => {
+            handle_remote_access_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/previewRepositoryClone"
         | "/api/startRepositoryClone"

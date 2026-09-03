@@ -604,6 +604,48 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
   remote: {
     sections: [
       {
+        id: 'easyConnect',
+        settings: [
+          {
+            key: 'easyConnectEnabled',
+            subtitle: 'Pair your phone once by scanning a code. No VPN, no accounts.',
+            title: 'Easy Connect',
+          },
+          {
+            key: 'sshAccess',
+            subtitle: 'Easy Connect carries SSH to this computer; Ghostex can turn it on with one admin prompt.',
+            title: 'SSH access',
+          },
+          {
+            key: 'pairingCode',
+            subtitle: 'Scan the pairing code with the Ghostex app, or copy it as text.',
+            title: 'Pairing code',
+          },
+          {
+            key: 'pairedDevices',
+            subtitle: 'Phones and computers paired with this computer; remove one to unpair it.',
+            title: 'Paired devices',
+          },
+        ],
+        title: 'Easy Connect',
+      },
+      {
+        id: 'tailscale',
+        settings: [
+          {
+            key: 'tailscaleSteps',
+            subtitle: 'Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone.',
+            title: 'Tailscale checklist',
+          },
+          {
+            key: 'tailscaleCode',
+            subtitle: 'Scan the Tailscale code with the Ghostex app, or type the host, IP and username.',
+            title: 'Tailscale code',
+          },
+        ],
+        title: 'Tailscale',
+      },
+      {
         id: 'remoteMachines',
         settings: [
           {
@@ -626,13 +668,8 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           },
           {
             key: 'password',
-            subtitle: 'SSH passwords are stored in macOS Keychain.',
+            subtitle: 'SSH passwords are stored in the system keychain.',
             title: 'Password',
-          },
-          {
-            key: 'tailscaleSetup',
-            subtitle: 'Use Tailscale when the remote machine is not reachable on your local network.',
-            title: 'Tailscale setup',
           },
           {
             key: 'installGxserver',
@@ -643,30 +680,32 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         title: 'Remote machines',
       },
       {
-        id: 'tailcat',
+        id: 'remoteAdvanced',
         settings: [
           {
-            key: 'tailcatEnabled',
-            subtitle: 'Reach this machine from another device without the Tailscale VPN.',
-            title: 'Enable Tailcat',
+            key: 'servedPorts',
+            subtitle: 'Local ports Easy Connect exposes to paired phones.',
+            title: 'Easy Connect served ports',
           },
           {
-            key: 'tailcatPairingAddress',
-            subtitle: 'Pairing address and QR code paired devices dial.',
-            title: 'Pairing address',
-          },
-          {
-            key: 'tailcatPorts',
-            subtitle: 'Local ports tailcat exposes to paired clients.',
-            title: 'Served ports',
-          },
-          {
-            key: 'tailcatAllowedClientKeys',
-            subtitle: 'Client keys allowed to connect; empty allows any paired client.',
+            key: 'allowedClientKeys',
+            subtitle: 'Client keys allowed to connect; empty allows any device that scanned the code.',
             title: 'Allowed client keys',
           },
+          {
+            key: 'pairingAddress',
+            subtitle: 'The raw Easy Connect address inside the QR, for pasting by hand.',
+            title: 'Pairing address',
+          },
+          { key: 'binary', subtitle: 'Path and version of the Easy Connect binary.', title: 'Easy Connect binary' },
+          { key: 'gxserver', subtitle: 'Local API the app and phones talk to.', title: 'gxserver' },
+          {
+            key: 'rawStatus',
+            subtitle: 'Raw Easy Connect status JSON for bug reports.',
+            title: 'Raw Easy Connect status',
+          },
         ],
-        title: 'Tailcat',
+        title: 'Advanced',
       },
     ],
     title: 'Remote',

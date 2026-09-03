@@ -53,7 +53,7 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
             "-L".to_string(),
             format!("127.0.0.1:{local_port}:127.0.0.1:{SOURCE_CODE_SERVER_REMOTE_PORT}"),
         ]);
-        arguments.extend(gpui_remote_ssh_target_arguments(machine_config));
+        arguments.extend(gpui_remote_ssh_target_arguments(machine_config)?);
         arguments.push(gpui_remote_command_for_execution_target(
             execution_target,
             source_code_server_remote_launch_command(target.project_path.as_path()).as_str(),

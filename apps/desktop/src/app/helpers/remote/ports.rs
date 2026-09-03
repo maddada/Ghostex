@@ -41,8 +41,25 @@ pub(crate) fn gpui_prepare_remote_ports_browser_page(
     if result.exit_code != 0 {
         return Err("Listing the remote machine's ports over SSH failed.".to_string());
     }
-    let ports = gpui_parse_remote_listening_ports(result.stdout.as_str());
-    let html = gpui_remote_ports_page_html(config.ssh_host.trim(), &ports);
+    let mut ports = gpui_parse_remote_listening_ports(result.stdout.as_str());
+    /*
+    CDXC:RemotePairing 2026-09-03:
+    Over Easy Connect the saved host is this app's loopback forwarder, so a
+    `http://127.0.0.1:<port>/` link would open the local computer, not the
+    remote one. No port on such a machine is directly reachable from here;
+    every one is listed as reach-via-port-forward, under the machine's name.
+    */
+    let via_easy_connect = config.uses_easy_connect();
+    let page_host = if via_easy_connect {
+        for entry in &mut ports {
+            entry.remotely_reachable = false;
+        }
+        gpui_remote_machine_name_from_settings(config.remote_machine_id.as_str())
+            .unwrap_or_else(|| "Easy Connect machine".to_string())
+    } else {
+        config.ssh_host.trim().to_string()
+    };
+    let html = gpui_remote_ports_page_html(page_host.as_str(), &ports, via_easy_connect);
     let directory = shared_settings::ghostex_storage_paths()
         .state_dir
         .join("remote-ports");
@@ -154,6 +171,7 @@ pub(crate) fn gpui_remote_ports_link_host(ssh_host: &str) -> String {
 pub(crate) fn gpui_remote_ports_page_html(
     ssh_host: &str,
     ports: &[GpuiRemoteListeningPort],
+    via_easy_connect: bool,
 ) -> String {
     let escaped_host = gpui_remote_ports_page_html_escape(ssh_host);
     let link_host = gpui_remote_ports_page_html_escape(&gpui_remote_ports_link_host(ssh_host));
@@ -193,6 +211,11 @@ pub(crate) fn gpui_remote_ports_page_html(
     }
     let loopback_section = if loopback_rows.is_empty() {
         String::new()
+    } else if via_easy_connect {
+        format!(
+            "<h2>Listening on the remote</h2>\
+             <p class=\"hint\">This machine is reached through Easy Connect, so none of its ports can be opened directly from here; reach them with an SSH port forward.</p>\n{loopback_rows}"
+        )
     } else {
         format!(
             "<h2>Bound to localhost on the remote</h2>\

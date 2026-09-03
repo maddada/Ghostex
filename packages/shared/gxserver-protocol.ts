@@ -12,6 +12,7 @@ CDXC:GxserverProtocol 2026-06-22-16:17:
 Local starts now rely only on server and no longer keep the deleted gxserver/ TypeScript source tree. Keep the TypeScript protocol contract in packages/shared/ so native web builds and Rust daemon packaging consume an app-owned contract without reaching into gxserver/.
 */
 
+import type { EasyConnectCode, TailscaleCode } from './ghostex-remote-pairing';
 import type {
   GxserverSessionChatAppendedEvent,
   GxserverSessionChatReplacedEvent,
@@ -172,6 +173,13 @@ export type GxserverEndpointPath =
    * first prompt reaches the agent the session's agent is fixed.
    */
   | '/api/switchDraftAgent'
+  /*
+   * CDXC:SwitchAccount 2026-09-03:
+   * Moves a PROMPTED session onto another agent configuration of the same CLI
+   * family (another account), so the client's Full Reload resumes the same
+   * conversation under that agent's command.
+   */
+  | '/api/switchSessionAgent'
   | '/api/readAgentLaunchPlan'
   | '/api/readAgentResumePlan'
   | '/api/requestSessionRename'
@@ -305,6 +313,13 @@ export type GxserverEndpointPath =
   | '/api/updatePortlessState'
   | '/api/tailcatStatus'
   | '/api/updateTailcatState'
+  | '/api/remoteAccessStatus'
+  | '/api/enableSshAccess'
+  | '/api/remotePairingCode'
+  | '/api/pairedDevices'
+  | '/api/removePairedDevice'
+  | '/api/pairDevice'
+  | '/api/pairedDeviceSeen'
   | '/api/installTool'
   | '/api/browseFilesystem'
   | '/api/destructiveAdminAction';
@@ -489,6 +504,107 @@ export type GxserverTailcatStateUpdate =
   | { kind: 'setEnabled'; enabled: boolean }
   | { kind: 'setPorts'; ports: readonly number[] }
   | { kind: 'setAllowedClientKeys'; allowedClientKeys: readonly string[] };
+
+/*
+CDXC:RemotePairing 2026-09-03:
+Remote access status (SSH access + Tailscale + this computer's identity) and
+the pairing codes shown in Settings → Remote. The structured pairing payloads
+come from `/api/remotePairingCode`, never from the raw sidecar token, so the
+QR can carry the user, ports, and the one-time pairing secret.
+*/
+export type GxserverRemoteAccessPlatform = 'macos' | 'windows' | 'linux';
+
+export interface GxserverRemoteSshAccessStatus {
+  enabled: boolean;
+  /** The SSH port that was probed (the one Easy Connect serves). */
+  port: number;
+  /** ISO timestamp of the probe. */
+  checkedAt: string;
+  /** Per-OS service detail (launchd / systemd / Windows service state). */
+  detail: string | null;
+}
+
+export interface GxserverRemoteTailscaleStatus {
+  installed: boolean;
+  running: boolean;
+  /** Signed-in login name, or the tailnet name when the login is unknown. */
+  account: string | null;
+  /** MagicDNS name without the trailing dot. */
+  magicDnsName: string | null;
+  /** First Tailscale IP (100.x.y.z). */
+  ip: string | null;
+  /** Whether this node runs Tailscale SSH; null when Tailscale is not running. */
+  sshEnabled: boolean | null;
+}
+
+export interface GxserverRemoteAccessStatus {
+  computerName: string;
+  username: string;
+  platform: GxserverRemoteAccessPlatform;
+  ssh: GxserverRemoteSshAccessStatus;
+  tailscale: GxserverRemoteTailscaleStatus;
+}
+
+export type GxserverEnableSshAccessOutcome = 'enabled' | 'cancelled' | 'failed';
+
+export interface GxserverEnableSshAccessResult {
+  outcome: GxserverEnableSshAccessOutcome;
+  message: string | null;
+  /** SSH status re-read after the enable attempt. */
+  ssh: GxserverRemoteSshAccessStatus;
+}
+
+export interface GxserverRemotePairingCodeResult {
+  /** Present only while Easy Connect is running with a published address. */
+  easyConnect?: { payload: string; code: EasyConnectCode };
+  /** Present only while Tailscale is running with a MagicDNS name or IP. */
+  tailscale?: { payload: string; code: TailscaleCode };
+}
+
+export interface GxserverPairedDevice {
+  id: string;
+  name: string;
+  platform: string;
+  pairedAt: string;
+  lastSeenAt: string | null;
+  sshKeyFingerprint: string;
+}
+
+// M2 (paired devices + pairing registration): served by
+// `server/src/remote_access/{paired_devices,pair_device}.rs`.
+export interface GxserverPairedDevicesResult {
+  devices: readonly GxserverPairedDevice[];
+}
+
+export interface GxserverRemovePairedDeviceParams {
+  deviceId: string;
+}
+
+export interface GxserverRemovePairedDeviceResult {
+  devices: readonly GxserverPairedDevice[];
+}
+
+export interface GxserverPairDeviceParams {
+  secret: string;
+  deviceName: string;
+  platform: string;
+  sshPublicKey: string;
+  tailcatClientKey?: string;
+}
+
+export interface GxserverPairDeviceResult {
+  deviceId: string;
+  user: string;
+  computerName: string;
+}
+
+export interface GxserverPairedDeviceSeenParams {
+  deviceId: string;
+}
+
+export interface GxserverPairedDeviceSeenResult {
+  device: GxserverPairedDevice;
+}
 
 export interface GxserverServerHealthResponse extends GxserverMinimalHealthResponse {
   buildIdentity: string;
@@ -2058,6 +2174,32 @@ export interface GxserverSwitchDraftAgentResult {
 }
 
 /*
+CDXC:SwitchAccount 2026-09-03:
+`/api/switchSessionAgent` rewrites which agent configuration a PROMPTED session
+launches with, keeping its provider conversation. It does not cycle the
+provider: the caller runs Full Reload (sleep, then wake) afterwards, and the
+wake's resume plan carries the new agent's command. `agentId` must be one of
+the rows the daemon published in the session's `switchableAgents`.
+*/
+export interface GxserverSwitchSessionAgentParams extends GxserverSessionLifecycleParams {
+  agentId: string;
+}
+
+export interface GxserverSwitchSessionAgentResult {
+  agentId: string;
+  plan: GxserverAgentResumePlan;
+  session: GxserverSessionDomainState;
+}
+
+/** One account a session can be moved to; the same shape as chat's `availableAgents` rows. */
+export interface GxserverSwitchableSessionAgent {
+  agentId: string;
+  baseAgentId: string;
+  icon: string;
+  name: string;
+}
+
+/*
 CDXC:SessionChatComposerReady 2026-08-26:
 readSessionTerminalTail answers "is the agent CLI's input box on screen, and if
 not, what IS on screen". The daemon reads the same capture every other
@@ -2622,6 +2764,13 @@ export interface GxserverPresentationSession {
    * that predate the terminal action-bar badge.
    */
   stashedPromptCount?: number;
+  /**
+   * CDXC:SwitchAccount 2026-09-03:
+   * The same-family agent configurations (accounts) this prompted session can
+   * be resumed under, resolved by the owning daemon. ABSENT when there is
+   * nothing to switch to and on daemons that predate the feature.
+   */
+  switchableAgents?: readonly GxserverSwitchableSessionAgent[];
   sessionPersistenceProvider?: 'tmux' | 'zmx' | 'zellij';
   sessionTag?: GxserverSessionTag;
   sendWhenAllProjectSessionsStopActive?: boolean;

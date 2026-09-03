@@ -9,6 +9,7 @@ import {
   type UIEvent as ReactUIEvent,
 } from 'react';
 import { cn } from '@/packages/components/utils';
+import type { SettingsRemoteSection } from './app-modal-host-bridge';
 import { Button } from '@/packages/components/ui/button';
 import { Command } from '@/packages/components/ui/command';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
@@ -144,7 +145,7 @@ import { OpenTargetsSettingsTab } from './settings-modal/tabs/open-targets';
 import { OSIntegrationSettingsTab } from './settings-modal/tabs/os-integration';
 import { ProjectsSettingsPanel } from './settings-modal/tabs/projects';
 import { RemoteSettingsTab } from './settings-modal/tabs/remote';
-import { type TailcatSettingsRpc } from './settings-modal/tabs/remote-tailcat';
+import { type RemoteSetupRpc } from './remote-setup-modal/gxserver-rpc';
 import {
   HotkeySettingsSectionId,
   MainSettingsScrollTargetId,
@@ -173,7 +174,16 @@ import { createSettingsActions, type GhosttySettingsAction } from './settings-mo
 import { getActiveSettingsModalScrollViewport } from './settings-modal/scroll-targets';
 
 export type { SettingsModalTab } from './settings-modal-tabs';
-export { gpuiBootstrapTailcatRpc, type TailcatSettingsRpc } from './settings-modal/tabs/remote-tailcat';
+/**
+ * CDXC:RemotePairing 2026-09-03:
+ * Settings → Remote talks to gxserver through the same RPC the Remote Setup
+ * modal uses. The `tailcat*` names stay as the host-facing prop/export names
+ * so the desktop modal host and the web host keep working unchanged.
+ */
+export {
+  gpuiBootstrapRemoteSetupRpc as gpuiBootstrapTailcatRpc,
+  type RemoteSetupRpc as TailcatSettingsRpc,
+} from './remote-setup-modal/gxserver-rpc';
 
 const GHOSTTY_THEME_UNMANAGED_VALUE = '__ghostex_ghostty_theme_unmanaged__';
 
@@ -236,6 +246,8 @@ export type SettingsModalProps = {
   initialSection?: MainSettingsInitialSectionId;
   initialSearchQuery?: string;
   initialRemoteMachineId?: string;
+  /** CDXC:RemoteSetup 2026-09-03: Remote tab card to scroll to (consumed by the Remote tab). */
+  initialRemoteSection?: SettingsRemoteSection;
   initialTab?: SettingsModalTab;
   isOpen: boolean;
   presentation?: SettingsModalPresentation;
@@ -280,11 +292,11 @@ export type SettingsModalProps = {
   projects?: SidebarProjectSettingsItem[];
   settings?: ghostexSettings;
   /**
-   * Talks to the gxserver that supervises the tailcat sidecar. Absent where the
-   * host has no daemon connection, which leaves the Remote page's Tailcat
-   * section out entirely.
+   * Talks to the gxserver that owns Easy Connect and SSH access. Absent where
+   * the host has no daemon connection, which leaves the Remote page's pairing
+   * cards and Advanced section out entirely.
    */
-  tailcatRpc?: TailcatSettingsRpc;
+  tailcatRpc?: RemoteSetupRpc;
   theme?: SidebarTheme;
   vscode?: WebviewApi;
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
@@ -299,6 +311,10 @@ export type SettingsModalProps = {
   appIconState?: SidebarAppIconStateMessage;
   /** Hosts without a native App Icon subsystem hide the section entirely. */
   appIconPickerUnavailable?: boolean;
+  /**
+   * Retained for the hosts that still pass sidebar Portless state; Settings no
+   * longer renders Portless controls (see docs/2026-09-03/mobile-setup plan §5.12).
+   */
   portless?: SidebarPortlessState;
 };
 
@@ -310,6 +326,7 @@ export function SettingsModal({
   initialSection,
   initialSearchQuery,
   initialRemoteMachineId,
+  initialRemoteSection,
   initialTab = 'settings',
   isOpen,
   onChange,
@@ -361,7 +378,6 @@ export function SettingsModal({
   // CDXC:AppIconPicker 2026-06-25-21:50: Prop-driven App Icon state replaces direct host-event listeners.
   appIconState,
   appIconPickerUnavailable = false,
-  portless,
 }: SettingsModalProps) {
   const isFirstLaunchSetup = presentation === 'firstLaunchSetup';
   const normalizedInitialSettings = normalizeghostexSettings(settings);
@@ -2403,7 +2419,7 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.power, 'keepAwakeAllowDisplaySleep') ? (
                               <ToggleField
                                 checked={draft.keepAwakeAllowDisplaySleep}
-                                description='Keep the Mac awake but allow the display to turn off.'
+                                description='Keep the computer awake but allow the display to turn off.'
                                 label='Allow display sleep'
                                 {...getSettingModificationProps('keepAwakeAllowDisplaySleep')}
                                 onChange={(checked) => updateDraft('keepAwakeAllowDisplaySleep', checked)}
@@ -2439,7 +2455,7 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.power, 'keepAwakeWhileWorkingSessions') ? (
                               <ToggleField
                                 checked={draft.keepAwakeWhileWorkingSessions}
-                                description='Keep the Mac awake while any session is Working and for 20 minutes after, so you have time to reply.'
+                                description='Keep the computer awake while any session is Working and for 20 minutes after, so you have time to reply.'
                                 label='Keep awake for working sessions'
                                 {...getSettingModificationProps('keepAwakeWhileWorkingSessions')}
                                 onChange={(checked) => updateDraft('keepAwakeWhileWorkingSessions', checked)}
@@ -2772,6 +2788,7 @@ export function SettingsModal({
                   <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='remote'>
                     <RemoteSettingsTab
                       initialRemoteMachineId={initialRemoteMachineId}
+                      initialRemoteSection={initialRemoteSection}
                       isActive={isOpen && activeTab === 'remote'}
                       onChange={(nextRemoteMachines) =>
                         applySettingsPatch(
@@ -2797,9 +2814,6 @@ export function SettingsModal({
                       onGlobalDocsDirectoryChange={(value) => updateDraft('globalDocsDirectory', value)}
                       onGlobalWorktreeCommandChange={(value) => updateDraft('globalWorktreeCommand', value)}
                       onManageAdditionalDocsFoldersChange={(value) => updateDraft('manageAdditionalDocsFolders', value)}
-                      onPortlessEnabledChange={(checked) => updateDraft('portlessEnabled', checked)}
-                      onPortlessProtocolChange={(protocol) => updateDraft('portlessProtocol', protocol)}
-                      portless={portless}
                       projects={projects}
                       search={extraSettingsTabSearches.projects}
                       searchEmptyState={settingsSearchEmptyState}
