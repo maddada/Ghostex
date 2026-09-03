@@ -1,14 +1,14 @@
 /*
-CDXC:GxserverProtocol 2026-05-30-14:04:
+CDXC:ServerApi 2026-05-30-14:04:
 The gxserver protocol is the shared contract for the daemon, future gx/ghostex CLI clients, macOS clients, and remote clients. JSON fields and endpoint path tokens stay camelCase; protocol mismatch is a hard failure that asks the user to update instead of falling back to compatibility behavior.
 
-CDXC:GxserverProtocol 2026-06-04-03:20:
+CDXC:ServerApi 2026-06-04-03:20:
 `zmxName` is the canonical provider identity and must carry the full server-project-session id. Clients should treat shorter project/session or compact g-* names as legacy display/state data, not as the reconnect target for gxserver zmx sessions.
 
-CDXC:GxserverRendererCommands 2026-06-13-02:24:
+CDXC:CefRuntime 2026-06-13-02:24:
 CLI commands that still require visible macOS UI, AppKit, CEF, or sidebar-local workspace state must enter through a typed gxserver command contract. gxserver owns auth, protocol checks, dispatch, timeouts, and the supported action list; the macOS app is only the renderer-side executor for behavior that cannot live in the daemon yet.
 
-CDXC:GxserverProtocol 2026-06-22-16:17:
+CDXC:ServerApi 2026-06-22-16:17:
 Local starts now rely only on server and no longer keep the deleted gxserver/ TypeScript source tree. Keep the TypeScript protocol contract in packages/shared/ so native web builds and Rust daemon packaging consume an app-owned contract without reaching into gxserver/.
 */
 
@@ -85,7 +85,7 @@ export type GxserverApiPermission = 'fullLocal' | 'remoteAllowed' | 'remoteBlock
 export type GxserverRpcErrorCode =
   | 'badRequest'
   /*
-  CDXC:SessionChatComposerReady 2026-08-26:
+  CDXC:SessionChat 2026-08-26:
   The send was refused because the agent CLI has no input box on screen — it is
   still booting, or a trust/auth/setup screen owns the terminal. Distinct from
   `dependencyUnavailable` (the terminal refused bytes we DID write) because
@@ -168,13 +168,13 @@ export type GxserverEndpointPath =
   | '/api/createAgentSession'
   | '/api/forkSession'
   /*
-   * CDXC:DraftSessions 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * Rewrites which agent CLI a DRAFT session launches. Drafts only — after the
    * first prompt reaches the agent the session's agent is fixed.
    */
   | '/api/switchDraftAgent'
   /*
-   * CDXC:SwitchAccount 2026-09-03:
+   * CDXC:AgentProviders 2026-09-03:
    * Moves a PROMPTED session onto another agent configuration of the same CLI
    * family (another account), so the client's Full Reload resumes the same
    * conversation under that agent's command.
@@ -194,7 +194,7 @@ export type GxserverEndpointPath =
   | '/api/readWorkspaceSessionGroups'
   | '/api/updateWorkspaceSessionGroups'
   /*
-   * CDXC:NavigationHistory 2026-08-19:
+   * CDXC:Navigation 2026-08-19:
    * Titlebar Back/Forward walks a daemon-owned trail of previously active
    * sessions and projects, shared by the gpui desktop titlebar and the web
    * titlebar. See packages/shared/navigation-history for the entry/state contract.
@@ -221,6 +221,7 @@ export type GxserverEndpointPath =
   | '/api/listPreviousSessions'
   | '/api/sessionForkBranches'
   | '/api/rewindSessionChat'
+  | '/api/selectSessionChatModel'
   | '/api/readSessionTranscriptSizes'
   | '/api/transitionSession'
   | '/api/holdSessionsAwake'
@@ -386,16 +387,16 @@ export interface GxserverLegacyLogImportStatus {
 }
 
 /*
-CDXC:PortlessProtocol 2026-06-23-00:25:
+CDXC:Portless 2026-06-23-00:25:
 Phase 12 Portless contracts are metadata-only. Health and presentation may expose enums, counts, stable project/session ids, protocol, hostname, and port fields, while action availability remains explicit and local-Mac-only so remote gxserver payloads cannot advertise runnable privileged setup actions.
 
-CDXC:PortlessSettings 2026-06-23-04:02:
+CDXC:Portless 2026-06-23-04:02:
 Phase 14 adds read-only assigned domains to presentation metadata so Settings
 can show persisted project/worktree hostnames separately from live route
 previews. Keep the payload to stable ids and hostnames; names, paths, full
 URLs, command text, process output, and runtime variables stay out.
 
-CDXC:PortlessFailureUX 2026-06-23-04:28:
+CDXC:Portless 2026-06-23-04:28:
 Phase 16 adds one metadata-only gxserver state update RPC for Portless protocol
 changes, admin results, Disable, retry, and explicit service removal. Payloads
 must stay enum/boolean/protocol only so setup recovery never carries paths,
@@ -816,7 +817,7 @@ export interface GxserverEndpointDescriptor {
 }
 
 /*
-CDXC:GxserverAppUserData 2026-06-24-13:30:
+CDXC:ServerDaemon 2026-06-24-13:30:
 Pinned Prompts use shared React hydrate fields on every client, but persistence
 belongs to gxserver instead of platform-local storage. These RPC payloads can
 include user-authored prompt bodies, so clients must not log request params or
@@ -841,7 +842,7 @@ export interface GxserverSavePinnedPromptParams {
 }
 
 /*
-CDXC:StashedPrompts 2026-07-29-00:00:
+CDXC:SavedPrompts 2026-07-29-00:00:
 Stashed prompts are captured server-side on every prompt-editor save-and-close
 and recalled from the session "Prompts" modal. projectId/sessionId/cwd are
 soft references describing where the prompt was composed; a stash outlives the
@@ -918,7 +919,7 @@ export interface GxserverListStashedPromptsResult {
 }
 
 /*
-CDXC:StashedPromptTags 2026-08-23:
+CDXC:SavedPrompts 2026-08-23:
 Saved Prompts are filed under daemon-owned tags. Favorites is not a separate
 flag but a seeded builtin tag, so the star control and a user tag write the same
 link table. Colors are stored as literal `#rrggbb` because every client
@@ -982,7 +983,7 @@ export interface GxserverDeleteStashedPromptResult {
 }
 
 /*
-CDXC:SessionAgentNotes 2026-08-24:
+CDXC:SessionNotes 2026-08-24:
 A session note is keyed by the PROVIDER conversation id (`agentSessionId`), not
 by the ghostex session id, so "what to do next here" survives closing the
 ghostex session and resuming the same agent conversation later. Clients address
@@ -1046,7 +1047,7 @@ export interface GxserverProjectDirectoryBrowseResult {
 }
 
 /**
- * CDXC:AddProjectNewFolder 2026-08-18:
+ * CDXC:AddProject 2026-08-18:
  * The Add Project dialog can create a destination folder before it adds or
  * clones into it. `name` is a single path segment validated by the daemon (no
  * separators, no `.`/`..`), so the caller names a child of a directory it just
@@ -1279,7 +1280,7 @@ export interface GxserverRunGitActionParams extends GxserverProjectOperationScop
 }
 
 /*
-CDXC:GPUISidebarGit 2026-06-24-16:11:
+CDXC:Git 2026-06-24-16:11:
 Blank GPUI commit messages are generated by gxserver from a registered project and
 the review-approved file set. The renderer sends only project id, selected
 project-relative paths, and the chosen prompt-agent id; gxserver owns staging,
@@ -1306,10 +1307,10 @@ export interface GxserverPullRequestSummary {
 }
 
 /*
-CDXC:GPUISidebarGit 2026-06-24-16:28:
+CDXC:Git 2026-06-24-16:28:
 Direct GPUI PR creation needs a gxserver-owned completion signal before opening the PR or deleting a finished worktree. The RPC accepts only trusted project scope, runs fixed GitHub CLI actions in gxserver, and returns sanitized PR state/URL metadata without raw command output, branch names, titles, commit messages, or shell text.
 
-CDXC:GPUIRemoteNativeActions 2026-06-24-19:25:
+CDXC:RemoteMachines 2026-06-24-19:25:
 Remote GPUI may use this completion signal only as gxserver-confirmed PR state; actual remote browser opens are a separate Rust-owned native side effect that re-runs `prView` through the saved-machine tunnel and opens only a validated HTTPS GitHub PR URL.
 */
 export type GxserverCreatePullRequestParams = GxserverProjectOperationScope;
@@ -1330,7 +1331,7 @@ export interface GxserverRunWorktreeActionParams extends GxserverProjectOperatio
 }
 
 /*
-CDXC:RemoteWorktrees 2026-06-24-18:40:
+CDXC:RemoteMachines 2026-06-24-18:40:
 Remote GPUI Add Worktree and Git branch parity must not trust renderer-provided
 absolute paths or branch targets. These project-id-scoped RPCs let the owning
 gxserver derive worktree paths, opaque open-existing keys, merge branches, and
@@ -1660,7 +1661,7 @@ export interface GxserverProjectDomainState {
   isFavorite: boolean;
   isPinned: boolean;
   /*
-  CDXC:GPUIRecentProjects 2026-06-24-12:27:
+  CDXC:Projects 2026-06-24-12:27:
   GPUI Recent Projects must be gxserver-owned project state, not a label/session
   inference. Parked projects stay in the project domain table with explicit
   recent fields so `/api/listRecentProjects` can return only trusted,
@@ -1677,7 +1678,7 @@ export interface GxserverProjectDomainState {
   recentClosedAt?: string;
   runtimeSettings: Record<string, unknown>;
   /*
-  CDXC:ProjectVisibility 2026-06-30-21:23:
+  CDXC:Projects 2026-06-30-21:23:
   Active project visibility is gxserver-owned so mobile, CLI, GPUI, and macOS omit Remote Attach carrier projects and other hidden containers through the shared daemon contract instead of each client filtering macOS sidebar details.
   */
   systemKind?: 'remoteAttachCarrier';
@@ -1699,7 +1700,7 @@ export interface GxserverRecentProjectDomainState {
 }
 
 /*
-CDXC:SidebarHudContract 2026-06-24-20:34:
+CDXC:AgentLauncher 2026-06-24-20:34:
 GPUI sidebar and app-modal clients should read normalized launcher/action HUD
 rows from gxserver instead of reimplementing project custom-agent/action
 projection in host-specific Rust. The endpoint returns the shared Sidebar HUD
@@ -1707,7 +1708,7 @@ JSON shape only; gxserver owns default rows, hidden built-ins, custom row
 validation, icon allowlists, display order, deleted default actions, and
 active-project command ownership.
 
-CDXC:SidebarHudSettingsMutation 2026-06-24-20:54:
+CDXC:AgentLauncher 2026-06-24-20:54:
 Settings save/delete/order mutations for custom agents and actions use a
 narrow gxserver contract instead of renderer-owned `/api/updateProject` field
 patches. The payload carries only the explicit Settings intent; gxserver owns
@@ -1750,7 +1751,7 @@ export interface GxserverSidebarHudCommandLink {
 export interface GxserverSidebarHudResponse {
   agents: readonly GxserverSidebarHudAgentButton[];
   /**
-   * CDXC:ProjectActions 2026-08-01:
+   * CDXC:Projects 2026-08-01:
    * Present only when the caller asked for `includeAllProjectCommands`.
    * Keyed by project id with worktrees already resolved to their parent's
    * Actions, mirroring the active-project `commands` resolution per project.
@@ -1758,7 +1759,7 @@ export interface GxserverSidebarHudResponse {
   commandsByProject?: Readonly<Record<string, readonly GxserverSidebarHudCommandButton[]>>;
   commands: readonly GxserverSidebarHudCommandButton[];
   /**
-   * CDXC:GlobalActions 2026-08-01:
+   * CDXC:AgentLauncher 2026-08-01:
    * Global Actions apply to every project and are stored daemon-side rather
    * than in project metadata, so they arrive as their own list instead of
    * inside `commands`. Optional because a gxserver older than the app drops
@@ -1768,7 +1769,7 @@ export interface GxserverSidebarHudResponse {
 }
 
 /**
- * CDXC:ProjectActions 2026-08-01:
+ * CDXC:Projects 2026-08-01:
  * Any HUD settings mutation returns a full replacement HUD snapshot, so
  * clients that render per-project quick actions ask the mutation for the same
  * opt-in commandsByProject block readSidebarHud serves. The flag rides beside
@@ -1815,7 +1816,7 @@ type GxserverSidebarHudSettingsMutationIntent =
       playCompletionSound?: boolean;
       showOnProjectRow?: boolean;
       /**
-       * CDXC:GlobalActions 2026-08-01:
+       * CDXC:AgentLauncher 2026-08-01:
        * Global and Project Actions accept the identical action definition and
        * differ only in ownership, so the target selects the list rather than
        * the payload shape. gxserver validates both through one path, which is
@@ -1857,7 +1858,7 @@ export interface GxserverConnectionProfile {
   id: string;
   name: string;
   /**
-   * CDXC:Tailcat 2026-09-01:
+   * CDXC:RemotePairing 2026-09-01:
    * The tailcat transport reaches the remote gxserver's own API port through a
    * client-side pipe, so the profile carries the peer's address blob and the
    * port it serves instead of a baseUrl. `remotePort` defaults to the gxserver
@@ -1940,7 +1941,7 @@ export interface GxserverSessionDomainState {
   sessionId: GxserverSessionId;
   sessionTag?: GxserverSessionTag;
   /**
-   * CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+   * CDXC:StateSync 2026-07-29-00:00:
    * Durable Sidebar V2 lifecycle. Writable only through the guarded
    * settle/snooze RPCs — `/api/updateSession` deliberately ignores these keys —
    * and absent when the session has no lifecycle state. The server-internal
@@ -1993,7 +1994,7 @@ export interface GxserverCreateSessionParams {
   completionRules?: Record<string, unknown>;
   cwd?: string;
   /**
-   * CDXC:DraftSessions 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * Create this agent session as a DRAFT: a real durable row whose agent CLI is
    * started in the background, but which has not received a first prompt yet.
    * gxserver records it as `runtimeSettings.draftStatus = 'draft'` and REMOVES
@@ -2016,7 +2017,7 @@ export interface GxserverCreateSessionParams {
   projectPath?: string;
   providerState?: Partial<GxserverSessionDomainState['providerState']>;
   /**
-   * CDXC:GPUIRemoteSessions 2026-06-24-17:19:
+   * CDXC:RemoteMachines 2026-06-24-17:19:
    * Remote agent starts can ask gxserver to reject unknown custom/default agent ids instead of creating an inert row with no launch command. This lets clients avoid sending renderer-owned command text while still failing honestly when remote project metadata cannot resolve the selected agent.
    */
   requireLaunchCommand?: boolean;
@@ -2036,7 +2037,7 @@ export type GxserverUpdateSessionParams = Partial<Omit<GxserverCreateSessionPara
 };
 
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 Sidebar V2's settle/snooze commands. gxserver enforces the guards its client
 twin (`packages/shared/sidebar-v2-lifecycle.ts`) mirrors: a working or blocked-on-you
 session cannot be settled, a blocked-on-you session cannot be snoozed, and a
@@ -2065,7 +2066,7 @@ export interface GxserverSessionLifecycleResult {
 }
 
 /*
-CDXC:SidebarV2Worktree 2026-07-29:
+CDXC:Worktrees 2026-07-29:
 Sidebar V2's worktree flow. A worktree is an ATTRIBUTE of a session (its cwd
 plus branch), not a registered sibling project, so ONE call creates the
 checkout and the session that lives in it, atomically, server-side.
@@ -2108,7 +2109,7 @@ export interface GxserverCreateWorktreeSessionResult {
 }
 
 /*
-CDXC:SidebarV2Worktree 2026-07-29:
+CDXC:Worktrees 2026-07-29:
 Cleanup for a worktree whose last session just closed. gxserver checks the
 checkout for uncommitted work FIRST: `dirty: true` with `removed: false` means
 it refused and the client must re-ask with `force`. `warnings` carries bounded,
@@ -2147,7 +2148,7 @@ export interface GxserverForkSessionResult {
 }
 
 /*
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 Agent switching is DRAFTS ONLY. A draft has no conversation, so swapping its
 agent needs no confirmation and loses nothing: gxserver kills the draft's
 background CLI, clears the session's agent identity, rebuilds its launch plan
@@ -2174,7 +2175,7 @@ export interface GxserverSwitchDraftAgentResult {
 }
 
 /*
-CDXC:SwitchAccount 2026-09-03:
+CDXC:AgentProviders 2026-09-03:
 `/api/switchSessionAgent` rewrites which agent configuration a PROMPTED session
 launches with, keeping its provider conversation. It does not cycle the
 provider: the caller runs Full Reload (sleep, then wake) afterwards, and the
@@ -2200,7 +2201,7 @@ export interface GxserverSwitchableSessionAgent {
 }
 
 /*
-CDXC:SessionChatComposerReady 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 readSessionTerminalTail answers "is the agent CLI's input box on screen, and if
 not, what IS on screen". The daemon reads the same capture every other
 screen-state reader takes (a direct zmx socket read, single-digit milliseconds)
@@ -2240,7 +2241,7 @@ export interface GxserverReadSessionTerminalTailResult {
 }
 
 /*
-CDXC:ExportTranscript 2026-08-20:
+CDXC:TranscriptExport 2026-08-20:
 exportSessionTranscript renders the session's agent transcript into a markdown
 file so a NEW agent conversation can be started with that file mentioned. The
 transcript only exists on the machine that runs the agent, so clients call this
@@ -2257,7 +2258,7 @@ export interface GxserverExportSessionTranscriptParams {
   projectId: GxserverProjectId;
   sessionId: GxserverSessionId;
   /**
-   * CDXC:ExportTranscriptOptions 2026-08-24:
+   * CDXC:TranscriptExport 2026-08-24:
    * The export dialog's include-toggles. User and agent messages are never
    * optional; these govern the optional record families. Absent values keep
    * the daemon's historical defaults (commands and patches in, reasoning
@@ -2309,7 +2310,7 @@ export interface GxserverSessionLifecycleParams {
 }
 
 /**
- * CDXC:DraftCrashSafety 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * One row per session with unsent composer text, from `/api/listSessionChatDrafts`.
  * Clients reconcile their per-keystroke draft cache from this at boot, because
  * that cache does not survive a kill that skips a clean Chromium shutdown —
@@ -2328,7 +2329,7 @@ export interface GxserverListSessionChatDraftsResult {
 }
 
 /*
-CDXC:MobileKeepAwake 2026-08-19:
+CDXC:KeepAwake 2026-08-19:
 A sleep request says WHO asked. `"automatic"` marks a client's "Sleep inactive
 agents" sweep; anything else (including an absent field, which is what every
 caller sent before this existed) is a user action.
@@ -2359,7 +2360,7 @@ export interface GxserverSleepSessionResult {
 }
 
 /*
-CDXC:MobileKeepAwake 2026-08-19:
+CDXC:KeepAwake 2026-08-19:
 A client that is ATTACHED to sessions it does not own panes for — Ghostex mobile
 over its SSH CLI bridge — renews a keep-awake lease so the machine's Auto Sleep
 sweep cannot retire a terminal the user is looking at on another device.
@@ -2405,7 +2406,7 @@ export interface GxserverHoldSessionsAwakeResult {
 export type GxserverSessionTransitionAction = 'close' | 'sleep';
 export interface GxserverSessionTransitionParams extends GxserverSessionLifecycleParams {
   /*
-  CDXC:ProjectSidebarOwnership 2026-06-02-13:01:
+  CDXC:StateSync 2026-06-02-13:01:
   gxserver owns the shared lifecycle mutation for close/sleep, but macOS owns selected tab and local pane focus. Keep visual order and focus-target selection out of this protocol so pane-tab layout cannot become gxserver-owned state.
   */
   action: GxserverSessionTransitionAction;
@@ -2430,7 +2431,7 @@ export interface GxserverCancelFirstPromptAutoTitleResult {
 }
 
 /**
- * CDXC:DraftSessions 2026-08-28:
+ * CDXC:Drafts 2026-08-28:
  * `'draft'` is projection-only and never durable: gxserver publishes it for a
  * draft session whose synced composer content supplies the row's display title,
  * so a client can tell "the user's unsent text" apart from a real session title.
@@ -2486,7 +2487,7 @@ export interface GxserverPresentationSessionActions {
 }
 
 /*
-CDXC:GxserverPresentation 2026-06-15-17:32:
+CDXC:StateSync 2026-06-15-17:32:
 Presentation clients need provider liveness as a first-class field because domain lifecycle and native pane lifecycle are separate resources. A row can remain visible while its zmx provider is missing or persistence is disabled, and clients must not infer provider existence from `running` alone.
 */
 export type GxserverPresentationProviderSessionState = 'exists' | 'missing' | 'persistence-disabled' | 'unknown';
@@ -2494,12 +2495,12 @@ export type GxserverPresentationProviderSessionState = 'exists' | 'missing' | 'p
 export interface GxserverPresentationProject {
   createdAt: string;
   /*
-  CDXC:GPUIRemoteGit 2026-06-24-18:22:
+  CDXC:Git 2026-06-24-18:22:
   Remote Sidebar Git preferences need current per-project settings in the same trusted presentation row that supplies the project id. Presentation exposes only sanitized Git preference keys so GPUI can preserve existing values while updating one preference without fetching path-bearing domain project lists through the remote bridge.
   */
   gitConfig?: Record<string, unknown>;
   /*
-  CDXC:SidebarV2LogicalProjects 2026-07-29:
+  CDXC:StateSync 2026-07-29:
   The project's `origin` remote URL, probed server-side with TTL caching like
   the worktree topology probe. Sidebar V2 normalizes it client-side into a
   repository identity so the SAME repo checked out on this Mac and on a remote
@@ -2518,7 +2519,7 @@ export interface GxserverPresentationProject {
   */
   gitRemoteOriginUrl?: string | null;
   /*
-  CDXC:SidebarV2LogicalProjects 2026-07-29 (P5 fix round):
+  CDXC:StateSync 2026-07-29 (P5 fix round):
   The repository root the project sits in (`git rev-parse --show-toplevel`),
   resolved in the SAME server-side probe and cache entry as
   `gitRemoteOriginUrl` above, and — like the URL — keyed on a worktree family's
@@ -2536,7 +2537,7 @@ export interface GxserverPresentationProject {
   */
   gitRepositoryRootPath?: string;
   /*
-  CDXC:SidebarV2ProjectIcons 2026-07-29 (discovered icons):
+  CDXC:Icons 2026-07-29 (discovered icons):
   The icon the PROJECT ITSELF ships, discovered server-side inside the checkout
   and shipped as a `data:` URL. Discovery checks well-known favicon and app-icon
   locations, then an icon declared by an HTML entry
@@ -2576,7 +2577,7 @@ export interface GxserverPresentationGroup {
 export type GxserverPresentationSettledOverride = 'active' | 'settled';
 
 /**
- * CDXC:SidebarV2Git 2026-07-29:
+ * CDXC:Git 2026-07-29:
  * The state of the change request that owns a session's branch. `draft` is a
  * separate value rather than a flag on `open` because the sidebar paints it in
  * a different (deliberately quiet) hue: a draft is work in progress, not a
@@ -2585,7 +2586,7 @@ export type GxserverPresentationSettledOverride = 'active' | 'settled';
 export type GxserverPresentationSessionPrState = 'closed' | 'draft' | 'merged' | 'open';
 
 /*
-CDXC:SidebarV2Git 2026-07-29:
+CDXC:Git 2026-07-29:
 Per-session git/PR state, probed SERVER-side from the session's own cwd (a
 worktree session's cwd is its worktree, so the session is the unit of git
 truth). gxserver probes per unique cwd, caches (~60s git, ~5min PR), throttles,
@@ -2616,13 +2617,13 @@ export interface GxserverPresentationSessionGitStatus {
 }
 
 /*
-CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+CDXC:StateSync 2026-07-29-00:00:
 Machine-scoped capability flags. A GPUI sidebar merges snapshots from several
 gxservers; an older daemon simply omits this object, and Sidebar V2 then hides
 settle/snooze affordances and classifies nothing as settled for that machine
 instead of inventing lifecycle out of derived data.
 
-CDXC:SidebarV2Git 2026-07-29:
+CDXC:Git 2026-07-29:
 `sessionGitStatus` is optional on top of that, because a daemon can be new
 enough to publish this block for settle/snooze and still predate the git probe.
 A missing flag means "this machine has no git/PR data to give", and V2 renders
@@ -2633,7 +2634,7 @@ export interface GxserverPresentationCapabilities {
   sessionSettlement: boolean;
   sessionSnooze: boolean;
   /**
-   * CDXC:SidebarSpaces 2026-08-27:
+   * CDXC:Spaces 2026-08-27:
    * `/api/readSidebarSpaces` + `/api/updateSidebarSpaces` are served by this
    * daemon. Absent means the machine has no Spaces at all, and its sidebar
    * section renders its full unfiltered project list — no Space row, no Spaces
@@ -2641,7 +2642,7 @@ export interface GxserverPresentationCapabilities {
    */
   spaces?: boolean;
   /**
-   * CDXC:SidebarV2Worktree 2026-07-29:
+   * CDXC:Worktrees 2026-07-29:
    * `/api/createWorktreeSession` + `/api/removeSessionWorktree` are served by
    * this daemon. Optional for the same reason as `sessionGitStatus`: a machine
    * can be new enough for settle/snooze and still predate the worktree flow.
@@ -2660,7 +2661,7 @@ export interface GxserverPresentationSession {
   agentSessionId?: string;
   agentSessionPath?: string;
   /**
-   * CDXC:SessionForkFamilies 2026-08-28:
+   * CDXC:SessionFork 2026-08-28:
    * Fork lineage derived by the daemon from its own registry, never from the
    * transcript files: the parent session this conversation branched off, how
    * many VISIBLE branches share its earlier history (present only at two or
@@ -2680,7 +2681,7 @@ export interface GxserverPresentationSession {
   delayedSendRemainingLabel?: string;
   delayedSendRemainingMs?: number;
   /**
-   * CDXC:SidebarV2Git 2026-07-29:
+   * CDXC:Git 2026-07-29:
    * Branch, diff stats, and change-request state for this session's cwd.
    * Absent whenever gxserver has nothing to publish: no probe yet, not a git
    * work tree, or a daemon that predates the probe entirely.
@@ -2688,7 +2689,7 @@ export interface GxserverPresentationSession {
   gitStatus?: GxserverPresentationSessionGitStatus;
   groupId: string;
   /**
-   * CDXC:AutoSleepNeverActive 2026-08-22:
+   * CDXC:SessionSleep 2026-08-22:
    * Whether this session has EVER entered working or attention, i.e. whether
    * anybody has prompted it. `lastActiveAt` below cannot answer that: the
    * projection falls back to `createdAt` so labels and sorting always have a
@@ -2699,7 +2700,7 @@ export interface GxserverPresentationSession {
    */
   hasEverBeenActive?: boolean;
   /**
-   * CDXC:DraftSessions 2026-08-28:
+   * CDXC:Drafts 2026-08-28:
    * This session was created from the sidebar and has not received its first
    * user prompt yet. Present ONLY while the session is a draft (never `false`),
    * which is also what a daemon that predates drafts publishes. Sidebars render
@@ -2716,7 +2717,7 @@ export interface GxserverPresentationSession {
   lastActiveAt?: string;
   lifecycleState: GxserverDomainLifecycleState;
   /**
-   * CDXC:ActivitySuppressionPolicy 2026-07-29-12:00:
+   * CDXC:AgentScreenDetection 2026-07-29-12:00:
    * `meaningfulActivityAt` is the recency clients sort by: working blips
    * shorter than gxserver's meaningful threshold never advance it, while a
    * meaningfully working session's value advances live with each snapshot.
@@ -2730,7 +2731,7 @@ export interface GxserverPresentationSession {
   providerSessionState: GxserverPresentationProviderSessionState;
   projectId: GxserverProjectId;
   /**
-   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * CDXC:SessionChat 2026-08-21-b:
    * How many Ghostex-owned chat prompts are held for this session, so the
    * sidebar can badge the agent icon without subscribing to every session's
    * chat. EVERY row counts, `failed` included: a queue stalled behind a failed
@@ -2741,7 +2742,7 @@ export interface GxserverPresentationSession {
    */
   queuedPromptCount?: number;
   /**
-   * CDXC:SessionChatPromptQueue 2026-08-21-b:
+   * CDXC:SessionChat 2026-08-21-b:
    * How many of those rows are `failed` (delivery attempted, held for the user
    * to retry or delete). Non-zero turns the badge red instead of yellow, and
    * `queuedPromptCount - queuedPromptFailedCount` is what still counts as work
@@ -2750,7 +2751,7 @@ export interface GxserverPresentationSession {
   queuedPromptFailedCount?: number;
   sessionId: GxserverSessionId;
   /**
-   * CDXC:SessionAgentNotes 2026-08-24:
+   * CDXC:SessionNotes 2026-08-24:
    * The full note text the user filed against this session's provider
    * conversation (`agentSessionId`), so sidebar rows can show the note in their
    * tooltip and mark the row without a per-session read. The key is ABSENT when
@@ -2765,7 +2766,7 @@ export interface GxserverPresentationSession {
    */
   stashedPromptCount?: number;
   /**
-   * CDXC:SwitchAccount 2026-09-03:
+   * CDXC:AgentProviders 2026-09-03:
    * The same-family agent configurations (accounts) this prompted session can
    * be resumed under, resolved by the owning daemon. ABSENT when there is
    * nothing to switch to and on daemons that predate the feature.
@@ -2776,7 +2777,7 @@ export interface GxserverPresentationSession {
   sendWhenAllProjectSessionsStopActive?: boolean;
   sendWhenAgentStopsActive?: boolean;
   /**
-   * CDXC:SidebarV2Lifecycle 2026-07-29-00:00:
+   * CDXC:StateSync 2026-07-29-00:00:
    * Server-owned Sidebar V2 inbox lifecycle. `settledOverride` is the explicit
    * user pin — "settled" forces the settled shelf, "active" pins the session
    * into the inbox and suppresses auto-settle — and gxserver clears it once
@@ -2814,7 +2815,7 @@ export interface GxserverPresentationSession {
 }
 
 /*
-CDXC:SidebarProjectCollections 2026-07-18-00:00:
+CDXC:Projects 2026-07-18-00:00:
 Colored "Group N" project collections are server-owned structure shared by the
 desktop sidebar and React Native Android. Expansion is client-local UI state.
 The wire state is fully normalized by
@@ -2838,7 +2839,7 @@ export interface GxserverSidebarProjectCollectionsState {
 }
 
 /*
-CDXC:SidebarSpaces 2026-08-27:
+CDXC:Spaces 2026-08-27:
 A Space is a server-owned saved sidebar filter: a name, an icon id, a color, a
 manual position, and the sidebar members it shows. Members are sidebar project
 collections ("groups") and ungrouped projects, and a member may belong to any
@@ -2920,7 +2921,7 @@ export interface GxserverUpdateSidebarSpacesResult {
 
 export interface GxserverPresentationSnapshot {
   /*
-  CDXC:SidebarV2LogicalProjects 2026-07-29:
+  CDXC:StateSync 2026-07-29:
   The inactivity window THIS daemon actually applies in its auto-settle sweep,
   in days. One sidebar renders rows from several daemons, and each daemon reads
   its OWN `sidebarAutoSettleAfterDays`, so a client that applied the local
@@ -3013,7 +3014,7 @@ export interface GxserverPresentationSearchResult {
   agentSessionId?: string;
   agentSessionPath?: string;
   /**
-   * CDXC:PreviousSessions 2026-06-17-17:06:
+   * CDXC:Sessions 2026-06-17-17:06:
    * Previous Sessions list/search responses expose close time separately from lastActiveAt so clients can group and sort restore rows by when the session was closed while still rendering Last Active from actual user activity.
    */
   closedAt?: string;
@@ -3037,7 +3038,7 @@ export interface GxserverPresentationSearchResult {
   primaryTitle?: string;
   sessionId: GxserverSessionId;
   /**
-   * CDXC:PreviousSessions 2026-06-13-15:36:
+   * CDXC:Sessions 2026-06-13-15:36:
    * Previous Sessions search results must carry the same identity and provider metadata needed to render and restore stopped agent rows without rehydrating native sidebar history. Keep raw prompt/user text out of list/search responses; restore-specific command construction stays behind readAgentResumePlan for the selected session.
    */
   sessionPersistenceName?: string;
@@ -3060,7 +3061,7 @@ export interface GxserverPresentationSearchResponse {
 }
 
 /**
- * CDXC:SessionForkFamilies 2026-08-28:
+ * CDXC:SessionFork 2026-08-28:
  * `/api/sessionForkBranches` answers "what else shares this conversation's
  * history". The daemon derives the family from its own registry, so the reply
  * includes the ancestors Previous Sessions hides once something continues from
@@ -3092,7 +3093,7 @@ export interface GxserverSessionForkBranchesResult {
 }
 
 /**
- * CDXC:SessionChatRewind 2026-09-02:
+ * CDXC:SessionChat 2026-09-02:
  * `/api/rewindSessionChat` drives the agent's own rewind flow in its terminal
  * (Claude: `/rewind`, pick the prompt, "Restore conversation") to the point
  * before `messageId`, a user prompt row of the active conversation. The daemon
@@ -3113,6 +3114,29 @@ export interface GxserverRewindSessionChatResult {
   targetMessageId: string;
   /** `uuid` of the new active leaf; null when rewound to before the first prompt. */
   leafId: string | null;
+}
+
+/**
+ * CDXC:AgentScreenDetection 2026-09-03 WHY:
+ * `/api/selectSessionChatModel` drives Codex's own `/model` picker in the
+ * session's terminal (the numbered model list, then the numbered reasoning
+ * list) because Codex has no command form for it: `/model <name>` is sent to
+ * the model as a prompt. The daemon reads the row digits off the screen and
+ * aborts on any mismatch. Codex only.
+ */
+export interface GxserverSelectSessionChatModelParams {
+  projectId: GxserverProjectId;
+  sessionId: GxserverSessionId;
+  /** Codex model id as its picker lists it (`gpt-5.6-sol`). */
+  model: string;
+  /** Effort id the reasoning list must offer for that model (`high`). */
+  effort: string;
+}
+
+export interface GxserverSelectSessionChatModelResult {
+  ok: true;
+  model: string;
+  effort: string;
 }
 
 export interface GxserverTerminalTitleEventParams extends GxserverSessionLifecycleParams {
@@ -3393,7 +3417,7 @@ export type GxserverEvent =
       type: 'presentationSnapshot';
     }
   /*
-   * CDXC:GxserverSubscribeHonorsLastRevision 2026-09-01:
+   * CDXC:StateSync 2026-09-01:
    * The reply to a `subscribePresentation` whose `lastRevision` already names
    * the daemon's current revision. It carries no snapshot on purpose: the
    * subscriber has missed nothing, so re-sending the projection it just applied
@@ -3443,7 +3467,7 @@ export type GxserverEvent =
       type: 'workspaceGroupsChanged';
     }
   /*
-   * CDXC:GlobalActions 2026-08-07:
+   * CDXC:AgentLauncher 2026-08-07:
    * A Global Action write is not a project write, so it produces no
    * presentation delta and live surfaces would otherwise keep a stale list.
    * The event announces the change and bumps the presentation revision; it

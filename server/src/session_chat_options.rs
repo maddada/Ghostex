@@ -1,5 +1,5 @@
 /*
-CDXC:SessionChatDetectedOptions 2026-08-01:
+CDXC:AgentScreenDetection 2026-08-01:
 Reads the CURRENT model / reasoning effort from agent-owned structured
 transcript metadata and the session's terminal scrollback, plus Claude's
 current permission mode from its footer, so the composer's option pills show
@@ -15,8 +15,15 @@ statusline delimiters (`|` for Claude's custom statusline, `·` for Codex's
 footer), every segment is trimmed, and a segment only counts when the WHOLE
 segment matches the grammar. Prose can therefore never false-match (an
 assistant sentence mentioning "high" is one long segment), and the Codex
-session title — which is the footer's own first `·` segment — is excluded by
-the grammar itself.
+session title is excluded by the grammar itself.
+
+CDXC:AgentScreenDetection 2026-09-03 WHY:
+Codex's footer is a user-ordered list (`tui.status_line`), so NO segment
+position carries meaning. An earlier "the first segment is the title" skip
+threw away `gpt-5.6-sol high` on every config that lists
+`model-with-reasoning` first, leaving the pills empty until the first turn's
+transcript record. The whole-segment grammar is the only guard; a title would
+have to be exactly `<model id> <effort>` to be mistaken for one.
 
 Terminal evidence wins per option because it can reflect an idle `/model`
 change before the next response. The latest Claude assistant / Codex
@@ -63,7 +70,7 @@ pub const SESSION_CHAT_OPTION_REDETECT_DELAYS_MS: [u64; 2] = [2_000, 6_000];
 pub const SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS: u64 = 30;
 
 /*
-CDXC:SessionChatTerminalActivity 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 Faster tiers for the same probe, picked by what the LAST one found. A capture is
 a direct zmx socket read, so these are priced, not chosen for feel:
 
@@ -90,7 +97,7 @@ pub const SESSION_CHAT_WORKING_RECONCILE_INTERVAL_TICKS: u64 = 1;
 pub const SESSION_CHAT_OPTION_STARTUP_RECONCILE_TICKS: u64 = 10;
 
 /*
-CDXC:SessionChatScreenProbed (settled 2026-08-30):
+CDXC:AgentScreenDetection (settled 2026-08-30):
 A drawn screen whose statusline has not painted yet must not settle the probe.
 Claude draws its composer chrome (and the permission-mode footer this grammar
 reads) immediately, but the user's statusline script runs asynchronously, so
@@ -123,7 +130,7 @@ pub struct SessionChatDetectedChoice {
 pub enum SessionChatOptionEvidence {
     Terminal,
     Transcript,
-    /// CDXC:ClaudeStatusline 2026-09-03: the JSON Claude Code pipes to its
+    /// CDXC:AgentScreenDetection 2026-09-03 WHY: the JSON Claude Code pipes to its
     /// statusLine command, stored by the Ghostex-installed script.
     Statusline,
 }
@@ -139,7 +146,7 @@ impl SessionChatOptionEvidence {
 }
 
 /*
-CDXC:ClaudeStatusline 2026-09-03:
+CDXC:AgentScreenDetection 2026-09-03 WHY:
 Claude's statusLine payload reports how full the context window is. The chat
 composer renders it as a usage ring (the t3code meter): percentage when Claude
 reports one, tokens over window size when it reports those. Both are optional
@@ -269,7 +276,7 @@ impl SessionChatDetectedOptions {
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 One `zmx history` capture, two readings. The model/effort grammar and the
 terminal-state classifier (session_chat_notice.rs) both want the same screen, so
 they are produced together and cached together — a notice must never cost a
@@ -283,7 +290,7 @@ pub struct SessionChatTerminalDetection {
     /// capture as the model, notice, activity, and composer state.
     pub prompt: Option<crate::session_chat::SessionChatInteractivePrompt>,
     /*
-    CDXC:SessionChatComposerReady 2026-08-26: whether the agent CLI's input box
+    CDXC:SessionChat 2026-08-26: whether the agent CLI's input box
     is on screen and accepting input. Fifth reading of the same capture, for the
     same reason as the second through fourth: it must never cost a spawn.
 
@@ -295,20 +302,20 @@ pub struct SessionChatTerminalDetection {
     pub composer: crate::session_chat_composer::SessionChatComposerReadiness,
     pub notice: Option<crate::session_chat_notice::SessionChatTerminalNotice>,
     /*
-    CDXC:SessionChatTerminalActivity 2026-08-22: live work the CLI reports on
+    CDXC:AgentScreenDetection 2026-08-22: live work the CLI reports on
     screen before transcript JSONL catches up (Claude's current `⏺` line and
     compaction). Third reading of the same capture, for the same reason the
     notice is the second one: it must never cost a spawn.
     */
     pub activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     /*
-    CDXC:SessionChatAgentFleet 2026-08-23: the sub-agents the screen is
+    CDXC:AgentScreenDetection 2026-08-23: the sub-agents the screen is
     painting. Fourth reading of the same capture, same reason as the second and
     third: it must never cost a spawn.
     */
     pub fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>,
     /*
-    CDXC:SessionChatAgentTasks 2026-09-03: Claude's task list, read from its
+    CDXC:SessionChat 2026-09-03: Claude's task list, read from its
     on-disk task store rather than the screen. It rides in the same detection
     because the detector is the one periodic reader every publisher already
     consults; unlike the screen readings it needs no capture, so a failed
@@ -320,7 +327,7 @@ pub struct SessionChatTerminalDetection {
     /// or capped capture must never retire a notice.
     pub captured: bool,
     /*
-    CDXC:SessionChatScreenProbed 2026-08-22 (settled 2026-08-30):
+    CDXC:AgentScreenDetection 2026-08-22 (settled 2026-08-30):
     True once detection has a SETTLED answer for this session — not merely once
     a capture was tried. A capture of a still-booting CLI comes back as a blank
     or shell screen that no classifier recognizes; saying "probed" then makes
@@ -355,7 +362,7 @@ pub type SessionChatOptionsReader = std::sync::Arc<
     dyn Fn(SessionChatOptionsReadMode) -> SessionChatTerminalDetection + Send + Sync,
 >;
 
-/// CDXC:ClaudeStatusline 2026-09-03: given the current agent session id, true
+/// CDXC:AgentScreenDetection 2026-09-03 WHY: given the current agent session id, true
 /// when the stored statusline payload changed since the previous call.
 pub type SessionChatOptionsChangeWatch = std::sync::Arc<dyn Fn(Option<&str>) -> bool + Send + Sync>;
 
@@ -435,13 +442,13 @@ pub fn is_session_chat_option_command_text(agent: Option<&str>, text: &str) -> b
 }
 
 /*
-CDXC:SessionChatTerminalActivity 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 Commands that START long on-screen work. The follower would find a compaction
 on its own within a probe tier, but the user who just typed `/compact` is
 watching for a response RIGHT NOW, and a transcript that sits silent for ten
 seconds before admitting anything is happening reads as a dropped message.
 
-CDXC:SessionChatCompactingStatus 2026-09-02: the fast look is keyed off the
+CDXC:AgentScreenDetection 2026-09-02: the fast look is keyed off the
 transcript row Claude records for the command, not off the chat send path — a
 `/compact` typed straight into the terminal never went through that path and
 used to wait for the idle 30s tier. The send path still treats the command as
@@ -542,17 +549,6 @@ fn line_segments(line: &str) -> Vec<String> {
     line.split(|ch| ch == '|' || ch == '\u{00b7}')
         .map(|segment| segment.trim().to_string())
         .collect()
-}
-
-/// Belt-and-braces companion to the grammar: on a Codex footer (identified by
-/// its `Context N% used` segment) the first segment is the session TITLE, so it
-/// is never eligible.
-fn skips_first_segment(segments: &[String]) -> bool {
-    segments.iter().any(|segment| {
-        segment.starts_with("Context ")
-            && segment.ends_with("% used")
-            && segment.len() > "Context % used".len()
-    })
 }
 
 // ---------------------------------------------------------------------------
@@ -941,7 +937,7 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
 //   ? for shortcuts                                    Gemini 3.8 Flash · high
 //   Gemini 3.8 Flash (High)                       (startup banner, same values)
 //
-// CDXC:SessionChatAntigravityOptions 2026-09-03: the footer's right edge is
+// CDXC:AgentScreenDetection 2026-09-03: the footer's right edge is
 // `<model> · <effort>` for the Gemini rows, whose ids are model and effort
 // flattened (`gemini-3.8-flash-high`, see `agy models`), and a bare `<model>`
 // for the rows without an effort slider. The pill values are the catalog's
@@ -1274,13 +1270,12 @@ pub fn detect_session_chat_selection(
             continue;
         }
         let segments = line_segments(line);
-        let first_eligible = usize::from(skips_first_segment(&segments));
         let matched_before = (
             found.model.is_some(),
             found.effort.is_some(),
             found.mode.is_some(),
         );
-        for segment in segments.iter().skip(first_eligible) {
+        for segment in segments.iter() {
             match agent {
                 SessionChatOptionAgent::Claude => {
                     if found.model.is_none() {
@@ -1458,7 +1453,7 @@ fn transcript_effort_choice(effort: &str) -> Option<SessionChatDetectedChoice> {
 }
 
 /*
-CDXC:ClaudeStatusline 2026-09-03:
+CDXC:AgentScreenDetection 2026-09-03 WHY:
 Claude's transcript records its permission mode too: a `permission-mode` row
 when the mode is set, and `permissionMode` on every user row. Reading them
 gives the mode pill a value before the first screen capture and without any
@@ -1564,7 +1559,7 @@ fn detect_claude_transcript_selection(text: &str) -> Option<SessionChatDetectedS
 }
 
 /*
-CDXC:ClaudeStatusline 2026-09-03:
+CDXC:AgentScreenDetection 2026-09-03 WHY:
 The payload the Ghostex statusLine script stored for this Claude session id.
 Model and effort are the live session values (Claude re-runs the script on
 `/model`, `/effort`, each assistant message, compaction and mode changes),
@@ -1714,7 +1709,7 @@ fn merge_session_chat_option_selections(
 /// then let any current terminal statusline value win per option. `None` means
 /// neither agent-owned source proved a value.
 ///
-/// CDXC:SessionChatTerminalNotices 2026-08-19: the same capture is classified
+/// CDXC:AgentScreenDetection 2026-08-19: the same capture is classified
 /// for terminal-state notices, so both readings ride one process spawn.
 pub fn detect_session_chat_terminal_state(
     repository: &DomainRepository<'_>,
@@ -1724,7 +1719,7 @@ pub fn detect_session_chat_terminal_state(
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
     /*
-    CDXC:SessionChatComposerReady 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     Two independent reasons to spend a capture on this session now. The
     statusline grammar covers three agents; the composer signature table covers
     nine, so an agent with only the latter (cursor, copilot, opencode, gemini,
@@ -1775,7 +1770,7 @@ pub fn detect_session_chat_terminal_state(
             )
         })
         .flatten();
-    // CDXC:SessionChatAgentTasks 2026-09-03: disk, not screen, so it is read
+    // CDXC:SessionChat 2026-09-03: disk, not screen, so it is read
     // whether or not the capture below succeeds.
     let tasks = crate::session_chat_agent_tasks::read_session_chat_agent_tasks(
         claude_session_id.as_deref(),
@@ -1823,7 +1818,7 @@ pub fn detect_session_chat_terminal_state(
         crate::session_chat::detect_cursor_question_prompt(agent_id, &capture.text)
     });
     /*
-    CDXC:SessionChatScreenProbed (settled 2026-08-30): probed only counts once
+    CDXC:AgentScreenDetection (settled 2026-08-30): probed only counts once
     the answer is settled. A capture that failed IS settled — a sleeping or
     stopped session has nothing to read, and that stays true until it runs. A
     capture that succeeded settles only when some classifier recognized the
@@ -2109,11 +2104,13 @@ mod tests {
         assert_eq!(selection.model.as_ref().unwrap().label, "gpt-9.1-nova");
     }
 
+    /// CDXC:AgentScreenDetection 2026-09-03 WHY: `tui.status_line` is user
+    /// ordered, so a footer that lists `model-with-reasoning` first must read
+    /// the same as the default order. Live capture from a session whose config
+    /// puts the model before the thread title.
     #[test]
-    fn codex_session_title_is_never_read_as_a_model() {
-        // A title that literally spells a model+effort is still segment 0 of a
-        // footer line, which the `Context N% used` guard makes ineligible.
-        let text = "  gpt-5.5 low \u{b7} gpt-5.6-sol high \u{b7} 19.8M used \u{b7} Ghostex \u{b7} main \u{b7} Context 29% used \u{b7} weekly 99% left\n";
+    fn codex_model_first_footer_is_read() {
+        let text = "  gpt-5.6-sol high \u{b7} Fix status line parsing \u{b7} 89K used \u{b7} Ghostex \u{b7} main \u{b7} Context 34% used \u{b7} weekly 34% left\n";
         let selection = codex(text).expect("codex footer detected");
         assert_eq!(pair(&selection), (Some("gpt-5.6-sol"), Some("high")));
     }
@@ -2355,7 +2352,7 @@ mod tests {
 }
 
 /*
-CDXC:SessionChatDetectedOptions 2026-08-01:
+CDXC:AgentScreenDetection 2026-08-01:
 Model/effort detection reads structured transcript metadata plus the session's
 zmx scrollback. The latter costs one short-lived process, so the combined read
 is NEVER done per frame or per long-poll tick.
@@ -2366,7 +2363,7 @@ no statusline must not re-spawn `zmx history` on every read. Detection is
 deliberately absent from resolve_session_chat_read_state's fingerprint: hashing
 it would make each 500ms long-poll tick spawn a process.
 
-CDXC:SessionChatTerminalNotices 2026-08-19: the SAME capture is classified for
+CDXC:AgentScreenDetection 2026-08-19: the SAME capture is classified for
 terminal-state notices (login expired, trust dialog, usage limit, a crashed
 CLI), so the cache entry carries both readings and neither costs an extra spawn.
 */
@@ -2385,8 +2382,30 @@ pub(crate) struct SessionChatOptionCacheEntry {
     /// the anchor `SESSION_CHAT_OPTION_MODEL_SETTLE_GRACE` counts from. Cleared
     /// the moment a model (or a screen-owning notice) shows up.
     pub(crate) model_grace_started: Option<std::time::Instant>,
+    /*
+    CDXC:AgentScreenDetection 2026-09-03:
+    The last screen notice that stopped classifying, with the instant it left.
+    Claude Code's Ink redraws and a capture that lands mid-repaint make a banner
+    (the usage-limit line) miss a probe every so often, so the cached notice
+    flipped to None and the next probe minted a fresh `detectedAt` — which is
+    the client's dismissal key, so a card the user had closed popped back up
+    every few seconds. A re-detection that says the same thing within
+    `SESSION_CHAT_NOTICE_REAPPEAR_GRACE` of the notice leaving is the same
+    instance and inherits its `detectedAt`; only a longer absence makes the
+    same words a new event.
+    */
+    pub(crate) retired_notice: Option<(
+        crate::session_chat_notice::SessionChatTerminalNotice,
+        std::time::Instant,
+    )>,
     pub(crate) value: crate::session_chat_options::SessionChatTerminalDetection,
 }
+
+/// How long a screen notice that stopped classifying still counts as the same
+/// instance when the identical words come back; see
+/// `SessionChatOptionCacheEntry::retired_notice`.
+pub(crate) const SESSION_CHAT_NOTICE_REAPPEAR_GRACE: std::time::Duration =
+    std::time::Duration::from_secs(10 * 60);
 
 /// Where the Ghostex agent hooks (and the Claude statusline script) keep their
 /// per-session state — the same resolution the installer bakes into them.
@@ -2436,7 +2455,7 @@ impl SessionChatOptionDetector {
         agent: Option<&str>,
         force: bool,
     ) -> crate::session_chat_options::SessionChatTerminalDetection {
-        // CDXC:SessionChatComposerReady 2026-08-26: same two-door gate the
+        // CDXC:SessionChat 2026-08-26: same two-door gate the
         // funnel itself uses, restated here so an agent with only a composer
         // signature is not turned away before the cache is even consulted.
         if crate::session_chat_options::session_chat_option_agent(agent).is_none()
@@ -2470,7 +2489,7 @@ impl SessionChatOptionDetector {
             })
             .unwrap_or_default();
         /*
-        CDXC:SessionChatTerminalNotices 2026-08-19:
+        CDXC:AgentScreenDetection 2026-08-19:
         This is the ONE funnel every fresh capture goes through (the follower's
         probe, a read-triggered detect, the post-dispatch redetect), so it owns
         the two rules a single detection cannot state on its own:
@@ -2487,7 +2506,7 @@ impl SessionChatOptionDetector {
         cache (plus the watchdog store) and emits on change.
         */
         /*
-        CDXC:SessionChatComposerReady 2026-08-26: only an agent the NOTICE
+        CDXC:SessionChat 2026-08-26: only an agent the NOTICE
         catalog covers can prove a screen clean. A composer-only agent always
         classifies to no notice — there are no rules for it — so retiring on
         that absence would clear a watchdog verdict on evidence that was never
@@ -2504,15 +2523,30 @@ impl SessionChatOptionDetector {
         let mut compacting_transition: Option<Option<String>> = None;
         if let Ok(mut cache) = self.cache.lock() {
             let previous_compacting = cache.get(&key).and_then(|entry| entry.projected_compacting);
-            if let Some(notice) = detected.notice.as_mut() {
-                notice.carry_forward_detected_at(
-                    cache
-                        .get(&key)
-                        .and_then(|entry| entry.value.notice.as_ref()),
-                );
-            }
+            // A notice that left the screen recently still counts as the
+            // instance to inherit from; see `retired_notice`.
+            let recently_retired_notice = cache
+                .get(&key)
+                .and_then(|entry| entry.retired_notice.clone())
+                .filter(|(_, retired_at)| {
+                    retired_at.elapsed() < SESSION_CHAT_NOTICE_REAPPEAR_GRACE
+                });
+            let cached_notice = cache.get(&key).and_then(|entry| entry.value.notice.clone());
+            let retired_notice = match detected.notice.as_mut() {
+                Some(notice) => {
+                    notice.carry_forward_detected_at(
+                        cached_notice
+                            .as_ref()
+                            .or(recently_retired_notice.as_ref().map(|(notice, _)| notice)),
+                    );
+                    None
+                }
+                None => cached_notice
+                    .map(|notice| (notice, std::time::Instant::now()))
+                    .or(recently_retired_notice),
+            };
             /*
-            CDXC:SessionChatTerminalActivity 2026-08-22: same instance-not-sample
+            CDXC:AgentScreenDetection 2026-08-22: same instance-not-sample
             rule, and load-bearing here — the client anchors its elapsed clock to
             `detectedAt`, so re-minting it on every probe would peg the timer at
             zero for the whole run.
@@ -2525,7 +2559,7 @@ impl SessionChatOptionDetector {
                 );
             }
             /*
-            CDXC:SessionChatAgentFleet 2026-08-23: deliberately NOT carried
+            CDXC:AgentScreenDetection 2026-08-23: deliberately NOT carried
             forward, unlike the notice and the activity row above. A fleet's
             `detectedAt` is the anchor its per-row clocks count from, so it has
             to stay paired with the seconds it was read beside; giving a fresh
@@ -2533,7 +2567,7 @@ impl SessionChatOptionDetector {
             twice. Holding a fleet still is `same_fleet`'s job.
             */
             /*
-            CDXC:SessionChatScreenProbed (settled 2026-08-30): the model grace.
+            CDXC:AgentScreenDetection (settled 2026-08-30): the model grace.
             The pure detector settles on any recognized chrome, but Claude's
             permission-mode footer and composer paint seconds before the async
             statusline that names the model. For an agent whose grammar CAN
@@ -2568,7 +2602,7 @@ impl SessionChatOptionDetector {
                 model_grace_started = Some(started);
             }
             /*
-            CDXC:SessionChatCompactingStatus 2026-09-02:
+            CDXC:AgentScreenDetection 2026-09-02:
             The screen owns this marker outright. It used to be forced false
             whenever the hooks said idle, on the theory that a finished
             compaction's row lingers in scrollback like a `⏺` status does — but
@@ -2594,6 +2628,7 @@ impl SessionChatOptionDetector {
                     fetched_at: std::time::Instant::now(),
                     projected_compacting: detected_compacting,
                     model_grace_started,
+                    retired_notice,
                     value: detected.clone(),
                 },
             );
@@ -2640,14 +2675,14 @@ impl SessionChatOptionDetector {
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 The notice a session should be showing RIGHT NOW, with no detection of its own:
 the last classification the shared 5s cache holds, overridden by a watchdog
 notice when one is pending. Every path that must stay spawn-free — the 500ms
 long-poll fingerprint, prompt-driven state frames — reads it through here.
 */
 /*
-CDXC:SessionChatTerminalActivity 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 The whole screen-derived half of a session's state, owned, from the shared 5s
 cache and the watchdog store. Every spawn-free publisher reads it through here
 so the notice and the progress row are always taken from the SAME cache read
@@ -2660,7 +2695,7 @@ pub(crate) struct CachedSessionChatScreenState {
     pub(crate) activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
     pub(crate) fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>,
     pub(crate) tasks: Option<crate::session_chat_agent_tasks::SessionChatAgentTasks>,
-    /// CDXC:SessionChatScreenProbed 2026-08-22: whether the cache entry these
+    /// CDXC:AgentScreenDetection 2026-08-22: whether the cache entry these
     /// came from was backed by a whole capture at all.
     pub(crate) probed: bool,
 }
@@ -2717,7 +2752,7 @@ pub(crate) fn cached_session_chat_screen_state(
 }
 
 /*
-CDXC:SessionChatComposerReady 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 Last known composer verdict with no process spawn, for the prompt-queue
 scheduler. A tick must never trigger a capture (that is the rule the notice
 reader next to this one exists to keep), so a session nobody has probed reads
@@ -2758,7 +2793,7 @@ pub(crate) fn cached_session_chat_terminal_notice(
 }
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 The send watchdog owns no frames and no database: it mutates the watchdog notice
 store and then calls this, which republishes whatever the session should be
 showing now — the cached model/effort pills included, so a notice frame can
@@ -2864,7 +2899,7 @@ pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, se
 }
 
 /*
-CDXC:SessionChatDetectedOptions 2026-08-01:
+CDXC:AgentScreenDetection 2026-08-01:
 Post-dispatch confirmation. After the chat surface types `/model`, `/effort` or
 `/fast`, the pill shows an unconfirmed value; these two probes read the
 statusline back (+2s for the TUI repaint, +6s to catch a Codex overlay the user
@@ -2893,7 +2928,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
     tokio::spawn(async move {
         let cached = detector.cached(&project_id, &session_id);
         let mut published = cached.options;
-        // CDXC:SessionChatTerminalNotices 2026-08-19: this probe re-reads the
+        // CDXC:AgentScreenDetection 2026-08-19: this probe re-reads the
         // screen anyway, so a notice that appeared or cleared with the dispatch
         // rides the same frame instead of waiting for the ~30s follower probe.
         let mut published_notice = crate::session_chat_notice::resolve_session_chat_terminal_notice(
@@ -3035,7 +3070,7 @@ pub(crate) fn emit_session_chat_options_state_frame(
     // Same seq discipline as the prompt frame: take the epoch and the seq and
     // publish as one step, because the follower task publishes into the SAME
     // counter and can start a new generation in between
-    // (CDXC:SessionChatFollowerLiveness 2026-08-24).
+    // (CDXC:AgentScreenDetection 2026-08-24).
     stream.emit_sequenced(
         |seq| {
             let (epoch, _) = stream.current();

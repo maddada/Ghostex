@@ -11,7 +11,7 @@
 // Agents without a catalog (unknown ids) get no pills at all — with one
 // exception owned by the pills, not by this module: a DRAFT session still
 // renders its agent pill, because the composer's "Agents" switcher lives in
-// that pill's menu (CDXC:DraftSessions 2026-08-28).
+// that pill's menu (CDXC:Drafts 2026-08-28).
 
 import {
   agentModelCatalogEffortLabel,
@@ -51,6 +51,16 @@ export type SessionChatOptionDispatch =
   /** Types a command that opens the agent's own picker, then shows the terminal. */
   | { kind: 'agent-picker'; command: string }
   /**
+   * CDXC:AgentScreenDetection 2026-09-03 WHY:
+   * Codex's model and effort are set by driving its own `/model` picker on the
+   * daemon (`/api/selectSessionChatModel`), because `/model <name>` is not a
+   * command there. The model rows and the effort rows share this kind: a model
+   * row keeps the current effort when the new model offers it, an effort row
+   * keeps the current model. Hosts without the endpoint fall back to the
+   * `agent-picker` behaviour (type `/model`, show the terminal).
+   */
+  | { kind: 'model-picker' }
+  /**
    * Nothing is typed: the pill shows the value gxserver read from the agent's
    * statusline and hands the user to the terminal to change it. For a TUI whose
    * picker cannot be driven blind from here (grok), a read-only pill plus a
@@ -82,7 +92,7 @@ export interface SessionChatOptionDescriptor {
   actionLabel?: string;
   /**
    * Tooltip for a `terminal-handoff` pill, replacing the generic
-   * "<category> <value> — change it in the CLI". Set it when the CLI has a
+   * "<category> <value>. Change it in the CLI." Set it when the CLI has a
    * named command for the change, so the handoff can say which one to type.
    */
   handoffHint?: string;
@@ -97,12 +107,18 @@ export interface SessionChatSessionOptionCatalog {
   modelIcon: SidebarAgentIcon;
   /** Everything else, in category order, for the current model. */
   optionsForModel: (modelValue: string) => readonly SessionChatOptionDescriptor[];
+  /**
+   * For `model-picker` catalogs: the effort a model change should keep or
+   * fall to — `currentEffort` when `modelValue` offers it, else the model's
+   * catalog default.
+   */
+  pickerEffortFor?: (modelValue: string, currentEffort: string | undefined) => string | undefined;
 }
 
 // ---------------------------------------------------------------------------
 // Catalog-driven descriptors
 //
-// CDXC:AgentModelCatalog 2026-09-02: the model lineup, the effort levels and
+// CDXC:AgentProviders 2026-09-02: the model lineup, the effort levels and
 // the fast-mode support of every agent come from the published agent model
 // catalog (packages/shared/agent-model-catalog.ts), bundled as a snapshot and
 // refreshed from the repo's main branch at runtime. This module only decides
@@ -203,7 +219,6 @@ function buildClaudeCatalog(
     label: 'Fast mode',
     category: 'model_config',
     actionLabel: 'Toggle Fast mode',
-    description: 'Flips fast mode; the current state is only known to the agent.',
     dispatch: { kind: 'toggle-command', command: agent.fastMode.command ?? '/fast' },
   };
   return {
@@ -243,32 +258,34 @@ const CODEX_MODE: SessionChatOptionDescriptor = {
 };
 
 function buildCodexCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogAgent): SessionChatSessionOptionCatalog {
-  /* Codex owns model selection in its interactive terminal picker. */
+  /*
+  CDXC:AgentScreenDetection 2026-09-03 DECISION:
+  User: Codex must list the available models and efforts in the chat box, and
+  whether fast mode is on or off, like Claude does; fast is toggled by sending
+  `/fast`. Model and effort go through the daemon-driven picker
+  (`model-picker`), the earlier Shift+Up/Down effort steps were relative to a
+  value the screen may not have shown yet.
+  */
   const model: SessionChatOptionDescriptor = {
     id: 'model',
     label: 'Model',
     category: 'model',
     choices: modelChoices(agent),
     actionLabel: "Open the CLI's model picker",
-    dispatch: { kind: 'agent-picker', command: '/model' },
+    dispatch: { kind: 'model-picker' },
   };
   const effortFor = memoByChoices((choices) => ({
     id: 'effort',
     label: 'Reasoning effort',
     category: 'thought_level',
     choices,
-    dispatch: {
-      kind: 'bounded-key-steps',
-      decreaseKey: 'shift-down',
-      increaseKey: 'shift-up',
-    },
+    dispatch: { kind: 'model-picker' },
   }));
   const fastMode: SessionChatOptionDescriptor = {
     id: 'fastMode',
     label: 'Fast mode',
     category: 'model_config',
-    actionLabel: 'Toggle Fast mode',
-    description: 'Flips the priority service tier; the footer shows the current state.',
+    actionLabel: 'Fast mode',
     dispatch: { kind: 'toggle-command', command: agent.fastMode.command ?? '/fast' },
   };
   return {
@@ -281,6 +298,13 @@ function buildCodexCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogA
         ...(agent.fastMode.available && (current?.fastMode ?? true) ? [fastMode] : []),
         CODEX_MODE,
       ]);
+    },
+    pickerEffortFor: (modelValue, currentEffort) => {
+      const efforts = effortsForModel(agent, modelValue);
+      if (currentEffort !== undefined && efforts.includes(currentEffort)) {
+        return currentEffort;
+      }
+      return catalogModel(agent, modelValue)?.defaultEffort ?? efforts[0];
     },
   };
 }
@@ -582,7 +606,9 @@ export function sessionChatOptionCommandNames(agent: string | null | undefined):
         ? dispatch.build(descriptor.choices?.[0]?.value ?? '')
         : dispatch.kind === 'toggle-command' || dispatch.kind === 'agent-picker'
           ? dispatch.command
-          : null;
+          : dispatch.kind === 'model-picker'
+            ? '/model'
+            : null;
     if (command === null) {
       return;
     }
@@ -645,6 +671,7 @@ export function sessionChatOptionTracksValue(descriptor: SessionChatOptionDescri
   return (
     (descriptor.dispatch.kind === 'command' ||
       descriptor.dispatch.kind === 'command-confirm-picker' ||
+      descriptor.dispatch.kind === 'model-picker' ||
       descriptor.dispatch.kind === 'bounded-key-steps' ||
       descriptor.dispatch.kind === 'cyclic-key-steps') &&
     descriptor.choices !== undefined &&
@@ -788,7 +815,7 @@ export function reconcileSessionChatOptionsFromCommand(
 }
 
 /*
-CDXC:SessionChatDetectedOptions 2026-08-01:
+CDXC:AgentScreenDetection 2026-08-01:
 gxserver reads the agent's structured transcript and terminal statusline and
 reports what it is REALLY running
 (`selectedOptions` on read results and snapshot/replaced/state frames). That

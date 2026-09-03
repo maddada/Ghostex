@@ -27,7 +27,7 @@ use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
 
 /*
-CDXC:SessionChatSend 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Session Chat send path (upstream chat spec §7/§8 port). The agent is a TUI, so sending is
 writing bytes to its pty via `zmx send` stdin. The spec's measured discipline is
 preserved verbatim: a Ctrl+U/Ctrl+K clear burst sized by the 2N-1 law, a
@@ -36,7 +36,7 @@ SEPARATE Enter write (a trailing \r inside the paste burst is read as newline
 text and the message stays staged). What is NOT preserved is the blind 500ms
 settle that used to precede that Enter: the Enter now waits until a screen
 capture proves the composer actually took the body, and is never written when
-the body is provably absent (CDXC:SessionChatVerifyPaste below). A per-session
+the body is provably absent (CDXC:Clipboard below). A per-session
 queue serializes sequences: each send owns the input line from its clear
 until its Enter fires. HTTP handlers enqueue and return immediately.
 */
@@ -58,7 +58,7 @@ delayed Enter.
 pub const SESSION_CHAT_CLEAR_INPUT_SETTLE_MS: u64 = 150;
 pub const SESSION_CHAT_SUBMIT: &str = "\r";
 /*
-CDXC:SessionChatVerifyPaste 2026-08-24:
+CDXC:Clipboard 2026-08-24:
 Why the Enter is closed-loop. The old sequence wrote the paste body, slept
 SESSION_CHAT_SUBMIT_DELAY_MS, then wrote a bare "\r" with nothing checking
 that the composer had taken the body. Claude Code ingests a multi-KB paste
@@ -82,7 +82,7 @@ pub const SESSION_CHAT_VERIFY_MIN_TIMEOUT_MS: u64 = 2_000;
 pub const SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS: u64 = 8_000;
 
 /*
-CDXC:SessionChatComposerReady 2026-08-26:
+CDXC:SessionChat 2026-08-26:
 The window `SessionChatSendStep::WaitForComposer` gives a CLI to paint its input
 box. Short settle because the overwhelming majority of sends go to a CLI that
 has been idle for minutes and answers on the first capture; six seconds of
@@ -787,7 +787,7 @@ pub enum SessionChatSendStep {
         timeout_ms: u64,
     },
     /*
-    CDXC:SessionChatComposerReady 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     Hold the sequence until the agent CLI's input box is on screen. This runs
     BEFORE the clear burst, which is the whole point: the burst is Ctrl+U/Ctrl+K
     keystrokes, and a CLI showing a trust dialog or an auth menu answers those
@@ -805,7 +805,7 @@ pub enum SessionChatSendStep {
         timeout_ms: u64,
     },
     /// Hold the sequence until the session's screen proves `text` reached the
-    /// agent's composer (CDXC:SessionChatVerifyPaste). Settles `settle_ms`,
+    /// agent's composer (CDXC:Clipboard). Settles `settle_ms`,
     /// then polls captures until the deadline `timeout_ms` sets. Failing this
     /// step aborts the sequence, so the Enter that follows it can never
     /// submit a composer the body never reached.
@@ -815,7 +815,7 @@ pub enum SessionChatSendStep {
         timeout_ms: u64,
     },
     /*
-    CDXC:SessionChatRewind 2026-09-02:
+    CDXC:SessionChat 2026-09-02:
     Hand the input line to the Claude rewind driver for the whole `/rewind`
     dialog. The driver is adaptive (it reads the screen and decides the next
     keystroke from what it sees), so it cannot be expressed as a fixed step
@@ -826,6 +826,12 @@ pub enum SessionChatSendStep {
     data.
     */
     DriveClaudeRewind {
+        job_id: u64,
+    },
+    /// Hand the input line to the Codex model picker driver
+    /// (session_chat_codex_picker.rs) for the whole `/model` flow, for the same
+    /// reasons DriveClaudeRewind lists: adaptive, and it must own the pty.
+    DriveCodexModelPicker {
         job_id: u64,
     },
 }
@@ -919,7 +925,7 @@ pub fn build_session_chat_message_steps(
 }
 
 // ---------------------------------------------------------------------------
-// Paste verification (CDXC:SessionChatVerifyPaste)
+// Paste verification (CDXC:Clipboard)
 // ---------------------------------------------------------------------------
 
 /// Longest needle taken from one line of the message. Long enough that a hit
@@ -1018,7 +1024,7 @@ pub fn build_session_chat_key_steps(key: &str) -> Option<Vec<SessionChatSendStep
 }
 
 /*
-CDXC:SessionChatTerminalPicker 2026-08-22:
+CDXC:SessionChat 2026-08-22:
 Answering an on-screen picker (Claude Code's resume-usage chooser today): type
 the chosen row's NUMBER, and nothing else.
 
@@ -1057,7 +1063,7 @@ pub fn build_ask_answer_steps(groups: &[AskAnswerKeyGroup]) -> Vec<SessionChatSe
 // ---------------------------------------------------------------------------
 
 /*
-CDXC:SessionChatTerminalNotices 2026-08-19:
+CDXC:AgentScreenDetection 2026-08-19:
 Why a send did not complete. The message a caller shows the user is the same as
 before; what is new is that the caller can tell "the terminal refused this
 message" (the agent CLI in the pane never answered the Ctrl+G handshake, or zmx
@@ -1077,7 +1083,7 @@ pub enum SessionChatSendFailure {
     /// A `zmx send` burst was refused.
     Write,
     /*
-    CDXC:SessionChatComposerReady 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     The agent CLI never showed an input box within the wait. Distinct from
     `Write` because nothing was written: there is no half-typed composer to
     explain and nothing for the delivery watchdog to verify, and the caller maps
@@ -1154,7 +1160,7 @@ zmx write aborts the rest of its sequence so a dangling Enter can never
 follow a body that was not delivered. Must be called from within the tokio
 runtime (HTTP handlers are).
 
-CDXC:SessionChatSerializedWriters 2026-08-24:
+CDXC:SessionChat 2026-08-24:
 "Each sequence owns the input line" only holds if EVERY server-side writer to
 that pty goes through here. Until this date several did not — the first-prompt
 auto-title job, the manual "generate name" job (which writes a Ctrl+U draft
@@ -1589,6 +1595,17 @@ async fn run_session_chat_send_worker(
                     )
                     .await;
                 }
+                SessionChatSendStep::DriveCodexModelPicker { job_id } => {
+                    crate::session_chat_codex_picker::run_codex_model_picker_job(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        job_id,
+                        &|| job_generation != generation.load(Ordering::SeqCst),
+                    )
+                    .await;
+                }
             }
         }
         if let Some(completion) = completion.take() {
@@ -1644,7 +1661,7 @@ pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<Stri
 }
 
 /*
-CDXC:SessionChatVerifyPaste 2026-08-24:
+CDXC:Clipboard 2026-08-24:
 The screen watch that stands between a paste body and its Enter. It settles
 once (so a paste the TUI already took costs nothing extra), then polls captures
 until one of three things is true: the body — or the TUI's collapsed paste
@@ -1764,7 +1781,7 @@ pub struct CapturedTerminalDraft {
 }
 
 /*
-CDXC:SessionChatDraftHandoff 2026-08-18:
+CDXC:Drafts 2026-08-18:
 Terminal → chat draft transfer, shared by every host. The bytes a user typed
 into the agent TUI live only in that TUI's composer, so the sole way to read
 them is the agent's prompt-editor contract: drop a one-shot `handoff:<id>`
@@ -1794,7 +1811,7 @@ async fn preserve_terminal_draft(
     .await
     .map_err(|message| {
         /*
-        CDXC:SessionChatTerminalNotices 2026-08-19:
+        CDXC:AgentScreenDetection 2026-08-19:
         The generation, not the message text, is what says whether this send was
         superseded while the handshake ran. Anything else here is the CLI in the
         pane failing to answer its prompt-editor invocation at all, which is
@@ -1809,7 +1826,7 @@ async fn preserve_terminal_draft(
 }
 
 /*
-CDXC:SessionChatSerializedWriters 2026-08-24:
+CDXC:SessionChat 2026-08-24:
 Standalone terminal-draft capture for the `/api/handoffSessionChatDraft`
 endpoint, as a QUEUED job.
 
@@ -2314,7 +2331,7 @@ mod tests {
 }
 
 /*
-CDXC:SessionChatSend 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 Send-side endpoints. Every write goes through the per-session async send
 queue in session_chat_send.rs (upstream chat spec §7 pacing: clear burst → bracketed-paste
 body → separate delayed Enter; answer keystroke groups 1000ms apart), so the
@@ -2505,7 +2522,7 @@ pub(crate) async fn handle_send_session_chat_message_http(
 }
 
 /*
-CDXC:SessionChatCore 2026-08-01:
+CDXC:SessionChat 2026-08-01:
 Second source for the question card, used when agent hooks never reported one:
 re-read the session's transcript tail and look for an AskUserQuestion tool call
 that has no tool result yet. Bounded to a short window and only reached on an
@@ -2707,7 +2724,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
             }
         }
         /*
-        CDXC:SessionChatTerminalPicker 2026-08-21:
+        CDXC:SessionChat 2026-08-21:
         A row of an on-screen picker (Claude Code's resume-usage chooser), which
         the chat surface renders from the `choices` its terminal notice carries.
 
@@ -2784,7 +2801,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         );
     }
     /*
-    CDXC:SessionChatTerminalPicker 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     The card the user just answered is a TERMINAL NOTICE, and notices only
     retire when a fresh capture proves the screen is clean. Left to the
     follower's ~30s probe the answered picker would stay on screen in chat for
@@ -2809,7 +2826,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
 }
 
 /*
-CDXC:SessionChatDraftHandoff 2026-08-18:
+CDXC:Drafts 2026-08-18:
 Terminal → chat draft transfer for every host. A user who typed into the agent
 CLI and then lands on the chat surface, by tapping the toggle or because the app
 auto-switched a terminal-started agent into Chat, must find that text in the
@@ -2823,7 +2840,7 @@ the command palette with Ctrl+P, `editor`, Enter instead.
 */
 
 /*
-CDXC:SessionChatDraftHandoff 2026-08-30:
+CDXC:Drafts 2026-08-30:
 The prompt-editor handshake only works when the agent CLI inherits the session
 shell's environment, where the launch script points $EDITOR/$VISUAL at
 `ghostex prompt-editor`. An agent command that hops to another user or host
@@ -2898,7 +2915,7 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     /*
-    CDXC:SessionChatLaunchDraft 2026-09-02:
+    CDXC:Drafts 2026-09-02:
     A staged first-input draft that has not reached the terminal yet is handed
     straight to Chat here, before any terminal capture: the auto-switch into
     Chat of a freshly created handoff session lands while the terminal typing

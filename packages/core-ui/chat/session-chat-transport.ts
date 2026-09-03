@@ -7,6 +7,7 @@
 import type {
   GxserverReadSessionTerminalTailResult,
   GxserverRewindSessionChatResult,
+  GxserverSelectSessionChatModelResult,
   GxserverSessionForkBranchesResult,
 } from '../../shared/gxserver-protocol';
 import type {
@@ -35,7 +36,7 @@ export interface SessionChatTransport {
    */
   readFiles?(): Promise<GxserverReadSessionChatFilesResult>;
   /*
-  CDXC:SessionForkFamilies 2026-08-28:
+  CDXC:SessionFork 2026-08-28:
   Every session that shares this conversation's earlier history, ancestors
   included (`/api/sessionForkBranches`). Optional on the same gate as
   everything else here: a host without a route to the endpoint omits it and the
@@ -44,7 +45,7 @@ export interface SessionChatTransport {
   */
   forkBranches?(): Promise<GxserverSessionForkBranchesResult>;
   /*
-  CDXC:SessionChatRewind 2026-09-02:
+  CDXC:SessionChat 2026-09-02:
   Drives the agent's own rewind flow in its terminal back to the point before
   `messageId` (`/api/rewindSessionChat`). Optional on the same gate as
   everything else here: a host without a route to the endpoint omits it and the
@@ -53,6 +54,13 @@ export interface SessionChatTransport {
   stream itself, so nothing here prunes rows.
   */
   rewindSessionChat?(params: { messageId: string }): Promise<GxserverRewindSessionChatResult>;
+  /**
+   * Drives Codex's own `/model` picker to `model` + `effort`
+   * (`/api/selectSessionChatModel`). Optional on the same gate as everything
+   * else here: a host without a route to the endpoint omits it and the model
+   * pill keeps its terminal handoff row instead of offering rows it cannot apply.
+   */
+  selectSessionChatModel?(params: { model: string; effort: string }): Promise<GxserverSelectSessionChatModelResult>;
   /** Returns an unsubscribe function. Events must already be filtered to this session. */
   subscribe(handlers: {
     onEvent: (e: GxserverSessionChatEvent) => void;
@@ -123,7 +131,7 @@ export interface SessionChatTransport {
   /** Saves a final assistant response inside the session project's Docs tree. */
   saveMessageMarkdown?(params: { content: string; path: string }): Promise<{ path: string }>;
   /*
-  CDXC:SessionChatComposerReady 2026-08-26:
+  CDXC:SessionChat 2026-08-26:
   The evidence behind a `composerNotReady` send refusal: the daemon's composer
   verdict plus the bottom of the session's terminal screen, ANSI-stripped. The
   composer's refusal notice reads it on demand so the user can see the trust /
@@ -133,7 +141,7 @@ export interface SessionChatTransport {
   */
   readTerminalTail?(): Promise<GxserverReadSessionTerminalTailResult>;
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   Switches a DRAFT session's agent (`/api/switchDraftAgent`): gxserver kills the
   draft's background CLI, rewrites its agent identity and launch plan, and
   starts the new agent's CLI. Optional on the same gate as everything else here
@@ -197,7 +205,7 @@ export interface SessionChatTransport {
    */
   setDraft?(params: { content: string; clientId: string }): Promise<void>;
   /*
-  CDXC:SessionAgentNotes 2026-08-24:
+  CDXC:SessionNotes 2026-08-24:
   The session's "what to do next here" note. gxserver files it under the
   PROVIDER conversation id, so the transport passes only the note body and the
   host's own (projectId, sessionId) resolve the rest. Both methods are optional

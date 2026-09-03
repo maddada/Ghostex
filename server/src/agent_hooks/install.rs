@@ -7,6 +7,9 @@ use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 
+use super::codex_status_line::{
+    codex_status_line_names_model, ensure_codex_status_line_names_model,
+};
 use super::codex_trust::{
     ghostex_codex_hook_trust_entries, remove_codex_hook_trust_entries, trust_ghostex_codex_hooks,
     CodexTrustWriteMode,
@@ -52,7 +55,7 @@ pub(crate) fn uninstall_agent_hook(
         | HookFormat::NestedJson => {
             let mut removed_paths = Vec::new();
             for config_path in config_paths {
-                // CDXC:CodexHookTrust 2026-09-02: state keys are positional, so
+                // CDXC:AgentHooks 2026-09-02: state keys are positional, so
                 // they must be read before the hooks leave the file.
                 let codex_trust_keys = (definition.agent_id == "codex")
                     .then(|| {
@@ -187,7 +190,7 @@ pub(crate) fn remove_json_hook(
     ensure_json_config_is_rewritable(definition.agent_id, config_path, &current_text)?;
     let mut data = read_json_object(&current_text);
     let mut changed = remove_owned_json_hooks(&mut data, hook_format(definition.agent_id), command);
-    // CDXC:ClaudeStatusline 2026-09-03: the statusLine Ghostex registered (or
+    // CDXC:AgentHooks 2026-09-03 WHY: the statusLine Ghostex registered (or
     // wrapped) leaves with the hooks, restoring the user's own command.
     if definition.agent_id == "claude" {
         changed |= unregister_claude_statusline(&mut data);
@@ -466,11 +469,17 @@ fn inspect_json_hook_config(
     let stale_ghostex_hook_present = json_contains_stale_ghostex_owned_hook_command(&data, command);
     let codex_interrupt_timeout_current =
         definition.agent_id != "codex" || codex_interrupt_hook_timeout_is_current(&data, command);
-    // CDXC:ClaudeStatusline 2026-09-03: a Claude install is only current once
+    // CDXC:AgentHooks 2026-09-03 WHY: a Claude install is only current once
     // its statusLine runs the Ghostex script, so an older install reads as
     // updateRequired and the Update Hooks button (or daemon repair) adds it.
     let claude_statusline_current =
         definition.agent_id != "claude" || claude_statusline_is_current(&data, hook_paths);
+    // CDXC:AgentHooks 2026-09-03 WHY: a Codex footer that hides the
+    // model reads as updateRequired so Update Hooks (or daemon repair) lists it.
+    let codex_status_line_current = definition.agent_id != "codex"
+        || codex_status_line_names_model(&super::codex_trust::codex_config_path_for_hooks(
+            config_path,
+        ));
     HookInspection {
         current_hook_installed: json_contains_hook_command(&data, command)
             && !stale_ghostex_hook_present
@@ -481,7 +490,8 @@ fn inspect_json_hook_config(
                 hook_format(definition.agent_id),
             )
             && codex_interrupt_timeout_current
-            && claude_statusline_current,
+            && claude_statusline_current
+            && codex_status_line_current,
         ghostex_hook_present: json_contains_ghostex_owned_hook_command(&data, command),
     }
 }
@@ -573,7 +583,7 @@ fn json_contains_stale_ghostex_owned_hook_command(value: &Value, command: &str) 
             .any(|item| json_contains_stale_ghostex_owned_hook_command(item, command));
     }
     if let Some(object) = value.as_object() {
-        // CDXC:ClaudeStatusline 2026-09-03: Claude's `statusLine` names the
+        // CDXC:AgentHooks 2026-09-03 WHY: Claude's `statusLine` names the
         // Ghostex statusline script, which is Ghostex-owned but not a hook;
         // its currency is judged by `claude_statusline_is_current` instead.
         return object
@@ -611,7 +621,7 @@ fn json_contains_ghostex_owned_hook_command(value: &Value, command: &str) -> boo
             .any(|item| json_contains_ghostex_owned_hook_command(item, command));
     }
     if let Some(object) = value.as_object() {
-        // CDXC:ClaudeStatusline 2026-09-03: Claude's `statusLine` names the
+        // CDXC:AgentHooks 2026-09-03 WHY: Claude's `statusLine` names the
         // Ghostex statusline script, which is Ghostex-owned but not a hook;
         // its currency is judged by `claude_statusline_is_current` instead.
         return object
@@ -633,7 +643,7 @@ pub(crate) fn read_json_object(text: &str) -> Value {
 }
 
 /*
-CDXC:AgentHookRunGates 2026-09-03:
+CDXC:AgentHooks 2026-09-03:
 An installed hook is only useful when its CLI will RUN it, and two chat agents
 carry a switch, outside the hook entries themselves, that silently turns the
 Ghostex hooks off while every file-shape check still passes:
@@ -741,13 +751,13 @@ pub(crate) fn install_agent_hook(
             for config_path in config_paths {
                 merge_json_hook(&config_path, definition, hook_paths, &command)?;
                 installed_paths.push(path_string(&config_path));
-                // CDXC:AgentHookRunGates 2026-09-03: the same explicit click
+                // CDXC:AgentHooks 2026-09-03: the same explicit click
                 // lifts an `"enabled": false` the user put on the Ghostex
                 // named hook in Antigravity; startup repair never does.
                 if definition.agent_id == "antigravity" {
                     enable_antigravity_ghostex_hook(&config_path, definition)?;
                 }
-                // CDXC:CodexHookTrust 2026-09-02: an explicit install is the
+                // CDXC:AgentHooks 2026-09-02: an explicit install is the
                 // user's approval of the Ghostex hooks, so record it where Codex
                 // reads it or Codex never runs them.
                 if definition.agent_id == "codex"
@@ -760,6 +770,14 @@ pub(crate) fn install_agent_hook(
                 {
                     let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
                     installed_paths.push(path_string(&config_toml));
+                }
+                // CDXC:AgentHooks 2026-09-03 WHY: the footer must name
+                // the model for the chat pills to have a pre-turn source.
+                if definition.agent_id == "codex" {
+                    let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
+                    if ensure_codex_status_line_names_model(&config_toml)? {
+                        push_unique_path(&mut installed_paths, path_string(&config_toml));
+                    }
                 }
             }
             Ok(installed_paths)
@@ -824,7 +842,7 @@ pub(crate) fn repair_agent_hook_paths(
             for config_path in config_paths {
                 merge_json_hook(&config_path, definition, hook_paths, &command)?;
                 repaired_paths.push(path_string(&config_path));
-                // CDXC:CodexHookTrust 2026-09-02: a repaired command changes the
+                // CDXC:AgentHooks 2026-09-02: a repaired command changes the
                 // hash Codex checks, so a slot the user already approved is
                 // re-approved; a slot Codex never saw approved stays untrusted
                 // until the user presses Update Hooks.
@@ -838,6 +856,12 @@ pub(crate) fn repair_agent_hook_paths(
                 {
                     let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
                     repaired_paths.push(path_string(&config_toml));
+                }
+                if definition.agent_id == "codex" {
+                    let config_toml = super::codex_trust::codex_config_path_for_hooks(&config_path);
+                    if ensure_codex_status_line_names_model(&config_toml)? {
+                        push_unique_path(&mut repaired_paths, path_string(&config_toml));
+                    }
                 }
             }
             Ok(repaired_paths)
@@ -949,7 +973,7 @@ fn merge_json_hook(
         | HookFormat::MarkedYaml
         | HookFormat::TomlMarked => {}
     }
-    // CDXC:ClaudeStatusline 2026-09-03: the same settings file carries the
+    // CDXC:AgentHooks 2026-09-03 WHY: the same settings file carries the
     // statusLine command, registered (or re-pointed) alongside the hooks.
     if definition.agent_id == "claude" {
         register_claude_statusline(&mut data, hook_paths);

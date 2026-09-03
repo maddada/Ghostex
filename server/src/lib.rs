@@ -40,6 +40,7 @@ pub mod session_chat_antigravity_mirror;
 pub mod session_chat_app_command;
 pub mod session_chat_branch;
 pub mod session_chat_codex_blocking;
+pub mod session_chat_codex_picker;
 pub mod session_chat_compacting;
 pub mod session_chat_composer;
 pub mod session_chat_cursor_blocking;

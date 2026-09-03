@@ -27,6 +27,7 @@ import {
   type GxserverReadSessionAgentNoteResult,
   type GxserverReadSessionTerminalTailResult,
   type GxserverRewindSessionChatResult,
+  type GxserverSelectSessionChatModelResult,
   type GxserverSessionForkBranch,
   type GxserverSessionForkBranchesResult,
 } from '@/packages/shared/gxserver-protocol';
@@ -66,7 +67,7 @@ import type { SessionChatBarExtension } from '@/packages/core-ui/chat/session-ch
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 
 /*
-CDXC:GPUISessionChatSurface 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 chat.html is the per-session Session Chat CEF surface that swaps with the
 terminal pane body in the gpui Agents workspace. It follows the
 kanban-main/manage-main minimalism: session identity arrives as URL query
@@ -203,7 +204,7 @@ async function rpc<TResult>(
   const envelope = body as { ok?: boolean; result?: TResult } | undefined;
   if (!response.ok || !envelope || envelope.ok !== true) {
     /*
-    CDXC:SessionChatComposerReady 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     A gxserver refusal is `{ ok: false, error: <code>, message }` — the code is
     a string on the envelope, not a nested object. Rethrowing it as the typed
     GxserverRpcError is what lets the shared chat composer tell
@@ -330,7 +331,7 @@ function createGpuiSessionChatTransport(
       });
     },
     /*
-    CDXC:SessionForkFamilies 2026-08-28:
+    CDXC:SessionFork 2026-08-28:
     The chat's branch switcher reads the fork family from the session's OWN
     daemon on the same bootstrap as the transcript, so a remote session's
     branches are derived by the registry on the machine that ran them. It is
@@ -344,7 +345,7 @@ function createGpuiSessionChatTransport(
       });
     },
     /*
-    CDXC:SessionChatRewind 2026-09-02:
+    CDXC:SessionChat 2026-09-02:
     Rewinding drives the agent's own `/rewind` dialog inside the session's
     terminal, so it lands on the daemon that owns that pane through the same
     bootstrap as the transcript. The daemon re-snapshots the chat stream after
@@ -353,6 +354,14 @@ function createGpuiSessionChatTransport(
     rewindSessionChat(params) {
       return rpc<GxserverRewindSessionChatResult>(bootstrap, '/api/rewindSessionChat', {
         messageId: params.messageId,
+        projectId,
+        sessionId,
+      });
+    },
+    selectSessionChatModel(params) {
+      return rpc<GxserverSelectSessionChatModelResult>(bootstrap, '/api/selectSessionChatModel', {
+        effort: params.effort,
+        model: params.model,
         projectId,
         sessionId,
       });
@@ -405,7 +414,7 @@ function createGpuiSessionChatTransport(
       });
     },
     /*
-    CDXC:SessionChatComposerReady 2026-08-26:
+    CDXC:SessionChat 2026-08-26:
     The evidence read behind a `composerNotReady` refusal. It lands on the
     session's own machine like every other call here, so a remote session's
     excerpt is the remote terminal's screen.
@@ -444,7 +453,7 @@ function createGpuiSessionChatTransport(
       );
     },
     /*
-    CDXC:GPUISessionChatPromptQueue 2026-08-21:
+    CDXC:SessionChat 2026-08-21:
     Ghostex's prompt queue and the synced composer draft are plain gxserver
     round trips on the same bootstrap as every other chat call, so a remote
     session's queue rides the machine's own SSH tunnel exactly like its
@@ -493,7 +502,7 @@ function createGpuiSessionChatTransport(
       });
     },
     /*
-    CDXC:SessionAgentNotes 2026-08-24:
+    CDXC:SessionNotes 2026-08-24:
     The session note is a plain gxserver round trip on the same bootstrap as
     every other chat call, so a remote session's note is stored by the daemon
     that owns the conversation. gxserver resolves the provider conversation id
@@ -513,7 +522,7 @@ function createGpuiSessionChatTransport(
       });
     },
     /*
-    CDXC:DraftSessions 2026-08-28:
+    CDXC:Drafts 2026-08-28:
     Switching a draft's agent is a plain gxserver round trip on the same
     bootstrap as every other chat call, so a remote draft is re-launched by the
     daemon that owns it. Unconditional here for the same reason the queue calls
@@ -644,7 +653,7 @@ function createGpuiSessionChatTransport(
 }
 
 /*
-CDXC:GPUISessionChatHostActions 2026-07-31:
+CDXC:SessionChat 2026-07-31:
 gpui cannot paint above this native CEF view, so the chat page renders the
 top-right [Terminal View][Agent Actions] cluster itself and posts clicks to
 Rust over the app-modal-host bridge shim installed for chat.html. The
@@ -692,7 +701,7 @@ function appModalHostMessageHandler(): AppModalHostMessageHandler | undefined {
 }
 
 /*
-CDXC:SessionChatFocusDiagnostics 2026-08-24:
+CDXC:Diagnostics 2026-08-24:
 Typing-focus-loss repro breadcrumbs. The chat page has no disk writer of its
 own, so composer/prompt transitions ride the bridge into Rust, which appends
 them to gpui-terminal-focus-debug.log only while the native.terminal.focus
@@ -772,7 +781,7 @@ function createGpuiSessionChatComposerBridge(
       };
     },
     /*
-    CDXC:GPUISessionChatSurfaceEviction 2026-08-24:
+    CDXC:SessionChat 2026-08-24:
     The desktop shell destroys chat surfaces that have been hidden for a long
     time to reclaim their Chromium RAM, and rebuilds them on the next pane that
     shows them. This is how Rust learns the page is not holding an unsent draft
@@ -783,7 +792,7 @@ function createGpuiSessionChatComposerBridge(
       postSessionChatHostAction('composerDraftState', { empty });
     },
     /*
-    CDXC:SessionChatDraftHandoff 2026-08-24:
+    CDXC:Drafts 2026-08-24:
     A transient stash is the durable copy of a draft that is about to leave the
     composer for the terminal, so it must OUTLIVE the move. Deleting it here
     (which this used to do, immediately) left the text owned by nothing but a
@@ -807,7 +816,7 @@ function createGpuiSessionChatComposerBridge(
       return options?.transient && result.created === true && promptId ? { promptId } : {};
     },
     /*
-    CDXC:SessionChatStashBadge 2026-08-24:
+    CDXC:SavedPrompts 2026-08-24:
     "Stashed from this conversation" is two questions, because a stash outlives
     the session it was written from. The provider conversation id is the
     durable answer and survives a compaction-resume rewrite (gxserver re-keys
@@ -834,7 +843,7 @@ function createGpuiSessionChatComposerBridge(
 }
 
 /*
-CDXC:GPUISessionChatAttachPicker 2026-08-02:
+CDXC:SessionChat 2026-08-02:
 The composer's attach button opens the same native macOS open panel the
 terminal's "Attach File or Folder" action uses (files AND folders — a browser
 file input cannot offer folders or absolute paths). The round trip rides the
@@ -869,7 +878,7 @@ function installAttachmentPickCallback(): void {
 }
 
 /*
-CDXC:GPUISessionChatImageSave 2026-08-19:
+CDXC:SessionChat 2026-08-19:
 "Save image" in the chat image overlay cannot be a browser download: gpui
 installs no CEF download handler, so a <a download> click is cancelled without
 a trace. Image bytes can exceed the bridge's one-message limit, so the page
@@ -968,14 +977,14 @@ function requestNativeAttachmentPaths(): Promise<string[]> {
 }
 
 /*
-CDXC:GPUISessionChatLinks 2026-08-03:
+CDXC:SessionChat 2026-08-03:
 Links in the conversation belong to the app, not to this page: a web URL opens
 in Ghostex's own Browser view (Shift+click asks for the OS browser instead),
 and a file path opens in the project's Docs view when Docs can show it, else in
 the Code view. Both ride the same host-action bridge as the button cluster; the
 page never navigates itself, since chat.html has nowhere to navigate to.
 
-CDXC:GPUISessionChatLinks 2026-08-18:
+CDXC:SessionChat 2026-08-18:
 Where a web URL actually lands is the host's call, not this page's: it reads the
 "Open links in embedded browser" Browser setting, the same one Command-clicked
 terminal links use, and hands the URL to the system default browser when that
@@ -1039,7 +1048,7 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
         shortcut: shortcut('reloadSession'),
       },
       /*
-      CDXC:SwitchAccount 2026-09-03:
+      CDXC:AgentProviders 2026-09-03:
       Listed without rows: the shared chat view fills them from the daemon's
       `switchableAgents` on the read state and hides the row when there are
       none. The pick comes back as the value and rides to Rust with the id.
@@ -1355,7 +1364,7 @@ function GpuiSessionChatPage({
   }, [extensions.length, updatePanelState]);
 
   /*
-  CDXC:SessionForkFamilies 2026-08-28:
+  CDXC:SessionFork 2026-08-28:
   Switching branches is a workspace focus change, and this page is bound to one
   session, so it asks the daemon to do it: `/api/focusSession` dispatches the
   renderer command the sidebar page already answers with its normal focusSession
@@ -1366,13 +1375,33 @@ function GpuiSessionChatPage({
   machine's own daemon through the SSH tunnel, and that daemon has no renderer
   attached from this Mac, so the command would only sit until it timed out. The
   switcher then lists the family read-only, which is the honest state.
+
+  CDXC:SessionFork 2026-09-03:
+  A fork's ancestor is usually STOPPED: forking kills the source's provider and
+  Previous Sessions hides the row. A stopped row is not in the live
+  presentation, so `/api/focusSession` alone answers "No matching session was
+  found" and the click did nothing. Wake it first: `/api/wakeSession` has no
+  lifecycle guard, respawns the provider with the row's saved agent resume
+  command, marks the SAME registry row running, and broadcasts its presentation
+  delta before it answers, so the follow-up focus resolves. Reviving in place
+  keeps the family edge intact; a Previous-Sessions-style restore would create a
+  new row and remove the parent both leaves point at.
   */
   const focusForkBranch = useCallback(
     (branch: GxserverSessionForkBranch): void => {
-      void rpc(bootstrap, '/api/focusSession', {
-        projectId: branch.projectId,
-        sessionId: branch.sessionId,
-      }).catch(() => undefined);
+      const target = { projectId: branch.projectId, sessionId: branch.sessionId };
+      const wake =
+        branch.lifecycleState === 'stopped'
+          ? rpc(bootstrap, '/api/wakeSession', target).then(() => undefined)
+          : Promise.resolve();
+      void wake
+        .then(() => rpc(bootstrap, '/api/focusSession', target))
+        .catch((error: unknown) => {
+          postSessionChatDiagnosticLog('sessionChat.forkBranchSwitchFailed', {
+            lifecycleState: branch.lifecycleState,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
     },
     [bootstrap]
   );
@@ -1503,7 +1532,7 @@ function applyDocumentChatTheme(theme: SessionChatTheme): void {
 }
 
 /*
-CDXC:SessionChatTypeScale 2026-08-22:
+CDXC:SessionChat 2026-08-22:
 An empty setting REMOVES the property rather than writing a fallback chain into
 it. The stylesheet already declares what the transcript falls back to, and the
 custom property's own fallback only applies while the property is unset — so
@@ -1562,7 +1591,7 @@ if (!projectId || !sessionId) {
       const transport = createGpuiSessionChatTransport(bootstrap, projectId, sessionId, remote);
       const composerBridge = createGpuiSessionChatComposerBridge(bootstrap, projectId, sessionId);
       /*
-      CDXC:DraftSessions 2026-08-28:
+      CDXC:Drafts 2026-08-28:
       A SEED, not the truth: the URL parameter is whatever agent the session had
       when this page was opened, and a draft's agent can be switched from the
       composer without the page reloading. SessionChatView follows the chat read

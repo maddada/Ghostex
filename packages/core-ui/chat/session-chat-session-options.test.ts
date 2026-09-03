@@ -98,16 +98,16 @@ describe('session chat session-option catalogs', () => {
     expect(mode && sessionChatOptionTracksValue(mode)).toBe(true);
   });
 
-  it("opens codex's model picker and adjusts effort with shifted arrows", () => {
+  it("drives codex's model picker for both the model and the effort", () => {
     const catalog = catalogFor('codex');
     expect(catalog.model.actionLabel).toBe("Open the CLI's model picker");
     expect(catalog.model.description).toBeUndefined();
-    expect(catalog.model.dispatch).toEqual({ kind: 'agent-picker', command: '/model' });
+    expect(catalog.model.dispatch).toEqual({ kind: 'model-picker' });
+    expect(catalog.pickerEffortFor?.('gpt-5.6-sol', 'xhigh')).toBe('xhigh');
+    expect(catalog.pickerEffortFor?.('gpt-5.5', 'ultra')).toBe('medium');
     const effort = catalog.optionsForModel('gpt-5.6-sol').find((descriptor) => descriptor.id === 'effort');
     expect(effort?.dispatch).toEqual({
-      kind: 'bounded-key-steps',
-      decreaseKey: 'shift-down',
-      increaseKey: 'shift-up',
+      kind: 'model-picker',
     });
     expect(seedSessionChatOptionState(catalog)).toEqual({});
     expect(sessionChatOptionValueLabel(catalog.model, {})).toBeNull();

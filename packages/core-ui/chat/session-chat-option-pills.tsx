@@ -8,7 +8,7 @@
 // Values are local (see session-chat-session-options.ts): a dispatch marks the
 // value "dispatched", never "confirmed".
 //
-// CDXC:DraftSessions 2026-08-28: the model pill's menu also carries a
+// CDXC:Drafts 2026-08-28: the model pill's menu also carries a
 // "Switch Agent CLI" submenu while (and only while) the session is a draft —
 // the one control here that changes the session itself rather than typing at
 // its TUI. The submenu sits above the model section.
@@ -29,6 +29,7 @@ import { getDefaultSidebarAgentByIcon, isSidebarAgentIcon } from '../../shared/s
 import { ProjectAgentLauncherIcon } from '../project-agent-launcher-icon';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -131,7 +132,7 @@ export function useSessionChatSessionOptions({
 }: {
   agent: string | null | undefined;
   /*
-  CDXC:DraftAgentSwitch 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   The draft's CONCRETE launch agent id (`sessionAgentId`), passed only while the
   session is a draft. `agent` above is the chat family, which a switch between
   two agents of the same family — Claude Code and a project custom agent built
@@ -140,14 +141,14 @@ export function useSessionChatSessionOptions({
   draftAgentId?: string | null;
   sessionKey?: string;
 }): SessionChatSessionOptionsController {
-  // CDXC:AgentModelCatalog 2026-09-02: the option catalog is built from the
+  // CDXC:AgentProviders 2026-09-02: the option catalog is built from the
   // published agent model catalog, so a remote refresh rebuilds the pills.
   const agentModelCatalog = useAgentModelCatalog();
   const catalog = useMemo(() => sessionChatSessionOptionCatalog(agent), [agent, agentModelCatalog]);
   const [state, setState] = useState<SessionChatOptionState>({});
 
   /*
-  CDXC:DraftAgentSwitch 2026-08-28: the option-storage key scheme.
+  CDXC:Drafts 2026-08-28: the option-storage key scheme.
 
   A session that has never been a draft in this client keeps the original key
   (`…options.<sessionKey>`), so every existing session still reads exactly what
@@ -248,7 +249,7 @@ export interface SessionChatSessionOptionPillsProps {
   /** True when the transport can inject raw keystrokes for agent TUI controls. */
   canSendKey: boolean;
   /*
-  CDXC:SessionChatScreenProbed 2026-08-22: true once gxserver has actually read
+  CDXC:AgentScreenDetection 2026-08-22: true once gxserver has actually read
   this session's screen. Until then a pill with no value has not been LOOKED
   for yet and shows a skeleton; once it is true, a pill with no value means the
   agent's screen names none, and the category word is the honest label.
@@ -260,8 +261,15 @@ export interface SessionChatSessionOptionPillsProps {
   onSwitchingChange?: (switching: boolean) => void;
   /** Agent-picker options flip the pane to the terminal after typing. */
   onSwitchToTerminal?: () => void;
+  /**
+   * Applies a `model-picker` choice by driving the agent's own picker on the
+   * daemon (`/api/selectSessionChatModel`). Absent when the host has no route
+   * to it: the model pill then keeps its terminal handoff row and the effort
+   * rows are not offered.
+   */
+  onPickModel?: (params: { model: string; effort: string }) => Promise<void>;
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   The composer's draft agent switcher. It exists ONLY while the session is a
   draft: `draftAgents` comes from `availableAgents` on the chat read state,
   which the daemon stops sending the moment the draft's first prompt reaches
@@ -276,7 +284,7 @@ export interface SessionChatSessionOptionPillsProps {
 }
 
 /*
-CDXC:SessionChatScreenProbed 2026-08-22:
+CDXC:AgentScreenDetection 2026-08-22:
 `skeleton` names which placeholder width to use while gxserver has not read the
 session's screen yet. The bar replaces only the LABEL — same button, same
 chevron, same padding — so resolving a value swaps text in without moving the
@@ -454,7 +462,7 @@ function ClaudePermissionModeIcon({ mode }: { mode: string }) {
 }
 
 /*
-CDXC:DraftSessions 2026-08-28:
+CDXC:Drafts 2026-08-28:
 Brand artwork for an "Agents" row. The daemon sends the icon as a plain wire
 string, so it is narrowed to the sidebar icon union and then drawn by the same
 component, with the same brand colouring, that the model pill already uses.
@@ -486,6 +494,7 @@ export function SessionChatSessionOptionPills({
   isWorking,
   onDispatchCommand,
   onDispatchKey,
+  onPickModel,
   onSwitchDraftAgent,
   onSwitchingChange,
   onSwitchToTerminal,
@@ -507,12 +516,13 @@ export function SessionChatSessionOptionPills({
     () =>
       optionDescriptors.filter(
         (descriptor) =>
-          (descriptor.dispatch.kind !== 'key' &&
+          ((descriptor.dispatch.kind !== 'key' &&
             descriptor.dispatch.kind !== 'bounded-key-steps' &&
             descriptor.dispatch.kind !== 'cyclic-key-steps') ||
-          canSendKey
+            canSendKey) &&
+          (descriptor.dispatch.kind !== 'model-picker' || onPickModel !== undefined)
       ),
-    [canSendKey, optionDescriptors]
+    [canSendKey, onPickModel, optionDescriptors]
   );
 
   const dispatch = useCallback(
@@ -537,6 +547,27 @@ export function SessionChatSessionOptionPills({
         }
         if (delivery.kind === 'toggle-command') {
           await onDispatchCommand(delivery.command);
+          return;
+        }
+        if (delivery.kind === 'model-picker') {
+          if (!onPickModel || value === undefined || catalog === null) {
+            // No daemon route: the agent's own picker in the terminal is the
+            // only way to change it, exactly as `agent-picker` behaves.
+            await onDispatchCommand('/model');
+            onSwitchToTerminal?.();
+            return;
+          }
+          const currentModel = state[catalog.model.id]?.value;
+          const currentEffort = state.effort?.value;
+          const model = descriptor.id === catalog.model.id ? value : currentModel;
+          const effort =
+            descriptor.id === 'effort' ? value : model ? catalog.pickerEffortFor?.(model, currentEffort) : undefined;
+          if (!model || !effort) {
+            throw new Error('The current model is not known yet, so there is nothing to change it from.');
+          }
+          await onPickModel({ model, effort });
+          recordDispatched(catalog.model.id, model);
+          recordDispatched('effort', effort);
           return;
         }
         if (delivery.kind === 'agent-picker') {
@@ -600,11 +631,20 @@ export function SessionChatSessionOptionPills({
           }
         });
     },
-    [onDispatchCommand, onDispatchKey, onSwitchToTerminal, onSwitchingChange, recordDispatched, state]
+    [
+      catalog,
+      onDispatchCommand,
+      onDispatchKey,
+      onPickModel,
+      onSwitchToTerminal,
+      onSwitchingChange,
+      recordDispatched,
+      state,
+    ]
   );
 
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   Drafts only, and only when this host can actually reach the endpoint: both
   gates have to pass before the section exists, exactly like every other
   daemon-capability + transport-capability pair in the chat surfaces.
@@ -677,7 +717,7 @@ export function SessionChatSessionOptionPills({
   ) : null;
 
   /*
-  CDXC:DraftSessions 2026-08-28:
+  CDXC:Drafts 2026-08-28:
   A draft whose agent has no option catalog (an unknown family) still needs the
   agent pill, because it is the only way to reach the switcher. It shows the
   draft's own agent instead of a model it cannot name, and its menu is the
@@ -716,6 +756,35 @@ export function SessionChatSessionOptionPills({
 
   const menuRows = (descriptor: SessionChatOptionDescriptor): ReactNode => {
     const current = state[descriptor.id];
+    if (descriptor.dispatch.kind === 'model-picker' && onPickModel === undefined) {
+      return (
+        <DropdownMenuItem className='rounded-md whitespace-nowrap' onClick={() => dispatch(descriptor)}>
+          {descriptor.actionLabel ?? "Open the CLI's model picker"}
+        </DropdownMenuItem>
+      );
+    }
+    /*
+    CDXC:AgentScreenDetection 2026-09-03 DECISION:
+    User: fast mode shows whether it is on or off and is toggled by sending
+    `/fast`. The row is a checkbox whose state is the fast marker gxserver
+    read from the agent's footer, so it reflects the terminal, not the click.
+    */
+    if (descriptor.dispatch.kind === 'toggle-command' && descriptor.id === 'fastMode') {
+      return (
+        <DropdownMenuCheckboxItem
+          checked={detectedOptions?.fast === true}
+          className='rounded-md'
+          onCheckedChange={() => dispatch(descriptor)}
+        >
+          <span className='grid min-w-0 gap-0.5'>
+            <span className='truncate'>{descriptor.actionLabel ?? descriptor.label}</span>
+            <span className='text-xs font-normal text-muted-foreground'>
+              {detectedOptions?.fast === true ? 'On' : 'Off'}
+            </span>
+          </span>
+        </DropdownMenuCheckboxItem>
+      );
+    }
     if (sessionChatOptionTracksValue(descriptor)) {
       return (
         <DropdownMenuRadioGroup
@@ -761,7 +830,7 @@ export function SessionChatSessionOptionPills({
   const contextWindow = isCursor ? detectedOptions?.contextWindow?.trim() : undefined;
   const fastMode = detectedOptions?.fast === true;
   const terminalStatusLine = detectedOptions?.terminalStatusLine?.trim();
-  // CDXC:ClaudeStatusline 2026-09-03: Claude's statusline payload carries the
+  // CDXC:AgentScreenDetection 2026-09-03 WHY: Claude's statusline payload carries the
   // context window fill; the ring exists only once it has been read.
   const contextMeterUsage = resolveSessionChatContextMeterUsage(detectedOptions?.contextUsage);
   const modeButton = visibleOptions.find(isShiftTabModeCycler);
@@ -808,7 +877,7 @@ export function SessionChatSessionOptionPills({
     ) || 'Options';
   const modeTitle = modeLabel ?? 'Mode';
   /*
-  CDXC:SessionChatScreenProbed 2026-08-22: a pill is "still loading" only while
+  CDXC:AgentScreenDetection 2026-08-22: a pill is "still loading" only while
   it has NO value AND gxserver has not read the screen yet. Once the screen has
   been read, no value is an answer — this agent's screen names none — and the
   category word is the honest label rather than a spinner that never ends. A
@@ -831,7 +900,7 @@ export function SessionChatSessionOptionPills({
       value: string | null
     ): string =>
       descriptor?.handoffHint ??
-      (value ? `${category} ${value} — change it in the CLI` : `${category} — set it in the CLI`);
+      (value ? `${category} ${value}. Change it in the CLI.` : `${category}. Set it in the CLI.`);
     const modelHandoffTitle = handoffTitle(catalog.model, catalog.model.label, modelLabel);
     const optionsHandoffTitle = handoffTitle(
       visibleOptions.length === 1 ? (visibleOptions[0] ?? null) : null,
@@ -841,7 +910,7 @@ export function SessionChatSessionOptionPills({
     return (
       <>
         {/*
-        CDXC:DraftSessions 2026-08-28:
+        CDXC:Drafts 2026-08-28:
         On a draft the model pill has to open a menu even here, because the
         Switch Agent CLI submenu lives inside it. The handoff itself stays
         below that row, so the read-only pill loses nothing by growing one.

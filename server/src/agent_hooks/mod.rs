@@ -1,4 +1,5 @@
 pub mod api;
+pub(crate) mod codex_status_line;
 pub(crate) mod codex_trust;
 pub mod config;
 pub mod event_mapping;

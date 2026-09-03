@@ -1,5 +1,5 @@
 /*
-CDXC:ClaudeStatusline 2026-09-03:
+CDXC:AgentHooks 2026-09-03 WHY:
 A default Claude Code install has no `statusLine`, so its screen never names
 the model or effort and the chat's option pills sat empty until the first
 assistant turn (and missed every idle `/model` or `/effort` change until the
@@ -384,7 +384,9 @@ fn payload_f64(payload: &Map<String, Value>, keys: &[&str]) -> Option<f64> {
 }
 
 /*
-Two rows, both `|` delimited so the screen grammar in session_chat_options.rs
+CDXC:AgentHooks 2026-09-03 DECISION:
+User: the default Claude statusline uses their own two-row layout (model, effort, context, cost, rate limits; then session id, project, branch), without the second context percentage and without the account email.
+Both rows are `|` delimited so the screen grammar in session_chat_options.rs
 reads the model and effort segments exactly as it reads a user's custom line:
 
     Fable 5.1 | medium | Ctx 25% | $11.14 | 5h 23% · 7d 41%
