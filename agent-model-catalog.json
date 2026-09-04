@@ -538,6 +538,13 @@
         "notes": "No /fast entry in the slash-command list; no Fast toggle in /model."
       },
       "notes": "The /model picker is a list with an Effort slider under models that have one (←/→). `agy models` flattens model and effort into one id (gemini-3.8-flash-high); Ghostex keys rows by the model part and appends the effort when it types the command. Labels drop the parenthetical the TUI shows; pickerLabel keeps it.",
+      "groups": [
+        {
+          "id": "legacy",
+          "label": "Legacy",
+          "description": "Previous generations"
+        }
+      ],
       "models": [
         {
           "value": "gemini-3.8-flash",
@@ -546,30 +553,6 @@
           "default": true,
           "efforts": ["low", "medium", "high"],
           "defaultEffort": "high",
-          "fastMode": false
-        },
-        {
-          "value": "gemini-3.7-flash",
-          "label": "Gemini 3.7 Flash",
-          "pickerLabel": "Gemini 3.7 Flash",
-          "efforts": ["low", "medium", "high"],
-          "defaultEffort": "low",
-          "fastMode": false
-        },
-        {
-          "value": "gemini-3.6-flash",
-          "label": "Gemini 3.6 Flash",
-          "pickerLabel": "Gemini 3.6 Flash",
-          "efforts": ["low", "medium", "high"],
-          "defaultEffort": "low",
-          "fastMode": false
-        },
-        {
-          "value": "gemini-3.1-pro",
-          "label": "Gemini 3.1 Pro",
-          "pickerLabel": "Gemini 3.1 Pro",
-          "efforts": ["low", "high"],
-          "defaultEffort": "low",
           "fastMode": false
         },
         {
@@ -595,6 +578,33 @@
           "description": "Medium reasoning",
           "efforts": [],
           "fastMode": false
+        },
+        {
+          "value": "gemini-3.7-flash",
+          "label": "Gemini 3.7 Flash",
+          "pickerLabel": "Gemini 3.7 Flash",
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "low",
+          "fastMode": false,
+          "group": "legacy"
+        },
+        {
+          "value": "gemini-3.6-flash",
+          "label": "Gemini 3.6 Flash",
+          "pickerLabel": "Gemini 3.6 Flash",
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "low",
+          "fastMode": false,
+          "group": "legacy"
+        },
+        {
+          "value": "gemini-3.1-pro",
+          "label": "Gemini 3.1 Pro",
+          "pickerLabel": "Gemini 3.1 Pro",
+          "efforts": ["low", "high"],
+          "defaultEffort": "low",
+          "fastMode": false,
+          "group": "legacy"
         }
       ]
     }

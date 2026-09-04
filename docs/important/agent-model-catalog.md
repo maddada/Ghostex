@@ -102,9 +102,10 @@ FIRST member, and holds every member in `models` order, so:
 
 Groups are additive for clients: an app built before 2026-09-05 ignores both
 keys and renders the same rows as one flat list, so a new group never needs an
-app release. Today Codex nests its previous generations under "Legacy" and
-Cursor nests its long lineup under Claude / GPT / Gemini / Other, keeping the
-current flagships at the top level.
+app release. Today Codex and Antigravity nest their previous generations
+under "Legacy" and Cursor nests its long lineup under Claude / GPT / Gemini /
+Other, keeping the current flagships at the top level. Claude (4 rows) and
+Grok (2) stay flat: a group header would cost more than it saves.
 
 ## Editing the file
 
