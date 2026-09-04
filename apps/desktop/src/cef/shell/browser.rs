@@ -664,6 +664,24 @@ impl CefBrowser {
         extension_bridge_event_handler: Option<ExtensionBridgeEventHandler>,
         page_load_end_handler: Option<PageLoadEndHandler>,
     ) -> Result<Self, String> {
+        /*
+        CDXC:CefRuntime 2026-09-04 WHY:
+        Every CefBrowser goes through here, so this is the one place that
+        refuses to touch libcef before the runtime exists. Packaged macOS
+        builds do not bundle Chromium; the first launch (and every launch
+        after a CEF component version bump) opens the main window and then
+        downloads the component while the app is already running. The
+        gxserver bootstrap resolves during that download, and the ensure-style
+        surface reconcile used to reach CefString::from with the library not
+        loaded yet: cef-rs resolves libcef functions lazily, so the call went
+        through a null pointer and the process died on every launch (2026-09-04,
+        8.8.0). context_initialized() implies the framework is loaded and
+        CEF finished initializing; before that, creation is reported as the
+        same fallible "not yet" that callers already retry on their next pass.
+        */
+        if !context_initialized() {
+            return Err("CEF runtime is not initialized yet".into());
+        }
         let keyboard_zoom_enabled = page_metadata_handler.is_some()
             || project_workarea_bridge_event_handler.is_some()
             || app_modal_host_bridge_surface == Some(AppModalHostBridgeSurface::SessionChat);

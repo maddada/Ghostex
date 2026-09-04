@@ -73,9 +73,17 @@ esac
 GHOSTEX_GPUI_MARKETING_VERSION="${GHOSTEX_GPUI_MARKETING_VERSION:-}"
 GHOSTEX_GPUI_BUILD_VERSION="${GHOSTEX_GPUI_BUILD_VERSION:-}"
 
-# Sparkle auto-update: the framework is staged from the macOS app's SwiftPM
-# artifacts (or GHOSTEX_GPUI_SPARKLE_FRAMEWORK); dev builds without it simply
-# run without an updater. Release packaging sets GHOSTEX_REQUIRE_SPARKLE=1.
+# Sparkle auto-update: the framework is staged only when the caller points
+# GHOSTEX_GPUI_SPARKLE_FRAMEWORK at a Sparkle.framework, which release
+# packaging (tooling/release-gpui/macos.sh) always does together with
+# GHOSTEX_REQUIRE_SPARKLE=1. Local `bun run start` bundles carry no updater.
+# CDXC:Release 2026-09-04 DECISION:
+# User: installing a published update from the titlebar of a local dev build
+# replaced that build with the release bundle and broke the launch. Dev builds
+# must never offer or install Sparkle updates. The script used to pick up
+# Sparkle.framework from leftover SwiftPM artifacts of the removed macOS Swift
+# app (build/*/SourcePackages), which is how the dev bundle got an updater;
+# that implicit lookup is gone on purpose.
 GHOSTEX_GPUI_SPARKLE_FRAMEWORK="${GHOSTEX_GPUI_SPARKLE_FRAMEWORK:-}"
 GHOSTEX_GPUI_SPARKLE_FEED_URL="${GHOSTEX_GPUI_SPARKLE_FEED_URL:-https://raw.githubusercontent.com/maddada/Ghostex/main/appcast.xml}"
 GHOSTEX_GPUI_SPARKLE_PUBLIC_ED_KEY="${GHOSTEX_GPUI_SPARKLE_PUBLIC_ED_KEY:-AGWDPeMqfhmbjt8Pbk+VTC9fDfXAYq+cZoLGCYuGn70=}"
@@ -856,21 +864,7 @@ derive_gpui_build_version() {
 }
 
 resolve_gpui_sparkle_framework_source() {
-	if [[ -n "$GHOSTEX_GPUI_SPARKLE_FRAMEWORK" ]]; then
-		printf '%s\n' "$GHOSTEX_GPUI_SPARKLE_FRAMEWORK"
-		return
-	fi
-	local candidate
-	for candidate in \
-		"$REPO_ROOT/build/arm64/SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework" \
-		"$REPO_ROOT/build/SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework" \
-		"/tmp/ghostex-xcodebuild/SourcePackages/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"; do
-		if [[ -d "$candidate" ]]; then
-			printf '%s\n' "$candidate"
-			return
-		fi
-	done
-	return 0
+	printf '%s\n' "$GHOSTEX_GPUI_SPARKLE_FRAMEWORK"
 }
 
 stage_gpui_sparkle_framework_if_available() {
@@ -878,9 +872,12 @@ stage_gpui_sparkle_framework_if_available() {
 	source_dir="$(resolve_gpui_sparkle_framework_source)"
 	if [[ -z "$source_dir" || ! -d "$source_dir" ]]; then
 		if [[ "$GHOSTEX_REQUIRE_SPARKLE" == "1" ]]; then
-			echo "Missing Sparkle.framework for the GPUI bundle. Build the macOS app once so SwiftPM downloads Sparkle, or set GHOSTEX_GPUI_SPARKLE_FRAMEWORK to a Sparkle.framework directory." >&2
+			echo "Missing Sparkle.framework for the GPUI bundle. Set GHOSTEX_GPUI_SPARKLE_FRAMEWORK to a Sparkle.framework directory (release packaging gets it from tooling/release-gpui/prepare-sparkle.sh)." >&2
 			exit 1
 		fi
+		# The staged bundle is reused across builds, so a Sparkle.framework
+		# left by an earlier build would keep offering updates to a dev bundle.
+		rm -rf "$APP_PATH/Contents/Frameworks/Sparkle.framework"
 		return 0
 	fi
 	if [[ ! -f "$source_dir/Sparkle" && ! -L "$source_dir/Sparkle" ]]; then
