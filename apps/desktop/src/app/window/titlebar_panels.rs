@@ -3,6 +3,7 @@
 // modules can still reach them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
 use crate::app::helpers::*;
+use crate::app::titlebar::resources_clean_ram_prompt::gpui_resources_clean_ram_prompt;
 use crate::*;
 
 pub(crate) struct GpuiTitlebarAnchoredDropdownState {
@@ -435,6 +436,9 @@ pub(crate) enum GpuiTitlebarReadingPanelState {
         read_ids: HashSet<String>,
     },
     Resources {
+        /// Clean RAM just copied its prompt; the button reads "Copied" until
+        /// the reset timer clears this.
+        clean_ram_copied: bool,
         collapsed_keys: HashSet<String>,
         hovered_sections: HashSet<String>,
         info_open: bool,
@@ -521,6 +525,7 @@ impl GpuiTitlebarReadingPanel {
             main_app,
             scroll_handle: ScrollHandle::new(),
             state: GpuiTitlebarReadingPanelState::Resources {
+                clean_ram_copied: false,
                 collapsed_keys,
                 hovered_sections: HashSet::new(),
                 info_open: false,
@@ -613,22 +618,7 @@ impl GpuiTitlebarReadingPanel {
             GpuiNativeResourceAction::Session => {
                 if let Some(session_id) = row.session_id {
                     let _ = self.main_app.update_in(cx, move |app, _window, cx| {
-                        let Some(shell_session_id) =
-                            app.gpui_titlebar_resource_shell_session_id(&session_id)
-                        else {
-                            return;
-                        };
-                        let Some(pane_id) =
-                            app.agents_workspace.pane_id_for_session(shell_session_id)
-                        else {
-                            return;
-                        };
-                        app.sleep_agents_tabs_for_scope(
-                            pane_id,
-                            shell_session_id,
-                            AgentsWorkspaceTabSleepScope::Sleep,
-                            cx,
-                        );
+                        app.sleep_gpui_titlebar_resource_session(&session_id, cx);
                     });
                 }
             }
@@ -1199,28 +1189,14 @@ impl GpuiTitlebarReadingPanel {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let GpuiTitlebarReadingPanelState::Resources {
-            collapsed_keys,
+            clean_ram_copied,
             info_open,
             ..
         } = &self.state
         else {
             unreachable!();
         };
-        let collapse_target_keys = snapshot
-            .server_rows
-            .iter()
-            .chain(snapshot.session_rows.iter())
-            .chain(snapshot.code_rows.iter())
-            .chain(snapshot.browser_rows.iter())
-            .chain(snapshot.orphan_rows.iter())
-            .enumerate()
-            .filter(|(_, row)| !row.children.is_empty())
-            .map(|(index, _)| format!("resource-{index}"))
-            .collect::<Vec<_>>();
-        let all_collapsed = !collapse_target_keys.is_empty()
-            && collapse_target_keys
-                .iter()
-                .all(|key| collapsed_keys.contains(key));
+        let clean_ram_copied = *clean_ram_copied;
         h_flex()
             .relative()
             .h(px(TITLEBAR_POPUP_READING_HEADER_HEIGHT))
@@ -1261,31 +1237,6 @@ impl GpuiTitlebarReadingPanel {
                     }
                 }),
             ))
-            .child(self.render_resource_icon_button(
-                "gpui-resources-collapse-all",
-                if all_collapsed {
-                    "titlebar/arrows-diagonal-expand.svg"
-                } else {
-                    "titlebar/arrows-diagonal-minimize.svg"
-                },
-                false,
-                !collapse_target_keys.is_empty(),
-                cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    if let GpuiTitlebarReadingPanelState::Resources { collapsed_keys, .. } =
-                        &mut this.state
-                    {
-                        if all_collapsed {
-                            collapsed_keys.clear();
-                        } else {
-                            collapsed_keys.clear();
-                            collapsed_keys.extend(collapse_target_keys.iter().cloned());
-                        }
-                        cx.notify();
-                    }
-                }),
-            ))
             .child(self.render_resource_text_button(
                 "gpui-resources-sleep-inactive",
                 COMMAND_ICON_MOON,
@@ -1299,17 +1250,26 @@ impl GpuiTitlebarReadingPanel {
                     });
                 }),
             ))
+            /*
+            CDXC:Resources 2026-09-04 DECISION:
+            User: drop the expand/collapse-all button and Sleep All ("who would
+            sleep running terminals"); in Sleep All's place put Clean RAM, a
+            wrench button that copies a prompt asking an agent to diagnose the
+            RAM this panel shows and how to bring it down.
+            */
             .child(self.render_resource_text_button(
-                "gpui-resources-sleep-all",
-                COMMAND_ICON_MOON,
-                "Sleep All",
-                snapshot.sleep_all_session_count > 0,
+                "gpui-resources-clean-ram",
+                "titlebar/tool.svg",
+                if clean_ram_copied {
+                    "Copied"
+                } else {
+                    "Clean RAM"
+                },
+                true,
                 cx.listener(|this, _event: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
-                    let _ = this.main_app.update_in(cx, |app, _window, cx| {
-                        app.dispatch_gpui_workspace_sleep_all_daemon_sessions(cx);
-                    });
+                    this.copy_clean_ram_prompt(cx);
                 }),
             ))
             .child(
@@ -1347,6 +1307,36 @@ impl GpuiTitlebarReadingPanel {
                     ),
             )
             .into_any_element()
+    }
+
+    fn copy_clean_ram_prompt(&mut self, cx: &mut gpui::Context<Self>) {
+        let GpuiTitlebarReadingPanelState::Resources {
+            clean_ram_copied,
+            snapshot,
+            ..
+        } = &mut self.state
+        else {
+            return;
+        };
+        let prompt = gpui_resources_clean_ram_prompt(snapshot);
+        cx.write_to_clipboard(ClipboardItem::new_string(prompt));
+        *clean_ram_copied = true;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(std::time::Duration::from_secs(2))
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if let GpuiTitlebarReadingPanelState::Resources {
+                    clean_ram_copied, ..
+                } = &mut this.state
+                {
+                    *clean_ram_copied = false;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
     }
 
     fn render_resource_icon_button(
@@ -1575,22 +1565,7 @@ impl GpuiTitlebarReadingPanel {
                                 .collect::<Vec<_>>();
                             let _ = this.main_app.update_in(cx, move |app, _window, cx| {
                                 for session_id in session_ids {
-                                    let Some(shell_session_id) =
-                                        app.gpui_titlebar_resource_shell_session_id(&session_id)
-                                    else {
-                                        continue;
-                                    };
-                                    let Some(pane_id) =
-                                        app.agents_workspace.pane_id_for_session(shell_session_id)
-                                    else {
-                                        continue;
-                                    };
-                                    app.sleep_agents_tabs_for_scope(
-                                        pane_id,
-                                        shell_session_id,
-                                        AgentsWorkspaceTabSleepScope::Sleep,
-                                        cx,
-                                    );
+                                    app.sleep_gpui_titlebar_resource_session(&session_id, cx);
                                 }
                             });
                         } else {

@@ -308,6 +308,17 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       return;
     }
     const sessionId = createGxserverPresentationProjectSessionId(request.projectId, request.sessionId);
+    /*
+    CDXC:Resources 2026-09-04 WHY:
+    The titlebar Resources panel lists the project's live sessions even when no
+    pane is mounted for them, so its moon and Sleep Project cannot go through
+    Rust's pane-owned sleep for those rows. They arrive here by gxserver
+    identity and take the same sleep path a sidebar row's Sleep uses.
+    */
+    if (request.action === 'sleepSession') {
+      await this.setSessionSleeping(sessionId, true);
+      return;
+    }
     if (request.action === 'forkSession') {
       await this.forkSession(sessionId);
       return;
@@ -522,7 +533,14 @@ export const gpuiSidebarRuntimeTerminalLifecycleMethods = {
       this.patchPresentationSession(request.projectId, request.sessionId, {
         lifecycleState: 'running',
       });
-      this.setLocalPresentationSessionFocus(request.projectId, request.sessionId);
+      /*
+      CDXC:Workarea 2026-09-04 WHY:
+      `keepSidebarFocus` marks a startup-restore wake of a split pane that is not the focused pane.
+      Moving the sidebar focus to it would republish and persist that session as the focused one, so after a restart with several sleeping panes the last wake to finish decided what the next restart focuses.
+      */
+      if (!request.keepSidebarFocus) {
+        this.setLocalPresentationSessionFocus(request.projectId, request.sessionId);
+      }
       this.publishPresentation('patch');
       return true;
     }

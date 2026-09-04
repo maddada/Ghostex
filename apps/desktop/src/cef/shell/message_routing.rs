@@ -34,6 +34,7 @@ pub(crate) enum SidebarBridgeEventKind {
     OpenBrowserUrl,
     BrowserTabFocus,
     ProjectBoardConversationResponse,
+    ResourcesSnapshotRequest,
 }
 
 impl SidebarBridgeEventKind {
@@ -82,6 +83,7 @@ impl SidebarBridgeEventKind {
             SidebarBridgeFunctionId::ProjectBoardConversationResponse => {
                 Self::ProjectBoardConversationResponse
             }
+            SidebarBridgeFunctionId::ResourcesSnapshotRequest => Self::ResourcesSnapshotRequest,
         })
     }
 }
@@ -229,6 +231,7 @@ pub enum SidebarBridgeEvent {
     OpenBrowserUrl(String),
     BrowserTabFocus(String),
     ProjectBoardConversationResponse(String),
+    ResourcesSnapshotRequest(String),
 }
 
 pub type SidebarBridgeEventHandler = StdRc<dyn Fn(SidebarBridgeEvent)>;
@@ -297,6 +300,7 @@ impl SidebarBridgeEventKind {
             Self::ProjectBoardConversationResponse => {
                 SidebarBridgeEvent::ProjectBoardConversationResponse(payload)
             }
+            Self::ResourcesSnapshotRequest => SidebarBridgeEvent::ResourcesSnapshotRequest(payload),
         }
     }
 }

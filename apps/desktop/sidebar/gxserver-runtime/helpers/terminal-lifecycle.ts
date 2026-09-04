@@ -118,6 +118,7 @@ export function normalizeGpuiWorkspaceTerminalRuntimeAction(
     record.action === 'forkSession' ||
     record.action === 'fullReloadSession' ||
     record.action === 'openSessionNote' ||
+    record.action === 'sleepSession' ||
     record.action === 'switchSessionAgent'
       ? record.action
       : undefined;
@@ -283,6 +284,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
       (key) =>
         ![
           'action',
+          'keepSidebarFocus',
           'projectId',
           'replacementProjectId',
           'replacementSessionId',
@@ -308,6 +310,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
     !projectId ||
     !sessionId ||
     (record.skipReplacementFallback !== true && record.skipReplacementFallback !== false) ||
+    (record.keepSidebarFocus !== undefined && record.keepSidebarFocus !== true) ||
     !gpuiWorkspaceLifecycleProjectIdAllowed(projectId) ||
     !gpuiLocalWorkspaceLifecycleSessionIdAllowed(sessionId)
   ) {
@@ -329,6 +332,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleQueuedRequest(
   }
   return {
     action,
+    keepSidebarFocus: record.keepSidebarFocus === true,
     projectId,
     ...(replacementProjectId && replacementSessionId ? { replacementProjectId, replacementSessionId } : {}),
     requestId: record.requestId,
@@ -349,6 +353,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
       (key) =>
         ![
           'action',
+          'keepSidebarFocus',
           'projectId',
           'replacementProjectId',
           'replacementSessionId',
@@ -382,6 +387,10 @@ export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
   const replacementSessionId = normalizeNonEmptyString(record.replacementSessionId)?.trim();
   const skipReplacementFallback =
     record.skipReplacementFallback === undefined ? false : record.skipReplacementFallback === true;
+  const keepSidebarFocus = record.keepSidebarFocus === undefined ? false : record.keepSidebarFocus === true;
+  if (record.keepSidebarFocus !== undefined && record.keepSidebarFocus !== true) {
+    return undefined;
+  }
   if (
     !projectId ||
     !sessionId ||
@@ -409,6 +418,7 @@ export function normalizeGpuiWorkspaceTerminalLifecycleRequest(
   }
   return {
     action,
+    keepSidebarFocus,
     projectId,
     ...(replacementProjectId && replacementSessionId ? { replacementProjectId, replacementSessionId } : {}),
     requestId: record.requestId,

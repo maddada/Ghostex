@@ -50,7 +50,7 @@ pub(crate) async fn handle_agent_http(
     }
 }
 
-fn dispatch_agent_http_blocking(
+pub(crate) fn dispatch_agent_http_blocking(
     state: &AppState,
     endpoint_path: String,
     request_id: String,

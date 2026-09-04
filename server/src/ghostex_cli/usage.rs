@@ -385,6 +385,10 @@ pub fn usage() -> String {
             "ports [--json]",
             "List the TCP ports listening on this machine",
         ),
+        format_help_command(
+            "resources [--json]",
+            "Print the CPU and RAM rows the desktop Resources panel shows",
+        ),
         format_help_command("server", "Run gxserver in the foreground"),
         format_help_command("server start [--json]", "Start gxserver in the background"),
         format_help_command(
@@ -1054,6 +1058,27 @@ Boundary:
   Use $ghostex-computer-use for native apps, browser chrome, and native dialogs.
 "
     .to_string()
+}
+
+pub fn resources_usage() -> String {
+    "Ghostex resources - print the desktop app's Resources panel
+
+Usage:
+  ghostex resources [--json] [--timeout-ms n]
+
+Output:
+  Without --json, prints the same header totals, sections, and rows the
+  Resources panel in the desktop titlebar shows, followed by the per-process
+  sample every row was summed from (one line per pid).
+  With --json, prints the raw snapshot: header, sections[].rows[], and
+  processes[], with memoryMb as floating-point megabytes.
+
+Notes:
+  The numbers come from the running desktop app, sampled when you run the
+  command, so the app must be open and connected to gxserver.
+  memoryMetric names the ledger memoryMb is read from (phys_footprint on macOS,
+  which is what Activity Monitor's Memory column shows)."
+        .to_string()
 }
 
 #[cfg(test)]

@@ -69,6 +69,8 @@ import type { GpuiSidebarRuntimeProjectAndCommandMethods } from './projects-and-
 import { gpuiSidebarRuntimeProjectAndCommandMethods } from './projects-and-commands';
 import type { GpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
 import { gpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
+import type { GpuiSidebarRuntimeResourcesSnapshotMethods } from './resources-snapshot';
+import { gpuiSidebarRuntimeResourcesSnapshotMethods } from './resources-snapshot';
 import type { GpuiSidebarRuntimeConversationJumpMethods } from './session-conversation-jump';
 import { gpuiSidebarRuntimeConversationJumpMethods } from './session-conversation-jump';
 import type { GpuiSidebarRuntimeDraftSessionMethods } from './draft-sessions';
@@ -92,6 +94,7 @@ import type {
   GpuiPendingGitCommitRequest,
   GpuiPendingNativeAppShotPromptInsertion,
   GpuiPendingRemoteGxserverRequest,
+  GpuiPendingResourcesSnapshotRequest,
   GpuiPresentationSubscription,
   GpuiProjectWorktreesResultMessage,
   GpuiRemoteSidebarHud,
@@ -395,6 +398,7 @@ export class GpuiSidebarRuntime {
   pendingNativeAppShotPromptInsertions: GpuiPendingNativeAppShotPromptInsertion[] = [];
   pendingGitCommitRequests = new Map<string, GpuiPendingGitCommitRequest>();
   pendingRemoteGxserverRequests = new Map<string, GpuiPendingRemoteGxserverRequest>();
+  pendingResourcesSnapshotRequests = new Map<string, GpuiPendingResourcesSnapshotRequest>();
   /*
   CDXC:TranscriptExport 2026-08-20:
   What the open Export Transcript result dialog is describing. The dialog is a
@@ -428,6 +432,7 @@ export class GpuiSidebarRuntime {
     | undefined;
   recentProjects: GxserverRecentProjectDomainState[] = [];
   remoteGxserverRequestSequence = 0;
+  resourcesSnapshotRequestSequence = 0;
   remotePresentations = new Map<string, GxserverPresentationSnapshot>();
   /*
    * CDXC:RemoteMachines 2026-08-29:
@@ -632,6 +637,9 @@ export class GpuiSidebarRuntime {
     };
     gpuiBridge.onNativeAppShotPromptResult = (payload) => {
       this.handleNativeAppShotPromptResult(payload);
+    };
+    gpuiBridge.onResourcesSnapshotResult = (payload) => {
+      this.handleResourcesSnapshotResult(payload);
     };
     gpuiBridge.onStatusPetActivation = (payload) => {
       this.handleGpuiStatusPetActivation(payload);
@@ -862,6 +870,12 @@ export class GpuiSidebarRuntime {
       : [];
     for (const payload of pendingNativeAppShotPromptResults) {
       this.handleNativeAppShotPromptResult(payload);
+    }
+    const pendingResourcesSnapshotResults = Array.isArray(gpuiBridge.pendingResourcesSnapshotResults)
+      ? gpuiBridge.pendingResourcesSnapshotResults.splice(0)
+      : [];
+    for (const payload of pendingResourcesSnapshotResults) {
+      this.handleResourcesSnapshotResult(payload);
     }
     const pendingNativeAppShots = Array.isArray(gpuiBridge.pendingNativeAppShots)
       ? gpuiBridge.pendingNativeAppShots.splice(0)
@@ -1201,6 +1215,9 @@ export class GpuiSidebarRuntime {
         return;
       case 'forkSession':
         await this.forkSession(message.sessionId);
+        return;
+      case 'splitSessionRight':
+        await this.splitSessionRight(message.sessionId);
         return;
       case 'exportSessionTranscript':
         await this.exportSessionTranscript(message.sessionId);
@@ -1571,6 +1588,7 @@ export interface GpuiSidebarRuntime
     GpuiSidebarRuntimeWorkspaceGroupMethods,
     GpuiSidebarRuntimeRemoteMachineMethods,
     GpuiSidebarRuntimeAppShotAndMiscMethods,
+    GpuiSidebarRuntimeResourcesSnapshotMethods,
     GpuiSidebarRuntimeProjectAndCommandMethods {}
 
 function installGpuiSidebarRuntimeMethods(methods: Record<string, unknown>): void {
@@ -1603,4 +1621,5 @@ installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeExportTranscriptMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeWorkspaceGroupMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeRemoteMachineMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeAppShotAndMiscMethods);
+installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeResourcesSnapshotMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeProjectAndCommandMethods);

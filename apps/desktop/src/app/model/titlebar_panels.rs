@@ -44,6 +44,9 @@ pub(crate) struct GpuiNativeResourceRow {
     pub(crate) memory_mb: f64,
     pub(crate) pids: Vec<u32>,
     pub(crate) session_id: Option<String>,
+    /// True when Sleep Inactive would put this row to sleep: an awake session
+    /// whose agent is idle (not working, not waiting for attention).
+    pub(crate) sleep_candidate: bool,
     pub(crate) url: Option<String>,
 }
 

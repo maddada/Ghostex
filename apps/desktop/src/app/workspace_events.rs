@@ -460,6 +460,9 @@ impl GhostexGpuiApp {
             cef::SidebarBridgeEvent::NativeAppShotPrompt(payload) => {
                 self.receive_sidebar_native_app_shot_prompt_payload(&payload, cx);
             }
+            cef::SidebarBridgeEvent::ResourcesSnapshotRequest(payload) => {
+                self.receive_sidebar_resources_snapshot_request_payload(&payload, cx);
+            }
             cef::SidebarBridgeEvent::SidebarCommandAction(payload) => {
                 self.receive_sidebar_command_action_payload(&payload, window, cx);
             }
@@ -873,6 +876,27 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let key = GpuiLocalWorkspaceSessionKey::from(message);
+        /*
+        CDXC:Navigation 2026-09-04 DECISION:
+        User: restart must restore the last active project, the last active view, and the last visible sessions.
+        The restored shell state already put this session on its pane as the active tab, `attach_surfaced_local_workspace_terminals` attaches it there, and in a project-editor mode with the companion open the focus-state handler retargets the companion to it.
+        When the user quit on Code, Browser, Kanban, Automate, or Docs with no companion, the ordinary focus path below would switch the app to Agents and move keyboard focus to the pane, replacing the restored view with a different one.
+        The replay therefore stops here in that case; `local_workspace_latest_focus_key` stays untouched so the pending surfaced-restore attach completes as a silent restore rather than being promoted to a click.
+        */
+        if message.startup_restore
+            && self.active_mode != TitlebarMode::Agents
+            && !self.should_keep_project_editor_open_for_local_workspace_terminal_focus(&key)
+        {
+            support_logs::append(
+                support_logs::GpuiSupportLog::TerminalFocus,
+                "gpui.terminalFocus.startupRestoreKeptView",
+                serde_json::json!({
+                    "projectId": key.project_id,
+                    "sessionId": key.session_id,
+                }),
+            );
+            return;
+        }
         if message.preferred_interface == GpuiPreferredAgentInterface::Chat {
             self.pending_agents_chat_launch_intents
                 .insert(GpuiWorkspaceTerminalSessionKey::Local(key.clone()));
@@ -956,6 +980,28 @@ impl GhostexGpuiApp {
         self.local_workspace_latest_focus_key = Some(key.clone());
         self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
         /*
+        CDXC:Workarea 2026-09-04 DECISION:
+        User: Advanced > Split Right opens the session in a pane to the right of
+        the focused agents pane. A session that already has a tab is moved into
+        a new right-hand leaf here, then the ordinary focus below selects it; a
+        session with no tab yet is attached into a new leaf at completion.
+        Splitting the lone tab of the focused pane is a no-op inside the model,
+        so that case degrades to a plain focus.
+        */
+        if message.placement == GpuiWorkspaceTerminalFocusPlacement::SplitRight
+            && let Some((shell_session_id, source_pane_id)) =
+                mapped_shell_session_id.zip(mapped_pane_id)
+            && self.agents_workspace.split_tab_to_pane(
+                source_pane_id,
+                requested_pane_id,
+                shell_session_id,
+                WorkspaceDropZone::Right,
+            )
+        {
+            self.persist_shell_layout_state();
+            cx.notify();
+        }
+        /*
         CDXC:CefRuntime 2026-07-12:
         Full reload kills the zmx daemon before this focus arrives, so the
         mounted terminal owner is a dead attach client that map-presence
@@ -1004,6 +1050,7 @@ impl GhostexGpuiApp {
             attach_intent,
             requested_pane_id,
             force_requested_pane_placement,
+            message.placement,
             GpuiLocalWorkspaceAttachOrigin::SidebarFocus,
             cx,
         );
@@ -1192,6 +1239,7 @@ impl GhostexGpuiApp {
         attach_intent: GpuiLocalWorkspaceAttachIntent,
         requested_pane_id: WorkspacePaneId,
         force_requested_pane_placement: bool,
+        placement: GpuiWorkspaceTerminalFocusPlacement,
         origin: GpuiLocalWorkspaceAttachOrigin,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -1298,13 +1346,29 @@ impl GhostexGpuiApp {
                         }
                         GpuiLocalWorkspaceAttachOrigin::SidebarFocus
                         | GpuiLocalWorkspaceAttachOrigin::WakeRecovery => {
-                            let _ = this.open_gpui_local_workspace_terminal(
-                                key,
-                                plan,
-                                requested_pane_id,
-                                force_requested_pane_placement,
-                                cx,
-                            );
+                            // A Split Right request whose tab already exists was
+                            // moved into its right-hand leaf when the focus arrived;
+                            // the ordinary open reuses that tab in place. Only a
+                            // session without a tab is attached into a new leaf here.
+                            if placement == GpuiWorkspaceTerminalFocusPlacement::SplitRight
+                                && !this.local_workspace_session_mappings.contains_key(&key)
+                            {
+                                let _ = this.open_gpui_local_workspace_terminal_in_new_leaf(
+                                    key,
+                                    plan,
+                                    requested_pane_id,
+                                    AgentsWorkspaceNewTerminalPlacement::SplitRight,
+                                    cx,
+                                );
+                            } else {
+                                let _ = this.open_gpui_local_workspace_terminal(
+                                    key,
+                                    plan,
+                                    requested_pane_id,
+                                    force_requested_pane_placement,
+                                    cx,
+                                );
+                            }
                         }
                     },
                     Err(message) => {
@@ -2047,10 +2111,12 @@ impl GhostexGpuiApp {
                 self.focus_local_workspace_terminal_from_message(
                     &GpuiSidebarWorkspaceTerminalFocusMessage {
                         force_remount: false,
+                        placement: GpuiWorkspaceTerminalFocusPlacement::Tab,
                         placement_target_session_id: None,
                         preferred_interface: GpuiPreferredAgentInterface::Terminal,
                         project_id,
                         session_id,
+                        startup_restore: false,
                     },
                     cx,
                 );

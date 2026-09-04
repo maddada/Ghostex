@@ -139,6 +139,15 @@ pub(crate) fn gpui_native_resource_is_user_runtime_process(
     .any(|needle| command.contains(needle))
 }
 
+/// CDXC:Resources 2026-09-04 WHY:
+/// A Ghostex CEF helper is recognised by its executable, not by "ghostex"
+/// appearing anywhere on the command line. The substring test also matched
+/// every helper of a Google Chrome that Ghostex launched with a
+/// `--user-data-dir=/tmp/ghostex-cursor-web-chrome.*` profile (and would match
+/// any Chrome tab whose URL mentions ghostex), so unrelated browsers were
+/// summed into the Browser runtime row. The helper executable carries the
+/// name on every platform: `Ghostex Helper (Renderer)` inside the macOS
+/// bundle, `ghostex-gpui-cef-helper` beside the Linux and Windows binaries.
 pub(crate) fn gpui_native_resource_is_ghostex_browser_process(
     process: &GpuiNativeResourceProcess,
 ) -> bool {
@@ -146,7 +155,10 @@ pub(crate) fn gpui_native_resource_is_ghostex_browser_process(
     (command.contains("--type=renderer")
         || command.contains("--type=gpu-process")
         || command.contains("--type=utility"))
-        && (command.contains("ghostex") || command.contains("/.ghostex/cef"))
+        && command
+            .split_whitespace()
+            .next()
+            .is_some_and(|executable| executable.contains("ghostex"))
 }
 
 pub(crate) fn gpui_native_resource_process_name(process: &GpuiNativeResourceProcess) -> String {

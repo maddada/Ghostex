@@ -12,6 +12,7 @@ pub mod output;
 pub mod paired_device;
 pub mod picker;
 pub mod ports;
+pub mod resources;
 pub mod rpc;
 pub mod saved_prompts;
 pub mod selector;
@@ -79,6 +80,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "move-codex-session",
     "paired-device-seen",
     "ports",
+    "resources",
     "quick-actions",
     "saved-prompts",
     "server",
@@ -271,6 +273,7 @@ fn is_known_command(name: &str) -> bool {
         "tailcat",
         "web",
         "ports",
+        "resources",
         "install-browser-skill",
         "install-browser-mcp-skill",
         "install-browser-use-skill",
@@ -714,6 +717,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "tailcat" => tailcat::tailcat_command(args),
         "web" => web::web_command(args),
         "ports" => ports::ports_command(args),
+        "resources" => resources::resources_command(args),
         "install-browser-skill" | "install-browser-mcp-skill" => {
             skills::install_browser_skill_command(args)
         }

@@ -119,6 +119,7 @@ pub enum SidebarBridgeEvent {
     OpenBrowserUrl(String),
     BrowserTabFocus(String),
     ProjectBoardConversationResponse(String),
+    ResourcesSnapshotRequest(String),
 }
 
 pub type SidebarBridgeEventHandler = Rc<dyn Fn(SidebarBridgeEvent)>;

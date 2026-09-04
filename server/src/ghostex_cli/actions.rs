@@ -454,6 +454,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         | "openBrowser"
         | "openBrowserPane"
         | "openPaths"
+        | "readResourcesSnapshot"
         | "restartSession"
         | "runCommand"
         | "saveAgent"

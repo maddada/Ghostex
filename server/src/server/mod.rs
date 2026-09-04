@@ -345,6 +345,7 @@ const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "openBrowser",
     "openBrowserPane",
     "openPaths",
+    "readResourcesSnapshot",
     "restartSession",
     /*
     CDXC:AgentSkills 2026-06-17-17:02:
