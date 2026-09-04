@@ -44,6 +44,11 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { truncateAgentModelLabel } from '../../shared/agent-model-catalog';
 import { SessionChatContextMeter, resolveSessionChatContextMeterUsage } from './session-chat-context-meter';
+import {
+  resolveSessionChatContextDetailGroups,
+  useSessionChatContextDetailsClock,
+  useSessionChatContextDetailsPreferences,
+} from './session-chat-context-details';
 import { useAgentModelCatalog } from '../../shared/agent-model-catalog-store';
 import {
   applySessionChatDetectedOptions,
@@ -268,6 +273,8 @@ export interface SessionChatSessionOptionPillsProps {
    * rows are not offered.
    */
   onPickModel?: (params: { model: string; effort: string }) => Promise<void>;
+  /** Opens the context details picker (the pen in the context meter popover). */
+  onEditContextDetails?: () => void;
   /*
   CDXC:Drafts 2026-08-28:
   The composer's draft agent switcher. It exists ONLY while the session is a
@@ -494,6 +501,7 @@ export function SessionChatSessionOptionPills({
   isWorking,
   onDispatchCommand,
   onDispatchKey,
+  onEditContextDetails,
   onPickModel,
   onSwitchDraftAgent,
   onSwitchingChange,
@@ -501,6 +509,8 @@ export function SessionChatSessionOptionPills({
   screenProbed,
 }: SessionChatSessionOptionPillsProps) {
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const contextDetailsPreferences = useSessionChatContextDetailsPreferences();
+  const contextDetailsNow = useSessionChatContextDetailsClock();
   const [switchingAgent, setSwitchingAgent] = useState(false);
   const mountedRef = useRef(true);
 
@@ -833,6 +843,14 @@ export function SessionChatSessionOptionPills({
   // CDXC:AgentScreenDetection 2026-09-03 WHY: Claude's statusline payload carries the
   // context window fill; the ring exists only once it has been read.
   const contextMeterUsage = resolveSessionChatContextMeterUsage(detectedOptions?.contextUsage);
+  const claudeStatus = detectedOptions?.claudeStatus;
+  const contextDetails = useMemo(
+    () =>
+      claudeStatus
+        ? resolveSessionChatContextDetailGroups(claudeStatus, contextDetailsPreferences, contextDetailsNow, 'shown')
+        : undefined,
+    [claudeStatus, contextDetailsNow, contextDetailsPreferences]
+  );
   const modeButton = visibleOptions.find(isShiftTabModeCycler);
   const menuOptions = modeButton ? visibleOptions.filter((descriptor) => descriptor !== modeButton) : visibleOptions;
   /*
@@ -1103,6 +1121,8 @@ export function SessionChatSessionOptionPills({
             void onDispatchCommand('/compact');
           }}
           usage={contextMeterUsage}
+          {...(contextDetails ? { details: contextDetails } : {})}
+          {...(contextDetails && onEditContextDetails ? { onEditDetails: onEditContextDetails } : {})}
         />
       ) : null}
     </>

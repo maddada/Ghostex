@@ -8,10 +8,12 @@ to the Ghostex-installed script (see server/src/agent_hooks/statusline.rs), so
 the ring exists only for Claude sessions and only once that payload arrived.
 */
 
+import { IconPencil } from '@tabler/icons-react';
 import { Button } from '../../components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import type { SessionChatContextUsage } from '../../shared/session-chat';
 import { AppTooltip } from '../app-tooltip';
+import type { SessionChatContextDetailGroup } from './session-chat-context-details';
 
 export interface SessionChatContextMeterUsage {
   /** 0–100, or null when Claude reported neither a percentage nor tokens over a window. */
@@ -84,11 +86,20 @@ export function SessionChatContextMeter({
   onCompact,
   compactDisabled,
   compactDisabledReason,
+  details,
+  onEditDetails,
 }: {
   usage: SessionChatContextMeterUsage;
   onCompact?: (() => void) | undefined;
   compactDisabled?: boolean;
   compactDisabledReason?: string | null;
+  /**
+   * The "More details" groups (session-chat-context-details.ts), already
+   * filtered to rows that are shown and have a value. Absent hides the section.
+   */
+  details?: readonly SessionChatContextDetailGroup[];
+  /** Opens the row picker; the pen icon exists only with this. */
+  onEditDetails?: (() => void) | undefined;
 }) {
   const percentageLabel = formatSessionChatContextPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
@@ -146,7 +157,11 @@ export function SessionChatContextMeter({
       </PopoverTrigger>
       <PopoverContent
         align='end'
-        className='ghostex-session-chat-popup ghostex-chat-context-meter-popover w-64 gap-2 rounded-xl p-3 text-left whitespace-normal [--radius:0.625rem]'
+        className={
+          details
+            ? 'ghostex-session-chat-popup ghostex-chat-context-meter-popover w-80 gap-2 rounded-xl p-3 text-left whitespace-normal [--radius:0.625rem]'
+            : 'ghostex-session-chat-popup ghostex-chat-context-meter-popover w-64 gap-2 rounded-xl p-3 text-left whitespace-normal [--radius:0.625rem]'
+        }
         side='top'
         sideOffset={8}
       >
@@ -196,6 +211,41 @@ export function SessionChatContextMeter({
               </Button>
             </span>
           </AppTooltip>
+        ) : null}
+        {details ? (
+          <div className='ghostex-chat-context-details mt-1 border-t border-border/60 pt-2'>
+            <div className='flex items-center justify-between'>
+              <div className='text-[11px] font-medium text-muted-foreground'>More details</div>
+              {onEditDetails ? (
+                <AppTooltip content='Choose which details to show' side='top'>
+                  <Button
+                    aria-label='Choose which details to show'
+                    className='ghostex-chat-context-details-edit -mr-1 rounded-md text-muted-foreground'
+                    onClick={onEditDetails}
+                    size='icon-xs'
+                    variant='ghost'
+                  >
+                    <IconPencil size={12} stroke={1.8} />
+                  </Button>
+                </AppTooltip>
+              ) : null}
+            </div>
+            {details.length === 0 ? (
+              <div className='mt-1 text-[11px] text-muted-foreground'>Nothing selected.</div>
+            ) : (
+              details.map((group) => (
+                <div className='ghostex-chat-context-details-group' key={group.id}>
+                  <div className='ghostex-chat-context-details-group-label'>{group.label}</div>
+                  {group.items.map((item) => (
+                    <div className='ghostex-chat-context-details-row' key={item.id}>
+                      <span className='ghostex-chat-context-details-key'>{item.label}</span>
+                      <span className='ghostex-chat-context-details-value'>{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
         ) : null}
       </PopoverContent>
     </Popover>
