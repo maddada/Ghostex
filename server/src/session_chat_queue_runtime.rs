@@ -12,11 +12,13 @@ window tracked per session, a guarded claim so two ticks cannot double-fire, and
 restart recovery that never silently re-sends. The differences are the readiness
 rule and the drain rate:
 
-  - Ready = `presentation_activity == "idle"` AND the chat transcript lifecycle
-    is not `Working`, held for SESSION_CHAT_QUEUE_STABILITY_MS.
-  - `attention` NEVER releases the queue. A prompt fired while the agent sits on
-    a permission/approval prompt would be swallowed as the ANSWER to that
-    prompt. Late delivery is harmless; early delivery corrupts a turn.
+  - Ready = the session is idle, or sits in the attention a hook's Stop
+    entered (`attentionSource: turnComplete`) with no question/approval card
+    pending, AND the chat transcript lifecycle is not `Working`, held for
+    SESSION_CHAT_QUEUE_STABILITY_MS.
+  - Every other `attention` NEVER releases the queue. A prompt fired while the
+    agent sits on a permission/approval prompt would be swallowed as the ANSWER
+    to that prompt. Late delivery is harmless; early delivery corrupts a turn.
   - ONE prompt per idle window. Delivering the head makes the agent work again,
     so the clock restarts from zero after every attempt and row #2 waits for the
     next stop. This is never a "drain the whole queue" loop.
@@ -72,6 +74,7 @@ use crate::{
         list_sessions_with_pending_queue, read_session_chat_queue_snapshot_with,
         SessionChatQueuePublisherFactory, SessionChatQueueSenderFactory,
     },
+    session_status::is_turn_complete_attention,
     storage::open_gxserver_database,
 };
 use axum::http::StatusCode;
@@ -266,8 +269,16 @@ impl SessionChatQueueRuntime {
             "working" is obvious. "attention" is the load-bearing one: the agent
             is sitting on a permission/approval prompt, and a prompt delivered
             now becomes the ANSWER to it.
+
+            CDXC:SessionChat 2026-09-04 DECISION:
+            User: Claude's Stop now rings attention like Codex's, and queued
+            prompts must keep draining unattended. The one attention the queue
+            may deliver into is the finished turn a hook's Stop entered
+            (`attentionSource: turnComplete`) with no question or approval card
+            standing; that is exactly the "next stop" this clock waits for.
+            Every other attention still holds the row.
             */
-            if presentation_activity(&session, &generated_at) != "idle" {
+            if !session_chat_queue_activity_is_deliverable(&session, &generated_at) {
                 self.reset_gate(&key);
                 continue;
             }
@@ -520,6 +531,23 @@ fn session_queue_key(project_id: &str, session_id: &str) -> String {
     format!("{project_id}\u{1f}{session_id}")
 }
 
+/// Idle, or a finished turn's attention with no interactive card pending.
+/// Working and every other attention hold the queue.
+fn session_chat_queue_activity_is_deliverable(session: &Value, generated_at: &str) -> bool {
+    match presentation_activity(session, generated_at).as_str() {
+        "idle" => true,
+        "attention" => {
+            let activity = session
+                .get("runtimeSettings")
+                .and_then(Value::as_object)
+                .and_then(|settings| settings.get("agentActivity"));
+            is_turn_complete_attention(activity)
+                && crate::agents::session_chat_prompt_setting(session).is_none()
+        }
+        _ => false,
+    }
+}
+
 fn session_text(session: &Value, key: &str) -> Option<String> {
     session
         .get(key)
@@ -675,6 +703,12 @@ pub(crate) async fn send_session_chat_message_internal(
         image_paths,
         dismiss_claude_settings,
     );
+    crate::session_chat_returned_prompt::record_session_chat_send_started(
+        &target.project_id,
+        &target.session_id,
+        text,
+        image_paths,
+    );
     if let Err(error) = crate::session_chat_send::execute_session_chat_send(
         &target.project_id,
         &target.session_id,
@@ -722,11 +756,23 @@ pub(crate) async fn send_session_chat_message_internal(
                 message: error.message,
             });
         }
+        // The user's own Escape stopped this send before Enter: not a failure
+        // the composer should announce, and the text is still theirs.
+        if error.cancelled() {
+            return Err(DomainStateError {
+                code: "sendCancelled",
+                message: error.message,
+            });
+        }
         return Err(DomainStateError {
             code: "dependencyUnavailable",
             message: error.message,
         });
     }
+    crate::session_chat_returned_prompt::record_session_chat_send_submitted(
+        &target.project_id,
+        &target.session_id,
+    );
     /*
     CDXC:AgentScreenDetection 2026-08-19:
     The bytes reached zmx, which says nothing about the agent having received

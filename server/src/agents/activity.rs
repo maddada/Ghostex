@@ -1,14 +1,14 @@
 use std::path::Path;
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
 use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::project_session_title_projection;
 use crate::session_status::{
-    ActivityUpdate, compute_activity_update, is_stale_activity_event,
-    normalize_agent_activity_value, parse_iso_ms,
+    compute_activity_update, is_stale_activity_event, normalize_agent_activity_value, parse_iso_ms,
+    ActivityUpdate, TURN_COMPLETE_ATTENTION_SOURCE,
 };
 
 pub(crate) const FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY: &str =
@@ -216,6 +216,12 @@ pub(crate) fn ingest_agent_hook_event(
             .and_then(parse_iso_ms)
             .unwrap_or_else(now_ms);
         let mut activity_params = params.clone();
+        if activity == "attention" && is_turn_complete_hook_event(params) {
+            activity_params.insert(
+                "attentionSource".to_string(),
+                json!(TURN_COMPLETE_ATTENTION_SOURCE),
+            );
+        }
         activity_params.insert("activity".to_string(), json!(activity));
         activity_params.insert(
             "nowMs".to_string(),
@@ -520,6 +526,17 @@ pub(crate) fn is_explicit_user_prompt_submit_event(params: &Map<String, Value>) 
         .or_else(|| params.get("rawEventName"))
         .and_then(Value::as_str)
         .is_some_and(|event_name| event_name.trim().eq_ignore_ascii_case("UserPromptSubmit"))
+}
+
+/// A hook event that names a completed turn (Codex's and Claude's `Stop`).
+/// Attention entered from one is a finished answer waiting to be read, not a
+/// question or approval prompt waiting to be answered.
+pub(crate) fn is_turn_complete_hook_event(params: &Map<String, Value>) -> bool {
+    params
+        .get("eventName")
+        .or_else(|| params.get("rawEventName"))
+        .and_then(Value::as_str)
+        .is_some_and(|event_name| event_name.trim().eq_ignore_ascii_case("Stop"))
 }
 
 pub(crate) fn claim_first_prompt_auto_title(
@@ -931,6 +948,7 @@ pub(crate) fn persistable_agent_activity_snapshot(value: Option<&Value>) -> Valu
         "activity",
         "agentName",
         "attentionEventId",
+        "attentionSource",
         "attentionSuppressedUntil",
         "hasSeenWorking",
         "isAcknowledged",
@@ -1010,7 +1028,16 @@ pub(crate) fn normalize_agent_hook_activity(
     // OpenClaude ships Claude's hook contract verbatim, so it shares every
     // Claude rule here exactly as it does in the notify hook's mapping.
     if matches!(normalized_agent.as_deref(), Some("claude" | "openclaude")) {
-        if matches!(lower.as_str(), "stop" | "idle") {
+        /*
+        CDXC:Notifications 2026-09-04 DECISION:
+        User: a finished Claude turn must show the blue dot and play the attention sound, like Codex.
+        Stop is Claude's completed-turn boundary and enters attention; it used to settle to idle, which left Claude with no end-of-turn attention once the 60-second reminder Notification was reclassified as idle (SessionChat 2026-08-24).
+        Mirrors activity_for_hook_event in server/src/agent_hooks/event_mapping.rs.
+        */
+        if lower == "stop" {
+            return Some("attention".to_string());
+        }
+        if lower == "idle" {
             return Some("idle".to_string());
         }
         /*

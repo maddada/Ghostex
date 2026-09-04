@@ -2442,6 +2442,14 @@ fn hook_activity_normalizes_provider_events() {
     );
     assert_eq!(
         normalize_agent_hook_activity(None, Some(&json!("Stop")), Some(&json!("Claude Code"))),
+        Some("attention".to_string())
+    );
+    assert_eq!(
+        normalize_agent_hook_activity(
+            None,
+            Some(&json!("StopFailure")),
+            Some(&json!("Claude Code"))
+        ),
         Some("idle".to_string())
     );
     assert_eq!(

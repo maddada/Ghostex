@@ -207,9 +207,21 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
             .as_deref()
             .unwrap_or_default(),
     );
+    /*
+    CDXC:SessionTitles 2026-09-04 WHY:
+    `prompt` is read from the payload's `message` field too, which on a Claude
+    Notification is the notification text. Forwarding it as the first user
+    message on a non-prompt event recorded "Claude is waiting for your input"
+    as the first prompt of 447 sessions and armed auto-title on it. Only a
+    prompt event may fall back to the payload prompt.
+    */
     let first_user_message = read_state_string(&state, "pendingFirstPromptAutoRenamePrompt")
         .or_else(|| (!decoded_first_prompt.is_empty()).then_some(decoded_first_prompt))
-        .or_else(|| prompt.filter(|prompt| is_actual_user_message_prompt(prompt)));
+        .or_else(|| {
+            prompt_event
+                .then(|| prompt.filter(|prompt| is_actual_user_message_prompt(prompt)))
+                .flatten()
+        });
     post_gxserver_hook_event(
         &agent_key,
         session_id.as_deref(),

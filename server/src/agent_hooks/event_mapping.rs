@@ -158,14 +158,21 @@ pub(crate) fn activity_for_hook_event(
     // tables (which have no PostCompact trigger check and no StopFailure arm).
     if matches!(agent_key, "claude" | "openclaude") {
         /*
+        CDXC:Notifications 2026-09-04 DECISION:
+        User: a Claude turn that finishes must show the blue dot and play the attention sound, like Codex does.
+        Claude's Stop used to settle to idle and the dot came from the 60-second "waiting for your input" Notification, which SessionChat 2026-08-24 reclassified as idle, so from release 8.2.0 no Claude turn rang at all.
+        Stop is Claude's authoritative completed-turn boundary, so it enters attention exactly like Codex's Stop.
+        SEE-ALSO: normalize_agent_hook_activity in server/src/agents/activity.rs, the turn-complete attention rule in server/src/session_status.rs, and the queue release in server/src/session_chat_queue_runtime.rs.
+        */
+        if lower == "stop" {
+            return Some("attention".to_string());
+        }
+        /*
         CDXC:AgentHooks 2026-08-27:
         Claude skips Stop after a model error and emits StopFailure instead, so
         without this arm the pane spins "working" forever on every failed turn.
         */
-        if matches!(
-            lower.as_str(),
-            "stop" | "stopfailure" | "idle" | "sessionend"
-        ) {
+        if matches!(lower.as_str(), "stopfailure" | "idle" | "sessionend") {
             return Some("idle".to_string());
         }
         /*

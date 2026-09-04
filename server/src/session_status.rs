@@ -32,6 +32,18 @@ pub const MIN_MEANINGFUL_WORKING_DURATION_MS: i64 = 10_000;
 const TITLE_ACTIVITY_WINDOW_MS: i64 = 1_000;
 const TITLE_ACTIVITY_HEARTBEAT_MS: i64 = 2_000;
 const SLOW_SPINNER_ACTIVITY_WINDOW_MS: i64 = 5_000;
+/*
+CDXC:Notifications 2026-09-04 WHY:
+`attentionSource` distinguishes the attention a hook's Stop enters (a finished
+turn waiting to be read) from every other attention (a permission, approval, or
+question waiting to be answered, a bell, an "Action Required" title). The chat
+prompt queue delivers into the first and must never deliver into the second,
+and a passive idle title must not end the first: Claude paints its idle title
+about a second after its Stop hook, which otherwise settled the fresh attention
+straight back to idle. SEE-ALSO: server/src/agents/activity.rs (sets it),
+server/src/session_chat_queue_runtime.rs (reads it).
+*/
+pub const TURN_COMPLETE_ATTENTION_SOURCE: &str = "turnComplete";
 
 const CLAUDE_CODE_IDLE_MARKERS: &[char] = &['\u{2733}', '*'];
 const CLAUDE_CODE_WORKING_MARKERS: &[char] = &[
@@ -56,6 +68,7 @@ struct ActivityState {
     activity: String,
     agent_name: Option<String>,
     attention_event_id: Option<String>,
+    attention_source: Option<String>,
     attention_suppressed_until: Option<String>,
     has_seen_working: Option<bool>,
     is_acknowledged: Option<bool>,
@@ -68,6 +81,14 @@ struct ActivityState {
     working_started_at: Option<String>,
 }
 
+impl ActivityState {
+    fn is_unacknowledged_turn_complete_attention(&self) -> bool {
+        self.activity == "attention"
+            && self.is_acknowledged != Some(true)
+            && self.attention_source.as_deref() == Some(TURN_COMPLETE_ATTENTION_SOURCE)
+    }
+}
+
 #[derive(Clone, Debug)]
 struct TitleStatusSignal {
     agent_name: String,
@@ -77,6 +98,7 @@ struct TitleStatusSignal {
 struct ActivityInput {
     activity: Option<String>,
     agent_id: Option<String>,
+    attention_source: Option<String>,
     event: Option<String>,
     now_iso: String,
     now_ms: i64,
@@ -121,6 +143,8 @@ pub fn compute_activity_update(
         agent_id: read_text(params, "agentName")
             .or_else(|| read_text_value(session, "agentId"))
             .or_else(|| previous.agent_name.clone()),
+        attention_source: read_text(params, "attentionSource")
+            .filter(|value| value == TURN_COMPLETE_ATTENTION_SOURCE),
         event: event.clone(),
         now_iso: iso_from_ms(now_ms_value),
         now_ms: now_ms_value,
@@ -164,6 +188,12 @@ pub fn compute_activity_update(
 
 pub fn normalize_agent_activity_value(value: Option<&Value>, fallback: &str) -> Value {
     normalize_agent_activity_state(value, fallback).to_value()
+}
+
+/// Whether the stored activity is an unacknowledged attention entered by a
+/// hook's Stop: a finished turn waiting to be read, not a prompt to answer.
+pub fn is_turn_complete_attention(value: Option<&Value>) -> bool {
+    normalize_agent_activity_state(value, "idle").is_unacknowledged_turn_complete_attention()
 }
 
 /*
@@ -243,6 +273,7 @@ fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
     if input.event.as_deref() == Some("acknowledge") {
         let mut next = previous.clone();
         next.activity = "idle".to_string();
+        next.attention_source = None;
         next.is_acknowledged = Some(true);
         next.last_changed_at = Some(input.now_iso.clone());
         return next;
@@ -258,9 +289,33 @@ fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
         if previous_activity == "attention" {
             next.activity = "idle".to_string();
             next.attention_event_id = None;
+            next.attention_source = None;
             next.last_changed_at = Some(input.now_iso.clone());
             next.working_source = None;
             next.working_started_at = None;
+        } else if previous_activity == "working"
+            && previous.working_source.as_deref() == Some("explicit")
+        {
+            /*
+            CDXC:SessionStatus 2026-09-04 WHY:
+            Escape is how a turn gets interrupted, and Claude Code fires no Stop
+            hook for an interrupted turn (it has no interrupt hook either), so a
+            hook-backed working claim made by UserPromptSubmit or PreToolUse
+            survived forever after the user pressed Stop: a turn cut off after a
+            second never showed a spinner title, and the same-title stop rules
+            above need one, so the idle title was ignored for hours (observed
+            2026-09-03 and 2026-09-04). An Escape therefore ends the hook's
+            claim and hands the state to the title: the stale-title window
+            closes it to idle if the agent really stopped, the spinner heartbeat
+            keeps it working if Escape stopped nothing, and the next hook makes
+            it explicit again. Sent by the chat-view interrupt endpoint and the
+            terminal-pane Escape key alike.
+            */
+            next.working_source = Some("title".to_string());
+            next.last_title_change_at = Some(input.now_iso.clone());
+            if next.last_changed_at.is_none() {
+                next.last_changed_at = Some(input.now_iso.clone());
+            }
         } else if next.last_changed_at.is_none() {
             next.last_changed_at = Some(input.now_iso.clone());
         }
@@ -294,6 +349,24 @@ fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
             next.last_title = title_transition.last_title;
             next.last_title_change_at = title_transition.last_title_change_at;
         }
+        return next;
+    }
+
+    /*
+    A finished turn stays in attention until the user acknowledges it or the
+    agent starts working again. The idle title Claude paints right after its
+    Stop hook is only the screen catching up with the hook, not a new signal,
+    so it is recorded but changes nothing. A working spinner still falls
+    through and moves the session to working.
+    */
+    if input.event.as_deref() == Some("title")
+        && !has_explicit_activity
+        && previous.is_unacknowledged_turn_complete_attention()
+        && title_signal.as_ref().map(|signal| signal.state.as_str()) != Some("working")
+    {
+        let mut next = previous.clone();
+        next.last_title = title_transition.last_title;
+        next.last_title_change_at = title_transition.last_title_change_at;
         return next;
     }
 
@@ -420,6 +493,16 @@ fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
             }
         }
         if previous_activity == "attention" {
+            // A Stop landing on a still-standing prompt attention is the same
+            // dot with a new meaning: the turn is over, so the queue may
+            // deliver. The event id stays, so nothing rings twice.
+            if input.attention_source.is_some()
+                && previous.attention_source != input.attention_source
+            {
+                let mut next = previous.clone();
+                next.attention_source = input.attention_source.clone();
+                return next;
+            }
             return previous;
         }
         if !has_explicit_activity
@@ -459,6 +542,7 @@ fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
             activity: "attention".to_string(),
             agent_name,
             attention_event_id: Some(create_attention_event_id(input.now_ms)),
+            attention_source: input.attention_source.clone(),
             has_seen_working: Some(true),
             is_acknowledged: Some(false),
             last_changed_at: Some(input.now_iso.clone()),
@@ -472,6 +556,7 @@ fn apply_agent_activity_transition(input: ActivityInput) -> ActivityState {
     let mut next = previous.clone();
     next.activity = "idle".to_string();
     next.agent_name = agent_name;
+    next.attention_source = None;
     if previous_activity == "idle" {
         next.last_changed_at = next.last_changed_at.or_else(|| Some(input.now_iso.clone()));
     } else {
@@ -839,6 +924,7 @@ fn state_for_suppressed_attention(
     next.activity = "idle".to_string();
     next.agent_name = agent_name;
     next.attention_event_id = None;
+    next.attention_source = None;
     next.attention_suppressed_until = Some(attention_suppressed_until);
     next.has_seen_working = Some(false);
     next.is_acknowledged = Some(true);
@@ -901,6 +987,8 @@ fn normalize_agent_activity_state(value: Option<&Value>, fallback: &str) -> Acti
             read_text_from_map(&record, "agentName").as_deref(),
         ),
         attention_event_id: read_text_from_map(&record, "attentionEventId"),
+        attention_source: read_text_from_map(&record, "attentionSource")
+            .filter(|value| value == TURN_COMPLETE_ATTENTION_SOURCE),
         attention_suppressed_until: read_text_from_map(&record, "attentionSuppressedUntil"),
         has_seen_working: record.get("hasSeenWorking").and_then(Value::as_bool),
         is_acknowledged: record.get("isAcknowledged").and_then(Value::as_bool),
@@ -1525,6 +1613,11 @@ impl ActivityState {
         );
         insert_optional_string(
             &mut output,
+            "attentionSource",
+            self.attention_source.clone(),
+        );
+        insert_optional_string(
+            &mut output,
             "attentionSuppressedUntil",
             self.attention_suppressed_until.clone(),
         );
@@ -1673,7 +1766,7 @@ mod tests {
     }
 
     #[test]
-    fn escape_suppresses_attention_without_clearing_working() {
+    fn escape_demotes_explicit_working_to_title_derived_without_clearing_it() {
         let working = transition(json!({
             "agentId": "codex",
             "event": "escape",
@@ -1693,7 +1786,11 @@ mod tests {
             working.get("attentionSuppressedUntil"),
             Some(&json!("2026-06-11T04:46:16.000Z"))
         );
-        assert_eq!(working.get("workingSource"), Some(&json!("explicit")));
+        assert_eq!(working.get("workingSource"), Some(&json!("title")));
+        assert_eq!(
+            working.get("lastTitleChangeAt"),
+            Some(&json!("2026-06-11T04:46:11.000Z"))
+        );
     }
 
     #[test]
