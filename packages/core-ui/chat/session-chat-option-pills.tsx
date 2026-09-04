@@ -256,12 +256,7 @@ export interface SessionChatSessionOptionPillsProps {
   canSend: boolean;
   /** True when the transport can inject raw keystrokes for agent TUI controls. */
   canSendKey: boolean;
-  /*
-  CDXC:AgentScreenDetection 2026-08-22: true once gxserver has actually read
-  this session's screen. Until then a pill with no value has not been LOOKED
-  for yet and shows a skeleton; once it is true, a pill with no value means the
-  agent's screen names none, and the category word is the honest label.
-  */
+  /** True once gxserver has read the screen; settles the separate mode pill. */
   screenProbed: boolean;
   onDispatchCommand: (command: string) => Promise<void>;
   onDispatchKey: (key: SessionChatSendKey, marker: string) => Promise<void>;
@@ -297,8 +292,8 @@ export interface SessionChatSessionOptionPillsProps {
 
 /*
 CDXC:AgentScreenDetection 2026-08-22:
-`skeleton` names which placeholder width to use while gxserver has not read the
-session's screen yet. The bar replaces only the LABEL — same button, same
+`skeleton` names which placeholder width to use while the pill has no known
+value. The bar replaces only the LABEL — same button, same
 chevron, same padding — so resolving a value swaps text in without moving the
 composer row. The trigger is disabled while it shows, because the menu would be
 offering choices against an unknown current value.
@@ -979,7 +974,13 @@ export function SessionChatSessionOptionPills({
   const modeLabel = modeButton ? sessionChatOptionValueLabel(modeButton, state) : null;
   const modeValue = modeButton ? state[modeButton.id]?.value : undefined;
   const modeIcon = modeValue ? <ClaudePermissionModeIcon mode={modeValue} /> : null;
-  const optionsLabel = sessionChatOptionsPillLabel(menuOptions, state);
+  // CDXC:AgentScreenDetection 2026-09-05 WHY:
+  // A detected effort remains known even when the host cannot dispatch its picker.
+  // Building the label from dispatchable menu rows hid that value behind "Options".
+  const optionsLabel = sessionChatOptionsPillLabel(
+    optionDescriptors.filter((descriptor) => !isShiftTabModeCycler(descriptor)),
+    state
+  );
   const combinedPickerEffort = menuOptions.find(
     (descriptor) => descriptor.id === 'effort' && descriptor.dispatch.kind === 'agent-picker'
   );
@@ -1006,16 +1007,13 @@ export function SessionChatSessionOptionPills({
       </>
     ) : undefined;
   const modeTitle = modeLabel ?? 'Mode';
-  /*
-  CDXC:AgentScreenDetection 2026-08-22: a pill is "still loading" only while
-  it has NO value AND gxserver has not read the screen yet. Once the screen has
-  been read, no value is an answer — this agent's screen names none — and the
-  category word is the honest label rather than a spinner that never ends. A
-  locally dispatched value also counts as a value, so a pill the user just set
-  never falls back to a skeleton while the agent repaints.
-  */
+  /**
+   * CDXC:AgentScreenDetection 2026-09-05 DECISION:
+   * User: always show skeletons when the model or options have not been detected, never the generic "Model" or "Options" labels.
+   * This supersedes settling those pills to category labels after the first screen probe.
+   */
   const skeletonFor = (pill: PillSkeleton, value: string | null | undefined): PillSkeleton | undefined =>
-    !screenProbed && !value ? pill : undefined;
+    !value && (pill !== 'mode' || !screenProbed) ? pill : undefined;
 
   /*
   Read-only pills (grok): both values come from the statusline gxserver reads,
