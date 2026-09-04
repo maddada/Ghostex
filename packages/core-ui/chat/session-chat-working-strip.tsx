@@ -8,6 +8,10 @@ When a terminal activity exists (compaction, background shells, a monitor, a
 ⏺ status), the strip renders the SAME activity card the transcript used to
 show — the card lives here now, and the transcript no longer duplicates it.
 Without an activity it shows the pulsing spark plus a whimsical working word.
+
+`working` is the session activity the sidebar spinner shows (`sessionWorking`
+in use-session-chat.ts), not the transcript's settled or held working, so the
+strip and the sidebar always agree.
 */
 
 import { useEffect, useState } from 'react';

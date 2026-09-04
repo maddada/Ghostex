@@ -80,6 +80,25 @@ export type SessionChatStatusTone = 'ok' | 'error' | 'neutral';
 export interface SessionChatStatusRow {
   label: string;
   tone: SessionChatStatusTone;
+  /** Short trailing fact ("exit code 0") rendered as its own non-wrapping chip. */
+  detail?: string;
+}
+
+/**
+ * CDXC:SessionChat 2026-09-04 WHY:
+ * The harness summary ends in "(exit code N)", and on a wrapped row that
+ * parenthetical splits so a lone "0)" lands on the second line. Peeling it
+ * off into a chip keeps the number with its words and lets the sentence wrap
+ * on its own.
+ */
+const TRAILING_EXIT_CODE = /\s*\((exit code -?\d+)\)\s*$/i;
+
+function splitStatusSummary(summary: string): { label: string; detail?: string } {
+  const match = TRAILING_EXIT_CODE.exec(summary);
+  if (!match) {
+    return { label: summary };
+  }
+  return { label: summary.slice(0, match.index).trim(), detail: match[1] };
 }
 
 function taskNotificationTone(status: string): SessionChatStatusTone {
@@ -104,12 +123,10 @@ export function parseSessionChatTaskNotifications(text: string): SessionChatStat
     if (summary.length === 0 && status.length === 0) {
       continue;
     }
-    rows.push({
-      // The summary already states what ran and how it ended. Without one, the
-      // status is all there is to say.
-      label: summary.length > 0 ? summary : `Background task ${status}`,
-      tone: taskNotificationTone(status),
-    });
+    // The summary already states what ran and how it ended. Without one, the
+    // status is all there is to say.
+    const { label, detail } = splitStatusSummary(summary.length > 0 ? summary : `Background task ${status}`);
+    rows.push({ label, tone: taskNotificationTone(status), ...(detail ? { detail } : {}) });
   }
   return rows;
 }

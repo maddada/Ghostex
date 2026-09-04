@@ -44,6 +44,11 @@ User decision: a dismissed notice must stay dismissed until it makes sense to sh
 The exact `detectedAt` key alone was not enough: a screen banner (Claude Code's usage-limit line) that misses one probe comes back with a fresh `detectedAt`, and the card the user had just closed reappeared every few seconds.
 gxserver now keeps the timestamp across short gaps, and this side remembers the dismissed notice's identity (`kind` + `title`) with the dismissal time: the same screen-state words re-detected within `NOTICE_REDISPLAY_COOLDOWN_MS` stay hidden, a different notice shows at once, and the same words after the cooldown are treated as a new event.
 Watchdog notices (`deliveryFailed`, an undelivered-send verdict) are exempt from the cooldown because each one reports a distinct lost message.
+
+CDXC:SessionChat 2026-09-04 DECISION:
+User: a picker card first shows collapsed and compact, with only its first two options side by side (the " (recommended)" suffix dropped), and clicking the title expands it to the full card (detail, every option, terminal output). The chevron floats in the corner and never pushes the card's content.
+User: no "Selected in terminal" badge on any picker row, in any state.
+User: picking an option is optimistic: the card disappears at once while the answer is sent in the background; it only comes back, with its failure line, when the daemon proves the answer did not land.
 */
 
 import { IconChevronRight, IconTerminal2, IconX } from '@tabler/icons-react';
@@ -57,7 +62,20 @@ import { SessionChatNoticeCard } from './session-chat-notice-card';
 const SEND_FAILED_NOTICE = "Couldn't deliver those keys. Switch to Terminal View to act there.";
 const READ_ONLY_HINT = 'Input is held by another device.';
 const CHOICE_FAILED_NOTICE = "Couldn't answer that picker. It may have been answered in the terminal already.";
-const CHOICE_DEFAULT_BADGE = 'Selected in terminal';
+/** Options a collapsed picker shows before the user expands it. */
+const COLLAPSED_CHOICE_COUNT = 2;
+/** Label suffixes dropped in the collapsed state so both options fit on one line. */
+const COLLAPSED_LABEL_SUFFIXES = [' (recommended)'];
+
+function collapsedChoiceLabel(label: string): string {
+  const trimmed = label.trim();
+  for (const suffix of COLLAPSED_LABEL_SUFFIXES) {
+    if (trimmed.toLowerCase().endsWith(suffix)) {
+      return trimmed.slice(0, -suffix.length).trimEnd();
+    }
+  }
+  return trimmed;
+}
 
 export function sessionChatTerminalNoticeDismissKey(notice: SessionChatTerminalNotice | null): string | null {
   return notice ? `${notice.kind}:${notice.detectedAt}` : null;
@@ -216,6 +234,11 @@ export function SessionChatTerminalNoticeCard({
   const [sendFailed, setSendFailed] = useState(false);
   const [choiceFailed, setChoiceFailed] = useState(false);
   const [pickedChoice, setPickedChoice] = useState<number | null>(null);
+  // Optimistic answer: the notice key whose picker was answered from here and
+  // is hidden while the daemon confirms. Cleared only by a failed answer or a
+  // new detection.
+  const [answeredKey, setAnsweredKey] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const sendingRef = useRef(false);
   const screenTailRef = useRef<HTMLPreElement>(null);
 
@@ -243,6 +266,8 @@ export function SessionChatTerminalNoticeCard({
     setSendFailed(false);
     setChoiceFailed(false);
     setPickedChoice(null);
+    setAnsweredKey(null);
+    setExpanded(false);
     setTailOpen(false);
   }, [noticeKey]);
 
@@ -252,7 +277,8 @@ export function SessionChatTerminalNoticeCard({
     }
   }, [notice?.screenTail, tailOpen]);
 
-  const visible = notice !== null && noticeKey !== null && !isNoticeDismissed(notice, dismissed);
+  const visible =
+    notice !== null && noticeKey !== null && noticeKey !== answeredKey && !isNoticeDismissed(notice, dismissed);
 
   useEffect(() => {
     onVisibleChange?.(visible);
@@ -273,13 +299,16 @@ export function SessionChatTerminalNoticeCard({
     setSending(true);
     setChoiceFailed(false);
     setPickedChoice(choiceIndex);
+    // Optimistic: the card leaves the screen now; the keystrokes land in the background.
+    setAnsweredKey(noticeKey);
     void onAnswerChoice(choiceIndex)
       .catch(() => {
         // The picker was gone (answered in the terminal, or already dismissed
-        // by the CLI): keep the card and say so rather than leaving a row that
-        // reads as confirmed.
+        // by the CLI): bring the card back and say so rather than leaving the
+        // user with a silently unanswered picker.
         setChoiceFailed(true);
         setPickedChoice(null);
+        setAnsweredKey(null);
       })
       .finally(() => {
         sendingRef.current = false;
@@ -405,24 +434,44 @@ export function SessionChatTerminalNoticeCard({
     (action): action is Extract<RenderableNoticeAction, { kind: 'switchToTerminal' }> =>
       action.kind === 'switchToTerminal'
   );
+  // A picker starts collapsed: title, its first rows, and an expand control.
+  // Everything else (detail prose, remaining rows, terminal output) waits
+  // behind the expand button so the card takes as little of the composer
+  // stack as an answer needs.
+  const collapsed = answerable && !expanded;
+  const choiceOptions = choices.map((choice) => ({
+    label: collapsed ? collapsedChoiceLabel(choice.label) : choice.label,
+  }));
+  const toggleExpanded = (): void => setExpanded((value) => !value);
   return (
     <SessionChatNoticeCard kind={notice.kind} severity={notice.severity}>
-      <div className='flex items-start gap-2 px-3 py-2.5'>
+      <div className={cn('relative flex items-start gap-2 px-3', collapsed ? 'py-2' : 'py-2.5')}>
         <div className='min-w-0 flex-1'>
-          <p className='text-sm leading-snug font-medium text-foreground'>{notice.title}</p>
-          {notice.detail ? <p className='mt-1 text-xs leading-snug text-muted-foreground'>{notice.detail}</p> : null}
           {answerable ? (
-            <div className='mt-3'>
+            <button
+              aria-expanded={expanded}
+              className='group/title flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-md pr-6 text-left outline-none'
+              data-slot='session-chat-notice-title-toggle'
+              onClick={toggleExpanded}
+              type='button'
+            >
+              <span className='min-w-0 flex-1 text-sm leading-snug font-medium text-foreground'>{notice.title}</span>
+            </button>
+          ) : (
+            <p className='text-sm leading-snug font-medium text-foreground'>{notice.title}</p>
+          )}
+          {notice.detail && !collapsed ? (
+            <p className='mt-1 text-xs leading-snug text-muted-foreground'>{notice.detail}</p>
+          ) : null}
+          {answerable ? (
+            <div className={collapsed ? 'mt-2' : 'mt-3'}>
               <SessionChatChoiceRows
+                dense={collapsed}
                 onSelect={answerChoice}
-                options={choices.map((choice) => ({
-                  label: choice.label,
-                  ...(choice.selected ? { badge: CHOICE_DEFAULT_BADGE } : {}),
-                }))}
-                // A pick stays locked in until the notice itself clears (the
-                // daemon re-reads the screen a couple of seconds after the
-                // keystrokes land). Re-enabling the rows in that gap would let
-                // a second answer arrive at a picker that is already gone.
+                options={collapsed ? choiceOptions.slice(0, COLLAPSED_CHOICE_COUNT) : choiceOptions}
+                // The rows lock while an answer is in flight; the card itself
+                // is hidden optimistically, so this only matters for the
+                // instant before the hide and for a failed answer.
                 readOnly={!canSend || sending || pickedChoice !== null}
                 selected={pickedChoice === null ? [] : [pickedChoice]}
                 showShortcuts={showShortcutLabels}
@@ -432,7 +481,7 @@ export function SessionChatTerminalNoticeCard({
               ) : null}
             </div>
           ) : null}
-          {notice.screenTail ? (
+          {notice.screenTail && !collapsed ? (
             <div className='mt-2'>
               <div className='flex min-w-0 items-center justify-between gap-2'>
                 <button
@@ -484,7 +533,7 @@ export function SessionChatTerminalNoticeCard({
           {choiceFailed ? (
             <p className='mt-2 text-[11px] leading-snug text-destructive/80'>{CHOICE_FAILED_NOTICE}</p>
           ) : null}
-          {sendKeysActions.length > 0 || (!notice.screenTail && switchToTerminalActions.length > 0) ? (
+          {!collapsed && (sendKeysActions.length > 0 || (!notice.screenTail && switchToTerminalActions.length > 0)) ? (
             <div className='mt-3 flex flex-wrap items-center gap-2'>
               {sendKeysActions.map((action, sendKeysIndex) => (
                 <Button
@@ -522,7 +571,24 @@ export function SessionChatTerminalNoticeCard({
             </div>
           ) : null}
         </div>
-        {answerable ? null : (
+        {answerable ? (
+          // Floats in the corner: the title row keeps its full width and the
+          // rows below never shift when the control appears.
+          <button
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Show less' : 'Show all options'}
+            className='absolute top-2 right-2 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors duration-150 hover:text-foreground'
+            data-slot='session-chat-notice-expand-toggle'
+            onClick={toggleExpanded}
+            title={expanded ? 'Show less' : 'Show all options'}
+            type='button'
+          >
+            <IconChevronRight
+              aria-hidden='true'
+              className={cn('ghostex-chat-disclosure-chevron', expanded && 'is-open')}
+            />
+          </button>
+        ) : (
           <Button aria-label='Dismiss' onClick={dismiss} size='icon-xs' variant='ghost'>
             <IconX aria-hidden='true' stroke={2} />
           </Button>

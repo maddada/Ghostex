@@ -4,8 +4,20 @@
 // items because the middle dot already separates the parts inside one value.
 
 import { Fragment } from 'react';
+import { createAppToastRequest } from '../../shared/app-toast-contract';
+import { postAppModalHostMessage } from '../app-modal-host-bridge';
 import { AppTooltip } from '../app-tooltip';
 import type { SessionChatContextDetailItem } from './session-chat-context-details';
+
+function copyStatusLineItem(copy: { text: string; label: string }): void {
+  void navigator.clipboard.writeText(copy.text).then(() => {
+    try {
+      postAppModalHostMessage(createAppToastRequest('success', copy.label, copy.text), 'SessionChatStatusLine:toast');
+    } catch {
+      // Toast-host availability must never gate the copy itself.
+    }
+  });
+}
 
 export function SessionChatStatusLine({ items }: { items: readonly SessionChatContextDetailItem[] }) {
   if (items.length === 0) {
@@ -20,9 +32,21 @@ export function SessionChatStatusLine({ items }: { items: readonly SessionChatCo
               ◆
             </span>
           ) : null}
-          <AppTooltip content={item.label} side='top'>
-            <span className='ghostex-chat-status-line-item'>{item.value}</span>
-          </AppTooltip>
+          {item.copy ? (
+            <AppTooltip content={`${item.label} · Click to copy id`} side='top'>
+              <button
+                className='ghostex-chat-status-line-item ghostex-chat-status-line-copy'
+                onClick={() => copyStatusLineItem(item.copy!)}
+                type='button'
+              >
+                {item.value}
+              </button>
+            </AppTooltip>
+          ) : (
+            <AppTooltip content={item.label} side='top'>
+              <span className='ghostex-chat-status-line-item'>{item.value}</span>
+            </AppTooltip>
+          )}
         </Fragment>
       ))}
     </div>

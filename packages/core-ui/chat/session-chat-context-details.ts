@@ -41,10 +41,26 @@ export type SessionChatContextDetailRowId =
   | 'folder'
   | 'pr';
 
+/**
+ * Ghostex's own view of the session for the session row. User: the title and
+ * id come from Ghostex data (the sidebar title, the agent session id on the
+ * chat read state), not from Claude's payload.
+ */
+export interface SessionChatContextDetailSession {
+  /** The sidebar title, null while the session has none. */
+  title: string | null;
+  /** Claude's conversation id (`claude --resume` takes it), null until it resolves. */
+  agentSessionId: string | null;
+  /** No prompt has reached the agent yet, so the id is not one worth copying. */
+  draft: boolean;
+}
+
 export interface SessionChatContextDetailRowInput {
   status: SessionChatClaudeStatus;
   /** Milliseconds since the epoch, for the reset and expiry countdowns. */
   now: number;
+  /** Null when the host did not describe the session; the session row is skipped. */
+  session: SessionChatContextDetailSession | null;
 }
 
 export interface SessionChatContextDetailRowDefinition {
@@ -56,6 +72,11 @@ export interface SessionChatContextDetailRowDefinition {
   recommended: boolean;
   /** Null when Claude did not report what the row needs; the row is skipped. */
   value: (input: SessionChatContextDetailRowInput) => string | null;
+  /**
+   * Text a click on the status line item copies, with the toast title. User:
+   * clicking the session name in the status line copies the session id.
+   */
+  copy?: (input: SessionChatContextDetailRowInput) => { text: string; label: string } | null;
 }
 
 const SEPARATOR = ' · ';
@@ -240,10 +261,17 @@ export const SESSION_CHAT_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetail
   {
     id: 'sessionName',
     group: 'session',
-    label: "Claude's session name",
-    description: 'The title Claude gave this conversation',
+    label: 'Session title',
+    description: 'The sidebar title, or the session id until there is one',
     recommended: false,
-    value: ({ status }) => status.sessionName ?? null,
+    // User: the id stands in until the session has a title, and a draft
+    // (nothing sent yet) says so instead of showing an id that will not be resumed.
+    value: ({ session }) =>
+      session === null ? null : session.draft ? 'Draft session' : (session.title ?? session.agentSessionId),
+    copy: ({ session }) =>
+      session !== null && !session.draft && session.agentSessionId !== null
+        ? { text: session.agentSessionId, label: 'Session id copied' }
+        : null,
   },
   {
     id: 'repo',
@@ -392,20 +420,33 @@ export function writeSessionChatContextDetailsPreferences(next: SessionChatConte
   window.dispatchEvent(new Event(CHANGED_EVENT));
 }
 
+/*
+CDXC:SessionChatDetectedOptions 2026-09-04 DECISION:
+User: a change saved in one chat view must reach every other chat view, not
+necessarily instantly. Every desktop chat view is its own CEF browser on the
+shared app-UI profile, so they read one localStorage; the `storage` event
+carries a save to the other views and a focus re-read covers a view that
+missed it, so the next time it is looked at it shows the latest picks.
+*/
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
+  const reread = () => {
+    cachedPreferences = null;
+    listener();
+  };
   const onStorage = (event: StorageEvent) => {
     if (event.key === null || event.key === SESSION_CHAT_CONTEXT_DETAILS_STORAGE_KEY) {
-      cachedPreferences = null;
-      listener();
+      reread();
     }
   };
   window.addEventListener(CHANGED_EVENT, listener);
   window.addEventListener('storage', onStorage);
+  window.addEventListener('focus', reread);
   return () => {
     listeners.delete(listener);
     window.removeEventListener(CHANGED_EVENT, listener);
     window.removeEventListener('storage', onStorage);
+    window.removeEventListener('focus', reread);
   };
 }
 
@@ -461,6 +502,8 @@ export interface SessionChatContextDetailItem {
   id: SessionChatContextDetailRowId;
   label: string;
   value: string;
+  /** Present when a click on the status line item copies something. */
+  copy?: { text: string; label: string };
 }
 
 export interface SessionChatContextDetailGroup {
@@ -477,7 +520,8 @@ export function resolveSessionChatContextDetailGroups(
   status: SessionChatClaudeStatus | undefined,
   preferences: SessionChatContextDetailsPreferences,
   now: number,
-  select: 'shown' | 'starred'
+  select: 'shown' | 'starred',
+  session: SessionChatContextDetailSession | null
 ): SessionChatContextDetailGroup[] {
   if (!status) {
     return [];
@@ -490,7 +534,7 @@ export function resolveSessionChatContextDetailGroups(
       if (!selected(preferences, row)) {
         continue;
       }
-      const value = row.value({ status, now });
+      const value = row.value({ status, now, session });
       if (value !== null) {
         items.push({ id: row.id, label: row.label, value });
       }
@@ -523,17 +567,20 @@ export function orderedSessionChatStarredRows(
 export function resolveSessionChatStarredContextDetails(
   status: SessionChatClaudeStatus | undefined,
   preferences: SessionChatContextDetailsPreferences,
-  now: number
+  now: number,
+  session: SessionChatContextDetailSession | null
 ): SessionChatContextDetailItem[] {
   if (!status) {
     return [];
   }
   const items: SessionChatContextDetailItem[] = [];
   for (const row of orderedSessionChatStarredRows(preferences)) {
-    const value = row.value({ status, now });
-    if (value !== null) {
-      items.push({ id: row.id, label: row.label, value });
+    const value = row.value({ status, now, session });
+    if (value === null) {
+      continue;
     }
+    const copy = row.copy?.({ status, now, session }) ?? null;
+    items.push({ id: row.id, label: row.label, value, ...(copy ? { copy } : {}) });
   }
   return items;
 }

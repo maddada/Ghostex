@@ -362,12 +362,17 @@ export function SessionChatMonacoInput({
           renderLineHighlight: 'none',
           renderWhitespace: 'none',
           scrollBeyondLastLine: false,
+          // 'visible' shows the slider exactly while the draft overflows; the
+          // composer's hover rule in chat.css decides when it is actually seen.
+          // The 15px track is the strip the editor extends past the composer
+          // padding (CDXC:SessionChat 2026-09-04 in chat.css), the slider is 3px.
           scrollbar: {
             alwaysConsumeMouseWheel: false,
             horizontal: 'hidden',
             useShadows: false,
-            vertical: 'auto',
-            verticalScrollbarSize: 3,
+            vertical: 'visible',
+            verticalScrollbarSize: 15,
+            verticalSliderSize: 3,
           },
           selectionHighlight: false,
           snippetSuggestions: 'none',

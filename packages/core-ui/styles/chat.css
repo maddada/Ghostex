@@ -1176,8 +1176,27 @@ the markdown block) rather than pinned to a tier of its own.
   white-space: nowrap;
 }
 
+/* User: the copyable item looks exactly like its neighbours, no hover fill or
+   colour change; the tooltip is the only tell. It is also excluded from the
+   dark-theme generic chat button rule below. */
+.ghostex-chat-status-line-copy,
+.ghostex-chat-status-line-copy:hover {
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  margin: 0;
+  padding: 0;
+}
+
 .ghostex-chat-fast-mode-icon {
   color: #f6daa0;
+}
+
+/* Codex Plan mode on the options pill: the same pastel weight as the fast
+   bolt, tinted blue. */
+.ghostex-chat-plan-mode-icon {
+  color: #a9c7f5;
 }
 
 @container ghostex-chat-composer (max-width: 32rem) {
@@ -1319,16 +1338,29 @@ the markdown block) rather than pinned to a tier of its own.
    picker rows are in that group too. Their keyboard highlight is a `bg-accent`
    fill on the active row, and flattening it left the arrow keys moving an
    invisible selection — only the CSS `:hover` fill below ever showed, so the
-   pickers read as mouse-only. */
+   pickers read as mouse-only.
+
+   CDXC:SessionChat 2026-09-04 WHY: the transcript's reference pills and file
+   chips are buttons too, and this selector's seven `:not()` terms outrank
+   their own colour rules, so every file, folder, and skill reference in a
+   dark-theme message rendered in plain `--foreground` while the composer's
+   pills kept their type colour. They opt out here so the transcript keeps the
+   per-kind tint and the dotted-underline hover instead of the neutral fill.
+   The status line's copy button opts out too: the user wants it to look
+   exactly like the plain text items beside it, with no hover fill. */
 .ghostex-session-chat-scope[data-chat-theme='dark']
   button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
     .ghostex-chat-scroll-bottom-button
-  ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]),
+  ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
+    .ghostex-chat-reference-pill
+  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy),
 body[data-session-chat-theme='dark']
   .ghostex-session-chat-popup
   button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
     .ghostex-chat-scroll-bottom-button
-  ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]) {
+  ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
+    .ghostex-chat-reference-pill
+  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy) {
   background-color: transparent;
   color: var(--foreground);
 }
@@ -1337,15 +1369,15 @@ body[data-session-chat-theme='dark']
   button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
-    :disabled
-  ):hover,
+    .ghostex-chat-reference-pill
+  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy):not(:disabled):hover,
 body[data-session-chat-theme='dark']
   .ghostex-session-chat-popup
   button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
-    :disabled
-  ):hover {
+    .ghostex-chat-reference-pill
+  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy):not(:disabled):hover {
   background-color: #333333;
 }
 
@@ -1889,8 +1921,43 @@ so the swap barely moves the composer row.
   --ghostex-chat-reference-outline: #668773;
 }
 
+/*
+CDXC:SessionChat 2026-09-04 DECISION:
+User: the chat box's input scrollbar is hidden unless the pointer is over the
+chat box, and it sits very close to the box's right edge. The composer pads
+its content by 1rem, so both input backends reach 0.75rem further right than
+the row and hand that strip to the scrollbar: the 3px slider ends up 4px in
+from the border while the text keeps its old wrap width. Monaco draws the
+slider inline-positioned inside a 15px scrollbar track (`verticalScrollbarSize`
+in session-chat-monaco-input.tsx reserves the strip for wrapping,
+`verticalSliderSize` keeps the slider 3px), so the slider is pinned to the
+track's right edge here. Visibility is driven by the composer box, not by
+Monaco's own editor hover, so hovering the pills row shows it too.
+*/
+.ghostex-chat-composer-monaco {
+  margin-right: -0.75rem;
+}
+
+.ghostex-chat-composer-monaco .monaco-scrollable-element > .scrollbar.vertical > .slider {
+  left: auto !important;
+  right: 0;
+}
+
+.ghostex-chat-composer-monaco .monaco-scrollable-element > .scrollbar.vertical {
+  transition: opacity 0.2s ease;
+}
+
+.ghostex-chat-composer:not(:hover) .ghostex-chat-composer-monaco .monaco-scrollable-element > .scrollbar.vertical {
+  opacity: 0;
+}
+
+.ghostex-chat-composer-plain-input {
+  margin-right: -0.75rem;
+  padding-right: 0.75rem;
+}
+
 /* 3px scrollbar in the chat input (the Monaco backend gets the same width via
-   verticalScrollbarSize). */
+   verticalSliderSize). */
 .ghostex-chat-composer-input::-webkit-scrollbar {
   width: 3px;
 }
@@ -1898,6 +1965,10 @@ so the swap barely moves the composer row.
 .ghostex-chat-composer-input::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--foreground) 28%, transparent);
   border-radius: 2px;
+}
+
+.ghostex-chat-composer:not(:hover) .ghostex-chat-composer-input::-webkit-scrollbar-thumb {
+  background: transparent;
 }
 
 .ghostex-chat-composer-input::-webkit-scrollbar-track {

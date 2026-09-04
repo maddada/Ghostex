@@ -17,8 +17,6 @@ export interface SessionChatChoiceRowOption {
   label: string;
   /** Second line; skipped when it only repeats the label. */
   description?: string;
-  /** Badge for the row the surface wants marked as its default. */
-  badge?: string;
 }
 
 export interface SessionChatChoiceRowsProps {
@@ -33,9 +31,12 @@ export interface SessionChatChoiceRowsProps {
    * matching keyboard handler, so the badge can never promise a dead key.
    */
   showShortcuts?: boolean;
+  /** Tighter rows, laid out side by side, for a collapsed picker that shows only its leading options. */
+  dense?: boolean;
 }
 
 export function SessionChatChoiceRows({
+  dense = false,
   onSelect,
   options,
   readOnly = false,
@@ -43,14 +44,15 @@ export function SessionChatChoiceRows({
   showShortcuts = false,
 }: SessionChatChoiceRowsProps) {
   return (
-    <div className='max-h-[45vh] space-y-1.5 overflow-y-auto'>
+    <div className={cn('max-h-[45vh] overflow-y-auto', dense ? 'grid grid-cols-2 gap-1.5' : 'space-y-1.5')}>
       {options.map((option, optionIndex) => {
         const isSelected = selected.includes(optionIndex);
         const shortcutKey = showShortcuts && optionIndex < 9 ? optionIndex + 1 : null;
         return (
           <button
             className={cn(
-              'group/option flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left outline-none transition-all duration-150 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/30',
+              'group/option flex w-full items-center gap-3 rounded-lg border px-3 text-left outline-none transition-all duration-150 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/30',
+              dense ? 'py-1.5' : 'py-2',
               isSelected
                 ? 'border-primary/30 bg-primary/10 text-foreground'
                 : 'border-transparent bg-foreground/[0.045] text-foreground/85 hover:border-border hover:bg-foreground/[0.08]',
@@ -75,11 +77,6 @@ export function SessionChatChoiceRows({
                 <span className='text-xs leading-snug text-muted-foreground'>{option.description}</span>
               ) : null}
             </span>
-            {option.badge ? (
-              <span className='flex h-5 shrink-0 items-center rounded-md bg-muted/60 px-1.5 text-[10px] font-medium text-muted-foreground'>
-                {option.badge}
-              </span>
-            ) : null}
             {isSelected ? (
               <IconCheck aria-hidden='true' className='ghostex-chat-glyph-semantic text-primary' />
             ) : shortcutKey !== null ? (

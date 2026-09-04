@@ -34,6 +34,7 @@ import {
   writeSessionChatContextDetailsPreferences,
   type SessionChatContextDetailGroupId,
   type SessionChatContextDetailRowDefinition,
+  type SessionChatContextDetailSession,
   type SessionChatContextDetailsPreferences,
 } from './session-chat-context-details';
 
@@ -55,11 +56,14 @@ function moveRow<T>(rows: readonly T[], from: number, to: number): T[] {
 export function SessionChatContextDetailsDialog({
   onOpenChange,
   open,
+  session,
   status,
   theme,
 }: {
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  /** Ghostex's own title, id and draft state for the session row. */
+  session: SessionChatContextDetailSession | null;
   /** Live sample values next to each row; absent rows show a dash. */
   status: SessionChatClaudeStatus | undefined;
   theme: SessionChatTheme;
@@ -125,7 +129,7 @@ export function SessionChatContextDetailsDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
         className={cn(
-          'ghostex-session-chat-popup ghostex-chat-context-details-dialog w-full max-w-lg rounded-xl font-sans [--radius:0.625rem]',
+          'ghostex-session-chat-popup ghostex-chat-context-details-dialog w-full rounded-xl sm:max-w-xl font-sans [--radius:0.625rem]',
           theme === 'dark' && 'dark'
         )}
       >
@@ -136,7 +140,7 @@ export function SessionChatContextDetailsDialog({
             row to show its value under the chat box.
           </DialogDescription>
         </DialogHeader>
-        <div className='ghostex-chat-context-details-dialog-body -mx-1 flex max-h-[60vh] flex-col gap-1 overflow-y-auto px-1'>
+        <div className='ghostex-chat-context-details-dialog-body -mx-1 flex max-h-[60vh] flex-col gap-1 overflow-x-hidden overflow-y-auto px-1'>
           {SESSION_CHAT_CONTEXT_DETAIL_GROUPS.map((group) => {
             const rows = orderedSessionChatContextDetailRows(draft, group.id);
             const handleDragEnd = ((event) => {
@@ -171,7 +175,7 @@ export function SessionChatContextDetailsDialog({
                       onToggleShown={(shown) => toggleShown(row, shown)}
                       onToggleStarred={() => toggleStarred(row)}
                       row={row}
-                      sample={status ? row.value({ status, now }) : null}
+                      sample={status ? row.value({ status, now, session }) : null}
                       shown={isSessionChatContextDetailShown(draft, row)}
                       starred={isSessionChatContextDetailStarred(draft, row)}
                     />
@@ -295,7 +299,7 @@ function ContextDetailOptionRow({
         <div className='truncate text-[11px] text-muted-foreground'>{row.description}</div>
       </div>
       <div
-        className='max-w-[11rem] shrink-0 truncate text-[11px] text-muted-foreground tabular-nums'
+        className='max-w-[13rem] shrink-0 truncate text-[11px] text-muted-foreground tabular-nums'
         title={sample ?? undefined}
       >
         {sample ?? '—'}

@@ -48,6 +48,7 @@ import {
   resolveSessionChatContextDetailGroups,
   useSessionChatContextDetailsClock,
   useSessionChatContextDetailsPreferences,
+  type SessionChatContextDetailSession,
 } from './session-chat-context-details';
 import { useAgentModelCatalog } from '../../shared/agent-model-catalog-store';
 import {
@@ -275,6 +276,8 @@ export interface SessionChatSessionOptionPillsProps {
   onPickModel?: (params: { model: string; effort: string }) => Promise<void>;
   /** Opens the context details picker (the pen in the context meter popover). */
   onEditContextDetails?: () => void;
+  /** Ghostex's own title, id and draft state for the popover's session row. */
+  contextDetailsSession?: SessionChatContextDetailSession;
   /*
   CDXC:Drafts 2026-08-28:
   The composer's draft agent switcher. It exists ONLY while the session is a
@@ -528,6 +531,7 @@ function optionMenuSections(descriptors: readonly SessionChatOptionDescriptor[])
 export function SessionChatSessionOptionPills({
   canSend,
   canSendKey,
+  contextDetailsSession,
   controller,
   detectedOptions,
   draftAgentId,
@@ -899,9 +903,15 @@ export function SessionChatSessionOptionPills({
   const contextDetails = useMemo(
     () =>
       claudeStatus
-        ? resolveSessionChatContextDetailGroups(claudeStatus, contextDetailsPreferences, contextDetailsNow, 'shown')
+        ? resolveSessionChatContextDetailGroups(
+            claudeStatus,
+            contextDetailsPreferences,
+            contextDetailsNow,
+            'shown',
+            contextDetailsSession ?? null
+          )
         : undefined,
-    [claudeStatus, contextDetailsNow, contextDetailsPreferences]
+    [claudeStatus, contextDetailsNow, contextDetailsPreferences, contextDetailsSession]
   );
   const modeButton = visibleOptions.find(isShiftTabModeCycler);
   const menuOptions = modeButton ? visibleOptions.filter((descriptor) => descriptor !== modeButton) : visibleOptions;
@@ -1115,19 +1125,21 @@ export function SessionChatSessionOptionPills({
             label={optionsLabel ?? 'Options'}
             skeleton={skeletonFor('options', optionsLabel)}
             title={optionsTitle}
-            trailingIcon={isCodex && fastMode ? <FastModeIcon /> : undefined}
+            trailingIcon={optionsTrailingIcon}
           />
           <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-60 rounded-xl [--radius:0.625rem]'>
-            {menuOptions.map((descriptor, index) => (
-              <Fragment key={descriptor.id}>
+            {menuSections.map((section, index) => (
+              <Fragment key={section.label}>
                 {index > 0 ? <DropdownMenuSeparator /> : null}
                 {/* Base UI's GroupLabel throws outside a Menu.Group context. */}
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>{descriptor.label}</DropdownMenuLabel>
-                  {descriptor.description ? (
-                    <DropdownMenuLabel className='whitespace-normal pt-0'>{descriptor.description}</DropdownMenuLabel>
+                  <DropdownMenuLabel>{section.label}</DropdownMenuLabel>
+                  {section.description ? (
+                    <DropdownMenuLabel className='whitespace-normal pt-0'>{section.description}</DropdownMenuLabel>
                   ) : null}
-                  {menuRows(descriptor)}
+                  {section.descriptors.map((descriptor) => (
+                    <Fragment key={descriptor.id}>{menuRows(descriptor)}</Fragment>
+                  ))}
                 </DropdownMenuGroup>
               </Fragment>
             ))}
