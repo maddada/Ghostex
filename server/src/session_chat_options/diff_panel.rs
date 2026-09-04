@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use crate::domain::DomainRepository;
-use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
+use super::{normalize_spaces, strip_ansi_sgr};
 
 const DIFF_PANEL_CLOSE_GLYPH: char = '✕';
 const DIFF_PANEL_EMPTY_HEADER: &str = "No changes this session";

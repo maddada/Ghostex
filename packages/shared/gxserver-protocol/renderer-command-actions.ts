@@ -1,0 +1,25 @@
+export const GXSERVER_RENDERER_COMMAND_ACTIONS = [
+  'assertSidebarCard',
+  'clickButton',
+  'focusGroup',
+  'focusSession',
+  'fullReloadSession',
+  'moveProject',
+  'moveSidebar',
+  'openBrowser',
+  'openBrowserPane',
+  'openPaths',
+  'readResourcesSnapshot',
+  'restartSession',
+  'renameCommand',
+  'runCommand',
+  'saveAgent',
+  'sendMessage',
+  'setViewMode',
+  'setVisibleCount',
+  'switchProject',
+  'toggleSidebarCollapsed',
+  'waitFor',
+] as const;
+
+export type GxserverRendererCommandAction = (typeof GXSERVER_RENDERER_COMMAND_ACTIONS)[number];

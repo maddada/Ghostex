@@ -116,7 +116,7 @@ pub type SessionChatWatchdogStateReader =
 /// Starts the returned-prompt detector for this send (supplied by the send
 /// path, which owns the AppState the detector needs). Called at the deadline
 /// instead of a delivery verdict when the screen shows the sent text back in
-/// Claude's composer (CDXC:SessionChat in session_chat_returned_prompt.rs).
+/// Claude's composer (CDXC:SessionChat in session_chat_follower/returned_prompt.rs).
 pub type SessionChatReturnedPromptTrigger = Arc<dyn Fn() + Send + Sync>;
 
 // ---------------------------------------------------------------------------
@@ -485,7 +485,7 @@ async fn run_session_chat_send_watchdog(
         if let Some(screen) =
             crate::session_chat_send::capture_session_terminal_text(&probe.zmx_name).await
         {
-            if crate::session_chat_returned_prompt::screen_shows_returned_session_chat_send(
+            if crate::session_chat_follower::returned_prompt::screen_shows_returned_session_chat_send(
                 &probe.project_id,
                 &probe.session_id,
                 probe.agent.as_deref(),

@@ -1,6 +1,6 @@
 /*
 CDXC:SessionChat 2026-09-04 WHY:
-Client half of the returned-prompt flow (server: session_chat_returned_prompt.rs).
+Client half of the returned-prompt flow (server: session_chat_follower/returned_prompt.rs).
 gxserver carries `returnedPrompt` on reads and frames for a couple of minutes,
 and every client that sees it must put the text back into its composer exactly
 once: a reload inside that window, a resync, or a second frame must not stack
@@ -14,8 +14,13 @@ is pressed, so it shows even when Claude writes no interrupt marker of its own
 turn interrupted mid-response, its transcript row supersedes the marker.
 */
 
-import type { SessionChatMessage } from '../../shared/session-chat';
-import type { SessionChatCommandMarker } from './session-chat-pending';
+import { useCallback, useEffect, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import type { SessionChatMessage, SessionChatReturnedPrompt } from '../../shared/session-chat';
+import {
+  normalizeSessionChatPendingText,
+  type SessionChatCommandMarker,
+  type SessionChatPendingSend,
+} from './session-chat-pending';
 
 const APPLIED_STORAGE_KEY = 'ghostex.sessionChat.returnedPrompts.applied';
 const APPLIED_LIMIT = 32;
@@ -61,6 +66,85 @@ export function markSessionChatReturnedPromptApplied(id: string): void {
   } catch {
     // Private mode / quota: the in-page dedupe still holds for this mount.
   }
+}
+
+export function useSessionChatReturnedPrompt(
+  setPending: Dispatch<SetStateAction<readonly SessionChatPendingSend[]>>
+): {
+  applyReturnedPrompt: (prompt: SessionChatReturnedPrompt) => void;
+  clearReturnedPrompt: () => void;
+  returnedPrompt: SessionChatReturnedPrompt | null;
+} {
+  /*
+  CDXC:SessionChat 2026-09-04: the prompt Claude handed back to its composer
+  after an Escape (session-chat-returned-prompt.ts). Set from reads and frames,
+  never cleared by omission; the view applies each id once.
+  */
+  const [returnedPrompt, setReturnedPrompt] = useState<SessionChatReturnedPrompt | null>(null);
+  /*
+  CDXC:SessionChat 2026-09-04 DECISION:
+  User: the optimistic echo of a prompt Claude handed back must leave the
+  transcript with it. The echo never had a transcript twin to prune it (the
+  message was never recorded), and an Escape typed in the terminal never
+  reached this client's own interrupt, so the returned prompt is what retires
+  it.
+  */
+  const applyReturnedPrompt = useCallback((prompt: SessionChatReturnedPrompt): void => {
+    setReturnedPrompt(prompt);
+    const returnedText = normalizeSessionChatPendingText(prompt.text);
+    setPending((current) => {
+      const next = current.filter((entry) => normalizeSessionChatPendingText(entry.text) !== returnedText);
+      return next.length === current.length ? current : next;
+    });
+  }, [setPending]);
+  const clearReturnedPrompt = useCallback((): void => setReturnedPrompt(null), []);
+  return { applyReturnedPrompt, clearReturnedPrompt, returnedPrompt };
+}
+
+type ReturnedPromptComposer = {
+  restoreReturnedPrompt: (text: string) => void;
+};
+
+export function useRestoreSessionChatReturnedPrompt(
+  returnedPrompt: SessionChatReturnedPrompt | null,
+  composerMounted: boolean,
+  composerRef: RefObject<ReturnedPromptComposer | null>
+): void {
+  /*
+  CDXC:SessionChat 2026-09-04: a prompt Claude handed back to its composer
+  comes back into this one, once per id (see session-chat-returned-prompt.ts).
+  Re-runs when the transcript finishes loading, because the composer is not
+  mounted while the view holds the loading state.
+  */
+  useEffect(() => {
+    if (!returnedPrompt || !composerMounted) {
+      return;
+    }
+    if (hasAppliedSessionChatReturnedPrompt(returnedPrompt.id)) {
+      return;
+    }
+    const composer = composerRef.current;
+    if (!composer) {
+      return;
+    }
+    markSessionChatReturnedPromptApplied(returnedPrompt.id);
+    composer.restoreReturnedPrompt(returnedPrompt.text);
+  }, [composerMounted, composerRef, returnedPrompt]);
+}
+
+export function restoreSessionChatReturnedPrompt(
+  text: string,
+  currentText: string,
+  focus: () => void,
+  restore: (text: string) => void
+): void {
+  // The terminal-to-chat draft transfer on a view switch may already have
+  // brought the same text over; never stack a second copy.
+  if (currentText.includes(text)) {
+    focus();
+    return;
+  }
+  restore(text);
 }
 
 function messageText(message: SessionChatMessage): string {

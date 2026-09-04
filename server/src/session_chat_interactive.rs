@@ -770,7 +770,7 @@ pub fn build_session_chat_prompt_state_frame(
     }
     insert_optional_selected_options(&mut frame, selected_options);
     insert_screen_state(&mut frame, screen);
-    crate::session_chat_returned_prompt::insert_session_chat_returned_prompt(
+    crate::session_chat_follower::returned_prompt::insert_session_chat_returned_prompt(
         &mut frame, project_id, session_id,
     );
     if let Some(queue) = queue {

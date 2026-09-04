@@ -59,13 +59,13 @@ import {
   retireSessionChatInterruptMarkers,
   SESSION_CHAT_INTERRUPT_MARKER_COMMAND,
   SESSION_CHAT_INTERRUPT_MARKER_LABEL,
+  useSessionChatReturnedPrompt,
 } from './session-chat-returned-prompt';
 import {
   appendSessionChatCommandMarker,
   applySessionChatCommandMarkerBoundaries,
   assignSessionChatPendingOccurrence,
   nextSessionChatPendingSendId,
-  normalizeSessionChatPendingText,
   pruneSessionChatPendingSends,
   SESSION_CHAT_PENDING_SEND_LIMIT,
   sessionChatAppCommandsAsMessages,
@@ -427,28 +427,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   often "this frame had nothing to add" than "that rename never happened".
   */
   const [appCommands, setAppCommands] = useState<readonly SessionChatAppCommand[]>([]);
-  /*
-  CDXC:SessionChat 2026-09-04: the prompt Claude handed back to its composer
-  after an Escape (session-chat-returned-prompt.ts). Set from reads and frames,
-  never cleared by omission; the view applies each id once.
-  */
-  const [returnedPrompt, setReturnedPrompt] = useState<SessionChatReturnedPrompt | null>(null);
-  /*
-  CDXC:SessionChat 2026-09-04 DECISION:
-  User: the optimistic echo of a prompt Claude handed back must leave the
-  transcript with it. The echo never had a transcript twin to prune it (the
-  message was never recorded), and an Escape typed in the terminal never
-  reached this client's own interrupt, so the returned prompt is what retires
-  it.
-  */
-  const applyReturnedPrompt = useCallback((prompt: SessionChatReturnedPrompt): void => {
-    setReturnedPrompt(prompt);
-    const returnedText = normalizeSessionChatPendingText(prompt.text);
-    setPending((current) => {
-      const next = current.filter((entry) => normalizeSessionChatPendingText(entry.text) !== returnedText);
-      return next.length === current.length ? current : next;
-    });
-  }, []);
+  const { applyReturnedPrompt, clearReturnedPrompt, returnedPrompt } = useSessionChatReturnedPrompt(setPending);
   // Claude replaces its current `⏺ …` terminal line in place. Keep each
   // DISTINCT value only for this mounted chat; matching transcript text removes
   // it from composition as soon as JSONL catches up. Distinct rather than
@@ -887,7 +866,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       clearTerminalToolHold();
       setTerminalTool(null);
       setAppCommands([]);
-      setReturnedPrompt(null);
+      clearReturnedPrompt();
       // A different session's detection must never leak into this one.
       setSelectedOptions(null);
       // Its "we have looked" latch is per-session too: a new session has not

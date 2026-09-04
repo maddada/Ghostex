@@ -64,10 +64,7 @@ import { sessionChatOptionCommandNames } from './session-chat-session-options';
 import { readStoredSessionChatVerbose, writeStoredSessionChatVerbose } from './session-chat-verbose-override';
 import { sessionChatSlashCommandsForAgent, sessionChatSlashHeadingForAgent } from './session-chat-slash-commands';
 import type { SessionChatTransport } from './session-chat-transport';
-import {
-  hasAppliedSessionChatReturnedPrompt,
-  markSessionChatReturnedPromptApplied,
-} from './session-chat-returned-prompt';
+import { useRestoreSessionChatReturnedPrompt } from './session-chat-returned-prompt';
 import { useSessionChat } from './use-session-chat';
 import { useSessionChatWorkingHold } from './use-session-chat-working-hold';
 
@@ -534,28 +531,7 @@ export function SessionChatView({
     setReadAgentEntry({ agent: readStateAgent, transport });
   }, [readStateAgent, transport]);
   const composerRef = useRef<SessionChatComposerHandle | null>(null);
-  /*
-  CDXC:SessionChat 2026-09-04: a prompt Claude handed back to its composer
-  comes back into this one, once per id (see session-chat-returned-prompt.ts).
-  Re-runs when the transcript finishes loading, because the composer is not
-  mounted while the view holds the loading state.
-  */
-  const returnedPrompt = chat.returnedPrompt;
-  const returnedPromptComposerMounted = chat.view.kind !== 'loading';
-  useEffect(() => {
-    if (!returnedPrompt || !returnedPromptComposerMounted) {
-      return;
-    }
-    if (hasAppliedSessionChatReturnedPrompt(returnedPrompt.id)) {
-      return;
-    }
-    const composer = composerRef.current;
-    if (!composer) {
-      return;
-    }
-    markSessionChatReturnedPromptApplied(returnedPrompt.id);
-    composer.restoreReturnedPrompt(returnedPrompt.text);
-  }, [returnedPrompt, returnedPromptComposerMounted]);
+  useRestoreSessionChatReturnedPrompt(chat.returnedPrompt, chat.view.kind !== 'loading', composerRef);
   const focusComposerAfterTranscriptMenuCloseRef = useRef(false);
   const draftAgentSwitchTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearDraftAgentSwitchTimers = useCallback((): void => {

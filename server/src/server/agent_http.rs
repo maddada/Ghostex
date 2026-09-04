@@ -129,7 +129,7 @@ pub(crate) fn dispatch_agent_http_blocking(
             User: an Escape typed in the terminal pane must get the same
             returned-prompt handling as the chat box's Stop. The pane reports
             that Escape as this activity event, so the detector hangs off it
-            here (see session_chat_returned_prompt.rs); a session that is not
+            here (see session_chat_follower/returned_prompt.rs); a session that is not
             followable, or has no chat send to answer, makes it a no-op.
             */
             if endpoint_path == "/api/updateAgentActivity"
@@ -140,7 +140,7 @@ pub(crate) fn dispatch_agent_http_blocking(
                     &params,
                     "updateAgentActivity",
                 ) {
-                    crate::session_chat_returned_prompt::schedule_session_chat_returned_prompt_detection(
+                    crate::session_chat_follower::returned_prompt::schedule_session_chat_returned_prompt_detection(
                         state,
                         &target,
                         &request_id,

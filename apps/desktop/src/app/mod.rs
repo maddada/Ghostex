@@ -37,6 +37,7 @@ pub(crate) mod render;
 pub(crate) mod session_chat;
 pub(crate) mod session_chat_context_menu;
 pub(crate) mod session_chat_image_save;
+pub(crate) mod sidebar_bridge_events;
 pub(crate) mod sidebar_dispatch;
 pub(crate) mod stashed_prompt_jump;
 pub(crate) mod status_pet;

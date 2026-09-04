@@ -200,7 +200,7 @@ pub(crate) fn resolve_session_chat_read_state(
         .hash(&mut hasher);
     // Same discipline: the returned prompt's id wakes a long-poller so it can
     // put the text back into its composer.
-    crate::session_chat_returned_prompt::session_chat_returned_prompt_identity(
+    crate::session_chat_follower::returned_prompt::session_chat_returned_prompt_identity(
         project_id, session_id,
     )
     .hash(&mut hasher);
@@ -521,7 +521,7 @@ pub(crate) async fn handle_read_session_chat_http(
             &project_id,
             &session_id,
         );
-        crate::session_chat_returned_prompt::insert_session_chat_returned_prompt(
+        crate::session_chat_follower::returned_prompt::insert_session_chat_returned_prompt(
             &mut result,
             &project_id,
             &session_id,
@@ -673,7 +673,7 @@ pub(crate) async fn handle_read_session_chat_http(
             let mut messages = messages;
             let mut lifecycle = lifecycle;
             if before_offset.is_none() {
-                crate::session_chat_returned_prompt::filter_session_chat_returned_prompts(
+                crate::session_chat_follower::returned_prompt::filter_session_chat_returned_prompts(
                     &project_id,
                     &session_id,
                     &mut messages,

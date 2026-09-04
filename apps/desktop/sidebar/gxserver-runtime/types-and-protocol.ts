@@ -31,6 +31,14 @@ import type {
   SidebarToExtensionMessage,
 } from '@/packages/shared/session-grid-contract';
 import type { SidebarGitAction, SidebarGitChangedFile, SidebarGitState } from '@/packages/shared/sidebar-git';
+import type { GpuiResourcesSnapshotBridge } from './types/resources-snapshot';
+
+export type {
+  GpuiPendingResourcesSnapshotRequest,
+  GpuiResourcesSnapshotBridge,
+} from './types/resources-snapshot';
+export type { GpuiWorkspaceTerminalLifecycleRequest } from './types/workspace-terminal-lifecycle';
+export type { GpuiWorkspaceTerminalFocusPlacement } from './types/workspace-terminal-placement';
 
 export type GpuiGxserverBootstrap = {
   authToken?: string;
@@ -133,7 +141,7 @@ export type GpuiSidebarHostMessage =
       }
     >;
 
-export type GhostexGpuiSidebarBridge = {
+export type GhostexGpuiSidebarBridge = GpuiResourcesSnapshotBridge & {
   browserTabs?: readonly GpuiBrowserTabSummary[];
   commandPaneSessions?: readonly GpuiCommandPaneSessionSummary[];
   /**
@@ -167,7 +175,6 @@ export type GhostexGpuiSidebarBridge = {
   onNativeAppShotCaptured?: (payload: unknown) => void;
   onNativeAppShotPromptResult?: (payload: unknown) => void;
   onOsIntegrationCommand?: (payload: unknown) => void;
-  onResourcesSnapshotResult?: (payload: unknown) => void;
   onProjectBoardConversationRequest?: (payload: unknown) => void;
   onRuntimeSettingsChanged?: (runtimeSettings: GpuiSidebarRuntimeSettingsSnapshot) => void;
   onSidebarHostMessage?: (message: GpuiSidebarHostMessage) => void;
@@ -216,7 +223,6 @@ export type GhostexGpuiSidebarBridge = {
   pendingNativeAppShotPromptResults?: unknown[];
   pendingNativeAppShots?: unknown[];
   pendingOsIntegrationCommands?: unknown[];
-  pendingResourcesSnapshotResults?: unknown[];
   pendingProjectBoardConversationRequests?: unknown[];
   pendingStashedPromptSessionJumps?: unknown[];
   pendingStatusPetActivations?: unknown[];
@@ -240,7 +246,6 @@ export type GhostexGpuiSidebarBridge = {
   postNativeAppShotPromptToSession?: (payload: string) => boolean;
   postNativeProjectPathAction?: (payload: string) => boolean;
   postOpenBrowserUrl?: (payload: string) => boolean;
-  postResourcesSnapshotRequest?: (payload: string) => boolean;
   postPetOverlayState?: (payload: string) => boolean;
   postProjectBoardConversationResponse?: (payload: string) => boolean;
   postSidebarCommandAction?: (payload: string) => boolean;
@@ -264,17 +269,6 @@ declare global {
 }
 
 export type GpuiSidebarRuntimeSnapshotKind = 'hydrate' | 'patch';
-
-export type GpuiWorkspaceTerminalLifecycleRequest = {
-  action: 'close' | 'sleep' | 'wake';
-  keepSidebarFocus: boolean;
-  projectId: string;
-  replacementProjectId?: string;
-  replacementSessionId?: string;
-  requestId: number;
-  sessionId: string;
-  skipReplacementFallback: boolean;
-};
 
 export type GpuiValidatedGxserverBootstrap = {
   authToken: string;
@@ -537,12 +531,6 @@ export type GpuiTrustedGitReviewFileSelection = {
   filePaths: string[];
 };
 
-export type GpuiPendingResourcesSnapshotRequest = {
-  reject: (error: Error) => void;
-  resolve: (snapshot: Record<string, unknown>) => void;
-  timeoutId: number;
-};
-
 export type GpuiPendingRemoteGxserverRequest = {
   reject: (error: Error) => void;
   resolve: (result: unknown) => void;
@@ -748,16 +736,6 @@ export type GpuiSessionAttentionTarget =
       projectId: string;
       sessionId: string;
     };
-
-/**
- * CDXC:Workarea 2026-09-04 DECISION:
- * User: Advanced > Split Right opens a sidebar session in a pane to the right
- * of the focused agents pane. The workspace focus bridge carries it as an
- * optional `placement`; absent means the ordinary tab placement.
- * SEE-ALSO: `gpui_sidebar_workspace_terminal_focus_from_value` in
- * apps/desktop/src/app/helpers/sidebar/workspace_terminal_actions.rs.
- */
-export type GpuiWorkspaceTerminalFocusPlacement = 'splitRight';
 
 export type GpuiWorkspaceTerminalRuntimeActionPayload =
   | {

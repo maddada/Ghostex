@@ -9,7 +9,6 @@ import {
   IconFileExport,
   IconFocus2,
   IconGitFork,
-  IconLayoutColumns,
   IconLayoutSidebarRightExpand,
   IconMessageCircle,
   IconMoon,
@@ -70,6 +69,11 @@ import {
 } from './session-tag-ui';
 import type { WebviewApi } from './webview-api';
 import { createPortal, flushSync } from 'react-dom';
+import { sidebarSessionComposerDraftPresentation } from './sortable-session-card/draft-presentation';
+import {
+  canSplitSidebarSessionRight,
+  createSplitSessionRightContextMenuAction,
+} from './sortable-session-card/split-right';
 
 const CONTEXT_MENU_MARGIN_PX = 12;
 const CONTEXT_MENU_WIDTH_PX = 178;
@@ -145,7 +149,7 @@ type ContextMenuPosition = {
   y: number;
 };
 
-type SessionContextMenuAction = {
+export type SessionContextMenuAction = {
   danger?: boolean;
   icon: ReactNode;
   key: string;
@@ -424,13 +428,6 @@ export type SidebarSessionContextMenuEligibility = {
   canPopOutPane: boolean;
   canRenameSession: boolean;
   canSleepSession: boolean;
-  /**
-   * CDXC:Workarea 2026-09-04 DECISION:
-   * User: Advanced > Split Right opens the session in a pane to the right of
-   * the focused agents pane, for local and remote machine rows alike. The Rust
-   * workspace owns pane topology, so the item needs the GPUI bridge and is
-   * hidden in the web app.
-   */
   canSplitSessionRight: boolean;
   canTagSession: boolean;
   isBrowserSession: boolean;
@@ -479,8 +476,7 @@ export function getSidebarSessionContextMenuEligibility({
      * Rename, Sleep, Pin, Tag, and Close stay available on drafts.
      */
     canForkSession: canUseTerminalAgentMenuAction && hasSession && !isDraftSession && supportsFork(session),
-    canSplitSessionRight:
-      canUseTerminalAgentMenuAction && hasSession && !isDraftSession && gpuiWorkspaceTerminalFocusBridgeAvailable(),
+    canSplitSessionRight: canSplitSidebarSessionRight(session, canUseTerminalAgentMenuAction),
     canFullReloadSession:
       canUseTerminalAgentMenuAction &&
       hasSession &&
@@ -1543,15 +1539,6 @@ export function SortableSessionCard({
     });
   };
 
-  const requestSplitSessionRight = () => {
-    setContextMenuPosition(undefined);
-    setAdvancedSubmenuPosition(undefined);
-    vscode.postMessage({
-      sessionId: session.sessionId,
-      type: 'splitSessionRight',
-    });
-  };
-
   /*
   CDXC:AgentProviders 2026-09-03:
   Advanced > Switch Account opens a third-level submenu of the daemon-resolved
@@ -2111,12 +2098,12 @@ export function SortableSessionCard({
     });
   }
   if (canSplitSessionRight) {
-    advancedSessionActions.push({
-      icon: <IconLayoutColumns aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
-      key: 'split-right',
-      label: 'Split Right',
-      onClick: requestSplitSessionRight,
-    });
+    advancedSessionActions.push(
+      createSplitSessionRightContextMenuAction(vscode, session.sessionId, () => {
+        setContextMenuPosition(undefined);
+        setAdvancedSubmenuPosition(undefined);
+      }),
+    );
   }
   if (canFocusMode) {
     /**
@@ -2718,7 +2705,7 @@ export function SortableSessionCard({
                 delayedSendDeadlineAt={session.delayedSendDeadlineAt}
                 delayedSendRemainingLabel={session.delayedSendRemainingLabel}
                 faviconDataUrl={session.faviconDataUrl}
-                hasComposerDraft={session.hasComposerDraft === true}
+                {...sidebarSessionComposerDraftPresentation(session)}
                 hasSessionNote={Boolean(session.sessionNote?.trim())}
                 isDraft={session.isDraft === true}
                 isFavorite={session.isFavorite}
@@ -3146,14 +3133,6 @@ function supportsResumeCommandCopy(session: SidebarSessionItem): boolean {
     session.agentIcon === 'cursor-cli' ||
     session.agentIcon === 'antigravity-cli'
   );
-}
-
-function gpuiWorkspaceTerminalFocusBridgeAvailable(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  const bridge = (window as { ghostexGpui?: { postWorkspaceTerminalFocus?: unknown } }).ghostexGpui;
-  return typeof bridge?.postWorkspaceTerminalFocus === 'function';
 }
 
 function supportsFork(session: SidebarSessionItem): boolean {

@@ -3087,8 +3087,8 @@ pub(crate) fn handle_interrupt_session_chat_http(
     );
     // Claude Code may answer this Escape by handing the prompt back to its
     // composer; the detector decides after the write lands (CDXC:SessionChat
-    // in session_chat_returned_prompt.rs).
-    crate::session_chat_returned_prompt::schedule_session_chat_returned_prompt_detection(
+    // in session_chat_follower/returned_prompt.rs).
+    crate::session_chat_follower::returned_prompt::schedule_session_chat_returned_prompt_detection(
         state,
         &target,
         &request_id,

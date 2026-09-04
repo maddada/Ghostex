@@ -31,6 +31,8 @@ turn-context record fills any missing value. Nothing matched ⇒ `None` ⇒ the
 field is omitted from results/frames. There is deliberately no guessing.
 */
 
+mod diff_panel;
+
 use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
@@ -2059,10 +2061,10 @@ pub fn detect_session_chat_terminal_state(
         .ok()
         .map(|mut capture| {
             // Read on the whole capture: the panel's header is what the cut
-            // below removes (see session_chat_diff_panel.rs).
+            // below removes (see session_chat_options/diff_panel.rs).
             diff_panel_on_screen = agent == Some(SessionChatOptionAgent::Claude)
                 && !capture.truncated
-                && crate::session_chat_diff_panel::claude_diff_panel_on_screen(&capture.text);
+                && diff_panel::claude_diff_panel_on_screen(&capture.text);
             // One cut for every detector below (see session_chat_screen_pane.rs).
             capture.text = crate::session_chat_screen_pane::strip_side_pane(&capture.text);
             capture
@@ -2087,7 +2089,7 @@ pub fn detect_session_chat_terminal_state(
     };
     if diff_panel_on_screen {
         if let Some(capture) = screen {
-            crate::session_chat_diff_panel::hide_claude_diff_panel_if_unwatched(
+            diff_panel::hide_claude_diff_panel_if_unwatched(
                 repository,
                 project_id,
                 session_id,

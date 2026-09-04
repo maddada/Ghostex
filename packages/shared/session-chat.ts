@@ -513,7 +513,7 @@ CDXC:SessionChat 2026-09-04 DECISION:
 User: a prompt Claude Code pulls back into its composer after an Escape must
 come back into the chat composer too, and its bubble must leave the transcript,
 so the user never writes a follow-up to a message the agent never took.
-SEE-ALSO: server/src/session_chat_returned_prompt.rs,
+SEE-ALSO: server/src/session_chat_follower/returned_prompt.rs,
 packages/core-ui/chat/session-chat-returned-prompt.ts.
 */
 export interface SessionChatReturnedPrompt {
