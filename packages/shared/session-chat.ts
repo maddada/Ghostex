@@ -284,6 +284,64 @@ export interface SessionChatContextUsage {
   windowSize?: number;
 }
 
+/**
+ * CDXC:SessionChatDetectedOptions 2026-09-04 DECISION:
+ * User: the context meter popover shows a "More details" section and starred
+ * rows become a text status line under the chat box. This is the slice of
+ * Claude's statusLine payload the chat can show, camelCase, every field
+ * absent when Claude did not report it (see `claude_statusline_status_value`
+ * in server/src/session_chat_options.rs).
+ */
+export interface SessionChatClaudeStatus {
+  cost?: {
+    totalUsd?: number;
+    durationMs?: number;
+    apiDurationMs?: number;
+    linesAdded?: number;
+    linesRemoved?: number;
+  };
+  rateLimits?: {
+    fiveHour?: SessionChatClaudeRateLimitWindow;
+    sevenDay?: SessionChatClaudeRateLimitWindow;
+  };
+  promptCache?: {
+    warm?: boolean;
+    ttl?: string;
+    /** Epoch seconds. */
+    expiresAt?: number;
+    hitRatio?: number;
+    requests?: number;
+    misses?: number;
+    lastMissCause?: string;
+    cacheWriteTokens?: number;
+    recacheTokensIfCold?: number;
+  };
+  lastRequest?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
+  totalOutputTokens?: number;
+  remainingPercentage?: number;
+  exceeds200kTokens?: boolean;
+  thinkingEnabled?: boolean;
+  outputStyle?: string;
+  sessionName?: string;
+  version?: string;
+  repo?: { host?: string; owner?: string; name?: string };
+  addedDirs?: string[];
+  projectDir?: string;
+  currentDir?: string;
+  pr?: { number?: number; url?: string; reviewState?: string };
+}
+
+export interface SessionChatClaudeRateLimitWindow {
+  usedPercentage?: number;
+  /** Epoch seconds. */
+  resetsAt?: number;
+}
+
 export interface SessionChatDetectedOptions {
   model?: SessionChatDetectedChoice;
   effort?: SessionChatDetectedChoice;
@@ -297,6 +355,8 @@ export interface SessionChatDetectedOptions {
   fast?: boolean;
   /** Claude's statusline-reported context window usage. */
   contextUsage?: SessionChatContextUsage;
+  /** The rest of Claude's statusline payload the chat can show. */
+  claudeStatus?: SessionChatClaudeStatus;
   /** ISO-8601 millis; compared against a pending dispatch's own timestamp. */
   detectedAt: string;
 }
@@ -357,7 +417,7 @@ export interface SessionChatTerminalNotice {
    * Open set (`loginExpired`, `trustPrompt`, `permissionsWarning`,
    * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`,
    * `queuedInput`, `deliveryFailed`, `resumePrompt`, `switchConfirmPrompt`,
-   * `sessionPausedPrompt`, `codexInputBlocked`, `cursorInputBlocked`, `grokInputBlocked`,
+   * `sessionPausedPrompt`, `permissionPrompt`, `codexInputBlocked`, `cursorInputBlocked`, `grokInputBlocked`,
    * `hermesInputBlocked`, `ompInputBlocked`, `piInputBlocked`). Clients MUST
    * render an unknown kind generically; title/detail/severity are self-sufficient.
    */
@@ -389,8 +449,9 @@ CDXC:AgentScreenDetection 2026-08-22:
 Live work the agent CLI reports on its terminal before transcript JSONL catches
 up. `claude-status` is the current `⏺ …` assistant line (its first paragraph,
 re-joined from the wrapped rows) and becomes transient reasoning history in the
-client; `claude-tool` is a `⏺` row with the `⎿` output gutter under it, i.e. a
-tool call, shown as live work only; `shells-running` remains one bottom activity
+client; `claude-tool` is the row above a `⎿` output gutter, i.e. a tool call,
+shown as a pending tool row at the bottom of the transcript and never in the
+working strip; `shells-running` remains one bottom activity
 row only while Claude shows its background-shell status; `compacting` is
 structured progress:
 
