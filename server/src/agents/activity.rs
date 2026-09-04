@@ -1,14 +1,14 @@
 use std::path::Path;
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use uuid::Uuid;
 
 use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::presentation::project_session_title_projection;
 use crate::session_status::{
-    compute_activity_update, is_stale_activity_event, normalize_agent_activity_value, parse_iso_ms,
-    ActivityUpdate,
+    ActivityUpdate, compute_activity_update, is_stale_activity_event,
+    normalize_agent_activity_value, parse_iso_ms,
 };
 
 pub(crate) const FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY: &str =
@@ -499,6 +499,7 @@ pub(crate) fn next_session_chat_prompt_setting(
                 tool_use_id,
                 idle_input_notification: params.get("notificationKind").and_then(Value::as_str)
                     == Some("idleInput"),
+                tool_input,
             },
         ),
         // Unparsable stored text has no tool identity to scope on: the

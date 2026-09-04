@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
-use crate::server::{read_runtime_text, read_session_text, session_observer_key, AppState};
+use crate::server::{AppState, read_runtime_text, read_session_text, session_observer_key};
 use crate::session_chat::*;
 use crate::session_chat_follower::{insert_optional_selected_options, insert_screen_state};
 use crate::session_chat_options::cached_session_chat_screen_state;
@@ -479,6 +479,9 @@ pub struct SessionChatPromptClearEvent<'a> {
     /// Claude's 60-second "waiting for your input" reminder
     /// (`notificationKind: idleInput`), which settles ACTIVITY to idle.
     pub idle_input_notification: bool,
+    /// The event's `tool_input`, which scopes a post-tool event to an approval
+    /// card when neither side carries a `tool_use_id`.
+    pub tool_input: Option<&'a Value>,
 }
 
 /*
@@ -501,6 +504,16 @@ same tool (an ask-tool for a question card, the approved tool for an approval
 card). A post-tool event with no tool identity at all keeps the old behaviour,
 because a hook script that forwards nothing cannot be scoped.
 
+CDXC:AgentScreenDetection 2026-09-04 WHY:
+Claude's `PermissionRequest` hook payload carries no `tool_use_id` at all
+(`tool_name`, `tool_input`, `permission_suggestions` only), so every approval
+card falls to the same-tool rule, and a parallel batch of Bash calls retired
+the card the moment a SIBLING call finished while the dialog was still on
+screen (observed 2026-09-04, a cd-compound-read prompt with no card in chat).
+The approved call's input is on both sides, so an approval card with a summary
+is retired only by a post-tool event whose `tool_input` summarizes to that same
+text; another input is another call and keeps the card.
+
 Claude's idle-input reminder is a statement about the input line, not about
 the question: the question IS what the input is waiting on. It moves activity
 to idle and must not take the card with it; a cancelled question retires
@@ -514,7 +527,12 @@ pub fn session_chat_prompt_clear_decision(
         return false;
     };
     if is_post_tool_hook_event(event.event_name) {
-        return post_tool_event_resolves_prompt(stored, event.tool_name, event.tool_use_id);
+        return post_tool_event_resolves_prompt(
+            stored,
+            event.tool_name,
+            event.tool_use_id,
+            event.tool_input,
+        );
     }
     if event.idle_input_notification {
         return false;
@@ -534,6 +552,7 @@ pub fn post_tool_event_resolves_prompt(
     stored: &SessionChatInteractivePrompt,
     tool_name: Option<&str>,
     tool_use_id: Option<&str>,
+    tool_input: Option<&Value>,
 ) -> bool {
     let tool_use_id = tool_use_id.map(str::trim).filter(|value| !value.is_empty());
     if let (Some(event_id), Some(stored_id)) = (tool_use_id, stored.tool_use_id()) {
@@ -544,8 +563,17 @@ pub fn post_tool_event_resolves_prompt(
     };
     match stored {
         SessionChatInteractivePrompt::Question { .. } => is_ask_user_question_tool(tool_name),
-        SessionChatInteractivePrompt::Approval { tool, .. } => {
-            normalize_session_chat_tool_name(tool) == normalize_session_chat_tool_name(tool_name)
+        SessionChatInteractivePrompt::Approval { tool, summary, .. } => {
+            if normalize_session_chat_tool_name(tool) != normalize_session_chat_tool_name(tool_name)
+            {
+                return false;
+            }
+            match (summary, tool_input.filter(|value| !value.is_null())) {
+                (Some(summary), Some(tool_input)) => {
+                    summarize_approval_input(Some(tool_input)) == *summary
+                }
+                _ => true,
+            }
         }
     }
 }
@@ -688,11 +716,7 @@ pub fn resolve_session_chat_prompt(
                     _ => false,
                 }
             });
-            if retired {
-                None
-            } else {
-                Some(prompt)
-            }
+            if retired { None } else { Some(prompt) }
         }
         None => transcript.pending().cloned(),
     }

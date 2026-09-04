@@ -4,19 +4,19 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::protocol::rpc_success;
 use crate::server::{
-    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
+    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
 };
 use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
 use crate::session_chat_follower::session_chat_agent_for_session;
@@ -24,7 +24,7 @@ use crate::session_chat_options::schedule_session_chat_option_redetect;
 use crate::session_chat_queue_runtime::send_session_chat_message_internal;
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /*
 CDXC:SessionChat 2026-07-31:
@@ -1037,6 +1037,12 @@ same reason as Claude's AskUserQuestion selector above.
 
 One verbatim write: no clear burst and no bracketed paste, because this is a
 keystroke for a dialog that owns the input line, not text for a composer.
+
+CDXC:AgentScreenDetection 2026-09-04 DECISION:
+The permission prompt is the one picker whose keys are an arrow walk plus
+Enter instead of a digit (user: "Enter for Yes and down arrow then Enter for
+No"); `SessionChatTerminalPicker::answer_key` derives the walk from the
+highlight in the answer-time capture, and this still writes it verbatim.
 */
 pub fn build_terminal_picker_answer_steps(answer_key: &str) -> Vec<SessionChatSendStep> {
     vec![SessionChatSendStep::Write(answer_key.to_string())]

@@ -40,10 +40,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::session_chat_options::{
-    normalize_spaces, session_chat_option_agent, strip_ansi_sgr, SessionChatOptionAgent,
+    SessionChatOptionAgent, normalize_spaces, session_chat_option_agent, strip_ansi_sgr,
 };
 
 // ---------------------------------------------------------------------------
@@ -107,6 +107,11 @@ pub const SESSION_CHAT_NOTICE_OMP_INPUT_BLOCKED: &str = "ompInputBlocked";
 /// A Pi focused selector, prompt, authentication flow, or modal has replaced
 /// its ordinary prompt editor.
 pub const SESSION_CHAT_NOTICE_PI_INPUT_BLOCKED: &str = "piInputBlocked";
+/// Claude Code's tool permission prompt ("Do you want to proceed?" over
+/// Yes/No rows), read off the screen: answerable the same way the resume
+/// picker is, and the only card for it when the hook-derived approval card
+/// never arrived or was retired early.
+pub use crate::session_chat_resume_prompt::SESSION_CHAT_PERMISSION_PROMPT_KIND as SESSION_CHAT_NOTICE_PERMISSION_PROMPT;
 /// Claude Code's resume-usage picker: an on-screen chooser the chat surface can
 /// ANSWER, not just point at. Its rows ride the notice as `choices`.
 pub use crate::session_chat_resume_prompt::SESSION_CHAT_RESUME_PROMPT_KIND as SESSION_CHAT_NOTICE_RESUME_PROMPT;
@@ -857,7 +862,9 @@ const CODEX_RULES: &[NoticeRule] = &[
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Exit,
-                parts: &[NoticePart::Text("To continue this session, run codex resume")],
+                parts: &[NoticePart::Text(
+                    "To continue this session, run codex resume",
+                )],
                 corroborators: &[],
             },
             NoticeSignature {
@@ -957,9 +964,7 @@ const CODEX_RULES: &[NoticeRule] = &[
             },
             NoticeSignature {
                 scope: NoticeScope::Banner,
-                parts: &[NoticePart::Text(
-                    "We're currently experiencing high demand",
-                )],
+                parts: &[NoticePart::Text("We're currently experiencing high demand")],
                 corroborators: &[],
             },
             NoticeSignature {
@@ -991,9 +996,7 @@ const CODEX_RULES: &[NoticeRule] = &[
             },
             NoticeSignature {
                 scope: NoticeScope::Dialog,
-                parts: &[NoticePart::Text(
-                    "This version will no longer be supported",
-                )],
+                parts: &[NoticePart::Text("This version will no longer be supported")],
                 corroborators: &[],
             },
         ],
@@ -1342,6 +1345,10 @@ pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
         // CDXC:AgentScreenDetection 2026-08-29: same again — the paused
         // chooser owns the input line until a row is picked.
         SESSION_CHAT_NOTICE_SESSION_PAUSED_PROMPT => true,
+        // CDXC:AgentScreenDetection 2026-09-04: the permission prompt owns
+        // the input line too; a message typed into it is read as dialog keys
+        // and its Enter confirms the highlighted row.
+        SESSION_CHAT_NOTICE_PERMISSION_PROMPT => true,
         _ => ALL_NOTICE_RULES
             .iter()
             .flat_map(|rules| rules.iter())
@@ -1443,6 +1450,10 @@ fn notice_from_picker(
         SessionChatTerminalPickerKind::SessionPaused => (
             SESSION_CHAT_NOTICE_SESSION_PAUSED_PROMPT,
             "Claude Code paused this session on a safeguards flag",
+        ),
+        SessionChatTerminalPickerKind::PermissionPrompt => (
+            SESSION_CHAT_NOTICE_PERMISSION_PROMPT,
+            "Claude Code is asking for permission to proceed",
         ),
     };
     SessionChatTerminalNotice::new(

@@ -152,6 +152,69 @@ const SESSION_PAUSED_SWITCH_PREFIX: &str = "Switch to ";
 const SESSION_PAUSED_EDIT_PREFIX: &str = "Edit prompt and retry";
 const SESSION_CHAT_SESSION_PAUSED_TAIL_LINES: usize = 6;
 
+/*
+CDXC:AgentScreenDetection 2026-09-04 WHY:
+Claude Code's tool permission prompt, read off the screen (measured against
+2.1.260 on a zmx pty):
+
+    Bash command
+
+      cd /Users/madda/dev/_scratch/permission-repro && cd sub && cat file.txt
+      Print sub/file.txt from repo root
+
+    Multiple directory changes in one command require approval for clarity
+
+    Do you want to proceed?
+    ❯ 1. Yes
+      2. Yes, and switch to auto mode · auto mode handles these prompts for you
+      3. No
+
+    Esc to cancel · Tab to amend
+
+The hook-derived approval card (`PermissionRequest` → `SessionChatInteractivePrompt::Approval`)
+already covers this dialog when the hook fires and its card survives, but the
+hook payload carries no `tool_use_id`, so a sibling tool call finishing in the
+same parallel batch retired the card while the dialog was still on screen
+(observed 2026-09-04: a "Compound command contains cd with a relative file read
+while a Read() deny rule exists" prompt with no card anywhere in chat). The
+screen is the only source that cannot be out of date about a dialog that owns
+the input line, so this kind describes the dialog from the capture like the
+resume picker does: the heading directly above the rows, a Yes row, a No row,
+and the run at the bottom of the capture with no composer chrome after it (the
+TUI erases the dialog once it is answered, and repaints its composer box).
+
+The row set is Claude's to change ("Yes, and don't ask again for …", "Yes,
+allow all edits during this session", "Yes, and switch to auto mode"), which is
+why only the Yes/No prefixes are required and every row is carried verbatim.
+The thinking-mode toggle paints the same heading over Enabled/Disabled rows and
+must not match; the Yes/No requirement is what keeps it out.
+
+CDXC:AgentScreenDetection 2026-09-04 DECISION:
+User: answer this dialog with "Enter for Yes and down arrow then Enter for No",
+so the answer is an arrow walk from the highlighted row to the chosen one plus
+Enter, not the row digit the other pickers type. Measured the same day: `ESC [ B`
+DOES move this dialog's highlight (unlike the resume picker measurement above),
+and the walk is computed from a capture taken at answer time, so the starting
+row is never stale.
+*/
+pub const SESSION_CHAT_PERMISSION_PROMPT_KIND: &str = "permissionPrompt";
+
+const PERMISSION_PROMPT_HEADING: &str = "Do you want to proceed?";
+const PERMISSION_PROMPT_YES_PREFIX: &str = "Yes";
+const PERMISSION_PROMPT_NO_PREFIX: &str = "No";
+
+/// Only the "Esc to cancel" footer and the user's statusline (three lines on
+/// the measured setup, user-configurable) may follow a live permission prompt.
+const SESSION_CHAT_PERMISSION_PROMPT_TAIL_LINES: usize = 8;
+
+/// A horizontal rule this long after the rows is the composer box Claude
+/// repaints once a dialog is answered, which proves the rows are scrollback.
+const SESSION_CHAT_PERMISSION_PROMPT_MIN_RULE_CHARS: usize = 20;
+
+const KEY_DOWN: &str = "\u{1b}[B";
+const KEY_UP: &str = "\u{1b}[A";
+const KEY_ENTER: &str = "\r";
+
 /// Which on-screen chooser a detection describes; the notice kind and title
 /// come from this.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -164,6 +227,8 @@ pub enum SessionChatTerminalPickerKind {
     SwitchEffort,
     /// The safeguards "Session paused" chooser.
     SessionPaused,
+    /// A tool permission prompt ("Do you want to proceed?" over Yes/No rows).
+    PermissionPrompt,
 }
 
 /// One row of an on-screen picker, in the order it is painted.
@@ -193,14 +258,27 @@ pub struct SessionChatTerminalPicker {
 
 impl SessionChatTerminalPicker {
     /*
-    The keystroke that picks row `target`: its printed number, as one digit.
-    `None` when `target` is not a row this picker painted, or when its number
-    cannot be typed as a single key — an answer is never guessed at, and the
-    card's "Open terminal" action is the honest fallback for a picker this
-    build cannot drive.
+    The keystrokes that pick row `target`. For the number-driven pickers that
+    is the row's printed number, as one digit. For the permission prompt it is
+    the arrow walk from the highlighted row to `target` followed by Enter (see
+    the kind's DECISION comment). `None` when `target` is not a row this picker
+    painted, or when its number cannot be typed as a single key — an answer is
+    never guessed at, and the card's "Open terminal" action is the honest
+    fallback for a picker this build cannot drive.
     */
     pub fn answer_key(&self, target: usize) -> Option<String> {
         let number = self.rows.get(target)?.number;
+        if self.kind == SessionChatTerminalPickerKind::PermissionPrompt {
+            let step = if target >= self.selected_index {
+                KEY_DOWN
+            } else {
+                KEY_UP
+            };
+            let distance = target.abs_diff(self.selected_index);
+            let mut keys = step.repeat(distance);
+            keys.push_str(KEY_ENTER);
+            return Some(keys);
+        }
         (1..=9).contains(&number).then(|| number.to_string())
     }
 }
@@ -424,6 +502,47 @@ fn session_paused_run_kind(
         .then_some(SessionChatTerminalPickerKind::SessionPaused)
 }
 
+/// True for a horizontal rule long enough to be Claude's composer frame.
+fn is_composer_rule(line: &str) -> bool {
+    line.trim().chars().filter(|ch| *ch == '\u{2500}').count()
+        >= SESSION_CHAT_PERMISSION_PROMPT_MIN_RULE_CHARS
+}
+
+/// The tool permission prompt: its heading painted directly above the rows, a
+/// Yes row and a No row, the run at the bottom of the capture, and no composer
+/// frame after it (see the kind's comment for why that proves liveness).
+fn permission_prompt_run_kind(
+    window: &[String],
+    run: &[PickerRow],
+) -> Option<SessionChatTerminalPickerKind> {
+    if !run
+        .iter()
+        .any(|row| row.label.starts_with(PERMISSION_PROMPT_YES_PREFIX))
+        || !run
+            .iter()
+            .any(|row| row.label.starts_with(PERMISSION_PROMPT_NO_PREFIX))
+    {
+        return None;
+    }
+    let first_row_line = run.first().map(|row| row.line).unwrap_or_default();
+    let last_row_line = run.last().map(|row| row.line).unwrap_or_default();
+    if window.len() - last_row_line > SESSION_CHAT_PERMISSION_PROMPT_TAIL_LINES {
+        return None;
+    }
+    if window[last_row_line + 1..]
+        .iter()
+        .any(|line| is_composer_rule(line))
+    {
+        return None;
+    }
+    let heading = first_row_line
+        .checked_sub(1)
+        .map(|line| strip_box_border(&window[line]))?;
+    heading
+        .contains(PERMISSION_PROMPT_HEADING)
+        .then_some(SessionChatTerminalPickerKind::PermissionPrompt)
+}
+
 /// `Some` only when a known Claude picker is live on screen and its highlight
 /// is proven, so every row is reachable with a derived key count.
 pub fn detect_session_chat_terminal_picker(text: &str) -> Option<SessionChatTerminalPicker> {
@@ -432,6 +551,7 @@ pub fn detect_session_chat_terminal_picker(text: &str) -> Option<SessionChatTerm
         let Some(kind) = resume_run_kind(&window, &run)
             .or_else(|| switch_confirm_run_kind(&window, &run))
             .or_else(|| session_paused_run_kind(&window, &run))
+            .or_else(|| permission_prompt_run_kind(&window, &run))
         else {
             continue;
         };
@@ -439,9 +559,22 @@ pub fn detect_session_chat_terminal_picker(text: &str) -> Option<SessionChatTerm
             continue; // no highlight proven ⇒ no derivable key count
         };
         let first_row_line = run.first().map(|row| row.line).unwrap_or_default();
+        let detail = prose_above(&window, first_row_line).and_then(|prose| {
+            // The heading is the card title's job; the detail keeps the tool,
+            // the command and Claude's reason for asking.
+            if kind != SessionChatTerminalPickerKind::PermissionPrompt {
+                return Some(prose);
+            }
+            let stripped = prose
+                .strip_suffix(PERMISSION_PROMPT_HEADING)
+                .map(str::trim_end)
+                .unwrap_or(&prose)
+                .to_string();
+            (!stripped.is_empty()).then_some(stripped)
+        });
         return Some(SessionChatTerminalPicker {
             kind,
-            detail: prose_above(&window, first_row_line),
+            detail,
             rows: run
                 .into_iter()
                 .map(|row| SessionChatTerminalPickerRow {
