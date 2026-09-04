@@ -25,15 +25,28 @@ Claude's wording:
     "until the agent's next transcript entry" and needs no knowledge of what
     the row was.
 
-Tool-call rows (`claude-tool`) never become history at all: the transcript
+Tool-call rows (`claude-tool`) never become reasoning history: the transcript
 writes the call with its result, and the screen paints the description in a
-different form ("Reading …" for "Read …") than the transcript stores.
+different form ("Reading …" for "Read …") than the transcript stores. They are
+the pending tool row instead, below.
 */
 
 import type { SessionChatMessage, SessionChatTerminalActivity } from '../../shared/session-chat';
 
 const CLAUDE_TERMINAL_STATUS_KIND = 'claude-status';
+const CLAUDE_TERMINAL_TOOL_KIND = 'claude-tool';
 const TERMINAL_STATUS_ID_PREFIX = 'terminal-status:';
+const TERMINAL_TOOL_ID_PREFIX = 'terminal-tool:';
+
+/*
+CDXC:SessionChatTerminalActivity 2026-09-04 DECISION:
+User: show the live tool card at the very bottom of the chat transcript
+instead of above the chat box, where it replaced the animated working spinner
+and text; keep the last card until a newer status replaces it or no Claude
+tool has been on screen for 5 seconds, because a card that came and went
+every second kept pushing the chat up and back down.
+*/
+export const SESSION_CHAT_TERMINAL_TOOL_HOLD_MS = 5_000;
 
 /**
  * Text as the terminal would paint it: markdown decoration gone, whitespace
@@ -144,4 +157,121 @@ export function unreconciledSessionChatTerminalStatuses(
     const text = messageText(status);
     return !evidence.texts.some((candidate) => candidate === text || candidate.startsWith(text));
   });
+}
+
+/** The pending tool row: one `claude-tool` activity as a transcript row. */
+export function sessionChatTerminalToolMessage(activity: SessionChatTerminalActivity): SessionChatMessage | null {
+  const text = activity.label.trim();
+  if (activity.kind !== CLAUDE_TERMINAL_TOOL_KIND || !text) {
+    return null;
+  }
+  const timestamp = Date.parse(activity.detectedAt);
+  return {
+    id: `${TERMINAL_TOOL_ID_PREFIX}${activity.detectedAt}`,
+    role: 'system',
+    blocks: [{ type: 'text', text }],
+    timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
+    source: 'hook',
+  };
+}
+
+export function isSessionChatTerminalToolMessage(message: SessionChatMessage): boolean {
+  return message.id.startsWith(TERMINAL_TOOL_ID_PREFIX);
+}
+
+/** The activity card a pending tool row renders as. */
+export function sessionChatTerminalToolActivity(message: SessionChatMessage): SessionChatTerminalActivity {
+  return {
+    kind: CLAUDE_TERMINAL_TOOL_KIND,
+    label: message.blocks
+      .filter((block) => block.type === 'text')
+      .map((block) => (block.type === 'text' ? block.text : ''))
+      .join(' ')
+      .trim(),
+    detectedAt: message.id.slice(TERMINAL_TOOL_ID_PREFIX.length),
+  };
+}
+
+/** Two samples of the same painted tool row. */
+export function sameSessionChatTerminalTool(current: SessionChatMessage, next: SessionChatMessage): boolean {
+  return messageText(current) === messageText(next);
+}
+
+/**
+ * A tool's bullet can be read before its `⎿` gutter has been painted, in
+ * which case it arrived as a status. The moment the same row is recognised as
+ * a tool, that status row is its twin and goes.
+ */
+export function withoutSessionChatTerminalStatus(
+  current: readonly SessionChatMessage[],
+  tool: SessionChatMessage
+): readonly SessionChatMessage[] {
+  const text = messageText(tool);
+  const next = current.filter((status) => {
+    const statusText = messageText(status);
+    return statusText !== text && !text.startsWith(statusText);
+  });
+  return next.length === current.length ? current : next;
+}
+
+/** Enough of a tool argument to be a meaningful match rather than a stray word. */
+const TOOL_ARGS_MATCH_MIN_LENGTH = 8;
+
+/**
+ * The part of a painted tool row that Claude copies verbatim from the call:
+ * the arguments of a `Read(path)` header, or everything after the leading
+ * verb of a description ("Reading /tmp/web-3.png", "Finding files handling
+ * AskUserQuestion"). The verb itself is the one word Claude rewrites.
+ */
+function toolArguments(text: string): string {
+  const header = /^[A-Za-z][\w-]*\((.*)\)$/su.exec(text);
+  if (header) {
+    return sessionChatTerminalStatusText(header[1]);
+  }
+  const space = text.indexOf(' ');
+  return space < 0 ? '' : text.slice(space + 1).trim();
+}
+
+function stringLeaves(value: unknown, out: string[]): void {
+  if (typeof value === 'string') {
+    if (value.trim()) {
+      out.push(sessionChatTerminalStatusText(value));
+    }
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      stringLeaves(item, out);
+    }
+  } else if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) {
+      stringLeaves(item, out);
+    }
+  }
+}
+
+/**
+ * The transcript has caught up with the pending tool: either a tool call
+ * carries its arguments (the call landed, however its verb was painted), or
+ * the transcript holds a row newer than the sample, which the append-only
+ * transcript could only have written after the call itself.
+ */
+export function sessionChatTerminalToolLanded(
+  tool: SessionChatMessage,
+  transcript: readonly SessionChatMessage[]
+): boolean {
+  const args = toolArguments(messageText(tool));
+  const leaves: string[] = [];
+  for (const message of transcript) {
+    if (message.source !== 'transcript') {
+      continue;
+    }
+    if (tool.timestamp !== null && message.timestamp !== null && message.timestamp > tool.timestamp) {
+      return true;
+    }
+    for (const block of message.blocks) {
+      if (block.type === 'tool-call') {
+        stringLeaves(block.input, leaves);
+      }
+    }
+  }
+  return args.length >= TOOL_ARGS_MATCH_MIN_LENGTH && leaves.some((leaf) => leaf.includes(args));
 }

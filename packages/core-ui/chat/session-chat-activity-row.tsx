@@ -8,7 +8,10 @@ was the one that REPLACES the conversation the user is reading.
 
 Since 2026-08-30 this card renders in the pinned working strip above the
 composer (session-chat-working-strip.tsx), not inside the transcript, so it
-stays visible at any scroll position and never shows twice.
+stays visible at any scroll position and never shows twice. The one exception
+is a `claude-tool` activity: since 2026-09-04 that card is a pending tool row
+at the bottom of the transcript (see session-chat-terminal-status.ts), so the
+strip keeps its spinner while a tool runs.
 
 The elapsed clock ticks LOCALLY from `detectedAt`, which the server holds still
 for the whole run. The bar only moves when a probe brings a new percentage
@@ -90,7 +93,10 @@ export function SessionChatActivityRow({ activity, className }: SessionChatActiv
   return (
     <div
       aria-live='polite'
-      className={cn('ghostex-chat-activity-row my-2 grid gap-2 rounded-2xl border border-border/65 bg-muted/20 px-4 py-3', className)}
+      className={cn(
+        'ghostex-chat-activity-row my-2 grid gap-2 rounded-2xl border border-border/65 bg-muted/20 px-4 py-3',
+        className
+      )}
       data-kind={activity.kind}
       role='status'
     >

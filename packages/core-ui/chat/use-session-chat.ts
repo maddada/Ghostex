@@ -45,9 +45,14 @@ import {
 } from './session-chat-merge';
 import { countSessionChatCompactionRecords } from './session-chat-noise';
 import {
+  SESSION_CHAT_TERMINAL_TOOL_HOLD_MS,
   mergeSessionChatTerminalStatus,
+  sameSessionChatTerminalTool,
   sessionChatTerminalStatusMessage,
+  sessionChatTerminalToolLanded,
+  sessionChatTerminalToolMessage,
   unreconciledSessionChatTerminalStatuses,
+  withoutSessionChatTerminalStatus,
 } from './session-chat-terminal-status';
 import {
   appendSessionChatCommandMarker,
@@ -402,6 +407,16 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // lines that the transcript later swallows, so a "differs from the previous
   // one" rule leaves the same phrase standing several times in a row.
   const [terminalStatusMessages, setTerminalStatusMessages] = useState<readonly SessionChatMessage[]>([]);
+  /** The pending tool row (see session-chat-terminal-status.ts) and its off-screen hold. */
+  const [terminalTool, setTerminalTool] = useState<SessionChatMessage | null>(null);
+  const terminalToolHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearTerminalToolHold = useCallback((): void => {
+    if (terminalToolHoldRef.current !== null) {
+      clearTimeout(terminalToolHoldRef.current);
+      terminalToolHoldRef.current = null;
+    }
+  }, []);
+  useEffect(() => clearTerminalToolHold, [clearTerminalToolHold]);
   /*
   CDXC:AgentScreenDetection 2026-08-22: "gxserver has read this screen",
   carried by read results and by snapshot/replaced/state frames. Latched rather
@@ -495,15 +510,34 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     autoReconnectsRef.current = 0;
   }, [transport]);
 
-  const applyTerminalActivity = useCallback((activity: SessionChatTerminalActivity | undefined): void => {
-    const transient = activity ? sessionChatTerminalStatusMessage(activity) : null;
-    if (!transient) {
-      setTerminalActivity(activity ?? null);
-      return;
-    }
-    setTerminalActivity(null);
-    setTerminalStatusMessages((current) => mergeSessionChatTerminalStatus(current, transient));
-  }, []);
+  const applyTerminalActivity = useCallback(
+    (activity: SessionChatTerminalActivity | undefined): void => {
+      const tool = activity ? sessionChatTerminalToolMessage(activity) : null;
+      if (tool) {
+        clearTerminalToolHold();
+        setTerminalTool((current) => (current && sameSessionChatTerminalTool(current, tool) ? current : tool));
+        setTerminalStatusMessages((current) => withoutSessionChatTerminalStatus(current, tool));
+        setTerminalActivity(null);
+        return;
+      }
+      // No tool on this frame: the last pending tool row stays for the hold
+      // and goes only if no tool has been painted by the time it elapses.
+      if (terminalToolHoldRef.current === null) {
+        terminalToolHoldRef.current = setTimeout(() => {
+          terminalToolHoldRef.current = null;
+          setTerminalTool(null);
+        }, SESSION_CHAT_TERMINAL_TOOL_HOLD_MS);
+      }
+      const transient = activity ? sessionChatTerminalStatusMessage(activity) : null;
+      if (!transient) {
+        setTerminalActivity(activity ?? null);
+        return;
+      }
+      setTerminalActivity(null);
+      setTerminalStatusMessages((current) => mergeSessionChatTerminalStatus(current, transient));
+    },
+    [clearTerminalToolHold]
+  );
 
   /**
    * Folds the two queue-carriage fields with their DIFFERENT omission rules:
@@ -789,6 +823,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setTerminalNotice(null);
       setTerminalActivity(null);
       setTerminalStatusMessages([]);
+      clearTerminalToolHold();
+      setTerminalTool(null);
       setAppCommands([]);
       // A different session's detection must never leak into this one.
       setSelectedOptions(null);
@@ -1154,9 +1190,22 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     if (streamingText) {
       tail.push(sessionChatStreamingMessage(streamingText));
     }
+    if (terminalTool && !sessionChatTerminalToolLanded(terminalTool, boundaried)) {
+      tail.push(terminalTool);
+    }
     tail.push(...pendingMessages);
     return [...boundaried, ...tail];
-  }, [appCommands, boundaried, compactionRecords, markers, pending, previewText, terminalStatusMessages, working]);
+  }, [
+    appCommands,
+    boundaried,
+    compactionRecords,
+    markers,
+    pending,
+    previewText,
+    terminalStatusMessages,
+    terminalTool,
+    working,
+  ]);
 
   const view = selectSessionChatViewState({
     error,
