@@ -383,7 +383,13 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     if (!session || session.lifecycleState !== 'running') {
       return;
     }
-    this.postLocalWorkspaceTerminalFocus(session.projectId, focusedSessionId);
+    /*
+    CDXC:Navigation 2026-09-04 DECISION:
+    User: restart must bring back the last active project, the last active view (Agents, Code, and so on), and the last visible sessions, so the user can continue where they left off.
+    The focus bridge normally switches the app to Agents and moves keyboard focus to the pane, which is right for a sidebar click but undoes the restored view when the user quit on Code, Browser, Kanban, Automate, or Docs.
+    `startupRestore` tells Rust this is the restore replay, not a click, so it keeps the restored mode and only materializes the session where the restored layout already shows it.
+    */
+    this.postLocalWorkspaceTerminalFocus(session.projectId, focusedSessionId, undefined, { startupRestore: true });
   },
 
   applyPresentationDelta(this: GpuiSidebarRuntime, delta: GxserverPresentationDelta, gxserverRevision: number): void {

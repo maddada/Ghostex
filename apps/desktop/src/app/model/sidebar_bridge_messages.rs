@@ -40,13 +40,39 @@ pub(crate) struct GpuiSidebarWorkspaceTabSession {
     pub(crate) title: String,
 }
 
+/// CDXC:Workarea 2026-09-04 DECISION:
+/// User: Advanced > Split Right in the sidebar session menu opens the session in a pane to the right of the focused agents pane.
+/// It rides on the ordinary sidebar focus bridge as an optional `placement`, so wake, attach, and focus stay one path.
+/// SEE-ALSO: `splitSessionRight` in apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, `focus_local_workspace_terminal_from_message` in apps/desktop/src/app/workspace_events.rs.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum GpuiWorkspaceTerminalFocusPlacement {
+    #[default]
+    Tab,
+    SplitRight,
+}
+
+impl GpuiWorkspaceTerminalFocusPlacement {
+    pub(crate) fn from_str(value: &str) -> Option<Self> {
+        match value {
+            "splitRight" => Some(Self::SplitRight),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSidebarWorkspaceTerminalFocusMessage {
     pub(crate) force_remount: bool,
+    pub(crate) placement: GpuiWorkspaceTerminalFocusPlacement,
     pub(crate) placement_target_session_id: Option<String>,
     pub(crate) preferred_interface: GpuiPreferredAgentInterface,
     pub(crate) project_id: String,
     pub(crate) session_id: String,
+    /// CDXC:Navigation 2026-09-04 WHY:
+    /// Set only by the sidebar's one-shot startup materialization of the persisted focused session.
+    /// A sidebar click means "show me this session" and may switch the app to Agents; the restore replay must not, or the view the user quit on is lost.
+    /// SEE-ALSO: `autoMaterializeStartupFocusedSession` in apps/desktop/sidebar/gxserver-runtime/presentation-stream.ts, `focus_local_workspace_terminal_from_message` in apps/desktop/src/app/workspace_events.rs.
+    pub(crate) startup_restore: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -2075,6 +2075,15 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('clickToWakeSleepingSessions', checked)}
                               />
                             ) : null}
+                            {mainSettingVisible(settingsSearch.terminal, 'showAgentsPaneTabBarWhenUnsplit') ? (
+                              <ToggleField
+                                checked={draft.showAgentsPaneTabBarWhenUnsplit}
+                                description='Keep the tabs bar above the agents pane even when the screen is not split. Split panes always show it; use Advanced > Split Right in a session menu to split.'
+                                label='Show tabs bar when not split'
+                                {...getSettingModificationProps('showAgentsPaneTabBarWhenUnsplit')}
+                                onChange={(checked) => updateDraft('showAgentsPaneTabBarWhenUnsplit', checked)}
+                              />
+                            ) : null}
                             {mainSettingVisible(settingsSearch.terminal, 'showSessionIdInTerminalPanes') ? (
                               /*
                                * CDXC:Workarea 2026-05-23-00:50:

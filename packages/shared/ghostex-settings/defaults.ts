@@ -524,6 +524,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   workspaceBackgroundColor: '#010101',
   clickToWakeSleepingSessions: true,
+  showAgentsPaneTabBarWhenUnsplit: false,
   customViews: [],
   /**
    * CDXC:Titlebar 2026-05-11-00:22

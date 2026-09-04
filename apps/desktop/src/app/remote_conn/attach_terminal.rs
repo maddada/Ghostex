@@ -92,6 +92,35 @@ impl GhostexGpuiApp {
                 "sessionId": key.session_id,
             }),
         );
+        /*
+        CDXC:Workarea 2026-09-04 DECISION:
+        User: Advanced > Split Right must work on remote machine rows too. A
+        remote session that already has a tab is moved into a new leaf right
+        of the focused pane before the ordinary focus or re-arm below; from
+        then on it is placed as a plain tab so the restored-tab re-arm does
+        not try to split its own single-tab pane again. Only a session with
+        no tab yet is created directly as a right-hand split.
+        */
+        let placement =
+            if let Some(existing_session_id) = self.remote_attach_sessions.get(&key).copied() {
+                if placement == AgentsWorkspaceNewTerminalPlacement::SplitRight
+                    && let Some(source_pane_id) = self
+                        .agents_workspace
+                        .pane_id_for_session(existing_session_id)
+                    && self.agents_workspace.split_tab_to_pane(
+                        source_pane_id,
+                        self.agents_workspace.focused_pane,
+                        existing_session_id,
+                        WorkspaceDropZone::Right,
+                    )
+                {
+                    self.persist_shell_layout_state();
+                    cx.notify();
+                }
+                AgentsWorkspaceNewTerminalPlacement::Tab
+            } else {
+                placement
+            };
         if self.focus_existing_gpui_remote_attach_terminal(&key, cx) {
             return;
         }

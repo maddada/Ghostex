@@ -635,6 +635,12 @@ export type ghostexSettings = {
    * pane body.
    */
   clickToWakeSleepingSessions: boolean;
+  /**
+   * CDXC:Workarea 2026-09-04 DECISION:
+   * User: hide the tabs bar above the agents pane when the screen is not split; split panes always show it.
+   * Off by default; the setup wizard offers it right below Terminal Width.
+   */
+  showAgentsPaneTabBarWhenUnsplit: boolean;
   customViews: GhostexCustomView[];
   customWorkspaceOpenTargets: CustomWorkspaceOpenTarget[];
   workspaceOpenTargetAvailability: WorkspaceOpenTargetAvailability;

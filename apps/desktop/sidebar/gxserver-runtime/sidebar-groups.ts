@@ -249,7 +249,13 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     this.presentation = undefined;
     this.appUserData = createEmptyGpuiAppUserData();
     this.domainProjects = [];
-    this.dropLocalPresentationSessionFocus();
+    /*
+    CDXC:Workarea 2026-09-04 WHY:
+    `focusedSessionId` / `visibleSessionIds` / `activeProjectId` survive here on purpose.
+    They are the restore seed replayed from the bootstrap at startup, and this method runs before the first daemon snapshot on every launch (`start()` publishes the bootstrap-pending placeholder, and any patch that lands before the snapshot arrives ends up here too).
+    Dropping them wiped the session the user quit on before `autoMaterializeStartupFocusedSession` ever saw it, and the post below persisted the loss to disk, so the next launch had nothing to restore either.
+    The ids are only routing hints: `ensureActiveProject` validates them against the real snapshot on hydrate, and a reconnect after a daemon restart lands on the same session instead of the first row.
+    */
     this.gitState = createDefaultSidebarGitState();
     this.lastGitRefreshProjectId = undefined;
     /*
@@ -438,6 +444,16 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
   },
 
   postActiveProjectContext(this: GpuiSidebarRuntime, attempt = 0): void {
+    if (!this.presentation && !this.activeRemoteProjectReference()) {
+      /*
+      CDXC:Workarea 2026-09-04 WHY:
+      Without a local presentation the group set is the unavailable placeholder, so this payload would be the projectless one.
+      Rust treats that as authoritative: it parks the restored Agents workspace, swaps in an empty pane, coerces the mode to Agents, and hides every restored CEF surface, then rebuilds it all a moment later when the hydrate names the project again.
+      That round trip ran on every launch (`start()` publishes before the snapshot fetch) and was the flash of a different pane the user saw, and mid-session it is what a daemon restart looked like.
+      Rust already holds the restored project from its shell state; the first real hydrate republishes the selection, and a remote group that owns the selection still goes out because its rows do not come from the local daemon.
+      */
+      return;
+    }
     /*
     CDXC:Navigation 2026-08-19:
     Every path that republishes active-project identity lands here, which makes
@@ -494,6 +510,16 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     without confusing them with local gxserver sessions.
     */
     const activeRemoteReference = this.activeRemoteProjectReference();
+    if (!this.presentation && !activeRemoteReference) {
+      /*
+      CDXC:Workarea 2026-09-04 WHY:
+      `tabSessions` is Rust's authority for which tabs exist in the active project; an empty list means "this project has no sessions" and makes `reconcile_with_sidebar_tab_sessions` clear every restored tab, split, and session mapping.
+      Before the first local snapshot the placeholder groups have no rows, so a post here (the bootstrap-pending publish, or a remote presentation patch that lands before the local fetch returns) sent exactly that empty list for the restored project.
+      The hydrate then re-created every session as a fresh tab in sidebar sort order with the first row active: the "different session after restart" the user kept reporting, and the reason split layouts came back flattened.
+      Rust already has the persisted focus ids from the bootstrap, so there is nothing to tell it until real rows exist.
+      */
+      return;
+    }
     const activeTabSessions = this.activeWorkspaceTabSessionsFromLatestGroups();
     const activeProjectId = activeRemoteReference
       ? createGpuiRemotePresentationProjectId(activeRemoteReference.machineId, activeRemoteReference.projectId)

@@ -3185,6 +3185,8 @@ impl GhostexGpuiApp {
                                             action:
                                                 GpuiSidebarNativeProjectPathAction::OpenRemoteSessionTerminal,
                                             file_path: None,
+                                            placement:
+                                                GpuiWorkspaceTerminalFocusPlacement::Tab,
                                             preferred_interface:
                                                 GpuiPreferredAgentInterface::Terminal,
                                             project_id: gpui_remote_scoped_session_id(

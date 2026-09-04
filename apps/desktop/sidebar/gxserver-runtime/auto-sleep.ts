@@ -18,6 +18,7 @@ import {
   parseGpuiRemotePresentationProjectId,
   parseGpuiRemotePresentationSessionId,
 } from './helpers/remote-presentation';
+import type { GpuiWorkspaceTerminalFocusPlacement } from './types-and-protocol';
 import {
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectGroupId,
@@ -44,7 +45,7 @@ export interface GpuiSidebarRuntimeAutoSleepMethods {
   setSessionSleeping(
     sessionId: string,
     sleeping: boolean,
-    options?: { automatic?: boolean; forceRemount?: boolean }
+    options?: { automatic?: boolean; forceRemount?: boolean; placement?: GpuiWorkspaceTerminalFocusPlacement }
   ): Promise<void>;
   closeInactiveProjectSessions(groupId: string): Promise<void>;
   sleepInactiveProjectSessions(groupId: string): Promise<void>;
@@ -261,7 +262,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
     this: GpuiSidebarRuntime,
     sessionId: string,
     sleeping: boolean,
-    options?: { automatic?: boolean; forceRemount?: boolean }
+    options?: { automatic?: boolean; forceRemount?: boolean; placement?: GpuiWorkspaceTerminalFocusPlacement }
   ): Promise<void> {
     const browserTab = this.browserTabs.find((candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId);
     if (browserTab) {

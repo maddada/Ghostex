@@ -652,6 +652,11 @@ export function getSettingsSearchSections(settingsSearchQuery: string, draft: gh
         title: 'Click to Wake Sleeping Panes',
       },
       {
+        key: 'showAgentsPaneTabBarWhenUnsplit',
+        subtitle: 'Keep the tabs bar above the agents pane even when the screen is not split.',
+        title: 'Show tabs bar when not split',
+      },
+      {
         key: 'showSessionIdInTerminalPanes',
         subtitle: 'Show the provider session id in the top-right corner of terminal panes.',
         title: 'Show session id in terminal panes',

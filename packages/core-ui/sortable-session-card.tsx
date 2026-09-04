@@ -9,6 +9,7 @@ import {
   IconFileExport,
   IconFocus2,
   IconGitFork,
+  IconLayoutColumns,
   IconLayoutSidebarRightExpand,
   IconMessageCircle,
   IconMoon,
@@ -423,6 +424,14 @@ export type SidebarSessionContextMenuEligibility = {
   canPopOutPane: boolean;
   canRenameSession: boolean;
   canSleepSession: boolean;
+  /**
+   * CDXC:Workarea 2026-09-04 DECISION:
+   * User: Advanced > Split Right opens the session in a pane to the right of
+   * the focused agents pane, for local and remote machine rows alike. The Rust
+   * workspace owns pane topology, so the item needs the GPUI bridge and is
+   * hidden in the web app.
+   */
+  canSplitSessionRight: boolean;
   canTagSession: boolean;
   isBrowserSession: boolean;
 };
@@ -470,6 +479,8 @@ export function getSidebarSessionContextMenuEligibility({
      * Rename, Sleep, Pin, Tag, and Close stay available on drafts.
      */
     canForkSession: canUseTerminalAgentMenuAction && hasSession && !isDraftSession && supportsFork(session),
+    canSplitSessionRight:
+      canUseTerminalAgentMenuAction && hasSession && !isDraftSession && gpuiWorkspaceTerminalFocusBridgeAvailable(),
     canFullReloadSession:
       canUseTerminalAgentMenuAction &&
       hasSession &&
@@ -755,6 +766,7 @@ export function SortableSessionCard({
     canPinSession,
     canRenameSession,
     canSleepSession,
+    canSplitSessionRight,
     canTagSession,
     isBrowserSession,
   } = getSidebarSessionContextMenuEligibility({
@@ -1219,6 +1231,7 @@ export function SortableSessionCard({
       Number(Boolean(session.firstUserMessage?.trim())) +
       Number(canGenerateSessionTitle) +
       Number(sessionGroup?.canCreateSessionGroup === true) +
+      Number(canSplitSessionRight) +
       Number(canFocusMode) +
       Number(canCopySessionDetails) +
       Number(canCopyResumeCommand) +
@@ -1527,6 +1540,15 @@ export function SortableSessionCard({
     vscode.postMessage({
       sessionId: session.sessionId,
       type: 'fullReloadSession',
+    });
+  };
+
+  const requestSplitSessionRight = () => {
+    setContextMenuPosition(undefined);
+    setAdvancedSubmenuPosition(undefined);
+    vscode.postMessage({
+      sessionId: session.sessionId,
+      type: 'splitSessionRight',
     });
   };
 
@@ -2086,6 +2108,14 @@ export function SortableSessionCard({
       key: 'move-to-new-group',
       label: 'Move to New Group',
       onClick: requestCreateSessionGroupFromSession,
+    });
+  }
+  if (canSplitSessionRight) {
+    advancedSessionActions.push({
+      icon: <IconLayoutColumns aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'split-right',
+      label: 'Split Right',
+      onClick: requestSplitSessionRight,
     });
   }
   if (canFocusMode) {
@@ -2688,6 +2718,7 @@ export function SortableSessionCard({
                 delayedSendDeadlineAt={session.delayedSendDeadlineAt}
                 delayedSendRemainingLabel={session.delayedSendRemainingLabel}
                 faviconDataUrl={session.faviconDataUrl}
+                hasComposerDraft={session.hasComposerDraft === true}
                 hasSessionNote={Boolean(session.sessionNote?.trim())}
                 isDraft={session.isDraft === true}
                 isFavorite={session.isFavorite}
@@ -3115,6 +3146,14 @@ function supportsResumeCommandCopy(session: SidebarSessionItem): boolean {
     session.agentIcon === 'cursor-cli' ||
     session.agentIcon === 'antigravity-cli'
   );
+}
+
+function gpuiWorkspaceTerminalFocusBridgeAvailable(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const bridge = (window as { ghostexGpui?: { postWorkspaceTerminalFocus?: unknown } }).ghostexGpui;
+  return typeof bridge?.postWorkspaceTerminalFocus === 'function';
 }
 
 function supportsFork(session: SidebarSessionItem): boolean {

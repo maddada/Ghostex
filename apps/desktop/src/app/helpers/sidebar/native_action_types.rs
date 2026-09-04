@@ -18,6 +18,8 @@ use crate::*;
 pub(crate) struct GpuiSidebarNativeProjectPathActionMessage {
     pub(crate) action: GpuiSidebarNativeProjectPathAction,
     pub(crate) file_path: Option<String>,
+    /// Only `openRemoteSessionTerminal` carries it; see `GpuiWorkspaceTerminalFocusPlacement`.
+    pub(crate) placement: GpuiWorkspaceTerminalFocusPlacement,
     pub(crate) preferred_interface: GpuiPreferredAgentInterface,
     pub(crate) project_id: String,
 }

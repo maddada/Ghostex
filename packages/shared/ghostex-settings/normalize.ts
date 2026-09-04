@@ -850,6 +850,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'clickToWakeSleepingSessions',
       DEFAULT_ghostex_SETTINGS.clickToWakeSleepingSessions
     ),
+    showAgentsPaneTabBarWhenUnsplit: readBoolean(
+      source,
+      'showAgentsPaneTabBarWhenUnsplit',
+      DEFAULT_ghostex_SETTINGS.showAgentsPaneTabBarWhenUnsplit
+    ),
     customViews: normalizeGhostexCustomViews(source.customViews),
     /**
      * CDXC:Titlebar 2026-05-11-00:22

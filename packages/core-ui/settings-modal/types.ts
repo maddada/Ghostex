@@ -273,6 +273,7 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'terminalCursorStyle',
     'terminalCursorStyleBlink',
     'clickToWakeSleepingSessions',
+    'showAgentsPaneTabBarWhenUnsplit',
     'showSessionIdInTerminalPanes',
     'showNotificationOnTerminalBell',
     'promptEditorBackend',

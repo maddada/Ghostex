@@ -72,10 +72,12 @@ impl GhostexGpuiApp {
             self.focus_local_workspace_terminal_from_message(
                 &GpuiSidebarWorkspaceTerminalFocusMessage {
                     force_remount: false,
+                    placement: GpuiWorkspaceTerminalFocusPlacement::Tab,
                     placement_target_session_id: None,
                     preferred_interface: GpuiPreferredAgentInterface::Terminal,
                     project_id: key.project_id.clone(),
                     session_id: key.session_id.clone(),
+                    startup_restore: false,
                 },
                 cx,
             );
@@ -550,6 +552,7 @@ impl GhostexGpuiApp {
                 GpuiLocalWorkspaceAttachIntent::Attach,
                 pane_id,
                 true,
+                GpuiWorkspaceTerminalFocusPlacement::Tab,
                 GpuiLocalWorkspaceAttachOrigin::SurfacedRestore,
                 cx,
             );
@@ -588,6 +591,7 @@ impl GhostexGpuiApp {
                     .map(|session_id| (pane_id, session_id))
             })
             .collect::<Vec<_>>();
+        let focused_pane_id = self.agents_workspace.focused_pane;
         for (pane_id, session_id) in surfaced {
             if self
                 .agents_workspace
@@ -598,7 +602,17 @@ impl GhostexGpuiApp {
             {
                 continue;
             }
-            self.request_mapped_sleeping_agents_terminal_wake(pane_id, session_id, cx);
+            let mutation_kind = if pane_id == focused_pane_id {
+                GpuiLocalWorkspaceLifecycleMutationKind::DirectWake
+            } else {
+                GpuiLocalWorkspaceLifecycleMutationKind::RestoreWake
+            };
+            self.request_mapped_sleeping_agents_terminal_wake(
+                pane_id,
+                session_id,
+                mutation_kind,
+                cx,
+            );
         }
     }
 
@@ -1053,6 +1067,12 @@ impl GhostexGpuiApp {
                 serde_json::Value::Bool(true),
             );
         }
+        if mutation_kind == GpuiLocalWorkspaceLifecycleMutationKind::RestoreWake {
+            message.insert(
+                "keepSidebarFocus".to_string(),
+                serde_json::Value::Bool(true),
+            );
+        }
 
         if action == GpuiLocalWorkspaceLifecycleAction::Close {
             /*
@@ -1287,7 +1307,8 @@ impl GhostexGpuiApp {
                 focus_agents_pane_after_mutation = selected;
                 slept || selected
             }
-            GpuiLocalWorkspaceLifecycleMutationKind::DirectWake => {
+            GpuiLocalWorkspaceLifecycleMutationKind::DirectWake
+            | GpuiLocalWorkspaceLifecycleMutationKind::RestoreWake => {
                 /*
                 CDXC:FocusRouting 2026-06-26-23:24:
                 A mapped sleeping Agents wake result means gxserver has accepted `/api/wakeSession`; only now may Rust move the reused native tab into Mounting. This keeps sidebar session clicks, placeholder body clicks, and click-to-wake-disabled tab selection aligned with macOS and avoids local shell-only wake state.
@@ -1348,6 +1369,7 @@ impl GhostexGpuiApp {
         &mut self,
         pane_id: WorkspacePaneId,
         session_id: TerminalSessionId,
+        mutation_kind: GpuiLocalWorkspaceLifecycleMutationKind,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         if !self.agents_terminal_session_is_mapped_sleeping(session_id) {
@@ -1375,7 +1397,7 @@ impl GhostexGpuiApp {
             pane_id,
             session_id,
             GpuiLocalWorkspaceLifecycleAction::Wake,
-            GpuiLocalWorkspaceLifecycleMutationKind::DirectWake,
+            mutation_kind,
             None,
             false,
             None,
@@ -1415,6 +1437,7 @@ impl GhostexGpuiApp {
             GpuiLocalWorkspaceAttachIntent::Attach,
             pane_id,
             true,
+            GpuiWorkspaceTerminalFocusPlacement::Tab,
             GpuiLocalWorkspaceAttachOrigin::WakeRecovery,
             cx,
         );

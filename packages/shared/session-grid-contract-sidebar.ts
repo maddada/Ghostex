@@ -558,6 +558,12 @@ export type SidebarSessionItem = {
    * that has stopped dead is the one queue state that needs the user to act.
    */
   queuedPromptFailedCount?: number;
+  /**
+   * CDXC:Drafts 2026-09-04 DECISION:
+   * User: the chat composer holds unsent text for this session. Draws the white
+   * composer-draft dot on the leading agent icon; absent means no dot.
+   */
+  hasComposerDraft?: boolean;
   /** True when Delayed Send is armed for every agent in this project to finish. */
   sendWhenAllProjectSessionsStopActive?: boolean;
   /** True when Delayed Send is armed for this agent to finish. */
@@ -2516,6 +2522,16 @@ export type SidebarToExtensionMessage =
     }
   | {
       type: 'forkSession';
+      sessionId: string;
+    }
+  | {
+      /**
+       * CDXC:Workarea 2026-09-04 DECISION:
+       * User: with the tabs bar hidden on unsplit workspaces, the sidebar
+       * session menu (Advanced > Split Right) is how a pane gets split: open
+       * this session in a new pane to the right of the focused agents pane.
+       */
+      type: 'splitSessionRight';
       sessionId: string;
     }
   | {

@@ -329,7 +329,9 @@ impl GhostexGpuiApp {
                     }
                 }),
             )
-            .child(self.render_workspace_tab_bar(leaf, cx))
+            .when(self.agents_workspace_tab_bar_visible(), |this| {
+                this.child(self.render_workspace_tab_bar(leaf, cx))
+            })
             .when_some(
                 self.render_agents_terminal_search_bar(leaf, cx),
                 |this, surface| this.child(surface),

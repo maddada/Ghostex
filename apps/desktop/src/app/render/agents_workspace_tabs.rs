@@ -28,6 +28,16 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
+    /// CDXC:Workarea 2026-09-04 DECISION:
+    /// User: hide the tabs bar above the agents pane when the screen is not split, off by default.
+    /// The gate counts real leaves, not the focus-mode projection, so a zoomed split still shows its bar and the double-click exit stays reachable.
+    /// Splitting an unsplit workspace goes through Advanced > Split Right in the sidebar session menu (`splitSessionRight`).
+    pub(crate) fn agents_workspace_tab_bar_visible(&self) -> bool {
+        self.agents_workspace.leaf_order().len() > 1
+            || shared_settings::shared_sidebar_settings_snapshot()
+                .show_agents_pane_tab_bar_when_unsplit()
+    }
+
     pub(crate) fn render_workspace_tab_bar(
         &self,
         leaf: &WorkspaceLeaf,
@@ -35,7 +45,7 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         /*
         CDXC:Workarea 2026-06-22-05:18:
-        Agents terminal panes need native-style tab chrome before libghostty mounts: every pane keeps an always-visible tab bar, tab selection colors stay tied to active tab state instead of pane focus, horizontal overflow remains scrollable, and right-side pane actions stay in the tab chrome instead of overlapping terminal bodies.
+        Agents terminal panes need native-style tab chrome before libghostty mounts: every pane keeps a tab bar (visible on split workspaces, see `agents_workspace_tab_bar_visible`), tab selection colors stay tied to active tab state instead of pane focus, horizontal overflow remains scrollable, and right-side pane actions stay in the tab chrome instead of overlapping terminal bodies.
 
         CDXC:CommandPane 2026-06-22-06:39:
         Agents pane action chrome mirrors the native compact tab-bar cluster: fixed New Terminal, New Browser Tab, and pane overflow controls live at the far right. Split, rotate, and merge actions stay in the overflow menu rather than occupying fixed tab-bar slots.

@@ -57,6 +57,7 @@ import type {
   GpuiPendingNativeAppShotPromptInsertion,
   GpuiRendererCommandResolvedSession,
   GpuiSidebarNativeProjectPathAction,
+  GpuiWorkspaceTerminalFocusPlacement,
 } from './types-and-protocol';
 import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
@@ -149,7 +150,11 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
     action: GpuiSidebarNativeProjectPathAction,
     projectId: string,
     originalMessage: SidebarToExtensionMessage,
-    options?: { filePath?: string; preferredInterface?: PreferredAgentInterface }
+    options?: {
+      filePath?: string;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+    }
   ): boolean;
   postSidebarCommandAction(
     command: SidebarCommandButton,
@@ -574,6 +579,8 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       }
       case 'runCommand':
         return this.runGxserverRendererCommandButton(readGpuiRecordString(command.payload, 'commandId'), command);
+      case 'readResourcesSnapshot':
+        return this.requestNativeResourcesSnapshot();
       case 'openBrowser':
       case 'openBrowserPane':
         return this.openEmbeddedBrowserFromRendererCommand(command);
@@ -959,7 +966,11 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     action: GpuiSidebarNativeProjectPathAction,
     projectId: string,
     originalMessage: SidebarToExtensionMessage,
-    options: { filePath?: string; preferredInterface?: PreferredAgentInterface } = {}
+    options: {
+      filePath?: string;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+    } = {}
   ): boolean {
     const normalizedProjectId = projectId.trim();
     if (!normalizedProjectId) {
@@ -974,6 +985,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     const payload = JSON.stringify({
       action,
       ...(options.filePath ? { filePath: options.filePath } : {}),
+      ...(options.placement ? { placement: options.placement } : {}),
       ...(options.preferredInterface ? { preferredInterface: options.preferredInterface } : {}),
       projectId: normalizedProjectId,
       type: GPUI_SIDEBAR_NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE,

@@ -1161,7 +1161,12 @@ impl GhostexGpuiApp {
         }
         if wake_on_tab_selection {
             if self.agents_terminal_session_is_mapped_sleeping(session_id) {
-                let _ = self.request_mapped_sleeping_agents_terminal_wake(pane_id, session_id, cx);
+                let _ = self.request_mapped_sleeping_agents_terminal_wake(
+                    pane_id,
+                    session_id,
+                    GpuiLocalWorkspaceLifecycleMutationKind::DirectWake,
+                    cx,
+                );
             } else if self
                 .agents_workspace
                 .set_session_sleeping(session_id, false)
@@ -1228,7 +1233,12 @@ impl GhostexGpuiApp {
         }
 
         if self.agents_terminal_session_is_mapped_sleeping(session_id) {
-            if !self.request_mapped_sleeping_agents_terminal_wake(pane_id, session_id, cx) {
+            if !self.request_mapped_sleeping_agents_terminal_wake(
+                pane_id,
+                session_id,
+                GpuiLocalWorkspaceLifecycleMutationKind::DirectWake,
+                cx,
+            ) {
                 return;
             }
             self.dispatch_gpui_workspace_session_attention_acknowledge(session_id, cx);

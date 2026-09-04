@@ -85,13 +85,16 @@ impl GhostexGpuiApp {
                         )),
                     );
                 }
+                let placement = match message.placement {
+                    GpuiWorkspaceTerminalFocusPlacement::Tab => {
+                        AgentsWorkspaceNewTerminalPlacement::Tab
+                    }
+                    GpuiWorkspaceTerminalFocusPlacement::SplitRight => {
+                        AgentsWorkspaceNewTerminalPlacement::SplitRight
+                    }
+                };
                 self.begin_gpui_remote_attach_terminal_open(
-                    reference,
-                    config,
-                    target,
-                    None,
-                    AgentsWorkspaceNewTerminalPlacement::Tab,
-                    cx,
+                    reference, config, target, None, placement, cx,
                 );
             }
             GpuiSidebarNativeProjectPathAction::CopyRemoteAttachCommand => {

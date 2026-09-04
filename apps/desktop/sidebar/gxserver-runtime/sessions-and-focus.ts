@@ -33,6 +33,7 @@ import {
   parseGpuiRemotePresentationSessionId,
 } from './helpers/remote-presentation';
 import { shouldApplyGpuiLocalWorkspaceTransition } from './helpers/terminal-lifecycle';
+import type { GpuiWorkspaceTerminalFocusPlacement } from './types-and-protocol';
 import { closeAppModal, openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import type { PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import { reorderPresentationProjectSessions } from '@/packages/shared/gxserver-presentation-cache';
@@ -74,17 +75,27 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   focusLocalWorkspaceSession(
     projectId: string,
     sessionId: string,
-    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
+    options?: {
+      forceRemount?: boolean;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+    }
   ): void;
   postLocalWorkspaceTerminalFocus(
     projectId: string,
     sessionId: string,
     placementTargetSessionId?: string,
-    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
+    options?: {
+      forceRemount?: boolean;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+      startupRestore?: boolean;
+    }
   ): void;
   transitionSession(sessionId: string, action: 'close' | 'sleep'): Promise<void>;
   copySessionDetails(message: Extract<SidebarToExtensionMessage, { type: 'copySessionDetails' }>): void;
   fullReloadSession(sessionId: string): Promise<void>;
+  splitSessionRight(sessionId: string): Promise<void>;
   switchSessionAgent(sessionId: string, agentId: string): Promise<void>;
   fullReloadProjectZmxSessions(groupId: string): Promise<void>;
   fullReloadWorkspaceGroup(groupId: string): Promise<void>;
@@ -123,7 +134,6 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   currentVisibleSessionIdsForLocalProject(projectId: string): string[];
   isGpuiPresentationChatProjectId(projectId: string): boolean;
   setRemotePresentationSessionFocus(reference: { machineId: string; projectId: string; sessionId: string }): void;
-  dropLocalPresentationSessionFocus(): void;
   dropRemotePresentationSessionFocus(machineId: string): void;
 }
 
@@ -325,7 +335,11 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this: GpuiSidebarRuntime,
     projectId: string,
     sessionId: string,
-    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
+    options?: {
+      forceRemount?: boolean;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+    }
   ): void {
     /*
     CDXC:FocusRouting 2026-06-26-06:18:
@@ -345,7 +359,12 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     projectId: string,
     sessionId: string,
     placementTargetSessionId?: string,
-    options?: { forceRemount?: boolean; preferredInterface?: PreferredAgentInterface }
+    options?: {
+      forceRemount?: boolean;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+      startupRestore?: boolean;
+    }
   ): void {
     /*
     CDXC:FocusRouting 2026-06-26-06:08:
@@ -358,7 +377,9 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     const payload = JSON.stringify({
       ...(placementTargetSessionId ? { placementTargetSessionId } : {}),
       ...(options?.forceRemount ? { forceRemount: true } : {}),
+      ...(options?.placement ? { placement: options.placement } : {}),
       ...(options?.preferredInterface ? { preferredInterface: options.preferredInterface } : {}),
+      ...(options?.startupRestore ? { startupRestore: true } : {}),
       projectId,
       sessionId,
       type: GPUI_SIDEBAR_WORKSPACE_TERMINAL_FOCUS_MESSAGE_TYPE,
@@ -479,6 +500,46 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     }
     await this.setSessionSleeping(sessionId, true);
     await this.setSessionSleeping(sessionId, false, { forceRemount: true });
+  },
+
+  async splitSessionRight(this: GpuiSidebarRuntime, sessionId: string): Promise<void> {
+    /*
+    CDXC:Workarea 2026-09-04 DECISION:
+    User: Advanced > Split Right in the session menu opens the session in a new
+    pane to the right of the focused agents pane. It is a sidebar focus with a
+    placement: a sleeping row wakes first exactly like a click, and the same
+    focus bridge carries `placement: 'splitRight'` so Rust either moves the
+    already-open tab into a new right-hand leaf or attaches the session there.
+    */
+    const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
+    if (remoteSession) {
+      // Remote rows open through the native project-path action bridge, the
+      // same route as a remote session click; Rust wakes and attaches there.
+      this.acknowledgeSessionAttention(sessionId, 'sidebar-focus');
+      if (
+        this.postRemoteSessionNativeAction(
+          'openRemoteSessionTerminal',
+          remoteSession,
+          { sessionId, type: 'splitSessionRight' },
+          { placement: 'splitRight' }
+        )
+      ) {
+        this.setRemotePresentationSessionFocus(remoteSession);
+        this.publishRemotePresentationPatch();
+      }
+      return;
+    }
+    const reference = parseGxserverPresentationProjectSessionId(sessionId);
+    if (!reference || !this.client || reference.projectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID) {
+      return;
+    }
+    this.acknowledgeSessionAttention(sessionId, 'sidebar-focus');
+    if (this.isSleepingLocalPresentationSession(reference.projectId, reference.sessionId)) {
+      await this.setSessionSleeping(sessionId, false, { placement: 'splitRight' });
+      return;
+    }
+    this.focusLocalWorkspaceSession(reference.projectId, reference.sessionId, { placement: 'splitRight' });
+    this.publishPresentation('patch');
   },
 
   async switchSessionAgent(this: GpuiSidebarRuntime, sessionId: string, agentId: string): Promise<void> {
@@ -1252,15 +1313,6 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this.focusedSessionId = scopedSessionId;
     this.visibleSessionIds = new Set([scopedSessionId]);
     this.postGxserverPresentationFocusState();
-  },
-
-  dropLocalPresentationSessionFocus(this: GpuiSidebarRuntime): void {
-    if (this.focusedSessionId && !parseGpuiRemotePresentationSessionId(this.focusedSessionId)) {
-      this.focusedSessionId = undefined;
-    }
-    this.visibleSessionIds = new Set(
-      [...this.visibleSessionIds].filter((sessionId) => Boolean(parseGpuiRemotePresentationSessionId(sessionId)))
-    );
   },
 
   dropRemotePresentationSessionFocus(this: GpuiSidebarRuntime, machineId: string): void {

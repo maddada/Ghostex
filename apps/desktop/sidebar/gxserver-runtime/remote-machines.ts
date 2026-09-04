@@ -32,6 +32,7 @@ import type {
   GpuiRemoteSidebarHud,
   GpuiSidebarNativeProjectPathAction,
   GpuiSidebarRemoteGxserverResponseEvent,
+  GpuiWorkspaceTerminalFocusPlacement,
 } from './types-and-protocol';
 import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
@@ -120,7 +121,7 @@ export interface GpuiSidebarRuntimeRemoteMachineMethods {
     >,
     reference: { machineId: string; projectId: string; sessionId: string },
     originalMessage: SidebarToExtensionMessage,
-    options?: { preferredInterface?: PreferredAgentInterface }
+    options?: { placement?: GpuiWorkspaceTerminalFocusPlacement; preferredInterface?: PreferredAgentInterface }
   ): boolean;
   postRemoteProjectNativeAction(
     action: Extract<
@@ -775,7 +776,7 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     >,
     reference: { machineId: string; projectId: string; sessionId: string },
     originalMessage: SidebarToExtensionMessage,
-    options: { preferredInterface?: PreferredAgentInterface } = {}
+    options: { placement?: GpuiWorkspaceTerminalFocusPlacement; preferredInterface?: PreferredAgentInterface } = {}
   ): boolean {
     return this.postNativeProjectPathAction(
       action,

@@ -214,6 +214,7 @@ impl GhostexGpuiApp {
                 GpuiSidebarNativeProjectPathActionMessage {
                     action,
                     file_path: None,
+                    placement: GpuiWorkspaceTerminalFocusPlacement::Tab,
                     preferred_interface: GpuiPreferredAgentInterface::Terminal,
                     project_id,
                 },
@@ -234,6 +235,7 @@ impl GhostexGpuiApp {
         let message = GpuiSidebarNativeProjectPathActionMessage {
             action,
             file_path: None,
+            placement: GpuiWorkspaceTerminalFocusPlacement::Tab,
             preferred_interface: GpuiPreferredAgentInterface::Terminal,
             project_id,
         };

@@ -62,6 +62,11 @@ pub(crate) enum GpuiLocalWorkspaceLifecycleMutationKind {
     ScopedClose,
     DirectSleep,
     DirectWake,
+    /// CDXC:Workarea 2026-09-04 WHY:
+    /// A startup-restore wake of a pane that is not the focused pane.
+    /// It mutates the tab exactly like `DirectWake`, but the sidebar must not move its focused session to it: every restored split pane wakes at once, the RPCs finish in any order, and the last one to finish used to become the persisted focus, so the next restart came back on a different pane's session.
+    /// SEE-ALSO: `keepSidebarFocus` in apps/desktop/sidebar/gxserver-runtime/helpers/terminal-lifecycle.ts.
+    RestoreWake,
     ScopedSleep,
 }
 

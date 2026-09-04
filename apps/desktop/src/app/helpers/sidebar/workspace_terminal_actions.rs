@@ -98,10 +98,12 @@ pub(crate) fn gpui_sidebar_workspace_terminal_focus_from_value(
             "version",
             "type",
             "forceRemount",
+            "placement",
             "placementTargetSessionId",
             "preferredInterface",
             "projectId",
             "sessionId",
+            "startupRestore",
         ],
     )?;
 
@@ -133,6 +135,13 @@ pub(crate) fn gpui_sidebar_workspace_terminal_focus_from_value(
             .as_bool()
             .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedJson)?,
     };
+    let placement = match object.get("placement") {
+        None => GpuiWorkspaceTerminalFocusPlacement::Tab,
+        Some(value) => value
+            .as_str()
+            .and_then(GpuiWorkspaceTerminalFocusPlacement::from_str)
+            .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedJson)?,
+    };
     let preferred_interface = match object.get("preferredInterface") {
         None => GpuiPreferredAgentInterface::Terminal,
         Some(value) => value
@@ -140,12 +149,20 @@ pub(crate) fn gpui_sidebar_workspace_terminal_focus_from_value(
             .and_then(GpuiPreferredAgentInterface::from_str)
             .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedJson)?,
     };
+    let startup_restore = match object.get("startupRestore") {
+        None => false,
+        Some(value) => value
+            .as_bool()
+            .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedJson)?,
+    };
     Ok(GpuiSidebarWorkspaceTerminalFocusMessage {
         force_remount,
+        placement,
         placement_target_session_id,
         preferred_interface,
         project_id,
         session_id,
+        startup_restore,
     })
 }
 
