@@ -446,6 +446,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         published, and it writes nothing but keystrokes into that one session.
         */
         | "/api/rewindSessionChat"
+        | "/api/selectSessionChatModel"
         | "/api/readSessionTranscriptSizes"
         | "/api/transitionSession"
         /*
