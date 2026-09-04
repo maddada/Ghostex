@@ -22,7 +22,7 @@ pub(crate) fn build_project_agent_launch_plan(
         global_accept_all_enabled: settings
             .get("agentAcceptAllEnabled")
             .and_then(Value::as_bool)
-            .unwrap_or(true),
+            .unwrap_or(false),
         icon: read_text_from_map(&agent_config, "icon"),
     })
 }
@@ -68,7 +68,7 @@ pub(crate) fn create_agent_session_params_for_project(
         global_accept_all_enabled: settings
             .get("agentAcceptAllEnabled")
             .and_then(Value::as_bool)
-            .unwrap_or(true),
+            .unwrap_or(false),
         icon: agent_icon.clone(),
     });
     let launch_plan_object = launch_plan.as_object().cloned().unwrap_or_default();
@@ -379,6 +379,9 @@ pub(crate) fn resolve_project_agent_config(
         .unwrap_or_default()
 }
 
+/// CDXC:AgentProviders 2026-09-04 DECISION:
+/// User: Agent approvals defaults to Ask first, so interactive Claude and Codex launches must not force permission-bypass flags unless the global or per-agent policy explicitly selects Run without asking.
+/// SEE-ALSO: packages/shared/ghostex-settings/defaults.ts, packages/find/src/agent.rs, apps/history-cli/src/ui.rs.
 pub(crate) fn resolve_agent_launch_command(
     agent_id: &str,
     command: &str,
@@ -386,18 +389,6 @@ pub(crate) fn resolve_agent_launch_command(
     global_accept_all_enabled: bool,
     icon: Option<&str>,
 ) -> String {
-    let required_permission_agent = match agent_id {
-        "codex" | "command-code" => Some(agent_id),
-        "claude" => Some("claude"),
-        _ => match icon {
-            Some("codex") => Some("codex"),
-            Some("claude") => Some("claude"),
-            _ => None,
-        },
-    };
-    if let Some(required_permission_agent) = required_permission_agent {
-        return enforce_required_agent_permission_flag(command, required_permission_agent);
-    }
     let enabled = match accept_all_mode {
         Some("enabled") => true,
         Some("disabled") => false,

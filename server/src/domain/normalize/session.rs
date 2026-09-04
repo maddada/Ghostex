@@ -369,7 +369,13 @@ pub(crate) fn normalize_create_agent_session_params(
     let base_command = read_optional_text(launch_settings.get("agentCommand"))
         .or_else(|| default_agent_command(&agent_id).map(str::to_string))
         .unwrap_or_default();
-    let command = apply_agent_accept_all(&agent_id, &base_command);
+    let command = crate::agents::resolve_agent_launch_command(
+        &agent_id,
+        &base_command,
+        read_optional_text(launch_settings.get("acceptAllMode")).as_deref(),
+        false,
+        read_optional_text(launch_settings.get("icon")).as_deref(),
+    );
     let startup_text = if command.is_empty() {
         String::new()
     } else {
@@ -436,10 +442,6 @@ fn default_agent_command(agent_id: &str) -> Option<&'static str> {
     silently dropped newer built-in agents from this normalization path.
     */
     crate::agents::default_agent_command(agent_id)
-}
-
-fn apply_agent_accept_all(agent_id: &str, command: &str) -> String {
-    crate::agents::enforce_required_agent_permission_flag(command, agent_id)
 }
 
 fn default_agent_activity(agent_id: Option<&str>, timestamp: &str) -> Value {

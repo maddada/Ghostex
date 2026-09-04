@@ -150,7 +150,7 @@ pub(crate) fn to_agent_resume_input(
                     settings
                         .get("agentAcceptAllEnabled")
                         .and_then(Value::as_bool)
-                        .unwrap_or(true),
+                        .unwrap_or(false),
                     read_text_from_map(&agent_config, "icon")
                         .or_else(|| read_text_from_map(&launch_settings, "icon"))
                         .as_deref(),

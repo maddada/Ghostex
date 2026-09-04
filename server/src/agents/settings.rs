@@ -95,7 +95,7 @@ pub(crate) fn normalize_agent_settings(value: Option<&Value>) -> Map<String, Val
     let accept_all = object
         .and_then(|settings| settings.get("agentAcceptAllEnabled"))
         .and_then(Value::as_bool)
-        .unwrap_or(true);
+        .unwrap_or(false);
     let mut settings = Map::new();
     settings.insert("agentAcceptAllEnabled".to_string(), Value::Bool(accept_all));
     settings.insert(

@@ -329,8 +329,8 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           {
             key: 'acceptAll',
             subtitle:
-              "Enable each supported agent's permission-bypass mode when launching sessions. Per-agent settings can inherit or override this default.",
-            title: 'Accept All',
+              'Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default.',
+            title: 'Agent approvals',
           },
         ],
         title: 'Config',

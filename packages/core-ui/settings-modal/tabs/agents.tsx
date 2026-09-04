@@ -50,7 +50,9 @@ import {
 } from '../../../shared/sidebar-agents';
 import { AgentChatViewSupportBadge, agentSupportsChatView } from '../../agent-menu-chat-indicator';
 import { getBrandAgentLogoStyle } from '../../agent-logos';
+import { AgentApprovalPolicyControl } from '../../agent-approval-policy-control';
 import { AgentTypeSelectOption } from '../../agent-type-select-option';
+import { DisabledSettingControlTooltip } from '../../disabled-setting-control-tooltip';
 import { useSidebarStore } from '../../sidebar-store';
 import { type AgentConfigDraft } from '../../agent-config-modal';
 import { type WebviewApi } from '../../webview-api';
@@ -164,7 +166,7 @@ export function AgentsSettingsTab({
   vscode?: WebviewApi;
 }) {
   const agents = useSidebarStore((state) => state.hud.agents);
-  const acceptAllToggleId = useId();
+  const agentApprovalsControlId = useId();
   const agentHooksAvailableForUninstall = hasRemovableAgentHooks(agentHookStatus);
   const [editorState, setEditorState] = useState<SettingsAgentEditorState>();
   const agentRosterSectionRef = useRef<HTMLDivElement>(null);
@@ -343,7 +345,7 @@ export function AgentsSettingsTab({
           <SettingsSection title='Config'>
             {/*
              * CDXC:Settings 2026-06-12-04:40:
-             * Default prompt, title generation, custom title command, and global Accept All are configuration controls, not agent management rows. Group them under the same labeled SettingsSection chrome as the Agents roster so the Agents tab scans as two consistent areas: config and the agent roster.
+             * Default prompt, title generation, custom title command, and global agent approvals are configuration controls, not agent management rows. Group them under the same labeled SettingsSection chrome as the Agents roster so the Agents tab scans as two consistent areas: config and the agent roster.
              */}
             {!shouldShowSetting(search.sections.config, 'defaultPromptAgent') ? null : promptAgentOptions.length > 0 ? (
               <SelectField
@@ -412,21 +414,26 @@ export function AgentsSettingsTab({
                 orientation='horizontal'
               >
                 <FieldContent>
-                  <FieldLabel className='text-sm' htmlFor={acceptAllToggleId}>
-                    Accept All
+                  <FieldLabel className='text-sm' htmlFor={agentApprovalsControlId}>
+                    Agent approvals
                   </FieldLabel>
                   <FieldDescription className='text-xs text-muted-foreground'>
-                    Enable each supported agent&apos;s permission-bypass mode when launching sessions. Per-agent
-                    settings can inherit or override this default.
+                    Choose whether supported agents ask before editing files or running commands. Per-agent settings can
+                    override this default.
                   </FieldDescription>
                 </FieldContent>
-                <SettingSwitch
-                  checked={agentAcceptAllEnabled}
+                <DisabledSettingControlTooltip
                   disabled={!vscode}
-                  disabledReason='This change needs the Ghostex app connection.'
-                  id={acceptAllToggleId}
-                  onCheckedChange={onAgentAcceptAllEnabledChange}
-                />
+                  reason='This change needs the Ghostex app connection.'
+                >
+                  <AgentApprovalPolicyControl
+                    disabled={!vscode}
+                    enabled={agentAcceptAllEnabled}
+                    id={agentApprovalsControlId}
+                    onChange={onAgentAcceptAllEnabledChange}
+                    size='sm'
+                  />
+                </DisabledSettingControlTooltip>
               </Field>
             ) : null}
           </SettingsSection>
@@ -967,7 +974,7 @@ export function SettingsAgentRow({
                 disabledReason={
                   acceptAllSupported
                     ? 'This change needs the Ghostex app connection.'
-                    : 'This agent doesn’t support Accept All.'
+                    : 'This agent doesn’t support approval policy changes.'
                 }
                 disabledTooltipClassName='w-full'
                 items={AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS}
@@ -1169,17 +1176,17 @@ export function AgentSettingsEditor({
       <Field className='gap-2.5'>
         <FieldContent>
           <FieldLabel className='text-sm' htmlFor={acceptAllModeId}>
-            Accept All
+            Agent approvals
           </FieldLabel>
           <FieldDescription className='text-xs text-muted-foreground'>
             {acceptAllSupported
-              ? "Inherit uses the global Agents setting. Accept All applies this agent's permission-bypass mode at launch without changing the stored command."
-              : 'This agent does not expose a supported Accept All mode in Ghostex.'}
+              ? "Use app default follows the global Agents setting. Skip permissions applies this agent's permission-bypass mode at launch without changing the stored command."
+              : 'This agent does not expose a supported approval policy in Ghostex.'}
           </FieldDescription>
         </FieldContent>
         <SettingsSelect
           disabled={!acceptAllSupported}
-          disabledReason='This agent doesn’t support Accept All.'
+          disabledReason='This agent doesn’t support approval policy changes.'
           disabledTooltipClassName='w-full'
           items={AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS}
           onValueChange={(value) => setAcceptAllMode(value as AgentAcceptAllMode)}

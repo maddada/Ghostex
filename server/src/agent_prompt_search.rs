@@ -522,7 +522,7 @@ pub fn resolve_agent_prompt_launch(
                 let agent = fork_agent.unwrap_or(rec.agent);
                 PromptLaunchPlan::Launch {
                     agent,
-                    command: agent.fresh_session_argv(&rec.text),
+                    command: agent.fresh_session_argv(&rec.text, accept_all),
                     cwd: rec.project.clone(),
                     cwd_exists: !rec.project.is_empty()
                         && std::path::Path::new(&rec.project).is_dir(),

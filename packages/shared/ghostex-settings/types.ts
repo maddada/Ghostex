@@ -175,12 +175,12 @@ export type ghostexSettings = {
   appShotsMetadataEnabled: boolean;
   /**
    * CDXC:AgentProviders 2026-06-02-22:23:
-   * This field is the sidebar render cache for gxserver-owned global Accept All
+   * This field is the sidebar render cache for gxserver-owned global agent approval
    * settings. Settings UI can display and edit it, but gxserver persists the
    * canonical value and applies each agent's runtime permission-bypass mode.
    *
    * CDXC:AgentProviders 2026-06-09-14:22:
-   * OpenCode Accept All is runtime config rather than a CLI flag, so settings
+   * OpenCode's run-without-asking mode is runtime config rather than a CLI flag, so settings
    * copy and storage must describe the policy without promising flag insertion.
    */
   agentAcceptAllEnabled: boolean;
@@ -193,7 +193,7 @@ export type ghostexSettings = {
    *
    * CDXC:AgentProviders 2026-06-19-08:58:
    * gxserver now owns the canonical Default Prompt Agent alongside global
-   * Accept All. Keep this field as the sidebar's synchronous render cache so
+   * agent approval policy. Keep this field as the sidebar's synchronous render cache so
    * Settings can draw immediately from startup snapshots and gxserver update
    * responses without localStorage becoming a competing source of truth.
    */

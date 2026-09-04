@@ -1369,13 +1369,13 @@ fn resume_agent_session(session: &Session, accept_all: bool) -> io::Result<()> {
 fn resume_argv(agent: Agent, session: &str, accept_all: bool) -> Vec<String> {
     let session = session.to_string();
     match (agent, accept_all) {
-        (Agent::Claude, _) => vec![
+        (Agent::Claude, true) => vec![
             "claude".into(),
             "--dangerously-skip-permissions".into(),
             "--resume".into(),
             session,
         ],
-        (Agent::Codex, _) => vec!["codex".into(), "--yolo".into(), "resume".into(), session],
+        (Agent::Codex, true) => vec!["codex".into(), "--yolo".into(), "resume".into(), session],
         (Agent::Cursor, true) => vec![
             "cursor-agent".into(),
             "--yolo".into(),
@@ -1390,6 +1390,8 @@ fn resume_argv(agent: Agent, session: &str, accept_all: bool) -> Vec<String> {
             session,
         ],
         (Agent::Pi, true) | (Agent::Pi, false) => vec!["pi".into(), "--session".into(), session],
+        (Agent::Claude, false) => vec!["claude".into(), "--resume".into(), session],
+        (Agent::Codex, false) => vec!["codex".into(), "resume".into(), session],
         (Agent::Cursor, false) => vec!["cursor-agent".into(), "--resume".into(), session],
         (Agent::Grok, false) => vec!["grok".into(), "--resume".into(), session],
     }
@@ -1592,7 +1594,7 @@ mod tests {
     fn resume_argv_matches_zehn_agent_commands() {
         assert_eq!(
             resume_argv(Agent::Codex, "codex-session", false),
-            ["codex", "--yolo", "resume", "codex-session"]
+            ["codex", "resume", "codex-session"]
         );
         assert_eq!(
             resume_argv(Agent::Codex, "codex-session", true),

@@ -55,12 +55,10 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   appShotsMetadataEnabled: false,
   /**
-   * CDXC:AgentProviders 2026-06-02-22:23:
-   * New installs should start with gxserver-owned Accept All enabled so built-in
-   * and custom agent launches inherit permission-bypass mode unless the user
-   * turns it off.
+   * CDXC:AgentProviders 2026-09-04 DECISION:
+   * User: new installs must start with Agent approvals set to Keep default. Running supported agents without approval is an explicit opt-in.
    */
-  agentAcceptAllEnabled: true,
+  agentAcceptAllEnabled: false,
   agentManagerZoomPercent: DEFAULT_AGENT_MANAGER_ZOOM_PERCENT,
   defaultPromptAgentId: 'codex',
   sessionTitleGenerationAgent: 'codex',

@@ -24,9 +24,9 @@ export const AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS: ReadonlyArray<{
   label: string;
   value: AgentAcceptAllMode;
 }> = [
-  { label: 'Inherit global setting', value: 'inherit' },
-  { label: 'Accept All', value: 'enabled' },
-  { label: 'Ask for permission', value: 'disabled' },
+  { label: 'Use app default', value: 'inherit' },
+  { label: 'Skip permissions', value: 'enabled' },
+  { label: 'Keep default', value: 'disabled' },
 ];
 
 export type AgentAcceptAllFlagSpec = {

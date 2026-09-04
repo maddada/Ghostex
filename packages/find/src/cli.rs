@@ -21,11 +21,11 @@ pub const HELP: &str = concat!(
     "  zehn --project  print agent<TAB>project<TAB>text (implies --print)\n",
     "  zehn --agent claude   show only one agent (claude/codex/pi/opencode/cursor/grok)\n",
     "  zehn --claude         shorthand for --agent claude\n",
-    "  zehn --accept-all     add permission-bypass flags for other supported agents\n",
+    "  zehn --accept-all     add permission-bypass flags for supported agents\n",
     "  zehn --list     dump all records\n",
     "\n",
-    "Resume:  claude --dangerously-skip-permissions --resume <id>\n",
-    "         codex --yolo resume <id>\n",
+    "Resume:  claude [--dangerously-skip-permissions] --resume <id>\n",
+    "         codex [--yolo] resume <id>\n",
     "         pi --session <id>\n",
     "         opencode [--dangerously-skip-permissions] --session <id>\n",
     "         cursor-agent [--yolo] --resume <id>\n",
@@ -189,7 +189,7 @@ pub fn run(args: &[String]) -> i32 {
             );
         }),
         ActionKind::View => actions::view_prompt(&rec),
-        ActionKind::Fork => actions::fork_session(&rec, action.fork_agent),
+        ActionKind::Fork => actions::fork_session(&rec, action.fork_agent, options.accept_all),
     };
     match outcome {
         Ok(()) => 0,

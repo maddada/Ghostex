@@ -227,13 +227,13 @@ export function AgentConfigModal({ draft, isOpen, onCancel, onSave, theme = 'dar
             <FieldContent>
               <FieldTitle>
                 <FieldLabel className='text-sm' htmlFor={acceptAllModeId}>
-                  Accept All
+                  Agent approvals
                 </FieldLabel>
               </FieldTitle>
               <FieldDescription className='text-xs text-muted-foreground'>
                 {acceptAllSupported
-                  ? "Inherit uses the global Agents setting. Accept All applies this agent's permission-bypass mode at launch without changing the stored command."
-                  : 'This agent does not expose a supported Accept All mode in Ghostex.'}
+                  ? "Use app default follows the global Agents setting. Skip permissions applies this agent's permission-bypass mode at launch without changing the stored command."
+                  : 'This agent does not expose a supported approval policy in Ghostex.'}
               </FieldDescription>
             </FieldContent>
             <Select

@@ -17,10 +17,9 @@ Treat closed stdout pipes as normal termination so commands like ghostex-history
 
 CDXC:PromptSearch 2026-06-25-21:54:
 Ctrl+R resume should follow Zehn's agent command matrix and accept-all option shape.
-Codex and Claude always use their required permission flags. Expose
---accept-all/--no-accept-all on ghostex-history so Ghostex-owned launchers can
-pass the gxserver global permission policy for the other agents through without
-parsing TUI state themselves.
+Expose --accept-all/--no-accept-all on ghostex-history so Ghostex-owned launchers
+can pass the gxserver global permission policy through without parsing TUI state
+themselves.
 */
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

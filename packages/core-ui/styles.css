@@ -2300,7 +2300,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  The first-launch defaults page should expose the highest-impact settings in
  one compact step: sidebar style ordered Recommended / Minimal / Codex /
  Detailed, default agent, first-prompt title-generation agent, lid-close
- keep-awake, Accept All, attention notifications, and completion sound. These
+ keep-awake, agent approvals, attention notifications, and completion sound. These
  controls write to the normal Settings model instead of keeping onboarding-only
  state.
 

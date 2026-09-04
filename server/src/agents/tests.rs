@@ -1807,7 +1807,7 @@ fn agent_settings_use_current_metadata_key_and_default_prompt_agent() {
         initial
             .get("settings")
             .and_then(|settings| settings.get("agentAcceptAllEnabled")),
-        Some(&json!(true))
+        Some(&json!(false))
     );
     assert_eq!(
         initial
@@ -1861,7 +1861,7 @@ fn agent_settings_ignore_legacy_metadata_key() {
         settings
             .get("settings")
             .and_then(|settings| settings.get("agentAcceptAllEnabled")),
-        Some(&json!(true))
+        Some(&json!(false))
     );
     assert_eq!(
         settings
@@ -1877,7 +1877,7 @@ fn agent_settings_ignore_legacy_metadata_key() {
             .expect("params"),
     )
     .expect("update settings with legacy row present");
-    assert_eq!(updated.get("agentAcceptAllEnabled"), Some(&json!(true)));
+    assert_eq!(updated.get("agentAcceptAllEnabled"), Some(&json!(false)));
     assert_eq!(updated.get("defaultPromptAgentId"), Some(&json!("claude")));
 
     let current: String = db
@@ -1892,7 +1892,7 @@ fn agent_settings_ignore_legacy_metadata_key() {
         current_value
             .get("agentAcceptAllEnabled")
             .and_then(Value::as_bool),
-        Some(true)
+        Some(false)
     );
     assert_eq!(
         current_value
@@ -2062,7 +2062,7 @@ fn launch_plan_applies_agent_settings_accept_all() {
     });
     let default_settings = read_agent_settings(&db).expect("settings");
     let plan = build_project_agent_launch_plan(&project, "codex", None, &default_settings);
-    assert_eq!(plan.get("command"), Some(&json!("codex --yolo")));
+    assert_eq!(plan.get("command"), Some(&json!("codex")));
     update_agent_settings(
         &db,
         json!({ "agentAcceptAllEnabled": false })
@@ -2072,7 +2072,7 @@ fn launch_plan_applies_agent_settings_accept_all() {
     .expect("update settings");
     let disabled_settings = read_agent_settings(&db).expect("disabled settings");
     let plan = build_project_agent_launch_plan(&project, "codex", None, &disabled_settings);
-    assert_eq!(plan.get("command"), Some(&json!("codex --yolo")));
+    assert_eq!(plan.get("command"), Some(&json!("codex")));
 }
 
 #[test]
@@ -2085,7 +2085,7 @@ fn launch_plan_keeps_typescript_custom_agent_lookup_and_empty_shape() {
     let plan =
         build_project_agent_launch_plan(&project_with_id_only_agent, "codex", None, &settings);
     assert_eq!(plan.get("agentCommand"), Some(&json!("codex")));
-    assert_eq!(plan.get("command"), Some(&json!("codex --yolo")));
+    assert_eq!(plan.get("command"), Some(&json!("codex")));
 
     let unknown_plan = build_project_agent_launch_plan(
         &json!({ "customAgents": [], "launchSettings": {} }),
@@ -2211,17 +2211,17 @@ fn resume_and_fork_plans_shape_agent_commands() {
         .expect("primary command");
     assert!(primary_command.contains("CODEX_RESUME_SESSION_ID"));
     assert!(primary_command.contains("--exact"));
-    assert!(primary_command.contains("codex --yolo resume \"$CODEX_RESUME_SESSION_ID\""));
+    assert!(primary_command.contains("codex resume \"$CODEX_RESUME_SESSION_ID\""));
     assert_eq!(
         resume.get("displayCommand"),
         Some(&json!(
-            "codex --yolo resume \"12345678-1234-1234-1234-123456789abc\""
+            "codex resume \"12345678-1234-1234-1234-123456789abc\""
         ))
     );
     assert_eq!(
         resume.get("copyCommand"),
         Some(&json!(
-            "codex --yolo resume \"12345678-1234-1234-1234-123456789abc\""
+            "codex resume \"12345678-1234-1234-1234-123456789abc\""
         ))
     );
     assert!(resume
@@ -2237,12 +2237,12 @@ fn resume_and_fork_plans_shape_agent_commands() {
     assert!(startup_text
         .contains("__ghostex_restore_resume_primary || __ghostex_restore_resume_status=$?"));
     assert!(startup_text.contains("Exact resume failed; trying saved fallback resume command."));
-    assert!(startup_text.contains("codex --yolo resume \"12345678-1234-1234-1234-123456789abc\""));
+    assert!(startup_text.contains("codex resume \"12345678-1234-1234-1234-123456789abc\""));
     let fork = build_agent_fork_plan(&project, &session, &settings);
     assert_eq!(
         fork.get("primaryCommand"),
         Some(&json!(
-            "codex --yolo fork \"12345678-1234-1234-1234-123456789abc\""
+            "codex fork \"12345678-1234-1234-1234-123456789abc\""
         ))
     );
 }
@@ -2269,7 +2269,7 @@ fn resume_plan_extracts_provider_exact_identity_hints() {
     assert_eq!(
         claude_plan.get("primaryCommand"),
         Some(&json!(
-            "claude --dangerously-skip-permissions --resume \"9970b270-b39f-4d63-a764-fa8d88083995\""
+            "claude --resume \"9970b270-b39f-4d63-a764-fa8d88083995\""
         ))
     );
     assert_eq!(
@@ -2336,18 +2336,13 @@ fn opencode_resume_keeps_lookup_command_separate_from_runtime_accept_all() {
         "title": "Readable thread title",
     });
     let plan = build_agent_resume_plan(&project, &titled, &settings);
-    assert_eq!(
-        plan.get("runtimeCommand"),
-        Some(&json!(
-            "OPENCODE_CONFIG_CONTENT='{\"permission\":\"allow\"}' opencode"
-        ))
-    );
+    assert_eq!(plan.get("runtimeCommand"), Some(&json!("opencode")));
     assert_eq!(plan.get("lookupCommand"), Some(&json!("opencode")));
     let primary = plan
         .get("primaryCommand")
         .and_then(Value::as_str)
         .expect("primary command");
-    assert!(primary.contains("OPENCODE_CONFIG_CONTENT='{\"permission\":\"allow\"}' opencode -s"));
+    assert!(primary.contains("opencode -s"));
     assert!(primary.contains("opencode session list --format json"));
     assert!(!primary
         .contains("OPENCODE_CONFIG_CONTENT='{\"permission\":\"allow\"}' opencode session list"));
@@ -2374,10 +2369,9 @@ fn attach_startup_text_uses_agent_resume_plan_and_settings() {
     assert!(startup_text.starts_with(' '));
     assert!(startup_text.ends_with('\r'));
     assert!(startup_text.contains("Restoring session..."));
-    assert!(startup_text.contains(
-        "printf '> %s\\n\\n' 'codex --yolo resume \"12345678-1234-1234-1234-123456789abc\"'"
-    ));
-    assert!(startup_text.contains("codex --yolo resume \"12345678-1234-1234-1234-123456789abc\""));
+    assert!(startup_text
+        .contains("printf '> %s\\n\\n' 'codex resume \"12345678-1234-1234-1234-123456789abc\"'"));
+    assert!(startup_text.contains("codex resume \"12345678-1234-1234-1234-123456789abc\""));
 }
 
 #[test]

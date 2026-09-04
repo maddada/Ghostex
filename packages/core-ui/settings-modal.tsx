@@ -1081,8 +1081,8 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.sidebar, 'agentAcceptAllEnabled') ? (
                               <ToggleField
                                 checked={draft.agentAcceptAllEnabled}
-                                description="Enable each supported agent's permission-bypass mode when launching sessions. Per-agent overrides live in Settings → Agents."
-                                label='Accept All'
+                                description='Run supported agents without approval prompts. Per-agent overrides live in Settings → Agents.'
+                                label='Run without asking'
                                 {...getSettingModificationProps('agentAcceptAllEnabled')}
                                 onChange={(checked) => updateDraft('agentAcceptAllEnabled', checked)}
                               />

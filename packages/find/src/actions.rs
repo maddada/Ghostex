@@ -78,8 +78,8 @@ fn usable_project(project: &str) -> Option<&Path> {
 
 /// Fork the prompt into a fresh session in `agent` (possibly different from the
 /// one it came from), starting in the recorded project dir when it still exists.
-pub fn fork_session(rec: &Record, agent: Agent) -> Result<(), String> {
-    let argv = agent.fresh_session_argv(&rec.text);
+pub fn fork_session(rec: &Record, agent: Agent, accept_all: bool) -> Result<(), String> {
+    let argv = agent.fresh_session_argv(&rec.text, accept_all);
     let project = usable_project(&rec.project);
     let mut note = format!(
         "\x1b[90m→ forking prompt into a new {} session",
