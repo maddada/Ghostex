@@ -50,6 +50,24 @@ If the daemon is not running on macOS, start the signed app in the background:
 open -n -g -a CuaDriver --args serve
 ```
 
+### macOS: "no vendor-signed system Chromium executable is available"
+
+The driver launches isolated profiles only from `/Applications/Google
+Chrome.app` or `/Applications/Microsoft Edge.app`, gated on
+`codesign --verify --strict`. A drag-installed Chrome often carries
+`com.apple.FinderInfo` extended attributes, which fail strict verification as
+"resource fork, Finder information, or similar detritus not allowed" and
+surface as that refusal. Verify, then strip the attribute (signature,
+notarization, and the user's profile are untouched):
+
+```bash
+/usr/bin/codesign --verify --strict "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+/usr/bin/xattr -r -d com.apple.FinderInfo "/Applications/Google Chrome.app"
+```
+
+Chrome updates can restore the attribute. Never work around the refusal with a
+hand-rolled `--remote-debugging-port` Chrome.
+
 Use CLI calls in the form `cua-driver <tool> '<JSON>'`.
 
 ## Windows and WSL
@@ -125,6 +143,20 @@ powershell.exe -NoProfile -Command "irm https://cua.ai/driver/install.ps1 | iex"
    cua-driver end_session '{"session":"browser-run-1"}'
    ```
 
+## macOS notes verified on this machine
+
+- The content window of a driver-launched Chrome is the one `list_windows`
+  reports with `is_on_screen: true`; ignore the 30px and 33px strips.
+- Take `target_id` and `tabs[0].tab_id` from the same bind result. Re-binding
+  mints new tab ids and invalidates the old ones (`browser_tab_not_found`).
+- Snapshot output lives in `refs`, with `page` and `outline` alongside;
+  `snapshot` holds only the budget summary.
+- `browser_click` on a standalone Chrome refuses the trusted route
+  (`route_unavailable`) because it would foreground the window. Use
+  `"input_route":"dom_event"` and confirm the change in the next snapshot.
+- `end_session` closes a driver-launched browser. Keep the session active when
+  the user wants to keep watching the window.
+
 ## Explicit browser preparation
 
 `get_browser_state` is read-only. If it returns `browser_requires_setup`, do
@@ -139,6 +171,28 @@ not hide setup inside another action.
   `cua-driver describe browser_prepare` schema. Do not invent or persist
   approval tokens, copy a personal profile, edit Chromium profile files, or
   restart the user's browser as a hidden setup step.
+
+### Ask for signed-in access before you start
+
+An isolated profile has no logins. If the task needs the user's accounts,
+cookies, or session, say so in your first reply, before any browser work:
+
+- Tell them it requires control of their signed-in Chrome, which exposes their
+  live pages, cookies, and storage to the driver.
+- Ask for the grant up front and wait, so they are at the computer when the
+  prompts appear. A tool call cannot add the grant, and it is lost when the
+  daemon stops:
+
+  ```bash
+  cua-driver stop
+  open -n -g -a CuaDriver --args serve --grant existing-profile
+  ```
+
+- Then prepare with `"strategy":{"kind":"existing_profile"}` plus `pid` and
+  `window_id`. Preparation opens the browser's remote-debugging page in that
+  window, ticks its checkbox, and closes the tab; report those effects.
+- Never start on an isolated profile and ask for the grant only after hitting a
+  login wall.
 
 ## Operating rules
 
