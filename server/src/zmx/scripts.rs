@@ -224,6 +224,27 @@ exec "$zmx_bin" history "$zmx_session"
     .to_string()
 }
 
+/// `zmx grid <session>`: the daemon grid plus every attached client and
+/// whether each one is hidden, as JSON.
+pub(crate) fn build_zmx_grid_command(session_name: &str, zmx_executable_path: &str) -> String {
+    format!(
+        r#"
+zmx_session={}
+zmx_bin={}
+if [ ! -x "$zmx_bin" ]; then
+  printf '%s\n' 'session persistence is set to zmx, but Ghostex bundled zmx was not found.' >&2
+  exit 127
+fi
+unset ZMX_SESSION ZMX_SESSION_PREFIX
+exec "$zmx_bin" grid "$zmx_session"
+"#,
+        shell_quote(session_name),
+        shell_quote(zmx_executable_path),
+    )
+    .trim()
+    .to_string()
+}
+
 pub(crate) fn build_zmx_send_command(session_name: &str, zmx_executable_path: &str) -> String {
     format!(
         r#"

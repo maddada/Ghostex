@@ -28,7 +28,12 @@ Claude's wording:
 Tool-call rows (`claude-tool`) never become reasoning history: the transcript
 writes the call with its result, and the screen paints the description in a
 different form ("Reading …" for "Read …") than the transcript stores. They are
-the pending tool row instead, below.
+the pending tool row instead, below, and the transcript never retires that
+row: most tools finish within a second, so their transcript row has usually
+landed before gxserver even samples the painted one, and retiring on it made
+the row vanish after one read while Claude kept it painted through the
+thinking that followed. The row mirrors the terminal instead: it lives while
+the screen shows it, is replaced by a newer one, and goes on the hold below.
 */
 
 import type { SessionChatMessage, SessionChatTerminalActivity } from '../../shared/session-chat';
@@ -36,7 +41,8 @@ import type { SessionChatMessage, SessionChatTerminalActivity } from '../../shar
 const CLAUDE_TERMINAL_STATUS_KIND = 'claude-status';
 const CLAUDE_TERMINAL_TOOL_KIND = 'claude-tool';
 const TERMINAL_STATUS_ID_PREFIX = 'terminal-status:';
-const TERMINAL_TOOL_ID_PREFIX = 'terminal-tool:';
+export const SESSION_CHAT_TERMINAL_TOOL_ID_PREFIX = 'terminal-tool:';
+const TERMINAL_TOOL_ID_PREFIX = SESSION_CHAT_TERMINAL_TOOL_ID_PREFIX;
 
 /*
 CDXC:SessionChatTerminalActivity 2026-09-04 DECISION:
@@ -166,10 +172,18 @@ export function sessionChatTerminalToolMessage(activity: SessionChatTerminalActi
     return null;
   }
   const timestamp = Date.parse(activity.detectedAt);
+  const detail = activity.detail?.trim() ?? '';
   return {
     id: `${TERMINAL_TOOL_ID_PREFIX}${activity.detectedAt}`,
     role: 'system',
-    blocks: [{ type: 'text', text }],
+    // The painted tool block rides along as a tool-result block, so the text
+    // blocks stay the label alone for every comparison below.
+    blocks: detail
+      ? [
+          { type: 'text', text },
+          { type: 'tool-result', output: detail },
+        ]
+      : [{ type: 'text', text }],
     timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
     source: 'hook',
   };
@@ -179,8 +193,14 @@ export function isSessionChatTerminalToolMessage(message: SessionChatMessage): b
   return message.id.startsWith(TERMINAL_TOOL_ID_PREFIX);
 }
 
+function terminalToolDetail(message: SessionChatMessage): string {
+  const block = message.blocks.find((candidate) => candidate.type === 'tool-result');
+  return block?.type === 'tool-result' ? block.output : '';
+}
+
 /** The activity card a pending tool row renders as. */
 export function sessionChatTerminalToolActivity(message: SessionChatMessage): SessionChatTerminalActivity {
+  const detail = terminalToolDetail(message);
   return {
     kind: CLAUDE_TERMINAL_TOOL_KIND,
     label: message.blocks
@@ -189,12 +209,21 @@ export function sessionChatTerminalToolActivity(message: SessionChatMessage): Se
       .join(' ')
       .trim(),
     detectedAt: message.id.slice(TERMINAL_TOOL_ID_PREFIX.length),
+    ...(detail ? { detail } : {}),
   };
 }
 
-/** Two samples of the same painted tool row. */
+/** Two samples of the same painted tool row, whatever its block shows now. */
 export function sameSessionChatTerminalTool(current: SessionChatMessage, next: SessionChatMessage): boolean {
   return messageText(current) === messageText(next);
+}
+
+/** The held row with the newer sample's tool block, keeping its identity and position. */
+export function withSessionChatTerminalToolDetail(
+  current: SessionChatMessage,
+  next: SessionChatMessage
+): SessionChatMessage {
+  return terminalToolDetail(current) === terminalToolDetail(next) ? current : { ...current, blocks: next.blocks };
 }
 
 /**
@@ -212,66 +241,4 @@ export function withoutSessionChatTerminalStatus(
     return statusText !== text && !text.startsWith(statusText);
   });
   return next.length === current.length ? current : next;
-}
-
-/** Enough of a tool argument to be a meaningful match rather than a stray word. */
-const TOOL_ARGS_MATCH_MIN_LENGTH = 8;
-
-/**
- * The part of a painted tool row that Claude copies verbatim from the call:
- * the arguments of a `Read(path)` header, or everything after the leading
- * verb of a description ("Reading /tmp/web-3.png", "Finding files handling
- * AskUserQuestion"). The verb itself is the one word Claude rewrites.
- */
-function toolArguments(text: string): string {
-  const header = /^[A-Za-z][\w-]*\((.*)\)$/su.exec(text);
-  if (header) {
-    return sessionChatTerminalStatusText(header[1]);
-  }
-  const space = text.indexOf(' ');
-  return space < 0 ? '' : text.slice(space + 1).trim();
-}
-
-function stringLeaves(value: unknown, out: string[]): void {
-  if (typeof value === 'string') {
-    if (value.trim()) {
-      out.push(sessionChatTerminalStatusText(value));
-    }
-  } else if (Array.isArray(value)) {
-    for (const item of value) {
-      stringLeaves(item, out);
-    }
-  } else if (value && typeof value === 'object') {
-    for (const item of Object.values(value)) {
-      stringLeaves(item, out);
-    }
-  }
-}
-
-/**
- * The transcript has caught up with the pending tool: either a tool call
- * carries its arguments (the call landed, however its verb was painted), or
- * the transcript holds a row newer than the sample, which the append-only
- * transcript could only have written after the call itself.
- */
-export function sessionChatTerminalToolLanded(
-  tool: SessionChatMessage,
-  transcript: readonly SessionChatMessage[]
-): boolean {
-  const args = toolArguments(messageText(tool));
-  const leaves: string[] = [];
-  for (const message of transcript) {
-    if (message.source !== 'transcript') {
-      continue;
-    }
-    if (tool.timestamp !== null && message.timestamp !== null && message.timestamp > tool.timestamp) {
-      return true;
-    }
-    for (const block of message.blocks) {
-      if (block.type === 'tool-call') {
-        stringLeaves(block.input, leaves);
-      }
-    }
-  }
-  return args.length >= TOOL_ARGS_MATCH_MIN_LENGTH && leaves.some((leaf) => leaf.includes(args));
 }

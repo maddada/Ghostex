@@ -264,3 +264,37 @@ pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHisto
         text: result.stdout,
     })
 }
+
+/*
+CDXC:SessionChatTerminalActivity 2026-09-04 WHY:
+Whether anyone is looking at this session's terminal right now. Every viewer
+(the desktop terminal pane, the web and mobile terminals) is a zmx client that
+announces itself hidden or visible through the ZMX_HIDDEN / ZMX_VISIBLE
+sequences, and `zmx grid` reports that flag per client, so "no visible client"
+is the daemon's own answer, not a guess from the chat view's state. `None`
+when the daemon could not be asked.
+*/
+pub(crate) fn zmx_session_has_visible_client(zmx_name: &str) -> Option<bool> {
+    let zmx = crate::toolchain::require_bundled_zmx().ok()?;
+    let result = crate::zmx::run_zmx_interaction_command(
+        crate::zmx::build_zmx_grid_command(zmx_name, &zmx.executable_path),
+        crate::zmx::ZmxCommandOptions::default(),
+    )
+    .ok()?;
+    if result.exit_code != 0 {
+        return None;
+    }
+    zmx_grid_has_visible_client(&result.stdout)
+}
+
+/// Reads `zmx grid` JSON: any client that is not hidden is a visible one.
+pub(crate) fn zmx_grid_has_visible_client(grid_json: &str) -> Option<bool> {
+    let grid: serde_json::Value = serde_json::from_str(grid_json.trim()).ok()?;
+    let clients = grid.get("clients")?.as_array()?;
+    Some(clients.iter().any(|client| {
+        client
+            .get("hidden")
+            .and_then(serde_json::Value::as_bool)
+            .is_some_and(|hidden| !hidden)
+    }))
+}

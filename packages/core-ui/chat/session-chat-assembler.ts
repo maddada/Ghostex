@@ -8,6 +8,7 @@
 // every prefix.
 
 import { SESSION_CHAT_SOURCE_PRIORITY, type SessionChatMessage } from '../../shared/session-chat';
+import { SESSION_CHAT_TERMINAL_TOOL_ID_PREFIX } from './session-chat-terminal-status';
 
 const STREAMING_ID = 'streaming';
 const PENDING_PREFIX = 'pending:';
@@ -191,8 +192,19 @@ export function sessionChatMessageSortRank(message: SessionChatMessage): number 
   if (message.id === STREAMING_ID) {
     return 1;
   }
-  if (message.id.startsWith(PENDING_PREFIX) || message.id.startsWith(LAUNCH_PENDING_PREFIX)) {
+  /*
+  CDXC:SessionChatTerminalActivity 2026-09-04 WHY:
+  The pending tool row is stamped with the time gxserver first saw it painted,
+  which falls between the tool call's own timestamp and its result's. Sorted
+  by time it landed between the two, and the result, cut off from its call,
+  rendered as a bare "Result" row under the card. The row is the transcript's
+  tail by definition, so it ranks after every transcript row instead.
+  */
+  if (message.id.startsWith(SESSION_CHAT_TERMINAL_TOOL_ID_PREFIX)) {
     return 2;
+  }
+  if (message.id.startsWith(PENDING_PREFIX) || message.id.startsWith(LAUNCH_PENDING_PREFIX)) {
+    return 3;
   }
   return 0;
 }

@@ -47,7 +47,7 @@ import {
   useSessionChatImageViewer,
 } from './session-chat-image-viewer';
 import { normalizeSessionChatImageTranscriptMessages } from './session-chat-image-transcript-markers';
-import { SessionChatActivityRow } from './session-chat-activity-row';
+import { SessionChatTerminalToolRow } from './session-chat-terminal-tool-row';
 import { isSessionChatTerminalToolMessage, sessionChatTerminalToolActivity } from './session-chat-terminal-status';
 import { Bubble, BubbleContent } from '../../components/ui/bubble';
 import { Marker, MarkerContent, MarkerIcon } from '../../components/ui/marker';
@@ -391,17 +391,26 @@ const STATUS_TONE_ICON: Record<SessionChatStatusTone, { Icon: typeof IconCheck; 
  * compaction, a background task reporting back. Non-expandable on purpose:
  * the label already says everything the row is for.
  */
-function StatusRow({ label, tone = 'ok' }: { label: string; tone?: SessionChatStatusTone }) {
+function StatusRow({ label, tone = 'ok', detail }: { label: string; tone?: SessionChatStatusTone; detail?: string }) {
   const { Icon, className } = STATUS_TONE_ICON[tone];
   return (
-    <div className='inline-flex max-w-full min-w-0 items-start gap-2 rounded-2xl border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground'>
+    <div className='inline-flex max-w-full min-w-0 items-start gap-2 rounded-xl border border-border/60 bg-muted/35 px-3 py-1.5 text-xs font-medium text-muted-foreground'>
       {/* Tone badge: a badge-tier glyph in a tinted round, top-aligned with
-          the first text line so multi-line rows keep it at the top left. The
-          row's corner radius matches the user message bubble (1rem). */}
+          the first text line so multi-line rows keep it at the top left.
+          CDXC:SessionChat 2026-09-04 DECISION: User: the row is less rounded
+          than a pill (0.75rem, same as the terminal activity card) so a
+          wrapped two-line row does not read as a lozenge. */}
       <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full', className)}>
         <Icon aria-hidden='true' className='ghostex-chat-glyph-badge' />
       </span>
-      <span className='min-w-0 [overflow-wrap:anywhere]'>{label}</span>
+      <span className='min-w-0 [overflow-wrap:anywhere] [text-wrap:pretty]'>
+        {label}
+        {detail ? (
+          <span className='ml-1.5 inline-block whitespace-nowrap rounded-md border border-border/60 px-1.5 font-mono text-[0.6875rem] font-normal tabular-nums'>
+            {detail}
+          </span>
+        ) : null}
+      </span>
     </div>
   );
 }
@@ -411,7 +420,7 @@ function StatusRows({ statuses }: { statuses: readonly SessionChatStatusRow[] })
   return (
     <div className='flex w-full min-w-0 flex-col items-start gap-1.5 pb-3'>
       {statuses.map((status, index) => (
-        <StatusRow key={index} label={status.label} tone={status.tone} />
+        <StatusRow key={index} label={status.label} tone={status.tone} detail={status.detail} />
       ))}
     </div>
   );
@@ -760,10 +769,10 @@ function MessageRow({
     return null;
   }
 
-  // The pending tool row: the same card the working strip draws for other
-  // activity kinds, placed as the transcript's last row instead.
+  // The pending tool row: the working strip's card shape, placed as the
+  // transcript's last row, opening onto the painted tool block.
   if (isSessionChatTerminalToolMessage(message)) {
-    return <SessionChatActivityRow activity={sessionChatTerminalToolActivity(message)} className='my-1' />;
+    return <SessionChatTerminalToolRow activity={sessionChatTerminalToolActivity(message)} />;
   }
 
   const suppressedTurn = sessionChatSuppressedTurnPresentation(message);

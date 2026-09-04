@@ -38,9 +38,9 @@ percentage and elapsed clock are read off the screen or omitted; neither is
 ever estimated.
 */
 
-use crate::session_chat_options::{SessionChatOptionAgent, session_chat_option_agent};
+use crate::session_chat_options::{session_chat_option_agent, SessionChatOptionAgent};
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 /// Tail window scanned for a progress line. The spinner row and its bar sit at
 /// the very bottom of a working screen, above at most a tip line and the
@@ -96,6 +96,9 @@ pub struct SessionChatTerminalActivity {
     /// RFC3339 millis. The client interpolates its own clock from this, so a
     /// 3s probe cadence still reads as a smoothly ticking timer.
     pub detected_at: String,
+    /// The tool block Claude painted under a `claude-tool` row (the `⎿` gutter
+    /// and its continuation rows), exactly as shown on the terminal.
+    pub detail: Option<String>,
 }
 
 impl SessionChatTerminalActivity {
@@ -106,6 +109,7 @@ impl SessionChatTerminalActivity {
             percent: None,
             elapsed_seconds: None,
             detected_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            detail: None,
         }
     }
 
@@ -126,6 +130,7 @@ impl SessionChatTerminalActivity {
             self.same_activity(Some(other))
                 && self.percent == other.percent
                 && self.elapsed_seconds == other.elapsed_seconds
+                && self.detail == other.detail
         })
     }
 
@@ -162,6 +167,9 @@ impl SessionChatTerminalActivity {
             map.insert("elapsedSeconds".to_string(), json!(elapsed_seconds));
         }
         map.insert("detectedAt".to_string(), json!(self.detected_at));
+        if let Some(detail) = &self.detail {
+            map.insert("detail".to_string(), json!(detail));
+        }
         Value::Object(map)
     }
 
@@ -572,6 +580,10 @@ const CLAUDE_STATUS_CONTINUATION_MAX_INDENT: usize = 8;
 /// starts the tool block, so it ends the status text.
 const CLAUDE_TOOL_OUTPUT_MARKER: char = '⎿';
 
+/// Rows of a tool block carried as the activity's detail. Claude itself
+/// collapses long blocks, so this only bounds a fully expanded one.
+const CLAUDE_TOOL_DETAIL_MAX_ROWS: usize = 12;
+
 /// A row that continues the status row above it: indented, physically
 /// contiguous, and neither a gutter nor a marker row of its own.
 fn is_claude_continuation_row(row: &ScreenRow) -> bool {
@@ -639,7 +651,13 @@ fn claude_tool_activity(rows: &[ScreenRow], gutter: usize) -> Option<SessionChat
     }
     let row = &rows[start];
     let bullet = row.text.starts_with('⏺');
-    if !bullet && row.indent < CLAUDE_STATUS_CONTINUATION_INDENT {
+    // A stacked gutter (Claude's compaction summary paints one `⎿` row per
+    // referenced file, directly under each other) is never a tool row: the
+    // row above a gutter that is itself a gutter belongs to whatever sits
+    // above the whole stack.
+    if row.text.starts_with(CLAUDE_TOOL_OUTPUT_MARKER)
+        || (!bullet && row.indent < CLAUDE_STATUS_CONTINUATION_INDENT)
+    {
         return None;
     }
     let label = joined_claude_status_line(rows, start);
@@ -649,8 +667,39 @@ fn claude_tool_activity(rows: &[ScreenRow], gutter: usize) -> Option<SessionChat
     let mut activity = claude_status_from_label('⏺', raw_label)?;
     if activity.kind == SESSION_CHAT_ACTIVITY_CLAUDE_STATUS {
         activity.kind = SESSION_CHAT_ACTIVITY_CLAUDE_TOOL;
+        activity.detail = claude_tool_gutter_text(rows, gutter);
     }
     Some(activity)
+}
+
+/*
+CDXC:SessionChatTerminalActivity 2026-09-04 DECISION:
+User: the pending tool card must open to show the actual tool call text the
+TUI shows under the row (the `⎿ $ rg -n …` block), in a mono code area; the
+text as Claude painted it is enough, nothing is fetched from anywhere else.
+The block is the gutter row and the rows indented under it until the next
+blank row or marker.
+*/
+fn claude_tool_gutter_text(rows: &[ScreenRow], gutter: usize) -> Option<String> {
+    let gutter_indent = rows[gutter].indent;
+    let mut lines = vec![rows[gutter]
+        .text
+        .trim_start_matches(CLAUDE_TOOL_OUTPUT_MARKER)
+        .trim()
+        .to_string()];
+    for row in &rows[gutter + 1..] {
+        if lines.len() >= CLAUDE_TOOL_DETAIL_MAX_ROWS
+            || row.after_blank
+            || row.indent <= gutter_indent
+            || row.text.starts_with(CLAUDE_TOOL_OUTPUT_MARKER)
+            || activity_from_line(&row.text).is_some()
+        {
+            break;
+        }
+        lines.push(row.text.clone());
+    }
+    let text = lines.join("\n");
+    (!text.trim().is_empty()).then_some(text)
 }
 
 /// `Some` while the agent is painting a live line this build understands.
