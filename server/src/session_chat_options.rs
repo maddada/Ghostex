@@ -187,7 +187,9 @@ impl SessionChatContextUsage {
 pub struct SessionChatDetectedSelection {
     pub model: Option<SessionChatDetectedChoice>,
     pub effort: Option<SessionChatDetectedChoice>,
-    /// Claude's Shift+Tab permission/input mode, available only on screen.
+    /// Claude's Shift+Tab permission/input mode, or Codex's Plan collaboration
+    /// mode (`plan`, absent while Codex is in its default mode); both are
+    /// available only on screen.
     pub mode: Option<SessionChatDetectedChoice>,
     /// Cursor's model context-window label, for example `272K` or `1M`.
     pub context_window: Option<String>,
@@ -444,7 +446,7 @@ pub fn is_session_chat_option_command_text(agent: Option<&str>, text: &str) -> b
     let Some(first) = text.trim_start().split_whitespace().next() else {
         return false;
     };
-    matches!(first, "/model" | "/effort" | "/fast")
+    matches!(first, "/model" | "/effort" | "/fast" | "/plan")
 }
 
 /*
@@ -703,6 +705,44 @@ fn match_codex_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
     }
     // Anything left over means this was prose that merely started with an id.
     next.is_none().then_some(selection)
+}
+
+/*
+CDXC:AgentScreenDetection 2026-09-04 DECISION:
+User: the Codex options dropdown shows a "Plan mode" row with a check mark
+when Codex is in Plan mode, and the options pill carries a map icon next to
+the fast bolt. Codex paints its collaboration mode right-aligned on the SAME
+footer line as the model segment:
+
+    gpt-5.6-sol high · <thread id> · Ghostex · main · … · weekly 25% left        Plan mode (shift+tab to cycle)
+
+and paints nothing there in its default mode, so the marker is stripped off
+the footer line before the segments are split (a narrow footer can put it in
+the model segment itself, which would otherwise fail the exact-tokens rule)
+and only counts when that line also names the model. Absence on a matched
+footer means default mode: the terminal layer reports no mode, and Codex has
+no transcript or statusline mode to fall back to.
+*/
+const CODEX_PLAN_MODE_MARKER: &str = "Plan mode";
+const CODEX_MODE_CYCLE_HINT: &str = " (shift+tab to cycle)";
+
+fn strip_codex_plan_mode_marker(line: &str) -> (&str, bool) {
+    let trimmed = line.trim_end();
+    let without_hint = trimmed
+        .strip_suffix(CODEX_MODE_CYCLE_HINT)
+        .unwrap_or(trimmed);
+    match without_hint.strip_suffix(CODEX_PLAN_MODE_MARKER) {
+        Some(rest) if rest.ends_with(' ') => (rest, true),
+        _ => (line, false),
+    }
+}
+
+fn codex_plan_mode_choice() -> SessionChatDetectedChoice {
+    SessionChatDetectedChoice {
+        value: "plan".to_string(),
+        label: "Plan".to_string(),
+        source: SessionChatOptionEvidence::Terminal,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1281,6 +1321,11 @@ pub fn detect_session_chat_selection(
         if is_divider_line(line) {
             continue;
         }
+        let (line, codex_plan_mode) = if agent == SessionChatOptionAgent::Codex {
+            strip_codex_plan_mode_marker(line)
+        } else {
+            (line, false)
+        };
         let segments = line_segments(line);
         let matched_before = (
             found.model.is_some(),
@@ -1302,7 +1347,10 @@ pub fn detect_session_chat_selection(
                 }
                 SessionChatOptionAgent::Codex => {
                     if found.model.is_none() && found.effort.is_none() {
-                        if let Some(selection) = match_codex_segment(segment) {
+                        if let Some(mut selection) = match_codex_segment(segment) {
+                            if codex_plan_mode {
+                                selection.mode = Some(codex_plan_mode_choice());
+                            }
                             found = selection;
                         }
                     }

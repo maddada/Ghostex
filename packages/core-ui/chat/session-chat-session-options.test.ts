@@ -183,11 +183,11 @@ describe('session chat session-option catalogs', () => {
     const mode = catalogFor('codex')
       .optionsForModel('gpt-5.6-sol')
       .find((descriptor) => descriptor.id === 'mode');
-    if (mode?.dispatch.kind !== 'command') {
-      throw new Error('codex mode must dispatch a command');
+    if (mode?.dispatch.kind !== 'toggle-command') {
+      throw new Error('codex mode must dispatch a toggle command');
     }
-    expect(mode.dispatch.build('')).toBe('/plan');
-    expect(mode.actionLabel).toBe('Switch to Plan mode');
+    expect(mode.dispatch.command).toBe('/plan');
+    expect(mode.actionLabel).toBe('Plan mode');
     // …and the picker offers it too, so both routes classify identically.
     expect(sessionChatSlashCommandsForAgent('codex').map((command) => command.name)).toEqual(
       expect.arrayContaining(['plan', 'permissions'])

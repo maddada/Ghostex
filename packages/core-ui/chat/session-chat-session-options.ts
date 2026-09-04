@@ -25,6 +25,15 @@ import type { SidebarAgentIcon } from '../../shared/sidebar-agents';
 
 export type SessionChatOptionCategory = 'model' | 'thought_level' | 'model_config' | 'mode';
 
+/*
+CDXC:AgentScreenDetection 2026-09-04 DECISION:
+User: fast mode and plan mode sit together under one "Modes" section of the
+options dropdown, fast mode first, with no separate "Fast mode" section. The
+pills merge consecutive descriptors that share a label into one section, so
+both toggles carry this label and the category order puts fast above plan.
+*/
+export const MODES_SECTION_LABEL = 'Modes';
+
 /** Options-pill ordering (§1.2); the model category has its own pill. */
 const CATEGORY_ORDER: Record<SessionChatOptionCategory, number> = {
   model: -1,
@@ -216,9 +225,9 @@ function buildClaudeCatalog(
   }));
   const fastMode: SessionChatOptionDescriptor = {
     id: 'fastMode',
-    label: 'Fast mode',
+    label: MODES_SECTION_LABEL,
     category: 'model_config',
-    actionLabel: 'Toggle Fast mode',
+    actionLabel: 'Fast mode',
     dispatch: { kind: 'toggle-command', command: agent.fastMode.command ?? '/fast' },
   };
   return {
@@ -249,12 +258,20 @@ export function codexEffortChoices(modelValue: string): readonly SessionChatOpti
   return agent ? effortChoices(catalog, effortsForModel(agent, modelValue)) : [];
 }
 
+/*
+CDXC:AgentScreenDetection 2026-09-04 DECISION:
+User: the Codex row is called "Plan mode" and shows a check mark while Codex
+is in Plan mode (read from its footer), not a "Switch to Plan mode" action.
+Codex's `/plan` only ENTERS Plan mode ("switch to Plan mode" in its own
+command list), and the way back to its default mode is Shift+Tab, so the row
+is a toggle-command here and the pills send Shift+Tab when it is checked.
+*/
 const CODEX_MODE: SessionChatOptionDescriptor = {
   id: 'mode',
-  label: 'Mode',
+  label: MODES_SECTION_LABEL,
   category: 'mode',
-  actionLabel: 'Switch to Plan mode',
-  dispatch: { kind: 'command', build: () => '/plan' },
+  actionLabel: 'Plan mode',
+  dispatch: { kind: 'toggle-command', command: '/plan' },
 };
 
 function buildCodexCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogAgent): SessionChatSessionOptionCatalog {
@@ -283,7 +300,7 @@ function buildCodexCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogA
   }));
   const fastMode: SessionChatOptionDescriptor = {
     id: 'fastMode',
-    label: 'Fast mode',
+    label: MODES_SECTION_LABEL,
     category: 'model_config',
     actionLabel: 'Fast mode',
     dispatch: { kind: 'toggle-command', command: agent.fastMode.command ?? '/fast' },

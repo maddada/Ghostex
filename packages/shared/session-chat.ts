@@ -345,7 +345,11 @@ export interface SessionChatClaudeRateLimitWindow {
 export interface SessionChatDetectedOptions {
   model?: SessionChatDetectedChoice;
   effort?: SessionChatDetectedChoice;
-  /** Claude's current Shift+Tab permission/input mode, read from its footer. */
+  /**
+   * Claude's current Shift+Tab permission/input mode, or Codex's Plan
+   * collaboration mode (`plan`; absent while Codex is in its default mode),
+   * read from the agent's footer.
+   */
   mode?: SessionChatDetectedChoice;
   /** Cursor's terminal-reported model context window, for example `272K` or `1M`. */
   contextWindow?: string;

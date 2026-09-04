@@ -13,7 +13,7 @@
 // the one control here that changes the session itself rather than typing at
 // its TUI. The submenu sits above the model section.
 
-import { IconBoltFilled, IconChevronDown } from '@tabler/icons-react';
+import { IconBoltFilled, IconChevronDown, IconMap } from '@tabler/icons-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { postAppModalHostMessage } from '../app-modal-host-bridge';
 import { AppTooltip } from '../app-tooltip';
@@ -491,6 +491,40 @@ function FastModeIcon() {
   return <IconBoltFilled aria-hidden='true' className='ghostex-chat-fast-mode-icon size-3 shrink-0' />;
 }
 
+/** Codex's Plan mode, shown beside the fast bolt on the options pill. */
+function PlanModeIcon() {
+  return <IconMap aria-hidden='true' className='ghostex-chat-plan-mode-icon size-3 shrink-0' stroke={2} />;
+}
+
+/** The Codex "Plan mode" toggle row: `/plan` enters, Shift+Tab leaves. */
+function isCodexPlanModeToggle(descriptor: SessionChatOptionDescriptor): boolean {
+  return descriptor.id === 'mode' && descriptor.dispatch.kind === 'toggle-command';
+}
+
+/** Descriptors that share a label render as one labelled section. */
+interface OptionMenuSection {
+  label: string;
+  description?: string;
+  descriptors: SessionChatOptionDescriptor[];
+}
+
+function optionMenuSections(descriptors: readonly SessionChatOptionDescriptor[]): OptionMenuSection[] {
+  const sections: OptionMenuSection[] = [];
+  for (const descriptor of descriptors) {
+    const last = sections[sections.length - 1];
+    if (last && last.label === descriptor.label) {
+      last.descriptors.push(descriptor);
+      continue;
+    }
+    sections.push({
+      label: descriptor.label,
+      ...(descriptor.description !== undefined ? { description: descriptor.description } : {}),
+      descriptors: [descriptor],
+    });
+  }
+  return sections;
+}
+
 export function SessionChatSessionOptionPills({
   canSend,
   canSendKey,
@@ -786,12 +820,29 @@ export function SessionChatSessionOptionPills({
           className='rounded-md'
           onCheckedChange={() => dispatch(descriptor)}
         >
-          <span className='grid min-w-0 gap-0.5'>
-            <span className='truncate'>{descriptor.actionLabel ?? descriptor.label}</span>
-            <span className='text-xs font-normal text-muted-foreground'>
-              {detectedOptions?.fast === true ? 'On' : 'Off'}
-            </span>
-          </span>
+          <span className='truncate'>{descriptor.actionLabel ?? descriptor.label}</span>
+        </DropdownMenuCheckboxItem>
+      );
+    }
+    /*
+    CDXC:AgentScreenDetection 2026-09-04 DECISION:
+    User: the Codex row reads "Plan mode" and is checked exactly when Codex's
+    footer says so. `/plan` only enters Plan mode, so a checked row sends the
+    Shift+Tab that cycles Codex back to its default mode; the state is the
+    footer marker gxserver read, never the click.
+    */
+    if (isCodexPlanModeToggle(descriptor)) {
+      const planMode = detectedOptions?.mode?.value === 'plan';
+      return (
+        <DropdownMenuCheckboxItem
+          checked={planMode}
+          className='rounded-md'
+          disabled={planMode && !canSendKey}
+          onCheckedChange={() =>
+            dispatch(planMode ? { ...descriptor, dispatch: { kind: 'key', key: 'shift-tab', marker: '' } } : descriptor)
+          }
+        >
+          <span className='truncate'>{descriptor.actionLabel ?? descriptor.label}</span>
         </DropdownMenuCheckboxItem>
       );
     }
@@ -839,6 +890,7 @@ export function SessionChatSessionOptionPills({
   const isCodex = catalog.modelIcon === 'codex';
   const contextWindow = isCursor ? detectedOptions?.contextWindow?.trim() : undefined;
   const fastMode = detectedOptions?.fast === true;
+  const planMode = isCodex && detectedOptions?.mode?.value === 'plan';
   const terminalStatusLine = detectedOptions?.terminalStatusLine?.trim();
   // CDXC:AgentScreenDetection 2026-09-03 WHY: Claude's statusline payload carries the
   // context window fill; the ring exists only once it has been read.
@@ -889,10 +941,20 @@ export function SessionChatSessionOptionPills({
   the detected mode itself ("Bypass permissions"), and the model pill shows the
   agent's full terminal status line whenever gxserver has read one.
   */
+  const menuSections = optionMenuSections(menuOptions);
   const optionsTitle =
-    [...menuOptions.map((descriptor) => descriptor.label), ...(isCodex && fastMode ? ['Fast enabled'] : [])].join(
-      ' • '
-    ) || 'Options';
+    [
+      ...menuSections.map((section) => section.label),
+      ...(isCodex && fastMode ? ['Fast enabled'] : []),
+      ...(planMode ? ['Plan mode'] : []),
+    ].join(' • ') || 'Options';
+  const optionsTrailingIcon =
+    (isCodex && fastMode) || planMode ? (
+      <>
+        {isCodex && fastMode ? <FastModeIcon /> : null}
+        {planMode ? <PlanModeIcon /> : null}
+      </>
+    ) : undefined;
   const modeTitle = modeLabel ?? 'Mode';
   /*
   CDXC:AgentScreenDetection 2026-08-22: a pill is "still loading" only while
