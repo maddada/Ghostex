@@ -1,11 +1,5 @@
 # Changelog
 
-## 8.8.1 - 2026-09-04
-
-- Minor
-  - Ghostex no longer quits a second after the Preparing Ghostex window appears. On a first launch, or after an update that brings a new Chromium runtime, the app opened its window while the runtime was still downloading and crashed as soon as a session chat view tried to start; those views now wait for the runtime and open once it is ready.
-  - A locally built development bundle no longer offers a titlebar update that would replace it with the released app.
-
 ## 8.8.0 - 2026-09-04
 
 - Major
