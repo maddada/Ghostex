@@ -161,6 +161,18 @@ pub(crate) fn gpui_native_resource_is_ghostex_browser_process(
             .is_some_and(|executable| executable.contains("ghostex"))
 }
 
+/// True for a zmx process (daemon, attach client, or gxserver watcher) that
+/// serves the session whose zmx name ends in `suffix` (`-<project>-<session>`).
+pub(crate) fn gpui_native_resource_process_is_zmx_session(
+    process: &GpuiNativeResourceProcess,
+    suffix: &str,
+) -> bool {
+    gpui_native_resource_process_name(process)
+        .to_ascii_lowercase()
+        .starts_with("zmx")
+        && process.command.contains(suffix)
+}
+
 pub(crate) fn gpui_native_resource_process_name(process: &GpuiNativeResourceProcess) -> String {
     process
         .command

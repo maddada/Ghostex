@@ -49,31 +49,64 @@ impl GhostexGpuiApp {
         let mut inactive_terminal_sleep_count = 0;
         let mut sleep_all_session_count = 0;
 
-        let protected_browser_tab_ids = if self.active_mode == TitlebarMode::Browser
-            && self
-                .project_editor_shell
-                .is_mode_awake(TitlebarMode::Browser)
-        {
-            self.browser_tabs.rendered_active_loaded_tab_ids()
-        } else {
-            HashSet::new()
-        };
         /*
         CDXC:Browser 2026-08-26:
-        The sleep counts are accounting for every page this shell keeps loaded,
+        The Sleep All count accounts for every page this shell keeps loaded,
         not just the mounted project's. Inactive projects now park their browser
         pages instead of losing them on a project switch, so those pages are
-        real sleep candidates here — and every one of them is unprotected,
-        because only the mounted project can have rendered tabs.
+        real sleep candidates here. (Since 2026-09-04 the Sleep Inactive count
+        is zmx-only and no longer includes browser pages; see the Resources
+        DECISION below.)
         */
         let parked_browser_surface_count = self.parked_browser_surface_count();
         sleep_all_session_count += self.browser_surfaces.len() + parked_browser_surface_count;
-        inactive_terminal_sleep_count += self
-            .browser_surfaces
-            .keys()
-            .filter(|tab_id| !protected_browser_tab_ids.contains(tab_id))
-            .count()
-            + parked_browser_surface_count;
+
+        /*
+        CDXC:Resources 2026-09-04 DECISION:
+        User: "sleep inactive should act on the zmx part not based on the
+        session panes part". Idle means a live zmx daemon whose agent the
+        sidebar reports as available, across every project, whether or not a
+        pane is mounted for it. The count therefore comes from the sidebar's
+        session inventory matched against running zmx processes, and the
+        button's action (the sidebar runtime's inactive sweep) already covers
+        every project the same way.
+        */
+        let indicator_sessions = self
+            .sidebar_session_status_indicators
+            .projects
+            .iter()
+            .flat_map(|project| {
+                project.sessions.iter().map(move |session| {
+                    (
+                        format!("-{}-{}", project.project_id, session.session_id),
+                        project.title.clone(),
+                        session.clone(),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        let zmx_session_is_idle =
+            |project_id: &str, session_id: &str, processes: &[GpuiNativeResourceProcess]| {
+                let suffix = format!("-{project_id}-{session_id}");
+                indicator_sessions
+                    .iter()
+                    .any(|(candidate_suffix, _, session)| {
+                        *candidate_suffix == suffix
+                            && session.status == GpuiStatusIndicatorStatus::Available
+                    })
+                    && processes.iter().any(|process| {
+                        gpui_native_resource_process_is_zmx_session(process, &suffix)
+                    })
+            };
+        for (suffix, _, session) in &indicator_sessions {
+            if session.status == GpuiStatusIndicatorStatus::Available
+                && processes
+                    .iter()
+                    .any(|process| gpui_native_resource_process_is_zmx_session(process, suffix))
+            {
+                inactive_terminal_sleep_count += 1;
+            }
+        }
 
         for session in &self.agents_workspace.terminal_sessions {
             let title = self.agents_workspace_tab_display_title(session.id);
@@ -126,13 +159,9 @@ impl GhostexGpuiApp {
             claimed_pids.extend(tree.iter().map(|process| process.pid));
             let (cpu, memory_mb) = gpui_sum_native_resource_processes(&tree);
             sleep_all_session_count += 1;
-            let sleep_candidate = session.presentation_state
-                != TerminalSessionPresentationState::Sleeping
-                && session.activity == AgentTerminalActivity::Idle
-                && !session.delayed_send_active;
-            if sleep_candidate {
-                inactive_terminal_sleep_count += 1;
-            }
+            let sleep_candidate = mapped_key.is_some_and(|key| {
+                zmx_session_is_idle(&key.project_id, &key.session_id, &processes)
+            });
             session_rows.push(GpuiNativeResourceRow {
                 action: GpuiNativeResourceAction::Session,
                 agent_icon: session.agent_icon,
@@ -177,14 +206,14 @@ impl GhostexGpuiApp {
             gpui_active_project_id_from_snapshot(self.latest_sidebar_project_snapshot.as_ref())
                 .map(str::to_string);
         if let Some(active_project_id) = active_project_id.as_deref() {
-            let indicator_sessions = self
+            let active_project_sessions = self
                 .sidebar_session_status_indicators
                 .projects
                 .iter()
                 .filter(|project| project.project_id == active_project_id)
                 .flat_map(|project| project.sessions.iter().cloned())
                 .collect::<Vec<_>>();
-            for indicator in indicator_sessions {
+            for indicator in active_project_sessions {
                 let session_id =
                     gpui_combined_presentation_session_id(active_project_id, &indicator.session_id);
                 if represented_session_ids.contains(&session_id) {
@@ -210,10 +239,8 @@ impl GhostexGpuiApp {
                 claimed_pids.extend(tree.iter().map(|process| process.pid));
                 let (cpu, memory_mb) = gpui_sum_native_resource_processes(&tree);
                 sleep_all_session_count += 1;
-                let sleep_candidate = indicator.status == GpuiStatusIndicatorStatus::Available;
-                if sleep_candidate {
-                    inactive_terminal_sleep_count += 1;
-                }
+                let sleep_candidate =
+                    zmx_session_is_idle(active_project_id, &indicator.session_id, &processes);
                 let seed = seeds.first();
                 session_rows.push(GpuiNativeResourceRow {
                     action: GpuiNativeResourceAction::Session,
@@ -558,18 +585,41 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
             claimed_pids.extend(tree.iter().map(|process| process.pid));
             let (cpu, memory_mb) = gpui_sum_native_resource_processes(&tree);
+            /*
+            A daemon of another project's session is not an orphan to the
+            user: name it after the session and say which project it belongs
+            to, so the Sleep Inactive count and this section describe the same
+            processes. Only a daemon with no session in the inventory keeps
+            the bare process name.
+            */
+            let known_session = indicator_sessions
+                .iter()
+                .find(|(suffix, _, _)| gpui_native_resource_process_is_zmx_session(&root, suffix));
+            let (label, detail, sleep_candidate) = match known_session {
+                Some((suffix, project_title, session)) => (
+                    session.title.clone(),
+                    format!("{project_title} • zmx pid {}", root.system_pid),
+                    session.status == GpuiStatusIndicatorStatus::Available
+                        && gpui_native_resource_process_is_zmx_session(&root, suffix),
+                ),
+                None => (
+                    gpui_native_resource_process_name(&root),
+                    format!("pid {}", root.system_pid),
+                    false,
+                ),
+            };
             orphan_rows.push(GpuiNativeResourceRow {
                 action: GpuiNativeResourceAction::Orphan,
                 agent_icon: None,
                 children: gpui_native_resource_child_rows(&tree, Some(root.pid)),
                 cpu,
-                detail: format!("pid {}", root.system_pid),
+                detail,
                 icon_path: TITLEBAR_ICON_BOX,
-                label: gpui_native_resource_process_name(&root),
+                label,
                 memory_mb,
                 pids: tree.iter().map(|process| process.system_pid).collect(),
                 session_id: None,
-                sleep_candidate: false,
+                sleep_candidate,
                 url: None,
             });
         }
