@@ -8,6 +8,63 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>8.8.0</title>
+            <pubDate>Fri, 04 Sep 2026 09:49:49 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.8.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>80800</sparkle:version>
+            <sparkle:shortVersionString>8.8.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 8.8.0
+
+## 8.8.0 - 2026-09-04
+
+- Major
+  - Pair a phone with Easy Connect: the new Mobile & Remote setup shows a code the Android app scans, Settings → Remote gains SSH access, Tailscale and paired-device cards in place of the tailcat panel, and saved machines are reached over an Easy Connect forwarder instead of a raw SSH host.
+  - The Android app gets the matching setup flow (Welcome, connect, scan code, connected), a Can't reach checklist that names the cause of a failed connection, Tailscale SSH without a password, machine tabs with a cloud connect glyph and counts, and Delayed Send countdowns that tick from the phone clock.
+  - Switch Account: a Claude or Codex session can be resumed under another account of the same agent family from the terminal action bar, the chat composer menu, or the sidebar card.
+  - Antigravity CLI is a Chat View agent: its transcripts are followed, model and effort are read from the terminal footer, thinking stays visible as narration, its hooks are installed, and its own conversation names become session titles.
+  - Only a terminal you are looking at sizes a session: hidden chat views and background clients rest at 200 columns, so agent CLIs stop truncating lines in Chat View and a hidden pane no longer pins the daemon narrow. Installing this release restarts every live zmx session once; agents resume from their saved commands.
+  - Custom Views: add any number of named HTTP or HTTPS pages in Settings → Extensions, drag them into the order you want, and turn one off without losing its name and URL. Each enabled view becomes its own titlebar mode tab and opens in its own isolated page.
+  - Codex model and effort are set from the chat pills: the pills list Codex's models, efforts and Fast mode the way Claude's do, and Ghostex drives Codex's own picker in the session terminal because Codex has no command form for it. Installing the hooks also adds a status line that names the model, so the pills are filled in before the first turn.
+  - Chat View follows Claude Code's live work: the tool Claude is running right now shows as a card pinned to the bottom of the transcript, carrying the tool's own painted text and opening to the full call, and Claude's permission dialog is answered from chat with Yes or No. Claude's side panes no longer leak into the transcript, and its diff panel is closed again when nobody is watching the pane.
+  - The context meter opens onto Claude's status line: a More details section groups Usage & cost, Context & cache and Session rows, including spend, rate limits, lines changed, prompt cache state and token counts. Star the rows you care about to keep them under the chat box, and drag them into the order you want.
+  - A prompt Claude hands back comes back to the chat box. Pressing Escape just after a send returns the text to the composer, whether you pressed it in chat, in the terminal pane or on a phone, instead of leaving the message lost or reported as undelivered.
+- Minor
+  - The chat box is never locked. When a send is refused because input is held by another device, a question is waiting, or a mode switch is in flight, the draft stays editable and a red toast says why instead of the text box going read-only.
+  - Settings → Remote stacks Easy Connect and Tailscale as expandable cards, so only one QR code is ever in front of you, and each path has its own on/off switch. Turning Tailscale off also hides it from the Mobile & Remote setup. Saved machines move to a compact grid and are edited in their own dialog.
+  - A Codex session keeps the title Codex generates for it: Ghostex waits for Codex's own name and only steps in when that never lands, so a session no longer settles on the first few words of your prompt. A custom agent's default session name no longer blocks auto-naming either.
+  - Dismissing a terminal notice in Chat View makes it stay dismissed; a banner that missed one screen probe used to reappear every few seconds.
+  - Clicking a fork's earlier thread now opens it: a stopped ancestor is woken in place first, which keeps the fork family intact.
+  - Sleep on a session card sends the running session to sleep instead of waking it.
+  - nix-darwin computers find their own tools again: sessions keep the PATH their login shell builds instead of the app's, and Ghostex also looks in the Nix profile directories for `claude`, `bd` and `gx` (GitHub issue #118).
+  - Queued prompts that Claude Code submits together no longer stay on screen labelled Queued, and the pane stops showing a stale working spinner after the reply lands.
+  - Minimizing an Agents panel no longer nudges the first tab sideways or drops the panel's left edge line.
+  - Usage analytics record which OS a phone or browser connects from, and which agent CLI a custom agent actually runs, instead of collapsing every custom agent into one bucket.
+  - Product copy across the desktop, web and Android apps drops em dashes for punctuation that reads naturally.
+  - Claude Code questions now stay in Chat View while background subagents work in the same session; previously a subagent's tool traffic retired the card within a second.
+  - Claude's task list shows above the composer, context window usage appears in the composer, and a Claude statusLine command keeps the model and effort pills live.
+  - Chat View retires terminal status rows by their first paragraph and transcript recency, approval cards no longer repeat the tool name, the context meter Compact button is simpler, option pill menus stay anchored while a choice loads, and the transcript selection toolbar stays one pill on mobile.
+  - Cursor's Ready title ends the working spinner, custom agents built on Claude keep a stable identity, and disabled Antigravity or Claude hooks count as not installed.
+  - Ghostex no longer bundles, downloads or symlinks the Beads `bd` CLI; install Beads on the machine and the Kanban board uses that copy.
+  - Machine tabs count every session on the machine regardless of filters and hide idle awake counts, and Space swipe works across the whole sidebar page.
+  - Tips & Tricks is refreshed for the current product surfaces, first-launch setup can finish when a project already exists and hands phone setup to Mobile & Remote, and product copy says computer instead of Mac.
+  - The model catalog adds Cursor's Gemini 3.8 Flash and the Antigravity CLI lineup, the `ghostex sessions` mobile summary carries delayed-send deadlines and automation flags, and the Linux app syncs the X server before CEF parents into the embed host.
+  - A Claude turn that finishes now shows the blue dot and plays the attention sound the way Codex does.
+  - Split Right opens a session in a pane beside the focused agents pane from Advanced in its sidebar menu, on local and remote machines, the tabs bar above the pane can be shown even when the screen is not split, and a restart comes back on the pane and session you left.
+  - Codex's options pill gains Plan mode, checked while Codex is actually in Plan mode, and Fast mode and Plan mode now share one Modes section.
+  - Picker cards in chat start collapsed with their first two options side by side and expand when you click the title, answering one takes effect immediately and only returns with a reason if the answer did not land, and the Selected in terminal badge is gone.
+  - Claude's "Resume full session as-is" row is answered with a single Escape.
+  - Reasoning rows show their whole heading wrapped instead of one clipped line, the transcript stays pinned to the bottom as it grows, and the chat box's scrollbar appears only when the pointer is over it.
+  - A session card shows a white dot on its agent icon while the chat box holds unsent text, and Switch Agent lists agents in the same order as the sidebar.
+  - Session rows on a remote machine use the same spacing as the same project opened locally.
+  - The new `ghostex resources` command prints the rows the desktop Resources panel shows together with the per-process sample behind them, and Clean RAM copies a diagnosis prompt built from that snapshot.
+  - Sleep Inactive counts idle session daemons across every project rather than mounted panes, and a daemon belonging to another project's session is listed under that session instead of as an orphaned process.
+  - The Tips warning about missing agent hooks opens Settings → Agents at the roster instead of an empty search, and only names agents you actually keep in the sidebar.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.8.0/ghostex-8.8.0-arm64.dmg" length="118690154" type="application/octet-stream" sparkle:edSignature="oA2kCtTBhWA8mxdtSiRLY4T/K5ngLMuqEznt8LVn8NaCQm3oz57QLtucAX12faX1k7QfYyw4DQK25OKl2d33Ag=="/>
+        </item>
+        <item>
             <title>8.7.0</title>
             <pubDate>Thu, 03 Sep 2026 19:19:40 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.7.0</sparkle:fullReleaseNotesLink>
@@ -187,37 +244,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.3.0/ghostex-8.3.0-arm64.dmg" length="116957913" type="application/octet-stream" sparkle:edSignature="Zc53jcdZffRo188Pg5isnnwsEn+B3yGUUc+x7xKjNUJXY86dmkHeoYJOouVs8vUR+H6rRX2IJXYxyecnWvUsBw=="/>
         </item>
         <item>
-            <title>8.2.0</title>
-            <pubDate>Fri, 28 Aug 2026 18:15:22 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.2.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>80200</sparkle:version>
-            <sparkle:shortVersionString>8.2.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 8.2.0
-
-## 8.2.0 - 2026-08-28
-
-- Major
-  - Spaces let you organize projects into named working sets and filter each local or remote gxserver independently, while machine tabs make it quick to move between this computer and connected machines without losing each machine's selected Space.
-  - New agent sessions can begin as durable drafts: choose the agent, model, effort, view, and first prompt before Ghostex launches a terminal, then recover the draft across desktop, web, and Android after navigation, reconnects, or crashes.
-  - Forked conversations now appear as a family across Session Chat and Previous Sessions, with branch badges and an in-chat switcher that follows successor sessions without losing the shared transcript.
-  - Arch Linux users now get an official, hash-verified `ghostex-8.2.0-linux-x64.tar.zst` package alongside the DEB and RPM downloads; its prefix-preserving layout installs Ghostex under `/opt` with the `ghostex` and `gx` commands on `PATH`.
-- Minor
-  - Session Chat preserves atomic file references in Monaco, keeps synced drafts until delivery is confirmed, restores unsent Saved Prompt drafts, shows clearer terminal readiness and refusal feedback, and presents compaction summaries and file-open paths more clearly.
-  - Agent and remote-machine settings are simpler to scan and configure, terminal width can apply to command panes, and sidebar tooltip delay is adjustable down to instant display.
-  - Docs can delete folders, style supported documents, and include temporary project files that were previously hidden.
-  - Quick Access includes already-open projects and offers direct Close and Remove actions, while sidebar grouping, active-session state, and empty states stay consistent across local and remote sections.
-  - Export Transcript is now Handoff, with a clearer agent action bar and shortcuts for carrying a session into another agent or conversation.
-  - Extensions can open approved remote URL surfaces while preserving the extension host's launch, consent, and bridge boundaries.
-  - Quitting the desktop app can shut down the full Ghostex service stack, including gxserver and its managed sessions, when you explicitly choose that option.
-  - Usage analytics now has a complete public field inventory, immediate opt-out controls, and clear disclosure of the one-way hashed identity used to group a person's own machines; retired sidebar-layout dimensions are no longer reported.
-  - Titlebar dropdowns keep their final row visible and return focus reliably, empty command-pane titlebars explain their controls, and action tooltips keep their intended spacing and hit area.
-  - Android preserves sent drafts across navigation, adds a default agent-view preference, and uses the same Handoff terminology as the desktop and web apps.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.2.0/ghostex-8.2.0-arm64.dmg" length="117211816" type="application/octet-stream" sparkle:edSignature="MuopKMzUeiaGVu+j+Rg/8mA7KqBRM+2u9qqXGhg9Ep6yOcA491XisaQrNXOSQd/Q/xY4+7uAt8ucEmjedqbPDw=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -229,6 +255,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: OFf8doerTLuZhVndaPLB6JqsK2nfxM9FuiFuoj71Ui6CKGBxCSwIU/3kfto+vZdvOXWc7WYh4ukgNw9FBSm7Dw==
-length: 27107
+edSignature: fWoOsXqxif9c8bMGZ6nvl87lMtAIwnLG/ceut6f6VVlLlMheNwB3vhMB3lSMJi73+5Ao6b42cOPDyquPK6s1CQ==
+length: 32767
 -->
