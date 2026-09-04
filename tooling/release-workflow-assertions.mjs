@@ -72,9 +72,17 @@ const RELEASE_BUILD_WORKFLOWS = [
   {
     // The compile step and the script it runs `cargo build` through. The
     // literal is the cargo call that inherits the job env; if it moves, the
-    // assertion cannot know where the wrapper has to reach and is stale.
+    // assertion cannot know where the wrapper has to reach and is stale. Since
+    // 2026-09-04 the macOS cargo call lives in build-macos-rust.sh, which
+    // build-macos-app.sh runs, so both links of that chain are asserted.
     compileNeedles: ['macos.sh', 'cargo '],
-    contract: [{ file: 'apps/desktop/scripts/build-macos-app.sh', literal: 'cargo build --release' }],
+    contract: [
+      { file: 'apps/desktop/scripts/build-macos-app.sh', literal: '"$SCRIPT_DIR/build-macos-rust.sh"' },
+      {
+        file: 'apps/desktop/scripts/build-macos-rust.sh',
+        literal: 'cargo_args=(build --release --bin ghostex-gpui --bin ghostex-gpui-cef-helper)',
+      },
+    ],
     file: '.github/workflows/release-gpui-macos.yml',
     platform: 'macos',
   },
