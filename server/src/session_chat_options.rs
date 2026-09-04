@@ -38,13 +38,13 @@ use std::{
     time::Duration,
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
 use crate::domain::DomainRepository;
 use crate::events::GxserverEventHub;
 use crate::paths::GxserverPaths;
-use crate::server::{read_runtime_text, session_observer_key, AppState, SessionChatFollowerEntry};
+use crate::server::{AppState, SessionChatFollowerEntry, read_runtime_text, session_observer_key};
 use crate::session_chat_follower::{is_session_chat_followable_session, session_chat_hook_working};
 use crate::storage::open_gxserver_database;
 use std::collections::HashMap;
@@ -200,6 +200,9 @@ pub struct SessionChatDetectedSelection {
     pub fast: Option<bool>,
     /// Claude's statusline-reported context window usage.
     pub context_usage: Option<SessionChatContextUsage>,
+    /// The rest of Claude's statusline payload the chat surface can show
+    /// (`claude_statusline_status_value`), camelCase and absent-when-absent.
+    pub claude_status: Option<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -269,6 +272,9 @@ impl SessionChatDetectedOptions {
         }
         if let Some(context_usage) = self.selection.context_usage.as_ref() {
             map.insert("contextUsage".to_string(), context_usage.to_value());
+        }
+        if let Some(claude_status) = self.selection.claude_status.as_ref() {
+            map.insert("claudeStatus".to_string(), claude_status.clone());
         }
         map.insert("detectedAt".to_string(), json!(self.detected_at));
         Value::Object(map)
@@ -857,6 +863,7 @@ fn match_cursor_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         terminal_status_line: Some(line.trim().to_string()),
         fast,
         context_usage: None,
+        claude_status: None,
         ..SessionChatDetectedSelection::default()
     })
 }
@@ -929,6 +936,7 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
         terminal_status_line: None,
         fast: None,
         context_usage: None,
+        claude_status: None,
     })
 }
 
@@ -1030,6 +1038,7 @@ fn match_antigravity_statusline(line: &str) -> Option<SessionChatDetectedSelecti
         terminal_status_line: None,
         fast: None,
         context_usage: None,
+        claude_status: None,
     })
 }
 
@@ -1100,6 +1109,7 @@ fn match_pi_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         terminal_status_line: None,
         fast: None,
         context_usage: None,
+        claude_status: None,
     })
 }
 
@@ -1146,6 +1156,7 @@ fn match_omp_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         terminal_status_line: None,
         fast: None,
         context_usage: None,
+        claude_status: None,
     })
 }
 
@@ -1194,6 +1205,7 @@ fn match_hermes_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         terminal_status_line: None,
         fast: None,
         context_usage: None,
+        claude_status: None,
     })
 }
 
@@ -1511,6 +1523,7 @@ fn detect_session_chat_transcript_selection(
                     terminal_status_line: None,
                     fast: None,
                     context_usage: None,
+                    claude_status: None,
                 }
             }
             _ => continue,
@@ -1611,8 +1624,221 @@ fn read_session_chat_statusline_selection(
         terminal_status_line: None,
         fast,
         context_usage: (!context_usage.is_empty()).then_some(context_usage),
+        claude_status: claude_statusline_status_value(payload),
     };
     (selection.model.is_some() || selection.effort.is_some()).then_some(selection)
+}
+
+/*
+CDXC:SessionChatDetectedOptions 2026-09-04 DECISION:
+User: the context meter popover gets a "More details" section (cost, rate
+limits, prompt cache, last request, lines, thinking, version, ...) with a pen
+icon to pick, reorder within groups, and star rows for a text status line under
+the chat box. Everything the chat can show is lifted here from the stored
+payload, renamed to camelCase and dropped when Claude did not report it, so
+the client owns which rows exist and never sees the raw payload.
+*/
+fn claude_statusline_status_value(payload: &Map<String, Value>) -> Option<Value> {
+    fn get<'a>(value: Option<&'a Value>, key: &str) -> Option<&'a Value> {
+        value.and_then(|value| value.get(key))
+    }
+    fn put(map: &mut Map<String, Value>, key: &str, value: Option<Value>) {
+        if let Some(value) = value {
+            map.insert(key.to_string(), value);
+        }
+    }
+    fn number(value: Option<&Value>) -> Option<Value> {
+        value
+            .and_then(Value::as_f64)
+            .filter(|number| number.is_finite())
+            .map(|number| json!(number))
+    }
+    fn integer(value: Option<&Value>) -> Option<Value> {
+        value.and_then(Value::as_i64).map(|number| json!(number))
+    }
+    fn boolean(value: Option<&Value>) -> Option<Value> {
+        value.and_then(Value::as_bool).map(|flag| json!(flag))
+    }
+    fn text(value: Option<&Value>) -> Option<Value> {
+        value
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(|text| json!(text))
+    }
+    fn object(map: Map<String, Value>) -> Option<Value> {
+        (!map.is_empty()).then_some(Value::Object(map))
+    }
+
+    let mut status = Map::new();
+
+    let cost = payload.get("cost");
+    let mut cost_map = Map::new();
+    put(
+        &mut cost_map,
+        "totalUsd",
+        number(get(cost, "total_cost_usd")),
+    );
+    put(
+        &mut cost_map,
+        "durationMs",
+        integer(get(cost, "total_duration_ms")),
+    );
+    put(
+        &mut cost_map,
+        "apiDurationMs",
+        integer(get(cost, "total_api_duration_ms")),
+    );
+    put(
+        &mut cost_map,
+        "linesAdded",
+        integer(get(cost, "total_lines_added")),
+    );
+    put(
+        &mut cost_map,
+        "linesRemoved",
+        integer(get(cost, "total_lines_removed")),
+    );
+    put(&mut status, "cost", object(cost_map));
+
+    let rate_limits = payload.get("rate_limits");
+    let mut limits_map = Map::new();
+    for (key, name) in [("five_hour", "fiveHour"), ("seven_day", "sevenDay")] {
+        let window = get(rate_limits, key);
+        let mut window_map = Map::new();
+        put(
+            &mut window_map,
+            "usedPercentage",
+            number(get(window, "used_percentage")),
+        );
+        put(
+            &mut window_map,
+            "resetsAt",
+            integer(get(window, "resets_at")),
+        );
+        put(&mut limits_map, name, object(window_map));
+    }
+    put(&mut status, "rateLimits", object(limits_map));
+
+    let cache = payload.get("prompt_cache");
+    let mut cache_map = Map::new();
+    put(&mut cache_map, "warm", boolean(get(cache, "warm")));
+    put(&mut cache_map, "ttl", text(get(cache, "ttl")));
+    put(
+        &mut cache_map,
+        "expiresAt",
+        integer(get(cache, "expires_at")),
+    );
+    put(&mut cache_map, "hitRatio", number(get(cache, "hit_ratio")));
+    put(&mut cache_map, "requests", integer(get(cache, "requests")));
+    put(&mut cache_map, "misses", integer(get(cache, "misses")));
+    put(
+        &mut cache_map,
+        "lastMissCause",
+        text(get(cache, "last_miss_cause")),
+    );
+    put(
+        &mut cache_map,
+        "cacheWriteTokens",
+        integer(get(cache, "cache_write_tokens")),
+    );
+    put(
+        &mut cache_map,
+        "recacheTokensIfCold",
+        integer(get(cache, "recache_tokens_if_cold")),
+    );
+    put(&mut status, "promptCache", object(cache_map));
+
+    let context_window = payload.get("context_window");
+    let usage = get(context_window, "current_usage");
+    let mut request_map = Map::new();
+    put(
+        &mut request_map,
+        "inputTokens",
+        integer(get(usage, "input_tokens")),
+    );
+    put(
+        &mut request_map,
+        "outputTokens",
+        integer(get(usage, "output_tokens")),
+    );
+    put(
+        &mut request_map,
+        "cacheReadTokens",
+        integer(get(usage, "cache_read_input_tokens")),
+    );
+    put(
+        &mut request_map,
+        "cacheWriteTokens",
+        integer(get(usage, "cache_creation_input_tokens")),
+    );
+    put(&mut status, "lastRequest", object(request_map));
+    put(
+        &mut status,
+        "totalOutputTokens",
+        integer(get(context_window, "total_output_tokens")),
+    );
+    put(
+        &mut status,
+        "remainingPercentage",
+        number(get(context_window, "remaining_percentage")),
+    );
+    put(
+        &mut status,
+        "exceeds200kTokens",
+        boolean(payload.get("exceeds_200k_tokens")),
+    );
+
+    put(
+        &mut status,
+        "thinkingEnabled",
+        boolean(get(payload.get("thinking"), "enabled")),
+    );
+    put(
+        &mut status,
+        "outputStyle",
+        text(get(payload.get("output_style"), "name")),
+    );
+    put(
+        &mut status,
+        "sessionName",
+        text(payload.get("session_name")),
+    );
+    put(&mut status, "version", text(payload.get("version")));
+
+    let workspace = payload.get("workspace");
+    let repo = get(workspace, "repo");
+    let mut repo_map = Map::new();
+    put(&mut repo_map, "host", text(get(repo, "host")));
+    put(&mut repo_map, "owner", text(get(repo, "owner")));
+    put(&mut repo_map, "name", text(get(repo, "name")));
+    put(&mut status, "repo", object(repo_map));
+    let added_dirs: Vec<Value> = get(workspace, "added_dirs")
+        .and_then(Value::as_array)
+        .map(|dirs| dirs.iter().filter_map(|dir| text(Some(dir))).collect())
+        .unwrap_or_default();
+    if !added_dirs.is_empty() {
+        status.insert("addedDirs".to_string(), Value::Array(added_dirs));
+    }
+    put(
+        &mut status,
+        "projectDir",
+        text(get(workspace, "project_dir")),
+    );
+    put(
+        &mut status,
+        "currentDir",
+        text(get(workspace, "current_dir")).or_else(|| text(payload.get("cwd"))),
+    );
+
+    let pr = payload.get("pr");
+    let mut pr_map = Map::new();
+    put(&mut pr_map, "number", integer(get(pr, "number")));
+    put(&mut pr_map, "url", text(get(pr, "url")));
+    put(&mut pr_map, "reviewState", text(get(pr, "review_state")));
+    put(&mut status, "pr", object(pr_map));
+
+    object(status)
 }
 
 fn read_session_chat_transcript_selection(
@@ -1684,6 +1910,9 @@ fn overlay_session_chat_option_selection(
     }
     if layer.context_usage.is_some() {
         merged.context_usage = layer.context_usage;
+    }
+    if layer.claude_status.is_some() {
+        merged.claude_status = layer.claude_status;
     }
 }
 
@@ -1776,8 +2005,13 @@ pub fn detect_session_chat_terminal_state(
         claude_session_id.as_deref(),
         claude_session_path.as_deref(),
     );
-    let capture =
-        crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id).ok();
+    let capture = crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id)
+        .ok()
+        .map(|mut capture| {
+            // One cut for every detector below (see session_chat_screen_pane.rs).
+            capture.text = crate::session_chat_screen_pane::strip_side_pane(&capture.text);
+            capture
+        });
     let terminal = agent
         .zip(capture.as_ref())
         .and_then(|(agent, capture)| detect_session_chat_selection(agent, &capture.text));
@@ -2263,6 +2497,7 @@ mod tests {
             terminal_status_line: None,
             fast: None,
             context_usage: None,
+            claude_status: None,
         };
         let terminal = claude("Ctx Used: 1% | Opus 4.8").unwrap();
         let merged = merge_session_chat_option_selections(Some(transcript), None, Some(terminal))
@@ -2314,6 +2549,7 @@ mod tests {
                 terminal_status_line: None,
                 fast: Some(true),
                 context_usage: None,
+                claude_status: None,
             },
             detected_at: "2026-08-01T12:00:00.000Z".to_string(),
         };

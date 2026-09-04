@@ -70,6 +70,7 @@ pub mod session_chat_read;
 pub mod session_chat_resume_prompt;
 pub mod session_chat_rewind;
 pub mod session_chat_rewind_state;
+pub mod session_chat_screen_pane;
 pub mod session_chat_send;
 pub mod session_chat_skills;
 pub mod session_chat_stream;
