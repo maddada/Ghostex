@@ -1,6 +1,6 @@
 # Changelog
 
-## 8.7.0 - 2026-09-03
+## 8.8.0 - 2026-09-04
 
 - Major
   - Pair a phone with Easy Connect: the new Mobile & Remote setup shows a code the Android app scans, Settings → Remote gains SSH access, Tailscale and paired-device cards in place of the tailcat panel, and saved machines are reached over an Easy Connect forwarder instead of a raw SSH host.
@@ -10,6 +10,9 @@
   - Only a terminal you are looking at sizes a session: hidden chat views and background clients rest at 200 columns, so agent CLIs stop truncating lines in Chat View and a hidden pane no longer pins the daemon narrow. Installing this release restarts every live zmx session once; agents resume from their saved commands.
   - Custom Views: add any number of named HTTP or HTTPS pages in Settings → Extensions, drag them into the order you want, and turn one off without losing its name and URL. Each enabled view becomes its own titlebar mode tab and opens in its own isolated page.
   - Codex model and effort are set from the chat pills: the pills list Codex's models, efforts and Fast mode the way Claude's do, and Ghostex drives Codex's own picker in the session terminal because Codex has no command form for it. Installing the hooks also adds a status line that names the model, so the pills are filled in before the first turn.
+  - Chat View follows Claude Code's live work: the tool Claude is running right now shows as a card pinned to the bottom of the transcript, carrying the tool's own painted text and opening to the full call, and Claude's permission dialog is answered from chat with Yes or No. Claude's side panes no longer leak into the transcript, and its diff panel is closed again when nobody is watching the pane.
+  - The context meter opens onto Claude's status line: a More details section groups Usage & cost, Context & cache and Session rows, including spend, rate limits, lines changed, prompt cache state and token counts. Star the rows you care about to keep them under the chat box, and drag them into the order you want.
+  - A prompt Claude hands back comes back to the chat box. Pressing Escape just after a send returns the text to the composer, whether you pressed it in chat, in the terminal pane or on a phone, instead of leaving the message lost or reported as undelivered.
 - Minor
   - The chat box is never locked. When a send is refused because input is held by another device, a question is waiting, or a mode switch is in flight, the draft stays editable and a red toast says why instead of the text box going read-only.
   - Settings → Remote stacks Easy Connect and Tailscale as expandable cards, so only one QR code is ever in front of you, and each path has its own on/off switch. Turning Tailscale off also hides it from the Mobile & Remote setup. Saved machines move to a compact grid and are edited in their own dialog.
@@ -30,6 +33,17 @@
   - Machine tabs count every session on the machine regardless of filters and hide idle awake counts, and Space swipe works across the whole sidebar page.
   - Tips & Tricks is refreshed for the current product surfaces, first-launch setup can finish when a project already exists and hands phone setup to Mobile & Remote, and product copy says computer instead of Mac.
   - The model catalog adds Cursor's Gemini 3.8 Flash and the Antigravity CLI lineup, the `ghostex sessions` mobile summary carries delayed-send deadlines and automation flags, and the Linux app syncs the X server before CEF parents into the embed host.
+  - A Claude turn that finishes now shows the blue dot and plays the attention sound the way Codex does.
+  - Split Right opens a session in a pane beside the focused agents pane from Advanced in its sidebar menu, on local and remote machines, the tabs bar above the pane can be shown even when the screen is not split, and a restart comes back on the pane and session you left.
+  - Codex's options pill gains Plan mode, checked while Codex is actually in Plan mode, and Fast mode and Plan mode now share one Modes section.
+  - Picker cards in chat start collapsed with their first two options side by side and expand when you click the title, answering one takes effect immediately and only returns with a reason if the answer did not land, and the Selected in terminal badge is gone.
+  - Claude's "Resume full session as-is" row is answered with a single Escape.
+  - Reasoning rows show their whole heading wrapped instead of one clipped line, the transcript stays pinned to the bottom as it grows, and the chat box's scrollbar appears only when the pointer is over it.
+  - A session card shows a white dot on its agent icon while the chat box holds unsent text, and Switch Agent lists agents in the same order as the sidebar.
+  - Session rows on a remote machine use the same spacing as the same project opened locally.
+  - The new `ghostex resources` command prints the rows the desktop Resources panel shows together with the per-process sample behind them, and Clean RAM copies a diagnosis prompt built from that snapshot.
+  - Sleep Inactive counts idle session daemons across every project rather than mounted panes, and a daemon belonging to another project's session is listed under that session instead of as an orphaned process.
+  - The Tips warning about missing agent hooks opens Settings → Agents at the roster instead of an empty search, and only names agents you actually keep in the sidebar.
 
 ## 8.6.0 - 2026-09-02
 
