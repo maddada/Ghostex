@@ -56,6 +56,7 @@ import {
   resolveSessionChatStarredContextDetails,
   useSessionChatContextDetailsClock,
   useSessionChatContextDetailsPreferences,
+  type SessionChatContextDetailSession,
 } from './session-chat-context-details';
 import { SessionChatContextDetailsDialog } from './session-chat-context-details-dialog';
 import { SessionChatStatusLine } from './session-chat-status-line';
@@ -63,6 +64,10 @@ import { sessionChatOptionCommandNames } from './session-chat-session-options';
 import { readStoredSessionChatVerbose, writeStoredSessionChatVerbose } from './session-chat-verbose-override';
 import { sessionChatSlashCommandsForAgent, sessionChatSlashHeadingForAgent } from './session-chat-slash-commands';
 import type { SessionChatTransport } from './session-chat-transport';
+import {
+  hasAppliedSessionChatReturnedPrompt,
+  markSessionChatReturnedPromptApplied,
+} from './session-chat-returned-prompt';
 import { useSessionChat } from './use-session-chat';
 import { useSessionChatWorkingHold } from './use-session-chat-working-hold';
 
@@ -400,8 +405,8 @@ function TranscriptSelectionToolbar({
           className='flex items-center gap-1.5 border-l border-foreground/10 px-3 py-1.5 text-sm'
           onPointerDown={(event) => {
             event.preventDefault();
-            onAddToChat(anchor.text);
             window.getSelection()?.removeAllRanges();
+            onAddToChat(anchor.text);
           }}
           type='button'
         >
@@ -529,6 +534,29 @@ export function SessionChatView({
     setReadAgentEntry({ agent: readStateAgent, transport });
   }, [readStateAgent, transport]);
   const composerRef = useRef<SessionChatComposerHandle | null>(null);
+  /*
+  CDXC:SessionChat 2026-09-04: a prompt Claude handed back to its composer
+  comes back into this one, once per id (see session-chat-returned-prompt.ts).
+  Re-runs when the transcript finishes loading, because the composer is not
+  mounted while the view holds the loading state.
+  */
+  const returnedPrompt = chat.returnedPrompt;
+  const returnedPromptComposerMounted = chat.view.kind !== 'loading';
+  useEffect(() => {
+    if (!returnedPrompt || !returnedPromptComposerMounted) {
+      return;
+    }
+    if (hasAppliedSessionChatReturnedPrompt(returnedPrompt.id)) {
+      return;
+    }
+    const composer = composerRef.current;
+    if (!composer) {
+      return;
+    }
+    markSessionChatReturnedPromptApplied(returnedPrompt.id);
+    composer.restoreReturnedPrompt(returnedPrompt.text);
+  }, [returnedPrompt, returnedPromptComposerMounted]);
+  const focusComposerAfterTranscriptMenuCloseRef = useRef(false);
   const draftAgentSwitchTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearDraftAgentSwitchTimers = useCallback((): void => {
     for (const timer of draftAgentSwitchTimersRef.current) {
@@ -1104,11 +1132,39 @@ export function SessionChatView({
   const contextDetailsPreferences = useSessionChatContextDetailsPreferences();
   const contextDetailsNow = useSessionChatContextDetailsClock();
   const claudeStatus = chat.selectedOptions?.claudeStatus;
+  const contextDetailsSession = useMemo<SessionChatContextDetailSession>(
+    () => ({
+      title: sessionTitle?.trim() ? sessionTitle.trim() : null,
+      agentSessionId: chat.agentSessionId,
+      // The daemon sends `availableAgents` for a draft and for nothing else
+      // (null, not undefined, on a promoted session).
+      draft: chat.availableAgents !== null,
+    }),
+    [chat.agentSessionId, chat.availableAgents, sessionTitle]
+  );
   const starredContextDetails = useMemo(
-    () => resolveSessionChatStarredContextDetails(claudeStatus, contextDetailsPreferences, contextDetailsNow),
-    [claudeStatus, contextDetailsNow, contextDetailsPreferences]
+    () =>
+      resolveSessionChatStarredContextDetails(
+        claudeStatus,
+        contextDetailsPreferences,
+        contextDetailsNow,
+        contextDetailsSession
+      ),
+    [claudeStatus, contextDetailsNow, contextDetailsPreferences, contextDetailsSession]
   );
   const composerEnabled = canSend && !terminalChoicePending && !sessionOptionSwitching;
+  // The newest user prompt the transcript knows about, for the composer's
+  // stale-draft check. Pending optimistic echoes count: they are prompts that
+  // left this composer.
+  const lastSentPromptAt = useMemo(() => {
+    let latest: number | null = null;
+    for (const message of chat.messages) {
+      if (message.role === 'user' && message.timestamp !== null && (latest === null || message.timestamp > latest)) {
+        latest = message.timestamp;
+      }
+    }
+    return latest;
+  }, [chat.messages]);
   /*
   CDXC:SessionChat 2026-09-03:
   `composerEnabled` gates only the actions that reach the agent (send, queue,
@@ -1119,7 +1175,9 @@ export function SessionChatView({
   const composerSendBlockedReason = !canSend
     ? 'Input is held by another device.'
     : terminalChoicePending
-      ? 'Answer the question above first.'
+      ? noticeCardVisible
+        ? 'Answer the question above first.'
+        : 'Your answer is still being applied. Try again in a moment.'
       : sessionOptionSwitching
         ? 'Claude is still switching mode. Try again in a moment.'
         : null;
@@ -1354,12 +1412,21 @@ export function SessionChatView({
     });
   }, [transcriptSelection]);
 
+  /*
+  CDXC:SessionChat 2026-09-04 DECISION:
+  User: Add to Chat puts the transcript selection in the composer as a quote, leaves a new line beneath it, and focuses the caret on that line so typing can continue immediately.
+  The desktop menu restores focus to its trigger when it finishes closing, so that path reclaims composer focus afterward.
+  */
+  const addTranscriptTextToChat = useCallback((text: string): boolean => {
+    const composer = composerRef.current;
+    return text !== '' && composer !== null && composer.appendText(`${asMarkdownQuote(text)}\n\n`);
+  }, []);
+
   const addTranscriptSelectionToChat = useCallback((): void => {
-    if (transcriptSelection === '') {
-      return;
+    if (addTranscriptTextToChat(transcriptSelection)) {
+      focusComposerAfterTranscriptMenuCloseRef.current = true;
     }
-    composerRef.current?.appendText(asMarkdownQuote(transcriptSelection));
-  }, [transcriptSelection]);
+  }, [addTranscriptTextToChat, transcriptSelection]);
 
   // The initial read cannot yet distinguish an existing transcript from a
   // genuinely empty session. Keep that indeterminate phase visually blank so
@@ -1483,11 +1550,18 @@ export function SessionChatView({
                         <TranscriptSelectionToolbar
                           addToChatEnabled={!questionActive}
                           containerRef={transcriptRef}
-                          onAddToChat={(text) => composerRef.current?.appendText(asMarkdownQuote(text))}
+                          onAddToChat={addTranscriptTextToChat}
                         />
                       </div>
                     ) : (
-                      <ContextMenu>
+                      <ContextMenu
+                        onOpenChangeComplete={(open) => {
+                          if (!open && focusComposerAfterTranscriptMenuCloseRef.current) {
+                            focusComposerAfterTranscriptMenuCloseRef.current = false;
+                            window.requestAnimationFrame(() => composerRef.current?.focus());
+                          }
+                        }}
+                      >
                         <ContextMenuTrigger
                           className='flex min-h-0 flex-1 select-text'
                           onContextMenu={captureTranscriptContext}
@@ -1593,7 +1667,7 @@ export function SessionChatView({
                   ) : null}
                 </div>
                 <div className='mx-auto grid w-full max-w-3xl flex-none gap-2 px-4 pt-2 pb-3'>
-                  <SessionChatWorkingStrip activity={chat.terminalActivity} working={transcriptWorking} />
+                  <SessionChatWorkingStrip activity={chat.terminalActivity} working={chat.sessionWorking} />
                   <SessionChatTerminalNoticeCard
                     canSend={canSend}
                     notice={chat.terminalNotice}
@@ -1653,6 +1727,7 @@ export function SessionChatView({
                       draftSync={chat.draft}
                       isWorking={chat.working}
                       key={sessionKey}
+                      lastSentPromptAt={lastSentPromptAt}
                       monacoVsBaseUrl={monacoVsBaseUrl}
                       nativeContextMenu={nativeSelectionMenus}
                       queue={chat.queue}
@@ -1699,6 +1774,7 @@ export function SessionChatView({
                             await chat.sendKey?.(key, marker);
                           }}
                           {...(pickModel ? { onPickModel: pickModel } : {})}
+                          contextDetailsSession={contextDetailsSession}
                           onEditContextDetails={() => setContextDetailsOpen(true)}
                           onSwitchingChange={setSessionOptionSwitching}
                           {...(onSwitchToTerminalForAgentPicker || hostActions?.onSwitchToTerminal
@@ -1715,7 +1791,9 @@ export function SessionChatView({
                         !canSend
                           ? 'Input is held by another device.'
                           : terminalChoicePending
-                            ? 'Answer the question above to continue.'
+                            ? noticeCardVisible
+                              ? 'Answer the question above to continue.'
+                              : 'Applying your answer…'
                             : sessionOptionSwitching
                               ? 'Switching Claude mode…'
                               : undefined
@@ -1735,6 +1813,7 @@ export function SessionChatView({
                   <SessionChatContextDetailsDialog
                     onOpenChange={setContextDetailsOpen}
                     open={contextDetailsOpen}
+                    session={contextDetailsSession}
                     status={claudeStatus}
                     theme={theme}
                   />

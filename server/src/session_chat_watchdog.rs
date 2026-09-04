@@ -327,6 +327,20 @@ fn register_session_chat_watchdog_task(
     map.insert(key, SessionChatWatchdogEntry { generation, task });
 }
 
+/// Retires the session's watchdog without a verdict. The returned-prompt
+/// detector calls this once it has proven the message is deliberately back in
+/// the composer, so the deadline cannot fire a "not delivered" notice for it.
+pub fn cancel_session_chat_send_watchdog(project_id: &str, session_id: &str) {
+    let watchdogs = SESSION_CHAT_WATCHDOGS.get_or_init(|| Mutex::new(HashMap::new()));
+    let Ok(mut map) = watchdogs.lock() else {
+        return;
+    };
+    if let Some(previous) = map.remove(&session_chat_notice_key(project_id, session_id)) {
+        previous.generation.fetch_add(1, Ordering::SeqCst);
+        previous.task.abort();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The watchdog task
 // ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ import type {
   SessionChatInteractivePrompt,
   SessionChatMessage,
   SessionChatQueuedPrompt,
+  SessionChatReturnedPrompt,
   SessionChatSendKey,
   SessionChatStatus,
   SessionChatTerminalActivity,
@@ -49,11 +50,16 @@ import {
   mergeSessionChatTerminalStatus,
   sameSessionChatTerminalTool,
   sessionChatTerminalStatusMessage,
-  sessionChatTerminalToolLanded,
   sessionChatTerminalToolMessage,
   unreconciledSessionChatTerminalStatuses,
+  withSessionChatTerminalToolDetail,
   withoutSessionChatTerminalStatus,
 } from './session-chat-terminal-status';
+import {
+  retireSessionChatInterruptMarkers,
+  SESSION_CHAT_INTERRUPT_MARKER_COMMAND,
+  SESSION_CHAT_INTERRUPT_MARKER_LABEL,
+} from './session-chat-returned-prompt';
 import {
   appendSessionChatCommandMarker,
   applySessionChatCommandMarkerBoundaries,
@@ -254,6 +260,16 @@ export interface UseSessionChatResult {
    */
   workingSignal: boolean;
   /**
+   * CDXC:SessionStatus 2026-09-04 DECISION:
+   * User: the working strip above the composer and the sidebar's working
+   * spinner must derive from the same source so they always match and never
+   * desync. This is that source: the session activity gxserver presents (the
+   * sidebar's `activity === 'working'`), untouched by the transcript lifecycle
+   * settle, the local Stop suppression, the settle hold, and the optimistic
+   * send echo that shape `working` for Stop-vs-Send and the transcript fold.
+   */
+  sessionWorking: boolean;
+  /**
    * Model/effort gxserver read out of the agent's own terminal, when it could
    * detect them. Null while nothing has been detected — the option pills then
    * keep their local truth.
@@ -266,6 +282,12 @@ export interface UseSessionChatResult {
   does not means CLEARED, so this drops back to null on its own.
   */
   terminalNotice: SessionChatTerminalNotice | null;
+  /**
+   * The prompt Claude Code handed back to its composer after an Escape, for
+   * the view to put back into the chat composer (once per id). Null until a
+   * read or frame carries one; a later omission leaves it as is.
+   */
+  returnedPrompt: SessionChatReturnedPrompt | null;
   /**
    * Live on-screen progress (compaction). Follows `terminalNotice` semantics:
    * a frame that can carry it and does not has CLEARED it.
@@ -375,6 +397,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // Live work as reported by the chat channel itself: the `working` flag on
   // read results/snapshots plus the server's activity-transition state frames.
   const [serverWorking, setServerWorking] = useState(false);
+  // The session's own activity as gxserver presents it, which is exactly what
+  // the sidebar's working spinner reads. Carried by the `working` flag on
+  // reads, snapshots, and state frames; a frame that omits it leaves it alone.
+  const [sessionActivityWorking, setSessionActivityWorking] = useState(false);
   // Detected model/effort: carried by read results and by
   // snapshot/replaced/state frames. Absent ⇒ unchanged (older daemons omit it).
   const [selectedOptions, setSelectedOptions] = useState<SessionChatDetectedOptions | null>(null);
@@ -400,6 +426,12 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   often "this frame had nothing to add" than "that rename never happened".
   */
   const [appCommands, setAppCommands] = useState<readonly SessionChatAppCommand[]>([]);
+  /*
+  CDXC:SessionChat 2026-09-04: the prompt Claude handed back to its composer
+  after an Escape (session-chat-returned-prompt.ts). Set from reads and frames,
+  never cleared by omission; the view applies each id once.
+  */
+  const [returnedPrompt, setReturnedPrompt] = useState<SessionChatReturnedPrompt | null>(null);
   // Claude replaces its current `⏺ …` terminal line in place. Keep each
   // DISTINCT value only for this mounted chat; matching transcript text removes
   // it from composition as soon as JSONL catches up. Distinct rather than
@@ -515,7 +547,11 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       const tool = activity ? sessionChatTerminalToolMessage(activity) : null;
       if (tool) {
         clearTerminalToolHold();
-        setTerminalTool((current) => (current && sameSessionChatTerminalTool(current, tool) ? current : tool));
+        setTerminalTool((current) =>
+          current && sameSessionChatTerminalTool(current, tool)
+            ? withSessionChatTerminalToolDetail(current, tool)
+            : tool
+        );
         setTerminalStatusMessages((current) => withoutSessionChatTerminalStatus(current, tool));
         setTerminalActivity(null);
         return;
@@ -574,6 +610,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         working?: boolean;
         /** Detected model/effort; omitted when the agent's screen said nothing. */
         selectedOptions?: SessionChatDetectedOptions;
+        /** The prompt Claude handed back to its composer; omitted ⇒ nothing new. */
+        returnedPrompt?: SessionChatReturnedPrompt;
         /** Blocking/failed terminal state; omitted ⇒ cleared. */
         terminalNotice?: SessionChatTerminalNotice;
         /** Live on-screen progress; omitted ⇒ cleared. */
@@ -608,6 +646,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       beforeOffsetRef.current = result.beforeOffset;
       setServerStatus(result.status);
       setServerWorking(result.working === true || result.status === 'working');
+      if (typeof result.working === 'boolean') {
+        setSessionActivityWorking(result.working);
+      }
       setPrompt(result.prompt ?? null);
       if (result.agent !== undefined) {
         setAgent(result.agent);
@@ -622,6 +663,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setAgentTasks(result.agentTasks ?? null);
       if (result.appCommands) {
         setAppCommands(result.appCommands);
+      }
+      if (result.returnedPrompt) {
+        setReturnedPrompt(result.returnedPrompt);
       }
       if (result.screenProbed) {
         setScreenProbed(true);
@@ -826,6 +870,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       clearTerminalToolHold();
       setTerminalTool(null);
       setAppCommands([]);
+      setReturnedPrompt(null);
       // A different session's detection must never leak into this one.
       setSelectedOptions(null);
       // Its "we have looked" latch is per-session too: a new session has not
@@ -931,6 +976,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       });
       setServerStatus(event.status);
       setServerWorking(event.working === true || event.status === 'working');
+      if (typeof event.working === 'boolean') {
+        setSessionActivityWorking(event.working);
+      }
       if (event.lifecycle) {
         setLifecycle(event.lifecycle);
       }
@@ -944,6 +992,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setAgentTasks(event.agentTasks ?? null);
       if (event.appCommands) {
         setAppCommands(event.appCommands);
+      }
+      if (event.returnedPrompt) {
+        setReturnedPrompt(event.returnedPrompt);
       }
       if (event.screenProbed) {
         setScreenProbed(true);
@@ -1173,9 +1224,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         .map(normalizedSessionChatText)
         .filter(Boolean)
     );
-    const markerMessages = sessionChatCommandMarkersAsMessages(markers, compactionRecords).filter(
-      (message) => message.role !== 'user' || !authoritativeText.has(normalizedSessionChatText(message))
-    );
+    const markerMessages = sessionChatCommandMarkersAsMessages(
+      retireSessionChatInterruptMarkers(markers, boundaried),
+      compactionRecords
+    ).filter((message) => message.role !== 'user' || !authoritativeText.has(normalizedSessionChatText(message)));
     const visibleTerminalStatuses = unreconciledSessionChatTerminalStatuses(terminalStatusMessages, boundaried);
     const tail: SessionChatMessage[] = [
       ...visibleTerminalStatuses,
@@ -1190,7 +1242,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     if (streamingText) {
       tail.push(sessionChatStreamingMessage(streamingText));
     }
-    if (terminalTool && !sessionChatTerminalToolLanded(terminalTool, boundaried)) {
+    if (terminalTool) {
       tail.push(terminalTool);
     }
     tail.push(...pendingMessages);
@@ -1500,6 +1552,21 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       // server-side Enter may never fire, so the echo would be a ghost bubble.
       setInterrupted(true);
       setPending([]);
+      /*
+      CDXC:SessionChat 2026-09-04 DECISION:
+      User: pressing Escape in the chat box must show an "Interrupted the
+      agent" status row, because the Escape goes to the terminal and nothing
+      else tells the user it happened. Claude writes its own interrupt row only
+      for a turn cut off mid-response; a prompt it hands back leaves none.
+      */
+      setMarkers((current) =>
+        appendSessionChatCommandMarker(
+          current,
+          SESSION_CHAT_INTERRUPT_MARKER_COMMAND,
+          Date.now(),
+          SESSION_CHAT_INTERRUPT_MARKER_LABEL
+        )
+      );
     }
     await transport.interrupt();
   }, [transport]);
@@ -1527,6 +1594,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     status,
     switchableAgents,
     terminalNotice,
+    returnedPrompt,
     terminalActivity,
     agentFleet,
     agentTasks,
@@ -1534,6 +1602,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     view,
     working,
     workingSignal: workingSignal && !interrupted,
+    sessionWorking: sessionActivityWorking || externalWorking === true,
     ...(transportSendKey ? { sendKey } : {}),
   };
 }

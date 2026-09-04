@@ -374,6 +374,45 @@ pub fn is_claude_code_settings_screen(agent_id: Option<&str>, screen_text: &str)
     })
 }
 
+/*
+CDXC:SessionChat 2026-09-04 WHY:
+The text Claude Code's input box holds, read off the same rule sandwich the
+readiness signature matches: the lowest full-width rule is the composer's
+foot, the titled rule above it is its head, and the rows between them are the
+input, the first one behind the `❯` marker. A wrapped draft continues on the
+following rows, so they are joined with single spaces. `None` for an empty box
+(a lone marker, or Claude's grey placeholder is not distinguishable from text
+here and is left to the caller's comparison) and for any screen without the
+sandwich. Used by the returned-prompt detector, which compares this against
+the message it just sent.
+*/
+pub fn claude_composer_input_text(screen_text: &str) -> Option<String> {
+    const CLAUDE_COMPOSER_MAX_ROWS: usize = 40;
+    let lines = composer_lines(screen_text);
+    let foot = (0..lines.len())
+        .rev()
+        .find(|&index| is_horizontal_rule(&lines[index]))?;
+    let head = (foot.saturating_sub(CLAUDE_COMPOSER_MAX_ROWS)..foot)
+        .rev()
+        .find(|&index| is_titled_horizontal_rule(&lines[index]))?;
+    let inner = &lines[head + 1..foot];
+    let first = inner.first()?;
+    if !is_marker_line(first, '\u{276f}') {
+        return None;
+    }
+    let mut text = first
+        .trim()
+        .trim_start_matches('\u{276f}')
+        .trim()
+        .to_string();
+    for line in &inner[1..] {
+        text.push(' ');
+        text.push_str(line.trim());
+    }
+    let text = text.trim().to_string();
+    (!text.is_empty()).then_some(text)
+}
+
 /// Display rows for terminal-preview clients, OLDEST FIRST.
 ///
 /// Readiness matching needs whitespace-folded non-blank lines, but a visual

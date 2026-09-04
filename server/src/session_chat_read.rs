@@ -198,6 +198,12 @@ pub(crate) fn resolve_session_chat_read_state(
     */
     crate::session_chat_app_command::session_chat_app_commands_identity(project_id, session_id)
         .hash(&mut hasher);
+    // Same discipline: the returned prompt's id wakes a long-poller so it can
+    // put the text back into its composer.
+    crate::session_chat_returned_prompt::session_chat_returned_prompt_identity(
+        project_id, session_id,
+    )
+    .hash(&mut hasher);
     /*
     CDXC:AgentScreenDetection 2026-08-22:
     The progress row DOES hash its numbers, unlike the notice above. A notice
@@ -515,6 +521,11 @@ pub(crate) async fn handle_read_session_chat_http(
             &project_id,
             &session_id,
         );
+        crate::session_chat_returned_prompt::insert_session_chat_returned_prompt(
+            &mut result,
+            &project_id,
+            &session_id,
+        );
         /*
         CDXC:AgentScreenDetection 2026-08-22: same capture, same cache.
         Ordinary activity is live only during the main turn, but Claude's
@@ -659,6 +670,16 @@ pub(crate) async fn handle_read_session_chat_http(
             has_more,
             before_offset: page_before_offset,
         })) => {
+            let mut messages = messages;
+            let mut lifecycle = lifecycle;
+            if before_offset.is_none() {
+                crate::session_chat_returned_prompt::filter_session_chat_returned_prompts(
+                    &project_id,
+                    &session_id,
+                    &mut messages,
+                    &mut lifecycle,
+                );
+            }
             let status = if before_offset.is_none() && messages.is_empty() && !has_more {
                 "empty"
             } else {

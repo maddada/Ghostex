@@ -328,6 +328,8 @@ export interface SessionChatClaudeStatus {
   thinkingEnabled?: boolean;
   outputStyle?: string;
   sessionName?: string;
+  /** Claude's own session id, the one `claude --resume` takes. */
+  sessionId?: string;
   version?: string;
   repo?: { host?: string; owner?: string; name?: string };
   addedDirs?: string[];
@@ -483,6 +485,8 @@ export interface SessionChatTerminalActivity {
   elapsedSeconds?: number;
   /** ISO-8601 millis; stable for the whole run, so a local clock can tick. */
   detectedAt: string;
+  /** `claude-tool` only: the tool block painted under the row, as shown on the terminal. */
+  detail?: string;
 }
 
 /*
@@ -504,6 +508,25 @@ so the two never both render, and nothing is persisted. Unlike `prompt` /
 their own schedule, so a frame with nothing to add stays silent instead of
 racing the client into dropping one it should still show.
 */
+/*
+CDXC:SessionChat 2026-09-04 DECISION:
+User: a prompt Claude Code pulls back into its composer after an Escape must
+come back into the chat composer too, and its bubble must leave the transcript,
+so the user never writes a follow-up to a message the agent never took.
+SEE-ALSO: server/src/session_chat_returned_prompt.rs,
+packages/core-ui/chat/session-chat-returned-prompt.ts.
+*/
+export interface SessionChatReturnedPrompt {
+  /** Stable per detection; a client applies each id once. */
+  id: string;
+  /** Exactly what was sent from Chat. */
+  text: string;
+  /** Image attachments the send carried, if any. */
+  imagePaths?: string[];
+  /** ISO-8601 millis. */
+  at: string;
+}
+
 export interface SessionChatAppCommand {
   /** Stable within a session; two sends can carry identical text. */
   id: string;
@@ -672,6 +695,12 @@ export interface GxserverReadSessionChatResult {
    * an omitted field leaves whatever the client already has.
    */
   appCommands?: SessionChatAppCommand[];
+  /**
+   * A prompt Claude Code handed back to its composer after an Escape, for the
+   * client to put back into its own composer. Applied once per `id` by the
+   * client; omitted ⇒ nothing new (never "cleared"). Carried while fresh only.
+   */
+  returnedPrompt?: SessionChatReturnedPrompt;
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
   /** Claude's task list from its on-disk store. Omitted ⇒ cleared. */
@@ -711,8 +740,8 @@ export interface GxserverReadSessionChatResult {
    * omitted field is the client's signal to hide the composer's "Agents"
    * section entirely (it is also what a daemon predating drafts sends).
    *
-   * The list is the five chat-supported base families plus the project's custom
-   * agents whose base family is chat-supported — never every launchable agent,
+   * The list follows the sidebar Select Agent order and includes its visible
+   * agents whose base family is chat-supported, never every launchable agent,
    * because chat cannot read a transcript it has no decoder for.
    */
   availableAgents?: SessionChatAvailableAgent[];
@@ -991,6 +1020,12 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
    * an omitted field leaves whatever the client already has.
    */
   appCommands?: SessionChatAppCommand[];
+  /**
+   * A prompt Claude Code handed back to its composer after an Escape, for the
+   * client to put back into its own composer. Applied once per `id` by the
+   * client; omitted ⇒ nothing new (never "cleared"). Carried while fresh only.
+   */
+  returnedPrompt?: SessionChatReturnedPrompt;
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
   /** Claude's task list from its on-disk store. Omitted ⇒ cleared. */
@@ -1065,6 +1100,12 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
    * an omitted field leaves whatever the client already has.
    */
   appCommands?: SessionChatAppCommand[];
+  /**
+   * A prompt Claude Code handed back to its composer after an Escape, for the
+   * client to put back into its own composer. Applied once per `id` by the
+   * client; omitted ⇒ nothing new (never "cleared"). Carried while fresh only.
+   */
+  returnedPrompt?: SessionChatReturnedPrompt;
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
   /** Claude's task list from its on-disk store. Omitted ⇒ cleared. */
@@ -1112,6 +1153,12 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
    * an omitted field leaves whatever the client already has.
    */
   appCommands?: SessionChatAppCommand[];
+  /**
+   * A prompt Claude Code handed back to its composer after an Escape, for the
+   * client to put back into its own composer. Applied once per `id` by the
+   * client; omitted ⇒ nothing new (never "cleared"). Carried while fresh only.
+   */
+  returnedPrompt?: SessionChatReturnedPrompt;
   /** Sub-agents the screen is painting. Omitted ⇒ cleared. */
   agentFleet?: SessionChatAgentFleet;
   /** Claude's task list from its on-disk store. Omitted ⇒ cleared. */

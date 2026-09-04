@@ -38,13 +38,13 @@ use std::{
     time::Duration,
 };
 
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
 use crate::domain::DomainRepository;
 use crate::events::GxserverEventHub;
 use crate::paths::GxserverPaths;
-use crate::server::{AppState, SessionChatFollowerEntry, read_runtime_text, session_observer_key};
+use crate::server::{read_runtime_text, session_observer_key, AppState, SessionChatFollowerEntry};
 use crate::session_chat_follower::{is_session_chat_followable_session, session_chat_hook_working};
 use crate::storage::open_gxserver_database;
 use std::collections::HashMap;
@@ -1324,7 +1324,7 @@ pub fn detect_session_chat_selection(
         let (line, codex_plan_mode) = if agent == SessionChatOptionAgent::Codex {
             strip_codex_plan_mode_marker(line)
         } else {
-            (line, false)
+            (line.as_str(), false)
         };
         let segments = line_segments(line);
         let matched_before = (
@@ -1852,6 +1852,7 @@ fn claude_statusline_status_value(payload: &Map<String, Value>) -> Option<Value>
         "sessionName",
         text(payload.get("session_name")),
     );
+    put(&mut status, "sessionId", text(payload.get("session_id")));
     put(&mut status, "version", text(payload.get("version")));
 
     let workspace = payload.get("workspace");
@@ -2053,9 +2054,15 @@ pub fn detect_session_chat_terminal_state(
         claude_session_id.as_deref(),
         claude_session_path.as_deref(),
     );
+    let mut diff_panel_on_screen = false;
     let capture = crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id)
         .ok()
         .map(|mut capture| {
+            // Read on the whole capture: the panel's header is what the cut
+            // below removes (see session_chat_diff_panel.rs).
+            diff_panel_on_screen = agent == Some(SessionChatOptionAgent::Claude)
+                && !capture.truncated
+                && crate::session_chat_diff_panel::claude_diff_panel_on_screen(&capture.text);
             // One cut for every detector below (see session_chat_screen_pane.rs).
             capture.text = crate::session_chat_screen_pane::strip_side_pane(&capture.text);
             capture
@@ -2078,6 +2085,17 @@ pub fn detect_session_chat_terminal_state(
         ),
         None => crate::session_chat_composer::SessionChatComposerReadiness::default(),
     };
+    if diff_panel_on_screen {
+        if let Some(capture) = screen {
+            crate::session_chat_diff_panel::hide_claude_diff_panel_if_unwatched(
+                repository,
+                project_id,
+                session_id,
+                &capture.text,
+                composer.state == crate::session_chat_composer::SessionChatComposerState::Ready,
+            );
+        }
+    }
     let activity = if agent == Some(SessionChatOptionAgent::Cursor)
         && composer.state == crate::session_chat_composer::SessionChatComposerState::Ready
     {

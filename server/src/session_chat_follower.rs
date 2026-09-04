@@ -558,6 +558,19 @@ fn insert_optional_app_commands(
     );
 }
 
+/// The prompt Claude handed back to its composer, for the client to put back
+/// into its own. Same process-global store shape as the app commands above.
+fn insert_optional_returned_prompt(
+    frame: &mut Map<String, Value>,
+    config: &SessionChatFollowerConfig,
+) {
+    crate::session_chat_returned_prompt::insert_session_chat_returned_prompt(
+        frame,
+        &config.project_id,
+        &config.session_id,
+    );
+}
+
 #[allow(clippy::too_many_arguments)]
 fn emit_state_frame(
     emit: &SessionChatFrameEmitter,
@@ -583,6 +596,7 @@ fn emit_state_frame(
             insert_screen_state(&mut frame, screen);
             insert_optional_queue(&mut frame, queue.as_ref());
             insert_optional_app_commands(&mut frame, config);
+            insert_optional_returned_prompt(&mut frame, config);
             insert_optional_agent_session_id(&mut frame, config);
             Value::Object(frame)
         },
@@ -634,6 +648,7 @@ fn emit_snapshot_frame(
             insert_screen_state(&mut frame, screen);
             insert_optional_queue(&mut frame, queue.as_ref());
             insert_optional_app_commands(&mut frame, config);
+            insert_optional_returned_prompt(&mut frame, config);
             insert_optional_agent_session_id(&mut frame, config);
             Value::Object(frame)
         },
@@ -1211,6 +1226,23 @@ pub async fn run_session_chat_follower(
                 appended_lifecycle,
                 content_replaced,
             } => {
+                // A prompt Claude handed back to its composer stays in the
+                // JSONL as an orphan row until the next prompt abandons it.
+                let mut tail = tail;
+                let mut appended = appended;
+                let mut appended_lifecycle = appended_lifecycle;
+                crate::session_chat_returned_prompt::filter_session_chat_returned_prompts(
+                    &config.project_id,
+                    &config.session_id,
+                    &mut tail.messages,
+                    &mut tail.lifecycle,
+                );
+                crate::session_chat_returned_prompt::filter_session_chat_returned_prompts(
+                    &config.project_id,
+                    &config.session_id,
+                    &mut appended,
+                    &mut appended_lifecycle,
+                );
                 let frame_type = if want_snapshot {
                     "sessionChatSnapshot"
                 } else {
@@ -1375,7 +1407,26 @@ pub async fn run_session_chat_follower(
                     }
                 }
             }
-            FollowerDrainOutcome::Idle => {}
+            FollowerDrainOutcome::Idle => {
+                // The returned-prompt detector cannot publish into this stream
+                // itself; its retraction rides the next reconcile tick.
+                if let Some((retracted, lifecycle)) =
+                    crate::session_chat_returned_prompt::take_session_chat_returned_prompt_retraction(
+                        &config.project_id,
+                        &config.session_id,
+                    )
+                {
+                    emit_appended_frame(
+                        &emit,
+                        &config,
+                        &stream,
+                        epoch,
+                        &[],
+                        Some(&lifecycle),
+                        &retracted,
+                    );
+                }
+            }
         }
 
         /*
@@ -1808,16 +1859,6 @@ pub(crate) fn is_session_chat_followable_session(session: &Value) -> bool {
     read_session_text(session, "lifecycleState").as_deref() == Some("running")
 }
 
-pub(crate) fn session_agent_activity(session: &Value) -> Option<&str> {
-    session
-        .get("runtimeSettings")
-        .and_then(Value::as_object)
-        .and_then(|settings| settings.get("agentActivity"))
-        .and_then(Value::as_object)
-        .and_then(|agent_activity| agent_activity.get("activity"))
-        .and_then(Value::as_str)
-}
-
 /*
 CDXC:SessionChat 2026-08-01:
 The chat channel's own working truth. Agent hooks are the only source that knows
@@ -1825,9 +1866,19 @@ a turn started before the transcript flushes its first row, so every chat surfac
 (gpui, web, mobile) reads it here instead of each host wiring its own session
 activity prop — desktop had none at all, so its Working marker and Stop button
 were dead.
+
+CDXC:SessionStatus 2026-09-04 DECISION:
+User: the chat view's working strip and the sidebar's working spinner must
+derive from the same source so they always match and never desync. The chat
+used to read the raw stored activity while the sidebar read the presentation's
+projection (a stale title-derived working closed out, a detected compaction
+counted as working), so the two drifted. Both now read `presentation_activity`,
+and the stale-activity timer re-syncs the follower through the presentation
+delta, so the flip lands in the chat at the same moment it lands in the sidebar.
 */
 pub(crate) fn session_chat_hook_working(session: &Value) -> bool {
-    session_agent_activity(session) == Some("working")
+    let generated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    crate::presentation::presentation_activity(session, &generated_at) == "working"
 }
 
 pub(crate) fn sync_session_chat_follower_for_session(

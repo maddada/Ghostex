@@ -106,6 +106,7 @@ import {
 import type { SessionChatHostActions } from './session-chat-host-actions';
 import {
   isNewerSessionChatDraftStamp,
+  isSessionChatDraftStale,
   SESSION_CHAT_QUEUE_LONG_PRESS_MS,
   shouldOfferSessionChatDraft,
   shouldRestoreOwnSessionChatDraft,
@@ -137,6 +138,11 @@ export interface SessionChatComposerHandle {
   getDraft: () => string;
   /** Insert a Saved Prompt at the caret as one editor operation. */
   insertSavedPrompt: (text: string) => boolean;
+  /**
+   * Put a prompt the agent handed back above whatever the composer holds now
+   * (same placement a failed send gets), caret at the end, and focus it.
+   */
+  restoreReturnedPrompt: (text: string) => void;
   /** Insert text at the caret; returns false when the composer cannot take it. */
   insertTypedText: (text: string) => boolean;
   /** Attach files/folders dropped anywhere on the chat view. */
@@ -287,6 +293,12 @@ export interface SessionChatComposerProps {
   sessionNoteHasText?: boolean;
   /** Whether the composer renders shortcut chords in its controls and menu. */
   showShortcutLabels?: boolean;
+  /**
+   * Epoch ms of the transcript's newest user prompt, null while the transcript
+   * is unknown. A silently restored draft older than this is a sent message
+   * coming back, and is dropped; see isSessionChatDraftStale.
+   */
+  lastSentPromptAt?: number | null;
   /** Per-session Verbose mode value shown with the right-hand composer actions. */
   verboseMode?: boolean;
   /** Toggle the per-session Verbose mode override. Omitted hides the action. */
@@ -548,6 +560,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       filesLoading = false,
       hostActions,
       isWorking,
+      lastSentPromptAt = null,
       monacoVsBaseUrl,
       nativeContextMenu = false,
       onAttachFile,
@@ -587,6 +600,18 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     ref
   ) {
     const [draft, setDraft] = useState(() => readStoredSessionChatDraft(sessionKey));
+    /**
+     * The text this composer holds without the user having typed it — the
+     * mount-time localStorage restore, or gxserver's crash-restore copy — with
+     * its stamp, so it can be measured against the transcript once that has
+     * loaded. Cleared once the check retires it or the user replaces it.
+     */
+    const silentlyRestoredDraftRef = useRef<{ text: string; updatedAt: number | undefined } | null>(
+      (() => {
+        const stored = readStoredSessionChatDraftEntry(sessionKey);
+        return stored !== null && stored.text !== '' ? stored : null;
+      })()
+    );
     const [history, setHistory] = useState(EMPTY_SESSION_CHAT_COMPOSER_HISTORY);
     const [slashDismissed, setSlashDismissed] = useState(false);
     const [slashIndex, setSlashIndex] = useState(0);
@@ -838,6 +863,9 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         writeStoredSessionChatDraft(sessionKey, getInputApi()?.getValue() ?? draftRef.current);
         pushDraftRef.current();
       },
+      restoreReturnedPrompt: (text: string): void => {
+        restoreComposerText(text);
+      },
       focus: () => {
         const input = getInputApi();
         if (!input) {
@@ -967,6 +995,14 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           // Do not overwrite a next draft typed while the send was in flight.
           // Put the failed message first so retrying still preserves send order.
           restoreComposerText(text);
+          /*
+          CDXC:SessionChat 2026-09-04: the user's own Escape cancelled this
+          send before its Enter (`sendCancelled`). Nothing failed and the
+          "Interrupted the agent" row already says what happened, so no error.
+          */
+          if (gxserverRpcErrorCode(error) === 'sendCancelled') {
+            return;
+          }
           /*
           CDXC:SessionChat 2026-08-26:
           `composerNotReady` means the daemon wrote NOTHING — the agent CLI has
@@ -1227,6 +1263,36 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     );
 
     /*
+    CDXC:Drafts 2026-09-04 WHY:
+    The transcript-side half of "a sent message never comes back as a draft".
+    Text this composer holds only because a cache restored it (mount-time
+    localStorage, or the crash-restore above when it ran before the transcript
+    loaded) is retired the moment the transcript proves a newer prompt went
+    out: the field, the localStorage copy, and — through the ordinary sync —
+    gxserver's row. Text the user has touched is never measured; the live
+    value must still equal the restored text, so a single keystroke opts out.
+    */
+    useEffect(() => {
+      const restored = silentlyRestoredDraftRef.current;
+      if (restored === null) {
+        return;
+      }
+      const composerText = getInputApi()?.getValue() ?? draftRef.current;
+      if (composerText !== restored.text) {
+        silentlyRestoredDraftRef.current = null;
+        return;
+      }
+      if (!isSessionChatDraftStale(restored.updatedAt, lastSentPromptAt)) {
+        return;
+      }
+      silentlyRestoredDraftRef.current = null;
+      vacateComposer();
+      // getInputApi is resolved lazily and draftRef is a ref; the draft this
+      // reads is deliberately the live one, not a render-scoped copy.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [draft, lastSentPromptAt]);
+
+    /*
   "Newer draft from another device": offered, never applied. The three
   conditions live in shouldOfferSessionChatDraft; the important half is here —
   a draft that is NOT offered still marks its stamp handled, so a later
@@ -1254,12 +1320,18 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           composerText,
           composerTouched: composerTouchedRef.current,
           incoming: syncedDraft,
+          lastSentPromptAt,
           stored: readStoredSessionChatDraftEntry(sessionKey),
         })
       ) {
         lastHandledDraftAtRef.current = syncedDraft.updatedAt;
         // The restore IS the synced content; pushing it back would be an echo.
         lastPushedDraftRef.current = syncedDraft.content;
+        const restoredAt = Date.parse(syncedDraft.updatedAt);
+        silentlyRestoredDraftRef.current = {
+          text: syncedDraft.content,
+          updatedAt: Number.isNaN(restoredAt) ? undefined : restoredAt,
+        };
         loadComposerText(syncedDraft.content);
         return;
       }

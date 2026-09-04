@@ -4,19 +4,19 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::{
-        Arc, Mutex, OnceLock,
         atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
     },
     time::Duration,
 };
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::domain::{DomainRepository, DomainStateError, read_domain_rpc_params};
+use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::protocol::rpc_success;
 use crate::server::{
-    AppState, RoutedResponse, domain_error_response, read_runtime_text, routed_json,
+    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
 };
 use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
 use crate::session_chat_follower::session_chat_agent_for_session;
@@ -24,7 +24,7 @@ use crate::session_chat_options::schedule_session_chat_option_redetect;
 use crate::session_chat_queue_runtime::send_session_chat_message_internal;
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 /*
 CDXC:SessionChat 2026-07-31:
@@ -1128,6 +1128,14 @@ impl SessionChatSendError {
     /// True when the send stopped because the agent CLI had no input box.
     pub fn composer_not_ready(&self) -> bool {
         self.failure == SessionChatSendFailure::ComposerNotReady
+    }
+
+    /// True when the send was cancelled before its Enter was written: the
+    /// interrupt endpoint bumped the queue generation under it, so nothing
+    /// reached the agent and the caller still owns the text.
+    pub fn cancelled(&self) -> bool {
+        self.failure == SessionChatSendFailure::NotAttempted
+            && self.message == SESSION_CHAT_SEND_CANCELLED
     }
 }
 
@@ -3062,6 +3070,28 @@ pub(crate) fn handle_interrupt_session_chat_http(
         vec![crate::session_chat_send::SessionChatSendStep::Write(
             crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string(),
         )],
+    );
+    // The interrupt is an Escape as far as the activity state machine is
+    // concerned: it ends the hook-backed working claim the way the
+    // terminal-pane Escape key does (see the escape branch in
+    // session_status.rs), because no agent hook reports an interrupted turn.
+    let mut escape_params = Map::new();
+    escape_params.insert("projectId".to_string(), json!(target.project_id));
+    escape_params.insert("sessionId".to_string(), json!(target.session_id));
+    escape_params.insert("event".to_string(), json!("escape"));
+    let _ = crate::server::dispatch_agent_http_blocking(
+        state,
+        "/api/updateAgentActivity".to_string(),
+        request_id.clone(),
+        escape_params,
+    );
+    // Claude Code may answer this Escape by handing the prompt back to its
+    // composer; the detector decides after the write lands (CDXC:SessionChat
+    // in session_chat_returned_prompt.rs).
+    crate::session_chat_returned_prompt::schedule_session_chat_returned_prompt_detection(
+        state,
+        &target,
+        &request_id,
     );
     routed_json(
         Some(endpoint_path),
