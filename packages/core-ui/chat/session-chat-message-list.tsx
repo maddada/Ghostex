@@ -47,6 +47,8 @@ import {
   useSessionChatImageViewer,
 } from './session-chat-image-viewer';
 import { normalizeSessionChatImageTranscriptMessages } from './session-chat-image-transcript-markers';
+import { SessionChatActivityRow } from './session-chat-activity-row';
+import { isSessionChatTerminalToolMessage, sessionChatTerminalToolActivity } from './session-chat-terminal-status';
 import { Bubble, BubbleContent } from '../../components/ui/bubble';
 import { Marker, MarkerContent, MarkerIcon } from '../../components/ui/marker';
 import { Message, MessageContent, MessageFooter } from '../../components/ui/message';
@@ -103,6 +105,17 @@ import { countSessionChatToolCalls, summarizeSessionChatToolRun } from './sessio
 
 const LOAD_EARLIER_SCROLL_TOP_PX = 320;
 const AUTO_SCROLL_EDGE_THRESHOLD_PX = 10;
+/*
+CDXC:SessionChat 2026-09-04 WHY:
+The scroll-to-bottom button used to show whenever the scroller's own state
+said the end was out of reach, which it briefly is every time a row grows at
+the bottom (the pending tool row appearing, its label wrapping to a second
+line) before bottom-follow pins the viewport again. The reader never left the
+end, so the button appeared for nothing. The viewport now carries whether the
+LAST reader scroll ended within the follow threshold, and the button is hidden
+while it did; it shows only after the reader has actually scrolled away.
+*/
+const FOLLOW_BOTTOM_ATTRIBUTE = 'data-ghostex-follow-bottom';
 const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
 /** Terminal-pane parity: the conversation scrollbar fades out this long after
  * the last scroll (chat.css keys on the data-user-scrolling attribute). */
@@ -409,23 +422,31 @@ function StatusRows({ statuses }: { statuses: readonly SessionChatStatusRow[] })
  * can carry lists, tables, and code just like an answer, and the old regex
  * strip flattened all of it into one gapless run of lines.
  *
- * `plainReasoningTeaser` still strips, but only for the ONE line shown on the
- * collapsed trigger: markdown cannot render inside a <button> (its links and
- * the code block's copy control are interactive) and a teaser wants no block
- * structure anyway.
+ * `plainReasoningText` still strips, but only for the heading on the
+ * disclosure trigger: markdown cannot render inside a <button> (its links and
+ * the code block's copy control are interactive). It keeps line structure so
+ * the caller can rebuild paragraphs from it.
  */
-function plainReasoningTeaser(markdown: string): string {
-  const text = markdown
-    .replace(/```(?:[^\n]*)\n?([\s\S]*?)```/g, '$1')
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s+/gm, '')
-    .replace(/(?:\*\*|__|\*|_|~~)/g, '')
-    .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, '$1')
-    .trim();
+function plainReasoningText(markdown: string): string {
   return (
-    text
+    markdown
+      .replace(/```(?:[^\n]*)\n?([\s\S]*?)```/g, '$1')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/^\s{0,3}(?:#{1,6}|>|[-+*]|\d+[.)])\s+/gm, '')
+      // Underscores drop only where they mark emphasis; the ones inside
+      // snake_case identifiers are part of the word and stay.
+      .replace(/(?:\*\*|\*|~~|(?<![A-Za-z0-9])_+|_+(?![A-Za-z0-9]))/g, '')
+      .replace(/\\([\\`*_[\]{}()#+\-.!>])/g, '$1')
+      .trim()
+  );
+}
+
+/** The first non-empty line of the stripped reasoning, for a one-line label. */
+function plainReasoningTeaser(markdown: string): string {
+  return (
+    plainReasoningText(markdown)
       .split(/\n+/)
       .map((line) => line.trim())
       .find(Boolean) ?? ''
@@ -433,49 +454,41 @@ function plainReasoningTeaser(markdown: string): string {
 }
 
 /**
- * A first line that is a list item, a table row, or a fence opener means
- * something to the markdown renderer that plain text on a heading cannot carry,
- * so it stays in the body.
+ * A list item, a table row, a blockquote, or a fence opener means something to
+ * the markdown renderer that plain text on the trigger cannot carry, so that
+ * line and everything after it stay in the body.
  */
 const NON_HOISTABLE_REASONING_LINE = /^\s{0,3}(?:[-+*]\s|\d+[.)]\s|>|\||```|~~~)/;
 
 /**
- * The disclosure heading carries the reasoning's OWN opening line, never the
- * word "Thinking". Verbose mode opens every reasoning turn by default, so the
- * static label produced a column of identical "Thinking" rows that said nothing
+ * The disclosure heading carries the reasoning's OWN text, never the word
+ * "Thinking". Verbose mode opens every reasoning turn by default, so a static
+ * label produced a column of identical "Thinking" rows that said nothing
  * while the sentence under each of them said everything.
  *
- * The heading therefore OWNS that line and the body renders only what follows
- * it, so it is never printed twice — and the shape verbose mode actually
- * produces (a one-line thought in front of a tool call) costs exactly one row
- * with no body at all.
- *
- * Only a first line that is a paragraph of its own is hoisted: it is the whole
- * markdown, or a blank line ends it. Anything else — a hard-wrapped paragraph
- * whose sentence continues on the next line, a list, a fenced block — would be
- * cut mid-thought, so the body keeps all of it and the heading falls back to
- * the teaser.
+ * CDXC:SessionChat 2026-09-04 DECISION:
+ * User: a reasoning row with tool calls under it must "always show all of the text wrapped"; it used to hoist only the first line and clamp it to one row with an ellipsis, so the reader had to expand the row to finish the sentence.
+ * The heading therefore owns every leading line that plain text can carry (paragraphs, headings, emphasis, inline code, links), and the body renders only what follows the first line that needs the markdown renderer, so nothing is printed twice and the chevron folds the tool calls rather than the thought.
+ * Paragraphs stay separated by one blank line and hard-wrapped lines rejoin with a space, so the heading reads the way markdown would have set it.
  */
 function splitReasoningHeadline(markdown: string): {
   headline: string;
   body: string;
 } {
   const lines = markdown.split(/\r?\n/);
-  const first = lines.findIndex((line) => line.trim().length > 0);
-  const hoistable =
-    first >= 0 &&
-    (lines[first + 1] ?? '').trim().length === 0 &&
-    !NON_HOISTABLE_REASONING_LINE.test(lines[first] ?? '');
-  const headline = hoistable ? plainReasoningTeaser(lines[first] ?? '') : '';
+  const firstBlock = lines.findIndex((line) => NON_HOISTABLE_REASONING_LINE.test(line));
+  const split = firstBlock < 0 ? lines.length : firstBlock;
+  const headline = plainReasoningText(lines.slice(0, split).join('\n'))
+    .split(/\n[ \t]*\n+/)
+    .map((paragraph) => paragraph.replace(/\s*\n\s*/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n\n');
   if (headline.length === 0) {
     return { headline: plainReasoningTeaser(markdown), body: markdown };
   }
   return {
     headline,
-    body: lines
-      .slice(first + 1)
-      .join('\n')
-      .trim(),
+    body: lines.slice(split).join('\n').trim(),
   };
 }
 
@@ -597,11 +610,11 @@ function ReasoningRow({
     </SessionChatScrollCap>
   );
 
-  // With tools, the caret owns BOTH the reasoning body and the tool rows: a
-  // long reasoning turn collapses to its first line instead of pushing the
-  // answer it belongs to off the screen. Verbose mode still opens it by
-  // default, so nothing is hidden from anyone who wants it. Answered question
-  // cards escape the collapse — they are conversation, not work.
+  // With tools, the caret owns the tool rows and any block-structured tail of
+  // the reasoning; the prose itself stays on the trigger in full. Verbose mode
+  // still opens it by default, so nothing is hidden from anyone who wants it.
+  // Answered question cards escape the collapse — they are conversation, not
+  // work.
   if (tools.length > 0) {
     const { headline, body: detail } = splitReasoningHeadline(markdown);
     const exchanges = questionPairsAsRows ? [] : questionExchangesFromTools(tools);
@@ -631,7 +644,7 @@ function ReasoningRow({
               />
             </span>
             <span className='ghostex-chat-thinking-text'>
-              {/* The reasoning's first line, open or collapsed: expanding a turn
+              {/* The reasoning's own prose, open or collapsed: expanding a turn
                 reveals what follows it, it does not relabel it. */}
               <span data-ghostex-thinking-text>{headline}</span>
             </span>
@@ -745,6 +758,12 @@ function MessageRow({
   // No ghost bubbles: skip entirely when there is nothing to show.
   if (markdown.length === 0 && images.length === 0 && tools.length === 0) {
     return null;
+  }
+
+  // The pending tool row: the same card the working strip draws for other
+  // activity kinds, placed as the transcript's last row instead.
+  if (isSessionChatTerminalToolMessage(message)) {
+    return <SessionChatActivityRow activity={sessionChatTerminalToolActivity(message)} className='my-1' />;
   }
 
   const suppressedTurn = sessionChatSuppressedTurnPresentation(message);
@@ -1345,6 +1364,7 @@ export function SessionChatMessageList({
       }
     });
     observer.observe(content);
+    viewportRef.current?.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'true');
     return () => observer.disconnect();
   }, []);
 
@@ -1380,6 +1400,7 @@ export function SessionChatMessageList({
       const viewport = event.currentTarget;
       shouldFollowBottomRef.current =
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= AUTO_SCROLL_EDGE_THRESHOLD_PX;
+      viewport.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, shouldFollowBottomRef.current ? 'true' : 'false');
       viewport.setAttribute('data-user-scrolling', 'true');
       if (scrollbarFadeTimeoutRef.current !== undefined) {
         window.clearTimeout(scrollbarFadeTimeoutRef.current);
