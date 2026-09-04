@@ -21,7 +21,9 @@ use crate::server::{
 use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
 use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_chat_options::schedule_session_chat_option_redetect;
-use crate::session_chat_queue_runtime::send_session_chat_message_internal;
+use crate::session_chat_queue_runtime::{
+    send_session_chat_message_internal, SessionChatMessageSource,
+};
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
 use serde_json::{json, Map, Value};
@@ -2519,7 +2521,7 @@ pub(crate) async fn handle_send_session_chat_message_http(
         &target.session_id,
         &text,
         &image_paths,
-        "chat",
+        SessionChatMessageSource::Composer,
     )
     .await
     {

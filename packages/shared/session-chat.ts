@@ -421,7 +421,7 @@ export interface SessionChatTerminalNoticeChoice {
 export interface SessionChatTerminalNotice {
   /**
    * Open set (`loginExpired`, `trustPrompt`, `permissionsWarning`,
-   * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`,
+   * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`, `agentError`,
    * `queuedInput`, `deliveryFailed`, `resumePrompt`, `switchConfirmPrompt`,
    * `sessionPausedPrompt`, `permissionPrompt`, `codexInputBlocked`, `cursorInputBlocked`, `grokInputBlocked`,
    * `hermesInputBlocked`, `ompInputBlocked`, `piInputBlocked`). Clients MUST

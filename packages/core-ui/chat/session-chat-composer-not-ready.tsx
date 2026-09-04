@@ -29,7 +29,7 @@ import { cn } from '@/packages/components/utils';
 import { Button } from '../../components/ui/button';
 import { SessionChatNoticeCard } from './session-chat-notice-card';
 
-const NOT_READY_HEADLINE = "The agent's input box is not ready yet. Your draft was restored.";
+const NOT_READY_HEADLINE = 'Message not sent. Your draft was restored.';
 
 export function SessionChatComposerNotReadyNotice({
   onOpenTerminal,

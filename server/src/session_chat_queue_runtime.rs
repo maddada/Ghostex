@@ -22,9 +22,9 @@ rule and the drain rate:
   - ONE prompt per idle window. Delivering the head makes the agent work again,
     so the clock restarts from zero after every attempt and row #2 waits for the
     next stop. This is never a "drain the whole queue" loop.
-  - An INPUT-BLOCKING terminal notice is not a delivery opportunity: the head
+  - An input-blocking notice or unresolved quota, authentication, or agent error is not a delivery opportunity: the head
     row is marked `failed` with the notice title and the drain stops until the
-    user retries or deletes it. The text is never lost. "Input-blocking" is
+    user retries or deletes it. The text is never lost. Queue eligibility uses
     `session_chat_notice.rs`'s own predicate, NOT `severity == error`: a trust
     dialog or a first-run setup screen is only catalogued `Warning`/`Info` and
     would still eat a prompt as the ANSWER to itself.
@@ -313,7 +313,7 @@ impl SessionChatQueueRuntime {
             prompt sent meanwhile survives.
             */
             if let Some(notice) = (self.notice_reader)(&project_id, &session_id) {
-                if notice.blocks_input() {
+                if notice.blocks_queued_delivery() {
                     blocked.push((
                         project_id,
                         session_id,
@@ -568,6 +568,13 @@ fn runtime_text(session: &Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SessionChatMessageSource {
+    Composer,
+    AutomaticQueue,
+    ManualQueue,
+}
+
 /*
 CDXC:SessionChat 2026-08-21:
 THE internal chat-message send. `/api/sendSessionChatMessage` is one caller;
@@ -579,18 +586,13 @@ the option re-detect — so a queued prompt is indistinguishable from one the us
 typed and can never interleave with a Delayed Send.
 Returns the number of text bytes handed to zmx.
 */
-///
-/// `prompt_source` is the analytics attribution for this send: `chat` when the
-/// user typed it into the composer, `queue` when the prompt queue delivered it.
-/// The two are indistinguishable from inside this function (that is the whole
-/// point of the queue), so the caller is the only place that knows.
 pub(crate) async fn send_session_chat_message_internal(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     text: &str,
     image_paths: &[String],
-    prompt_source: &'static str,
+    source: SessionChatMessageSource,
 ) -> std::result::Result<usize, DomainStateError> {
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
@@ -652,6 +654,21 @@ pub(crate) async fn send_session_chat_message_internal(
             code: "invalidState",
             message: format!("{}. Answer it in chat before sending.", blocking.title),
         });
+    }
+    // Recheck automatic delivery against the fresh capture: the scheduler's
+    // cached notice may predate a quota, authentication, or agent error.
+    // Explicit Send now is a retry.
+    if source == SessionChatMessageSource::AutomaticQueue {
+        if let Some(notice) = detection
+            .notice
+            .as_ref()
+            .filter(|notice| notice.blocks_queued_delivery())
+        {
+            return Err(DomainStateError {
+                code: "invalidState",
+                message: format!("{}. The queued message was not sent.", notice.title),
+            });
+        }
     }
     /*
     CDXC:SessionChat 2026-08-26:
@@ -809,7 +826,15 @@ pub(crate) async fn send_session_chat_message_internal(
     are all that leave; the prompt text is not in scope for the emitter and
     cannot be.
     */
-    crate::telemetry::prompt_sent(&target.session, prompt_source);
+    crate::telemetry::prompt_sent(
+        &target.session,
+        match source {
+            SessionChatMessageSource::Composer => "chat",
+            SessionChatMessageSource::AutomaticQueue | SessionChatMessageSource::ManualQueue => {
+                "queue"
+            }
+        },
+    );
     /*
     An option command changes what the statusline reports: read it back. It is
     also NOT a user prompt — Ghostex itself typed it on the user's behalf when
@@ -931,7 +956,12 @@ pub(crate) async fn handle_send_session_chat_queued_prompt_http(
         Ok(target) => target,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    let sender = session_chat_queue_sender(state, &project_id, &session_id);
+    let sender = session_chat_queue_sender(
+        state,
+        &project_id,
+        &session_id,
+        SessionChatMessageSource::ManualQueue,
+    );
     match crate::session_chat_queue::deliver_session_chat_queued_prompt(
         &state.paths,
         state.metadata.server_id.as_str(),
@@ -1117,6 +1147,7 @@ pub(crate) fn session_chat_queue_sender(
     state: &Arc<AppState>,
     project_id: &str,
     session_id: &str,
+    source: SessionChatMessageSource,
 ) -> crate::session_chat_queue::SessionChatQueueSender {
     let state = state.clone();
     let project_id = project_id.to_string();
@@ -1126,17 +1157,10 @@ pub(crate) fn session_chat_queue_sender(
         let project_id = project_id.clone();
         let session_id = session_id.clone();
         Box::pin(async move {
-            send_session_chat_message_internal(
-                &state,
-                &project_id,
-                &session_id,
-                &text,
-                &[],
-                "queue",
-            )
-            .await
-            .map(|_| ())
-            .map_err(|error| error.message)
+            send_session_chat_message_internal(&state, &project_id, &session_id, &text, &[], source)
+                .await
+                .map(|_| ())
+                .map_err(|error| error.message)
         })
     })
 }
@@ -1148,7 +1172,12 @@ pub(crate) fn session_chat_queue_sender_factory(
 ) -> crate::session_chat_queue::SessionChatQueueSenderFactory {
     let state = state.clone();
     Arc::new(move |project_id: &str, session_id: &str| {
-        session_chat_queue_sender(&state, project_id, session_id)
+        session_chat_queue_sender(
+            &state,
+            project_id,
+            session_id,
+            SessionChatMessageSource::AutomaticQueue,
+        )
     })
 }
 

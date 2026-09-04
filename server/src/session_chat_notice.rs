@@ -66,6 +66,8 @@ pub const SESSION_CHAT_NOTICE_STREAM_ERROR: &str = "streamError";
 pub const SESSION_CHAT_NOTICE_UPDATE_PROMPT: &str = "updatePrompt";
 /// The agent process appears to have exited back to a shell.
 pub const SESSION_CHAT_NOTICE_AGENT_EXITED: &str = "agentExited";
+/// The agent reported an error; this alone does not establish that it exited.
+pub const SESSION_CHAT_NOTICE_AGENT_ERROR: &str = "agentError";
 /// Input accepted but held client-side until the running turn ends.
 pub const SESSION_CHAT_NOTICE_QUEUED_INPUT: &str = "queuedInput";
 /*
@@ -260,6 +262,8 @@ pub struct SessionChatTerminalNotice {
     /// Answerable picker rows, in screen order. Empty for every notice that
     /// only describes a state.
     pub choices: Vec<SessionChatTerminalNoticeChoice>,
+    /// Server-side delivery policy for this particular detected state.
+    blocks_input: bool,
 }
 
 impl SessionChatTerminalNotice {
@@ -279,6 +283,7 @@ impl SessionChatTerminalNotice {
             detected_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             actions: Vec::new(),
             choices: Vec::new(),
+            blocks_input: session_chat_notice_kind_blocks_input(kind),
         }
     }
 
@@ -303,6 +308,11 @@ impl SessionChatTerminalNotice {
         self
     }
 
+    fn with_input_blocking(mut self, blocks_input: bool) -> Self {
+        self.blocks_input = blocks_input;
+        self
+    }
+
     /// True when this notice offers rows the chat surface can answer itself.
     pub fn is_answerable(&self) -> bool {
         !self.choices.is_empty()
@@ -319,6 +329,7 @@ impl SessionChatTerminalNotice {
                 && self.title == other.title
                 && self.detail == other.detail
                 && self.source == other.source
+                && self.blocks_input == other.blocks_input
                 && self.actions == other.actions
                 // Labels only: the highlight moves whenever the user arrows
                 // around in the terminal, and re-minting `detectedAt` for that
@@ -348,11 +359,22 @@ impl SessionChatTerminalNotice {
         }
     }
 
-    /// True when a message delivered while this notice is showing would not
-    /// reach the model — see `session_chat_notice_kind_blocks_input`. This is
-    /// NOT `severity == Error`; the two axes disagree in both directions.
+    /// CDXC:AgentScreenDetection 2026-09-05 DECISION:
+    /// User: Claude and Codex quota and login-error banners, and Claude's generic error banner, must show clear errors without blocking a usable composer.
+    /// Actual dialogs and exited agents still block; leave Claude's automatic-continue wait-screen policy unchanged.
+    /// This extends the earlier Claude quota-warning decision; automatic delivery separately holds on unresolved quota, authentication, and agent-error evidence so it cannot consume queued prompts in failed attempts.
     pub fn blocks_input(&self) -> bool {
-        session_chat_notice_kind_blocks_input(&self.kind)
+        self.blocks_input
+    }
+
+    pub fn blocks_queued_delivery(&self) -> bool {
+        self.blocks_input()
+            || matches!(
+                self.kind.as_str(),
+                SESSION_CHAT_NOTICE_USAGE_LIMIT
+                    | SESSION_CHAT_NOTICE_LOGIN_EXPIRED
+                    | SESSION_CHAT_NOTICE_AGENT_ERROR
+            )
     }
 
     /// Stable identity for the long-poll fingerprint: kind plus the human text.
@@ -530,6 +552,29 @@ impl NoticeScreen {
             .iter()
             .skip(notice_index + 1)
             .any(|line| is_codex_composer_line(line))
+    }
+
+    /// CDXC:AgentScreenDetection 2026-09-05 WHY:
+    /// A successful `/model` command can leave the previous model's quota error within the banner window indefinitely.
+    /// Its confirmation followed by a normal composer supersedes that evidence, but says nothing about the new model's quota; any later limit still counts.
+    fn has_claude_model_switch_after(&self, signature: &NoticeSignature) -> bool {
+        let Some(command_index) = self.folded.windows(2).rposition(|pair| {
+            pair[0]
+                .trim_start()
+                .strip_prefix("❯ /model")
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
+                && pair[1].trim_start().starts_with("⎿ Set model to ")
+        }) else {
+            return false;
+        };
+        let after_switch = &self.folded[command_index + 1..];
+        !matches_parts(&after_switch.join(" "), signature.parts)
+            && crate::session_chat_composer::detect_session_chat_composer_ready(
+                Some("claude"),
+                &after_switch.join("\n"),
+            )
+            .state
+                == crate::session_chat_composer::SessionChatComposerState::Ready
     }
 
     /// The newest displayed line carrying `needle`, capped. Absent when the
@@ -786,9 +831,9 @@ const CODEX_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Codex login expired",
-        detail: "Codex needs a fresh login on this machine. Open the terminal and run /login. The sign-in flow is interactive, so it cannot be answered from chat.",
-        blocks_input: true,
+        title: "Codex reported a sign-in error",
+        detail: "Codex could not authenticate a previous request. Open the terminal and run /login to sign in again, or retry if you have already fixed it. Automatic queued delivery is paused while this error applies.",
+        blocks_input: false,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -808,6 +853,17 @@ const CODEX_RULES: &[NoticeRule] = &[
                 ],
                 corroborators: &[],
             },
+        ],
+        actions: &[OPEN_TERMINAL],
+        quote_evidence: true,
+    },
+    NoticeRule {
+        kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+        severity: SessionChatTerminalNoticeSeverity::Error,
+        title: "Codex is waiting for sign-in",
+        detail: "Complete or cancel the sign-in dialog in the terminal before sending a message.",
+        blocks_input: true,
+        signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Dialog,
                 parts: &[NoticePart::Text("Sign in with ChatGPT to use Codex")],
@@ -884,8 +940,8 @@ const CODEX_RULES: &[NoticeRule] = &[
         kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Codex reported a usage limit",
-        detail: "Codex says it is out of quota, so new turns will fail until it resets.",
-        blocks_input: true,
+        detail: "Codex reported a usage, spending, or credit limit on a previous attempt. Check the limit details in the terminal. You can retry after addressing it; automatic queued delivery is paused while this warning applies.",
+        blocks_input: false,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -916,7 +972,7 @@ const CODEX_RULES: &[NoticeRule] = &[
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Codex hit a network or server error",
         detail: "Codex reported a transport failure on screen. The turn may need to be retried.",
-        // The only `false` in the catalog. The composer still accepts input and
+        // The composer still accepts input and
         // codex retries the transport itself, so a message sent now DOES reach
         // the model once the connection comes back. Holding here would stall a
         // queue on a state that heals without the user, which is the failure
@@ -1019,9 +1075,9 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
         severity: SessionChatTerminalNoticeSeverity::Error,
-        title: "Claude Code login expired",
-        detail: "Claude Code needs a fresh login on this machine. Open the terminal and run /login.",
-        blocks_input: true,
+        title: "Claude Code reported a sign-in error",
+        detail: "Claude Code could not authenticate a previous request. Open the terminal and run /login, or correct the credentials for your configured provider. You can retry if you have already fixed it; automatic queued delivery is paused while this error applies.",
+        blocks_input: false,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -1055,6 +1111,17 @@ const CLAUDE_RULES: &[NoticeRule] = &[
                 parts: &[NoticePart::Text("API Error: 401")],
                 corroborators: &[],
             },
+        ],
+        actions: &[OPEN_TERMINAL],
+        quote_evidence: true,
+    },
+    NoticeRule {
+        kind: SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
+        severity: SessionChatTerminalNoticeSeverity::Error,
+        title: "Claude Code is waiting for sign-in",
+        detail: "Complete or cancel the sign-in flow in the terminal before sending a message. If macOS asks you to unlock the keychain, finish that step there.",
+        blocks_input: true,
+        signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Dialog,
                 parts: &[NoticePart::Text("Select login method:")],
@@ -1159,8 +1226,26 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         kind: SESSION_CHAT_NOTICE_AGENT_EXITED,
         severity: SessionChatTerminalNoticeSeverity::Error,
         title: "Claude Code stopped with an error",
-        detail: "Claude Code printed a fatal error in this terminal. Check it there before sending more messages.",
+        detail: "Claude Code reported an error and this terminal is back at a shell prompt. Restart or resume Claude Code in the terminal before sending a message.",
         blocks_input: true,
+        signatures: &[NoticeSignature {
+            scope: NoticeScope::Exit,
+            parts: &[
+                NoticePart::Text("Sorry, Claude"),
+                NoticePart::Gap(6),
+                NoticePart::Text("encountered an error"),
+            ],
+            corroborators: &[],
+        }],
+        actions: &[OPEN_TERMINAL],
+        quote_evidence: true,
+    },
+    NoticeRule {
+        kind: SESSION_CHAT_NOTICE_AGENT_ERROR,
+        severity: SessionChatTerminalNoticeSeverity::Error,
+        title: "Claude Code reported an error",
+        detail: "Claude Code reported an error on a previous attempt. Check the terminal details below and retry when ready. Automatic queued delivery is paused while this error applies.",
+        blocks_input: false,
         signatures: &[NoticeSignature {
             scope: NoticeScope::Banner,
             parts: &[
@@ -1202,8 +1287,8 @@ const CLAUDE_RULES: &[NoticeRule] = &[
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
-        title: "Claude Code hit a usage limit",
-        detail: "Claude Code reported a usage limit on screen.",
+        title: "Claude Code is waiting on a usage limit",
+        detail: "Claude Code is showing its usage-limit wait screen. Handle the wait in the terminal before sending.",
         blocks_input: true,
         signatures: &[
             NoticeSignature {
@@ -1224,6 +1309,17 @@ const CLAUDE_RULES: &[NoticeRule] = &[
                 ],
                 corroborators: &[],
             },
+        ],
+        actions: &[OPEN_TERMINAL],
+        quote_evidence: true,
+    },
+    NoticeRule {
+        kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
+        severity: SessionChatTerminalNoticeSeverity::Warning,
+        title: "Claude Code reported a usage limit",
+        detail: "Claude Code reported a usage limit on a previous attempt. You can send again or change models; automatic queued delivery is paused while this warning applies.",
+        blocks_input: false,
+        signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
                 parts: &[
@@ -1298,10 +1394,11 @@ prompt queue's scheduler is the first — must gate on this, never on severity:
 a `Warning` trust dialog eats what it is sent, while an `Error` stream banner
 does not.
 
-Kind-level rather than rule-level because the wire notice only carries its
-kind, and because two agents' rules for the same kind describe the same state.
-When they ever disagree, ANY blocking rule wins: holding costs a visible failed
-row the user can retry, delivering into a dialog costs the turn.
+This is the default for notices constructed without a catalog match.
+Catalog matches carry their own rule's input policy instead: the same kind can
+describe an advisory error or a screen waiting for sign-in or a keypress.
+Automatic queue delivery uses `blocks_queued_delivery`, which also holds on
+unresolved quota, authentication, and agent errors.
 
 The two watchdog-only kinds have no catalog rule and are answered here:
   - `deliveryFailed` — the watchdog could not prove the LAST message arrived (or
@@ -1400,6 +1497,7 @@ fn notice_from_rule(
         SessionChatTerminalNoticeSource::Screen,
         rule.title,
     )
+    .with_input_blocking(rule.blocks_input)
     .with_detail(detail)
     .with_screen_tail(screen.screen_tail())
     .with_actions(
@@ -1615,9 +1713,16 @@ pub fn classify_session_chat_terminal_notice(
             return Some(notice_from_picker(&screen, picker));
         }
     }
+    let mut advisory_notice = None;
     for rule in notice_rules(agent) {
         if let Some(signature) = rule.signatures.iter().find(|signature| {
             if !signature_matches(&screen, signature) {
+                return false;
+            }
+            if agent == SessionChatOptionAgent::Claude
+                && rule.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT
+                && screen.has_claude_model_switch_after(signature)
+            {
                 return false;
             }
             if agent != SessionChatOptionAgent::Codex
@@ -1628,7 +1733,13 @@ pub fn classify_session_chat_terminal_notice(
             !signature_needle(signature)
                 .is_some_and(|needle| screen.has_codex_composer_after(needle))
         }) {
-            return Some(notice_from_rule(&screen, rule, signature));
+            let notice = notice_from_rule(&screen, rule, signature);
+            if !notice.blocks_input() {
+                // An inline error must not conceal a current dialog or picker.
+                advisory_notice.get_or_insert(notice);
+            } else {
+                return Some(notice);
+            }
         }
     }
     if agent == SessionChatOptionAgent::Codex {
@@ -1673,7 +1784,7 @@ pub fn classify_session_chat_terminal_notice(
             return Some(notice_from_pi_blocking_screen(&screen, blocking));
         }
     }
-    None
+    advisory_notice
 }
 
 /*
