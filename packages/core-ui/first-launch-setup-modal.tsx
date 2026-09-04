@@ -71,6 +71,7 @@ import {
 import { DEFAULT_SIDEBAR_AGENTS } from '../shared/sidebar-agents';
 import { GHOSTEX_ANDROID_APK_URL, GHOSTEX_DISCORD_URL } from '../shared/sidebar-commands';
 import { AgentHookBenefits } from './agent-hook-benefits';
+import { AgentApprovalPolicyControl } from './agent-approval-policy-control';
 import { openAppModal } from './app-modal-host-bridge';
 import { getBrandAgentLogoStyle } from './agent-logos';
 import type { WebviewApi } from './webview-api';
@@ -228,9 +229,9 @@ const FIRST_LAUNCH_SETUP_PAGES: readonly FirstLaunchSetupPage[] = [
 const FIRST_LAUNCH_STEP_LABELS: Partial<Record<FirstLaunchSetupPage, string>> = {
   agents: 'Agents',
   extensions: 'Extensions',
-  hooks: 'Install required hooks',
+  hooks: 'Connect agent',
   project: 'Get started',
-  skills: 'Skills',
+  skills: 'Capabilities',
   welcome: 'Welcome',
 };
 
@@ -254,7 +255,7 @@ type FirstLaunchUseCase = { number: string; text: string; title: string; wide?: 
 const FIRST_LAUNCH_USE_CASES: readonly FirstLaunchUseCase[] = [
   {
     number: '01',
-    text: 'Claude Code on a refactor, Codex on tests, OpenCode on docs. Each in its own session, not a pile of terminal tabs.',
+    text: 'Claude Code on a refactor, Codex on tests, Cursor on docs. Each in its own session, not a pile of terminal tabs.',
     title: 'Run several agents at once',
   },
   {
@@ -309,7 +310,7 @@ const FIRST_LAUNCH_PLUGIN_ROWS: readonly {
   title: string;
 }[] = [
   {
-    description: 'Built-in Chromium panes so you can preview the app your agent is building.',
+    description: 'Preview the app your agent is building.',
     icon: IconWorld,
     key: 'browser',
     recommended: true,
@@ -369,20 +370,55 @@ const FIRST_LAUNCH_AGENT_DISPLAY_NAMES: Readonly<Record<string, string>> = {
 const FIRST_LAUNCH_AGENT_INSTALL_GUIDE_URLS: Readonly<Record<string, string>> = {
   claude: 'https://docs.anthropic.com/en/docs/claude-code/setup',
   codex: 'https://developers.openai.com/codex/cli',
-  copilot: 'https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli',
-  gemini: 'https://github.com/google-gemini/gemini-cli#installation',
+  cursor: 'https://cursor.com/docs/cli/installation',
 };
 
+/**
+ * CDXC:Onboarding 2026-09-05 DECISION:
+ * User: setup focuses on Codex, Claude, and Cursor; other agents appear only when installed.
+ */
 const FIRST_LAUNCH_RECOMMENDED_INSTALL_AGENTS: readonly { agentId: string; subtitle: string }[] = [
   { agentId: 'claude', subtitle: "Anthropic's coding agent. Uses your Claude subscription." },
   { agentId: 'codex', subtitle: "OpenAI's coding agent. Uses your ChatGPT subscription." },
+  { agentId: 'cursor', subtitle: 'Cursor’s command-line agent. Sign in with your Cursor account.' },
 ];
 
 const FIRST_LAUNCH_RECOMMENDED_SKILL_IDS: readonly BundledGhostexAgentSkillId[] =
   VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === 'recommended').map((skill) => skill.id);
 
-const FIRST_LAUNCH_CHAT_SUPPORT_NOTE = 'Chat is available for Claude, Codex, Pi, OMP, and Grok for now.';
-const FIRST_LAUNCH_CHAT_SUPPORT_FOLLOW_UP = 'You can flip any session between chat and terminal with one click.';
+/**
+ * CDXC:Onboarding 2026-09-05 DECISION:
+ * User: present skills as capabilities such as Control Ghostex, Use your browser, and Use your computer, and explain dependencies only when needed.
+ */
+const FIRST_LAUNCH_SKILL_CAPABILITIES: Record<BundledGhostexAgentSkillId, { title: string; description: string }> = {
+  cli: { title: 'Control Ghostex', description: 'Let agents manage sessions, projects, and tasks for you.' },
+  browserUse: {
+    title: 'Use your browser',
+    description: 'Open pages, click, and fill forms in your supported browser.',
+  },
+  embeddedBrowserUse: {
+    title: 'Use the Ghostex browser',
+    description: 'Check pages, take screenshots, and interact with the browser inside Ghostex.',
+  },
+  computerUse: { title: 'Use your computer', description: 'Let agents see the screen, click, and type in your apps.' },
+  fable56Orchestration: {
+    title: 'Coordinate multiple agents',
+    description: 'Let Claude delegate work to Codex agents and review their results.',
+  },
+  manageBeads: {
+    title: 'Manage your project board',
+    description: 'Let agents create tasks and keep their progress up to date.',
+  },
+  generateTitle: { title: 'Name your sessions', description: 'Give sessions short, useful names automatically.' },
+  moveCodexSession: {
+    title: 'Continue Codex in another folder',
+    description: 'Carry a Codex conversation into a different project folder.',
+  },
+};
+
+const FIRST_LAUNCH_CHAT_SUPPORT_NOTE = 'Chat is available for supported agents. Other agents open in the terminal.';
+const FIRST_LAUNCH_CHAT_SUPPORT_FOLLOW_UP =
+  'For agents that support Chat, switch between chat and terminal with one click.';
 
 const FIRST_LAUNCH_GUIDE_PAGES: readonly FirstLaunchGuidePage[] = [
   {
@@ -846,6 +882,7 @@ export function FirstLaunchSetupModal({
     () => new Set(FIRST_LAUNCH_RECOMMENDED_SKILL_IDS)
   );
   const [selectedHookAgentIds, setSelectedHookAgentIds] = useState<ReadonlySet<string>>();
+  const [connectingAgentIds, setConnectingAgentIds] = useState<readonly string[]>([]);
   const [backgroundAgentChoice, setBackgroundAgentChoice] = useState<SessionTitleGenerationAgent>();
   const [finishError, setFinishError] = useState<string>();
   const [isFinishing, setIsFinishing] = useState(false);
@@ -860,7 +897,7 @@ export function FirstLaunchSetupModal({
     titleAndCommitAgents.find((agent) => agent.agentId === settings.defaultPromptAgentId)?.agentId ??
     titleAndCommitAgents.find((agent) => agent.agentId === settings.sessionTitleGenerationAgent)?.agentId ??
     titleAndCommitAgents[0]?.agentId;
-  const firstProjectSessionAgentId = installedCliAgents[0]?.agentId ?? 'terminal';
+  const firstProjectSessionAgentId = backgroundAgentId ?? installedCliAgents[0]?.agentId ?? 'terminal';
 
   useEffect(() => {
     if (!isOpen || agentHookStatus || agentHookStatusLoading) {
@@ -874,6 +911,7 @@ export function FirstLaunchSetupModal({
       setRequestedPage(initialPage);
       setSelectedSkillIds(new Set(FIRST_LAUNCH_RECOMMENDED_SKILL_IDS));
       setSelectedHookAgentIds(undefined);
+      setConnectingAgentIds([]);
       setBackgroundAgentChoice(undefined);
       setFinishError(undefined);
       setIsFinishing(false);
@@ -951,7 +989,14 @@ export function FirstLaunchSetupModal({
   const selectedHookInstallAgentIds = hookInstallCandidates
     .filter((agent) => effectiveSelectedHookAgentIds.has(agent.agentId))
     .map((agent) => agent.agentId);
-  const allHooksInstalled = hookInstallCandidates.length === 0;
+  const allHooksInstalled = installedCliAgents.length > 0 && hookInstallCandidates.length === 0;
+  const selectedAgentsConnected =
+    connectingAgentIds.length > 0 &&
+    connectingAgentIds.every((agentId) => {
+      const status = hookStatusByAgentId.get(agentId)?.status;
+      return status === 'installed' || status === 'notRequired';
+    });
+  const canContinueFromHooks = allHooksInstalled || selectedAgentsConnected;
   const installableSkillSelection = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter(
     (skill) => selectedSkillIds.has(skill.id) && !isFirstLaunchSkillInstalled(skill.id, ghostexCliStatus)
   );
@@ -968,12 +1013,12 @@ export function FirstLaunchSetupModal({
     moveCodexSession: onInstallMoveCodexSessionSkill,
   };
 
-  const installSelectedHooksAndContinue = () => {
+  const connectSelectedAgents = () => {
     if (!onInstallAgentHooks || selectedHookInstallAgentIds.length === 0) {
       return;
     }
+    setConnectingAgentIds(selectedHookInstallAgentIds);
     onInstallAgentHooks(selectedHookInstallAgentIds);
-    navigateToPage(nextPage);
   };
 
   const runSelectedSkillInstallsAndContinue = async (skillIds: readonly BundledGhostexAgentSkillId[]) => {
@@ -1096,9 +1141,12 @@ export function FirstLaunchSetupModal({
             <FirstLaunchAgentsPage installedCliAgents={installedCliAgents} vscode={vscode} />
           ) : activePage === 'hooks' ? (
             <FirstLaunchHooksPage
+              connectionComplete={!agentHookStatusLoading && canContinueFromHooks}
+              connecting={agentHookStatusLoading}
               hookStatusByAgentId={hookStatusByAgentId}
               installedCliAgents={installedCliAgents}
-              onToggleAgent={(agentId, selected) =>
+              onToggleAgent={(agentId, selected) => {
+                setConnectingAgentIds([]);
                 setSelectedHookAgentIds((current) => {
                   const next = new Set(current ?? hookInstallCandidates.map((candidate) => candidate.agentId));
                   if (selected) {
@@ -1107,8 +1155,8 @@ export function FirstLaunchSetupModal({
                     next.delete(agentId);
                   }
                   return next;
-                })
-              }
+                });
+              }}
               selectedAgentIds={effectiveSelectedHookAgentIds}
             />
           ) : activePage === 'skills' ? (
@@ -1131,11 +1179,13 @@ export function FirstLaunchSetupModal({
             />
           ) : activePage === 'project' ? (
             <FirstLaunchProjectPage
+              agentAcceptAllEnabled={settings.agentAcceptAllEnabled}
               attentionNotificationsEnabled={settings.showMacOSAttentionNotifications}
               backgroundAgentId={backgroundAgentId}
               completionSoundEnabled={settings.completionSound !== 'off'}
               onAddFirstProject={finishFirstLaunchSetup}
               onChangePreferredInterface={(preferredAgentInterface) => updateSettings({ preferredAgentInterface })}
+              onChangeAgentAcceptAllEnabled={(agentAcceptAllEnabled) => updateSettings({ agentAcceptAllEnabled })}
               onChangeTerminalWidthMode={(terminalViewWidthMode) => updateSettings({ terminalViewWidthMode })}
               onToggleAgentsPaneTabBar={(enabled) => updateSettings({ showAgentsPaneTabBarWhenUnsplit: enabled })}
               onSelectBackgroundAgent={(agentId) => {
@@ -1189,13 +1239,13 @@ export function FirstLaunchSetupModal({
             {activePage === 'skills'
               ? (skillInstallError ??
                 (isSettingUpCliForSkills
-                  ? 'Setting up Ghostex CLI before installing the selected skills…'
+                  ? 'Preparing the tools for your selected capabilities…'
                   : isInstallingSelectedSkills
-                    ? 'Installing the selected agent skills…'
+                    ? 'Enabling your selected capabilities…'
                     : ghostexCliStatusLoading
-                      ? 'Checking Ghostex CLI…'
+                      ? 'Checking setup…'
                       : !cliReady && installableSkillSelection.length > 0
-                        ? 'Ghostex CLI setup is required before selected skills can be installed.'
+                        ? 'Ghostex will prepare the included tools when you enable your selections.'
                         : 'You can re-run this tour anytime from the Tips panel in the title bar.'))
               : (finishError ?? 'You can re-run this tour anytime from the Tips panel in the title bar.')}
           </span>
@@ -1227,18 +1277,25 @@ export function FirstLaunchSetupModal({
               </>
             ) : activePage === 'hooks' ? (
               <>
-                <Button onClick={() => navigateToPage(nextPage)} type='button' variant='ghost'>
-                  Skip for Now
-                </Button>
+                {!canContinueFromHooks && (
+                  <Button
+                    disabled={agentHookStatusLoading}
+                    onClick={() => navigateToPage(nextPage)}
+                    type='button'
+                    variant='ghost'
+                  >
+                    Skip for Now
+                  </Button>
+                )}
                 <Button
                   disabled={
                     agentHookStatusLoading ||
-                    (!allHooksInstalled && (!onInstallAgentHooks || selectedHookInstallAgentIds.length === 0))
+                    (!canContinueFromHooks && (!onInstallAgentHooks || selectedHookInstallAgentIds.length === 0))
                   }
-                  onClick={allHooksInstalled ? () => navigateToPage(nextPage) : installSelectedHooksAndContinue}
+                  onClick={canContinueFromHooks ? () => navigateToPage(nextPage) : connectSelectedAgents}
                   type='button'
                 >
-                  {allHooksInstalled ? (
+                  {canContinueFromHooks ? (
                     <>
                       Continue
                       <IconArrowRight aria-hidden='true' data-icon='inline-end' />
@@ -1246,7 +1303,7 @@ export function FirstLaunchSetupModal({
                   ) : (
                     <>
                       <IconDownload aria-hidden='true' data-icon='inline-start' />
-                      Install Hooks
+                      {agentHookStatusLoading ? 'Connecting…' : 'Connect selected agents'}
                     </>
                   )}
                 </Button>
@@ -1262,7 +1319,7 @@ export function FirstLaunchSetupModal({
                   type='button'
                   variant='ghost'
                 >
-                  Skip, Install None
+                  Skip for now
                 </Button>
                 <Button
                   disabled={
@@ -1276,14 +1333,12 @@ export function FirstLaunchSetupModal({
                     <>
                       <IconDownload aria-hidden='true' data-icon='inline-start' />
                       {isInstallingSelectedSkills
-                        ? 'Installing Skills…'
+                        ? 'Enabling…'
                         : isSettingUpCliForSkills
-                          ? 'Setting Up CLI…'
+                          ? 'Preparing setup…'
                           : ghostexCliStatusLoading
-                            ? 'Checking Ghostex CLI…'
-                            : cliReady
-                              ? `Install Selected (${installableSkillSelection.length})`
-                              : `Set Up CLI & Install Selected (${installableSkillSelection.length})`}
+                            ? 'Checking setup…'
+                            : `Enable selected (${installableSkillSelection.length})`}
                     </>
                   ) : (
                     <>
@@ -1442,13 +1497,9 @@ function FirstLaunchAgentsPage({
   const hasAgents = installedCliAgents.length > 0;
   const installedAgentIds = new Set(installedCliAgents.map((agent) => agent.agentId));
   const notInstalledAgents = FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS.filter(
-    (agent) => !installedAgentIds.has(agent.agentId)
-  );
-  const notInstalledWithGuides = notInstalledAgents.filter(
-    (agent) => FIRST_LAUNCH_AGENT_INSTALL_GUIDE_URLS[agent.agentId] !== undefined
-  );
-  const notInstalledWithoutGuides = notInstalledAgents.filter(
-    (agent) => FIRST_LAUNCH_AGENT_INSTALL_GUIDE_URLS[agent.agentId] === undefined
+    (agent) =>
+      FIRST_LAUNCH_RECOMMENDED_INSTALL_AGENTS.some((recommended) => recommended.agentId === agent.agentId) &&
+      !installedAgentIds.has(agent.agentId)
   );
 
   return (
@@ -1485,42 +1536,37 @@ function FirstLaunchAgentsPage({
               </span>
             </div>
           ))}
-          <details className='first-launch-onb-flat-details'>
-            <summary>Add more agents ({notInstalledAgents.length} supported, not installed)</summary>
-            <div className='first-launch-onb-flat-details-body'>
-              {notInstalledWithGuides.map((agent) => (
-                <div className='first-launch-onb-row' key={agent.agentId}>
-                  <span className='first-launch-onb-row-icon'>
-                    <FirstLaunchAgentLogo agent={agent} />
-                  </span>
-                  <span className='first-launch-onb-row-main'>
-                    <strong>{getFirstLaunchAgentDisplayName(agent)}</strong>
-                  </span>
-                  <Button
-                    onClick={() =>
-                      openFirstLaunchExternalUrl(vscode, FIRST_LAUNCH_AGENT_INSTALL_GUIDE_URLS[agent.agentId] ?? '')
-                    }
-                    type='button'
-                    variant='outline'
-                  >
-                    Install Guide
-                    <IconExternalLink aria-hidden='true' data-icon='inline-end' />
-                  </Button>
-                </div>
-              ))}
-              <div className='first-launch-onb-pill-wrap'>
-                {notInstalledWithoutGuides.map((agent) => (
-                  <span className='first-launch-onb-pill' data-tone='dim' key={agent.agentId}>
-                    {agent.name}
-                  </span>
+          {notInstalledAgents.length > 0 && (
+            <details className='first-launch-onb-flat-details'>
+              <summary>Add more agents ({notInstalledAgents.length} supported, not installed)</summary>
+              <div className='first-launch-onb-flat-details-body'>
+                {notInstalledAgents.map((agent) => (
+                  <div className='first-launch-onb-row' key={agent.agentId}>
+                    <span className='first-launch-onb-row-icon'>
+                      <FirstLaunchAgentLogo agent={agent} />
+                    </span>
+                    <span className='first-launch-onb-row-main'>
+                      <strong>{getFirstLaunchAgentDisplayName(agent)}</strong>
+                    </span>
+                    <Button
+                      onClick={() =>
+                        openFirstLaunchExternalUrl(vscode, FIRST_LAUNCH_AGENT_INSTALL_GUIDE_URLS[agent.agentId] ?? '')
+                      }
+                      type='button'
+                      variant='outline'
+                    >
+                      Install Guide
+                      <IconExternalLink aria-hidden='true' data-icon='inline-end' />
+                    </Button>
+                  </div>
                 ))}
               </div>
-            </div>
-          </details>
+            </details>
+          )}
         </>
       ) : (
         <>
-          <div className='first-launch-onb-seclabel'>RECOMMENDED: INSTALL THE ONE YOU ALREADY SUBSCRIBE TO</div>
+          <div className='first-launch-onb-seclabel'>CHOOSE AN AGENT</div>
           <div className='first-launch-onb-grid2'>
             {FIRST_LAUNCH_RECOMMENDED_INSTALL_AGENTS.map(({ agentId, subtitle }) => {
               const agent = FIRST_LAUNCH_HOOK_SUPPORTED_AGENTS.find((candidate) => candidate.agentId === agentId);
@@ -1550,35 +1596,30 @@ function FirstLaunchAgentsPage({
             })}
           </div>
           <p className='first-launch-onb-hint'>
-            These agents need a paid account, so pick the one you already have a subscription for. You will see its
-            sign-in screen the first time Ghostex launches it.
+            Pick the agent you already use, or choose one to try. You will see its sign-in screen the first time Ghostex
+            launches it.
           </p>
-          <details className='first-launch-onb-flat-details'>
-            <summary>{notInstalledAgents.length - 2} other supported agents</summary>
-            <div className='first-launch-onb-flat-details-body'>
-              <div className='first-launch-onb-pill-wrap'>
-                {notInstalledAgents
-                  .filter((agent) => agent.agentId !== 'claude' && agent.agentId !== 'codex')
-                  .map((agent) => (
-                    <span className='first-launch-onb-pill' data-tone='dim' key={agent.agentId}>
-                      {agent.name}
-                    </span>
-                  ))}
-              </div>
-            </div>
-          </details>
         </>
       )}
     </section>
   );
 }
 
+/**
+ * CDXC:Onboarding 2026-09-05 DECISION:
+ * User: title this page "Connect Ghostex to your Agent" and mention hooks in the subtitle, not the title.
+ * Keep the shortened benefits above the agent list and show connection success before continuing.
+ */
 function FirstLaunchHooksPage({
+  connectionComplete,
+  connecting,
   hookStatusByAgentId,
   installedCliAgents,
   onToggleAgent,
   selectedAgentIds,
 }: {
+  connectionComplete: boolean;
+  connecting: boolean;
   hookStatusByAgentId: ReadonlyMap<string, SidebarAgentHookStatusItem>;
   installedCliAgents: readonly FirstLaunchSidebarAgent[];
   onToggleAgent: (agentId: string, selected: boolean) => void;
@@ -1591,17 +1632,16 @@ function FirstLaunchHooksPage({
   return (
     <section aria-labelledby='first-launch-connect-title' className='first-launch-onb-page'>
       <h2 className='first-launch-onb-title' id='first-launch-connect-title'>
-        Install required hooks
+        Connect Ghostex to your Agent
       </h2>
       <p className='first-launch-onb-lede'>
-        Ghostex needs these hooks to enable the following great features: live session awareness, useful notifications,
-        automatic names, Chat View, and reliable agent resume. Each hook is a small local helper that reports session
-        lifecycle metadata only to Ghostex, keeping your agents connected across sleep, reloads, and app restarts.
+        Connect your installed agents with small local helpers called hooks. They let Ghostex show agent status, notify
+        you when you’re needed, and help you pick up where you left off.
       </p>
 
       <AgentHookBenefits />
 
-      <div className='first-launch-onb-seclabel'>HOOKS TO INSTALL</div>
+      <div className='first-launch-onb-seclabel'>YOUR AGENTS</div>
       {installedCliAgents.map((agent) => {
         const status = hookStatusByAgentId.get(agent.agentId)?.status;
         const hookInstalled = isHookInstalled(agent.agentId);
@@ -1614,7 +1654,7 @@ function FirstLaunchHooksPage({
             <input
               checked={hookInstalled || selectedAgentIds.has(agent.agentId)}
               className='first-launch-onb-checkbox'
-              disabled={hookInstalled}
+              disabled={hookInstalled || connecting}
               onChange={(event) => onToggleAgent(agent.agentId, event.currentTarget.checked)}
               type='checkbox'
             />
@@ -1623,26 +1663,39 @@ function FirstLaunchHooksPage({
             </span>
             <span className='first-launch-onb-row-main'>
               <strong>{getFirstLaunchAgentDisplayName(agent)}</strong>
-              <span>
-                Adds a hooks entry to {getFirstLaunchAgentDisplayName(agent)}. Removable anytime from Settings &gt;
-                Agents.
-              </span>
+              <span>{hookInstalled ? 'Ready to use with Ghostex.' : 'Connect to enable Ghostex features.'}</span>
             </span>
             <span className='first-launch-onb-pill' data-tone={hookInstalled ? 'ok' : 'dim'}>
-              {hookInstalled ? 'Installed' : status === 'updateRequired' ? 'Needs update' : 'Not installed'}
+              {hookInstalled ? 'Connected' : status === 'updateRequired' ? 'Needs update' : 'Not connected'}
             </span>
           </label>
         );
       })}
+      <div aria-live='polite' role='status'>
+        {connectionComplete && (
+          <div className='first-launch-onb-row'>
+            <span className='first-launch-onb-row-icon'>
+              <IconCircleCheckFilled aria-hidden='true' size={20} />
+            </span>
+            <span className='first-launch-onb-row-main'>
+              <strong>You’re connected!</strong>
+              <span>Your agents are ready to use with Ghostex. Continue when you’re ready.</span>
+            </span>
+          </div>
+        )}
+      </div>
+      <p className='first-launch-onb-hint'>You can manage these connections anytime in Settings &gt; Agents.</p>
     </section>
   );
 }
 
 function FirstLaunchProjectPage({
+  agentAcceptAllEnabled,
   attentionNotificationsEnabled,
   backgroundAgentId,
   completionSoundEnabled,
   onAddFirstProject,
+  onChangeAgentAcceptAllEnabled,
   onChangePreferredInterface,
   onChangeTerminalWidthMode,
   onSelectBackgroundAgent,
@@ -1654,10 +1707,12 @@ function FirstLaunchProjectPage({
   terminalWidthMode,
   titleAndCommitAgents,
 }: {
+  agentAcceptAllEnabled: boolean;
   attentionNotificationsEnabled: boolean;
   backgroundAgentId: string | undefined;
   completionSoundEnabled: boolean;
   onAddFirstProject: (path: string) => void;
+  onChangeAgentAcceptAllEnabled: (enabled: boolean) => void;
   onChangePreferredInterface: (preferredInterface: PreferredAgentInterface) => void;
   onChangeTerminalWidthMode: (terminalWidthMode: TerminalViewWidthMode) => void;
   onSelectBackgroundAgent: (agentId: SessionTitleGenerationAgent) => void;
@@ -1715,7 +1770,7 @@ function FirstLaunchProjectPage({
         </span>
         <span className='first-launch-onb-row-main'>
           <strong>Default agent</strong>
-          <span>Used to generate session titles and commit messages.</span>
+          <span>Starts your first session and generates session titles and commit messages.</span>
         </span>
         {backgroundAgentId ? (
           <SegmentedControl
@@ -1811,6 +1866,25 @@ function FirstLaunchProjectPage({
           <span>Show the tabs bar above the agents pane even when the screen is not split.</span>
         </span>
         <Switch aria-label='Tabs bar' checked={showAgentsPaneTabBar} onCheckedChange={onToggleAgentsPaneTabBar} />
+      </div>
+
+      {/*
+       * CDXC:Onboarding 2026-09-04 DECISION:
+       * User: Agent approvals belongs on the final setup page as one ordinary row, the same size as the other rows, not as a large card or a separate setup step.
+       */}
+      <div className='first-launch-onb-row first-launch-onb-setting-row'>
+        <span className='first-launch-onb-row-icon'>
+          <IconBolt aria-hidden='true' size={16} />
+        </span>
+        <span className='first-launch-onb-row-main'>
+          <strong>Agent approvals</strong>
+          <span>Ask before edits and commands, or let supported agents run without asking.</span>
+        </span>
+        <AgentApprovalPolicyControl
+          className='first-launch-onb-setting-control'
+          enabled={agentAcceptAllEnabled}
+          onChange={onChangeAgentAcceptAllEnabled}
+        />
       </div>
 
       <div className='first-launch-onb-seclabel'>NOTIFICATIONS</div>
@@ -2061,9 +2135,9 @@ function FirstLaunchPreferencesPage({
         />
         <FirstLaunchCheckboxSetting
           checked={settings.agentAcceptAllEnabled}
-          description='Launch supported agents with their permission-bypass mode by default.'
+          description='Run supported agents without approval prompts.'
           icon={IconBolt}
-          label='Accept All for new agent sessions'
+          label='Skip permissions'
           onChange={(checked) => updateSetting('agentAcceptAllEnabled', checked)}
         />
         <FirstLaunchCheckboxSetting
@@ -2160,9 +2234,7 @@ function FirstLaunchSkillRow({
   skill: BundledGhostexAgentSkill;
 }) {
   const installed = isFirstLaunchSkillInstalled(skill.id, ghostexCliStatus);
-  // Distinguish the agent-facing CLI guidance from the executable prerequisite
-  // above it; the other rows read cleaner without repeating "Ghostex".
-  const shortName = skill.id === 'cli' ? 'Ghostex CLI for Agents' : skill.name.replace(/^Ghostex /u, '');
+  const capability = FIRST_LAUNCH_SKILL_CAPABILITIES[skill.id];
   return (
     <label className='first-launch-onb-row first-launch-onb-skill-row' data-installed={installed}>
       <input
@@ -2173,16 +2245,12 @@ function FirstLaunchSkillRow({
         type='checkbox'
       />
       <span className='first-launch-onb-row-main'>
-        <strong>{shortName}</strong>
-        <span>{skill.description}</span>
+        <strong>{capability.title}</strong>
+        <span>{capability.description}</span>
       </span>
       {installed ? (
         <span className='first-launch-onb-pill' data-tone='ok'>
           Installed
-        </span>
-      ) : skill.requiresCuaDriver ? (
-        <span className='first-launch-onb-pill' data-tone='dim'>
-          Uses {GHOSTEX_TRYCUA_PRODUCT_NAME}
         </span>
       ) : null}
     </label>
@@ -2205,37 +2273,21 @@ function FirstLaunchSkillsPage({
   const recommendedSkills = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === 'recommended');
   const optionalSkills = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter((skill) => skill.tier === 'optional');
   const cliReady = ghostexCliStatus?.installed === true;
+  const skillsToEnable = VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS.filter(
+    (skill) => selectedSkillIds.has(skill.id) && !isFirstLaunchSkillInstalled(skill.id, ghostexCliStatus)
+  );
+  const needsComputerControl =
+    skillsToEnable.some((skill) => skill.requiresCuaDriver) && !ghostexCliStatus?.cuaDriverInstalled;
 
   return (
     <section aria-labelledby='first-launch-skills-title' className='first-launch-onb-page'>
       <h2 className='first-launch-onb-title' id='first-launch-skills-title'>
-        Install Optional Agent Skills
+        What should your agents be able to do?
       </h2>
       <p className='first-launch-onb-lede'>
-        Skills teach your agents Ghostex tricks, like driving your browser or controlling your machine. Pick what sounds
-        useful; everything here is optional and can be added later from Settings.
+        Choose what you’d like help with. Ghostex adds instructions called skills to your agents. Everything here is
+        optional and can be added later from Settings.
       </p>
-
-      <div className='first-launch-onb-seclabel'>PREREQUISITE</div>
-      <article className='first-launch-onb-row' data-installed={cliReady}>
-        <input
-          aria-label='Ghostex CLI setup status'
-          checked={cliReady}
-          className='first-launch-onb-checkbox'
-          disabled
-          readOnly
-          type='checkbox'
-        />
-        <span className='first-launch-onb-row-main'>
-          <strong>Ghostex CLI</strong>
-          <span>
-            Included with Ghostex. Set up the `ghostex` and `gx` terminal commands before installing agent skills.
-          </span>
-        </span>
-        <span className='first-launch-onb-pill' data-tone={cliReady ? 'ok' : 'dim'}>
-          {isSettingUpCli ? 'Setting up' : ghostexCliStatusLoading ? 'Checking' : cliReady ? 'Ready' : 'Setup required'}
-        </span>
-      </article>
 
       <div className='first-launch-onb-seclabel'>RECOMMENDED</div>
       {recommendedSkills.map((skill) => (
@@ -2251,9 +2303,7 @@ function FirstLaunchSkillsPage({
       {optionalSkills.length > 0 ? (
         <details className='first-launch-onb-flat-details'>
           <summary>
-            {optionalSkills.length === 1
-              ? '1 more skill for power users'
-              : `${optionalSkills.length} more skills for power users`}
+            {optionalSkills.length === 1 ? '1 more capability' : `${optionalSkills.length} more capabilities`}
           </summary>
           <div className='first-launch-onb-flat-details-body'>
             {optionalSkills.map((skill) => (
@@ -2268,6 +2318,19 @@ function FirstLaunchSkillsPage({
           </div>
         </details>
       ) : null}
+      {skillsToEnable.length > 0 && (isSettingUpCli || (!ghostexCliStatusLoading && !cliReady)) && (
+        <p className='first-launch-onb-hint' role='status'>
+          {isSettingUpCli
+            ? 'Preparing the tools for your selected capabilities…'
+            : 'Ghostex will set up its included command-line tools automatically when you enable these capabilities.'}
+        </p>
+      )}
+      {needsComputerControl && (
+        <p className='first-launch-onb-hint'>
+          Browser and computer control use {GHOSTEX_TRYCUA_PRODUCT_NAME}, which Ghostex will install. You may need to
+          allow screen access and control in your computer’s settings.
+        </p>
+      )}
     </section>
   );
 }

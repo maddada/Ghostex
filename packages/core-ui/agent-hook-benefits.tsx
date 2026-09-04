@@ -3,23 +3,23 @@ import { IconCircleCheck, IconHistory, IconMessageCircle, IconPencil } from '@ta
 const AGENT_HOOK_BENEFITS = [
   {
     icon: IconCircleCheck,
-    text: 'See when agents are working, waiting, or done, and get notified when they finish or need you.',
+    text: 'See agent progress and get notified when you’re needed.',
     title: 'Live status and alerts',
   },
   {
     icon: IconPencil,
-    text: 'Sessions name themselves automatically from your first message, so you see "Fix login bug", not "zsh\u00a0(3)".',
-    title: 'Names, not noise',
+    text: 'Find sessions easily with names based on your first message.',
+    title: 'Automatic session names',
   },
   {
     icon: IconMessageCircle,
-    text: 'Read and reply in a clean conversation view, then switch back to the full terminal with one click.',
+    text: 'Read and reply in chat, with the terminal one click away.',
     title: 'Chat View',
   },
   {
     icon: IconHistory,
-    text: 'Resume the exact agent conversation after sleep, reload, or app restart instead of starting over.',
-    title: 'Resume Agents',
+    text: 'Pick up the same conversation after sleep or a restart.',
+    title: 'Resume your work',
   },
 ] as const;
 

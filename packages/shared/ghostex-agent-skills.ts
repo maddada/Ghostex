@@ -6,7 +6,6 @@ export type BundledGhostexAgentSkillId =
   | 'fable56Orchestration'
   | 'manageBeads'
   | 'generateTitle'
-  | 'manageBeads'
   | 'moveCodexSession';
 
 export type BundledGhostexAgentSkillTier = 'recommended' | 'optional';
@@ -27,8 +26,8 @@ export type BundledGhostexAgentSkill = {
    * CDXC:AgentSkills 2026-08-24:
    * Some bundled skills stay installable through the CLI (and keep working when
    * already installed) but are deliberately absent from every app surface:
-   * onboarding, Settings > Integrations, and settings search. Only Fable 5.6
-   * Orchestration and Manage Beads remain as the visible optional skills.
+   * onboarding, Settings > Integrations, and settings search. Fable 5.6
+   * Orchestration remains optional; the project-board skill is recommended.
    */
   hiddenFromUi?: boolean;
   skillName: string;
@@ -105,15 +104,6 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: 'fable56Orchestration',
     name: 'Ghostex Fable 5.6 Orchestration',
     skillName: 'ghostex-fable-56-orchestration',
-    tier: 'optional',
-  },
-  {
-    command: 'ghostex manage-beads install-skill',
-    description:
-      'Teaches agents the Ghostex project board workflow through the machine-installed `bd` Beads CLI: create, update, comment on, review, and close beads and link them to sessions.',
-    id: 'manageBeads',
-    name: 'Ghostex Manage Beads',
-    skillName: 'ghostex-manage-beads',
     tier: 'optional',
   },
   {
