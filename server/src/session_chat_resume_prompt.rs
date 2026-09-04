@@ -267,7 +267,19 @@ impl SessionChatTerminalPicker {
     fallback for a picker this build cannot drive.
     */
     pub fn answer_key(&self, target: usize) -> Option<String> {
-        let number = self.rows.get(target)?.number;
+        let row = self.rows.get(target)?;
+        let number = row.number;
+        /*
+        CDXC:SessionChat 2026-09-04 DECISION:
+        User: the "Resume full session as-is" row is answered with a single Escape, nothing else.
+        The picker's own footer offers "Esc to cancel", and cancelling the chooser resumes the full session, so Escape reaches that outcome in one key without any row navigation.
+        The Escape is the kitty CSI-u encoding for the same reason as SESSION_CHAT_INTERRUPT: under zmx a bare 0x1b is dropped.
+        */
+        if self.kind == SessionChatTerminalPickerKind::Resume
+            && row.label.starts_with(RESUME_FULL_SESSION_LABEL)
+        {
+            return Some(crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string());
+        }
         if self.kind == SessionChatTerminalPickerKind::PermissionPrompt {
             let step = if target >= self.selected_index {
                 KEY_DOWN
