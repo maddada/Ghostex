@@ -74,7 +74,11 @@ import {
   normalizeWorkspaceThemeColor,
 } from '@/packages/shared/workspace-project-appearance';
 import { installAppModalGlobalErrorLogging, logAppModalError } from '@/packages/core-ui/app-modal-error-log';
-import { postAppModalHostMessage, type SettingsRemoteSection } from '@/packages/core-ui/app-modal-host-bridge';
+import {
+  postAppModalHostMessage,
+  type SettingsAgentsSection,
+  type SettingsRemoteSection,
+} from '@/packages/core-ui/app-modal-host-bridge';
 import { MissingProjectFolderModal } from '@/packages/core-ui/missing-project-folder-modal';
 import { useSidebarStore } from '@/packages/core-ui/sidebar-store';
 import {
@@ -236,6 +240,7 @@ type AppModalHostMessage =
       worktreeRenameDraft?: WorktreeRenameModalDraft;
       initialRemoteMachineId?: string;
       initialRemoteSection?: SettingsRemoteSection;
+      initialAgentsSection?: SettingsAgentsSection;
       initialSection?: MainSettingsInitialSectionId;
       /** CDXC:SavedPrompts 2026-08-24: see StashedPromptsModalState. */
       initialScope?: StashedPromptsScope;
@@ -1184,6 +1189,7 @@ function AppModalHost() {
     settingsInitialSection,
     settingsInitialRemoteMachineId,
     settingsInitialRemoteSection,
+    settingsInitialAgentsSection,
     settingsInitialSearchQuery,
     settingsInitialTabOverride,
   } = useModalStateFromNative();
@@ -2243,6 +2249,7 @@ function AppModalHost() {
         initialSection={settingsInitialSection}
         initialRemoteMachineId={settingsInitialRemoteMachineId}
         initialRemoteSection={settingsInitialRemoteSection}
+        initialAgentsSection={settingsInitialAgentsSection}
         initialSearchQuery={settingsInitialSearchQuery}
         initialTab={settingsInitialTab}
         isOpen={isSettingsRenderable}
@@ -2748,6 +2755,7 @@ function useModalStateFromNative() {
   const [settingsInitialSection, setSettingsInitialSection] = useState<MainSettingsInitialSectionId>();
   const [settingsInitialRemoteMachineId, setSettingsInitialRemoteMachineId] = useState<string>();
   const [settingsInitialRemoteSection, setSettingsInitialRemoteSection] = useState<SettingsRemoteSection>();
+  const [settingsInitialAgentsSection, setSettingsInitialAgentsSection] = useState<SettingsAgentsSection>();
   const [settingsInitialSearchQuery, setSettingsInitialSearchQuery] = useState<string>();
   const [settingsInitialTabOverride, setSettingsInitialTabOverride] = useState<SettingsModalTab>();
   const activeModalRef = useRef<AppModalKind | undefined>(activeModal);
@@ -3334,11 +3342,13 @@ function useModalStateFromNative() {
                 ? message.initialRemoteSection
                 : undefined
             );
+            setSettingsInitialAgentsSection(message.initialAgentsSection === 'agentHooks' ? 'agentHooks' : undefined);
             setSettingsInitialTabOverride(isSettingsModalTab(message.initialTab) ? message.initialTab : undefined);
           } else {
             setSettingsInitialSection(undefined);
             setSettingsInitialRemoteMachineId(undefined);
             setSettingsInitialRemoteSection(undefined);
+            setSettingsInitialAgentsSection(undefined);
             setSettingsInitialSearchQuery(undefined);
             setSettingsInitialTabOverride(undefined);
           }
@@ -3620,6 +3630,7 @@ function useModalStateFromNative() {
     settingsInitialSection,
     settingsInitialRemoteMachineId,
     settingsInitialRemoteSection,
+    settingsInitialAgentsSection,
     settingsInitialSearchQuery,
     settingsInitialTabOverride,
   };

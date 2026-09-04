@@ -178,14 +178,14 @@ describe('native titlebar Tips & Tricks source', () => {
     expect(noticeSource).toContain('getDefaultSidebarAgentById(status.agentId)');
     expect(noticeSource).toContain('!status.cliInstalled');
     expect(noticeSource).toContain("Warning: Agent hooks aren't installed for agent CLIs");
-    expect(noticeSource).toContain('Open Settings > Integrations');
+    expect(noticeSource).toContain('Open Settings > Agents');
     expect(noticeSource).toContain('Automatic session renaming');
     expect(noticeSource).toContain('In Progress/Needs Attention status');
     expect(noticeSource).toContain('sleeping or resuming agent sessions will not work correctly');
     expect(noticeSource).toContain("action: 'openSettings'");
     expect(noticeSource).toContain("settingsTarget: 'agentHooks'");
-    expect(appSource).toContain("initialSearchQuery: 'Agent Hooks'");
-    expect(appSource).toContain("initialTab: 'integrations'");
+    expect(appSource).toContain("initialAgentsSection: 'agentHooks'");
+    expect(appSource).toContain("initialTab: 'agents'");
     expect(tipsPanelSource).toContain("title='Notices'");
     expect(appSource).toContain('openAgentHooksSettings');
     expect(appSource).not.toContain('installAgentHooksFromTitlebarNotice');

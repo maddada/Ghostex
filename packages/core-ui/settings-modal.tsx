@@ -9,7 +9,7 @@ import {
   type UIEvent as ReactUIEvent,
 } from 'react';
 import { cn } from '@/packages/components/utils';
-import type { SettingsRemoteSection } from './app-modal-host-bridge';
+import type { SettingsAgentsSection, SettingsRemoteSection } from './app-modal-host-bridge';
 import { Button } from '@/packages/components/ui/button';
 import { Command } from '@/packages/components/ui/command';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
@@ -248,6 +248,8 @@ export type SettingsModalProps = {
   initialRemoteMachineId?: string;
   /** CDXC:RemotePairing 2026-09-03: Remote tab card to scroll to (consumed by the Remote tab). */
   initialRemoteSection?: SettingsRemoteSection;
+  /** Agents tab card to scroll to (consumed by the Agents tab). */
+  initialAgentsSection?: SettingsAgentsSection;
   initialTab?: SettingsModalTab;
   isOpen: boolean;
   presentation?: SettingsModalPresentation;
@@ -327,6 +329,7 @@ export function SettingsModal({
   initialSearchQuery,
   initialRemoteMachineId,
   initialRemoteSection,
+  initialAgentsSection,
   initialTab = 'settings',
   isOpen,
   onChange,
@@ -2838,6 +2841,8 @@ export function SettingsModal({
                 {!isFirstLaunchSetup ? (
                   <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='agents'>
                     <AgentsSettingsTab
+                      initialAgentsSection={initialAgentsSection}
+                      isActive={isOpen && activeTab === 'agents'}
                       agentHookStatus={agentHookStatus}
                       agentHookStatusLoading={agentHookStatusLoading}
                       agentAcceptAllEnabled={draft.agentAcceptAllEnabled}

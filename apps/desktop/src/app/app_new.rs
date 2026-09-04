@@ -450,6 +450,7 @@ impl GhostexGpuiApp {
                 titlebar_resources_presentation_groups: Vec::new(),
                 titlebar_tips_cli_status: None,
                 titlebar_tips_agent_hook_status: None,
+                titlebar_tips_sidebar_agent_ids: None,
                 agent_hook_status_request_in_flight: false,
                 sidebar: None,
                 browser_surfaces: HashMap::new(),

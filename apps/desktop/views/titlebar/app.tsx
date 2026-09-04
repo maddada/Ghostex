@@ -1315,14 +1315,13 @@ export function App() {
 
   const openAgentHooksSettings = () => {
     /**
-     * CDXC:AgentHooks 2026-06-23-05:09:
-     * The missing-hook Tips warning should deep-link to Settings > Integrations
-     * and search for Agent Hooks instead of installing directly from titlebar
-     * chrome, so users land on the provider-specific status and install control.
+     * CDXC:AgentHooks 2026-09-04 DECISION:
+     * User: the missing-hook Tips warning opens Settings > Agents scrolled to the roster "without searching for anything".
+     * Supersedes the 2026-06-23 seeded "Agent Hooks" search, which landed on an empty Integrations result once hook setup moved into the Agents roster.
      */
     window.webkit?.messageHandlers?.ghostexAppModalHost?.postMessage({
-      initialSearchQuery: 'Agent Hooks',
-      initialTab: 'integrations',
+      initialAgentsSection: 'agentHooks',
+      initialTab: 'agents',
       modal: 'settings',
       type: 'open',
     });

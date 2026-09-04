@@ -299,6 +299,27 @@ pub(crate) fn gpui_sidebar_command_button_value(
     serde_json::Value::Object(button)
 }
 
+/// CDXC:AgentHooks 2026-09-04 DECISION:
+/// User: the Tips hook warning must not name agents the user "isn't actually using currently in the sidebar".
+/// Maps every visible sidebar launcher (gxserver's `hud.agents`) to the built-in agent whose hooks it needs: default launchers by id, custom ones by their icon.
+pub(crate) fn gpui_sidebar_default_agent_ids_from_hud_agents(
+    agents: &serde_json::Value,
+) -> HashSet<String> {
+    agents
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|agent| {
+            let agent_id = agent.get("agentId").and_then(serde_json::Value::as_str)?;
+            if let Some(default_agent) = gpui_default_sidebar_agent_by_id(agent_id) {
+                return Some(default_agent.agent_id.to_string());
+            }
+            let icon = agent.get("icon").and_then(serde_json::Value::as_str)?;
+            gpui_default_sidebar_agent_by_icon(icon).map(|agent| agent.agent_id.to_string())
+        })
+        .collect()
+}
+
 pub(crate) fn gpui_normalized_stored_sidebar_agents(
     candidate: Option<&serde_json::Value>,
 ) -> Vec<GpuiStoredSidebarAgent> {

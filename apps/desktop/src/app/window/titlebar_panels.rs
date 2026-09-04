@@ -231,6 +231,18 @@ impl GpuiTitlebarPopupWindow {
             });
         }
     }
+
+    pub(crate) fn update_tips_sidebar_agent_ids(
+        &mut self,
+        sidebar_agent_ids: HashSet<String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let GpuiTitlebarPopupContent::Reading(panel) = &self.content {
+            panel.update(cx, |panel, cx| {
+                panel.update_tips_sidebar_agent_ids(sidebar_agent_ids, cx);
+            });
+        }
+    }
 }
 
 impl Render for GpuiTitlebarPopupWindow {
@@ -434,6 +446,8 @@ pub(crate) enum GpuiTitlebarReadingPanelState {
         cli_status: Option<serde_json::Value>,
         live_agent_ids: HashSet<String>,
         read_ids: HashSet<String>,
+        /// Built-in agent ids the sidebar launchers use; `None` while the HUD read is still pending.
+        sidebar_agent_ids: Option<HashSet<String>>,
     },
     Resources {
         /// Clean RAM just copied its prompt; the button reads "Copied" until
@@ -472,6 +486,7 @@ impl GpuiTitlebarReadingPanel {
         cli_status: Option<serde_json::Value>,
         agent_hook_status: Option<serde_json::Value>,
         live_agent_ids: HashSet<String>,
+        sidebar_agent_ids: Option<HashSet<String>>,
     ) -> Self {
         Self {
             main_app,
@@ -481,8 +496,24 @@ impl GpuiTitlebarReadingPanel {
                 cli_status,
                 live_agent_ids,
                 read_ids: gpui_titlebar_tips_read_ids_from_settings(),
+                sidebar_agent_ids,
             },
         }
+    }
+
+    fn update_tips_sidebar_agent_ids(
+        &mut self,
+        next_sidebar_agent_ids: HashSet<String>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let GpuiTitlebarReadingPanelState::Tips {
+            sidebar_agent_ids, ..
+        } = &mut self.state
+        else {
+            return;
+        };
+        *sidebar_agent_ids = Some(next_sidebar_agent_ids);
+        cx.notify();
     }
 
     fn update_tips_runtime_status(
@@ -941,6 +972,7 @@ impl GpuiTitlebarReadingPanel {
     fn missing_agent_hooks_notice(
         status: &serde_json::Value,
         live_agent_ids: &HashSet<String>,
+        sidebar_agent_ids: Option<&HashSet<String>>,
     ) -> Option<GpuiNativeTitlebarNotice> {
         if status
             .get("errorMessage")
@@ -949,6 +981,8 @@ impl GpuiTitlebarReadingPanel {
         {
             return None;
         }
+        // Until the sidebar HUD read answers, no agent is known to be in use, so nothing is warned about; see gpui_sidebar_default_agent_ids_from_hud_agents.
+        let sidebar_agent_ids = sidebar_agent_ids?;
         let mut outdated = Vec::new();
         let mut missing = Vec::new();
         for agent in status
@@ -977,6 +1011,9 @@ impl GpuiTitlebarReadingPanel {
             let Some(default_agent) = gpui_default_sidebar_agent_by_id(agent_id) else {
                 continue;
             };
+            if !sidebar_agent_ids.contains(default_agent.agent_id) {
+                continue;
+            }
             let entry = (
                 default_agent.agent_id.to_string(),
                 default_agent.name.to_string(),
@@ -1016,7 +1053,7 @@ impl GpuiTitlebarReadingPanel {
         };
         Some(GpuiNativeTitlebarNotice {
             body: format!(
-                "Open Settings > Integrations to {action_label} agent hooks for {formatted_agents}. Automatic session renaming, In Progress/Needs Attention status, and sleeping or resuming agent sessions will not work correctly until hooks are {action_verb}."
+                "Open Settings > Agents to {action_label} agent hooks for {formatted_agents}. Automatic session renaming, In Progress/Needs Attention status, and sleeping or resuming agent sessions will not work correctly until hooks are {action_verb}."
             ),
             target: GpuiNativeTitlebarNoticeTarget::AgentHooks,
             title: "Warning: Agent hooks aren't installed for agent CLIs".to_string(),
@@ -1029,6 +1066,7 @@ impl GpuiTitlebarReadingPanel {
             cli_status,
             live_agent_ids,
             read_ids,
+            sidebar_agent_ids,
         } = &self.state
         else {
             unreachable!();
@@ -1052,10 +1090,9 @@ impl GpuiTitlebarReadingPanel {
                 title: "Debug mode is on".to_string(),
             });
         }
-        if let Some(notice) = agent_hook_status
-            .as_ref()
-            .and_then(|status| Self::missing_agent_hooks_notice(status, live_agent_ids))
-        {
+        if let Some(notice) = agent_hook_status.as_ref().and_then(|status| {
+            Self::missing_agent_hooks_notice(status, live_agent_ids, sidebar_agent_ids.as_ref())
+        }) {
             notices.push(notice);
         }
         let has_notices = !notices.is_empty();

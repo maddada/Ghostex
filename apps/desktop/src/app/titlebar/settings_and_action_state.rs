@@ -164,8 +164,13 @@ impl GhostexGpuiApp {
     ) {
         let modal = GpuiAppModalKind::Settings;
         let sidebar_state_message = self.gpui_app_modal_sidebar_state_message_for_open(modal, cx);
+        /*
+        CDXC:AgentHooks 2026-09-04 DECISION:
+        User: the hook warning should "just open this page in settings and scroll down to" the Agents roster "without searching for anything".
+        A seeded "Agent Hooks" search used to land on Integrations, where that section no longer exists, and showed an empty result.
+        */
         let mut open_message = serde_json::json!({
-            "initialSearchQuery": "Agent Hooks",
+            "initialAgentsSection": "agentHooks",
             "initialTab": "agents",
             "modal": modal.modal_id(),
             "type": "open",
@@ -187,7 +192,10 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let (initial_tab, search_query) = match target {
-            GpuiNativeTitlebarNoticeTarget::AgentHooks => ("integrations", "Agent Hooks"),
+            GpuiNativeTitlebarNoticeTarget::AgentHooks => {
+                self.open_gpui_settings_agent_hooks_page(window, cx);
+                return;
+            }
             GpuiNativeTitlebarNoticeTarget::DebuggingMode => ("settings", "Show debug UI controls"),
             GpuiNativeTitlebarNoticeTarget::GhostexCli => ("integrations", "Ghostex CLI"),
         };

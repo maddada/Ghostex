@@ -318,6 +318,7 @@ impl GhostexGpuiApp {
                         self.titlebar_tips_cli_status.clone(),
                         self.titlebar_tips_agent_hook_status.clone(),
                         live_agent_ids,
+                        self.titlebar_tips_sidebar_agent_ids.clone(),
                     )
                 }))
             }

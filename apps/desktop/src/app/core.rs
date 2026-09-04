@@ -1093,6 +1093,8 @@ pub struct GhostexGpuiApp {
     pub(crate) titlebar_resources_presentation_groups: Vec<serde_json::Value>,
     pub(crate) titlebar_tips_cli_status: Option<serde_json::Value>,
     pub(crate) titlebar_tips_agent_hook_status: Option<serde_json::Value>,
+    /// Built-in agent ids the sidebar launchers map to; `None` until the first HUD read completes.
+    pub(crate) titlebar_tips_sidebar_agent_ids: Option<HashSet<String>>,
     pub(crate) agent_hook_status_request_in_flight: bool,
     pub(crate) sidebar: Option<Entity<CefSurface>>,
     pub(crate) browser_surfaces: HashMap<BrowserTabId, Entity<CefSurface>>,

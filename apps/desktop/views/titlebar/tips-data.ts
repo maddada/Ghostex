@@ -232,7 +232,7 @@ export function createTitlebarMissingAgentHooksNotice(
   const actionVerb = action === 'setup' ? 'set up' : action === 'update' ? 'updated' : 'installed';
   return {
     action: 'openSettings',
-    body: `Open Settings > Integrations to ${actionLabel} agent hooks for ${formattedAgents}. Automatic session renaming, In Progress/Needs Attention status, and sleeping or resuming agent sessions will not work correctly until hooks are ${action === 'setup' ? 'installed or updated' : actionVerb}.`,
+    body: `Open Settings > Agents to ${actionLabel} agent hooks for ${formattedAgents}. Automatic session renaming, In Progress/Needs Attention status, and sleeping or resuming agent sessions will not work correctly until hooks are ${action === 'setup' ? 'installed or updated' : actionVerb}.`,
     icon: 'warning',
     id: `agent-hooks-${action}-${[...outdatedAgents.keys(), ...missingAgents.keys()].sort().join('-')}`,
     settingsTarget: 'agentHooks',

@@ -6,6 +6,8 @@ import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 
 /** The Settings → Remote cards a deep link can scroll to. */
 export type SettingsRemoteSection = 'easyConnect' | 'tailscale';
+/** Agents tab card a Settings deep link scrolls to; see AgentsSettingsTab. */
+export type SettingsAgentsSection = 'agentHooks';
 
 export type AppModalKind =
   | 'addProject'
@@ -227,6 +229,12 @@ export type OpenAppModalMessage =
        * `initialRemoteMachineId` scrolls to a machine card.
        */
       initialRemoteSection?: SettingsRemoteSection;
+      /**
+       * CDXC:AgentHooks 2026-09-04 DECISION:
+       * User: the Tips hook warning should open Settings → Agents scrolled to the roster "without searching for anything".
+       * Deep links use this instead of `initialSearchQuery: 'Agent Hooks'`, which filtered the page and used to land on an empty Integrations search.
+       */
+      initialAgentsSection?: SettingsAgentsSection;
       initialTab?: SettingsModalTab;
       modal: 'settings';
       type: 'open';

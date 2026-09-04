@@ -1,12 +1,13 @@
 import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/packages/components/utils';
 import { Button } from '@/packages/components/ui/button';
 import { Command } from '@/packages/components/ui/command';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/packages/components/ui/empty';
 import { Field, FieldContent, FieldDescription, FieldLabel } from '@/packages/components/ui/field';
 import { SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
+import { type SettingsAgentsSection } from '../../app-modal-host-bridge';
 import { AppTooltip } from '../../app-tooltip';
 import {
   IconAlertTriangle,
@@ -117,6 +118,8 @@ export function hasInstalledBundledAgentSkills(ghostexCliStatus: SidebarGhostexC
 }
 
 export function AgentsSettingsTab({
+  initialAgentsSection,
+  isActive,
   agentHookStatus,
   agentHookStatusLoading,
   agentAcceptAllEnabled,
@@ -137,6 +140,9 @@ export function AgentsSettingsTab({
   searchEmptyState,
   vscode,
 }: {
+  /** Card a deep link scrolls to once the tab is active; see the bridge contract. */
+  initialAgentsSection?: SettingsAgentsSection;
+  isActive: boolean;
   agentHookStatus?: SidebarAgentHookStatusMessage;
   agentHookStatusLoading: boolean;
   agentAcceptAllEnabled: boolean;
@@ -161,6 +167,22 @@ export function AgentsSettingsTab({
   const acceptAllToggleId = useId();
   const agentHooksAvailableForUninstall = hasRemovableAgentHooks(agentHookStatus);
   const [editorState, setEditorState] = useState<SettingsAgentEditorState>();
+  const agentRosterSectionRef = useRef<HTMLDivElement>(null);
+  const lastTargetedAgentsSectionRef = useRef<SettingsAgentsSection | undefined>(undefined);
+  useEffect(() => {
+    if (!isActive) {
+      lastTargetedAgentsSectionRef.current = undefined;
+      return;
+    }
+    if (!initialAgentsSection || lastTargetedAgentsSectionRef.current === initialAgentsSection) {
+      return;
+    }
+    lastTargetedAgentsSectionRef.current = initialAgentsSection;
+    const animationFrame = requestAnimationFrame(() => {
+      agentRosterSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [initialAgentsSection, isActive]);
   const [draftAgentIds, setDraftAgentIds] = useState<string[]>();
   /*
    * CDXC:AgentHooks 2026-08-28:
@@ -425,6 +447,7 @@ export function AgentsSettingsTab({
                 </SettingButton>
               ) : null
             }
+            sectionRef={agentRosterSectionRef}
             title={editorState ? 'Agent' : 'Agents'}
           >
             {editorState ? (

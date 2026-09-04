@@ -1170,6 +1170,31 @@ impl GhostexGpuiApp {
             cx,
         );
         self.run_gpui_progressive_agent_hook_status_task(None, cx);
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let sidebar_agent_ids = background
+                .spawn(async move {
+                    gpui_sidebar_hud_from_gxserver(Duration::from_secs(2), None)
+                        .map(|hud| gpui_sidebar_default_agent_ids_from_hud_agents(&hud.agents))
+                        .ok()
+                })
+                .await;
+            let Some(sidebar_agent_ids) = sidebar_agent_ids else {
+                return;
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.titlebar_tips_sidebar_agent_ids = Some(sidebar_agent_ids.clone());
+                if this.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Tips)
+                    && let Some(handle) = this.titlebar_popup_window.clone()
+                {
+                    let _ = handle.update(cx, |popup, window, cx| {
+                        popup.update_tips_sidebar_agent_ids(sidebar_agent_ids, cx);
+                        window.refresh();
+                    });
+                }
+            });
+        })
+        .detach();
     }
 
     pub(crate) fn receive_gpui_titlebar_tips_unread_count_message(
