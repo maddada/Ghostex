@@ -106,6 +106,8 @@ the shared checkout alone. The 2026-09-02 run, with raw transcripts and the
 walk scripts, is in `docs/2026-09-02/agent-model-catalog/` (local, `docs/` is
 gitignored). The 2026-09-03 refresh added Cursor's Gemini 3.8 Flash and the
 Antigravity CLI (1.1.24).
+The 2026-09-04 refresh added Codex's GPT 6 Astra (CLI 0.153.3), which is also
+the CLI's own default once no `model` is set in `~/.codex/config.toml`.
 
 ### 1. Scratch sessions
 
@@ -153,7 +155,10 @@ gx read-text inv-claude --visible
   to that marker. `Enter` on a model opens its reasoning list; a "More
   reasoning…" row opens the Max / Ultra submenu. Confirming a row writes
   `~/.codex/config.toml`, so note the banner's model and effort first and
-  restore them at the end (or always leave with `escape`).
+  restore them at the end (or always leave with `escape`). To read which model
+  the CLI itself defaults to, rather than the one the config pins, start it
+  with a throwaway `CODEX_HOME` holding only a copy of `auth.json`; the banner
+  then shows the default model and the word "default" instead of an effort.
 - Cursor shows ten rows with an "a-b of 35" counter; the list wraps at both
   ends. Rows ending in "(Tab to modify)" open an "Edit Parameters" panel with
   Context / Effort or Reasoning / Thinking / Fast; `escape` closes the panel,

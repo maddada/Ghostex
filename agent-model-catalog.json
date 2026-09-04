@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-09-03",
+  "updatedAt": "2026-09-04",
   "effortLabels": {
     "none": "None",
     "minimal": "Minimal",
@@ -64,7 +64,7 @@
     },
     "codex": {
       "name": "Codex CLI",
-      "cliVersion": "0.152.1",
+      "cliVersion": "0.153.3",
       "modelCommand": "/model",
       "effortCommand": null,
       "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
@@ -76,10 +76,18 @@
       },
       "models": [
         {
+          "value": "gpt-6-astra",
+          "label": "GPT 6 Astra",
+          "description": "Our most capable model for complex, demanding work.",
+          "default": true,
+          "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
+          "defaultEffort": "medium",
+          "fastMode": true
+        },
+        {
           "value": "gpt-5.6-sol",
           "label": "GPT 5.6 Sol",
           "description": "Reliable agentic workhorse for everyday tasks.",
-          "default": true,
           "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"],
           "defaultEffort": "low",
           "fastMode": true
