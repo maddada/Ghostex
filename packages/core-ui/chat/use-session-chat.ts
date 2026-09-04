@@ -405,6 +405,45 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // Detected model/effort: carried by read results and by
   // snapshot/replaced/state frames. Absent ⇒ unchanged (older daemons omit it).
   const [selectedOptions, setSelectedOptions] = useState<SessionChatDetectedOptions | null>(null);
+  const selectedOptionsDetectedAt = selectedOptions?.detectedAt ?? null;
+  const selectedOptionsFast = selectedOptions?.fast === true;
+  useEffect(() => {
+    if (agent?.toLowerCase() !== 'codex' || selectedOptionsDetectedAt === null) {
+      return;
+    }
+    const detectedAt = Date.parse(selectedOptionsDetectedAt);
+    if (!Number.isFinite(detectedAt)) {
+      return;
+    }
+    setMarkers((current) => {
+      let confirmedIndex = -1;
+      for (let index = current.length - 1; index >= 0; index -= 1) {
+        const marker = current[index];
+        if (
+          marker &&
+          marker.label === undefined &&
+          marker.sentAt <= detectedAt &&
+          marker.command.trim().toLowerCase() === '/fast'
+        ) {
+          confirmedIndex = index;
+          break;
+        }
+      }
+      if (confirmedIndex < 0) {
+        return current;
+      }
+      /*
+      CDXC:SessionChat 2026-09-04 DECISION:
+      User: Codex's terminal-only "Service tier set to priority/default"
+      confirmation must appear in chat as a Fast mode ON/OFF action pill.
+      The rollout records neither message, so the pill is completed only after
+      gxserver's post-command footer probe confirms whether `fast` is present.
+      */
+      return current.map((marker, index) =>
+        index === confirmedIndex ? { ...marker, label: `Fast mode ${selectedOptionsFast ? 'ON' : 'OFF'}` } : marker
+      );
+    });
+  }, [agent, selectedOptionsDetectedAt, selectedOptionsFast]);
   // Terminal-state notice: carried by read results and by
   // snapshot/replaced/state frames. Omitted ⇒ CLEARED (prompt semantics, unlike
   // selectedOptions) — the server only stops sending it once the state is gone.

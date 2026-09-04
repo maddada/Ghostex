@@ -58,7 +58,8 @@ function isContextCompactionRecord(message: SessionChatMessage, text: string): b
  */
 const MODEL_DEFAULT_OUTPUT =
   /^set model to\s+(.+?)\s+and saved as your default for new sessions\s*(?:[.!…]+(?=\s|$))?\s*(.*)$/i;
-const EFFORT_DEFAULT_OUTPUT = /^set effort level to\s+\S+/i;
+const EFFORT_DEFAULT_OUTPUT = /^set effort level to\s+(\S+)/i;
+const FAST_MODE_OUTPUT = /^fast mode\s+(on|off)\s*[.!…]*$/i;
 
 /*
  * Claude Code's background-task notifications. The wrapper carries four fields
@@ -185,6 +186,14 @@ function modelSetByCommandOutput(text: string): ModelDefaultOutput | null {
   return { model, note: note.length > 0 ? note : null };
 }
 
+function effortSetByCommandOutput(text: string): string | null {
+  return EFFORT_DEFAULT_OUTPUT.exec(normalizedSuppressedTurnBody(text))?.[1]?.trim() || null;
+}
+
+function fastModeSetByCommandOutput(text: string): string | null {
+  return FAST_MODE_OUTPUT.exec(normalizedSuppressedTurnBody(text))?.[1]?.toUpperCase() || null;
+}
+
 /** Harness tags that render as a collapsed, expandable marker. */
 const COLLAPSED_TAG_LABELS: Readonly<Record<string, string>> = {
   'agent-message': 'Message from another session',
@@ -284,13 +293,19 @@ export type SessionChatSuppressedTurn =
   | { kind: 'status'; label: string; tone?: SessionChatStatusTone };
 
 export function classifySessionChatSuppressedTurn(message: SessionChatMessage): SessionChatSuppressedTurn | null {
+  const text = sessionChatMessageText(message);
+  if (message.role === 'system' && message.source === 'client') {
+    const fastMode = fastModeSetByCommandOutput(text);
+    if (fastMode) {
+      return { kind: 'status', label: `Fast mode ${fastMode}` };
+    }
+  }
   if (message.role !== 'user' && message.role !== 'system') {
     return null;
   }
   if (message.blocks.some((block) => block.type === 'tool-call' || block.type === 'tool-result')) {
     return null;
   }
-  const text = sessionChatMessageText(message);
   if (isContextCompactionRecord(message, text)) {
     // Same completed-action pill Claude's compaction gets, so the seam reads
     // identically whichever CLI drew it.
@@ -312,6 +327,7 @@ export function classifySessionChatSuppressedTurn(message: SessionChatMessage): 
     label === 'Slash command' &&
     (command?.name.toLowerCase() === '/model' ||
       command?.name.toLowerCase() === '/effort' ||
+      command?.name.toLowerCase() === '/fast' ||
       command?.name.toLowerCase() === '/compact')
   ) {
     // The local-command output owns the one user-facing result row.
@@ -322,10 +338,14 @@ export function classifySessionChatSuppressedTurn(message: SessionChatMessage): 
     if (model) {
       return { kind: 'status', label: `Set model to ${model.model}` };
     }
-    if (EFFORT_DEFAULT_OUTPUT.test(normalizedSuppressedTurnBody(text))) {
-      // Effort is part of the model configuration action. The model result
-      // above is the single durable row for the two picker selections.
-      return { kind: 'hidden' };
+    const effort = effortSetByCommandOutput(text);
+    if (effort) {
+      // CDXC:SessionChat 2026-09-04 DECISION: User: show successful `/effort` and `/fast` changes as their own completed-action pills beside the separately recorded model change.
+      return { kind: 'status', label: `Set effort level to ${effort}` };
+    }
+    const fastMode = fastModeSetByCommandOutput(text);
+    if (fastMode) {
+      return { kind: 'status', label: `Fast mode ${fastMode}` };
     }
   }
   if (label === 'Task notification') {

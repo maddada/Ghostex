@@ -486,10 +486,10 @@ export function sessionChatCommandMarkersAsMessages(
 ): SessionChatMessage[] {
   return markers.flatMap((marker) => {
     const commandName = commandMarkerName(marker.command);
-    if (commandName === '/model' || commandName === '/effort') {
-      // Not typed: these are what the model and effort pills dispatch. The
-      // configuration they produce gets one authoritative status row, and a
-      // "Ran /model" above it would narrate the implementation of a click.
+    if (commandName === '/model' || commandName === '/effort' || (commandName === '/fast' && !marker.label)) {
+      // Not typed: these are what the model, effort, and Fast mode controls
+      // dispatch. Their configuration gets one authoritative status row; a
+      // redundant "Ran …" row would narrate the implementation of a click.
       return [];
     }
     /*
