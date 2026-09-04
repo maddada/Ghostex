@@ -293,10 +293,9 @@ body[data-session-chat-theme='dark'] .ghostex-session-chat-popup {
      same on the page, inside a bubble, and inside an alert. */
   --chat-inline-code-surface: color-mix(in srgb, var(--foreground) 11%, var(--background));
   --chat-inline-code-border: color-mix(in srgb, var(--foreground) 18%, transparent);
-  /* Same 82% step as light. #fcfcfc on #0d0d0d is the loudest pairing in the
-     app, so this is the theme the softening was really for: 19.6:1 -> 13.4:1,
-     well clear of the muted lane. */
-  --chat-prose-foreground: color-mix(in srgb, var(--foreground) 82%, var(--background));
+  /* CDXC:SessionChat 2026-09-05 DECISION:
+     User: change the chat's #d1d1d1 prose to #b4b8bf so it is easier on the eyes. */
+  --chat-prose-foreground: #b4b8bf;
   /* Same five families lifted for a dark background: the light theme's shades
      go muddy on this near-black, so each one moves up to its brighter
      sibling. */
