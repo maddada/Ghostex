@@ -68,7 +68,7 @@ pub fn user_login_shell_exec_command() -> String {
     login_exec_command_for_shell_path(&user_login_shell_path())
 }
 
-fn user_login_shell_path() -> String {
+pub(crate) fn user_login_shell_path() -> String {
     for candidate in user_login_shell_candidates() {
         if is_executable_file(Path::new(&candidate)) {
             return candidate;

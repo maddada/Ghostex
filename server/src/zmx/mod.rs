@@ -11,6 +11,7 @@ pub mod session_glue;
 mod tests;
 pub mod types;
 pub mod wire_cycle;
+mod zsh_startup;
 
 pub use endpoint::*;
 pub(crate) use env::*;

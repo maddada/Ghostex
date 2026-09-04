@@ -498,8 +498,9 @@ provider probe — never by a failure.
 
   * The pane is ALIVE (the common case: the user is looking at the draft they
     just opened). The switch then happens INSIDE that pane and the provider is
-    never touched. The provider script is `<setup>; <agent CLI>;
-    exec $SHELL -l`, so interrupting the CLI drops the same pty into its login
+    never touched. Zsh launches the agent from a one-shot startup hook and
+    keeps its initialized login shell; other shells use `<setup>; <agent CLI>;
+    exec $SHELL -l`. Interrupting the CLI returns the same pty to its login
     shell, where the new agent's launch line can simply be typed.
   * The pane is MISSING (a slept or never-opened draft). There is nothing to
     reuse and nothing to interrupt, so the rewritten row is started the normal
