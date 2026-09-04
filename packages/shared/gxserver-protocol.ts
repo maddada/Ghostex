@@ -106,6 +106,13 @@ export type GxserverRpcErrorCode =
   client can distinguish it from a generic internal error.
   */
   | 'invalidState'
+  /*
+  The send was cancelled by the user's own Escape before its Enter was written
+  (`/api/interruptSessionChat` bumps the queue generation under it). Nothing
+  reached the agent, so the composer restores the text silently instead of
+  announcing a delivery failure.
+  */
+  | 'sendCancelled'
   | 'internalError'
   | 'methodNotAllowed'
   | 'notFound'
@@ -125,6 +132,7 @@ export const GXSERVER_RENDERER_COMMAND_ACTIONS = [
   'openBrowser',
   'openBrowserPane',
   'openPaths',
+  'readResourcesSnapshot',
   'restartSession',
   'renameCommand',
   'runCommand',
@@ -2158,10 +2166,9 @@ promoted (its first user prompt reached the agent), because at that point the
 transcript, the resume plan, and the session's agent identity all belong to the
 agent that produced them.
 
-`agentId` is a project agent id: one of the five chat-supported base families or
-a project custom agent whose base family is chat-supported. Clients read the
-allowed set from `availableAgents` on `/api/readSessionChat` rather than
-building it themselves.
+`agentId` is a visible sidebar project agent whose base family is
+chat-supported. Clients read the allowed set from `availableAgents` on
+`/api/readSessionChat` rather than building it themselves.
 */
 export interface GxserverSwitchDraftAgentParams extends GxserverSessionLifecycleParams {
   agentId: string;
@@ -2749,6 +2756,15 @@ export interface GxserverPresentationSession {
    * the agent is going to receive. ABSENT means none failed.
    */
   queuedPromptFailedCount?: number;
+  /**
+   * CDXC:Drafts 2026-09-04 DECISION:
+   * User: a white dot on the agent icon marks a session whose chat composer
+   * holds unsent text (the chat box only, never the terminal's own input
+   * line). True when gxserver's synced draft for this session is non-blank;
+   * ABSENT otherwise, never `false`, which is also what a daemon that predates
+   * the flag publishes.
+   */
+  hasComposerDraft?: boolean;
   sessionId: GxserverSessionId;
   /**
    * CDXC:SessionNotes 2026-08-24:
