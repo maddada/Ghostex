@@ -352,8 +352,12 @@ pub fn zmx_client_visible_sequence(rows: u16, cols: u16) -> String {
 }
 
 /// In-band sequence telling the zmx attach client "this client is not
-/// displaying; my local grid is rows x cols; hand the grid to whoever is
-/// displaying, or rest wide".
+/// displaying a terminal but is showing chat; claim the wide resting grid".
+pub fn zmx_client_chat_sequence(rows: u16, cols: u16) -> String {
+    format!("\x1b]1337;ZMX_CHAT={rows},{cols}\x07")
+}
+
+/// In-band parked claim: retain the daemon grid unless another client needs it.
 pub fn zmx_client_hidden_sequence(rows: u16, cols: u16) -> String {
     format!("\x1b]1337;ZMX_HIDDEN={rows},{cols}\x07")
 }

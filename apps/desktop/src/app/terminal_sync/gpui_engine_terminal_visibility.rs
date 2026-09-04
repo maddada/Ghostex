@@ -6,13 +6,14 @@ use std::collections::HashSet;
 
 use crate::app::model::*;
 use crate::terminal_model::ZMX_RESTING_GRID_COLS;
-use crate::terminal_model::zmx_client_hidden_sequence;
+use crate::terminal_model::{zmx_client_chat_sequence, zmx_client_hidden_sequence};
 use crate::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiEngineTerminalZmxVisibility {
     Visible,
-    Hidden,
+    Chat,
+    Parked,
 }
 
 /// Last visibility claim made to the zmx attach client behind one Agents
@@ -26,7 +27,7 @@ pub(crate) struct GpuiEngineTerminalAnnouncedVisibility {
 
 impl GhostexGpuiApp {
     /*
-    CDXC:Terminal 2026-09-03:
+    CDXC:Terminal 2026-09-05 WHY:
     Agent sessions run inside zmx, and every Agents engine terminal keeps its
     `zmx attach` client alive while parked (background tab, chat mode, another
     titlebar mode, collapsed companion). A parked client used to keep its last
@@ -34,7 +35,7 @@ impl GhostexGpuiApp {
     rendering narrow and the chat view, which reads the zmx screen, showed
     truncated lines. This pass runs after every engine reconcile (once per
     render through `prepare_focus_bounds_for_render`) and tells each client
-    whether it is displaying:
+    whether its rendered slot is a terminal, chat, or absent:
 
     - Displayed = the session is the active session of a rendered mount slot
       in the current titlebar mode: an Agents pane slot
@@ -44,9 +45,11 @@ impl GhostexGpuiApp {
       that editor mode is active. Chat-mode sessions are never displayed: the
       chat CEF body replaces the terminal mount slot. Popped-out sessions are
       `PoppedOutPlaceholder`, never Running, so they own no engine record here.
-    - Hidden: the local emulator is resized to `ZMX_RESTING_GRID_COLS` x its
+    - Chat: a rendered chat slot holds a wide-grid claim with `ZMX_CHAT`.
+    - Parked: a session outside the rendered slots holds no chat claim.
+    - Both non-visible states: the local emulator is resized to `ZMX_RESTING_GRID_COLS` x its
       current rows so it never receives output rendered for a width it does
-      not have, then `ZMX_HIDDEN=<rows>,<cols>` is written into the PTY input
+      not have, then the matching `ZMX_CHAT` or `ZMX_HIDDEN` is written into the PTY input
       (the same `write_input` path pastes use; the attach client consumes the
       sequence and never forwards it to the shell).
     - Visible: the claim is written from the element's prepaint, after the
@@ -107,7 +110,14 @@ impl GhostexGpuiApp {
                 .agents_gpui_engine_terminal_zmx_visibility
                 .get(&session_id)
                 .map(|announced| announced.visibility);
-            let is_displayed = displayed.contains(&session_id);
+            let visibility = if !displayed.contains(&session_id) {
+                GpuiEngineTerminalZmxVisibility::Parked
+            } else if self.agents_chat_mode_sessions.contains(&session_id) {
+                GpuiEngineTerminalZmxVisibility::Chat
+            } else {
+                GpuiEngineTerminalZmxVisibility::Visible
+            };
+            let is_displayed = visibility == GpuiEngineTerminalZmxVisibility::Visible;
             if is_displayed {
                 let (cols, rows) = view.read(cx).model().size();
                 if previous != Some(GpuiEngineTerminalZmxVisibility::Visible) {
@@ -121,19 +131,22 @@ impl GhostexGpuiApp {
                         cols,
                     },
                 );
-            } else if previous != Some(GpuiEngineTerminalZmxVisibility::Hidden) {
+            } else if previous != Some(visibility) {
                 let (_, rows) = view.read(cx).model().size();
                 let cols = ZMX_RESTING_GRID_COLS;
                 view.update(cx, |view, cx| {
                     view.resize_grid(cols, rows, cx);
-                    let _ = view
-                        .model()
-                        .write_input(zmx_client_hidden_sequence(rows, cols).as_bytes());
+                    let sequence = if visibility == GpuiEngineTerminalZmxVisibility::Chat {
+                        zmx_client_chat_sequence(rows, cols)
+                    } else {
+                        zmx_client_hidden_sequence(rows, cols)
+                    };
+                    let _ = view.model().write_input(sequence.as_bytes());
                 });
                 self.agents_gpui_engine_terminal_zmx_visibility.insert(
                     session_id,
                     GpuiEngineTerminalAnnouncedVisibility {
-                        visibility: GpuiEngineTerminalZmxVisibility::Hidden,
+                        visibility,
                         rows,
                         cols,
                     },
@@ -143,8 +156,7 @@ impl GhostexGpuiApp {
     }
 
     /// Sessions whose engine terminal is rendered as a terminal body in the
-    /// current titlebar mode. Chat-mode sessions render the chat surface in
-    /// that slot instead, so they never count as displayed.
+    /// current titlebar mode, including slots rendering chat instead.
     fn displayed_agents_gpui_engine_terminal_sessions(&self) -> HashSet<TerminalSessionId> {
         let mut displayed = HashSet::new();
         if self.active_mode == TitlebarMode::Agents {
@@ -161,7 +173,6 @@ impl GhostexGpuiApp {
                     .map(|slot_id| slot_id.session_id),
             );
         }
-        displayed.retain(|session_id| !self.agents_chat_mode_sessions.contains(session_id));
         displayed
     }
 
@@ -180,7 +191,7 @@ impl GhostexGpuiApp {
     }
 
     /// Whether a `refresh-if-stale` may carry this engine terminal's grid:
-    /// false while the client is announced hidden (its model rests at
+    /// false while the client is announced chat or parked (its model rests at
     /// `ZMX_RESTING_GRID_COLS`) or while a visible announce is still pending
     /// (the next prepaint re-establishes and claims the real grid). Records
     /// outside the visibility protocol (non-zmx shells, command pane) are
@@ -197,7 +208,7 @@ impl GhostexGpuiApp {
             .agents_gpui_engine_terminal_zmx_visibility
             .get(&session_id)
             .is_some_and(|announced| {
-                announced.visibility == GpuiEngineTerminalZmxVisibility::Hidden
+                announced.visibility != GpuiEngineTerminalZmxVisibility::Visible
             })
         {
             return false;

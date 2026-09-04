@@ -300,6 +300,7 @@ async fn run_terminal_socket(
         child
     });
     let mut child_exited = false;
+    let mut visibility_state = None;
     loop {
         tokio::select! {
             message = socket_receiver.next() => {
@@ -310,7 +311,7 @@ async fn run_terminal_socket(
                         }
                     }
                     Some(Ok(Message::Text(text))) => {
-                        if let Some(bytes) = handle_control_message(&master, text.as_str()) {
+                        if let Some(bytes) = handle_control_message(&master, text.as_str(), &mut visibility_state) {
                             if input_tx.send(bytes).await.is_err() {
                                 break;
                             }
@@ -387,36 +388,59 @@ CDXC:Zmx 2026-09-03:
 Web clients keep a session's xterm mounted (socket open) while it is parked
 behind another tab or under the chat view, so a plain detach never happens
 and the hidden client would keep clamping the shared zmx grid to its own
-size. `{"type":"visibility","hidden":bool,"cols":..,"rows":..}` resizes this
+size. `{"type":"visibility","state":"visible"|"chat"|"parked","cols":..,"rows":..}` resizes this
 pty exactly like `resize` and then feeds the zmx attach client the in-band
-`ZMX_HIDDEN` / `ZMX_VISIBLE` sequence at that same grid, which zmx consumes
+`ZMX_HIDDEN` / `ZMX_CHAT` / `ZMX_VISIBLE` sequence at that same grid, which zmx consumes
 (never forwarding it to the shell) to hand the grid to whichever client is
-actually displaying, or rest wide when none is. The sequence goes through the
+actually displaying, or rest wide only with a chat claim.
+Older cached bundles may omit state and supply hidden instead (true means parked). The sequence goes through the
 pty writer channel so it is ordered with the client's own input bytes.
+Once a client claims visibility, subsequent resize messages also carry its last
+state as an OSC. zmx ignores that client's SIGWINCH sizes, since the local
+200-column pin can race ahead of the parked claim. This also keeps resizing
+working for cached bundles that send plain resize controls.
 Returns the bytes to write, if any; the socket loop owns the channel.
 */
-fn handle_control_message(master: &Box<dyn MasterPty + Send>, text: &str) -> Option<Vec<u8>> {
+fn handle_control_message(
+    master: &Box<dyn MasterPty + Send>,
+    text: &str,
+    visibility_state: &mut Option<&'static str>,
+) -> Option<Vec<u8>> {
     let Ok(value) = serde_json::from_str::<Value>(text) else {
         return None;
     };
-    let hidden = match value.get("type").and_then(Value::as_str)? {
-        "resize" => None,
-        "visibility" => Some(value.get("hidden").and_then(Value::as_bool)?),
+    let state = match value.get("type").and_then(Value::as_str)? {
+        "resize" => *visibility_state,
+        "visibility" => Some(match value.get("state") {
+            Some(state) => match state.as_str()? {
+                "visible" => "ZMX_VISIBLE",
+                "chat" => "ZMX_CHAT",
+                "parked" => "ZMX_HIDDEN",
+                _ => return None,
+            },
+            None => {
+                if value.get("hidden").and_then(Value::as_bool)? {
+                    "ZMX_HIDDEN"
+                } else {
+                    "ZMX_VISIBLE"
+                }
+            }
+        }),
         _ => return None,
     };
     let cols = json_dimension(&value, "cols")?;
     let rows = json_dimension(&value, "rows")?;
+    *visibility_state = state;
     let _ = master.resize(PtySize {
         rows,
         cols,
         pixel_width: 0,
         pixel_height: 0,
     });
-    hidden.map(|hidden| zmx_visibility_sequence(hidden, rows, cols))
+    state.map(|state| zmx_visibility_sequence(state, rows, cols))
 }
 
-fn zmx_visibility_sequence(hidden: bool, rows: u16, cols: u16) -> Vec<u8> {
-    let key = if hidden { "ZMX_HIDDEN" } else { "ZMX_VISIBLE" };
+fn zmx_visibility_sequence(key: &str, rows: u16, cols: u16) -> Vec<u8> {
     format!("\x1b]1337;{key}={rows},{cols}\x07").into_bytes()
 }
 

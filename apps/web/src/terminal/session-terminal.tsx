@@ -3,7 +3,7 @@ import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { Terminal } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
-import { forwardRef, useEffect, useImperativeHandle, useRef, type HTMLAttributes } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type HTMLAttributes } from 'react';
 import { detectghostexHotkeyPlatform } from '@/packages/shared/ghostex-hotkeys';
 import type {
   GxserverProjectId,
@@ -12,7 +12,7 @@ import type {
   GxserverTerminalWsReadyMessage,
 } from '@/packages/shared/gxserver-protocol';
 import { GHOSTTY_DEFAULT_THEME } from './ghostty-default-theme';
-import { TerminalWsClient, type TerminalWsClientError } from './terminal-ws-client';
+import { TerminalWsClient, type TerminalWsClientError, type TerminalVisibility } from './terminal-ws-client';
 import './session-terminal.css';
 
 const INITIAL_COLS = 120;
@@ -47,11 +47,11 @@ export interface SessionTerminalProps extends Omit<HTMLAttributes<HTMLDivElement
   baseUrl: string;
   customKeyEventHandler?(event: KeyboardEvent): boolean;
   /**
-   * True while the terminal stays mounted but is not displayed (parked behind
-   * another tab, or under the chat view). The socket stays open; the client
-   * announces itself hidden to zmx and stops fitting to its container.
+   * On-screen terminal, on-screen chat, or parked behind another tab.
+   * Both non-visible states keep the socket open and pin the local grid.
+   * A background browser tab always reports parked.
    */
-  hidden?: boolean;
+  visibility?: TerminalVisibility;
   onError?(error: TerminalWsClientError): void;
   onExit?(message: GxserverTerminalWsExitMessage): void;
   onReady?(message: GxserverTerminalWsReadyMessage): void;
@@ -134,7 +134,7 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
     baseUrl,
     className,
     customKeyEventHandler,
-    hidden = false,
+    visibility: requestedVisibility = 'visible',
     onError,
     onExit,
     onReady,
@@ -147,9 +147,16 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
   const containerRef = useRef<HTMLDivElement>(null);
   const searchAddonRef = useRef<SearchAddon>(null);
   const terminalRef = useRef<Terminal>(null);
-  const hiddenRef = useRef(hidden);
-  hiddenRef.current = hidden;
-  const applyVisibilityRef = useRef<(hidden: boolean) => void>(null);
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState === 'visible');
+  useEffect(() => {
+    const update = () => setPageVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+  const visibility = pageVisible ? requestedVisibility : 'parked';
+  const visibilityRef = useRef(visibility);
+  visibilityRef.current = visibility;
+  const applyVisibilityRef = useRef<(state: TerminalVisibility) => void>(null);
   const callbacksRef = useRef({
     autoFocus,
     customKeyEventHandler,
@@ -242,12 +249,12 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
     // Container-driven fits only apply while displayed; a hidden terminal
     // holds the wide grid it announced to zmx until it is shown again.
     const fit = () => {
-      if (!hiddenRef.current) {
+      if (visibilityRef.current === 'visible') {
         measure();
       }
     };
     measure();
-    if (hiddenRef.current) {
+    if (visibilityRef.current !== 'visible') {
       terminal.resize(HIDDEN_COLS, terminal.rows);
     }
 
@@ -271,18 +278,16 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
     });
     const dataSubscription = terminal.onData((data) => client.sendInput(data));
     const resizeSubscription = terminal.onResize(({ cols, rows }) => client.resize(cols, rows));
-    const applyVisibility = (nextHidden: boolean) => {
-      if (nextHidden) {
+    const applyVisibility = (state: TerminalVisibility) => {
+      if (state !== 'visible') {
         terminal.resize(HIDDEN_COLS, terminal.rows);
       } else {
         measure();
       }
-      client.setVisibility(nextHidden, { cols: terminal.cols, rows: terminal.rows });
+      client.setVisibility(state, { cols: terminal.cols, rows: terminal.rows });
     };
     applyVisibilityRef.current = applyVisibility;
-    if (hiddenRef.current) {
-      client.setVisibility(true, { cols: terminal.cols, rows: terminal.rows });
-    }
+    client.setVisibility(visibilityRef.current, { cols: terminal.cols, rows: terminal.rows });
     const resizeObserver = new ResizeObserver(fit);
     resizeObserver.observe(container);
     const initialFitFrame = window.requestAnimationFrame(fit);
@@ -301,14 +306,14 @@ export const SessionTerminal = forwardRef<SessionTerminalHandle, SessionTerminal
     };
   }, [authToken, baseUrl, projectId, sessionId]);
 
-  const mountedHiddenRef = useRef(hidden);
+  const mountedVisibilityRef = useRef(visibility);
   useEffect(() => {
-    if (mountedHiddenRef.current === hidden) {
+    if (mountedVisibilityRef.current === visibility) {
       return;
     }
-    mountedHiddenRef.current = hidden;
-    applyVisibilityRef.current?.(hidden);
-  }, [hidden]);
+    mountedVisibilityRef.current = visibility;
+    applyVisibilityRef.current?.(visibility);
+  }, [visibility]);
 
   return (
     <div

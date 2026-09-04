@@ -37,7 +37,11 @@ The first version of this pass stamped the IDENTITY of the spawning binary
 conflates "the code changed" with "the wire broke": on 2026-09-03 three zmx
 rebuilds that only ADDED tags (Visibility=26, GridInfo=27, which old daemons
 drop through their `_` arm) cycled 57 sessions in one day, several with agents
-mid-task. The stamp is now the explicit wire-generation number zmx declares
+mid-task. Widening the Visibility byte from `hidden: bool` to visible/chat/parked
+on 2026-09-05 also stayed generation 1: 8.8.0 shipped the boolean, but the payload
+is still 9 bytes and an old daemon reads chat and parked as hidden, which is the
+resting-grid behaviour it already had.
+The stamp is now the explicit wire-generation number zmx declares
 (`WIRE_GENERATION` in `.dependencies/zmx/src/ipc.zig`, printed by
 `zmx version` as `wire_generation\t<n>`). A daemon is cycled only when the
 generation it was spawned with differs from the bundled binary's, so an

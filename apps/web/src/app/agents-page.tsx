@@ -610,7 +610,9 @@ export function IntegratedAgentsPage() {
                   customKeyEventHandler={(event) =>
                     !((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f')
                   }
-                  hidden={!controls.isActive || session.sessionSurfaceMode === 'chat'}
+                  visibility={
+                    !controls.isActive ? 'parked' : session.sessionSurfaceMode === 'chat' ? 'chat' : 'visible'
+                  }
                   onError={(nextError: TerminalWsClientError) => setError(nextError.message)}
                   onReady={() => void deliverStartupText(session)}
                   projectId={session.projectId as GxserverProjectId}

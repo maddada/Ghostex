@@ -620,6 +620,7 @@ pub struct TerminalView {
     /// real grid resize so the claim carries the grid the slot actually has
     /// (CDXC:Terminal 2026-09-03).
     pending_zmx_visible_announce: bool,
+    zmx_visibility_claims_enabled: bool,
 }
 
 impl TerminalView {
@@ -721,6 +722,7 @@ impl TerminalView {
             hovered_link: None,
             search: None,
             pending_zmx_visible_announce: false,
+            zmx_visibility_claims_enabled: false,
         }
     }
 
@@ -735,6 +737,7 @@ impl TerminalView {
     /// Ask the next prepaint to announce `ZMX_VISIBLE` with the grid it
     /// settles on. Called when the terminal becomes a displayed slot.
     pub fn request_zmx_visible_announce(&mut self) {
+        self.zmx_visibility_claims_enabled = true;
         self.pending_zmx_visible_announce = true;
     }
 
@@ -2249,7 +2252,8 @@ impl TerminalView {
         let cell_width_px = ((metrics.cell_width.as_f32() * scale).round() as u32).max(1);
         let cell_height_px = ((metrics.line_height.as_f32() * scale).round() as u32).max(1);
 
-        if self.frame.is_none() || (cols, rows) != self.model.size() {
+        let grid_changed = (cols, rows) != self.model.size();
+        if self.frame.is_none() || grid_changed {
             // Resize reflows the vt grid synchronously, so take the fresh
             // frame now instead of waiting for the SIGWINCH redraw wakeup.
             // Best-effort: the PTY side can only fail once the child is
@@ -2258,7 +2262,8 @@ impl TerminalView {
             self.row_cache.clear();
             self.refresh_snapshot();
         }
-        if self.pending_zmx_visible_announce {
+        if self.pending_zmx_visible_announce || (self.zmx_visibility_claims_enabled && grid_changed)
+        {
             // The grid above is the real one for this displayed slot, so the
             // visibility claim carries it (CDXC:Terminal
             // 2026-09-03).
