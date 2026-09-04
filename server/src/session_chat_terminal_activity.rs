@@ -38,9 +38,9 @@ percentage and elapsed clock are read off the screen or omitted; neither is
 ever estimated.
 */
 
-use crate::session_chat_options::{session_chat_option_agent, SessionChatOptionAgent};
+use crate::session_chat_options::{SessionChatOptionAgent, session_chat_option_agent};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 /// Tail window scanned for a progress line. The spinner row and its bar sit at
 /// the very bottom of a working screen, above at most a tip line and the
@@ -57,11 +57,12 @@ pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
 /// Claude Code's current assistant status, not yet flushed to transcript JSONL.
 pub const SESSION_CHAT_ACTIVITY_CLAUDE_STATUS: &str = "claude-status";
 
-/// The `⏺` row of a Claude Code tool call: the row has the `⎿` output gutter
-/// directly under it. Shown as live work only, never as chat history — the
+/// The row of a Claude Code tool call: the row directly above the `⎿` output
+/// gutter, with or without its bullet. The client shows it as a pending tool
+/// row at the bottom of the transcript, never as reasoning history — the
 /// transcript writes the call itself once its result lands, and the screen
 /// paints the description in a different form ("Reading …" for "Read …")
-/// than the transcript stores, so the row could never be matched against it.
+/// than the transcript stores, so the row could never be matched as prose.
 pub const SESSION_CHAT_ACTIVITY_CLAUDE_TOOL: &str = "claude-tool";
 
 /// Cursor Agent's live reasoning/composition row before its transcript flushes.
@@ -452,7 +453,11 @@ fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
     if !rest.chars().next().is_some_and(char::is_whitespace) {
         return None;
     }
-    let raw_label = rest.trim();
+    claude_status_from_label(marker, rest.trim())
+}
+
+/// The activity a Claude status row carries once its marker is known.
+fn claude_status_from_label(marker: char, raw_label: &str) -> Option<SessionChatTerminalActivity> {
     if let Some(activity) = running_shells_activity(raw_label) {
         return Some(activity);
     }
@@ -558,20 +563,27 @@ fn screen_rows(screen_text: &str) -> Vec<ScreenRow> {
 /// deeper, so anything at least this deep still belongs to the status.
 const CLAUDE_STATUS_CONTINUATION_INDENT: usize = 2;
 
+/// Deepest indent of a row that can still continue the `⏺` line: wrapped
+/// prose sits at two, a wrapped item of a nested list a few deeper. A row that
+/// starts far to the right is a second column (a side pane), not a wrap.
+const CLAUDE_STATUS_CONTINUATION_MAX_INDENT: usize = 8;
+
 /// Claude's tool-output gutter. It is indented like a continuation row but
 /// starts the tool block, so it ends the status text.
 const CLAUDE_TOOL_OUTPUT_MARKER: char = '⎿';
 
-/// A `⏺` row read across its wrapped extent.
-struct ClaudeStatusExtent {
-    /// The row's text with its wrapped continuation rows joined back on.
-    label: String,
-    /// The `⎿` gutter sits directly under the extent: this is a tool call.
-    opens_tool_block: bool,
+/// A row that continues the status row above it: indented, physically
+/// contiguous, and neither a gutter nor a marker row of its own.
+fn is_claude_continuation_row(row: &ScreenRow) -> bool {
+    (CLAUDE_STATUS_CONTINUATION_INDENT..=CLAUDE_STATUS_CONTINUATION_MAX_INDENT)
+        .contains(&row.indent)
+        && !row.after_blank
+        && !row.text.starts_with(CLAUDE_TOOL_OUTPUT_MARKER)
+        && activity_from_line(&row.text).is_none()
 }
 
 /*
-CDXC:AgentScreenDetection 2026-09-03:
+CDXC:SessionChatTerminalActivity 2026-09-03:
 Only rows that are physically contiguous with the `⏺` row are part of it. A
 blank row ends the status even though what follows is indented the same way,
 because Claude paints everything that belongs to the turn under that bullet
@@ -585,37 +597,60 @@ with the same two-space indent:
 
       Ran 6 shell commands
 
-The in-flight tool row (whose own bullet blinks on and off), the collapsed
-"Ran 6 shell commands" summary, and a second paragraph of the message are
-indistinguishable by layout. Joining past the blank once swallowed the tool row
-into the status, which then never matched the transcript's sentence and
-produced a fresh near-duplicate for every tool that followed. Stopping at the
-blank makes the label the message's first paragraph: always a prefix of the
-transcript text, so the client can retire it by prefix and never needs to
-guess what the indented rows below were.
+The in-flight tool row, the collapsed "Ran 6 shell commands" summary, and a
+second paragraph of the message are indistinguishable by layout. Joining past
+the blank once swallowed the tool row into the status, which then never
+matched the transcript's sentence and produced a fresh near-duplicate for
+every tool that followed. Stopping at the blank makes the label the message's
+first paragraph: always a prefix of the transcript text, so the client can
+retire it by prefix and never needs to guess what the indented rows below were.
 */
-fn claude_status_extent(rows: &[ScreenRow], index: usize) -> ClaudeStatusExtent {
+fn joined_claude_status_line(rows: &[ScreenRow], index: usize) -> String {
     let mut label = rows[index].text.clone();
-    let mut next = index + 1;
-    while let Some(row) = rows.get(next) {
-        if row.after_blank
-            || row.indent < CLAUDE_STATUS_CONTINUATION_INDENT
-            || row.text.starts_with(CLAUDE_TOOL_OUTPUT_MARKER)
-            || activity_from_line(&row.text).is_some()
-        {
+    for row in &rows[index + 1..] {
+        if !is_claude_continuation_row(row) {
             break;
         }
         label.push(' ');
         label.push_str(&row.text);
-        next += 1;
     }
-    let opens_tool_block = rows
-        .get(next)
-        .is_some_and(|row| !row.after_blank && row.text.starts_with(CLAUDE_TOOL_OUTPUT_MARKER));
-    ClaudeStatusExtent {
-        label,
-        opens_tool_block,
+    label
+}
+
+/*
+CDXC:SessionChatTerminalActivity 2026-09-04 WHY:
+A tool call is recognised by its `⎿` output gutter, not by its bullet. Claude
+paints the in-flight tool row both as `⏺ Dumping other live Claude screens…`
+and as `  Running cd …` (same row, bullet absent), so a detector keyed on the
+bullet saw the tool appear and vanish with the paint, and the client card
+blinked once a second and pushed the transcript up and down with it. The row
+directly above the gutter, walked back over its wrapped rows, is the tool
+whether the bullet is drawn or not. What sits above a gutter is a tool only
+when it is a bullet row or an indented row: the spinner's `⎿ Tip:` and a
+prompt's `⎿ Referenced file` hang under marker and prompt rows and are not.
+*/
+fn claude_tool_activity(rows: &[ScreenRow], gutter: usize) -> Option<SessionChatTerminalActivity> {
+    if gutter == 0 || rows[gutter].after_blank {
+        return None;
     }
+    let mut start = gutter - 1;
+    while start > 0 && is_claude_continuation_row(&rows[start]) {
+        start -= 1;
+    }
+    let row = &rows[start];
+    let bullet = row.text.starts_with('⏺');
+    if !bullet && row.indent < CLAUDE_STATUS_CONTINUATION_INDENT {
+        return None;
+    }
+    let label = joined_claude_status_line(rows, start);
+    let raw_label = label
+        .strip_prefix('⏺')
+        .map_or(label.as_str(), str::trim_start);
+    let mut activity = claude_status_from_label('⏺', raw_label)?;
+    if activity.kind == SESSION_CHAT_ACTIVITY_CLAUDE_STATUS {
+        activity.kind = SESSION_CHAT_ACTIVITY_CLAUDE_TOOL;
+    }
+    Some(activity)
 }
 
 /// `Some` while the agent is painting a live line this build understands.
@@ -655,6 +690,12 @@ pub fn detect_session_chat_terminal_activity(
     // Newest match wins: a screen can still hold the tail of a previous run.
     for index in (window_start..rows.len()).rev() {
         let line = &rows[index].text;
+        if line.starts_with(CLAUDE_TOOL_OUTPUT_MARKER) {
+            if let Some(activity) = claude_tool_activity(&rows, index) {
+                return Some(activity);
+            }
+            continue;
+        }
         let Some(mut activity) = activity_from_line(line) else {
             continue;
         };
@@ -667,12 +708,8 @@ pub fn detect_session_chat_terminal_activity(
             // Re-read the status from its whole wrapped extent, so the clock
             // and parenthetical metadata are stripped from the real end of
             // the text rather than from the end of its first row.
-            let extent = claude_status_extent(&rows, index);
-            if let Some(joined) = activity_from_line(&extent.label) {
+            if let Some(joined) = activity_from_line(&joined_claude_status_line(&rows, index)) {
                 activity = joined;
-            }
-            if extent.opens_tool_block {
-                activity.kind = SESSION_CHAT_ACTIVITY_CLAUDE_TOOL;
             }
         }
         return Some(activity);
