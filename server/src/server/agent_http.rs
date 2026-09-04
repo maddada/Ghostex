@@ -124,6 +124,29 @@ pub(crate) fn dispatch_agent_http_blocking(
             actually changed agent (a switch to the agent already in use is a
             no-op and must not blank a valid detection).
             */
+            /*
+            CDXC:SessionChat 2026-09-04 DECISION:
+            User: an Escape typed in the terminal pane must get the same
+            returned-prompt handling as the chat box's Stop. The pane reports
+            that Escape as this activity event, so the detector hangs off it
+            here (see session_chat_returned_prompt.rs); a session that is not
+            followable, or has no chat send to answer, makes it a no-op.
+            */
+            if endpoint_path == "/api/updateAgentActivity"
+                && params.get("event").and_then(Value::as_str) == Some("escape")
+            {
+                if let Ok(target) = crate::session_chat_send::resolve_session_chat_send_target(
+                    state,
+                    &params,
+                    "updateAgentActivity",
+                ) {
+                    crate::session_chat_returned_prompt::schedule_session_chat_returned_prompt_detection(
+                        state,
+                        &target,
+                        &request_id,
+                    );
+                }
+            }
             if endpoint_path == "/api/switchDraftAgent"
                 || endpoint_path == "/api/switchSessionAgent"
             {

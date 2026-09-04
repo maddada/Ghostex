@@ -99,6 +99,10 @@ struct LastChatSend {
     /// Enter was written. False while the worker is still typing, or when the
     /// interrupt cancelled the send before Enter.
     submitted: bool,
+    /// A detector is looking at this send right now. The chat interrupt
+    /// endpoint and the `escape` activity event it also raises would otherwise
+    /// start two detectors for one Escape.
+    claimed: bool,
 }
 
 type LastSendStore = Mutex<HashMap<String, LastChatSend>>;
@@ -124,6 +128,7 @@ pub fn record_session_chat_send_started(
                 started_at: Instant::now(),
                 sent_at_ms: chrono::Utc::now().timestamp_millis(),
                 submitted: false,
+                claimed: false,
             },
         );
     }
@@ -138,9 +143,66 @@ pub fn record_session_chat_send_submitted(project_id: &str, session_id: &str) {
     }
 }
 
-fn take_last_chat_send(project_id: &str, session_id: &str) -> Option<LastChatSend> {
+/// Hands the send to one detector. `None` while another detector holds it.
+fn claim_last_chat_send(project_id: &str, session_id: &str) -> Option<LastChatSend> {
     let mut sends = last_sends().lock().ok()?;
-    sends.remove(&store_key(project_id, session_id))
+    let send = sends.get_mut(&store_key(project_id, session_id))?;
+    if send.claimed {
+        return None;
+    }
+    send.claimed = true;
+    Some(send.clone())
+}
+
+/// A detector that found nothing gives the send back: a later Escape (or the
+/// delivery watchdog's deadline) may still be the one that returns it.
+fn release_last_chat_send(project_id: &str, session_id: &str) {
+    if let Ok(mut sends) = last_sends().lock() {
+        if let Some(send) = sends.get_mut(&store_key(project_id, session_id)) {
+            send.claimed = false;
+        }
+    }
+}
+
+fn take_last_chat_send(project_id: &str, session_id: &str) {
+    if let Ok(mut sends) = last_sends().lock() {
+        sends.remove(&store_key(project_id, session_id));
+    }
+}
+
+/*
+CDXC:SessionChat 2026-09-04 WHY:
+The delivery watchdog's deadline tier. Web and mobile terminals report no
+`escape` activity event, so an Escape typed there reaches this daemon only as
+silence: the watchdog wakes ten seconds after the send with nothing recorded.
+Before it raises a "not delivered" notice it asks this question of the capture
+it already took, and a composer that holds the sent text is a returned prompt,
+not a lost one. The full detector then runs through the trigger it was given.
+*/
+pub fn screen_shows_returned_session_chat_send(
+    project_id: &str,
+    session_id: &str,
+    agent: Option<&str>,
+    screen_text: &str,
+) -> bool {
+    let Some(agent) = normalize_agent_id(agent) else {
+        return false;
+    };
+    if !matches!(agent.as_str(), "claude" | "openclaude") {
+        return false;
+    }
+    let Some(send) = last_sends()
+        .lock()
+        .ok()
+        .and_then(|sends| sends.get(&store_key(project_id, session_id)).cloned())
+    else {
+        return false;
+    };
+    if !send.submitted || send.claimed {
+        return false;
+    }
+    claude_composer_input_text(screen_text)
+        .is_some_and(|composer_text| composer_holds_sent_text(&composer_text, &send.text))
 }
 
 // ---------------------------------------------------------------------------
@@ -397,9 +459,10 @@ fn log(state: &AppState, level: LogLevel, event: &str, details: Value) {
     });
 }
 
-/// Runs after the interrupt endpoint wrote Escape. Returns without doing
-/// anything unless the session runs Claude Code and the Escape answers a send
-/// this daemon made from Chat.
+/// Runs after an Escape reached the session: the chat interrupt endpoint, the
+/// `escape` activity event a terminal pane reports, or the delivery watchdog's
+/// deadline tier. Returns without doing anything unless the session runs
+/// Claude Code and the Escape answers a send this daemon made from Chat.
 pub(crate) fn schedule_session_chat_returned_prompt_detection(
     state: &AppState,
     target: &SessionChatSendTarget,
@@ -418,10 +481,11 @@ pub(crate) fn schedule_session_chat_returned_prompt_detection(
     {
         return;
     }
-    let Some(send) = take_last_chat_send(&target.project_id, &target.session_id) else {
+    let Some(send) = claim_last_chat_send(&target.project_id, &target.session_id) else {
         return;
     };
     if send.started_at.elapsed() > LAST_CHAT_SEND_MAX_AGE {
+        take_last_chat_send(&target.project_id, &target.session_id);
         return;
     }
     let state = state.clone();
@@ -451,6 +515,7 @@ pub(crate) fn schedule_session_chat_returned_prompt_detection(
                 "sessionChatInterruptCancelledSendCleared",
                 json!({ "projectId": project_id, "sessionId": session_id, "textBytes": send.text.len() }),
             );
+            take_last_chat_send(&project_id, &session_id);
             return;
         }
         tokio::time::sleep(RETURNED_PROMPT_DETECT_SETTLE).await;
@@ -473,6 +538,7 @@ pub(crate) fn schedule_session_chat_returned_prompt_detection(
             tokio::time::sleep(RETURNED_PROMPT_DETECT_POLL).await;
         }
         if !returned {
+            release_last_chat_send(&project_id, &session_id);
             return;
         }
         let transcript_path: Option<PathBuf> = {
@@ -512,6 +578,7 @@ pub(crate) fn schedule_session_chat_returned_prompt_detection(
                                     "sessionChatReturnedPromptRejectedByTranscript",
                                     json!({ "projectId": project_id, "sessionId": session_id }),
                                 );
+                                take_last_chat_send(&project_id, &session_id);
                                 return;
                             }
                         }
@@ -523,6 +590,7 @@ pub(crate) fn schedule_session_chat_returned_prompt_detection(
         // The delivery watchdog would otherwise wake at its deadline to explain
         // a message that is deliberately back in the composer.
         crate::session_chat_watchdog::cancel_session_chat_send_watchdog(&project_id, &session_id);
+        take_last_chat_send(&project_id, &session_id);
         let entry = record_returned_prompt(&project_id, &session_id, &send, message_id.clone());
         // Claude fires no hook for this, so nothing else ends the working claim.
         let idle_state = state.clone();

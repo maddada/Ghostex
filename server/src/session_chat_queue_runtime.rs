@@ -782,10 +782,24 @@ pub(crate) async fn send_session_chat_message_internal(
     cannot. It never retries and never writes to the terminal.
     */
     if let Some(send_probe) = send_probe {
+        let returned_prompt_state = state.clone();
+        let returned_prompt_target = crate::session_chat_send::SessionChatSendTarget {
+            project_id: target.project_id.clone(),
+            session_id: target.session_id.clone(),
+            zmx_name: target.zmx_name.clone(),
+            session: target.session.clone(),
+        };
         crate::session_chat_watchdog::start_session_chat_send_watchdog(
             send_probe,
             session_chat_terminal_notice_publisher(state, &target.project_id, &target.session_id),
             session_chat_watchdog_state_reader(state, &target.project_id, &target.session_id),
+            std::sync::Arc::new(move || {
+                crate::session_chat_returned_prompt::schedule_session_chat_returned_prompt_detection(
+                    &returned_prompt_state,
+                    &returned_prompt_target,
+                    "session-chat-watchdog",
+                );
+            }),
         );
     }
     /*

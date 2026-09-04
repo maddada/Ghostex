@@ -113,6 +113,12 @@ pub type SessionChatWatchdogPublisher = Arc<dyn Fn() + Send + Sync>;
 pub type SessionChatWatchdogStateReader =
     Arc<dyn Fn() -> SessionChatWatchdogLiveState + Send + Sync>;
 
+/// Starts the returned-prompt detector for this send (supplied by the send
+/// path, which owns the AppState the detector needs). Called at the deadline
+/// instead of a delivery verdict when the screen shows the sent text back in
+/// Claude's composer (CDXC:SessionChat in session_chat_returned_prompt.rs).
+pub type SessionChatReturnedPromptTrigger = Arc<dyn Fn() + Send + Sync>;
+
 // ---------------------------------------------------------------------------
 // Send probe
 // ---------------------------------------------------------------------------
@@ -242,6 +248,7 @@ pub fn start_session_chat_send_watchdog(
     probe: SessionChatSendProbe,
     publish: SessionChatWatchdogPublisher,
     read_state: SessionChatWatchdogStateReader,
+    returned_prompt: SessionChatReturnedPromptTrigger,
 ) {
     let probe = Arc::new(probe);
     let (project_id, session_id) = (probe.project_id.clone(), probe.session_id.clone());
@@ -253,6 +260,7 @@ pub fn start_session_chat_send_watchdog(
                 probe,
                 publish,
                 read_state,
+                returned_prompt,
                 generation,
                 my_generation,
             ))
@@ -375,6 +383,7 @@ async fn run_session_chat_send_watchdog(
     probe: Arc<SessionChatSendProbe>,
     publish: SessionChatWatchdogPublisher,
     read_state: SessionChatWatchdogStateReader,
+    returned_prompt: SessionChatReturnedPromptTrigger,
     generation: Arc<AtomicU64>,
     my_generation: u64,
 ) {
@@ -470,6 +479,23 @@ async fn run_session_chat_send_watchdog(
         Some(submitted_empty) => UndeliveredSendReason::MismatchedInput { submitted_empty },
         None => UndeliveredSendReason::TranscriptSilent,
     };
+    // Silence plus the sent text back in Claude's composer is an Escape this
+    // daemon never saw (a web or mobile terminal), not a lost message.
+    if reason == UndeliveredSendReason::TranscriptSilent {
+        if let Some(screen) =
+            crate::session_chat_send::capture_session_terminal_text(&probe.zmx_name).await
+        {
+            if crate::session_chat_returned_prompt::screen_shows_returned_session_chat_send(
+                &probe.project_id,
+                &probe.session_id,
+                probe.agent.as_deref(),
+                &screen,
+            ) {
+                returned_prompt();
+                return;
+            }
+        }
+    }
     escalate_undelivered_send(&probe, cursor.path.is_some(), &publish, &read_state, reason).await;
 }
 

@@ -864,6 +864,13 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         pushDraftRef.current();
       },
       restoreReturnedPrompt: (text: string): void => {
+        // The terminal-to-chat draft transfer on a view switch may already
+        // have brought the same text over; never stack a second copy.
+        const current = getInputApi()?.getValue() ?? draftRef.current;
+        if (current.includes(text)) {
+          getInputApi()?.focus();
+          return;
+        }
         restoreComposerText(text);
       },
       focus: () => {

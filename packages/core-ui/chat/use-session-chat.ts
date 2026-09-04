@@ -65,6 +65,7 @@ import {
   applySessionChatCommandMarkerBoundaries,
   assignSessionChatPendingOccurrence,
   nextSessionChatPendingSendId,
+  normalizeSessionChatPendingText,
   pruneSessionChatPendingSends,
   SESSION_CHAT_PENDING_SEND_LIMIT,
   sessionChatAppCommandsAsMessages,
@@ -432,6 +433,22 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   never cleared by omission; the view applies each id once.
   */
   const [returnedPrompt, setReturnedPrompt] = useState<SessionChatReturnedPrompt | null>(null);
+  /*
+  CDXC:SessionChat 2026-09-04 DECISION:
+  User: the optimistic echo of a prompt Claude handed back must leave the
+  transcript with it. The echo never had a transcript twin to prune it (the
+  message was never recorded), and an Escape typed in the terminal never
+  reached this client's own interrupt, so the returned prompt is what retires
+  it.
+  */
+  const applyReturnedPrompt = useCallback((prompt: SessionChatReturnedPrompt): void => {
+    setReturnedPrompt(prompt);
+    const returnedText = normalizeSessionChatPendingText(prompt.text);
+    setPending((current) => {
+      const next = current.filter((entry) => normalizeSessionChatPendingText(entry.text) !== returnedText);
+      return next.length === current.length ? current : next;
+    });
+  }, []);
   // Claude replaces its current `⏺ …` terminal line in place. Keep each
   // DISTINCT value only for this mounted chat; matching transcript text removes
   // it from composition as soon as JSONL catches up. Distinct rather than
@@ -665,7 +682,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setAppCommands(result.appCommands);
       }
       if (result.returnedPrompt) {
-        setReturnedPrompt(result.returnedPrompt);
+        applyReturnedPrompt(result.returnedPrompt);
       }
       if (result.screenProbed) {
         setScreenProbed(true);
@@ -994,7 +1011,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setAppCommands(event.appCommands);
       }
       if (event.returnedPrompt) {
-        setReturnedPrompt(event.returnedPrompt);
+        applyReturnedPrompt(event.returnedPrompt);
       }
       if (event.screenProbed) {
         setScreenProbed(true);
