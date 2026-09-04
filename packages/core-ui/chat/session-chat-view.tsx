@@ -38,7 +38,7 @@ import {
   SessionChatHostLinksProvider,
   type SessionChatHostLinks,
 } from './session-chat-links';
-import { SessionChatInteractiveCard } from './session-chat-interactive-card';
+import { SessionChatInteractiveCard, sessionChatCardDismissKey } from './session-chat-interactive-card';
 import { SessionChatMessageList } from './session-chat-message-list';
 import { SessionChatNotePanel } from './session-chat-note-panel';
 import { SessionChatSearch, type SessionChatHostSearchBridge } from './session-chat-search';
@@ -52,6 +52,13 @@ import {
   sessionChatTerminalNoticeDismissKey,
 } from './session-chat-terminal-notice-card';
 import { SessionChatSessionOptionPills, useSessionChatSessionOptions } from './session-chat-option-pills';
+import {
+  resolveSessionChatStarredContextDetails,
+  useSessionChatContextDetailsClock,
+  useSessionChatContextDetailsPreferences,
+} from './session-chat-context-details';
+import { SessionChatContextDetailsDialog } from './session-chat-context-details-dialog';
+import { SessionChatStatusLine } from './session-chat-status-line';
 import { sessionChatOptionCommandNames } from './session-chat-session-options';
 import { readStoredSessionChatVerbose, writeStoredSessionChatVerbose } from './session-chat-verbose-override';
 import { sessionChatSlashCommandsForAgent, sessionChatSlashHeadingForAgent } from './session-chat-slash-commands';
@@ -1044,10 +1051,19 @@ export function SessionChatView({
   */
   const noticeKey = sessionChatTerminalNoticeDismissKey(chat.terminalNotice);
   const [retiredNoticeKey, setRetiredNoticeKey] = useState<string | null>(null);
+  const [answeredApprovalKey, setAnsweredApprovalKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (chat.prompt === null) {
+      setAnsweredApprovalKey(null);
+    }
+  }, [chat.prompt]);
   const answerNoticeChoice = useCallback(
     async (choiceIndex: number): Promise<void> => {
       try {
         await chatAnswerPrompt({ choiceIndex, kind: 'terminalChoice' });
+        if (chat.terminalNotice?.kind === 'permissionPrompt' && chat.prompt?.kind === 'approval') {
+          setAnsweredApprovalKey(sessionChatCardDismissKey(chat.prompt));
+        }
       } catch (error) {
         /*
         The answer did not land, which the daemon only reports after PROVING
@@ -1063,10 +1079,35 @@ export function SessionChatView({
         throw error;
       }
     },
-    [chatAnswerPrompt, noticeKey]
+    [chat.prompt, chat.terminalNotice?.kind, chatAnswerPrompt, noticeKey]
   );
   const terminalChoicePending = (chat.terminalNotice?.choices?.length ?? 0) > 0 && noticeKey !== retiredNoticeKey;
+  /*
+  CDXC:AgentScreenDetection 2026-09-04 WHY:
+  Claude's tool permission dialog can reach chat twice: as the hook-derived
+  approval card (Allow/Deny) and, once the screen probe sees it, as the
+  `permissionPrompt` notice carrying the dialog's real rows. Both answer the
+  same dialog, so while the answerable notice is up the approval card stays
+  hidden; the notice is the one that cannot be stale about what is on screen.
+  A row picked on the notice also answers the approval card: gxserver only
+  retires that stored card on a later hook event (a denied tool produces none),
+  so the same local dismissal the card applies to its own Allow/Deny keeps it
+  from resurfacing stale once the notice retires.
+  */
+  const interactivePrompt =
+    (terminalChoicePending && chat.terminalNotice?.kind === 'permissionPrompt' && chat.prompt?.kind === 'approval') ||
+    (chat.prompt?.kind === 'approval' && sessionChatCardDismissKey(chat.prompt) === answeredApprovalKey)
+      ? null
+      : chat.prompt;
   const [sessionOptionSwitching, setSessionOptionSwitching] = useState(false);
+  const [contextDetailsOpen, setContextDetailsOpen] = useState(false);
+  const contextDetailsPreferences = useSessionChatContextDetailsPreferences();
+  const contextDetailsNow = useSessionChatContextDetailsClock();
+  const claudeStatus = chat.selectedOptions?.claudeStatus;
+  const starredContextDetails = useMemo(
+    () => resolveSessionChatStarredContextDetails(claudeStatus, contextDetailsPreferences, contextDetailsNow),
+    [claudeStatus, contextDetailsNow, contextDetailsPreferences]
+  );
   const composerEnabled = canSend && !terminalChoicePending && !sessionOptionSwitching;
   /*
   CDXC:SessionChat 2026-09-03:
@@ -1573,7 +1614,7 @@ export function SessionChatView({
                     onShowingChange={setInteractiveCardVisible}
                     onShowingQuestionChange={setQuestionActive}
                     onSwitchToTerminal={hostActions?.onSwitchToTerminal}
-                    prompt={chat.prompt}
+                    prompt={interactivePrompt}
                     showShortcutLabels={showShortcutLabels}
                   />
                   {/*
@@ -1658,6 +1699,7 @@ export function SessionChatView({
                             await chat.sendKey?.(key, marker);
                           }}
                           {...(pickModel ? { onPickModel: pickModel } : {})}
+                          onEditContextDetails={() => setContextDetailsOpen(true)}
                           onSwitchingChange={setSessionOptionSwitching}
                           {...(onSwitchToTerminalForAgentPicker || hostActions?.onSwitchToTerminal
                             ? {
@@ -1688,7 +1730,14 @@ export function SessionChatView({
                       fileHeading='Project files'
                       skillHeading={`${draftAgentRow?.name ?? displayAgentName(resolvedAgentLabel) ?? 'Agent'} skills`}
                     />
+                    <SessionChatStatusLine items={starredContextDetails} />
                   </div>
+                  <SessionChatContextDetailsDialog
+                    onOpenChange={setContextDetailsOpen}
+                    open={contextDetailsOpen}
+                    status={claudeStatus}
+                    theme={theme}
+                  />
                   {chatBarPanelState?.open && chatBarExtensions.length > 0 ? (
                     <SessionChatExtensionPanel
                       activeExtensionId={chatBarPanelState.activeExtensionId}
