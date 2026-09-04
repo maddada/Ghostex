@@ -212,6 +212,33 @@ export function shouldOfferSessionChatDraft(params: {
  *   the stored draft is missing/blank, or carries an older stamp. A legacy
  *   stored value without a stamp is "age unknown" and is never overridden.
  */
+/*
+CDXC:Drafts 2026-09-04 WHY:
+"A draft edited before the newest prompt went out is not a draft." Every copy
+of a draft (this client's localStorage, gxserver's row, a remote daemon's row)
+can go stale independently — a daemon that predates the retire-on-send, a
+dropped empty push, a page killed mid-send — and each stale copy resurrected
+the SENT message into the composer on the next app start. The transcript is
+the one source that cannot be stale about what was sent, so silent restores
+are measured against its newest user prompt instead of trusting any copy's
+own bookkeeping. An unparseable or unknown stamp is "age unknown" and never
+counts as stale; a missing prompt time (transcript not loaded) disables the
+rule rather than guessing.
+*/
+export function isSessionChatDraftStale(
+  draftUpdatedAt: number | string | null | undefined,
+  lastSentPromptAt: number | null | undefined
+): boolean {
+  if (lastSentPromptAt === null || lastSentPromptAt === undefined) {
+    return false;
+  }
+  const at = typeof draftUpdatedAt === 'string' ? Date.parse(draftUpdatedAt) : draftUpdatedAt;
+  if (at === null || at === undefined || Number.isNaN(at)) {
+    return false;
+  }
+  return at <= lastSentPromptAt;
+}
+
 export function shouldRestoreOwnSessionChatDraft(params: {
   incoming: SessionChatDraft | null;
   clientId: string;
@@ -221,12 +248,17 @@ export function shouldRestoreOwnSessionChatDraft(params: {
   composerText: string;
   /** This client's stored draft entry, null when absent. */
   stored: { text: string; updatedAt: number | undefined } | null;
+  /** Epoch ms of the transcript's newest user prompt; null while unknown. */
+  lastSentPromptAt?: number | null;
 }): boolean {
-  const { clientId, composerText, composerTouched, incoming, stored } = params;
+  const { clientId, composerText, composerTouched, incoming, lastSentPromptAt, stored } = params;
   if (!incoming || incoming.originClientId !== clientId || composerTouched) {
     return false;
   }
   if (incoming.content.trim() === '' || incoming.content === composerText) {
+    return false;
+  }
+  if (isSessionChatDraftStale(incoming.updatedAt, lastSentPromptAt)) {
     return false;
   }
   if (stored === null) {

@@ -39,6 +39,8 @@ export interface WorkspaceSession {
    * delete the row, so the terminal-view button says so in red.
    */
   queuedPromptFailedCount?: number;
+  /** The chat composer holds unsent text for this session (sidebar draft dot). */
+  hasComposerDraft?: boolean;
   /** Saved prompts associated with this provider conversation. */
   stashedPromptCount?: number;
   /**

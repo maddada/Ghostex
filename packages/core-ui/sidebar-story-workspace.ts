@@ -106,6 +106,7 @@ type SidebarSessionDecoration = Pick<
    */
   | 'queuedPromptCount'
   | 'queuedPromptFailedCount'
+  | 'hasComposerDraft'
   | 'terminalTitle'
   | 'workingStartedAt'
 >;
@@ -205,6 +206,7 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
               lastInteractionAt: session.lastInteractionAt,
               queuedPromptCount: session.queuedPromptCount,
               queuedPromptFailedCount: session.queuedPromptFailedCount,
+              hasComposerDraft: session.hasComposerDraft,
               terminalTitle: session.terminalTitle,
               workingStartedAt: session.workingStartedAt,
             } satisfies SidebarSessionDecoration,

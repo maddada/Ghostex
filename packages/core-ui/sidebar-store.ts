@@ -1254,6 +1254,9 @@ function haveSameSidebarSessionItem(left: SidebarSessionItem, right: SidebarSess
      * for exactly the reason the count above does.
      */
     left.queuedPromptFailedCount === right.queuedPromptFailedCount &&
+    // CDXC:Drafts 2026-09-04: same lone-field-change reasoning as the queue
+    // count: typing into or emptying the composer must move the draft dot.
+    left.hasComposerDraft === right.hasComposerDraft &&
     left.row === right.row &&
     left.sessionId === right.sessionId &&
     left.sessionKind === right.sessionKind &&

@@ -959,6 +959,19 @@
   --session-queued-prompt-badge-font-size: calc(7px * var(--sidebar-density-scale));
   --session-queued-prompt-badge-overhang: calc(3px * var(--sidebar-density-scale));
   /*
+   * CDXC:Drafts 2026-09-04:
+   * The composer-draft dot shares the badge's corner. Its size is derived from
+   * the badge so the two stay concentric at every density; the stacked offset
+   * is how far it slides toward the top-right when a count badge sits in front
+   * of it. 4px, not 3px: with a 6px dot behind a 10px badge, 3px left barely a
+   * pixel showing past the badge's dark outline ring.
+   */
+  --session-composer-draft-dot-size: calc(6px * var(--sidebar-density-scale));
+  --session-composer-draft-dot-stacked-offset: calc(4px * var(--sidebar-density-scale));
+  --session-composer-draft-dot-inset: calc(
+    (var(--session-queued-prompt-badge-size) - var(--session-composer-draft-dot-size)) / 2
+  );
+  /*
    * CDXC:SessionNotes 2026-08-24:
    * The "this session has a note" dot, parked just left of the leading icon.
    *
@@ -1217,6 +1230,61 @@
  * dragged card does not carry a bright yellow dot across the sidebar.
  */
 .session-frame[data-dragging='true'] .session-queued-prompt-badge {
+  opacity: 0;
+}
+
+/*
+ * CDXC:Drafts 2026-09-04 DECISION:
+ * The "chat composer holds text" dot: a plain white circle, no digit, centred on
+ * the exact spot the queued-prompt badge occupies, so a draft that becomes a
+ * queued row swaps in place. User picked the stacked pile for the case where
+ * both exist: the badge stays where it is and paints in front (z-index 6 vs 5),
+ * and `data-stacked` slides the dot up and to the right so a white crescent
+ * peeks out from behind the yellow. Same layout ownership as the badge: an
+ * absolutely positioned, pointer-transparent sibling of the leading icon that
+ * contributes nothing to the row's flow. Never wrap the icon to position it.
+ */
+.session-composer-draft-dot {
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(12, 12, 14, 0.75);
+  box-sizing: border-box;
+  height: var(--session-composer-draft-dot-size);
+  left: calc(
+    var(--session-leading-icon-left) + var(--session-leading-icon-size) - var(--session-queued-prompt-badge-size) +
+      var(--session-queued-prompt-badge-overhang) + var(--session-composer-draft-dot-inset)
+  );
+  pointer-events: none;
+  position: absolute;
+  top: calc(
+    var(--session-leading-icon-top) - var(--session-queued-prompt-badge-overhang) +
+      var(--session-composer-draft-dot-inset)
+  );
+  transition: opacity 120ms ease;
+  width: var(--session-composer-draft-dot-size);
+  z-index: 5;
+}
+
+.session-composer-draft-dot[data-stacked='true'] {
+  translate: var(--session-composer-draft-dot-stacked-offset)
+    calc(-1 * var(--session-composer-draft-dot-stacked-offset));
+}
+
+/* Same reference-layout scoping as the badge above: the anchor only exists there. */
+@supports (left: anchor(left)) {
+  .sidebar-reference-layout[data-reference-sidebar='true'] .session-composer-draft-dot {
+    left: calc(
+      anchor(right) - var(--session-queued-prompt-badge-size) + var(--session-queued-prompt-badge-overhang) +
+        var(--session-composer-draft-dot-inset)
+    );
+    position-anchor: --session-leading-icon;
+    top: calc(
+      anchor(top) - var(--session-queued-prompt-badge-overhang) + var(--session-composer-draft-dot-inset)
+    );
+  }
+}
+
+.session-frame[data-dragging='true'] .session-composer-draft-dot {
   opacity: 0;
 }
 

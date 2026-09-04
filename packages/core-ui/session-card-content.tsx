@@ -853,6 +853,13 @@ type SessionAgentIconProps = {
    * whatever owns it.
    */
   hasSessionNote?: boolean;
+  /**
+   * CDXC:Drafts 2026-09-04 DECISION:
+   * User: the chat composer holds unsent text for this session. Rendered as a
+   * white dot over the leading icon's top-right corner, chat box only (the
+   * terminal's own input line is not tracked).
+   */
+  hasComposerDraft?: boolean;
   isFavorite?: boolean;
   isPinned?: boolean;
   sessionTag?: SidebarSessionTag;
@@ -990,6 +997,7 @@ export function SessionFloatingAgentIcon({
   delayedSendDeadlineAt,
   delayedSendRemainingLabel,
   faviconDataUrl,
+  hasComposerDraft = false,
   hasSessionNote = false,
   isDraft = false,
   isFavorite = false,
@@ -1030,6 +1038,27 @@ export function SessionFloatingAgentIcon({
   not appear to have lost its note.
   */
   const sessionNoteDot = hasSessionNote ? <span aria-hidden='true' className='session-note-dot' /> : null;
+  /*
+  CDXC:Drafts 2026-09-04 DECISION:
+  User picked the "stacked pile" for a session that has BOTH queued prompts and
+  composer text: the yellow count badge keeps its place and the white draft dot
+  peeks out from behind it, offset toward the top-right, instead of hiding one
+  signal, moving the dot to another corner, or recolouring the badge. Alone, the
+  dot sits centred on the badge's own spot so a draft becoming a queued row
+  swaps in place. Same ownership rule as the badge and the note dot: an
+  absolutely positioned SIBLING of the leading icon, rendered in every branch,
+  never a wrapper. `data-stacked` mirrors the badge's own "renders at count >= 1"
+  rule so the CSS never has to know the count.
+  */
+  const hasQueuedPromptBadge =
+    typeof queuedPromptCount === 'number' && Number.isFinite(queuedPromptCount) && queuedPromptCount >= 1;
+  const composerDraftDot = hasComposerDraft ? (
+    <span
+      aria-hidden='true'
+      className='session-composer-draft-dot'
+      data-stacked={hasQueuedPromptBadge ? 'true' : undefined}
+    />
+  ) : null;
   const hasActiveDelayedSend = Boolean(delayedSendRemainingLabel || delayedSendDeadlineAt);
   const hasActiveCloseAfterDone = Boolean(closeAfterDone || closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt);
   const isCloseAfterDoneCountingDown = Boolean(closeAfterDoneRemainingLabel || closeAfterDoneDeadlineAt);
@@ -1048,6 +1077,7 @@ export function SessionFloatingAgentIcon({
           remainingLabel={delayedSendRemainingLabel}
         />
         {sessionNoteDot}
+        {composerDraftDot}
         {queuedPromptBadge}
       </>
     );
@@ -1072,6 +1102,7 @@ export function SessionFloatingAgentIcon({
           remainingLabel={closeAfterDoneRemainingLabel}
         />
         {sessionNoteDot}
+        {composerDraftDot}
         {queuedPromptBadge}
       </>
     );
@@ -1098,6 +1129,7 @@ export function SessionFloatingAgentIcon({
         slot='floating'
       />
       {sessionNoteDot}
+      {composerDraftDot}
       {queuedPromptBadge}
     </>
   );

@@ -37,6 +37,7 @@ export function presentationSessionToWorkspaceSession(
     ...(typeof session.queuedPromptFailedCount === 'number' && session.queuedPromptFailedCount > 0
       ? { queuedPromptFailedCount: session.queuedPromptFailedCount }
       : {}),
+    ...(session.hasComposerDraft === true ? { hasComposerDraft: true } : {}),
     ...(session.switchableAgents && session.switchableAgents.length > 0
       ? {
           switchableAgents: session.switchableAgents.map((row) => ({

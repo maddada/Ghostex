@@ -442,6 +442,9 @@ export function createGxserverPresentationSidebarSession({
       typeof presentation.queuedPromptFailedCount === 'number' && presentation.queuedPromptFailedCount > 0
         ? Math.floor(presentation.queuedPromptFailedCount)
         : undefined,
+    // CDXC:Drafts 2026-09-04: daemon-owned like the queue count above; anything
+    // but an explicit `true` collapses to `undefined` so no dot can render.
+    hasComposerDraft: presentation.hasComposerDraft === true ? true : undefined,
     displayTitle: presentation.displayTitle,
     displayTitleTooltip: presentation.displayTitleTooltip,
     /*

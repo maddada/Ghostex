@@ -1048,6 +1048,9 @@ fn to_cli_session(
         "queuedPromptFailedCount",
         &[p("queuedPromptFailedCount")],
     );
+    // CDXC:Drafts 2026-09-04: the composer-draft dot's input, forwarded for the
+    // same reason as the queue counts above. Absent means no draft.
+    insert_js(&mut map, "hasComposerDraft", &[p("hasComposerDraft")]);
     /*
      * CDXC:SessionNotes 2026-08-24:
      * The phone's session row renders the note dot and the note text from this
@@ -1937,6 +1940,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         "queuedPromptFailedCount",
         &[s("queuedPromptFailedCount")],
     );
+    insert_js(&mut map, "hasComposerDraft", &[s("hasComposerDraft")]);
     /*
      * CDXC:SessionNotes 2026-08-24:
      * Same SECOND-whitelist trap as the queue counts above: forwarding these in

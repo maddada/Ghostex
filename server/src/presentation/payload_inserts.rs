@@ -387,16 +387,27 @@ fn apply_draft_display_title(session: &mut Value, content: &str) {
     );
 }
 
-pub(crate) fn insert_draft_title_presentation_payload(snapshot: &mut Value, db: &Connection) {
+/*
+CDXC:Drafts 2026-09-04 DECISION:
+User: the sidebar shows a white dot on the top-right of the agent icon when the
+session's chat composer holds text, tracking the chat box only (the terminal's
+own input line is deliberately not tracked). `hasComposerDraft` is that dot's
+whole input. It rides the presentation projection for the same reason
+`queuedPromptCount` does: the sidebar renders every session from this snapshot
+and holds no per-session chat subscription, and the synced draft is already the
+durable cross-client copy, so no client has to report its own typing. The flag
+is published as an ABSENT key when there is no draft, never `false`, and
+whitespace-only text counts as no draft (`read_non_blank_session_chat_draft_contents`
+already trims). It shares the one grouped drafts read with the draft display
+title below rather than adding a second query per snapshot.
+*/
+pub(crate) fn insert_session_chat_draft_presentation_payload(
+    snapshot: &mut Value,
+    db: &Connection,
+) {
     let Some(sessions) = snapshot.get_mut("sessions").and_then(Value::as_array_mut) else {
         return;
     };
-    if !sessions
-        .iter()
-        .any(|session| session.get("isDraft").and_then(Value::as_bool) == Some(true))
-    {
-        return;
-    }
     let drafts = crate::session_chat_queue::read_non_blank_session_chat_draft_contents(db);
     if drafts.is_empty() {
         return;
@@ -415,28 +426,33 @@ pub(crate) fn insert_draft_title_presentation_payload(snapshot: &mut Value, db: 
                 .to_string(),
         );
         if let Some(content) = drafts.get(&key) {
+            apply_composer_draft_flag(session);
             apply_draft_display_title(session, content);
         }
     }
 }
 
-pub(crate) fn insert_draft_title_session_projection(
+pub(crate) fn insert_session_chat_draft_session_projection(
     session: &mut Value,
     db: &Connection,
     project_id: &str,
     session_id: &str,
 ) {
-    if session.get("isDraft").and_then(Value::as_bool) != Some(true) {
-        return;
-    }
-    // A failed read here only costs this delta its draft title; the next one
-    // republishes it. Nothing is destroyed by guessing.
+    // A failed read here only costs this delta its draft flag and title; the
+    // next one republishes them. Nothing is destroyed by guessing.
     let Ok(Some(content)) =
         crate::session_chat_queue::read_session_chat_draft_content(db, project_id, session_id)
     else {
         return;
     };
+    apply_composer_draft_flag(session);
     apply_draft_display_title(session, &content);
+}
+
+fn apply_composer_draft_flag(session: &mut Value) {
+    if let Some(object) = session.as_object_mut() {
+        object.insert("hasComposerDraft".to_string(), Value::Bool(true));
+    }
 }
 
 pub(crate) fn insert_auto_settle_window_presentation_payload(

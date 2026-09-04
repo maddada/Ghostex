@@ -32,7 +32,7 @@ pub fn read_presentation_snapshot(
     );
     insert_delayed_send_presentation_payload(db, &mut snapshot)?;
     insert_session_chat_queue_presentation_payload(&mut snapshot, db);
-    insert_draft_title_presentation_payload(&mut snapshot, db);
+    insert_session_chat_draft_presentation_payload(&mut snapshot, db);
     insert_session_agent_note_presentation_payload(&mut snapshot, db);
     insert_stashed_prompt_counts_presentation_payload(&mut snapshot, db);
     insert_auto_settle_window_presentation_payload(&mut snapshot, auto_settle_after_days);
@@ -129,7 +129,12 @@ pub fn build_presentation_session_delta(
         project_id,
         session_id,
     );
-    insert_draft_title_session_projection(&mut presentation_session, db, project_id, session_id);
+    insert_session_chat_draft_session_projection(
+        &mut presentation_session,
+        db,
+        project_id,
+        session_id,
+    );
     insert_session_agent_note_session_projection(&mut presentation_session, db);
     insert_stashed_prompt_count_session_projection(&mut presentation_session, db);
     /*

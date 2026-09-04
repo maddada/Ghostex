@@ -417,23 +417,17 @@ despite sharing Pi's transcript format, because it paints different chrome.
 */
 pub(crate) fn chat_supported_base_agent_id(value: Option<&str>) -> Option<&'static str> {
     match value?.trim().to_ascii_lowercase().as_str() {
+        "antigravity" | "antigravity-cli" => Some("antigravity"),
         "claude" | "openclaude" => Some("claude"),
         "codex" => Some("codex"),
+        "cursor" | "cursor-cli" => Some("cursor"),
         "grok" | "grok-build" => Some("grok"),
+        "hermes" | "hermes-agent" => Some("hermes-agent"),
         "pi" => Some("pi"),
         "omp" => Some("omp"),
         _ => None,
     }
 }
-
-/// The five base families, in the order the composer renders them.
-const CHAT_SUPPORTED_BASE_AGENTS: [(&str, &str, &str); 5] = [
-    ("claude", "Claude", "claude"),
-    ("codex", "Codex", "codex"),
-    ("grok", "Grok Build", "grok-build"),
-    ("pi", "Pi Agent", "pi"),
-    ("omp", "OMP", "omp"),
-];
 
 #[derive(Clone)]
 struct AvailableDraftAgent {
@@ -460,65 +454,33 @@ daemon that owns the project so every client (desktop, web, phone over SSH)
 offers the same set without shipping its own copy of the project's agent
 configuration.
 
-The list is the five base families, each overridden by the project's stored
-configuration for that id when there is one, plus every project custom agent
-whose declared base family — its `icon`, which is how a custom agent states
-what CLI it actually runs — is chat-supported. A hidden agent is dropped, which
-is the same rule the sidebar launcher applies.
+The list starts with the sidebar launcher's normalized rows, then drops agents
+whose transcript family chat cannot read. That keeps custom names, hidden
+built-ins, custom agents, and display order identical between both menus.
 */
+/// CDXC:Drafts 2026-09-04 DECISION:
+/// User: Switch Agent CLI must match the agent order in the sidebar Select Agent dropdown, so this projection preserves the sidebar rows' order before filtering out chat-unsupported families.
 pub(crate) fn available_draft_agents(project: &Value) -> Value {
-    let mut agents = CHAT_SUPPORTED_BASE_AGENTS
-        .iter()
-        .map(|(agent_id, name, icon)| AvailableDraftAgent {
-            agent_id: agent_id.to_string(),
-            base_agent_id: agent_id.to_string(),
-            icon: icon.to_string(),
-            name: name.to_string(),
-        })
-        .collect::<Vec<_>>();
-    let mut custom = Vec::new();
-    for configured in project
-        .get("customAgents")
-        .and_then(Value::as_array)
+    let agents =
+        crate::sidebar_hud::sidebar_agent_buttons_from_projects(std::slice::from_ref(project));
+    let agents = agents
+        .as_array()
         .into_iter()
         .flatten()
         .filter_map(Value::as_object)
-    {
-        let Some(agent_id) = read_text_from_map(configured, "agentId") else {
-            continue;
-        };
-        let hidden = configured.get("hidden").and_then(Value::as_bool) == Some(true);
-        let base_index = agents
-            .iter()
-            .position(|agent| agent.agent_id.eq_ignore_ascii_case(&agent_id));
-        if let Some(index) = base_index {
-            if hidden {
-                agents.remove(index);
-                continue;
-            }
-            if let Some(name) = read_text_from_map(configured, "name") {
-                agents[index].name = name;
-            }
-            if let Some(icon) = read_text_from_map(configured, "icon") {
-                agents[index].icon = icon;
-            }
-            continue;
-        }
-        if hidden {
-            continue;
-        }
-        let icon = read_text_from_map(configured, "icon");
-        let Some(base_agent_id) = chat_supported_base_agent_id(icon.as_deref()) else {
-            continue;
-        };
-        custom.push(AvailableDraftAgent {
-            base_agent_id: base_agent_id.to_string(),
-            icon: icon.unwrap_or_else(|| base_agent_id.to_string()),
-            name: read_text_from_map(configured, "name").unwrap_or_else(|| agent_id.clone()),
-            agent_id,
-        });
-    }
-    agents.extend(custom);
+        .filter_map(|agent| {
+            let agent_id = read_text_from_map(agent, "agentId")?;
+            let icon = read_text_from_map(agent, "icon")?;
+            let base_agent_id = chat_supported_base_agent_id(Some(&agent_id))
+                .or_else(|| chat_supported_base_agent_id(Some(&icon)))?;
+            Some(AvailableDraftAgent {
+                agent_id,
+                base_agent_id: base_agent_id.to_string(),
+                icon,
+                name: read_text_from_map(agent, "name")?,
+            })
+        })
+        .collect::<Vec<_>>();
     Value::Array(agents.iter().map(AvailableDraftAgent::to_value).collect())
 }
 
