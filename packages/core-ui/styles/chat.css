@@ -84,6 +84,10 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
    card: the composer's max-w-3xl outer column (48rem), minus its px-4 gutters
    (2rem), or the viewport minus those same gutters in a narrow pane. */
 .ghostex-chat-activity-row {
+  /* CDXC:SessionChatTerminalActivity 2026-09-04 DECISION: User: the card is
+     less rounded than before, so its short height reads like the text box's
+     corners rather than a pill. */
+  border-radius: 0.75rem;
   left: 50%;
   position: relative;
   transform: translateX(-50%);
@@ -667,22 +671,14 @@ body[data-session-chat-bullets='off'] .ghostex-session-chat-popup {
   min-width: 0;
 }
 
-/* Collapsed, the trigger carries a one-line teaser of the reasoning. Keep it
-   on one line: the point of the collapsed state is that a long thought costs
-   one row, and pre-wrap is inherited from the row for the expanded body. */
+/* CDXC:SessionChat 2026-09-04 DECISION:
+   User: the collapsed reasoning row shows all of its text, wrapped. It used to
+   clamp the heading to one nowrap line with an ellipsis, and the reader had to
+   expand the row to finish the sentence. The row's pre-wrap is inherited so
+   the heading's paragraph breaks survive, open or collapsed. */
 .ghostex-chat-thinking-text > [data-ghostex-thinking-text] {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Open, that same line is the heading of an expanded turn — and for a one-line
-   thought it is the whole thought, so it has to be readable in full. Only the
-   collapsed state trades completeness for a single row. */
-.ghostex-chat-thinking-trigger[aria-expanded='true'] .ghostex-chat-thinking-text > [data-ghostex-thinking-text] {
-  overflow: visible;
-  text-overflow: clip;
-  white-space: normal;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The reasoning body is markdown, so it owns its own block spacing and must
@@ -1033,6 +1029,23 @@ the markdown block) rather than pinned to a tier of its own.
   border-radius: 9999px;
 }
 
+/* CDXC:SessionChat 2026-09-04 DECISION: User: the scroll-to-bottom button
+   sits just above the chat box container and moves with it as the box grows,
+   instead of floating 16px up inside the transcript over its text. The
+   transcript is the flex sibling directly above the composer stack, so its
+   bottom edge IS the top of that container; the button sits 4px inside it,
+   over the transcript's bottom padding, which the scroll fade already blanks. */
+.ghostex-chat-scroll-bottom-button[data-direction='end'] {
+  bottom: 0.25rem;
+}
+
+/* Hidden while the reader's last scroll ended at the bottom (see
+   FOLLOW_BOTTOM_ATTRIBUTE in session-chat-message-list.tsx). */
+[data-ghostex-follow-bottom='true'] ~ .ghostex-chat-scroll-bottom-button {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-composer {
   background: #141414;
 }
@@ -1092,6 +1105,75 @@ the markdown block) rather than pinned to a tier of its own.
 
 .ghostex-chat-context-meter-popover {
   max-width: none;
+}
+
+/* CDXC:SessionChatDetectedOptions 2026-09-04 DECISION: the "More details"
+   section of the context popover (session-chat-context-details.ts). User: the
+   group labels look different from the rows and carry space above each one,
+   and a label never renders without rows under it (the resolver drops empty
+   groups). */
+.ghostex-chat-context-details-group-label {
+  color: color-mix(in oklab, var(--muted-foreground) 70%, transparent);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  line-height: 14px;
+  margin: 8px 0 2px;
+  text-transform: uppercase;
+}
+
+.ghostex-chat-context-details-group:first-of-type .ghostex-chat-context-details-group-label {
+  margin-top: 4px;
+}
+
+.ghostex-chat-context-details-row {
+  display: flex;
+  font-size: 11px;
+  gap: 0.625rem;
+  justify-content: space-between;
+  line-height: 16px;
+}
+
+.ghostex-chat-context-details-key {
+  color: color-mix(in oklab, var(--muted-foreground) 75%, transparent);
+  flex: none;
+}
+
+.ghostex-chat-context-details-value {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+/* CDXC:SessionChatDetectedOptions 2026-09-04 DECISION: the starred rows under
+   the chat box. User: centre the CONTAINER, never the text. The line is a
+   fit-content box centred in the composer column and capped at the chat box
+   width, so a single line sits centred and, once it wraps, the lines stay
+   left-aligned inside the box. */
+.ghostex-chat-status-line {
+  color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  gap: 0 0.375rem;
+  justify-self: center;
+  line-height: 16px;
+  max-width: 100%;
+  padding: 0 0.25rem;
+  width: fit-content;
+}
+
+.ghostex-chat-status-line-separator {
+  color: color-mix(in oklab, var(--muted-foreground) 40%, transparent);
+  font-size: 7px;
+}
+
+.ghostex-chat-status-line-item {
+  cursor: default;
+  white-space: nowrap;
 }
 
 .ghostex-chat-fast-mode-icon {
