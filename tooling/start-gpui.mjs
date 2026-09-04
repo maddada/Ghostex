@@ -180,8 +180,10 @@ if (!isDarwin && !targetsWindows) {
     includeBundleId: false,
   });
 }
+let desktopRustBuild;
 if (isDarwin) {
-  logStartStep('Building GPUI runtime resources...');
+  desktopRustBuild = startDesktopRustBuildInBackground();
+  logStartStep('Building GPUI runtime resources (desktop Rust build running alongside)...');
   run('/bin/bash', [path.join(gpuiDir, 'scripts', 'prepare-macos-runtime.sh')], {
     env: buildEnvironment,
     quietLabel: 'GPUI runtime resource build',
@@ -191,6 +193,7 @@ if (isDarwin) {
     action: `before replacing staged build bundle ${appPath}`,
     includeBundleId: false,
   });
+  await desktopRustBuild.finish();
 }
 if (!isDarwin && !targetsWindows) {
   /*
@@ -222,7 +225,7 @@ run(
   isWindows ? 'powershell.exe' : '/bin/bash',
   isWindows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', buildScript] : [buildScript],
   {
-    env: buildEnvironment,
+    env: desktopRustBuild ? { ...buildEnvironment, GHOSTEX_GPUI_USE_PREBUILT_RUST: '1' } : buildEnvironment,
     quietLabel: `${appName} build`,
   }
 );
@@ -253,6 +256,65 @@ if (targetsWindows) {
   installAndLaunchLinuxApp(appPath);
 }
 finishStartStep();
+
+function startDesktopRustBuildInBackground() {
+  /*
+  CDXC:Build 2026-09-04 WHY:
+  gxserver (prepare-macos-runtime.sh) and the desktop crate used to compile
+  back to back, and each is a single leaf crate that leaves most cores idle
+  during its front-end phase. Start the desktop build first, let the runtime
+  prep run alongside it, then hand the finished binaries to build-macos-app.sh
+  through GHOSTEX_GPUI_USE_PREBUILT_RUST. The cargo invocation lives in
+  build-macos-rust.sh so both callers use identical flags and environment.
+  */
+  const label = 'Desktop Rust build';
+  const command = '/bin/bash';
+  const args = [path.join(gpuiDir, 'scripts', 'build-macos-rust.sh')];
+  const logPath = quietCommandLogPath(label);
+  mkdirSync(path.dirname(logPath), { recursive: true });
+  const logFile = openSync(logPath, 'w');
+  writeSync(logFile, `$ ${formatCommand(command, args)}\n`);
+  const startedAtMs = Date.now();
+  const child = spawn(command, args, {
+    cwd: repoRoot,
+    env: buildEnvironment,
+    stdio: ['ignore', logFile, logFile],
+  });
+  const exit = new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('exit', (code, signal) => resolve({ code, signal }));
+  });
+  const killIfStillRunning = () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM');
+    }
+  };
+  process.once('exit', killIfStillRunning);
+  let finished = false;
+  return {
+    async finish() {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      if (child.exitCode === null && child.signalCode === null) {
+        logStartStep('Waiting for the desktop Rust build...');
+      }
+      const { code, signal } = await exit;
+      process.off('exit', killIfStillRunning);
+      closeSync(logFile);
+      if (startVerbose) {
+        process.stdout.write(readFileSync(logPath, 'utf8'));
+      }
+      if (code !== 0) {
+        reportQuietCommandFailure(label, code ?? 1, logPath);
+        throw new Error(`${label} failed with exit code ${code ?? 1}${signal ? ` (${signal})` : ''}.`);
+      }
+      logStartDetail(`Desktop Rust binaries are ready (${formatDuration(Date.now() - startedAtMs)} alongside).`);
+      rmSync(logPath, { force: true });
+    },
+  };
+}
 
 function resolveGpuiInstallDir() {
   if (isDarwin) {
@@ -940,7 +1002,17 @@ function inspectInstalledAppCodeSignature(appPathForSignature) {
 }
 
 function hasValidInstalledAppCodeSignature(appPathForSignature) {
-  const result = spawnSync('codesign', ['--verify', '--deep', '--strict', appPathForSignature], {
+  /*
+  CDXC:Build 2026-09-04 WHY:
+  This check used `--strict`, which rejects the Finder bundle bit that
+  ensureMacosInstalledAppBundleBit sets on the installed wrapper after every
+  install, so it failed on every start and the whole 1.4GB installed bundle
+  was re-signed inside-out each time. Deep verification without `--strict`
+  still validates every nested signature and the resource seal, and strict
+  verification already ran on the staged bundle at sign time, before the
+  bundle bit was set.
+  */
+  const result = spawnSync('codesign', ['--verify', '--deep', appPathForSignature], {
     cwd: repoRoot,
     encoding: 'utf8',
     env: startEnvironment,

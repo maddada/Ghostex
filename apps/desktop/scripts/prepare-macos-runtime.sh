@@ -146,39 +146,10 @@ acquire_local_start_lock_if_needed() {
 
 acquire_local_start_lock_if_needed "$@"
 
-# CDXC:Build 2026-06-07-16:23: Local starts should rebuild expensive bundled resources only when their runtime inputs change. Store content-hash stamps under build/<arch> so repeated `bun run start` calls do not churn source files or rely on generated folders that may be deleted by other build steps.
-fingerprint_inputs() {
-	"${GXSERVER_NODE_BIN:-node}" "$REPO_ROOT/tooling/fingerprint-build-inputs.mjs" "$@"
-}
-
-cache_stamp_path() {
-	printf '%s/%s.sha256\n' "$BUILD_CACHE_DIR" "$1"
-}
-
-cache_matches() {
-	local key="$1"
-	local digest="$2"
-	shift 2
-	local stamp
-	stamp="$(cache_stamp_path "$key")"
-	if [[ ! -f "$stamp" || "$(<"$stamp")" != "$digest" ]]; then
-		return 1
-	fi
-	local output_path
-	for output_path in "$@"; do
-		if [[ ! -e "$output_path" ]]; then
-			return 1
-		fi
-	done
-	return 0
-}
-
-write_cache_stamp() {
-	local key="$1"
-	local digest="$2"
-	mkdir -p "$BUILD_CACHE_DIR"
-	printf '%s\n' "$digest" >"$(cache_stamp_path "$key")"
-}
+# Content-hash stamp helpers (fingerprint_inputs, cache_matches,
+# write_cache_stamp, path_identity) are shared with build-macos-app.sh.
+# shellcheck source=build-cache.sh
+source "$SCRIPT_DIR/build-cache.sh"
 
 binary_supports_macos_arch() {
 	local binary_path="$1"
@@ -268,15 +239,6 @@ node_pty_prebuilds_match_arch() {
 		done < <(find "$prebuilds_dir" -mindepth 1 -maxdepth 1 -type d -print0)
 	done < <(find "$root" -path '*/node_modules/node-pty/prebuilds' -type d -print0)
 	return 0
-}
-
-path_identity() {
-	local candidate="$1"
-	if [[ -e "$candidate" ]]; then
-		stat -f '%m:%z:%N' "$candidate"
-	else
-		printf 'missing:%s\n' "$candidate"
-	fi
 }
 
 code_server_node_distribution_arch() {
@@ -1092,10 +1054,21 @@ EOF
 
 	# CDXC:Build 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
 	# CDXC:Build 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `bun run start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (sccache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
+	# CDXC:Build 2026-09-04 WHY:
+	# gxserver is one 168k-line leaf crate, so every local start that touched
+	# server/ paid a full non-incremental release compile (~27s). The per-package
+	# override enables incremental codegen for the gxserver package only;
+	# dependencies keep their profile hash and stay served by sccache, and
+	# release builds (no GHOSTEX_LOCAL_START) keep the plain release profile.
+	# SEE-ALSO: apps/desktop/scripts/build-macos-rust.sh does the same for the desktop crate.
+	local -a cargo_profile_args=()
+	if [[ "${GHOSTEX_LOCAL_START:-0}" == "1" ]]; then
+		cargo_profile_args+=(--config 'profile.release.package.gxserver.incremental=true')
+	fi
 	(
 		cd "$GXSERVER_RS_ROOT"
 		GHOSTEX_GPUI_MARKETING_VERSION="$marketing_version" \
-			"$cargo_bin" build --release --bins --manifest-path "$GXSERVER_RS_ROOT/Cargo.toml" --target "$cargo_target"
+			"$cargo_bin" build --release --bins --manifest-path "$GXSERVER_RS_ROOT/Cargo.toml" --target "$cargo_target" ${cargo_profile_args[@]+"${cargo_profile_args[@]}"}
 	)
 	if ! binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH"; then
 		echo "Rust gxserver binary does not contain $GHOSTEX_MACOS_ARCH: $output_path" >&2

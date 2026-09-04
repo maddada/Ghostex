@@ -38,6 +38,9 @@ GHOSTEX_REMOTE_GXSERVER_LINUX_ARM64_PACKAGE="${GHOSTEX_REMOTE_GXSERVER_LINUX_ARM
 GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES="${GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES:-0}"
 GHOSTEX_ON_DEMAND_ASSETS="${GHOSTEX_ON_DEMAND_ASSETS:-0}"
 GHOSTEX_GPUI_USE_PREBUILT_RUST="${GHOSTEX_GPUI_USE_PREBUILT_RUST:-0}"
+# Set by tooling/start-gpui.mjs. Local starts stage into the existing bundle and
+# compile the app crate incrementally; release packaging leaves it unset.
+GHOSTEX_LOCAL_START="${GHOSTEX_LOCAL_START:-0}"
 case "$(printf '%s' "$GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES" | tr '[:upper:]' '[:lower:]')" in
 1 | true | yes | on)
 	GHOSTEX_REQUIRE_REMOTE_GXSERVER_LINUX_PACKAGES=1
@@ -439,6 +442,27 @@ build_gpui_lid_sleep_helper() {
 	local swift_target="$GHOSTEX_MACOS_ARCH-apple-macos13.0"
 	local helper_swift_developer_dir
 	local helper_sdk_path
+	local helper_digest
+
+	# CDXC:Build 2026-09-04 WHY:
+	# The helper was wiped and recompiled with swiftc on every start, toolchain
+	# probing included, although its two sources rarely change. Skip the build
+	# when sources, target, versions and toolchain selection match the last one.
+	helper_digest="$(fingerprint_inputs \
+		--value "gpui-lid-sleep-helper-v1" \
+		--value "target=$swift_target" \
+		--value "label=$GPUI_LID_SLEEP_HELPER_LABEL" \
+		--value "version=$GPUI_MARKETING_VERSION/$GPUI_BUILD_VERSION" \
+		--value "developer=${GHOSTEX_GPUI_SWIFT_DEVELOPER_DIR:-}|${DEVELOPER_DIR:-}|$(xcode-select -p 2>/dev/null || true)" \
+		--value "swift=$(xcrun swiftc --version 2>/dev/null | head -n 1 || true)" \
+		--path "$LID_SLEEP_HELPER_SOURCE_DIR/Shared/GhostexLidSleepHelperProtocol.swift" \
+		--path "$LID_SLEEP_HELPER_SOURCE_DIR/GhostexLidSleepHelper/main.swift")"
+	if cache_matches "gpui-lid-sleep-helper-$GHOSTEX_MACOS_ARCH" "$helper_digest" "$helper_binary" "$helper_info_plist" &&
+		[[ -x "$helper_binary" ]]; then
+		echo "GPUI lid-sleep helper is current; skipping Swift build." >&2
+		printf '%s\n' "$helper_binary"
+		return 0
+	fi
 
 	# CDXC:KeepAwake 2026-06-26-00:09:
 	# Packaged GPUI closed-lid Keep Awake must ship the real Swift privileged helper under the GPUI helper label. Build from the native app's reviewed helper/protocol sources with an embedded helper bundle id so GPUI installs the same narrow XPC daemon instead of a stub or direct pmset path.
@@ -493,6 +517,7 @@ EOF_HELPER_PLIST
 		echo "GPUI lid-sleep helper build did not produce an executable helper." >&2
 		exit 1
 	fi
+	write_cache_stamp "gpui-lid-sleep-helper-$GHOSTEX_MACOS_ARCH" "$helper_digest"
 	printf '%s\n' "$helper_binary"
 }
 
@@ -502,6 +527,30 @@ EOF_HELPER_PLIST
 # (vi for anyone with no $EDITOR).
 stage_gpui_ghostex_editor_app() {
 	local editor_executable="$GHOSTEX_EDITOR_APP_DEST/Contents/MacOS/GhostexEditor"
+	local editor_digest
+
+	# CDXC:Build 2026-09-04 WHY:
+	# Every start rebuilt the editor helper (Bun bundle, Monaco copy, SwiftPM
+	# release build, ad-hoc sign) and re-copied it into the bundle. Skip all of
+	# it when its inputs match the last successful staging.
+	editor_digest="$(fingerprint_inputs \
+		--value "gpui-ghostex-editor-app-v1" \
+		--value "arch=$GHOSTEX_MACOS_ARCH" \
+		--value "developer=${GHOSTEX_GPUI_SWIFT_DEVELOPER_DIR:-${DEVELOPER_DIR:-}}|$(xcode-select -p 2>/dev/null || true)" \
+		--value "swift=$(xcrun swiftc --version 2>/dev/null | head -n 1 || true)" \
+		--path "$REPO_ROOT/apps/editor/web" \
+		--path "$REPO_ROOT/apps/editor/macos/Package.swift" \
+		--path "$REPO_ROOT/apps/editor/macos/Sources" \
+		--path "$REPO_ROOT/apps/editor/scripts" \
+		--path "$REPO_ROOT/node_modules/monaco-editor/package.json")"
+	if cache_matches "gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH" "$editor_digest" \
+		"$GHOSTEX_EDITOR_APP_SOURCE/Contents/MacOS/GhostexEditor" \
+		"$editor_executable" \
+		"$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/index.html" \
+		"$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/monaco/vs/loader.js"; then
+		echo "Bundled GhostexEditor helper is current; skipping rebuild." >&2
+		return 0
+	fi
 
 	echo "Building bundled GhostexEditor helper for $GHOSTEX_MACOS_ARCH" >&2
 	GHOSTEX_EDITOR_ARCH="$GHOSTEX_MACOS_ARCH" \
@@ -527,6 +576,7 @@ stage_gpui_ghostex_editor_app() {
 		echo "Packaged GhostexEditor helper does not contain $GHOSTEX_MACOS_ARCH: $editor_executable" >&2
 		exit 1
 	fi
+	write_cache_stamp "gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH" "$editor_digest"
 }
 
 stage_gpui_lid_sleep_helper() {
@@ -541,6 +591,60 @@ stage_gpui_lid_sleep_helper() {
 		echo "Packaged GPUI lid-sleep helper is missing or not executable." >&2
 		exit 1
 	fi
+}
+
+build_cef_sidebar_bundle_if_needed() {
+	local bundle_digest
+	local -a bundle_outputs
+
+	# CDXC:Build 2026-09-04 WHY:
+	# Tailwind, Vite and the seven esbuild entry bundles ran on every start even
+	# when only Rust changed. Hash every tree the CEF pages import (the sidebar
+	# and views entries, the shared packages, the web app that tailwind scans)
+	# plus the toolchain inputs, and skip the web build when nothing moved.
+	bundle_digest="$(fingerprint_inputs \
+		--value "cef-sidebar-bundle-v1" \
+		--value "bun=$(bun --version 2>/dev/null || true)" \
+		--path "$GPUI_DIR/vite.config.ts" \
+		--path "$GPUI_DIR/tsconfig.json" \
+		--path "$GPUI_DIR/index.html" \
+		--path "$GPUI_DIR/chat.html" \
+		--path "$GPUI_DIR/find.html" \
+		--path "$GPUI_DIR/kanban.html" \
+		--path "$GPUI_DIR/manage.html" \
+		--path "$GPUI_DIR/modal-host.html" \
+		--path "$GPUI_DIR/titlebar-host.html" \
+		--path "$GPUI_DIR/sidebar" \
+		--path "$GPUI_DIR/views" \
+		--path "$REPO_ROOT/packages/core-ui" \
+		--path "$REPO_ROOT/packages/components" \
+		--path "$REPO_ROOT/packages/shared" \
+		--path "$REPO_ROOT/apps/web/src" \
+		--path "$REPO_ROOT/tooling/shiki-classic-assets.mjs" \
+		--path "$REPO_ROOT/package.json" \
+		--path "$REPO_ROOT/bun.lock" \
+		--path "$REPO_ROOT/tsconfig.json")"
+	bundle_outputs=(
+		"$REPO_ROOT/packages/core-ui/styles/shadcn.generated.css"
+		"$GPUI_DIR/dist/sidebar/index.html"
+		"$GPUI_DIR/dist/sidebar/chat.html"
+		"$GPUI_DIR/dist/sidebar/find.html"
+		"$GPUI_DIR/dist/sidebar/kanban.html"
+		"$GPUI_DIR/dist/sidebar/manage.html"
+		"$GPUI_DIR/dist/sidebar/modal-host.html"
+		"$GPUI_DIR/dist/sidebar/titlebar-host.html"
+		"$GPUI_DIR/dist/sidebar/monaco/vs/loader.js"
+	)
+	if cache_matches "cef-sidebar-bundle" "$bundle_digest" "${bundle_outputs[@]}"; then
+		echo "CEF sidebar bundle is current; skipping web build."
+		return 0
+	fi
+	(
+		cd "$REPO_ROOT"
+		bun run build:sidebar-css
+		bunx vite build --config "$GPUI_DIR/vite.config.ts"
+	)
+	write_cache_stamp "cef-sidebar-bundle" "$bundle_digest"
 }
 
 validate_remote_gxserver_linux_package() {
@@ -835,13 +939,29 @@ notarize_and_staple_gpui_app_if_requested() {
 }
 
 prepare_gpui_app_bundle_path() {
+	local stale_app_path
+	for stale_app_path in "$APP_PATH".stale.*; do
+		if [[ -e "$stale_app_path" ]]; then
+			rm -rf "$stale_app_path"
+		fi
+	done
+	# CDXC:Build 2026-09-04 WHY:
+	# Local starts stage into the existing bundle instead of wiping it: every
+	# staging step is idempotent (rsync --delete, cp, install, or a stamp check),
+	# so unchanged payloads such as the CEF framework and code-server become
+	# no-ops and only the signatures are redone. This supersedes the 2026-06-26
+	# move-then-delete of the whole bundle for local starts; release packaging
+	# keeps it below so a DMG never inherits a stale file.
+	if [[ "$GHOSTEX_LOCAL_START" == "1" && -d "$APP_PATH" ]]; then
+		return
+	fi
 	if [[ ! -e "$APP_PATH" ]]; then
 		return
 	fi
 
 	# CDXC:Release 2026-06-26-05:23:
 	# Rebuilding GPUI must replace the app bundle even when the previous CEF framework leaves a partially removable directory tree. Move the old bundle off the canonical path first, then best-effort clean the stale bundle so packaging can create a fresh app without launching, restarting, or relying on in-place framework deletion.
-	local stale_app_path="$APP_PATH.stale.$$"
+	stale_app_path="$APP_PATH.stale.$$"
 	rm -rf "$stale_app_path"
 	mv "$APP_PATH" "$stale_app_path"
 	chmod -R u+w "$stale_app_path" 2>/dev/null || true
@@ -876,6 +996,59 @@ stage_framework_directory() {
 		rm -rf "$temp_dir"
 		exit 1
 	fi
+}
+
+stage_cef_framework_if_changed() {
+	local target_dir framework_digest
+	target_dir="$APP_PATH/Contents/Frameworks/$(basename "$CEF_FRAMEWORK")"
+
+	# CDXC:Build 2026-09-04 WHY:
+	# The 300MB framework was copied into the bundle on every start. Copy it only
+	# when the cached CEF distribution changes; the signed copy in the bundle
+	# intentionally differs from the cache, so compare the cache identity, not
+	# the staged files.
+	framework_digest="$(fingerprint_inputs \
+		--value "cef-framework-stage-v1" \
+		--value "arch=$GHOSTEX_MACOS_ARCH" \
+		--value "libcef=$(path_identity "$CEF_FRAMEWORK/Chromium Embedded Framework")" \
+		--path "$CEF_CACHE_DIR/archive.json" \
+		--path "$CEF_FRAMEWORK/Resources/Info.plist")"
+	if cache_matches "cef-framework-staged" "$framework_digest" \
+		"$target_dir/Chromium Embedded Framework" \
+		"$target_dir/Resources/Info.plist"; then
+		echo "CEF framework is current in the staged bundle; skipping copy."
+		return 0
+	fi
+	stage_framework_directory "$CEF_FRAMEWORK" "$target_dir"
+	write_cache_stamp "cef-framework-staged" "$framework_digest"
+}
+
+stage_code_server_payload_if_changed() {
+	local target_dir="$WEB_DIR/code-server"
+	local payload_digest
+
+	# CDXC:Build 2026-09-04 WHY:
+	# The 460MB, 5.5k-file code-server payload was re-copied on every start.
+	# prepare-macos-runtime.sh already stamps the runtime package, so reuse that
+	# stamp plus the identity of the files the app launches as the payload
+	# identity and skip the copy when it matches the staged bundle.
+	payload_digest="$(fingerprint_inputs \
+		--value "code-server-stage-v1" \
+		--value "arch=$GHOSTEX_MACOS_ARCH" \
+		--value "entry=$(path_identity "$WEB_SOURCE_DIR/code-server/out/node/entry.js")" \
+		--value "node=$(path_identity "$WEB_SOURCE_DIR/code-server/lib/node")" \
+		--value "vscode=$(path_identity "$WEB_SOURCE_DIR/code-server/lib/vscode/out/server-main.js")" \
+		--path "$(cache_stamp_path "code-server-package-$GHOSTEX_MACOS_ARCH")")"
+	if cache_matches "code-server-staged" "$payload_digest" \
+		"$target_dir/out/node/entry.js" \
+		"$target_dir/lib/node" \
+		"$target_dir/lib/vscode/out/server-main.js"; then
+		echo "code-server payload is current in the staged bundle; skipping copy."
+		return 0
+	fi
+	rsync -a --delete "$WEB_SOURCE_DIR/code-server/" "$target_dir/"
+	chmod 755 "$target_dir/lib/node"
+	write_cache_stamp "code-server-staged" "$payload_digest"
 }
 
 cef_component_version() {
@@ -979,6 +1152,15 @@ esac
 
 CEF_CACHE_DIR="$GPUI_DIR/build/cef-cache"
 export CEF_PATH="$CEF_CACHE_DIR"
+BUILD_CACHE_DIR="${GHOSTEX_BUILD_CACHE_DIR:-$REPO_ROOT/build/$GHOSTEX_MACOS_ARCH/build-cache}"
+# shellcheck source=build-cache.sh
+source "$SCRIPT_DIR/build-cache.sh"
+# Stamp fingerprints run on the Node runtime that prepare-macos-runtime.sh
+# staged, the same one it used for its own stamps; on-demand release bundles
+# ship no Node runtime and use the packager host's node like the release tooling.
+if [[ -z "${GXSERVER_NODE_BIN:-}" && -x "$WEB_SOURCE_DIR/code-server/lib/node" ]]; then
+	GXSERVER_NODE_BIN="$WEB_SOURCE_DIR/code-server/lib/node"
+fi
 
 GPUI_MARKETING_VERSION="$(resolve_gpui_marketing_version)"
 GPUI_BUILD_VERSION="${GHOSTEX_GPUI_BUILD_VERSION:-$(derive_gpui_build_version "$GPUI_MARKETING_VERSION")}"
@@ -990,11 +1172,7 @@ validate_local_gxserver_runtime_resources
 validate_build_toolchain_dependencies
 validate_ghosttykit_archive
 
-(
-	cd "$REPO_ROOT"
-	bun run build:sidebar-css
-	bunx vite build --config "$GPUI_DIR/vite.config.ts"
-)
+build_cef_sidebar_bundle_if_needed
 
 if [[ "$GHOSTEX_GPUI_USE_PREBUILT_RUST" == "1" ]]; then
 	for binary_path in \
@@ -1011,10 +1189,7 @@ if [[ "$GHOSTEX_GPUI_USE_PREBUILT_RUST" == "1" ]]; then
 	done
 	echo "Using prebuilt GPUI Rust binaries and CEF payload."
 else
-	(
-		cd "$GPUI_DIR"
-		cargo build --release --bins
-	)
+	/bin/bash "$SCRIPT_DIR/build-macos-rust.sh"
 fi
 
 CEF_FRAMEWORK="$(find "$CEF_CACHE_DIR" -path '*/Chromium Embedded Framework.framework' -type d -print -quit)"
@@ -1033,7 +1208,9 @@ cp "$GPUI_DIR/target/release/ghostex-gpui" "$APP_PATH/Contents/MacOS/$APP_NAME"
 chmod 755 "$APP_PATH/Contents/MacOS/$APP_NAME"
 stage_gpui_app_icon
 if [[ "$GHOSTEX_ON_DEMAND_ASSETS" != "1" ]]; then
-	stage_framework_directory "$CEF_FRAMEWORK" "$APP_PATH/Contents/Frameworks/$(basename "$CEF_FRAMEWORK")"
+	stage_cef_framework_if_changed
+else
+	rm -rf "$APP_PATH/Contents/Frameworks/$(basename "$CEF_FRAMEWORK")"
 fi
 rsync -a --delete "$GPUI_DIR/dist/sidebar/" "$APP_PATH/Contents/Resources/sidebar/"
 # The composited terminal engine uses Ghostty's real zsh integration for OSC
@@ -1076,13 +1253,14 @@ done
 # GPUI local starts seal the freshly built app-owned gxserver package and shared
 # Web/bin tools into Contents/Resources/Web, matching the native start command's
 # daemon ownership instead of launching against the main Ghostex.app bundle.
-rm -rf "$WEB_DIR/bin" "$WEB_DIR/code-server" "$WEB_DIR/gxserver" "$WEB_DIR/portless"
+rm -rf "$WEB_DIR/bin" "$WEB_DIR/gxserver" "$WEB_DIR/portless"
 mkdir -p "$WEB_DIR/portless"
 rsync -a --delete "$WEB_BIN_SOURCE_DIR/" "$WEB_DIR/bin/"
 rsync -a --delete "$GXSERVER_SOURCE_DIR/" "$WEB_DIR/gxserver/"
 if [[ "$GHOSTEX_ON_DEMAND_ASSETS" != "1" ]]; then
-	rsync -a --delete "$WEB_SOURCE_DIR/code-server/" "$WEB_DIR/code-server/"
-	chmod 755 "$WEB_DIR/code-server/lib/node"
+	stage_code_server_payload_if_changed
+else
+	rm -rf "$WEB_DIR/code-server"
 fi
 rsync -a --delete "$WEB_SOURCE_DIR/portless/" "$WEB_DIR/portless/"
 chmod 755 "$WEB_DIR/portless/dist/cli.js"
