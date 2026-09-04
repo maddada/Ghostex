@@ -645,6 +645,21 @@ fn claude_tool_activity(rows: &[ScreenRow], gutter: usize) -> Option<SessionChat
     if gutter == 0 || rows[gutter].after_blank {
         return None;
     }
+    // CDXC:SessionChat 2026-09-05 WHY:
+    // Claude also puts skill-availability notices under multiline user prompts, so their gutter is not evidence that the preceding paragraph is a tool call.
+    let mut notice = rows[gutter]
+        .text
+        .trim_start_matches(CLAUDE_TOOL_OUTPUT_MARKER)
+        .split_whitespace();
+    if notice
+        .next()
+        .is_some_and(|count| count.bytes().all(|byte| byte.is_ascii_digit()))
+        && matches!(notice.next(), Some("skill" | "skills"))
+        && notice.next() == Some("available")
+        && notice.next().is_none()
+    {
+        return None;
+    }
     let mut start = gutter - 1;
     while start > 0 && is_claude_continuation_row(&rows[start]) {
         start -= 1;
