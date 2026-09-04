@@ -1218,8 +1218,15 @@ export function SessionGroupSection({
   const groupSessions = orderedSessionIds
     .map((sessionId) => sessionsById[sessionId])
     .filter((session): session is NonNullable<typeof session> => session !== undefined);
+  /*
+   * CDXC:Sessions 2026-09-04 DECISION:
+   * User: the gap between session rows must be the same for a project on a remote machine as for the same project loaded locally.
+   * The 1px slot between rows used to exist only where pinned-session reorder was enabled, so remote groups (which disable session dragging) rendered rows touching while local groups rendered them 1px apart.
+   * Render the slot for every non-empty session list; only the active insertion indicator stays gated on the reorder capability.
+   */
+  const shouldRenderSessionRowGaps = orderedSessionIds.length > 0;
   const shouldRenderPinnedSessionDropGaps =
-    allowPinnedSessionReorder && showSessionDropPositionIndicators && orderedSessionIds.length > 0;
+    allowPinnedSessionReorder && showSessionDropPositionIndicators && shouldRenderSessionRowGaps;
   const pinnedSessionDropGapKey = shouldRenderPinnedSessionDropGaps
     ? getPinnedSessionDropGapKey({
         dropTarget: pinnedSessionDropIndicator,
@@ -1239,9 +1246,7 @@ export function SessionGroupSection({
   const sessionSummary = getGroupSessionSummary(groupSessions);
   const awakeCount = getAwakeTerminalAndBrowserCount(groupSessions);
   const actualSessionCount = storedSessionIds.length;
-  const hasRunningSessions = groupSessions.some(
-    (session) => getSidebarSessionLifecycleState(session) === 'running'
-  );
+  const hasRunningSessions = groupSessions.some((session) => getSidebarSessionLifecycleState(session) === 'running');
   const hasSleepingSessions = groupSessions.some((session) => getSidebarSessionLifecycleState(session) === 'sleeping');
   const allSessionsSleeping = !hasRunningSessions && hasSleepingSessions;
   /**
@@ -2626,7 +2631,7 @@ export function SessionGroupSection({
             <div
               className='group-sessions sidebar-collapse-content'
               data-drop-position={sessionGroupDropPosition}
-              data-pinned-drop-gaps={String(shouldRenderPinnedSessionDropGaps)}
+              data-pinned-drop-gaps={String(shouldRenderSessionRowGaps)}
               data-drop-target={String(isSessionDropTargetVisible)}
               id={sessionsRegionId}
               onContextMenu={handleGroupSessionsContextMenu}
@@ -2711,7 +2716,7 @@ export function SessionGroupSection({
                         {!projectContext && shouldRenderSessionKindLabels && sessionId === firstTerminalSessionId ? (
                           <div className='session-kind-label'>Sessions</div>
                         ) : null}
-                        {!isProjectSessionSectionCollapsed && shouldRenderPinnedSessionDropGaps ? (
+                        {!isProjectSessionSectionCollapsed && shouldRenderSessionRowGaps ? (
                           <div
                             aria-hidden
                             className='pinned-session-drop-gap'
@@ -2800,7 +2805,7 @@ export function SessionGroupSection({
                       vscode={vscode}
                     />
                   ) : null}
-                  {shouldRenderPinnedSessionDropGaps ? (
+                  {shouldRenderSessionRowGaps ? (
                     <div
                       aria-hidden
                       className='pinned-session-drop-gap'
