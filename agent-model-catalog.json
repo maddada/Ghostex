@@ -16,7 +16,7 @@
   "agents": {
     "claude": {
       "name": "Claude Code",
-      "cliVersion": "2.1.258",
+      "cliVersion": "2.1.260",
       "modelCommand": "/model <value>",
       "effortCommand": "/effort <value>",
       "efforts": ["low", "medium", "high", "xhigh", "max", "ultracode"],
@@ -29,19 +29,26 @@
       },
       "models": [
         {
-          "value": "opus",
-          "label": "Opus 5",
-          "pickerLabel": "Opus (1M context)",
-          "description": "Best for everyday, complex tasks",
-          "default": true,
-          "fastMode": true
-        },
-        {
           "value": "fable",
           "label": "Fable 5.1",
           "pickerLabel": "Fable",
           "description": "Most capable for your hardest and longest-running tasks",
           "fastMode": false
+        },
+        {
+          "value": "opus[1m]",
+          "label": "Opus 5 (1M)",
+          "pickerLabel": "Opus (1M context)",
+          "description": "Best for everyday, complex tasks, with a 1M-token context window",
+          "default": true,
+          "fastMode": true
+        },
+        {
+          "value": "opus",
+          "label": "Opus 5",
+          "pickerLabel": "Opus",
+          "description": "Best for everyday, complex tasks",
+          "fastMode": true
         },
         {
           "value": "sonnet",
@@ -60,7 +67,7 @@
           "notes": "The /model picker shows its effort row for every model, but Haiku 4.5 has no effort tiers, so none are offered."
         }
       ],
-      "notes": "The picker's first row, 'Default (recommended)', is Opus 5 with 1M context, the same model as the 'opus' row, so it is not listed twice."
+      "notes": "The picker's first row, 'Default (recommended)', is the same model as 'Opus (1M context)', so it is not listed twice. `claude --model` also accepts sonnet[1m] and fable[1m], but the picker offers no row for them, so neither is listed."
     },
     "codex": {
       "name": "Codex CLI",

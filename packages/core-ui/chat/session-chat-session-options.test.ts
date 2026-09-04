@@ -38,8 +38,9 @@ describe('session chat session-option catalogs', () => {
 
   it('shows the claude model lineup from the published agent model catalog', () => {
     expect(catalogFor('claude').model.choices?.map(({ value, label }) => ({ value, label }))).toEqual([
-      { value: 'opus', label: 'Opus 5' },
       { value: 'fable', label: 'Fable 5.1' },
+      { value: 'opus[1m]', label: 'Opus 5 (1M)' },
+      { value: 'opus', label: 'Opus 5' },
       { value: 'sonnet', label: 'Sonnet 5' },
       { value: 'haiku', label: 'Haiku 4.5' },
     ]);

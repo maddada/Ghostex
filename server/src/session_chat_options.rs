@@ -1437,9 +1437,18 @@ fn transcript_text(value: Option<&Value>) -> Option<&str> {
         .filter(|text| !text.is_empty())
 }
 
+/// CDXC:AgentProviders 2026-09-05 WHY:
+/// `claude-opus-5[1m]` and `claude-opus-5` are two rows of Claude's own picker
+/// ("Opus (1M context)" and "Opus"), so the context-window suffix is carried
+/// into the detected value as `opus[1m]`, matching the published catalog. It
+/// is still not a version token, so it is stripped before the version scan.
+/// SEE-ALSO: `claude_model_choice_keeps_variant`, agent-model-catalog.json.
 pub(crate) fn claude_transcript_model_choice(model: &str) -> Option<SessionChatDetectedChoice> {
-    // `claude-fable-5-1[1m]` — the context-window suffix is not a version token.
     let normalized = model.trim().to_ascii_lowercase();
+    let variant = normalized
+        .split_once('[')
+        .and_then(|(_, tail)| tail.strip_suffix(']'))
+        .map(str::to_string);
     let normalized = normalized
         .split_once('[')
         .map_or(normalized.as_str(), |(head, _)| head)
@@ -1492,11 +1501,31 @@ pub(crate) fn claude_transcript_model_choice(model: &str) -> Option<SessionChatD
     } else {
         format!("{title} {}", version.join("."))
     };
+    let (value, label) = match variant {
+        Some(variant) => (
+            format!("{family}[{variant}]"),
+            format!("{label} ({})", variant.to_ascii_uppercase()),
+        ),
+        None => (family.to_string(), label),
+    };
     Some(SessionChatDetectedChoice {
-        value: family.to_string(),
+        value,
         label,
         source: SessionChatOptionEvidence::Transcript,
     })
+}
+
+/// CDXC:AgentProviders 2026-09-05 WHY:
+/// Claude's footer prints "Opus 5" whether the session runs Opus 5 or Opus 5
+/// (1M) — the statusline has no way to say which. Letting it overlay the
+/// transcript would flip the model pill back to plain Opus a moment after the
+/// user picked the 1M row, so a live value that is the same family without the
+/// variant does not replace a variant the transcript proved.
+fn claude_model_choice_keeps_variant(existing: &SessionChatDetectedChoice, incoming: &str) -> bool {
+    existing
+        .value
+        .split_once('[')
+        .is_some_and(|(family, _)| family == incoming)
 }
 
 fn transcript_effort_choice(effort: &str) -> Option<SessionChatDetectedChoice> {
@@ -1939,8 +1968,14 @@ fn overlay_session_chat_option_selection(
     merged: &mut SessionChatDetectedSelection,
     layer: SessionChatDetectedSelection,
 ) {
-    if layer.model.is_some() {
-        merged.model = layer.model;
+    if let Some(model) = layer.model {
+        let keeps_variant = merged
+            .model
+            .as_ref()
+            .is_some_and(|existing| claude_model_choice_keeps_variant(existing, &model.value));
+        if !keeps_variant {
+            merged.model = Some(model);
+        }
     }
     if layer.effort.is_some() {
         merged.effort = layer.effort;

@@ -75,9 +75,11 @@ Label conventions already applied, keep them:
 - Codex ids read as words: "GPT 5.6 Sol", "GPT 5.4 Mini", "GPT 5.3 Codex Spark".
 - Cursor rows drop the "Claude" and "Cursor" words ("Opus 5", "Grok 4.6") and
   keep the literal row text in `pickerLabel`.
-- Claude's "Default (recommended)" row is Opus 5 with 1M context, the same
-  model as the `opus` row, so it is not listed twice. Haiku 4.5 is given
-  `efforts: []`.
+- Claude's picker has TWO Opus rows, "Opus (1M context)" and "Opus", which are
+  the aliases `opus[1m]` and `opus`; its "Default (recommended)" row is the
+  same model as the 1M one, so only that one is listed. `claude --model` also
+  accepts `sonnet[1m]` and `fable[1m]`, but the picker offers no row for them,
+  so the catalog does not either. Haiku 4.5 is given `efforts: []`.
 - Antigravity's `value` is the MODEL part of the ids `agy models` prints
   (`gemini-3.8-flash`, not `gemini-3.8-flash-high`); the client appends
   `-<effort>` when it types `/model`. Rows without efforts (`claude-sonnet-4-6`,
@@ -132,7 +134,8 @@ walk scripts, is in `docs/2026-09-02/agent-model-catalog/` (local, `docs/` is
 gitignored). The 2026-09-03 refresh added Cursor's Gemini 3.8 Flash and the
 Antigravity CLI (1.1.24).
 The 2026-09-04 refresh added Codex's GPT 6 Astra (CLI 0.153.3), which is also
-the CLI's own default once no `model` is set in `~/.codex/config.toml`.
+the CLI's own default once no `model` is set in `~/.codex/config.toml`. The
+2026-09-05 refresh split Claude's two Opus rows apart (CLI 2.1.260).
 
 ### 1. Scratch sessions
 
@@ -173,7 +176,12 @@ gx send-text inv-claude "/model"; gx send-enter inv-claude
 gx read-text inv-claude --visible
 ```
 
-- Claude shows three rows with a "… +N models" footer: press `arrow-down`
+- Claude's row labels are aliases, not model names: the full alias list is
+  `["sonnet","opus","haiku","fable","best","sonnet[1m]","opus[1m]","fable[1m]",
+  "opusplan"]`, readable with `strings` on the CLI binary when a row's slug is
+  unclear. Confirming a row, or typing `/model <alias>`, writes `model` in
+  `~/.claude/settings.json`, so note its value first and restore it; `s` in the
+  picker applies to that session only and writes nothing. Press `arrow-down`
   until every row has been seen. The effort row under the list is driven by
   `arrow-left` / `arrow-right` and wraps; `/effort` opens the same scale.
 - Codex opens with the CURRENT model highlighted (`›`), so navigate relative
