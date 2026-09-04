@@ -30,3 +30,6 @@
 	url = https://github.com/maddada/gpui-component.git
 	branch = ghostex
 	ignore = dirty
+[submodule ".dependencies/codex-swap"]
+	path = .dependencies/codex-swap
+	url = https://github.com/maddada/codex-swap.git
