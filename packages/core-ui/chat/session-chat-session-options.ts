@@ -17,6 +17,7 @@ import {
   agentModelCatalogEffortLabel,
   type AgentModelCatalog,
   type AgentModelCatalogAgent,
+  type AgentModelCatalogGroup,
   type AgentModelCatalogModel,
 } from '../../shared/agent-model-catalog';
 import { currentAgentModelCatalog } from '../../shared/agent-model-catalog-store';
@@ -48,7 +49,12 @@ export interface SessionChatOptionChoice {
   /** The CLI's own row text when it differs from `label` (see AgentModelCatalogModel). */
   pickerLabel?: string;
   description?: string;
+  /** Id of the `choiceGroups` submenu this row is nested under. */
+  group?: string;
 }
+
+/** A submenu of choices; see `sessionChatOptionChoiceSections`. */
+export type SessionChatOptionChoiceGroup = AgentModelCatalogGroup;
 
 export type SessionChatOptionDispatch =
   /** Types `build(value)` into the TUI; the chosen value becomes the local truth. */
@@ -96,6 +102,8 @@ export interface SessionChatOptionDescriptor {
   dispatch: SessionChatOptionDispatch;
   /** Present for value-carrying (select) options only. */
   choices?: readonly SessionChatOptionChoice[];
+  /** Submenus the choices may name; order comes from `choices`, not from here. */
+  choiceGroups?: readonly SessionChatOptionChoiceGroup[];
   defaultValue?: string;
   /** Row label for toggle / agent-picker / key rows. */
   actionLabel?: string;
@@ -124,6 +132,55 @@ export interface SessionChatSessionOptionCatalog {
   pickerEffortFor?: (modelValue: string, currentEffort: string | undefined) => string | undefined;
 }
 
+/** One run of top-level rows, or one submenu, of a choice list. */
+export type SessionChatOptionChoiceSection =
+  | { kind: 'choices'; key: string; choices: readonly SessionChatOptionChoice[] }
+  | {
+      kind: 'group';
+      key: string;
+      group: SessionChatOptionChoiceGroup;
+      choices: readonly SessionChatOptionChoice[];
+    };
+
+/**
+ * CDXC:AgentProviders 2026-09-05 DECISION:
+ * User: the model list can nest rows under a named group, and the order of
+ * the published catalog is the order the menu shows.
+ *
+ * So the flat `choices` order is the only ordering input: rows render in it,
+ * and a group's submenu takes the place of its FIRST member, carrying every
+ * member in that same order. A group is moved by moving its rows, and a
+ * descriptor without `choiceGroups` yields exactly one plain run.
+ */
+export function sessionChatOptionChoiceSections(
+  descriptor: SessionChatOptionDescriptor
+): readonly SessionChatOptionChoiceSection[] {
+  const choices = descriptor.choices ?? [];
+  const groups = descriptor.choiceGroups ?? [];
+  const sections: SessionChatOptionChoiceSection[] = [];
+  const grouped = new Map<string, SessionChatOptionChoice[]>();
+  for (const choice of choices) {
+    const group = choice.group === undefined ? undefined : groups.find((entry) => entry.id === choice.group);
+    if (group === undefined) {
+      const last = sections.at(-1);
+      if (last?.kind === 'choices') {
+        (last.choices as SessionChatOptionChoice[]).push(choice);
+      } else {
+        sections.push({ kind: 'choices', key: `choices:${choice.value}`, choices: [choice] });
+      }
+      continue;
+    }
+    let members = grouped.get(group.id);
+    if (members === undefined) {
+      members = [];
+      grouped.set(group.id, members);
+      sections.push({ kind: 'group', key: `group:${group.id}`, group, choices: members });
+    }
+    members.push(choice);
+  }
+  return sections;
+}
+
 // ---------------------------------------------------------------------------
 // Catalog-driven descriptors
 //
@@ -146,6 +203,9 @@ function modelChoices(agent: AgentModelCatalogAgent): readonly SessionChatOption
     }
     if (model.description !== undefined) {
       choice.description = model.description;
+    }
+    if (model.group !== undefined) {
+      choice.group = model.group;
     }
     return choice;
   });
@@ -214,6 +274,7 @@ function buildClaudeCatalog(
     label: 'Model',
     category: 'model',
     choices: modelChoices(agent),
+    choiceGroups: agent.groups,
     dispatch: { kind: 'command', build: (value) => `/model ${value}` },
   };
   const effortFor = memoByChoices((choices) => ({
@@ -288,6 +349,7 @@ function buildCodexCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogA
     label: 'Model',
     category: 'model',
     choices: modelChoices(agent),
+    choiceGroups: agent.groups,
     actionLabel: "Open the CLI's model picker",
     dispatch: { kind: 'model-picker' },
   };
@@ -345,6 +407,7 @@ function buildCursorCatalog(
     label: 'Model',
     category: 'model',
     choices,
+    choiceGroups: agent.groups,
     dispatch: {
       kind: 'command-confirm-picker',
       build: (value) => `/model ${pickerFilter(value)}`,
@@ -438,6 +501,7 @@ function buildAntigravityCatalog(
     label: 'Model',
     category: 'model',
     choices: modelChoices(agent),
+    choiceGroups: agent.groups,
     dispatch: { kind: 'command', build: (value) => antigravityModelCommand(agent, value) },
   };
   const effortByModel = new Map<string, SessionChatOptionDescriptor>();

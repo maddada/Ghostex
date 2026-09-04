@@ -50,6 +50,7 @@ Per agent (`agents.<id>`):
 | `efforts`       | Every effort id the agent knows, lowest first. Used for a model the catalog does not list.     |
 | `defaultEffort` | Optional.                                                                                      |
 | `fastMode`      | `{ available, command, scope }`. `scope` is `"model"` or `"session"`.                          |
+| `groups`        | Optional submenus: `[{ id, label, description? }]`. See "Grouping and order" below.            |
 | `models`        | Ordered list of rows; the dropdown shows them in this order.                                   |
 
 Per model (`agents.<id>.models[]`):
@@ -64,6 +65,7 @@ Per model (`agents.<id>.models[]`):
 | `defaultEffort` | Optional.                                                                                                                 |
 | `fastMode`      | Whether this model can run in fast mode.                                                                                  |
 | `default`       | Optional; marks the CLI's own default row.                                                                                |
+| `group`         | Optional id from the agent's `groups`; the row is nested in that submenu instead of listed at the top level.               |
 
 Every other field (`cliVersion`, `modelCommand`, `notes`, `contextWindows`,
 `thinking`, `_readme`) is documentation for humans and is ignored by clients.
@@ -81,6 +83,28 @@ Label conventions already applied, keep them:
   `-<effort>` when it types `/model`. Rows without efforts (`claude-sonnet-4-6`,
   `claude-opus-4-6-thinking`, `gpt-oss-120b-medium`) use the full id and drop
   the TUI's parenthetical from `label`, keeping it in `pickerLabel`.
+
+## Grouping and order
+
+The order of `models` is the order the dropdown shows. There is no sort key and
+no alphabetising anywhere in the clients, so to move a row, move it in the JSON.
+
+A row may name one of the agent's `groups`, which draws it inside a submenu
+instead of at the top level. The submenu takes the position of the group's
+FIRST member, and holds every member in `models` order, so:
+
+- To move a group, move its rows. Keep a group's rows next to each other; that
+  is what makes the flat order and the grouped order tell the same story.
+- To rename a group or give it a subtitle, edit its row in `groups`.
+- A `group` id that no entry in `groups` declares makes the whole document
+  invalid, on purpose: a typo must not silently flatten a row. The bundled
+  snapshot is parsed at import time, so `bun run test` catches it.
+
+Groups are additive for clients: an app built before 2026-09-05 ignores both
+keys and renders the same rows as one flat list, so a new group never needs an
+app release. Today Codex nests its previous generations under "Legacy" and
+Cursor nests its long lineup under Claude / GPT / Gemini / Other, keeping the
+current flagships at the top level.
 
 ## Editing the file
 

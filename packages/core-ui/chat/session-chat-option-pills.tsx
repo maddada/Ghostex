@@ -58,6 +58,7 @@ import {
   seedSessionChatOptionState,
   sessionChatBoundedKeySteps,
   sessionChatCyclicKeySteps,
+  sessionChatOptionChoiceSections,
   sessionChatOptionsPillLabel,
   sessionChatOptionTracksValue,
   sessionChatOptionValueLabel,
@@ -65,6 +66,7 @@ import {
   setSessionChatOptionValue,
   writeStoredSessionChatOptions,
   type SessionChatDetectedOptionInput,
+  type SessionChatOptionChoice,
   type SessionChatOptionDescriptor,
   type SessionChatOptionState,
   type SessionChatSessionOptionCatalog,
@@ -851,16 +853,14 @@ export function SessionChatSessionOptionPills({
       );
     }
     if (sessionChatOptionTracksValue(descriptor)) {
-      return (
-        <DropdownMenuRadioGroup
-          onValueChange={(value) => {
-            if (typeof value === 'string' && value !== current?.value) {
-              dispatch(descriptor, value);
-            }
-          }}
-          value={current?.value ?? ''}
-        >
-          {(descriptor.choices ?? []).map((choice) => (
+      const choose = (value: unknown): void => {
+        if (typeof value === 'string' && value !== current?.value) {
+          dispatch(descriptor, value);
+        }
+      };
+      const radioGroup = (choices: readonly SessionChatOptionChoice[]): ReactNode => (
+        <DropdownMenuRadioGroup onValueChange={choose} value={current?.value ?? ''}>
+          {choices.map((choice) => (
             <DropdownMenuRadioItem className='rounded-md' key={choice.value} value={choice.value}>
               <span className='grid min-w-0 gap-0.5'>
                 <span className='truncate'>{choice.label}</span>
@@ -871,6 +871,46 @@ export function SessionChatSessionOptionPills({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+      );
+      const sections = sessionChatOptionChoiceSections(descriptor);
+      if (sections.length === 1 && sections[0]?.kind === 'choices') {
+        return radioGroup(sections[0].choices);
+      }
+      /*
+      CDXC:AgentProviders 2026-09-05 DECISION:
+      User: long model lists nest, so a group from the published catalog is a
+      submenu here. The trigger names the selected row when the current model
+      is inside it, because a collapsed submenu would otherwise be the only
+      place the radio check lives.
+      */
+      return (
+        <>
+          {sections.map((section) =>
+            section.kind === 'choices' ? (
+              <Fragment key={section.key}>{radioGroup(section.choices)}</Fragment>
+            ) : (
+              <DropdownMenuSub key={section.key}>
+                <DropdownMenuSubTrigger className='rounded-md'>
+                  <span className='grid min-w-0 gap-0.5'>
+                    <span className='truncate'>{section.group.label}</span>
+                    {section.group.description ? (
+                      <span className='text-xs font-normal text-muted-foreground'>{section.group.description}</span>
+                    ) : null}
+                  </span>
+                  {(() => {
+                    const selected = section.choices.find((choice) => choice.value === current?.value);
+                    return selected ? (
+                      <span className='ml-auto truncate text-xs text-muted-foreground'>{selected.label}</span>
+                    ) : null;
+                  })()}
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
+                  {radioGroup(section.choices)}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )
+          )}
+        </>
       );
     }
     return (

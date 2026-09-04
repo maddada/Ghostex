@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-09-04",
+  "updatedAt": "2026-09-05",
   "effortLabels": {
     "none": "None",
     "minimal": "Minimal",
@@ -74,6 +74,13 @@
         "scope": "session",
         "notes": "Toggles the service tier between priority and default; the footer appends 'fast'."
       },
+      "groups": [
+        {
+          "id": "legacy",
+          "label": "Legacy",
+          "description": "Previous generations"
+        }
+      ],
       "models": [
         {
           "value": "gpt-6-astra",
@@ -114,7 +121,8 @@
           "description": "Proven previous-generation model for coding and general work.",
           "efforts": ["low", "medium", "high", "xhigh"],
           "defaultEffort": "medium",
-          "fastMode": true
+          "fastMode": true,
+          "group": "legacy"
         },
         {
           "value": "gpt-5.4",
@@ -122,7 +130,8 @@
           "description": "Strong model for everyday coding.",
           "efforts": ["low", "medium", "high", "xhigh"],
           "defaultEffort": "medium",
-          "fastMode": true
+          "fastMode": true,
+          "group": "legacy"
         },
         {
           "value": "gpt-5.4-mini",
@@ -130,7 +139,8 @@
           "description": "Small, fast, and cost-efficient model for simpler coding tasks.",
           "efforts": ["low", "medium", "high", "xhigh"],
           "defaultEffort": "medium",
-          "fastMode": true
+          "fastMode": true,
+          "group": "legacy"
         },
         {
           "value": "gpt-5.3-codex-spark",
@@ -138,7 +148,8 @@
           "description": "Ultra-fast coding model.",
           "efforts": ["low", "medium", "high", "xhigh"],
           "defaultEffort": "high",
-          "fastMode": true
+          "fastMode": true,
+          "group": "legacy"
         }
       ]
     },
@@ -154,6 +165,25 @@
         "scope": "model",
         "notes": "A 'Fast' checkbox in the model's Tab panel inside /model."
       },
+      "groups": [
+        {
+          "id": "claude",
+          "label": "Claude"
+        },
+        {
+          "id": "gpt",
+          "label": "GPT"
+        },
+        {
+          "id": "gemini",
+          "label": "Gemini"
+        },
+        {
+          "id": "other",
+          "label": "Other",
+          "description": "Grok, Kimi, and GLM"
+        }
+      ],
       "models": [
         {
           "value": "auto",
@@ -186,31 +216,6 @@
           "fastMode": true
         },
         {
-          "value": "claude-opus-4-8",
-          "label": "Opus 4.8",
-          "pickerLabel": "Claude Opus 4.8",
-          "contextWindows": ["300K", "1M"],
-          "efforts": ["low", "medium", "high", "xhigh", "max"],
-          "thinking": true,
-          "fastMode": true
-        },
-        {
-          "value": "gpt-5.6-sol",
-          "label": "GPT-5.6 Sol",
-          "pickerLabel": "GPT-5.6 Sol",
-          "contextWindows": ["272K", "1M"],
-          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
-          "fastMode": true
-        },
-        {
-          "value": "gpt-5.5",
-          "label": "GPT-5.5",
-          "pickerLabel": "GPT-5.5",
-          "contextWindows": ["272K", "1M"],
-          "efforts": ["none", "low", "medium", "high", "xhigh"],
-          "fastMode": true
-        },
-        {
           "value": "claude-fable-5-1",
           "label": "Fable 5.1",
           "pickerLabel": "Claude Fable 5.1",
@@ -218,45 +223,6 @@
           "efforts": ["low", "medium", "high", "xhigh", "max"],
           "thinking": true,
           "fastMode": false
-        },
-        {
-          "value": "claude-fable-5",
-          "label": "Fable 5",
-          "pickerLabel": "Claude Fable 5",
-          "contextWindows": ["300K", "1M"],
-          "efforts": ["low", "medium", "high", "xhigh", "max"],
-          "thinking": true,
-          "fastMode": false
-        },
-        {
-          "value": "cursor-grok-4.5",
-          "label": "Grok 4.5",
-          "pickerLabel": "Cursor Grok 4.5",
-          "efforts": ["low", "medium", "high"],
-          "fastMode": true
-        },
-        {
-          "value": "gemini-3.8-flash",
-          "label": "Gemini 3.8 Flash",
-          "pickerLabel": "Gemini 3.8 Flash",
-          "efforts": ["low", "medium", "high"],
-          "defaultEffort": "high",
-          "fastMode": false
-        },
-        {
-          "value": "gemini-3.7-flash",
-          "label": "Gemini 3.7 Flash",
-          "pickerLabel": "Gemini 3.7 Flash",
-          "efforts": ["low", "medium", "high"],
-          "fastMode": false
-        },
-        {
-          "value": "gpt-5.6-terra",
-          "label": "GPT-5.6 Terra",
-          "pickerLabel": "GPT-5.6 Terra",
-          "contextWindows": ["272K", "1M"],
-          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
-          "fastMode": true
         },
         {
           "value": "claude-sonnet-5",
@@ -268,20 +234,50 @@
           "fastMode": false
         },
         {
+          "value": "gpt-5.6-sol",
+          "label": "GPT-5.6 Sol",
+          "pickerLabel": "GPT-5.6 Sol",
+          "contextWindows": ["272K", "1M"],
+          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+          "fastMode": true
+        },
+        {
+          "value": "gemini-3.8-flash",
+          "label": "Gemini 3.8 Flash",
+          "pickerLabel": "Gemini 3.8 Flash",
+          "efforts": ["low", "medium", "high"],
+          "defaultEffort": "high",
+          "fastMode": false
+        },
+        {
+          "value": "claude-opus-4-8",
+          "label": "Opus 4.8",
+          "pickerLabel": "Claude Opus 4.8",
+          "contextWindows": ["300K", "1M"],
+          "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "thinking": true,
+          "fastMode": true,
+          "group": "claude"
+        },
+        {
+          "value": "claude-fable-5",
+          "label": "Fable 5",
+          "pickerLabel": "Claude Fable 5",
+          "contextWindows": ["300K", "1M"],
+          "efforts": ["low", "medium", "high", "xhigh", "max"],
+          "thinking": true,
+          "fastMode": false,
+          "group": "claude"
+        },
+        {
           "value": "claude-sonnet-4-6",
           "label": "Sonnet 4.6",
           "pickerLabel": "Claude Sonnet 4.6",
           "contextWindows": ["200K", "1M"],
           "efforts": ["low", "medium", "high", "max"],
           "thinking": true,
-          "fastMode": false
-        },
-        {
-          "value": "gpt-5.3-codex",
-          "label": "Codex 5.3",
-          "pickerLabel": "Codex 5.3",
-          "efforts": ["low", "medium", "high", "xhigh"],
-          "fastMode": true
+          "fastMode": false,
+          "group": "claude"
         },
         {
           "value": "claude-opus-4-7",
@@ -290,15 +286,8 @@
           "contextWindows": ["300K", "1M"],
           "efforts": ["low", "medium", "high", "xhigh", "max"],
           "thinking": true,
-          "fastMode": true
-        },
-        {
-          "value": "gpt-5.4",
-          "label": "GPT-5.4",
-          "pickerLabel": "GPT-5.4",
-          "contextWindows": ["272K", "1M"],
-          "efforts": ["none", "low", "medium", "high", "xhigh"],
-          "fastMode": true
+          "fastMode": true,
+          "group": "claude"
         },
         {
           "value": "claude-opus-4-6",
@@ -307,7 +296,8 @@
           "contextWindows": ["200K", "1M"],
           "efforts": ["low", "medium", "high", "max"],
           "thinking": true,
-          "fastMode": false
+          "fastMode": false,
+          "group": "claude"
         },
         {
           "value": "claude-opus-4-5",
@@ -315,50 +305,8 @@
           "pickerLabel": "Claude Opus 4.5",
           "efforts": [],
           "thinking": true,
-          "fastMode": false
-        },
-        {
-          "value": "gpt-5.2",
-          "label": "GPT-5.2",
-          "pickerLabel": "GPT-5.2",
-          "efforts": ["low", "medium", "high", "xhigh"],
-          "fastMode": true
-        },
-        {
-          "value": "gpt-5.6-luna",
-          "label": "GPT-5.6 Luna",
-          "pickerLabel": "GPT-5.6 Luna",
-          "contextWindows": ["272K", "1M"],
-          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
-          "fastMode": true
-        },
-        {
-          "value": "gemini-3.6-flash",
-          "label": "Gemini 3.6 Flash",
-          "pickerLabel": "Gemini 3.6 Flash",
-          "efforts": ["minimal", "low", "medium", "high"],
-          "fastMode": false
-        },
-        {
-          "value": "gemini-3.1-pro",
-          "label": "Gemini 3.1 Pro",
-          "pickerLabel": "Gemini 3.1 Pro",
-          "efforts": [],
-          "fastMode": false
-        },
-        {
-          "value": "gpt-5.4-mini",
-          "label": "GPT-5.4 Mini",
-          "pickerLabel": "GPT-5.4 Mini",
-          "efforts": ["none", "low", "medium", "high", "xhigh"],
-          "fastMode": false
-        },
-        {
-          "value": "gpt-5.4-nano",
-          "label": "GPT-5.4 Nano",
-          "pickerLabel": "GPT-5.4 Nano",
-          "efforts": ["none", "low", "medium", "high", "xhigh"],
-          "fastMode": false
+          "fastMode": false,
+          "group": "claude"
         },
         {
           "value": "claude-haiku-4-5",
@@ -366,7 +314,8 @@
           "pickerLabel": "Claude Haiku 4.5",
           "efforts": [],
           "thinking": true,
-          "fastMode": false
+          "fastMode": false,
+          "group": "claude"
         },
         {
           "value": "claude-sonnet-4-5",
@@ -374,21 +323,8 @@
           "pickerLabel": "Claude Sonnet 4.5",
           "efforts": [],
           "thinking": true,
-          "fastMode": false
-        },
-        {
-          "value": "gpt-5.1",
-          "label": "GPT-5.1",
-          "pickerLabel": "GPT-5.1",
-          "efforts": ["low", "medium", "high"],
-          "fastMode": false
-        },
-        {
-          "value": "gemini-3.5-flash",
-          "label": "Gemini 3.5 Flash",
-          "pickerLabel": "Gemini 3.5 Flash",
-          "efforts": [],
-          "fastMode": false
+          "fastMode": false,
+          "group": "claude"
         },
         {
           "value": "claude-sonnet-4",
@@ -396,42 +332,164 @@
           "pickerLabel": "Claude Sonnet 4",
           "efforts": [],
           "thinking": false,
-          "fastMode": false
+          "fastMode": false,
+          "group": "claude"
+        },
+        {
+          "value": "gpt-5.6-terra",
+          "label": "GPT-5.6 Terra",
+          "pickerLabel": "GPT-5.6 Terra",
+          "contextWindows": ["272K", "1M"],
+          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+          "fastMode": true,
+          "group": "gpt"
+        },
+        {
+          "value": "gpt-5.6-luna",
+          "label": "GPT-5.6 Luna",
+          "pickerLabel": "GPT-5.6 Luna",
+          "contextWindows": ["272K", "1M"],
+          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+          "fastMode": true,
+          "group": "gpt"
+        },
+        {
+          "value": "gpt-5.5",
+          "label": "GPT-5.5",
+          "pickerLabel": "GPT-5.5",
+          "contextWindows": ["272K", "1M"],
+          "efforts": ["none", "low", "medium", "high", "xhigh"],
+          "fastMode": true,
+          "group": "gpt"
+        },
+        {
+          "value": "gpt-5.3-codex",
+          "label": "Codex 5.3",
+          "pickerLabel": "Codex 5.3",
+          "efforts": ["low", "medium", "high", "xhigh"],
+          "fastMode": true,
+          "group": "gpt"
+        },
+        {
+          "value": "gpt-5.4",
+          "label": "GPT-5.4",
+          "pickerLabel": "GPT-5.4",
+          "contextWindows": ["272K", "1M"],
+          "efforts": ["none", "low", "medium", "high", "xhigh"],
+          "fastMode": true,
+          "group": "gpt"
+        },
+        {
+          "value": "gpt-5.2",
+          "label": "GPT-5.2",
+          "pickerLabel": "GPT-5.2",
+          "efforts": ["low", "medium", "high", "xhigh"],
+          "fastMode": true,
+          "group": "gpt"
+        },
+        {
+          "value": "gpt-5.4-mini",
+          "label": "GPT-5.4 Mini",
+          "pickerLabel": "GPT-5.4 Mini",
+          "efforts": ["none", "low", "medium", "high", "xhigh"],
+          "fastMode": false,
+          "group": "gpt"
+        },
+        {
+          "value": "gpt-5.4-nano",
+          "label": "GPT-5.4 Nano",
+          "pickerLabel": "GPT-5.4 Nano",
+          "efforts": ["none", "low", "medium", "high", "xhigh"],
+          "fastMode": false,
+          "group": "gpt"
+        },
+        {
+          "value": "gpt-5.1",
+          "label": "GPT-5.1",
+          "pickerLabel": "GPT-5.1",
+          "efforts": ["low", "medium", "high"],
+          "fastMode": false,
+          "group": "gpt"
         },
         {
           "value": "gpt-5-mini",
           "label": "GPT-5 Mini",
           "pickerLabel": "GPT-5 Mini",
           "efforts": [],
-          "fastMode": false
+          "fastMode": false,
+          "group": "gpt"
         },
         {
-          "value": "kimi-k3",
-          "label": "Kimi K3",
-          "pickerLabel": "Kimi K3",
-          "efforts": ["low", "high", "max"],
-          "fastMode": false
+          "value": "gemini-3.7-flash",
+          "label": "Gemini 3.7 Flash",
+          "pickerLabel": "Gemini 3.7 Flash",
+          "efforts": ["low", "medium", "high"],
+          "fastMode": false,
+          "group": "gemini"
         },
         {
-          "value": "kimi-k2.7-code",
-          "label": "Kimi K2.7 Code",
-          "pickerLabel": "Kimi K2.7 Code",
+          "value": "gemini-3.6-flash",
+          "label": "Gemini 3.6 Flash",
+          "pickerLabel": "Gemini 3.6 Flash",
+          "efforts": ["minimal", "low", "medium", "high"],
+          "fastMode": false,
+          "group": "gemini"
+        },
+        {
+          "value": "gemini-3.1-pro",
+          "label": "Gemini 3.1 Pro",
+          "pickerLabel": "Gemini 3.1 Pro",
           "efforts": [],
-          "fastMode": false
+          "fastMode": false,
+          "group": "gemini"
         },
         {
-          "value": "glm-5.2",
-          "label": "GLM 5.2",
-          "pickerLabel": "GLM 5.2",
-          "efforts": ["high", "max"],
-          "fastMode": false
+          "value": "gemini-3.5-flash",
+          "label": "Gemini 3.5 Flash",
+          "pickerLabel": "Gemini 3.5 Flash",
+          "efforts": [],
+          "fastMode": false,
+          "group": "gemini"
         },
         {
           "value": "gemini-3-flash",
           "label": "Gemini 3 Flash",
           "pickerLabel": "Gemini 3 Flash",
           "efforts": [],
-          "fastMode": false
+          "fastMode": false,
+          "group": "gemini"
+        },
+        {
+          "value": "cursor-grok-4.5",
+          "label": "Grok 4.5",
+          "pickerLabel": "Cursor Grok 4.5",
+          "efforts": ["low", "medium", "high"],
+          "fastMode": true,
+          "group": "other"
+        },
+        {
+          "value": "kimi-k3",
+          "label": "Kimi K3",
+          "pickerLabel": "Kimi K3",
+          "efforts": ["low", "high", "max"],
+          "fastMode": false,
+          "group": "other"
+        },
+        {
+          "value": "kimi-k2.7-code",
+          "label": "Kimi K2.7 Code",
+          "pickerLabel": "Kimi K2.7 Code",
+          "efforts": [],
+          "fastMode": false,
+          "group": "other"
+        },
+        {
+          "value": "glm-5.2",
+          "label": "GLM 5.2",
+          "pickerLabel": "GLM 5.2",
+          "efforts": ["high", "max"],
+          "fastMode": false,
+          "group": "other"
         }
       ],
       "notes": "Labels drop the 'Claude' and 'Cursor' words the TUI shows; pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash)."

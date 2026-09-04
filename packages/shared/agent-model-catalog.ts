@@ -37,6 +37,21 @@ export interface AgentModelCatalogModel {
   defaultEffort?: string;
   fastMode: boolean;
   default?: boolean;
+  /**
+   * Id of the agent group this row is nested under, from `agent.groups`.
+   * Absent means the row sits at the top level of the picker.
+   */
+  group?: string;
+}
+
+/**
+ * A submenu in an agent's model picker. Rows carrying the group's `id` are
+ * nested inside it instead of being listed at the top level.
+ */
+export interface AgentModelCatalogGroup {
+  id: string;
+  label: string;
+  description?: string;
 }
 
 export interface AgentModelCatalogFastMode {
@@ -53,6 +68,21 @@ export interface AgentModelCatalogAgent {
   efforts: readonly string[];
   defaultEffort?: string;
   fastMode: AgentModelCatalogFastMode;
+  /**
+   * CDXC:AgentProviders 2026-09-05 DECISION:
+   * User: the catalog can nest rows ("old ChatGPT models under Legacy", the
+   * long Cursor lineup grouped), and the order of the JSON is the order the
+   * picker shows.
+   *
+   * `models` therefore stays ONE flat list in display order, which is what
+   * every client shipped before 2026-09-05 renders and what all the option
+   * logic (label lookup, key stepping) keys on. Grouping is layered on top:
+   * a row names a group and the group is drawn as a submenu at the position
+   * of its FIRST member, so moving a group means moving its rows. Clients
+   * that predate this field ignore both keys and keep rendering the flat
+   * list, so adding a group never has to break them.
+   */
+  groups?: readonly AgentModelCatalogGroup[];
   models: readonly AgentModelCatalogModel[];
 }
 
@@ -121,7 +151,38 @@ function parseModel(input: unknown, agentEfforts: readonly string[]): AgentModel
   if (input.default === true) {
     model.default = true;
   }
+  const group = optionalString(input.group);
+  if (group !== undefined) {
+    model.group = group;
+  }
   return model;
+}
+
+function parseGroups(input: unknown): AgentModelCatalogGroup[] | null {
+  if (input === undefined) {
+    return [];
+  }
+  if (!Array.isArray(input)) {
+    return null;
+  }
+  const groups: AgentModelCatalogGroup[] = [];
+  for (const entry of input) {
+    if (!isRecord(entry)) {
+      return null;
+    }
+    const id = optionalString(entry.id);
+    const label = optionalString(entry.label);
+    if (!id || !label || groups.some((group) => group.id === id)) {
+      return null;
+    }
+    const group: AgentModelCatalogGroup = { id, label };
+    const description = optionalString(entry.description);
+    if (description !== undefined) {
+      group.description = description;
+    }
+    groups.push(group);
+  }
+  return groups;
 }
 
 function parseAgent(input: unknown): AgentModelCatalogAgent | null {
@@ -130,13 +191,17 @@ function parseAgent(input: unknown): AgentModelCatalogAgent | null {
   }
   const name = optionalString(input.name);
   const efforts = stringList(input.efforts);
-  if (!name || efforts === null || !Array.isArray(input.models)) {
+  const groups = parseGroups(input.groups);
+  if (!name || efforts === null || groups === null || !Array.isArray(input.models)) {
     return null;
   }
   const models: AgentModelCatalogModel[] = [];
   for (const entry of input.models) {
     const model = parseModel(entry, efforts);
-    if (model === null) {
+    // A row pointing at a group the agent never declares is an authoring
+    // mistake, and rendering it flat would hide it; reject the document so
+    // the last good catalog stays in effect.
+    if (model === null || (model.group !== undefined && !groups.some((group) => group.id === model.group))) {
       return null;
     }
     models.push(model);
@@ -155,6 +220,9 @@ function parseAgent(input: unknown): AgentModelCatalogAgent | null {
   const defaultEffort = optionalString(input.defaultEffort);
   if (defaultEffort !== undefined) {
     agent.defaultEffort = defaultEffort;
+  }
+  if (groups.length > 0) {
+    agent.groups = groups;
   }
   return agent;
 }
