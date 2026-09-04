@@ -2110,6 +2110,7 @@ impl GhostexGpuiApp {
             if !gpui_sidebar_chrome_visible(self.sidebar_collapsed) {
                 self.upsert_gpui_app_toast(
                     GpuiAppToast {
+                        copy_text: None,
                         id: "gpui-browser-tab-created-in-sidebar".to_string(),
                         level: GpuiAppToastLevel::from_raw(Some("info")),
                         title: "New tab created in sidebar".to_string(),

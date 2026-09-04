@@ -61,6 +61,7 @@ impl GhostexGpuiApp {
                 let _ = this.update(cx, |this, cx| {
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
+                            copy_text: None,
                             id: "gpui-sparkle-updater-start-failed".to_string(),
                             level: GpuiAppToastLevel::from_raw(Some("warning")),
                             title: "Updates unavailable".to_string(),
@@ -163,6 +164,7 @@ impl GhostexGpuiApp {
         if !self.updater_started {
             self.upsert_gpui_app_toast(
                 GpuiAppToast {
+                    copy_text: None,
                     id: "gpui-sparkle-updater-unavailable".to_string(),
                     level: GpuiAppToastLevel::from_raw(Some("warning")),
                     title: "Updates unavailable".to_string(),
@@ -197,6 +199,7 @@ impl GhostexGpuiApp {
         if !self.updater_started {
             self.upsert_gpui_app_toast(
                 GpuiAppToast {
+                    copy_text: None,
                     id: "gpui-windows-updater-unavailable".to_string(),
                     level: GpuiAppToastLevel::from_raw(Some("warning")),
                     title: "Updates unavailable".to_string(),
@@ -312,6 +315,7 @@ impl GhostexGpuiApp {
                         if interactive {
                             this.upsert_gpui_app_toast(
                                 GpuiAppToast {
+                                    copy_text: None,
                                     id: "gpui-windows-updater-current".to_string(),
                                     level: GpuiAppToastLevel::from_raw(Some("success")),
                                     title: "Ghostex is up to date".to_string(),
@@ -329,6 +333,7 @@ impl GhostexGpuiApp {
                     Err(_) => {
                         this.upsert_gpui_app_toast(
                             GpuiAppToast {
+                                copy_text: None,
                                 id: "gpui-windows-updater-check-failed".to_string(),
                                 level: GpuiAppToastLevel::from_raw(Some("warning")),
                                 title: "Could not check for updates".to_string(),
@@ -428,6 +433,7 @@ impl GhostexGpuiApp {
                                 Err(_) => {
                                     this.upsert_gpui_app_toast(
                                         GpuiAppToast {
+                                            copy_text: None,
                                             id: "gpui-windows-updater-download-failed".to_string(),
                                             level: GpuiAppToastLevel::from_raw(Some("warning")),
                                             title: "Update download failed".to_string(),
@@ -469,6 +475,7 @@ impl GhostexGpuiApp {
         if updater.apply_after_exit(asset).is_err() {
             self.upsert_gpui_app_toast(
                 GpuiAppToast {
+                    copy_text: None,
                     id: "gpui-windows-updater-apply-failed".to_string(),
                     level: GpuiAppToastLevel::from_raw(Some("warning")),
                     title: "Could not start the updater".to_string(),

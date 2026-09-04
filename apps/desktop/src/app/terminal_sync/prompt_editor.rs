@@ -232,6 +232,7 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |this, cx| {
                 this.upsert_gpui_app_toast(
                     GpuiAppToast {
+                        copy_text: None,
                         id: GPUI_MISSING_MONACO_PROMPT_EDITOR_TOAST_ID.to_string(),
                         level: GpuiAppToastLevel::Warning,
                         title: "Monaco prompt editor unavailable".to_string(),
@@ -466,6 +467,7 @@ impl GhostexGpuiApp {
     ) {
         self.upsert_gpui_app_toast(
             GpuiAppToast {
+                copy_text: None,
                 id: "gpui-remote-prompt-editor-failed".to_string(),
                 level: GpuiAppToastLevel::from_raw(Some("warning")),
                 title: "Remote prompt editor unavailable".to_string(),

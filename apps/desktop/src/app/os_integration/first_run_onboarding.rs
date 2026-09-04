@@ -165,6 +165,7 @@ impl GhostexGpuiApp {
                 if show_os_integration_toast {
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
+                            copy_text: None,
                             id: "gpui-os-integration-onboarding".to_string(),
                             level: GpuiAppToastLevel::from_raw(Some("info")),
                             title: "OS Integration available".to_string(),

@@ -108,8 +108,11 @@ pub(crate) fn gxserver_get_typed_operation(
     }
     let token = read_gpui_gxserver_auth_token()?;
     let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{GPUI_GXSERVER_LOCAL_API_PORT}");
-    let mut stream = TcpStream::connect(&address)
-        .map_err(|_| "gxserver is not reachable on 127.0.0.1:58744.".to_string())?;
+    let mut stream = TcpStream::connect_timeout(
+        &std::net::SocketAddr::from(([127, 0, 0, 1], GPUI_GXSERVER_LOCAL_API_PORT)),
+        timeout,
+    )
+    .map_err(|error| format!("gxserver connection to {address} failed: {error}"))?;
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|_| "Could not configure gxserver read timeout.".to_string())?;
@@ -122,12 +125,12 @@ pub(crate) fn gxserver_get_typed_operation(
     );
     stream
         .write_all(request.as_bytes())
-        .map_err(|_| "Could not send gxserver health request.".to_string())?;
+        .map_err(|error| format!("Could not send gxserver health request: {error}"))?;
 
     let mut response = String::new();
     stream
         .read_to_string(&mut response)
-        .map_err(|_| "Could not read gxserver health response.".to_string())?;
+        .map_err(|error| format!("Could not read gxserver health response: {error}"))?;
     let (headers, body) = response
         .split_once("\r\n\r\n")
         .ok_or_else(|| "gxserver returned an invalid HTTP response.".to_string())?;
@@ -351,7 +354,7 @@ pub(crate) fn read_gpui_gxserver_auth_token() -> Result<String, String> {
             .join("auth")
             .join("token");
         let token = fs::read_to_string(token_path)
-            .map_err(|_| "gxserver auth token is unavailable.".to_string())?
+            .map_err(|error| format!("gxserver auth token could not be read: {error}"))?
             .trim()
             .to_string();
         if token.is_empty() {

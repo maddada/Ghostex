@@ -71,21 +71,33 @@ pub(crate) enum GpuiLocalGxserverHealthState {
 /// check, hard protocol-version and build-identity matches, and availability
 /// of the tools shipped beside this GPUI build's gxserver binary.
 pub(crate) fn gpui_probe_local_gxserver_health() -> GpuiLocalGxserverHealthState {
-    let Ok(health) = gpui_gxserver_server_health(Duration::from_millis(1000)) else {
-        return GpuiLocalGxserverHealthState::Unreachable;
+    gpui_probe_local_gxserver_health_with_diagnostics().0
+}
+
+pub(crate) fn gpui_probe_local_gxserver_health_with_diagnostics()
+-> (GpuiLocalGxserverHealthState, String) {
+    let health = match gpui_gxserver_server_health(Duration::from_millis(1000)) {
+        Ok(health) => health,
+        Err(reason) => return (GpuiLocalGxserverHealthState::Unreachable, reason),
     };
     if health.get("product").and_then(serde_json::Value::as_str)
         != Some(GPUI_GXSERVER_EXPECTED_PRODUCT)
     {
-        return GpuiLocalGxserverHealthState::Unreachable;
+        return (
+            GpuiLocalGxserverHealthState::Unreachable,
+            "Health endpoint returned an unexpected product.".into(),
+        );
     }
     let reported_protocol = health
         .get("protocolVersion")
         .and_then(serde_json::Value::as_u64);
     if reported_protocol != Some(GPUI_GXSERVER_PROTOCOL_VERSION) {
-        return GpuiLocalGxserverHealthState::ProtocolMismatch {
-            reported: reported_protocol,
-        };
+        return (
+            GpuiLocalGxserverHealthState::ProtocolMismatch {
+                reported: reported_protocol,
+            },
+            gpui_gxserver_protocol_mismatch_message(reported_protocol),
+        );
     }
     #[cfg(not(target_os = "windows"))]
     if let Some(expected_build_identity) = gpui_expected_local_gxserver_build_identity() {
@@ -95,12 +107,20 @@ pub(crate) fn gpui_probe_local_gxserver_health() -> GpuiLocalGxserverHealthState
             .map(str::trim)
             .filter(|value| !value.is_empty());
         if reported_build_identity != Some(expected_build_identity.as_str()) {
-            return GpuiLocalGxserverHealthState::BuildMismatch;
+            return (
+                GpuiLocalGxserverHealthState::BuildMismatch,
+                format!(
+                    "Build mismatch: expected {expected_build_identity}; reported {}.",
+                    reported_build_identity.unwrap_or("missing")
+                ),
+            );
         }
     }
-    GpuiLocalGxserverHealthState::Healthy {
-        tools_available: gpui_gxserver_required_tools_available(&health),
-    }
+    let tools_available = gpui_gxserver_required_tools_available(&health);
+    (
+        GpuiLocalGxserverHealthState::Healthy { tools_available },
+        format!("Health OK; required tools available: {tools_available}."),
+    )
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -706,9 +726,17 @@ fn gpui_bootout_all_ghostex_launchd_jobs() {
 /// Last few launch-log lines so a startup-timeout toast can say why, matching
 /// the macOS client's recentGxserverLaunchOutput.
 pub(crate) fn gpui_recent_gxserver_launch_output() -> Option<String> {
-    let text = std::fs::read_to_string(gpui_gxserver_launch_log_path()).ok()?;
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(gpui_gxserver_launch_log_path()).ok()?;
+    let length = file.metadata().ok()?.len();
+    let offset = length.saturating_sub(16 * 1024);
+    file.seek(SeekFrom::Start(offset)).ok()?;
+    let mut bytes = Vec::new();
+    file.take(16 * 1024).read_to_end(&mut bytes).ok()?;
+    let text = String::from_utf8_lossy(&bytes);
     let lines = text
         .lines()
+        .skip(usize::from(offset > 0))
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
@@ -716,7 +744,126 @@ pub(crate) fn gpui_recent_gxserver_launch_output() -> Option<String> {
         return None;
     }
     let start = lines.len().saturating_sub(6);
-    Some(lines[start..].join(" "))
+    Some(lines[start..].join("\n"))
+}
+
+/// CDXC:ServerDaemon 2026-09-05 DECISION:
+/// User: add a button to the startup failure toast to copy the relevant failure lines so users can send them back for diagnosis.
+/// Capture the failed attempt before a later Load Sessions retry replaces the evidence.
+pub(crate) fn gpui_gxserver_startup_failure_report(probes: &[String]) -> String {
+    let captured_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    let log_path = gpui_gxserver_launch_log_path();
+    let log_modified = fs::metadata(&log_path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs().to_string())
+        .unwrap_or_else(|| "unavailable".into());
+    let output = gpui_recent_gxserver_launch_output()
+        .unwrap_or_else(|| "No readable, non-empty launcher output.".into());
+    let mut report = format!(
+        "Ghostex gxserver startup diagnostics\nApp: {}\nPlatform: {} / {}\nCaptured at (Unix seconds): {captured_at}\nHealth endpoint: 127.0.0.1:58744/api/health/server\nExpected protocol: {}\n\n{}\n\nLauncher log tail (may predate this attempt; modified Unix seconds: {log_modified}):\n{output}",
+        GPUI_APP_MARKETING_VERSION,
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        GPUI_GXSERVER_PROTOCOL_VERSION,
+        probes.join("\n"),
+    );
+    #[cfg(target_os = "macos")]
+    {
+        let version = gpui_run_command_with_captured_output_timeout(
+            Path::new("/usr/bin/sw_vers"),
+            &["-productVersion"],
+            Duration::from_secs(1),
+            256,
+        );
+        if let Ok(version) = version {
+            if version.success {
+                report.push_str(&format!("\n\nmacOS version: {}", version.stdout.trim()));
+            }
+        }
+        let uid = gpui_run_command_with_captured_output_timeout(
+            Path::new("/usr/bin/id"),
+            &["-u"],
+            Duration::from_secs(1),
+            64,
+        );
+        if let Ok(uid) = uid {
+            if uid.success && uid.stdout.trim().parse::<u32>().is_ok() {
+                let target = format!(
+                    "gui/{}/{}",
+                    uid.stdout.trim(),
+                    GPUI_GXSERVER_LAUNCH_AGENT_LABEL
+                );
+                report.push_str("\n\nlaunchd job at failure:\n");
+                match gpui_run_command_with_captured_output_timeout(
+                    Path::new("/bin/launchctl"),
+                    &["print", &target],
+                    Duration::from_secs(2),
+                    32 * 1024,
+                ) {
+                    Ok(job) if job.success => {
+                        for line in job.stdout.lines() {
+                            let Some((key, value)) = line.trim().split_once(" = ") else {
+                                continue;
+                            };
+                            if [
+                                "state",
+                                "pid",
+                                "runs",
+                                "last exit code",
+                                "last terminating signal",
+                                "program",
+                                "job state",
+                            ]
+                            .contains(&key)
+                            {
+                                report.push_str(&format!("{key}: {value}\n"));
+                            }
+                        }
+                    }
+                    Ok(_) => report
+                        .push_str("launchctl print failed or timed out; job may not be loaded.\n"),
+                    Err(error) => {
+                        report.push_str(&format!("launchctl inspection failed: {error}\n"))
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(token) = read_gpui_gxserver_auth_token() {
+        report = report.replace(&token, "[redacted token]");
+    }
+    if let Ok(home) = env::var("HOME") {
+        if !home.is_empty() {
+            report = report.replace(&home, "$HOME");
+        }
+    }
+    report
+        .lines()
+        .map(|line| {
+            let lower = line.to_ascii_lowercase();
+            if [
+                "bearer ",
+                "authtoken",
+                "authorization:",
+                "password",
+                "secret",
+                "token=",
+            ]
+            .iter()
+            .any(|key| lower.contains(key))
+            {
+                "[credential-bearing line omitted]".to_string()
+            } else {
+                line.chars().take(1024).collect::<String>()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub(crate) fn gpui_gxserver_protocol_mismatch_message(reported: Option<u64>) -> String {

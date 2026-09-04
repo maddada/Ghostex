@@ -745,6 +745,7 @@ impl GhostexGpuiApp {
                 if missing_count > 0 {
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
+                            copy_text: None,
                             id: "gpui-os-integration-open-missing".to_string(),
                             level: GpuiAppToastLevel::from_raw(Some("warning")),
                             title: "Path does not exist".to_string(),

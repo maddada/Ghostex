@@ -1250,6 +1250,7 @@ impl GhostexGpuiApp {
         cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
         self.upsert_gpui_app_toast(
             GpuiAppToast {
+                copy_text: None,
                 id: format!(
                     "gpui-disabled-{}-file-path-copied",
                     plugin_name.to_ascii_lowercase()
@@ -1276,6 +1277,7 @@ impl GhostexGpuiApp {
         cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
         self.upsert_gpui_app_toast(
             GpuiAppToast {
+                copy_text: None,
                 id: format!(
                     "gpui-unavailable-{}-file-path-copied",
                     workarea_name.to_ascii_lowercase()
@@ -1325,6 +1327,7 @@ impl GhostexGpuiApp {
         cx.write_to_clipboard(ClipboardItem::new_string(path.to_string()));
         self.upsert_gpui_app_toast(
             GpuiAppToast {
+                copy_text: None,
                 id: "gpui-session-chat-unresolved-file-path-copied".to_string(),
                 level: GpuiAppToastLevel::from_raw(Some("success")),
                 title: "File path copied".to_string(),
@@ -1346,6 +1349,7 @@ impl GhostexGpuiApp {
     ) {
         self.upsert_gpui_app_toast(
             GpuiAppToast {
+                copy_text: None,
                 id: "gpui-session-chat-file-open-failed".to_string(),
                 level: GpuiAppToastLevel::from_raw(Some("warning")),
                 title: "Could not open the file".to_string(),
@@ -1372,6 +1376,7 @@ impl GhostexGpuiApp {
     ) {
         self.upsert_gpui_app_toast(
             GpuiAppToast {
+                copy_text: None,
                 id: GPUI_SESSION_CHAT_FILE_OPENING_TOAST_ID.to_string(),
                 level: GpuiAppToastLevel::from_raw(None),
                 title: format!("Opening file in {destination}"),

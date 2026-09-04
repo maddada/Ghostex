@@ -1170,6 +1170,7 @@ impl GhostexGpuiApp {
                     };
                     this.upsert_gpui_app_toast(
                         GpuiAppToast {
+                            copy_text: None,
                             id: id.to_string(),
                             level: GpuiAppToastLevel::from_raw(Some("warning")),
                             title: title.to_string(),

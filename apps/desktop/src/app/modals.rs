@@ -2246,6 +2246,7 @@ impl GhostexGpuiApp {
         self.upsert_gpui_app_toast(
             GpuiAppToast {
                 id,
+                copy_text: None,
                 level: GpuiAppToastLevel::from_raw(Some(level)),
                 title: title.to_string(),
                 description: (!description.is_empty()).then(|| description.to_string()),
@@ -2332,6 +2333,7 @@ impl GhostexGpuiApp {
         );
         self.upsert_gpui_app_toast(
             GpuiAppToast {
+                copy_text: None,
                 id: GPUI_GXSERVER_DAEMON_TOAST_ID.to_string(),
                 level: GpuiAppToastLevel::from_raw(Some(level)),
                 title: title.to_string(),

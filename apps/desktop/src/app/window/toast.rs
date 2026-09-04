@@ -87,6 +87,7 @@ pub(crate) struct GpuiAppToast {
     pub(crate) level: GpuiAppToastLevel,
     pub(crate) title: String,
     pub(crate) description: Option<String>,
+    pub(crate) copy_text: Option<String>,
     pub(crate) loading: bool,
     pub(crate) persistent: bool,
     pub(crate) duration_ms: u64,
@@ -142,6 +143,7 @@ pub(crate) fn gpui_app_toast_from_bridge_message(
         .map(|duration| duration as u64)
         .unwrap_or(GPUI_APP_TOAST_DEFAULT_DURATION_MS);
     Some(GpuiAppToast {
+        copy_text: None,
         id: message
             .get("toastId")
             .and_then(serde_json::Value::as_str)
@@ -190,7 +192,10 @@ pub(crate) fn gpui_app_toast_estimated_height(toast: &GpuiAppToast) -> f32 {
                 } * GPUI_APP_TOAST_DESCRIPTION_LINE_HEIGHT
         })
         .unwrap_or(0.0);
-    GPUI_APP_TOAST_VERTICAL_PADDING * 2.0 + title_height + description_height
+    GPUI_APP_TOAST_VERTICAL_PADDING * 2.0
+        + title_height
+        + description_height
+        + if toast.copy_text.is_some() { 34.0 } else { 0.0 }
 }
 
 pub(crate) fn gpui_app_toast_stack_height(toasts: &[GpuiAppToast]) -> f32 {
@@ -442,7 +447,42 @@ impl Render for GpuiAppToastWindow {
                                                         )
                                                         .child(description),
                                                 )
-                                            }),
+                                            })
+                                            .when_some(
+                                                toast.copy_text.clone(),
+                                                |column, report| {
+                                                    column.child(
+                                                        div()
+                                                            .id(format!(
+                                                                "toast-copy-diagnostics-{}",
+                                                                toast.id
+                                                            ))
+                                                            .mt(px(6.0))
+                                                            .h(px(26.0))
+                                                            .px(px(8.0))
+                                                            .flex()
+                                                            .items_center()
+                                                            .rounded(px(4.0))
+                                                            .border_1()
+                                                            .border_color(rgba(0xffffff40))
+                                                            .text_size(px(12.0))
+                                                            .text_color(rgba(0xffffffff))
+                                                            .cursor_pointer()
+                                                            .hover(|button| {
+                                                                button.bg(rgba(0xffffff18))
+                                                            })
+                                                            .on_click(move |_, _, cx| {
+                                                                cx.stop_propagation();
+                                                                cx.write_to_clipboard(
+                                                                    ClipboardItem::new_string(
+                                                                        report.clone(),
+                                                                    ),
+                                                                );
+                                                            })
+                                                            .child("Copy diagnostics"),
+                                                    )
+                                                },
+                                            ),
                                     ),
                             ),
                     )

@@ -52,6 +52,8 @@ impl GhostexGpuiApp {
             None
         };
         cx.spawn(async move |this, cx| {
+            let startup_started = std::time::Instant::now();
+            let mut startup_diagnostics = Vec::new();
             #[cfg(target_os = "windows")]
             {
                 /*
@@ -146,10 +148,11 @@ impl GhostexGpuiApp {
                     }
                 }
             }
-            let health = cx
+            let (health, detail) = cx
                 .background_executor()
-                .spawn(async { gpui_probe_local_gxserver_health() })
+                .spawn(async { gpui_probe_local_gxserver_health_with_diagnostics() })
                 .await;
+            startup_diagnostics.push(format!("+{}ms initial probe: {detail}", startup_started.elapsed().as_millis()));
             match health {
                 GpuiLocalGxserverHealthState::Healthy {
                     tools_available: true,
@@ -309,14 +312,16 @@ impl GhostexGpuiApp {
                 });
                 return;
             }
-            for _ in 0..40 {
+            startup_diagnostics.push(format!("+{}ms launcher accepted the start request.", startup_started.elapsed().as_millis()));
+            for attempt in 1..=40 {
                 cx.background_executor()
                     .timer(Duration::from_millis(500))
                     .await;
-                let health = cx
+                let (health, detail) = cx
                     .background_executor()
-                    .spawn(async { gpui_probe_local_gxserver_health() })
+                    .spawn(async { gpui_probe_local_gxserver_health_with_diagnostics() })
                     .await;
+                startup_diagnostics.push(format!("+{}ms probe {attempt}/40: {detail}", startup_started.elapsed().as_millis()));
                 match health {
                     GpuiLocalGxserverHealthState::Healthy { tools_available } => {
                         let _ = this.update(cx, |this, cx| {
@@ -362,20 +367,22 @@ impl GhostexGpuiApp {
                     GpuiLocalGxserverHealthState::Unreachable => {}
                 }
             }
-            let launch_output = cx
+            let report = cx
                 .background_executor()
-                .spawn(async { gpui_recent_gxserver_launch_output() })
+                .spawn(async move { gpui_gxserver_startup_failure_report(&startup_diagnostics) })
                 .await;
-            let description = launch_output
-                .unwrap_or_else(|| "The daemon did not become healthy in time.".to_string());
             let _ = this.update(cx, |this, cx| {
                 this.show_gpui_gxserver_bootstrap_toast(
                     "error",
                     "gxserver failed to start",
-                    &description,
+                    "The daemon did not become healthy in time. Copy diagnostics to share the failure details.",
                     true,
                     cx,
                 );
+                if let Some(toast) = this.app_toasts.iter_mut().find(|toast| toast.id == GPUI_GXSERVER_DAEMON_TOAST_ID) {
+                    toast.copy_text = Some(report);
+                }
+                this.sync_gpui_app_toast_window(cx);
             });
         })
         .detach();
