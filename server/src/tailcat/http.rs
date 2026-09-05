@@ -29,7 +29,11 @@ pub(crate) async fn handle_tailcat_http(
     let runtime = state.tailcat_runtime.clone();
     let logger = state.logger.clone();
 
-    if endpoint_path == "/api/tailcatStatus" {
+    if endpoint_path == "/api/installTailcat" {
+        super::install::start_installation(paths.clone(), runtime.clone());
+    }
+
+    if endpoint_path == "/api/tailcatStatus" || endpoint_path == "/api/installTailcat" {
         let status = tokio::task::spawn_blocking(move || {
             read_tailcat_status_payload_for_paths(&paths, &runtime)
         })

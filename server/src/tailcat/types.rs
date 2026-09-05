@@ -53,6 +53,12 @@ impl TailcatStateUpdate {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TailcatStatusPayload {
+    #[serde(default)]
+    pub installing: bool,
+    #[serde(default)]
+    pub install_progress: Option<String>,
+    #[serde(default)]
+    pub install_error: Option<String>,
     pub enabled: bool,
     pub running: bool,
     pub binary_found: bool,

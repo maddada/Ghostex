@@ -29,6 +29,9 @@ export type RemoteAccessState = {
   pairedDevices: readonly GxserverPairedDevice[] | undefined;
   requestError: string | undefined;
   isEnablingSsh: boolean;
+  isInstallingEasyConnect: boolean;
+  easyConnectInstallError: string | undefined;
+  installEasyConnect: () => void;
   /** Result of the last Turn on SSH access click; cleared once SSH access reads as on. */
   sshEnableAttempt: SshEnableAttempt | undefined;
   removingDeviceId: string | undefined;
@@ -58,6 +61,9 @@ export function useRemoteAccess(rpc: RemoteSetupRpc | undefined, isActive: boole
   const [pairedDevices, setPairedDevices] = useState<readonly GxserverPairedDevice[]>();
   const [requestError, setRequestError] = useState<string>();
   const [isEnablingSsh, setIsEnablingSsh] = useState(false);
+  const [installRequestPending, setInstallRequestPending] = useState(false);
+  const [installRequestError, setInstallRequestError] = useState<string>();
+  const installRequestRef = useRef(false);
   const [sshEnableAttempt, setSshEnableAttempt] = useState<SshEnableAttempt>();
   const [removingDeviceId, setRemovingDeviceId] = useState<string>();
   const [refreshTick, setRefreshTick] = useState(0);
@@ -195,6 +201,32 @@ export function useRemoteAccess(rpc: RemoteSetupRpc | undefined, isActive: boole
       });
   }, [isEnablingSsh, rpc]);
 
+  const installEasyConnect = useCallback(() => {
+    if (!rpc || installRequestRef.current || easyConnect?.installing) {
+      return;
+    }
+    installRequestRef.current = true;
+    setInstallRequestPending(true);
+    setInstallRequestError(undefined);
+    void rpc('/api/installTailcat', {})
+      .then((result) => {
+        if (mountedRef.current) {
+          setEasyConnect(readTailcatStatusResult(result));
+        }
+      })
+      .catch((error: unknown) => {
+        if (mountedRef.current) {
+          setInstallRequestError(error instanceof Error ? error.message : String(error));
+        }
+      })
+      .finally(() => {
+        installRequestRef.current = false;
+        if (mountedRef.current) {
+          setInstallRequestPending(false);
+        }
+      });
+  }, [easyConnect?.installing, rpc]);
+
   const removePairedDevice = useCallback(
     (deviceId: string) => {
       if (!rpc) {
@@ -225,6 +257,9 @@ export function useRemoteAccess(rpc: RemoteSetupRpc | undefined, isActive: boole
     easyConnect,
     enableSshAccess,
     isEnablingSsh,
+    isInstallingEasyConnect: installRequestPending || easyConnect?.installing === true,
+    easyConnectInstallError: installRequestError ?? easyConnect?.installError ?? undefined,
+    installEasyConnect,
     pairedDevices,
     pairingCode,
     refresh,

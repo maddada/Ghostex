@@ -725,6 +725,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         are never reachable from the remote listener.
         */
         | "/api/tailcatStatus"
+        | "/api/installTailcat"
         | "/api/updateTailcatState"
         /*
         CDXC:RemotePairing 2026-09-03:

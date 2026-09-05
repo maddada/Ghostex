@@ -1,7 +1,9 @@
+import { useId, useState } from 'react';
+import { Button } from '@/packages/components/ui/button';
 import { cn } from '@/packages/components/utils';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import { Switch } from '@/packages/components/ui/switch';
-import { IconDeviceFloppy } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconDeviceFloppy } from '@tabler/icons-react';
 import { readPairingCode } from '../../../shared/ghostex-remote-pairing';
 import {
   normalizeRemoteMachineSettings,
@@ -171,6 +173,8 @@ export function RemoteMachineFields({
   passwordDescription?: string;
   showSidebarVisibility?: boolean;
 }) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const advancedId = useId();
   const showPasswordSaveButton = typeof onPasswordSave === 'function';
   const canSavePassword =
     !passwordSaveDisabled && showPasswordSaveButton && (draft.sshPassword.trim().length > 0 || draft.sshPasswordSaved);
@@ -227,7 +231,7 @@ export function RemoteMachineFields({
               ? codeReading.summary
               : codeReading?.kind === 'rejected'
                 ? codeReading.reason
-                : 'On the other computer, open Settings → Remote → Easy Connect and use "Copy as text".'}
+                : 'On the other computer, open Settings → Remote → Easy Connect → Connect a Remote machine and click "Copy Easy Connect code".'}
           </FieldDescription>
         </Field>
       ) : null}
@@ -255,64 +259,22 @@ export function RemoteMachineFields({
           />
         </Field>
       )}
-      <div className={cn('settings-remote-machine-user-port', easyConnect && 'settings-remote-machine-user-only')}>
-        <Field className='settings-remote-machine-field'>
-          <FieldLabel className='settings-remote-machine-field-label'>SSH user</FieldLabel>
-          <SettingsInput
-            aria-label='Remote machine SSH user'
-            className='settings-remote-machine-input'
-            maxLength={120}
-            onChange={(event) => onChange({ sshUser: event.currentTarget.value })}
-            placeholder='machine username'
-            value={draft.sshUser}
-          />
-        </Field>
-        {easyConnect ? null : (
-          <Field className='settings-remote-machine-field'>
-            <FieldLabel className='settings-remote-machine-field-label'>SSH port</FieldLabel>
-            <SettingsInput
-              aria-label='Remote machine SSH port'
-              className='settings-remote-machine-input'
-              inputMode='numeric'
-              maxLength={5}
-              onChange={(event) => onChange({ sshPort: event.currentTarget.value.replace(/[^0-9]/gu, '') })}
-              placeholder='22'
-              value={draft.sshPort}
-            />
-          </Field>
-        )}
-      </div>
       <Field className='settings-remote-machine-field'>
-        <FieldLabel className='settings-remote-machine-field-label'>Identity file</FieldLabel>
+        <FieldLabel className='settings-remote-machine-field-label'>SSH username</FieldLabel>
         <SettingsInput
-          aria-label='Remote machine SSH identity file'
-          className='settings-remote-machine-input'
-          maxLength={500}
-          onChange={(event) => onChange({ sshIdentityFile: event.currentTarget.value })}
-          placeholder='~/.ssh/id_ed25519'
-          value={draft.sshIdentityFile}
-        />
-        <FieldDescription className='settings-remote-machine-field-description'>
-          {identityDescription ?? 'Provide either an SSH identity file or save an SSH password below.'}
-        </FieldDescription>
-      </Field>
-      <Field className='settings-remote-machine-field'>
-        <FieldLabel className='settings-remote-machine-field-label'>Windows WSL distribution</FieldLabel>
-        <SettingsInput
-          aria-label='Remote machine WSL distribution'
+          aria-label='Remote machine SSH user'
           className='settings-remote-machine-input'
           maxLength={120}
-          onChange={(event) => onChange({ wslDistribution: event.currentTarget.value })}
-          placeholder='Ubuntu-24.04'
-          value={draft.wslDistribution}
+          onChange={(event) => onChange({ sshUser: event.currentTarget.value })}
+          placeholder='machine username'
+          value={draft.sshUser}
         />
         <FieldDescription className='settings-remote-machine-field-description'>
-          Optional. Windows remotes run gxserver inside this WSL2 distribution; leave blank to use the default
-          distribution.
+          The account you sign in with on the other computer.
         </FieldDescription>
       </Field>
       <Field className='settings-remote-machine-field'>
-        <FieldLabel className='settings-remote-machine-field-label'>Password</FieldLabel>
+        <FieldLabel className='settings-remote-machine-field-label'>SSH password</FieldLabel>
         <div
           className={cn(
             'settings-remote-machine-password-row',
@@ -352,6 +314,67 @@ export function RemoteMachineFields({
             'Passwords are stored in macOS Keychain. Leave blank and press Save to remove a saved password.'}
         </FieldDescription>
       </Field>
+      {/* CDXC:RemotePairing 2026-09-05 DECISION: User: simplify adding a machine and hide the WSL version details under Advanced. */}
+      <div className='settings-remote-machine-advanced'>
+        <Button
+          aria-controls={advancedOpen ? advancedId : undefined}
+          aria-expanded={advancedOpen}
+          onClick={() => setAdvancedOpen(!advancedOpen)}
+          size='sm'
+          type='button'
+          variant='ghost'
+        >
+          {advancedOpen ? <IconChevronDown aria-hidden='true' /> : <IconChevronRight aria-hidden='true' />}
+          Advanced
+        </Button>
+        {advancedOpen ? (
+          <div className='settings-remote-machine-advanced-fields' id={advancedId}>
+            {easyConnect ? null : (
+              <Field className='settings-remote-machine-field'>
+                <FieldLabel className='settings-remote-machine-field-label'>SSH port</FieldLabel>
+                <SettingsInput
+                  aria-label='Remote machine SSH port'
+                  className='settings-remote-machine-input'
+                  inputMode='numeric'
+                  maxLength={5}
+                  onChange={(event) => onChange({ sshPort: event.currentTarget.value.replace(/[^0-9]/gu, '') })}
+                  placeholder='22'
+                  value={draft.sshPort}
+                />
+              </Field>
+            )}
+            <Field className='settings-remote-machine-field'>
+              <FieldLabel className='settings-remote-machine-field-label'>Identity file</FieldLabel>
+              <SettingsInput
+                aria-label='Remote machine SSH identity file'
+                className='settings-remote-machine-input'
+                maxLength={500}
+                onChange={(event) => onChange({ sshIdentityFile: event.currentTarget.value })}
+                placeholder='~/.ssh/id_ed25519'
+                value={draft.sshIdentityFile}
+              />
+              <FieldDescription className='settings-remote-machine-field-description'>
+                {identityDescription ?? 'Optional. Use an SSH private key instead of a password.'}
+              </FieldDescription>
+            </Field>
+            <Field className='settings-remote-machine-field'>
+              <FieldLabel className='settings-remote-machine-field-label'>Windows WSL distribution</FieldLabel>
+              <SettingsInput
+                aria-label='Remote machine WSL distribution'
+                className='settings-remote-machine-input'
+                maxLength={120}
+                onChange={(event) => onChange({ wslDistribution: event.currentTarget.value })}
+                placeholder='Ubuntu-24.04'
+                value={draft.wslDistribution}
+              />
+              <FieldDescription className='settings-remote-machine-field-description'>
+                Optional. Windows remotes run gxserver inside this WSL2 distribution; leave blank to use the default
+                distribution.
+              </FieldDescription>
+            </Field>
+          </div>
+        ) : null}
+      </div>
     </FieldGroup>
   );
 }

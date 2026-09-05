@@ -2328,7 +2328,7 @@ async fn route_http(
         "/api/updatePortlessState" => {
             handle_portless_state_http(&state, endpoint.path, request_id, &body_json)
         }
-        "/api/tailcatStatus" | "/api/updateTailcatState" => {
+        "/api/tailcatStatus" | "/api/updateTailcatState" | "/api/installTailcat" => {
             handle_tailcat_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/remoteAccessStatus"

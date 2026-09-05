@@ -2,9 +2,17 @@ import { useId } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import { QrCode } from '@/packages/components/ui/qr-code';
 import { Switch } from '@/packages/components/ui/switch';
-import { IconAlertTriangle, IconChevronDown, IconChevronRight, IconPower, IconQrcode } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconChevronDown,
+  IconChevronRight,
+  IconDownload,
+  IconLoader2,
+  IconPower,
+  IconQrcode,
+} from '@tabler/icons-react';
 import { RemoteCopyButton } from './remote-copy-button';
-import { EASY_CONNECT_INSTALL_COMMAND, getEasyConnectStatusBadge } from './remote-easy-connect-model';
+import { getEasyConnectStatusBadge } from './remote-easy-connect-model';
 import { PairedDevicesList } from './remote-paired-devices';
 import { SshAccessRow } from './remote-ssh-access-row';
 import type { RemoteAccessState } from './use-remote-access';
@@ -26,6 +34,9 @@ const SSH_REQUIRED_OFF =
  * User: show Easy Connect and Tailscale "as expandible cards so the user clicks to expand the one they want to use. i dont want the user confused by seeing 2 qr codes in front of themselves".
  * The card is collapsed to its header row (icon, title, badges, the enable switch, a chevron) until `expanded`; the QR, SSH row, and paired devices only render inside the open body, and the parent keeps at most one path card open.
  * The switch sits beside the header button, not inside it, so toggling Easy Connect never expands or collapses the card.
+ *
+ * CDXC:RemotePairing 2026-09-05 DECISION:
+ * User: explain why the Tailcat CLI is needed and install it with one click; separate Connect a Phone (compact QR) from Connect a Remote machine (copy button only), and explain the SSH login on the other device.
  */
 export function EasyConnectCard({
   expanded,
@@ -68,7 +79,7 @@ export function EasyConnectCard({
             <IconQrcode aria-hidden='true' size={16} />
           </span>
           <span className='settings-remote-path-title' id={titleId}>
-            Easy Connect (QR/Token)
+            Easy Connect
           </span>
           <span className='settings-remote-badges'>
             <span className='settings-remote-tag'>Recommended</span>
@@ -92,27 +103,43 @@ export function EasyConnectCard({
         <div className='settings-remote-path-body' id={bodyId}>
           <p className='settings-management-description'>
             {isOn
-              ? 'Pair your phone once by scanning this code. No VPN, no accounts. The pairing keeps working until you remove it below.'
-              : 'Pair your phone once by scanning a code. No VPN, no accounts. Turn it on to show the code.'}
+              ? 'Reach this computer from your phone or another computer. No VPN setup or account needed.'
+              : 'Reach this computer from your phone or another computer. Turn on Easy Connect to get a pairing code.'}
           </p>
 
-          {status && !binaryFound ? (
+          {status && (!binaryFound || status.installing) ? (
             <div className='settings-remote-install'>
               <div className='settings-management-main'>
-                <span className='settings-management-title'>Easy Connect is not installed</span>
+                <span className='settings-management-title'>Install the Easy Connect helper</span>
                 <span className='settings-management-detail'>
-                  gxserver could not find the Easy Connect binary on this computer. Install it, then reopen this page.
+                  Easy Connect uses the Tailcat CLI to carry your SSH connection through an encrypted tunnel, so your
+                  devices can reach this computer across networks. Ghostex installs and manages the helper for you.
                 </span>
               </div>
-              <div className='settings-remote-command-row'>
-                <code className='settings-remote-command'>{EASY_CONNECT_INSTALL_COMMAND}</code>
-                <RemoteCopyButton
-                  copyLabel='Copy the install command'
-                  size='icon'
-                  value={EASY_CONNECT_INSTALL_COMMAND}
-                  variant='outline'
-                />
-              </div>
+              <Button
+                className='settings-remote-install-button'
+                disabled={!rpcAvailable || remote.isInstallingEasyConnect}
+                onClick={remote.installEasyConnect}
+                size='sm'
+                type='button'
+              >
+                {remote.isInstallingEasyConnect ? (
+                  <IconLoader2 aria-hidden='true' className='animate-spin' />
+                ) : (
+                  <IconDownload aria-hidden='true' />
+                )}
+                {remote.isInstallingEasyConnect ? 'Installing Easy Connect…' : 'Install Easy Connect'}
+              </Button>
+              <span className='settings-management-detail' role='status'>
+                {status.installProgress ??
+                  'One-time setup. Any required build tools are downloaded automatically. No terminal commands needed.'}
+              </span>
+            </div>
+          ) : null}
+          {remote.easyConnectInstallError ? (
+            <div className='settings-remote-error' role='alert'>
+              <IconAlertTriangle aria-hidden='true' />
+              <span>{remote.easyConnectInstallError}</span>
             </div>
           ) : null}
 
@@ -129,47 +156,75 @@ export function EasyConnectCard({
           />
 
           {isOn ? (
-            <div className='settings-remote-qr-block settings-remote-easy-connect-qr-block'>
-              {easyConnectCode ? (
-                <QrCode
-                  alt='Easy Connect pairing code'
-                  className='settings-remote-qr'
-                  value={easyConnectCode.payload}
-                />
-              ) : (
-                <span className='settings-remote-qr settings-remote-qr-pending' data-slot='qr-code'>
-                  <span className='settings-management-detail'>Waiting for the address…</span>
-                </span>
-              )}
-              <div className='settings-remote-qr-meta'>
-                <strong>Scan with the Ghostex app</strong>
-                <span>
-                  Open the app → <em>Connect your computer</em> → <em>Scan code</em>.
-                </span>
+            <div className='settings-remote-connect-sections'>
+              <section
+                aria-label='Connect a Phone'
+                className='settings-remote-qr-block settings-remote-easy-connect-qr-block'
+              >
                 {easyConnectCode ? (
-                  <span>
-                    Pairs as <strong>{easyConnectCode.code.user}</strong> on{' '}
-                    <strong>{easyConnectCode.code.name}</strong>. Nothing to type on the phone.
+                  <QrCode
+                    alt='Easy Connect pairing code'
+                    className='settings-remote-qr'
+                    size={144}
+                    value={easyConnectCode.payload}
+                  />
+                ) : (
+                  <span className='settings-remote-qr settings-remote-qr-pending' data-slot='qr-code'>
+                    <span className='settings-management-detail'>Waiting for the address…</span>
                   </span>
-                ) : null}
-                <span>
-                  The code refreshes after each pairing. Any phone or computer that scans the current code can pair;
-                  remove a device below to unpair it.
-                </span>
-                {easyConnectCode ? (
-                  <div className='settings-remote-qr-actions'>
-                    <RemoteCopyButton
-                      className='settings-remote-copy-code-button'
-                      copyLabel='Copy the pairing code as text'
-                      size='xs'
-                      value={easyConnectCode.payload}
-                      variant='outline'
-                    >
-                      Copy as text
-                    </RemoteCopyButton>
-                  </div>
-                ) : null}
-              </div>
+                )}
+                <div className='settings-remote-qr-meta'>
+                  <strong>1. Connect a Phone</strong>
+                  <span>
+                    On your phone, open Ghostex → <em>Connect your computer</em> → <em>Scan code</em> and scan this QR.
+                  </span>
+                  {easyConnectCode ? (
+                    <span>
+                      Pairs as <strong>{easyConnectCode.code.user}</strong> on{' '}
+                      <strong>{easyConnectCode.code.name}</strong>. Nothing to type on the phone.
+                    </span>
+                  ) : null}
+                  <span>The QR refreshes after pairing. Remove a paired phone below to disconnect it.</span>
+                </div>
+              </section>
+              <section aria-label='Connect a Remote machine' className='settings-remote-computer-connect'>
+                <div className='settings-remote-qr-meta'>
+                  <strong>2. Connect a Remote machine</strong>
+                  <span>To add this computer on another computer, copy its Easy Connect code below.</span>
+                  <ol className='settings-remote-connect-instructions'>
+                    <li>On the other computer, open Ghostex → Settings → Remote → Add a machine.</li>
+                    <li>
+                      Choose <strong>Easy Connect code</strong> and paste the copied code.
+                    </li>
+                    <li>
+                      Confirm this computer’s SSH username
+                      {easyConnectCode ? (
+                        <>
+                          {' '}
+                          (<strong>{easyConnectCode.code.user}</strong>)
+                        </>
+                      ) : null}{' '}
+                      and enter its SSH password. If you use an SSH key, choose it under Advanced instead.
+                    </li>
+                    <li>
+                      Click <strong>Add machine</strong>, then open it from the sidebar.
+                    </li>
+                  </ol>
+                  {easyConnectCode ? (
+                    <div className='settings-remote-qr-actions'>
+                      <RemoteCopyButton
+                        className='settings-remote-copy-code-button'
+                        copyLabel='Copy Easy Connect code for another computer'
+                        size='sm'
+                        value={easyConnectCode.payload}
+                        variant='default'
+                      >
+                        Copy Easy Connect code
+                      </RemoteCopyButton>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
             </div>
           ) : (
             <div className='settings-remote-off-block'>
@@ -177,8 +232,8 @@ export function EasyConnectCard({
               <div className='settings-remote-off-text'>
                 <strong>Turn on Easy Connect to get a pairing code</strong>
                 <span className='settings-management-detail'>
-                  Ghostex keeps it running while the app is open. You can turn it off any time; paired phones simply
-                  stop being able to reach the computer.
+                  Ghostex keeps it running while the app is open. You can turn it off any time; paired phones and
+                  computers stop being able to reach this computer.
                 </span>
                 <Button
                   className='settings-remote-turn-on-button'

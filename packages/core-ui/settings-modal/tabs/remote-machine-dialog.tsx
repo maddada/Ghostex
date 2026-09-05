@@ -161,7 +161,7 @@ function RemoteMachineDialogContent({
         <DialogTitle>{isNew ? 'Add a machine' : machine.name}</DialogTitle>
         <DialogDescription>
           {isNew
-            ? 'Another computer this one connects to. Its projects show up as a separate sidebar section.'
+            ? 'Paste an Easy Connect code or enter the other computer’s address, then use that computer’s SSH username and password to sign in.'
             : 'Connection details for this machine. Changes apply when you save.'}
         </DialogDescription>
       </DialogHeader>
@@ -181,12 +181,11 @@ function RemoteMachineDialogContent({
         ) : null}
         <RemoteMachineFields
           draft={draft}
-          identityDescription={isNew ? 'Provide either an SSH identity file now or an SSH password below.' : undefined}
           onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
           onPasswordSave={isNew ? undefined : savePassword}
           passwordDescription={
             isNew
-              ? 'Passwords are stored in macOS Keychain. Leave blank to add the machine without a saved password.'
+              ? 'Use the password for this username on the other computer. If you already use SSH keys, leave this blank and set the key under Advanced.'
               : undefined
           }
           passwordSaveDisabled={!vscode}

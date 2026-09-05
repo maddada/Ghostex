@@ -324,7 +324,7 @@ fn spawn_tailcat_serve(spec: &TailcatServeSpec) -> std::io::Result<Child> {
     command.spawn()
 }
 
-fn configure_process_group(command: &mut Command) {
+pub(super) fn configure_process_group(command: &mut Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -338,7 +338,7 @@ fn configure_process_group(command: &mut Command) {
     }
 }
 
-fn terminate_process_group(child: &mut Child) {
+pub(super) fn terminate_process_group(child: &mut Child) {
     #[cfg(unix)]
     {
         let process_group_id = child.id() as libc::pid_t;

@@ -15,9 +15,9 @@ export function RemoteCopyButton({
   children?: ReactNode;
   className?: string;
   copyLabel: string;
-  size?: 'icon-xs' | 'icon' | 'xs';
+  size?: 'icon-xs' | 'icon' | 'xs' | 'sm';
   value: string;
-  variant?: 'ghost' | 'outline' | 'secondary';
+  variant?: 'ghost' | 'outline' | 'secondary' | 'default';
 }) {
   const [copied, setCopied] = useState(false);
   return (

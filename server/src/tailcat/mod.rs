@@ -1,5 +1,6 @@
 pub mod binary;
 pub mod http;
+pub(crate) mod install;
 pub mod keys;
 pub mod repository;
 pub mod status;

@@ -42,7 +42,11 @@ fn tailcat_status_payload_from_state(
         .as_ref()
         .and_then(|path| runtime.binary_version(path));
     let snapshot = runtime.snapshot();
+    let installation = super::install::installation_status();
     TailcatStatusPayload {
+        installing: installation.running,
+        install_progress: installation.progress,
+        install_error: installation.error,
         enabled: state.enabled,
         running: snapshot.running,
         binary_found: binary_path.is_some(),

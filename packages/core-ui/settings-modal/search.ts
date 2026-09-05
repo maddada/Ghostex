@@ -619,7 +619,7 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         settings: [
           {
             key: 'easyConnectEnabled',
-            subtitle: 'Pair your phone once by scanning a code. No VPN, no accounts.',
+            subtitle: 'Connect a phone or a remote machine. Install the Tailcat CLI helper with one click.',
             title: 'Easy Connect',
           },
           {
@@ -629,7 +629,8 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           },
           {
             key: 'pairingCode',
-            subtitle: 'Scan the pairing code with the Ghostex app, or copy it as text.',
+            subtitle:
+              'Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password.',
             title: 'Pairing code',
           },
           {

@@ -6,12 +6,9 @@ use std::{
 };
 
 /*
-CDXC:RemotePairing 2026-09-01:
-The tailcat binary is never vendored or downloaded by Ghostex. gxserver only
-LOCATES an existing install, in the order a user would expect: an explicit
-override, the PATH the daemon was launched with, then the two install
-locations `go install` and Homebrew use. A missing binary is a reported status,
-not an error path that hides the integration.
+CDXC:RemotePairing 2026-09-05 SEE-ALSO:
+Keep this lookup in sync with apps/desktop/src/app/helpers/remote/easy_connect_forward.rs so both serving and connecting find the helper installed by Settings.
+The managed install follows explicit overrides and PATH; existing Go and Homebrew installs are still recognized.
 */
 pub fn resolve_tailcat_binary() -> Option<PathBuf> {
     tailcat_binary_candidates()
@@ -30,11 +27,19 @@ fn tailcat_binary_candidates() -> Vec<PathBuf> {
         candidates
             .extend(env::split_paths(&path).map(|directory| directory.join(executable_name())));
     }
+    candidates.push(managed_tailcat_binary());
     if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
         candidates.push(home.join("go").join("bin").join(executable_name()));
     }
     candidates.push(PathBuf::from("/opt/homebrew/bin").join(executable_name()));
     candidates
+}
+
+pub(crate) fn managed_tailcat_binary() -> PathBuf {
+    ghostex_paths::GhostexPaths::resolve()
+        .data_dir
+        .join("tailcat/bin")
+        .join(executable_name())
 }
 
 fn executable_name() -> &'static str {

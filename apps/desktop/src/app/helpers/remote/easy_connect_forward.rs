@@ -38,9 +38,7 @@ same paths that terminate the machine's gxserver connection (disconnect,
 watchdog, app quit) and by a failed connect. A machine whose forwarder is not
 running resolves to an empty SSH host, which is deliberately not dialable.
 
-The binary is never vendored or downloaded: it is located in the same order
-as `server/src/tailcat/binary.rs` (explicit override, PATH, `~/go/bin`,
-Homebrew).
+The binary is located in the same order as `server/src/tailcat/binary.rs`: explicit override, PATH, the helper installed through Settings, `~/go/bin`, then Homebrew.
 */
 
 pub(crate) const GPUI_EASY_CONNECT_FORWARD_HOST: &str = "127.0.0.1";
@@ -138,7 +136,7 @@ pub(crate) fn gpui_start_easy_connect_forward(
     }
     let Some(binary_path) = gpui_resolve_easy_connect_binary() else {
         return Err(
-            "Easy Connect is not installed on this computer. Install it, then reconnect the machine."
+            "Easy Connect is not installed on this computer. Open Settings → Remote → Easy Connect and click Install Easy Connect, then reconnect the machine."
                 .to_string(),
         );
     };
@@ -256,6 +254,13 @@ fn easy_connect_binary_candidates() -> Vec<PathBuf> {
             env::split_paths(&path).map(|directory| directory.join(easy_connect_executable_name())),
         );
     }
+    // CDXC:RemotePairing 2026-09-05 SEE-ALSO: server/src/tailcat/binary.rs installs the Settings helper at this shared per-user location.
+    candidates.push(
+        ghostex_paths::GhostexPaths::resolve()
+            .data_dir
+            .join("tailcat/bin")
+            .join(easy_connect_executable_name()),
+    );
     if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
         candidates.push(
             home.join("go")

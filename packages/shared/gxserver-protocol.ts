@@ -321,6 +321,7 @@ export type GxserverEndpointPath =
   | '/api/updateListenerConfig'
   | '/api/updatePortlessState'
   | '/api/tailcatStatus'
+  | '/api/installTailcat'
   | '/api/updateTailcatState'
   | '/api/remoteAccessStatus'
   | '/api/enableSshAccess'
@@ -494,6 +495,9 @@ export interface GxserverPortlessPresentation {
  * server key at runtime and is null until the running sidecar has published it.
  */
 export interface GxserverTailcatStatus {
+  installing?: boolean;
+  installProgress?: string | null;
+  installError?: string | null;
   enabled: boolean;
   running: boolean;
   binaryFound: boolean;

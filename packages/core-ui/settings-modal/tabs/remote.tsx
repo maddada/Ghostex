@@ -296,9 +296,9 @@ export function RemoteSettingsTab({
           <section className='settings-remote-from-phone'>
             <header className='settings-management-header'>
               <div className='settings-management-header-text'>
-                <h3 className='settings-management-heading'>Use Ghostex from your phone</h3>
+                <h3 className='settings-management-heading'>Connect to this computer</h3>
                 <p className='settings-management-description'>
-                  Two ways for the Ghostex app to reach this computer. Most people only need Easy Connect.
+                  Use Ghostex from your phone or another computer. Most people only need Easy Connect.
                 </p>
               </div>
             </header>
@@ -326,7 +326,7 @@ export function RemoteSettingsTab({
             ) : (
               <p className='settings-management-description settings-remote-no-server'>
                 Pairing needs the Ghostex server on this computer. Open Settings from the Ghostex app to set up your
-                phone.
+                devices.
               </p>
             )}
             {remote.requestError ? (

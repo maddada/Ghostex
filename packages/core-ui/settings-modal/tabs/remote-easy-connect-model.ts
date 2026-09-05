@@ -15,8 +15,6 @@ import type {
  * its payload; user-facing copy says "Easy Connect".
  */
 
-export const EASY_CONNECT_INSTALL_COMMAND = 'go install github.com/tailscale/tailcat/cmd/tailcat@latest';
-
 /** Easy Connect status + pairing code poll (the code rotates after a device pairs). */
 export const REMOTE_FAST_REFRESH_MS = 4000;
 /** SSH probe, Tailscale status, and paired devices poll. */
@@ -124,6 +122,9 @@ export type EasyConnectStatusBadge = {
 export function getEasyConnectStatusBadge(status: GxserverTailcatStatus | undefined): EasyConnectStatusBadge {
   if (!status) {
     return { label: 'Unknown', tone: 'unknown' };
+  }
+  if (status.installing) {
+    return { label: 'Installing', tone: 'unknown' };
   }
   if (!status.binaryFound) {
     return { label: 'Not installed', tone: 'needsSetup' };
