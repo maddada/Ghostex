@@ -122,7 +122,7 @@ describe('noise filter (§9.1)', () => {
       '<local-command-stdout>Set effort level to xhigh (saved as your default for new sessions): Deeper reasoning than high</local-command-stdout>'
     );
     expect(sessionChatSuppressedTurnLabel(effortCommand)).toBeNull();
-    expect(sessionChatSuppressedTurnLabel(effortOutput)).toBeNull();
+    expect(sessionChatSuppressedTurnLabel(effortOutput)).toBe('Set effort level to xhigh');
     // Prose that merely mentions compaction is untouched.
     expect(
       sessionChatSuppressedTurnLabel(
