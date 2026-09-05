@@ -8,6 +8,39 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>8.9.0</title>
+            <pubDate>Sat, 05 Sep 2026 00:48:41 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.9.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>80900</sparkle:version>
+            <sparkle:shortVersionString>8.9.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 8.9.0
+
+## 8.9.0 - 2026-09-05
+
+- Major
+  - Agent approvals now start at Keep default. Claude and Codex no longer have their permission-bypass flags forced into interactive launches: skipping permissions is an explicit opt-in, set once for the app or per agent from one control that confirms before turning it on, and sessions resumed or forked from Find and `ghostex-history` follow the same policy. Existing choices are untouched; only new installs default to asking.
+  - A quota, sign-in, or agent error no longer locks the chat box. Claude's and Codex's banners about a previous failed attempt now report the error while leaving the composer usable, so you can retry or switch models from chat. Screens that really do consume the next message — the sign-in dialog, Claude's usage-limit wait screen, an agent that exited — still hold input, and automatic queue delivery still waits until the error clears so a queued prompt is never spent on a failing session.
+  - Easy Connect installs itself. Settings → Remote now sets up the helper it needs with one click instead of asking you to paste a `go install` command into a terminal: Ghostex downloads a checksum-verified toolchain, builds the pinned helper, and starts it, and the install keeps running if you close Settings. The card explains what the helper is for and splits pairing into Connect a Phone, which keeps the QR code, and Connect a Remote machine, which carries the code plus the SSH login the other computer needs; Add a machine now asks only for what that flow uses and keeps identity file, port, and WSL distribution under Advanced.
+  - First-run setup is rebuilt around what you want to do. It focuses on Codex, Claude, and Cursor and lists other supported agents only when they are installed; the hooks step is now Connect Ghostex to your Agent and confirms the connection before moving on; and skills are presented as capabilities — Control Ghostex, Use your browser, Use your computer — with prerequisites explained only when they apply.
+- Minor
+  - Switching terminal tabs no longer reflows the agent's TUI. Every client now says whether it is showing a terminal, showing chat, or parked, and only an on-screen chat view widens a session nobody is watching; a parked tab leaves the grid alone. Installing this release does not restart your sessions.
+  - Codex GPT 6 Astra joins the model lists, model rows are grouped under named headings, Antigravity's superseded Gemini rows move under Legacy, and Claude's two Opus rows are listed separately in a reordered lineup.
+  - A successful `/effort` or `/fast` change gets its own completed-action pill next to the model change. Codex confirms Fast mode only in its terminal, so its pill settles to Fast mode ON or OFF once Ghostex has read the footer back.
+  - The model and options pills hold a skeleton until a value is actually detected instead of settling on the words Model and Options, and a detected effort is no longer hidden behind Options on surfaces that cannot open its picker.
+  - Codex's model and effort picker can now be driven on a machine you are connected to remotely, so the phone and the web app can change them too.
+  - A gxserver that never becomes healthy now offers Copy diagnostics on its error toast, carrying every health probe of the failed attempt with its timing, the launcher log tail, and the launchd job state, with auth tokens, home paths, and credential-bearing lines stripped.
+  - Interrupting an agent twice no longer leaves you at a half-loaded shell. A zsh session starts its login shell once and launches the agent from the first prompt, so the same fully initialized shell survives the agent however often you interrupt it.
+  - Claude's "N skills available" notice is no longer painted as a tool call in Chat View, so the prompt above it stays a normal message.
+  - The chat transcript's body text is softened to be easier on the eyes.
+  - Tooltips no longer stretch into one unreadable line across the window. Long content, like the agent status line behind the model pill, wraps inside a sensible width, and the Terminal View hover preview shortens the agent's full-width rules instead of letting them dictate the popup's size.
+  - Ghostex no longer quits a second after the Preparing Ghostex window appears. On a first launch, or after an update that brings a new Chromium runtime, the app opened its window while the runtime was still downloading and crashed as soon as a session chat view tried to start; those views now wait for the runtime and open once it is ready.
+  - A locally built development bundle no longer offers a titlebar update that would replace it with the released app.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.9.0/ghostex-8.9.0-arm64.dmg" length="121393028" type="application/octet-stream" sparkle:edSignature="sUAmCN3JCw+lHnK7Th9KrIaL0t2kvng5/sbB92M/uRuM17gx2md3oJSShPvkPeFYGD7L1hXx3kQ+RD8A1pB7CA=="/>
+        </item>
+        <item>
             <title>8.8.0</title>
             <pubDate>Fri, 04 Sep 2026 09:49:49 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.8.0</sparkle:fullReleaseNotesLink>
@@ -201,49 +234,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.4.0/ghostex-8.4.0-arm64.dmg" length="118074063" type="application/octet-stream" sparkle:edSignature="tdDcW8KciRoSjLzKb++jUX8bQJrWSbgTfVV1kta+r0r5+71DsKiTjnhcvuF8T+TBb8SBv34SP4fVRsuoVyB1AQ=="/>
         </item>
         <item>
-            <title>8.3.0</title>
-            <pubDate>Sun, 30 Aug 2026 03:40:46 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v8.3.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>80300</sparkle:version>
-            <sparkle:shortVersionString>8.3.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 8.3.0
-
-## 8.3.0 - 2026-08-30
-
-- Major
-  - Hermes Agent is now a first-class Session Chat agent, with its own transcript reader, model pill, welcome art, automatic session titles, hook allowlisting, and handoff hints.
-  - Agent questions asked by Pi, Hermes, and oh-my-pi are answerable straight from the chat card, each driven through that CLI's own picker, alongside the existing Claude and Codex support.
-  - Settings has a single Extensions page: the built-in features Ghostex ships sit above the extension store and your installed list, replacing the separate Customize page and the standalone Extensions window, and every menu, shortcut, and command-palette entry now opens it.
-  - A remote machine's project Actions load in the sidebar and run in the desktop command pane, so remote work no longer has to be started from a terminal by hand.
-- Minor
-  - Session Chat can give the transcript its own width, and the terminal view can use the full pane, match the chat width, or take an independent width of its own.
-  - Terminal notices can be answered with number keys, single-select questions submit as soon as you pick an option, and Claude's model-switch and paused pickers are answerable from chat.
-  - The composer's model and options pills stay as loading placeholders until the agent's screen is actually readable, instead of flashing empty labels while a CLI is still starting.
-  - Files and folders dragged from the desktop attach through their native paths, so local drops land as real attachments rather than unresolved names.
-  - Composer reference pills stay atomic, wrap with their own text, and no longer leak into the message the agent receives; pasting long text into the composer is noticeably faster.
-  - Empty draft sessions now stay until you delete or send them, instead of disappearing on their own.
-  - New installs open with an ice-tinted app chrome and a lighter accent color, and Accent Color now also marks advanced rows in Settings.
-  - First-launch setup finishes only when your first project starts — Escape and the close button no longer end it halfway — and its Skills step sets up the Ghostex CLI for you when a selected skill needs it.
-  - Chinese, Japanese, and Korean input works properly in the terminal: the composition caret is drawn in place, and Backspace edits the composition instead of deleting text behind it.
-  - Opening a file in Code from agent chat or the Agents Hub is queued until the editor is ready, instead of failing when the request beats the workbench.
-  - Spaces respond to trackpad swipes, and the Space switcher and its overflow menu are rounder and easier to hit; Settings moved into the sidebar's More menu.
-  - Prompt search no longer fills up with the title, commit-message, and sub-agent scaffolding turns that agents write into the same transcripts.
-  - Kanban card conversation links display again on large shared boards, and jumping to a dead linked session resumes the agent conversation rather than an empty shell.
-  - Custom agents keep their activity across identity updates and resume through their own CLI family.
-  - Saved Prompts lets you change tags and favorites on prompts you already saved, not only while saving them.
-  - Session Chat pins an agent-working indicator above the composer, so a running turn stays visible no matter where the transcript is scrolled.
-  - Interrupting a Codex session no longer trips a hook-output error, because the Ghostex notify hook now returns the response Codex's Interrupt event accepts.
-  - Long automation prompts stay inside their detail cards, chat surfaces no longer show stray browser focus rings, and child windows open centered on the main display.
-  - The Terminal View button previews the agent's CLI on hover with a readable tail, and Summary mode shows its state as its own icon.
-  - Markdown ordered lists keep the numbering the agent wrote instead of being merged into one run.
-  - macOS 26 and later no longer crash the zmx daemon on exit, and Codex session files resolve correctly on macOS.
-  - Android and iOS gain the custom transcript width toggle; on iOS the chat view loads reliably again and Send & Attach File opens the document picker as expected.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v8.3.0/ghostex-8.3.0-arm64.dmg" length="116957913" type="application/octet-stream" sparkle:edSignature="Zc53jcdZffRo188Pg5isnnwsEn+B3yGUUc+x7xKjNUJXY86dmkHeoYJOouVs8vUR+H6rRX2IJXYxyecnWvUsBw=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -255,6 +245,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: fWoOsXqxif9c8bMGZ6nvl87lMtAIwnLG/ceut6f6VVlLlMheNwB3vhMB3lSMJi73+5Ao6b42cOPDyquPK6s1CQ==
-length: 32767
+edSignature: rUkzj6+egJqlGVNqllyV8TvitXBu5b/gwqrYMYLTwpCk21INOMfVMo6QxHHowOVBNfVLGDz9ASWCs7NX92s+Bw==
+length: 33233
 -->
