@@ -3,23 +3,23 @@
 ## 8.9.0 - 2026-09-05
 
 - Major
-  - Agent approvals now start at Keep default. Claude and Codex no longer have their permission-bypass flags forced into interactive launches: skipping permissions is an explicit opt-in, set once for the app or per agent from one control that confirms before turning it on, and sessions resumed or forked from Find and `ghostex-history` follow the same policy. Existing choices are untouched; only new installs default to asking.
-  - A quota, sign-in, or agent error no longer locks the chat box. Claude's and Codex's banners about a previous failed attempt now report the error while leaving the composer usable, so you can retry or switch models from chat. Screens that really do consume the next message — the sign-in dialog, Claude's usage-limit wait screen, an agent that exited — still hold input, and automatic queue delivery still waits until the error clears so a queued prompt is never spent on a failing session.
-  - Easy Connect installs itself. Settings → Remote now sets up the helper it needs with one click instead of asking you to paste a `go install` command into a terminal: Ghostex downloads a checksum-verified toolchain, builds the pinned helper, and starts it, and the install keeps running if you close Settings. The card explains what the helper is for and splits pairing into Connect a Phone, which keeps the QR code, and Connect a Remote machine, which carries the code plus the SSH login the other computer needs; Add a machine now asks only for what that flow uses and keeps identity file, port, and WSL distribution under Advanced.
-  - First-run setup is rebuilt around what you want to do. It focuses on Codex, Claude, and Cursor and lists other supported agents only when they are installed; the hooks step is now Connect Ghostex to your Agent and confirms the connection before moving on; and skills are presented as capabilities — Control Ghostex, Use your browser, Use your computer — with prerequisites explained only when they apply.
+  - Agent approvals start at Keep default. Claude and Codex no longer launch with permissions skipped; turn that on per app or per agent when you want it. Your existing choices are unchanged.
+  - Quota, sign-in, and agent errors no longer lock the chat box. You see the error and can retry or switch models. Only screens that genuinely need an answer, like a sign-in dialog, still hold input.
+  - Easy Connect installs itself with one click in Settings → Remote, instead of a `go install` command in a terminal. Pairing is now split into Connect a Phone, with the QR code, and Connect a Remote machine, with the code and SSH login the other computer needs.
+  - First-run setup focuses on Codex, Claude, and Cursor, confirms each agent is connected before moving on, and offers skills as capabilities: Control Ghostex, Use your browser, Use your computer.
 - Minor
-  - Switching terminal tabs no longer reflows the agent's TUI. Every client now says whether it is showing a terminal, showing chat, or parked, and only an on-screen chat view widens a session nobody is watching; a parked tab leaves the grid alone. Installing this release does not restart your sessions.
-  - Codex GPT 6 Astra joins the model lists, model rows are grouped under named headings, Antigravity's superseded Gemini rows move under Legacy, and Claude's two Opus rows are listed separately in a reordered lineup.
-  - A successful `/effort` or `/fast` change gets its own completed-action pill next to the model change. Codex confirms Fast mode only in its terminal, so its pill settles to Fast mode ON or OFF once Ghostex has read the footer back.
-  - The model and options pills hold a skeleton until a value is actually detected instead of settling on the words Model and Options, and a detected effort is no longer hidden behind Options on surfaces that cannot open its picker.
-  - Codex's model and effort picker can now be driven on a machine you are connected to remotely, so the phone and the web app can change them too.
-  - A gxserver that never becomes healthy now offers Copy diagnostics on its error toast, carrying every health probe of the failed attempt with its timing, the launcher log tail, and the launchd job state, with auth tokens, home paths, and credential-bearing lines stripped.
-  - Interrupting an agent twice no longer leaves you at a half-loaded shell. A zsh session starts its login shell once and launches the agent from the first prompt, so the same fully initialized shell survives the agent however often you interrupt it.
-  - Claude's "N skills available" notice is no longer painted as a tool call in Chat View, so the prompt above it stays a normal message.
-  - The chat transcript's body text is softened to be easier on the eyes.
-  - Tooltips no longer stretch into one unreadable line across the window. Long content, like the agent status line behind the model pill, wraps inside a sensible width, and the Terminal View hover preview shortens the agent's full-width rules instead of letting them dictate the popup's size.
-  - Ghostex no longer quits a second after the Preparing Ghostex window appears. On a first launch, or after an update that brings a new Chromium runtime, the app opened its window while the runtime was still downloading and crashed as soon as a session chat view tried to start; those views now wait for the runtime and open once it is ready.
-  - A locally built development bundle no longer offers a titlebar update that would replace it with the released app.
+  - Switching terminal tabs no longer reflows the agent's TUI. Only an on-screen chat view widens a session nobody is watching. This update does not restart your sessions.
+  - Codex GPT 6 Astra joins the model lists, model rows are grouped under headings, and Claude's two Opus rows are listed separately.
+  - A successful `/effort` or `/fast` change gets its own pill in the transcript, including Codex's Fast mode ON and OFF.
+  - The model and options pills stay skeletons until a value is known, instead of showing the words Model and Options.
+  - Codex's model picker works on a machine you are connected to remotely, so the phone and the web app can change it too.
+  - A gxserver that fails to start offers Copy diagnostics on its toast, with the health probes, launcher log, and launchd state, minus tokens and paths.
+  - Interrupting an agent twice no longer leaves you at a half-loaded shell.
+  - Claude's "N skills available" notice is no longer drawn as a tool call.
+  - The chat transcript's body text is easier on the eyes.
+  - Tooltips wrap at a sensible width instead of stretching across the window, and the Terminal View preview shortens the agent's full-width rules.
+  - Ghostex no longer quits a second after the Preparing Ghostex window on a first launch or after a Chromium runtime update.
+  - A locally built development bundle no longer offers an update that would replace it with the released app.
 
 ## 8.8.0 - 2026-09-04
 
