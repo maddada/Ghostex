@@ -76,7 +76,14 @@ function TooltipContent({
           )}
           style={{
             ...tooltipSurfaceStyle,
-            maxWidth: 'min(90vw, var(--available-width, 90vw))',
+            /*
+             * CDXC:Tooltips 2026-09-05 DECISION:
+             * User: a tooltip must have a sensical max width. Long content (the
+             * chat model pill carries a whole agent status line) used to stretch
+             * the popup to 90vw and render as one unreadable full-window line,
+             * so cap the measure at 24rem and let it wrap instead.
+             */
+            maxWidth: 'min(24rem, 90vw, var(--available-width, 90vw))',
             zIndex: 'var(--ghostex-tooltip-z-index, 1400)',
             ...style,
           }}
