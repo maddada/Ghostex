@@ -439,6 +439,28 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
+    /// CDXC:Workarea 2026-09-05 SEE-ALSO:
+    /// Chat and the focused-session shortcut use the same split_tab_to_pane operation as sidebar Split Right in workspace_events.rs, including its lone-tab no-op.
+    pub(crate) fn split_existing_agents_session_right(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(source_pane_id) = self.agents_workspace.pane_id_for_session(session_id) else {
+            return;
+        };
+        if self.agents_workspace.split_tab_to_pane(
+            source_pane_id,
+            self.agents_workspace.focused_pane,
+            session_id,
+            WorkspaceDropZone::Right,
+        ) {
+            self.focus_agents_pane(self.agents_workspace.focused_pane, cx);
+            self.persist_shell_layout_state();
+            cx.notify();
+        }
+    }
+
     pub(crate) fn split_agents_registered_terminal_right(
         &mut self,
         pane_id: WorkspacePaneId,

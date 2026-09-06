@@ -6,6 +6,7 @@ import {
   IconEyeOff,
   IconFileExport,
   IconGitBranch,
+  IconLayoutColumns,
   IconListCheck,
   IconListDetails,
   IconMaximize,
@@ -54,6 +55,7 @@ const COMPOSER_MENU_EXCLUDED_HOST_ACTION_IDS = new Set(['attachPath', 'promptEdi
 const AGENT_HOST_ACTION_IDS = new Set(['fork', 'fullReload', 'rename', 'sleep', 'switchAccount']);
 
 const HOST_ACTION_ICONS: Record<string, TablerIcon> = {
+  splitSessionRight: IconLayoutColumns,
   closeAfterDone: IconClock,
   delayedActions: IconClockCheck,
   exportTranscript: IconFileExport,
@@ -262,10 +264,12 @@ export function SessionChatComposerActions({
   */
   const delayedHostAction = hostActionList.find((action) => action.id === 'delayedActions');
   const closeAfterDoneHostAction = hostActionList.find((action) => action.id === 'closeAfterDone');
+  const splitRightHostAction = hostActionList.find((action) => action.id === 'splitSessionRight');
   const foldedHostActions = hostActionList.filter(
     (action) =>
       action.id !== 'delayedActions' &&
       action.id !== 'closeAfterDone' &&
+      action.id !== 'splitSessionRight' &&
       !COMPOSER_MENU_EXCLUDED_HOST_ACTION_IDS.has(action.id) &&
       // A submenu with nothing to pick is hidden rather than shown empty.
       (action.items === undefined || action.items.length > 0)
@@ -363,7 +367,8 @@ export function SessionChatComposerActions({
     verboseMenuItem !== null ||
     summaryMenuItem !== null ||
     delayedActionsMenuItem !== null ||
-    closeAfterDoneMenuItem !== null;
+    closeAfterDoneMenuItem !== null ||
+    splitRightHostAction !== undefined;
   const hasExpandedMenu = hasBaseMenuItems || agentMenuSection !== null || otherHostMenuSection !== null;
 
   /*
@@ -477,6 +482,8 @@ export function SessionChatComposerActions({
                   {summaryMenuItem}
                   {delayedActionsMenuItem}
                   {closeAfterDoneMenuItem}
+                  {/* CDXC:SessionChat 2026-09-05 DECISION: User: add Split Right below Close After Done in the chat composer's More menu. */}
+                  {splitRightHostAction ? hostActionMenuItem(splitRightHostAction) : null}
                 </DropdownMenuGroup>
               ) : null}
               {hostMenuSections(hasBaseMenuItems)}
@@ -584,6 +591,8 @@ export function SessionChatComposerActions({
               {verboseMenuItem}
               {summaryMenuItem}
               {delayedActionsMenuItem}
+              {closeAfterDoneMenuItem}
+              {splitRightHostAction ? hostActionMenuItem(splitRightHostAction) : null}
               {onSessionNote ? (
                 <DropdownMenuCheckboxItem
                   checked={sessionNoteActive}
