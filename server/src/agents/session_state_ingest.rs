@@ -14,6 +14,16 @@ pub(crate) fn ingest_session_state_event(
     home_dir: &Path,
 ) -> Result<Value, DomainStateError> {
     let current = require_session(repository, lifecycle)?;
+    if crate::agent_hooks::resolution::is_codex_subagent_transcript(
+        read_text(params, "agentSessionPath").as_deref(),
+    ) {
+        return Ok(json!({
+            "changed": false,
+            "projection": project_session_title_projection(&current),
+            "reason": "subagent-session-state",
+            "session": current,
+        }));
+    }
     let observed_identity = align_observed_identity_with_launch_profile(
         &current,
         resolve_session_identity(&IdentityInput {
