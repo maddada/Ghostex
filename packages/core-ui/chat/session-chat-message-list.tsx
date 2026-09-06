@@ -122,6 +122,7 @@ const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
 const SCROLLBAR_FADE_MS = 2000;
 
 export interface SessionChatMessageListProps {
+  composerCollapsed?: boolean;
   messages: readonly SessionChatMessage[];
   isWorking: boolean;
   hasMore: boolean;
@@ -857,6 +858,17 @@ function MessageRow({
     );
   }
 
+  if (isSystem && message.id.startsWith('app-command-output:')) {
+    const command = message.blocks[0]?.type === 'text' ? message.blocks[0].text : '';
+    const output = message.blocks[1]?.type === 'text' ? message.blocks[1].text : '';
+    return (
+      <details open className='mb-3 min-w-0 rounded-lg border bg-muted/20'>
+        <summary className='cursor-pointer px-3 py-2 text-xs font-medium'>{command}</summary>
+        <pre className='max-h-96 overflow-auto whitespace-pre-wrap break-words border-t px-3 py-2 text-xs leading-relaxed'>{output}</pre>
+      </details>
+    );
+  }
+
   if (isSystem) {
     return (
       <Marker className='pb-2'>
@@ -1319,6 +1331,7 @@ function ScrollToLatestSend({ pendingMessageId }: { pendingMessageId: string | n
 }
 
 export function SessionChatMessageList({
+  composerCollapsed = false,
   hasMore,
   isWorking,
   loadingEarlier,
@@ -1341,6 +1354,9 @@ export function SessionChatMessageList({
   const contentRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const shouldFollowBottomRef = useRef(true);
+  // Collapsing enlarges the viewport; that resize must not resume live-follow while the reader is in history.
+  const composerCollapsedRef = useRef(composerCollapsed);
+  composerCollapsedRef.current = composerCollapsed;
   const scrollbarFadeTimeoutRef = useRef<number | undefined>(undefined);
   const [markdownToSave, setMarkdownToSave] = useState<string | null>(null);
   const [rewindRequest, setRewindRequest] = useState<SessionChatRewindRequest | null>(null);
@@ -1368,7 +1384,7 @@ export function SessionChatMessageList({
     }
     const observer = new ResizeObserver(() => {
       const viewport = viewportRef.current;
-      if (viewport && shouldFollowBottomRef.current) {
+      if (viewport && shouldFollowBottomRef.current && !composerCollapsedRef.current) {
         viewport.scrollTop = viewport.scrollHeight;
       }
     });
@@ -1453,7 +1469,11 @@ export function SessionChatMessageList({
   }, [rendered]);
 
   return (
-    <MessageScrollerProvider autoScroll defaultScrollPosition='end' scrollEdgeThreshold={AUTO_SCROLL_EDGE_THRESHOLD_PX}>
+    <MessageScrollerProvider
+      autoScroll={!composerCollapsed}
+      defaultScrollPosition='end'
+      scrollEdgeThreshold={AUTO_SCROLL_EDGE_THRESHOLD_PX}
+    >
       <ScrollToLatestSend pendingMessageId={pendingMessageId} />
       <MessageScroller className='flex-1'>
         {/* RTL viewport + LTR content puts the scrollbar on the left edge. */}

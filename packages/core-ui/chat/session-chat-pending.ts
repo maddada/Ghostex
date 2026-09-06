@@ -549,6 +549,16 @@ export function sessionChatAppCommandsAsMessages(
     })
   );
   return commands.flatMap((entry) => {
+    if (entry.output !== undefined) {
+      if (!entry.output) return [];
+      return [{
+        blocks: [{ text: entry.command, type: 'text' as const }, { text: entry.output, type: 'text' as const }],
+        id: `app-command-output:${entry.id}`,
+        role: 'system' as const,
+        source: 'client' as const,
+        timestamp: Date.parse(entry.sentAt) || null,
+      }];
+    }
     if (recorded.has(normalizeSessionChatPendingText(entry.command))) {
       return [];
     }
