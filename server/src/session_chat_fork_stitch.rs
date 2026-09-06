@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
@@ -106,6 +107,13 @@ pub struct SessionChatForkLineage {
     pub forked_from_id: Option<String>,
     /// hop 1 = immediate predecessor, hop 2 = its predecessor, and so on.
     pub ancestors: Vec<SessionChatForkAncestor>,
+    history: Vec<SessionChatForkHistory>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct SessionChatForkHistory {
+    ancestor: SessionChatForkAncestor,
+    end_offset: u64,
 }
 
 impl SessionChatForkLineage {
@@ -113,14 +121,18 @@ impl SessionChatForkLineage {
         if hop == 0 {
             return Some(self.session_id.as_str());
         }
-        Some(self.ancestors.get(hop - 1)?.session_id.as_str())
+        Some(self.history.get(hop - 1)?.ancestor.session_id.as_str())
     }
 
     fn forked_from_at(&self, hop: usize) -> Option<&str> {
         if hop == 0 {
             return self.forked_from_id.as_deref();
         }
-        self.ancestors.get(hop - 1)?.forked_from_id.as_deref()
+        self.history
+            .get(hop - 1)?
+            .ancestor
+            .forked_from_id
+            .as_deref()
     }
 
     /// Readable file for `hop`; hop 0 is the caller's own transcript path.
@@ -128,7 +140,13 @@ impl SessionChatForkLineage {
         if hop == 0 {
             return None;
         }
-        self.ancestors.get(hop - 1)?.path.as_deref()
+        self.history.get(hop - 1)?.ancestor.path.as_deref()
+    }
+
+    fn ancestor_end_offset(&self, hop: usize) -> Option<u64> {
+        self.history
+            .get(hop.checked_sub(1)?)
+            .map(|entry| entry.end_offset)
     }
 
     pub fn fork_info(&self) -> Option<SessionChatForkInfo> {
@@ -211,6 +229,7 @@ fn resolve_codex_fork_lineage(rollout_path: &Path) -> Option<SessionChatForkLine
         session_id: meta.session_id,
         forked_from_id: meta.forked_from_id.clone(),
         ancestors: Vec::new(),
+        history: Vec::new(),
     };
     let Some(mut next_session_id) = meta.forked_from_id else {
         return Some(lineage);
@@ -223,6 +242,7 @@ fn resolve_codex_fork_lineage(rollout_path: &Path) -> Option<SessionChatForkLine
         });
         return Some(lineage);
     };
+    lineage.history = resolve_codex_fork_history(rollout_path, &index);
     let mut visited: HashSet<String> = HashSet::new();
     visited.insert(lineage.session_id.clone());
     for _ in 1..=SUCCESSOR_CHAIN_LIMIT {
@@ -255,7 +275,93 @@ fn resolve_codex_fork_lineage(rollout_path: &Path) -> Option<SessionChatForkLine
     Some(lineage)
 }
 
-/// Ancestor rollouts are dead files whose opening `session_meta` never changes,
+/// CDXC:SessionFork 2026-09-05 WHY:
+/// A parent can keep running after a fork, so reading its live tail leaks later parent replies into the child and makes both chats end with the same content.
+/// Codex's history_base names the actual inherited file and exclusive byte boundary; a rewind can skip an intermediate fork entirely, while forked_from_id still records the family relationship.
+/// Keep genealogy for branch navigation and resolve bounded history separately for pagination.
+fn resolve_codex_fork_history(
+    rollout_path: &Path,
+    index: &HashMap<String, PathBuf>,
+) -> Vec<SessionChatForkHistory> {
+    let mut history = Vec::new();
+    let mut current_path = rollout_path.to_path_buf();
+    let mut visited = HashSet::new();
+    let mut inherited_ordinal: Option<u64> = None;
+    for _ in 0..SUCCESSOR_CHAIN_LIMIT {
+        let Some(meta) = read_codex_session_meta(&current_path) else {
+            break;
+        };
+        visited.insert(meta.session_id);
+        let Some(parent_id) = meta.forked_from_id else {
+            break;
+        };
+        let (source_id, ordinal, byte_offset) = match meta.history_base {
+            Some(base) => (
+                base.thread_id,
+                Some(base.end_ordinal_exclusive),
+                Some(base.end_byte_offset),
+            ),
+            None => (parent_id, meta.forked_from_ordinal_exclusive, None),
+        };
+        if visited.contains(&source_id) {
+            break;
+        }
+        let cutoff_ordinal = match (inherited_ordinal, ordinal) {
+            (Some(outer), Some(inner)) => Some(outer.min(inner)),
+            (outer, inner) => outer.or(inner),
+        };
+        let candidate = index.get(&source_id).cloned();
+        let source_meta = candidate
+            .as_deref()
+            .and_then(read_codex_session_meta)
+            .filter(|meta| meta.session_id == source_id);
+        let source_path = candidate.filter(|_| source_meta.is_some());
+        let end_offset = source_path.as_deref().and_then(|path| {
+            if byte_offset.is_some() && cutoff_ordinal == ordinal {
+                byte_offset
+            } else {
+                codex_history_end_offset(path, cutoff_ordinal?)
+            }
+        });
+        let path = source_path.filter(|_| end_offset.is_some());
+        let next_path = path.clone();
+        history.push(SessionChatForkHistory {
+            ancestor: SessionChatForkAncestor {
+                session_id: source_id,
+                path,
+                forked_from_id: source_meta.and_then(|meta| meta.forked_from_id),
+            },
+            end_offset: end_offset.unwrap_or(0),
+        });
+        let Some(next_path) = next_path else {
+            break;
+        };
+        current_path = next_path;
+        inherited_ordinal = cutoff_ordinal;
+    }
+    history
+}
+
+/// Older rollouts record the exclusive ordinal without a byte index.
+fn codex_history_end_offset(path: &Path, ordinal: u64) -> Option<u64> {
+    let mut reader = BufReader::new(fs::File::open(path).ok()?);
+    let mut line = String::new();
+    let mut offset = 0;
+    loop {
+        line.clear();
+        let length = reader.read_line(&mut line).ok()?;
+        if length == 0 {
+            return Some(offset);
+        }
+        let record = parse_json_object(&line)?;
+        if record.get("ordinal").and_then(Value::as_u64)? >= ordinal {
+            return Some(offset);
+        }
+        offset += length as u64;
+    }
+}
+
+/// Fork metadata and inherited history boundaries never change,
 /// so one resolution per rollout path is enough for the lifetime of the daemon.
 /// The map is cleared wholesale once it grows past the cap rather than carrying
 /// an LRU: entries are tiny and a re-resolution is one head read plus one
@@ -418,7 +524,14 @@ pub fn read_session_chat_tail_page_stitched(
     let (mut hop, mut window_end) = match before_offset {
         Some(cursor) => {
             let (hop, offset) = decode_stitched_cursor(cursor);
-            (hop, Some(offset))
+            (
+                hop,
+                Some(
+                    lineage
+                        .ancestor_end_offset(hop)
+                        .map_or(offset, |end| offset.min(end)),
+                ),
+            )
         }
         None => (0usize, None),
     };
@@ -512,7 +625,7 @@ pub fn read_session_chat_tail_page_stitched(
             break;
         }
         hop += 1;
-        window_end = None;
+        window_end = lineage.ancestor_end_offset(hop);
     }
 
     Ok(SessionChatStitchedPage {

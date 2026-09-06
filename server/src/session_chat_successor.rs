@@ -584,6 +584,15 @@ const CODEX_SESSION_META_HEAD_BYTES: u64 = 128 * 1024;
 pub(crate) struct CodexSessionMeta {
     pub(crate) session_id: String,
     pub(crate) forked_from_id: Option<String>,
+    pub(crate) forked_from_ordinal_exclusive: Option<u64>,
+    pub(crate) history_base: Option<CodexHistoryBase>,
+    pub(crate) is_subagent: bool,
+}
+
+pub(crate) struct CodexHistoryBase {
+    pub(crate) thread_id: String,
+    pub(crate) end_ordinal_exclusive: u64,
+    pub(crate) end_byte_offset: u64,
 }
 
 /// The `session_meta` is written before any conversation record, so only the
@@ -600,6 +609,20 @@ pub(crate) fn read_codex_session_meta(path: &Path) -> Option<CodexSessionMeta> {
     Some(CodexSessionMeta {
         session_id,
         forked_from_id: extract_string(payload.get("forked_from_id")),
+        forked_from_ordinal_exclusive: payload
+            .get("forked_from_ordinal_exclusive")
+            .and_then(Value::as_u64),
+        history_base: payload.get("history_base").and_then(|base| {
+            Some(CodexHistoryBase {
+                thread_id: extract_string(base.get("thread_id"))?,
+                end_ordinal_exclusive: base.get("end_ordinal_exclusive")?.as_u64()?,
+                end_byte_offset: base.get("end_byte_offset")?.as_u64()?,
+            })
+        }),
+        is_subagent: payload
+            .get("source")
+            .and_then(Value::as_object)
+            .is_some_and(|source| source.contains_key("subagent")),
     })
 }
 
