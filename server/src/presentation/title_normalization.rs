@@ -384,6 +384,8 @@ pub(crate) fn is_ignored_placeholder_session_title_text(lower: &str) -> bool {
             | "cursor agent session"
             | "cursor cli session"
             | "cursor session"
+            | "mastra session"
+            | "mastra code session"
             | "devin session"
             | "droid session"
             | "factory droid session"

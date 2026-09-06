@@ -18,6 +18,21 @@ pub(crate) struct CodexHookSessionIdentity {
     pub agent_session_path: Option<String>,
 }
 
+/// CDXC:AgentHooks 2026-09-05 WHY:
+/// Codex subagent tool hooks inherit the parent terminal routing and can report the parent's session id alongside the child's transcript path.
+/// A child PreToolUse reopened a completed parent turn as working indefinitely; use the rollout's own source metadata before accepting any status or identity writes.
+pub(crate) fn is_codex_subagent_transcript(transcript_path: Option<&str>) -> bool {
+    transcript_path
+        .map(super::probing::expand_home_path)
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("rollout-") && name.ends_with(".jsonl"))
+        })
+        .and_then(|path| crate::session_chat_successor::read_codex_session_meta(&path))
+        .is_some_and(|meta| meta.is_subagent)
+}
+
 pub(crate) fn read_codex_hook_session_identities(
     paths: &GxserverPaths,
 ) -> HashMap<String, CodexHookSessionIdentity> {
@@ -226,6 +241,7 @@ pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec
             None,
         )
         .join("config.toml")],
+        "mastra" => vec![hook_paths.home_dir.join(".mastracode/hooks.json")],
         "openclaude" => vec![hook_paths
             .home_dir
             .join(".openclaude")
@@ -324,6 +340,7 @@ fn normalize_requested_agent_id(value: &Value) -> Option<String> {
         .join(" ");
     let mapped = match normalized.as_str() {
         "agy" | "antigravity cli" => "antigravity",
+        "mastracode" | "mastra code" => "mastra",
         "claude code" => "claude",
         "code buddy" => "codebuddy",
         "codex cli" => "codex",

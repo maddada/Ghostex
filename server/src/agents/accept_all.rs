@@ -168,6 +168,10 @@ pub(crate) fn accept_all_spec(agent_id: &str) -> Option<AcceptAllSpec> {
             aliases: vec!["--always-approve".to_string()],
             canonical: "--always-approve",
         },
+        "mastra" => AcceptAllSpec::Environment {
+            assignments: vec!["MASTRACODE_YOLO=1".to_string()],
+            legacy_aliases: vec![],
+        },
         "opencode" => AcceptAllSpec::Environment {
             assignments: vec!["OPENCODE_CONFIG_CONTENT='{\"permission\":\"allow\"}'".to_string()],
             legacy_aliases: vec![

@@ -38,6 +38,7 @@ pub const KNOWN_AGENT_IDS: &[&str] = &[
     "copilot",
     "cursor",
     "custom",
+    "mastra",
     "devin",
     "droid",
     "gemini",

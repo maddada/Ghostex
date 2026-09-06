@@ -50,6 +50,7 @@ pub(crate) fn uninstall_agent_hook(
             uninstall_marked_yaml_hook(definition, config_paths)
         }
         HookFormat::Antigravity
+        | HookFormat::RootFlatJson
         | HookFormat::FlatJson
         | HookFormat::KiroJson
         | HookFormat::NestedJson => {
@@ -205,6 +206,8 @@ pub(crate) fn remove_json_hook(
 fn remove_owned_json_hooks(data: &mut Value, format: HookFormat, command: &str) -> bool {
     let event_groups = if format == HookFormat::Antigravity {
         data.get_mut("ghostex").and_then(Value::as_object_mut)
+    } else if format == HookFormat::RootFlatJson {
+        data.as_object_mut()
     } else {
         data.get_mut("hooks").and_then(Value::as_object_mut)
     };
@@ -220,7 +223,7 @@ fn remove_owned_json_hooks(data: &mut Value, format: HookFormat, command: &str) 
     {
         let next_entries = match format {
             HookFormat::Antigravity => remove_antigravity_entries(entries, command),
-            HookFormat::FlatJson | HookFormat::KiroJson => entries
+            HookFormat::RootFlatJson | HookFormat::FlatJson | HookFormat::KiroJson => entries
                 .iter()
                 .filter(|entry| !is_ghostex_owned_hook_command(entry, command))
                 .cloned()
@@ -421,7 +424,10 @@ pub(crate) fn inspect_agent_hook_installation(
                     || text_contains_ghostex_owned_hook_command(&text),
             }
         }
-        HookFormat::FlatJson | HookFormat::KiroJson | HookFormat::NestedJson => {
+        HookFormat::RootFlatJson
+        | HookFormat::FlatJson
+        | HookFormat::KiroJson
+        | HookFormat::NestedJson => {
             let existing_paths = config_paths
                 .iter()
                 .filter(|path| !read_file_text(path).trim().is_empty())
@@ -522,7 +528,12 @@ fn json_hook_event_coverage_is_current(
     } else {
         "hooks"
     };
-    let Some(event_groups) = data.get(container_key).and_then(Value::as_object) else {
+    let event_groups = if format == HookFormat::RootFlatJson {
+        data.as_object()
+    } else {
+        data.get(container_key).and_then(Value::as_object)
+    };
+    let Some(event_groups) = event_groups else {
         return false;
     };
     for event_name in &events {
@@ -744,6 +755,7 @@ pub(crate) fn install_agent_hook(
             Ok(vec![path_string(config_path)])
         }
         HookFormat::Antigravity
+        | HookFormat::RootFlatJson
         | HookFormat::FlatJson
         | HookFormat::KiroJson
         | HookFormat::NestedJson => {
@@ -834,6 +846,7 @@ pub(crate) fn repair_agent_hook_paths(
             Ok(repaired_paths)
         }
         HookFormat::Antigravity
+        | HookFormat::RootFlatJson
         | HookFormat::FlatJson
         | HookFormat::KiroJson
         | HookFormat::NestedJson => {
@@ -889,6 +902,24 @@ fn merge_json_hook(
                 ghostex.insert(
                     event_name.to_string(),
                     Value::Array(vec![antigravity_hook_entry(command, event_name)]),
+                );
+            }
+        }
+        HookFormat::RootFlatJson => {
+            let hooks = ensure_json_object(&mut data);
+            for event_name in events {
+                let entries = hooks
+                    .get(event_name)
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                hooks.insert(
+                    event_name.to_string(),
+                    Value::Array(merge_flat_hook_entries(
+                        &entries,
+                        command,
+                        Some(json!({ "type": "command", "timeout": 5000 })),
+                    )),
                 );
             }
         }

@@ -64,6 +64,7 @@ export const AGENT_ACCEPT_ALL_SPECS: Readonly<Record<DefaultSidebarAgentId, Agen
     aliases: ['--dangerously-allow-all'],
     canonicalFlag: '--dangerously-allow-all',
   },
+  mastra: { kind: 'runtimeConfig' },
   campfire: null,
   claude: {
     kind: 'flag',

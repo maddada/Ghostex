@@ -123,13 +123,37 @@ pub(crate) fn ingest_agent_hook_event(
     home_dir: &Path,
 ) -> Result<Value, DomainStateError> {
     let current = require_session(repository, lifecycle)?;
-    let mut hook_activity = normalize_agent_hook_activity(
-        params.get("status"),
-        params
-            .get("eventName")
-            .or_else(|| params.get("rawEventName")),
-        params.get("agentName"),
-    );
+    if crate::agent_hooks::resolution::is_codex_subagent_transcript(
+        read_text(params, "agentSessionPath").as_deref(),
+    ) {
+        return Ok(json!({
+            "changed": false,
+            "enteredAttention": false,
+            "reason": "subagent-hook",
+            "session": current,
+        }));
+    }
+    let mut hook_activity = if normalize_agent_id(params.get("agentName").and_then(Value::as_str))
+        .as_deref()
+        == Some("mastra")
+    {
+        crate::agent_hooks::event_mapping::mastra_hook_activity(
+            params
+                .get("eventName")
+                .or_else(|| params.get("rawEventName"))
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+            &Value::Object(params.clone()),
+        )
+    } else {
+        normalize_agent_hook_activity(
+            params.get("status"),
+            params
+                .get("eventName")
+                .or_else(|| params.get("rawEventName")),
+            params.get("agentName"),
+        )
+    };
     /*
     CDXC:SessionChat 2026-08-24:
     The notify hook tags Claude's 60s "waiting for your input" reminder with

@@ -87,7 +87,13 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         payload.get("log_path"),
         payload.get("logPath"),
     ]);
+    if agent_key == "codex"
+        && super::resolution::is_codex_subagent_transcript(transcript_path.as_deref())
+    {
+        return Ok(());
+    }
     let prompt = first_string([
+        payload.get("user_message"),
         payload.get("prompt"),
         payload.get("text"),
         payload.get("message"),
@@ -436,6 +442,13 @@ fn post_gxserver_hook_event(
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(GXSERVER_PROTOCOL_VERSION as i64);
     let mut params = Map::new();
+    if agent_key == "mastra" {
+        for key in ["stop_reason", "reason", "decision"] {
+            if let Some(value) = payload.get(key) {
+                params.insert(key.to_string(), value.clone());
+            }
+        }
+    }
     params.insert("agentName".to_string(), json!(agent_key));
     params.insert("eventName".to_string(), json!(event_name));
     params.insert("projectId".to_string(), json!(project_id));

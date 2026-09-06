@@ -27,6 +27,8 @@ pub(crate) struct HookDefinition {
 pub(crate) enum HookFormat {
     Antigravity,
     FlatJson,
+    /// Event arrays at the JSON root, as used by Mastra Code.
+    RootFlatJson,
     KiroJson,
     MarkedYaml,
     NestedJson,
@@ -40,6 +42,10 @@ pub(crate) enum HookFormat {
 }
 
 pub(crate) const HOOK_DEFINITIONS: &[HookDefinition] = &[
+    HookDefinition {
+        agent_id: "mastra",
+        cli_command: "mastracode",
+    },
     HookDefinition {
         agent_id: "codex",
         cli_command: "codex",
@@ -184,6 +190,7 @@ pub(crate) fn hook_format(agent_id: &str) -> HookFormat {
     match agent_id {
         "antigravity" => HookFormat::Antigravity,
         "cursor" => HookFormat::FlatJson,
+        "mastra" => HookFormat::RootFlatJson,
         "kiro" => HookFormat::KiroJson,
         "rovodev" | "hermes-agent" => HookFormat::MarkedYaml,
         "kimi" => HookFormat::TomlMarked,
@@ -206,6 +213,7 @@ pub(crate) fn hook_marker(agent_id: &str) -> Option<&'static str> {
 
 pub(crate) fn command_agent(agent_id: &str) -> Option<&'static str> {
     match agent_id {
+        "mastra" => Some("mastra"),
         "claude" => Some("claude"),
         "cursor" => Some("cursor"),
         "gemini" => Some("gemini"),
@@ -263,6 +271,21 @@ pub(crate) fn nested_event_timeout(agent_id: &str, event_name: &str) -> Option<i
 
 pub(crate) fn all_hook_events(agent_id: &str) -> Vec<&'static str> {
     let events: &[&str] = match agent_id {
+        "mastra" => &[
+            "SessionStart",
+            "SessionEnd",
+            "UserPromptSubmit",
+            "AgentStart",
+            "AgentEnd",
+            "PreToolUse",
+            "PostToolUse",
+            "PermissionRequest",
+            "PermissionResult",
+            "Interrupt",
+            "Notification",
+            "SubagentStart",
+            "SubagentEnd",
+        ],
         // Codex deliberately has no PreCompact/PostCompact registration: its
         // compaction lifecycle does not carry the trigger metadata needed to
         // tell a mid-turn auto-compact from a manual one.

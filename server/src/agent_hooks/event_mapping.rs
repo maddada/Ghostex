@@ -55,6 +55,7 @@ pub(crate) fn normalized_hook_agent_key(value: &str) -> String {
         "codex" | "openai codex" | "codex cli" => "codex",
         "kimi" | "kimi code" => "kimi",
         "campfire" => "campfire",
+        "mastra" | "mastracode" | "mastra code" => "mastra",
         "devin" => "devin",
         "pi" | "π" => "pi",
         "omp" => "omp",
@@ -97,6 +98,9 @@ pub(crate) fn activity_for_hook_event(
     event_name: &str,
     payload: &Value,
 ) -> Option<String> {
+    if agent_key == "mastra" {
+        return mastra_hook_activity(event_name, payload);
+    }
     let normalized_event_name = normalize_prompt_text(event_name);
     let lower = normalized_event_name.to_ascii_lowercase();
     let compact = lower.replace(['_', '-', '.'], "");
@@ -415,4 +419,32 @@ pub(crate) fn is_prompt_event(event_name: &str) -> bool {
             | "agent.start"
             | "before_agent_start"
     )
+}
+
+/// CDXC:AgentHooks 2026-09-05 WHY:
+/// Mastra uses Pi's TUI components but its own root-level JSON hooks and user_message payload.
+/// AgentEnd preserves suspended/aborted/error reasons, while Mastra 0.35's Stop reports suspended runs as complete, so Stop is deliberately not installed.
+/// The agent_done Notification duplicates AgentEnd and must not ring a second time; child events must not move the lead session.
+/// SEE-ALSO: server/src/agents/activity.rs and server/src/agent_hooks/notify_runtime.rs.
+pub(crate) fn mastra_hook_activity(event_name: &str, payload: &Value) -> Option<String> {
+    let activity = match event_name.to_ascii_lowercase().as_str() {
+        "sessionstart" | "sessionend" | "interrupt" => "idle",
+        "userpromptsubmit" | "agentstart" | "pretooluse" | "posttooluse" => "working",
+        "permissionrequest" => "attention",
+        "permissionresult" => match payload.get("decision").and_then(Value::as_str) {
+            Some("dismissed") => "idle",
+            Some("approved" | "auto_approved" | "declined") => "working",
+            _ => return None,
+        },
+        "agentend" => match payload.get("stop_reason").and_then(Value::as_str) {
+            Some("complete" | "suspended") => "attention",
+            Some("aborted" | "error") => "idle",
+            _ => return None,
+        },
+        "notification" if payload.get("reason").and_then(Value::as_str) != Some("agent_done") => {
+            "attention"
+        }
+        _ => return None,
+    };
+    Some(activity.to_string())
 }

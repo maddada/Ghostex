@@ -335,6 +335,13 @@ pub(crate) const GPUI_DEFAULT_SIDEBAR_AGENTS: &[GpuiDefaultSidebarAgent] = &[
         icon: "devin",
         name: "Devin",
     },
+    GpuiDefaultSidebarAgent {
+        agent_id: "mastra",
+        command: "mastracode",
+        hidden_by_default: false,
+        icon: "mastra",
+        name: "Mastra Code",
+    },
 ];
 
 pub(crate) const GPUI_DEFAULT_SIDEBAR_COMMANDS: &[GpuiDefaultSidebarCommand] = &[

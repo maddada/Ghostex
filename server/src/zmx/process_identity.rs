@@ -461,6 +461,7 @@ fn infer_agent_id_from_process_executable(
             "commandcode" => "command-code",
             "copilot" => "copilot",
             "cursor-agent" => "cursor",
+            "mastracode" => "mastra",
             "devin" => "devin",
             "droid" => "droid",
             "gemini" => "gemini",

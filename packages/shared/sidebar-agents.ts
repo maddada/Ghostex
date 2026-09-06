@@ -217,6 +217,12 @@ const DEFAULT_SIDEBAR_AGENT_DEFINITIONS = [
     icon: 'devin',
     name: 'Devin',
   },
+  /**
+   * CDXC:AgentProviders 2026-09-05 DECISION:
+   * User: add Mastra hooks support and its logo to the app.
+   * SEE-ALSO: server/src/agent_hooks/config.rs, server/src/sidebar_hud.rs, and apps/desktop/src/app/helpers/sidebar/sidebar_defaults_types.rs.
+   */
+  { agentId: 'mastra', command: 'mastracode', icon: 'mastra', name: 'Mastra Code' },
 ] as const;
 
 export const DEFAULT_SIDEBAR_AGENTS = DEFAULT_SIDEBAR_AGENT_DEFINITIONS;

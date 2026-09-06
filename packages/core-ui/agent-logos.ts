@@ -13,6 +13,7 @@ import factoryDroidLogo from './assets/factory-droid.svg' with { type: 'text' };
 import geminiLogo from './assets/gemini.svg' with { type: 'text' };
 import grokBuildLogo from './assets/grok-build.svg' with { type: 'text' };
 import hermesAgentLogo from './assets/hermes-agent.svg' with { type: 'text' };
+import mastraLogo from './assets/mastra.svg' with { type: 'text' };
 import kimiLogo from './assets/kimi.svg' with { type: 'text' };
 import kiroLogo from './assets/kiro.svg' with { type: 'text' };
 import ompLogo from './assets/omp.svg' with { type: 'text' };
@@ -92,6 +93,7 @@ export const AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
   gemini: svgTextToDataUrl(geminiLogo),
   'grok-build': svgTextToDataUrl(grokBuildLogo),
   'hermes-agent': svgTextToDataUrl(hermesAgentLogo),
+  mastra: svgTextToDataUrl(mastraLogo),
   kimi: svgTextToDataUrl(kimiLogo),
   kiro: svgTextToDataUrl(kiroLogo),
   omp: svgTextToDataUrl(ompLogo),
@@ -125,6 +127,7 @@ export const AGENT_LOGO_COLORS: Record<SidebarAgentIcon, string> = {
   gemini: '#8b9aff',
   'grok-build': '#ffffff',
   'hermes-agent': '#f3c46b',
+  mastra: '#ffffff',
   kimi: '#7b6cf6',
   kiro: '#a6e3ff',
   omp: '#a663ed',
@@ -158,6 +161,7 @@ export const COLORED_AGENT_LOGOS: Record<SidebarAgentIcon, string> = {
   gemini: svgTextToColorizedDataUrl(geminiLogo, AGENT_LOGO_COLORS.gemini),
   'grok-build': svgTextToColorizedDataUrl(grokBuildLogo, AGENT_LOGO_COLORS['grok-build']),
   'hermes-agent': svgTextToColorizedDataUrl(hermesAgentLogo, AGENT_LOGO_COLORS['hermes-agent']),
+  mastra: svgTextToColorizedDataUrl(mastraLogo, AGENT_LOGO_COLORS.mastra),
   kimi: svgTextToColorizedDataUrl(kimiLogo, AGENT_LOGO_COLORS.kimi),
   kiro: svgTextToColorizedDataUrl(kiroLogo, AGENT_LOGO_COLORS.kiro),
   omp: svgTextToColorizedDataUrl(ompLogo, AGENT_LOGO_COLORS.omp),

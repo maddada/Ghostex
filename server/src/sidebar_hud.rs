@@ -267,6 +267,13 @@ const DEFAULT_SIDEBAR_AGENTS: &[DefaultSidebarAgent] = &[
         icon: "devin",
         name: "Devin",
     },
+    DefaultSidebarAgent {
+        agent_id: "mastra",
+        command: "mastracode",
+        hidden_by_default: false,
+        icon: "mastra",
+        name: "Mastra Code",
+    },
 ];
 
 const DEFAULT_SIDEBAR_COMMANDS: &[DefaultSidebarCommand] = &[
