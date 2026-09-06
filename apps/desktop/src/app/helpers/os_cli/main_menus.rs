@@ -91,6 +91,10 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
     cx.on_action(|_: &HideGhostexGpui, cx| cx.hide());
     cx.on_action(|_: &HideGhostexGpuiOthers, cx| cx.hide_other_apps());
     cx.on_action(|_: &ShowAllGhostexGpuiApps, cx| cx.unhide_other_apps());
+    cx.on_action(|_: &RestartGhostexGpui, cx| {
+        GPUI_APP_QUIT_IN_PROGRESS.store(true, Ordering::Release);
+        cx.restart();
+    });
     cx.on_action(|_: &QuitGhostexGpui, cx| {
         GPUI_APP_QUIT_IN_PROGRESS.store(true, Ordering::Release);
         cx.quit();
@@ -124,7 +128,7 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
 }
 
 /// Native app menu bar (macOS `installMainMenu` parity, AppDelegate.swift
-/// :2533-2663): App (About/Check for Updates/Settings/Hide/Quit),
+/// :2533-2663): App (About/Check for Updates/Settings/Hide/Restart/Quit),
 /// File → Close Pane ⌘W, the Edit clipboard set (first-responder OS actions so
 /// CEF and Ghostty views handle them natively), and Window → Minimize/Zoom.
 /// Undo/Redo are omitted from the GPUI-owned menu because gpui routes them
@@ -161,6 +165,9 @@ pub(crate) fn ghostex_gpui_main_menus_for_source_focus(
             MenuItem::action("Hide Others", HideGhostexGpuiOthers),
             MenuItem::action("Show All", ShowAllGhostexGpuiApps),
             MenuItem::separator(),
+            // CDXC:OsIntegration 2026-09-05 DECISION:
+            // User: add Restart Ghostex to the app menu directly above Quit Ghostex.
+            MenuItem::action("Restart Ghostex", RestartGhostexGpui),
             MenuItem::action("Quit Ghostex", QuitGhostexGpui),
             MenuItem::action(
                 "Quit Ghostex & BG Service",

@@ -64,6 +64,7 @@ gpui::actions!(
         HideGhostexGpui,
         HideGhostexGpuiOthers,
         ShowAllGhostexGpuiApps,
+        RestartGhostexGpui,
         QuitGhostexGpui,
         QuitGhostexGpuiAndBackgroundServices,
         MinimizeGhostexGpuiWindow,
