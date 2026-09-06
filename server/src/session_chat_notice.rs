@@ -93,6 +93,7 @@ so a clean screen must not retire it.
 pub const SESSION_CHAT_NOTICE_API_REFUSAL: &str = "apiRefusal";
 /// A Codex decision surface has replaced the ordinary composer. The concrete
 /// title/detail come from the source-derived screen classifier.
+pub const SESSION_CHAT_NOTICE_CLAUDE_INPUT_BLOCKED: &str = "claudeInputBlocked";
 pub const SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED: &str = "codexInputBlocked";
 /// A Cursor model/effort picker owns terminal input while retaining the normal
 /// composer frame around its filter field.
@@ -262,6 +263,7 @@ pub struct SessionChatTerminalNotice {
     /// Answerable picker rows, in screen order. Empty for every notice that
     /// only describes a state.
     pub choices: Vec<SessionChatTerminalNoticeChoice>,
+    pub dialog: Option<crate::session_chat_terminal_dialog::TerminalDialog>,
     /// Server-side delivery policy for this particular detected state.
     blocks_input: bool,
 }
@@ -283,6 +285,7 @@ impl SessionChatTerminalNotice {
             detected_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             actions: Vec::new(),
             choices: Vec::new(),
+            dialog: None,
             blocks_input: session_chat_notice_kind_blocks_input(kind),
         }
     }
@@ -315,7 +318,7 @@ impl SessionChatTerminalNotice {
 
     /// True when this notice offers rows the chat surface can answer itself.
     pub fn is_answerable(&self) -> bool {
-        !self.choices.is_empty()
+        !self.choices.is_empty() || self.dialog.is_some()
     }
 
     /// True when two detections say the SAME thing. `detectedAt` and the raw
@@ -331,6 +334,7 @@ impl SessionChatTerminalNotice {
                 && self.source == other.source
                 && self.blocks_input == other.blocks_input
                 && self.actions == other.actions
+                && self.dialog == other.dialog
                 // Labels only: the highlight moves whenever the user arrows
                 // around in the terminal, and re-minting `detectedAt` for that
                 // would resurrect a card they just dismissed.
@@ -384,7 +388,8 @@ impl SessionChatTerminalNotice {
             "{}\u{1f}{}\u{1f}{}",
             self.kind,
             self.title,
-            self.detail.as_deref().unwrap_or_default()
+            self.dialog.as_ref().map(|dialog| dialog.id.as_str())
+                .unwrap_or_else(|| self.detail.as_deref().unwrap_or_default())
         )
     }
 
@@ -392,6 +397,9 @@ impl SessionChatTerminalNotice {
         let mut map = Map::new();
         map.insert("kind".to_string(), json!(self.kind));
         map.insert("severity".to_string(), json!(self.severity.as_str()));
+        if let Some(dialog) = self.dialog.as_ref() {
+            map.insert("dialog".to_string(), json!(dialog));
+        }
         map.insert("title".to_string(), json!(self.title));
         if let Some(detail) = self.detail.as_deref() {
             map.insert("detail".to_string(), json!(detail));
@@ -1166,7 +1174,7 @@ const CLAUDE_RULES: &[NoticeRule] = &[
                 id: "trustDirectory",
                 label: "Trust and continue",
                 kind: SessionChatTerminalNoticeActionKind::SendKeys,
-                send: Some("\u{1b}[B\r"),
+                send: Some("\u{1b}[1;1B\r"),
             },
             OPEN_TERMINAL,
         ],
@@ -1221,6 +1229,57 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         ],
         actions: &[OPEN_TERMINAL],
         quote_evidence: false,
+    },
+    NoticeRule {
+        kind: SESSION_CHAT_NOTICE_STREAM_ERROR,
+        severity: SessionChatTerminalNoticeSeverity::Warning,
+        title: "Claude Code hit a temporary service error",
+        detail: "The request failed because of a connection or server error. Automatic continuation will retry when enabled.",
+        blocks_input: false,
+        signatures: &[
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("API Error: 500")],
+                corroborators: &[],
+            },
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("API Error: 502")],
+                corroborators: &[],
+            },
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("API Error: 503")],
+                corroborators: &[],
+            },
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("API Error: 504")],
+                corroborators: &[],
+            },
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("API Error: 529")],
+                corroborators: &[],
+            },
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("Unable to connect to API")],
+                corroborators: &[],
+            },
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("Request timed out")],
+                corroborators: &[],
+            },
+            NoticeSignature {
+                scope: NoticeScope::Banner,
+                parts: &[NoticePart::Text("Connection error.")],
+                corroborators: &[],
+            },
+        ],
+        actions: &[OPEN_TERMINAL],
+        quote_evidence: true,
     },
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_AGENT_EXITED,
@@ -1417,7 +1476,7 @@ pub fn session_chat_notice_kind_blocks_input(kind: &str) -> bool {
         // The refusal proves the terminal DID deliver the message — the model
         // declined it. A follow-up prompt goes through fine.
         SESSION_CHAT_NOTICE_API_REFUSAL => false,
-        SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED => true,
+        SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED | SESSION_CHAT_NOTICE_CLAUDE_INPUT_BLOCKED => true,
         SESSION_CHAT_NOTICE_CURSOR_INPUT_BLOCKED => true,
         SESSION_CHAT_NOTICE_GROK_INPUT_BLOCKED => true,
         SESSION_CHAT_NOTICE_HERMES_INPUT_BLOCKED => true,
@@ -1526,11 +1585,10 @@ fn notice_from_picker(
     picker: crate::session_chat_resume_prompt::SessionChatTerminalPicker,
 ) -> SessionChatTerminalNotice {
     use crate::session_chat_resume_prompt::SessionChatTerminalPickerKind;
-    const PICKER_GUIDANCE: &str =
-        "Claude Code accepts no input until this is answered. Pick an option to answer it here.";
+    let guidance = "Claude Code accepts no input until this is answered. Pick an option to answer it here.";
     let detail = match picker.detail.as_deref() {
-        Some(prose) => format!("{prose} {PICKER_GUIDANCE}"),
-        None => PICKER_GUIDANCE.to_string(),
+        Some(prose) => format!("{prose} {guidance}"),
+        None => guidance.to_string(),
     };
     let (kind, title) = match picker.kind {
         SessionChatTerminalPickerKind::Resume => (
@@ -1711,6 +1769,14 @@ pub fn classify_session_chat_terminal_notice(
             crate::session_chat_resume_prompt::detect_session_chat_terminal_picker(screen_text)
         {
             return Some(notice_from_picker(&screen, picker));
+        }
+        if let Some(dialog) = crate::session_chat_claude_dialog::detect_claude_dialog(screen_text) {
+            return Some(dialog.into_notice(SESSION_CHAT_NOTICE_CLAUDE_INPUT_BLOCKED));
+        }
+    }
+    if agent == SessionChatOptionAgent::Codex {
+        if let Some(dialog) = crate::session_chat_codex_dialog::detect_codex_dialog(screen_text) {
+            return Some(dialog.into_notice(SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED));
         }
     }
     let mut advisory_notice = None;

@@ -196,7 +196,7 @@ enum ComposerSignature {
     /// The weakest signature here, so it is the one that most needs the
     /// numbered-option filter — codex's own trust dialog draws `› 1. Yes,
     /// continue` with this exact marker.
-    BareMarker { marker: char },
+    BareMarkers { markers: &'static [char] },
     /// A marker line INSIDE a `│ … │` box: `│ ❯                          │`.
     BoxedMarker { marker: char },
     /// A marker line between half-block rules, `▄▄▄▄…` above and `▀▀▀▀…` below.
@@ -255,7 +255,11 @@ fn composer_signature(agent: &str) -> Option<ComposerSignature> {
         // profile prefix confirmed against v0.20.5 source on 2026-08-30).
         "hermes-agent" => ComposerSignature::ProfiledRuleSandwich { marker: '\u{276f}' },
         // `› ` with no frame.
-        "codex" => ComposerSignature::BareMarker { marker: '\u{203a}' },
+        // CDXC:AgentScreenDetection 2026-09-05 WHY:
+        // Codex Ultra draws » instead of ›, so recognizing only the normal marker blocks option changes and prompt delivery after selecting Ultra.
+        "codex" => ComposerSignature::BareMarkers {
+            markers: &['\u{203a}', '\u{00bb}'],
+        },
         // Empty row bounded by two full-width rules, statusline below.
         "pi" => ComposerSignature::EmptyRuleSandwich,
         // `│ ❯ … │`, model/mode drawn into the bottom border.
@@ -592,10 +596,10 @@ fn signature_matches(signature: ComposerSignature, lines: &[String]) -> bool {
                 is_horizontal_rule(&lines[index + 1]) && is_titled_horizontal_rule(&lines[index])
             })
         }
-        ComposerSignature::BareMarker { marker } => lines.iter().rev().any(|line| {
+        ComposerSignature::BareMarkers { markers } => lines.iter().rev().any(|line| {
             // A `›` inside a box belongs to that box's content, not to a
             // frameless composer.
-            !line.contains('\u{2502}') && is_marker_line(line, marker)
+            !line.contains('\u{2502}') && markers.iter().any(|marker| is_marker_line(line, *marker))
         }),
         ComposerSignature::BoxedMarker { marker } => lines
             .iter()

@@ -762,6 +762,15 @@ pub fn has_ask_answer(selections: &[SessionChatQuestionSelection]) -> bool {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SessionChatSendStep {
+    BeginCodexCommandOutput {
+        command: String,
+    },
+    FinishCodexCommandOutput,
+    /// Revalidate after reaching the front of the send queue, before any dialog input.
+    VerifyTerminalDialog {
+        agent: String,
+        id: String,
+    },
     /// Move any existing agent-TUI composer draft into Saved Prompts before
     /// chat takes ownership of the input line. The prompt-editor handshake
     /// answers only after the CLI has durably stashed and cleared that draft.
@@ -836,6 +845,7 @@ pub enum SessionChatSendStep {
     DriveCodexModelPicker {
         job_id: u64,
     },
+    DriveClaudeModelPicker { job_id: u64 },
 }
 
 /// The screen-watch window for a payload: a floor that covers small pastes,
@@ -914,8 +924,15 @@ pub fn build_session_chat_message_steps(
             text,
         )));
     }
+    let mut verify = session_chat_verify_step(text);
+    if crate::session_chat_options::is_session_chat_option_command_text(agent, text) {
+        // Short option commands can be checked immediately; Enter still requires visible paste evidence.
+        if let Some(SessionChatSendStep::VerifyPasteLanded { settle_ms, .. }) = &mut verify {
+            *settle_ms = 0;
+        }
+    }
     steps.push(
-        session_chat_verify_step(text)
+        verify
             // Nothing on screen could confirm this payload, so the Enter keeps
             // the original blind settle. That is only an images-only send,
             // whose payload is one short path — the size that never lost a
@@ -1329,6 +1346,43 @@ async fn run_session_chat_send_worker(
                 break; // cancelled mid-sequence
             }
             match step {
+                SessionChatSendStep::BeginCodexCommandOutput { command } => {
+                    if let Some(screen) = capture_session_terminal_text(&zmx_name).await {
+                        crate::session_chat_app_command::begin_codex_command_output(
+                            &project_id,
+                            &session_id,
+                            &command,
+                            screen,
+                        );
+                    }
+                }
+                SessionChatSendStep::FinishCodexCommandOutput => {
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                    if let Some(screen) = capture_session_terminal_text(&zmx_name).await {
+                        crate::session_chat_app_command::refresh_codex_command_output(
+                            &project_id,
+                            &session_id,
+                            &screen,
+                        );
+                    }
+                }
+                SessionChatSendStep::VerifyTerminalDialog { agent, id } => {
+                    let current =
+                        capture_session_terminal_text(&zmx_name)
+                            .await
+                            .and_then(|screen| {
+                                match agent.as_str() {
+                                    "claude" => crate::session_chat_claude_dialog::detect_claude_dialog(&screen),
+                                    _ => crate::session_chat_codex_dialog::detect_codex_dialog(&screen),
+                                }
+                            });
+                    if current.is_none_or(|dialog| dialog.id != id) {
+                        outcome = Err(SessionChatSendError::not_attempted(
+                            "The dialog changed before the answer could be sent.".to_string(),
+                        ));
+                        break;
+                    }
+                }
                 SessionChatSendStep::SleepMs(delay_ms) => {
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
@@ -1613,6 +1667,17 @@ async fn run_session_chat_send_worker(
                 }
                 SessionChatSendStep::DriveCodexModelPicker { job_id } => {
                     crate::session_chat_codex_picker::run_codex_model_picker_job(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        job_id,
+                        &|| job_generation != generation.load(Ordering::SeqCst),
+                    )
+                    .await;
+                }
+                SessionChatSendStep::DriveClaudeModelPicker { job_id } => {
+                    crate::session_chat_codex_picker::run_claude_model_picker_job(
                         &project_id,
                         &session_id,
                         &zmx_name,
@@ -2344,6 +2409,52 @@ mod tests {
         );
         assert!(build_ask_answer_steps(&[]).is_empty());
     }
+
+    /// Run this test binary from the packaged Web directory so bundled zmx resolves.
+    /// Set `GHOSTEX_CLAUDE_MODEL_TEST_ZMX` to a dedicated idle Claude TUI and pass `live_zmx_claude_model_changes --ignored --nocapture`.
+    #[tokio::test]
+    #[ignore = "requires an explicitly supplied disposable Claude zmx session"]
+    async fn live_zmx_claude_model_changes() {
+        use crate::session_chat_options::{detect_session_chat_selection, SessionChatOptionAgent};
+        let name = std::env::var("GHOSTEX_CLAUDE_MODEL_TEST_ZMX")
+            .expect("set the dedicated test session name");
+        assert!(name.starts_with("ghostex-claude-check-"));
+        for model in ["opus", "fable", "haiku", "sonnet", "opus", "sonnet"] {
+            let started = std::time::Instant::now();
+            let command = format!("/model {model}");
+            execute_session_chat_send(
+                "claude-model-check",
+                &name,
+                &name,
+                "claude-model-check",
+                build_session_chat_message_steps(Some("claude"), &command, &[], false),
+            )
+            .await
+            .expect("deliver model command");
+            let delivered_ms = started.elapsed().as_millis();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(6);
+            loop {
+                let screen = capture_session_terminal_text(&name).await.unwrap();
+                let selected =
+                    detect_session_chat_selection(SessionChatOptionAgent::Claude, &screen);
+                if selected
+                    .and_then(|value| value.model)
+                    .is_some_and(|value| value.value == model)
+                {
+                    println!(
+                        "Claude {model}: delivered {delivered_ms}ms, footer confirmed {}ms",
+                        started.elapsed().as_millis()
+                    );
+                    break;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "Claude did not confirm {model}:\n{screen}"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+        }
+    }
 }
 
 /*
@@ -2453,18 +2564,29 @@ pub(crate) async fn handle_send_session_chat_message_http(
                 },
             );
         };
-        crate::session_chat_send::enqueue_session_chat_send(
+        if let Err(error) = crate::session_chat_send::execute_session_chat_send(
             &target.project_id,
             &target.session_id,
             &target.zmx_name,
             "session-chat-key",
             steps,
-        );
+        )
+        .await
+        {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "sessionInputFailed",
+                    message: error.message,
+                },
+            );
+        }
         /*
         Raw option keys repaint the footer just like `/model` and `/effort`:
         Shift+Tab changes Claude's permission mode, while shifted arrows change
-        Codex effort. Re-read at the established +2s/+6s cadence so the pill
-        confirms the value promptly instead of waiting for the idle probe.
+        Codex effort. Re-read after delivery so the pill confirms the value
+        promptly instead of waiting for the idle probe.
         */
         let agent = session_chat_agent_for_session(&target.session);
         schedule_session_chat_option_redetect(
@@ -2591,6 +2713,36 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         .get("kind")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    if kind == "terminalDialog" {
+        let agent = crate::session_chat_options::session_chat_option_agent(session_chat_agent_for_session(&target.session).as_deref());
+        let (agent_name, result) = match agent {
+            Some(crate::session_chat_options::SessionChatOptionAgent::Codex) => ("codex", crate::session_chat_codex_dialog::answer_codex_dialog(&target, &params).await),
+            Some(crate::session_chat_options::SessionChatOptionAgent::Claude) => ("claude", crate::session_chat_claude_dialog::answer_claude_dialog(&target, &params).await),
+            _ => return domain_error_response(endpoint_path, request_id, DomainStateError { code: "invalidParams", message: "This agent does not offer terminal dialogs.".to_string() }),
+        };
+        crate::session_chat_options::SessionChatOptionDetector::new(state)
+            .detect(&target.project_id, &target.session_id, Some(agent_name), true)
+            .await;
+        crate::session_chat_options::session_chat_terminal_notice_publisher(
+            state,
+            &target.project_id,
+            &target.session_id,
+        )();
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            Some(agent_name),
+        );
+        return match result {
+            Ok(result) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result),
+            ),
+            Err(error) => domain_error_response(endpoint_path, request_id, error),
+        };
+    }
     let steps = match kind {
         "approval" => {
             // Allow → the option's raw send byte ("1"); Deny/empty → ESC.
@@ -3077,6 +3229,7 @@ pub(crate) fn handle_interrupt_session_chat_http(
     // concerned: it ends the hook-backed working claim the way the
     // terminal-pane Escape key does (see the escape branch in
     // session_status.rs), because no agent hook reports an interrupted turn.
+    let _ = crate::accounts::recovery::user_action(state, &target.project_id, &target.session_id, true);
     let mut escape_params = Map::new();
     escape_params.insert("projectId".to_string(), json!(target.project_id));
     escape_params.insert("sessionId".to_string(), json!(target.session_id));

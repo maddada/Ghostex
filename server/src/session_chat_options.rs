@@ -62,9 +62,8 @@ const SESSION_CHAT_OPTION_TRANSCRIPT_SCAN_BYTES: u64 = 6 * 1024 * 1024;
 /// Detection spawns a process, so every trigger goes through a short cache.
 pub const SESSION_CHAT_OPTION_CACHE_TTL: Duration = Duration::from_secs(5);
 
-/// Re-detect schedule after a client dispatches `/model`, `/effort` or `/fast`:
-/// the TUI needs a repaint, and Codex needs the user to finish its overlay.
-pub const SESSION_CHAT_OPTION_REDETECT_DELAYS_MS: [u64; 2] = [2_000, 6_000];
+/// Post-delivery probes at 0ms, 150ms, 2s and 6s; entries are incremental delays.
+pub const SESSION_CHAT_OPTION_REDETECT_DELAYS_MS: [u64; 4] = [0, 150, 1_850, 4_000];
 
 /// Follower reconciles (1s each) between periodic re-detects.
 pub const SESSION_CHAT_OPTION_RECONCILE_INTERVAL_TICKS: u64 = 30;
@@ -665,7 +664,8 @@ fn match_claude_mode(segment: &str) -> Option<SessionChatDetectedChoice> {
 /// Mirrors the Codex efforts in the published agent model catalog
 /// (`agent-model-catalog.json`); `max` and `ultra` sit behind the picker's
 /// "More reasoning…" row.
-const CODEX_EFFORTS: &[&str] = &["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
+pub(crate) const CODEX_EFFORTS: &[&str] =
+    &["minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
 
 /// `gpt-` + a digit + id characters, lowercase and case-sensitive so an
 /// uppercase "GPT-5.6" in prose or a title cannot match.
@@ -2099,7 +2099,13 @@ pub fn detect_session_chat_terminal_state(
                 && !capture.truncated
                 && crate::session_chat_diff_panel::claude_diff_panel_on_screen(&capture.text);
             // One cut for every detector below (see session_chat_screen_pane.rs).
-            capture.text = crate::session_chat_screen_pane::strip_side_pane(&capture.text);
+            // CDXC:AgentScreenDetection 2026-09-05 WHY:
+            // Agent dialogs align descriptions and setting values in columns; the diff-pane heuristic mistook those columns for a side pane and deleted them.
+            if agent == Some(SessionChatOptionAgent::Claude)
+                && crate::session_chat_claude_dialog::detect_claude_dialog(&capture.text).is_none()
+            {
+                capture.text = crate::session_chat_screen_pane::strip_side_pane(&capture.text);
+            }
             capture
         });
     let terminal = agent
@@ -2107,6 +2113,11 @@ pub fn detect_session_chat_terminal_state(
         .and_then(|(agent, capture)| detect_session_chat_selection(agent, &capture.text));
     // A capped capture lost its tail, so the live screen is not in it.
     let screen = capture.as_ref().filter(|capture| !capture.truncated);
+    if agent == Some(SessionChatOptionAgent::Codex) {
+        if let Some(capture) = screen {
+            crate::session_chat_app_command::refresh_codex_command_output(project_id, session_id, &capture.text);
+        }
+    }
     let notice = screen.and_then(|capture| {
         crate::session_chat_notice::classify_session_chat_terminal_notice(agent_id, &capture.text)
     });
@@ -3236,14 +3247,9 @@ pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, se
 }
 
 /*
-CDXC:AgentScreenDetection 2026-08-01:
-Post-dispatch confirmation. After the chat surface types `/model`, `/effort` or
-`/fast`, the pill shows an unconfirmed value; these two probes read the
-statusline back (+2s for the TUI repaint, +6s to catch a Codex overlay the user
-had to finish) and push the real value through the live follower stream. A
-probe that finds the SAME value emits nothing, and with no follower/no
-subscribers nothing is emitted at all — the next readSessionChat still carries
-it.
+CDXC:AgentScreenDetection 2026-09-05 WHY:
+Optimistic option controls need fresh evidence even when a CLI refuses a change and its footer stays the same.
+Post-delivery probes start immediately, then cover slower repaints at 150ms, 2s and 6s; captured option state is republished even when unchanged so the client can settle or undo its pending selection.
 */
 pub(crate) fn schedule_session_chat_option_redetect(
     state: &AppState,
@@ -3296,6 +3302,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
                 .options
                 .as_ref()
                 .is_some_and(|detected| !detected.same_selection(published.as_ref()));
+            let options_refreshed = detection.captured && detection.options.is_some();
             let activity_changed = detection.captured
                 && !crate::session_chat_terminal_activity::same_session_chat_terminal_activity(
                     detection.activity.as_ref(),
@@ -3313,6 +3320,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
             );
             let prompt_changed = detection.captured && detection.prompt != published_prompt;
             if !options_changed
+                && !options_refreshed
                 && !notice_changed
                 && !activity_changed
                 && !fleet_changed
@@ -3321,7 +3329,7 @@ pub(crate) fn schedule_session_chat_option_redetect(
             {
                 continue;
             }
-            if options_changed {
+            if options_changed || options_refreshed {
                 published = detection.options;
             }
             if notice_changed {

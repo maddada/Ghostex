@@ -53,11 +53,12 @@ User: picking an option is optimistic: the card disappears at once while the ans
 
 import { IconChevronRight, IconTerminal2, IconX } from '@tabler/icons-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { SessionChatTerminalNotice } from '../../shared/session-chat';
+import type { GxserverAnswerSessionChatPromptParams, SessionChatTerminalNotice } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
 import { Button } from '../../components/ui/button';
 import { SessionChatChoiceRows } from './session-chat-choice-rows';
 import { SessionChatNoticeCard } from './session-chat-notice-card';
+import { SessionChatTerminalDialogCard } from './session-chat-terminal-dialog';
 
 const SEND_FAILED_NOTICE = "Couldn't deliver those keys. Switch to Terminal View to act there.";
 const READ_ONLY_HINT = 'Input is held by another device.';
@@ -190,6 +191,7 @@ export interface SessionChatTerminalNoticeCardProps {
    * is a card that looks answered while the CLI still waits.
    */
   onAnswerChoice?: (choiceIndex: number) => Promise<void>;
+  onAnswerDialog?: (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>) => Promise<void>;
   /** Host switch-back; `switchToTerminal` actions hide when the host has none. */
   onSwitchToTerminal?: () => void;
   /**
@@ -217,6 +219,7 @@ export function SessionChatTerminalNoticeCard({
   canSend,
   notice,
   onAnswerChoice,
+  onAnswerDialog,
   onSendKeys,
   onSwitchToTerminal,
   onVisibleChange,
@@ -403,6 +406,11 @@ export function SessionChatTerminalNoticeCard({
   if (!visible || !notice) {
     return null;
   }
+  if (notice.dialog && notice.dialog.rows.length === 0 && onAnswerDialog) {
+    return <SessionChatNoticeCard kind={notice.kind} severity={notice.severity}>
+      <SessionChatTerminalDialogCard key={notice.dialog.title} dialog={notice.dialog} canSend={canSend} onAnswer={onAnswerDialog} />
+    </SessionChatNoticeCard>;
+  }
 
   // Actions are normalized here so the render below never has to re-prove that
   // a `sendKeys` action carries bytes. An action kind this build does not know
@@ -440,7 +448,7 @@ export function SessionChatTerminalNoticeCard({
   // stack as an answer needs.
   const collapsed = answerable && !expanded;
   const choiceOptions = choices.map((choice) => ({
-    label: collapsed ? collapsedChoiceLabel(choice.label) : choice.label,
+    label: collapsed ? collapsedChoiceLabel(notice.dialog?.rows[choice.index]?.label ?? choice.label) : choice.label,
   }));
   const toggleExpanded = (): void => setExpanded((value) => !value);
   return (
@@ -480,6 +488,9 @@ export function SessionChatTerminalNoticeCard({
                 <p className='mt-2 text-[11px] leading-snug text-muted-foreground'>{READ_ONLY_HINT}</p>
               ) : null}
             </div>
+          ) : null}
+          {notice.dialog && onAnswerDialog && !collapsed ? (
+            <SessionChatTerminalDialogCard dialog={notice.dialog} canSend={canSend && !sending && pickedChoice === null} onAnswer={onAnswerDialog} controlsOnly />
           ) : null}
           {notice.screenTail && !collapsed ? (
             <div className='mt-2'>
