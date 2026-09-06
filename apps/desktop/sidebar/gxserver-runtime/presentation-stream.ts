@@ -11,6 +11,7 @@ import {
   GPUI_SIDEBAR_BOOTSTRAP_RETRY_DELAY_MS,
 } from './constants';
 import type { GpuiSidebarRuntime } from './core';
+import { rememberGpuiProjectSession } from './project-activation';
 import {
   activeGroupIdForGpuiGxserverBootstrapPresentationState,
   hasSameGpuiGxserverBootstrapTransport,
@@ -192,6 +193,9 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     this.activeGroupId = nextActiveGroupId;
     this.focusedSessionId = nextFocusedSessionId;
     this.visibleSessionIds = nextVisibleSessionIds;
+    if (nextFocusedSessionId && bootstrap.initialActiveProjectId) {
+      rememberGpuiProjectSession(this, bootstrap.initialActiveProjectId, nextFocusedSessionId);
+    }
     return didChange;
   },
 

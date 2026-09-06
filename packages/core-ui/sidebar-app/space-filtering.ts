@@ -211,3 +211,30 @@ export function createSelectedSidebarSpaceVisibility({
     spaces: selection.spaces,
   });
 }
+
+/** CDXC:Projects 2026-09-05 DECISION: User: opening a project from Quick Access switches to its Space, including membership inherited from its group or parent project. */
+export function resolveSidebarSpaceForRevealedGroup({
+  targetGroupId,
+  spacesState,
+  selectedSpaceId,
+  ...visibility
+}: {
+  targetGroupId: string;
+  spacesState: SidebarSpacesState;
+  selectedSpaceId: string | undefined;
+  collectionState: SidebarProjectCollectionsState;
+  groupIds: readonly string[];
+  groupsById: SidebarProjectGroupLookup;
+  resolveProjectId: (groupId: string) => string | undefined;
+}): string {
+  const current = resolveSelectedSidebarSpace(spacesState, selectedSpaceId)!;
+  if (createSelectedSidebarSpaceVisibility({ ...visibility, selection: current })(targetGroupId)) {
+    return current.spaceId;
+  }
+  return (
+    spacesState.order.find((spaceId) => {
+      const space = spacesState.spaces[spaceId];
+      return space && createSidebarSpaceGroupVisibility({ ...visibility, space })(targetGroupId);
+    }) ?? OTHER_SIDEBAR_SPACE_ID
+  );
+}

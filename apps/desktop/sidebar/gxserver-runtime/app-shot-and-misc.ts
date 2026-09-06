@@ -20,6 +20,7 @@ import {
   GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION,
 } from './constants';
 import type { GpuiSidebarRuntime } from './core';
+import { activateGpuiProject } from './project-activation';
 import {
   formatGpuiNativeAppShotPrompt,
   isNativeAppShotAgentSession,
@@ -211,18 +212,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     if (!activation) {
       return;
     }
-    /*
-    CDXC:StatusPet 2026-06-26-06:05:
-    Running Agents project rows should behave like focusing the matching sidebar project group. Reuse local focusProjectId or the remote group projection plus the normal presentation publish instead of creating a native-only project switch path, and accept only the bounded project id from Rust.
-    */
-    const remoteProject = parseGpuiRemotePresentationProjectId(activation.projectId);
-    if (remoteProject) {
-      this.activeGroupId = createGpuiRemotePresentationGroupId(remoteProject.machineId, remoteProject.projectId);
-      this.publishRemotePresentationPatch();
-      return;
-    }
-    this.focusProjectId(activation.projectId);
-    this.publishPresentation('patch');
+    void activateGpuiProject(this, activation.projectId);
   },
 
   async handleGpuiMenuBarSessionActivation(this: GpuiSidebarRuntime, payload: unknown): Promise<void> {

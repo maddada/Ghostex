@@ -7,6 +7,7 @@ import { runGpuiSidebarBulkSleepPaced } from '../bulk-sleep-pacing';
 import { getGpuiWorkspaceSessionSubgroups, parseGpuiWorkspaceSessionSubgroupId } from '../workspace-session-groups';
 import { GPUI_AUTO_SLEEP_MONITOR_INTERVAL_MS, GPUI_QUICK_AUTOMATIONS_PROJECT_ID } from './constants';
 import type { GpuiSidebarRuntime } from './core';
+import type { PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import { createGpuiAutoSleepAgentSessionIds, gxserverSleepWasDeclined } from './helpers/auto-sleep';
 import { createGpuiSidebarSettings } from './helpers/bootstrap';
 import { gpuiBrowserSidebarSessionId } from './helpers/browser-tabs';
@@ -45,7 +46,12 @@ export interface GpuiSidebarRuntimeAutoSleepMethods {
   setSessionSleeping(
     sessionId: string,
     sleeping: boolean,
-    options?: { automatic?: boolean; forceRemount?: boolean; placement?: GpuiWorkspaceTerminalFocusPlacement }
+    options?: {
+      automatic?: boolean;
+      forceRemount?: boolean;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+    }
   ): Promise<void>;
   closeInactiveProjectSessions(groupId: string): Promise<void>;
   sleepInactiveProjectSessions(groupId: string): Promise<void>;
@@ -262,7 +268,12 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
     this: GpuiSidebarRuntime,
     sessionId: string,
     sleeping: boolean,
-    options?: { automatic?: boolean; forceRemount?: boolean; placement?: GpuiWorkspaceTerminalFocusPlacement }
+    options?: {
+      automatic?: boolean;
+      forceRemount?: boolean;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+    }
   ): Promise<void> {
     const browserTab = this.browserTabs.find((candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId);
     if (browserTab) {

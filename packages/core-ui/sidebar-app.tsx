@@ -74,6 +74,7 @@ import {
   createSelectedSidebarSpaceVisibility,
   LOCAL_SIDEBAR_SPACE_SECTION_KEY,
   resolveSelectedSidebarSpace,
+  resolveSidebarSpaceForRevealedGroup,
 } from './sidebar-app/space-filtering';
 import { SidebarTooltipDelayProvider } from './tooltip-delay';
 import { AppTooltip, setSidebarTooltipsSuppressedForDrag, useDismissSidebarTooltipsOnScroll } from './app-tooltip';
@@ -2875,29 +2876,59 @@ export function SidebarApp({
     }
     const { requestId, sessionId } = sessionRevealRequest;
     if (handledSessionRevealRequestIdRef.current !== requestId) {
-      const groupId = Object.keys(displayedWorkspaceSessionIdsByGroup).find((candidateGroupId) =>
-        displayedWorkspaceSessionIdsByGroup[candidateGroupId]?.includes(sessionId)
+      const groupId = effectiveGroupIds.find((candidateGroupId) =>
+        effectiveSessionIdsByGroup[candidateGroupId]?.includes(sessionId)
       );
       if (!groupId) {
         // The row has not been published yet; this effect re-runs when it is.
         return;
       }
+      const machineId = groupsById[groupId]?.remoteMachineContext?.machineId;
+      const sectionGroupIds = effectiveGroupIds.filter(
+        (candidate) => groupsById[candidate]?.remoteMachineContext?.machineId === machineId
+      );
+      const collectionState = machineId
+        ? (remoteProjectCollectionsByMachineId[machineId] ?? { collections: [], nextCollectionNumber: 1 })
+        : projectCollections;
+      const sectionSpaces = machineId ? remoteSpacesByMachineId[machineId] : spacesState;
+      const sectionKey = machineId ? createRemoteSidebarSpaceSectionKey(machineId) : LOCAL_SIDEBAR_SPACE_SECTION_KEY;
+      const resolveProjectId = (id: string) =>
+        machineId ? groupsById[id]?.remoteMachineContext?.projectId : groupsById[id]?.projectContext?.editor.projectId;
+      setSelectedMachineTabId(machineId ?? LOCAL_SIDEBAR_MACHINE_TAB_ID);
+      if (sectionSpaces) {
+        selectSidebarSpace(
+          sectionKey,
+          resolveSidebarSpaceForRevealedGroup({
+            targetGroupId: groupId,
+            spacesState: sectionSpaces,
+            selectedSpaceId: selectedSpaceIdBySectionKey[sectionKey],
+            collectionState,
+            groupIds: sectionGroupIds,
+            groupsById,
+            resolveProjectId,
+          })
+        );
+      }
       handledSessionRevealRequestIdRef.current = requestId;
       pendingSessionRevealScrollRequestIdRef.current = requestId;
-
-      const collectionItem = displayedProjectCollectionItems.find(
-        (item) => item.kind === 'collection' && item.groupIds.includes(groupId)
-      );
-      if (collectionItem?.kind === 'collection') {
+      const rawProjectId = resolveProjectId(groupId);
+      const collectionId =
+        rawProjectId &&
+        createProjectCollectionIdByProjectId(collectionState, sectionGroupIds, groupsById, resolveProjectId).get(
+          rawProjectId
+        );
+      if (collectionId) {
         setProjectCollectionCollapsed(
-          createLocalProjectCollectionCollapseKey(collectionItem.collection.collectionId),
+          machineId
+            ? createRemoteProjectCollectionCollapseKey(machineId, collectionId)
+            : createLocalProjectCollectionCollapseKey(collectionId),
           false
         );
       }
       setGroupCollapsed(groupId, false);
       const projectId = groupsById[groupId]?.projectContext?.editor.projectId;
       if (projectId) {
-        setProjectSessionListCollapsed(projectId, false);
+        setProjectSessionListCollapsed(machineId ? `remote:${machineId}:${projectId}` : projectId, false);
       }
     }
 
@@ -2958,6 +2989,14 @@ export function SidebarApp({
      * collapsed project mounts its body, so the row this effect scrolls to only
      * exists in the DOM on the run that follows its own expansion.
      */
+    effectiveGroupIds,
+    effectiveSessionIdsByGroup,
+    projectCollections,
+    remoteProjectCollectionsByMachineId,
+    spacesState,
+    remoteSpacesByMachineId,
+    selectedSpaceIdBySectionKey,
+    selectedMachineTabId,
     collapsedGroupsById,
     collapsedProjectCollectionsByKey,
     collapsedProjectSessionListsById,

@@ -17,6 +17,7 @@ import {
   SESSION_LIFECYCLE_FAILURE_TITLES,
 } from './constants';
 import type { GpuiSidebarRuntime } from './core';
+import { rememberGpuiProjectSession } from './project-activation';
 import { gpuiBrowserSidebarSessionId } from './helpers/browser-tabs';
 import { isGpuiInactiveProjectPresentationSession } from './helpers/close-after-done';
 import {
@@ -70,7 +71,11 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   ensureQuickAutomationsProject(): void;
   focusQuickAutomationsProject(): void;
   closeQuickAutomationsProject(): void;
-  focusSession(sessionId: string, originalMessage?: SidebarToExtensionMessage): Promise<void>;
+  focusSession(
+    sessionId: string,
+    originalMessage?: SidebarToExtensionMessage,
+    options?: { preferredInterface?: PreferredAgentInterface }
+  ): Promise<void>;
   postSidebarSessionFocusConfirmation(sessionId: string): void;
   focusLocalWorkspaceSession(
     projectId: string,
@@ -231,7 +236,8 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
   async focusSession(
     this: GpuiSidebarRuntime,
     sessionId: string,
-    originalMessage?: SidebarToExtensionMessage
+    originalMessage?: SidebarToExtensionMessage,
+    options?: { preferredInterface?: PreferredAgentInterface }
   ): Promise<void> {
     const browserTab = this.browserTabs.find((candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId);
     if (browserTab) {
@@ -263,7 +269,8 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
         this.postRemoteSessionNativeAction(
           'openRemoteSessionTerminal',
           remoteSession,
-          originalMessage ?? { sessionId, type: 'focusSession' }
+          originalMessage ?? { sessionId, type: 'focusSession' },
+          options
         )
       ) {
         this.setRemotePresentationSessionFocus(remoteSession);
@@ -288,14 +295,14 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       CDXC:FocusRouting 2026-06-26-23:24:
       Sleeping local session-card clicks must match macOS session activation by committing gxserver `/api/wakeSession` before the Rust workspace materializes the terminal. A plain focus bridge can select the tab but leaves gxserver sleeping, so route this branch through the same Wake path as the sidebar sleep toggle.
       */
-      await this.setSessionSleeping(sessionId, false);
+      await this.setSessionSleeping(sessionId, false, options);
       return;
     }
     /*
     CDXC:FocusRouting 2026-06-26-04:42:
     Local GPUI sidebar clicks must match the macOS sidebar ownership model: the SidebarApp adapter applies local focus immediately and publishes the CEF bootstrap focus hint, but it must not call gxserver `/api/focusSession`. That endpoint is an external renderer-command route and can bounce focus when another renderer is the first open gxserver subscriber.
     */
-    this.focusLocalWorkspaceSession(reference.projectId, reference.sessionId);
+    this.focusLocalWorkspaceSession(reference.projectId, reference.sessionId, options);
     this.publishPresentation('patch');
   },
 
@@ -1239,6 +1246,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
         : createGxserverPresentationProjectGroupId(normalizedProjectId));
     this.refreshSidebarHudFromClient();
     this.focusedSessionId = normalizedSessionId;
+    rememberGpuiProjectSession(this, normalizedProjectId, normalizedSessionId);
     this.visibleSessionIds = exactVisibleSessionIds
       ? new Set(exactVisibleSessionIds)
       : this.nextVisibleSessionIdsForLocalFocus(normalizedProjectId, normalizedSessionId);
@@ -1311,6 +1319,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     );
     this.activeGroupId = scopedGroupId;
     this.focusedSessionId = scopedSessionId;
+    rememberGpuiProjectSession(this, projectId, scopedSessionId);
     this.visibleSessionIds = new Set([scopedSessionId]);
     this.postGxserverPresentationFocusState();
   },

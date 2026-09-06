@@ -293,6 +293,7 @@ impl GhostexGpuiApp {
             }
             (None, None, scoped_project_id.to_string(), None)
         };
+        let activation_project_id = scoped_project_id.to_string();
         let request = GpuiRecentProjectsRequest {
             machine_id: machine_id.clone(),
             machine_name,
@@ -308,6 +309,9 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |this, cx| {
                 this.dispatch_open_gpui_app_modal_sidebar_state_payload(result_message, cx);
                 if mutated {
+                    if mutation == GpuiRecentProjectMutation::Restore {
+                        this.dispatch_gpui_menu_bar_project_activation(&activation_project_id, cx);
+                    }
                     if matches!(
                         mutation,
                         GpuiRecentProjectMutation::Close | GpuiRecentProjectMutation::Restore
