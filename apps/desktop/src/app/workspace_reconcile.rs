@@ -1076,6 +1076,8 @@ impl GhostexGpuiApp {
         }
         self.restore_gpui_agents_delayed_sends(delayed_send_restore_intents, cx);
         self.apply_project_view_state_for_active_project(cx);
+        self.reconcile_agents_chat_surfaces(cx);
+        self.evict_expired_hidden_agents_chat_surfaces(cx);
         self.persist_shell_layout_state();
         self.sync_gpui_keep_awake_automation_from_current_settings(cx);
         cx.notify();
@@ -2065,6 +2067,7 @@ impl GhostexGpuiApp {
     pub(crate) fn open_browser_popup_tab(
         &mut self,
         requested_url: String,
+        remote_machine_id: Option<String>,
         placement: cef::BrowserPopupPlacement,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
@@ -2097,6 +2100,9 @@ impl GhostexGpuiApp {
         let Some(popup_tab_id) = popup_tab_id else {
             return;
         };
+        if let Some(tab) = self.browser_tabs.tabs.iter_mut().find(|tab| tab.id == popup_tab_id) {
+            tab.remote_machine_id = remote_machine_id;
+        }
         self.request_sidebar_browser_tab_reveal(popup_tab_id);
         if matches!(placement, cef::BrowserPopupPlacement::Background) {
             /*

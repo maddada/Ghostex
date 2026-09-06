@@ -1061,6 +1061,7 @@ impl GhostexGpuiApp {
         payload: &str,
         cx: &mut gpui::Context<Self>,
     ) {
+        let _profile = crate::profiling::span(crate::profiling::Metric::AgentCreate);
         let Ok(message) = gpui_sidebar_create_project_agent_from_json(payload) else {
             return;
         };
@@ -2181,7 +2182,9 @@ impl GhostexGpuiApp {
         // retries through the normal visibility reconciliation path.
         let bootstrap = self.agents_session_chat_gxserver_bootstrap(session_id)?;
         let url = self.agents_session_chat_runtime_url(session_id)?;
-        let host_action_handler = self.session_chat_host_bridge_event_handler(session_id, cx);
+        let page_state = SessionChatPageState::new();
+        let host_action_handler =
+            self.session_chat_host_bridge_event_handler(session_id, page_state.generation, cx);
         let chat_theme = gpui_session_chat_theme_from_settings(
             shared_settings::shared_sidebar_settings_snapshot().object(),
         );
@@ -2240,6 +2243,7 @@ impl GhostexGpuiApp {
                 return None;
             }
         };
+        self.agents_chat_page_states.insert(session_id, page_state);
         self.agents_chat_surfaces
             .insert(session_id, surface.clone());
         Some(surface)
@@ -2285,6 +2289,7 @@ impl GhostexGpuiApp {
                 .remove(&session_id);
             self.session_chat_composer_empty_reports.remove(&session_id);
             self.agents_chat_surface_hidden_since.remove(&session_id);
+            self.agents_chat_page_states.remove(&session_id);
             if let Some(surface) = self.agents_chat_surfaces.remove(&session_id) {
                 surface.update(cx, |surface, _| surface.set_visible(false));
             }
@@ -2318,99 +2323,49 @@ impl GhostexGpuiApp {
         for session_id in &visible_session_ids {
             let _ = self.ensure_agents_chat_surface(*session_id, cx);
         }
+        let mut visibility_changed = false;
         for (session_id, surface) in &self.agents_chat_surfaces {
             let visible = visible_session_ids.contains(session_id);
             surface.update(cx, |surface, _| surface.set_visible(visible));
             /*
             CDXC:SessionChat 2026-08-24:
-            The hidden clock the RAM eviction pass reads. `or_insert_with` is
-            load-bearing: a surface that is already aging must keep its original
+            The hidden clock the RAM eviction pass reads. A surface that is
+            already aging must keep its original
             stamp across every later hidden pass, and only a pass that actually
             showed it clears the clock. Reconcile runs on drags, mode switches,
             and pane edits, so overwriting here would keep resetting the timer
             and nothing would ever expire.
             */
             if visible {
-                self.agents_chat_surface_hidden_since.remove(session_id);
-            } else {
+                visibility_changed |= self
+                    .agents_chat_surface_hidden_since
+                    .remove(session_id)
+                    .is_some();
+                if let Some(state) = self.agents_chat_page_states.get_mut(session_id) {
+                    state.pending_probe = None;
+                }
+            } else if !self
+                .agents_chat_surface_hidden_since
+                .contains_key(session_id)
+            {
+                visibility_changed = true;
                 self.agents_chat_surface_hidden_since
-                    .entry(*session_id)
-                    .or_insert_with(Instant::now);
+                    .insert(*session_id, Instant::now());
+                self.session_chat_composer_empty_reports.remove(session_id);
             }
         }
-    }
-
-    /*
-    CDXC:SessionChat 2026-08-24:
-    Destroy the Chromium page behind a chat surface nobody has looked at for
-    `GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER`. Chat-mode membership
-    (`agents_chat_mode_sessions`) is deliberately untouched: it is the persisted
-    "this session shows chat, not a terminal" preference, and dropping it would
-    flip the session back to the terminal view. Only the runtime surface goes,
-    and the next reconcile that makes the session visible rebuilds it through
-    the idempotent `ensure_agents_chat_surface`.
-
-    Every gate below protects state that lives ONLY in the page, and each one is
-    conservative: unknown means "do not evict".
-    */
-    pub(crate) fn evict_expired_hidden_agents_chat_surfaces(
-        &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let expired_session_ids = self
-            .agents_chat_surface_hidden_since
-            .iter()
-            .filter(|(session_id, hidden_since)| {
-                hidden_since.elapsed() >= GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER
-                    && self.agents_chat_surfaces.contains_key(session_id)
-                    && self.agents_chat_surface_evictable(**session_id)
-            })
-            .map(|(session_id, _)| *session_id)
-            .collect::<Vec<_>>();
-        let evicted_any = !expired_session_ids.is_empty();
-        for session_id in expired_session_ids {
-            let Some(surface) = self.agents_chat_surfaces.remove(&session_id) else {
-                continue;
-            };
-            surface.update(cx, |surface, _| surface.set_visible(false));
-            drop(surface);
-            self.session_chat_composer_ready_sessions
-                .remove(&session_id);
-            self.session_chat_composer_empty_reports.remove(&session_id);
-            self.agents_chat_surface_hidden_since.remove(&session_id);
-        }
-        /*
-        CDXC:SessionChat 2026-08-26:
-        Parked projects keep their chat pages alive, so the same RAM ceiling has
-        to reach them; otherwise every project the user ever visited would hold
-        its browsers until the app quits. A parked surface ages on the stamp it
-        carried into the park and, once dropped, is rebuilt by the normal
-        ensure/reconcile path when its project becomes active again. No frame
-        renders a parked surface, so this needs no redraw.
-        */
-        for parked in self.parked_agents_chat_runtimes_by_project.values_mut() {
-            for session_id in parked.expired_hidden_evictable_session_ids() {
-                let Some(surface) = parked.surfaces.remove(&session_id) else {
-                    continue;
-                };
-                surface.update(cx, |surface, _| surface.set_visible(false));
-                drop(surface);
-                parked.composer_ready_sessions.remove(&session_id);
-                parked.composer_empty_reports.remove(&session_id);
-                parked.surface_hidden_since.remove(&session_id);
-            }
-        }
-        if evicted_any {
-            // A frame could still be rendering the surface if the render tree
-            // and the reconcile visibility set ever disagree; request a redraw
-            // so no stale frame outlives its browser.
-            cx.notify();
+        if visibility_changed {
+            self.evict_expired_hidden_agents_chat_surfaces(cx);
         }
     }
 
     /// Whether a hidden chat surface holds nothing that would be destroyed with
     /// its page. See `evict_expired_hidden_agents_chat_surfaces`.
-    fn agents_chat_surface_evictable(&self, session_id: TerminalSessionId) -> bool {
+    pub(crate) fn agents_chat_surface_evictable(
+        &self,
+        session_id: TerminalSessionId,
+        require_empty: bool,
+    ) -> bool {
         // Only an idle agent is evictable. A working or attention session is
         // producing output the user is coming back to, and a session the shell
         // no longer knows about has an unknown status rather than an idle one.
@@ -2431,7 +2386,8 @@ impl GhostexGpuiApp {
         if !self
             .session_chat_composer_ready_sessions
             .contains(&session_id)
-            || self.session_chat_composer_empty_reports.get(&session_id) != Some(&true)
+            || (require_empty
+                && self.session_chat_composer_empty_reports.get(&session_id) != Some(&true))
         {
             return false;
         }
@@ -2448,6 +2404,9 @@ impl GhostexGpuiApp {
         if self
             .pending_session_chat_draft_handoffs
             .contains(&session_id)
+            || self
+                .pending_session_terminal_composer_insert
+                .contains_key(&session_id)
             || self.pending_session_chat_composer_focus == Some(session_id)
             || self
                 .pending_session_chat_composer_insert
@@ -2491,6 +2450,7 @@ impl GhostexGpuiApp {
             .remove(&session_id);
         self.session_chat_composer_empty_reports.remove(&session_id);
         self.agents_chat_surface_hidden_since.remove(&session_id);
+        self.agents_chat_page_states.remove(&session_id);
         if self.pending_session_chat_composer_focus == Some(session_id) {
             self.pending_session_chat_composer_focus = None;
         }
@@ -2537,6 +2497,14 @@ impl GhostexGpuiApp {
         &mut self,
         cx: &mut gpui::Context<Self>,
     ) -> ParkedAgentsChatRuntime {
+        let protected_sessions = self
+            .agents_delayed_send_timers
+            .keys()
+            .chain(self.agents_send_when_stopped_watchers.keys())
+            .chain(self.pending_session_chat_draft_handoffs.iter())
+            .chain(self.pending_session_terminal_composer_insert.keys())
+            .copied()
+            .collect();
         self.agents_chat_mode_sessions.clear();
         self.agents_chat_auto_switch_observed_sessions.clear();
         self.pending_agents_chat_launch_intents.clear();
@@ -2553,6 +2521,8 @@ impl GhostexGpuiApp {
                 .or_insert_with(Instant::now);
         }
         ParkedAgentsChatRuntime {
+            page_states: std::mem::take(&mut self.agents_chat_page_states),
+            protected_sessions,
             surfaces: std::mem::take(&mut self.agents_chat_surfaces),
             surface_hidden_since: std::mem::take(&mut self.agents_chat_surface_hidden_since),
             composer_ready_sessions: std::mem::take(&mut self.session_chat_composer_ready_sessions),
@@ -2572,6 +2542,7 @@ impl GhostexGpuiApp {
         parked: ParkedAgentsChatRuntime,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.agents_chat_page_states = parked.page_states;
         self.agents_chat_surfaces = parked.surfaces;
         self.agents_chat_surface_hidden_since = parked.surface_hidden_since;
         self.session_chat_composer_ready_sessions = parked.composer_ready_sessions;

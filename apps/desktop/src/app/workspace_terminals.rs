@@ -280,6 +280,7 @@ impl GhostexGpuiApp {
         next_state: GpuiGxserverPresentationFocusState,
         cx: &mut gpui::Context<Self>,
     ) {
+        let _profile = crate::profiling::span(crate::profiling::Metric::ProjectFocus);
         /*
         CDXC:Navigation 2026-07-29:
         This snapshot is the authoritative project switch for sidebar clicks
@@ -1594,6 +1595,8 @@ impl GhostexGpuiApp {
     ) -> bool {
         if !self.active_mode.is_project_editor_mode()
             || !self.project_editor_shell.left_companion_visible
+            // CDXC:SessionChat 2026-09-05 WHY: An explicit chat launch must expose the Agents composer; keeping Code or Docs open would focus its terminal companion instead.
+            || self.pending_agents_chat_launch_intents.contains(key)
         {
             return false;
         }

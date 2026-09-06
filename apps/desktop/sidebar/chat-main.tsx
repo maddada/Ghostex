@@ -108,6 +108,7 @@ interface ChatBridgeNamespace {
   sessionChatDropPaths?: unknown;
   onGxserverBootstrapChanged?: (bootstrap: ChatGxserverBootstrap) => void;
   onSessionChatFocusComposerRequested?: () => void;
+  onSessionChatEvictionProbeRequested?: (nonce: string) => void;
   onSessionChatHandoffToTerminalRequested?: () => void;
   onSessionChatInsertPromptRequested?: (payload: { content?: unknown }) => void;
   onSessionChatStashPromptRequested?: () => void;
@@ -181,9 +182,11 @@ function waitForBootstrap(): Promise<{ authToken: string; baseUrl: string }> {
 async function rpc<TResult>(
   bootstrap: { authToken: string; baseUrl: string },
   path: string,
-  params: Record<string, unknown>
+  params: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<TResult> {
   const response = await fetch(`${bootstrap.baseUrl}${path}`, {
+    ...(signal ? { signal } : {}),
     body: JSON.stringify({
       params,
       protocolVersion: GXSERVER_PROTOCOL_VERSION,
@@ -303,6 +306,7 @@ function createGpuiSessionChatTransport(
   remote: boolean
 ): SessionChatTransport {
   return {
+    accounts: (params) => rpc(bootstrap, '/api/agentAccounts', { ...params, projectId, sessionId }),
     async answerPrompt(params) {
       await rpc(bootstrap, '/api/answerSessionChatPrompt', {
         ...params,
@@ -361,6 +365,7 @@ function createGpuiSessionChatTransport(
     selectSessionChatModel(params) {
       return rpc<GxserverSelectSessionChatModelResult>(bootstrap, '/api/selectSessionChatModel', {
         effort: params.effort,
+        defer: params.defer,
         model: params.model,
         projectId,
         sessionId,
@@ -745,6 +750,48 @@ function createGpuiSessionChatComposerBridge(
           actions.insertPrompt(payload.content);
         }
       };
+      let registered = true;
+      let evictionRequest: AbortController | undefined;
+      /**
+       * CDXC:SessionChat 2026-09-05 WHY:
+       * An old empty report cannot authorize destroying a page after a final edit or pending attachment operation.
+       * Read current provider activity through this page's own bootstrap, then sample the live composer after the await; unknown or unreachable state protects the page.
+       */
+      const requestEvictionProbe = (nonce: string): void => {
+        evictionRequest?.abort();
+        const reply = (allowed: boolean): void => {
+          if (registered) {
+            postSessionChatHostAction('composerEvictionState', { allowed, nonce });
+          }
+        };
+        if (!actions.canRelease()) {
+          reply(false);
+          return;
+        }
+        const request = new AbortController();
+        evictionRequest = request;
+        const timeout = window.setTimeout(() => request.abort(), 2_500);
+        void rpc<GxserverReadPresentationSnapshotResult>(bootstrap, '/api/readPresentationSnapshot', {}, request.signal)
+          .then(({ snapshot }) => {
+            const session = snapshot.sessions.find(
+              (candidate) => candidate.projectId === projectId && candidate.sessionId === sessionId
+            );
+            reply(
+              session?.activity === 'idle' &&
+                session.delayedSendDeadlineAt === undefined &&
+                session.delayedSendRemainingMs === undefined &&
+                (session.queuedPromptCount ?? 0) === 0 &&
+                actions.canRelease()
+            );
+          })
+          .catch(() => reply(false))
+          .finally(() => {
+            window.clearTimeout(timeout);
+            if (evictionRequest === request) {
+              evictionRequest = undefined;
+            }
+          });
+      };
       const requestFocus = (): void => actions.focus();
       const requestHandoffToTerminal = (): void => {
         void actions
@@ -760,12 +807,18 @@ function createGpuiSessionChatComposerBridge(
           });
       };
       const requestStash = (): void => actions.requestStash();
+      namespace.onSessionChatEvictionProbeRequested = requestEvictionProbe;
       namespace.onSessionChatFocusComposerRequested = requestFocus;
       namespace.onSessionChatHandoffToTerminalRequested = requestHandoffToTerminal;
       namespace.onSessionChatInsertPromptRequested = insertPrompt;
       namespace.onSessionChatStashPromptRequested = requestStash;
       postSessionChatHostAction('composerReady');
       return () => {
+        registered = false;
+        evictionRequest?.abort();
+        if (namespace.onSessionChatEvictionProbeRequested === requestEvictionProbe) {
+          delete namespace.onSessionChatEvictionProbeRequested;
+        }
         if (namespace.onSessionChatFocusComposerRequested === requestFocus) {
           delete namespace.onSessionChatFocusComposerRequested;
         }
@@ -1041,6 +1094,7 @@ function createGpuiSessionChatHostActions(hotkeysValue: unknown): SessionChatHos
         label: 'Close After Done',
         shortcut: shortcut('closeAfterDone'),
       },
+      { id: 'splitSessionRight', label: 'Split Right', shortcut: shortcut('splitSessionRight') },
       { id: 'fork', label: 'Fork Session', shortcut: shortcut('forkSession') },
       {
         id: 'fullReload',

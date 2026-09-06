@@ -19,6 +19,9 @@ None of this is serialized; it returns only to the exact project that parked it.
 */
 #[derive(Default)]
 pub(crate) struct ParkedAgentsChatRuntime {
+    pub(crate) page_states: HashMap<TerminalSessionId, SessionChatPageState>,
+    /// Pending sends and handoffs remain protected until the owning project restores their runtime state.
+    pub(crate) protected_sessions: HashSet<TerminalSessionId>,
     pub(crate) surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
     pub(crate) surface_hidden_since: HashMap<TerminalSessionId, Instant>,
     pub(crate) composer_ready_sessions: HashSet<TerminalSessionId>,
@@ -28,49 +31,37 @@ pub(crate) struct ParkedAgentsChatRuntime {
 }
 
 impl ParkedAgentsChatRuntime {
-    /*
-    CDXC:SessionChat 2026-08-24 (extended 2026-08-26):
-    Parked pages hold the same RAM as live hidden ones, so they age out on the
-    same clock rather than living until the app quits. Each parked surface
-    carried its hidden stamp into the park, and the project it belongs to
-    rebuilds an evicted page through the idempotent `ensure_agents_chat_surface`
-    on the first reconcile after the user comes back.
+    pub(crate) fn surface_evictable(
+        &self,
+        session_id: TerminalSessionId,
+        require_empty: bool,
+    ) -> bool {
+        self.composer_ready_sessions.contains(&session_id)
+            && (!require_empty || self.composer_empty_reports.get(&session_id) == Some(&true))
+            && !self.protected_sessions.contains(&session_id)
+            && self.pending_composer_focus != Some(session_id)
+            && !self.pending_composer_insert.contains_key(&session_id)
+    }
+}
 
-    Only the guards whose state travels in this bundle are checkable here, and
-    each one keeps the original contract that unknown means "do not evict".
-    */
-    pub(crate) fn expired_hidden_evictable_session_ids(&self) -> Vec<TerminalSessionId> {
-        self.surface_hidden_since
-            .iter()
-            .filter(|(session_id, hidden_since)| {
-                hidden_since.elapsed() >= GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER
-                    && self.surfaces.contains_key(session_id)
-                    && self.surface_evictable(**session_id)
-            })
-            .map(|(session_id, _)| *session_id)
-            .collect()
+/// CDXC:SessionChat 2026-09-05 WHY:
+/// Numeric shell session IDs collide across projects, and a browser can finish posting after its replacement exists.
+/// The generation travels with the exact page through parking; a hidden-page probe is cancelled whenever that page is shown again.
+pub(crate) struct SessionChatPageState {
+    pub(crate) generation: u64,
+    pub(crate) pending_probe: Option<(u64, Option<futures::channel::oneshot::Sender<bool>>)>,
+}
+
+impl SessionChatPageState {
+    pub(crate) fn next_identity() -> u64 {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// Whether a parked chat surface holds nothing that would be destroyed with
-    /// its page. Mirrors `agents_chat_surface_evictable` for the state a parked
-    /// bundle owns.
-    fn surface_evictable(&self, session_id: TerminalSessionId) -> bool {
-        // A composer with typed text or attached images is unsent user content
-        // that lives only in the page. Eviction requires an explicit "empty"
-        // report plus a registered composer bridge; a missing entry means the
-        // state is unknown, never empty.
-        if !self.composer_ready_sessions.contains(&session_id)
-            || self.composer_empty_reports.get(&session_id) != Some(&true)
-        {
-            return false;
+    pub(crate) fn new() -> Self {
+        Self {
+            generation: Self::next_identity(),
+            pending_probe: None,
         }
-        // One-shot composer messages terminate at a page that has to still be
-        // there to receive them once the project is activated again.
-        if self.pending_composer_focus == Some(session_id)
-            || self.pending_composer_insert.contains_key(&session_id)
-        {
-            return false;
-        }
-        true
     }
 }

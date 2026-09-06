@@ -37,11 +37,16 @@ pays renderer RAM for surfaces nobody has looked at in a long time. A surface
 that has been continuously hidden this long is destroyed; the very next
 visibility reconcile rebuilds it through `ensure_agents_chat_surface`, and the
 page restores its transcript from gxserver and its draft from storage, so the
-eviction is invisible apart from a reload. The window is deliberately long
-because the rebuild costs a page load the user waits on.
+eviction saves memory at the cost of a page load when the user returns.
+Five minutes keeps a short return window before reclaiming eligible pages.
 */
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER: Duration =
-    Duration::from_secs(20 * 60);
+    Duration::from_secs(5 * 60);
+
+/// CDXC:SessionChat 2026-09-05 DECISION:
+/// User approved the reviewed RAM recommendation: three hidden pages as a soft global budget and five-minute expiry, preserving protected drafts and active work.
+/// The old twenty-minute timer limited retention time but allowed many visited pages to accumulate together; protected pages can still exceed this budget.
+pub(crate) const GPUI_AGENTS_CHAT_SURFACE_HIDDEN_MAX: usize = 3;
 
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_EVICT_POLL_INTERVAL: Duration = Duration::from_secs(60);
 

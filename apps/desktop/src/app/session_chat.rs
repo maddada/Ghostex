@@ -185,6 +185,7 @@ impl GhostexGpuiApp {
     pub(crate) fn session_chat_host_bridge_event_handler(
         &self,
         session_id: TerminalSessionId,
+        generation: u64,
         cx: &mut gpui::Context<Self>,
     ) -> cef::AppModalHostBridgeEventHandler {
         let app = cx.entity().downgrade();
@@ -200,7 +201,9 @@ impl GhostexGpuiApp {
             foreground
                 .spawn(async move {
                     let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        this.receive_session_chat_host_action(session_id, &payload, window, cx);
+                        this.receive_owned_session_chat_host_action(
+                            session_id, generation, &payload, window, cx,
+                        );
                     });
                 })
                 .detach();
@@ -259,6 +262,15 @@ impl GhostexGpuiApp {
                 .get("details")
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!({}));
+            if event.starts_with("sessionChat.draft.") {
+                support_logs::append_for_scenario(
+                    support_logs::GpuiSupportLog::SessionChat,
+                    "gpui.sessionChat.drafts",
+                    event,
+                    serde_json::json!({ "sessionId": format!("{session_id:?}"), "details": details }),
+                );
+                return;
+            }
             support_logs::append_for_scenario(
                 support_logs::GpuiSupportLog::TerminalFocus,
                 "native.terminal.focus",
@@ -558,6 +570,10 @@ impl GhostexGpuiApp {
             let _ = self.dispatch_gpui_workspace_terminal_switch_account(session_id, agent_id, cx);
             return;
         }
+        if action == "splitSessionRight" {
+            self.split_existing_agents_session_right(session_id, cx);
+            return;
+        }
         let request = match action {
             "rename" => TerminalAgentActionRequest::Rename,
             "sleep" => TerminalAgentActionRequest::Sleep,
@@ -607,6 +623,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.cancel_session_chat_eviction_probe(session_id);
         if self.pending_session_chat_composer_focus != Some(session_id) {
             return;
         }
@@ -758,6 +775,7 @@ impl GhostexGpuiApp {
         paths: Vec<PathBuf>,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.cancel_session_chat_eviction_probe(session_id);
         let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned() else {
             return;
         };
@@ -787,6 +805,7 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.cancel_session_chat_eviction_probe(session_id);
         let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned() else {
             return;
         };
@@ -802,6 +821,7 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.cancel_session_chat_eviction_probe(session_id);
         // This is the Chat View button's directional command, not the shared
         // toggle hotkey. Its CEF bridge message crosses an async queue, so it
         // may arrive after a newer native Chat View click has already switched
@@ -975,6 +995,7 @@ impl GhostexGpuiApp {
         content: &str,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        self.cancel_session_chat_eviction_probe(session_id);
         let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned() else {
             return false;
         };
