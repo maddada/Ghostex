@@ -456,7 +456,9 @@ fn state_value(
             rows.push(json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","color":saved.color,"eligible":saved.eligible,"registered":true,"sharedHistory":saved.shared_history,"status":"unavailable","usage":[],"usageError":"The helper could not find this saved login. Refresh or reconnect it.","sessionCount":sessions.iter().filter(|s|s.pointer("/runtimeSettings/accountId").and_then(Value::as_str)==Some(&saved.id)).count()}));
         }
     }
-    let helper_rows:Vec<_>=[Provider::Claude,Provider::Codex].into_iter().map(|p|json!({"provider":p,"installed":helpers::executable(home,p.helper()).is_some(),"cliInstalled":helpers::executable(home,p.id()).is_some(),"error":snapshot.errors.get(&p),"installCommand":if p==Provider::Claude{"uv tool install claude-swap"}else{"cargo install --git https://github.com/maddada/codex-swap --locked"},"loginCommand":if p==Provider::Claude{"claude auth login && cswap add"}else{"xswap add --login --share-history"}})).collect();
+    // CDXC:AgentProviders 2026-09-06 DECISION:
+    // User: Codex Swap should install through Homebrew on macOS and Linux without requiring Cargo.
+    let helper_rows:Vec<_>=[Provider::Claude,Provider::Codex].into_iter().map(|p|json!({"provider":p,"installed":helpers::executable(home,p.helper()).is_some(),"cliInstalled":helpers::executable(home,p.id()).is_some(),"error":snapshot.errors.get(&p),"installCommand":if p==Provider::Claude{"uv tool install claude-swap"}else{"brew install maddada/tap/codex-swap"},"loginCommand":if p==Provider::Claude{"claude auth login && cswap add"}else{"xswap add --login --share-history"}})).collect();
     let mut value = json!({"accounts":rows,"helpers":helper_rows,"defaults":{"claude":registry.defaults.get(&Provider::Claude).cloned().unwrap_or_default(),"codex":registry.defaults.get(&Provider::Codex).cloned().unwrap_or_default()},"defaultAccounts":registry.default_accounts});
     if params.contains_key("sessionId") {
         let session = get_session(repository, params)?;

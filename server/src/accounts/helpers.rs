@@ -12,6 +12,18 @@ pub(crate) fn executable(home: &Path, name: &str) -> Option<PathBuf> {
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
     dirs.extend([home.join(".local/bin"), home.join(".cargo/bin")]);
+    // CDXC:AgentProviders 2026-09-06 WHY:
+    // A GUI or systemd launch may omit Homebrew from PATH even after the account helper is installed.
+    #[cfg(target_os = "macos")]
+    dirs.extend([
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ]);
+    #[cfg(target_os = "linux")]
+    dirs.extend([
+        home.join(".linuxbrew/bin"),
+        PathBuf::from("/home/linuxbrew/.linuxbrew/bin"),
+    ]);
     dirs.into_iter().map(|dir| dir.join(name)).find(|p| {
         p.metadata().is_ok_and(|m| {
             #[cfg(unix)]
