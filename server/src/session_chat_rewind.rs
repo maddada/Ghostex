@@ -63,11 +63,11 @@ const CLAUDE_REWIND_COMMAND: &str = "/rewind";
 /// Up arrow, the only key that moves the prompt list. The rewind list is walked
 /// in ONE direction on purpose: an overshoot cannot be corrected without
 /// re-reading the whole list, so it is a refusal instead.
-const CLAUDE_REWIND_LIST_UP: &str = "\u{1b}[A";
+const CLAUDE_REWIND_LIST_UP: &str = "\u{1b}[1;1A";
 
 /// Down arrow, used only inside the confirmation menu, where the option this
 /// driver wants is always at or below the initially highlighted row.
-const CLAUDE_REWIND_MENU_DOWN: &str = "\u{1b}[B";
+const CLAUDE_REWIND_MENU_DOWN: &str = "\u{1b}[1;1B";
 
 const CLAUDE_REWIND_SUBMIT: &str = "\r";
 

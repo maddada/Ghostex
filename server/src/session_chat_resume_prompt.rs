@@ -211,8 +211,8 @@ const SESSION_CHAT_PERMISSION_PROMPT_TAIL_LINES: usize = 8;
 /// repaints once a dialog is answered, which proves the rows are scrollback.
 const SESSION_CHAT_PERMISSION_PROMPT_MIN_RULE_CHARS: usize = 20;
 
-const KEY_DOWN: &str = "\u{1b}[B";
-const KEY_UP: &str = "\u{1b}[A";
+const KEY_DOWN: &str = "\u{1b}[1;1B";
+const KEY_UP: &str = "\u{1b}[1;1A";
 const KEY_ENTER: &str = "\r";
 
 /// Which on-screen chooser a detection describes; the notice kind and title
