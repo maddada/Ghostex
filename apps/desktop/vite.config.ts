@@ -252,6 +252,7 @@ async function buildInlineCefEntryScript(entryPoint: string): Promise<string> {
       '@': repoRoot,
     },
     bundle: true,
+    conditions: ['production'],
     define: {
       'process.env.NODE_ENV': '"production"',
     },
@@ -288,11 +289,11 @@ function createCefSingleFileEsbuildPlugin(): esbuild.Plugin {
   return {
     name: 'ghostex-gpui-cef-single-file',
     setup(build) {
-      build.onResolve({ filter: /\.css$/ }, (args) => ({
-        namespace: 'ghostex-gpui-empty-css',
-        path: args.path,
-      }));
-      build.onLoad({ filter: /.*/, namespace: 'ghostex-gpui-empty-css' }, () => ({
+      /*
+       * CDXC:CefRuntime 2026-09-05 WHY:
+       * Vite owns the inlined CSS, so skip CSS when loading resolved files in the JavaScript-only bundle; bare package imports such as @fontsource-variable/inter resolve to CSS without a .css import suffix.
+       */
+      build.onLoad({ filter: /\.css$/ }, () => ({
         contents: '',
         loader: 'js',
       }));

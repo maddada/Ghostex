@@ -601,60 +601,6 @@ stage_gpui_lid_sleep_helper() {
 	fi
 }
 
-build_cef_sidebar_bundle_if_needed() {
-	local bundle_digest
-	local -a bundle_outputs
-
-	# CDXC:Build 2026-09-04 WHY:
-	# Tailwind, Vite and the seven esbuild entry bundles ran on every start even
-	# when only Rust changed. Hash every tree the CEF pages import (the sidebar
-	# and views entries, the shared packages, the web app that tailwind scans)
-	# plus the toolchain inputs, and skip the web build when nothing moved.
-	bundle_digest="$(fingerprint_inputs \
-		--value "cef-sidebar-bundle-v1" \
-		--value "bun=$(bun --version 2>/dev/null || true)" \
-		--path "$GPUI_DIR/vite.config.ts" \
-		--path "$GPUI_DIR/tsconfig.json" \
-		--path "$GPUI_DIR/index.html" \
-		--path "$GPUI_DIR/chat.html" \
-		--path "$GPUI_DIR/find.html" \
-		--path "$GPUI_DIR/kanban.html" \
-		--path "$GPUI_DIR/manage.html" \
-		--path "$GPUI_DIR/modal-host.html" \
-		--path "$GPUI_DIR/titlebar-host.html" \
-		--path "$GPUI_DIR/sidebar" \
-		--path "$GPUI_DIR/views" \
-		--path "$REPO_ROOT/packages/core-ui" \
-		--path "$REPO_ROOT/packages/components" \
-		--path "$REPO_ROOT/packages/shared" \
-		--path "$REPO_ROOT/apps/web/src" \
-		--path "$REPO_ROOT/tooling/shiki-classic-assets.mjs" \
-		--path "$REPO_ROOT/package.json" \
-		--path "$REPO_ROOT/bun.lock" \
-		--path "$REPO_ROOT/tsconfig.json")"
-	bundle_outputs=(
-		"$REPO_ROOT/packages/core-ui/styles/shadcn.generated.css"
-		"$GPUI_DIR/dist/sidebar/index.html"
-		"$GPUI_DIR/dist/sidebar/chat.html"
-		"$GPUI_DIR/dist/sidebar/find.html"
-		"$GPUI_DIR/dist/sidebar/kanban.html"
-		"$GPUI_DIR/dist/sidebar/manage.html"
-		"$GPUI_DIR/dist/sidebar/modal-host.html"
-		"$GPUI_DIR/dist/sidebar/titlebar-host.html"
-		"$GPUI_DIR/dist/sidebar/monaco/vs/loader.js"
-	)
-	if cache_matches "cef-sidebar-bundle" "$bundle_digest" "${bundle_outputs[@]}"; then
-		echo "CEF sidebar bundle is current; skipping web build."
-		return 0
-	fi
-	(
-		cd "$REPO_ROOT"
-		bun run build:sidebar-css
-		bunx vite build --config "$GPUI_DIR/vite.config.ts"
-	)
-	write_cache_stamp "cef-sidebar-bundle" "$bundle_digest"
-}
-
 validate_remote_gxserver_linux_package() {
 	local package_dir="$1"
 	local package_label="$2"
@@ -757,7 +703,6 @@ stage_remote_gxserver_linux_package_if_available() {
 	fi
 	# CDXC:RemoteMachines 2026-06-24-20:08:
 	# GPUI remote gxserver install parity may stage only explicit prebuilt Linux packages into Contents/Resources/Web. Validate required gxserver/zmx/bd/Node/Portless/CLI resources and reject Mach-O or wrong-architecture payloads before copying, so runtime install never falls back to source checkout paths or uploads a host macOS package to Linux.
-	rm -rf "$target_dir"
 	mkdir -p "$target_dir"
 	rsync -a --delete "$source_dir"/ "$target_dir"/
 }
@@ -1169,7 +1114,7 @@ validate_local_gxserver_runtime_resources
 validate_build_toolchain_dependencies
 validate_ghosttykit_archive
 
-build_cef_sidebar_bundle_if_needed
+/bin/bash "$SCRIPT_DIR/build-macos-sidebar.sh"
 
 if [[ "$GHOSTEX_GPUI_USE_PREBUILT_RUST" == "1" ]]; then
 	for binary_path in \
@@ -1250,7 +1195,6 @@ done
 # GPUI local starts seal the freshly built app-owned gxserver package and shared
 # Web/bin tools into Contents/Resources/Web, matching the native start command's
 # daemon ownership instead of launching against the main Ghostex.app bundle.
-rm -rf "$WEB_DIR/bin" "$WEB_DIR/gxserver" "$WEB_DIR/portless"
 mkdir -p "$WEB_DIR/portless"
 rsync -a --delete "$WEB_BIN_SOURCE_DIR/" "$WEB_DIR/bin/"
 rsync -a --delete "$GXSERVER_SOURCE_DIR/" "$WEB_DIR/gxserver/"

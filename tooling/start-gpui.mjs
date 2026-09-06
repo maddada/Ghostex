@@ -182,8 +182,9 @@ if (!isDarwin && !targetsWindows) {
 }
 let desktopRustBuild;
 if (isDarwin) {
-  desktopRustBuild = startDesktopRustBuildInBackground();
-  logStartStep('Building GPUI runtime resources (desktop Rust build running alongside)...');
+  desktopRustBuild = startBuildInBackground('Desktop Rust build', 'build-macos-rust.sh');
+  const sidebarBuild = startBuildInBackground('React pages build', 'build-macos-sidebar.sh');
+  logStartStep('Building GPUI runtime resources (Rust and React builds running alongside)...');
   run('/bin/bash', [path.join(gpuiDir, 'scripts', 'prepare-macos-runtime.sh')], {
     env: buildEnvironment,
     quietLabel: 'GPUI runtime resource build',
@@ -194,6 +195,7 @@ if (isDarwin) {
     includeBundleId: false,
   });
   await desktopRustBuild.finish();
+  await sidebarBuild.finish();
 }
 if (!isDarwin && !targetsWindows) {
   /*
@@ -257,19 +259,13 @@ if (targetsWindows) {
 }
 finishStartStep();
 
-function startDesktopRustBuildInBackground() {
-  /*
-  CDXC:Build 2026-09-04 WHY:
-  gxserver (prepare-macos-runtime.sh) and the desktop crate used to compile
-  back to back, and each is a single leaf crate that leaves most cores idle
-  during its front-end phase. Start the desktop build first, let the runtime
-  prep run alongside it, then hand the finished binaries to build-macos-app.sh
-  through GHOSTEX_GPUI_USE_PREBUILT_RUST. The cargo invocation lives in
-  build-macos-rust.sh so both callers use identical flags and environment.
-  */
-  const label = 'Desktop Rust build';
+function startBuildInBackground(label, scriptName) {
+  /* CDXC:Build 2026-09-05 WHY:
+   * Rust and the React pages have independent outputs, so both can build during runtime preparation.
+   * The packager checks the frontend fingerprint again after the handoff to catch edits made during compilation.
+   */
   const command = '/bin/bash';
-  const args = [path.join(gpuiDir, 'scripts', 'build-macos-rust.sh')];
+  const args = [path.join(gpuiDir, 'scripts', scriptName)];
   const logPath = quietCommandLogPath(label);
   mkdirSync(path.dirname(logPath), { recursive: true });
   const logFile = openSync(logPath, 'w');
@@ -278,6 +274,7 @@ function startDesktopRustBuildInBackground() {
   const child = spawn(command, args, {
     cwd: repoRoot,
     env: buildEnvironment,
+    detached: true,
     stdio: ['ignore', logFile, logFile],
   });
   const exit = new Promise((resolve, reject) => {
@@ -286,7 +283,11 @@ function startDesktopRustBuildInBackground() {
   });
   const killIfStillRunning = () => {
     if (child.exitCode === null && child.signalCode === null) {
-      child.kill('SIGTERM');
+      try {
+        process.kill(-child.pid, 'SIGTERM');
+      } catch (error) {
+        if (error.code !== 'ESRCH') throw error;
+      }
     }
   };
   process.once('exit', killIfStillRunning);
@@ -298,7 +299,7 @@ function startDesktopRustBuildInBackground() {
       }
       finished = true;
       if (child.exitCode === null && child.signalCode === null) {
-        logStartStep('Waiting for the desktop Rust build...');
+        logStartStep(`Waiting for ${label.toLowerCase()}...`);
       }
       const { code, signal } = await exit;
       process.off('exit', killIfStillRunning);
@@ -310,7 +311,7 @@ function startDesktopRustBuildInBackground() {
         reportQuietCommandFailure(label, code ?? 1, logPath);
         throw new Error(`${label} failed with exit code ${code ?? 1}${signal ? ` (${signal})` : ''}.`);
       }
-      logStartDetail(`Desktop Rust binaries are ready (${formatDuration(Date.now() - startedAtMs)} alongside).`);
+      logStartDetail(`${label} completed (${formatDuration(Date.now() - startedAtMs)} alongside).`);
       rmSync(logPath, { force: true });
     },
   };
@@ -378,17 +379,22 @@ function resolveWindowsProgramFilesPaths() {
 function validateStartArguments(args) {
   let verbose =
     truthyStartFlag(process.env.GHOSTEX_GPUI_START_VERBOSE) || truthyStartFlag(process.env.GHOSTEX_START_VERBOSE);
+  let profile = false;
   for (const arg of args) {
     if (arg === '--') {
+      continue;
+    }
+    if (arg === '--profile') {
+      profile = true;
       continue;
     }
     if (arg === '--verbose' || arg === '-v') {
       verbose = true;
       continue;
     }
-    throw new Error(`Unknown GPUI start argument: ${arg}. Use "bun run start" or "bun run start --verbose".`);
+    throw new Error(`Unknown GPUI start argument: ${arg}. Use "bun run start" with optional --verbose and --profile flags.`);
   }
-  return { verbose };
+  return { verbose, profile };
 }
 
 function truthyStartFlag(value) {
@@ -921,7 +927,7 @@ async function installAndOpenMacosApp(stagedAppPath) {
       : 'No explicit gxserver daemon override is set; GPUI will use its bundled daemon.'
   );
   logStartStep(`Opening ${appName}...`);
-  run('open', [installedAppPath], { env: startEnvironment });
+  run('open', [installedAppPath, ...(startOptions.profile ? ['--args', '--profile'] : [])], { env: startEnvironment });
   await verifyCanonicalMacosGpuiLaunch();
   logStartDetail(`One canonical app process is running from ${installedAppPath}.`);
 }
@@ -1195,7 +1201,7 @@ function publishLaunchServicesGxserverExplicitEnvironment() {
 }
 
 function launchLinuxGpuiApp() {
-  const child = spawn(linuxAppExecutable, [], {
+  const child = spawn(linuxAppExecutable, startOptions.profile ? ['--profile'] : [], {
     cwd: appPath,
     env: startEnvironment,
     detached: true,
@@ -1209,7 +1215,7 @@ function launchLinuxGpuiApp() {
 }
 
 function launchWindowsGpuiApp() {
-  const child = spawn(windowsAppExecutable, [], {
+  const child = spawn(windowsAppExecutable, startOptions.profile ? ['--profile'] : [], {
     cwd: installedAppPath,
     env: startEnvironment,
     detached: true,

@@ -80,6 +80,51 @@ cat >"$CEF_ENTITLEMENTS" <<'EOF_ENTITLEMENTS'
 </plist>
 EOF_ENTITLEMENTS
 
+# CDXC:Build 2026-09-05 WHY:
+# Preserve unchanged nested signatures only when their signature details match a signature made by this exact recipe and identity.
+# Deep verification catches changed resources inside a bundle even when its executable's CDHash is unchanged.
+SIGNATURE_CACHE_DIR=""
+SIGNATURE_RECIPE=""
+if [[ "${GHOSTEX_LOCAL_START:-0}" == "1" ]]; then
+	script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	repo_root="$(cd "$script_dir/../../.." && pwd)"
+	SIGNATURE_CACHE_DIR="${GHOSTEX_BUILD_CACHE_DIR:-$repo_root/build/${GHOSTEX_MACOS_ARCH:-$(uname -m)}/build-cache}/signatures"
+	mkdir -p "$SIGNATURE_CACHE_DIR"
+	SIGNATURE_RECIPE="$( { cat "${BASH_SOURCE[0]}"; printf '%s\0' "$CODE_SIGN_IDENTITY" "$CODE_SIGN_TIMESTAMP_FLAG"; } | shasum -a 256 | cut -d ' ' -f 1)"
+fi
+
+signature_stamp_path() {
+	printf '%s/%s.sha256\n' "$SIGNATURE_CACHE_DIR" "$(printf '%s' "$1" | shasum -a 256 | cut -d ' ' -f 1)"
+}
+
+signature_fingerprint() {
+	codesign -d -r- --verbose=4 "$1" 2>&1 | shasum -a 256 | cut -d ' ' -f 1
+}
+
+reuse_signature() {
+	[[ -n "$SIGNATURE_CACHE_DIR" ]] || return 1
+	local stamp signature_digest
+	stamp="$(signature_stamp_path "$1")"
+	[[ -f "$stamp" ]] || return 1
+	signature_digest="$(signature_fingerprint "$1")" || return 1
+	[[ -n "$signature_digest" && "$(<"$stamp")" == "$SIGNATURE_RECIPE:$signature_digest" ]] || return 1
+	codesign --verify --deep --strict "$1" 2>/dev/null || return 1
+	echo "Reusing signature: $1"
+}
+
+sign_code() {
+	local code_path="${!#}" signature_digest
+	if reuse_signature "$code_path"; then
+		return 0
+	fi
+	codesign "$@"
+	if [[ -n "$SIGNATURE_CACHE_DIR" ]]; then
+		signature_digest="$(signature_fingerprint "$code_path")"
+		[[ -n "$signature_digest" ]]
+		printf '%s\n' "$SIGNATURE_RECIPE:$signature_digest" >"$(signature_stamp_path "$code_path")"
+	fi
+}
+
 requires_v8_runtime_entitlements() {
 	local code_path="$1"
 	# Dev bundles still sign the self-contained code-server Node runtime. Release
@@ -90,7 +135,7 @@ requires_v8_runtime_entitlements() {
 sign_plain_macho() {
 	local code_path="$1"
 	if requires_v8_runtime_entitlements "$code_path"; then
-		codesign \
+		sign_code \
 			--force \
 			--options runtime \
 			--entitlements "$CEF_ENTITLEMENTS" \
@@ -98,7 +143,7 @@ sign_plain_macho() {
 			--sign "$CODE_SIGN_IDENTITY" \
 			"$code_path"
 	else
-		codesign \
+		sign_code \
 			--force \
 			--options runtime \
 			"$CODE_SIGN_TIMESTAMP_FLAG" \
@@ -109,6 +154,9 @@ sign_plain_macho() {
 
 sign_cef_framework() {
 	local framework_path="$1"
+	if reuse_signature "$framework_path"; then
+		return 0
+	fi
 	find "$framework_path/Libraries" \
 		-name '*.dylib' \
 		-type f \
@@ -116,7 +164,7 @@ sign_cef_framework() {
 		while IFS= read -r -d '' dylib_path; do
 			sign_plain_macho "$dylib_path"
 		done
-	codesign \
+	sign_code \
 		--force \
 		--options runtime \
 		"$CODE_SIGN_TIMESTAMP_FLAG" \
@@ -143,7 +191,7 @@ if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
 		"$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Downloader.xpc" \
 		"$SPARKLE_FRAMEWORK/Versions/B/XPCServices/Installer.xpc"; do
 		if [[ -d "$xpc_service" ]]; then
-			codesign \
+			sign_code \
 				--force \
 				--options runtime \
 				--preserve-metadata=entitlements \
@@ -153,7 +201,7 @@ if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
 		fi
 	done
 	if [[ -f "$SPARKLE_FRAMEWORK/Versions/B/Autoupdate" ]]; then
-		codesign \
+		sign_code \
 			--force \
 			--options runtime \
 			"$CODE_SIGN_TIMESTAMP_FLAG" \
@@ -161,14 +209,14 @@ if [[ -d "$SPARKLE_FRAMEWORK" ]]; then
 			"$SPARKLE_FRAMEWORK/Versions/B/Autoupdate"
 	fi
 	if [[ -d "$SPARKLE_FRAMEWORK/Versions/B/Updater.app" ]]; then
-		codesign \
+		sign_code \
 			--force \
 			--options runtime \
 			"$CODE_SIGN_TIMESTAMP_FLAG" \
 			--sign "$CODE_SIGN_IDENTITY" \
 			"$SPARKLE_FRAMEWORK/Versions/B/Updater.app"
 	fi
-	codesign \
+	sign_code \
 		--force \
 		--options runtime \
 		"$CODE_SIGN_TIMESTAMP_FLAG" \
@@ -186,7 +234,7 @@ if [[ -d "$FRAMEWORKS_PATH" ]]; then
 			helper_name="$(basename "$helper_app" .app)"
 			helper_executable="$helper_app/Contents/MacOS/$helper_name"
 			if [[ -x "$helper_executable" ]]; then
-				codesign \
+				sign_code \
 					--force \
 					--options runtime \
 					--entitlements "$CEF_ENTITLEMENTS" \
@@ -194,7 +242,7 @@ if [[ -d "$FRAMEWORKS_PATH" ]]; then
 					--sign "$CODE_SIGN_IDENTITY" \
 					"$helper_executable"
 			fi
-			codesign \
+			sign_code \
 				--force \
 				--options runtime \
 				--entitlements "$CEF_ENTITLEMENTS" \
@@ -227,16 +275,16 @@ sign_nested_resource_code() {
 # notarization needs its executable and then the bundle signed before the outer
 # app. It is a plain WKWebView Swift app: no V8/JIT entitlements.
 GHOSTEX_EDITOR_APP="$APP_PATH/Contents/Resources/GhostexEditor.app"
-if [[ -d "$GHOSTEX_EDITOR_APP" ]]; then
+if [[ -d "$GHOSTEX_EDITOR_APP" ]] && ! reuse_signature "$GHOSTEX_EDITOR_APP"; then
 	if [[ -x "$GHOSTEX_EDITOR_APP/Contents/MacOS/GhostexEditor" ]]; then
-		codesign \
+		sign_code \
 			--force \
 			--options runtime \
 			"$CODE_SIGN_TIMESTAMP_FLAG" \
 			--sign "$CODE_SIGN_IDENTITY" \
 			"$GHOSTEX_EDITOR_APP/Contents/MacOS/GhostexEditor"
 	fi
-	codesign \
+	sign_code \
 		--force \
 		--options runtime \
 		"$CODE_SIGN_TIMESTAMP_FLAG" \
@@ -253,14 +301,14 @@ if [[ -d "$LAUNCH_SERVICES_PATH" ]]; then
 	# runtime and a secure timestamp before the outer app; no debug
 	# entitlements such as get-task-allow. DevID signing makes the helper's
 	# capture-at-install client requirement certificate-anchored (plan §14
-	# Batch 9.3), replacing ad-hoc per-build cdhash pinning.
+	# Batch 9.3), replacing ad-hoc per-build signature_digest pinning.
 	find "$LAUNCH_SERVICES_PATH" \
 		-type f \
 		-perm -111 \
 		-print0 |
 		while IFS= read -r -d '' helper_executable; do
 			if file "$helper_executable" | grep -q 'Mach-O'; then
-				codesign \
+				sign_code \
 					--force \
 					--options runtime \
 					"$CODE_SIGN_TIMESTAMP_FLAG" \
@@ -274,9 +322,11 @@ if [[ -n "$LID_SLEEP_HELPER_LABEL" && -e "$APP_PATH/Contents/Resources/$LID_SLEE
 	exit 1
 fi
 
+# CDXC:Build 2026-09-05 WHY:
+# Nested code is signed explicitly above; a recursive outer signing pass signed it a second time and added several seconds per start.
+# Keep deep verification below to validate the complete bundle.
 codesign \
 	--force \
-	--deep \
 	--options runtime \
 	--entitlements "$CEF_ENTITLEMENTS" \
 	"$CODE_SIGN_TIMESTAMP_FLAG" \
@@ -285,10 +335,7 @@ codesign \
 
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
-# The final --deep pass must preserve the nested V8 entitlements (codesign
-# deep re-signing preserves nested entitlement metadata); verify one CEF
-# helper still carries allow-jit so a codesign behavior change fails the build
-# instead of shipping browser panes that trap under the hardened runtime.
+# Verify the nested helper retains its V8 entitlements after sealing the outer app.
 first_helper="$(find "$FRAMEWORKS_PATH" -maxdepth 1 -name "$HELPER_APP_GLOB" -type d -print -quit)"
 helper_entitlements=""
 if [[ -n "$first_helper" ]]; then

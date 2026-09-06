@@ -1018,7 +1018,7 @@ resolve_gxserver_marketing_version() {
 }
 
 build_gxserver_rust_if_needed() {
-	local cargo_bin cargo_target output_path cli_output_path cargo_version build_digest
+	local cargo_bin cargo_target output_path cli_output_path
 	local marketing_version
 	if [[ ! -f "$GXSERVER_RS_ROOT/Cargo.toml" ]]; then
 		cat >&2 <<EOF
@@ -1034,23 +1034,10 @@ EOF
 	output_path="$GXSERVER_RS_ROOT/target/$cargo_target/release/gxserver"
 	cli_output_path="$GXSERVER_RS_ROOT/target/$cargo_target/release/ghostex"
 	GXSERVER_RUST_BIN=""
-	cargo_version="$("$cargo_bin" --version 2>/dev/null || true)"
 	marketing_version="$(resolve_gxserver_marketing_version)"
-	build_digest="$(fingerprint_inputs \
-		--value "gxserver-rs-build-v2" \
-		--value "target=$cargo_target" \
-		--value "cargo=$cargo_version" \
-		--value "marketingVersion=$marketing_version" \
-		--path "$GXSERVER_RS_ROOT/src" \
-		--path "$GXSERVER_RS_ROOT/Cargo.toml" \
-		--path "$GXSERVER_RS_ROOT/Cargo.lock")"
-	if cache_matches "gxserver-rs-$GHOSTEX_MACOS_ARCH" "$build_digest" "$output_path" "$cli_output_path" &&
-		binary_supports_macos_arch "$output_path" "$GHOSTEX_MACOS_ARCH" &&
-		binary_supports_macos_arch "$cli_output_path" "$GHOSTEX_MACOS_ARCH"; then
-		echo "Rust gxserver is current; skipping Cargo build." >&2
-		GXSERVER_RUST_BIN="$output_path"
-		return 0
-	fi
+	# CDXC:Build 2026-09-05 WHY:
+	# The source-only stamp missed packages/find, packages/paths, build.rs and profile changes, allowing stale server binaries.
+	# Cargo tracks the whole dependency graph and its warm freshness check takes about 0.2 seconds.
 
 	# CDXC:Build 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
 	# CDXC:Build 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `bun run start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (sccache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
@@ -1078,7 +1065,6 @@ EOF
 		echo "Rust ghostex CLI binary does not contain $GHOSTEX_MACOS_ARCH: $cli_output_path" >&2
 		exit 1
 	fi
-	write_cache_stamp "gxserver-rs-$GHOSTEX_MACOS_ARCH" "$build_digest"
 	GXSERVER_RUST_BIN="$output_path"
 }
 

@@ -32,12 +32,14 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     path: { multiple: true, type: 'string' },
+    'exclude-path': { multiple: true, type: 'string' },
     value: { multiple: true, type: 'string' },
   },
 });
 
 const inputPaths = [...(values.path ?? []), ...positionals];
 const inputValues = values.value ?? [];
+const excludedPaths = new Set((values['exclude-path'] ?? []).map((value) => path.resolve(value)));
 const hash = createHash('sha256');
 
 for (const value of inputValues) {
@@ -53,6 +55,7 @@ for (const inputPath of inputPaths) {
 process.stdout.write(`${hash.digest('hex')}\n`);
 
 async function hashPath(rootPath, currentPath) {
+  if (excludedPaths.has(currentPath)) return;
   const label = path.relative(rootPath, currentPath) || path.basename(rootPath);
   let info;
   try {
