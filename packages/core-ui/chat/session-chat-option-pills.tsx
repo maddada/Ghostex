@@ -1,9 +1,11 @@
+import type { AccountIconColor } from '@/packages/shared/agent-accounts';
+import type { SessionChatPendingModelSelection } from '@/packages/shared/session-chat';
 // Composer footer session-option pills (upstream chat spec §1.2-§1.4 port).
 // Ghost controls showing the current values only: Model and Effort are menu
 // triggers, including Claude's permission mode selector backed by Shift+Tab.
 // The category names live in tooltips / accessible labels. Controls
-// that type into the TUI are disabled while the agent is working or a dispatch
-// is in flight.
+// that type directly into the TUI are disabled during a turn. Model choices
+// are always selectable and enter the durable model-selection queue.
 //
 // Values are local (see session-chat-session-options.ts): a dispatch marks the
 // value "dispatched", never "confirmed".
@@ -13,6 +15,7 @@
 // the one control here that changes the session itself rather than typing at
 // its TUI. The submenu sits above the model section.
 
+import { SessionChatModelPickerLauncher, type ModelPickerActions } from './session-chat-model-picker-launcher';
 import { IconBoltFilled, IconChevronDown, IconMap } from '@tabler/icons-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { postAppModalHostMessage } from '../app-modal-host-bridge';
@@ -51,11 +54,9 @@ import {
   type SessionChatContextDetailSession,
 } from './session-chat-context-details';
 import { useAgentModelCatalog } from '../../shared/agent-model-catalog-store';
+import { useSessionChatOptionState, type SessionChatOptionDispatchReceipt } from './session-chat-option-state';
 import {
-  applySessionChatDetectedOptions,
-  readStoredSessionChatOptions,
-  reconcileSessionChatOptionsFromCommand,
-  seedSessionChatOptionState,
+  MODES_SECTION_LABEL,
   sessionChatBoundedKeySteps,
   sessionChatCyclicKeySteps,
   sessionChatOptionChoiceSections,
@@ -63,8 +64,6 @@ import {
   sessionChatOptionTracksValue,
   sessionChatOptionValueLabel,
   sessionChatSessionOptionCatalog,
-  setSessionChatOptionValue,
-  writeStoredSessionChatOptions,
   type SessionChatDetectedOptionInput,
   type SessionChatOptionChoice,
   type SessionChatOptionDescriptor,
@@ -117,11 +116,20 @@ function pillLoadingText(skeleton: PillSkeleton): string {
   return 'Reading model…';
 }
 
+function showUnconfirmedOptionFailure(): void {
+  showSessionChatOptionFailureToast(
+    'Could not confirm session options',
+    'The agent did not confirm the selection. The controls now reflect the latest detected settings.'
+  );
+}
+
 export interface SessionChatSessionOptionsController {
+  sessionKey?: string;
   catalog: SessionChatSessionOptionCatalog | null;
   state: SessionChatOptionState;
   /** Descriptors of the Options pill for the currently selected model. */
   optionDescriptors: readonly SessionChatOptionDescriptor[];
+  beginDispatch: (values: Readonly<Record<string, string>>) => SessionChatOptionDispatchReceipt;
   recordDispatched: (descriptorId: string, value: string) => void;
   /** A command the user typed themselves reconciles the pills (§1.4). */
   reconcileTypedCommand: (text: string) => void;
@@ -153,7 +161,6 @@ export function useSessionChatSessionOptions({
   // published agent model catalog, so a remote refresh rebuilds the pills.
   const agentModelCatalog = useAgentModelCatalog();
   const catalog = useMemo(() => sessionChatSessionOptionCatalog(agent), [agent, agentModelCatalog]);
-  const [state, setState] = useState<SessionChatOptionState>({});
 
   /*
   CDXC:Drafts 2026-08-28: the option-storage key scheme.
@@ -180,12 +187,11 @@ export function useSessionChatSessionOptions({
   const storageKey =
     sessionKey === undefined ? undefined : storageAgentId === null ? sessionKey : `${sessionKey}#${storageAgentId}`;
 
-  // Reseed whenever the session, the agent, or the draft's agent id changes:
-  // the stored values are per (session, agent), and a different agent has a
-  // different catalog — or, within one family, different values entirely.
-  useEffect(() => {
-    setState(catalog ? seedSessionChatOptionState(catalog, readStoredSessionChatOptions(storageKey)) : {});
-  }, [catalog, storageKey]);
+  const { state, beginDispatch, recordDispatched, reconcileTypedCommand, applyDetected } = useSessionChatOptionState(
+    catalog,
+    storageKey,
+    showUnconfirmedOptionFailure
+  );
 
   const optionDescriptors = useMemo(() => {
     if (!catalog) {
@@ -195,48 +201,9 @@ export function useSessionChatSessionOptions({
     return catalog.optionsForModel(modelValue);
   }, [catalog, state]);
 
-  const persist = useCallback(
-    (next: SessionChatOptionState) => {
-      writeStoredSessionChatOptions(storageKey, next);
-      return next;
-    },
-    [storageKey]
-  );
-
-  const recordDispatched = useCallback(
-    (descriptorId: string, value: string) => {
-      setState((current) => persist(setSessionChatOptionValue(current, descriptorId, value, 'dispatched')));
-    },
-    [persist]
-  );
-
-  const reconcileTypedCommand = useCallback(
-    (text: string) => {
-      if (!catalog) {
-        return;
-      }
-      setState((current) => {
-        const next = reconcileSessionChatOptionsFromCommand(catalog, current, text);
-        return next === current ? current : persist(next);
-      });
-    },
-    [catalog, persist]
-  );
-
-  const applyDetected = useCallback(
-    (detected: SessionChatDetectedOptionInput | null | undefined) => {
-      if (!catalog || !detected) {
-        return;
-      }
-      setState((current) => {
-        const next = applySessionChatDetectedOptions(catalog, current, detected);
-        return next === current ? current : persist(next);
-      });
-    },
-    [catalog, persist]
-  );
-
   return {
+    sessionKey: storageKey,
+    beginDispatch,
     applyDetected,
     catalog,
     optionDescriptors,
@@ -247,10 +214,11 @@ export function useSessionChatSessionOptions({
 }
 
 export interface SessionChatSessionOptionPillsProps {
+  accountColor?: AccountIconColor;
   controller: SessionChatSessionOptionsController;
   /** Terminal-only metadata that does not belong in persisted option state. */
   detectedOptions?: SessionChatDetectedOptions | null;
-  /** True while the agent is working: every pill is disabled (§1.2). */
+  /** True while the agent is working: immediate TUI controls are disabled. */
   isWorking: boolean;
   /** False when input is held elsewhere. */
   canSend: boolean;
@@ -271,6 +239,8 @@ export interface SessionChatSessionOptionPillsProps {
    * rows are not offered.
    */
   onPickModel?: (params: { model: string; effort: string }) => Promise<void>;
+  onQueueModel?: (params: { model: string; effort: string }) => Promise<SessionChatPendingModelSelection>;
+  pendingModelSelection?: SessionChatPendingModelSelection | null;
   /** Opens the context details picker (the pen in the context meter popover). */
   onEditContextDetails?: () => void;
   /** Ghostex's own title, id and draft state for the popover's session row. */
@@ -526,6 +496,7 @@ function optionMenuSections(descriptors: readonly SessionChatOptionDescriptor[])
 }
 
 export function SessionChatSessionOptionPills({
+  accountColor,
   canSend,
   canSendKey,
   contextDetailsSession,
@@ -538,12 +509,16 @@ export function SessionChatSessionOptionPills({
   onDispatchKey,
   onEditContextDetails,
   onPickModel,
+  onQueueModel,
+  pendingModelSelection,
   onSwitchDraftAgent,
   onSwitchingChange,
   onSwitchToTerminal,
   screenProbed,
 }: SessionChatSessionOptionPillsProps) {
+  const modelPickerActions = useRef<ModelPickerActions | null>(null);
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const dispatchingRef = useRef<object | null>(null);
   const contextDetailsPreferences = useSessionChatContextDetailsPreferences();
   const contextDetailsNow = useSessionChatContextDetailsClock();
   const [switchingAgent, setSwitchingAgent] = useState(false);
@@ -556,7 +531,7 @@ export function SessionChatSessionOptionPills({
     };
   }, []);
 
-  const { catalog, optionDescriptors, recordDispatched, state } = controller;
+  const { catalog, optionDescriptors, beginDispatch, state } = controller;
   const visibleOptions = useMemo(
     () =>
       optionDescriptors.filter(
@@ -572,22 +547,32 @@ export function SessionChatSessionOptionPills({
 
   const dispatch = useCallback(
     (descriptor: SessionChatOptionDescriptor, value?: string): void => {
+      if (value !== undefined && (catalog?.modelIcon === 'codex' || catalog?.modelIcon === 'claude') && (descriptor.id === catalog.model.id || descriptor.id === 'effort')) {
+        const model = descriptor.id === catalog.model.id ? value : state[catalog.model.id]?.value;
+        if (!model) return;
+        const effortOption = catalog.optionsForModel(model).find((entry) => entry.id === 'effort');
+        const preferred = descriptor.id === 'effort' ? value : state.effort?.value;
+        const effort = effortOption?.choices?.find((entry) => entry.value === preferred)?.value ?? effortOption?.defaultValue ?? effortOption?.choices?.[0]?.value ?? '';
+        modelPickerActions.current?.select({ model, effort });
+        return;
+      }
+      if (dispatchingRef.current !== null || isWorking || !canSend) return;
+      const operation = {};
+      dispatchingRef.current = operation;
       setDispatchingId(descriptor.id);
+      let receipt: SessionChatOptionDispatchReceipt | undefined;
+      if (value !== undefined && descriptor.dispatch.kind !== 'model-picker') {
+        receipt = beginDispatch({ [descriptor.id]: value });
+      }
       const run = async (): Promise<void> => {
         const { dispatch: delivery } = descriptor;
         if (delivery.kind === 'command') {
           await onDispatchCommand(delivery.build(value ?? ''));
-          if (value !== undefined) {
-            recordDispatched(descriptor.id, value);
-          }
           return;
         }
         if (delivery.kind === 'command-confirm-picker') {
           await onDispatchCommand(delivery.build(value ?? ''));
           await onDispatchKey('enter', '');
-          if (value !== undefined) {
-            recordDispatched(descriptor.id, value);
-          }
           return;
         }
         if (delivery.kind === 'toggle-command') {
@@ -610,9 +595,8 @@ export function SessionChatSessionOptionPills({
           if (!model || !effort) {
             throw new Error('The current model is not known yet, so there is nothing to change it from.');
           }
+          receipt = beginDispatch({ [catalog.model.id]: model, effort });
           await onPickModel({ model, effort });
-          recordDispatched(catalog.model.id, model);
-          recordDispatched('effort', effort);
           return;
         }
         if (delivery.kind === 'agent-picker') {
@@ -636,9 +620,6 @@ export function SessionChatSessionOptionPills({
           for (const key of keys) {
             await onDispatchKey(key, '');
           }
-          if (value !== undefined) {
-            recordDispatched(descriptor.id, value);
-          }
           return;
         }
         if (delivery.kind === 'cyclic-key-steps') {
@@ -652,13 +633,10 @@ export function SessionChatSessionOptionPills({
             return;
           }
           onSwitchingChange?.(true);
-          recordDispatched(descriptor.id, value);
-          const minimumSwitchTime = new Promise<void>((resolve) => window.setTimeout(resolve, 160));
           try {
             for (const key of keys) {
               await onDispatchKey(key, '');
             }
-            await minimumSwitchTime;
           } finally {
             onSwitchingChange?.(false);
           }
@@ -667,23 +645,28 @@ export function SessionChatSessionOptionPills({
         await onDispatchKey(delivery.key, delivery.marker);
       };
       void run()
+        .then(() => receipt?.complete())
         .catch(() => {
+          receipt?.rollback();
           showOptionDispatchFailure(descriptor, value);
         })
         .finally(() => {
-          if (mountedRef.current) {
+          if (mountedRef.current && dispatchingRef.current === operation) {
+            dispatchingRef.current = null;
             setDispatchingId(null);
           }
         });
     },
     [
       catalog,
+      canSend,
+      isWorking,
+      beginDispatch,
       onDispatchCommand,
       onDispatchKey,
       onPickModel,
       onSwitchToTerminal,
       onSwitchingChange,
-      recordDispatched,
       state,
     ]
   );
@@ -743,7 +726,7 @@ export function SessionChatSessionOptionPills({
           value={draftAgentId ?? ''}
         >
           {agentRows.map((row) => (
-            <DropdownMenuRadioItem className='rounded-md' key={row.agentId} value={row.agentId}>
+            <DropdownMenuRadioItem closeOnClick className='rounded-md' key={row.agentId} value={row.agentId}>
               <DraftAgentIcon icon={row.icon} />
               <span className='truncate'>{row.name}</span>
             </DropdownMenuRadioItem>
@@ -799,6 +782,10 @@ export function SessionChatSessionOptionPills({
     );
   }
 
+  /**
+   * CDXC:SessionChat 2026-09-05 DECISION:
+   * User: selecting a model or effort, or toggling a mode, closes the selector for every agent, including nested and already-selected rows.
+   */
   const menuRows = (descriptor: SessionChatOptionDescriptor): ReactNode => {
     const current = state[descriptor.id];
     if (descriptor.dispatch.kind === 'model-picker' && onPickModel === undefined) {
@@ -809,38 +796,39 @@ export function SessionChatSessionOptionPills({
       );
     }
     /*
-    CDXC:AgentScreenDetection 2026-09-03 DECISION:
-    User: fast mode shows whether it is on or off and is toggled by sending
-    `/fast`. The row is a checkbox whose state is the fast marker gxserver
-    read from the agent's footer, so it reflects the terminal, not the click.
+    CDXC:AgentScreenDetection 2026-09-05 DECISION:
+    User: Fast mode updates optimistically for Codex and Claude; this supersedes waiting for the footer marker before updating the checkbox.
+    `/fast` still performs the toggle, and the shared option state reconciles the result.
     */
     if (descriptor.dispatch.kind === 'toggle-command' && descriptor.id === 'fastMode') {
       return (
         <DropdownMenuCheckboxItem
-          checked={detectedOptions?.fast === true}
+          checked={fastMode}
+          closeOnClick
           className='rounded-md'
-          onCheckedChange={() => dispatch(descriptor)}
+          onCheckedChange={(checked) => dispatch(descriptor, checked ? 'on' : 'off')}
         >
           <span className='truncate'>{descriptor.actionLabel ?? descriptor.label}</span>
         </DropdownMenuCheckboxItem>
       );
     }
     /*
-    CDXC:AgentScreenDetection 2026-09-04 DECISION:
-    User: the Codex row reads "Plan mode" and is checked exactly when Codex's
-    footer says so. `/plan` only enters Plan mode, so a checked row sends the
-    Shift+Tab that cycles Codex back to its default mode; the state is the
-    footer marker gxserver read, never the click.
+    CDXC:AgentScreenDetection 2026-09-05 DECISION:
+    User: Plan mode updates optimistically and closes the selector; this supersedes waiting for the footer before updating the check mark.
+    `/plan` enters Plan mode and Shift+Tab leaves it, with detection confirming both directions.
     */
     if (isCodexPlanModeToggle(descriptor)) {
-      const planMode = detectedOptions?.mode?.value === 'plan';
       return (
         <DropdownMenuCheckboxItem
           checked={planMode}
+          closeOnClick
           className='rounded-md'
           disabled={planMode && !canSendKey}
-          onCheckedChange={() =>
-            dispatch(planMode ? { ...descriptor, dispatch: { kind: 'key', key: 'shift-tab', marker: '' } } : descriptor)
+          onCheckedChange={(checked) =>
+            dispatch(
+              checked ? descriptor : { ...descriptor, dispatch: { kind: 'key', key: 'shift-tab', marker: '' } },
+              checked ? 'plan' : 'default'
+            )
           }
         >
           <span className='truncate'>{descriptor.actionLabel ?? descriptor.label}</span>
@@ -856,7 +844,7 @@ export function SessionChatSessionOptionPills({
       const radioGroup = (choices: readonly SessionChatOptionChoice[]): ReactNode => (
         <DropdownMenuRadioGroup onValueChange={choose} value={current?.value ?? ''}>
           {choices.map((choice) => (
-            <DropdownMenuRadioItem className='rounded-md' key={choice.value} value={choice.value}>
+            <DropdownMenuRadioItem closeOnClick className='rounded-md' key={choice.value} value={choice.value}>
               <span className='grid min-w-0 gap-0.5'>
                 <span className='truncate'>{choice.label}</span>
                 {choice.description ? (
@@ -918,7 +906,7 @@ export function SessionChatSessionOptionPills({
   const modelAgent = getDefaultSidebarAgentByIcon(catalog.modelIcon);
   const modelIcon = (
     <span className='contents' data-icon='inline-start'>
-      <ProjectAgentLauncherIcon agent={modelAgent ? { ...modelAgent, isDefault: true } : undefined} colorMode='brand' />
+      <ProjectAgentLauncherIcon accountColor={accountColor} agent={modelAgent ? { ...modelAgent, isDefault: true } : undefined} colorMode='brand' />
     </span>
   );
   const modelLabel = sessionChatOptionValueLabel(catalog.model, state);
@@ -928,8 +916,8 @@ export function SessionChatSessionOptionPills({
   const isCursor = catalog.modelIcon === 'cursor-cli';
   const isCodex = catalog.modelIcon === 'codex';
   const contextWindow = isCursor ? detectedOptions?.contextWindow?.trim() : undefined;
-  const fastMode = detectedOptions?.fast === true;
-  const planMode = isCodex && detectedOptions?.mode?.value === 'plan';
+  const fastMode = state.fastMode?.value === 'on';
+  const planMode = isCodex && state.mode?.value === 'plan';
   const terminalStatusLine = detectedOptions?.terminalStatusLine?.trim();
   // CDXC:AgentScreenDetection 2026-09-03 WHY: Claude's statusline payload carries the
   // context window fill; the ring exists only once it has been read.
@@ -993,9 +981,14 @@ export function SessionChatSessionOptionPills({
   agent's full terminal status line whenever gxserver has read one.
   */
   const menuSections = optionMenuSections(menuOptions);
+  /**
+   * CDXC:SessionChat 2026-09-05 DECISION:
+   * User: omit "Modes" and its separator from the tooltip, and show Codex Plan as the existing map icon without "Plan" text in the pill.
+   * The dropdown keeps its Modes heading and Plan mode row; the tooltip and accessible name still describe the icon.
+   */
   const optionsTitle =
     [
-      ...menuSections.map((section) => section.label),
+      ...menuSections.map((section) => section.label).filter((label) => label !== MODES_SECTION_LABEL),
       ...(isCodex && fastMode ? ['Fast enabled'] : []),
       ...(planMode ? ['Plan mode'] : []),
     ].join(' • ') || 'Options';
@@ -1129,11 +1122,18 @@ export function SessionChatSessionOptionPills({
 
   return (
     <>
+      <SessionChatModelPickerLauncher
+        key={controller.sessionKey}
+        actionsRef={modelPickerActions}
+        controller={controller}
+        onQueueModel={onQueueModel}
+        pendingModelSelection={pendingModelSelection}
+      />
       <DropdownMenu>
         <PillTrigger
           ariaLabel={modelTitle}
           className='ghostex-chat-model-pill'
-          disabled={disabled}
+          disabled={(catalog.modelIcon === 'codex' || catalog.modelIcon === 'claude') ? switchingAgent : disabled}
           icon={modelIcon}
           label={modelPillLabel ?? catalog.model.label}
           skeleton={skeletonFor('model', modelLabel)}
@@ -1142,6 +1142,11 @@ export function SessionChatSessionOptionPills({
         />
         <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
           {agentsSection}
+          {(catalog.modelIcon === 'codex' || catalog.modelIcon === 'claude') && (
+            <DropdownMenuItem closeOnClick className='rounded-md' onClick={() => modelPickerActions.current?.open()}>
+              Quick picker <span className='ml-auto text-xs text-muted-foreground'>⌥P</span>
+            </DropdownMenuItem>
+          )}
           {/* Base UI's GroupLabel throws outside a Menu.Group context. */}
           <DropdownMenuGroup>
             <DropdownMenuLabel>{catalog.model.label}</DropdownMenuLabel>

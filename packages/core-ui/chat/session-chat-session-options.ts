@@ -61,15 +61,17 @@ export type SessionChatOptionDispatch =
   | { kind: 'command'; build: (value: string) => string }
   /** Types a filtered picker command, then confirms its sole matching row. */
   | { kind: 'command-confirm-picker'; build: (value: string) => string }
-  /** Types a fixed command that FLIPS an unknown baseline (no value tracked). */
+  /** Types a fixed toggle command while tracking its optimistic target. */
   | { kind: 'toggle-command'; command: string }
   /** Types a command that opens the agent's own picker, then shows the terminal. */
   | { kind: 'agent-picker'; command: string }
   /**
    * CDXC:AgentScreenDetection 2026-09-03 WHY:
-   * Codex's model and effort are set by driving its own `/model` picker on the
-   * daemon (`/api/selectSessionChatModel`), because `/model <name>` is not a
-   * command there. The model rows and the effort rows share this kind: a model
+   * Codex model changes drive its own `/model` picker on the daemon
+   * (`/api/selectSessionChatModel`), because `/model <name>` is not a command
+   * there. Normal effort-only changes use shifted arrows in the same serialized
+   * job; Max and Ultra go through the picker's More reasoning section.
+   * The model rows and the effort rows share this kind: a model
    * row keeps the current effort when the new model offers it, an effort row
    * keeps the current model. Hosts without the endpoint fall back to the
    * `agent-picker` behaviour (type `/model`, show the terminal).
@@ -320,12 +322,9 @@ export function codexEffortChoices(modelValue: string): readonly SessionChatOpti
 }
 
 /*
-CDXC:AgentScreenDetection 2026-09-04 DECISION:
-User: the Codex row is called "Plan mode" and shows a check mark while Codex
-is in Plan mode (read from its footer), not a "Switch to Plan mode" action.
-Codex's `/plan` only ENTERS Plan mode ("switch to Plan mode" in its own
-command list), and the way back to its default mode is Shift+Tab, so the row
-is a toggle-command here and the pills send Shift+Tab when it is checked.
+CDXC:AgentScreenDetection 2026-09-05 DECISION:
+User: the Codex "Plan mode" checkbox updates optimistically; this supersedes waiting for the footer before showing the selection.
+Codex's `/plan` enters Plan mode and Shift+Tab leaves it, with the footer confirming the result afterward.
 */
 const CODEX_MODE: SessionChatOptionDescriptor = {
   id: 'mode',
@@ -337,12 +336,9 @@ const CODEX_MODE: SessionChatOptionDescriptor = {
 
 function buildCodexCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogAgent): SessionChatSessionOptionCatalog {
   /*
-  CDXC:AgentScreenDetection 2026-09-03 DECISION:
-  User: Codex must list the available models and efforts in the chat box, and
-  whether fast mode is on or off, like Claude does; fast is toggled by sending
-  `/fast`. Model and effort go through the daemon-driven picker
-  (`model-picker`), the earlier Shift+Up/Down effort steps were relative to a
-  value the screen may not have shown yet.
+  CDXC:AgentScreenDetection 2026-09-05 DECISION:
+  User: choosing normal Codex effort in the dropdown sends Shift+Up/Down internally, without adding composer shortcuts; Max and Ultra use `/model` and More reasoning instead.
+  This supersedes sending shifted arrows to every effort level. Both paths use the same daemon request and read the live footer to confirm the selection.
   */
   const model: SessionChatOptionDescriptor = {
     id: 'model',
@@ -732,7 +728,7 @@ export interface SessionChatOptionValue {
   detectedAt?: string;
 }
 
-/** Descriptor id → local value. Only value-carrying options appear. */
+/** Descriptor id → local value, including pending Fast and Plan toggles. */
 export type SessionChatOptionState = Readonly<Record<string, SessionChatOptionValue>>;
 
 /**
@@ -744,6 +740,11 @@ export type SessionChatOptionState = Readonly<Record<string, SessionChatOptionVa
 export const SESSION_CHAT_DISPATCH_GRACE_MS = 10_000;
 
 function isTrackedValue(descriptor: SessionChatOptionDescriptor, value: string): boolean {
+  if (descriptor.dispatch.kind === 'toggle-command') {
+    return descriptor.id === 'fastMode'
+      ? value === 'on' || value === 'off'
+      : descriptor.id === 'mode' && (value === 'plan' || value === 'default');
+  }
   return (descriptor.choices ?? []).some((choice) => choice.value === value);
 }
 
@@ -821,7 +822,7 @@ export function seedSessionChatOptionState(
       return;
     }
     const storedValue = stored[descriptor.id];
-    if (!sessionChatOptionTracksValue(descriptor)) {
+    if (!sessionChatOptionTracksValue(descriptor) && descriptor.dispatch.kind !== 'toggle-command') {
       return;
     }
     /*
@@ -829,7 +830,11 @@ export function seedSessionChatOptionState(
     terminal while Chat is unmounted. gxserver will re-confirm it on the seed
     read; only still-pending local intent survives this synchronous reseed.
     */
-    if (storedValue?.source === 'dispatched' && isTrackedValue(descriptor, storedValue.value)) {
+    if (
+      storedValue?.source === 'dispatched' &&
+      isTrackedValue(descriptor, storedValue.value) &&
+      Date.parse(storedValue.dispatchedAt ?? '') + SESSION_CHAT_DISPATCH_GRACE_MS > Date.now()
+    ) {
       next[descriptor.id] = storedValue;
       return;
     }
@@ -929,14 +934,16 @@ function applyDetectedChoice(
   const detectedAtMs = Date.parse(detectedAt);
   const dispatchedAtMs = current?.dispatchedAt ? Date.parse(current.dispatchedAt) : Number.NaN;
   const agrees = current?.value === detected.value;
+  if (current?.detectedAt && detectedAtMs < Date.parse(current.detectedAt)) {
+    return state;
+  }
   if (
     current?.source === 'dispatched' &&
     Number.isFinite(dispatchedAtMs) &&
     Number.isFinite(detectedAtMs) &&
-    !agrees &&
     // A read taken BEFORE the dispatch is stale by construction; a read taken
     // just after it may have caught the pre-repaint screen.
-    detectedAtMs < dispatchedAtMs + SESSION_CHAT_DISPATCH_GRACE_MS
+    (detectedAtMs < dispatchedAtMs || (!agrees && detectedAtMs < dispatchedAtMs + SESSION_CHAT_DISPATCH_GRACE_MS))
   ) {
     return state;
   }
@@ -988,6 +995,25 @@ export function applySessionChatDetectedOptions(
     if (hasMode) {
       next = applyDetectedChoice(next, 'mode', detected.mode, detected.detectedAt);
     }
+  } else if (catalog.modelIcon === 'codex' && detected.model?.source === 'terminal') {
+    // A recognized Codex footer with no Plan marker explicitly means default mode.
+    next = applyDetectedChoice(
+      next,
+      'mode',
+      { value: 'default', label: 'Default', source: 'terminal' },
+      detected.detectedAt
+    );
+  }
+  if (detected.fast !== undefined || (catalog.modelIcon === 'codex' && detected.model?.source === 'terminal')) {
+    next = applyDetectedChoice(
+      next,
+      'fastMode',
+      {
+        value: detected.fast === true ? 'on' : 'off',
+        label: detected.fast === true ? 'Fast enabled' : 'Fast disabled',
+      },
+      detected.detectedAt
+    );
   }
   return next;
 }
@@ -1042,6 +1068,7 @@ export function sessionChatOptionsPillLabel(
   state: SessionChatOptionState
 ): string | null {
   const labels = descriptors
+    .filter((descriptor) => descriptor.dispatch.kind !== 'toggle-command')
     .map((descriptor) => sessionChatOptionValueLabel(descriptor, state))
     .filter((label): label is string => label !== null);
   return labels.length > 0 ? labels.join(' · ') : null;

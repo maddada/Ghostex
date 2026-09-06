@@ -28,6 +28,7 @@ export type ghostexHotkeyActionId =
   | 'scrollTerminalToTop'
   | 'stashPrompt'
   | 'stashedPrompts'
+  | 'openModelPicker'
   | 'toggleChatView'
   | 'openFindPrompts'
   | 'toggleCompanionPane'
@@ -44,6 +45,7 @@ export type ghostexHotkeyActionId =
   | 'focusRight'
   | 'focusDown'
   | 'focusLeft'
+  | 'splitSessionRight'
   | 'splitMore'
   | 'splitMoreDown'
   | 'switchAgentsView'
@@ -58,6 +60,7 @@ export type ghostexHotkeyActionId =
 export type ghostexHotkeySettings = Partial<Record<ghostexHotkeyActionId, string>>;
 
 export type ghostexFocusedPaneAction =
+  | 'splitSessionRight'
   | 'closeAfterDone'
   | 'closeFocusedSession'
   | 'delayedSend'
@@ -80,6 +83,7 @@ export type ghostexTerminalToolbarAction =
   | 'stashPrompt'
   | 'stashedPrompts'
   | 'toggleAgentActions'
+  | 'openModelPicker'
   | 'toggleChatView';
 
 export type ghostexHotkeyAction =
@@ -343,6 +347,13 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     title: 'Close After Done',
   },
   {
+    action: { id: 'openModelPicker', kind: 'terminalToolbarAction', terminalToolbarAction: 'openModelPicker' },
+    defaultKey: 'alt+p',
+    description: 'Choose the chat model and effort with arrow keys, then Enter to save.',
+    id: 'openModelPicker',
+    title: 'Model & Effort Picker',
+  },
+  {
     action: {
       id: 'promptEditor',
       kind: 'terminalToolbarAction',
@@ -489,6 +500,17 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     description: 'Scroll the focused terminal to the bottom.',
     id: 'scrollTerminalToBottom',
     title: 'Scroll Terminal to Bottom',
+  },
+  {
+    /**
+     * CDXC:Hotkeys 2026-09-05 DECISION:
+     * User: Option+Shift+D moves the current thread into a right-hand split, like the sidebar session menu's Split Right action.
+     */
+    action: { focusedPaneAction: 'splitSessionRight', id: 'splitSessionRight', kind: 'focusedPaneAction' },
+    defaultKey: 'alt+shift+d',
+    description: 'Move the focused session into a pane to the right.',
+    id: 'splitSessionRight',
+    title: 'Split Right',
   },
   {
     action: { focusedPaneAction: 'forkSession', id: 'forkSession', kind: 'focusedPaneAction' },

@@ -19,9 +19,13 @@ use crate::domain::{read_domain_rpc_params, DomainStateError};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::protocol::rpc_success;
 use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::session_chat_options::{
+    detect_session_chat_selection, SessionChatOptionAgent, CODEX_EFFORTS,
+};
 use crate::session_chat_send::{
     capture_session_terminal_text, execute_session_chat_send, resolve_session_chat_send_target,
     write_session_chat_payload, SessionChatSendStep, SESSION_CHAT_INTERRUPT,
+    SESSION_CHAT_SHIFT_DOWN, SESSION_CHAT_SHIFT_UP,
 };
 
 /// Typed as literal keystrokes so the composer's slash popup runs it.
@@ -32,19 +36,19 @@ const CODEX_MODEL_PICKER_TITLE: &str = "Select Model and Effort";
 const CODEX_EFFORT_PICKER_TITLE_PREFIX: &str = "Select Reasoning Level for ";
 /// Row that opens the Max / Ultra sub-list.
 const CODEX_MORE_REASONING_ROW: &str = "More reasoning";
+const CODEX_ADVANCED_REASONING_TITLE: &str = "Advanced Reasoning";
 /// The line Codex prints once the picker has applied the change.
 const CODEX_MODEL_CHANGED_PREFIX: &str = "Model changed to ";
 /// Highlight marker on the picker's current row (and Codex's composer prompt).
 const CODEX_CURSOR: char = '\u{203a}';
+const CODEX_ULTRA_CURSOR: char = '\u{00bb}';
 
 const PICKER_POLL_MS: u64 = 150;
 const PICKER_STEP_TIMEOUT_MS: u64 = 6_000;
-/// Settle between typing the command and submitting it, so the two writes
-/// reach the TUI in separate stdin chunks.
-const PICKER_COMMAND_SETTLE_MS: u64 = 300;
-/// Escapes written to close whatever the drive left open: the effort list
-/// backs out to the model list, and the model list to the composer.
-const PICKER_CANCEL_ESCAPES: usize = 2;
+/// Error recovery gives the dialog time to close before checking its parent.
+const PICKER_CANCEL_SETTLE_MS: u64 = 300;
+/// Advanced reasoning backs out through effort and model to the composer.
+const PICKER_CANCEL_ESCAPES: usize = 3;
 
 static LOGGER: OnceLock<GxserverLogger> = OnceLock::new();
 
@@ -99,7 +103,7 @@ fn dialog_mismatch(step: &str, detail: &str) -> DomainStateError {
 fn picker_timeout(step: &str) -> DomainStateError {
     DomainStateError {
         code: "timeout",
-        message: format!("Codex did not answer the model picker's {step} step in time."),
+        message: format!("The agent did not confirm the model picker's {step} step in time."),
     }
 }
 
@@ -166,30 +170,17 @@ fn effort_picker_rows(screen: &str, model: &str) -> Option<Vec<PickerRow>> {
     picker_rows_under(&screen_lines(screen), |line| line == expected)
 }
 
-/// The last run of consecutive numbered rows on screen, for the Max / Ultra
-/// sub-list, whose heading Ghostex does not pin. Any non-row line ends a run.
-fn last_numbered_run(screen: &str) -> Option<Vec<PickerRow>> {
-    let mut runs: Vec<Vec<PickerRow>> = Vec::new();
-    let mut current: Vec<PickerRow> = Vec::new();
-    for line in screen_lines(screen) {
-        match parse_picker_row(&line) {
-            Some(row) => current.push(row),
-            None => {
-                if !current.is_empty() {
-                    runs.push(std::mem::take(&mut current));
-                }
-            }
-        }
-    }
-    if !current.is_empty() {
-        runs.push(current);
-    }
-    runs.pop()
+fn advanced_effort_picker_rows(screen: &str) -> Option<Vec<PickerRow>> {
+    picker_rows_under(&screen_lines(screen), |line| {
+        line == CODEX_ADVANCED_REASONING_TITLE
+    })
 }
 
 fn any_picker_open(screen: &str) -> bool {
     screen_lines(screen).iter().any(|line| {
-        line == CODEX_MODEL_PICKER_TITLE || line.starts_with(CODEX_EFFORT_PICKER_TITLE_PREFIX)
+        line == CODEX_MODEL_PICKER_TITLE
+            || line.starts_with(CODEX_EFFORT_PICKER_TITLE_PREFIX)
+            || line == CODEX_ADVANCED_REASONING_TITLE
     })
 }
 
@@ -322,6 +313,81 @@ impl Drop for PickInFlightGuard {
 // The driver
 // ---------------------------------------------------------------------------
 
+fn claude_model_label_matches(label: &str, value: &str) -> bool {
+    let target = label
+        .to_ascii_lowercase()
+        .replace(" (1m context)", "[1m]")
+        .replace(" (1m)", "[1m]")
+        .replace(' ', "-");
+    target == value
+        || crate::session_chat_options::claude_transcript_model_choice(&target)
+            .is_some_and(|choice| choice.value == value)
+}
+
+fn claude_switch_confirmation(
+    screen: &str,
+    field: &str,
+    value: &str,
+) -> Option<crate::session_chat_resume_prompt::SessionChatTerminalPicker> {
+    use crate::session_chat_resume_prompt::{
+        detect_session_chat_terminal_picker, SessionChatTerminalPickerKind,
+    };
+    let picker = detect_session_chat_terminal_picker(screen)?;
+    let expected = if field == "model" {
+        SessionChatTerminalPickerKind::SwitchModel
+    } else {
+        SessionChatTerminalPickerKind::SwitchEffort
+    };
+    if picker.kind != expected {
+        return None;
+    }
+    let target = picker
+        .rows
+        .iter()
+        .find_map(|row| row.label.strip_prefix("Yes, switch to "))?;
+    let matches = if field == "effort" {
+        target.eq_ignore_ascii_case(value)
+    } else {
+        claude_model_label_matches(target, value)
+    };
+    matches.then_some(picker)
+}
+
+fn claude_option_applied(screen: &str, field: &str, value: &str) -> bool {
+    if crate::session_chat_composer::detect_session_chat_composer_readiness(
+        Some("claude"),
+        screen,
+        None,
+    )
+    .state
+        != crate::session_chat_composer::SessionChatComposerState::Ready
+    {
+        return false;
+    }
+    let lines = screen_lines(screen);
+    let command = format!("❯ /{field} {value}");
+    let Some(command_index) = lines.iter().rposition(|line| line == &command) else {
+        return false;
+    };
+    let Some(reply) = lines[command_index + 1..]
+        .iter()
+        .find(|line| !line.is_empty())
+    else {
+        return false;
+    };
+    if field == "effort" {
+        reply
+            .strip_prefix("⎿ Set effort level to ")
+            .and_then(|rest| rest.split_whitespace().next())
+            .is_some_and(|actual| actual == value)
+    } else {
+        reply
+            .strip_prefix("⎿ Set model to ")
+            .map(|rest| rest.split(" and saved").next().unwrap_or(rest))
+            .is_some_and(|label| claude_model_label_matches(label, value))
+    }
+}
+
 struct PickerDriver<'a> {
     project_id: &'a str,
     session_id: &'a str,
@@ -385,7 +451,7 @@ impl PickerDriver<'_> {
             if self.write(SESSION_CHAT_INTERRUPT).await.is_err() {
                 return;
             }
-            tokio::time::sleep(Duration::from_millis(PICKER_COMMAND_SETTLE_MS)).await;
+            tokio::time::sleep(Duration::from_millis(PICKER_CANCEL_SETTLE_MS)).await;
         }
     }
 
@@ -397,6 +463,165 @@ impl PickerDriver<'_> {
                 Err(error)
             }
         }
+    }
+
+    /// CDXC:AgentScreenDetection 2026-09-05 DECISION:
+    /// User: choosing a normal Codex effort uses Shift+Up/Down internally; Max and Ultra must use `/model` and More reasoning instead.
+    /// This supersedes sending shifted arrows to every effort level, which only prints Codex's picker-only warning for Max and Ultra.
+    /// The fresh footer supplies the baseline inside the serialized send job, so stale client state cannot add the wrong number of steps or split them around another prompt.
+    async fn change_effort(
+        &self,
+        plan: &CodexPickerPlan,
+        current: &str,
+    ) -> Result<(), DomainStateError> {
+        let current_index = CODEX_EFFORTS
+            .iter()
+            .position(|effort| *effort == current)
+            .ok_or_else(|| {
+                agent_busy("Codex's current effort could not be read, so it was not changed.")
+            })?;
+        let target_index = CODEX_EFFORTS
+            .iter()
+            .position(|effort| *effort == plan.effort)
+            .ok_or_else(|| invalid_params(format!("Unknown Codex effort {}.", plan.effort)))?;
+        if current_index == target_index {
+            return Ok(());
+        }
+        let key = if target_index > current_index {
+            SESSION_CHAT_SHIFT_UP
+        } else {
+            SESSION_CHAT_SHIFT_DOWN
+        };
+        let mut index = current_index;
+        while index != target_index {
+            if (self.cancelled)() {
+                return Err(agent_busy(
+                    "The effort change was cancelled by another action on this session.",
+                ));
+            }
+            index = if target_index > index {
+                index + 1
+            } else {
+                index - 1
+            };
+            // Codex can coalesce repeated shifted arrows in one stdin burst.
+            // Read each applied step before sending the next one.
+            self.write(key).await?;
+            self.wait_for("confirm effort", |screen| {
+                let selection =
+                    detect_session_chat_selection(SessionChatOptionAgent::Codex, screen)?;
+                (selection.model.as_ref()?.value == plan.model
+                    && selection.effort.as_ref()?.value == CODEX_EFFORTS[index])
+                    .then_some(())
+            })
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn drive_claude(&self, plan: &CodexPickerPlan) -> Result<(), DomainStateError> {
+        for (field, value) in [
+            ("model", plan.model.as_str()),
+            ("effort", plan.effort.as_str()),
+        ] {
+            if value.is_empty() {
+                continue;
+            }
+            if (self.cancelled)() {
+                return Err(agent_busy(
+                    "The selection was interrupted and remains queued.",
+                ));
+            }
+            let screen = self
+                .capture()
+                .await
+                .ok_or_else(|| session_not_running("The agent's input could not be read."))?;
+            let composer = crate::session_chat_composer::detect_session_chat_composer_readiness(
+                Some("claude"),
+                &screen,
+                None,
+            );
+            if composer.state != crate::session_chat_composer::SessionChatComposerState::Ready {
+                return Err(agent_busy("Waiting for Claude's input box."));
+            }
+            let command = format!("/{field} {value}");
+            // Never replace a terminal draft while applying a queued setting.
+            if crate::session_chat_composer::claude_composer_input_text(&screen)
+                .is_some_and(|text| !text.trim().is_empty())
+            {
+                return Err(agent_busy(
+                    "Waiting for the text in Claude's terminal input to be sent or cleared.",
+                ));
+            }
+            let result = self.change_claude_option(field, value, &command).await;
+            if result.is_err() && !(self.cancelled)() {
+                // Only undo this job's exact input or matching switch confirmation.
+                if let Some(screen) = self.capture().await {
+                    if let Some(picker) = claude_switch_confirmation(&screen, field, value) {
+                        if let Some(key) = picker
+                            .rows
+                            .iter()
+                            .position(|row| row.label == "No, go back")
+                            .and_then(|index| picker.answer_key(index))
+                        {
+                            let _ = self.write(&key).await;
+                        }
+                    } else if crate::session_chat_composer::claude_composer_input_text(&screen)
+                        .is_some_and(|text| text.trim() == command)
+                    {
+                        let _ = self
+                            .write(crate::session_chat_send::AGENT_TUI_CLEAR_INPUT_LINE)
+                            .await;
+                    }
+                }
+            }
+            result?;
+        }
+        Ok(())
+    }
+
+    /// CDXC:SessionChat 2026-09-05 WHY:
+    /// Bracket-pasting `/effort max` reached Claude as an ordinary prompt during live verification.
+    /// Option commands use the shared single-line typing encoder, and their cache-change confirmation is part of the serialized job.
+    /// Completion requires Claude's acknowledgement below the exact command after the dialog closes: the footer calls both Opus variants "Opus", so it cannot prove which variant was applied.
+    async fn change_claude_option(
+        &self,
+        field: &str,
+        value: &str,
+        command: &str,
+    ) -> Result<(), DomainStateError> {
+        self.write(&crate::session_chat_send::build_session_chat_paste_bytes(
+            command,
+        ))
+        .await?;
+        self.wait_for("type Claude option command", |screen| {
+            crate::session_chat_composer::claude_composer_input_text(screen)
+                .is_some_and(|text| text.trim() == command)
+                .then_some(())
+        })
+        .await?;
+        self.write(CODEX_SUBMIT).await?;
+        let answer = self
+            .wait_for("Claude option confirmation", |screen| {
+                if let Some(picker) = claude_switch_confirmation(screen, field, value) {
+                    return picker
+                        .rows
+                        .iter()
+                        .position(|row| row.label.starts_with("Yes, switch to "))
+                        .and_then(|index| picker.answer_key(index))
+                        .map(Some);
+                }
+                claude_option_applied(screen, field, value).then_some(None)
+            })
+            .await?;
+        if let Some(answer) = answer {
+            self.write(&answer).await?;
+            self.wait_for("applied Claude option", |screen| {
+                claude_option_applied(screen, field, value).then_some(())
+            })
+            .await?;
+        }
+        Ok(())
     }
 
     async fn drive(&self, plan: &CodexPickerPlan) -> Result<(), DomainStateError> {
@@ -418,8 +643,40 @@ impl PickerDriver<'_> {
             ));
         }
 
+        let selection = detect_session_chat_selection(SessionChatOptionAgent::Codex, &screen)
+            .ok_or_else(|| {
+                agent_busy(
+                    "Codex's current model could not be read, so its settings were not changed.",
+                )
+            })?;
+        if selection
+            .model
+            .as_ref()
+            .is_some_and(|model| model.value == plan.model)
+        {
+            let effort = selection.effort.as_ref().ok_or_else(|| {
+                agent_busy("Codex's current effort could not be read, so it was not changed.")
+            })?;
+            if effort.value == plan.effort {
+                return Ok(());
+            }
+            if !matches!(plan.effort.as_str(), "max" | "ultra") {
+                return self.change_effort(plan, &effort.value).await;
+            }
+        }
+
         self.write(CODEX_MODEL_COMMAND).await?;
-        tokio::time::sleep(Duration::from_millis(PICKER_COMMAND_SETTLE_MS)).await;
+        self.wait_for("type command", |screen| {
+            screen_lines(screen)
+                .iter()
+                .any(|line| {
+                    line.strip_prefix(CODEX_CURSOR)
+                        .or_else(|| line.strip_prefix(CODEX_ULTRA_CURSOR))
+                        .is_some_and(|text| text.trim() == CODEX_MODEL_COMMAND)
+                })
+                .then_some(())
+        })
+        .await?;
         self.write(CODEX_SUBMIT).await?;
 
         let model_rows = self.wait_for("open", model_picker_rows).await?;
@@ -451,7 +708,7 @@ impl PickerDriver<'_> {
             self.write(&row_key(more, "effort")?).await?;
             let row = self
                 .wait_for("more reasoning", |screen| {
-                    last_numbered_run(screen)
+                    advanced_effort_picker_rows(screen)
                         .and_then(|rows| rows.into_iter().find(|row| row_names(row, effort_label)))
                 })
                 .await?;
@@ -469,7 +726,13 @@ impl PickerDriver<'_> {
         }
 
         self.wait_for("confirm", |screen| {
-            changed_line_present(screen, &plan.model, &plan.effort).then_some(())
+            let selection = detect_session_chat_selection(SessionChatOptionAgent::Codex, screen)?;
+            // Earlier visits can leave the same confirmation line in scrollback.
+            (changed_line_present(screen, &plan.model, &plan.effort)
+                && !any_picker_open(screen)
+                && selection.model.as_ref()?.value == plan.model
+                && selection.effort.as_ref()?.value == plan.effort)
+                .then_some(())
         })
         .await
     }
@@ -520,6 +783,51 @@ pub(crate) async fn run_codex_model_picker_job(
     }
 }
 
+pub(crate) async fn run_claude_model_picker_job(
+    project_id: &str,
+    session_id: &str,
+    zmx_name: &str,
+    source: &str,
+    job_id: u64,
+    cancelled: &(dyn Fn() -> bool + Send + Sync),
+) {
+    let plan = picker_jobs()
+        .lock()
+        .ok()
+        .and_then(|jobs| jobs.get(&job_id).map(|job| job.plan.clone()));
+    let Some(plan) = plan else {
+        return;
+    };
+    let driver = PickerDriver {
+        project_id,
+        session_id,
+        zmx_name,
+        source,
+        cancelled,
+    };
+    let outcome = driver.drive_claude(&plan).await;
+    if let Err(error) = outcome.as_ref() {
+        log_picker(
+            LogLevel::Error,
+            "sessionChatClaudeModelPickFailed",
+            json!({
+                "projectId": project_id,
+                "providerSessionId": zmx_name,
+                "sessionId": session_id,
+                "code": error.code,
+                "model": plan.model,
+                "effort": plan.effort,
+            }),
+            Some(error.message.clone()),
+        );
+    }
+    if let Ok(mut jobs) = picker_jobs().lock() {
+        if let Some(job) = jobs.get_mut(&job_id) {
+            job.outcome = Some(outcome);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // /api/selectSessionChatModel
 // ---------------------------------------------------------------------------
@@ -534,7 +842,12 @@ pub(crate) async fn handle_select_session_chat_model_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    match select_session_chat_model(state, &params).await {
+    let result = if params.get("defer").and_then(Value::as_bool) == Some(true) {
+        crate::session_chat_model_selection::enqueue(state, &params)
+    } else {
+        select_session_chat_model(state, &params).await
+    };
+    match result {
         Ok(result) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
@@ -553,38 +866,37 @@ fn read_trimmed(params: &Map<String, Value>, key: &str) -> String {
         .to_string()
 }
 
-async fn select_session_chat_model(
+pub(crate) async fn select_session_chat_model(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
     let model = read_trimmed(params, "model");
     let effort = read_trimmed(params, "effort");
-    if model.is_empty() || effort.is_empty() {
+    if model.is_empty() {
         return Err(invalid_params(
             "selectSessionChatModel requires model and effort.",
         ));
     }
-    if effort_row_label(&effort).is_none() {
-        return Err(invalid_params(format!("Unknown Codex effort {effort}.")));
-    }
     let target = resolve_session_chat_send_target(state, params, "selectSessionChatModel")?;
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
-    if agent.as_deref() != Some("codex") {
+    if !matches!(agent.as_deref(), Some("codex" | "claude")) {
         return Err(DomainStateError {
             code: "unsupportedAgent",
-            message: "Choosing the model from chat is only available for Codex sessions."
+            message: "Choosing the model from chat is available for Codex and Claude sessions."
                 .to_string(),
         });
     }
+    crate::session_chat_model_selection::validate_selection(
+        agent.as_deref().unwrap_or_default(),
+        &model,
+        &effort,
+    )?;
+    if agent.as_deref() == Some("codex") && effort_row_label(&effort).is_none() {
+        return Err(invalid_params(format!("Unknown Codex effort {effort}.")));
+    }
     if crate::presentation::effective_lifecycle_state(&target.session) != "running" {
         return Err(session_not_running(
-            "The session is not running, so Codex has no model picker to drive.",
-        ));
-    }
-    let generated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    if crate::presentation::presentation_activity(&target.session, &generated_at) == "working" {
-        return Err(agent_busy(
-            "Codex is still working on a turn. Wait for it to finish, or stop it, and then change the model.",
+            "Waiting for the session to be running before applying the selection.",
         ));
     }
     let Some(_guard) = PickInFlightGuard::claim(&target.project_id, &target.session_id) else {
@@ -601,7 +913,11 @@ async fn select_session_chat_model(
         &target.session_id,
         &target.zmx_name,
         "session-chat-model-picker",
-        vec![SessionChatSendStep::DriveCodexModelPicker { job_id }],
+        vec![if agent.as_deref() == Some("claude") {
+            SessionChatSendStep::DriveClaudeModelPicker { job_id }
+        } else {
+            SessionChatSendStep::DriveCodexModelPicker { job_id }
+        }],
     )
     .await;
     let outcome = take_job_outcome(job_id);
@@ -620,8 +936,7 @@ async fn select_session_chat_model(
         }
         (Ok(()), Some(Ok(()))) => {}
     }
-    // The footer repaints within a second; the post-dispatch redetect reads it
-    // at +2s and +6s and republishes the pills.
+    // Publish the completed selection promptly and recheck slower footer repaints.
     crate::session_chat_options::schedule_session_chat_option_redetect(
         state,
         &target.project_id,
@@ -640,4 +955,103 @@ async fn select_session_chat_model(
         None,
     );
     Ok(json!({ "ok": true, "model": model, "effort": effort }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ultra_composer_is_ready_but_advanced_picker_is_not() {
+        use crate::session_chat_composer::{
+            detect_session_chat_composer_ready, SessionChatComposerState,
+        };
+        assert_eq!(
+            detect_session_chat_composer_ready(
+                Some("codex"),
+                "» Ask Codex to do anything\n  gpt-6-astra ultra"
+            )
+            .state,
+            SessionChatComposerState::Ready
+        );
+        let advanced = "Advanced Reasoning\n⚠ Consumes usage limits faster\n› 1. Max  Higher usage\n  2. Ultra  Highest usage\nPress enter to confirm or esc to go back";
+        assert!(any_picker_open(advanced));
+        assert_eq!(advanced_effort_picker_rows(advanced).unwrap().len(), 2);
+        assert_eq!(
+            detect_session_chat_composer_ready(Some("codex"), advanced).state,
+            SessionChatComposerState::NotReady
+        );
+    }
+
+    /// Run this test binary from the packaged Web directory so bundled zmx resolves.
+    /// Set `GHOSTEX_CODEX_PICKER_TEST_ZMX=ghostex-effort-check-...` to a dedicated idle Codex TUI and pass `live_zmx_effort_round_trip --ignored --nocapture`.
+    #[tokio::test]
+    #[ignore = "requires an explicitly supplied disposable Codex zmx session"]
+    async fn live_zmx_effort_round_trip() {
+        let name = std::env::var("GHOSTEX_CODEX_PICKER_TEST_ZMX")
+            .expect("set the dedicated test session name");
+        assert!(name.starts_with("ghostex-effort-check-"));
+        let screen = capture_session_terminal_text(&name).await.unwrap();
+        let initial =
+            detect_session_chat_selection(SessionChatOptionAgent::Codex, &screen).unwrap();
+        let model = initial.model.unwrap().value;
+        let original_effort = initial.effort.unwrap().value;
+        let warning = "Max and Ultra are available under";
+        let warning_count = screen.matches(warning).count();
+        let mut failure = None;
+        for effort in [
+            "high",
+            "xhigh",
+            "max",
+            "ultra",
+            "max",
+            "low",
+            "ultra",
+            "high",
+            original_effort.as_str(),
+        ] {
+            let started = std::time::Instant::now();
+            let job_id = register_job(CodexPickerPlan {
+                model: model.clone(),
+                effort: effort.to_string(),
+            });
+            let send = execute_session_chat_send(
+                "effort-check",
+                &name,
+                &name,
+                "effort-check",
+                vec![SessionChatSendStep::DriveCodexModelPicker { job_id }],
+            )
+            .await;
+            let result = take_job_outcome(job_id).expect("picker worker outcome");
+            if let Err(error) = result {
+                failure = Some(error.message);
+                break;
+            }
+            assert!(send.is_ok());
+            let screen = capture_session_terminal_text(&name).await.unwrap();
+            let selection =
+                detect_session_chat_selection(SessionChatOptionAgent::Codex, &screen).unwrap();
+            assert_eq!(selection.model.unwrap().value, model);
+            assert_eq!(selection.effort.unwrap().value, effort);
+            assert_eq!(
+                screen.matches(warning).count(),
+                warning_count,
+                "shifted arrows must not attempt Max/Ultra"
+            );
+            assert!(!any_picker_open(&screen));
+            println!(
+                "{model} {effort}: {}ms, footer confirmed and picker closed",
+                started.elapsed().as_millis()
+            );
+        }
+        if let Some(error) = failure {
+            panic!(
+                "{error}\n{}",
+                capture_session_terminal_text(&name)
+                    .await
+                    .unwrap_or_default()
+            );
+        }
+    }
 }

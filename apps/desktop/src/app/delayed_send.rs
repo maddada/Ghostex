@@ -2111,6 +2111,10 @@ impl GhostexGpuiApp {
                 if self.run_gpui_terminal_toolbar_hotkey_action(action_id, window, cx) {
                     return;
                 }
+                if action_id == "openModelPicker" {
+                    self.request_focused_session_chat_model_picker(cx);
+                    return;
+                }
                 if action_id == "toggleChatView" {
                     /*
                     CDXC:SessionChat 2026-07-31:
@@ -2194,6 +2198,12 @@ impl GhostexGpuiApp {
                     }
                     Some(GpuiFocusedPaneHotkeyAction::OpenBrowserPane) => {
                         self.add_browser_tab_from_hotkey(window, cx);
+                        return;
+                    }
+                    Some(GpuiFocusedPaneHotkeyAction::SplitSessionRight) => {
+                        if let Some(session_id) = self.focused_agents_workspace_shell_session_id() {
+                            self.split_existing_agents_session_right(session_id, cx);
+                        }
                         return;
                     }
                     Some(GpuiFocusedPaneHotkeyAction::SplitRight) => {

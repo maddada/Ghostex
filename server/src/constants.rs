@@ -118,4 +118,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0026_stashed_prompt_agent_session",
     "0027_tailcat_state",
     "0028_remote_pairing",
+    "0029_session_chat_model_selections",
 ];

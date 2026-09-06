@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createSessionChatOptionState } from './session-chat-option-state';
 import {
   applySessionChatDetectedOptions,
   codexEffortChoices,
@@ -23,6 +24,89 @@ function catalogFor(agent: string) {
   }
   return catalog;
 }
+
+describe('pending session chat options', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('shows the selected Claude model before delivery completes, then rolls back a failed request', () => {
+    const catalog = catalogFor('claude');
+    const store = createSessionChatOptionState(catalog, undefined, vi.fn());
+    store.applyDetected({ model: { value: 'sonnet', label: 'Sonnet 5' }, detectedAt: new Date().toISOString() });
+    const changed = vi.fn();
+    const unsubscribe = store.subscribe(changed);
+    const request = store.beginDispatch({ model: 'opus' });
+    expect(changed).toHaveBeenCalledOnce();
+    expect(sessionChatOptionValueLabel(catalog.model, store.getSnapshot())).toBe('Opus 5');
+    expect(store.getSnapshot().model?.source).toBe('dispatched');
+    request.rollback();
+    expect(sessionChatOptionValueLabel(catalog.model, store.getSnapshot())).toBe('Sonnet 5');
+    unsubscribe();
+  });
+
+  it('keeps a newer selection when an older request fails, then confirms fresh evidence', () => {
+    vi.useFakeTimers();
+    const store = createSessionChatOptionState(catalogFor('codex'), undefined, vi.fn());
+    const oldChange = store.beginDispatch({ effort: 'high' });
+    const newChange = store.beginDispatch({ effort: 'ultra' });
+    oldChange.rollback();
+    expect(store.getSnapshot().effort?.value).toBe('ultra');
+    newChange.complete();
+    store.applyDetected({
+      model: { value: 'gpt-6-astra', label: 'Astra', source: 'terminal' },
+      effort: { value: 'ultra', label: 'Ultra', source: 'terminal' },
+      detectedAt: new Date().toISOString(),
+    });
+    expect(store.getSnapshot().effort?.source).toBe('detected');
+  });
+
+  it('restores the detected mode after failed delivery without changing another session', () => {
+    const first = createSessionChatOptionState(catalogFor('claude'), undefined, vi.fn());
+    const second = createSessionChatOptionState(catalogFor('claude'), undefined, vi.fn());
+    first.applyDetected({ mode: { value: 'manual', label: 'Manual' }, detectedAt: new Date().toISOString() });
+    const change = first.beginDispatch({ mode: 'plan' });
+    expect(first.getSnapshot().mode?.value).toBe('plan');
+    expect(second.getSnapshot().mode).toBeUndefined();
+    change.rollback();
+    expect(first.getSnapshot().mode?.value).toBe('manual');
+  });
+
+  it('undoes an unconfirmed Fast toggle using the fresh unchanged footer', () => {
+    vi.useFakeTimers();
+    const unconfirmed = vi.fn();
+    const store = createSessionChatOptionState(catalogFor('codex'), undefined, unconfirmed);
+    const unsubscribe = store.subscribe(() => {});
+    const change = store.beginDispatch({ fastMode: 'on' });
+    change.complete();
+    vi.advanceTimersByTime(150);
+    store.applyDetected({
+      model: { value: 'gpt-6-astra', label: 'Astra', source: 'terminal' },
+      detectedAt: new Date().toISOString(),
+    });
+    expect(store.getSnapshot().fastMode?.value).toBe('on');
+    vi.advanceTimersByTime(SESSION_CHAT_DISPATCH_GRACE_MS);
+    expect(store.getSnapshot().fastMode?.value).toBe('off');
+    expect(unconfirmed).toHaveBeenCalledOnce();
+    unsubscribe();
+  });
+
+  it('clears Codex Plan on an ordinary footer and keeps the pill label to effort only', () => {
+    const catalog = catalogFor('codex');
+    const store = createSessionChatOptionState(catalog, undefined, vi.fn());
+    store.applyDetected({
+      model: { value: 'gpt-6-astra', label: 'Astra', source: 'terminal' },
+      effort: { value: 'high', label: 'High' },
+      mode: { value: 'plan', label: 'Plan' },
+      detectedAt: new Date().toISOString(),
+    });
+    expect(store.getSnapshot().mode?.value).toBe('plan');
+    expect(sessionChatOptionsPillLabel(catalog.optionsForModel('gpt-6-astra'), store.getSnapshot())).toBe('High');
+    store.applyDetected({
+      model: { value: 'gpt-6-astra', label: 'Astra', source: 'terminal' },
+      detectedAt: new Date().toISOString(),
+    });
+    expect(store.getSnapshot().mode?.value).toBe('default');
+  });
+});
 
 describe('session chat session-option catalogs', () => {
   it('gives Pi a terminal handoff and unknown agents no pills at all', () => {
@@ -251,14 +335,20 @@ describe('session chat session-option catalogs', () => {
 
   it('keeps a stored value only when the catalog still offers it', () => {
     const catalog = catalogFor('claude');
+    const dispatchedAt = new Date().toISOString();
     const kept = seedSessionChatOptionState(catalog, {
-      model: { value: 'fable', source: 'dispatched' },
+      model: { value: 'fable', source: 'dispatched', dispatchedAt },
     });
-    expect(kept.model).toEqual({ value: 'fable', source: 'dispatched' });
+    expect(kept.model).toEqual({ value: 'fable', source: 'dispatched', dispatchedAt });
     const dropped = seedSessionChatOptionState(catalog, {
-      model: { value: 'retired-model', source: 'dispatched' },
+      model: { value: 'retired-model', source: 'dispatched', dispatchedAt },
     });
     expect(dropped.model).toBeUndefined();
+    expect(
+      seedSessionChatOptionState(catalog, {
+        model: { value: 'fable', source: 'dispatched', dispatchedAt: '2020-01-01T00:00:00Z' },
+      }).model
+    ).toBeUndefined();
   });
 });
 

@@ -248,6 +248,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("exportTranscript", "cmd+alt+e"),
     ("toggleAgentActions", "cmd+alt+a"),
     ("toggleChatView", "alt+g"),
+    ("openModelPicker", "alt+p"),
     // CDXC:PromptSearch 2026-08-24: mirrors packages/shared/ghostex-hotkeys.ts.
     ("openFindPrompts", "cmd+shift+f"),
     ("scrollTerminalToTop", ""),
@@ -292,6 +293,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("runActionSlot3", "ctrl+shift+3"),
     ("runActionSlot4", "ctrl+shift+4"),
     ("runActionSlot5", "ctrl+shift+5"),
+    ("splitSessionRight", "alt+shift+d"),
     ("splitMore", "cmd+d"),
     ("splitMoreDown", "cmd+shift+d"),
 ];
@@ -493,7 +495,10 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(owner: GpuiKeyboardOwner, action
     if gpui_workarea_switch_hotkey_action_id(action_id) {
         return true;
     }
-    if action_id == "openExtensions" {
+    // CDXC:Hotkeys 2026-09-05 DECISION:
+    // User: Option+P must always open the focused chat's model picker, including when input focus has left the composer.
+    // The picker handler resolves the actual chat pane; sidebar and shell responders must not swallow this command.
+    if matches!(action_id, "openExtensions" | "openModelPicker") {
         return true;
     }
     match owner {

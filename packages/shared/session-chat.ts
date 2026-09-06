@@ -29,6 +29,14 @@ export type {
 
 import type { SessionChatDraft, SessionChatQueuedPrompt } from './session-chat-queue';
 
+export interface SessionChatPendingModelSelection {
+  id: string;
+  model: string;
+  effort: string;
+  state: 'queued' | 'applying';
+  errorMessage?: string;
+}
+
 export const SESSION_CHAT_SUPPORTED_AGENTS = new Set([
   'antigravity',
   'antigravity-cli',
@@ -419,11 +427,13 @@ export interface SessionChatTerminalNoticeChoice {
 }
 
 export interface SessionChatTerminalNotice {
+  /** Live Codex-owned menu or form, validated again before each input. */
+  dialog?: SessionChatTerminalDialog;
   /**
    * Open set (`loginExpired`, `trustPrompt`, `permissionsWarning`,
    * `onboarding`, `usageLimit`, `streamError`, `updatePrompt`, `agentExited`, `agentError`,
    * `queuedInput`, `deliveryFailed`, `resumePrompt`, `switchConfirmPrompt`,
-   * `sessionPausedPrompt`, `permissionPrompt`, `codexInputBlocked`, `cursorInputBlocked`, `grokInputBlocked`,
+   * `sessionPausedPrompt`, `permissionPrompt`, `codexInputBlocked`, `claudeInputBlocked`, `cursorInputBlocked`, `grokInputBlocked`,
    * `hermesInputBlocked`, `ompInputBlocked`, `piInputBlocked`). Clients MUST
    * render an unknown kind generically; title/detail/severity are self-sufficient.
    */
@@ -528,6 +538,8 @@ export interface SessionChatReturnedPrompt {
 }
 
 export interface SessionChatAppCommand {
+  /** Codex's local command result, which its conversation transcript omits. */
+  output?: string;
   /** Stable within a session; two sends can carry identical text. */
   id: string;
   /** Verbatim command as written to the terminal, e.g. `/rename Fix parser`. */
@@ -723,6 +735,7 @@ export interface GxserverReadSessionChatResult {
    * When present, it is authoritative and replaces the client's list.
    * See CDXC:SessionChat in ./session-chat-queue.
    */
+  pendingModelSelection?: SessionChatPendingModelSelection | null;
   queue?: SessionChatQueuedPrompt[];
   /**
    * Latest synced composer draft. Unlike `prompt`/`terminalNotice`, an OMITTED
@@ -915,7 +928,11 @@ export interface GxserverReadSessionChatImageResult {
 export interface GxserverAnswerSessionChatPromptParams {
   projectId: string;
   sessionId: string;
-  kind: 'question' | 'approval' | 'terminalChoice';
+  kind: 'question' | 'approval' | 'terminalChoice' | 'terminalDialog';
+  dialogId?: string;
+  dialogAction?: string;
+  keyModifiers?: number;
+  text?: string;
   /** For questions: one entry per question. */
   selections?: SessionChatQuestionSelection[];
   /** For approvals: the raw byte string of the chosen option ("1" allow, "" deny). */
@@ -1046,6 +1063,7 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
    * every queue control. When present it is authoritative and replaces the
    * client's list. Never carried by `sessionChatAppended`.
    */
+  pendingModelSelection?: SessionChatPendingModelSelection | null;
   queue?: SessionChatQueuedPrompt[];
   /**
    * Latest synced composer draft. Omitted ⇒ UNCHANGED, not cleared — the
@@ -1126,6 +1144,7 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
    * every queue control. When present it is authoritative and replaces the
    * client's list. Never carried by `sessionChatAppended`.
    */
+  pendingModelSelection?: SessionChatPendingModelSelection | null;
   queue?: SessionChatQueuedPrompt[];
   /**
    * Latest synced composer draft. Omitted ⇒ UNCHANGED, not cleared — the
@@ -1179,6 +1198,7 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
    * every queue control. When present it is authoritative and replaces the
    * client's list. Never carried by `sessionChatAppended`.
    */
+  pendingModelSelection?: SessionChatPendingModelSelection | null;
   queue?: SessionChatQueuedPrompt[];
   /**
    * Latest synced composer draft. Omitted ⇒ UNCHANGED, not cleared — the
@@ -1216,3 +1236,14 @@ body on exactly the same terms as chat: the terminal parks rather than closing,
 and only one surface can own the pane at a time.
 */
 export type SessionSurfaceMode = 'terminal' | 'chat';
+
+export interface SessionChatTerminalDialog {
+  id: string;
+  title: string;
+  body: string;
+  footer: string;
+  rows: { number: number; label: string; description: string | null; selected: boolean }[];
+  input: 'search' | 'text' | 'key' | null;
+  inputValue: string;
+  actions: string[];
+}

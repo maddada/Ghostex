@@ -1,3 +1,4 @@
+import type { AccountsTransport } from '@/packages/shared/agent-accounts';
 // Session Chat transport contract.
 // Hosts (ghostex-web, gpui CEF, mobile web views) inject an implementation so
 // the shared chat components never talk to gxserver directly. The transport is
@@ -27,6 +28,7 @@ import type {
 } from '../../shared/session-chat';
 
 export interface SessionChatTransport {
+  accounts?: AccountsTransport;
   read(params: { limit?: number; beforeOffset?: number }): Promise<GxserverReadSessionChatResult>;
   /** Lists skills gxserver resolved for this session's stored agent identity. */
   readSkills?(): Promise<GxserverReadSessionChatSkillsResult>;
@@ -60,7 +62,11 @@ export interface SessionChatTransport {
    * else here: a host without a route to the endpoint omits it and the model
    * pill keeps its terminal handoff row instead of offering rows it cannot apply.
    */
-  selectSessionChatModel?(params: { model: string; effort: string }): Promise<GxserverSelectSessionChatModelResult>;
+  selectSessionChatModel?(params: {
+    model: string;
+    effort: string;
+    defer?: boolean;
+  }): Promise<GxserverSelectSessionChatModelResult>;
   /** Returns an unsubscribe function. Events must already be filtered to this session. */
   subscribe(handlers: {
     onEvent: (e: GxserverSessionChatEvent) => void;

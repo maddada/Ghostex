@@ -1,3 +1,4 @@
+import type { SessionChatPendingModelSelection } from '@/packages/shared/session-chat';
 // useSessionChat — host-agnostic session-chat state machine.
 // Consumes an injected SessionChatTransport; implements the seed read, frame
 // folding with epoch/seq rules (drop dup seq, resnapshot on gap/epoch
@@ -358,6 +359,7 @@ export interface UseSessionChatResult {
   retry: () => void;
   /** Ghostex prompt queue: rows the agent has never seen (plan 016). */
   queue: SessionChatQueueController;
+  pendingModelSelection: SessionChatPendingModelSelection | null | undefined;
   /** Cross-client composer draft sync. */
   draft: SessionChatDraftController;
 }
@@ -519,6 +521,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   control. An empty array means supported-and-empty. Once present it is
   authoritative and replaces the list wholesale.
   */
+  const [pendingModelSelection, setPendingModelSelection] = useState<SessionChatPendingModelSelection | null | undefined>(undefined);
   const [queuePrompts, setQueuePrompts] = useState<readonly SessionChatQueuedPrompt[] | null>(null);
   /*
   Latest synced composer draft. An OMITTED draft means unchanged, NOT cleared
@@ -638,7 +641,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
    * clearing a draft is an explicit empty `content` from the server.
    */
   const applyQueueCarriage = useCallback(
-    (carrier: { queue?: SessionChatQueuedPrompt[]; draft?: SessionChatDraft }): void => {
+    (carrier: { queue?: SessionChatQueuedPrompt[]; draft?: SessionChatDraft; pendingModelSelection?: SessionChatPendingModelSelection | null }): void => {
+      if (carrier.pendingModelSelection !== undefined) setPendingModelSelection(carrier.pendingModelSelection);
       if (carrier.queue !== undefined) {
         setQueuePrompts(carrier.queue);
       }
@@ -681,6 +685,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         /** gxserver has read the screen; latched, never cleared by omission. */
         screenProbed?: boolean;
         /** Ghostex prompt queue; PRESENT (even empty) is the capability probe. */
+        pendingModelSelection?: SessionChatPendingModelSelection | null;
         queue?: SessionChatQueuedPrompt[];
         /** Synced composer draft; omitted ⇒ unchanged, never cleared. */
         draft?: SessionChatDraft;
@@ -935,6 +940,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       // Nor its queue or its draft: both are per-session, and re-probing the
       // capability from scratch is what keeps a mixed old/new daemon honest.
       setQueuePrompts(null);
+      setPendingModelSelection(undefined);
       setSyncedDraft(null);
       // CDXC:Drafts 2026-08-28: another session's draft agent list must
       // never tick a row (or offer a switch) for this one.
@@ -1570,15 +1576,20 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     },
     [queueCapabilities.canSendNow, queueMutation, transport]
   );
+  // Keep writes ordered across composer remounts, which share this hook.
+  // Otherwise a slow typing save can arrive after the successful-send clear.
+  const draftWrites = useMemo(() => ({ tail: Promise.resolve() }), [transport]);
   const pushDraft = useCallback(
     async (content: string): Promise<void> => {
       const call = transport.setDraft?.bind(transport);
       if (!call) {
         return;
       }
-      await call({ clientId, content });
+      const write = draftWrites.tail.then(() => call({ clientId, content }));
+      draftWrites.tail = write.catch(() => {});
+      await write;
     },
-    [clientId, transport]
+    [clientId, draftWrites, transport]
   );
   const queue = useMemo<SessionChatQueueController>(
     () => ({
@@ -1642,6 +1653,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     messages,
     prompt,
     queue,
+    pendingModelSelection,
     refresh: requestResync,
     retry: reconnect,
     sessionAgentId,

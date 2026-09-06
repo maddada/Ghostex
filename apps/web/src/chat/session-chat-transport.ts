@@ -32,6 +32,7 @@ export function createSessionChatTransport(
   sessionId: string
 ): SessionChatTransport {
   return {
+    accounts: (params) => rpcForMachine(machineId, '/api/agentAccounts', { ...params, projectId, sessionId }),
     async answerPrompt(params) {
       await rpcForMachine(machineId, '/api/answerSessionChatPrompt', {
         ...params,
@@ -156,6 +157,7 @@ export function createSessionChatTransport(
     selectSessionChatModel(params) {
       return rpcForMachine<GxserverSelectSessionChatModelResult>(machineId, '/api/selectSessionChatModel', {
         effort: params.effort,
+        defer: params.defer,
         model: params.model,
         projectId,
         sessionId,
