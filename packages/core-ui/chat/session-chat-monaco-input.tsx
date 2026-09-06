@@ -12,7 +12,7 @@
 // and sibling assets are unreachable from a base-URL-less html string), so
 // this component is never mounted there and the composer keeps its textarea.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { SessionChatTheme } from '../../shared/session-chat';
 import { Tooltip, TooltipContent } from '../app-tooltip';
 import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from './session-chat-composer';
@@ -246,6 +246,7 @@ export function SessionChatMonacoInput({
   onPasteData,
   placeholder,
   fillHeight,
+  collapsed = false,
   registerApi,
   theme,
   vsBaseUrl,
@@ -255,6 +256,7 @@ export function SessionChatMonacoInput({
    * flex row own the height, so a short draft still gets the full box.
    */
   fillHeight: boolean;
+  collapsed?: boolean;
   initialValue: string;
   onChange: (value: string, caret: number) => void;
   /** Caret offset after a pure selection move (no edit). */
@@ -276,6 +278,8 @@ export function SessionChatMonacoInput({
   const insertTextRef = useRef<((text: string) => boolean) | null>(null);
   const fillHeightRef = useRef(fillHeight);
   fillHeightRef.current = fillHeight;
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
   const suppressChangeRef = useRef(false);
   const quickInputOpenRef = useRef(false);
   const themeRef = useRef(theme);
@@ -340,7 +344,7 @@ export function SessionChatMonacoInput({
           language: 'plaintext',
           lightbulb: { enabled: 'off' },
           lineDecorationsWidth: 0,
-          lineHeight: 24,
+          lineHeight: collapsedRef.current ? 32 : 24,
           lineNumbers: 'off',
           lineNumbersMinChars: 0,
           // URL detection turns pasted links into underlined, ctrl-clickable
@@ -385,7 +389,7 @@ export function SessionChatMonacoInput({
           },
           value: initialPresentation,
           wordBasedSuggestions: 'off',
-          wordWrap: 'on',
+          wordWrap: collapsedRef.current ? 'off' : 'on',
           wrappingStrategy: 'advanced',
         });
         editorRef.current = editor;
@@ -490,7 +494,9 @@ export function SessionChatMonacoInput({
         disposables.push({ dispose: () => referenceDomObserver.disconnect() });
         renderReferencePills();
         const applyHeight = (): void => {
-          if (fillHeightRef.current) {
+          if (collapsedRef.current) {
+            container.style.height = '32px';
+          } else if (fillHeightRef.current) {
             // Clear the inline height so the stylesheet's stretched container
             // wins; monaco's automaticLayout then follows the flex row.
             container.style.height = '';
@@ -734,9 +740,10 @@ export function SessionChatMonacoInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vsBaseUrl]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    editorRef.current?.updateOptions({ lineHeight: collapsed ? 32 : 24, wordWrap: collapsed ? 'off' : 'on' });
     applyHeightRef.current?.();
-  }, [fillHeight]);
+  }, [collapsed, fillHeight]);
 
   useEffect(() => {
     editorRef.current?.updateOptions({ placeholder });

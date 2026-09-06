@@ -1,0 +1,41 @@
+.ghostex-chat-composer[data-scroll-collapsed='true'] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.5rem;
+  padding-block: 0.5rem;
+}
+
+.ghostex-chat-composer[data-scroll-collapsed='true'] > .ghostex-chat-composer-row {
+  grid-column: 1;
+  padding-bottom: 0;
+}
+
+.ghostex-chat-composer[data-scroll-collapsed='true'] :is(.ghostex-chat-composer-input, .ghostex-chat-composer-monaco) {
+  height: 2rem !important;
+  min-height: 2rem;
+  max-height: 2rem;
+  overflow: hidden;
+}
+
+.ghostex-chat-composer[data-scroll-collapsed='true'] .ghostex-chat-composer-plain-input,
+.ghostex-chat-composer[data-scroll-collapsed='true'] .ghostex-chat-composer-plain-input::before,
+.ghostex-chat-composer[data-scroll-collapsed='true'] .editorPlaceholder {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.ghostex-chat-composer[data-scroll-collapsed='true'] .ghostex-chat-composer-plain-input {
+  line-height: 2rem;
+}
+
+.ghostex-chat-composer[data-scroll-collapsed='true'] > .ghostex-chat-composer-footer {
+  grid-column: 2;
+  width: auto;
+}
+
+.ghostex-chat-composer[data-scroll-collapsed='true'] .ghostex-chat-composer-footer-options,
+.ghostex-chat-composer[data-scroll-collapsed='true'] .ghostex-chat-composer-footer-actions-expanded,
+.ghostex-chat-composer[data-scroll-collapsed='true'] .ghostex-chat-composer-footer-actions-compact {
+  display: none;
+}
