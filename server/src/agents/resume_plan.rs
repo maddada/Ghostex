@@ -123,8 +123,8 @@ pub(crate) fn to_agent_resume_input(
     let agent_id = resume_agent_family_id(configured_agent_id, &agent_config, &launch_settings);
     let stored_agent_command = read_text_from_map(&runtime_settings, "agentCommand");
     let configured_agent_command = read_text_from_map(&agent_config, "command");
-    let base_command = stored_agent_command
-        .clone()
+    let base_command = read_text_from_map(&runtime_settings, "accountCommand")
+        .or_else(|| stored_agent_command.clone())
         .filter(|command| !is_one_time_agent_session_command(agent_id.as_deref(), command))
         .or_else(|| {
             configured_agent_command

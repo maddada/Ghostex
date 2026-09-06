@@ -227,7 +227,7 @@ pub(crate) fn switch_session_agent(
     let settings = read_agent_settings(db)?;
 
     let mut runtime_settings = object_field(&session, "runtimeSettings");
-    for key in ["agentCommand", "launchAgentId", "agentName"] {
+    for key in ["agentCommand", "launchAgentId", "agentName", "accountId", "accountName", "accountColor", "accountProvider", "accountCommand", "accountRecovery", "accountRecoverySuppressed", "accountPolicyOverride"] {
         runtime_settings.remove(key);
     }
     let mut launch_settings = object_field(&session, "launchSettings");

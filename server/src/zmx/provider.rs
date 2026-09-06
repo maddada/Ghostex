@@ -48,6 +48,9 @@ pub(crate) fn create_attach_session_metadata_with_observed_state(
     let cwd = string_field(&existing_session, "cwd").or_else(|| string_field(&project, "path"));
     let (probe, probed_session, zmx, zmx_name) =
         probe_and_cache_session_provider_with_observed_state(repository, &lifecycle, observed)?;
+    if probe.lifecycle_state == "missing" {
+        crate::accounts::launch::validate_session(repository, &probed_session)?;
+    }
     let explicit_startup_text = normalize_optional_startup_text(params.get("startupText"));
     let queued_launch_startup_text = if explicit_startup_text.is_none() {
         get_queued_agent_launch_startup_text_for_session(&probed_session)
@@ -186,6 +189,9 @@ pub(crate) fn start_session_provider_with_observed_state(
         })?;
     let (probe, probed_session, zmx, zmx_name) =
         probe_and_cache_session_provider_with_observed_state(repository, &lifecycle, observed)?;
+    if probe.lifecycle_state == "missing" {
+        crate::accounts::launch::validate_session(repository, &probed_session)?;
+    }
     let explicit_startup_text = normalize_optional_startup_text(params.get("startupText"));
     let queued_launch_startup_text = if explicit_startup_text.is_none() {
         get_queued_agent_launch_startup_text_for_session(&probed_session)

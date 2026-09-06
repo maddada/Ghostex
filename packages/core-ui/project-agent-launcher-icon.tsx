@@ -1,13 +1,16 @@
+import { accountIconColor, type AccountIconColor } from '@/packages/shared/agent-accounts';
 import { IconCode } from '@tabler/icons-react';
 import type { SidebarAgentButton } from '../shared/sidebar-agents';
 import { AGENT_LOGOS, getBrandAgentLogoStyle } from './agent-logos';
 
 export function ProjectAgentLauncherIcon({
   agent,
+  accountColor,
   colorMode = 'monochrome',
 }: {
   agent?: SidebarAgentButton;
   colorMode?: 'brand' | 'monochrome';
+  accountColor?: AccountIconColor;
 }) {
   if (!agent) {
     return (
@@ -46,7 +49,7 @@ export function ProjectAgentLauncherIcon({
         aria-hidden='true'
         className='group-agent-launcher-icon group-agent-launcher-agent-icon'
         data-agent-icon={agent.icon}
-        style={iconStyle}
+        style={accountColor && (agent.icon === 'claude' || agent.icon === 'codex') ? { backgroundColor: accountIconColor(accountColor), maskImage: `url("${AGENT_LOGOS[agent.icon]}")`, WebkitMaskImage: `url("${AGENT_LOGOS[agent.icon]}")` } : iconStyle}
       />
     );
   }

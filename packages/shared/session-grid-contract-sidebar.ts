@@ -315,6 +315,9 @@ export type SidebarSwitchableSessionAgent = {
 };
 
 export type SidebarSessionItem = {
+  accountId?: string;
+  accountName?: string;
+  accountColor?: string;
   kind?: 'browser' | 'workspace';
   sessionKind?: 'browser' | 'terminal';
   activity: 'idle' | 'working' | 'attention';

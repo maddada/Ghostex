@@ -56,12 +56,13 @@ pub(crate) fn create_agent_session_params_for_project(
     let agent_config = resolve_project_agent_config(project, &agent_id, Some(&launch_settings));
     let agent_icon = read_text_from_map(&agent_config, "icon")
         .or_else(|| read_text_from_map(&launch_settings, "icon"));
+    let account_command = crate::accounts::launch::apply_new_session(db, &agent_id, agent_icon.as_deref(), &mut runtime_settings)?;
     let launch_plan = build_agent_launch_plan(AgentLaunchInput {
         accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
             .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
         agent_id: agent_id.clone(),
         agent_session_id: read_text_from_map(&runtime_settings, "agentSessionId"),
-        command: read_text_from_map(&agent_config, "command")
+        command: account_command.or_else(|| read_text_from_map(&agent_config, "command"))
             .or_else(|| read_text_from_map(&launch_settings, "agentCommand")),
         delayed_send_deadline_at: read_text_from_map(&launch_settings, "delayedSendDeadlineAt"),
         first_user_message: read_text_from_map(&runtime_settings, "firstUserMessage"),
@@ -265,6 +266,7 @@ pub(crate) fn default_agent_session_title_name(agent_id: &str) -> Option<&'stati
         "command-code" => Some("Command Code"),
         "copilot" => Some("Copilot"),
         "cursor" => Some("Cursor CLI"),
+        "mastra" => Some("Mastra Code"),
         "devin" => Some("Devin"),
         "droid" => Some("Factory Droid"),
         "gemini" => Some("Gemini"),

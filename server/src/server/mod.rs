@@ -167,6 +167,7 @@ use crate::{
 };
 
 pub mod agent_http;
+pub(crate) mod accounts_http;
 pub mod agent_prompt_search_http;
 pub mod background_tasks;
 pub mod commit_message_generation;
@@ -223,6 +224,7 @@ enum ExistingGxserverState {
 
 #[derive(Clone)]
 pub(crate) struct AppState {
+    pub(crate) accounts: Arc<crate::accounts::runtime::AccountRuntime>,
     pub(crate) auth_token: String,
     pub(crate) automation_runtime: AutomationRuntime,
     pub(crate) delayed_send_runtime: DelayedSendRuntime,
@@ -482,6 +484,7 @@ pub async fn run_gxserver_foreground(
     );
 
     let state = Arc::new(AppState {
+        accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,
         automation_runtime,
         delayed_send_runtime,
@@ -567,6 +570,7 @@ pub async fn run_gxserver_foreground(
     explicit reason and waits for the user. Never silently re-sent.
     */
     let _ = crate::session_chat_queue::recover_session_chat_queue_after_restart(&paths);
+    crate::accounts::recovery::start(state.clone());
     /*
     CDXC:SessionChat 2026-08-21:
     The queue scheduler is built HERE rather than beside the other runtimes
@@ -580,6 +584,7 @@ pub async fn run_gxserver_foreground(
         paths.clone(),
         metadata.server_id.clone(),
         session_chat_queue_sender_factory(&state),
+        crate::session_chat_model_selection::sender(&state),
         session_chat_queue_publisher_factory(&state),
         session_chat_queue_notice_reader(&state),
         session_chat_queue_composer_reader(&state),
@@ -2101,6 +2106,7 @@ async fn route_http(
             &body_json,
             |_, db, params, server_id| list_session_fork_branches(db, server_id, params),
         ),
+        "/api/agentAccounts" => accounts_http::handle_accounts_http(&state, endpoint.path, request_id, &body_json).await,
         "/api/readAgentSettings"
         | "/api/updateAgentSettings"
         | "/api/readAgentLaunchPlan"

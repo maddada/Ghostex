@@ -2832,6 +2832,7 @@ fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
         ),
     );
     Arc::new(AppState {
+        accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
         automation_runtime,
         delayed_send_runtime,

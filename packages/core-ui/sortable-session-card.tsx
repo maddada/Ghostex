@@ -2712,6 +2712,7 @@ export function SortableSessionCard({
             {isProjectSessionListMoreRow ? null : (
               <SessionFloatingAgentIcon
                 agentIcon={session.agentIcon}
+                accountColor={session.accountColor}
                 closeAfterDone={session.closeAfterDone}
                 closeAfterDoneDeadlineAt={session.closeAfterDoneDeadlineAt}
                 closeAfterDoneRemainingLabel={session.closeAfterDoneRemainingLabel}

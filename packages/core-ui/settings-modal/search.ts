@@ -301,6 +301,7 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
   },
   agents: {
     sections: [
+      { id: 'accounts', title: 'Accounts', settings: [{ key: 'accounts', title: 'Accounts and automatic continuation', subtitle: 'Claude cswap, Codex xswap, usage limits, account colors, switching, error recovery and retry settings.' }] },
       {
         id: 'config',
         settings: [

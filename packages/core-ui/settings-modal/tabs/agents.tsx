@@ -1,3 +1,4 @@
+import { AccountsSettingsSection } from '@/packages/core-ui/accounts/manager';
 import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -341,6 +342,7 @@ export function AgentsSettingsTab({
     <SettingsNativeScrollArea className='h-full min-h-0'>
       <div className='settings-page-width flex flex-col gap-6 px-5 pb-5'>
         {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
+        {!editorState && shouldShowSettingsSection(search.sections.accounts) && <AccountsSettingsSection active={isActive} />}
         {!editorState && shouldShowSettingsSection(search.sections.config) ? (
           <SettingsSection title='Config'>
             {/*

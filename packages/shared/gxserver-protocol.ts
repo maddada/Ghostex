@@ -188,6 +188,7 @@ export type GxserverEndpointPath =
    * conversation under that agent's command.
    */
   | '/api/switchSessionAgent'
+  | '/api/agentAccounts'
   | '/api/readAgentLaunchPlan'
   | '/api/readAgentResumePlan'
   | '/api/requestSessionRename'
@@ -2664,6 +2665,9 @@ export interface GxserverPresentationCapabilities {
 }
 
 export interface GxserverPresentationSession {
+  accountId?: string;
+  accountName?: string;
+  accountColor?: string;
   actions: GxserverPresentationSessionActions;
   activity: GxserverPresentationSessionActivity;
   agentIcon?: string;
@@ -3142,12 +3146,14 @@ export interface GxserverRewindSessionChatResult {
  * session's terminal (the numbered model list, then the numbered reasoning
  * list) because Codex has no command form for it: `/model <name>` is sent to
  * the model as a prompt. The daemon reads the row digits off the screen and
- * aborts on any mismatch. Codex only.
+ * aborts on any mismatch. With `defer`, Codex and Claude choices enter the durable queue and return before delivery.
  */
 export interface GxserverSelectSessionChatModelParams {
   projectId: GxserverProjectId;
   sessionId: GxserverSessionId;
-  /** Codex model id as its picker lists it (`gpt-5.6-sol`). */
+  /** Store the choice durably and apply at the next idle opportunity (Codex and Claude). */
+  defer?: boolean;
+  /** Model id from the published catalog. */
   model: string;
   /** Effort id the reasoning list must offer for that model (`high`). */
   effort: string;
@@ -3155,6 +3161,8 @@ export interface GxserverSelectSessionChatModelParams {
 
 export interface GxserverSelectSessionChatModelResult {
   ok: true;
+  queued?: boolean;
+  pendingModelSelection?: import('./session-chat').SessionChatPendingModelSelection;
   model: string;
   effort: string;
 }

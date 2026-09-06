@@ -381,6 +381,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // CDXC:AgentProviders 2026-09-03: same reasoning as switchDraftAgent
         // above; the resume command is built by the daemon that owns the row.
         | "/api/switchSessionAgent"
+        | "/api/agentAccounts"
         | "/api/readAgentLaunchPlan"
         | "/api/readAgentResumePlan"
         | "/api/requestSessionRename"

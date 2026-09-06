@@ -1,0 +1,304 @@
+/* CDXC:AgentProviders 2026-09-05 DECISION: User requested neutral usage bars and brighter selected controls; only the per-account provider logo uses one of nine chosen colors. */
+.gx-accounts {
+  --ring: #bcbcbc;
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 12px;
+}
+.gx-accounts h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+.gx-accounts p,
+.gx-accounts small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.gx-accounts p {
+  margin: 7px 0;
+}
+.gx-accounts button {
+  font-size: 12px;
+}
+.gx-account-logo {
+  display: inline-block;
+  width: 21px;
+  height: 21px;
+  flex: none;
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-position: center;
+}
+.gx-account-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 62px;
+}
+.gx-account-figures {
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.gx-account-figures span + span {
+  opacity: 0.6;
+}
+.gx-account-heading,
+.gx-account-field-row,
+.gx-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.gx-account-heading {
+  margin-bottom: 14px;
+}
+.gx-account-row {
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+.gx-account-row-copy {
+  flex: 1;
+  min-width: 0;
+}
+.gx-account-row-copy strong,
+.gx-account-row-copy small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.gx-account-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.gx-account-status {
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted-foreground);
+}
+.gx-account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 15px 0;
+}
+.gx-accounts select,
+.gx-accounts input[type='text'] {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  padding: 6px 10px;
+  color: var(--foreground);
+  font: inherit;
+}
+.gx-accounts select:focus-visible,
+.gx-accounts input:focus-visible {
+  outline: 3px solid #bcbcbc33;
+  border-color: #bcbcbc;
+  outline-offset: 1px;
+}
+.gx-account-policy fieldset {
+  border: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 18px 0 0;
+}
+.gx-account-policy fieldset:disabled {
+  opacity: 0.45;
+}
+.gx-account-policy legend {
+  margin-bottom: 9px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.gx-account-field-row {
+  margin: 14px 0;
+}
+.gx-account-usage {
+  display: grid;
+  gap: 18px;
+  margin: 20px 0;
+}
+.gx-account-usage-window strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+.gx-account-meter {
+  height: 5px;
+  background: #363636;
+  border-radius: 3px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+.gx-account-meter > span {
+  display: block;
+  height: 100%;
+  background: #b9b9b9;
+  border-radius: 3px;
+}
+.gx-account-usage-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.gx-account-editor,
+.gx-account-setup,
+.gx-account-local-policy {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 16px;
+  margin: 14px 0;
+}
+.gx-account-error,
+.gx-account-recovery {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 12px 0;
+  line-height: 1.6;
+}
+.gx-account-error {
+  color: var(--foreground);
+}
+.gx-account-preview {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 15px 0;
+}
+.gx-account-preview > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.gx-account-switch {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.gx-account-switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.gx-account-switch:hover:enabled {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.gx-account-panel {
+  flex: none;
+  max-height: 55vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  padding: 18px;
+  margin: 8px 0;
+}
+.gx-account-panel-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.gx-account-panel-columns > section + section {
+  border-left: 1px solid var(--border);
+  padding-left: 24px;
+}
+.gx-account-current {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.gx-account-color-preview-label {
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+.gx-account-toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 3px 8px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.gx-account-toolbar-button[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
+  color: var(--foreground);
+}
+.gx-account-setup code {
+  display: block;
+  padding: 10px;
+  overflow-wrap: anywhere;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 11px;
+  margin: 10px 0;
+}
+.gx-account-consent {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 11px;
+  margin: 14px 0;
+}
+.gx-account-consent input {
+  accent-color: #bcbcbc;
+  margin-top: 3px;
+}
+.gx-account-provider {
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+}
+@container (max-width:600px) {
+  .gx-account-panel-columns {
+    grid-template-columns: 1fr;
+  }
+  .gx-account-panel-columns > section + section {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 18px 0 0;
+  }
+}
+@media (max-width: 650px) {
+  .gx-account-panel-columns {
+    grid-template-columns: 1fr;
+  }
+  .gx-account-panel-columns > section + section {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 18px 0 0;
+  }
+  .gx-account-row {
+    flex-wrap: wrap;
+  }
+}

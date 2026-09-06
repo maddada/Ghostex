@@ -176,6 +176,9 @@ pub(crate) fn project_presentation_session(
     bar, chat composer) renders the same rows. ABSENT when there is nothing to
     switch to, which is also what a daemon predating the feature publishes.
     */
+    for key in ["accountId", "accountName", "accountColor"] {
+        insert_optional_string(&mut output, key, read_runtime_text(session, key));
+    }
     if let Some(switchable_agents) =
         crate::agents::switchable_session_agents_value(project, session)
     {

@@ -385,6 +385,9 @@ export function createGxserverPresentationSidebarSession({
     activity: presentation.activity,
     agentIcon,
     agentName: presentation.agentName ?? presentation.agentId,
+    accountId: presentation.accountId,
+    accountName: presentation.accountName,
+    accountColor: presentation.accountColor,
     agentSessionId: presentation.agentSessionId ?? localSession?.agentSessionId,
     alias: presentation.title,
     /*
