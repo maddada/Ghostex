@@ -1,11 +1,6 @@
 /*
-CDXC:AgentScreenDetection 2026-09-03 WHY:
-Context window usage ring for the chat composer, the t3code ContextWindowMeter
-shape: a small ring in the footer that fills as the window fills, hover for a
-popover with the percentage, tokens over window size, a progress bar and a
-Compact button. The numbers come from the statusLine payload Claude Code pipes
-to the Ghostex-installed script (see server/src/agent_hooks/statusline.rs), so
-the ring exists only for Claude sessions and only once that payload arrived.
+CDXC:AgentScreenDetection 2026-09-05 DECISION:
+User requested compact percentage text instead of a filling usage ring, with neutral usage bars. Keep the existing context details and Compact action behind the percentage control.
 */
 
 import { IconPencil } from '@tabler/icons-react';
@@ -76,11 +71,6 @@ export function formatSessionChatContextPercentage(value: number | null): string
   return `${Math.round(value)}%`;
 }
 
-const RING_RADIUS = 9.75;
-const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
-/** Above this the ring and bar turn to the destructive colour. */
-const OVERLOADED_PERCENTAGE = 90;
-
 export function SessionChatContextMeter({
   usage,
   onCompact,
@@ -103,11 +93,7 @@ export function SessionChatContextMeter({
 }) {
   const percentageLabel = formatSessionChatContextPercentage(usage.usedPercentage);
   const normalizedPercentage = Math.max(0, Math.min(100, usage.usedPercentage ?? 0));
-  const dashOffset = RING_CIRCUMFERENCE * (1 - normalizedPercentage / 100);
-  const isOverloaded = normalizedPercentage > OVERLOADED_PERCENTAGE;
-  const usageColor = isOverloaded
-    ? 'var(--destructive)'
-    : 'color-mix(in oklab, var(--muted-foreground) 72%, transparent)';
+  const usageColor = '#b9b9b9';
   const ariaLabel =
     usage.windowSize !== null && percentageLabel
       ? `Context window ${percentageLabel} used`
@@ -124,36 +110,13 @@ export function SessionChatContextMeter({
         render={
           <Button
             aria-label={ariaLabel}
-            className='ghostex-chat-footer-control ghostex-chat-context-meter ml-[6px] rounded-full text-muted-foreground hover:text-muted-foreground'
+            className='ghostex-chat-footer-control ghostex-chat-context-meter ml-[6px] w-auto px-1 text-muted-foreground hover:text-muted-foreground'
             size='icon-xs'
             variant='ghost'
           />
         }
       >
-        <span className='relative flex size-4 items-center justify-center'>
-          <svg aria-hidden='true' className='absolute inset-0 size-full -rotate-90 transform-gpu' viewBox='0 0 24 24'>
-            <circle
-              cx='12'
-              cy='12'
-              fill='none'
-              r={RING_RADIUS}
-              stroke='color-mix(in oklab, var(--muted-foreground) 24%, transparent)'
-              strokeWidth='3'
-            />
-            <circle
-              className='transition-[stroke-dashoffset,stroke] duration-500 ease-out motion-reduce:transition-none'
-              cx='12'
-              cy='12'
-              fill='none'
-              r={RING_RADIUS}
-              stroke={usageColor}
-              strokeDasharray={RING_CIRCUMFERENCE}
-              strokeDashoffset={dashOffset}
-              strokeLinecap='round'
-              strokeWidth='3'
-            />
-          </svg>
-        </span>
+        <span className='text-[10px] tabular-nums'>{percentageLabel ?? formatSessionChatContextTokens(usage.usedTokens)}</span>
       </PopoverTrigger>
       <PopoverContent
         align='end'
