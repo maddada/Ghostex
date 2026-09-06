@@ -9,6 +9,8 @@
  * before this format are still readable and get stamped on first enumeration.
  */
 
+import { sessionChatDraftFingerprint, type SessionChatDraftDiagnosticLog } from './session-chat-draft-diagnostics';
+
 const SESSION_CHAT_DRAFT_STORAGE_PREFIX = 'ghostex.sessionChat.draft.';
 
 /** Recovered drafts older than this are deleted on enumeration. */
@@ -84,31 +86,40 @@ export function readStoredSessionChatDraftEntry(
   return raw === null || raw === undefined ? null : decodeStoredDraft(raw);
 }
 
-export function writeStoredSessionChatDraft(sessionKey: string | undefined, draft: string): void {
+export function writeStoredSessionChatDraft(sessionKey: string | undefined, draft: string, updatedAt?: number): void {
   if (!sessionKey) {
     return;
   }
   try {
     const storage = draftStorage();
     const key = draftStorageKey(sessionKey);
-    if (draft === '') {
-      storage?.removeItem(key);
-    } else {
-      storage?.setItem(key, JSON.stringify({ text: draft, updatedAt: Date.now() }));
-    }
+    // A successful send must leave the same tombstone as an explicit delete:
+    // removing the key lets an older server copy win the next boot reconcile.
+    const previousAt = readStoredSessionChatDraftEntry(sessionKey)?.updatedAt ?? 0;
+    const stamp = updatedAt ?? Math.max(Date.now(), previousAt + 1);
+    storage?.setItem(key, JSON.stringify({ text: draft, updatedAt: stamp }));
   } catch {
     // Storage quota/private-mode failures must not break the composer.
   }
 }
 
-/*
-Drops the persisted draft only while it still holds the exact text that left
-the composer. A send resolves asynchronously, and by then the field may already
-hold the next message, which must survive the acknowledgement of the previous
-one.
-*/
-export function clearStoredSessionChatDraftIfUnchanged(sessionKey: string | undefined, text: string): void {
-  if (readStoredSessionChatDraft(sessionKey) === text) {
+/**
+ * Retire the saved version submitted by this send, not a newer edit that
+ * happens to have the same text. Local edit stamps advance even within a
+ * millisecond; restores retain their original stamp.
+ */
+export function clearStoredSessionChatDraftIfUnchanged(
+  sessionKey: string | undefined,
+  submitted: DecodedStoredDraft | string | null
+): void {
+  const current = readStoredSessionChatDraftEntry(sessionKey);
+  // The mobile host's pre-mount acknowledgement carries text only. Composer
+  // sends capture an entry so later edits must also match its version.
+  const matches =
+    typeof submitted === 'string'
+      ? current?.text === submitted
+      : submitted && current?.text === submitted.text && current.updatedAt === submitted.updatedAt;
+  if (matches) {
     writeStoredSessionChatDraft(sessionKey, '');
   }
 }
@@ -144,10 +155,12 @@ export function deleteStoredSessionChatDraft(sessionKey: string): void {
  */
 export function reconcileSessionChatDraftsFromServer(
   drafts: readonly { projectId: string; sessionId: string; content: string; updatedAt: string }[],
-  sessionKeyPrefix = ''
+  sessionKeyPrefix = '',
+  diagnosticLog?: SessionChatDraftDiagnosticLog
 ): void {
   const storage = draftStorage();
   if (!storage) {
+    diagnosticLog?.('sessionChat.draft.bootStorageUnavailable', {});
     return;
   }
   const now = Date.now();
@@ -161,14 +174,22 @@ export function reconcileSessionChatDraftsFromServer(
     }
     const sessionKey = `${sessionKeyPrefix}${draft.projectId}:${draft.sessionId}`;
     const stored = readStoredSessionChatDraftEntry(sessionKey);
+    const details = {
+      sessionKey,
+      incoming: { ...sessionChatDraftFingerprint(draft.content), updatedAt: draft.updatedAt },
+      stored: stored ? { ...sessionChatDraftFingerprint(stored.text), updatedAt: stored.updatedAt } : null,
+    };
     if (stored !== null && (stored.updatedAt === undefined || stored.updatedAt >= serverAt)) {
+      diagnosticLog?.('sessionChat.draft.bootRestoreSkipped', details);
       continue;
     }
     try {
       // The server's stamp, not now: the entry's age (retention, freshness
       // comparisons) must describe the text, not the moment it was healed.
       storage.setItem(draftStorageKey(sessionKey), JSON.stringify({ text: draft.content, updatedAt: serverAt }));
+      diagnosticLog?.('sessionChat.draft.bootRestoreApplied', details);
     } catch {
+      diagnosticLog?.('sessionChat.draft.bootRestoreRejected', details);
       // Storage quota/private-mode failures must not break the client.
     }
   }

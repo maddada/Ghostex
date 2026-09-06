@@ -508,7 +508,11 @@ impl GhostexGpuiApp {
                     return;
                 };
                 support_logs::append_for_scenario(
-                    support_logs::GpuiSupportLog::SidebarRefresh,
+                    if scenario_id == "gpui.sessionChat.drafts" {
+                        support_logs::GpuiSupportLog::SessionChat
+                    } else {
+                        support_logs::GpuiSupportLog::SidebarRefresh
+                    },
                     scenario_id,
                     message
                         .get("event")

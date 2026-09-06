@@ -10,6 +10,7 @@ in the sidebar whether or not anything has been typed into it, and leaves only
 by being deleted or promoted.
 */
 import type { GpuiSidebarRuntime } from './core';
+import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import { reconcileSessionChatDraftsFromServer } from '@/packages/core-ui/chat/session-chat-draft-storage';
 import type { GxserverListSessionChatDraftsResult } from '@/packages/shared/gxserver-protocol';
 
@@ -49,7 +50,16 @@ export const gpuiSidebarRuntimeDraftSessionMethods = {
     void client
       .rpc<GxserverListSessionChatDraftsResult>('/api/listSessionChatDrafts')
       .then((result) => {
-        reconcileSessionChatDraftsFromServer(result.drafts ?? []);
+        reconcileSessionChatDraftsFromServer(result.drafts ?? [], '', (event, details) => {
+          try {
+            postAppModalHostMessage(
+              { type: 'sidebarDiagnosticLog', scenarioId: 'gpui.sessionChat.drafts', event, details },
+              'Drafts:reconcile'
+            );
+          } catch {
+            // Diagnostic delivery must not interrupt draft recovery.
+          }
+        });
       })
       .catch(() => {
         // An old daemon without the endpoint, or a transient failure: retry on

@@ -213,22 +213,20 @@ export function shouldOfferSessionChatDraft(params: {
  *   stored value without a stamp is "age unknown" and is never overridden.
  */
 /*
-CDXC:Drafts 2026-09-04 WHY:
-"A draft edited before the newest prompt went out is not a draft." Every copy
-of a draft (this client's localStorage, gxserver's row, a remote daemon's row)
-can go stale independently — a daemon that predates the retire-on-send, a
-dropped empty push, a page killed mid-send — and each stale copy resurrected
-the SENT message into the composer on the next app start. The transcript is
-the one source that cannot be stale about what was sent, so silent restores
-are measured against its newest user prompt instead of trusting any copy's
-own bookkeeping. An unparseable or unknown stamp is "age unknown" and never
-counts as stale; a missing prompt time (transcript not loaded) disables the
-rule rather than guessing.
+CDXC:Drafts 2026-09-05 WHY:
+Age alone cannot prove a draft was sent: another client or the terminal can send a different prompt while this composer holds unsent text.
+A debounced save can contain only the beginning of the submitted message, so compare prefixes as well as complete text.
+Only an untouched restored copy saved no later than that matching message may be retired from transcript evidence; newer drafts remain unsent.
 */
 export function isSessionChatDraftStale(
   draftUpdatedAt: number | string | null | undefined,
-  lastSentPromptAt: number | null | undefined
+  lastSentPromptAt: number | null | undefined,
+  draftText: string,
+  lastSentPromptText: string | null | undefined
 ): boolean {
+  if (!draftText.trim() || !lastSentPromptText?.trim().startsWith(draftText.trim())) {
+    return false;
+  }
   if (lastSentPromptAt === null || lastSentPromptAt === undefined) {
     return false;
   }
@@ -250,15 +248,16 @@ export function shouldRestoreOwnSessionChatDraft(params: {
   stored: { text: string; updatedAt: number | undefined } | null;
   /** Epoch ms of the transcript's newest user prompt; null while unknown. */
   lastSentPromptAt?: number | null;
+  lastSentPromptText?: string | null;
 }): boolean {
-  const { clientId, composerText, composerTouched, incoming, lastSentPromptAt, stored } = params;
+  const { clientId, composerText, composerTouched, incoming, lastSentPromptAt, lastSentPromptText, stored } = params;
   if (!incoming || incoming.originClientId !== clientId || composerTouched) {
     return false;
   }
   if (incoming.content.trim() === '' || incoming.content === composerText) {
     return false;
   }
-  if (isSessionChatDraftStale(incoming.updatedAt, lastSentPromptAt)) {
+  if (isSessionChatDraftStale(incoming.updatedAt, lastSentPromptAt, incoming.content, lastSentPromptText)) {
     return false;
   }
   if (stored === null) {

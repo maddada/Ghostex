@@ -87,12 +87,17 @@ state frames, never `appended`. Their omission semantics differ:
 pub struct SessionChatQueueSnapshot {
     pub queue: Vec<SessionChatQueuedPrompt>,
     pub draft: Option<SessionChatDraft>,
+    pub pending_model_selection: Option<crate::session_chat_model_selection::PendingModelSelection>,
 }
 
 impl SessionChatQueueSnapshot {
     /// Writes `queue` (always) and `draft` (only when stored) onto a frame or
     /// read result.
     pub fn insert_into(&self, target: &mut Map<String, Value>) {
+        target.insert(
+            "pendingModelSelection".to_string(),
+            serde_json::to_value(&self.pending_model_selection).unwrap_or(Value::Null),
+        );
         target.insert(
             "queue".to_string(),
             serde_json::to_value(&self.queue).unwrap_or_else(|_| Value::Array(Vec::new())),
@@ -112,7 +117,7 @@ impl SessionChatQueueSnapshot {
     text and error all reach the row strip.
     */
     pub fn revision(&self) -> String {
-        let mut revision = String::with_capacity(32 + self.queue.len() * 48);
+        let mut revision = serde_json::to_string(&self.pending_model_selection).unwrap_or_default();
         for prompt in &self.queue {
             revision.push_str(&prompt.id);
             revision.push(':');
@@ -231,7 +236,15 @@ pub fn handle_session_chat_queue_endpoint(
         }
         "/api/queueSessionChatPrompt" => {
             let text = required_text(params, "text")?;
+            let draft_before_queue = read_snapshot(&db, &project_id, &session_id)?.draft;
             let prompt = append_prompt(&db, &project_id, &session_id, &text)?;
+            clear_session_chat_draft_after_send(
+                &db,
+                &project_id,
+                &session_id,
+                &text,
+                draft_before_queue.as_ref(),
+            )?;
             let snapshot = read_snapshot(&db, &project_id, &session_id)?;
             let mut value = snapshot_value(&snapshot);
             insert_prompt(&mut value, &prompt);
@@ -281,7 +294,37 @@ pub fn handle_session_chat_queue_endpoint(
                 })?
                 .to_string();
             let client_id = required_text(params, "clientId")?;
-            let draft = set_draft(&db, &project_id, &session_id, &content, &client_id)?;
+            let logger = crate::logging::GxserverLogger::new(paths.clone());
+            let before = read_snapshot(&db, &project_id, &session_id)
+                .ok()
+                .and_then(|snapshot| snapshot.draft);
+            let describe = |draft: &SessionChatDraft| {
+                json!({
+                    "value": crate::session_chat_draft_diagnostics::fingerprint(&draft.content),
+                    "updatedAt": draft.updated_at, "originClientId": draft.origin_client_id,
+                })
+            };
+            crate::session_chat_draft_diagnostics::log(
+                &logger,
+                "serverSaveBegin",
+                &project_id,
+                &session_id,
+                json!({
+                    "clientId": client_id, "incoming": crate::session_chat_draft_diagnostics::fingerprint(&content),
+                    "previous": before.as_ref().map(&describe),
+                }),
+            );
+            let result = set_draft(&db, &project_id, &session_id, &content, &client_id);
+            crate::session_chat_draft_diagnostics::log(
+                &logger,
+                "serverSaveSettled",
+                &project_id,
+                &session_id,
+                json!({
+                    "clientId": client_id, "accepted": result.is_ok(), "saved": result.as_ref().ok().map(describe),
+                }),
+            );
+            let draft = result?;
             (
                 json!({
                     "draft": serde_json::to_value(&draft).unwrap_or(Value::Null),
@@ -408,6 +451,7 @@ pub fn list_sessions_with_pending_queue(
             SELECT DISTINCT projectId, sessionId
             FROM session_chat_queued_prompts
             WHERE state <> 'failed'
+            UNION SELECT projectId, sessionId FROM session_chat_model_selections
             ORDER BY projectId, sessionId
             "#,
         )
@@ -430,6 +474,9 @@ pub fn session_has_pending_session_chat_queue(
     project_id: &str,
     session_id: &str,
 ) -> bool {
+    if crate::session_chat_model_selection::read_pending(db, project_id, session_id).is_some() {
+        return true;
+    }
     db.query_row(
         r#"
         SELECT COUNT(*) FROM session_chat_queued_prompts
@@ -461,6 +508,8 @@ pub fn recover_session_chat_queue_after_restart(
         params![SESSION_CHAT_QUEUE_RESTART_REASON, now_iso()],
     )
     .map_err(sql_error)?;
+    // Model selection is idempotent: the driver reads the current footer before changing anything.
+    db.execute("UPDATE session_chat_model_selections SET state = 'queued', retryAt = 0 WHERE state = 'applying'", []).map_err(sql_error)?;
     Ok(())
 }
 
@@ -515,7 +564,13 @@ fn read_snapshot(
         )
         .optional()
         .map_err(sql_error)?;
-    Ok(SessionChatQueueSnapshot { queue, draft })
+    Ok(SessionChatQueueSnapshot {
+        queue,
+        draft,
+        pending_model_selection: crate::session_chat_model_selection::read_pending(
+            db, project_id, session_id,
+        ),
+    })
 }
 
 fn append_prompt(
@@ -706,31 +761,40 @@ fn set_draft(
             crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES
         )));
     }
-    let draft = SessionChatDraft {
+    let mut draft = SessionChatDraft {
         content: content.to_string(),
         origin_client_id: client_id.to_string(),
         updated_at: now_iso(),
     };
-    db.execute(
-        r#"
+    // A new write must have a distinct version even in the same millisecond:
+    // a send acknowledgement may be comparing against the previous stamp.
+    draft.updated_at = db
+        .query_row(
+            r#"
         INSERT INTO session_chat_drafts (projectId, sessionId, content, originClientId, updatedAt)
         VALUES (?1, ?2, ?3, ?4, ?5)
         ON CONFLICT(projectId, sessionId) DO UPDATE SET
           content = excluded.content,
           originClientId = excluded.originClientId,
-          updatedAt = excluded.updatedAt
+          updatedAt = CASE
+            WHEN excluded.updatedAt > session_chat_drafts.updatedAt THEN excluded.updatedAt
+            ELSE strftime('%Y-%m-%dT%H:%M:%fZ', session_chat_drafts.updatedAt, '+0.001 seconds')
+          END
+        RETURNING updatedAt
         "#,
-        params![
-            project_id,
-            session_id,
-            draft.content,
-            draft.origin_client_id,
-            draft.updated_at,
-        ],
-    )
-    .map_err(sql_error)?;
+            params![
+                project_id,
+                session_id,
+                draft.content,
+                draft.origin_client_id,
+                draft.updated_at,
+            ],
+            |row| row.get(0),
+        )
+        .map_err(sql_error)?;
     Ok(draft)
 }
+
 
 /*
 CDXC:Drafts 2026-08-28:
@@ -848,35 +912,33 @@ pub fn clear_session_chat_draft_after_delivery(
     set_draft(db, project_id, session_id, "", "gxserver-delayed-send").map(|_| ())
 }
 
-/*
-CDXC:Drafts 2026-09-02:
-Clears the synced composer draft once a chat send delivered exactly its text.
-Until this existed the row was cleared only by the client's debounced empty
-push after Enter, which is fire-and-forget: when it was skipped, failed, or
-was overtaken by a later flush, the row kept the SENT message forever, and the
-boot-time draft reconcile plus the composer's own-draft crash restore put that
-message straight back into the composer on the next app start. The comparison
-is deliberate — a draft typed while the send was in flight has already reached
-this row and must not be wiped by the message that left before it. The server
-origin id makes every client apply the empty draft instead of treating the
-frame as an echo of its own edit. `Ok(true)` means the row changed and the
-session's followers need the new state.
-*/
+/// CDXC:Drafts 2026-09-05 WHY:
+/// Debounced saves can hold only a prefix of the submitted message; exact-text cleanup left those fragments available for restart recovery.
+/// Compare against the draft captured before delivery, then retire that exact version atomically so edits made during the send survive, even when their text is identical.
+/// Queue insertion owns retirement for queued prompts; their later delivery must not retire a new composer draft.
 pub fn clear_session_chat_draft_after_send(
     db: &Connection,
     project_id: &str,
     session_id: &str,
     sent_text: &str,
+    draft_before_send: Option<&SessionChatDraft>,
 ) -> Result<bool, DomainStateError> {
-    let Some(content) = read_session_chat_draft_content(db, project_id, session_id)? else {
+    let Some(draft) = draft_before_send else {
         return Ok(false);
     };
-    if content.trim() != sent_text.trim() {
+    if draft.content.trim().is_empty() || !sent_text.trim().starts_with(draft.content.trim()) {
         return Ok(false);
     }
-    set_draft(db, project_id, session_id, "", "gxserver-chat-send")?;
-    Ok(true)
+    let changed = db.execute(
+        "UPDATE session_chat_drafts SET content = '', originClientId = 'gxserver-chat-send',
+           updatedAt = CASE WHEN ?6 > updatedAt THEN ?6
+             ELSE strftime('%Y-%m-%dT%H:%M:%fZ', updatedAt, '+0.001 seconds') END
+         WHERE projectId = ?1 AND sessionId = ?2 AND content = ?3 AND updatedAt = ?4 AND originClientId = ?5",
+        params![project_id, session_id, draft.content, draft.updated_at, draft.origin_client_id, now_iso()],
+    ).map_err(sql_error)?;
+    Ok(changed > 0)
 }
+
 
 /// Guarded claim: only a `queued` or `failed` row can move to `sending`, so two
 /// scheduler ticks (or a tick racing a "Send now") cannot both deliver it.

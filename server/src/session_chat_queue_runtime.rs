@@ -134,6 +134,7 @@ struct ReadyDelivery {
     project_id: String,
     session_id: String,
     prompt_id: String,
+    model_selection: Option<crate::session_chat_model_selection::PendingModelSelection>,
 }
 
 #[derive(Clone)]
@@ -141,6 +142,7 @@ pub struct SessionChatQueueRuntime {
     paths: GxserverPaths,
     server_id: String,
     sender_factory: SessionChatQueueSenderFactory,
+    model_selector: crate::session_chat_model_selection::ModelSelectionSender,
     publisher_factory: SessionChatQueuePublisherFactory,
     notice_reader: SessionChatQueueNoticeReader,
     composer_reader: SessionChatQueueComposerReader,
@@ -158,6 +160,7 @@ impl SessionChatQueueRuntime {
         paths: GxserverPaths,
         server_id: impl Into<String>,
         sender_factory: SessionChatQueueSenderFactory,
+        model_selector: crate::session_chat_model_selection::ModelSelectionSender,
         publisher_factory: SessionChatQueuePublisherFactory,
         notice_reader: SessionChatQueueNoticeReader,
         composer_reader: SessionChatQueueComposerReader,
@@ -167,6 +170,7 @@ impl SessionChatQueueRuntime {
             paths,
             server_id: server_id.into(),
             sender_factory,
+            model_selector,
             publisher_factory,
             notice_reader,
             composer_reader,
@@ -191,6 +195,7 @@ impl SessionChatQueueRuntime {
                 tokio::select! {
                     _ = shutdown_rx.recv() => break,
                     _ = interval.tick() => runtime.run_tick().await,
+                    _ = crate::session_chat_model_selection::selection_requested() => runtime.run_tick().await,
                 }
             }
         });
@@ -250,6 +255,22 @@ impl SessionChatQueueRuntime {
                 self.reset_gate(&key);
                 continue;
             }
+            // CDXC:SessionChat 2026-09-05 DECISION:
+            // User: model changes run during a turn whenever the CLI accepts them; only actual delivery failure keeps them pending.
+            // Prompt activity, transcript and stability gates below do not apply to model selection. The serialized driver checks a fresh terminal screen.
+            let snapshot = read_session_chat_queue_snapshot_with(&db, &project_id, &session_id);
+            if let Some(selection) = snapshot.pending_model_selection.as_ref() {
+                if selection.retry_at > now.timestamp_millis() {
+                    continue;
+                }
+                ready.push(ReadyDelivery {
+                    project_id,
+                    session_id,
+                    prompt_id: String::new(),
+                    model_selection: Some(selection.clone()),
+                });
+                continue;
+            }
             /*
             A compacting marker is written by the same whole zmx screen capture
             that feeds chat's progress card. Refresh only this marked state so
@@ -278,6 +299,10 @@ impl SessionChatQueueRuntime {
             standing; that is exactly the "next stop" this clock waits for.
             Every other attention still holds the row.
             */
+            if matches!(session.pointer("/runtimeSettings/accountRecovery/status").and_then(Value::as_str), Some("waiting" | "retrying" | "needsAttention")) {
+                self.reset_gate(&key);
+                continue;
+            }
             if !session_chat_queue_activity_is_deliverable(&session, &generated_at) {
                 self.reset_gate(&key);
                 continue;
@@ -289,11 +314,6 @@ impl SessionChatQueueRuntime {
             if !self.stability_window_elapsed(&key, now) {
                 continue;
             }
-            let snapshot = read_session_chat_queue_snapshot_with(&db, &project_id, &session_id);
-            /*
-            `None` means the queue is empty, or its head is `failed`/`sending`.
-            A failed head is the stop signal: the drain does not step over it.
-            */
             let Some(head) = snapshot.deliverable_head() else {
                 continue;
             };
@@ -313,6 +333,10 @@ impl SessionChatQueueRuntime {
             prompt sent meanwhile survives.
             */
             if let Some(notice) = (self.notice_reader)(&project_id, &session_id) {
+                if crate::accounts::recovery::holds_queue(&repository, &session, &notice) {
+                    self.reset_gate(&key);
+                    continue;
+                }
                 if notice.blocks_queued_delivery() {
                     blocked.push((
                         project_id,
@@ -346,6 +370,7 @@ impl SessionChatQueueRuntime {
                 project_id,
                 session_id,
                 prompt_id: head.id.clone(),
+                model_selection: None,
             });
         }
         drop(repository);
@@ -369,6 +394,12 @@ impl SessionChatQueueRuntime {
     }
 
     async fn deliver(&self, key: String, ready: ReadyDelivery) {
+        if let Some(selection) = ready.model_selection {
+            (self.model_selector)(ready.project_id, ready.session_id, selection).await;
+            self.reset_gate(&key);
+            self.finish_delivery(&key);
+            return;
+        }
         let sender = (self.sender_factory)(&ready.project_id, &ready.session_id);
         /*
         The shared claim → send → settle path. It deletes the row on success and
@@ -572,6 +603,7 @@ fn runtime_text(session: &Value, key: &str) -> Option<String> {
 pub(crate) enum SessionChatMessageSource {
     Composer,
     AutomaticQueue,
+    AutomaticRecovery,
     ManualQueue,
 }
 
@@ -598,6 +630,16 @@ pub(crate) async fn send_session_chat_message_internal(
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
     let target = resolve_session_chat_send_target(state, &params, "sendSessionChatMessage")?;
+    let draft_before_send = if source == SessionChatMessageSource::Composer {
+        open_gxserver_database(&state.paths).ok().and_then(|db| {
+            read_session_chat_queue_snapshot_with(&db, &target.project_id, &target.session_id).draft
+        })
+    } else {
+        None
+    };
+    if source == SessionChatMessageSource::Composer {
+        crate::accounts::recovery::user_action(state, project_id, session_id, false)?;
+    }
     let agent = session_chat_agent_for_session(&target.session);
     let terminal_agent =
         crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
@@ -658,6 +700,14 @@ pub(crate) async fn send_session_chat_message_internal(
     // Recheck automatic delivery against the fresh capture: the scheduler's
     // cached notice may predate a quota, authentication, or agent error.
     // Explicit Send now is a retry.
+    if source == SessionChatMessageSource::AutomaticRecovery {
+        let current = resolve_session_chat_send_target(state, &params, "automaticRecovery")?;
+        let armed = current.session.pointer("/runtimeSettings/accountRecovery/status").and_then(Value::as_str) == Some("retrying");
+        let blocked = detection.notice.as_ref().is_some_and(|n| n.blocks_queued_delivery() && !matches!(n.kind.as_str(), "streamError" | "usageLimit" | "agentError"));
+        if !armed || !detection.captured || detection.composer.state != crate::session_chat_composer::SessionChatComposerState::Ready || detection.prompt.is_some() || crate::session_chat_send::transcript_pending_question_prompt(&current.session).is_some() || detection.activity.is_some() || blocked {
+            return Err(DomainStateError { code: "accountRecoveryNotReady", message: "Automatic recovery is waiting for the session to be ready.".into() });
+        }
+    }
     if source == SessionChatMessageSource::AutomaticQueue {
         if let Some(notice) = detection
             .notice
@@ -714,12 +764,27 @@ pub(crate) async fn send_session_chat_message_internal(
     Terminal -> Chat view switching remains the separate, loss-safe draft
     transfer path for text the user actually wants to carry between views.
     */
-    let steps = crate::session_chat_send::build_session_chat_message_steps(
+    let mut steps = crate::session_chat_send::build_session_chat_message_steps(
         terminal_agent.as_deref(),
         text,
         image_paths,
         dismiss_claude_settings,
     );
+    let capture_codex_output = terminal_agent.as_deref() == Some("codex")
+        && crate::session_chat_codex_dialog::command_has_local_output(text);
+    crate::session_chat_app_command::stop_codex_command_output(
+        &target.project_id,
+        &target.session_id,
+    );
+    if capture_codex_output {
+        steps.insert(
+            0,
+            crate::session_chat_send::SessionChatSendStep::BeginCodexCommandOutput {
+                command: text.to_string(),
+            },
+        );
+        steps.push(crate::session_chat_send::SessionChatSendStep::FinishCodexCommandOutput);
+    }
     crate::session_chat_returned_prompt::record_session_chat_send_started(
         &target.project_id,
         &target.session_id,
@@ -830,7 +895,7 @@ pub(crate) async fn send_session_chat_message_internal(
         &target.session,
         match source {
             SessionChatMessageSource::Composer => "chat",
-            SessionChatMessageSource::AutomaticQueue | SessionChatMessageSource::ManualQueue => {
+            SessionChatMessageSource::AutomaticQueue | SessionChatMessageSource::AutomaticRecovery | SessionChatMessageSource::ManualQueue => {
                 "queue"
             }
         },
@@ -874,12 +939,20 @@ pub(crate) async fn send_session_chat_message_internal(
     } else {
         promote_draft_session_after_send(state, &target.project_id, &target.session_id);
     }
-    retire_sent_session_chat_draft(state, &target.project_id, &target.session_id, text);
+    if source == SessionChatMessageSource::Composer {
+        retire_sent_session_chat_draft(
+            state,
+            &target.project_id,
+            &target.session_id,
+            text,
+            draft_before_send.as_ref(),
+        );
+    }
     // A `/compact` is NOT re-read here: the follower's transcript-keyed probe
     // burst covers it for chat-sent and terminal-typed commands alike
     // (CDXC:AgentScreenDetection), and a second publisher of the same
     // activity only let a later follower frame overwrite what this one showed.
-    if is_option_readback_command {
+    if is_option_readback_command || capture_codex_output {
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,
@@ -1081,33 +1154,54 @@ fn promote_draft_session_after_send(state: &AppState, project_id: &str, session_
     }
 }
 
-/*
-CDXC:Drafts 2026-09-02:
-The server half of "a sent message never comes back as a draft". Reached only
-after the bytes were accepted, from both callers of the internal send (the
-composer and the queue scheduler), so every Ghostex-delivered prompt retires the
-draft row it came from. The republish is what makes the desktop, web and mobile
-composers drop their copies right away instead of relying on their own delayed
-empty push.
-*/
+/// Publishes retirement only after a composer send was accepted; queue insertion
+/// already retired the draft belonging to a queued prompt.
 fn retire_sent_session_chat_draft(
     state: &AppState,
     project_id: &str,
     session_id: &str,
     sent_text: &str,
+    draft_before_send: Option<&crate::session_chat_queue::SessionChatDraft>,
 ) {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;
     };
-    if matches!(
-        crate::session_chat_queue::clear_session_chat_draft_after_send(
-            &db, project_id, session_id, sent_text
-        ),
-        Ok(true)
-    ) {
+    let before = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
+        &db, project_id, session_id,
+    )
+    .draft;
+    let result = crate::session_chat_queue::clear_session_chat_draft_after_send(
+        &db,
+        project_id,
+        session_id,
+        sent_text,
+        draft_before_send,
+    );
+    crate::session_chat_draft_diagnostics::log(
+        &state.logger,
+        "serverRetireSettled",
+        project_id,
+        session_id,
+        json!({
+            "sent": crate::session_chat_draft_diagnostics::fingerprint(sent_text),
+            "captured": draft_before_send.map(|draft| json!({
+                "value": crate::session_chat_draft_diagnostics::fingerprint(&draft.content),
+                "updatedAt": draft.updated_at, "originClientId": draft.origin_client_id,
+            })),
+            "previous": before.as_ref().map(|draft| json!({
+                "value": crate::session_chat_draft_diagnostics::fingerprint(&draft.content),
+                "updatedAt": draft.updated_at, "originClientId": draft.origin_client_id,
+                "equalsSent": draft.content.trim() == sent_text.trim(),
+                "prefixOfSent": !draft.content.is_empty() && sent_text.starts_with(&draft.content),
+            })),
+            "cleared": matches!(result, Ok(true)), "completed": result.is_ok(),
+        }),
+    );
+    if matches!(result, Ok(true)) {
         broadcast_session_chat_queue_state(state, project_id, session_id);
     }
 }
+
 
 /// Re-arms a draft's launch activity-suppression window after Ghostex typed one
 /// of its OWN commands (a model/effort pick) into the terminal, so the churn
