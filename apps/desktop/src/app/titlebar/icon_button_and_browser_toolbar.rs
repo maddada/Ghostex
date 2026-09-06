@@ -192,6 +192,14 @@ impl GhostexGpuiApp {
         The Browser feedback toolbar starts Agentation through CEF main-frame JavaScript injection. Keep github.com and *.github.com disabled before injection, and keep the toolbar surface status private by showing only bounded page-data-free notifications for missing CEF surfaces or frames.
         */
         let address_value = self.browser_tabs.address_value_for_pane(pane_id);
+        let remote_machine_name = self
+            .browser_tabs
+            .active_tab_for_pane(pane_id)
+            .and_then(|tab| tab.remote_machine_id.as_deref())
+            .map(|id| {
+                gpui_remote_machine_name_from_settings(id)
+                    .unwrap_or_else(|| "Remote computer".into())
+            });
         let feedback_tool_unavailable = browser_feedback_tool_unavailable_url(&address_value);
         let feedback_tooltip = feedback_tool_unavailable
             .then_some(BROWSER_FEEDBACK_TOOL_UNAVAILABLE_TOOLTIP)
@@ -257,6 +265,30 @@ impl GhostexGpuiApp {
             .bg(browser_toolbar_background())
             .border_b_1()
             .border_color(rgb(0x252525))
+            .when_some(remote_machine_name, |bar, name| {
+                bar.child(
+                    h_flex()
+                        .max_w(px(160.0))
+                        .flex_shrink_0()
+                        .px(px(9.0))
+                        .gap(px(5.0))
+                        .items_center()
+                        .child(
+                            svg()
+                                .path(BROWSER_ICON_WORLD)
+                                .size(px(13.0))
+                                .text_color(rgb(0x7acb9d)),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .truncate()
+                                .text_size(px(11.0))
+                                .text_color(rgb(0xb7b7b7))
+                                .child(name),
+                        ),
+                )
+            })
             .child(
                 h_flex()
                     .items_center()

@@ -218,6 +218,14 @@ impl GhostexGpuiApp {
                     ))
                 },
             )
+            .child(self.render_titlebar_native_popup_button(
+                GpuiTitlebarPopupKind::RemoteSites,
+                BROWSER_ICON_WORLD,
+                "Remote dev servers",
+                false,
+                window,
+                cx,
+            ))
             .when(
                 !button_hidden(RESOURCES_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
                 |this| {
@@ -378,6 +386,7 @@ impl GhostexGpuiApp {
             GpuiTitlebarPopupKind::Extensions => "ghostex-gpui-titlebar-extensions-popup-anchor",
             GpuiTitlebarPopupKind::Tips => "ghostex-gpui-titlebar-tips-popup-anchor",
             GpuiTitlebarPopupKind::Resources => "ghostex-gpui-titlebar-resources-popup-anchor",
+            GpuiTitlebarPopupKind::RemoteSites => "ghostex-gpui-titlebar-remote-sites-popup-anchor",
             _ => "ghostex-gpui-titlebar-native-popup-anchor",
         };
         let anchor_state = window.use_keyed_state(anchor_key, cx, |_, _| {
@@ -396,6 +405,9 @@ impl GhostexGpuiApp {
                 }
                 GpuiTitlebarPopupKind::Tips => "ghostex-gpui-titlebar-button-tips-native",
                 GpuiTitlebarPopupKind::Resources => "ghostex-gpui-titlebar-button-resources-native",
+                GpuiTitlebarPopupKind::RemoteSites => {
+                    "ghostex-gpui-titlebar-button-remote-sites-native"
+                }
                 _ => "ghostex-gpui-titlebar-button-native-popup",
             })
             .relative()

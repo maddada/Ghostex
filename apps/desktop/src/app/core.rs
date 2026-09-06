@@ -423,6 +423,7 @@ pub struct GhostexGpuiApp {
     */
     pub(crate) remote_machine_connect_states: HashMap<String, String>,
     pub(crate) remote_gxserver_connections: HashMap<String, GpuiRemoteGxserverConnection>,
+    pub(crate) remote_browser: crate::app::remote_browser::RemoteBrowserRuntime,
     pub(crate) remote_gxserver_connect_generations: HashMap<String, u64>,
     pub(crate) remote_gxserver_watchdog_probe_in_flight: bool,
     /*
@@ -574,6 +575,9 @@ pub struct GhostexGpuiApp {
     /// One-shot Chat launch requests waiting for a shell-session mapping. The
     /// mapped session enters Chat mode before any terminal focus handoff.
     pub(crate) pending_agents_chat_launch_intents: HashSet<GpuiWorkspaceTerminalSessionKey>,
+    pub(crate) agents_chat_page_states: HashMap<TerminalSessionId, SessionChatPageState>,
+    pub(crate) agents_chat_eviction_running: bool,
+    pub(crate) agents_chat_eviction_requested: bool,
     pub(crate) agents_chat_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
     /// When each currently hidden chat surface last became hidden, the clock the
     /// RAM eviction pass ages out. A surface that is visible has no entry, so a
@@ -1307,6 +1311,7 @@ impl EntityInputHandler for GhostexGpuiApp {
 
 impl Render for GhostexGpuiApp {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        let _profile = crate::profiling::span(crate::profiling::Metric::AppRender);
         // Only the main workspace window renders this entity, so this keeps
         // the authoritative frame and display every child popup anchors against.
         self.main_window_bounds = window.bounds();

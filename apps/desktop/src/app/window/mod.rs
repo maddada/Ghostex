@@ -7,6 +7,7 @@
 pub(crate) mod extension_titlebar_panel;
 pub(crate) mod modal_host;
 pub(crate) mod titlebar_panels;
+pub(crate) mod remote_sites;
 pub(crate) mod toast;
 
 pub(crate) use extension_titlebar_panel::*;

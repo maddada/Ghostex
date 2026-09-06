@@ -187,6 +187,7 @@ static SIDEBAR_EDITABLE_FOCUS_NATIVE_VIEW: AtomicUsize = AtomicUsize::new(0);
 // shell::*`, cef/macos.rs, cef/windows.rs, cef/linux_x11.rs) resolving
 // unchanged.
 mod browser;
+mod remote_browser;
 mod client;
 mod lifecycle;
 mod message_routing;
@@ -194,6 +195,7 @@ mod native_view;
 mod request_handling;
 
 pub(crate) use browser::*;
+pub(crate) use remote_browser::*;
 pub(crate) use client::*;
 pub(crate) use lifecycle::*;
 pub(crate) use message_routing::*;

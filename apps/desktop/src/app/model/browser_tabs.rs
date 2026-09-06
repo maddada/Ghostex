@@ -347,6 +347,8 @@ pub(crate) struct BrowserTab {
     pub(crate) profile_id: BrowserProfileId,
     pub(crate) title: String,
     pub(crate) runtime_page_title: Option<String>,
+    /// Saved machine identity keeps localhost routing attached to the tab across project switches and restores.
+    pub(crate) remote_machine_id: Option<String>,
     pub(crate) runtime_favicon_url: Option<String>,
     pub(crate) runtime_favicon_image: Option<BrowserFaviconImage>,
     pub(crate) runtime_favicon_fetch: Option<BrowserFaviconFetchSource>,
@@ -614,6 +616,7 @@ impl BrowserTabModel {
         */
         let default_url = browser_shell_default_url(None);
         let first_tab = BrowserTab {
+            remote_machine_id: None,
             id: BrowserTabId(1),
             profile_id,
             title: browser_tab_title_for_url(&default_url),
@@ -738,6 +741,7 @@ impl BrowserTabModel {
         let tab_id = BrowserTabId(self.next_tab_id);
         self.next_tab_id += 1;
         self.tabs.push(BrowserTab {
+            remote_machine_id: None,
             id: tab_id,
             profile_id,
             title: "New Tab".to_string(),
@@ -937,6 +941,8 @@ impl BrowserTabModel {
         };
         let (favicon_url, favicon_image, favicon_fetch) =
             browser_runtime_favicon_from_url(favicon_url.as_deref());
+        // Remote HTTP favicons are fetched through the tab's SSH route, never GPUI's local HTTP client.
+        let favicon_fetch = favicon_fetch.filter(|_| tab.remote_machine_id.is_none());
         if tab.runtime_favicon_url == favicon_url
             && tab.runtime_favicon_image == favicon_image
             && tab.runtime_favicon_fetch == favicon_fetch
@@ -999,6 +1005,7 @@ impl BrowserTabModel {
         let tab_id = BrowserTabId(self.next_tab_id);
         self.next_tab_id += 1;
         let tab = BrowserTab {
+            remote_machine_id: None,
             id: tab_id,
             profile_id,
             title: browser_tab_title_for_url(&requested_url),

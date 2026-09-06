@@ -47,6 +47,7 @@ pub(crate) fn browser_tab_model_to_shell_state_json(model: &BrowserTabModel) -> 
                 serde_json::json!({
                     "id": tab.id.0,
                     "profileId": tab.profile_id.0,
+                    "remoteMachineId": tab.remote_machine_id,
                     "state": state.element_slug(),
                     "url": sanitized_url.unwrap_or_default(),
                     "history": history,
@@ -380,6 +381,8 @@ pub(crate) fn browser_tab_from_shell_state(
     };
     Some(BrowserTab {
         id,
+        remote_machine_id: json_string_field(object, "remoteMachineId")
+            .and_then(crate::app::helpers::gpui_normalize_remote_machine_id),
         profile_id: json_u64_field(object, "profileId")
             .map(BrowserProfileId)
             .filter(|profile_id| browser_profiles.contains_profile(*profile_id))

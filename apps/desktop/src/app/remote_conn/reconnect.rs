@@ -245,6 +245,14 @@ impl GhostexGpuiApp {
                     "connected",
                     cx,
                 );
+                if self
+                    .browser_tabs
+                    .tabs
+                    .iter()
+                    .any(|tab| tab.remote_machine_id.as_deref() == Some(remote_machine_id.as_str()))
+                {
+                    self.ensure_remote_browser_tunnel(&remote_machine_id, true, cx);
+                }
                 /*
                 A connect may have installed or upgraded the remote package, so
                 refresh the version Settings shows next to its Install/Update

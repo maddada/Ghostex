@@ -38,6 +38,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        let _profile = crate::profiling::span(crate::profiling::Metric::PopupOpen);
         log_gpui_titlebar_popup_repro(
             "gpui.titlebarPopup.setOpenRequested",
             serde_json::json!({
@@ -265,7 +266,13 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> GpuiTitlebarPopupContent {
+        let _profile = crate::profiling::span(crate::profiling::Metric::PopupBuild);
         match kind {
+            GpuiTitlebarPopupKind::RemoteSites => {
+                GpuiTitlebarPopupContent::RemoteSites(cx.new(|cx| {
+                    crate::app::window::remote_sites::RemoteSitesPanel::new(main_app, cx)
+                }))
+            }
             GpuiTitlebarPopupKind::Actions => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
                     self.build_gpui_titlebar_actions_popup_menu(

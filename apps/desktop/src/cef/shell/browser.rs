@@ -664,6 +664,7 @@ impl CefBrowser {
         extension_bridge_event_handler: Option<ExtensionBridgeEventHandler>,
         page_load_end_handler: Option<PageLoadEndHandler>,
     ) -> Result<Self, String> {
+        let _profile = crate::profiling::span(crate::profiling::Metric::CefCreate);
         /*
         CDXC:CefRuntime 2026-09-04 WHY:
         Every CefBrowser goes through here, so this is the one place that
@@ -1399,6 +1400,9 @@ pub(crate) fn cef_root_cache_path() -> Result<PathBuf> {
 }
 
 pub(crate) fn cef_request_context_for_profile(profile: &str) -> Result<cef::RequestContext> {
+    if profile.starts_with("remote-") {
+        return super::remote_browser::remote_browser_request_context(profile);
+    }
     /*
     CDXC:Browser 2026-07-16:
     Browser profile ids are app-global rather than project- or tab-scoped. The

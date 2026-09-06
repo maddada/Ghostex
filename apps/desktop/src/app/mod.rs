@@ -14,6 +14,7 @@
 pub(crate) mod actions;
 pub(crate) mod consts;
 pub(crate) mod core;
+pub(crate) mod remote_browser;
 pub(crate) mod element;
 pub(crate) mod extensions;
 pub(crate) mod ffi;
@@ -35,7 +36,9 @@ pub(crate) mod project_editor;
 pub(crate) mod remote_conn;
 pub(crate) mod render;
 pub(crate) mod session_chat;
+pub(crate) mod session_chat_model_picker;
 pub(crate) mod session_chat_context_menu;
+pub(crate) mod session_chat_eviction;
 pub(crate) mod session_chat_image_save;
 pub(crate) mod sidebar_dispatch;
 pub(crate) mod stashed_prompt_jump;

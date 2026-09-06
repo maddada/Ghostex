@@ -324,6 +324,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn titlebar_popup_content_height(&self, kind: GpuiTitlebarPopupKind) -> f32 {
         match kind {
+            GpuiTitlebarPopupKind::RemoteSites => 650.0,
             GpuiTitlebarPopupKind::Actions => self.titlebar_actions_popup_content_height(),
             GpuiTitlebarPopupKind::Extensions => {
                 let extension_count = self

@@ -68,7 +68,15 @@ impl GhostexGpuiApp {
             )
             .when_some(active_browser_surface, |this, browser| this.child(browser))
             .when(render_empty_body, |this| {
-                this.child(self.render_browser_placeholder_body(pane_id, placeholder))
+                if let Some(machine_id) = self
+                    .browser_tabs
+                    .active_tab_for_pane(pane_id)
+                    .and_then(|tab| tab.remote_machine_id.as_deref())
+                {
+                    this.child(self.render_remote_browser_placeholder(machine_id, cx))
+                } else {
+                    this.child(self.render_browser_placeholder_body(pane_id, placeholder))
+                }
             })
             .when_some(self.browser_pane_drop_zone(pane_id), |this, zone| {
                 this.child(self.render_browser_pane_drop_feedback(pane_id, zone))

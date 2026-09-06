@@ -29,6 +29,7 @@ pub(crate) enum GpuiTitlebarPopupKind {
     Git,
     OpenTargets,
     Resources,
+    RemoteSites,
     Tips,
 }
 
@@ -40,6 +41,7 @@ impl GpuiTitlebarPopupKind {
             Self::Git => "git",
             Self::OpenTargets => "openTargets",
             Self::Resources => "resources",
+            Self::RemoteSites => "remoteSites",
             Self::Tips => "tips",
         }
     }
@@ -136,6 +138,7 @@ impl Default for GpuiTitlebarPopupAnchorState {
 pub(crate) enum GpuiTitlebarPopupContent {
     Menu(Entity<PopupMenu>),
     Reading(Entity<GpuiTitlebarReadingPanel>),
+    RemoteSites(Entity<crate::app::window::remote_sites::RemoteSitesPanel>),
 }
 
 pub(crate) struct GpuiTitlebarPopupWindow {
@@ -157,6 +160,7 @@ impl GpuiTitlebarPopupWindow {
         let content_kind = match &content {
             GpuiTitlebarPopupContent::Menu(_) => "menu",
             GpuiTitlebarPopupContent::Reading(_) => "reading",
+            GpuiTitlebarPopupContent::RemoteSites(_) => "remoteSites",
         };
         log_gpui_titlebar_popup_repro(
             "gpui.titlebarPopup.windowConstructing",
@@ -186,6 +190,7 @@ impl GpuiTitlebarPopupWindow {
                     },
                 )),
                 GpuiTitlebarPopupContent::Reading(_) => None,
+                GpuiTitlebarPopupContent::RemoteSites(_) => None,
             };
             Self {
                 main_app,
@@ -247,6 +252,7 @@ impl GpuiTitlebarPopupWindow {
 
 impl Render for GpuiTitlebarPopupWindow {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        let _profile = crate::profiling::span(crate::profiling::Metric::PopupRender);
         if !self.logged_first_render {
             self.logged_first_render = true;
             log_gpui_titlebar_popup_repro(
@@ -436,6 +442,7 @@ impl Render for GpuiTitlebarPopupWindow {
             .child(match &self.content {
                 GpuiTitlebarPopupContent::Menu(menu) => menu.clone().into_any_element(),
                 GpuiTitlebarPopupContent::Reading(panel) => panel.clone().into_any_element(),
+                GpuiTitlebarPopupContent::RemoteSites(panel) => panel.clone().into_any_element(),
             })
     }
 }

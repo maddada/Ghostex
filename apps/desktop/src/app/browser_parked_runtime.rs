@@ -206,6 +206,7 @@ impl GhostexGpuiApp {
         &mut self,
         project_id: &str,
         requested_url: String,
+        remote_machine_id: Option<String>,
         placement: cef::BrowserPopupPlacement,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -221,6 +222,13 @@ impl GhostexGpuiApp {
         else {
             return;
         };
+        if let Some(tab) = parked_tabs
+            .tabs
+            .iter_mut()
+            .find(|tab| tab.id == popup_tab_id)
+        {
+            tab.remote_machine_id = remote_machine_id;
+        }
         self.pending_sidebar_browser_tab_reveal = Some(PendingSidebarBrowserTabReveal {
             project_id: project_id.to_string(),
             tab_id: popup_tab_id,

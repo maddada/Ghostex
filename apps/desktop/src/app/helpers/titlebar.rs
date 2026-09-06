@@ -62,6 +62,7 @@ pub(crate) fn titlebar_tooltip(
 
 pub(crate) fn titlebar_popup_menu_width(kind: GpuiTitlebarPopupKind) -> f32 {
     match kind {
+        GpuiTitlebarPopupKind::RemoteSites => 640.0,
         GpuiTitlebarPopupKind::Actions | GpuiTitlebarPopupKind::OpenTargets => {
             TITLEBAR_POPUP_COMPACT_WIDTH
         }
@@ -97,9 +98,9 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
     let main_window_bounds = window.bounds();
     let width = titlebar_popup_menu_width(kind);
     let max_height = match kind {
-        GpuiTitlebarPopupKind::Resources | GpuiTitlebarPopupKind::Tips => {
-            TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT
-        }
+        GpuiTitlebarPopupKind::Resources
+        | GpuiTitlebarPopupKind::Tips
+        | GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT,
         _ => TITLEBAR_POPUP_MENU_MAX_HEIGHT,
     };
     let available_height = (main_window_bounds.size.height.as_f32() - 28.0).max(180.0);

@@ -365,6 +365,7 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn stop_gpui_remote_gxserver_connection(&mut self, remote_machine_id: &str) {
+        self.stop_remote_browser_tunnel(remote_machine_id);
         if let Some(mut connection) = self.remote_gxserver_connections.remove(remote_machine_id) {
             connection.terminate();
         }
@@ -373,6 +374,9 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn stop_all_gpui_remote_gxserver_connections(&mut self) {
+        for (_, tunnel) in self.remote_browser.tunnels.drain() {
+            tunnel.stop();
+        }
         for (_, mut connection) in self.remote_gxserver_connections.drain() {
             connection.terminate();
         }

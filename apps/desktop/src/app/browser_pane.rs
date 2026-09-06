@@ -627,8 +627,28 @@ impl GhostexGpuiApp {
         CDXC:Browser 2026-06-23-11:14:
         CEF Browser surfaces must be keyed by tab id for runtime ownership but created with the tab's generated Browser profile id. This lets existing loaded surfaces keep their profile after toolbar selection changes while future tabs/surfaces use the newly selected profile.
         */
-        let profile = profile_id.cef_profile_string();
-        let popup_open_handler = self.browser_popup_open_handler(cx);
+        let remote_machine_id = self
+            .browser_tabs
+            .tab(tab_id)
+            .and_then(|tab| tab.remote_machine_id.clone());
+        let profile = if let Some(machine_id) = remote_machine_id.as_deref() {
+            use sha2::{Digest, Sha256};
+            let tunnel = self.ensure_remote_browser_tunnel(machine_id, false, cx)?;
+            let identity = format!("{:x}", Sha256::digest(machine_id.as_bytes()));
+            let profile = format!(
+                "remote-{}-{}-{}",
+                tunnel.port,
+                &identity[..16],
+                profile_id.0
+            );
+            if !self.prepare_remote_browser_context(machine_id, &profile, tunnel.port, cx) {
+                return None;
+            }
+            profile
+        } else {
+            profile_id.cef_profile_string()
+        };
+        let popup_open_handler = self.browser_popup_open_handler(remote_machine_id, cx);
         let page_metadata_handler = self.browser_page_metadata_handler(tab_id, cx);
         let media_access_handler = self.browser_media_access_handler(tab_id, profile_id, cx);
         let initially_visible = BrowserRuntimeSurfacePolicy::for_tab(
@@ -692,6 +712,7 @@ impl GhostexGpuiApp {
     */
     pub(crate) fn browser_popup_open_handler(
         &self,
+        remote_machine_id: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) -> cef::BrowserPopupOpenHandler {
         let app = cx.entity().downgrade();
@@ -701,6 +722,7 @@ impl GhostexGpuiApp {
 
         Rc::new(
             move |requested_url: String, placement: cef::BrowserPopupPlacement| {
+                let remote_machine_id = remote_machine_id.clone();
                 let app = app.clone();
                 let mut async_cx = async_cx.clone();
                 foreground
@@ -710,6 +732,7 @@ impl GhostexGpuiApp {
                                 Some(BrowserRuntimeOwner::Live) => {
                                     this.open_browser_popup_tab(
                                         requested_url,
+                                        remote_machine_id,
                                         placement,
                                         window,
                                         cx,
@@ -719,6 +742,7 @@ impl GhostexGpuiApp {
                                     this.open_parked_browser_popup_tab(
                                         &project_id,
                                         requested_url,
+                                        remote_machine_id,
                                         placement,
                                         cx,
                                     );
@@ -743,6 +767,10 @@ impl GhostexGpuiApp {
         let runtime_key = self.browser_tabs_runtime_key;
 
         Rc::new(move |event: cef::BrowserPageMetadataEvent| {
+            let remote_favicon_url = match &event {
+                cef::BrowserPageMetadataEvent::FaviconUrlChanged(Some(url)) => Some(url.clone()),
+                _ => None,
+            };
             let app = app.clone();
             let mut async_cx = async_cx.clone();
             foreground
@@ -761,6 +789,9 @@ impl GhostexGpuiApp {
                                 );
                             }
                             None => {}
+                        }
+                        if let Some(url) = remote_favicon_url {
+                            this.fetch_remote_tab_favicon(runtime_key, tab_id, url, cx);
                         }
                     });
                 })
