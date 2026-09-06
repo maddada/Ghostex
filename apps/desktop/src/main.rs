@@ -16,6 +16,7 @@ mod ghostty_kit;
 mod ghostty_vt;
 mod navigation_history;
 mod plugins_modal;
+mod profiling;
 mod shared_settings;
 mod support_logs;
 mod terminal_element;
@@ -190,6 +191,7 @@ fn main() {
     // Ghostex-owned wrappers off the main thread so filesystem probing cannot
     // delay first paint, and only after the PATH normalization above so the
     // scan sees the user's standard tool directories.
+    profiling::start();
     thread::spawn(gpui_auto_repair_stale_ghostex_cli_wrappers);
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     cef_component_window::configure_cef_framework_path_for_process();

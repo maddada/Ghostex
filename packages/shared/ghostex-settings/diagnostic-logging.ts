@@ -19,6 +19,21 @@ export type DiagnosticLoggingScenarioDefinition = {
 };
 export const DIAGNOSTIC_LOGGING_SCENARIOS = [
   {
+    description: 'Per-second native timing aggregates when launched with --profile (30-minute maximum).',
+    group: 'GPUI',
+    id: 'gpui.performance',
+    label: 'Desktop performance profiling',
+    logFiles: ['gpui-performance.jsonl'],
+  },
+  {
+    description:
+      'Composer draft saves, send acknowledgements, clears, and restart recovery, with lengths and fingerprints for partial-text restores.',
+    group: 'GPUI',
+    id: 'gpui.sessionChat.drafts',
+    label: 'Chat draft persistence and recovery',
+    logFiles: ['gpui-session-chat-debug.jsonl', 'gxserver.jsonl'],
+  },
+  {
     description: 'AppKit focus, first responder, key/input routing, and terminal focus repair breadcrumbs.',
     group: 'macOS',
     id: 'native.terminal.focus',

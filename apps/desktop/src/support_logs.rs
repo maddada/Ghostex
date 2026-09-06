@@ -40,6 +40,7 @@ pub enum GpuiSupportLog {
     AppModal,
     TitlebarPopupRepro,
     CrashReports,
+    Performance,
 }
 
 impl GpuiSupportLog {
@@ -57,11 +58,13 @@ impl GpuiSupportLog {
             Self::AppModal => "gpui-app-modal-debug.jsonl",
             Self::TitlebarPopupRepro => "gpui-titlebar-popup-repro.jsonl",
             Self::CrashReports => "gpui-crash-reports.log",
+            Self::Performance => "gpui-performance.jsonl",
         }
     }
 
     fn scenario(self) -> Option<GpuiDiagnosticScenario> {
         match self {
+            Self::Performance => Some(GpuiDiagnosticScenario::Performance),
             Self::HostLifecycle => Some(GpuiDiagnosticScenario::HostLifecycle),
             Self::RemoteGxserverInstall => Some(GpuiDiagnosticScenario::RemoteGxserverInstall),
             Self::SidebarRenderer => Some(GpuiDiagnosticScenario::SidebarRenderer),
@@ -79,6 +82,7 @@ impl GpuiSupportLog {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GpuiDiagnosticScenario {
+    Performance,
     HostLifecycle,
     RemoteGxserverInstall,
     SidebarRenderer,
@@ -92,6 +96,7 @@ pub enum GpuiDiagnosticScenario {
 impl GpuiDiagnosticScenario {
     fn scenario_id(self) -> &'static str {
         match self {
+            Self::Performance => "gpui.performance",
             Self::HostLifecycle => "native.host.lifecycle",
             Self::RemoteGxserverInstall => "native.remote.gxserver.install",
             Self::SidebarRenderer => "gpui.sidebar.renderer",
