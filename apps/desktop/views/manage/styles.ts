@@ -3,7 +3,6 @@ import {
   MANAGE_MEO_CODE_BLOCK_BACKGROUND,
   MANAGE_MEO_CODE_COLOR,
   MANAGE_MEO_HEADING_COLOR,
-  MANAGE_MEO_VARIABLE_COLOR,
   MANAGE_REDLINE_ANNOTATION_COLOR,
 } from './constants';
 import { quickLabelColor } from './annotation-store';
@@ -13,14 +12,14 @@ export const MANAGE_STYLES = `
     color-scheme: dark;
     --manage-bg: #0e0e0e;
     --manage-panel: #0e0e0e;
-    --manage-panel-strong: #181818;
-    --manage-panel-raised: #202020;
+    --manage-panel-strong: #161616;
+    --manage-panel-raised: #1d1d1d;
     --manage-border: color-mix(in srgb, #ffffff 11%, transparent);
     --manage-border-strong: rgba(255, 255, 255, 0.12);
-    --manage-text: #c8cdd5;
-    --manage-muted: #a6adb6;
-    --manage-subtle: #747b85;
-    --manage-accent: #95d7f6;
+    --manage-text: #e5e5e5;
+    --manage-muted: #a3a3a3;
+    --manage-subtle: #808080;
+    --manage-accent: #9bbce0;
     --manage-accent-muted: rgba(255, 255, 255, 0.055);
     --manage-row-surface: #202020;
     /*
@@ -30,9 +29,9 @@ export const MANAGE_STYLES = `
      * 32px convention. Header bars keep their own 35px full-height segments.
      */
     --manage-control-height: 32px;
-    --manage-green: #86efac;
+    --manage-green: #9db6aa;
     --manage-red: #fda4af;
-    --manage-yellow: #fde68a;
+    --manage-yellow: #c6ad80;
     background: var(--manage-bg);
   }
 
@@ -68,7 +67,7 @@ export const MANAGE_STYLES = `
 
   body {
     color: var(--manage-text);
-    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+    font-family: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   }
 
   button,
@@ -117,8 +116,13 @@ export const MANAGE_STYLES = `
     grid-row: 1;
   }
 
+  /*
+   * CDXC:Docs 2026-09-05 DECISION:
+   * User: make the files list match the existing app sidebar, including its lightweight text, neutral row states, and context menu.
+   */
   .manage-sidebar {
-    background: var(--manage-panel);
+    background: var(--app-background);
+    color: var(--app-foreground);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -341,8 +345,8 @@ export const MANAGE_STYLES = `
    */
   .manage-sidebar-menu {
     backdrop-filter: blur(18px);
-    background: #0e0e0e;
-    border: 1px solid #595959;
+    background: var(--app-dropdown-background);
+    border: 1px solid var(--ghostex-tooltip-border);
     border-radius: 8px;
     box-shadow:
       0 18px 42px rgba(0, 0, 0, 0.38),
@@ -496,7 +500,7 @@ export const MANAGE_STYLES = `
     flex: 1 1 auto;
     font-size: 15.55px;
     font-weight: 300;
-    line-height: 18px;
+    line-height: 20px;
     min-width: 0;
     outline: 0;
     padding: 0;
@@ -530,7 +534,7 @@ export const MANAGE_STYLES = `
   .manage-file-list {
     min-height: 0;
     overflow: auto;
-    padding: 0 0 10px;
+    padding: 4px 0 10px;
     position: relative;
     scrollbar-color: transparent transparent;
     scrollbar-width: thin;
@@ -594,12 +598,12 @@ export const MANAGE_STYLES = `
     background: transparent;
     border: 0;
     box-sizing: border-box;
-    color: var(--manage-muted);
+    color: #b4b8c0;
     display: grid;
     gap: 9px;
     grid-template-columns: 14px 16px minmax(0, 1fr) auto;
-    min-height: 29px;
-    padding: 4px 7px 4px calc(9px + (var(--depth) * 18px));
+    min-height: 34px;
+    padding: 7px 7px 7px calc(9px + (var(--depth) * 18px));
     position: relative;
     text-align: left;
     width: 100%;
@@ -607,8 +611,8 @@ export const MANAGE_STYLES = `
 
   .manage-file-row:hover,
   .manage-file-row:focus-visible {
-    background: color-mix(in srgb, var(--manage-text) 8%, transparent);
-    color: var(--manage-text);
+    background: var(--app-context-menu-hover-background);
+    color: #d8d8d8;
     outline: none;
   }
 
@@ -622,8 +626,8 @@ export const MANAGE_STYLES = `
   }
 
   .manage-file-row[data-selected="true"] {
-    background: color-mix(in srgb, var(--manage-row-surface) 72%, transparent);
-    color: #ffffff;
+    background: var(--manage-row-surface);
+    color: #d8d8d8;
   }
 
   .manage-file-row[data-context-menu-open="true"] {
@@ -667,12 +671,13 @@ export const MANAGE_STYLES = `
 
   .manage-file-icon {
     color: currentColor;
+    opacity: 0.75;
   }
 
   .manage-file-name {
     font-size: 15.55px;
     font-weight: 300;
-    line-height: 18px;
+    line-height: 20px;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -688,10 +693,10 @@ export const MANAGE_STYLES = `
 
   .manage-count-badge {
     align-items: center;
-    background: rgba(253, 230, 138, 0.14);
-    border: 1px solid rgba(253, 230, 138, 0.32);
+    background: var(--manage-panel-raised);
+    border: 1px solid var(--manage-border-strong);
     border-radius: 4px;
-    color: var(--manage-yellow);
+    color: var(--manage-muted);
     display: inline-flex;
     font-size: 10px;
     font-weight: 500;
@@ -701,42 +706,17 @@ export const MANAGE_STYLES = `
     padding: 0 5px;
   }
 
-  /*
-   * CDXC:Docs 2026-08-08:
-   * Docs uses the shared sidebar context-menu stylesheet and class contract.
-   * Keep only Docs-specific tokens and nested-row layout here so its menu
-   * surface, spacing, square corners, hover, dividers, and danger rows cannot
-   * drift from the GPUI sidebar menu again.
-   */
   .sidebar-context-menu-backdrop {
-    background: transparent;
-    border: 0;
-    cursor: default;
-    inset: 0;
-    margin: 0;
-    padding: 0;
-    position: fixed;
     z-index: 60;
   }
 
   .manage-file-context-menu {
-    --app-border: var(--manage-border);
-    --app-card: var(--manage-panel);
-    --app-context-menu-hover-background: var(--manage-row-surface);
-    /*
-     * CDXC:AppModal 2026-08-26:
-     * Docs-scoped only. The shared sidebar-context-menu sheet stays square for
-     * every other surface that uses it; rounding is applied through the Docs
-     * class so this page's menus match the Docs dropdown language.
-     */
-    border-radius: 8px;
-    color: var(--manage-text);
+    color: var(--app-foreground);
     font-size: 12px;
     font-weight: 400;
   }
 
   .manage-file-context-menu-item {
-    border-radius: 6px;
     line-height: 16px;
   }
 
@@ -836,7 +816,12 @@ export const MANAGE_STYLES = `
     grid-template-rows: auto minmax(0, 1fr);
   }
 
+  /*
+   * CDXC:Docs 2026-09-05 DECISION:
+   * User: keep this bar's square full-height buttons and their existing sizes and widths; only fonts and colors may change.
+   */
   .manage-preview-header {
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
     align-items: center;
     border-bottom: 1px solid var(--manage-border);
     box-sizing: border-box;
@@ -1122,7 +1107,7 @@ export const MANAGE_STYLES = `
   }
 
   .manage-meo-markdown-editor {
-    background: #101112;
+    background: var(--manage-bg);
     box-sizing: border-box;
     color: rgba(248, 250, 252, 0.9);
     inline-size: 100%;
@@ -1138,6 +1123,8 @@ export const MANAGE_STYLES = `
    * Keep Meo's single-row toolbar layout, measure before hiding the three secondary right-side utility buttons, and use one Live/Source toggle button instead of a two-option segmented control.
    */
   .manage-meo-markdown-editor .mode-toolbar {
+    background: #0d0d0d;
+    box-shadow: inset 0 -1px 0 var(--manage-border);
     box-sizing: border-box;
     display: flex;
     flex: 0 0 auto;
@@ -1190,8 +1177,8 @@ export const MANAGE_STYLES = `
 
   .manage-meo-markdown-editor .mode-button[aria-selected="true"],
   .manage-meo-markdown-editor .mode-button.is-active {
-    background: rgba(125, 211, 252, 0.18);
-    box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.34);
+    background: #242424;
+    box-shadow: inset 0 0 0 1px var(--manage-border-strong);
     color: var(--manage-text);
   }
 
@@ -1235,19 +1222,24 @@ export const MANAGE_STYLES = `
   .manage-meo-markdown-editor .cm-line:not(.meo-md-code-block):not(.meo-src-code-block) + .cm-line:is(.meo-md-code-block, .meo-src-code-block),
   .manage-meo-markdown-editor .cm-content > .cm-line:is(.meo-md-code-block, .meo-src-code-block):first-child {
     --manage-code-block-top-border: var(--manage-border-strong);
+    border-radius: 8px 8px 0 0;
   }
 
   .manage-meo-markdown-editor .cm-line:is(.meo-md-code-block, .meo-src-code-block):has(+ .cm-line:not(.meo-md-code-block):not(.meo-src-code-block)),
   .manage-meo-markdown-editor .cm-content > .cm-line:is(.meo-md-code-block, .meo-src-code-block):last-child {
     --manage-code-block-bottom-border: var(--manage-border-strong);
+    border-radius: 0 0 8px 8px;
   }
 
-  .manage-meo-markdown-editor .cm-line:is(.meo-md-code-block, .meo-src-code-block) [style*="#fde68a" i],
-  .manage-meo-markdown-editor .cm-line:is(.meo-md-code-block, .meo-src-code-block) [style*="rgb(253, 230, 138)" i],
-  .manage-meo-markdown-editor .cm-line:is(.meo-md-code-block, .meo-src-code-block) [style*="#c084fc" i],
-  .manage-meo-markdown-editor .cm-line:is(.meo-md-code-block, .meo-src-code-block) [style*="rgb(192, 132, 252)" i] {
-    color: ${MANAGE_MEO_VARIABLE_COLOR} !important;
-    -webkit-text-fill-color: ${MANAGE_MEO_VARIABLE_COLOR} !important;
+  .manage-meo-markdown-editor .meo-search-match {
+    background: rgba(155, 188, 224, 0.18);
+    color: var(--manage-text);
+    outline-color: rgba(155, 188, 224, 0.4);
+  }
+
+  .manage-meo-markdown-editor .meo-search-match-active {
+    background: rgba(155, 188, 224, 0.32);
+    outline-color: var(--manage-accent);
   }
 
   .manage-meo-markdown-editor .editor-wrapper,
@@ -1264,12 +1256,12 @@ export const MANAGE_STYLES = `
   }
 
   .manage-meo-markdown-editor .cm-editor {
-    background: #101112;
+    background: var(--manage-bg);
     height: 100%;
   }
 
   .manage-meo-markdown-editor .cm-scroller {
-    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+    scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
   }
 
   .manage-meo-markdown-editor .cm-gutters {

@@ -1,3 +1,4 @@
+import '@fontsource-variable/inter';
 import { createRoot } from 'react-dom/client';
 import { TooltipProvider } from '@/packages/core-ui/app-tooltip';
 import { ManageApp } from './manage/manage-app';

@@ -59,39 +59,39 @@ import {
 import { applyThemeSettings as applyMeoThemeSettings } from '../meo/helpers/theme';
 
 export const MANAGE_MEO_THEME = {
-  backgroundColor: '#101112',
+  backgroundColor: '#0e0e0e',
   colors: {
-    base01: '#e5e7eb',
-    base02: '#8b949e',
-    base03: '#30363d',
+    base01: '#d4d4d4',
+    base02: '#858585',
+    base03: '#303030',
     base04: MANAGE_MEO_HEADING_COLOR,
-    base05: '#7dd3fc',
-    base06: '#67e8f9',
-    base07: '#fde68a',
-    base08: '#c084fc',
-    base09: '#86efac',
+    base05: '#9bbce0',
+    base06: '#a4bac8',
+    base07: '#e5e5e5',
+    base08: '#b6a3cc',
+    base09: '#a4bac8',
   },
   fonts: {
-    liveFont: '',
-    sourceFont: '',
-    liveFontWeight: '450',
-    sourceFontWeight: '450',
+    liveFont: '"Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif',
+    sourceFont: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    liveFontWeight: '400',
+    sourceFontWeight: '400',
     liveFontSize: 14,
     sourceFontSize: 14,
-    h1FontSize: 1.5,
-    h1FontWeight: '720',
-    h2FontSize: 1.35,
-    h2FontWeight: '700',
+    h1FontSize: 1.85,
+    h1FontWeight: '650',
+    h2FontSize: 1.45,
+    h2FontWeight: '600',
     h3FontSize: 1.18,
-    h3FontWeight: '700',
+    h3FontWeight: '600',
     h4FontSize: 1.08,
-    h4FontWeight: '680',
+    h4FontWeight: '600',
     h5FontSize: 1,
-    h5FontWeight: '660',
+    h5FontWeight: '600',
     h6FontSize: 0.94,
-    h6FontWeight: '650',
-    liveLineHeight: 1.55,
-    sourceLineHeight: 1.55,
+    h6FontWeight: '600',
+    liveLineHeight: 1.7,
+    sourceLineHeight: 1.65,
   },
   id: 'ghostex-manage-meo',
   name: 'Ghostex Docs Meo',
@@ -101,6 +101,10 @@ export const MANAGE_MEO_THEME = {
     constant: MANAGE_MEO_VARIABLE_COLOR,
     definedVariable: MANAGE_MEO_VARIABLE_COLOR,
     monospace: MANAGE_MEO_CODE_COLOR,
+    keyword: '#b6a3cc',
+    operatorKeyword: '#b6a3cc',
+    quote: '#a3a3a3',
+    strong: '#e5e5e5',
     regexp: MANAGE_MEO_VARIABLE_COLOR,
     specialVariable: MANAGE_MEO_VARIABLE_COLOR,
     specialString: MANAGE_MEO_VARIABLE_COLOR,
@@ -713,16 +717,17 @@ export function applyManageMeoTheme(): void {
   const rootStyle = document.documentElement.style;
   rootStyle.setProperty(
     '--vscode-editor-font-family',
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+    '"Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
   );
   rootStyle.setProperty('--vscode-editor-font-size', '14px');
-  rootStyle.setProperty('--vscode-editor-font-weight', '450');
-  rootStyle.setProperty('--vscode-editor-background', '#101112');
-  rootStyle.setProperty('--vscode-editor-foreground', '#e5e7eb');
-  rootStyle.setProperty('--vscode-sideBar-background', '#17191c');
+  rootStyle.setProperty('--vscode-editor-font-weight', '400');
+  rootStyle.setProperty('--vscode-editor-background', MANAGE_MEO_THEME.backgroundColor);
+  rootStyle.setProperty('--vscode-editor-foreground', MANAGE_MEO_THEME.colors.base01);
+  rootStyle.setProperty('--vscode-sideBar-background', '#0d0d0d');
   rootStyle.setProperty('--vscode-panel-border', 'rgba(255, 255, 255, 0.10)');
-  rootStyle.setProperty('--vscode-editor-selectionBackground', 'rgba(125, 211, 252, 0.28)');
-  rootStyle.setProperty('--vscode-editorWidget-background', '#17191c');
+  rootStyle.setProperty('--vscode-editor-selectionBackground', 'rgba(155, 188, 224, 0.28)');
+  rootStyle.setProperty('--vscode-editorWidget-background', '#0d0d0d');
+  rootStyle.setProperty('--vscode-toolbar-hoverBackground', '#242424');
   applyMeoThemeSettings(MANAGE_MEO_THEME);
 }
 

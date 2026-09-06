@@ -50,9 +50,14 @@
   max-height: calc(100vh - 24px);
   overflow-y: auto;
   padding: 6px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
-  border-radius: 0;
-  background: color-mix(in srgb, var(--app-card) 92%, #000000 8%);
+  /*
+   * CDXC:Docs 2026-09-05 DECISION:
+   * User: the Docs files context menu must match the existing app sidebar menu.
+   * Keep the shared menu appearance here because Docs imports this sheet without the sidebar shell stylesheet.
+   */
+  border: 1px solid var(--ghostex-tooltip-border, rgba(255, 255, 255, 0.12));
+  border-radius: 8px;
+  background: var(--app-dropdown-background);
   box-shadow:
     0 14px 28px color-mix(in srgb, #000000 32%, transparent),
     0 0 0 1px color-mix(in srgb, #ffffff 4%, transparent);
@@ -77,8 +82,9 @@
   width: 100%;
   padding: 8px 10px;
   border: 0;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
+  cursor: default;
   color: inherit;
   text-align: left;
   white-space: nowrap;
