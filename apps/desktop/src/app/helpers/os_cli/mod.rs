@@ -6,6 +6,7 @@
 // qualification. If two submodules ever define the same name, drop the glob
 // for one of them here and qualify its call sites instead. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
+pub(crate) mod agent_folder_trust;
 pub(crate) mod app_state_persistence;
 pub(crate) mod attention_and_menu_bar;
 pub(crate) mod cli_install;
@@ -23,6 +24,7 @@ pub(crate) mod open_target;
 pub(crate) mod process_and_constants;
 pub(crate) mod source_code_server_spawn;
 
+pub(crate) use agent_folder_trust::*;
 pub(crate) use app_state_persistence::*;
 pub(crate) use attention_and_menu_bar::*;
 pub(crate) use cli_install::*;
