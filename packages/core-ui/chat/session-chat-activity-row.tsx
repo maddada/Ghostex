@@ -106,14 +106,16 @@ export function SessionChatActivityRow({ activity, className }: SessionChatActiv
         ) : (
           <span aria-hidden='true' className='size-1.5 shrink-0 animate-pulse rounded-full bg-primary' />
         )}
-        <span className='ghostex-chat-card-title min-w-0 flex-1 truncate text-sm text-foreground/90'>{activity.label}</span>
+        <span className='ghostex-chat-card-title min-w-0 flex-1 truncate text-foreground/90'>{activity.label}</span>
         {elapsed !== null ? (
           <span className='ghostex-chat-card-hint shrink-0 text-xs text-muted-foreground tabular-nums'>
             {formatSessionChatActivityElapsed(elapsed)}
           </span>
         ) : null}
         {percent !== null ? (
-          <span className='ghostex-chat-card-hint shrink-0 text-xs font-medium text-foreground/80 tabular-nums'>{percent}%</span>
+          <span className='ghostex-chat-card-hint shrink-0 text-xs font-medium text-foreground/80 tabular-nums'>
+            {percent}%
+          </span>
         ) : null}
       </div>
       {percent !== null ? (
@@ -129,6 +131,12 @@ export function SessionChatActivityRow({ activity, className }: SessionChatActiv
             style={{ width: `${percent}%` }}
           />
         </div>
+      ) : null}
+      {/* CDXC:SessionChat 2026-09-10 DECISION: User: Claude Code compaction shows "Send message to queue it after compaction". */}
+      {activity.kind === 'compacting' ? (
+        <p className='ghostex-chat-card-hint text-xs text-muted-foreground'>
+          Send message to queue it after compaction
+        </p>
       ) : null}
     </div>
   );

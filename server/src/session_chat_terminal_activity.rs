@@ -42,9 +42,8 @@ use crate::session_chat_options::{session_chat_option_agent, SessionChatOptionAg
 
 use serde_json::{json, Map, Value};
 
-/// Tail window scanned for a progress line. The spinner row and its bar sit at
-/// the very bottom of a working screen, above at most a tip line and the
-/// statusline; 15 matches the notice banner scope.
+/// Tail window for general status and tool rows. Compaction scans the whole
+/// screen because queued messages can push its progress above this window.
 const ACTIVITY_SCAN_LINES: usize = 15;
 
 /// Rows after the label that may carry the bar. Claude paints it on the very
@@ -456,7 +455,7 @@ general status requires `⏺`, and another star marker requires an allowlisted
 whole label. An assistant sentence, a tip, and custom spinner wording cannot
 satisfy those shapes.
 */
-fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
+fn compacting_activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
     if let Some(at) = line.find(COMPACTING_LABEL) {
         if !line[..at]
             .chars()
@@ -469,6 +468,14 @@ fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
             activity.elapsed_seconds = trailing_parenthetical(line).and_then(parse_elapsed_seconds);
             return Some(activity);
         }
+    }
+
+    None
+}
+
+fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
+    if let Some(activity) = compacting_activity_from_line(line) {
+        return Some(activity);
     }
 
     let trimmed = line.trim_start();
@@ -737,6 +744,9 @@ fn claude_tool_gutter_text(rows: &[ScreenRow], gutter: usize) -> Option<String> 
 }
 
 /// `Some` while the agent is painting a live line this build understands.
+///
+/// CDXC:AgentScreenDetection 2026-09-10 DECISION:
+/// User: detect compaction across the whole terminal screen and mirror its progress above the chat composer, even when a long queued message pushes it away from the bottom.
 pub fn detect_session_chat_terminal_activity(
     agent: Option<&str>,
     screen_text: &str,
@@ -756,6 +766,15 @@ pub fn detect_session_chat_terminal_activity(
         return None;
     }
     let mut rows = screen_rows(screen_text);
+    for index in (0..rows.len()).rev() {
+        if let Some(mut activity) = compacting_activity_from_line(&rows[index].text) {
+            activity.percent = rows[index + 1..]
+                .iter()
+                .take(ACTIVITY_PERCENT_LOOKAHEAD)
+                .find_map(|candidate| parse_percent(&candidate.text));
+            return Some(activity);
+        }
+    }
     /*
     CDXC:AgentScreenDetection 2026-08-23: cut the background-agent block off
     the bottom of the screen before reading anything. Its rows are
@@ -782,12 +801,7 @@ pub fn detect_session_chat_terminal_activity(
         let Some(mut activity) = activity_from_line(line) else {
             continue;
         };
-        if activity.kind == SESSION_CHAT_ACTIVITY_COMPACTING {
-            activity.percent = rows[index + 1..]
-                .iter()
-                .take(ACTIVITY_PERCENT_LOOKAHEAD)
-                .find_map(|candidate| parse_percent(&candidate.text));
-        } else if activity.kind == SESSION_CHAT_ACTIVITY_CLAUDE_STATUS && line.starts_with('⏺') {
+        if activity.kind == SESSION_CHAT_ACTIVITY_CLAUDE_STATUS && line.starts_with('⏺') {
             // Re-read the status from its whole wrapped extent, so the clock
             // and parenthetical metadata are stripped from the real end of
             // the text rather than from the end of its first row.
