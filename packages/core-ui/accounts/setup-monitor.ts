@@ -22,7 +22,7 @@ export function monitorAccountSetup(): () => void {
         for (const job of data.setupJobs ?? []) {
           if (stopped || job.acknowledged || job.status !== 'complete') continue;
           await connection.request({ operation: 'setupAcknowledge', owner: accountSetupOwner(), jobId: job.id });
-          openAppModal({ type: 'open', modal: 'settings', initialTab: 'agents', initialAgentsSection: 'accounts' });
+          openAppModal({ type: 'open', modal: 'settings', initialTab: 'accounts' });
           showAccountFlowToast('Account connected', 'Your account is ready and highlighted in Settings.');
         }
       }

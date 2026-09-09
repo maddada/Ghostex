@@ -80,6 +80,59 @@ export interface AgentAccountsState {
     recovery?: AccountRecovery;
   };
 }
+
+/** CDXC:AgentProviders 2026-09-09 DECISION: User: quick launch starts with the saved default account. If that account has any usage window at 100%, the provider's saved switch/wait and account-preference rules choose the account for the new session. SEE-ALSO: server/src/accounts/recovery.rs. */
+export function quickLaunchAccountId(
+  state: AgentAccountsState,
+  provider: AccountProvider
+): string | undefined {
+  const accounts = state.accounts.filter((account) => account.registered && account.provider === provider);
+  const selected =
+    accounts.find((account) => account.id === state.defaultAccounts[provider]) ??
+    accounts.toSorted((left, right) => Number(left.selector) - Number(right.selector))[0];
+  if (!selected || !selected.usage.some((window) => window.usedPercent >= 100)) return selected?.id;
+
+  const policy = state.defaults[provider] ?? DEFAULT_ACCOUNT_POLICY;
+  if (!policy.enabled || policy.atLimit !== 'switch') return selected.id;
+
+  const score = (account: AgentAccount) =>
+    account.usage.reduce((highest, window) => Math.max(highest, window.usedPercent), 0);
+  const reset = (account: AgentAccount) =>
+    account.usage.reduce<number | undefined>((earliest, window) => {
+      const timestamp = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;
+      if (!Number.isFinite(timestamp)) return earliest;
+      return earliest === undefined ? timestamp : Math.min(earliest, timestamp);
+    }, undefined);
+  const candidates = accounts
+    .filter(
+      (account) =>
+        account.id !== selected.id &&
+        account.eligible &&
+        account.status === 'ready' &&
+        !account.usageError &&
+        account.usage.length > 0 &&
+        account.usage.every((window) => window.usedPercent < 100)
+    )
+    .toSorted((left, right) => {
+      if (policy.priority === 'leastUsed') return score(left) - score(right) || left.id.localeCompare(right.id);
+      if (policy.priority === 'mostUsed') return score(right) - score(left) || left.id.localeCompare(right.id);
+      const leftReset = reset(left);
+      const rightReset = reset(right);
+      const resetOrder =
+        leftReset === undefined
+          ? rightReset === undefined
+            ? 0
+            : 1
+          : rightReset === undefined
+            ? -1
+            : policy.priority === 'latestReset'
+              ? rightReset - leftReset
+              : leftReset - rightReset;
+      return resetOrder || left.id.localeCompare(right.id);
+    });
+  return candidates[0]?.id ?? selected.id;
+}
+
 export type AgentAccountsRequest =
   | { operation: 'setTitlebar'; id: string; shown: boolean }
   | { operation: 'setupStart'; owner: string; provider: AccountProvider; email: string; shareHistory: true; accountId?: string; selector?: string }
@@ -109,4 +162,9 @@ export interface AccountSetupJob {
   output: string;
   error?: string;
   acknowledged: boolean;
+}
+
+/** Account labels contain up to two letters or digits; a lone hyphen hides the indicator. */
+export function normalizeAccountIndicatorInput(value: string): string {
+  return value === '-' ? '-' : (value.match(/[\p{L}\p{N}]/gu) ?? []).slice(0, 2).join('');
 }

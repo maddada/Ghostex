@@ -52,7 +52,7 @@ export function AccountConnectionGuide({
           <DialogHeader>
             <DialogTitle>Connect your accounts</DialogTitle>
             <DialogDescription>
-              Save each login on the computer where your sessions run, then add it to Ghostex.
+              Add an account for usage stats on the computer where your sessions run. This is optional, even for a single account.
             </DialogDescription>
           </DialogHeader>
           <section>
@@ -89,7 +89,8 @@ export function AccountConnectionGuide({
           </section>
           <section>
             <h3>2. Your account is ready</h3>
-            <p>Ghostex verifies and adds the connected account automatically, then opens Accounts with it highlighted. Give it a name or swap its slot with another account. A white badge at the top-left of the session’s agent icon identifies the account. Use its slot number or set a custom letter or number in the account’s settings.</p>
+            <p>Ghostex verifies and adds the connected account automatically, then opens Settings &gt; Accounts with it highlighted. Star the account to show its usage in the titlebar. In chat context details, star Account limits to show usage in the status line.</p>
+            <p>Give the account a name or swap its slot with another account. A small label centered over the session’s agent icon identifies the account. Use its slot number or set up to two custom letters or numbers in the account’s settings.</p>
           </section>
           <section>
             <h3>3. Start with an account</h3>
@@ -99,7 +100,8 @@ export function AccountConnectionGuide({
             </p>
             <p>
               Quick launch uses the account chosen under Account for new sessions in Settings. Choosing another
-              account from the launcher applies only to that new session. Add an account before starting Claude or Codex.
+              account from the launcher applies only to that new session. Until you add an account for a provider,
+              Ghostex uses its current CLI login without an account switcher.
             </p>
           </section>
           <section>

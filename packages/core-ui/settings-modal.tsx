@@ -110,6 +110,7 @@ import {
   SessionChatThemeField,
   SettingButton,
   SettingRow,
+  SettingsListItem,
   SettingsNativeScrollArea,
   SettingsSection,
   SettingsSelect,
@@ -138,6 +139,7 @@ import { getMostlyVisibleSettingsSectionId, isAdvancedMainSetting } from './sett
 import { AboutSettingsTab } from './settings-modal/tabs/about';
 import { ActionsSettingsTab } from './settings-modal/tabs/actions';
 import { AgentsSettingsTab } from './settings-modal/tabs/agents';
+import { AccountsSettingsTab } from './settings-modal/tabs/accounts';
 import { ExtensionsSettingsTab } from './settings-modal/tabs/extensions';
 import { HotkeysSettingsTab } from './settings-modal/tabs/hotkeys';
 import { IntegrationsSettingsTab } from './settings-modal/tabs/integrations';
@@ -271,6 +273,7 @@ export type SettingsModalProps = {
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
+  onInstallHelpSkill?: () => void;
   onPlayCompletionSound?: (sound: CompletionSoundSetting) => void;
   onRequestMacOSNotificationPermission?: () => void;
   /*
@@ -292,6 +295,7 @@ export type SettingsModalProps = {
   onSetOSIntegrationDefaults?: (target: 'editor' | 'terminalLinks' | 'scriptRunner' | 'all') => void;
   onTestAgentTaskCompletion?: () => void;
   projects?: SidebarProjectSettingsItem[];
+  projectViewSpaces?: import('@/packages/shared/ghostex-settings/project-views').ProjectViewSpace[];
   settings?: ghostexSettings;
   /**
    * Talks to the gxserver that owns Easy Connect and SSH access. Absent where
@@ -351,6 +355,7 @@ export function SettingsModal({
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
   onInstallMoveCodexSessionSkill,
+  onInstallHelpSkill,
   onPlayCompletionSound,
   onRequestMacOSNotificationPermission,
   onInstallAgentHooks,
@@ -366,6 +371,7 @@ export function SettingsModal({
   onSetOSIntegrationDefaults,
   onTestAgentTaskCompletion,
   projects = [],
+  projectViewSpaces = [],
   settings,
   tailcatRpc,
   theme = 'dark-blue',
@@ -1139,15 +1145,6 @@ export function SettingsModal({
                                 value={draft.sidebarSpacesEnabled}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.sidebar, 'revealSessionWhenActivating') ? (
-                              <ToggleField
-                                checked={draft.revealSessionWhenActivating}
-                                description='Switch Space, expand the project and group, and scroll to the activated session.'
-                                label='Reveal session when activating'
-                                {...getSettingModificationProps('revealSessionWhenActivating')}
-                                onChange={(checked) => updateDraft('revealSessionWhenActivating', checked)}
-                              />
-                            ) : null}
                             {/*
                              * CDXC:Settings 2026-06-30-22:22:
                              * Users need every preset-mutated setting directly under the preset selector so applying Recommended, Codex, Minimal, or Detailed has an inspectable effect without hunting through Session Cards, Project rows, or Status Indicators.
@@ -1391,16 +1388,6 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('sessionCards', settingsSearch.sessionCards) ? (
                           <SettingsSection sectionRef={sessionCardsSectionRef} title='Session Cards'>
-                            {/* CDXC:Icons 2026-06-29-23:58: Users need a Session Cards toggle for colored agent brand artwork while the default sidebar remains monochrome and favorite rows no longer gold-tint agent logos. CDXC:Icons 2026-06-30-22:40: The colored agent icon setting must also color the selected-agent launcher icon so the Mac sidebar picker and session cards use the same agent identity mode. */}
-                            {mainSettingVisible(settingsSearch.sessionCards, 'useColoredSessionAgentIcons') ? (
-                              <ToggleField
-                                checked={draft.useColoredSessionAgentIcons}
-                                description='Render session and selected-agent logos with colored brand artwork instead of monochrome masks.'
-                                label='Use colored agent icons'
-                                {...getSettingModificationProps('useColoredSessionAgentIcons')}
-                                onChange={(checked) => updateDraft('useColoredSessionAgentIcons', checked)}
-                              />
-                            ) : null}
                             {mainSettingVisible(settingsSearch.sessionCards, 'showSessionCloseContextMenuAction') ? (
                               <>
                                 {/*
@@ -1639,6 +1626,15 @@ export function SettingsModal({
                                 value={draft.sessionChatTranscriptWidthPercent}
                               />
                             ) : null}
+                            {mainSettingVisible(settingsSearch.chat, 'sessionChatFileEditPreviews') ? (
+                              <ToggleField
+                                checked={draft.sessionChatFileEditPreviews}
+                                description='Show the first seven code lines in each file edit. Turn off to show only the path and change counts.'
+                                label='Show file edit previews'
+                                {...getSettingModificationProps('sessionChatFileEditPreviews')}
+                                onChange={(checked) => updateDraft('sessionChatFileEditPreviews', checked)}
+                              />
+                            ) : null}
                             {mainSettingVisible(settingsSearch.chat, 'sessionChatVerboseMode') ? (
                               <ToggleField
                                 checked={draft.sessionChatVerboseMode}
@@ -1839,10 +1835,10 @@ export function SettingsModal({
                       it uses the neutral Info box pattern (muted border/background
                       plus an info icon) instead of any colored alert tint, matching
                       the IconInfoCircle info boxes used elsewhere in Settings. */}
-                                <div className='flex items-start gap-3 rounded-none border border-border bg-muted/20 px-4 py-3 text-sm leading-6 text-muted-foreground'>
+                                <div className='flex items-start gap-3 text-[13px] leading-5 text-muted-foreground'>
                                   <IconInfoCircle
                                     aria-hidden='true'
-                                    className='mt-0.5 size-4 shrink-0 text-foreground'
+                                    className='mt-0.5 size-4 shrink-0 text-muted-foreground'
                                   />
                                   <p className='m-0'>
                                     Whatever you set here also applies to your external Ghostty terminal because this
@@ -2556,17 +2552,7 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('sounds', settingsSearch.sounds) ? (
                           <SettingsSection sectionRef={soundsSectionRef} title='Sounds'>
-                            {mainSettingVisible(settingsSearch.sounds, 'completionSound') ? (
-                              <SoundField
-                                allowOff
-                                description='Sound for terminal completions.'
-                                label='Completion Sound'
-                                {...getSettingModificationProps('completionSound')}
-                                onChange={(value) => updateDraft('completionSound', value)}
-                                onPlay={onPlayCompletionSound}
-                                value={draft.completionSound}
-                              />
-                            ) : null}
+                            {/* CDXC:Settings 2026-09-09 DECISION: User: the macOS notification toggle leads the Sounds section and the two sound pickers sit next to each other under it. */}
                             {/* CDXC:Notifications 2026-05-10-16:46:
                   Attention banners are separate from completion sounds because
                   users may want clickable macOS routing without audible alerts. */}
@@ -2582,6 +2568,27 @@ export function SettingsModal({
                                     onRequestMacOSNotificationPermission?.();
                                   }
                                 }}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sounds, 'completionSound') ? (
+                              <SoundField
+                                allowOff
+                                description='Sound for terminal completions.'
+                                label='Completion Sound'
+                                {...getSettingModificationProps('completionSound')}
+                                onChange={(value) => updateDraft('completionSound', value)}
+                                onPlay={onPlayCompletionSound}
+                                value={draft.completionSound}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sounds, 'actionCompletionSound') ? (
+                              <SoundField
+                                description='Sound for action completions.'
+                                label='Action Completion Sound'
+                                {...getSettingModificationProps('actionCompletionSound')}
+                                onChange={(value) => value !== 'off' && updateDraft('actionCompletionSound', value)}
+                                onPlay={onPlayCompletionSound}
+                                value={draft.actionCompletionSound}
                               />
                             ) : null}
                             {/* CDXC:Notifications 2026-05-11-01:14:
@@ -2603,16 +2610,6 @@ export function SettingsModal({
                                 ]}
                                 description='Run the current completion sound and notification flow, or open macOS notification permissions.'
                                 label='Completion Alerts'
-                              />
-                            ) : null}
-                            {mainSettingVisible(settingsSearch.sounds, 'actionCompletionSound') ? (
-                              <SoundField
-                                description='Sound for action completions.'
-                                label='Action Completion Sound'
-                                {...getSettingModificationProps('actionCompletionSound')}
-                                onChange={(value) => value !== 'off' && updateDraft('actionCompletionSound', value)}
-                                onPlay={onPlayCompletionSound}
-                                value={draft.actionCompletionSound}
                               />
                             ) : null}
                           </SettingsSection>
@@ -2748,7 +2745,7 @@ export function SettingsModal({
 
                         {isFirstLaunchSetup ? (
                           <div className='flex justify-end pt-2'>
-                            <Button className='h-8 px-3 text-[13px]' onClick={closeSettingsModal} type='button'>
+                            <Button className='h-8 px-3' onClick={closeSettingsModal} type='button'>
                               Continue
                             </Button>
                           </div>
@@ -2756,12 +2753,7 @@ export function SettingsModal({
                           <>
                             <Separator className='bg-border' />
                             <div className='flex justify-between gap-3'>
-                              <Button
-                                className='h-8 px-3 text-[13px]'
-                                onClick={resetSettings}
-                                type='button'
-                                variant='outline'
-                              >
+                              <Button className='h-8 px-3' onClick={resetSettings} type='button' variant='outline'>
                                 Reset to defaults
                               </Button>
                             </div>
@@ -2804,6 +2796,7 @@ export function SettingsModal({
                       onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
                       onInstallGhostexCli={onInstallGhostexCli}
                       onInstallMoveCodexSessionSkill={onInstallMoveCodexSessionSkill}
+                      onInstallHelpSkill={onInstallHelpSkill}
                       onUninstallBundledAgentSkill={onUninstallBundledAgentSkill}
                       onUninstallBundledAgentSkills={onUninstallBundledAgentSkills}
                       onOpenAccessibilityPreferences={onOpenAccessibilityPreferences}
@@ -2817,6 +2810,7 @@ export function SettingsModal({
                 {!isFirstLaunchSetup ? (
                   <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='extensions'>
                     <ExtensionsSettingsTab
+                      spaces={projectViewSpaces}
                       isActive={isOpen && activeTab === 'extensions'}
                       onRequestStatus={onRequestPluginSettingsStatus}
                       onReinstallPlugin={onReinstallPlugin}
@@ -2859,6 +2853,7 @@ export function SettingsModal({
                 {!isFirstLaunchSetup ? (
                   <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='projects'>
                     <ProjectsSettingsPanel
+                      onCustomViewsChange={(value) => updateDraft('customViews', value)}
                       onGlobalBeadsDirectoryChange={(value) => updateDraft('globalBeadsDirectory', value)}
                       onGlobalBeadsDisplayKeyChange={(value) => updateDraft('globalBeadsDisplayKey', value)}
                       onGlobalDocsDirectoryChange={(value) => updateDraft('globalDocsDirectory', value)}
@@ -2873,10 +2868,19 @@ export function SettingsModal({
                   </TabsContent>
                 ) : null}
                 {!isFirstLaunchSetup ? (
-                  <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='agents'>
-                    <AgentsSettingsTab
+                  <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='accounts'>
+                    <AccountsSettingsTab
+                      isActive={isOpen && activeTab === 'accounts'}
                       hideAccountEmails={draft.hideAccountEmails}
                       onHideAccountEmailsChange={(checked) => updateDraft('hideAccountEmails', checked)}
+                      search={extraSettingsTabSearches.accounts}
+                      searchEmptyState={settingsSearchEmptyState}
+                    />
+                  </TabsContent>
+                ) : null}
+                {!isFirstLaunchSetup ? (
+                  <TabsContent className='mt-0 min-h-0 flex-1 overflow-hidden' value='agents'>
+                    <AgentsSettingsTab
                       initialAgentsSection={initialAgentsSection}
                       isActive={isOpen && activeTab === 'agents'}
                       agentHookStatus={agentHookStatus}
@@ -3205,15 +3209,9 @@ function GhostexFolderStatsSection({
   const folders = stats?.folders ?? [];
   return (
     <SettingsSection title='Storage'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <div className='text-sm font-medium text-foreground'>Ghostex folder</div>
-          <div className='mt-1 truncate text-xs text-muted-foreground'>
-            {stats?.folderPath ?? '~/.local/share/ghostex'}
-          </div>
-        </div>
+      <SettingsListItem detail={stats?.folderPath ?? '~/.local/share/ghostex'} title='Ghostex folder'>
         <SettingButton
-          className='h-9 shrink-0 gap-2 px-3 text-sm'
+          className='h-8 shrink-0 gap-2 px-3'
           disabled={!onOpenGhostexFolder}
           disabledReason='Folder access isn’t available here.'
           onClick={onOpenGhostexFolder}
@@ -3223,40 +3221,27 @@ function GhostexFolderStatsSection({
           <IconFolderOpen aria-hidden='true' className='size-4' />
           Open Folder
         </SettingButton>
-      </div>
+      </SettingsListItem>
 
-      {isLoading && !stats ? (
-        <div className='rounded-none border border-border bg-muted/25 px-3 py-2 text-sm text-muted-foreground'>
-          Loading folder sizes...
-        </div>
-      ) : null}
+      {isLoading && !stats ? <div className='text-sm text-muted-foreground'>Loading folder sizes...</div> : null}
 
-      {stats?.errorMessage ? (
-        <div className='rounded-none border border-destructive/45 bg-destructive/10 px-3 py-2 text-sm text-foreground'>
-          {stats.errorMessage}
-        </div>
-      ) : null}
+      {stats?.errorMessage ? <div className='text-sm text-destructive'>{stats.errorMessage}</div> : null}
 
       {stats && !stats.errorMessage ? (
-        <div className='rounded-none border border-border bg-muted/20'>
+        <>
           {folders.length > 0 ? (
             folders.map((folder) => (
-              <div
-                className='flex items-center justify-between gap-3 border-b border-border px-3 py-2 text-sm last:border-b-0'
-                key={folder.path}
-              >
-                <span className='min-w-0 truncate text-foreground'>{folder.name}</span>
-                <span className='shrink-0 tabular-nums text-muted-foreground'>{formatBytes(folder.sizeBytes)}</span>
-              </div>
+              <SettingsListItem key={folder.path} title={folder.name}>
+                <span className='text-sm tabular-nums text-muted-foreground'>{formatBytes(folder.sizeBytes)}</span>
+              </SettingsListItem>
             ))
           ) : (
-            <div className='px-3 py-2 text-sm text-muted-foreground'>No folders found.</div>
+            <div className='text-sm text-muted-foreground'>No folders found.</div>
           )}
-          <div className='flex items-center justify-between gap-3 border-t border-border px-3 py-2 text-sm font-medium'>
-            <span>Total</span>
-            <span className='tabular-nums'>{formatBytes(stats.totalBytes)}</span>
-          </div>
-        </div>
+          <SettingsListItem title='Total'>
+            <span className='text-sm tabular-nums text-foreground'>{formatBytes(stats.totalBytes)}</span>
+          </SettingsListItem>
+        </>
       ) : null}
     </SettingsSection>
   );
@@ -3289,14 +3274,14 @@ function GhosttySettingsActions({
   onResetDefaults: () => void;
 }) {
   return (
-    <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-      <Button className='h-8 px-3 text-[13px]' onClick={onResetDefaults} type='button' variant='outline'>
+    <div className='flex flex-wrap gap-2'>
+      <Button className='h-8 px-3' onClick={onResetDefaults} type='button' variant='outline'>
         Reset Ghostty defaults
       </Button>
       <Tooltip>
         <TooltipTrigger
           render={
-            <Button className='h-8 px-3 text-[13px]' onClick={onApplyRecommended} type='button' variant='outline'>
+            <Button className='h-8 px-3' onClick={onApplyRecommended} type='button' variant='outline'>
               Apply recommended
             </Button>
           }
@@ -3305,10 +3290,10 @@ function GhosttySettingsActions({
           {GHOSTEX_RECOMMENDED_GHOSTTY_CONFIG_LINES.join('\n')}
         </TooltipContent>
       </Tooltip>
-      <Button className='h-8 px-3 text-[13px]' onClick={onOpenDocs} type='button' variant='outline'>
+      <Button className='h-8 px-3' onClick={onOpenDocs} type='button' variant='outline'>
         Open Ghostty docs
       </Button>
-      <Button className='h-8 px-3 text-[13px]' onClick={onOpenConfigFile} type='button' variant='outline'>
+      <Button className='h-8 px-3' onClick={onOpenConfigFile} type='button' variant='outline'>
         Open Ghostty config
       </Button>
     </div>
@@ -3339,7 +3324,7 @@ function PromptEditorBackendField({
       onResetToDefault={onResetToDefault}
     >
       <SettingsSelect onValueChange={(value) => onChange(value as PromptEditorBackend)} value={backend}>
-        <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={id}>
+        <SelectTrigger className='h-8 w-full px-3' id={id}>
           <SelectValue />
         </SelectTrigger>
         <SettingsSelectContent>

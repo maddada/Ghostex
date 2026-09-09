@@ -8,6 +8,7 @@ export const SETTINGS_MODAL_NAVIGATION_TABS = [
   'remote',
   'projects',
   'agents',
+  'accounts',
   'actions',
   'openTargets',
   'hotkeys',

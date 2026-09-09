@@ -158,19 +158,22 @@ pub(crate) fn apply_new_session(
         _ => return Ok(None),
     };
     let registry = store::read(db)?;
-    runtime
-        .entry("accountPolicyDefault")
-        .or_insert(json!(registry
-            .defaults
-            .get(&provider)
-            .cloned()
-            .unwrap_or_default()));
-    // CDXC:AgentProviders 2026-09-08 DECISION: Claude and Codex launches require a saved account; the CLI login is no longer a separate launch choice.
+    // CDXC:AgentProviders 2026-09-09 DECISION: User: use the current CLI login until an account is added to Ghostex for that provider, then use its saved accounts. This replaces the saved-account requirement; a normal CLI launch needs no account switcher and starts with automatic continuation off.
     let id = runtime
         .get("accountId")
         .and_then(Value::as_str)
         .or_else(|| registry.default_accounts.get(&provider).map(String::as_str));
-    let id = id.or_else(|| registry.accounts.iter().filter(|a| a.provider == provider).min_by_key(|a| a.selector.parse::<u32>().unwrap_or(u32::MAX)).map(|a| a.id.as_str())).ok_or_else(|| DomainStateError::bad_request("Add an account in Settings > Agents > Accounts before launching this agent."))?;
+    let Some(id) = id.or_else(|| {
+        registry
+            .accounts
+            .iter()
+            .filter(|a| a.provider == provider)
+            .min_by_key(|a| a.selector.parse::<u32>().unwrap_or(u32::MAX))
+            .map(|a| a.id.as_str())
+    }) else {
+        runtime.insert("accountPolicyDefault".into(), json!(Policy::default()));
+        return Ok(None);
+    };
     let account = registry
         .accounts
         .iter()
@@ -180,6 +183,13 @@ pub(crate) fn apply_new_session(
                 "The selected account is no longer registered. Choose another account.",
             )
         })?;
+    runtime
+        .entry("accountPolicyDefault")
+        .or_insert(json!(registry
+            .defaults
+            .get(&provider)
+            .cloned()
+            .unwrap_or_default()));
     let home = home()?;
     let cmd = command(&home, account)?;
     Ok(Some(assign(runtime, account, cmd)?))

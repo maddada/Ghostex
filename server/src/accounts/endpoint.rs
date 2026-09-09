@@ -35,7 +35,10 @@ pub(crate) fn dispatch(
     } else { true };
     // CDXC:AgentProviders 2026-09-07 WHY:
     // A manual switch already has a selected saved login and validates its identity locally in launch::command. Polling both providers' usage first could delay the restart by an unrelated network timeout.
-    let mut snapshot = if matches!(operation, "select" | "setTitlebar") || !titlebar_has_accounts {
+    // CDXC:AgentProviders 2026-09-09 WHY:
+    // The first titlebar response renders saved identities without waiting for helper discovery or usage network requests. The desktop follows it with a normal usage refresh.
+    let cached_titlebar = operation == "titlebar" && params.get("cachedOnly").and_then(Value::as_bool) == Some(true);
+    let mut snapshot = if matches!(operation, "select" | "setTitlebar") || !titlebar_has_accounts || cached_titlebar {
         state.accounts.snapshot()
     } else {
         state.accounts.refresh(
@@ -84,12 +87,9 @@ pub(crate) fn dispatch(
                     launch::assign(&mut runtime, saved, launch::command(&state.paths.home_dir, saved)?)?;
                     let mut settings = session["launchSettings"].as_object().cloned().unwrap_or_default();
                     for key in ["agentLaunchPlan", "agentResumePlan", "agentCommand"] { settings.remove(key); }
-                    if session.pointer("/runtimeSettings/agentSessionId").and_then(Value::as_str).is_none() {
+                    if super::drafts::needs_fresh_launch(&session) {
                         let project = repository.get_project(session["projectId"].as_str().unwrap_or(""))?.ok_or_else(|| DomainStateError::not_found("Project not found."))?;
-                        let params = json!({"agentId":session["agentId"],"runtimeSettings":runtime,"launchSettings":settings});
-                        let fresh = crate::agents::create_agent_session_params_for_project(&db, &project, params.as_object().unwrap())?;
-                        runtime = fresh["runtimeSettings"].as_object().cloned().unwrap_or_default();
-                        settings = fresh["launchSettings"].as_object().cloned().unwrap_or_default();
+                        super::drafts::rebuild_launch(&repository, &project, &session, &mut runtime, &mut settings)?;
                     }
                     repository.update_session(json!({"projectId":session["projectId"],"sessionId":session["sessionId"],"runtimeSettings":runtime,"launchSettings":settings}).as_object().unwrap())?;
                     changed_sessions.push(session);
@@ -172,28 +172,17 @@ pub(crate) fn dispatch(
                     for key in ["agentLaunchPlan", "agentResumePlan", "agentCommand"] {
                         settings.remove(key);
                     }
-                    if session
-                        .pointer("/runtimeSettings/agentSessionId")
-                        .and_then(Value::as_str)
-                        .is_none()
-                    {
+                    if super::drafts::needs_fresh_launch(&session) {
                         let project = repository
                             .get_project(session["projectId"].as_str().unwrap_or(""))?
                             .ok_or_else(|| DomainStateError::not_found("Project not found."))?;
-                        let params = json!({"agentId":session["agentId"],"runtimeSettings":runtime,"launchSettings":settings});
-                        let fresh = crate::agents::create_agent_session_params_for_project(
-                            &db,
+                        super::drafts::rebuild_launch(
+                            &repository,
                             &project,
-                            params.as_object().unwrap(),
+                            &session,
+                            &mut runtime,
+                            &mut settings,
                         )?;
-                        runtime = fresh["runtimeSettings"]
-                            .as_object()
-                            .cloned()
-                            .unwrap_or_default();
-                        settings = fresh["launchSettings"]
-                            .as_object()
-                            .cloned()
-                            .unwrap_or_default();
                     }
                     repository.update_session(json!({"projectId":session["projectId"],"sessionId":session["sessionId"],"runtimeSettings":runtime,"launchSettings":settings}).as_object().unwrap())?;
                     changed_sessions.push(session);
@@ -219,9 +208,9 @@ pub(crate) fn dispatch(
                 .find(|a| a.id == id)
                 .ok_or_else(|| DomainStateError::not_found("Account not found."))?;
             if let Some(indicator) = params.get("indicator") {
-                let indicator = indicator.as_str().ok_or_else(|| DomainStateError::bad_request("Enter one letter or number, or - to hide the account indicator."))?.trim();
-                if !indicator.is_empty() && indicator != "-" && (indicator.chars().count() != 1 || !indicator.chars().all(char::is_alphanumeric)) {
-                    return Err(DomainStateError::bad_request("Enter one letter or number, or - to hide the account indicator."));
+                let indicator = indicator.as_str().ok_or_else(|| DomainStateError::bad_request("Enter up to two letters or numbers, or - to hide the account indicator."))?.trim();
+                if !indicator.is_empty() && indicator != "-" && (indicator.chars().count() > 2 || !indicator.chars().all(char::is_alphanumeric)) {
+                    return Err(DomainStateError::bad_request("Enter up to two letters or numbers, or - to hide the account indicator."));
                 }
                 account.indicator = indicator.into();
             }
@@ -441,10 +430,6 @@ pub(crate) fn select(
     if let Some(identity) = &old_limit {
         runtime.insert("accountSuppressedUsageNotice".into(), json!(identity));
     }
-    let prompted = session
-        .pointer("/runtimeSettings/agentSessionId")
-        .and_then(Value::as_str)
-        .is_some_and(|s| !s.is_empty());
     let was_running = session["lifecycleState"].as_str() == Some("running");
     let mut launch_settings = session["launchSettings"]
         .as_object()
@@ -453,33 +438,38 @@ pub(crate) fn select(
     for key in ["agentLaunchPlan", "agentResumePlan", "agentCommand"] {
         launch_settings.remove(key);
     }
-    if !prompted {
-        let params = json!({"agentId":session["agentId"],"runtimeSettings":runtime,"launchSettings":launch_settings});
-        let fresh = crate::agents::create_agent_session_params_for_project(
-            repository.db,
+    if super::drafts::needs_fresh_launch(session) {
+        super::drafts::rebuild_launch(
+            repository,
             project,
-            params.as_object().unwrap(),
+            session,
+            &mut runtime,
+            &mut launch_settings,
         )?;
-        runtime = fresh["runtimeSettings"]
-            .as_object()
-            .cloned()
-            .unwrap_or_default();
-        launch_settings = fresh["launchSettings"]
-            .as_object()
-            .cloned()
-            .unwrap_or_default();
     }
-    if was_running {
+    let is_draft = crate::agents::session_is_draft(session);
+    let reuse_command = if is_draft {
+        super::drafts::prepare_live_switch(repository, session, &mut launch_settings)?
+    } else {
+        None
+    };
+    if was_running && !is_draft {
         cycle(state, repository, session, "/api/sleepSession")?;
     }
-    let updated = update_session(repository, session, runtime)?;
-    repository.update_session(&json!({"projectId":session["projectId"],"sessionId":session["sessionId"],"launchSettings":launch_settings}).as_object().unwrap().clone())?;
+    let updated = repository.update_session(json!({
+        "projectId": session["projectId"],
+        "sessionId": session["sessionId"],
+        "runtimeSettings": runtime,
+        "launchSettings": launch_settings,
+    }).as_object().unwrap())?;
     if let Some(identity) = old_limit {
         crate::session_chat_notice::suppress_account_usage_notice(
             session["projectId"].as_str().unwrap_or_default(), session["sessionId"].as_str().unwrap_or_default(), identity,
         );
     }
-    if was_running {
+    if let Some(command) = reuse_command {
+        super::drafts::switch_in_live_provider(repository, &updated, &command)?;
+    } else if was_running {
         cycle(state, repository, &updated, "/api/wakeSession")?;
     }
     crate::session_chat_options::forget_session_chat_options(
@@ -535,9 +525,10 @@ fn state_value(
         let saved = registry.accounts.iter().find(|a| a.id == id);
         rows.push(json!({"id":id,"provider":found.provider,"selector":found.selector,"name":saved.map(|a|a.name.as_str()).unwrap_or(&found.name),"email":found.email,"indicator":saved.map(|a|a.indicator.as_str()).unwrap_or(""),"color":saved.map(|a|a.color.as_str()).unwrap_or("neutral"),"eligible":saved.is_some_and(|a|a.eligible),"registered":saved.is_some(),"showInTitlebar":saved.is_some_and(|a|a.show_in_titlebar),"sharedHistory":saved.is_some_and(|a|a.shared_history)||found.shared_history,"status":found.status,"usage":found.usage,"resetCredits":found.reset_credits,"usageUpdatedAt":found.usage_updated_at,"usageError":found.usage_error,"sessionCount":sessions.iter().filter(|s|s.pointer("/runtimeSettings/accountId").and_then(Value::as_str)==Some(&id)).count()}));
     }
+    let loading = titlebar && snapshot.fetched_at.is_none();
     for saved in &registry.accounts {
         if !rows.iter().any(|r| r["id"].as_str() == Some(&saved.id)) {
-            rows.push(json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","indicator":saved.indicator,"color":saved.color,"eligible":saved.eligible,"registered":true,"showInTitlebar":saved.show_in_titlebar,"sharedHistory":saved.shared_history,"status":"unavailable","usage":[],"usageError":"The helper could not find this saved login. Refresh or reconnect it.","sessionCount":sessions.iter().filter(|s|s.pointer("/runtimeSettings/accountId").and_then(Value::as_str)==Some(&saved.id)).count()}));
+            rows.push(json!({"id":saved.id,"provider":saved.provider,"selector":saved.selector,"name":saved.name,"email":"","indicator":saved.indicator,"color":saved.color,"eligible":saved.eligible,"registered":true,"showInTitlebar":saved.show_in_titlebar,"sharedHistory":saved.shared_history,"status":if loading {"loading"} else {"unavailable"},"usage":[],"usageError":if loading {None} else {Some("The helper could not find this saved login. Refresh or reconnect it.")},"sessionCount":sessions.iter().filter(|s|s.pointer("/runtimeSettings/accountId").and_then(Value::as_str)==Some(&saved.id)).count()}));
         }
     }
     if titlebar {
@@ -553,7 +544,8 @@ fn state_value(
             .get_project(required(params, "projectId")?)?
             .ok_or_else(|| DomainStateError::not_found("Project not found."))?;
         if let Some(p) = launch::provider(&project, &session) {
-            value["session"] = json!({"provider":p,"accountId":session.pointer("/runtimeSettings/accountId"),"override":session.pointer("/runtimeSettings/accountPolicyOverride"),"policy":launch::effective_policy(registry,p,&session),"recovery":session.pointer("/runtimeSettings/accountRecovery")});
+            let account_id = super::session_identity::display_account_id(registry, p, &session, home);
+            value["session"] = json!({"provider":p,"accountId":account_id,"override":session.pointer("/runtimeSettings/accountPolicyOverride"),"policy":launch::effective_policy(registry,p,&session),"recovery":session.pointer("/runtimeSettings/accountRecovery")});
         }
     }
     Ok(value)

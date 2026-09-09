@@ -96,7 +96,7 @@ export function SidebarAccountMenu({
       {/* CDXC:AgentProviders 2026-09-07 DECISION: Put Manage accounts beneath a separator in the sidebar account submenu; it opens the Accounts section in Settings. */}
       <div role='separator' className='session-context-menu-divider' />
       <button type='button' className='session-context-menu-item' role='menuitem' onClick={() => {
-        openAppModal({ type: 'open', modal: 'settings', initialTab: 'agents', initialAgentsSection: 'accounts' });
+        openAppModal({ type: 'open', modal: 'settings', initialTab: 'accounts' });
         close();
       }}><IconSettings aria-hidden='true' size={16} /><span>Manage accounts</span></button>
     </div>

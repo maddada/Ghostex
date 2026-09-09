@@ -23,6 +23,8 @@ fn titlebar_entry(account: &Value, machine: &str) -> Value {
     account
 }
 
+/// CDXC:AgentProviders 2026-09-09 WHY:
+/// The Codex artwork matches the shared chat SVG; the old 100px SVG had internal padding that made its titlebar icon visibly smaller than Claude.
 fn icon(codex: bool) -> Arc<gpui::Image> {
     static CODEX: OnceLock<Arc<gpui::Image>> = OnceLock::new();
     static CLAUDE: OnceLock<Arc<gpui::Image>> = OnceLock::new();
@@ -46,15 +48,16 @@ fn icon(codex: bool) -> Arc<gpui::Image> {
     .clone()
 }
 
-fn popup_account(account: &Value) -> Value {
-    let mut account = account.clone();
-    let name = text(&account, "name");
+/// The account's name as the user wants it shown: masked when Settings hides
+/// account emails. Shared by the titlebar account popup and the New Thread picker.
+pub(crate) fn account_display_name(account: &Value) -> String {
+    let name = text(account, "name");
     let hidden = shared_settings::shared_sidebar_settings_snapshot()
         .object()
         .get("hideAccountEmails")
         .and_then(Value::as_bool)
         == Some(true);
-    let display = if hidden {
+    if hidden {
         match name.split_once('@') {
             Some((local, _)) => format!(
                 "{}•••{}@••••••.•••",
@@ -65,8 +68,12 @@ fn popup_account(account: &Value) -> Value {
         }
     } else {
         name.to_string()
-    };
-    account["displayName"] = json!(display);
+    }
+}
+
+fn popup_account(account: &Value) -> Value {
+    let mut account = account.clone();
+    account["displayName"] = json!(account_display_name(&account));
     account
 }
 
@@ -96,7 +103,7 @@ fn badge_lines(account: &Value) -> Vec<String> {
             lines.push(format!("{}%", usage.join("/")));
         }
         if let Some(resets) = account["resetCredits"].as_u64() {
-            lines.push(format!("{resets} rs"));
+            lines.push(format!("{resets}rs"));
         }
         lines
     } else {
@@ -164,13 +171,10 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// CDXC:AgentProviders 2026-09-08 WHY:
-    /// All titlebar accounts share gxserver's cached cswap/xswap discovery. A popup owns no helper process, credentials, or network polling loop.
+    /// CDXC:AgentProviders 2026-09-09 WHY:
+    /// Show saved identities before polling usage, and publish each machine independently so a slow helper or offline remote cannot hide local accounts at startup.
+    /// Usage still comes from gxserver's shared discovery cache.
     pub(crate) fn refresh_titlebar_accounts(&mut self, cx: &mut gpui::Context<Self>) {
-        if self.titlebar_accounts_refresh_in_flight {
-            return;
-        }
-        self.titlebar_accounts_refresh_in_flight = true;
         let revision = self.titlebar_accounts_revision;
         let mut targets = vec![("local".to_string(), None)];
         targets.extend(
@@ -178,62 +182,72 @@ impl GhostexGpuiApp {
                 .iter()
                 .map(|(id, connection)| (id.clone(), Some(connection.request_target()))),
         );
-        cx.spawn(async move |this, cx| {
-            let results = cx.background_executor().spawn(async move {
-                std::thread::scope(|scope| {
-                    let tasks = targets.into_iter().map(|(machine, target)| scope.spawn(move || {
-                        let params = json!({"operation":"titlebar"});
-                        let result = match target {
+        for (machine, target) in targets {
+            if !self
+                .titlebar_accounts_refresh_in_flight
+                .insert(machine.clone())
+            {
+                continue;
+            }
+            cx.spawn(async move |this, cx| {
+                for cached_only in [true, false] {
+                    let target = target.clone();
+                    let result = cx.background_executor().spawn(async move {
+                        let params = json!({"operation":"titlebar", "cachedOnly":cached_only});
+                        match target {
                             Some(target) => gpui_remote_gxserver_rpc_result(&target, "/api/agentAccounts", &params, Duration::from_secs(60)),
                             None => gpui_gxserver_rpc_result("/api/agentAccounts", &params, Duration::from_secs(60)),
-                        };
-                        (machine, result)
-                    })).collect::<Vec<_>>();
-                    tasks.into_iter().filter_map(|task| task.join().ok()).collect::<Vec<_>>()
-                })
-            }).await;
-            let _ = this.update_in(cx, |this, window, cx| {
-                this.titlebar_accounts_refresh_in_flight = false;
-                if this.titlebar_accounts_revision != revision {
-                    this.refresh_titlebar_accounts(cx);
-                    return;
-                }
-                for (machine, result) in results {
-                    match result {
-                        Ok(result) => {
-                            this.titlebar_accounts.retain(|a| text(a, "titlebarMachine") != machine);
-                            for account in result["accounts"].as_array().into_iter().flatten()
-                                .filter(|a| a["registered"] == true && a["showInTitlebar"] == true) {
-                                this.titlebar_accounts.push(titlebar_entry(account, &machine));
+                        }
+                    }).await;
+                    if this.update_in(cx, |this, window, cx| {
+                        if this.titlebar_accounts_revision != revision {
+                            return;
+                        }
+                        match result {
+                            Ok(result) => {
+                                this.titlebar_accounts.retain(|a| text(a, "titlebarMachine") != machine);
+                                for account in result["accounts"].as_array().into_iter().flatten()
+                                    .filter(|a| a["registered"] == true && a["showInTitlebar"] == true) {
+                                    this.titlebar_accounts.push(titlebar_entry(account, &machine));
+                                }
+                            }
+                            Err(_) => {
+                                for account in this.titlebar_accounts.iter_mut().filter(|a| text(a, "titlebarMachine") == machine) {
+                                    account["usageError"] = json!("Could not refresh account usage. Showing the last received snapshot.");
+                                }
                             }
                         }
-                        Err(_) => {
-                            for account in this.titlebar_accounts.iter_mut().filter(|a| text(a, "titlebarMachine") == machine) {
-                                account["usageError"] = json!("Could not refresh account usage. Showing the last received snapshot.");
+                        this.titlebar_accounts.sort_by(|a, b| text(a,"titlebarMachine").cmp(text(b,"titlebarMachine"))
+                            .then(text(a,"provider").cmp(text(b,"provider")))
+                            .then(text(a,"selector").parse::<u64>().unwrap_or(0).cmp(&text(b,"selector").parse::<u64>().unwrap_or(0))));
+                        if let Some(state) = &this.titlebar_extension_popup {
+                            if state.account {
+                                if let Some(account) = this.titlebar_accounts.iter().find(|a| text(a,"titlebarKey") == state.id.as_str()) {
+                                    if let Some(panel) = state.panel.clone() {
+                                        let script = format!("window.ghostexUpdateAccountUsage?.({});", popup_account(account));
+                                        panel.update(cx, |panel, cx| panel.surface.update(cx, |surface, _| { surface.execute_app_owned_script(&script); }));
+                                    }
+                                } else { this.close_titlebar_extension_popup(window, cx); }
                             }
                         }
+                        cx.notify();
+                    }).is_err() {
+                        return;
                     }
                 }
-                this.titlebar_accounts.sort_by(|a, b| text(a,"titlebarMachine").cmp(text(b,"titlebarMachine"))
-                    .then(text(a,"provider").cmp(text(b,"provider")))
-                    .then(text(a,"selector").parse::<u64>().unwrap_or(0).cmp(&text(b,"selector").parse::<u64>().unwrap_or(0))));
-                if let Some(state) = &this.titlebar_extension_popup {
-                    if state.account {
-                        if let Some(account) = this.titlebar_accounts.iter().find(|a| text(a,"titlebarKey") == state.id.as_str()) {
-                            if let Some(panel) = state.panel.clone() {
-                                let script = format!("window.ghostexUpdateAccountUsage?.({});", popup_account(account));
-                                panel.update(cx, |panel, cx| panel.surface.update(cx, |surface, _| { surface.execute_app_owned_script(&script); }));
-                            }
-                        } else { this.close_titlebar_extension_popup(window, cx); }
+                let _ = this.update(cx, |this, cx| {
+                    this.titlebar_accounts_refresh_in_flight.remove(&machine);
+                    if this.titlebar_accounts_revision != revision {
+                        this.refresh_titlebar_accounts(cx);
                     }
-                }
-                cx.notify();
-            });
-        }).detach();
+                });
+            }).detach();
+        }
     }
 
-    /// CDXC:AgentProviders 2026-09-08 DECISION:
-    /// User: account usage buttons precede extensions, match their appearance and popup behavior, and identify each account at the top-left of its agent icon.
+    /// CDXC:AgentProviders 2026-09-09 DECISION:
+    /// User wants the account label centered over a larger agent icon, keeping its font and Claude color, with Codex text #7db8fb. Always use original provider colors. Use a 19.2px background icon, 9.9px label, and 9.5px usage text in the chat indicator’s monospace font. Keep usage percentages and reset counts beside it. This replaces the label-underneath design.
+    /// Account buttons still precede extensions and open their usage popup.
     pub(crate) fn render_titlebar_account_buttons(
         &self,
         window: &mut Window,
@@ -259,6 +273,11 @@ impl GhostexGpuiApp {
                             ),
                             icon_image: icon(codex),
                             badge_lines: badge_lines(account),
+                            indicator_color: if codex {
+                                gpui::rgb(0x7db8fb)
+                            } else {
+                                gpui::rgb(0xa4a8af)
+                            },
                             indicator: (!indicator.is_empty() && indicator != "-")
                                 .then(|| indicator.to_string()),
                             account: true,

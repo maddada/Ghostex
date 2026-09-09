@@ -1,4 +1,7 @@
-/* CDXC:AgentProviders 2026-09-08 DECISION: Usage bars remain neutral and selection uses brighter controls. Original provider logos keep their appearance. Only the session icon has a white account indicator at its top-left, replacing the centered slot badges throughout the app. */
+:root {
+  --gx-account-font-family: ui-monospace, SFMono-Regular, monospace;
+}
+/* CDXC:AgentProviders 2026-09-08 DECISION: Usage bars remain neutral and selection uses brighter controls. Original provider logos keep their appearance. Account labels sit over larger session icons; sidebar icons have no account indicator. */
 .gx-accounts {
   --ring: #bcbcbc;
   min-width: 0;
@@ -41,6 +44,7 @@
   min-width: 62px;
 }
 .gx-account-figures {
+  font-family: var(--gx-account-font-family);
   display: flex;
   flex-direction: column;
   font-size: 10px;
@@ -381,6 +385,19 @@ details[open] > .gx-account-policy-summary > svg {
   border: 0;
   padding: 0;
   font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gx-account-status-info {
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  cursor: help;
+}
+.gx-account-status-info svg {
+  width: 100%;
+  height: 100%;
 }
 .gx-account-saved[data-editing='true'] .gx-account-edit-chevron {
   transform: rotate(90deg);
@@ -463,66 +480,285 @@ details[open] > .gx-account-policy-summary > svg {
   }
 }
 
-.gx-account-guide { max-width: min(680px, calc(100vw - 48px)); overflow-y: auto; gap: 20px; }
-.gx-account-guide section { display: grid; gap: 10px; }
-.gx-account-guide h3 { font-size: 13px; font-weight: 600; margin: 0; }
-.gx-accounts.gx-account-guide p { margin: 0; font-size: 12px; line-height: 1.6; }
-.gx-account-guide-providers { display: grid; gap: 10px; padding: 0; margin: 4px 0; list-style: none; }
-.gx-account-guide-providers li { display: grid; gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
-.gx-account-guide-providers li[data-selected=true] { background: color-mix(in srgb, var(--foreground) 5%, transparent); }
-.gx-account-guide h4 { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; }
-.gx-account-launcher-hint { padding: 8px 10px; margin: 0; color: var(--muted-foreground); font-size: 11px; line-height: 1.5; }
-.group-agent-menu .gx-account-logo { flex-shrink: 0; width: 16px; height: 16px; }
-.gx-account-launcher-default { flex-shrink: 0; color: var(--muted-foreground); font-size: 11px; }
-
-.gx-account-settings .gx-account-refresh {
-  flex-shrink: 0;
-  min-width: 145px;
-  background: color-mix(in srgb, var(--foreground) 18%, var(--background));
-  color: var(--foreground);
-  border: 1px solid color-mix(in srgb, var(--foreground) 24%, transparent);
+.gx-account-guide {
+  max-width: min(680px, calc(100vw - 48px));
+  overflow-y: auto;
+  gap: 20px;
 }
-.gx-account-settings .gx-account-refresh[aria-busy=true] {
+.gx-account-guide section {
+  display: grid;
+  gap: 10px;
+}
+.gx-account-guide h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+.gx-accounts.gx-account-guide p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.gx-account-guide-providers {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 4px 0;
+  list-style: none;
+}
+.gx-account-guide-providers li {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.gx-account-guide-providers li[data-selected='true'] {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.gx-account-guide h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 600;
+}
+.gx-account-launcher-hint {
+  padding: 8px 10px;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.group-agent-menu .gx-account-logo {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+.gx-account-launcher-copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.gx-account-launcher-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.gx-account-launcher-usage {
+  font-family: var(--gx-account-font-family);
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gx-account-launcher-default {
+  flex-shrink: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.gx-account-refresh[aria-busy='true'] {
   opacity: 1;
   cursor: progress;
 }
-.gx-account-refresh[aria-busy=true] svg {
+.gx-account-refresh[aria-busy='true'] svg {
   animation: gx-account-refresh-spin 1s linear infinite;
 }
 @keyframes gx-account-refresh-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gx-account-refresh[aria-busy=true] svg { animation: none; }
-}
-.gx-account-settings .gx-account-refresh:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--foreground) 26%, var(--background));
+  .gx-account-refresh[aria-busy='true'] svg {
+    animation: none;
+  }
 }
 
-.gx-account-login-action { flex-shrink: 0; }
+.gx-account-login-action {
+  flex-shrink: 0;
+}
 
 /* CDXC:AgentProviders 2026-09-07 DECISION: Hidden addresses retain their end characters; the entire domain is blurred. Render substitute glyphs so selecting or hovering cannot reveal the original domain. */
-.gx-account-hidden-domain { display: inline-block; user-select: none; }
-.gx-account-hidden-domain > span { filter: blur(4px); }
-.gx-account-privacy-description { display: block; margin-top: 4px; color: var(--muted-foreground); font-size: 12px; }
-.gx-account-saved .gx-account-logo, .session-saved-account-submenu .gx-account-logo { flex-shrink: 0; }
+.gx-account-hidden-domain {
+  display: inline-block;
+  user-select: none;
+}
+.gx-account-hidden-domain > span {
+  filter: blur(4px);
+}
+.gx-account-privacy-description {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.gx-account-saved .gx-account-logo,
+.session-saved-account-submenu .gx-account-logo {
+  flex-shrink: 0;
+}
 
-.gx-account-settings .gx-account-privacy-setting { flex-direction: row; align-items: center; margin: 4px 0 18px; }
-.gx-account-default-summary { display: flex; align-items: center; gap: 6px; }
-.gx-account-default-summary .gx-account-logo { width: 14px; height: 14px; flex-shrink: 0; }
-.session-context-menu.session-saved-account-submenu { width: 260px; max-width: calc(100vw - 24px); }
-.session-saved-account-submenu .session-tag-menu-item-label { flex: 1; white-space: nowrap; }
-.session-saved-account-submenu .session-context-menu-trailing-icon { flex-shrink: 0; }
+.gx-account-settings .gx-account-privacy-setting {
+  flex-direction: row;
+  align-items: center;
+  margin: 4px 0 18px;
+}
+.gx-account-default-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gx-account-default-summary .gx-account-logo {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.session-context-menu.session-saved-account-submenu {
+  width: 260px;
+  max-width: calc(100vw - 24px);
+}
+.session-saved-account-submenu .session-tag-menu-item-label {
+  flex: 1;
+  white-space: nowrap;
+}
+.session-saved-account-submenu .session-context-menu-trailing-icon {
+  flex-shrink: 0;
+}
 
-/* CDXC:AgentProviders 2026-09-08 DECISION: Slot numbers replace account logo tinting; the centered dot is visual only. */
-.gx-account-logo, .gx-account-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.gx-account-logo { background: none; mask-image: none; -webkit-mask-image: none; }
-.gx-account-logo-image { width: 100%; height: 100%; background-size: contain; background-repeat: no-repeat; background-position: center; }
-.gx-account-indicator.ghostex-chat-stash-count-badge { top: -4px; left: -4px; right: auto; background: #fff; color: #111; }
-.gx-account-saved[data-highlighted='true'] { outline: 2px solid var(--foreground); outline-offset: 3px; background: var(--accent); }
-.gx-account-connect-flow { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 12px 0; }
-.gx-account-connect-flow > button { align-self: flex-start; }
-.gx-account-connect-flow .gx-account-consent { margin: 0; }
-.gx-account-code-input { display: flex; gap: 8px; }
-.gx-account-terminal-output { max-height: 240px; overflow: auto; padding: 12px; border-radius: 8px; background: var(--background); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.gx-account-signin-link { text-decoration: underline; font-size: 12px; }
+.gx-account-logo,
+.gx-account-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.gx-account-logo {
+  background: none;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+.gx-account-logo-image {
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  width: 100%;
+  height: 100%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.gx-account-mark {
+  line-height: 1;
+}
+.gx-account-mark:has(> .gx-account-indicator) {
+  display: inline-grid;
+  place-items: center;
+  width: 19.2px;
+  height: 19.2px;
+}
+.gx-account-mark:has(> .gx-account-indicator) > * {
+  grid-area: 1 / 1;
+  pointer-events: none;
+}
+.gx-account-mark:has(> .gx-account-indicator) > :first-child {
+  width: 19.2px;
+  height: 19.2px;
+  opacity: 0.3;
+}
+.gx-account-indicator {
+  position: relative;
+  color: var(--muted-foreground);
+  font: 600 9.9px/9.9px var(--gx-account-font-family);
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+.gx-account-mark[data-provider='codex'] > .gx-account-indicator {
+  color: #7db8fb;
+}
+.gx-account-saved[data-highlighted='true'] {
+  outline: 2px solid var(--foreground);
+  outline-offset: 3px;
+  background: var(--accent);
+}
+.gx-account-connect-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin: 12px 0;
+}
+.gx-account-connect-flow > button {
+  align-self: flex-start;
+}
+.gx-account-connect-flow .gx-account-consent {
+  margin: 0;
+}
+.gx-account-code-input {
+  display: flex;
+  gap: 8px;
+}
+.gx-account-terminal-output {
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--background);
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gx-account-signin-link {
+  text-decoration: underline;
+  font-size: 12px;
+}
+
+/* CDXC:Settings 2026-09-10 DECISION: User: the Accounts page uses the General page's section cards and rows; account-specific chrome is limited to the identity figures, the status caption, and inset form blocks. */
+.ghostex-settings-shadcn .gx-account-status {
+  border: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.ghostex-settings-shadcn .gx-account-saved[data-highlighted='true'] {
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
+  background: transparent;
+}
+.ghostex-settings-shadcn .gx-account-default-summary .gx-account-logo {
+  vertical-align: -3px;
+}
+.ghostex-settings-shadcn .gx-account-preview-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ghostex-settings-shadcn .gx-account-inset {
+  padding: 0.875rem 1.25rem;
+}
+.ghostex-settings-shadcn .settings-list-panel > .gx-account-inset {
+  padding-inline: 0;
+}
+.ghostex-settings-shadcn .gx-account-inset .gx-account-command-block,
+.ghostex-settings-shadcn .gx-account-inset .gx-account-connect-flow {
+  margin: 0;
+}
+.ghostex-settings-shadcn .gx-account-inset .gx-account-field {
+  margin: 0 0 12px;
+}
+.ghostex-settings-shadcn .gx-account-inset p {
+  margin: 8px 0 0;
+}

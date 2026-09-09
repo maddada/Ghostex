@@ -1,4 +1,3 @@
-import { AccountsSettingsSection } from '@/packages/core-ui/accounts/manager';
 import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -6,7 +5,6 @@ import { cn } from '@/packages/components/utils';
 import { Button } from '@/packages/components/ui/button';
 import { Command } from '@/packages/components/ui/command';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/packages/components/ui/empty';
-import { Field, FieldContent, FieldDescription, FieldLabel } from '@/packages/components/ui/field';
 import { SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import { type SettingsAgentsSection } from '../../app-modal-host-bridge';
 import { AppTooltip } from '../../app-tooltip';
@@ -66,11 +64,12 @@ import {
   reconcileDraftIds,
 } from '../drag-data';
 import {
-  DisabledCommandPreviewField,
   SelectField,
   SettingButton,
+  SettingRow,
   SettingSwitch,
   SettingsInput,
+  SettingsListItem,
   SettingsNativeScrollArea,
   SettingsSection,
   SettingsSelect,
@@ -116,7 +115,8 @@ export function hasInstalledBundledAgentSkills(ghostexCliStatus: SidebarGhostexC
     ghostexCliStatus?.fable56OrchestrationSkillInstalled === true ||
     ghostexCliStatus?.manageBeadsSkillInstalled === true ||
     ghostexCliStatus?.generateTitleSkillInstalled === true ||
-    ghostexCliStatus?.moveCodexSessionSkillInstalled === true
+    ghostexCliStatus?.moveCodexSessionSkillInstalled === true ||
+    ghostexCliStatus?.helpSkillInstalled === true
   );
 }
 
@@ -125,8 +125,6 @@ export function AgentsSettingsTab({
   isActive,
   agentHookStatus,
   agentHookStatusLoading,
-  hideAccountEmails,
-  onHideAccountEmailsChange,
   agentAcceptAllEnabled,
   customSessionTitleGenerationCommand,
   defaultPromptAgentId,
@@ -150,8 +148,6 @@ export function AgentsSettingsTab({
   isActive: boolean;
   agentHookStatus?: SidebarAgentHookStatusMessage;
   agentHookStatusLoading: boolean;
-  hideAccountEmails: boolean;
-  onHideAccountEmailsChange: (hidden: boolean) => void;
   agentAcceptAllEnabled: boolean;
   customSessionTitleGenerationCommand: string;
   defaultPromptAgentId: string;
@@ -175,7 +171,6 @@ export function AgentsSettingsTab({
   const agentHooksAvailableForUninstall = hasRemovableAgentHooks(agentHookStatus);
   const [editorState, setEditorState] = useState<SettingsAgentEditorState>();
   const agentRosterSectionRef = useRef<HTMLDivElement>(null);
-  const accountsSectionRef = useRef<HTMLDivElement>(null);
   const lastTargetedAgentsSectionRef = useRef<SettingsAgentsSection | undefined>(undefined);
   useEffect(() => {
     if (!isActive) {
@@ -189,7 +184,7 @@ export function AgentsSettingsTab({
       setEditorState(undefined);
       return;
     }
-    const sectionRef = initialAgentsSection === 'accounts' ? accountsSectionRef : agentRosterSectionRef;
+    const sectionRef = agentRosterSectionRef;
     if (!sectionRef.current) return;
     lastTargetedAgentsSectionRef.current = initialAgentsSection;
     const animationFrame = requestAnimationFrame(() => {
@@ -353,7 +348,6 @@ export function AgentsSettingsTab({
     <SettingsNativeScrollArea className='h-full min-h-0'>
       <div className='settings-page-width flex flex-col gap-6 px-5 pb-5'>
         {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
-        {!editorState && shouldShowSettingsSection(search.sections.accounts) && <AccountsSettingsSection active={isActive} sectionRef={accountsSectionRef} hideEmails={hideAccountEmails} onHideEmailsChange={onHideAccountEmailsChange} />}
         {!editorState && shouldShowSettingsSection(search.sections.config) ? (
           <SettingsSection title='Config'>
             {/*
@@ -380,12 +374,12 @@ export function AgentsSettingsTab({
              * CDXC:SessionTitles 2026-06-04-08:24:
              * First-prompt session-title generation needs its own agent selector instead of reusing Default Prompt Agent, because title generation is a gxserver-owned background job while prompt-launch defaults affect Git helpers, project-board prompts, and worktree starts.
              *
-             * CDXC:SessionTitles 2026-06-04-22:44:
-             * Show the disabled command preview directly under the selector so users can inspect the exact Codex, Cursor CLI, Claude, Grok Build, or Custom command template before Ghostex sends a background title-generation prompt.
+             * CDXC:SessionTitles 2026-09-09 DECISION:
+             * User: hide the Title Generation Command preview area and put the exact command inside the info tooltip of the Title Generation Agent row instead. This supersedes the 2026-06-04 decision to show the disabled preview textarea under the selector.
              */}
             {shouldShowSetting(search.sections.config, 'titleGenerationAgent') ? (
               <SelectField
-                description='Choose the headless agent Ghostex uses for first-prompt session title generation.'
+                description={`Choose the headless agent Ghostex uses for first-prompt session title generation.\n\nCommand Ghostex sends:\n${titleGenerationCommandPreview}`}
                 isModified={sessionTitleGenerationAgent !== DEFAULT_ghostex_SETTINGS.sessionTitleGenerationAgent}
                 label='Title Generation Agent'
                 onChange={(value) => onSessionTitleGenerationAgentChange(value as SessionTitleGenerationAgent)}
@@ -394,13 +388,6 @@ export function AgentsSettingsTab({
                 }
                 options={SESSION_TITLE_GENERATION_AGENT_OPTIONS}
                 value={sessionTitleGenerationAgent}
-              />
-            ) : null}
-            {shouldShowSetting(search.sections.config, 'titleGenerationCommand') ? (
-              <DisabledCommandPreviewField
-                description='Preview of the command Ghostex sends to generate automatic first-prompt session titles.'
-                label='Title Generation Command'
-                value={titleGenerationCommandPreview}
               />
             ) : null}
             {sessionTitleGenerationAgent === 'custom' &&
@@ -422,19 +409,11 @@ export function AgentsSettingsTab({
               />
             ) : null}
             {shouldShowSetting(search.sections.config, 'acceptAll') ? (
-              <Field
-                className='items-center justify-between rounded-none border border-border bg-muted/20 px-4 py-3'
-                orientation='horizontal'
+              <SettingRow
+                description='Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default.'
+                htmlFor={agentApprovalsControlId}
+                label='Agent approvals'
               >
-                <FieldContent>
-                  <FieldLabel className='text-sm' htmlFor={agentApprovalsControlId}>
-                    Agent approvals
-                  </FieldLabel>
-                  <FieldDescription className='text-xs text-muted-foreground'>
-                    Choose whether supported agents ask before editing files or running commands. Per-agent settings can
-                    override this default.
-                  </FieldDescription>
-                </FieldContent>
                 <DisabledSettingControlTooltip
                   disabled={!vscode}
                   reason='This change needs the Ghostex app connection.'
@@ -447,7 +426,7 @@ export function AgentsSettingsTab({
                     size='sm'
                   />
                 </DisabledSettingControlTooltip>
-              </Field>
+              </SettingRow>
             ) : null}
           </SettingsSection>
         ) : null}
@@ -477,7 +456,7 @@ export function AgentsSettingsTab({
                 onSave={saveAgent}
               />
             ) : (
-              <div className='flex flex-col gap-3'>
+              <>
                 {/*
                  * CDXC:AgentHooks 2026-08-28:
                  * Hook setup lives inside the one Agents roster instead of a
@@ -488,8 +467,8 @@ export function AgentsSettingsTab({
                  * hook shows its own install button while collapsed, and each
                  * row expands to the full hook detail for that agent.
                  */}
-                <div className='flex flex-wrap items-center gap-x-3 gap-y-2 rounded-none border border-border/70 bg-muted/10 px-3 py-2'>
-                  <div className='flex min-w-0 flex-1 items-center gap-2'>
+                <div className='flex flex-col gap-2'>
+                  <div className='flex min-w-0 items-start gap-2'>
                     <AppTooltip
                       content={
                         <>
@@ -509,76 +488,76 @@ export function AgentsSettingsTab({
                         <IconInfoCircle aria-hidden='true' className='size-4' />
                       </span>
                     </AppTooltip>
-                    <span className='min-w-0 truncate text-xs text-muted-foreground'>
+                    <span className='min-w-0 text-[13px] leading-5 text-muted-foreground'>
                       Session resume hooks let Ghostex capture each agent&apos;s native session id and resume the exact
                       conversation.
                     </span>
                   </div>
-                  <span className='shrink-0 rounded-none border border-border/70 bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground'>
-                    {hookStatusSummary}
-                  </span>
-                  <div className='flex shrink-0 flex-wrap items-center gap-1.5'>
-                    <SettingButton
-                      disabled={!onInstallAgentHooks || agentHookStatusLoading}
-                      disabledReason={
-                        agentHookStatusLoading
-                          ? 'Hook status is being checked.'
-                          : 'Hook installation isn’t available here.'
-                      }
-                      onClick={() => onInstallAgentHooks?.()}
-                      size='sm'
-                      type='button'
-                      variant='ghost'
-                    >
-                      <IconDownload aria-hidden='true' data-icon='inline-start' />
-                      {updateRequiredHookCount > 0 ? 'Update All' : 'Install All'}
-                    </SettingButton>
-                    {/*
-                     * CDXC:AgentHooks 2026-08-19-11:20:
-                     * Hook removal lives beside the install control it undoes: one Uninstall All for the whole set, plus a per-agent removal in each expanded row. Both stay disabled while status is loading or when no Ghostex-owned hook is present, so users cannot fire a no-op removal.
-                     */}
-                    <SettingButton
-                      disabled={agentHookStatusLoading || !agentHooksAvailableForUninstall || !onUninstallAgentHooks}
-                      disabledReason={
-                        agentHookStatusLoading
-                          ? 'Hook status is being checked.'
-                          : !agentHooksAvailableForUninstall
-                            ? 'No Ghostex hooks are installed.'
-                            : 'Hook removal isn’t available here.'
-                      }
-                      onClick={() => onUninstallAgentHooks?.()}
-                      size='sm'
-                      type='button'
-                      variant='ghost'
-                    >
-                      <IconTrash aria-hidden='true' data-icon='inline-start' />
-                      Uninstall All
-                    </SettingButton>
-                    <SettingButton
-                      disabled={!onRequestAgentHookStatus || agentHookStatusLoading}
-                      disabledReason={
-                        agentHookStatusLoading
-                          ? 'Hook status is being checked.'
-                          : 'Hook status refresh isn’t available here.'
-                      }
-                      onClick={onRequestAgentHookStatus}
-                      size='sm'
-                      type='button'
-                      variant='ghost'
-                    >
-                      <IconRefresh aria-hidden='true' data-icon='inline-start' />
-                      Refresh
-                    </SettingButton>
+                  <div className='flex flex-wrap items-center justify-end gap-2'>
+                    <span className='shrink-0 rounded-[6px] border border-border/70 px-2 py-1 text-[11px] text-muted-foreground'>
+                      {hookStatusSummary}
+                    </span>
+                    <div className='flex shrink-0 flex-wrap items-center justify-end gap-1.5'>
+                      <SettingButton
+                        disabled={!onInstallAgentHooks || agentHookStatusLoading}
+                        disabledReason={
+                          agentHookStatusLoading
+                            ? 'Hook status is being checked.'
+                            : 'Hook installation isn’t available here.'
+                        }
+                        onClick={() => onInstallAgentHooks?.()}
+                        size='sm'
+                        type='button'
+                        variant='ghost'
+                      >
+                        <IconDownload aria-hidden='true' data-icon='inline-start' />
+                        {updateRequiredHookCount > 0 ? 'Update All' : 'Install All'}
+                      </SettingButton>
+                      {/*
+                       * CDXC:AgentHooks 2026-08-19-11:20:
+                       * Hook removal lives beside the install control it undoes: one Uninstall All for the whole set, plus a per-agent removal in each expanded row. Both stay disabled while status is loading or when no Ghostex-owned hook is present, so users cannot fire a no-op removal.
+                       */}
+                      <SettingButton
+                        disabled={agentHookStatusLoading || !agentHooksAvailableForUninstall || !onUninstallAgentHooks}
+                        disabledReason={
+                          agentHookStatusLoading
+                            ? 'Hook status is being checked.'
+                            : !agentHooksAvailableForUninstall
+                              ? 'No Ghostex hooks are installed.'
+                              : 'Hook removal isn’t available here.'
+                        }
+                        onClick={() => onUninstallAgentHooks?.()}
+                        size='sm'
+                        type='button'
+                        variant='ghost'
+                      >
+                        <IconTrash aria-hidden='true' data-icon='inline-start' />
+                        Uninstall All
+                      </SettingButton>
+                      <SettingButton
+                        disabled={!onRequestAgentHookStatus || agentHookStatusLoading}
+                        disabledReason={
+                          agentHookStatusLoading
+                            ? 'Hook status is being checked.'
+                            : 'Hook status refresh isn’t available here.'
+                        }
+                        onClick={onRequestAgentHookStatus}
+                        size='sm'
+                        type='button'
+                        variant='ghost'
+                      >
+                        <IconRefresh aria-hidden='true' data-icon='inline-start' />
+                        Refresh
+                      </SettingButton>
+                    </div>
                   </div>
                 </div>
                 {agentHookStatus?.errorMessage ? (
-                  <div className='rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive'>
-                    {agentHookStatus.errorMessage}
-                  </div>
+                  <div className='text-[13px] text-destructive'>{agentHookStatus.errorMessage}</div>
                 ) : null}
                 {orderedAgents.length > 0 ? (
                   <DragDropProvider onDragEnd={handleDragEnd}>
-                    <div className='flex flex-col gap-2'>
+                    <div className='settings-list-rows'>
                       {orderedAgents.map((agent, index) => {
                         /*
                          * CDXC:AgentHooks 2026-08-28:
@@ -643,7 +622,7 @@ export function AgentsSettingsTab({
                     </div>
                   </DragDropProvider>
                 ) : (
-                  <Empty className='border border-border bg-muted/20'>
+                  <Empty>
                     <EmptyHeader>
                       <EmptyTitle>No agents configured</EmptyTitle>
                       <EmptyDescription>Add an agent launcher to start new sessions.</EmptyDescription>
@@ -651,11 +630,11 @@ export function AgentsSettingsTab({
                   </Empty>
                 )}
                 {agentHookStatus ? (
-                  <FieldDescription className='truncate text-[11px] text-muted-foreground'>
+                  <div className='truncate text-[13px] text-muted-foreground'>
                     Hook state: {agentHookStatus.hookStateDirectory}
-                  </FieldDescription>
+                  </div>
                 ) : null}
-              </div>
+              </>
             )}
           </SettingsSection>
         ) : null}
@@ -707,14 +686,10 @@ export function AgentPreferredInterfaceOverrideSelect({
       }
       value={value ?? PREFERRED_AGENT_INTERFACE_INHERIT_VALUE}
     >
-      <SelectTrigger
-        aria-label={`Default view for ${agentName}`}
-        className={cn('h-8 w-full px-3 text-[13px]', className)}
-        id={id}
-      >
+      <SelectTrigger aria-label={`Default view for ${agentName}`} className={cn('h-8 w-full px-3', className)} id={id}>
         <SelectValue />
       </SelectTrigger>
-      <SettingsSelectContent>
+      <SettingsSelectContent className='settings-list-select-content'>
         <SelectGroup>
           {options.map((option) => (
             <SelectItem key={option.value} value={option.value}>
@@ -882,12 +857,8 @@ export function SettingsAgentRow({
     : 'Hook installation isn’t available here.';
 
   return (
-    <div
-      className='rounded-none border border-border bg-muted/20'
-      data-dragging={String(Boolean(isDragging))}
-      ref={setRowRef}
-    >
-      <div className='settings-management-row flex items-center gap-2 p-2'>
+    <div data-dragging={String(Boolean(isDragging))} ref={setRowRef}>
+      <div className='settings-management-row flex min-h-14 items-center gap-2 py-1.5'>
         <Button aria-label={`Reorder ${agent.name}`} ref={handleRef} size='icon-sm' type='button' variant='ghost'>
           <IconGripVertical aria-hidden='true' />
         </Button>
@@ -917,7 +888,7 @@ export function SettingsAgentRow({
               <span className='truncate text-sm font-medium text-foreground'>{agent.name}</span>
               <AgentChatViewSupportBadge agent={agent} />
             </span>
-            <span className='block truncate text-xs text-muted-foreground'>
+            <span className='block truncate text-[13px] text-muted-foreground'>
               {agent.command?.trim() || 'Not configured'}
             </span>
           </span>
@@ -925,7 +896,7 @@ export function SettingsAgentRow({
         {supportsHooks ? (
           <span
             className={cn(
-              'flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-xs font-medium',
+              'flex shrink-0 items-center gap-1.5 rounded-none px-2 py-1 text-[11px]',
               getAgentHookStatusClassName(hookStatus, isHookStatusPending)
             )}
           >
@@ -963,121 +934,115 @@ export function SettingsAgentRow({
         </Button>
       </div>
       {isExpanded ? (
-        <div className='flex flex-col gap-3 border-t border-border/70 px-3 py-3' id={panelId}>
+        <div className='settings-list-panel border-t border-border/70' id={panelId}>
           {supportsHooks ? (
-            <>
-              <span className='text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
-                Session resume hook
-              </span>
-              <div className='flex items-center gap-2 border-b border-border/60 pb-3 text-xs text-muted-foreground'>
-                <AgentHookStatusIcon isLoading={isHookStatusPending} status={hookStatus} />
-                <span className='min-w-0 truncate'>{hookStatus?.detail ?? 'Waiting for hook check'}</span>
-              </div>
-            </>
-          ) : null}
-          <div className='grid gap-3 sm:grid-cols-2'>
-            <Field className='gap-1.5'>
-              <FieldContent>
-                <FieldLabel className='text-xs text-muted-foreground' htmlFor={acceptAllModeId}>
-                  Permission mode
-                </FieldLabel>
-              </FieldContent>
-              <SettingsSelect
-                disabled={!acceptAllSupported || !onAcceptAllModeChange}
-                disabledReason={
-                  acceptAllSupported
-                    ? 'This change needs the Ghostex app connection.'
-                    : 'This agent doesn’t support approval policy changes.'
-                }
-                disabledTooltipClassName='w-full'
-                items={AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS}
-                onValueChange={(value) => onAcceptAllModeChange?.(value as AgentAcceptAllMode)}
-                value={acceptAllMode}
-              >
-                <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={acceptAllModeId}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SettingsSelectContent>
-                  <SelectGroup>
-                    {AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SettingsSelectContent>
-              </SettingsSelect>
-            </Field>
-            {supportsChatView ? (
-              <Field className='gap-1.5'>
-                <FieldContent>
-                  <FieldLabel className='text-xs text-muted-foreground' htmlFor={preferredInterfaceId}>
-                    Default interface
-                  </FieldLabel>
-                </FieldContent>
-                <AgentPreferredInterfaceOverrideSelect
-                  agentName={agent.name}
-                  id={preferredInterfaceId}
-                  onChange={onPreferredInterfaceOverrideChange}
-                  preferredAgentInterface={preferredAgentInterface}
-                  value={preferredInterfaceOverride}
-                />
-              </Field>
-            ) : null}
-          </div>
-          {supportsHooks ? (
-            <div className='flex flex-wrap items-center justify-end gap-2'>
-              <SettingButton
-                disabled={hookInstallDisabled}
-                disabledReason={hookInstallDisabledReason}
-                onClick={onInstallHook}
-                size='sm'
-                type='button'
-                variant={hookInstalled ? 'outline' : 'default'}
-              >
-                {hookInstalled ? (
-                  <IconRefresh aria-hidden='true' data-icon='inline-start' />
-                ) : (
-                  <IconDownload aria-hidden='true' data-icon='inline-start' />
-                )}
-                {hookInstallLabel}
-              </SettingButton>
-              {hookRemovable ? (
+            <SettingsListItem
+              detail={
+                <span className='flex items-center gap-1.5'>
+                  <AgentHookStatusIcon isLoading={isHookStatusPending} status={hookStatus} />
+                  <span className='min-w-0 truncate'>{hookStatus?.detail ?? 'Waiting for hook check'}</span>
+                </span>
+              }
+              title='Session resume hook'
+            >
+              <div className='flex flex-wrap justify-end gap-2'>
                 <SettingButton
-                  aria-label={`Uninstall ${agent.name} hook`}
-                  disabled={isHookStatusLoading || !onUninstallHook}
-                  disabledReason={
-                    isHookStatusLoading ? 'Hook status is being checked.' : 'Hook removal isn’t available here.'
-                  }
-                  onClick={onUninstallHook}
+                  disabled={hookInstallDisabled}
+                  disabledReason={hookInstallDisabledReason}
+                  onClick={onInstallHook}
                   size='sm'
                   type='button'
-                  variant='destructive'
+                  variant='outline'
                 >
-                  <IconTrash aria-hidden='true' data-icon='inline-start' />
-                  Uninstall hook
+                  {hookInstalled ? (
+                    <IconRefresh aria-hidden='true' data-icon='inline-start' />
+                  ) : (
+                    <IconDownload aria-hidden='true' data-icon='inline-start' />
+                  )}
+                  {hookInstallLabel}
                 </SettingButton>
-              ) : null}
-            </div>
+                {hookRemovable ? (
+                  <SettingButton
+                    aria-label={`Uninstall ${agent.name} hook`}
+                    disabled={isHookStatusLoading || !onUninstallHook}
+                    disabledReason={
+                      isHookStatusLoading ? 'Hook status is being checked.' : 'Hook removal isn’t available here.'
+                    }
+                    onClick={onUninstallHook}
+                    size='sm'
+                    type='button'
+                    variant='destructive'
+                  >
+                    <IconTrash aria-hidden='true' data-icon='inline-start' />
+                    Uninstall hook
+                  </SettingButton>
+                ) : null}
+              </div>
+            </SettingsListItem>
           ) : null}
-          <div className='flex flex-wrap items-center gap-2 border-t border-border/60 pt-3'>
-            <span className='text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>Agent</span>
-            <span className='flex-1' />
-            <Button aria-label={`Edit ${agent.name}`} onClick={onEdit} size='sm' type='button' variant='outline'>
-              <IconPencil aria-hidden='true' data-icon='inline-start' />
-              Edit agent
-            </Button>
-            <Button
-              aria-label={`Delete ${agent.name}`}
-              onClick={onDelete}
-              size='sm'
-              type='button'
-              variant='destructive'
+          <SettingRow
+            description='How the agent handles approvals when Ghostex starts it.'
+            htmlFor={acceptAllModeId}
+            label='Permission mode'
+          >
+            <SettingsSelect
+              disabled={!acceptAllSupported || !onAcceptAllModeChange}
+              disabledReason={
+                acceptAllSupported
+                  ? 'This change needs the Ghostex app connection.'
+                  : 'This agent doesn’t support approval policy changes.'
+              }
+              items={AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS}
+              onValueChange={(value) => onAcceptAllModeChange?.(value as AgentAcceptAllMode)}
+              value={acceptAllMode}
             >
-              <IconTrash aria-hidden='true' data-icon='inline-start' />
-              Remove agent
-            </Button>
-          </div>
+              <SelectTrigger className='h-8 px-3' id={acceptAllModeId}>
+                <SelectValue />
+              </SelectTrigger>
+              <SettingsSelectContent className='settings-list-select-content'>
+                <SelectGroup>
+                  {AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SettingsSelectContent>
+            </SettingsSelect>
+          </SettingRow>
+          {supportsChatView ? (
+            <SettingRow
+              description='Open this agent in Chat or Terminal, or follow the app-wide default.'
+              htmlFor={preferredInterfaceId}
+              label='Default interface'
+            >
+              <AgentPreferredInterfaceOverrideSelect
+                agentName={agent.name}
+                id={preferredInterfaceId}
+                onChange={onPreferredInterfaceOverrideChange}
+                preferredAgentInterface={preferredAgentInterface}
+                value={preferredInterfaceOverride}
+              />
+            </SettingRow>
+          ) : null}
+          <SettingsListItem title='Agent'>
+            <div className='flex flex-wrap justify-end gap-2'>
+              <Button aria-label={`Edit ${agent.name}`} onClick={onEdit} size='sm' type='button' variant='outline'>
+                <IconPencil aria-hidden='true' data-icon='inline-start' />
+                Edit agent
+              </Button>
+              <Button
+                aria-label={`Delete ${agent.name}`}
+                onClick={onDelete}
+                size='sm'
+                type='button'
+                variant='destructive'
+              >
+                <IconTrash aria-hidden='true' data-icon='inline-start' />
+                Remove agent
+              </Button>
+            </div>
+          </SettingsListItem>
         </div>
       ) : null}
     </div>
@@ -1131,19 +1096,14 @@ export function AgentSettingsEditor({
 
   return (
     <>
-      <Field className='gap-2.5'>
-        <FieldContent>
-          <FieldLabel className='text-sm' htmlFor={agentTypeId}>
-            Agent type
-          </FieldLabel>
-        </FieldContent>
+      <SettingRow htmlFor={agentTypeId} label='Agent type'>
         <SettingsSelect items={AGENT_TYPE_SELECT_ITEMS} onValueChange={updateAgentType} value={icon}>
-          <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={agentTypeId}>
+          <SelectTrigger className='h-8 w-full px-3' id={agentTypeId}>
             <SelectValue>
               <AgentTypeSelectOption icon={icon} name={selectedDefaultAgent?.name ?? 'Custom'} />
             </SelectValue>
           </SelectTrigger>
-          <SettingsSelectContent>
+          <SettingsSelectContent className='settings-list-select-content'>
             <SelectGroup>
               <SelectItem value='custom'>
                 <AgentTypeSelectOption icon='custom' name='Custom' />
@@ -1156,28 +1116,18 @@ export function AgentSettingsEditor({
             </SelectGroup>
           </SettingsSelectContent>
         </SettingsSelect>
-      </Field>
-      <Field className='gap-2.5'>
-        <FieldContent>
-          <FieldLabel className='text-sm' htmlFor={nameId}>
-            Name
-          </FieldLabel>
-        </FieldContent>
+      </SettingRow>
+      <SettingRow htmlFor={nameId} label='Name'>
         <SettingsInput
           autoFocus
-          className='h-8 px-3 text-[13px]'
+          className='settings-control-lane h-8 px-3'
           id={nameId}
           onChange={(event) => setName(event.currentTarget.value)}
           placeholder='Codex'
           value={name}
         />
-      </Field>
-      <Field className='gap-2.5'>
-        <FieldContent>
-          <FieldLabel className='text-sm' htmlFor={commandId}>
-            Command
-          </FieldLabel>
-        </FieldContent>
+      </SettingRow>
+      <SettingRow htmlFor={commandId} label='Command' wide>
         <SettingsTextarea
           id={commandId}
           onChange={(event) => setCommand(event.currentTarget.value)}
@@ -1185,18 +1135,16 @@ export function AgentSettingsEditor({
           rows={3}
           value={command}
         />
-      </Field>
-      <Field className='gap-2.5'>
-        <FieldContent>
-          <FieldLabel className='text-sm' htmlFor={acceptAllModeId}>
-            Agent approvals
-          </FieldLabel>
-          <FieldDescription className='text-xs text-muted-foreground'>
-            {acceptAllSupported
-              ? "Use app default follows the global Agents setting. Skip permissions applies this agent's permission-bypass mode at launch without changing the stored command."
-              : 'This agent does not expose a supported approval policy in Ghostex.'}
-          </FieldDescription>
-        </FieldContent>
+      </SettingRow>
+      <SettingRow
+        description={
+          acceptAllSupported
+            ? "Use app default follows the global Agents setting. Skip permissions applies this agent's permission-bypass mode at launch without changing the stored command."
+            : 'This agent does not expose a supported approval policy in Ghostex.'
+        }
+        htmlFor={acceptAllModeId}
+        label='Agent approvals'
+      >
         <SettingsSelect
           disabled={!acceptAllSupported}
           disabledReason='This agent doesn’t support approval policy changes.'
@@ -1205,10 +1153,10 @@ export function AgentSettingsEditor({
           onValueChange={(value) => setAcceptAllMode(value as AgentAcceptAllMode)}
           value={acceptAllMode}
         >
-          <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={acceptAllModeId}>
+          <SelectTrigger className='h-8 w-full px-3' id={acceptAllModeId}>
             <SelectValue />
           </SelectTrigger>
-          <SettingsSelectContent>
+          <SettingsSelectContent className='settings-list-select-content'>
             <SelectGroup>
               {AGENT_ACCEPT_ALL_MODE_SELECT_ITEMS.map((item) => (
                 <SelectItem key={item.value} value={item.value}>
@@ -1218,7 +1166,7 @@ export function AgentSettingsEditor({
             </SelectGroup>
           </SettingsSelectContent>
         </SettingsSelect>
-      </Field>
+      </SettingRow>
       <div className='flex justify-end gap-3'>
         <Button onClick={onCancel} type='button' variant='outline'>
           Cancel

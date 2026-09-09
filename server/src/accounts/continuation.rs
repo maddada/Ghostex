@@ -6,8 +6,9 @@ use crate::{
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 
-/// CDXC:AgentProviders 2026-09-07 DECISION:
-/// Every account switch sends one literal "." once the agent input is ready, regardless of auto-continue defaults. Stop or a manual send cancels the claim; an uncertain delivery is never replayed.
+/// CDXC:AgentProviders 2026-09-09 DECISION:
+/// Account switches on prompted sessions send one literal "." once the agent input is ready, regardless of auto-continue defaults. Drafts keep their input unsent and receive no continuation, superseding the earlier every-switch rule for drafts only.
+/// Stop or a manual send cancels the claim; an uncertain delivery is never replayed.
 pub(crate) fn start(
     state: &AppState,
     repo: &DomainRepository<'_>,
@@ -24,6 +25,9 @@ pub(crate) fn start(
     let session = repo
         .get_session(&project, &id)?
         .ok_or_else(|| DomainStateError::not_found("Session not found."))?;
+    if crate::agents::session_is_draft(&session) {
+        return Ok(());
+    }
     let claim = uuid::Uuid::new_v4();
     let mut runtime = session["runtimeSettings"]
         .as_object()

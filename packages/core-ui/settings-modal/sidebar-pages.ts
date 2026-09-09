@@ -17,6 +17,7 @@ import {
   IconPuzzle,
   IconSettings,
   IconTools,
+  IconUsers,
 } from '@tabler/icons-react';
 import { type SettingsModalTab } from '../settings-modal-tabs';
 import { SearchableExtraSettingsTabId, getSettingsSectionSearch, settingsTabSearchHasMatches } from './search';
@@ -135,6 +136,7 @@ export function createSettingsSidebarPages({
       title: 'General',
     },
     { icon: IconCodeDots, id: 'agents', title: 'Agents' },
+    { icon: IconUsers, id: 'accounts', title: 'Accounts' },
     { icon: IconTools, id: 'integrations', title: 'Integrations' },
     { icon: IconPuzzle, id: 'extensions', title: 'Extensions' },
     { icon: IconCloud, id: 'remote', title: 'Remote' },

@@ -11,7 +11,7 @@ import { Button } from '@/packages/components/ui/button';
 import type { AgentAccountsRequest, AgentAccountsState } from '@/packages/shared/agent-accounts';
 import { openAppModal } from '../app-modal-host-bridge';
 import { AccountIdentity, PolicyControls, UsageBars } from './controls';
-/** CDXC:Settings 2026-09-06 DECISION: Account management and provider defaults belong only in Settings > Agents. The chat panel keeps session switching and recovery controls; a settings icon opens Settings > Agents at Accounts. Use menu dismissal instead of a Close button, omit the heading subtitle, make Refresh an unframed icon, and keep session controls flat instead of inside a card. */
+/** CDXC:Settings 2026-09-09 DECISION: Account management and provider defaults belong in Settings > Accounts, replacing the section under Agents. The chat panel keeps session switching and recovery controls; its settings icon opens Accounts. Use menu dismissal instead of a Close button, omit the heading subtitle, make Refresh an unframed icon, and keep session controls flat instead of inside a card. */
 export function SessionAccountsPanel({
   data,
   error,
@@ -35,14 +35,19 @@ export function SessionAccountsPanel({
     openAppModal({
       type: 'open',
       modal: 'settings',
-      initialTab: 'agents',
-      initialAgentsSection: 'accounts',
+      initialTab: 'accounts',
     });
     close();
   };
-  // CDXC:AgentProviders 2026-09-08 DECISION: With no saved accounts, the chat switcher offers only Add accounts. An unassigned CLI login is not an account choice.
+  // CDXC:AgentProviders 2026-09-09 DECISION: Current CLI login remains available until an account is added for this provider, replacing the earlier saved-account gate.
   if (data && session && !data.accounts.some((a) => a.registered && a.provider === session.provider)) {
-    return <div className='gx-accounts gx-account-panel'><Button variant='ghost' onClick={manageAccounts}>Add accounts</Button></div>;
+    return (
+      <div className='gx-accounts gx-account-panel'>
+        <strong>Current CLI login</strong>
+        <p>Add your account to see usage and reset times in Ghostex, even if you only use one account.</p>
+        <Button variant='outline' onClick={manageAccounts}>Add account</Button>
+      </div>
+    );
   }
   return (
     <div className='gx-accounts gx-account-panel'>
@@ -135,7 +140,7 @@ export function SessionAccountsPanel({
                       <span>
                         {context.usedPercentage === null
                           ? 'Usage unavailable'
-                          : `${Math.round(context.usedPercentage)}% used`}
+                          : `${Math.round(context.usedPercentage)}%`}
                       </span>
                       <span>
                         {formatSessionChatContextTokens(context.usedTokens)} /{' '}

@@ -7,9 +7,9 @@ export function useAccounts(transport: AccountsTransport | undefined, session = 
   const [refreshing, setRefreshing] = useState(false);
   const generation = useRef(0);
   const pending = useRef(false);
-  const request = useCallback(
+  const load = useCallback(
     async (params: AgentAccountsRequest) => {
-      if (!transport) return false;
+      if (!transport) return undefined;
       const id = ++generation.current;
       pending.current = true;
       setBusy(true);
@@ -18,10 +18,10 @@ export function useAccounts(transport: AccountsTransport | undefined, session = 
       try {
         const result = await transport(params);
         if (generation.current === id) setData(result);
-        return true;
+        return result;
       } catch (e) {
         if (generation.current === id) setError(e instanceof Error ? e.message : 'Account request failed.');
-        return false;
+        return undefined;
       } finally {
         if (generation.current === id) {
           setBusy(false);
@@ -32,6 +32,7 @@ export function useAccounts(transport: AccountsTransport | undefined, session = 
     },
     [transport]
   );
+  const request = useCallback(async (params: AgentAccountsRequest) => Boolean(await load(params)), [load]);
   useEffect(() => {
     setData(undefined);
     if (!active || !transport) {
@@ -54,5 +55,5 @@ export function useAccounts(transport: AccountsTransport | undefined, session = 
       pending.current = false;
     };
   }, [active, transport, session, request, refreshOnOpen]);
-  return { data, error, busy, refreshing, request };
+  return { data, error, busy, refreshing, load, request };
 }

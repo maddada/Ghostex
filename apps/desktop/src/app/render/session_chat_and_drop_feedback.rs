@@ -45,7 +45,7 @@ impl GhostexGpuiApp {
         &self,
         session_id: TerminalSessionId,
     ) -> AnyElement {
-        let switching = self.session_account_switch_progress(session_id);
+        let switching = self.session_account_switch_placeholder_progress(session_id);
         self.record_session_chat_render(session_id);
         let surface = self
             .agents_chat_surfaces
@@ -74,18 +74,30 @@ impl GhostexGpuiApp {
             } else {
                 ("Loading Chat...", "")
             };
-            let hide_emails = shared_settings::shared_sidebar_settings_snapshot().object()
-                .get("hideAccountEmails").and_then(serde_json::Value::as_bool) == Some(true);
+            let hide_emails = shared_settings::shared_sidebar_settings_snapshot()
+                .object()
+                .get("hideAccountEmails")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true);
             let message = if switching.is_some() && hide_emails {
                 match message.split_once('@') {
                     Some((address, _)) => {
                         let chars: Vec<_> = address.chars().collect();
-                        format!("{}•••{}@••••••.•••", chars.first().copied().unwrap_or('•'),
-                            if chars.len() > 1 { chars.last().unwrap().to_string() } else { String::new() })
+                        format!(
+                            "{}•••{}@••••••.•••",
+                            chars.first().copied().unwrap_or('•'),
+                            if chars.len() > 1 {
+                                chars.last().unwrap().to_string()
+                            } else {
+                                String::new()
+                            }
+                        )
                     }
                     None => message.to_string(),
                 }
-            } else { message.to_string() };
+            } else {
+                message.to_string()
+            };
             v_flex()
                 .id(format!(
                     "ghostex-gpui-session-chat-placeholder-{}",
@@ -118,9 +130,21 @@ impl GhostexGpuiApp {
                                     .text_color(workspace_terminal_placeholder_message_color())
                                     .flex().items_center().gap(px(8.0))
                                     .when_some(switching, |this, progress| {
-                                        this.child(div().relative().size(px(18.0)).flex_shrink_0()
-                                            .child(gpui::svg().path(workspace_tab_agent_icon_path(progress.provider).unwrap()).size(px(18.0)))
-                                            .when(!progress.indicator.is_empty() && progress.indicator != "-", |this| this.child(div().absolute().top(px(-4.0)).left(px(-4.0)).size(px(12.0)).rounded_full().bg(gpui::rgb(0xffffff)).text_color(gpui::rgb(0x111111)).text_size(px(9.0)).line_height(px(12.0)).font_weight(gpui::FontWeight::BOLD).flex().items_center().justify_center().child(progress.indicator.clone()))))
+                                        let labelled = !progress.indicator.is_empty() && progress.indicator != "-";
+                                        let size = if labelled { 19.2 } else { 18.0 };
+                                        this.child(
+                                            div().relative().size(px(size)).flex().items_center().justify_center().flex_shrink_0()
+                                                .child(gpui::svg().path(workspace_tab_agent_icon_path(progress.provider).unwrap())
+                                                    .absolute().top_0().left_0().size(px(size))
+                                                    .text_color(gpui::rgb(if progress.provider == "claude" { 0xd97757 } else { 0xffffff }))
+                                                    .when(labelled, |this| this.opacity(0.3)))
+                                                .when(labelled, |this| {
+                                                    this.child(div().relative()
+                                                        .text_color(if progress.provider == "codex" { gpui::rgb(0x7db8fb).into() } else { workspace_terminal_placeholder_message_color() })
+                                                        .text_size(px(9.9)).line_height(px(9.9)).font_family(ACCOUNT_INDICATOR_FONT_FAMILY)
+                                                        .font_weight(gpui::FontWeight::SEMIBOLD).child(progress.indicator.clone()))
+                                                }),
+                                        )
                                     })
                                     .child(message.clone()),
                             )

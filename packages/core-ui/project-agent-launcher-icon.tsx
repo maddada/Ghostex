@@ -29,14 +29,9 @@ export function ProjectAgentLauncherIcon({
      * The sidebar project agent dropdown should show colored provider icons for
      * scanability, while compact split launchers stay monochrome unless the
      * caller opts into brand color.
-     *
-     * CDXC:AgentLauncher 2026-06-30-22:40:
-     * The Settings toggle for colored agent icons also applies to the compact
-     * selected-agent launcher icon, so colorMode must stay explicit at the
-     * launcher call site instead of being limited to dropdown rows.
      */
     const iconStyle =
-      colorMode === 'brand'
+      (colorMode === 'brand' || (accountIndicator !== undefined && (agent.icon === 'claude' || agent.icon === 'codex')))
         ? getBrandAgentLogoStyle(agent.icon)
         : {
             backgroundColor: 'currentColor',
@@ -44,7 +39,7 @@ export function ProjectAgentLauncherIcon({
             WebkitMaskImage: `url("${AGENT_LOGOS[agent.icon]}")`,
           };
 
-    return <span className='gx-account-mark'>
+    return <span className='gx-account-mark' data-provider={agent.icon}>
       <span aria-hidden='true' className='group-agent-launcher-icon group-agent-launcher-agent-icon' data-agent-icon={agent.icon} style={iconStyle} />
       <AccountIndicator value={accountIndicator} />
     </span>;

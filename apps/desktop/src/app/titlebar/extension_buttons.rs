@@ -32,6 +32,7 @@ pub(crate) struct TitlebarBadgeButton {
     pub icon_image: std::sync::Arc<gpui::Image>,
     pub badge_lines: Vec<String>,
     pub indicator: Option<String>,
+    pub indicator_color: gpui::Rgba,
     pub account: bool,
 }
 
@@ -140,6 +141,7 @@ impl GhostexGpuiApp {
                 icon_image: extension.icon_image,
                 badge_lines: extension.badge_lines,
                 indicator: None,
+                indicator_color: rgb(0xa4a8af),
                 account: false,
             },
             window,
@@ -184,29 +186,37 @@ impl GhostexGpuiApp {
         } else {
             TITLEBAR_BUTTON_WIDTH
         };
+        let account_button = button.account;
         let tooltip = button.title.clone();
         let icon_image = button.icon_image.clone();
 
         let icon = |size| {
+            let labelled = button.indicator.is_some();
+            let size = if labelled { 19.2 } else { size };
             div()
                 .relative()
                 .size(px(size))
+                .flex()
+                .items_center()
+                .justify_center()
                 .flex_shrink_0()
-                .child(img(icon_image.clone()).size_full())
+                .child(
+                    img(icon_image.clone())
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size(px(size))
+                        .when(labelled, |this| this.opacity(0.3)),
+                )
                 .when_some(button.indicator.clone(), |this, indicator| {
                     this.child(
                         div()
-                            .absolute()
-                            .top(px(-4.0))
-                            .left(px(-4.0))
-                            .w(px(12.0))
-                            .h(px(12.0))
-                            .rounded_full()
-                            .bg(rgb(0xffffff))
-                            .text_color(rgb(0x171717))
-                            .text_size(px(9.0))
-                            .line_height(px(12.0))
-                            .font_weight(FontWeight::BOLD)
+                            .relative()
+                            .text_color(button.indicator_color)
+                            .text_size(px(9.9))
+                            .line_height(px(9.9))
+                            .font_family(ACCOUNT_INDICATOR_FONT_FAMILY)
+                            .font_weight(FontWeight::SEMIBOLD)
                             .text_center()
                             .child(indicator),
                     )
@@ -284,8 +294,11 @@ impl GhostexGpuiApp {
                     this.child(
                         h_flex().gap(px(4.0)).child(icon(14.0)).child(
                             v_flex()
-                                .text_size(px(10.5))
-                                .line_height(px(10.5))
+                                .text_size(px(if account_button { 9.5 } else { 10.5 }))
+                                .line_height(px(if account_button { 9.5 } else { 10.5 }))
+                                .when(account_button, |this| {
+                                    this.font_family(ACCOUNT_INDICATOR_FONT_FAMILY)
+                                })
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .text_color(rgb(0xb9b9b9))
                                 .children(badge_lines),

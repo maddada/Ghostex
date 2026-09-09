@@ -40,11 +40,11 @@ function renderBars(hostId, values, labels, codex) {
     head.className = 'bar-head';
     label.className = 'bar-label';
     meta.className = 'bar-meta';
-    label.textContent = labels[index] || bar?.label || 'Usage';
+    label.textContent = `${labels[index] || bar?.label || 'Usage'}${bar ? `: ${Math.round(bar.usedPercent)}%` : ''}`;
     meta.textContent = codex
       ? warning
       : bar
-        ? `${Math.round(bar.usedPercent)}% used · ${resetText(bar.resetsAt)}`
+        ? resetText(bar.resetsAt)
         : 'No live data';
     head.append(label, meta);
     track.className = 'track';
@@ -54,12 +54,10 @@ function renderBars(hostId, values, labels, codex) {
     row.append(head, track);
     if (codex) {
       const foot = document.createElement('div'),
-        used = document.createElement('span'),
         reset = document.createElement('span');
       foot.className = 'bar-foot';
-      used.textContent = bar ? `${Math.round(bar.usedPercent)}% used` : 'No data';
       reset.textContent = bar ? resetText(bar.resetsAt) : 'No data';
-      foot.append(used, reset);
+      foot.append(reset);
       row.append(foot);
     }
     host.append(row);
@@ -77,7 +75,7 @@ function render() {
     ? `Updated ${new Date(account.usageUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     : '';
   byId('notice').textContent =
-    account.usageError || (account.status === 'ready' ? '' : 'Reconnect this account in Settings > Agents > Accounts.');
+    account.usageError || (account.status === 'loading' ? 'Loading account usage…' : account.status === 'ready' ? '' : 'Reconnect this account in Settings > Accounts.');
   const logo = document.querySelector('.logo');
   let indicator = logo.querySelector('.account-indicator');
   const mark = account.indicator || account.selector;
@@ -86,19 +84,19 @@ function render() {
       indicator = document.createElement('span');
       indicator.className = 'account-indicator';
       indicator.style.cssText =
-        'position:absolute;top:-5px;left:-5px;min-width:13px;height:13px;padding:0 2px;display:grid;place-items:center;border-radius:50%;background:white;color:#171717;font:bold 9px/13px Inter,sans-serif';
+        'position:absolute;top:-5px;left:-5px;min-width:13px;height:13px;padding:0 2px;display:grid;place-items:center;border-radius:50%;background:white;color:#171717;font:600 9.9px/13px ui-monospace,SFMono-Regular,monospace';
       logo.style.position = 'relative';
       logo.append(indicator);
     }
     indicator.textContent = mark;
   } else indicator?.remove();
   if (codex) {
-    renderBars('coreBars', [session, weekly], ['5-hour', 'Weekly'], true);
+    renderBars('coreBars', [session, weekly], ['5h', '7d'], true);
     const spark = models.filter((w) => /spark/i.test(w.model));
     renderBars(
       'sparkBars',
       [spark.find((w) => w.limitWindowSeconds === 18000), spark.find((w) => w.limitWindowSeconds >= 604800)],
-      ['Spark', 'Spark Weekly'],
+      ['Spark 5h', 'Spark 7d'],
       true
     );
     byId('trend').textContent = 'No data';
@@ -109,10 +107,10 @@ function render() {
       byId('resets').append(dot, document.createTextNode(`${account.resetCredits} available`));
     } else byId('resets').textContent = 'No data';
   } else {
-    renderBars('bars', [session, weekly, models[0]], ['Session', 'Weekly', models[0]?.label || 'Top model'], false);
+    renderBars('bars', [session, weekly, models[0]], ['5h', '7d', models[0]?.model ? `${models[0].model} 7d` : 'Top model'], false);
     byId('trendTotal').textContent = 'No data';
     const extra = windows.find((w) => w.id === 'spend');
-    byId('extra').textContent = extra ? `${Math.round(extra.usedPercent)}% used` : 'No data';
+    byId('extra').textContent = extra ? `${Math.round(extra.usedPercent)}%` : 'No data';
     ['today', 'yesterday', 'thirty'].forEach((id) => {
       byId(`${id}Cost`).textContent = '';
       byId(`${id}Tokens`).textContent = 'No data';
