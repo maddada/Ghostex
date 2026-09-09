@@ -1,0 +1,18 @@
+.ghostex-settings-shadcn.settings-titlebar-view-order-dialog[data-slot='dialog-content'] {
+  display: flex;
+  flex-direction: column;
+  width: 34rem;
+  max-width: calc(100vw - 2rem);
+  max-height: min(85vh, 48rem);
+  gap: 16px;
+  padding: 20px;
+}
+
+.settings-titlebar-view-order-list {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-titlebar-view-order-list [data-dragging='true'] {
+  opacity: 0.5;
+}

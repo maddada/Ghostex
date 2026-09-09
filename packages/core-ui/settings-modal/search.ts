@@ -213,6 +213,7 @@ export type SearchableExtraSettingsTabId =
   | 'about'
   | 'actions'
   | 'agents'
+  | 'accounts'
   | 'extensions'
   | 'integrations'
   | 'openTargets'
@@ -299,9 +300,25 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
     ],
     title: 'Actions',
   },
+  accounts: {
+    title: 'Accounts',
+    sections: [
+      {
+        id: 'accounts',
+        title: 'Accounts',
+        settings: [
+          {
+            key: 'accounts',
+            title: 'Accounts, usage stats and automatic continuation',
+            subtitle:
+              'Current CLI login, Claude cswap, Codex xswap, titlebar, status lines, usage limits and resets, account indicators, switching, hide emails, privacy, error recovery and retry settings.',
+          },
+        ],
+      },
+    ],
+  },
   agents: {
     sections: [
-      { id: 'accounts', title: 'Accounts', settings: [{ key: 'accounts', title: 'Accounts and automatic continuation', subtitle: 'Claude cswap, Codex xswap, usage limits, account colors, switching, hide emails, privacy, error recovery and retry settings.' }] },
       {
         id: 'config',
         settings: [
@@ -314,13 +331,9 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           {
             key: 'titleGenerationAgent',
             options: SESSION_TITLE_GENERATION_AGENT_OPTIONS,
-            subtitle: 'Choose the headless agent Ghostex uses for first-prompt session title generation.',
+            subtitle:
+              'Choose the headless agent Ghostex uses for first-prompt session title generation. Hover the info icon to see the exact command Ghostex sends.',
             title: 'Title Generation Agent',
-          },
-          {
-            key: 'titleGenerationCommand',
-            subtitle: 'Preview of the command Ghostex sends to generate automatic first-prompt session titles.',
-            title: 'Title Generation Command',
           },
           {
             key: 'customTitleCommand',
@@ -425,6 +438,18 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
   extensions: {
     sections: [
       {
+        id: 'viewOrder',
+        settings: [
+          {
+            key: 'titlebarViewOrder',
+            title: 'Arrange titlebar views',
+            subtitle:
+              'Reorder built-in, extension, and custom views. Option Alt numbered view shortcuts follow the visible order.',
+          },
+        ],
+        title: 'Titlebar views',
+      },
+      {
         id: 'official',
         settings: [
           ...GHOSTEX_OFFICIAL_EXTENSIONS.map((extension) => ({
@@ -456,11 +481,12 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         settings: [
           {
             key: 'customViews',
-            subtitle: 'Add, arrange, and toggle named HTTP or HTTPS pages as titlebar workareas.',
-            title: 'Custom Views',
+            subtitle:
+              'Project views, templates, Storybook, Linear, GitHub Issues, dev server commands, and HTML reports.',
+            title: 'Your views',
           },
         ],
-        title: 'Custom Views',
+        title: 'Your views',
       },
     ],
     title: 'Extensions',

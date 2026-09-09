@@ -1,3 +1,10 @@
+import { CustomViewEditor, type CustomViewEditorState } from '../project-views/editor';
+import { ProjectViewTemplates } from '../project-views/templates';
+import {
+  projectViewDescription,
+  DEFAULT_PROJECT_VIEW_SOURCE,
+  type ProjectViewTemplate,
+} from '@/packages/shared/ghostex-settings/project-views';
 /*
  * CDXC:Extensions 2026-08-30:
  * Settings has one Extensions page. The "Official Extensions" section is the
@@ -22,6 +29,7 @@ import { Button } from '@/packages/components/ui/button';
 import { Switch } from '@/packages/components/ui/switch';
 import {
   IconBolt,
+  IconArrowsSort,
   IconCodeDots,
   IconDeviceDesktop,
   IconExternalLink,
@@ -29,6 +37,7 @@ import {
   IconFolderOpen,
   IconGitCommit,
   IconGripVertical,
+  IconHelpCircle,
   IconInfoCircle,
   IconPencil,
   IconPlayerPlay,
@@ -60,13 +69,16 @@ import {
 import { type WebviewApi } from '../../webview-api';
 import { ExtensionsBrowserDetail, ExtensionsBrowserList, useExtensionsBrowserState } from '../../extensions-modal';
 import { createExtensionsModalTransport } from '../../extensions-modal/transport';
+import { TitlebarViewOrderDialog } from './titlebar-view-order-dialog';
+import { titlebarViewOrderItems } from '@/packages/shared/ghostex-settings/titlebar-view-order';
 import { createSettingsCustomViewDragData, getSettingsCustomViewDragData, moveId } from '../drag-data';
 import {
+  setSettingsSortableRowElement,
   SettingButton,
   SettingsInput,
+  SettingsListItem,
   SettingsNativeScrollArea,
   SettingsSection,
-  setSettingsSortableRowElement,
 } from '../fields';
 import {
   SettingsTabSearch,
@@ -76,13 +88,8 @@ import {
 } from '../search';
 
 export type OfficialExtensionSettingKey = GhostexOfficialExtensionSettingsKey;
-type ExtensionPageSettingKey = OfficialExtensionSettingKey | 'customViews';
-
-type CustomViewEditorState = {
-  draft: Pick<GhostexCustomView, 'name' | 'url'>;
-  error?: string;
-  id?: string;
-};
+type ExtensionPageSettingKey =
+  OfficialExtensionSettingKey | 'customViews' | 'titlebarViewOrder' | 'customViewTemplates';
 
 const GHOSTEX_EXTENSIONS_REPO_URL = 'https://github.com/maddada/ghostex-extensions';
 
@@ -94,6 +101,7 @@ const OFFICIAL_EXTENSION_ICONS: Record<GhostexOfficialExtensionId, TablerIcon> =
   docs: IconFileText,
   extensionsButton: IconPuzzle,
   gitActions: IconGitCommit,
+  help: IconHelpCircle,
   kanban: IconPlayerPlay,
   openIn: IconFolderOpen,
   quickActions: IconPlayerPlay,
@@ -112,6 +120,7 @@ const OFFICIAL_TITLEBAR_EXTENSIONS = GHOSTEX_OFFICIAL_EXTENSIONS.filter(
 );
 
 export function ExtensionsSettingsTab({
+  spaces = [],
   isActive,
   onRequestStatus,
   onReinstallPlugin,
@@ -123,6 +132,7 @@ export function ExtensionsSettingsTab({
   statusLoading,
   vscode,
 }: {
+  spaces?: import('@/packages/shared/ghostex-settings/project-views').ProjectViewSpace[];
   isActive: boolean;
   onRequestStatus?: () => void;
   onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem['id']) => void;
@@ -135,6 +145,8 @@ export function ExtensionsSettingsTab({
   vscode?: WebviewApi;
 }) {
   const [customViewEditor, setCustomViewEditor] = useState<CustomViewEditorState>();
+  const [choosingTemplate, setChoosingTemplate] = useState(false);
+  const [viewOrderOpen, setViewOrderOpen] = useState(false);
   const statusById = new Map(status?.plugins.map((plugin) => [plugin.id, plugin]));
   const cef = statusById.get('cef');
   /*
@@ -145,6 +157,12 @@ export function ExtensionsSettingsTab({
    */
   const transport = useMemo(() => createExtensionsModalTransport(), []);
   const browser = useExtensionsBrowserState({ active: isActive && Boolean(transport), transport });
+  const orderedViews = titlebarViewOrderItems(settings, browser.installed);
+  const customViewsById = new Map(settings.customViews.map((view) => [`extension:${view.id}`, view]));
+  const orderedCustomViews = orderedViews.flatMap((item) => {
+    const view = customViewsById.get(item.id);
+    return view ? [view] : [];
+  });
   const detailOpen = Boolean(transport) && browser.detailOpen;
   const showOfficial = (key: string) => shouldShowSetting(search.sections.official, key);
 
@@ -169,31 +187,41 @@ export function ExtensionsSettingsTab({
     }
 
     const reorderedIds = moveId(
-      settings.customViews.map((view) => view.id),
+      orderedCustomViews.map((view) => `extension:${view.id}`),
       source.initialIndex,
       targetIndex
     );
-    const viewById = new Map(settings.customViews.map((view) => [view.id, view]));
-    updateCustomViews(reorderedIds.flatMap((id) => (viewById.get(id) ? [viewById.get(id)!] : [])));
+    let customIndex = 0;
+    const ids = orderedViews.map((item) => (customViewsById.has(item.id) ? reorderedIds[customIndex++]! : item.id));
+    const knownIds = new Set(ids);
+    onUpdateSetting('titlebarViewOrder', [...ids, ...settings.titlebarViewOrder.filter((id) => !knownIds.has(id))]);
   }) satisfies DragDropEventHandlers['onDragEnd'];
 
   const saveCustomView = () => {
     if (!customViewEditor) return;
     const name = customViewEditor.draft.name.trim();
-    const url = normalizeCustomViewUrl(customViewEditor.draft.url);
-    if (!name) {
-      setCustomViewEditor({ ...customViewEditor, error: 'Enter a name for the titlebar tab.' });
+    const draft = customViewEditor.draft;
+    const source = draft.source;
+    const needsUrl = !source || (source.kind === 'website' && source.destination === 'fixed');
+    const url = normalizeCustomViewUrl(draft.url) ?? '';
+    if (!name || (needsUrl && !url)) {
+      setCustomViewEditor({
+        ...customViewEditor,
+        error: !name ? 'Enter a name for the titlebar tab.' : 'Enter a complete HTTP or HTTPS URL.',
+      });
       return;
     }
-    if (!url) {
-      setCustomViewEditor({ ...customViewEditor, error: 'Enter a complete HTTP or HTTPS URL.' });
+    if (draft.availability === 'spaces' && !draft.spaceRefs?.length) {
+      setCustomViewEditor({ ...customViewEditor, error: 'Choose at least one space.' });
+      return;
+    }
+    if (source?.kind === 'report' && !source.reportDirectory.trim()) {
+      setCustomViewEditor({ ...customViewEditor, error: 'Enter the report directory.' });
       return;
     }
     const customView: GhostexCustomView = {
-      enabled: customViewEditor.id
-        ? (settings.customViews.find((view) => view.id === customViewEditor.id)?.enabled ?? true)
-        : true,
-      id: customViewEditor.id ?? `${CUSTOM_VIEW_ID_PREFIX}${Date.now().toString(36)}`,
+      ...draft,
+      id: customViewEditor.id ?? `${CUSTOM_VIEW_ID_PREFIX}${crypto.randomUUID()}`,
       name,
       url,
     };
@@ -203,6 +231,27 @@ export function ExtensionsSettingsTab({
         : [...settings.customViews, customView]
     );
     setCustomViewEditor(undefined);
+  };
+
+  const saveViewTemplate = () => {
+    if (!customViewEditor) return;
+    if (!customViewEditor.draft.name.trim()) {
+      setCustomViewEditor({ ...customViewEditor, error: 'Enter a name for the template.' });
+      return;
+    }
+    const draft = customViewEditor.draft;
+    const source = { ...(draft.source ?? DEFAULT_PROJECT_VIEW_SOURCE) };
+    if (source.kind === 'website' && source.destination === 'fixed') source.destination = 'project';
+    if (/^(?:[A-Za-z]:|[/\\])/.test(source.cwd)) source.cwd = '.';
+    const template: ProjectViewTemplate = {
+      id: `personal-${crypto.randomUUID()}`,
+      name: draft.name.trim(),
+      url: '',
+      source,
+      availability: 'matching',
+    };
+    onUpdateSetting('customViewTemplates', [...settings.customViewTemplates, template]);
+    setCustomViewEditor({ ...customViewEditor, notice: 'Template saved. Choose Add view to use it.' });
   };
 
   /*
@@ -234,6 +283,26 @@ export function ExtensionsSettingsTab({
         ) : (
           <>
             {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
+            {shouldShowSettingsSection(search.sections.viewOrder) ? (
+              <SettingsSection
+                title='Titlebar views'
+                description='Choose the order of built-in, extension, and custom views.'
+              >
+                <SettingsListItem title='View order'>
+                  <Button onClick={() => setViewOrderOpen(true)} type='button' variant='outline'>
+                    <IconArrowsSort aria-hidden='true' data-icon='inline-start' />
+                    Arrange views
+                  </Button>
+                </SettingsListItem>
+              </SettingsSection>
+            ) : null}
+            <TitlebarViewOrderDialog
+              open={viewOrderOpen}
+              onOpenChange={setViewOrderOpen}
+              settings={settings}
+              installed={browser.installed}
+              onChange={(order) => onUpdateSetting('titlebarViewOrder', order)}
+            />
             {shouldShowSettingsSection(search.sections.official) ? (
               <SettingsSection
                 actions={
@@ -326,7 +395,7 @@ export function ExtensionsSettingsTab({
                   <SettingButton
                     disabled={Boolean(customViewEditor)}
                     disabledReason='Finish editing the current custom view first.'
-                    onClick={() => setCustomViewEditor({ draft: { name: '', url: '' } })}
+                    onClick={() => setChoosingTemplate(true)}
                     type='button'
                     variant='ghost'
                   >
@@ -334,26 +403,46 @@ export function ExtensionsSettingsTab({
                     Add view
                   </SettingButton>
                 }
-                description='Add, arrange, and toggle titlebar views that open HTTP or HTTPS pages inside Ghostex.'
+                description='Websites, project dev servers, and HTML reports. Add from a template or configure your own.'
                 descriptionClassName='pb-2'
-                title='Custom Views'
+                title='Your views'
               >
+                {choosingTemplate ? (
+                  <ProjectViewTemplates
+                    templates={settings.customViewTemplates}
+                    onCancel={() => setChoosingTemplate(false)}
+                    onRemove={(id) =>
+                      onUpdateSetting(
+                        'customViewTemplates',
+                        settings.customViewTemplates.filter((t) => t.id !== id)
+                      )
+                    }
+                    onSelect={(template) => {
+                      setChoosingTemplate(false);
+                      setCustomViewEditor({
+                        draft: { ...template, id: '', enabled: true, projectBindings: {}, templateId: template.id },
+                      });
+                    }}
+                  />
+                ) : null}
                 <DragDropProvider onDragEnd={handleCustomViewDragEnd}>
-                  <div className='extensions-group divide-y overflow-hidden'>
-                    {settings.customViews.map((view, index) =>
+                  <div className='settings-list-rows'>
+                    {orderedCustomViews.map((view, index) =>
                       customViewEditor?.id === view.id ? (
                         <CustomViewEditor
+                          spaces={spaces}
                           editor={customViewEditor}
                           key={view.id}
                           onCancel={() => setCustomViewEditor(undefined)}
                           onChange={setCustomViewEditor}
                           onSave={saveCustomView}
+                          onSaveTemplate={saveViewTemplate}
                         />
                       ) : (
                         <CustomViewRow
                           index={index}
                           key={view.id}
-                          onEdit={() => setCustomViewEditor({ draft: { name: view.name, url: view.url }, id: view.id })}
+                          onEdit={() => setCustomViewEditor({ draft: { ...view }, id: view.id })}
                           onEnabledChange={(enabled) =>
                             updateCustomViews(
                               settings.customViews.map((candidate) =>
@@ -370,13 +459,15 @@ export function ExtensionsSettingsTab({
                     )}
                     {customViewEditor && !customViewEditor.id ? (
                       <CustomViewEditor
+                        spaces={spaces}
                         editor={customViewEditor}
                         onCancel={() => setCustomViewEditor(undefined)}
                         onChange={setCustomViewEditor}
                         onSave={saveCustomView}
+                        onSaveTemplate={saveViewTemplate}
                       />
                     ) : settings.customViews.length === 0 ? (
-                      <div className='px-4 py-5 text-center text-[13px] font-normal text-muted-foreground'>
+                      <div className='py-5 text-center text-[13px] font-normal text-muted-foreground'>
                         No custom views yet.
                       </div>
                     ) : null}
@@ -420,7 +511,7 @@ function CustomViewRow({
 
   return (
     <div
-      className='extensions-row group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors'
+      className='extensions-row group/row flex min-h-14 items-center gap-3 py-2 transition-colors'
       data-dragging={String(Boolean(isDragging))}
       ref={setRowRef}
     >
@@ -439,7 +530,9 @@ function CustomViewRow({
       </span>
       <div className='min-w-0 flex-1'>
         <span className='block truncate text-sm font-normal text-foreground'>{view.name}</span>
-        <p className='mt-0.5 truncate text-[13px] font-normal leading-relaxed text-foreground/75'>{view.url}</p>
+        <p className='mt-0.5 truncate text-[13px] font-normal leading-relaxed text-foreground/75'>
+          {projectViewDescription(view)}
+        </p>
       </div>
       <div className='flex shrink-0 items-center gap-1'>
         <Button aria-label={`Edit ${view.name}`} onClick={onEdit} size='icon-sm' type='button' variant='ghost'>
@@ -449,7 +542,6 @@ function CustomViewRow({
           <IconTrash aria-hidden='true' className='size-4' />
         </Button>
         <div className='ml-1 flex shrink-0 items-center gap-2'>
-          <span className='text-xs font-normal text-muted-foreground'>{view.enabled ? 'On' : 'Off'}</span>
           <Switch
             aria-label={`${view.enabled ? 'Disable' : 'Enable'} ${view.name}`}
             checked={view.enabled}
@@ -457,51 +549,6 @@ function CustomViewRow({
             size='sm'
           />
         </div>
-      </div>
-    </div>
-  );
-}
-
-function CustomViewEditor({
-  editor,
-  onCancel,
-  onChange,
-  onSave,
-}: {
-  editor: CustomViewEditorState;
-  onCancel: () => void;
-  onChange: (editor: CustomViewEditorState) => void;
-  onSave: () => void;
-}) {
-  return (
-    <div className='flex flex-col gap-3 px-3 py-3'>
-      <SettingsInput
-        aria-label='Custom view name'
-        autoFocus
-        onChange={(event) =>
-          onChange({ ...editor, draft: { ...editor.draft, name: event.currentTarget.value }, error: undefined })
-        }
-        placeholder='Titlebar name'
-        value={editor.draft.name}
-      />
-      <SettingsInput
-        aria-invalid={Boolean(editor.error)}
-        aria-label='Custom view URL'
-        onChange={(event) =>
-          onChange({ ...editor, draft: { ...editor.draft, url: event.currentTarget.value }, error: undefined })
-        }
-        placeholder='https://example.com'
-        type='url'
-        value={editor.draft.url}
-      />
-      {editor.error ? <p className='text-xs font-normal text-destructive'>{editor.error}</p> : null}
-      <div className='flex justify-end gap-2'>
-        <Button onClick={onCancel} type='button' variant='ghost'>
-          Cancel
-        </Button>
-        <Button onClick={onSave} type='button'>
-          {editor.id ? 'Save changes' : 'Add view'}
-        </Button>
       </div>
     </div>
   );
@@ -553,10 +600,10 @@ function OfficialExtensionList({
 
 function OfficialExtensionGroup({ children, label }: { children: ReactNode; label: string }) {
   return (
-    <section className='flex flex-col gap-2.5'>
-      <h3 className='text-[13px] font-normal text-muted-foreground'>{label}</h3>
-      <div className='extensions-group divide-y overflow-hidden'>{children}</div>
-    </section>
+    <>
+      <div className='settings-list-group-label'>{label}</div>
+      <div className='settings-list-rows'>{children}</div>
+    </>
   );
 }
 
@@ -588,7 +635,7 @@ function OfficialExtensionRow({
   ].filter(Boolean);
 
   return (
-    <div className='extensions-row group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors'>
+    <div className='extensions-row group/row flex min-h-14 items-center gap-3 py-2 transition-colors'>
       <span
         aria-hidden='true'
         className={cn('size-1.5 shrink-0 rounded-full', enabled === false ? 'bg-white/20' : 'bg-emerald-400/80')}
@@ -620,7 +667,7 @@ function OfficialExtensionRow({
             {actionLabel}
           </SettingButton>
           {metadata.length ? (
-            <p className='max-w-56 truncate text-right text-xs font-normal text-muted-foreground'>
+            <p className='max-w-56 truncate text-right text-[13px] font-normal text-muted-foreground'>
               {metadata.join(' · ')}
             </p>
           ) : null}
@@ -628,7 +675,6 @@ function OfficialExtensionRow({
       ) : null}
       {onEnabledChange && enabled !== undefined ? (
         <div className='ml-1 flex shrink-0 items-center gap-2'>
-          <span className='text-xs font-normal text-muted-foreground'>{enabled ? 'On' : 'Off'}</span>
           <Switch
             aria-label={`${enabled ? 'Disable' : 'Enable'} ${title}`}
             checked={enabled}
@@ -637,7 +683,10 @@ function OfficialExtensionRow({
           />
         </div>
       ) : (
-        <span className='ml-1 shrink-0 text-xs font-normal text-muted-foreground'>Always on</span>
+        /* CDXC:Settings 2026-09-09 DECISION: User: no On or Off text beside toggles anywhere in Settings. A view that cannot be turned off shows a locked-on switch instead of an "Always on" caption. */
+        <div className='ml-1 flex shrink-0 items-center gap-2'>
+          <Switch aria-label={`${title} is always on`} checked disabled size='sm' />
+        </div>
       )}
     </div>
   );
