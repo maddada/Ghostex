@@ -18,7 +18,7 @@ reference_revision() {
 	case "$1" in
 	zed) printf '%s\n' "5775362fbd422f00ef7ca3e7a88b088a65d7c22b" ;;
 	cef-rs) printf '%s\n' "0ddbc2accc06a3ac7f18e1543f752c3fb65161f2" ;;
-	gpui-component) printf '%s\n' "d34717841a8f52cd7fcf6a27a81e60704f45754c" ;;
+	gpui-component) printf '%s\n' "ab906b14a4aef2ae45211b5211f161e2db3197b7" ;;
 	esac
 }
 
