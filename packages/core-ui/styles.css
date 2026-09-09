@@ -14,6 +14,7 @@
 @import './styles/hierarchy-panels.css';
 @import './styles/chat.css';
 @import './styles/find.css';
+@import './styles/new-thread-palette.css';
 /**
  * CDXC:ContextMenus 2026-05-11-01:39
  * Sidebar and app context menus should behave like native menus: menu items
@@ -183,13 +184,28 @@ body {
    * quiet type here, after the shorthand, so buttons match the 13px/400 used
    * by every other control in the same row.
    */
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-body);
   font-weight: 400;
 }
 
 .ghostex-settings-shadcn button[data-slot='button']:disabled {
   cursor: revert-layer;
   opacity: revert-layer;
+}
+
+/*
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: no white buttons anywhere in Settings. The default (primary) Button variant renders as the quiet bordered button, the same shape as the outline variant, so primary actions stop reading as bright blocks.
+ */
+.ghostex-settings-shadcn button[data-slot='button'][data-variant='default'] {
+  background: transparent;
+  border-color: var(--settings-hairline);
+  color: var(--foreground);
+}
+
+.ghostex-settings-shadcn button[data-slot='button'][data-variant='default']:hover,
+.ghostex-settings-shadcn button[data-slot='button'][data-variant='default'][aria-expanded='true'] {
+  background: var(--settings-raised-hover);
 }
 
 /*
@@ -241,6 +257,15 @@ body {
   --settings-raised-hover: #1d1d1d;
   --settings-hairline: rgba(255, 255, 255, 0.08);
   --settings-accent: var(--ghostex-accent, #86d3f8);
+  /*
+   * CDXC:Settings 2026-09-09 DECISION:
+   * User: Settings uses one four-step type scale on every page: 16px section headings, 14px labels and control text, 13px secondary copy, 11px badges. About and empty-state titles cap at 18px. Every settings-scoped font-size resolves to one of these tokens.
+   */
+  --settings-text-display: 1.125rem;
+  --settings-text-heading: 1rem;
+  --settings-text-body: 0.875rem;
+  --settings-text-detail: 0.8125rem;
+  --settings-text-badge: 0.6875rem;
 
   --background: var(--settings-surface);
   --card: var(--settings-raised);
@@ -265,6 +290,7 @@ body {
   --settings-radius-adaptive: min(8px, 22%);
   --settings-control-radius: var(--settings-radius-control);
   --settings-control-height: 2rem;
+  --settings-select-width: 12rem;
   --settings-content-inline-padding: 1.25rem;
   --settings-content-max-width: 770px;
   --settings-focus-border-color: color-mix(in srgb, var(--foreground) 58%, var(--border) 42%);
@@ -305,11 +331,47 @@ body {
   padding: 4px;
 }
 
+.settings-select-content {
+  /*
+   * CDXC:Settings 2026-09-09 WHY:
+   * The popup is portaled under <body>, so it inherits the body font (system UI at 11.7px) and cannot see the Settings type tokens. Repeat the trigger's font here so rows and trigger match exactly.
+   */
+  --settings-text-body: 0.875rem;
+  --settings-text-detail: 0.8125rem;
+  font-family: var(--font-sans, 'Inter Variable', sans-serif);
+  font-size: var(--settings-text-body);
+  line-height: 1.45;
+}
+
 .settings-select-content [data-slot='select-item'] {
   border-radius: 6px !important;
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-body);
   font-weight: 400;
   min-height: 1.75rem;
+}
+
+/*
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: a list-row dropdown popup is exactly as wide as its trigger, and its rows are as tall as the trigger.
+ * The trigger is sized to its longest option by a hidden sizer (see SelectField), so no option is clipped; rows share the 32px control height.
+ */
+.settings-list-select-content {
+  min-width: 0 !important;
+  width: var(--anchor-width) !important;
+}
+
+.settings-list-select-content [data-slot='select-item'] {
+  min-height: 2rem;
+}
+
+/*
+ * Base UI lines the selected item's text up with the trigger's text. The
+ * trigger text sits 13px in (1px border + 12px padding); with the group's own
+ * 4px padding the item text sat 17px in, which pushed the popup 4px left of
+ * the trigger. Without it both are 13px and the popup lands exactly on top.
+ */
+.settings-list-select-content [data-slot='select-group'] {
+  padding: 0;
 }
 
 .settings-select-content [data-slot='select-item']:is(:hover, :focus, :focus-visible),
@@ -328,7 +390,7 @@ body {
  */
 .settings-select-content [data-slot='select-item'][data-selected],
 .settings-select-content [data-slot='select-item'][aria-selected='true'] {
-  background: transparent !important;
+  background: #2c2c2c !important;
   color: #ffffff !important;
 }
 
@@ -416,11 +478,19 @@ body {
  * a right-side tick only. Accent fills are reserved for pointer and keyboard
  * highlight states, never persisted selection.
  */
-[data-slot='select-item'][data-selected],
-[data-slot='select-item'][aria-selected='true'],
 [data-slot='dropdown-menu-checkbox-item'][data-checked],
 [data-slot='dropdown-menu-radio-item'][data-checked] {
   background: transparent;
+  color: var(--popover-foreground, #ffffff);
+}
+
+/*
+ * CDXC:DesignSystem 2026-09-09 DECISION:
+ * User: select rows have no check mark; the selected row shows a quiet fill instead, one step above the hover fill so both states stay distinguishable.
+ */
+[data-slot='select-item'][data-selected],
+[data-slot='select-item'][aria-selected='true'] {
+  background: color-mix(in srgb, var(--popover-foreground, #ffffff) 12%, transparent);
   color: var(--popover-foreground, #ffffff);
 }
 
@@ -499,14 +569,15 @@ body {
  * explicitly instead of reverting to the primitive's rounded-none layer. The
  * popup marker class covers chat-owned dropdown menus portalled outside the
  * chat root. Collapse rails and the terminal/agent floating strip keep their
- * purpose-built geometry.
+ * purpose-built geometry. File-change cards also own their link, code pane,
+ * and padded disclosure-button shapes.
  */
 .ghostex-session-chat-scope :is(input, textarea),
 .ghostex-session-chat-popup,
 .ghostex-session-chat-scope
   :is(button, [role='button'], [data-slot='button']):not([data-slot='session-chat-host-action']):not(
     .ghostex-chat-expansion-rail
-  ),
+  ):not(.ghostex-chat-file-change-card button),
 .ghostex-session-chat-popup
   :is(
     button,
@@ -516,7 +587,7 @@ body {
     [data-slot='dropdown-menu-radio-item'],
     [data-slot='dropdown-menu-sub-trigger'],
     [data-slot='dropdown-menu-sub-content']
-  ) {
+  ):not(.ghostex-chat-file-change-card button) {
   border-radius: calc(var(--radius, 0.625rem) - 2px);
 }
 
@@ -587,8 +658,14 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   width: min(654px, calc(100vw - 1rem));
 }
 
+/* CDXC:Theming 2026-09-09 DECISION:
+ * User: use #b4b8bf for text in Command Pane, Projects, Sessions, and Saved Prompts.
+ */
 .quick-access-surface {
-  --quick-access-item-color: var(--foreground, var(--app-foreground));
+  --foreground: #b4b8bf;
+  --app-foreground: #b4b8bf;
+  --accent-foreground: #b4b8bf;
+  --quick-access-item-color: #b4b8bf;
   --quick-access-item-font-size: 14px;
   --quick-access-item-line-height: 20px;
   --quick-access-group-heading-height: 32px;
@@ -1495,6 +1572,11 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
    * grid instead of floating over tab content.
    */
   --settings-section-sidebar-width: 12rem;
+  /*
+   * CDXC:Settings 2026-09-09 DECISION:
+   * User: the Settings background behind the container areas is #0d0d0d, a touch darker than the #0e0e0e shell the other app modals keep.
+   */
+  --settings-surface: #0d0d0d;
   container-name: settings-modal;
   container-type: inline-size;
   height: min(860px, calc(100vh - 1rem));
@@ -3308,7 +3390,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .discover-ghostex-feature-title {
   color: var(--foreground);
-  font-size: 1.22rem;
+  font-size: var(--settings-text-display);
   font-weight: 800;
   letter-spacing: 0;
   line-height: 1.14;
@@ -3319,7 +3401,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .discover-ghostex-feature-description {
   color: color-mix(in srgb, var(--foreground) 70%, #8b8f98 30%);
-  font-size: 0.875rem;
+  font-size: var(--settings-text-body);
   font-weight: 400;
   line-height: 1.36;
   margin: 0;
@@ -3782,7 +3864,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-show-advanced-copy {
   display: block;
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-detail);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1.125rem;
@@ -3818,7 +3900,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   border-radius: 0.75rem;
   color: var(--background);
   display: flex;
-  font-size: 1.5rem;
+  font-size: var(--settings-text-display);
   font-weight: 750;
   height: 3.25rem;
   justify-content: center;
@@ -3827,7 +3909,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-about-title {
   color: var(--foreground);
-  font-size: 1.5rem;
+  font-size: var(--settings-text-display);
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.2;
@@ -3841,12 +3923,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 .ghostex-settings-shadcn .settings-about-version {
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-detail);
   margin: 0.25rem 0 0;
 }
 
 .ghostex-settings-shadcn .settings-about-description {
-  font-size: 0.875rem;
+  font-size: var(--settings-text-body);
   line-height: 1.5;
   margin: 1.25rem 0 1.5rem;
 }
@@ -3885,12 +3967,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 .ghostex-settings-shadcn .settings-about-link-title {
-  font-size: 0.875rem;
+  font-size: var(--settings-text-body);
   font-weight: 600;
 }
 
 .ghostex-settings-shadcn .settings-about-link-description {
-  font-size: 0.75rem;
+  font-size: var(--settings-text-detail);
   line-height: 1.4;
 }
 
@@ -3978,6 +4060,392 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 
 .ghostex-settings-shadcn .settings-section-anchor {
   scroll-margin-top: 1rem;
+}
+
+/*
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: every Settings page matches the grouped-list prototype: a quiet group
+ * heading sitting above a raised card, one setting per row with the label on
+ * the left and the control on the right, rows separated by hairlines, no
+ * floating title pill. Every SettingsSection renders this; the old stacked
+ * card rules are gone.
+ */
+.ghostex-settings-shadcn .settings-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.ghostex-settings-shadcn .settings-list-section-header {
+  align-items: flex-end;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-inline: 0.125rem;
+}
+
+.ghostex-settings-shadcn .settings-list-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ghostex-settings-shadcn .settings-list-section-title {
+  color: var(--foreground);
+  font-size: var(--settings-text-heading);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.ghostex-settings-shadcn .settings-list-section-description {
+  color: var(--muted-foreground);
+  font-size: var(--settings-text-detail);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.ghostex-settings-shadcn .settings-list-section-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+.ghostex-settings-shadcn .settings-list-card {
+  background: var(--settings-raised);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-section);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/*
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: no subtitle text anywhere in the list rows. A row shows only its label; an info icon appears beside the label while the row is hovered, and hovering that icon shows the description as a tooltip, so the page stays uncrowded.
+ */
+.ghostex-settings-shadcn .settings-list-row {
+  align-items: center;
+  display: flex;
+  gap: 1.5rem;
+  justify-content: space-between;
+  min-height: 3.25rem;
+  padding: 0.625rem 1.25rem;
+}
+
+.ghostex-settings-shadcn .settings-list-card > * + * {
+  border-top: 1px solid var(--settings-hairline);
+}
+
+/* A section whose rows are all hidden (advanced off, search) has nothing to show. */
+.ghostex-settings-shadcn .settings-list-section:has(> .settings-list-card:empty) {
+  display: none;
+}
+
+/*
+ * Anything in a card that is not a row (an editor form, a notice, a nested
+ * list) gets the row inset so its content lines up with the row labels.
+ */
+.ghostex-settings-shadcn
+  .settings-list-card
+  > :not(.settings-list-row, .settings-list-rows, .settings-list-group, .settings-list-group-label) {
+  padding: 0.875rem 1.25rem;
+}
+
+/* A row whose control needs the full width: label line on top, control under it. */
+.ghostex-settings-shadcn .settings-list-row-wide {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.ghostex-settings-shadcn .settings-list-row-wide > .settings-list-row-control {
+  justify-content: stretch;
+  max-width: none;
+}
+
+.ghostex-settings-shadcn .settings-list-row-wide > .settings-list-row-control > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * Management lists (agents, actions, custom views) are a run of rows that
+ * should divide edge to edge, so the list itself has no inset and each row
+ * carries the horizontal padding instead.
+ */
+.ghostex-settings-shadcn .settings-list-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.ghostex-settings-shadcn .settings-list-rows > * {
+  padding-inline: 1rem;
+}
+
+.ghostex-settings-shadcn .settings-list-rows > * + * {
+  border-top: 1px solid var(--settings-hairline);
+}
+
+/*
+ * The rows carry the control radius for their hover fill, which would bend the
+ * hairline between them at both ends. Dividers in a list are always straight.
+ */
+.ghostex-settings-shadcn .settings-list-rows > *,
+.ghostex-settings-shadcn .settings-list-rows .settings-management-row {
+  border-radius: 0;
+}
+
+/*
+ * A management row can expand into a panel of ordinary setting rows (agent
+ * details). Those rows sit inside the list inset already, so they drop their
+ * own horizontal padding and divide with the same hairline.
+ */
+.ghostex-settings-shadcn .settings-list-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.ghostex-settings-shadcn .settings-list-panel > * {
+  padding-inline: 0;
+}
+
+.ghostex-settings-shadcn .settings-list-panel > * + * {
+  border-top: 1px solid var(--settings-hairline);
+}
+
+/* A run of rows under one caption inside a card; rows inside it divide like direct card children. */
+.ghostex-settings-shadcn .settings-list-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.ghostex-settings-shadcn .settings-list-group > .settings-list-row + .settings-list-row {
+  border-top: 1px solid var(--settings-hairline);
+}
+
+/* A read-only command shown as a row control, next to its copy button. */
+.ghostex-settings-shadcn .settings-inline-code {
+  background: var(--settings-surface);
+  border: 1px solid var(--settings-hairline);
+  border-radius: var(--settings-radius-control);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--settings-text-detail);
+  padding: 0.3rem 0.625rem;
+}
+
+/* A small caption that groups the rows after it inside one card. */
+.ghostex-settings-shadcn .settings-list-group-label {
+  color: var(--muted-foreground);
+  font-size: var(--settings-text-detail);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 0.75rem 1.25rem 0.375rem;
+}
+
+.ghostex-settings-shadcn .settings-list-card > .settings-list-group-label + * {
+  border-top: 0;
+}
+
+/* Install or permission state as a dot before the icon, matching the Extensions page. */
+.ghostex-settings-shadcn .settings-list-item-status {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  height: 6px;
+  width: 6px;
+}
+
+.ghostex-settings-shadcn .settings-list-item-status[data-tone='success'] {
+  background: rgba(52, 211, 153, 0.8);
+}
+
+.ghostex-settings-shadcn .settings-list-item-status[data-tone='warning'] {
+  background: rgba(251, 191, 36, 0.85);
+}
+
+.ghostex-settings-shadcn .settings-list-item-icon {
+  align-items: center;
+  color: var(--muted-foreground);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.ghostex-settings-shadcn .settings-list-item-icon svg {
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+.ghostex-settings-shadcn .settings-list-row-detail {
+  color: var(--muted-foreground);
+  font-size: var(--settings-text-detail);
+  line-height: 1.4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-settings-shadcn .settings-list-row-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ghostex-settings-shadcn .settings-list-row-label {
+  color: var(--foreground);
+  font-size: var(--settings-text-body);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/*
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: no super tiny text in Settings. Secondary copy (account notes, row details, list metadata) reads at 13px, one step under the 14px row labels, instead of the 11px the accounts popover uses.
+ */
+.ghostex-settings-shadcn .gx-accounts,
+.ghostex-settings-shadcn .gx-accounts p,
+.ghostex-settings-shadcn .gx-accounts small {
+  font-size: var(--settings-text-detail);
+}
+
+.ghostex-settings-shadcn .gx-accounts button,
+.ghostex-settings-shadcn .gx-accounts h3,
+.ghostex-settings-shadcn .gx-account-settings {
+  font-size: var(--settings-text-body);
+}
+
+.ghostex-settings-shadcn .gx-account-policy legend,
+.ghostex-settings-shadcn .gx-account-usage-window strong,
+.ghostex-settings-shadcn .gx-account-command code,
+.ghostex-settings-shadcn .gx-account-consent,
+.ghostex-settings-shadcn .gx-account-color-preview-label,
+.ghostex-settings-shadcn .gx-account-terminal-output,
+.ghostex-settings-shadcn .gx-account-privacy-description,
+.ghostex-settings-shadcn .gx-account-signin-link,
+.ghostex-settings-shadcn .gx-account-settings p,
+.ghostex-settings-shadcn .gx-account-settings small {
+  font-size: var(--settings-text-detail);
+}
+
+/*
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: empty-state titles in Settings sit one step down at the 16px heading size, and their description may run wider than the shadcn 24rem cap so a short sentence stays on one line.
+ */
+.ghostex-settings-shadcn [data-slot='empty-header'],
+.ghostex-settings-shadcn [data-slot='empty-content'] {
+  max-width: 40rem;
+}
+
+.ghostex-settings-shadcn [data-slot='empty-title'] {
+  font-size: var(--settings-text-heading);
+}
+
+.ghostex-settings-shadcn [data-slot='empty-description'] {
+  font-size: var(--settings-text-detail);
+}
+
+.ghostex-settings-shadcn .gx-account-figures,
+.ghostex-settings-shadcn .gx-account-status,
+.ghostex-settings-shadcn .gx-account-usage-caption,
+.ghostex-settings-shadcn .gx-account-settings .gx-account-status {
+  font-size: var(--settings-text-badge);
+}
+
+.ghostex-settings-shadcn .settings-list-row-control {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  max-width: 60%;
+  min-width: 0;
+}
+
+/*
+ * The field components size their controls for the stacked layout (full
+ * width). In a list row the control hugs the right edge instead: segmented
+ * controls size to their labels, dropdowns to their longest option, and a
+ * slider gets a fixed lane so every slider row lines up.
+ */
+/*
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: the segmented control should match the prototype's look: a slightly raised bordered tray with a small inset, no dividers between segments, and the selected segment drawn as its own rounded fill.
+ * Scoped to list rows while the layout is being trialled on one section; once every page uses the list layout this look belongs in the shared SegmentedControl component.
+ */
+.ghostex-settings-shadcn .settings-list-row-control [data-slot='segmented-control'] {
+  /*
+   * The tray shares the card colour (the prototype's tray is #151515 on a
+   * #151515 card, only its #282828 border and the #313131 selected fill stand
+   * out), so it is transparent rather than raised.
+   */
+  background: transparent;
+  border-color: var(--settings-hairline);
+  border-radius: 9px;
+  gap: 2px;
+  padding: 3px;
+  width: auto;
+}
+
+.ghostex-settings-shadcn .settings-list-row-control [data-slot='segmented-control-item'] {
+  border-left: 0 !important;
+  border-radius: 6px;
+  flex: 0 0 auto;
+  padding-inline: 0.75rem;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.ghostex-settings-shadcn .settings-list-row-control [data-slot='segmented-control-item']:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.ghostex-settings-shadcn .settings-list-row-control [data-slot='segmented-control-item'][aria-pressed='true'] {
+  background: color-mix(in srgb, var(--foreground) 13%, transparent);
+  color: var(--foreground);
+}
+
+/*
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: every dropdown in a settings row has the same standard width and the same height, instead of each trigger sizing itself to its longest option.
+ * Plain and searchable triggers share the pinned control height; a label longer than the standard width truncates in the trigger and in the matching-width popup.
+ */
+.ghostex-settings-shadcn .settings-list-row-control [data-slot='select-trigger'] {
+  max-width: 100%;
+  min-width: 0;
+  width: var(--settings-select-width);
+}
+
+.ghostex-settings-shadcn .settings-list-row-control [data-slot='select-trigger'] [data-slot='select-value'] {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-settings-shadcn .settings-list-row-control .settings-slider-number,
+.ghostex-settings-shadcn .settings-list-row-control .settings-control-lane {
+  max-width: 100%;
+  width: 17rem;
+}
+
+.ghostex-settings-shadcn .settings-list-row-control [data-slot='textarea'] {
+  width: 100%;
+}
+
+.ghostex-settings-shadcn .settings-list-row-control > .flex.flex-col {
+  align-items: flex-end;
 }
 
 /*
@@ -4089,7 +4557,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   border-radius: var(--settings-radius-control);
   box-sizing: border-box;
   color: var(--foreground);
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-body);
   font-weight: 400;
   height: var(--settings-control-height);
   letter-spacing: 0;
@@ -4226,8 +4694,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 .ghostex-settings-shadcn .settings-open-target-icon,
 .ghostex-settings-shadcn .settings-row-advanced-button,
 .ghostex-settings-shadcn .settings-row-info-button,
-.ghostex-settings-shadcn .settings-show-advanced-toggle,
-.ghostex-settings-shadcn .settings-section-title-pill {
+.ghostex-settings-shadcn .settings-show-advanced-toggle {
   border-radius: var(--settings-radius-control);
 }
 
@@ -4272,8 +4739,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 .ghostex-settings-shadcn [data-slot='dialog-content'],
 .ghostex-settings-shadcn [data-slot='empty'],
 .ghostex-settings-shadcn [data-slot='popover-content'],
-.ghostex-settings-shadcn .first-launch-setup-preference-card,
-.ghostex-settings-shadcn .settings-section-card {
+.ghostex-settings-shadcn .first-launch-setup-preference-card {
   border-radius: var(--settings-radius-section) !important;
 }
 
@@ -4298,7 +4764,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 .ghostex-settings-shadcn [data-slot='toggle'],
 .ghostex-settings-shadcn [data-slot='toggle-group-item'],
 .ghostex-settings-shadcn [data-slot='segmented-control'] {
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-body);
   height: var(--settings-control-height);
   min-height: var(--settings-control-height);
 }
@@ -4312,13 +4778,13 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  * geometry, so it cannot push its row neighbors around.
  */
 .ghostex-settings-shadcn [data-slot='segmented-control'] [data-slot='segmented-control-item'] {
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-body);
   height: 100%;
 }
 
 .ghostex-settings-shadcn [data-slot='button'],
 .ghostex-settings-shadcn [data-slot='textarea'] {
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-body);
 }
 
 /*
@@ -4328,12 +4794,12 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  * of text rather than three competing sizes.
  */
 .ghostex-settings-shadcn [data-slot='field-label'] {
-  font-size: 0.8125rem;
+  font-size: var(--settings-text-body);
 }
 
 .ghostex-settings-shadcn [data-slot='field-description'] {
   color: var(--muted-foreground);
-  font-size: 0.75rem;
+  font-size: var(--settings-text-detail);
   line-height: 1.45;
 }
 
@@ -4465,37 +4931,6 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   font-weight: 500;
 }
 
-.ghostex-settings-shadcn .settings-section-with-actions {
-  /*
-   * CDXC:AppModal 2026-08-24:
-   * Header actions now sit inside the card next to the section label, so the
-   * with-actions variant shares the same 48px header band as a plain section.
-   */
-  padding-top: 3rem;
-}
-
-.ghostex-settings-shadcn .settings-section-card {
-  /*
-   * CDXC:Settings 2026-06-16-08:12:
-   * Superseded by CDXC:AppModal 2026-08-24.
-   *
-   * CDXC:AppModal 2026-08-24:
-   * Section cards are the raised tone (#1d1d1d) on the #161616 modal surface,
-   * with a single hairline and no shadow, so groups separate by elevation
-   * instead of by the old mixed-in tint.
-   */
-  background: var(--settings-raised) !important;
-  background-color: var(--settings-raised) !important;
-  border: 1px solid var(--settings-hairline) !important;
-  border-radius: var(--settings-radius-section) !important;
-  box-shadow: none !important;
-  /*
-   * The title label and any header actions are absolutely positioned inside
-   * the card's top inset, so the card reserves one 48px band for them.
-   */
-  padding-top: 3rem !important;
-}
-
 /*
  * CDXC:Settings 2026-05-21-09:17:
  * Settings Agents and Actions rows keep edit/delete controls on the right side
@@ -4518,24 +4953,23 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 /*
- * CDXC:AppModal 2026-08-24:
- * Section header actions used to straddle the card's top border next to the
- * floating title pill. The title is now a quiet label inside the card, so the
- * actions sit on the same line inside the card instead of cutting the border.
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: the hover fill on a management row (agents, actions) covers the whole row, including the drag grip and the edit and delete buttons on the right, instead of only the inner edit button.
  */
-.ghostex-settings-shadcn .settings-section-header-actions {
-  align-items: center;
+.ghostex-settings-shadcn .settings-list-rows .settings-management-row:hover,
+.ghostex-settings-shadcn .settings-list-rows .settings-management-row:focus-within {
+  background: var(--settings-raised-hover);
+}
+
+/* An agent row nests its header inside a wrapper that also holds the expanded panel, so the header reclaims the list inset to fill edge to edge. */
+.ghostex-settings-shadcn .settings-list-rows > * > .settings-management-row {
+  margin-inline: -1rem;
+  padding-inline: 1rem;
+}
+
+.ghostex-settings-shadcn .settings-list-rows .settings-management-edit-button:hover,
+.ghostex-settings-shadcn .settings-list-rows .settings-management-edit-button[aria-expanded='true'] {
   background: transparent;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  max-width: calc(100% - 9rem);
-  padding: 0;
-  position: absolute;
-  right: 1rem;
-  top: 0.5rem;
-  z-index: 1;
 }
 
 /* CDXC:Settings 2026-05-07-19:44: Modified settings use a small
@@ -4568,12 +5002,6 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   color: var(--foreground);
 }
 
-.ghostex-settings-shadcn .settings-row-title {
-  align-items: start;
-  display: grid;
-  gap: 0.25rem;
-}
-
 .ghostex-settings-shadcn .settings-row-label-line {
   align-items: center;
   display: inline-flex;
@@ -4582,14 +5010,6 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   min-width: 0;
   position: relative;
   width: max-content;
-}
-
-.ghostex-settings-shadcn .settings-row-subtitle {
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  line-height: 1.35;
-  margin: 0;
-  max-width: 100%;
 }
 
 /*
@@ -4649,44 +5069,6 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
    Settings section header chrome follows the modal token so Dark 1, Dark 2,
    and Light do not leave old dark islands inside the chosen mode. */
 /*
- * CDXC:AppModal 2026-08-24:
- * Superseded the floating bordered pill that straddled the card's top border.
- * The section name is now a clear 16px/600 title sitting inside the card, so a
- * settings page reads as a stack of clean cards instead of notched boxes. The
- * absolute positioning and max-content sizing stay, because they are what keep
- * multi-word headings like "Session Cards" on one line.
- */
-.ghostex-settings-shadcn .settings-section-title-pill {
-  align-items: center !important;
-  background: transparent !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  display: inline-flex !important;
-  flex-direction: column !important;
-  gap: 0 !important;
-  justify-content: center !important;
-  left: 1rem !important;
-  max-width: calc(100% - 2rem) !important;
-  min-width: max-content !important;
-  overflow: visible !important;
-  padding: 0 !important;
-  position: absolute !important;
-  top: 1.0625rem !important;
-  width: max-content !important;
-}
-
-.ghostex-settings-shadcn .settings-section-title-pill-text {
-  color: var(--foreground);
-  display: block;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  line-height: 1.25;
-  min-width: max-content;
-  white-space: nowrap;
-}
-
-/*
  * CDXC:AppModal 2026-08-26:
  * The update modal renders inside AppModalShell now, so its surface, width,
  * title scale, and footer buttons come from `.gx-app-modal`. The old
@@ -4738,7 +5120,7 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  * placement), and this pass changes only their surface, radius, and type.
  */
 .quick-access-surface {
-  --quick-access-item-color: var(--foreground, var(--app-foreground));
+  --quick-access-item-color: #b4b8bf;
   --quick-access-item-font-size: 13px;
   --quick-access-item-line-height: 18px;
   --quick-access-group-heading-height: 26px;
@@ -5273,7 +5655,9 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   width: 264px;
   flex-shrink: 0;
 }
-.quick-access-session-scope-hint { flex-shrink: 0; }
+.quick-access-session-scope-hint {
+  flex-shrink: 0;
+}
 .quick-access-session-project-controls {
   display: flex;
   align-items: center;

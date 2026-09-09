@@ -333,12 +333,13 @@ pub struct GhostexGpuiApp {
     // 2s policy poll), never per frame on the main thread.
     pub(crate) titlebar_actions_snapshot: Vec<GpuiTitlebarAction>,
     pub(crate) titlebar_actions_refresh_in_flight: bool,
+    pub(crate) project_views: crate::app::project_views::ProjectViews,
     pub(crate) extensions_snapshot: GpuiExtensionsSnapshot,
     pub(crate) extension_projects: HashMap<String, GpuiExtensionProjectMetadata>,
     pub(crate) extension_session_details: HashMap<String, serde_json::Value>,
     pub(crate) extensions_refresh_in_flight: bool,
     pub(crate) titlebar_accounts: Vec<serde_json::Value>,
-    pub(crate) titlebar_accounts_refresh_in_flight: bool,
+    pub(crate) titlebar_accounts_refresh_in_flight: std::collections::HashSet<String>,
     pub(crate) titlebar_accounts_revision: u64,
     pub(crate) titlebar_tips_unread_count: u64,
     // Platform-neutral updater state drives the native titlebar. Sparkle owns
@@ -585,7 +586,8 @@ pub struct GhostexGpuiApp {
     pub(crate) agents_chat_eviction_running: bool,
     pub(crate) agents_chat_eviction_requested: bool,
     pub(crate) agents_chat_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
-    pub(crate) account_switch_progress: HashMap<GpuiWorkspaceTerminalSessionKey, SessionAccountSwitchProgress>,
+    pub(crate) account_switch_progress:
+        HashMap<GpuiWorkspaceTerminalSessionKey, SessionAccountSwitchProgress>,
     /// When each currently hidden chat surface last became hidden, the clock the
     /// RAM eviction pass ages out. A surface that is visible has no entry, so a
     /// transient hide (a tab drag hides every surface for its duration) neither
@@ -612,6 +614,8 @@ pub struct GhostexGpuiApp {
     pub(crate) pending_session_terminal_composer_insert:
         HashMap<TerminalSessionId, crate::app::session_chat::GpuiSessionChatDraftHandoff>,
     pub(crate) pending_session_chat_draft_handoffs: HashSet<TerminalSessionId>,
+    pub(crate) session_chat_draft_capture_in_flight: HashSet<TerminalSessionId>,
+    pub(crate) pending_session_chat_received_drafts: HashMap<TerminalSessionId, serde_json::Value>,
     pub(crate) pending_session_chat_image_saves: HashMap<
         (TerminalSessionId, String),
         crate::app::session_chat_image_save::GpuiPendingSessionChatImageSave,
@@ -660,6 +664,17 @@ pub struct GhostexGpuiApp {
     */
     pub(crate) sidebar_agents_delayed_sends_snapshot: String,
     pub(crate) sidebar_timer_presentations_replayed_after_ready: bool,
+    /// The sidebar page's last-used launcher agent id, published over the native host bridge for the native New Thread picker.
+    pub(crate) sidebar_primary_agent_launcher_id: Option<String>,
+    pub(crate) new_thread_picker_window: Option<WindowHandle<Root>>,
+    pub(crate) new_thread_picker: Option<Entity<GpuiNewThreadPickerWindow>>,
+    pub(crate) new_thread_picker_visible: bool,
+    pub(crate) new_thread_picker_preloaded_agent_count: usize,
+    /// Cached local accounts list so a preloaded picker opens with its badges and rows filled.
+    pub(crate) new_thread_picker_accounts: Option<serde_json::Value>,
+    /// Cached sidebar HUD agent buttons so the New Thread picker opens without a gxserver round trip.
+    pub(crate) new_thread_picker_agents: Option<Vec<serde_json::Value>>,
+    pub(crate) new_thread_picker_agents_refresh_in_flight: bool,
     /*
     CDXC:DelayedSend 2026-06-25-15:11:
     GPUI Delayed Send timers for command-pane terminals are runtime-owned session timers. Store only shell session ids, UTC deadlines, and cancellation generations in memory; persist only the bounded restart checkpoint described below.
@@ -743,6 +758,7 @@ pub struct GhostexGpuiApp {
     pub(crate) workspace_leaf_layout_bounds: HashMap<WorkspacePaneId, Bounds<Pixels>>,
     pub(crate) browser_leaf_layout_bounds: HashMap<BrowserPaneId, Bounds<Pixels>>,
     pub(crate) command_group_layout_bounds: HashMap<CommandPaneGroupId, Bounds<Pixels>>,
+    pub(crate) command_group_minimize_tooltip_visible: HashMap<CommandPaneGroupId, bool>,
     pub(crate) command_pane_layout_bounds: Option<Bounds<Pixels>>,
     pub(crate) project_editor_surface_layout_bounds: Option<ProjectEditorFocusBounds>,
     pub(crate) project_editor_companion_layout_bounds: Option<ProjectEditorFocusBounds>,
@@ -979,6 +995,8 @@ pub struct GhostexGpuiApp {
     pub(crate) command_pane_side: GpuiCommandPaneSide,
     pub(crate) sidebar_width: f32,
     pub(crate) sidebar_collapsed: bool,
+    #[cfg(target_os = "macos")]
+    pub(crate) companion_reveal: Option<crate::app::companion_reveal::CompanionReveal>,
     pub(crate) sidebar_drag: Option<SidebarDragState>,
     pub(crate) sidebar_divider_hovering: bool,
     pub(crate) sidebar_divider_hover_visible: bool,
@@ -1083,6 +1101,9 @@ pub struct GhostexGpuiApp {
     pub(crate) titlebar_dropdown_previous_focus_handle: Option<FocusHandle>,
     pub(crate) titlebar_popup_menu: Option<GpuiTitlebarPopupState>,
     pub(crate) titlebar_popup_window: Option<WindowHandle<GpuiTitlebarPopupWindow>>,
+    /// Last painted bounds of the titlebar Help button, so the `openGhostexHelp`
+    /// hotkey can anchor the Help popup without a click.
+    pub(crate) titlebar_help_button_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     pub(crate) titlebar_extension_popup_generation: u64,
     pub(crate) titlebar_extension_popup: Option<GpuiTitlebarExtensionPopupState>,
     pub(crate) titlebar_tips_panel_open: bool,
@@ -1125,6 +1146,10 @@ pub struct GhostexGpuiApp {
 
 impl Drop for GhostexGpuiApp {
     fn drop(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(reveal) = self.companion_reveal.as_ref() {
+            reveal.dispose_native_host();
+        }
         #[cfg(target_os = "macos")]
         unregister_gpui_app_shots_callback_target();
         #[cfg(target_os = "macos")]
@@ -1367,6 +1392,9 @@ impl Render for GhostexGpuiApp {
             .relative()
             .size_full()
             .bg(workspace_background_color())
+            .when(self.active_mode == TitlebarMode::Browser, |this| {
+                this.key_context(BROWSER_KEY_CONTEXT)
+            })
             .when(titlebar_popup_dismissal_active, |this| {
                 /*
                 Native titlebar dropdowns live in non-activating panels, while
@@ -1496,6 +1524,9 @@ impl Render for GhostexGpuiApp {
                     cx.stop_propagation();
                 }
             }))
+            .on_action(cx.listener(|this, _: &OpenBrowserHistory, window, cx| {
+                this.show_browser_history_popup(this.browser_tabs.focused_pane, window, cx);
+            }))
             .on_action(cx.listener(|this, _: &OpenCommandPane, window, cx| {
                 this.open_command_pane_from_keyboard(window, cx);
             }))
@@ -1618,7 +1649,7 @@ impl Render for GhostexGpuiApp {
             )
             .on_action(
                 cx.listener(|this, _: &StartGpuiGxserverFromTitlebar, _window, cx| {
-                    this.start_gpui_local_gxserver_bootstrap(cx);
+                    this.start_gpui_local_gxserver_bootstrap(true, cx);
                 }),
             )
             .on_action(
@@ -1889,6 +1920,7 @@ impl Render for GhostexGpuiApp {
                     );
                 }),
             )
+            .on_action(cx.listener(|this, action: &crate::app::project_views::ProjectViewCommand, window, cx| { this.project_view_command(action, window, cx); }))
             .on_action(cx.listener(|this, _: &OpenGpuiExtensionsModal, window, cx| {
                 /*
                 CDXC:Titlebar 2026-08-13:
@@ -2095,19 +2127,6 @@ impl Render for GhostexGpuiApp {
                     );
                 }),
             )
-            .on_action(cx.listener(
-                |this, action: &OpenBrowserHistoryEntryInNewTab, window, cx| {
-                    let Ok(index) = usize::try_from(action.index) else {
-                        return;
-                    };
-                    this.open_browser_history_entry_in_new_tab(
-                        BrowserPaneId(action.pane_id),
-                        index,
-                        window,
-                        cx,
-                    );
-                },
-            ))
             .on_action(cx.listener(|this, _: &RunBrowserFeedbackTool, window, cx| {
                 this.run_browser_feedback_tool_from_toolbar(
                     this.browser_tabs.focused_pane,

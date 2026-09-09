@@ -121,12 +121,20 @@ export type GpuiSidebarHostMessage =
          * `setSessionNote` joins this list for the same reason `renameSession`
          * is on it: the note editor is an app-modal window, so its confirm
          * arrives through Rust rather than from the sidebar page itself.
+         *
+         * CDXC:AgentLauncher 2026-09-09 WHY:
+         * `runSidebarAgent`, `createSession`, and `openBrowserPaneInGroup`
+         * join it for the New Thread picker, another app-modal window whose
+         * launches must land in this runtime's active-project handlers.
          */
         type:
           | 'cancelDelayedSend'
           | 'confirmAgentHookLaunch'
+          | 'createSession'
+          | 'openBrowserPaneInGroup'
           | 'removeProject'
           | 'renameSession'
+          | 'runSidebarAgent'
           | 'scheduleDelayedSend'
           | 'setSessionNote'
           | 'toggleCloseAfterDone';

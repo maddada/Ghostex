@@ -1,0 +1,168 @@
+/*
+ * CDXC:AgentLauncher 2026-09-09 DECISION:
+ * User: the New Thread picker is the project-header agent dropdown rendered
+ * as a keyboard palette in a short borderless child window. Search, key
+ * hints, and list are pinned to the top; the highlighted row uses the same
+ * surface as the focused session in the sidebar (composer fill, 5px radius,
+ * no border) and is not bolded; every row is the same height whether or not
+ * it carries the account count button.
+ */
+.new-thread-palette-dialog {
+  height: 100vh;
+  max-height: 100vh;
+  max-width: min(420px, calc(100vw - 1rem));
+  top: 0 !important;
+  translate: -50% 0 !important;
+  width: min(420px, calc(100vw - 1rem));
+}
+
+.new-thread-palette-dialog [data-slot='command'] {
+  height: 100%;
+  padding: 0 0 4px;
+}
+
+.new-thread-palette {
+  --quick-access-row-height: 36px;
+  --quick-access-row-padding-x: 10px;
+}
+
+.new-thread-palette [data-slot='command-input-wrapper'] {
+  padding: 6px 6px 0;
+}
+
+/*
+ * In the account list the provider sits as a chip inside the search field so
+ * the field never moves; the chip and the Left/Backspace/Esc keys go back.
+ */
+.new-thread-palette-search {
+  position: relative;
+}
+
+.new-thread-palette-search[data-scope='accounts'] [data-slot='command-input'] {
+  padding-left: calc(var(--new-thread-scope-width, 0px) + 10px);
+}
+
+.new-thread-palette-scope {
+  align-items: center;
+  appearance: none;
+  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 8%, transparent);
+  border: 0;
+  border-radius: 4px;
+  color: var(--app-foreground, var(--foreground));
+  cursor: default;
+  display: inline-flex;
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  gap: 5px;
+  height: 22px;
+  left: 12px;
+  line-height: 1;
+  padding: 0 7px 0 4px;
+  position: absolute;
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 1;
+}
+
+.new-thread-palette-scope:hover {
+  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 14%, transparent);
+}
+
+.new-thread-palette-hints {
+  color: var(--app-muted, var(--muted-foreground));
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  gap: 12px;
+  line-height: 16px;
+  opacity: 0.8;
+  padding: 6px 16px 4px;
+  user-select: none;
+}
+
+.new-thread-palette-hints span {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.new-thread-palette-hints kbd {
+  background: color-mix(in srgb, var(--app-foreground, var(--foreground)) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-foreground, var(--foreground)) 14%, transparent);
+  border-radius: 4px;
+  color: inherit;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 14px;
+  min-width: 16px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.new-thread-palette-list {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+  padding: 2px 6px 0;
+}
+
+.new-thread-palette-list [data-slot='command-separator'] {
+  background: color-mix(in srgb, var(--app-border, var(--border)) 70%, transparent);
+  margin: 4px 4px;
+}
+
+.new-thread-palette-row {
+  border-radius: 5px !important;
+  box-sizing: border-box;
+  gap: 8px;
+  height: var(--quick-access-row-height);
+  min-height: var(--quick-access-row-height);
+  padding: 0 var(--quick-access-row-padding-x);
+  width: 100%;
+}
+
+.new-thread-palette-account-row {
+  height: auto;
+  min-height: var(--quick-access-row-height);
+  padding: 6px var(--quick-access-row-padding-x);
+}
+
+/* The composer values are literal: the sidebar declares them only on its own layout root. */
+.new-thread-palette-row[data-selected='true'] {
+  background: #141414;
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 5%),
+    inset 0 1px rgb(255 255 255 / 3%);
+}
+
+.new-thread-palette-row[data-selected='true'] .group-agent-menu-label {
+  color: #d8d8d8;
+  font-weight: inherit;
+}
+
+.new-thread-palette-row .gx-account-logo {
+  flex-shrink: 0;
+  height: 16px;
+  width: 16px;
+}
+
+.new-thread-palette-row > svg:last-child {
+  display: none;
+}
+
+.new-thread-palette-glyph {
+  color: color-mix(in srgb, var(--app-foreground) 62%, var(--app-muted) 38%);
+  flex: none;
+}
+
+.new-thread-palette-row button.new-thread-palette-accounts {
+  cursor: default;
+  height: 24px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.new-thread-palette .gx-account-launcher-hint {
+  padding: 6px 10px;
+}
