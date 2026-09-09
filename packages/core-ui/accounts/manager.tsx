@@ -44,7 +44,8 @@ import {
 import { CopyCommand } from './copy-command';
 import { AccountConnectionGuide } from './connection-guide';
 import { useAccounts } from './use-accounts';
-import { AccountIdentity, AccountLogo, PolicySettingRows } from './controls';
+import { AccountIdentity, AccountLogo } from './controls';
+import { PolicySettingRows } from './policy-setting-rows';
 type Mutation = (request: AgentAccountsRequest) => Promise<boolean>;
 const providerLabel = (provider: AccountProvider) => (provider === 'claude' ? 'Claude' : 'Codex');
 const helperLabel = (provider: AccountProvider) => (provider === 'claude' ? 'Claude Swap' : 'Codex Swap');
