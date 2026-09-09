@@ -1,3 +1,4 @@
+import { modelPickerProvider } from './session-chat-model-picker-request';
 import { resolveContextDetailStatus, type ContextDetailStatus } from './session-chat-context-details-agents';
 import type { AccountIconColor } from '@/packages/shared/agent-accounts';
 import type { SessionChatPendingModelSelection } from '@/packages/shared/session-chat';
@@ -270,8 +271,8 @@ CDXC:AgentScreenDetection 2026-08-22:
 `skeleton` names which placeholder width to use while the pill has no known
 value. The bar replaces only the LABEL — same button, same
 chevron, same padding — so resolving a value swaps text in without moving the
-composer row. The trigger is disabled while it shows, because the menu would be
-offering choices against an unknown current value.
+composer row. Ordinary controls stay disabled until their current value is known.
+The model catalog remains available while loading so a quick-picker selection can be queued.
 */
 function PillTrigger({
   ariaLabel,
@@ -281,6 +282,7 @@ function PillTrigger({
   iconOnly = false,
   label,
   skeleton,
+  allowWhileLoading = false,
   title,
   tooltipWhenDisabled = false,
   trailingIcon,
@@ -292,6 +294,7 @@ function PillTrigger({
   iconOnly?: boolean;
   label: string;
   skeleton?: PillSkeleton;
+  allowWhileLoading?: boolean;
   title: string;
   /**
    * Keeps the tooltip hoverable while the pill is disabled: the disabled
@@ -308,7 +311,7 @@ function PillTrigger({
   // when resolved would move the composer row twice.
   const loadingText = skeleton ? pillLoadingText(skeleton) : '';
   const resolvedIconOnly = iconOnly;
-  const isDisabled = disabled || skeleton !== undefined;
+  const isDisabled = disabled || (skeleton !== undefined && !allowWhileLoading);
   const trigger = (
     <DropdownMenuTrigger
       render={
@@ -540,10 +543,9 @@ export function SessionChatSessionOptionPills({
 
   const { catalog, optionDescriptors, beginDispatch, state } = controller;
   const queuedControls = catalog?.modelIcon === 'codex' || catalog?.modelIcon === 'claude';
+  const quickPicker = modelPickerProvider(catalog?.modelIcon) !== undefined;
   // CDXC:SessionChat 2026-09-06 WHY: The queued selection route replaced direct picking on desktop; checking only onPickModel hid choices even while the quick picker could apply them.
-  const canPickModel =
-    onPickModel !== undefined ||
-    (onQueueModel !== undefined && (catalog?.modelIcon === 'codex' || catalog?.modelIcon === 'claude'));
+  const canPickModel = onPickModel !== undefined || (onQueueModel !== undefined && quickPicker);
   const visibleOptions = useMemo(
     () =>
       optionDescriptors.filter(
@@ -568,7 +570,8 @@ export function SessionChatSessionOptionPills({
       }
       if (
         value !== undefined &&
-        (catalog?.modelIcon === 'codex' || catalog?.modelIcon === 'claude') &&
+        quickPicker &&
+        catalog &&
         (descriptor.id === catalog.model.id || descriptor.id === 'effort')
       ) {
         const model = descriptor.id === catalog.model.id ? value : state[catalog.model.id]?.value;
@@ -687,6 +690,7 @@ export function SessionChatSessionOptionPills({
     [
       catalog,
       queuedControls,
+      quickPicker,
       canSend,
       isWorking,
       beginDispatch,
@@ -741,7 +745,7 @@ export function SessionChatSessionOptionPills({
 
   const disabled = isWorking || !canSend || dispatchingId !== null || switchingAgent;
   /** CDXC:SessionChat 2026-09-08 DECISION: User: effort, Plan mode, Fast mode and Claude permissions stay available while working, just like model selection; undeliverable choices remain queued. */
-  const optionsDisabled = queuedControls ? switchingAgent : disabled;
+  const optionsDisabled = quickPicker ? switchingAgent : disabled;
 
   const agentsSubmenu = agentRows ? (
     <DropdownMenuSub>
@@ -796,7 +800,7 @@ export function SessionChatSessionOptionPills({
             disabled={disabled}
             icon={
               currentDraftAgent ? (
-                <span className='contents' data-icon='inline-start'>
+                <span className='ghostex-chat-model-pill-icon' data-icon='inline-start'>
                   <DraftAgentIcon icon={currentDraftAgent.icon} />
                 </span>
               ) : undefined
@@ -935,7 +939,7 @@ export function SessionChatSessionOptionPills({
 
   const modelAgent = getDefaultSidebarAgentByIcon(catalog.modelIcon);
   const modelIcon = (
-    <span className='contents' data-icon='inline-start'>
+    <span className='ghostex-chat-model-pill-icon' data-icon='inline-start'>
       <ProjectAgentLauncherIcon
         accountIndicator={accountIndicator}
         agent={modelAgent ? { ...modelAgent, isDefault: true } : undefined}
@@ -1038,8 +1042,8 @@ export function SessionChatSessionOptionPills({
     ) : undefined;
   const modeTitle = modeLabel ?? 'Mode';
   /**
-   * CDXC:AgentScreenDetection 2026-09-05 DECISION:
-   * User: always show skeletons when the model or options have not been detected, never the generic "Model" or "Options" labels.
+   * CDXC:AgentScreenDetection 2026-09-09 DECISION:
+   * User: always show skeletons when the model or options have not been detected, never the generic "Model" or "Options" labels, including when queued controls are enabled.
    * This supersedes settling those pills to category labels after the first screen probe.
    */
   const skeletonFor = (pill: PillSkeleton, value: string | null | undefined): PillSkeleton | undefined =>
@@ -1170,7 +1174,8 @@ export function SessionChatSessionOptionPills({
         <PillTrigger
           ariaLabel={modelTitle}
           className='ghostex-chat-model-pill'
-          disabled={catalog.modelIcon === 'codex' || catalog.modelIcon === 'claude' ? switchingAgent : disabled}
+          disabled={quickPicker ? switchingAgent : disabled}
+          allowWhileLoading={quickPicker}
           icon={modelIcon}
           label={modelPillLabel ?? catalog.model.label}
           skeleton={skeletonFor('model', modelLabel)}
@@ -1179,7 +1184,7 @@ export function SessionChatSessionOptionPills({
         />
         <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
           {agentsSection}
-          {(catalog.modelIcon === 'codex' || catalog.modelIcon === 'claude') && (
+          {quickPicker && (
             <DropdownMenuItem closeOnClick className='rounded-md' onClick={() => modelPickerActions.current?.open()}>
               Quick picker <span className='ml-auto text-xs text-muted-foreground'>⌥P</span>
             </DropdownMenuItem>
@@ -1203,7 +1208,7 @@ export function SessionChatSessionOptionPills({
             className='ghostex-chat-options-pill'
             disabled={optionsDisabled}
             label={optionsLabel ?? 'Options'}
-            skeleton={queuedControls ? undefined : skeletonFor('options', optionsLabel)}
+            skeleton={skeletonFor('options', optionsLabel)}
             title={optionsTitle}
             trailingIcon={optionsTrailingIcon}
           />

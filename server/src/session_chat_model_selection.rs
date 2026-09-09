@@ -43,7 +43,8 @@ pub(crate) fn read_options(
         "claude" => matches!(mode, "bypass" | "auto" | "manual" | "accept-edits" | "plan"),
         _ => false,
     });
-    if !valid_mode
+    if (options.fast_mode.is_some() && !matches!(provider, "codex" | "claude"))
+        || !valid_mode
         || !options
             .fast_mode
             .as_deref()
@@ -113,8 +114,10 @@ pub(crate) fn validate_selection(
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || b"-._[]():/".contains(&byte))
     };
-    if !matches!(provider, "codex" | "claude")
-        || !token(model)
+    if !matches!(
+        provider,
+        "codex" | "claude" | "cursor" | "grok" | "antigravity"
+    ) || !token(model)
         || (!effort.is_empty() && !token(effort))
     {
         return Err(DomainStateError {

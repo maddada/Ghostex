@@ -12,6 +12,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+#[path = "session_chat_provider_model_picker.rs"]
+mod provider_model_picker;
+pub(crate) use provider_model_picker::run_provider_model_picker_job;
 #[path = "session_chat_selection_options.rs"]
 mod selection_options;
 
@@ -245,6 +248,7 @@ fn changed_line_present(screen: &str, model: &str, effort: &str) -> bool {
 
 #[derive(Clone, Debug, Default)]
 struct CodexPickerPlan {
+    provider: String,
     model: String,
     effort: String,
     options: crate::session_chat_model_selection::SelectionOptions,
@@ -898,11 +902,13 @@ pub(crate) async fn select_session_chat_model(
     }
     let target = resolve_session_chat_send_target(state, params, "selectSessionChatModel")?;
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
-    if !matches!(agent.as_deref(), Some("codex" | "claude")) {
+    if !matches!(
+        agent.as_deref(),
+        Some("codex" | "claude" | "cursor" | "grok" | "antigravity")
+    ) {
         return Err(DomainStateError {
             code: "unsupportedAgent",
-            message: "Choosing the model from chat is available for Codex and Claude sessions."
-                .to_string(),
+            message: "This agent does not support the quick model picker.".to_string(),
         });
     }
     let options = crate::session_chat_model_selection::read_options(
@@ -931,6 +937,7 @@ pub(crate) async fn select_session_chat_model(
         ));
     };
     let job_id = register_job(CodexPickerPlan {
+        provider: agent.clone().unwrap_or_default(),
         model: model.clone(),
         effort: effort.clone(),
         options,
@@ -944,8 +951,10 @@ pub(crate) async fn select_session_chat_model(
         "session-chat-model-picker",
         vec![if agent.as_deref() == Some("claude") {
             SessionChatSendStep::DriveClaudeModelPicker { job_id }
-        } else {
+        } else if agent.as_deref() == Some("codex") {
             SessionChatSendStep::DriveCodexModelPicker { job_id }
+        } else {
+            SessionChatSendStep::DriveProviderModelPicker { job_id }
         }],
     )
     .await;

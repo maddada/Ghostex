@@ -4,9 +4,13 @@ import { postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridg
 import {
   SessionChatModelPicker,
   type ModelPickerRequest,
+  type ModelPickerProvider,
   type ModelPickerSelection,
 } from '@/packages/core-ui/chat/session-chat-model-picker';
-import { createModelPickerRequest } from '@/packages/core-ui/chat/session-chat-model-picker-request';
+import {
+  createModelPickerRequest,
+  modelPickerProvider,
+} from '@/packages/core-ui/chat/session-chat-model-picker-request';
 import { currentAgentModelCatalog, useAgentModelCatalog } from '@/packages/shared/agent-model-catalog-store';
 import {
   ghostexHotkeyTextFromKeyboardEvent,
@@ -20,7 +24,7 @@ import './model-picker-host.css';
 interface PickerOpen {
   type: 'open';
   modal: 'modelPicker';
-  provider: 'claude' | 'codex';
+  provider: ModelPickerProvider;
   projectId: string;
   sessionId: string;
   hotkeys: unknown;
@@ -89,7 +93,7 @@ function ModelPickerHost() {
     const receive = (event: Event) => {
       const message = (event as CustomEvent<PickerOpen>).detail;
       if (message?.type !== 'open' || message.modal !== 'modelPicker') return;
-      if (message.provider !== 'claude' && message.provider !== 'codex') return;
+      if (!modelPickerProvider(message.provider)) return;
       interacted.current = false;
       setCancelRequested(false);
       setError(undefined);

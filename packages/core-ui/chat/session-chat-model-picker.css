@@ -379,19 +379,64 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.model-picker-help {
+.model-picker-footer {
   z-index: 5;
   box-sizing: border-box;
   width: 100%;
   min-height: 56px;
-  padding: 12px 16px;
-  flex-wrap: wrap;
+  padding: 12px 24px;
   background: linear-gradient(transparent, #05070ce8 48%);
   position: absolute;
   bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px 24px;
+}
+/* CDXC:SessionChat 2026-09-09 DECISION: Show the agent CLI name and icon at the top left, 30% larger. User corrected the previous top-right placement. */
+.model-picker-agent {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 5;
+  transform: scale(1.3);
+  transform-origin: top left;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #e0e2ec;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.model-picker-agent-emblem {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--picker-accent) 28%, transparent);
+  border-radius: 11px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--picker-accent) 14%, #171a22), #10131a);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--picker-accent) 12%, transparent),
+    inset 0 1px 0 #ffffff0a;
+  color: color-mix(in srgb, var(--picker-accent) 60%, white);
+}
+.model-picker-agent-emblem > span {
+  width: 20px;
+  height: 20px;
+  background: currentColor;
+  mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+}
+.model-picker-help {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 14px 24px;
@@ -442,6 +487,9 @@
 }
 .ghostex-model-picker[data-compact-controls] .model-picker-help {
   gap: 10px 16px;
+}
+.ghostex-model-picker[data-compact-controls] .model-picker-footer {
+  padding-inline: 16px;
   bottom: 4px;
 }
 .model-picker-help > span > span,
@@ -612,10 +660,15 @@
   color: color-mix(in srgb, var(--picker-accent) 65%, white);
 }
 
+/* CDXC:SessionChat 2026-09-09 DECISION: Disabled effort cards stay dimmed but opaque in front of the connecting line; dim their contents and colors instead of the whole card. */
 .ghostex-model-picker .model-picker-effort[data-unavailable] {
-  opacity: 0.28;
+  border-color: #71717b20;
+  background: linear-gradient(145deg, #0b0c0e, #08090b 90%);
   filter: saturate(0);
   box-shadow: none;
+}
+.ghostex-model-picker .model-picker-effort[data-unavailable] > * {
+  opacity: 0.28;
 }
 .model-picker-line-horizontal,
 .model-picker-axis-left,

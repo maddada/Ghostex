@@ -2,8 +2,15 @@
  * CDXC:SessionChat 2026-09-08 DECISION:
  * User: Luna uses the exact artwork from Downloads/night.svg, recolored to match the picker theme.
  */
-export function ModelPickerIcon({ model }: { model: string }) {
-  const artwork = model.includes('astra') ? (
+export function ModelPickerIcon({ model, standard = false }: { model: string; standard?: boolean }) {
+  const artwork = standard ? (
+    <>
+      <path d='m24 4 17 10v20L24 44 7 34V14Z' />
+      <path d='m7 14 17 10 17-10M24 24v20' opacity='.55' />
+      <path d='m24 13 9 5v11l-9 5-9-5V18Z' opacity='.7' />
+      <circle cx='24' cy='24' r='3' fill='currentColor' stroke='none' />
+    </>
+  ) : model.includes('astra') ? (
     <>
       <ellipse cx='24' cy='24' rx='9' ry='21' transform='rotate(35 24 24)' />
       <ellipse cx='24' cy='24' rx='9' ry='21' transform='rotate(-35 24 24)' />
@@ -63,7 +70,7 @@ export function ModelPickerIcon({ model }: { model: string }) {
   return (
     <svg
       aria-hidden='true'
-      viewBox={model.includes('luna') ? '0 0 512 512' : '0 0 48 48'}
+      viewBox={!standard && model.includes('luna') ? '0 0 512 512' : '0 0 48 48'}
       fill='none'
       stroke='currentColor'
       strokeWidth='1.6'

@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
+import { getDefaultSidebarAgentById } from '@/packages/shared/sidebar-agents';
+import { AGENT_LOGOS } from '../agent-logos';
 import { ModelPickerEffortIcon } from './session-chat-model-picker-effort-icons';
 import { ModelPickerIcon } from './session-chat-model-picker-icons';
 import {
@@ -17,9 +19,10 @@ export interface ModelPickerModel {
   efforts: { value: string; label: string }[];
   defaultEffort?: string;
 }
+export type ModelPickerProvider = 'codex' | 'claude' | 'cursor' | 'grok' | 'antigravity';
 export interface ModelPickerRequest {
   requestId: string;
-  provider: 'codex' | 'claude';
+  provider: ModelPickerProvider;
   models: ModelPickerModel[];
   efforts: { value: string; label: string }[];
   model: string;
@@ -81,9 +84,11 @@ export function SessionChatModelPicker({
   const modelIndex = request.models.findIndex((model) => model.value === selection.model);
   const model = request.models[modelIndex]!;
   const effortIndex = request.efforts.findIndex((effort) => effort.value === selection.effort);
+  const agent = getDefaultSidebarAgentById(request.provider)!;
   const narrow = paneSize.width <= 700;
   const viewportHeight = Math.max(1, paneSize.height - controlsHeight - 24);
-  const widthScale = Math.max(0.01, Math.min(1, (paneSize.width - 28) / (narrow ? 240 : 1060)));
+  const stageWidth = Math.max(1180, Math.ceil(request.efforts.length / 2) * 284 + 328);
+  const widthScale = Math.max(0.01, Math.min(1, (paneSize.width - 28) / (narrow ? 240 : stageWidth - 120)));
   const short = viewportHeight - 24 < 3 * 142 * widthScale;
   const scale = Math.max(0.01, Math.min(widthScale, (viewportHeight - 24) / (short ? 200 : 3 * 142)));
   const visibleModels = short
@@ -216,7 +221,12 @@ export function SessionChatModelPicker({
           data-saving={committing ? '' : undefined}
           data-narrow={narrow ? '' : undefined}
           data-compact-controls={paneSize.width < 560 ? '' : undefined}
-          style={{ '--picker-accent': request.provider === 'codex' ? '#0069cb' : '#e85c35' } as CSSProperties}
+          style={
+            {
+              '--picker-accent':
+                request.provider === 'codex' ? '#0069cb' : request.provider === 'claude' ? '#e85c35' : '#ffffff',
+            } as CSSProperties
+          }
           onPointerDown={(event) => {
             if (!(event.target as Element).closest('button')) finish(false);
           }}
@@ -234,6 +244,12 @@ export function SessionChatModelPicker({
             Up and down choose a model. Left and right choose effort. Enter saves. Escape cancels.
           </Dialog.Description>
           {notice}
+          <div className='model-picker-agent'>
+            <span className='model-picker-agent-emblem' aria-hidden='true'>
+              <span style={{ maskImage: `url("${AGENT_LOGOS[agent.icon]}")` }} />
+            </span>
+            <span>{agent.name}</span>
+          </div>
           <div className='model-picker-atmosphere' aria-hidden='true'>
             <div className='model-picker-nebula' />
             <div className='model-picker-nebula model-picker-nebula-secondary' />
@@ -256,6 +272,7 @@ export function SessionChatModelPicker({
               style={
                 {
                   height: stageHeight,
+                  width: stageWidth,
                   transform: `translate(-50%, -50%) scale(${scale})`,
                   '--center-y': `${centerY}px`,
                 } as CSSProperties
@@ -295,7 +312,11 @@ export function SessionChatModelPicker({
                 </>
               )}
               {!narrow && request.efforts.length > 0 && (
-                <div className='model-picker-line model-picker-line-horizontal' aria-hidden='true' />
+                <div
+                  className='model-picker-line model-picker-line-horizontal'
+                  aria-hidden='true'
+                  style={{ width: stageWidth - 180 }}
+                />
               )}
               {!short && (
                 <button
@@ -373,7 +394,10 @@ export function SessionChatModelPicker({
                     onDoubleClick={() => chooseModel(index, true)}
                   >
                     <span className='model-picker-artwork' key={`${entry.value}-artwork`}>
-                      <ModelPickerIcon model={entry.value} />
+                      <ModelPickerIcon
+                        model={entry.value}
+                        standard={request.provider !== 'claude' && request.provider !== 'codex'}
+                      />
                     </span>
                     <span className='model-picker-model-name' key={`${entry.value}-name`}>
                       {entry.version && <span className='model-picker-model-version'>{entry.version}</span>}
@@ -450,72 +474,74 @@ export function SessionChatModelPicker({
               </span>
             </div>
           </div>
-          <footer ref={setControls} className='model-picker-help'>
-            <span className='model-picker-open-hint' data-key-pressed={cancelRequested ? '' : undefined}>
-              <kbd>⌥</kbd>
-              <kbd>P</kbd>
-              <span>Close</span>
-            </span>
-            <span>
+          <footer ref={setControls} className='model-picker-footer'>
+            <div className='model-picker-help'>
+              <span className='model-picker-open-hint' data-key-pressed={cancelRequested ? '' : undefined}>
+                <kbd>⌥</kbd>
+                <kbd>P</kbd>
+                <span>Close</span>
+              </span>
+              <span>
+                <button
+                  type='button'
+                  aria-label='Previous model'
+                  disabled={closing || committing || modelIndex === 0}
+                  data-key-pressed={pressed.has('ArrowUp') ? '' : undefined}
+                  onClick={() => chooseModel(modelIndex - 1)}
+                >
+                  <kbd>↑</kbd>
+                </button>
+                <button
+                  type='button'
+                  aria-label='Next model'
+                  disabled={closing || committing || modelIndex === request.models.length - 1}
+                  data-key-pressed={pressed.has('ArrowDown') ? '' : undefined}
+                  onClick={() => chooseModel(modelIndex + 1)}
+                >
+                  <kbd>↓</kbd>
+                </button>
+                <span>Model</span>
+              </span>
+              <span>
+                <button
+                  type='button'
+                  aria-label='Decrease effort'
+                  disabled={closing || committing || !canMoveEffort(-1)}
+                  data-key-pressed={pressed.has('ArrowLeft') ? '' : undefined}
+                  onClick={() => moveEffort(-1)}
+                >
+                  <kbd>←</kbd>
+                </button>
+                <button
+                  type='button'
+                  aria-label='Increase effort'
+                  disabled={closing || committing || !canMoveEffort(1)}
+                  data-key-pressed={pressed.has('ArrowRight') ? '' : undefined}
+                  onClick={() => moveEffort(1)}
+                >
+                  <kbd>→</kbd>
+                </button>
+                <span>Effort</span>
+              </span>
               <button
                 type='button'
-                aria-label='Previous model'
-                disabled={closing || committing || modelIndex === 0}
-                data-key-pressed={pressed.has('ArrowUp') ? '' : undefined}
-                onClick={() => chooseModel(modelIndex - 1)}
+                data-key-pressed={pressed.has('Enter') ? '' : undefined}
+                disabled={closing || committing}
+                onClick={() => finish(true)}
               >
-                <kbd>↑</kbd>
+                <kbd>↵</kbd>
+                <span>Save</span>
               </button>
               <button
                 type='button'
-                aria-label='Next model'
-                disabled={closing || committing || modelIndex === request.models.length - 1}
-                data-key-pressed={pressed.has('ArrowDown') ? '' : undefined}
-                onClick={() => chooseModel(modelIndex + 1)}
+                data-key-pressed={pressed.has('Escape') ? '' : undefined}
+                disabled={closing || committing}
+                onClick={() => finish(false)}
               >
-                <kbd>↓</kbd>
+                <kbd>Esc</kbd>
+                <span>Cancel</span>
               </button>
-              <span>Model</span>
-            </span>
-            <span>
-              <button
-                type='button'
-                aria-label='Decrease effort'
-                disabled={closing || committing || !canMoveEffort(-1)}
-                data-key-pressed={pressed.has('ArrowLeft') ? '' : undefined}
-                onClick={() => moveEffort(-1)}
-              >
-                <kbd>←</kbd>
-              </button>
-              <button
-                type='button'
-                aria-label='Increase effort'
-                disabled={closing || committing || !canMoveEffort(1)}
-                data-key-pressed={pressed.has('ArrowRight') ? '' : undefined}
-                onClick={() => moveEffort(1)}
-              >
-                <kbd>→</kbd>
-              </button>
-              <span>Effort</span>
-            </span>
-            <button
-              type='button'
-              data-key-pressed={pressed.has('Enter') ? '' : undefined}
-              disabled={closing || committing}
-              onClick={() => finish(true)}
-            >
-              <kbd>↵</kbd>
-              <span>Save</span>
-            </button>
-            <button
-              type='button'
-              data-key-pressed={pressed.has('Escape') ? '' : undefined}
-              disabled={closing || committing}
-              onClick={() => finish(false)}
-            >
-              <kbd>Esc</kbd>
-              <span>Cancel</span>
-            </button>
+            </div>
           </footer>
         </Dialog.Popup>
       </Dialog.Portal>

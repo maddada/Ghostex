@@ -1,7 +1,7 @@
 {
   "_readme": "Do not edit blind. docs/important/agent-model-catalog.md explains the schema, how every Ghostex client loads this file from GitHub (with the bundled copy as the offline source), how to publish a change, and how to re-collect models, efforts and fast mode from the agent CLIs' own /model pickers.",
   "schemaVersion": 1,
-  "updatedAt": "2026-09-08",
+  "updatedAt": "2026-09-09",
   "effortLabels": {
     "none": "None",
     "minimal": "Minimal",
@@ -174,21 +174,8 @@
       },
       "groups": [
         {
-          "id": "claude",
-          "label": "Claude"
-        },
-        {
-          "id": "gpt",
-          "label": "GPT"
-        },
-        {
-          "id": "gemini",
-          "label": "Gemini"
-        },
-        {
-          "id": "other",
-          "label": "Other",
-          "description": "Grok, Kimi, and GLM"
+          "id": "legacy",
+          "label": "Legacy"
         }
       ],
       "models": [
@@ -204,13 +191,6 @@
           "label": "Grok 4.6",
           "pickerLabel": "Cursor Grok 4.6",
           "efforts": ["low", "medium", "high", "xhigh"],
-          "fastMode": true
-        },
-        {
-          "value": "composer-2.5",
-          "label": "Composer 2.5",
-          "pickerLabel": "Composer 2.5",
-          "efforts": [],
           "fastMode": true
         },
         {
@@ -263,8 +243,31 @@
           "contextWindows": ["300K", "1M"],
           "efforts": ["low", "medium", "high", "xhigh", "max"],
           "thinking": true,
+          "fastMode": true
+        },
+        {
+          "value": "gpt-5.6-terra",
+          "label": "GPT-5.6 Terra",
+          "pickerLabel": "GPT-5.6 Terra",
+          "contextWindows": ["272K", "1M"],
+          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+          "fastMode": true
+        },
+        {
+          "value": "gpt-5.6-luna",
+          "label": "GPT-5.6 Luna",
+          "pickerLabel": "GPT-5.6 Luna",
+          "contextWindows": ["272K", "1M"],
+          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
+          "fastMode": true
+        },
+        {
+          "value": "composer-2.5",
+          "label": "Composer 2.5",
+          "pickerLabel": "Composer 2.5",
+          "efforts": [],
           "fastMode": true,
-          "group": "claude"
+          "group": "legacy"
         },
         {
           "value": "claude-fable-5",
@@ -274,7 +277,7 @@
           "efforts": ["low", "medium", "high", "xhigh", "max"],
           "thinking": true,
           "fastMode": false,
-          "group": "claude"
+          "group": "legacy"
         },
         {
           "value": "claude-sonnet-4-6",
@@ -284,7 +287,7 @@
           "efforts": ["low", "medium", "high", "max"],
           "thinking": true,
           "fastMode": false,
-          "group": "claude"
+          "group": "legacy"
         },
         {
           "value": "claude-opus-4-7",
@@ -294,7 +297,7 @@
           "efforts": ["low", "medium", "high", "xhigh", "max"],
           "thinking": true,
           "fastMode": true,
-          "group": "claude"
+          "group": "legacy"
         },
         {
           "value": "claude-opus-4-6",
@@ -304,7 +307,7 @@
           "efforts": ["low", "medium", "high", "max"],
           "thinking": true,
           "fastMode": false,
-          "group": "claude"
+          "group": "legacy"
         },
         {
           "value": "claude-opus-4-5",
@@ -313,7 +316,7 @@
           "efforts": [],
           "thinking": true,
           "fastMode": false,
-          "group": "claude"
+          "group": "legacy"
         },
         {
           "value": "claude-haiku-4-5",
@@ -322,7 +325,7 @@
           "efforts": [],
           "thinking": true,
           "fastMode": false,
-          "group": "claude"
+          "group": "legacy"
         },
         {
           "value": "claude-sonnet-4-5",
@@ -331,7 +334,7 @@
           "efforts": [],
           "thinking": true,
           "fastMode": false,
-          "group": "claude"
+          "group": "legacy"
         },
         {
           "value": "claude-sonnet-4",
@@ -340,25 +343,7 @@
           "efforts": [],
           "thinking": false,
           "fastMode": false,
-          "group": "claude"
-        },
-        {
-          "value": "gpt-5.6-terra",
-          "label": "GPT-5.6 Terra",
-          "pickerLabel": "GPT-5.6 Terra",
-          "contextWindows": ["272K", "1M"],
-          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
-          "fastMode": true,
-          "group": "gpt"
-        },
-        {
-          "value": "gpt-5.6-luna",
-          "label": "GPT-5.6 Luna",
-          "pickerLabel": "GPT-5.6 Luna",
-          "contextWindows": ["272K", "1M"],
-          "efforts": ["none", "low", "medium", "high", "xhigh", "max"],
-          "fastMode": true,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gpt-5.5",
@@ -367,7 +352,7 @@
           "contextWindows": ["272K", "1M"],
           "efforts": ["none", "low", "medium", "high", "xhigh"],
           "fastMode": true,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gpt-5.3-codex",
@@ -375,7 +360,7 @@
           "pickerLabel": "Codex 5.3",
           "efforts": ["low", "medium", "high", "xhigh"],
           "fastMode": true,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gpt-5.4",
@@ -384,7 +369,7 @@
           "contextWindows": ["272K", "1M"],
           "efforts": ["none", "low", "medium", "high", "xhigh"],
           "fastMode": true,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gpt-5.2",
@@ -392,7 +377,7 @@
           "pickerLabel": "GPT-5.2",
           "efforts": ["low", "medium", "high", "xhigh"],
           "fastMode": true,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gpt-5.4-mini",
@@ -400,7 +385,7 @@
           "pickerLabel": "GPT-5.4 Mini",
           "efforts": ["none", "low", "medium", "high", "xhigh"],
           "fastMode": false,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gpt-5.4-nano",
@@ -408,7 +393,7 @@
           "pickerLabel": "GPT-5.4 Nano",
           "efforts": ["none", "low", "medium", "high", "xhigh"],
           "fastMode": false,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gpt-5.1",
@@ -416,7 +401,7 @@
           "pickerLabel": "GPT-5.1",
           "efforts": ["low", "medium", "high"],
           "fastMode": false,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gpt-5-mini",
@@ -424,7 +409,7 @@
           "pickerLabel": "GPT-5 Mini",
           "efforts": [],
           "fastMode": false,
-          "group": "gpt"
+          "group": "legacy"
         },
         {
           "value": "gemini-3.7-flash",
@@ -432,7 +417,7 @@
           "pickerLabel": "Gemini 3.7 Flash",
           "efforts": ["low", "medium", "high"],
           "fastMode": false,
-          "group": "gemini"
+          "group": "legacy"
         },
         {
           "value": "gemini-3.6-flash",
@@ -440,7 +425,7 @@
           "pickerLabel": "Gemini 3.6 Flash",
           "efforts": ["minimal", "low", "medium", "high"],
           "fastMode": false,
-          "group": "gemini"
+          "group": "legacy"
         },
         {
           "value": "gemini-3.1-pro",
@@ -448,7 +433,7 @@
           "pickerLabel": "Gemini 3.1 Pro",
           "efforts": [],
           "fastMode": false,
-          "group": "gemini"
+          "group": "legacy"
         },
         {
           "value": "gemini-3.5-flash",
@@ -456,7 +441,7 @@
           "pickerLabel": "Gemini 3.5 Flash",
           "efforts": [],
           "fastMode": false,
-          "group": "gemini"
+          "group": "legacy"
         },
         {
           "value": "gemini-3-flash",
@@ -464,7 +449,7 @@
           "pickerLabel": "Gemini 3 Flash",
           "efforts": [],
           "fastMode": false,
-          "group": "gemini"
+          "group": "legacy"
         },
         {
           "value": "cursor-grok-4.5",
@@ -472,7 +457,7 @@
           "pickerLabel": "Cursor Grok 4.5",
           "efforts": ["low", "medium", "high"],
           "fastMode": true,
-          "group": "other"
+          "group": "legacy"
         },
         {
           "value": "kimi-k3",
@@ -480,7 +465,7 @@
           "pickerLabel": "Kimi K3",
           "efforts": ["low", "high", "max"],
           "fastMode": false,
-          "group": "other"
+          "group": "legacy"
         },
         {
           "value": "kimi-k2.7-code",
@@ -488,7 +473,7 @@
           "pickerLabel": "Kimi K2.7 Code",
           "efforts": [],
           "fastMode": false,
-          "group": "other"
+          "group": "legacy"
         },
         {
           "value": "glm-5.2",
@@ -496,7 +481,7 @@
           "pickerLabel": "GLM 5.2",
           "efforts": ["high", "max"],
           "fastMode": false,
-          "group": "other"
+          "group": "legacy"
         }
       ],
       "notes": "Labels drop the 'Claude' and 'Cursor' words the TUI shows; pickerLabel is the exact row text the /model filter needs. Row count re-read on 2026-09-03 (36 rows; Gemini 3.8 Flash added between Cursor Grok 4.5 and Gemini 3.7 Flash)."
@@ -548,8 +533,7 @@
       "groups": [
         {
           "id": "legacy",
-          "label": "Legacy",
-          "description": "Previous generations"
+          "label": "Legacy"
         }
       ],
       "models": [
@@ -587,6 +571,14 @@
           "fastMode": false
         },
         {
+          "value": "gemini-3.1-pro",
+          "label": "Gemini 3.1 Pro",
+          "pickerLabel": "Gemini 3.1 Pro",
+          "efforts": ["low", "high"],
+          "defaultEffort": "low",
+          "fastMode": false
+        },
+        {
           "value": "gemini-3.7-flash",
           "label": "Gemini 3.7 Flash",
           "pickerLabel": "Gemini 3.7 Flash",
@@ -600,15 +592,6 @@
           "label": "Gemini 3.6 Flash",
           "pickerLabel": "Gemini 3.6 Flash",
           "efforts": ["low", "medium", "high"],
-          "defaultEffort": "low",
-          "fastMode": false,
-          "group": "legacy"
-        },
-        {
-          "value": "gemini-3.1-pro",
-          "label": "Gemini 3.1 Pro",
-          "pickerLabel": "Gemini 3.1 Pro",
-          "efforts": ["low", "high"],
           "defaultEffort": "low",
           "fastMode": false,
           "group": "legacy"

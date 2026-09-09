@@ -409,19 +409,12 @@ function buildCursorCatalog(
       build: (value) => `/model ${pickerFilter(value)}`,
     },
   };
-  /*
-  Cursor exposes reasoning effort inside the model picker's Tab-to-edit panel.
-  The footer is authoritative, but navigating that nested picker blind would
-  also risk changing the context window or Fast toggle. Show the detected value
-  and hand the user to the agent-owned picker to change it.
-  */
   const effortFor = memoByChoices((effortRows) => ({
     id: 'effort',
     label: 'Reasoning effort',
     category: 'thought_level',
     choices: effortRows,
-    actionLabel: 'Change it in the CLI',
-    dispatch: { kind: 'agent-picker', command: '/model' },
+    dispatch: { kind: 'model-picker' },
   }));
   return {
     model,
@@ -437,29 +430,22 @@ function buildCursorCatalog(
 // Grok
 // ---------------------------------------------------------------------------
 
-/*
-Grok prints `Grok 4.6 (medium)` in its composer footer and changes both values
-through one interactive `/model` picker, which also owns the effort list per
-model. Blind keystrokes into that picker would be guesswork against a menu this
-side cannot see, so both pills are read-only mirrors of the statusline gxserver
-already reads, and either one hands the user to the terminal to make the change.
-*/
+/** CDXC:SessionChat 2026-09-09 DECISION: User: Grok Build lists and changes models and efforts directly in chat without switching to the CLI. Its supported /model command replaces the read-only handoff. */
 function buildGrokCatalog(catalog: AgentModelCatalog, agent: AgentModelCatalogAgent): SessionChatSessionOptionCatalog {
-  /** No `choices`: the model is never typed from here, only mirrored. */
   const model: SessionChatOptionDescriptor = {
     id: 'model',
     label: 'Model',
     category: 'model',
-    actionLabel: 'Change it in the CLI',
-    dispatch: { kind: 'terminal-handoff' },
+    choices: modelChoices(agent),
+    choiceGroups: agent.groups,
+    dispatch: { kind: 'model-picker' },
   };
   const effortFor = memoByChoices((choices) => ({
     id: 'effort',
     label: 'Reasoning effort',
     category: 'thought_level',
     choices,
-    actionLabel: 'Change it in the CLI',
-    dispatch: { kind: 'terminal-handoff' },
+    dispatch: { kind: 'model-picker' },
   }));
   return {
     model,
@@ -643,6 +629,8 @@ function catalogsFor(catalog: AgentModelCatalog): Record<string, SessionChatSess
   if (byAgent.antigravity !== undefined) {
     byAgent['antigravity-cli'] = byAgent.antigravity;
   }
+  if (byAgent.grok !== undefined) byAgent['grok-build'] = byAgent.grok;
+  if (byAgent.cursor !== undefined) byAgent['cursor-cli'] = byAgent.cursor;
   byAgent.hermes = HERMES_CATALOG;
   byAgent['hermes-agent'] = HERMES_CATALOG;
   byAgent.omp = OMP_CATALOG;

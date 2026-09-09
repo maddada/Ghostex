@@ -25,6 +25,7 @@ impl GhostexGpuiApp {
     /// CDXC:Hotkeys 2026-09-08 DECISION:
     /// User: offer the quick model and effort picker for Claude and Codex in terminal view, with a setting to turn it off (enabled by default).
     /// This supersedes the chat-only shortcut rule; disabled or unsupported terminals keep their own bindings.
+    /// CDXC:Hotkeys 2026-09-09 DECISION: User: extend the quick picker to Cursor, Grok Build and Antigravity.
     pub(crate) fn terminal_model_picker_session(&self) -> Option<TerminalSessionId> {
         let settings = shared_settings::shared_sidebar_settings_snapshot();
         if !settings
@@ -39,7 +40,7 @@ impl GhostexGpuiApp {
         if self.agents_chat_mode_sessions.contains(&session_id)
             || !matches!(
                 self.agents_session_chat_transcript_agent(session_id),
-                Some("claude" | "codex")
+                Some("claude" | "codex" | "cursor" | "grok" | "antigravity")
             )
         {
             return None;

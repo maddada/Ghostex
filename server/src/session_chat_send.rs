@@ -787,6 +787,8 @@ pub enum SessionChatSendStep {
     PreserveTerminalDraft {
         state_dir: PathBuf,
         prompt_editor_input: String,
+        /// A view transfer may replace its own copy, but must keep newer terminal typing.
+        replacement: Option<String>,
     },
     /// One `zmx send` stdin burst.
     Write(String),
@@ -859,6 +861,9 @@ pub enum SessionChatSendStep {
         job_id: u64,
     },
     DriveClaudeModelPicker {
+        job_id: u64,
+    },
+    DriveProviderModelPicker {
         job_id: u64,
     },
 }
@@ -1484,6 +1489,7 @@ async fn run_session_chat_send_worker(
                 SessionChatSendStep::PreserveTerminalDraft {
                     state_dir,
                     prompt_editor_input,
+                    replacement,
                 } => {
                     match preserve_terminal_draft(
                         &state_dir,
@@ -1497,6 +1503,24 @@ async fn run_session_chat_send_worker(
                     .await
                     {
                         Ok(draft) => {
+                            if let (Some(expected), Some(existing)) =
+                                (replacement.as_deref(), draft.content.as_deref())
+                            {
+                                if !existing.is_empty() && existing != expected {
+                                    // The editor handshake already saved and cleared this text. Put it back,
+                                    // then refuse the stale replacement without issuing any further clear.
+                                    let restored = write_session_chat_payload(
+                                        &project_id,
+                                        &session_id,
+                                        &zmx_name,
+                                        &source,
+                                        &build_session_chat_paste_bytes(existing),
+                                    )
+                                    .await;
+                                    outcome = Err(SessionChatSendError::new(SessionChatSendFailure::Write, restored.err().unwrap_or_else(|| "The terminal has different unsent text. Both drafts have been kept; the Chat draft is in Recovered.".to_string())));
+                                    break;
+                                }
+                            }
                             if let Some(sink) = captured_draft.take() {
                                 let _ = sink.send(draft);
                             }
@@ -1782,6 +1806,17 @@ async fn run_session_chat_send_worker(
                     )
                     .await;
                 }
+                SessionChatSendStep::DriveProviderModelPicker { job_id } => {
+                    crate::session_chat_codex_picker::run_provider_model_picker_job(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        job_id,
+                        &|| job_generation != generation.load(Ordering::SeqCst),
+                    )
+                    .await;
+                }
                 SessionChatSendStep::DriveClaudeModelPicker { job_id } => {
                     crate::session_chat_codex_picker::run_claude_model_picker_job(
                         &project_id,
@@ -1998,6 +2033,8 @@ fn prompt_handoff_response_path(state_dir: &Path, request_id: &str) -> PathBuf {
 /// it again without destroying a prompt the user had stashed themselves.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CapturedTerminalDraft {
+    pub content: Option<String>,
+    pub draft_version: Option<crate::session_chat_draft_versions::DraftVersion>,
     pub created: bool,
     pub prompt_id: Option<String>,
 }
@@ -2082,6 +2119,7 @@ pub async fn capture_session_chat_terminal_draft(
         zmx_name,
         "session-chat-draft-handoff",
         vec![SessionChatSendStep::PreserveTerminalDraft {
+            replacement: None,
             state_dir: state_dir.to_path_buf(),
             prompt_editor_input: if agent == Some("grok") {
                 SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT
@@ -2206,6 +2244,15 @@ async fn run_terminal_draft_capture(
                     return Ok(CapturedTerminalDraft::default());
                 }
                 return Ok(CapturedTerminalDraft {
+                    content: response
+                        .get("content")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_string),
+                    draft_version: response
+                        .get("draftVersion")
+                        .filter(|v| !v.is_null())
+                        .cloned()
+                        .and_then(|v| serde_json::from_value(v).ok()),
                     created: response
                         .get("created")
                         .and_then(serde_json::Value::as_bool)
@@ -2797,6 +2844,37 @@ pub(crate) async fn handle_send_session_chat_message_http(
         Ok(version) => version,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    // CDXC:SessionChat 2026-09-09 DECISION:
+    // User: sending in a new chat is immediate, but delivery waits for the agent's input box. A durable queue receipt lets both apps clear the composer while startup continues.
+    if crate::agents::session_is_draft(&target.session) && image_paths.is_empty() {
+        return match crate::session_chat_queue::handle_session_chat_queue_endpoint(
+            &state.paths,
+            state.metadata.server_id.as_str(),
+            "/api/queueSessionChatPrompt",
+            &params,
+        ) {
+            Ok(result) => {
+                crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+                    state,
+                    &target.project_id,
+                    &target.session_id,
+                );
+                routed_json(
+                    Some(endpoint_path),
+                    StatusCode::OK,
+                    rpc_success(
+                        request_id,
+                        json!({
+                            "queued": true,
+                            "textBytes": text.len(),
+                            "queuedPromptId": result.value.pointer("/prompt/id"),
+                        }),
+                    ),
+                )
+            }
+            Err(error) => domain_error_response(endpoint_path, request_id, error),
+        };
+    }
     match crate::session_chat_queue_runtime::send_session_chat_message_with_draft(
         state,
         &target.project_id,
@@ -3273,6 +3351,29 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
         Ok(target) => target,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    let pending = open_gxserver_database(&state.paths)
+        .map_err(|error| DomainStateError {
+            code: "internalError",
+            message: error.to_string(),
+        })
+        .and_then(|db| {
+            crate::session_chat_draft_handoffs::pending_chat(
+                &db,
+                &target.project_id,
+                &target.session_id,
+            )
+        });
+    match pending {
+        Ok(Some(result)) => {
+            return routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, result),
+            )
+        }
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+        Ok(None) => {}
+    }
     /*
     CDXC:Drafts 2026-09-02:
     A staged first-input draft that has not reached the terminal yet is handed
@@ -3331,11 +3432,13 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
             rpc_success(request_id, json!({ "content": "", "transferred": false })),
         );
     };
-    let content = match read_and_release_stashed_prompt(
+    let recovered = match read_and_release_stashed_prompt(
         state,
         &target.project_id,
+        &target.session_id,
         &prompt_id,
         captured.created,
+        captured.draft_version,
     ) {
         Ok(content) => content,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
@@ -3343,22 +3446,20 @@ pub(crate) async fn handle_handoff_session_chat_draft_http(
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,
-        rpc_success(
-            request_id,
-            json!({ "content": content, "transferred": !content.is_empty() }),
-        ),
+        rpc_success(request_id, recovered),
     )
 }
 
-/// Reads back the Saved Prompt the draft capture just wrote and, when the
-/// capture created that row, deletes it — the text is moving to a composer, not
-/// into the user's stash. An update of a pre-existing row is left alone.
+/// CDXC:Drafts 2026-09-10 WHY:
+/// The captured text must enter durable recovery and the transfer ledger before releasing its temporary stash. Previously a lost HTTP reply or a second toggle could destroy the only copy.
 pub(crate) fn read_and_release_stashed_prompt(
     state: &AppState,
     project_id: &str,
+    session_id: &str,
     prompt_id: &str,
     created: bool,
-) -> std::result::Result<String, DomainStateError> {
+    captured_version: Option<crate::session_chat_draft_versions::DraftVersion>,
+) -> std::result::Result<Value, DomainStateError> {
     let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
         code: "internalError",
         message: format!("SQLite gxserver state error: {error}"),
@@ -3382,12 +3483,32 @@ pub(crate) fn read_and_release_stashed_prompt(
             message: "The transferred draft could not be recalled.".to_string(),
         })?
         .to_string();
+    let version = match captured_version {
+        Some(version) => version,
+        None => crate::session_chat_draft_handoffs::returned_version(
+            &db, project_id, session_id, &content,
+        )?,
+    };
+    let id = uuid::Uuid::new_v4().to_string();
+    crate::session_chat_draft_handoffs::stage(
+        &db, project_id, session_id, &id, &content, &version, "chat",
+    )?;
+    crate::session_chat_draft_versions::save(
+        &db,
+        project_id,
+        session_id,
+        "gxserver-draft-handoff",
+        &content,
+        &version,
+    )?;
     if created {
         let mut delete_params = Map::new();
         delete_params.insert("promptId".to_string(), json!(prompt_id));
         let _ = repository.delete_stashed_prompt(&delete_params);
     }
-    Ok(content)
+    Ok(
+        json!({"content":content,"draftVersion":version,"handoffId":id,"transferred":!content.is_empty()}),
+    )
 }
 
 pub(crate) fn handle_interrupt_session_chat_http(

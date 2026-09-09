@@ -3,7 +3,14 @@ import './session-chat-model-picker-effort-icons.css';
 /** A growing constellation: spark, orbit, star, nova, reactor, then a solar vortex. */
 export function ModelPickerEffortIcon({ effort }: { effort: string }) {
   const artwork =
-    effort === 'low' ? (
+    effort === 'none' ? (
+      <circle cx='28' cy='28' r='14' opacity='.55' />
+    ) : effort === 'minimal' ? (
+      <>
+        <circle cx='28' cy='28' r='14' opacity='.25' strokeDasharray='1 5' />
+        <circle cx='28' cy='28' r='4' fill='currentColor' stroke='none' />
+      </>
+    ) : effort === 'low' ? (
       <>
         <circle cx='28' cy='28' r='14' opacity='.25' strokeDasharray='1 5' />
         <path d='m28 17 2.8 8.2L39 28l-8.2 2.8L28 39l-2.8-8.2L17 28l8.2-2.8Z' />

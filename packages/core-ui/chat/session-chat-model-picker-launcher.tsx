@@ -6,7 +6,7 @@ import {
   getghostexHotkeyActionIdForKey,
 } from '@/packages/shared/ghostex-hotkeys';
 import { useAgentModelCatalog } from '@/packages/shared/agent-model-catalog-store';
-import { createModelPickerRequest } from './session-chat-model-picker-request';
+import { createModelPickerRequest, modelPickerProvider } from './session-chat-model-picker-request';
 import type { SessionChatSessionOptionPillsProps } from './session-chat-option-pills';
 import type { SessionChatOptionDispatchReceipt } from './session-chat-option-state';
 import type { SessionChatSelectionOptions } from '@/packages/shared/session-chat';
@@ -132,8 +132,8 @@ export function SessionChatModelPickerLauncher(
   useEffect(() => {
     const open = () => {
       const current = latest.current;
-      const provider = current.controller.catalog?.modelIcon;
-      if (requestRef.current || (provider !== 'codex' && provider !== 'claude')) return;
+      const provider = modelPickerProvider(current.controller.catalog?.modelIcon);
+      if (requestRef.current || !provider) return;
       const pane = anchor.current?.closest<HTMLElement>('.ghostex-session-chat-scope');
       if (!pane) return;
       const desired = latestOutbox.current ?? current.pendingModelSelection;
