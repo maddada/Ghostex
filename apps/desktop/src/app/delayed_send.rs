@@ -2068,6 +2068,11 @@ impl GhostexGpuiApp {
                 else {
                     return;
                 };
+                // The New Thread picker is a native GPUI window, not an app-modal page.
+                if action_id == "openNewThreadPalette" {
+                    self.toggle_gpui_new_thread_picker(cx);
+                    return;
+                }
                 /*
                 CDXC:FocusMode 2026-06-25-15:01:
                 The shared command palette posts focused-session commands as `runGhostexHotkeyAction`. Handle command-pane Sleep/Wake/Close focused-session ids directly in GPUI before modal routing so command-palette rows operate on the shell-focused command tab instead of no-oping or trying to open another modal.
@@ -2133,6 +2138,12 @@ impl GhostexGpuiApp {
                     self.switch_workarea_from_hotkey(mode, window, cx);
                     return;
                 }
+                if let Some(index) = gpui_titlebar_view_hotkey_index(action_id) {
+                    if let Some(item) = self.titlebar_mode_switcher_items().get(index) {
+                        self.switch_workarea_from_hotkey(item.mode, window, cx);
+                    }
+                    return;
+                }
                 if let Some(action_index) = gpui_command_palette_action_slot_index(action_id) {
                     self.run_configured_gpui_titlebar_action_index(action_index, window, cx);
                     return;
@@ -2164,6 +2175,10 @@ impl GhostexGpuiApp {
                 }
                 if action_id == "openExtensions" {
                     self.open_gpui_settings_extensions_page(Some(window), cx);
+                    return;
+                }
+                if action_id == "openGhostexHelp" {
+                    self.show_gpui_titlebar_help_menu(window, cx);
                     return;
                 }
                 if let Some(tab_cycle_action) =
@@ -2459,6 +2474,12 @@ impl GhostexGpuiApp {
             "installMoveCodexSessionSkill" => {
                 self.run_gpui_ghostex_cli_settings_action(
                     GpuiGhostexCliSettingsAction::InstallMoveCodexSessionSkill,
+                    cx,
+                );
+            }
+            "installHelpSkill" => {
+                self.run_gpui_ghostex_cli_settings_action(
+                    GpuiGhostexCliSettingsAction::InstallHelpSkill,
                     cx,
                 );
             }
@@ -2952,7 +2973,15 @@ impl GhostexGpuiApp {
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string);
                 let inserted = session_id.as_deref().is_some_and(|session_id| {
-                    self.insert_stashed_prompt_into_agents_session(session_id, &content, cx)
+                    self.insert_stashed_prompt_into_agents_session(
+                        session_id,
+                        &content,
+                        command
+                            .get("promptId")
+                            .and_then(serde_json::Value::as_str)
+                            .is_some_and(|id| id.starts_with("recovered:")),
+                        cx,
+                    )
                 });
                 if !inserted {
                     /*

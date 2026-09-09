@@ -115,9 +115,10 @@ impl GpuiAppModalHostWindow {
                 disabled with "server connection unavailable", so the modal
                 must be in this allowlist.
                 */
-                modal.needs_gxserver_bootstrap()
-                .then_some(sidebar_gxserver_bootstrap)
-                .flatten(),
+                modal
+                    .needs_gxserver_bootstrap()
+                    .then_some(sidebar_gxserver_bootstrap)
+                    .flatten(),
                 None,
                 None,
                 None,
