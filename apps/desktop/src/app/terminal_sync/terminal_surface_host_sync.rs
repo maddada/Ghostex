@@ -523,15 +523,17 @@ impl GhostexGpuiApp {
                     );
                 }
             }
+            let companion_parent = self.companion_native_parent();
             let frame_operations =
                 terminal_native_view::reconcile_app_owned_terminal_host_native_view(
                     &mut self.project_editor_companion_terminal_host_native_views,
                     &mut self.project_editor_companion_terminal_surface_lifecycle,
-                    self.parent_ns_view,
+                    companion_parent,
                     &commands,
                     &decisions,
                     terminal_native_view::TerminalHostNativeViewFactory::create,
                 );
+            self.reparent_floating_companion_terminal_hosts();
             terminal_native_view::execute_app_owned_terminal_host_frame_operations(
                 &self.project_editor_companion_terminal_host_native_views,
                 &frame_operations,

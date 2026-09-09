@@ -230,9 +230,6 @@ impl GhostexGpuiApp {
         CDXC:CodeEditor 2026-06-22-05:49:
         Project-editor modes replace the main workspace area while active, but they still flow through the same command-pane wrapper as Agents mode. Browser keeps the existing CEF toolbar/body inside this shell, while Source, Kanban, Automate, and Docs render distinct GPUI-colored placeholders until their direct runtime CEF gates can replace them.
 
-        CDXC:CodeEditor 2026-06-22-08:15:
-        When the companion is hidden, the shell still owns a visible restore rail as a normal left layout sibling before the editor surface. The rail never overlaps the editor surface or Browser CEF child view, and restoring the companion reuses the stored width ratio instead of resetting layout.
-
         CDXC:CodeEditor 2026-06-22-17:18:
         Source, Browser, Kanban, and Manage share this horizontal shell, and gpui-component h_flex centers children by default. Override that alignment and make the editor surface slot full-height so placeholders and Browser CEF bodies fill the available workspace height instead of rendering as a centered band with black space above and below.
         */
@@ -257,7 +254,7 @@ impl GhostexGpuiApp {
                 .items_start()
                 .overflow_hidden()
                 .bg(project_editor_shell_background_color())
-                .child(self.render_project_editor_companion_pane(mode, window, cx))
+                .child(self.render_project_editor_companion_pane(mode, companion_ratio, window, cx))
                 .child(self.render_project_editor_companion_divider(mode, cx))
                 .child(
                     div()
@@ -303,7 +300,6 @@ impl GhostexGpuiApp {
                 .items_start()
                 .overflow_hidden()
                 .bg(project_editor_shell_background_color())
-                .child(self.render_project_editor_companion_restore_rail(mode, cx))
                 .child(
                     div()
                         .on_children_prepainted(move |child_bounds, _window, cx| {

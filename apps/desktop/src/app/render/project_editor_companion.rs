@@ -37,9 +37,15 @@ use crate::*;
 use super::terminal_content_layout::terminal_content_frame;
 
 impl GhostexGpuiApp {
+    /// CDXC:Workarea 2026-09-09 DECISION:
+    /// User: remove the hide button from the companion pane header; the app titlebar owns its visibility toggle.
+    /// CDXC:Workarea 2026-09-09 WHY:
+    /// The floating window already applies the saved width ratio, so its lone pane must grow to fill the host (1.0).
+    /// Reapplying the docked ratio inside that window narrowed the content and left a large black strip beside it.
     pub(crate) fn render_project_editor_companion_pane(
         &self,
         mode: TitlebarMode,
+        flex_grow: f32,
         window: &Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
@@ -64,9 +70,7 @@ impl GhostexGpuiApp {
                 "ghostex-gpui-project-editor-companion-pane-{}",
                 mode.element_slug()
             ))
-            .flex_grow(project_editor_companion_width_ratio(
-                self.project_editor_shell.left_companion_width_ratio,
-            ))
+            .flex_grow(flex_grow)
             .flex_shrink_1()
             .flex_basis(relative(0.0))
             .min_w(px(PROJECT_EDITOR_COMPANION_MIN_WIDTH))
@@ -109,9 +113,6 @@ impl GhostexGpuiApp {
                             .text_size(px(12.5))
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(workspace_tab_active_text_color())
-                            .child(self.render_project_editor_companion_collapse_button(
-                                mode, is_focused, cx,
-                            ))
                             .child(
                                 div()
                                     .mx(px(8.0))
@@ -664,100 +665,6 @@ impl GhostexGpuiApp {
                     workspace_tab_close_inactive_color()
                 },
             ))
-            .into_any_element()
-    }
-
-    pub(crate) fn render_project_editor_companion_collapse_button(
-        &self,
-        mode: TitlebarMode,
-        is_focused: bool,
-        cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
-        let icon_color = if is_focused {
-            workspace_tab_close_active_color()
-        } else {
-            workspace_tab_close_inactive_color()
-        };
-        div()
-            .id(format!(
-                "ghostex-gpui-project-editor-companion-collapse-{}",
-                mode.element_slug()
-            ))
-            .flex()
-            .flex_shrink_0()
-            .h_full()
-            .w(px(31.0))
-            .items_center()
-            .justify_center()
-            .border_r_1()
-            .border_color(rgb(0x252525))
-            .text_color(icon_color)
-            .cursor_default()
-            .hover(|this| this.bg(workspace_tab_close_hover_color()))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    this.hide_project_editor_companion(mode, window, cx);
-                }),
-            )
-            .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, |window, cx| {
-                Tooltip::new("Hide companion").build(window, cx)
-            })
-            .child(titlebar_svg_icon(
-                TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_COLLAPSE,
-                13.0,
-                icon_color,
-            ))
-            .into_any_element()
-    }
-
-    pub(crate) fn render_project_editor_companion_restore_rail(
-        &self,
-        mode: TitlebarMode,
-        cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
-        v_flex()
-            .id(format!(
-                "ghostex-gpui-project-editor-companion-restore-rail-{}",
-                mode.element_slug()
-            ))
-            .flex_shrink_0()
-            .h_full()
-            .w(px(PROJECT_EDITOR_COMPANION_RESTORE_RAIL_WIDTH))
-            .items_center()
-            .border_r_1()
-            .border_t_1()
-            .border_color(rgb(0x252525))
-            .bg(workspace_tab_bar_color())
-            .cursor_default()
-            .hover(|this| this.bg(workspace_tab_close_hover_color()))
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    this.restore_project_editor_companion(mode, window, cx);
-                }),
-            )
-            .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, |window, cx| {
-                Tooltip::new("Show companion").build(window, cx)
-            })
-            .child(
-                div()
-                    .flex()
-                    .flex_shrink_0()
-                    .h(px(WORKSPACE_TAB_BAR_HEIGHT))
-                    .w_full()
-                    .items_center()
-                    .justify_center()
-                    .child(titlebar_svg_icon(
-                        PROJECT_EDITOR_COMPANION_RESTORE_ICON,
-                        12.0,
-                        rgb(0x737373).into(),
-                    )),
-            )
             .into_any_element()
     }
 

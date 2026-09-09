@@ -168,7 +168,7 @@ impl GhostexGpuiApp {
             }
             FirstResponderTarget::CefSurface(FirstResponderCefSurface::SessionChat(session_id))
                 if self.active_mode.is_project_editor_mode()
-                    && self.project_editor_shell.left_companion_visible =>
+                    && self.project_editor_companion_is_visible() =>
             {
                 if self.project_editor_companion_terminal_session_id == Some(session_id) {
                     self.project_editor_companion_focused_terminal_slot =
@@ -204,14 +204,14 @@ impl GhostexGpuiApp {
             }
             FirstResponderTarget::CefSurface(FirstResponderCefSurface::ProjectEditorCompanion)
                 if self.active_mode.is_project_editor_mode()
-                    && self.project_editor_shell.left_companion_visible =>
+                    && self.project_editor_companion_is_visible() =>
             {
                 self.set_shell_focus(ShellFocusTarget::ProjectEditorCompanion(self.active_mode));
             }
             FirstResponderTarget::TerminalSurface(
                 FirstResponderTerminalSurface::ProjectEditorCompanion(session_id),
             ) if self.active_mode.is_project_editor_mode()
-                && self.project_editor_shell.left_companion_visible =>
+                && self.project_editor_companion_is_visible() =>
             {
                 if self.project_editor_companion_terminal_session_id == Some(session_id) {
                     self.project_editor_companion_focused_terminal_slot =

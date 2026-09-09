@@ -419,7 +419,7 @@ impl GhostexGpuiApp {
     ) -> Option<ProjectEditorCompanionTerminalBodyMountSlotId> {
         if self.active_mode != mode
             || !mode.is_project_editor_mode()
-            || !self.project_editor_shell.left_companion_visible
+            || !self.project_editor_companion_is_visible()
             || !self.project_editor_shell.is_mode_awake(mode)
         {
             return None;
@@ -434,7 +434,7 @@ impl GhostexGpuiApp {
     ) -> Vec<ProjectEditorCompanionTerminalBodyMountSlotId> {
         let mode = self.active_mode;
         if !mode.is_project_editor_mode()
-            || !self.project_editor_shell.left_companion_visible
+            || !self.project_editor_companion_is_visible()
             || !self.project_editor_shell.is_mode_awake(mode)
         {
             return Vec::new();

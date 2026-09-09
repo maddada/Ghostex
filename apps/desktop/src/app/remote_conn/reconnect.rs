@@ -309,8 +309,7 @@ impl GhostexGpuiApp {
         connection_generation: u64,
         cx: &mut gpui::Context<Self>,
     ) {
-        if !self.active_mode.is_project_editor_mode()
-            || !self.project_editor_shell.left_companion_visible
+        if !self.active_mode.is_project_editor_mode() || !self.project_editor_companion_is_visible()
         {
             return;
         }
