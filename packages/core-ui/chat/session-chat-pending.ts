@@ -62,6 +62,7 @@ function stripSkillChipLines(text: string): string {
 
 export interface SessionChatPendingSend {
   id: string;
+  queuedPromptId?: string;
   text: string;
   imagePaths?: readonly string[];
   sentAt: number;
@@ -444,7 +445,7 @@ export function sessionChatPendingSendsAsMessages(pending: readonly SessionChatP
     // Lowest priority: the real transcript turn always supersedes.
     source: 'client' as const,
     timestamp: entry.sentAt,
-    ...(entry.sentWhileWorking === true ? { queued: true as const } : {}),
+    ...(entry.sentWhileWorking === true || entry.queuedPromptId ? { queued: true as const } : {}),
   }));
 }
 

@@ -111,10 +111,8 @@ pub type SessionChatQueueComposerReader =
     Arc<dyn Fn(&str, &str) -> SessionChatComposerReadiness + Send + Sync>;
 
 /*
-The one deliberate refresh the queue scheduler may request. It is called only
-for a session whose last whole screen capture proved `/compact` was live. That
-keeps headless queues moving after the chat client disconnects without turning
-the one-second scheduler into a general terminal-screen poller.
+Refresh screen evidence for a queued session waiting for startup or compaction.
+This keeps queued delivery progressing even after the chat client disconnects.
 */
 pub type SessionChatQueueCompactingRefresher = Arc<dyn Fn(&str, &str, Option<&str>) + Send + Sync>;
 
@@ -271,6 +269,26 @@ impl SessionChatQueueRuntime {
                 });
                 continue;
             }
+            // CDXC:SessionChat 2026-09-09 SEE-ALSO:
+            // sendSessionChatMessage accepts new-chat sends before the provider exists. Probe startup independently of activity and require positive input-box evidence before the first delivery.
+            if snapshot.deliverable_head().is_none() {
+                self.reset_gate(&key);
+                continue;
+            }
+            let starting_draft = crate::agents::session_is_draft(&session);
+            let composer_agent =
+                crate::session_chat_composer::session_chat_composer_agent_id(&session);
+            let composer = (self.composer_reader)(&project_id, &session_id);
+            if starting_draft
+                && crate::session_chat_composer::has_session_chat_composer_signature(
+                    composer_agent.as_deref(),
+                )
+                && composer.state != crate::session_chat_composer::SessionChatComposerState::Ready
+            {
+                self.reset_gate(&key);
+                (self.compacting_refresher)(&project_id, &session_id, composer_agent.as_deref());
+                continue;
+            }
             /*
             A compacting marker is written by the same whole zmx screen capture
             that feeds chat's progress card. Refresh only this marked state so
@@ -311,7 +329,10 @@ impl SessionChatQueueRuntime {
                 self.reset_gate(&key);
                 continue;
             }
-            if !self.stability_window_elapsed(&key, now) {
+            if !(starting_draft
+                && composer.state == crate::session_chat_composer::SessionChatComposerState::Ready)
+                && !self.stability_window_elapsed(&key, now)
+            {
                 continue;
             }
             let Some(head) = snapshot.deliverable_head() else {
@@ -361,7 +382,6 @@ impl SessionChatQueueRuntime {
             Grok requires positive readiness; unmeasured agents retain their
             existing Unknown behavior.
             */
-            let composer = (self.composer_reader)(&project_id, &session_id);
             if composer.blocks_message_for(
                 crate::session_chat_composer::session_chat_composer_agent_id(&session).as_deref(),
             ) && !composer.should_dismiss_with_escape()
@@ -1377,9 +1397,9 @@ pub(crate) fn session_chat_queue_compacting_refresher(
             let session_id = session_id.to_string();
             let agent = agent.map(str::to_string);
             tokio::task::spawn_blocking(move || {
-                // Respect the shared TTL. The scheduler asks every second, but at
-                // most one fresh zmx capture is needed per cache window.
-                detector.detect_blocking(&project_id, &session_id, agent.as_deref(), false)
+                // Only startup and compaction holds request this probe. Fresh evidence
+                // releases input promptly instead of waiting out the five-second cache.
+                detector.detect_blocking(&project_id, &session_id, agent.as_deref(), true)
             });
         },
     )

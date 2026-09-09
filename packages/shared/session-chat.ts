@@ -920,6 +920,8 @@ export interface GxserverSendSessionChatMessageParams {
 export interface GxserverSendSessionChatMessageResult {
   queued: boolean;
   textBytes: number;
+  /** Durable startup queue row, until the agent can accept its first prompt. */
+  queuedPromptId?: string;
 }
 
 /*

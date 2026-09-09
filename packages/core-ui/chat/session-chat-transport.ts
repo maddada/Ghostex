@@ -86,7 +86,11 @@ export interface SessionChatTransport {
      */
     currentLimit?: () => number;
   }): () => void;
-  send(text: string, imagePaths?: string[], draftVersion?: SessionChatDraftVersion): Promise<void>;
+  send(
+    text: string,
+    imagePaths?: string[],
+    draftVersion?: SessionChatDraftVersion
+  ): Promise<void | { queuedPromptId?: string }>;
   /**
    * Injects a raw keystroke sequence (no text, no Enter) for controls owned by
    * the agent TUI. Hosts without a path for it omit this, which hides those
