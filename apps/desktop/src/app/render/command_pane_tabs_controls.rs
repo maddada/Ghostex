@@ -27,6 +27,15 @@ use crate::*;
 const COMMAND_PANE_MINIMIZE_TOOLTIP: &str = "Right click an empty spot in the tabs bar to toggle minimizing.\nAlso double click to create a new tab.";
 
 impl GhostexGpuiApp {
+    /// CDXC:CommandPane 2026-09-09 DECISION:
+    /// User: show the same hint below the minimize and add-tab buttons, extending rightward from add-tab, only while expanded with at least 60px of terminal body height so it is not cut off.
+    fn command_pane_tab_hint_visible(&self, group_id: Option<CommandPaneGroupId>) -> bool {
+        self.command_pane.is_expanded()
+            && group_id.is_some_and(|group_id| {
+                self.command_group_minimize_tooltip_visible.get(&group_id) == Some(&true)
+            })
+    }
+
     pub(crate) fn render_command_pane_tab_add_button(
         &self,
         group_id: Option<CommandPaneGroupId>,
@@ -88,6 +97,15 @@ impl GhostexGpuiApp {
                     window.prevent_default();
                     cx.stop_propagation();
                 }),
+            )
+            .when(
+                !collapsed_strip && self.command_pane_tab_hint_visible(group_id),
+                |this| {
+                    this.managed_tooltip_with_placement(
+                        ManagedTooltipPlacement::BelowRight,
+                        |window, cx| Tooltip::new(COMMAND_PANE_MINIMIZE_TOOLTIP).build(window, cx),
+                    )
+                },
             )
             .child(titlebar_svg_icon(
                 command_pane_tab_add_icon_path(),
@@ -464,7 +482,8 @@ impl GhostexGpuiApp {
         let pin_icon_path = command_pane_panel_pin_icon_path(self.command_pane.mode);
         let expand_icon_path =
             command_pane_panel_visibility_icon_path(self.command_pane.is_expanded());
-        let visibility_tooltip = expanded_chrome.then_some(COMMAND_PANE_MINIMIZE_TOOLTIP);
+        let visibility_tooltip = (expanded_chrome && self.command_pane_tab_hint_visible(group_id))
+            .then_some(COMMAND_PANE_MINIMIZE_TOOLTIP);
         let controls_id = if expanded_chrome {
             match group_id {
                 Some(group_id) => {
@@ -578,7 +597,11 @@ impl GhostexGpuiApp {
             )
             .when_some(tooltip, |this, tooltip| {
                 this.managed_tooltip_with_placement(
-                    ManagedTooltipPlacement::Left,
+                    if is_visibility_control {
+                        ManagedTooltipPlacement::BelowLeft
+                    } else {
+                        ManagedTooltipPlacement::Left
+                    },
                     move |window, cx| Tooltip::new(tooltip).build(window, cx),
                 )
             })

@@ -53,8 +53,18 @@ impl GhostexGpuiApp {
 
         let group = v_flex()
             .on_children_prepainted(move |child_bounds, _window, cx| {
-                let _ = view.update(cx, |this, _cx| {
+                let _ = view.update(cx, |this, cx| {
                     this.record_command_group_layout_bounds(group_id, &child_bounds);
+                    let visible = child_bounds
+                        .last()
+                        .is_some_and(|bounds| bounds.size.height >= px(60.0));
+                    if this
+                        .command_group_minimize_tooltip_visible
+                        .insert(group_id, visible)
+                        != Some(visible)
+                    {
+                        cx.notify();
+                    }
                 });
             })
             .id(format!("ghostex-gpui-command-pane-group-{}", group_id.0))
