@@ -508,6 +508,9 @@ impl GhostexGpuiApp {
             if !custom_view.enabled {
                 return None;
             }
+            if custom_view.definition.get("source").is_some() {
+                return self.custom_project_view_url(id);
+            }
             return ProjectWorkareaRealRuntimeUrl::from_authorized_runtime_url(custom_view.url);
         }
         let extension = self.installed_extension_view(id)?;
@@ -533,6 +536,9 @@ impl GhostexGpuiApp {
         let title = gpui_extension_view_presentation(id)
             .map(|presentation| presentation.title)
             .unwrap_or_else(|| id.as_str().to_string());
+        if gpui_custom_view(id).is_some_and(|v| v.definition.get("source").is_some()) {
+            return self.custom_project_view_placeholder(id);
+        }
         if gpui_custom_view(id).is_some() {
             return ProjectEditorPlaceholderSignature {
                 mode,
@@ -570,6 +576,10 @@ impl GhostexGpuiApp {
         id: ExtensionId,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        if gpui_custom_view(id).is_some() {
+            self.ensure_custom_project_views(cx);
+            return false;
+        }
         if self.installed_extension_view(id).is_none()
             || gpui_extension_view_presentation(id).is_some_and(|value| value.server_is_static)
             || matches!(
@@ -860,11 +870,41 @@ impl GhostexGpuiApp {
             stale_surface
                 .surface
                 .update(cx, |surface, _| surface.set_visible(false));
+            self.park_custom_project_view(stale_surface);
+        }
+        if let Some(owned) = self.take_custom_project_view(&runtime_url) {
+            let surface = owned.surface.clone();
+            self.project_workarea_runtime_cef_surfaces
+                .insert(slot_key, owned);
+            self.update_project_workarea_runtime_cef_surface_visibility(cx);
+            return Some(surface);
         }
 
         let parent_ns_view = self.parent_ns_view;
         let surface_id = slot_key.cef_surface_id();
-        let profile = slot_key.cef_profile_id();
+        let mut profile = slot_key.cef_profile_id();
+        if let ProjectWorkareaCefSurfaceSlotKey::Extension(id) = slot_key {
+            if gpui_custom_view(id).is_some_and(|v| v.definition.get("source").is_some()) {
+                if let Some(remote) = self
+                    .latest_sidebar_project_snapshot
+                    .as_ref()
+                    .and_then(|s| s.active_project_id.as_ref())
+                    .and_then(|p| gpui_remote_project_reference_from_project_id(&p.0))
+                {
+                    profile = format!("{profile}-{}", remote.remote_machine_id);
+                    let tunnel =
+                        self.ensure_remote_browser_tunnel(&remote.remote_machine_id, false, cx)?;
+                    if !self.prepare_remote_browser_context(
+                        &remote.remote_machine_id,
+                        &profile,
+                        tunnel.port,
+                        cx,
+                    ) {
+                        return None;
+                    }
+                }
+            }
+        }
         let url = runtime_url.clone().into_cef_url();
         // The Source slot hosts the app-owned code-server runtime; its origin
         // is the one trusted clipboard origin (macOS trustedClipboardOrigin).
@@ -1077,6 +1117,7 @@ impl GhostexGpuiApp {
         &mut self,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        self.ensure_custom_project_views(cx);
         /*
         CDXC:Workarea 2026-06-24-11:03:
         Workarea CEF surface materialization is active-workarea-only. The app creates Kanban/Automate/Manage CefSurface entities only when CEF is initialized, the workarea is selected and awake, and a real bundled runtime URL can be issued from the current explicit sidebar snapshot; it does not prewarm hidden surfaces or synthesize Source/code-server URLs.
@@ -1217,6 +1258,7 @@ impl GhostexGpuiApp {
                 owned_surface
                     .surface
                     .update(cx, |surface, _| surface.set_visible(false));
+                self.park_custom_project_view(owned_surface);
                 pruned = true;
             }
         }
@@ -1272,7 +1314,8 @@ impl GhostexGpuiApp {
         let available = match mode {
             TitlebarMode::Extension(id) => {
                 if gpui_custom_view(id).is_some() {
-                    gpui_enabled_custom_view(id).is_some()
+                    gpui_enabled_custom_view(id)
+                        .is_some_and(|view| self.custom_project_view_visible(&view))
                 } else {
                     self.project_scoped_workarea_availability()
                         .titlebar_mode_available(mode)
@@ -1334,13 +1377,30 @@ impl GhostexGpuiApp {
         items.extend(
             gpui_custom_views_from_settings()
                 .into_iter()
-                .filter(|view| view.enabled)
+                .filter(|view| self.custom_project_view_visible(view))
                 .map(|view| TitlebarModeSwitcherItem {
                     mode: TitlebarMode::Extension(view.id),
                     is_available: true,
                     disabled_reason: None,
                 }),
         );
+        // CDXC:Titlebar 2026-09-09 DECISION:
+        // User: titlebar order mixes built-in, extension, and custom views; Option+1..9 follows exactly the displayed list.
+        // SEE-ALSO: packages/shared/ghostex-settings/titlebar-view-order.ts uses the same mode slugs for Settings.
+        let snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        if let Some(order) = snapshot
+            .object()
+            .get("titlebarViewOrder")
+            .and_then(serde_json::Value::as_array)
+        {
+            items.sort_by_cached_key(|item| {
+                let slug = item.mode.element_slug();
+                order
+                    .iter()
+                    .position(|id| id.as_str() == Some(slug.as_str()))
+                    .unwrap_or(usize::MAX)
+            });
+        }
         if items.len() == 1 && items[0].mode == TitlebarMode::Agents {
             items.clear();
         }
@@ -1360,7 +1420,7 @@ impl GhostexGpuiApp {
             return false;
         }
 
-        self.active_mode = next_active_mode;
+        self.change_active_mode_with_pane_state(next_active_mode, cx);
         self.focus_default_surface_for_active_mode();
         self.update_active_mode_cef_child_visibility(cx);
         self.scroll_all_active_tab_strips();

@@ -122,8 +122,8 @@ use crate::{
     session_chat_read::handle_read_session_chat_http,
     session_chat_send::{
         handle_answer_session_chat_prompt_http, handle_handoff_session_chat_draft_http,
-        handle_interrupt_session_chat_http, handle_send_session_chat_message_http,
-        handle_replace_session_chat_draft_http,
+        handle_interrupt_session_chat_http, handle_replace_session_chat_draft_http,
+        handle_send_session_chat_message_http,
     },
     session_chat_skills::handle_read_session_chat_skills_http,
     session_git_status, session_keep_awake, session_lifecycle,
@@ -167,8 +167,8 @@ use crate::{
     },
 };
 
-pub mod agent_http;
 pub(crate) mod accounts_http;
+pub mod agent_http;
 pub mod agent_prompt_search_http;
 pub mod background_tasks;
 pub mod commit_message_generation;
@@ -346,6 +346,7 @@ const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "openBrowser",
     "openBrowserPane",
     "openPaths",
+    "openSettings",
     "readResourcesSnapshot",
     "restartSession",
     /*
@@ -361,6 +362,7 @@ const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     "switchProject",
     "toggleCloseAfterDone",
     "toggleSidebarCollapsed",
+    "updateSettingsPatch",
     "waitFor",
 ];
 const PORTLESS_BACKGROUND_SYNC_INTERVAL: Duration = Duration::from_secs(10);
@@ -664,6 +666,7 @@ pub async fn run_gxserver_foreground(
     .await;
     crate::accounts::setup::cancel_all(&state);
     state.extension_registry.stop_all();
+    crate::project_views::stop_all();
     state.tailcat_runtime.stop();
     serve_result.with_context(|| "run gxserver HTTP listener")?;
 
@@ -771,6 +774,10 @@ async fn route_http(
 
     if method == Method::GET && path.starts_with("/ext/") {
         return serve_extension_static(state.extension_registry.clone(), path).await;
+    }
+
+    if method == Method::GET && path.starts_with("/project-view-report/") {
+        return crate::project_views::serve(path).await;
     }
 
     let endpoint = endpoint_for(&path);
@@ -1236,9 +1243,19 @@ async fn route_http(
             |repository, db, params, _| {
                 let created_session = repository.create_session(params, false)?;
                 let session = apply_created_session_identity(repository, &created_session, params)?;
-                if session.pointer("/runtimeSettings/externalSession").and_then(Value::as_bool) == Some(true) {
+                if session
+                    .pointer("/runtimeSettings/externalSession")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                {
                     repository.restore_recent_project(&value_text(&session, "projectId")?)?;
-                    schedule_presentation_project_delta(&state, db, repository, &value_text(&session, "projectId")?, "projectUpdated")?;
+                    schedule_presentation_project_delta(
+                        &state,
+                        db,
+                        repository,
+                        &value_text(&session, "projectId")?,
+                        "projectUpdated",
+                    )?;
                 }
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
@@ -1294,7 +1311,9 @@ async fn route_http(
                         name.as_str()
                             .filter(|name| !name.is_empty() && name.len() <= 256)
                             .map(str::to_string)
-                            .ok_or_else(|| DomainStateError::bad_request("Invalid zmx session name."))
+                            .ok_or_else(|| {
+                                DomainStateError::bad_request("Invalid zmx session name.")
+                            })
                     })
                     .collect::<Result<std::collections::HashSet<_>, _>>()?;
                 Ok(json!({ "sessions": repository.resource_session_owners(&names)? }))
@@ -2112,17 +2131,36 @@ async fn route_http(
             let worker_state = state.clone();
             let worker_endpoint = endpoint.path.clone();
             let worker_request_id = request_id.clone();
-            match tokio::task::spawn_blocking(move || handle_domain_http(
-                &worker_state, worker_endpoint, worker_request_id, &body_json,
-                |_, db, params, server_id| {
-                    crate::external_sessions::discover(db, server_id, &worker_state.paths)?;
-                    list_previous_sessions(db, server_id, params)
-                },
-            )).await {
+            match tokio::task::spawn_blocking(move || {
+                handle_domain_http(
+                    &worker_state,
+                    worker_endpoint,
+                    worker_request_id,
+                    &body_json,
+                    |_, db, params, server_id| {
+                        crate::external_sessions::discover(
+                            db,
+                            server_id,
+                            &worker_state.paths,
+                            params
+                                .get("refreshExternalSessions")
+                                .and_then(Value::as_bool)
+                                == Some(true),
+                        )?;
+                        list_previous_sessions(db, server_id, params)
+                    },
+                )
+            })
+            .await
+            {
                 Ok(response) => response,
-                Err(error) => domain_error_response(endpoint.path, request_id, DomainStateError::corrupt_state(format!("Session discovery failed: {error}"))),
+                Err(error) => domain_error_response(
+                    endpoint.path,
+                    request_id,
+                    DomainStateError::corrupt_state(format!("Session discovery failed: {error}")),
+                ),
             }
-        },
+        }
         /*
         CDXC:SessionFork 2026-08-28:
         Previous Sessions hides a closed row once something continues from it, so
@@ -2137,7 +2175,9 @@ async fn route_http(
             &body_json,
             |_, db, params, server_id| list_session_fork_branches(db, server_id, params),
         ),
-        "/api/agentAccounts" => accounts_http::handle_accounts_http(&state, endpoint.path, request_id, &body_json).await,
+        "/api/agentAccounts" => {
+            accounts_http::handle_accounts_http(&state, endpoint.path, request_id, &body_json).await
+        }
         "/api/readAgentSettings"
         | "/api/updateAgentSettings"
         | "/api/readAgentLaunchPlan"
@@ -2304,7 +2344,8 @@ async fn route_http(
                 .await
         }
         "/api/replaceSessionChatDraft" => {
-            handle_replace_session_chat_draft_http(&state, endpoint.path, request_id, &body_json).await
+            handle_replace_session_chat_draft_http(&state, endpoint.path, request_id, &body_json)
+                .await
         }
         "/api/claimSessionChatLaunchDraft" => handle_claim_session_chat_launch_draft_http(
             &state,
@@ -2318,7 +2359,8 @@ async fn route_http(
         | "/api/removeSessionChatQueuedPrompt"
         | "/api/reorderSessionChatQueue"
         | "/api/sendSessionChatQueuedPrompt"
-        | "/api/setSessionChatDraft" => {
+        | "/api/setSessionChatDraft"
+        | "/api/acknowledgeSessionChatDraftHandoff" => {
             handle_session_chat_queue_http(&state, endpoint.path, request_id, &body_json).await
         }
         // CDXC:Drafts 2026-08-28: the boot-time draft-cache
@@ -2397,6 +2439,9 @@ async fn route_http(
         }
         "/api/resolveGitRootForPath" => {
             handle_resolve_git_root_for_path_http(&state, endpoint.path, request_id, &body_json)
+        }
+        "/api/projectView" => {
+            crate::project_views::handle(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/listExtensions"
         | "/api/extensionsCatalog"

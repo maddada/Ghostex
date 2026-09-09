@@ -361,6 +361,7 @@ impl GhostexGpuiApp {
             actions,
         } = signature;
         let has_title = title.is_some();
+        let project_view = matches!(mode, TitlebarMode::Extension(id) if gpui_custom_view(id).is_some_and(|v| v.definition.get("source").is_some()));
         let has_actions = !actions.is_empty();
         let mut action_row = h_flex()
             .mt(px(16.0))
@@ -369,6 +370,19 @@ impl GhostexGpuiApp {
             .gap(px(8.0));
         for action in actions {
             let (id, label) = match action {
+                ProjectEditorPlaceholderAction::ProjectViewRetry => {
+                    ("project-view-retry", "Start / Retry")
+                }
+                ProjectEditorPlaceholderAction::ProjectViewStop => ("project-view-stop", "Stop"),
+                ProjectEditorPlaceholderAction::ProjectViewOutput => {
+                    ("project-view-output", "Command output")
+                }
+                ProjectEditorPlaceholderAction::ProjectViewOpen => {
+                    ("project-view-open", "Open view")
+                }
+                ProjectEditorPlaceholderAction::ProjectViewConfigure => {
+                    ("project-view-configure", "Configure")
+                }
                 ProjectEditorPlaceholderAction::HideCodeViewTab => {
                     ("ghostex-gpui-source-hide-code-tab", "Hide “Code” tab")
                 }
@@ -408,6 +422,37 @@ impl GhostexGpuiApp {
                             window.prevent_default();
                             cx.stop_propagation();
                             match action {
+                                ProjectEditorPlaceholderAction::ProjectViewRetry
+                                | ProjectEditorPlaceholderAction::ProjectViewStop
+                                | ProjectEditorPlaceholderAction::ProjectViewOutput
+                                | ProjectEditorPlaceholderAction::ProjectViewOpen
+                                | ProjectEditorPlaceholderAction::ProjectViewConfigure => {
+                                    if let TitlebarMode::Extension(id) = mode {
+                                        let operation = match action {
+                                            ProjectEditorPlaceholderAction::ProjectViewRetry => {
+                                                "restart"
+                                            }
+                                            ProjectEditorPlaceholderAction::ProjectViewStop => {
+                                                "stop"
+                                            }
+                                            ProjectEditorPlaceholderAction::ProjectViewOutput => {
+                                                "output"
+                                            }
+                                            ProjectEditorPlaceholderAction::ProjectViewOpen => {
+                                                "open"
+                                            }
+                                            _ => "configure",
+                                        };
+                                        this.project_view_command(
+                                            &crate::app::project_views::ProjectViewCommand {
+                                                id: id.as_str().into(),
+                                                operation: operation.into(),
+                                            },
+                                            window,
+                                            cx,
+                                        );
+                                    }
+                                }
                                 ProjectEditorPlaceholderAction::HideCodeViewTab => {
                                     this.hide_code_view_tab(cx);
                                 }
@@ -470,9 +515,14 @@ impl GhostexGpuiApp {
                     .when(!message.is_empty(), |this| {
                         this.child(
                             div()
+                                .id("project-editor-placeholder-message")
+                                .when(project_view, |this| {
+                                    this.max_h(px(300.0)).overflow_y_scroll()
+                                })
                                 .when(has_title, |this| this.mt(px(5.0)))
                                 .max_w(px(430.0))
                                 .text_center()
+                                .when(project_view, |this| this.text_left())
                                 .text_size(px(12.0))
                                 .line_height(px(17.0))
                                 .text_color(workspace_terminal_placeholder_message_color())

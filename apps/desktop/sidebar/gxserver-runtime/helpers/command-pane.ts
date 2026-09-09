@@ -1,3 +1,4 @@
+import { projectViewSpaceOptions } from '@/packages/shared/ghostex-settings/project-views';
 /*
 CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
@@ -489,6 +490,16 @@ export function createGpuiSidebarHudState({
     isFocusModeActive: false,
     pendingAgentIds: [],
     projectSettingsProjects: createGpuiProjectSettingsProjects(domainProjects, presentation),
+    projectViewSpaces: [
+      ...projectViewSpaceOptions(presentation?.sidebarSpaces, 'local'),
+      ...[...(remotePresentationsByMachineId ?? [])].flatMap(([machineId, snapshot]) =>
+        projectViewSpaceOptions(
+          snapshot.sidebarSpaces,
+          `remote:${machineId}`,
+          settings.remoteMachines.find((machine) => machine.id === machineId)?.name ?? machineId
+        )
+      ),
+    ],
     /*
     CDXC:Projects 2026-06-24-12:27:
     GPUI Recent Projects hydrate from `/api/listRecentProjects`, a

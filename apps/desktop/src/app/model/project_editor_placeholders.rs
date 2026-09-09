@@ -22,6 +22,11 @@ pub(crate) enum ProjectEditorPlaceholderAction {
     HideCodeViewTab,
     InstallSourceComponent,
     RetrySourceLoad,
+    ProjectViewRetry,
+    ProjectViewStop,
+    ProjectViewOutput,
+    ProjectViewOpen,
+    ProjectViewConfigure,
 }
 
 impl ProjectEditorPlaceholderSignature {

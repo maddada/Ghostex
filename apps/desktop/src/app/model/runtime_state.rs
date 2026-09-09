@@ -534,6 +534,7 @@ impl ProjectWorkareaCefSurfaceSlotKey {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ProjectWorkareaRealRuntimeUrl {
     pub(crate) value: String,
+    pub(crate) project_view_key: Option<String>,
 }
 
 impl ProjectWorkareaRealRuntimeUrl {
@@ -549,7 +550,10 @@ impl ProjectWorkareaRealRuntimeUrl {
             return None;
         }
 
-        Some(Self { value })
+        Some(Self {
+            value,
+            project_view_key: None,
+        })
     }
 
     pub(crate) fn into_cef_url(self) -> String {

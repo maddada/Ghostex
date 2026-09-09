@@ -192,6 +192,8 @@ export type SidebarGhostexCliStatusMessage = {
   generateTitleSkillPath?: string;
   moveCodexSessionSkillInstalled: boolean;
   moveCodexSessionSkillPath?: string;
+  helpSkillInstalled: boolean;
+  helpSkillPath?: string;
   cuaDriverAccessibilityPermissionGranted?: boolean;
   cuaAppInstalled: boolean;
   cuaDriverInstalled: boolean;
@@ -398,7 +400,7 @@ export type SidebarSessionItem = {
    * prompt yet, copied straight through from
    * `GxserverPresentationSession.isDraft`. PRESENT-ONLY (never `false`), which
    * is also what a daemon that predates drafts publishes, so absence means
-   * "not a draft". Rows render drafts first, newest by creation, with a
+   * "not a draft". Drafts lead the Sessions subsection, newest by creation, with a
    * pencil glyph instead of the agent logo and a dimmed title; the drafted text
    * already arrives as `displayTitle`, derived server-side.
    */
@@ -931,6 +933,7 @@ export type SidebarHudState = {
    * The Worktrees settings surface needs the same project id/name/path projection as native workspace storage, plus an optional per-project command override for creating worktrees.
    */
   projectSettingsProjects?: SidebarProjectSettingsItem[];
+  projectViewSpaces?: import('./ghostex-settings/project-views').ProjectViewSpace[];
   /**
    * CDXC:Projects 2026-05-04-14:25
    * Combined sidebar hides projects without active/sleeping sessions in a
@@ -1312,7 +1315,9 @@ export type SidebarStashedPromptsResultMessage = {
    */
   tags?: GxserverStashedPromptTag[];
   type: 'stashedPromptsResult';
+  drafts?: import('./gxserver-protocol').GxserverSessionChatDraftListEntry[];
   deliveredDrafts?: import('./session-chat-queue').SessionChatDeliveredDraft[];
+  recoveryDrafts?: import('./session-chat-queue').SessionChatRecoveryDraft[];
 };
 
 /**
@@ -1645,6 +1650,7 @@ export type SidebarToExtensionMessage =
         | 'installGenerateTitleSkill'
         | 'installManageBeadsSkill'
         | 'installMoveCodexSessionSkill'
+        | 'installHelpSkill'
         | 'uninstallBundledAgentSkills'
         | 'installCuaDriver';
     }
@@ -1997,8 +2003,13 @@ export type SidebarToExtensionMessage =
        * Project headers expose New Browser beside the create-session control.
        * Carry the group id so native can focus that project/group before
        * creating the browser pane.
+       *
+       * CDXC:AgentLauncher 2026-09-09 WHY:
+       * The New Thread picker sends no group id: it is an app-modal window
+       * that cannot see sidebar groups, and the sidebar runtime already owns
+       * the active group, so an absent id means the active project.
        */
-      groupId: string;
+      groupId?: string;
       type: 'openBrowserPaneInGroup';
     }
   | {
@@ -2610,6 +2621,7 @@ export type SidebarToExtensionMessage =
       sessionTags?: SidebarSessionTagFilter[];
       projectId?: string;
       externalOnly?: boolean;
+      refreshExternalSessions?: boolean;
       type: 'requestPreviousSessions';
     }
   | {
