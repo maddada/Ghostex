@@ -18,6 +18,8 @@ function monacoContentType(filePath: string): string {
 
 const config: StorybookConfig = {
   framework: '@storybook/react-vite',
+  // Standalone story pages otherwise request the missing /favicon.ico instead of Storybook's real icon.
+  previewHead: (head) => `${head}<link rel="icon" type="image/svg+xml" href="./favicon.svg" />`,
   /**
    * CDXC:NativeOnlyCleanup 2026-05-05-02:22
    * Storybook now covers the native/shared sidebar UI only. The old VS Code
