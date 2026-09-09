@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, type UIEvent as ReactUIEvent } from 'react';
 import { Button } from '@/packages/components/ui/button';
-import { Field, FieldContent, FieldDescription, FieldLabel } from '@/packages/components/ui/field';
 import {
   DEFAULT_ghostex_HOTKEYS,
   GHOSTEX_HOTKEY_DEFINITIONS,
@@ -10,7 +9,7 @@ import {
   type ghostexHotkeySettings,
 } from '../../../shared/ghostex-hotkeys';
 import { HotkeyRecorderField } from '../../hotkey-recorder-field';
-import { SettingsNativeScrollArea, SettingsSection, ToggleField } from '../fields';
+import { SettingRow, SettingsNativeScrollArea, SettingsSection, ToggleField } from '../fields';
 import { getMostlyVisibleSettingsSectionId, shouldShowSetting } from '../search';
 import {
   HotkeySettingsDefinitionById,
@@ -192,29 +191,28 @@ export function HotkeysSettingsTab({
                 const value = normalizedHotkeys[definition.id] ?? definition.defaultKey;
                 const isDuplicate = duplicateIds.has(definition.id);
                 return [
-                  <Field className='gap-2.5' data-invalid={isDuplicate} key={definition.id}>
-                    <FieldContent>
-                      <FieldLabel className='text-sm' htmlFor={`hotkey-${definition.id}`}>
-                        {definition.title}
-                      </FieldLabel>
-                      <FieldDescription className='text-sm'>{definition.description}</FieldDescription>
-                    </FieldContent>
-                    <HotkeyRecorderField
-                      ariaInvalid={isDuplicate}
-                      id={`hotkey-${definition.id}`}
-                      hotkey={value}
-                      onChange={(nextHotkey) => updateHotkey(definition.id, nextHotkey)}
-                      originalHotkey={defaultHotkeys[definition.id] ?? ''}
-                    />
-                  </Field>,
+                  <SettingRow
+                    description={definition.description}
+                    htmlFor={`hotkey-${definition.id}`}
+                    key={definition.id}
+                    label={definition.title}
+                  >
+                    <div className='settings-control-lane' data-invalid={isDuplicate || undefined}>
+                      <HotkeyRecorderField
+                        ariaInvalid={isDuplicate}
+                        id={`hotkey-${definition.id}`}
+                        hotkey={value}
+                        onChange={(nextHotkey) => updateHotkey(definition.id, nextHotkey)}
+                        originalHotkey={defaultHotkeys[definition.id] ?? ''}
+                      />
+                    </div>
+                  </SettingRow>,
                 ];
               })}
             </SettingsSection>
           ))}
           {!hasVisibleHotkeys ? (
-            <div className='rounded-none border border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground'>
-              No hotkeys match your search.
-            </div>
+            <div className='px-4 py-6 text-center text-sm text-muted-foreground'>No hotkeys match your search.</div>
           ) : null}
           <div className='flex justify-end'>
             <Button onClick={resetHotkeys} type='button' variant='outline'>

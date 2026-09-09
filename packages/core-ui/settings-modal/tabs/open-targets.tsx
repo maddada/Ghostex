@@ -12,7 +12,14 @@ import {
   type CustomWorkspaceOpenTarget,
 } from '../../../shared/workspace-open-targets';
 import { EditorBrandIcon, getEditorBrandIconId } from '../../brand-icons';
-import { SettingSwitch, SettingsInput, SettingsNativeScrollArea, SettingsSection, SettingsTextarea } from '../fields';
+import {
+  SettingSwitch,
+  SettingsInput,
+  SettingsListItem,
+  SettingsNativeScrollArea,
+  SettingsSection,
+  SettingsTextarea,
+} from '../fields';
 import {
   SettingsTabSearch,
   hasVisibleSettingsSearchResult,
@@ -112,127 +119,115 @@ export function OpenTargetsSettingsTab({
               Settings must show the same Open In editor icons as the titlebar
               dropdown so users can scan Cursor, VS Code variants, Zed,
               Antigravity, VSCodium, and JetBrains-family targets by brand. */}
-            <div className='flex flex-col gap-2'>
-              {BUILT_IN_WORKSPACE_OPEN_TARGETS.filter((target) =>
-                shouldShowSetting(search.sections.openIn, `builtin:${target.id}`)
-              ).map((target) => {
-                const isAvailable = target.id === 'finder' || availableBuiltInIds.has(target.id);
-                return (
-                  <div
-                    className='flex items-center justify-between gap-3 rounded-none border border-border/70 bg-card/40 px-3 py-2'
-                    key={target.id}
-                  >
-                    <div className='flex min-w-0 flex-1 items-center gap-3'>
-                      <OpenTargetSettingsIcon targetId={target.id} />
-                      <div className='min-w-0'>
-                        <div className='truncate text-sm font-medium'>{target.label}</div>
-                        <div className='truncate text-xs text-muted-foreground'>
-                          {isAvailable
-                            ? target.id === 'finder'
-                              ? 'Built-in'
-                              : (target.commands?.join(', ') ?? 'macOS')
-                            : 'Not installed'}
-                        </div>
-                      </div>
-                    </div>
-                    <SettingSwitch
-                      checked={isAvailable && !hiddenIds.has(target.id)}
-                      disabled={!isAvailable}
-                      disabledReason={`Install ${target.label} to enable this option.`}
-                      onCheckedChange={(checked) => updateHiddenTarget(target.id, checked)}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+            {BUILT_IN_WORKSPACE_OPEN_TARGETS.filter((target) =>
+              shouldShowSetting(search.sections.openIn, `builtin:${target.id}`)
+            ).map((target) => {
+              const isAvailable = target.id === 'finder' || availableBuiltInIds.has(target.id);
+              return (
+                <SettingsListItem
+                  detail={
+                    isAvailable
+                      ? target.id === 'finder'
+                        ? 'Built-in'
+                        : (target.commands?.join(', ') ?? 'macOS')
+                      : 'Not installed'
+                  }
+                  icon={<OpenTargetSettingsIcon targetId={target.id} />}
+                  key={target.id}
+                  title={target.label}
+                >
+                  <SettingSwitch
+                    checked={isAvailable && !hiddenIds.has(target.id)}
+                    disabled={!isAvailable}
+                    disabledReason={`Install ${target.label} to enable this option.`}
+                    onCheckedChange={(checked) => updateHiddenTarget(target.id, checked)}
+                  />
+                </SettingsListItem>
+              );
+            })}
           </SettingsSection>
         ) : null}
 
         {shouldShowSettingsSection(search.sections.customOpenTargets) ? (
           <SettingsSection title='Custom Open Targets'>
-            <div className='flex flex-col gap-2'>
-              {settings.customWorkspaceOpenTargets.map((target) => (
-                <div
-                  className='flex items-center justify-between gap-3 rounded-none border border-border/70 bg-card/40 px-3 py-2'
-                  key={target.id}
-                >
-                  <div className='min-w-0'>
-                    <div className='truncate text-sm font-medium'>{target.label}</div>
-                    <div className='truncate text-xs text-muted-foreground'>
-                      {[target.command, ...target.args].join(' ')}
-                    </div>
-                  </div>
-                  <div className='flex shrink-0 items-center gap-1'>
-                    <Button
-                      onClick={() =>
-                        setEditorState({
-                          draft: {
-                            argsText: target.args.join('\n'),
-                            command: target.command,
-                            label: target.label,
-                          },
-                          id: target.id,
-                        })
-                      }
-                      size='icon-xs'
-                      type='button'
-                      variant='ghost'
-                    >
-                      <IconPencil aria-hidden='true' size={14} />
-                      <span className='sr-only'>Edit</span>
-                    </Button>
-                    <Button onClick={() => removeCustomTarget(target.id)} size='icon-xs' type='button' variant='ghost'>
-                      <IconTrash aria-hidden='true' size={14} />
-                      <span className='sr-only'>Remove</span>
-                    </Button>
-                  </div>
+            {settings.customWorkspaceOpenTargets.map((target) => (
+              <SettingsListItem
+                detail={[target.command, ...target.args].join(' ')}
+                key={target.id}
+                title={target.label}
+              >
+                <div className='flex shrink-0 items-center gap-1'>
+                  <Button
+                    onClick={() =>
+                      setEditorState({
+                        draft: {
+                          argsText: target.args.join('\n'),
+                          command: target.command,
+                          label: target.label,
+                        },
+                        id: target.id,
+                      })
+                    }
+                    size='icon-xs'
+                    type='button'
+                    variant='ghost'
+                  >
+                    <IconPencil aria-hidden='true' size={14} />
+                    <span className='sr-only'>Edit</span>
+                  </Button>
+                  <Button onClick={() => removeCustomTarget(target.id)} size='icon-xs' type='button' variant='ghost'>
+                    <IconTrash aria-hidden='true' size={14} />
+                    <span className='sr-only'>Remove</span>
+                  </Button>
                 </div>
-              ))}
-              {editorState ? (
-                <div className='flex flex-col gap-3 rounded-none border border-border/70 bg-card/40 p-3'>
-                  <SettingsInput
-                    aria-label='Open target name'
-                    onChange={(event) =>
-                      setEditorState({
-                        ...editorState,
-                        draft: { ...editorState.draft, label: event.currentTarget.value },
-                      })
-                    }
-                    placeholder='Name'
-                    value={editorState.draft.label}
-                  />
-                  <SettingsInput
-                    aria-label='Open target command'
-                    onChange={(event) =>
-                      setEditorState({
-                        ...editorState,
-                        draft: { ...editorState.draft, command: event.currentTarget.value },
-                      })
-                    }
-                    placeholder='Command'
-                    value={editorState.draft.command}
-                  />
-                  <SettingsTextarea
-                    aria-label='Open target arguments'
-                    onChange={(event) =>
-                      setEditorState({
-                        ...editorState,
-                        draft: { ...editorState.draft, argsText: event.currentTarget.value },
-                      })
-                    }
-                    placeholder='Optional arguments, one per line'
-                    value={editorState.draft.argsText}
-                  />
-                  <div className='flex justify-end gap-2'>
-                    <Button onClick={() => setEditorState(undefined)} type='button' variant='ghost'>
-                      Cancel
-                    </Button>
-                    <Button onClick={saveCustomTarget} type='button'>
-                      Save
-                    </Button>
-                  </div>
+              </SettingsListItem>
+            ))}
+            {editorState ? (
+              <div className='flex flex-col gap-3'>
+                <SettingsInput
+                  aria-label='Open target name'
+                  onChange={(event) =>
+                    setEditorState({
+                      ...editorState,
+                      draft: { ...editorState.draft, label: event.currentTarget.value },
+                    })
+                  }
+                  placeholder='Name'
+                  value={editorState.draft.label}
+                />
+                <SettingsInput
+                  aria-label='Open target command'
+                  onChange={(event) =>
+                    setEditorState({
+                      ...editorState,
+                      draft: { ...editorState.draft, command: event.currentTarget.value },
+                    })
+                  }
+                  placeholder='Command'
+                  value={editorState.draft.command}
+                />
+                <SettingsTextarea
+                  aria-label='Open target arguments'
+                  onChange={(event) =>
+                    setEditorState({
+                      ...editorState,
+                      draft: { ...editorState.draft, argsText: event.currentTarget.value },
+                    })
+                  }
+                  placeholder='Optional arguments, one per line'
+                  value={editorState.draft.argsText}
+                />
+                <div className='flex justify-end gap-2'>
+                  <Button onClick={() => setEditorState(undefined)} type='button' variant='ghost'>
+                    Cancel
+                  </Button>
+                  <Button onClick={saveCustomTarget} type='button'>
+                    Save
+                  </Button>
                 </div>
-              ) : (
+              </div>
+            ) : (
+              <div>
                 <Button
                   className='w-fit'
                   onClick={() => setEditorState({ draft: { argsText: '', command: '', label: '' } })}
@@ -242,8 +237,8 @@ export function OpenTargetsSettingsTab({
                   <IconPlus aria-hidden='true' size={16} />
                   Add target
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
           </SettingsSection>
         ) : null}
       </div>

@@ -1057,7 +1057,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-modal-section-title {
   color: var(--app-foreground);
-  font-size: 12px;
+  font-size: var(--settings-text-heading);
   font-weight: 800;
   line-height: 1.2;
 }
@@ -1071,7 +1071,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-modal-number-suffix {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   font-weight: 700;
   min-width: 24px;
 }
@@ -1114,7 +1114,9 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-row:hover .settings-row-advanced-button,
 .settings-row:hover .settings-row-info-button,
 .settings-row:focus-within .settings-row-advanced-button,
-.settings-row:focus-within .settings-row-info-button {
+.settings-row:focus-within .settings-row-info-button,
+.settings-list-row:hover .settings-row-info-button,
+.settings-list-row:focus-within .settings-row-info-button {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1134,14 +1136,8 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-row-info-tooltip {
   max-width: min(350px, calc(100vw - 32px));
-}
-
-.settings-row-subtitle {
-  color: var(--muted-foreground);
-  font-size: 12px;
-  line-height: 1.35;
-  margin: 0;
-  max-width: 100%;
+  /* Skill tooltips carry the install command on its own line after the description. */
+  white-space: pre-line;
 }
 
 .command-config-field {
@@ -3638,7 +3634,15 @@ html:has(body.app-modal-host-native-window-body) {
 
 .projects-settings-layout {
   display: grid;
-  gap: 14px;
+  gap: 1.5rem;
+}
+
+/* Inside a settings list row the project selector is a right-aligned control, not a full-width block. */
+.settings-list-row-control .projects-settings-selector-trigger {
+  max-width: 100%;
+  min-height: 2.5rem;
+  padding: 4px 10px;
+  width: 22rem;
 }
 
 /*
@@ -3660,7 +3664,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .projects-settings-selector-label {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   font-weight: 600;
   line-height: 1.2;
 }
@@ -3710,7 +3714,7 @@ html:has(body.app-modal-host-native-window-body) {
 .projects-settings-selector-name,
 .projects-settings-selector-option-name {
   color: var(--app-foreground);
-  font-size: 13px;
+  font-size: var(--settings-text-body);
   font-weight: 650;
   line-height: 1.25;
   min-width: 0;
@@ -3722,7 +3726,7 @@ html:has(body.app-modal-host-native-window-body) {
 .projects-settings-selector-path,
 .projects-settings-selector-option-path {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--settings-text-detail);
   font-weight: 400;
   line-height: 1.35;
   min-width: 0;
@@ -3792,7 +3796,7 @@ html:has(body.app-modal-host-native-window-body) {
   color: var(--app-muted);
   display: inline-flex;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--settings-text-badge);
   font-weight: 700;
   line-height: 1;
   min-height: 24px;
@@ -3881,7 +3885,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-portless-domain-group-title {
   color: var(--app-foreground);
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   font-weight: 700;
   min-width: 0;
   overflow: hidden;
@@ -3892,7 +3896,7 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-portless-domain-group-kind,
 .settings-portless-domain-meta {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--settings-text-detail);
   line-height: 1.35;
 }
 
@@ -3913,7 +3917,7 @@ html:has(body.app-modal-host-native-window-body) {
   border: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
   color: color-mix(in srgb, var(--app-foreground) 88%, var(--app-muted) 12%);
   font-family: var(--settings-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
-  font-size: 11px;
+  font-size: var(--settings-text-detail);
   min-width: 0;
   overflow: hidden;
   padding: 5px 7px;
@@ -3923,7 +3927,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-portless-domain-empty {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   line-height: 1.45;
 }
 
@@ -4026,7 +4030,7 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-remote-path-title {
   color: var(--app-foreground);
   flex: none;
-  font-size: 13px;
+  font-size: var(--settings-text-body);
   font-weight: 600;
   min-width: 0;
   overflow: hidden;
@@ -4065,7 +4069,7 @@ html:has(body.app-modal-host-native-window-body) {
   color: var(--app-muted);
   display: inline-flex;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--settings-text-badge);
   font-weight: 700;
   line-height: 1;
   min-height: 22px;
@@ -4125,7 +4129,7 @@ html:has(body.app-modal-host-native-window-body) {
   align-items: center;
   color: var(--app-foreground);
   display: flex;
-  font-size: 12.5px;
+  font-size: var(--settings-text-body);
   font-weight: 600;
   gap: 6px;
 }
@@ -4156,7 +4160,7 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-remote-os-popover-title {
   align-items: center;
   display: flex;
-  font-size: 12.5px;
+  font-size: var(--settings-text-detail);
   font-weight: 600;
   gap: 6px;
 }
@@ -4190,7 +4194,7 @@ html:has(body.app-modal-host-native-window-body) {
   color: var(--app-muted);
   display: inline-flex;
   flex: none;
-  font-size: 11px;
+  font-size: var(--settings-text-badge);
   font-weight: 700;
   height: 20px;
   justify-content: center;
@@ -4212,7 +4216,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-remote-step-title {
   color: var(--app-foreground);
-  font-size: 12.5px;
+  font-size: var(--settings-text-body);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -4254,7 +4258,7 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-remote-qr-meta {
   color: var(--app-muted);
   display: grid;
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   gap: 6px;
   line-height: 1.5;
   min-width: 0;
@@ -4312,7 +4316,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-remote-qr-preview-caption span {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
 }
 
 .settings-remote-computer-connect {
@@ -4368,7 +4372,7 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-remote-off-text {
   color: var(--app-foreground);
   display: grid;
-  font-size: 12.5px;
+  font-size: var(--settings-text-detail);
   gap: 8px;
   justify-items: start;
   min-width: 0;
@@ -4376,7 +4380,7 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-remote-section-label {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--settings-text-detail);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -4417,7 +4421,7 @@ html:has(body.app-modal-host-native-window-body) {
   align-items: center;
   color: var(--app-foreground);
   display: flex;
-  font-size: 12.5px;
+  font-size: var(--settings-text-body);
   font-weight: 600;
   gap: 6px;
 }
@@ -4427,7 +4431,7 @@ html:has(body.app-modal-host-native-window-body) {
   color: var(--app-muted);
   display: inline-flex;
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   gap: 6px;
   max-width: 60%;
   min-width: 0;
@@ -4440,7 +4444,7 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-remote-raw-status,
 .settings-remote-kv-value code {
   font-family: var(--settings-mono-font, 'SF Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace);
-  font-size: 11px;
+  font-size: var(--settings-text-detail);
 }
 
 .settings-remote-dot {
@@ -4496,7 +4500,7 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-remote-kv-key {
   color: var(--app-muted);
   flex: none;
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
 }
 
 .settings-remote-kv-value {
@@ -4553,7 +4557,7 @@ html:has(body.app-modal-host-native-window-body) {
 .settings-remote-field-error,
 .settings-remote-error {
   color: color-mix(in srgb, #f87171 82%, var(--app-foreground) 18%);
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   line-height: 1.45;
 }
 
@@ -4605,17 +4609,18 @@ html:has(body.app-modal-host-native-window-body) {
 }
 
 .settings-management-heading {
+  /* Same scale as the Settings list-section headings so custom pages match. */
   color: var(--app-foreground);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
+  font-size: var(--settings-text-heading);
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.3;
   margin: 0;
 }
 
 .settings-management-description {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   line-height: 1.5;
   margin: 0;
 }
@@ -4735,13 +4740,13 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-remote-machine-tile-title {
   color: var(--app-foreground);
-  font-size: 12.5px;
+  font-size: var(--settings-text-body);
   font-weight: 600;
 }
 
 .settings-remote-machine-tile-detail {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--settings-text-detail);
 }
 
 .settings-remote-machine-tile-switch {
@@ -4804,13 +4809,13 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-management-title {
   color: var(--app-foreground);
-  font-size: 13px;
+  font-size: var(--settings-text-body);
   font-weight: 700;
 }
 
 .settings-management-detail {
   color: var(--app-muted);
-  font-size: 11px;
+  font-size: var(--settings-text-detail);
 }
 
 .settings-project-command-card {
@@ -4836,7 +4841,7 @@ html:has(body.app-modal-host-native-window-body) {
   align-self: center;
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--settings-text-badge);
   font-weight: 500;
   letter-spacing: 0.02em;
   line-height: 1.4;
@@ -4865,18 +4870,18 @@ html:has(body.app-modal-host-native-window-body) {
 
 .settings-remote-machine-field-label {
   color: var(--app-muted);
-  font-size: 12px;
+  font-size: var(--settings-text-body);
   font-weight: 500;
 }
 
 .settings-remote-machine-field-description {
   color: color-mix(in srgb, var(--app-muted) 92%, transparent);
-  font-size: 11px;
+  font-size: var(--settings-text-detail);
   line-height: 1.4;
 }
 
 .settings-remote-machine-input {
-  font-size: 13px;
+  font-size: var(--settings-text-body);
   height: 2.125rem;
   padding-inline: 0.625rem;
 }
@@ -4944,7 +4949,7 @@ and error text instead of the muted description tone.
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted-foreground);
-  font-size: 12px;
+  font-size: var(--settings-text-detail);
   line-height: 1.4;
 }
 
@@ -5655,7 +5660,7 @@ and error text instead of the muted description tone.
   border: 1px solid var(--gx-modal-hairline, rgba(255, 255, 255, 0.08));
   border-radius: var(--gx-modal-radius-section, 12px);
   display: flex;
-  font-size: 13px;
+  font-size: var(--settings-text-detail);
   gap: 12px;
   padding: 12px;
 }

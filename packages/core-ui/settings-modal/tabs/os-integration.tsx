@@ -11,7 +11,7 @@ import {
   type SidebarOSIntegrationStatusMessage,
   type SidebarOSIntegrationStatusItem,
 } from '../../../shared/session-grid-contract';
-import { SettingButton, SettingsNativeScrollArea, SettingsSection } from '../fields';
+import { SettingButton, SettingsListItem, SettingsNativeScrollArea, SettingsSection } from '../fields';
 import { SettingsTabSearch, hasVisibleSettingsSearchResult, shouldShowSettingsSection } from '../search';
 
 export function OSIntegrationSettingsTab({
@@ -56,12 +56,11 @@ export function OSIntegrationSettingsTab({
              * at install/build time, but Settings is the only place that changes
              * default editor, terminal-link, or script-runner ownership.
              */}
-            <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+            <SettingsListItem title='Default editor'>
               <SettingButton
-                className='h-8 w-full justify-start px-3'
+                className='h-8 px-3'
                 disabled={!onSetDefaults}
                 disabledReason='macOS default-app changes aren’t available here.'
-                disabledTooltipClassName='w-full'
                 onClick={() => onSetDefaults?.('editor')}
                 type='button'
                 variant='outline'
@@ -69,11 +68,12 @@ export function OSIntegrationSettingsTab({
                 <IconCodeDots aria-hidden='true' data-icon='inline-start' />
                 Set as Default Editor
               </SettingButton>
+            </SettingsListItem>
+            <SettingsListItem title='Terminal links'>
               <SettingButton
-                className='h-8 w-full justify-start px-3'
+                className='h-8 px-3'
                 disabled={!onSetDefaults}
                 disabledReason='macOS default-app changes aren’t available here.'
-                disabledTooltipClassName='w-full'
                 onClick={() => onSetDefaults?.('terminalLinks')}
                 type='button'
                 variant='outline'
@@ -81,11 +81,12 @@ export function OSIntegrationSettingsTab({
                 <IconTerminal2 aria-hidden='true' data-icon='inline-start' />
                 Set Terminal Links
               </SettingButton>
+            </SettingsListItem>
+            <SettingsListItem title='Script runner'>
               <SettingButton
-                className='h-8 w-full justify-start px-3'
+                className='h-8 px-3'
                 disabled={!onSetDefaults}
                 disabledReason='macOS default-app changes aren’t available here.'
-                disabledTooltipClassName='w-full'
                 onClick={() => onSetDefaults?.('scriptRunner')}
                 type='button'
                 variant='outline'
@@ -93,24 +94,25 @@ export function OSIntegrationSettingsTab({
                 <IconPlayerPlay aria-hidden='true' data-icon='inline-start' />
                 Set Script Runner
               </SettingButton>
+            </SettingsListItem>
+            <SettingsListItem title='All defaults'>
               <SettingButton
-                className='h-8 w-full justify-start px-3'
+                className='h-8 px-3'
                 disabled={!onSetDefaults}
                 disabledReason='macOS default-app changes aren’t available here.'
-                disabledTooltipClassName='w-full'
                 onClick={() => onSetDefaults?.('all')}
                 type='button'
               >
                 <IconCircleCheckFilled aria-hidden='true' data-icon='inline-start' />
                 Set All
               </SettingButton>
-            </div>
+            </SettingsListItem>
           </SettingsSection>
         ) : null}
 
         {shouldShowSettingsSection(search.sections.cli) ? (
           <SettingsSection title='CLI'>
-            <div className='grid gap-2 rounded-none border border-border bg-muted/20 p-3 font-mono text-xs text-muted-foreground'>
+            <div className='grid gap-2 font-mono text-[13px] text-muted-foreground'>
               <div>ghostex open ./folder</div>
               <div>ghostex edit --wait file.ts:12:3</div>
               <div>ghostex terminal --cwd /tmp --title Scratch -- echo hi</div>
@@ -121,88 +123,85 @@ export function OSIntegrationSettingsTab({
 
         {shouldShowSettingsSection(search.sections.diagnostics) ? (
           <SettingsSection title='Diagnostics'>
-            <div className='flex flex-col gap-3 rounded-none border border-border bg-muted/20 p-3 text-sm text-muted-foreground'>
-              <div className='flex items-center justify-between gap-3'>
-                <span>{loading && !status ? 'Checking macOS handlers...' : 'macOS handler status'}</span>
-                <SettingButton
-                  className='h-8 px-3'
-                  disabled={loading || !onRequestStatus}
-                  disabledReason={
-                    loading ? 'macOS handler status is being checked.' : 'Status checks aren’t available here.'
-                  }
-                  onClick={onRequestStatus}
-                  type='button'
-                  variant='outline'
-                >
-                  <IconRefresh aria-hidden='true' data-icon='inline-start' />
-                  Refresh
-                </SettingButton>
-              </div>
-              {status ? (
-                <div className='grid gap-2'>
-                  {statusItems.length > 0 ? (
-                    <div className='grid gap-2 rounded-none border border-destructive/30 bg-destructive/5 p-3 text-xs text-muted-foreground'>
-                      {/*
-                       * CDXC:OsIntegration 2026-06-24-15:10:
-                       * Settings must account for shared Launch Services status items without exposing raw OSStatus values or native paths. Show generic repair guidance and sanitized target/extension labels so the same UI works for Swift and GPUI senders.
-                       */}
-                      <div className='flex items-start gap-2'>
-                        <IconAlertTriangle aria-hidden='true' className='mt-0.5 shrink-0 text-destructive' size={16} />
-                        <div className='grid gap-1'>
-                          <div className='font-medium text-foreground'>
-                            {getOSIntegrationStatusNoticeTitle(statusItems)}
-                          </div>
-                          <div>{getOSIntegrationStatusNoticeDescription(statusItems)}</div>
-                        </div>
-                      </div>
+            <SettingsListItem title={loading && !status ? 'Checking macOS handlers...' : 'macOS handler status'}>
+              <SettingButton
+                className='h-8 px-3'
+                disabled={loading || !onRequestStatus}
+                disabledReason={
+                  loading ? 'macOS handler status is being checked.' : 'Status checks aren’t available here.'
+                }
+                onClick={onRequestStatus}
+                type='button'
+                variant='outline'
+              >
+                <IconRefresh aria-hidden='true' data-icon='inline-start' />
+                Refresh
+              </SettingButton>
+            </SettingsListItem>
+            {status ? (
+              <>
+                {statusItems.length > 0 ? (
+                  <div className='grid gap-2 rounded-[8px] border border-destructive/30 bg-destructive/5 p-3 text-[13px] text-muted-foreground'>
+                    {/*
+                     * CDXC:OsIntegration 2026-06-24-15:10:
+                     * Settings must account for shared Launch Services status items without exposing raw OSStatus values or native paths. Show generic repair guidance and sanitized target/extension labels so the same UI works for Swift and GPUI senders.
+                     */}
+                    <div className='flex items-start gap-2'>
+                      <IconAlertTriangle aria-hidden='true' className='mt-0.5 shrink-0 text-destructive' size={16} />
                       <div className='grid gap-1'>
-                        {visibleStatusItems.map((item, index) => (
-                          <div className='flex items-center justify-between gap-3' key={index}>
-                            <span>{formatOSIntegrationStatusItemSubject(item)}</span>
-                            <span className='text-right font-medium text-foreground'>
-                              {formatOSIntegrationStatusItemReason(item)}
-                            </span>
-                          </div>
-                        ))}
-                        {remainingStatusItemCount > 0 ? (
-                          <div className='text-muted-foreground'>
-                            {remainingStatusItemCount} more handler updates need attention.
-                          </div>
-                        ) : null}
+                        <div className='font-medium text-foreground'>
+                          {getOSIntegrationStatusNoticeTitle(statusItems)}
+                        </div>
+                        <div>{getOSIntegrationStatusNoticeDescription(statusItems)}</div>
                       </div>
                     </div>
-                  ) : null}
-                  <OSIntegrationDiagnosticRow
-                    label='Available editor'
-                    value={status.registeredEditableFiles ? 'Registered' : 'Missing'}
-                  />
-                  <OSIntegrationDiagnosticRow
-                    label='Available script runner'
-                    value={status.registeredScriptRunner ? 'Registered' : 'Missing'}
-                  />
-                  <OSIntegrationDiagnosticRow
-                    label='ghostex:// links'
-                    value={
-                      status.registeredGhostexURLScheme
-                        ? terminalDefault
-                          ? 'Default'
-                          : `Default: ${status.terminalLinkDefaultBundleId ?? 'None'}`
-                        : 'Missing'
-                    }
-                  />
-                  <OSIntegrationDiagnosticRow
-                    label='Editor defaults'
-                    value={`${editorDefaultCount}/${Object.keys(status.editorDefaults).length} sampled`}
-                  />
-                  <OSIntegrationDiagnosticRow
-                    label='Script defaults'
-                    value={`${scriptDefaultCount}/${Object.keys(status.scriptDefaults).length} sampled`}
-                  />
-                </div>
-              ) : (
-                <div>Ghostex has not checked Launch Services yet.</div>
-              )}
-            </div>
+                    <div className='grid gap-1'>
+                      {visibleStatusItems.map((item, index) => (
+                        <div className='flex items-center justify-between gap-3' key={index}>
+                          <span>{formatOSIntegrationStatusItemSubject(item)}</span>
+                          <span className='text-right font-medium text-foreground'>
+                            {formatOSIntegrationStatusItemReason(item)}
+                          </span>
+                        </div>
+                      ))}
+                      {remainingStatusItemCount > 0 ? (
+                        <div className='text-muted-foreground'>
+                          {remainingStatusItemCount} more handler updates need attention.
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+                <OSIntegrationDiagnosticRow
+                  label='Available editor'
+                  value={status.registeredEditableFiles ? 'Registered' : 'Missing'}
+                />
+                <OSIntegrationDiagnosticRow
+                  label='Available script runner'
+                  value={status.registeredScriptRunner ? 'Registered' : 'Missing'}
+                />
+                <OSIntegrationDiagnosticRow
+                  label='ghostex:// links'
+                  value={
+                    status.registeredGhostexURLScheme
+                      ? terminalDefault
+                        ? 'Default'
+                        : `Default: ${status.terminalLinkDefaultBundleId ?? 'None'}`
+                      : 'Missing'
+                  }
+                />
+                <OSIntegrationDiagnosticRow
+                  label='Editor defaults'
+                  value={`${editorDefaultCount}/${Object.keys(status.editorDefaults).length} sampled`}
+                />
+                <OSIntegrationDiagnosticRow
+                  label='Script defaults'
+                  value={`${scriptDefaultCount}/${Object.keys(status.scriptDefaults).length} sampled`}
+                />
+              </>
+            ) : (
+              <div className='text-sm text-muted-foreground'>Ghostex has not checked Launch Services yet.</div>
+            )}
           </SettingsSection>
         ) : null}
       </div>
@@ -267,9 +266,8 @@ export function formatOSIntegrationStatusItemReason(item: SidebarOSIntegrationSt
 
 export function OSIntegrationDiagnosticRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className='flex items-center justify-between gap-3'>
-      <span>{label}</span>
-      <span className='text-right font-medium text-foreground'>{value}</span>
-    </div>
+    <SettingsListItem title={label}>
+      <span className='text-right text-sm text-muted-foreground'>{value}</span>
+    </SettingsListItem>
   );
 }

@@ -4,7 +4,6 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import { Button } from '@/packages/components/ui/button';
 import { Command } from '@/packages/components/ui/command';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/packages/components/ui/empty';
-import { Field, FieldContent, FieldDescription, FieldLabel } from '@/packages/components/ui/field';
 import { SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import { Switch } from '@/packages/components/ui/switch';
 import { IconGripVertical, IconInfoCircle, IconPencil, IconPlus, IconTrash, IconX } from '@tabler/icons-react';
@@ -31,6 +30,7 @@ import {
 } from '../drag-data';
 import {
   SettingButton,
+  SettingRow,
   SettingsInput,
   SettingsNativeScrollArea,
   SettingsSection,
@@ -225,8 +225,8 @@ export function ActionsSettingsTab({
     <SettingsNativeScrollArea className='h-full min-h-0'>
       <div className='settings-page-width flex flex-col gap-6 px-5 pb-5'>
         {!hasConfiguredActions ? (
-          <div className='flex items-start gap-3 border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground'>
-            <IconInfoCircle aria-hidden='true' className='mt-0.5 size-4 shrink-0 text-foreground' />
+          <div className='flex items-start gap-3 px-1 text-[13px] leading-5 text-muted-foreground'>
+            <IconInfoCircle aria-hidden='true' className='mt-0.5 size-4 shrink-0 text-muted-foreground' />
             <p className='m-0'>
               Set frequently used terminal or browser commands here so you can run them with one click or a hotkey.
             </p>
@@ -395,7 +395,7 @@ export function ActionsSettingsSection({
     >
       {commands.length > 0 ? (
         <DragDropProvider onDragEnd={handleDragEnd}>
-          <div className='flex flex-col gap-2'>
+          <div className='settings-list-rows'>
             {commands.map((command, index) => (
               <SettingsCommandRow
                 command={command}
@@ -408,7 +408,7 @@ export function ActionsSettingsSection({
           </div>
         </DragDropProvider>
       ) : (
-        <Empty className='border border-border bg-muted/20'>
+        <Empty>
           <EmptyHeader>
             <EmptyTitle>{emptyTitle}</EmptyTitle>
             <EmptyDescription>{emptyDescription}</EmptyDescription>
@@ -446,7 +446,7 @@ export function SettingsCommandRow({
 
   return (
     <div
-      className='settings-management-row flex items-center gap-2 border border-border bg-muted/20 p-2'
+      className='settings-management-row flex min-h-14 items-center gap-2 py-1.5'
       data-dragging={String(Boolean(isDragging))}
       ref={setRowRef}
     >
@@ -473,7 +473,7 @@ export function SettingsCommandRow({
         </span>
         <span className='min-w-0 flex-1'>
           <span className='block truncate text-sm font-medium text-foreground'>{getActionTitle(command)}</span>
-          <span className='block truncate text-xs text-muted-foreground'>{getActionMeta(command)}</span>
+          <span className='block truncate text-[13px] text-muted-foreground'>{getActionMeta(command)}</span>
         </span>
       </Button>
       <span className='settings-management-row-actions'>
@@ -529,6 +529,7 @@ export function ActionSettingsEditor({
   const actionTypeId = useId();
   const closeTerminalOnExitId = useId();
   const commandId = useId();
+  const linksId = useId();
   const nameId = useId();
   const showOnProjectRowId = useId();
   const soundId = useId();
@@ -576,12 +577,7 @@ export function ActionSettingsEditor({
   return (
     <>
       {isActionTypeLocked ? null : (
-        <Field className='gap-2.5'>
-          <FieldContent>
-            <FieldLabel className='text-sm' htmlFor={actionTypeId}>
-              Type
-            </FieldLabel>
-          </FieldContent>
+        <SettingRow htmlFor={actionTypeId} label='Type'>
           <SettingsSelect
             onValueChange={(value) => {
               const nextActionType = value === 'browser' ? 'browser' : 'terminal';
@@ -592,45 +588,36 @@ export function ActionSettingsEditor({
             }}
             value={actionType}
           >
-            <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={actionTypeId}>
+            <SelectTrigger className='h-8 w-full px-3' id={actionTypeId}>
               <SelectValue />
             </SelectTrigger>
-            <SettingsSelectContent>
+            <SettingsSelectContent className='settings-list-select-content'>
               <SelectGroup>
                 <SelectItem value='terminal'>Terminal</SelectItem>
                 <SelectItem value='browser'>Browser</SelectItem>
               </SelectGroup>
             </SettingsSelectContent>
           </SettingsSelect>
-        </Field>
+        </SettingRow>
       )}
-      <Field className='gap-2.5' data-invalid={hasDuplicateTitle || undefined}>
-        <FieldContent>
-          <FieldLabel className='text-sm' htmlFor={nameId}>
-            Text
-          </FieldLabel>
-        </FieldContent>
+      <SettingRow
+        description={hasDuplicateTitle ? 'Another action already uses this title.' : undefined}
+        htmlFor={nameId}
+        label='Text'
+      >
         <SettingsInput
           autoFocus
           aria-invalid={hasDuplicateTitle || undefined}
-          className='h-8 px-3 text-[13px]'
+          className='settings-control-lane h-8 px-3'
           id={nameId}
           onChange={(event) => setName(event.currentTarget.value)}
           placeholder={actionType === 'browser' ? 'Docs' : 'Dev'}
           value={name}
         />
-        {hasDuplicateTitle ? (
-          <FieldDescription className='text-sm'>Another action already uses this title.</FieldDescription>
-        ) : null}
-      </Field>
+      </SettingRow>
       <CommandIconPicker icon={icon} onIconChange={setIcon} />
       {actionType === 'browser' ? (
-        <Field className='gap-2.5'>
-          <FieldContent>
-            <FieldLabel className='text-sm' htmlFor={urlId}>
-              URL
-            </FieldLabel>
-          </FieldContent>
+        <SettingRow htmlFor={urlId} label='URL' wide>
           <SettingsTextarea
             id={urlId}
             onChange={(event) => setUrl(event.currentTarget.value)}
@@ -638,15 +625,10 @@ export function ActionSettingsEditor({
             rows={3}
             value={url}
           />
-        </Field>
+        </SettingRow>
       ) : (
         <>
-          <Field className='gap-2.5'>
-            <FieldContent>
-              <FieldLabel className='text-sm' htmlFor={commandId}>
-                Command
-              </FieldLabel>
-            </FieldContent>
+          <SettingRow htmlFor={commandId} label='Command' wide>
             <SettingsTextarea
               id={commandId}
               onChange={(event) => setCommand(event.currentTarget.value)}
@@ -654,23 +636,13 @@ export function ActionSettingsEditor({
               rows={3}
               value={command}
             />
-          </Field>
-          <Field className='items-center justify-between' orientation='horizontal'>
-            <FieldContent>
-              <FieldLabel className='text-sm' htmlFor={closeTerminalOnExitId}>
-                Close terminal after the command finishes
-              </FieldLabel>
-            </FieldContent>
+          </SettingRow>
+          <SettingRow htmlFor={closeTerminalOnExitId} label='Close terminal after the command finishes'>
             <Switch checked={closeTerminalOnExit} id={closeTerminalOnExitId} onCheckedChange={setCloseTerminalOnExit} />
-          </Field>
-          <Field className='items-center justify-between' orientation='horizontal'>
-            <FieldContent>
-              <FieldLabel className='text-sm' htmlFor={soundId}>
-                Play completion sound
-              </FieldLabel>
-            </FieldContent>
+          </SettingRow>
+          <SettingRow htmlFor={soundId} label='Play completion sound'>
             <Switch checked={playCompletionSound} id={soundId} onCheckedChange={setPlayCompletionSound} />
-          </Field>
+          </SettingRow>
           {/*
            * CDXC:Projects 2026-07-31-12:00:
            * Terminal actions can open saved links whenever they run, so a dev
@@ -678,72 +650,69 @@ export function ActionSettingsEditor({
            * same click. Each link picks the project's integrated browser or the
            * user's default external browser.
            */}
-          <Field className='gap-2.5'>
-            <FieldContent>
-              <FieldLabel className='text-sm'>Open links when this action runs</FieldLabel>
-              <FieldDescription className='text-sm'>
-                Open saved URLs, like your dev server&apos;s localhost address, alongside the command. Each link can
-                open in the project&apos;s integrated browser or your default browser.
-              </FieldDescription>
-            </FieldContent>
-            {links.length > 0 ? (
-              <div className='flex flex-col gap-2'>
-                {links.map((link, index) => (
-                  <div className='flex items-center gap-2' key={index}>
-                    <SettingsInput
-                      aria-label={`Link ${index + 1} URL`}
-                      autoFocus={link.url.length === 0}
-                      className='h-8 min-w-0 flex-1 px-3 text-[13px]'
-                      onChange={(event) => updateLink(index, { url: event.currentTarget.value })}
-                      placeholder={DEFAULT_BROWSER_ACTION_URL}
-                      value={link.url}
-                    />
-                    <SettingsSelect
-                      onValueChange={(value) =>
-                        updateLink(index, {
-                          target: value === 'external' ? 'external' : 'integrated',
-                        })
-                      }
-                      value={link.target}
-                    >
-                      <SelectTrigger
-                        aria-label={`Link ${index + 1} target`}
-                        className='h-8 w-44 shrink-0 px-3 text-[13px]'
+          <SettingRow
+            description="Open saved URLs, like your dev server's localhost address, alongside the command. Each link can open in the project's integrated browser or your default browser."
+            htmlFor={linksId}
+            label='Open links when this action runs'
+            wide
+          >
+            <div className='flex flex-col gap-2' id={linksId}>
+              {links.length > 0 ? (
+                <div className='flex flex-col gap-2'>
+                  {links.map((link, index) => (
+                    <div className='flex items-center gap-2' key={index}>
+                      <SettingsInput
+                        aria-label={`Link ${index + 1} URL`}
+                        autoFocus={link.url.length === 0}
+                        className='h-8 min-w-0 flex-1 px-3'
+                        onChange={(event) => updateLink(index, { url: event.currentTarget.value })}
+                        placeholder={DEFAULT_BROWSER_ACTION_URL}
+                        value={link.url}
+                      />
+                      <SettingsSelect
+                        onValueChange={(value) =>
+                          updateLink(index, {
+                            target: value === 'external' ? 'external' : 'integrated',
+                          })
+                        }
+                        value={link.target}
                       >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SettingsSelectContent>
-                        <SelectGroup>
-                          <SelectItem value='integrated'>Integrated browser</SelectItem>
-                          <SelectItem value='external'>External browser</SelectItem>
-                        </SelectGroup>
-                      </SettingsSelectContent>
-                    </SettingsSelect>
-                    <Button
-                      aria-label={`Remove link ${index + 1}`}
-                      onClick={() =>
-                        setLinks((currentLinks) => currentLinks.filter((_, linkIndex) => linkIndex !== index))
-                      }
-                      size='icon-sm'
-                      type='button'
-                      variant='ghost'
-                    >
-                      <IconX aria-hidden='true' />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            <Button
-              className='self-start'
-              onClick={() => setLinks([...links, { target: 'integrated', url: '' }])}
-              type='button'
-              variant='outline'
-            >
-              <IconPlus aria-hidden='true' data-icon='inline-start' />
-              Add link
-            </Button>
-          </Field>
+                        <SelectTrigger aria-label={`Link ${index + 1} target`} className='h-8 w-44 shrink-0 px-3'>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SettingsSelectContent>
+                          <SelectGroup>
+                            <SelectItem value='integrated'>Integrated browser</SelectItem>
+                            <SelectItem value='external'>External browser</SelectItem>
+                          </SelectGroup>
+                        </SettingsSelectContent>
+                      </SettingsSelect>
+                      <Button
+                        aria-label={`Remove link ${index + 1}`}
+                        onClick={() =>
+                          setLinks((currentLinks) => currentLinks.filter((_, linkIndex) => linkIndex !== index))
+                        }
+                        size='icon-sm'
+                        type='button'
+                        variant='ghost'
+                      >
+                        <IconX aria-hidden='true' />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <Button
+                className='self-start'
+                onClick={() => setLinks([...links, { target: 'integrated', url: '' }])}
+                type='button'
+                variant='outline'
+              >
+                <IconPlus aria-hidden='true' data-icon='inline-start' />
+                Add link
+              </Button>
+            </div>
+          </SettingRow>
         </>
       )}
       {/*
@@ -751,14 +720,9 @@ export function ActionSettingsEditor({
        * Both terminal and browser actions can opt into the project's sidebar
        * row, so this toggle lives outside the action-type branch above.
        */}
-      <Field className='items-center justify-between' orientation='horizontal'>
-        <FieldContent>
-          <FieldLabel className='text-sm' htmlFor={showOnProjectRowId}>
-            Show on the project&apos;s sidebar row
-          </FieldLabel>
-        </FieldContent>
+      <SettingRow htmlFor={showOnProjectRowId} label="Show on the project's sidebar row">
         <Switch checked={showOnProjectRow} id={showOnProjectRowId} onCheckedChange={setShowOnProjectRow} />
-      </Field>
+      </SettingRow>
       {/*
        * CDXC:AgentLauncher 2026-06-18-10:11:
        * Settings > Actions must let users delete any selected action from the edit surface itself, including default Build/Test actions whose deletion is represented by deletedDefaultCommandIds. Keep this wired to the same deleteSidebarCommand path as the row trash button so default and custom actions share one behavior.

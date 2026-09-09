@@ -9,14 +9,7 @@ import { InputGroup, InputGroupAddon } from './input-group';
 import './searchable-dropdown.css';
 
 import { cn } from '../utils';
-import {
-  IconSelector,
-  IconCheck,
-  IconChevronUp,
-  IconChevronDown,
-  IconSearch,
-  IconX,
-} from '@tabler/icons-react';
+import { IconSelector, IconChevronUp, IconChevronDown, IconSearch, IconX } from '@tabler/icons-react';
 import { OverlayLayerContext, overlayTooltipBorderStyle } from './overlay-surface';
 
 type SelectProps = Omit<SelectPrimitive.Root.Props<string>, 'onValueChange' | 'onOpenChange'> & {
@@ -186,24 +179,14 @@ function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
     if (!collectSelectItems(props.children).some((item) => search.visibleValues.has(item.value))) return null;
     return <Combobox.Group data-slot='select-group' className={cn('p-1', className)} {...props} />;
   }
-  return (
-    <SelectPrimitive.Group
-      data-slot='select-group'
-      className={cn('scroll-my-1.5 p-1', className)}
-      {...props}
-    />
-  );
+  return <SelectPrimitive.Group data-slot='select-group' className={cn('scroll-my-1.5 p-1', className)} {...props} />;
 }
 
 function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   const search = React.useContext(SearchableSelectContext);
   if (search) return <SearchableSelectValue className={className} {...props} />;
   return (
-    <SelectPrimitive.Value
-      data-slot='select-value'
-      className={cn('flex flex-1 text-left', className)}
-      {...props}
-    />
+    <SelectPrimitive.Value data-slot='select-value' className={cn('flex flex-1 text-left', className)} {...props} />
   );
 }
 
@@ -231,9 +214,7 @@ function SearchableSelectValue({
       children:
         typeof children === 'function'
           ? children(search.value)
-          : (children ??
-            (search.value === null ? undefined : search.labels.get(search.value)) ??
-            placeholder),
+          : (children ?? (search.value === null ? undefined : search.labels.get(search.value)) ?? placeholder),
     },
   });
 }
@@ -262,9 +243,7 @@ function SelectTrigger({
       {search ? (
         <IconChevronDown className='pointer-events-none size-4 text-muted-foreground' />
       ) : (
-        <SelectPrimitive.Icon
-          render={<IconSelector className='pointer-events-none size-4 text-muted-foreground' />}
-        />
+        <SelectPrimitive.Icon render={<IconSelector className='pointer-events-none size-4 text-muted-foreground' />} />
       )}
     </Trigger>
   );
@@ -280,11 +259,7 @@ function SearchableSelectTrigger({ render, style, className, ...props }: SelectP
   return (
     <Combobox.Trigger
       {...props}
-      render={
-        typeof render === 'function'
-          ? (elementProps, state) => render(elementProps, selectState(state))
-          : render
-      }
+      render={typeof render === 'function' ? (elementProps, state) => render(elementProps, selectState(state)) : render}
       style={typeof style === 'function' ? (state) => style(selectState(state)) : style}
       className={typeof className === 'function' ? (state) => className(selectState(state)) : className}
     />
@@ -304,10 +279,7 @@ function SelectContent({
   style,
   ...props
 }: SelectPrimitive.Popup.Props &
-  Pick<
-    SelectPrimitive.Positioner.Props,
-    'align' | 'alignOffset' | 'side' | 'sideOffset' | 'alignItemWithTrigger'
-  > & {
+  Pick<SelectPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset' | 'alignItemWithTrigger'> & {
     header?: React.ReactNode;
     showScrollButtons?: boolean;
   }) {
@@ -397,7 +369,7 @@ function SelectContent({
                * forms. Keep their overflow cue consistent with the sidebar's
                * Codex-style scroll-container fade.
                */
-              'vertical-scroll-fade-mask relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-lg duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+              'vertical-scroll-fade-mask relative isolate z-50 max-h-(--available-height) w-(--anchor-width) origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-lg duration-100 data-[align-trigger=true]:animate-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
               className
             )}
             style={{ ...overlayTooltipBorderStyle, ...style }}
@@ -448,9 +420,6 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
         {...itemProps}
       >
         <span className='searchable-dropdown-item-label'>{children}</span>
-        <Combobox.ItemIndicator className='ml-auto shrink-0'>
-          <IconCheck size={16} />
-        </Combobox.ItemIndicator>
       </Combobox.Item>
     );
   }
@@ -458,21 +427,18 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
     <SelectPrimitive.Item
       data-slot='select-item'
       className={cn(
-        "relative flex min-h-7 w-full cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        /*
+         * CDXC:DesignSystem 2026-09-09 DECISION:
+         * User: select rows carry no check mark. The selected row is marked by a different background instead, so the popup can match the trigger width exactly.
+         */
+        "relative flex min-h-7 w-full cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className
       )}
       {...props}
     >
-      <SelectPrimitive.ItemText className='flex flex-1 shrink-0 gap-2 whitespace-nowrap'>
+      <SelectPrimitive.ItemText className='flex min-w-0 flex-1 gap-2 overflow-hidden text-ellipsis whitespace-nowrap'>
         {children}
       </SelectPrimitive.ItemText>
-      <SelectPrimitive.ItemIndicator
-        render={
-          <span className='pointer-events-none absolute right-2 flex size-4 items-center justify-center' />
-        }
-      >
-        <IconCheck className='pointer-events-none' />
-      </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   );
 }
@@ -480,9 +446,7 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
 function SelectSeparator({ className, ...props }: SelectPrimitive.Separator.Props) {
   const search = React.useContext(SearchableSelectContext);
   if (search)
-    return (
-      <Separator data-slot='select-separator' className={cn('my-1 h-px bg-border', className)} {...props} />
-    );
+    return <Separator data-slot='select-separator' className={cn('my-1 h-px bg-border', className)} {...props} />;
   return (
     <SelectPrimitive.Separator
       data-slot='select-separator'
@@ -492,10 +456,7 @@ function SelectSeparator({ className, ...props }: SelectPrimitive.Separator.Prop
   );
 }
 
-function SelectScrollUpButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.ScrollUpArrow>) {
+function SelectScrollUpButton({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.ScrollUpArrow>) {
   return (
     <SelectPrimitive.ScrollUpArrow
       data-slot='select-scroll-up-button'
@@ -510,10 +471,7 @@ function SelectScrollUpButton({
   );
 }
 
-function SelectScrollDownButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.ScrollDownArrow>) {
+function SelectScrollDownButton({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.ScrollDownArrow>) {
   return (
     <SelectPrimitive.ScrollDownArrow
       data-slot='select-scroll-down-button'

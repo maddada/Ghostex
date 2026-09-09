@@ -587,10 +587,7 @@ describe('settings modal source', () => {
      * trash action should not be available from this page.
      */
     const projectsPanel = sourceFrom(settingsModalProjectsTabSource, 'function ProjectsSettingsPanel');
-    const selectedProjectEditor = sourceFrom(
-      settingsModalProjectsTabSource,
-      "<Card className='settings-project-command-card'>"
-    );
+    const selectedProjectEditor = sourceFrom(settingsModalProjectsTabSource, "<SettingsSection title='Project'>");
 
     expect(projectsPanel).not.toContain("type: 'removeProject'");
     expect(projectsPanel).not.toContain('removeSelectedProject');
@@ -615,7 +612,7 @@ describe('settings modal source', () => {
 
     expect(projectsPanel).not.toContain('<PortlessGlobalSettingsPanel');
     expect(settingsModalProjectsTabSource).not.toContain("from './portless'");
-    expect(projectsPanel).toContain("className='projects-settings-selector'");
+    expect(projectsPanel).toContain("className='projects-settings-selector-trigger'");
     expect(settingsModalProjectsTab).not.toContain('portless={portless}');
     expect(settingsModalStylesSource).toContain('.settings-projects-global-settings');
   });
@@ -720,11 +717,7 @@ describe('settings modal source', () => {
       'const ADVANCED_MAIN_SETTING_KEYS',
       'type HotkeySettingsSectionId'
     );
-    const appIconSearch = sourceBetween(
-      settingsModalSearchCatalogSource,
-      "appIcon: getSettingsSectionSearch(settingsSearchQuery, 'App Icon', [",
-      "browser: getSettingsSectionSearch(settingsSearchQuery, 'Browser', ["
-    );
+    const appIconSearch = sourceBetween(settingsModalSearchCatalogSource, 'appIcon: {', 'fileOpening: {');
     const appIconField = sourceBetween(settingsModalFieldsSource, 'function AppIconPickerField', 'function SoundField');
 
     // Section is registered as advanced and grouped under Appearance.

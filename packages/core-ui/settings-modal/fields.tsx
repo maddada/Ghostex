@@ -5,16 +5,8 @@ import { flushSync } from 'react-dom';
 import ColorPicker from 'react-best-gradient-color-picker';
 import { cn } from '@/packages/components/utils';
 import { Button } from '@/packages/components/ui/button';
-import { Card, CardContent, CardTitle } from '@/packages/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
-import {
-  Field,
-  FieldContent,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-  FieldTitle,
-} from '@/packages/components/ui/field';
+import { FieldLabel } from '@/packages/components/ui/field';
 import { Input as BaseInput } from '@/packages/components/ui/input';
 import {
   Select,
@@ -318,6 +310,7 @@ export function TerminalDevServerIgnoredPortsField({
       htmlFor={id}
       isModified={isModified}
       label='Ignored ports'
+      wide
       onResetToDefault={onResetToDefault}
     >
       <div className='grid gap-3' id={id}>
@@ -348,7 +341,7 @@ export function TerminalDevServerIgnoredPortsField({
           <SettingsInput
             aria-invalid={Boolean(error)}
             aria-label='Ignored port or range'
-            className='h-8 min-w-0 flex-1 px-3 text-[13px]'
+            className='h-8 min-w-0 flex-1 px-3'
             onChange={(event) => {
               setInputValue(event.currentTarget.value);
               if (error) {
@@ -385,6 +378,11 @@ export function TerminalDevServerIgnoredPortsField({
   );
 }
 
+/**
+ * CDXC:Settings 2026-09-09 DECISION:
+ * User: every Settings page and section shares one style, the grouped-list prototype: a plain group heading above a raised card, one setting per row with its label on the left and its control on the right, rows separated by hairlines, no floating title pill and no visible subtitle text.
+ * The older stacked card (label above a full-width control) is gone; anything that needs the full row width uses `SettingRow wide` instead.
+ */
 export function SettingsSection({
   actions,
   children,
@@ -401,50 +399,54 @@ export function SettingsSection({
   title: string;
 }) {
   return (
-    <div className='settings-section-anchor' ref={sectionRef}>
-      <Card
-        className={cn(
-          'settings-section-card relative mt-5 overflow-visible pb-[25px] pt-8',
-          actions && 'settings-section-with-actions'
-        )}
-        size='sm'
-      >
-        {/* CDXC:Settings 2026-04-26-12:31: The target settings examples stack the
-          text above controls. Keeping rows vertical avoids squeezing labels in
-          the narrow ghostex sidebar modal. */}
-        {/* CDXC:Settings 2026-04-26-21:00: Settings sections need extra space
-          above each header, while adjacent settings should separate by rhythm
-          instead of divider lines. */}
-        {/* CDXC:Settings 2026-04-26-21:03: Each settings category is a distinct
-          shadcn card. The heading is larger and sits over the top border so
-          the card reads as a labeled group without reintroducing row dividers. */}
-        {/* CDXC:Settings 2026-04-26-21:22: Section card labels must stay on one
-          line and clear the card contents, including multi-word headings like
-          Session Cards. */}
-        {/* CDXC:Settings 2026-04-27-01:01: The title pill cannot use shadcn
-          CardHeader because its container-query size containment makes
-          max-content resolve to the padding width instead of the text width. */}
-        {/* CDXC:Settings 2026-06-12-21:00: Settings section cards need exactly
-          25px of total bottom space between their last row and the card border,
-          matching the compact bordered card style used by Agent Hooks and
-          adjacent grouped settings sections. */}
-        <div className='settings-section-title-pill'>
-          <CardTitle className='settings-section-title-pill-text'>{title}</CardTitle>
-        </div>
-        {/* CDXC:Settings 2026-05-09-17:01: Agents and Actions management
-          controls belong in the section header row. Action creation labels omit
-          "Add", while the agent creation CTA keeps "Add Agent" per product
-          requirements. */}
-        {actions ? <div className='settings-section-header-actions'>{actions}</div> : null}
-        <CardContent className='pt-2'>
+    <div className='settings-section-anchor settings-list-section' ref={sectionRef}>
+      <div className='settings-list-section-header'>
+        <div className='settings-list-section-heading'>
+          <h3 className='settings-list-section-title'>{title}</h3>
           {description ? (
-            <p className={cn('m-0 pb-5 text-sm leading-6 text-muted-foreground', descriptionClassName)}>
-              {description}
-            </p>
+            <p className={cn('settings-list-section-description', descriptionClassName)}>{description}</p>
           ) : null}
-          <FieldGroup className='gap-6'>{children}</FieldGroup>
-        </CardContent>
-      </Card>
+        </div>
+        {actions ? <div className='settings-list-section-actions'>{actions}</div> : null}
+      </div>
+      <div className='settings-list-card'>{children}</div>
+    </div>
+  );
+}
+
+/**
+ * A non-form row inside a settings list card: management lists (agents,
+ * actions, open targets, storage folders, diagnostics) render one of these per
+ * item so they share the setting rows' geometry and hairlines. `detail` is the
+ * item's own data (a command, a path, a status), not a setting subtitle.
+ */
+export function SettingsListItem({
+  children,
+  className,
+  detail,
+  icon,
+  status,
+  title,
+  ...props
+}: Omit<ComponentProps<'div'>, 'title'> & {
+  detail?: ReactNode;
+  icon?: ReactNode;
+  /**
+   * CDXC:Settings 2026-09-09 DECISION:
+   * User: rows do not spell out Installed or Permissions Allowed in a pill. State is a small dot before the icon, the way the Extensions page marks enabled views.
+   */
+  status?: 'success' | 'warning' | 'neutral';
+  title: ReactNode;
+}) {
+  return (
+    <div className={cn('settings-list-row settings-list-item', className)} {...props}>
+      {status ? <span aria-hidden='true' className='settings-list-item-status' data-tone={status} /> : null}
+      {icon ? <span className='settings-list-item-icon'>{icon}</span> : null}
+      <div className='settings-list-row-text'>
+        <span className='settings-list-row-label settings-list-item-title'>{title}</span>
+        {detail ? <span className='settings-list-row-detail'>{detail}</span> : null}
+      </div>
+      {children !== undefined && children !== null ? <div className='settings-list-row-control'>{children}</div> : null}
     </div>
   );
 }
@@ -518,7 +520,7 @@ export function SliderNumberField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className='grid grid-cols-[minmax(0,1fr)_4.75rem] items-center gap-3'>
+      <div className='settings-slider-number grid grid-cols-[minmax(0,1fr)_4.75rem] items-center gap-3'>
         <Slider
           aria-label={label}
           max={max}
@@ -530,7 +532,7 @@ export function SliderNumberField({
         />
         <SettingsInput
           id={id}
-          className='h-8 px-3 text-[13px] tabular-nums'
+          className='h-8 px-3 tabular-nums'
           onBlur={(event) => commitValue(Number(event.currentTarget.value))}
           onChange={(event) => updateInputText(event.currentTarget.value)}
           onFocus={(event) => event.currentTarget.select()}
@@ -586,7 +588,7 @@ export function ActionButtonField({
   const id = useId();
   return (
     <SettingRow advanced={advanced} description={description} htmlFor={id} label={label}>
-      <Button className='h-8 w-full justify-start px-3 text-[13px]' id={id} onClick={onClick} type='button'>
+      <Button className='h-8 px-3' id={id} onClick={onClick} type='button'>
         {children}
       </Button>
     </SettingRow>
@@ -607,10 +609,10 @@ export function ActionButtonPairField({
   const id = useId();
   return (
     <SettingRow advanced={advanced} description={description} htmlFor={id} label={label}>
-      <div className='grid w-full grid-cols-1 gap-2 sm:grid-cols-2'>
+      <div className='flex flex-wrap justify-end gap-2'>
         {actions.map((action, index) => (
           <Button
-            className='h-8 w-full justify-center px-3 text-center text-[13px]'
+            className='h-8 px-3'
             id={index === 0 ? id : undefined}
             key={action.label}
             onClick={action.onClick}
@@ -670,10 +672,13 @@ export function SelectField({
         onValueChange={onChange}
         value={value}
       >
-        <SelectTrigger className='h-8 w-full px-3 text-[13px]' disabled={disabled} id={id}>
+        <SelectTrigger className='h-8 w-full px-3' disabled={disabled} id={id}>
           <SelectValue />
         </SelectTrigger>
-        <SettingsSelectContent className={contentClassName} showScrollButtons={showScrollButtons}>
+        <SettingsSelectContent
+          className={cn('settings-list-select-content', contentClassName)}
+          showScrollButtons={showScrollButtons}
+        >
           <SelectGroup>
             {options.map((option) => (
               <SelectItem key={option.value} value={option.value}>
@@ -740,13 +745,13 @@ export function PetPickerField({
       label='Pet'
       onResetToDefault={onResetToDefault}
     >
-      <div className='flex min-w-0 items-center gap-3'>
+      <div className='settings-control-lane flex min-w-0 items-center gap-3'>
         <div className='flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-none border border-border bg-muted/30'>
           <PetAvatar className='scale-[0.42]' petId={selectedPet.id} />
         </div>
         <div className='flex min-w-0 flex-1 flex-col gap-2'>
           <SettingsSelect onValueChange={(nextValue) => onChange(nextValue as PetId)} value={value}>
-            <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={id}>
+            <SelectTrigger className='h-8 w-full px-3' id={id}>
               <SelectValue />
             </SelectTrigger>
             <SettingsSelectContent>
@@ -759,7 +764,7 @@ export function PetPickerField({
               </SelectGroup>
             </SettingsSelectContent>
           </SettingsSelect>
-          <div className='truncate text-xs text-muted-foreground'>{selectedPet.description}</div>
+          <div className='truncate text-[13px] text-muted-foreground'>{selectedPet.description}</div>
         </div>
       </div>
     </SettingRow>
@@ -802,6 +807,7 @@ export function AppIconPickerField({
       description='Choose a PNG for the macOS Dock and app-switcher icon.'
       htmlFor={id}
       label='Custom app icon'
+      wide
     >
       <div className='flex min-w-0 flex-col gap-3'>
         <div className='flex min-w-0 items-center gap-3'>
@@ -842,14 +848,14 @@ export function AppIconPickerField({
               <IconDownload aria-hidden='true' data-icon='inline-start' />
               Select Image
             </Button>
-            <div className='truncate text-xs text-muted-foreground'>
+            <div className='truncate text-[13px] text-muted-foreground'>
               {isDefaultSelected ? 'Using the bundled Ghostex icon.' : (selectedIcon?.name ?? selectedId)}
             </div>
           </div>
         </div>
 
         {error ? (
-          <div className='flex items-start gap-2 rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive'>
+          <div className='flex items-start gap-2 rounded-none border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13px] text-destructive'>
             <IconAlertTriangle aria-hidden='true' className='mt-0.5 size-4 shrink-0' />
             <span className='min-w-0'>{error}</span>
           </div>
@@ -899,9 +905,9 @@ export function SoundField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className='grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2'>
+      <div className='settings-control-lane grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-2'>
         <SettingsSelect onValueChange={(nextValue) => onChange(nextValue as CompletionSoundPreference)} value={value}>
-          <SelectTrigger className='h-8 w-full px-3 text-[13px]' id={id}>
+          <SelectTrigger className='h-8 w-full px-3' id={id}>
             <SelectValue />
           </SelectTrigger>
           <SettingsSelectContent className='max-h-72' showScrollButtons={false}>
@@ -998,10 +1004,10 @@ export function TextField({
       onResetToDefault={onResetToDefault}
     >
       {onBrowse ? (
-        <div className='grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2'>
+        <div className='settings-control-lane grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2'>
           <SettingsInput
             id={id}
-            className='h-8 px-3 text-[13px]'
+            className='h-8 px-3'
             onBlur={(event) => updateInputValue(event.currentTarget.value)}
             onChange={(event) => updateInputValue(event.currentTarget.value)}
             placeholder={placeholder}
@@ -1029,7 +1035,7 @@ export function TextField({
       ) : (
         <SettingsInput
           id={id}
-          className='h-8 px-3 text-[13px]'
+          className='settings-control-lane h-8 px-3'
           onBlur={(event) => updateInputValue(event.currentTarget.value)}
           onChange={(event) => updateInputValue(event.currentTarget.value)}
           placeholder={placeholder}
@@ -1054,9 +1060,9 @@ export function DisabledCommandPreviewField({
 }) {
   const id = useId();
   return (
-    <SettingRow advanced={advanced} description={description} htmlFor={id} label={label}>
+    <SettingRow advanced={advanced} description={description} htmlFor={id} label={label} wide>
       <SettingsTextarea
-        className='min-h-24 resize-none px-3 py-2 font-mono text-xs leading-5'
+        className='min-h-24 resize-none px-3 py-2 font-mono text-[13px] leading-5'
         disabled
         id={id}
         readOnly
@@ -1092,7 +1098,7 @@ export function ColorField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className='grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-3'>
+      <div className='settings-control-lane grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-3'>
         <SettingsInput
           aria-label={`${label} picker`}
           className='h-8 cursor-pointer rounded-none p-1'
@@ -1102,7 +1108,7 @@ export function ColorField({
         />
         <SettingsInput
           id={id}
-          className='h-8 px-3 text-[13px]'
+          className='h-8 px-3'
           onChange={(event) => onChange(event.currentTarget.value)}
           value={value}
         />
@@ -1192,6 +1198,7 @@ export function WebColorPickerField({
       isModified={isModified}
       label={label}
       onResetToDefault={onResetToDefault}
+      wide
     >
       {/*
         CDXC:Theming 2026-06-15-15:28:
@@ -1254,7 +1261,7 @@ export function WebColorPickerField({
         <AppTooltip content='Pick custom tint color'>
           <Button
             aria-label={`${label} custom color picker`}
-            className='h-8 min-w-0 gap-2 px-2 text-xs'
+            className='h-8 min-w-0 gap-2 px-2'
             onClick={() => {
               setPickerValue(colorValue);
               setPickerOpen(true);
@@ -1317,7 +1324,7 @@ export function WebColorPickerField({
         </Dialog>
         <SettingsInput
           aria-label={`${label} hex color`}
-          className='h-8 min-w-0 flex-1 px-2 font-mono text-xs uppercase'
+          className='h-8 min-w-0 flex-1 px-2 font-mono uppercase'
           id={id}
           inputMode='text'
           onBlur={() => commitColor(colorText)}
@@ -1390,13 +1397,13 @@ export function SidebarPresetField({
       label={label}
       onResetToDefault={onResetToDefault}
     >
-      <div className='flex flex-col gap-2'>
+      <div className='flex items-center gap-3'>
+        {activePresetId ? null : <span className='text-[13px] text-muted-foreground'>Custom</span>}
         <SegmentedControl
           aria-label={label}
           onValueChange={(nextPresetId) => {
             onChange(nextPresetId as SidebarSettingsPresetId);
           }}
-          stretch
           value={activePresetId ?? ''}
         >
           {SIDEBAR_SETTINGS_PRESETS.map((preset, index) => (
@@ -1410,7 +1417,6 @@ export function SidebarPresetField({
             </SegmentedControlItem>
           ))}
         </SegmentedControl>
-        {activePresetId ? null : <span className='text-sm text-muted-foreground'>Custom</span>}
       </div>
     </SettingRow>
   );
@@ -1446,7 +1452,6 @@ export function SidebarProjectGroupStyleField({
         onValueChange={(nextValue) => {
           onChange(nextValue as SidebarProjectGroupStyle);
         }}
-        stretch
         value={value}
       >
         {SIDEBAR_PROJECT_GROUP_STYLE_OPTIONS.map((option, index) => (
@@ -1492,7 +1497,6 @@ export function TerminalViewWidthModeField({
       <SegmentedControl
         aria-label={label}
         onValueChange={(nextValue) => onChange(nextValue as TerminalViewWidthMode)}
-        stretch
         value={value}
       >
         {TERMINAL_VIEW_WIDTH_MODE_OPTIONS.map((option, index) => (
@@ -1546,7 +1550,6 @@ export function SidebarSpacesField({
         onValueChange={(nextValue) => {
           onChange(nextValue === 'on');
         }}
-        stretch
         value={value ? 'on' : 'off'}
       >
         {SIDEBAR_SPACES_ENABLED_OPTIONS.map((option, index) => (
@@ -1591,7 +1594,6 @@ export function PreferredAgentInterfaceField({
         onValueChange={(nextInterface) => {
           onChange(nextInterface as PreferredAgentInterface);
         }}
-        stretch
         value={value}
       >
         {PREFERRED_AGENT_INTERFACE_OPTIONS.map((option, index) => (
@@ -1636,7 +1638,6 @@ export function SessionChatThemeField({
         onValueChange={(nextValue) => {
           onChange(nextValue as SessionChatTheme);
         }}
-        stretch
         value={value}
       >
         {SESSION_CHAT_THEME_OPTIONS.map((option, index) => (
@@ -1713,6 +1714,7 @@ export function DiagnosticLoggingSettingsField({
       htmlFor={`${idBase}-native-terminal-focus`}
       isModified={isModified}
       label='Diagnostic disk logging scenarios'
+      wide
       onResetToDefault={onResetToDefault}
     >
       <div className='grid gap-4'>
@@ -1720,7 +1722,7 @@ export function DiagnosticLoggingSettingsField({
           const scenarios = DIAGNOSTIC_LOGGING_SCENARIOS.filter((scenario) => scenario.group === group);
           return (
             <div className='grid gap-2' key={group}>
-              <div className='text-xs font-medium uppercase tracking-normal text-muted-foreground'>{group}</div>
+              <div className='text-[13px] text-muted-foreground'>{group}</div>
               <div className='grid gap-2'>
                 {scenarios.map((scenario) => {
                   const scenarioId = scenario.id as DiagnosticLoggingScenarioId;
@@ -1737,7 +1739,7 @@ export function DiagnosticLoggingSettingsField({
                           <FieldLabel className='text-sm' htmlFor={switchId}>
                             {scenario.label}
                           </FieldLabel>
-                          <div className='mt-0.5 break-words text-xs text-muted-foreground'>
+                          <div className='mt-0.5 break-words text-[13px] text-muted-foreground'>
                             {scenario.logFiles.join(', ')}
                           </div>
                         </div>
@@ -1914,18 +1916,19 @@ export function SidebarTagListSettingsField({
        * The expanded Sidebar Tags list should attach directly to the disclosure
        * header; no vertical gutter belongs between the header and its rows.
        */}
-      <summary className='settings-management-row flex cursor-pointer list-none items-center justify-between gap-3 border border-border bg-muted/20 px-3 py-3 marker:hidden [&::-webkit-details-marker]:hidden'>
+      <summary className='settings-row settings-management-row flex cursor-pointer list-none items-center justify-between gap-3 py-1 marker:hidden [&::-webkit-details-marker]:hidden'>
         <div className='flex min-w-0 flex-1 items-center gap-2.5'>
           <IconChevronRight
             aria-hidden='true'
             className='size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-90'
           />
-          <FieldContent className='min-w-0 gap-1'>
-            <FieldLabel className='text-sm'>Tag filter list</FieldLabel>
-            <FieldDescription className='text-xs text-muted-foreground'>
-              Reorder, hide, or disable sidebar tag filters and separators.
-            </FieldDescription>
-          </FieldContent>
+          <span className='settings-row-label-line'>
+            <span className='settings-list-row-label'>Tag filter list</span>
+            <SettingDescriptionTooltip
+              description='Reorder, hide, or disable sidebar tag filters and separators.'
+              label='Tag filter list'
+            />
+          </span>
         </div>
         <SettingButton
           disabled={!isModified}
@@ -1941,7 +1944,7 @@ export function SidebarTagListSettingsField({
           Reset to Default
         </SettingButton>
       </summary>
-      <div className='border border-border/80 bg-muted/10 p-3'>
+      <div className='pt-3'>
         <DragDropProvider onDragEnd={handleDragEnd}>
           <div className='flex w-full flex-col gap-2'>
             {normalizedItems.map((item, index) => (
@@ -2091,8 +2094,10 @@ export function SettingRow({
   htmlFor,
   isModified,
   label,
+  labelAddon,
   onResetToDefault,
   subtitle,
+  wide,
 }: {
   advanced?: boolean;
   /** Rows for newly shipped settings may carry a short label badge. */
@@ -2102,33 +2107,39 @@ export function SettingRow({
   htmlFor: string;
   isModified?: boolean;
   label: string;
+  /** Extra inline content after the label, such as an Inherited badge. */
+  labelAddon?: ReactNode;
   onResetToDefault?: () => void;
   subtitle?: string;
+  /** Put the control on its own full-width line under the label (textareas, pickers, lists). */
+  wide?: boolean;
 }) {
+  /*
+   * CDXC:Settings 2026-09-09 DECISION:
+   * User: rows show no subtitle text. The description (and any subtitle) lives only in the tooltip behind the hover-revealed info icon next to the label.
+   */
+  const tooltipText = [description, subtitle].filter(Boolean).join('\n\n');
   return (
-    <Field className='settings-row gap-2.5' orientation='vertical'>
-      <FieldContent>
-        <FieldTitle className='settings-row-title text-sm'>
-          <span className='settings-row-label-line'>
-            {isModified && onResetToDefault ? (
-              <ModifiedSettingResetButton label={label} onResetToDefault={onResetToDefault} />
-            ) : null}
-            <FieldLabel className='text-sm' htmlFor={htmlFor}>
-              {label}
-            </FieldLabel>
-            {badge ? (
-              /* The badge uses the modal theme tokens and a quiet raised chip. */
-              <span className='settings-row-badge inline-flex px-1.5 py-0.5 text-[11px] font-normal'>{badge}</span>
-            ) : null}
-            {advanced ? <AdvancedSettingTooltip label={label} /> : null}
-            {description ? <SettingDescriptionTooltip description={description} label={label} /> : null}
-          </span>
-        </FieldTitle>
-        {subtitle ? <FieldDescription className='settings-row-subtitle'>{subtitle}</FieldDescription> : null}
-        {description ? <FieldDescription className='sr-only'>{description}</FieldDescription> : null}
-      </FieldContent>
-      <div className='min-w-0'>{children}</div>
-    </Field>
+    <div className={cn('settings-row settings-list-row', wide && 'settings-list-row-wide')} role='group'>
+      <div className='settings-list-row-text'>
+        <span className='settings-row-label-line'>
+          {isModified && onResetToDefault ? (
+            <ModifiedSettingResetButton label={label} onResetToDefault={onResetToDefault} />
+          ) : null}
+          <FieldLabel className='settings-list-row-label' htmlFor={htmlFor}>
+            {label}
+          </FieldLabel>
+          {labelAddon}
+          {badge ? (
+            <span className='settings-row-badge inline-flex px-1.5 py-0.5 text-[11px] font-normal'>{badge}</span>
+          ) : null}
+          {advanced ? <AdvancedSettingTooltip label={label} /> : null}
+          {tooltipText ? <SettingDescriptionTooltip description={tooltipText} label={label} /> : null}
+        </span>
+        {tooltipText ? <span className='sr-only'>{tooltipText}</span> : null}
+      </div>
+      <div className='settings-list-row-control'>{children}</div>
+    </div>
   );
 }
 

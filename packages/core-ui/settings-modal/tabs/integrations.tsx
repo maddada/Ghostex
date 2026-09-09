@@ -1,29 +1,22 @@
-import { useState, type ReactNode } from 'react';
-import { cn } from '@/packages/components/utils';
+import { useId, useState, type ReactNode } from 'react';
 import { Button } from '@/packages/components/ui/button';
-import { Field, FieldContent, FieldDescription, FieldTitle } from '@/packages/components/ui/field';
 import { SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import { Switch } from '@/packages/components/ui/switch';
 import { AppTooltip } from '../../app-tooltip';
-import {
-  IconDeviceDesktop,
-  IconDownload,
-  IconInfoCircle,
-  IconRefresh,
-  IconSettings,
-  IconTerminal2,
-} from '@tabler/icons-react';
+import { IconDeviceDesktop, IconDownload, IconInfoCircle, IconRefresh, IconTerminal2 } from '@tabler/icons-react';
 import { type SidebarGhostexCliStatusMessage } from '../../../shared/session-grid-contract';
 import { APP_SHOTS_HOTKEY_OPTIONS, type AppShotsHotkey } from '../../../shared/ghostex-settings';
 import { type BundledGhostexAgentSkillId } from '../../../shared/ghostex-agent-skills';
-import { BundledAgentSkillsPanel } from '../../bundled-agent-skills-panel';
+import { AgentSkillsSection, DesktopControlSection, IntegrationRowTitle } from './integration-skills';
 import {
   SettingButton,
-  SettingSwitch,
+  SettingRow,
+  SettingsListItem,
   SettingsNativeScrollArea,
   SettingsSection,
   SettingsSelect,
   SettingsSelectContent,
+  SettingSwitch,
 } from '../fields';
 import {
   SettingsTabSearch,
@@ -110,6 +103,7 @@ export function IntegrationsSettingsTab({
   onInstallGenerateTitleSkill,
   onInstallGhostexCli,
   onInstallMoveCodexSessionSkill,
+  onInstallHelpSkill,
   onUninstallBundledAgentSkill,
   onUninstallBundledAgentSkills,
   onOpenAccessibilityPreferences,
@@ -136,6 +130,7 @@ export function IntegrationsSettingsTab({
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
+  onInstallHelpSkill?: () => void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onUninstallBundledAgentSkills?: () => void;
   onOpenAccessibilityPreferences?: () => void;
@@ -145,6 +140,8 @@ export function IntegrationsSettingsTab({
   searchEmptyState?: ReactNode;
 }) {
   const showIntegrationRow = (settingKey: string) => shouldShowSetting(search.sections.integrations, settingKey);
+  const appShotsHotkeyId = useId();
+  const appShotsMetadataId = useId();
   const ghostexCliStatusChecking = ghostexCliStatusLoading || !ghostexCliStatus;
   const cliReady = ghostexCliStatus?.installed === true;
   /**
@@ -183,14 +180,14 @@ export function IntegrationsSettingsTab({
          */}
         {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
         {shouldShowSettingsSection(search.sections.integrations) ? (
-          <SettingsSection title='Integrations'>
+          <SettingsSection title='Ghostex CLI'>
             {showIntegrationRow('ghostexCli') ? (
               <IntegrationSettingsRow
                 description='Ghostex keeps the app-bundled ghostex command linked automatically for mobile apps and CLI-backed integration setup. gx is linked when that alias is available and not taken by another command.'
                 icon={IconTerminal2}
                 status={ghostexCliStatusChecking ? 'Checking' : cliReady ? 'Installed' : 'Not installed'}
                 tone={ghostexCliStatusChecking ? 'neutral' : cliReady ? 'success' : 'warning'}
-                title='Ghostex CLI'
+                title='Command line tool'
               >
                 <SettingButton
                   disabled={ghostexCliStatusChecking || !onInstallGhostexCli}
@@ -199,10 +196,10 @@ export function IntegrationsSettingsTab({
                   }
                   onClick={onInstallGhostexCli}
                   type='button'
-                  variant={cliReady ? 'outline' : 'default'}
+                  variant='outline'
                 >
                   <IconDownload aria-hidden='true' data-icon='inline-start' />
-                  Repair CLI
+                  Repair
                 </SettingButton>
                 <SettingButton
                   disabled={ghostexCliStatusChecking || !onRequestGhostexCliStatus}
@@ -221,27 +218,48 @@ export function IntegrationsSettingsTab({
               </IntegrationSettingsRow>
             ) : null}
 
-            {showIntegrationRow('bundledAgentSkills') ? (
-              <BundledAgentSkillsPanel
-                ghostexCliStatus={ghostexCliStatus}
-                ghostexCliStatusLoading={ghostexCliStatusChecking}
-                onInstallCuaDriver={onInstallCuaDriver}
-                onInstallSkill={{
-                  cli: onInstallCliSkill,
-                  browserUse: onInstallBrowserUseSkill,
-                  computerUse: onInstallComputerUseSkill,
-                  embeddedBrowserUse: onInstallBrowserControl,
-                  fable56Orchestration: onInstallFable56OrchestrationSkill,
-                  manageBeads: onInstallManageBeadsSkill,
-                  generateTitle: onInstallGenerateTitleSkill,
-                  moveCodexSession: onInstallMoveCodexSessionSkill,
-                }}
-                onRefreshStatus={onRequestGhostexCliStatus}
-                onUninstallAllSkills={onUninstallBundledAgentSkills}
-                onUninstallSkill={onUninstallBundledAgentSkill}
-              />
-            ) : null}
-
+            {/*
+            CDXC:Settings 2026-06-19-14:51:
+            macOS Settings > Integrations should not include a Setup Flow launcher row.
+            Keep setup access owned by first-launch and other explicit entry points instead of listing it as an integration setting.
+          */}
+          </SettingsSection>
+        ) : null}
+        {shouldShowSettingsSection(search.sections.integrations) ? (
+          <DesktopControlSection
+            ghostexCliStatus={ghostexCliStatus}
+            ghostexCliStatusLoading={ghostexCliStatusChecking}
+            onInstallCuaDriver={onInstallCuaDriver}
+            onOpenAccessibilityPreferences={onOpenAccessibilityPreferences}
+            onOpenScreenRecordingPreferences={onOpenScreenRecordingPreferences}
+            permissionStatus={cuaPermissionStatus}
+            showPermissions={showIntegrationRow('cuaPermissions')}
+            showTrycua={showIntegrationRow('bundledAgentSkills')}
+          />
+        ) : null}
+        {shouldShowSettingsSection(search.sections.integrations) && showIntegrationRow('bundledAgentSkills') ? (
+          <AgentSkillsSection
+            ghostexCliStatus={ghostexCliStatus}
+            ghostexCliStatusLoading={ghostexCliStatusChecking}
+            onInstallSkill={{
+              cli: onInstallCliSkill,
+              browserUse: onInstallBrowserUseSkill,
+              computerUse: onInstallComputerUseSkill,
+              embeddedBrowserUse: onInstallBrowserControl,
+              fable56Orchestration: onInstallFable56OrchestrationSkill,
+              manageBeads: onInstallManageBeadsSkill,
+              generateTitle: onInstallGenerateTitleSkill,
+              moveCodexSession: onInstallMoveCodexSessionSkill,
+              help: onInstallHelpSkill,
+            }}
+            onRefreshStatus={onRequestGhostexCliStatus}
+            onUninstallAllSkills={onUninstallBundledAgentSkills}
+            onUninstallSkill={onUninstallBundledAgentSkill}
+          />
+        ) : null}
+        {/* CDXC:Settings 2026-09-09 DECISION: User: App Shots is its own section on the Integrations page, separate from the CLI, skills, and Trycua card. */}
+        {shouldShowSettingsSection(search.sections.integrations) && showIntegrationRow('appShots') ? (
+          <SettingsSection title='App Shots'>
             {/*
              * CDXC:AppShots 2026-06-12-11:12:
              * Settings copy must describe App Shots as an agent-session feature because captured context now targets the focused or recent agent instead of Codex only.
@@ -252,90 +270,59 @@ export function IntegrationsSettingsTab({
              * CDXC:AppShots 2026-06-29-02:59:
              * App Shot prompt metadata is disabled by default and must be a visible opt-in under the App Shots row, because routine captures should paste only the image link unless the user asks for window metadata.
              */}
-            {showIntegrationRow('appShots') ? (
-              <IntegrationSettingsRow
-                badge='Beta'
-                description='Capture the frontmost app window, then stage it in the focused or recent agent session as local image context.'
-                icon={IconDeviceDesktop}
-                status={appShotsEnabled ? 'Enabled' : 'Disabled'}
-                tone={appShotsEnabled ? 'success' : 'neutral'}
-                title='App Shots'
+            <IntegrationSettingsRow
+              badge='Beta'
+              description='Capture the frontmost app window, then stage it in the focused or recent agent session as local image context.'
+              icon={IconDeviceDesktop}
+              status={appShotsEnabled ? 'Enabled' : 'Disabled'}
+              tone={appShotsEnabled ? 'success' : 'neutral'}
+              title='App Shots'
+            >
+              <Switch
+                aria-label='Enable App Shots'
+                checked={appShotsEnabled}
+                onCheckedChange={onAppShotsEnabledChange}
+              />
+            </IntegrationSettingsRow>
+            <SettingRow
+              description='Which Command key press captures the frontmost app window.'
+              htmlFor={appShotsHotkeyId}
+              label='App Shots hotkey'
+            >
+              <SettingsSelect
+                disabled={!appShotsEnabled}
+                disabledReason='Turn on App Shots first.'
+                onValueChange={(value) => onAppShotsHotkeyChange(value as AppShotsHotkey)}
+                value={appShotsHotkey}
               >
-                <div className='flex min-w-[190px] flex-col gap-2 sm:items-end'>
-                  <div className='flex items-center gap-2'>
-                    <span className='text-xs text-muted-foreground'>Enabled</span>
-                    <Switch
-                      aria-label='Enable App Shots'
-                      checked={appShotsEnabled}
-                      onCheckedChange={onAppShotsEnabledChange}
-                    />
-                  </div>
-                  <SettingsSelect
-                    disabled={!appShotsEnabled}
-                    disabledReason='Turn on App Shots first.'
-                    onValueChange={(value) => onAppShotsHotkeyChange(value as AppShotsHotkey)}
-                    value={appShotsHotkey}
-                  >
-                    <SelectTrigger aria-label='App Shots hotkey' className='w-[190px]'>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SettingsSelectContent>
-                      <SelectGroup>
-                        {APP_SHOTS_HOTKEY_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    </SettingsSelectContent>
-                  </SettingsSelect>
-                  <div className='flex items-center gap-2'>
-                    <span className='text-xs text-muted-foreground'>Metadata</span>
-                    <SettingSwitch
-                      aria-label='Include App Shots metadata'
-                      checked={appShotsMetadataEnabled}
-                      disabled={!appShotsEnabled}
-                      disabledReason='Turn on App Shots first.'
-                      onCheckedChange={onAppShotsMetadataEnabledChange}
-                    />
-                  </div>
-                </div>
-              </IntegrationSettingsRow>
-            ) : null}
-
-            {showIntegrationRow('cuaPermissions') ? (
-              <IntegrationSettingsRow
-                description='Trycua needs Accessibility to click and type in apps, and Screen Recording to understand what is visible on the desktop.'
-                icon={IconSettings}
-                status={cuaPermissionStatus.status}
-                tone={cuaPermissionStatus.tone}
-                title='Trycua Permissions'
-              >
-                <SettingButton
-                  disabled={!onOpenAccessibilityPreferences}
-                  disabledReason='Accessibility settings aren’t available here.'
-                  onClick={onOpenAccessibilityPreferences}
-                  type='button'
-                  variant='outline'
-                >
-                  Accessibility
-                </SettingButton>
-                <SettingButton
-                  disabled={!onOpenScreenRecordingPreferences}
-                  disabledReason='Screen Recording settings aren’t available here.'
-                  onClick={onOpenScreenRecordingPreferences}
-                  type='button'
-                  variant='outline'
-                >
-                  Screen Recording
-                </SettingButton>
-              </IntegrationSettingsRow>
-            ) : null}
-            {/*
-            CDXC:Settings 2026-06-19-14:51:
-            macOS Settings > Integrations should not include a Setup Flow launcher row.
-            Keep setup access owned by first-launch and other explicit entry points instead of listing it as an integration setting.
-          */}
+                <SelectTrigger aria-label='App Shots hotkey' id={appShotsHotkeyId}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SettingsSelectContent className='settings-list-select-content'>
+                  <SelectGroup>
+                    {APP_SHOTS_HOTKEY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SettingsSelectContent>
+              </SettingsSelect>
+            </SettingRow>
+            <SettingRow
+              description='Paste the window title and app name together with the image link.'
+              htmlFor={appShotsMetadataId}
+              label='App Shots metadata'
+            >
+              <SettingSwitch
+                aria-label='Include App Shots metadata'
+                checked={appShotsMetadataEnabled}
+                disabled={!appShotsEnabled}
+                disabledReason='Turn on App Shots first.'
+                id={appShotsMetadataId}
+                onCheckedChange={onAppShotsMetadataEnabledChange}
+              />
+            </SettingRow>
           </SettingsSection>
         ) : null}
       </div>
@@ -363,43 +350,23 @@ export function IntegrationSettingsRow({
   version?: string;
 }) {
   return (
-    <Field className='rounded-none border border-border bg-muted/20 px-4 py-3'>
-      <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
-        <div className='flex min-w-0 gap-3'>
-          <span className='mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-none bg-muted text-muted-foreground'>
-            <Icon aria-hidden='true' size={17} />
-          </span>
-          <FieldContent>
-            <div className='flex flex-wrap items-center gap-2'>
-              <FieldTitle className='text-sm'>{title}</FieldTitle>
-              {badge ? (
-                /*
-                 * CDXC:AppShots 2026-06-13-19:51:
-                 * Settings must visibly mark App Shots as Beta while keeping
-                 * the separate Enabled/Disabled status badge for its toggle
-                 * state.
-                 */
-                <span className='inline-flex rounded-none border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-200'>
-                  {badge}
-                </span>
-              ) : null}
-              <span
-                className={cn(
-                  'inline-flex rounded-none border px-2 py-0.5 text-[11px] font-semibold',
-                  tone === 'success' && 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
-                  tone === 'warning' && 'border-amber-500/40 bg-amber-500/10 text-amber-200',
-                  tone === 'neutral' && 'border-border bg-card text-muted-foreground'
-                )}
-              >
-                {status}
-              </span>
-              {version ? <VersionInfoButton label={title} version={version} /> : null}
-            </div>
-            <FieldDescription className='text-xs text-muted-foreground'>{description}</FieldDescription>
-          </FieldContent>
-        </div>
-        <div className='flex shrink-0 flex-wrap gap-2 sm:justify-end'>{children}</div>
-      </div>
-    </Field>
+    <SettingsListItem
+      icon={<Icon aria-hidden='true' size={17} />}
+      status={tone}
+      title={
+        <span className='flex flex-wrap items-center gap-2'>
+          {/*
+           * CDXC:AppShots 2026-06-13-19:51:
+           * Settings must visibly mark App Shots as Beta while keeping
+           * the separate Enabled/Disabled status badge for its toggle
+           * state.
+           */}
+          <IntegrationRowTitle badge={badge} description={`${status}. ${description}`} label={title} />
+          {version ? <VersionInfoButton label={title} version={version} /> : null}
+        </span>
+      }
+    >
+      <div className='flex shrink-0 flex-wrap justify-end gap-2'>{children}</div>
+    </SettingsListItem>
   );
 }
