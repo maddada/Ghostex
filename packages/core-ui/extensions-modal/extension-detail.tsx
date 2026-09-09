@@ -64,7 +64,7 @@ function DetailHeader({
       </Button>
       <ExtensionIcon className='extensions-icon-lg size-11 p-2' src={iconUrl} title={title} />
       <div className='min-w-0 flex-1'>
-        <h2 className='truncate text-lg font-normal text-foreground'>{title}</h2>
+        <h2 className='truncate text-base font-normal text-foreground'>{title}</h2>
         <p className='mt-1 max-w-3xl text-[13px] font-normal leading-relaxed text-muted-foreground'>{description}</p>
       </div>
     </header>
@@ -158,7 +158,7 @@ export function InstalledExtensionDetail({
                   <div className='flex min-h-14 items-center justify-between gap-4 px-4 py-3'>
                     <div>
                       <div className='text-sm font-normal text-foreground/90'>Open location</div>
-                      <p className='mt-0.5 text-xs font-normal text-muted-foreground'>
+                      <p className='mt-0.5 text-[13px] font-normal text-muted-foreground'>
                         Choose where this extension opens.
                       </p>
                     </div>
@@ -186,7 +186,7 @@ export function InstalledExtensionDetail({
                   <div className='flex min-h-14 items-center justify-between gap-4 px-4 py-3'>
                     <div>
                       <div className='text-sm font-normal text-foreground/90'>Open location</div>
-                      <p className='mt-0.5 text-xs font-normal text-muted-foreground'>
+                      <p className='mt-0.5 text-[13px] font-normal text-muted-foreground'>
                         Choose how its terminal pane opens.
                       </p>
                     </div>
@@ -207,7 +207,7 @@ export function InstalledExtensionDetail({
               <section aria-labelledby='extension-preferences-heading' className='flex flex-col gap-2.5'>
                 <ExtensionSectionLabel id='extension-preferences-heading'>Preferences</ExtensionSectionLabel>
                 <ExtensionGroup className='divide-y-0 p-4'>
-                  <p className='mb-4 text-xs font-normal text-muted-foreground'>
+                  <p className='mb-4 text-[13px] font-normal text-muted-foreground'>
                     Required preferences must be completed before first use.
                   </p>
                   <PreferencesForm definitions={definitions} onChange={setPreferences} values={preferences} />
@@ -237,7 +237,7 @@ export function InstalledExtensionDetail({
                   />
                   <div>
                     <div className='text-sm font-normal text-foreground/90'>Enabled</div>
-                    <div className='mt-0.5 text-xs font-normal text-muted-foreground'>
+                    <div className='mt-0.5 text-[13px] font-normal text-muted-foreground'>
                       Available from its configured placement.
                     </div>
                   </div>
@@ -255,7 +255,7 @@ export function InstalledExtensionDetail({
                   <IconPin aria-hidden='true' className='mt-0.5 size-4 shrink-0 text-muted-foreground' />
                   <div>
                     <div className='text-sm font-normal text-foreground/90'>Pinned</div>
-                    <div className='mt-0.5 text-xs font-normal text-muted-foreground'>
+                    <div className='mt-0.5 text-[13px] font-normal text-muted-foreground'>
                       Show its icon in the titlebar.
                     </div>
                   </div>

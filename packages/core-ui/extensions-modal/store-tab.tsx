@@ -152,7 +152,7 @@ export function StoreTab({
             </SelectContent>
           </Select>
         ) : null}
-        <span className='shrink-0 text-xs font-normal text-muted-foreground'>{shownCount} shown</span>
+        <span className='shrink-0 text-[13px] font-normal text-muted-foreground'>{shownCount} shown</span>
         <Button
           aria-label='Refresh extensions'
           disabled={loading}

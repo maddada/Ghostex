@@ -81,7 +81,7 @@ export function InstalledExtensionCard({
           <span className='truncate text-sm font-normal text-foreground'>{extension.manifest.title}</span>
         </div>
         <p className='mt-0.5 truncate text-[13px] font-normal text-foreground/75'>{extension.manifest.description}</p>
-        <p className='mt-0.5 truncate text-xs font-normal text-muted-foreground'>
+        <p className='mt-0.5 truncate text-[13px] font-normal text-muted-foreground'>
           {[
             extension.manifest.author,
             `v${extension.state.version}`,
@@ -94,7 +94,7 @@ export function InstalledExtensionCard({
       </div>
       <div className='flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100'>
         {supportsChatBar ? (
-          <div className='mr-1 flex items-center gap-2 text-xs font-normal text-muted-foreground'>
+          <div className='mr-1 flex items-center gap-2 text-[13px] font-normal text-muted-foreground'>
             Auto-open
             <Switch
               aria-label={`${extension.state.chatBarAutoOpen ? 'Disable' : 'Enable'} automatic opening for ${extension.manifest.title}`}
@@ -113,8 +113,8 @@ export function InstalledExtensionCard({
           <span className='sr-only'>Remove</span>
         </Button>
       </div>
+      {/* CDXC:Settings 2026-09-09 DECISION: User: never show On or Off text beside a toggle in Settings. The switch itself is the state. */}
       <div className='ml-1 flex shrink-0 items-center gap-2'>
-        <span className='text-xs font-normal text-muted-foreground'>{extension.state.enabled ? 'On' : 'Off'}</span>
         <Switch
           aria-label={`${extension.state.enabled ? 'Disable' : 'Enable'} ${extension.manifest.title}`}
           checked={extension.state.enabled}
@@ -153,11 +153,11 @@ export function StoreExtensionCard({
         <div className='flex min-w-0 items-baseline gap-2'>
           <span className='truncate text-sm font-normal text-foreground'>{entry.title}</span>
           {installedVersion ? (
-            <span className='shrink-0 text-xs font-normal text-muted-foreground'>Installed</span>
+            <span className='shrink-0 text-[13px] font-normal text-muted-foreground'>Installed</span>
           ) : null}
         </div>
         <p className='mt-0.5 truncate text-[13px] font-normal text-foreground/75'>{entry.description}</p>
-        <p className='mt-0.5 truncate text-xs font-normal text-muted-foreground'>{metadata.join(' · ')}</p>
+        <p className='mt-0.5 truncate text-[13px] font-normal text-muted-foreground'>{metadata.join(' · ')}</p>
       </div>
       <div className='flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100'>
         <Button className='font-normal' onClick={onDetails} size='sm' type='button' variant='ghost'>
@@ -166,7 +166,7 @@ export function StoreExtensionCard({
         </Button>
       </div>
       {installedVersion ? (
-        <span className='ml-1 shrink-0 text-xs font-normal text-muted-foreground'>
+        <span className='ml-1 shrink-0 text-[13px] font-normal text-muted-foreground'>
           {installedVersion === entry.version ? 'Up to date' : `Installed v${installedVersion}`}
         </span>
       ) : null}

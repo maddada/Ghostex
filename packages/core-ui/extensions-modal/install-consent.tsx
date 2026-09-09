@@ -58,7 +58,7 @@ export function InstallConsentDialog({
                 <IconShieldCheck aria-hidden='true' className='mt-0.5 shrink-0 text-muted-foreground' />
                 <div>
                   <div className='capitalize text-foreground'>{permission}</div>
-                  <div className='mt-0.5 text-xs leading-5 text-muted-foreground'>
+                  <div className='mt-0.5 text-[13px] leading-5 text-muted-foreground'>
                     {PERMISSION_DESCRIPTIONS[permission]}
                   </div>
                 </div>
@@ -69,7 +69,7 @@ export function InstallConsentDialog({
                 <IconAlertTriangle aria-hidden='true' className='mt-0.5 shrink-0 text-muted-foreground' />
                 <div>
                   <div className='text-foreground'>Runs a background process</div>
-                  <div className='mt-0.5 text-xs leading-5 text-muted-foreground'>
+                  <div className='mt-0.5 text-[13px] leading-5 text-muted-foreground'>
                     Server extensions run outside a sandbox. Open-source review remains the primary trust boundary.
                   </div>
                 </div>
@@ -80,7 +80,7 @@ export function InstallConsentDialog({
                 <IconAlertTriangle aria-hidden='true' className='mt-0.5 shrink-0 text-muted-foreground' />
                 <div>
                   <div className='text-foreground'>Loads a remote website</div>
-                  <div className='mt-0.5 text-xs leading-5 text-muted-foreground'>
+                  <div className='mt-0.5 text-[13px] leading-5 text-muted-foreground'>
                     This extension opens {remoteUrl} directly. The page runs outside Ghostex and cannot use the
                     extension bridge, but it sees whatever you type into it.
                   </div>
