@@ -1,0 +1,31 @@
+.ghostex-delayed-loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 76px;
+  padding: 24px 16px;
+  color: color-mix(in srgb, var(--foreground, var(--app-foreground)) 58%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.ghostex-delayed-loading-spinner {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--foreground, var(--app-foreground)) 78%, transparent);
+  animation: ghostex-delayed-loading-spin 800ms linear infinite;
+}
+
+@keyframes ghostex-delayed-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostex-delayed-loading-spinner {
+    animation-duration: 1.6s;
+  }
+}

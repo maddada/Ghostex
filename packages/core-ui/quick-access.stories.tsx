@@ -350,14 +350,34 @@ function SavedPromptsStory() {
   );
 }
 
+function SavedPromptsLoadingStory() {
+  const vscode = useQuickAccessStoryHost(false);
+  return (
+    <StashedPromptsModal
+      isOpen={true}
+      onClose={() => undefined}
+      projectId='quick-access-project-1'
+      sessionId='quick-access-open-session-1'
+      vscode={vscode}
+    />
+  );
+}
+
 function RecentProjectsLoadingStory() {
   const vscode = useQuickAccessStoryHost(false);
   return <RecentProjectsModal isOpen={true} onClose={() => undefined} vscode={vscode} />;
 }
 
-function RecentSessionsLoadingStory() {
+function RecentSessionsLoadingStory({ initialScope = 'all' }: { initialScope?: 'all' | 'external' }) {
   const vscode = useQuickAccessStoryHost(false);
-  return <PreviousSessionsModal isOpen={true} onClose={() => undefined} vscode={vscode} />;
+  return (
+    <PreviousSessionsModal
+      initialScope={initialScope}
+      isOpen={true}
+      onClose={() => undefined}
+      vscode={vscode}
+    />
+  );
 }
 
 const meta = {
@@ -377,8 +397,12 @@ export const RecentProjects: Story = { render: () => <RecentProjectsStory /> };
 export const Sessions: Story = { render: () => <RecentSessionsStory /> };
 export const SessionsTagFilterMenu: Story = { render: () => <RecentSessionsTagFilterStory /> };
 export const SavedPrompts: Story = { render: () => <SavedPromptsStory /> };
+export const SavedPromptsLoading: Story = { render: () => <SavedPromptsLoadingStory /> };
 export const RecentProjectsLoading: Story = { render: () => <RecentProjectsLoadingStory /> };
 export const RecentSessionsLoading: Story = { render: () => <RecentSessionsLoadingStory /> };
+export const ExternalSessionsLoading: Story = {
+  render: () => <RecentSessionsLoadingStory initialScope='external' />,
+};
 
 export const ExternalSessions: Story = {
   render: () => <RecentSessionsStory initialScope='external' />,

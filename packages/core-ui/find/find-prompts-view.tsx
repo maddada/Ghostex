@@ -10,11 +10,11 @@ through one handler; rows and overlays select on mousedown with the default
 prevented rather than taking focus.
 */
 
-import { IconLoader2 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FindPromptAgent, FindPromptRow } from '../../shared/agent-prompt-search';
 import { cn } from '@/packages/components/utils';
 import { FIND_PROMPT_AGENTS } from '../../shared/agent-prompt-search';
+import { DelayedLoadingIndicator } from '../delayed-loading-indicator';
 import { FindPromptResultRow } from './find-prompt-row';
 import {
   formatDayHeader,
@@ -370,9 +370,6 @@ export function FindPromptsView({ acceptAll, hostActions, onReady, transport }: 
           type='text'
           value={find.query}
         />
-        {find.loading ? (
-          <IconLoader2 aria-label='Searching' className='size-3.5 animate-spin text-muted-foreground' />
-        ) : null}
         {/* CDXC:PromptSearch 2026-09-08 DECISION: Hide both result counters while loading so Search by Prompt does not display provisional 0/0 counts. */}
         {!find.loading ? (
           <span className='shrink-0 tabular-nums text-[11px] text-muted-foreground'>
@@ -414,6 +411,10 @@ export function FindPromptsView({ acceptAll, hostActions, onReady, transport }: 
         role='listbox'
         tabIndex={-1}
       >
+        <DelayedLoadingIndicator
+          label='Loading all your prompts...'
+          loading={find.loading && viewRows.length === 0}
+        />
         {viewRows.length === 0 && !find.loading ? (
           <div className='px-2 py-6 text-center text-[13px] text-muted-foreground'>
             {find.total === 0 ? 'No agent prompt history was found on this machine.' : 'No prompts match this search.'}

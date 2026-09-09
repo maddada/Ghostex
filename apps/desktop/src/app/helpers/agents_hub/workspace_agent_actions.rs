@@ -36,6 +36,25 @@ pub(crate) fn gpui_create_local_project_workspace_agent(
     ),
     String,
 > {
+    let key = gpui_create_local_project_workspace_agent_record(project_id, agent_id, account_id)?;
+    match gpui_prepare_local_workspace_attach_terminal_plan(
+        &key,
+        GpuiLocalWorkspaceAttachIntent::Attach,
+    ) {
+        Ok(plan) => Ok((key, plan)),
+        Err(message) => {
+            gpui_close_command_terminal_gxserver_session(&key);
+            Err(message)
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn gpui_create_local_project_workspace_agent_record(
+    project_id: &str,
+    agent_id: &str,
+    account_id: Option<&str>,
+) -> Result<GpuiLocalWorkspaceSessionKey, String> {
     if !gpui_remote_sidebar_project_id_allowed(project_id)
         || !gpui_remote_sidebar_agent_id_allowed(agent_id)
     {
@@ -80,16 +99,7 @@ pub(crate) fn gpui_create_local_project_workspace_agent(
         project_id: created_project_id,
         session_id,
     };
-    match gpui_prepare_local_workspace_attach_terminal_plan(
-        &key,
-        GpuiLocalWorkspaceAttachIntent::Attach,
-    ) {
-        Ok(plan) => Ok((key, plan)),
-        Err(message) => {
-            gpui_close_command_terminal_gxserver_session(&key);
-            Err(message)
-        }
-    }
+    Ok(key)
 }
 
 pub(crate) fn gpui_workspace_attach_agent_icon(

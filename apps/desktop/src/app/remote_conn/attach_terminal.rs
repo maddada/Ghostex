@@ -125,10 +125,44 @@ impl GhostexGpuiApp {
             return;
         }
         let prepare_reference = reference.clone();
+        let open_chat_early = placement == AgentsWorkspaceNewTerminalPlacement::Tab
+            && self
+                .pending_agents_chat_launch_intents
+                .contains(&GpuiWorkspaceTerminalSessionKey::Remote(key.clone()));
+        let preview_pane_id = requested_pane_id.unwrap_or(self.agents_workspace.focused_pane);
         let update_reference = reference;
         let remote_machine_id = key.remote_machine_id;
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
+            if open_chat_early {
+                let preview_target = target.clone();
+                let preview_reference = prepare_reference.clone();
+                let preview = background
+                    .spawn(async move {
+                        gpui_remote_gxserver_rpc_result(
+                            &preview_target,
+                            "/api/attachSessionMetadata",
+                            &serde_json::json!({
+                                "projectId": preview_reference.project_id,
+                                "sessionId": preview_reference.session_id,
+                            }),
+                            std::time::Duration::from_secs(15),
+                        )
+                    })
+                    .await;
+                if let Ok(metadata) = preview {
+                    let _ = this.update(cx, |this, cx| {
+                        this.show_pending_agents_chat_launch(
+                            GpuiWorkspaceTerminalSessionKey::Remote(
+                                GpuiRemoteAttachSessionKey::from(&prepare_reference),
+                            ),
+                            &metadata,
+                            preview_pane_id,
+                            cx,
+                        );
+                    });
+                }
+            }
             let result = background
                 .spawn(async move {
                     gpui_prepare_remote_attach_terminal_plan(
@@ -203,7 +237,15 @@ impl GhostexGpuiApp {
             }
             return false;
         };
-        if self.agents_tab_selected_local_runtime_missing(pane_id, session_id) {
+        if self.agents_tab_selected_local_runtime_missing(pane_id, session_id)
+            || (self.agents_chat_mode_sessions.contains(&session_id)
+                && self
+                    .agents_workspace
+                    .session(session_id)
+                    .is_some_and(|session| {
+                        session.presentation_state == TerminalSessionPresentationState::Mounting
+                    }))
+        {
             /*
             Parking a workspace drops local attach clients, so a restored
             remote tab keeps Running presentation with no live SSH client.
@@ -234,7 +276,7 @@ impl GhostexGpuiApp {
                 cx,
             );
         } else {
-            self.active_mode = TitlebarMode::Agents;
+            self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
             self.request_agents_session_text_focus_handoff(
                 AgentsTerminalBodyMountSlotId {
@@ -419,6 +461,10 @@ impl GhostexGpuiApp {
                 {
                     session.title = tab_title.clone();
                     session.agent_icon = tab_agent_icon;
+                    session.set_presentation_state_with_startup_eligibility(
+                        TerminalSessionPresentationState::Running,
+                        false,
+                    );
                 }
                 #[cfg(target_os = "macos")]
                 if let Some(askpass) = plan.askpass {
@@ -446,7 +492,7 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 } else {
-                    self.active_mode = TitlebarMode::Agents;
+                    self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
                     self.set_shell_focus_with_terminal_handoff(
                         ShellFocusTarget::AgentsPane(placed_pane_id),
                         true,
@@ -547,7 +593,7 @@ impl GhostexGpuiApp {
                 cx,
             );
         } else {
-            self.active_mode = TitlebarMode::Agents;
+            self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
             self.request_agents_session_text_focus_handoff(mount_slot_id, cx);
         }

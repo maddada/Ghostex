@@ -61,6 +61,7 @@ import {
 import type { SidebarToExtensionMessage } from '../shared/session-grid-contract';
 import { BUILT_IN_WORKSPACE_OPEN_TARGETS } from '../shared/workspace-open-targets';
 import { openAppModal, openQuickAccess } from './app-modal-host-bridge';
+import { DelayedLoadingIndicator } from './delayed-loading-indicator';
 import { QuickAccessHeader } from './quick-access-tabs';
 import { getSidebarCommandRunModeForClick } from './command-run-feedback';
 import { SidebarCommandIconGlyph } from './sidebar-command-icon';
@@ -870,7 +871,13 @@ export function CommandPalette({
         />
         <CommandList className='ghostex-command-palette-list' ref={commandListRef}>
           {!hasCommandResults ? (
-            <CommandEmpty>{isInitialLoadResolved ? 'No commands found.' : 'Loading commands…'}</CommandEmpty>
+            <CommandEmpty>
+              {isInitialLoadResolved ? (
+                'No commands found.'
+              ) : (
+                <DelayedLoadingIndicator label='Loading commands...' loading />
+              )}
+            </CommandEmpty>
           ) : null}
           {isSearchingCommands && filteredCommandResults.length > 0 ? (
             <CommandGroup heading='Results'>

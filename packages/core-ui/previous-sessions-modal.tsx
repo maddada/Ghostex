@@ -28,6 +28,7 @@ import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import { TooltipProvider } from './app-tooltip';
 import { QuickAccessSearchInput } from './quick-access-search-input';
 import { QuickAccessHeader } from './quick-access-tabs';
+import { DelayedLoadingIndicator } from './delayed-loading-indicator';
 import { SessionTagIcon, getSidebarSessionTagLabel, type SidebarSessionTagFilter } from './session-tag-ui';
 import type { WebviewApi } from './webview-api';
 import type {
@@ -204,6 +205,7 @@ export function PreviousSessionsModal({
   const previousSessionsBodyRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const hasRequestedInitialLoadRef = useRef(false);
+  const externalRefreshPendingRef = useRef(false);
   const isLoadingMorePreviousSessionsRef = useRef(false);
   const latestRequestRef = useRef<
     { mode: PreviousSessionsRequestMode; queryKey: string; requestId: string } | undefined
@@ -373,6 +375,11 @@ export function PreviousSessionsModal({
       }
 
       const requestId = `previous-sessions-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const refreshExternalSessions = input.mode === 'replace' && externalRefreshPendingRef.current;
+      if (refreshExternalSessions) {
+        externalRefreshPendingRef.current = false;
+        setResolvedPreviousSessionsQueryKey(undefined);
+      }
       hasRequestedInitialLoadRef.current = true;
       latestRequestRef.current = {
         mode: input.mode,
@@ -401,6 +408,7 @@ export function PreviousSessionsModal({
         sessionTags: selectedSessionTagFilters,
         projectId: selectedProjectId || undefined,
         externalOnly: showExternalOnly,
+        refreshExternalSessions,
         type: 'requestPreviousSessions',
       });
     },
@@ -841,6 +849,14 @@ export function PreviousSessionsModal({
     };
   }, [canShowModal, visibleSessionItems, vscode]);
 
+  /** CDXC:Sessions 2026-09-09 DECISION:
+   * User: refresh discovery whenever External is opened and skip unnecessary scanning.
+   * Only entering External requests a filesystem refresh; search, filters, and pagination reuse the discovered history.
+   */
+  useEffect(() => {
+    externalRefreshPendingRef.current = isOpen && showExternalOnly;
+  }, [isOpen, showExternalOnly, openRequestSequence]);
+
   useEffect(() => {
     if (!isDataActive) {
       return;
@@ -856,7 +872,7 @@ export function PreviousSessionsModal({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isDataActive, requestPreviousSessionsPage]);
+  }, [isDataActive, isOpen, openRequestSequence, requestPreviousSessionsPage]);
 
   useEffect(() => {
     if (
@@ -1160,7 +1176,18 @@ export function PreviousSessionsModal({
                       ? `No ${showClosedSessionsOnly ? 'closed ' : ''}sessions match those tags.`
                       : `No ${showClosedSessionsOnly ? 'closed ' : ''}sessions yet.`}
               </div>
-            ) : null}
+            ) : (
+              <DelayedLoadingIndicator
+                label={
+                  showExternalOnly
+                    ? 'Loading external sessions...'
+                    : showClosedSessionsOnly
+                      ? 'Loading closed sessions...'
+                      : 'Loading sessions...'
+                }
+                loading
+              />
+            )}
           </div>
           {/*
            * CDXC:Sessions 2026-06-13-01:09:

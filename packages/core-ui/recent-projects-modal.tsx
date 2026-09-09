@@ -20,6 +20,7 @@ import { readSidebarHiddenItems } from './sidebar-hidden-items';
 import { readSidebarProjectCollections } from './project-collections';
 import { QuickAccessSearchInput } from './quick-access-search-input';
 import { QuickAccessHeader } from './quick-access-tabs';
+import { DelayedLoadingIndicator } from './delayed-loading-indicator';
 import { isEditableKeyboardTarget } from './text-input-keyboard';
 import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import type { WebviewApi } from './webview-api';
@@ -531,7 +532,9 @@ export function RecentProjectsModal({
               <div className='group-empty-state previous-sessions-empty-state'>
                 {searchQuery.trim() ? 'No projects match that search.' : 'No projects yet.'}
               </div>
-            ) : null}
+            ) : (
+              <DelayedLoadingIndicator label='Loading projects...' loading />
+            )}
           </div>
           {contextMenuPosition ? (
             <SidebarContextMenuPortal
