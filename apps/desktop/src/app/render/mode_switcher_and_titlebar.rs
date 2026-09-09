@@ -144,8 +144,9 @@ impl GhostexGpuiApp {
                 }))
         };
 
-        // CDXC:AgentProviders 2026-09-08 WHY:
-        // Pinned accounts can grow the right controls by several hundred pixels. Normal sibling layout reserves that width instead of placing interactive buttons over mode tabs or the project name.
+        // CDXC:Titlebar 2026-09-10 DECISION:
+        // User: full view buttons stay centered in the window, but the compact dropdown belongs on the left immediately after Next.
+        // This supersedes centering the compact dropdown; equal side regions still keep the full tabs centered.
         titlebar
             .on_click(|event, window, _cx| {
                 if event.click_count() != 2 {
@@ -155,25 +156,40 @@ impl GhostexGpuiApp {
             })
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
                     this.show_gpui_titlebar_customize_menu(event.position, window, cx);
                 }),
             )
-            .child(self.render_project_slot(use_compact_mode_dropdown, cx))
             .child(
                 h_flex()
+                    .id("ghostex-gpui-titlebar-left")
                     .h_full()
                     .flex_1()
                     .min_w_0()
+                    .overflow_hidden()
+                    .child(self.render_project_slot(use_compact_mode_dropdown, cx)),
+            )
+            .child(
+                h_flex()
+                    .h_full()
+                    .flex_shrink_0()
                     .items_center()
                     .justify_center()
                     .when(show_mode_switcher && !use_compact_mode_dropdown, |this| {
                         this.child(self.render_mode_switcher(cx))
                     }),
             )
-            .child(self.render_right_titlebar_controls(window, cx))
+            .child(
+                h_flex()
+                    .id("ghostex-gpui-titlebar-right")
+                    .h_full()
+                    .flex_1()
+                    .min_w_0()
+                    .justify_end()
+                    .child(self.render_right_titlebar_controls(window, cx)),
+            )
     }
 
     pub(crate) fn render_project_slot(
@@ -208,6 +224,12 @@ impl GhostexGpuiApp {
             not be.
             */
             .child(self.render_titlebar_navigation_history_buttons(cx))
+            .when(show_compact_mode_dropdown, |this| {
+                this.child(self.render_compact_mode_dropdown(cx))
+            })
+            .when(self.active_mode.is_project_editor_mode(), |this| {
+                this.child(self.render_titlebar_companion_toggle(cx))
+            })
             .child(
                 h_flex()
                     .h(px(TITLEBAR_CONTROL_HEIGHT))
@@ -235,9 +257,58 @@ impl GhostexGpuiApp {
                     })
                     .child(self.project_name.clone()),
             )
-            .when(show_compact_mode_dropdown, |this| {
-                this.child(self.render_compact_mode_dropdown(cx))
+    }
+
+    /// CDXC:Workarea 2026-09-10 DECISION:
+    /// User: the companion expand button replaces the minimized companion bar beside Next; when views collapse, the view dropdown goes immediately after Next, before this button.
+    /// This supersedes the companion button's immediate adjacency to Next in compact mode.
+    pub(crate) fn render_titlebar_companion_toggle(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
+        let visible = self.project_editor_shell.left_companion_visible;
+        div()
+            .id("ghostex-gpui-titlebar-companion-toggle")
+            .flex()
+            .flex_shrink_0()
+            .w(px(TITLEBAR_LEADING_BUTTON_WIDTH))
+            .h(px(TITLEBAR_CONTROL_HEIGHT))
+            .items_center()
+            .justify_center()
+            .cursor_default()
+            .hover(|this| this.bg(titlebar_button_hover_color()))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.toggle_project_editor_companion_from_hotkey(window, cx);
+                }),
+            )
+            .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
+                titlebar_tooltip(
+                    if visible {
+                        "Hide companion"
+                    } else {
+                        "Show companion"
+                    },
+                    window,
+                    cx,
+                )
             })
+            .child(titlebar_svg_icon(
+                if visible {
+                    TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_COLLAPSE
+                } else {
+                    TITLEBAR_ICON_LAYOUT_SIDEBAR_LEFT_EXPAND
+                },
+                16.0,
+                if visible {
+                    titlebar_active_text_color()
+                } else {
+                    titlebar_inactive_text_color()
+                },
+            ))
     }
 
     pub(crate) fn render_sidebar_collapse_button(
@@ -333,6 +404,7 @@ impl GhostexGpuiApp {
             switcher = switcher.child(self.render_mode_tab(
                 item.mode,
                 label,
+                index,
                 index + 1 == mode_count,
                 item.is_available,
                 item.disabled_reason,
@@ -352,6 +424,13 @@ impl GhostexGpuiApp {
                 .unwrap_or_else(|| id.as_str().to_string()),
             mode => mode.display_label().to_string(),
         };
+        let shortcut = self
+            .titlebar_mode_switcher_items()
+            .iter()
+            .position(|item| item.mode == self.active_mode)
+            .and_then(|index| {
+                gpui_configured_hotkey_label(&format!("switchTitlebarView{}", index + 1))
+            });
         /*
         CDXC:Titlebar 2026-09-06 DECISION:
         User: the compact view dropdown is a full-height square titlebar
@@ -360,9 +439,9 @@ impl GhostexGpuiApp {
         */
         h_flex()
             .id("ghostex-gpui-titlebar-compact-mode-dropdown")
+            .flex_shrink_0()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
             .min_w(px(108.0))
-            .ml(px(7.0))
             .items_center()
             .justify_center()
             .gap(px(7.0))
@@ -392,6 +471,12 @@ impl GhostexGpuiApp {
                     this.show_gpui_titlebar_customize_menu(event.position, window, cx);
                 }),
             )
+            .when_some(shortcut, |this, shortcut| {
+                this.managed_tooltip_with_placement(
+                    ManagedTooltipPlacement::Right,
+                    move |window, cx| titlebar_tooltip(shortcut.clone(), window, cx),
+                )
+            })
             .child(label)
             .child(titlebar_svg_icon(
                 TITLEBAR_ICON_CHEVRON_DOWN,
@@ -404,12 +489,16 @@ impl GhostexGpuiApp {
         &self,
         mode: TitlebarMode,
         label: String,
+        position: usize,
         is_last: bool,
         is_available: bool,
-        disabled_reason: Option<&'static str>,
+        _disabled_reason: Option<&'static str>,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let is_active = is_available && self.active_mode == mode;
+        // CDXC:Hotkeys 2026-09-09 DECISION:
+        // User: hovering a titlebar view shows only its shortcut at its current position, including after reordering.
+        let shortcut = gpui_configured_hotkey_label(&format!("switchTitlebarView{}", position + 1));
         /*
         CDXC:Titlebar 2026-07-04-01:00:
         Disabled Quick/projectless tabs remain normal titlebar segments with a hover reason and no separate hit target. Browser, Kanban, Automate, and Docs share the native disabled reason while click handling still calls the central availability guard before changing active workspace mode.
@@ -467,16 +556,24 @@ impl GhostexGpuiApp {
             )
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
+                    if let TitlebarMode::Extension(id) = mode {
+                        if gpui_custom_view(id)
+                            .is_some_and(|view| view.definition.get("source").is_some())
+                        {
+                            this.show_project_view_menu(id, event.position, window, cx);
+                            return;
+                        }
+                    }
                     this.show_gpui_titlebar_customize_menu(event.position, window, cx);
                 }),
             )
-            .when_some(disabled_reason, |this, reason| {
+            .when_some(shortcut, |this, shortcut| {
                 this.managed_tooltip_with_placement(
                     ManagedTooltipPlacement::Right,
-                    move |window, cx| titlebar_tooltip(reason, window, cx),
+                    move |window, cx| titlebar_tooltip(shortcut.clone(), window, cx),
                 )
             })
             .child(label)
