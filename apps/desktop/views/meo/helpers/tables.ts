@@ -11,6 +11,7 @@ import { isPrimaryModifierPointerClick } from './linkNavigation';
 import { wikiLinkScheme } from './wikiLinks';
 import { normalizeSourceHref } from './rawUrls';
 import type { EditorDiagnostic } from './diagnostics';
+import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 
 declare global {
   interface HTMLDivElement {
@@ -236,11 +237,11 @@ function getModifierLinkActivationHref(event) {
 }
 
 function isUndoShortcut(event) {
-  return event.key.toLowerCase() === 'z' && !event.shiftKey;
+  return shortcutKeyFromKeyboardEvent(event) === 'z' && !event.shiftKey;
 }
 
 function isRedoShortcut(event) {
-  const key = event.key.toLowerCase();
+  const key = shortcutKeyFromKeyboardEvent(event);
   return (key === 'z' && event.shiftKey) || key === 'y';
 }
 

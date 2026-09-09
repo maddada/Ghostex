@@ -1,3 +1,5 @@
+import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
+
 /*
 CDXC:PromptSearch 2026-08-20:
 One key map for the Find surface, shared by every host so `gx f` muscle memory
@@ -16,8 +18,10 @@ export type FindPromptsMode = 'agentPicker' | 'forkPicker' | 'list' | 'preview' 
 
 export interface FindPromptsKeyEvent {
   readonly altKey: boolean;
+  readonly code?: string;
   readonly ctrlKey: boolean;
   readonly key: string;
+  readonly keyCode?: number;
   readonly metaKey: boolean;
   readonly shiftKey: boolean;
 }
@@ -85,6 +89,9 @@ function isPlainKey(event: FindPromptsKeyEvent): boolean {
 }
 
 export function resolveFindPromptsAction(event: FindPromptsKeyEvent, mode: FindPromptsMode): FindPromptsAction | null {
+  // Control chords match the key's layout-independent letter so `^f` favorites
+  // a prompt under an Arabic layout too, exactly as it does in `gx f`.
+  const chordKey = event.key.length === 1 ? shortcutKeyFromKeyboardEvent(event) : event.key;
   if (mode === 'forkPicker') {
     // Any key leaves fork mode; a digit also picks the target agent. Matches
     // the terminal picker, where fork mode is a single keystroke.
@@ -105,10 +112,10 @@ export function resolveFindPromptsAction(event: FindPromptsKeyEvent, mode: FindP
     if (event.key === ' ' && isPlainKey(event)) {
       return { type: 'togglePickerSelection' };
     }
-    if (event.key === 'ArrowDown' || (event.ctrlKey && event.key === 'n')) {
+    if (event.key === 'ArrowDown' || (event.ctrlKey && chordKey === 'n')) {
       return { delta: 1, type: 'move' };
     }
-    if (event.key === 'ArrowUp' || (event.ctrlKey && event.key === 'p')) {
+    if (event.key === 'ArrowUp' || (event.ctrlKey && chordKey === 'p')) {
       return { delta: -1, type: 'move' };
     }
     if (mode === 'agentPicker') {
@@ -125,7 +132,7 @@ export function resolveFindPromptsAction(event: FindPromptsKeyEvent, mode: FindP
   if (event.key === 'Escape') {
     return { type: 'close' };
   }
-  if (event.ctrlKey && event.key === 'c') {
+  if (event.ctrlKey && chordKey === 'c') {
     return { type: 'close' };
   }
   if (event.key === 'Enter' && !event.shiftKey) {
@@ -136,7 +143,7 @@ export function resolveFindPromptsAction(event: FindPromptsKeyEvent, mode: FindP
   }
 
   if (event.ctrlKey && !event.altKey) {
-    switch (event.key) {
+    switch (chordKey) {
       case 'd':
         return { type: 'toggleDayGrouping' };
       case 'g':

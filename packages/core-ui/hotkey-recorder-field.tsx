@@ -74,11 +74,9 @@ export function HotkeyRecorderField({
         return;
       }
       /**
-       * CDXC:Hotkeys 2026-07-30:
-       * Record the physical key (`KeyboardEvent.code`) rather than the
-       * Option-modified character (`KeyboardEvent.key`). For example, macOS
-       * reports Option+S as `ß`; GPUI dispatches the physical S key, so storing
-       * the produced character made the shortcut impossible to run.
+       * CDXC:Hotkeys 2026-09-10 WHY:
+       * Record the key's layout-independent identity rather than the modified character (`KeyboardEvent.key`): macOS reports Option+S as `ß` and an Arabic layout reports Cmd+V as `ر`, while GPUI dispatches the letter key in both cases, so storing the produced character made the shortcut impossible to run.
+       * This supersedes the 2026-07-30 rule that recorded `KeyboardEvent.code`, which stored AZERTY and Dvorak letters by their QWERTY position.
        */
       setIsRecording(false);
       onChange(recordedHotkey);

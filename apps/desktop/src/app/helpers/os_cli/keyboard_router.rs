@@ -152,7 +152,7 @@ pub(crate) fn route_gpui_native_keyboard_event(
     action: std::ffi::c_int,
     keycode: u32,
     modifiers: u64,
-    characters_ignoring_modifiers: &str,
+    shortcut_characters: &str,
     characters: &str,
 ) -> bool {
     const NATIVE_KEY_PRESS: std::ffi::c_int = 1;
@@ -341,8 +341,7 @@ pub(crate) fn route_gpui_native_keyboard_event(
         }
 
         let owner = target.owner;
-        let native_hotkey_text =
-            gpui_native_hotkey_text(keycode, modifiers, characters_ignoring_modifiers);
+        let native_hotkey_text = gpui_native_hotkey_text(keycode, modifiers, shortcut_characters);
         // CDXC:Sessions 2026-09-08 SEE-ALSO:
         // previous-sessions-modal.tsx owns Option+C scope cycling; reserve the native chord before configured app shortcuts can consume it.
         let sessions_scope_shortcut = native_hotkey_text.as_deref() == Some("alt+c")
@@ -358,7 +357,9 @@ pub(crate) fn route_gpui_native_keyboard_event(
                     app.app_modal_window
                         .as_ref()
                         .and_then(|handle| handle.read(cx).ok())
-                        .is_some_and(|modal| modal.current_modal == GpuiAppModalKind::PreviousSessions)
+                        .is_some_and(|modal| {
+                            modal.current_modal == GpuiAppModalKind::PreviousSessions
+                        })
                 })
                 .unwrap_or(false);
         if sessions_scope_shortcut {

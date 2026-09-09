@@ -1,3 +1,4 @@
+import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 import { IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
@@ -141,7 +142,13 @@ export function SessionChatSearch({
 
   useEffect(() => {
     const handleShortcut = (event: globalThis.KeyboardEvent): void => {
-      if (event.key.toLocaleLowerCase() !== 'f' || !event.metaKey || event.ctrlKey || event.altKey) {
+      if (
+        event.isComposing ||
+        shortcutKeyFromKeyboardEvent(event) !== 'f' ||
+        !event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
         return;
       }
       event.preventDefault();

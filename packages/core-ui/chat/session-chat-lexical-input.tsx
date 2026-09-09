@@ -1,3 +1,4 @@
+import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
   $createRangeSelectionFromDom,
@@ -18,6 +19,7 @@ import type { SessionChatTheme } from '@/packages/shared/session-chat';
 import { Tooltip, TooltipContent } from '../app-tooltip';
 import type { SessionChatComposerInputApi, SessionChatComposerKeyEvent } from './session-chat-composer';
 import { sessionChatCaretMovement } from './session-chat-caret-navigation';
+import { revealSessionChatComposerCaret } from './session-chat-composer-scroll';
 import { sessionChatBreaksKillSequence, sessionChatEditingShortcut } from './session-chat-edit-shortcuts';
 import { createSessionChatTerminalEditing } from './session-chat-terminal-editing';
 import { SESSION_CHAT_REFERENCE_REVEAL_MARKER } from './session-chat-reference-pills';
@@ -192,20 +194,7 @@ export function SessionChatLexicalInput({
         if (lastLine instanceof HTMLBRElement) rect = lastLine.getBoundingClientRect();
       }
       if (rect && shouldReveal && document.activeElement === root) {
-        const top = box.top + root.clientTop;
-        const left = box.left + root.clientLeft;
-        const bottom = top + root.clientHeight;
-        const right = left + root.clientWidth;
-        const previousTop = root.scrollTop;
-        const previousLeft = root.scrollLeft;
-        root.scrollTop += rect.top < top ? rect.top - top : Math.max(0, rect.bottom - bottom);
-        root.scrollLeft += rect.left < left ? rect.left - left : Math.max(0, rect.right + 2 - right);
-        rect = new DOMRect(
-          rect.left - (root.scrollLeft - previousLeft),
-          rect.top - (root.scrollTop - previousTop),
-          rect.width,
-          rect.height
-        );
+        rect = revealSessionChatComposerCaret(root, rect);
       }
       if (current.start !== current.end) return;
       if (!rect || rect.top < box.top || rect.bottom > box.bottom + 1) return;
@@ -390,6 +379,7 @@ export function SessionChatLexicalInput({
         const changed = value !== valueRef.current;
         valueRef.current = value;
         if (changed) for (const listener of valueListeners) listener();
+        if (changed && !tags.has(SKIP_DOM_SELECTION_TAG)) scheduleSelectionReveal();
         if (changed && !tags.has(EXTERNAL_VALUE_TAG)) callbacksRef.current.onChange(value, selectionRef.current.focus);
         callbacksRef.current.onCaretChange(selectionRef.current.focus);
       });
@@ -400,15 +390,18 @@ export function SessionChatLexicalInput({
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.isComposing || event.keyCode === 229 || editor.isComposing()) return;
       const key = composerKey(event);
+      const shortcutKey = shortcutKeyFromKeyboardEvent(event);
       const mac = /Mac|iPhone|iPad/.test(navigator.platform);
       const primary = mac ? event.metaKey : event.ctrlKey;
       const adapted: SessionChatComposerKeyEvent = {
         altKey: event.altKey,
+        code: event.code,
         ctrlKey: event.ctrlKey,
         metaKey: event.metaKey,
         shiftKey: event.shiftKey,
         isComposing: false,
         key,
+        keyCode: event.keyCode,
         preventDefault: () => {
           event.preventDefault();
           event.stopPropagation();
@@ -416,14 +409,11 @@ export function SessionChatLexicalInput({
       };
       if (sessionChatBreaksKillSequence(adapted)) terminalEditing.breakSequence();
       let nextPanel: ComposerEditorPanel | undefined;
-      if (key === 'F1' || (primary && event.shiftKey && key.toLowerCase() === 'p')) nextPanel = 'commands';
-      else if (primary && event.key.toLowerCase() === 'f' && !event.altKey) nextPanel = 'find';
-      else if (
-        (primary && event.altKey && event.key.toLowerCase() === 'f') ||
-        (!mac && primary && event.key.toLowerCase() === 'h')
-      )
+      if (key === 'F1' || (primary && event.shiftKey && shortcutKey === 'p')) nextPanel = 'commands';
+      else if (primary && shortcutKey === 'f' && !event.altKey) nextPanel = 'find';
+      else if ((primary && event.altKey && shortcutKey === 'f') || (!mac && primary && shortcutKey === 'h'))
         nextPanel = 'replace';
-      else if (event.ctrlKey && event.key.toLowerCase() === 'g') nextPanel = 'line';
+      else if (event.ctrlKey && shortcutKey === 'g') nextPanel = 'line';
       if (nextPanel) {
         event.preventDefault();
         event.stopPropagation();
@@ -433,7 +423,7 @@ export function SessionChatLexicalInput({
       }
       callbacksRef.current.onKeyDown(adapted);
       if (event.defaultPrevented) return;
-      if (event.altKey && !event.metaKey && !event.ctrlKey && event.key.toLowerCase() === 'z') {
+      if (event.altKey && !event.metaKey && !event.ctrlKey && shortcutKey === 'z') {
         event.preventDefault();
         event.stopPropagation();
         setWrap((value) => !value);
@@ -485,13 +475,13 @@ export function SessionChatLexicalInput({
       }
       const command =
         primary && !event.altKey
-          ? event.key === ']'
+          ? shortcutKey === ']'
             ? 'indent'
-            : event.key === '['
+            : shortcutKey === '['
               ? 'outdent'
-              : event.key.toLowerCase() === 'l'
+              : shortcutKey === 'l'
                 ? 'expandLineSelection'
-                : event.shiftKey && event.key.toLowerCase() === 'k'
+                : event.shiftKey && shortcutKey === 'k'
                   ? 'deleteLines'
                   : undefined
           : undefined;
@@ -545,6 +535,7 @@ export function SessionChatLexicalInput({
       }, 900);
     };
     root.addEventListener('keydown', handleKeyDown, true);
+    root.addEventListener('input', scheduleSelectionReveal);
     root.addEventListener('paste', clipboard, true);
     root.addEventListener('copy', clipboard, true);
     root.addEventListener('cut', clipboard, true);
@@ -567,6 +558,7 @@ export function SessionChatLexicalInput({
       unregisterHistory();
       unregisterPlainText();
       root.removeEventListener('keydown', handleKeyDown, true);
+      root.removeEventListener('input', scheduleSelectionReveal);
       root.removeEventListener('paste', clipboard, true);
       root.removeEventListener('copy', clipboard, true);
       root.removeEventListener('cut', clipboard, true);
@@ -628,7 +620,7 @@ export function SessionChatLexicalInput({
       ) : null}
       <div
         ref={rootRef}
-        className='ghostex-chat-composer-lexical-content'
+        className='ghostex-chat-composer-lexical-content scroll-fade-y'
         role='textbox'
         aria-label='Message'
         aria-multiline='true'

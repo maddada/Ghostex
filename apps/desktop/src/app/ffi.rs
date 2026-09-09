@@ -48,14 +48,14 @@ pub extern "C" fn GhostexGpuiKeyboardRouteNativeEvent(
     action: std::ffi::c_int,
     keycode: u32,
     modifiers: u64,
-    characters_ignoring_modifiers: *const std::ffi::c_char,
+    shortcut_characters: *const std::ffi::c_char,
     characters: *const std::ffi::c_char,
 ) -> std::ffi::c_int {
-    let characters_ignoring_modifiers = if characters_ignoring_modifiers.is_null() {
+    let shortcut_characters = if shortcut_characters.is_null() {
         String::new()
     } else {
         // SAFETY: AppKit owns the UTF-8 buffer for this synchronous callback.
-        unsafe { std::ffi::CStr::from_ptr(characters_ignoring_modifiers) }
+        unsafe { std::ffi::CStr::from_ptr(shortcut_characters) }
             .to_string_lossy()
             .into_owned()
     };
@@ -67,9 +67,8 @@ pub extern "C" fn GhostexGpuiKeyboardRouteNativeEvent(
             .to_string_lossy()
             .into_owned()
     };
-    let should_probe = keycode == 0
-        || characters.chars().count() > 1
-        || characters_ignoring_modifiers.chars().count() > 1;
+    let should_probe =
+        keycode == 0 || characters.chars().count() > 1 || shortcut_characters.chars().count() > 1;
     if should_probe {
         support_logs::append_temporary(
             support_logs::GpuiSupportLog::TerminalFocus,
@@ -77,8 +76,8 @@ pub extern "C" fn GhostexGpuiKeyboardRouteNativeEvent(
             serde_json::json!({
                 "action": action,
                 "characters": support_logs::temporary_fluid_voice_text_shape(&characters),
-                "charactersIgnoringModifiers":
-                    support_logs::temporary_fluid_voice_text_shape(&characters_ignoring_modifiers),
+                "shortcutCharacters":
+                    support_logs::temporary_fluid_voice_text_shape(&shortcut_characters),
                 "keycode": keycode,
                 "modifiers": modifiers,
                 "rootViewPresent": !gpui_root_view.is_null(),
@@ -90,7 +89,7 @@ pub extern "C" fn GhostexGpuiKeyboardRouteNativeEvent(
         action,
         keycode,
         modifiers,
-        &characters_ignoring_modifiers,
+        &shortcut_characters,
         &characters,
     );
     if should_probe {

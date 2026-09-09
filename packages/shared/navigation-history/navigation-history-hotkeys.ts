@@ -17,6 +17,7 @@ import {
   normalizeghostexHotkeySettings,
   type ghostexHotkeySettings,
 } from '../ghostex-hotkeys';
+import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 import type { NavigationHistoryDirection } from './navigation-history-contract';
 
 const NAVIGATION_HISTORY_HOTKEY_DIRECTIONS: Readonly<Record<string, NavigationHistoryDirection>> = {
@@ -30,18 +31,11 @@ export function navigationHistoryHotkeyDirection(actionId: string | undefined): 
 }
 
 function chordTextForEvent(event: KeyboardEvent): string | undefined {
-  // `event.key` carries the layout-shifted character (Alt+[ is "“" on macOS),
-  // so bracket-style chords are read from the physical code, matching how the
-  // native gpui path reads charactersIgnoringModifiers.
-  const key =
-    event.code === 'BracketLeft'
-      ? '['
-      : event.code === 'BracketRight'
-        ? ']'
-        : event.key.length === 1
-          ? event.key.toLowerCase()
-          : undefined;
-  if (!key) {
+  // `event.key` carries the layout-shifted character (Alt+[ is "“" on macOS,
+  // Cmd+V is "ر" on an Arabic layout), so the chord key is the shared
+  // layout-independent identity, matching the native gpui path.
+  const key = shortcutKeyFromKeyboardEvent(event);
+  if (key.length !== 1) {
     return undefined;
   }
   const parts: string[] = [];

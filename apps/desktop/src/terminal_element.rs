@@ -2604,7 +2604,7 @@ fn terminal_overlay_platform_hotkey<'a>(action_id: &str, key: &'a str) -> &'a st
     }
 }
 
-fn terminal_overlay_hotkey_chord_label(chord: &str) -> String {
+pub(crate) fn terminal_overlay_hotkey_chord_label(chord: &str) -> String {
     let parts = chord
         .split('+')
         .map(|part| part.trim().to_ascii_lowercase())

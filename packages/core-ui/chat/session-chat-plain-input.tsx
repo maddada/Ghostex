@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ClipboardEvent, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { SessionChatComposerInputApi } from './session-chat-composer';
+import { revealSessionChatComposerCaret } from './session-chat-composer-scroll';
 import { sessionChatBreaksKillSequence, sessionChatTerminalShortcut } from './session-chat-edit-shortcuts';
 import { createSessionChatTerminalEditing } from './session-chat-terminal-editing';
 import {
@@ -160,11 +161,23 @@ export function SessionChatPlainInput({
   const valueRef = useRef(initialValue);
   const selectionRef = useRef({ end: initialValue.length, focus: initialValue.length, start: initialValue.length });
   const composingRef = useRef(false);
+  const revealFrameRef = useRef(0);
   const terminalEditingRef = useRef<ReturnType<typeof createSessionChatTerminalEditing> | null>(null);
   const registerApiRef = useRef(registerApi);
   registerApiRef.current = registerApi;
   const callbacksRef = useRef({ onCaretChange, onChange, onPasteData });
   callbacksRef.current = { onCaretChange, onChange, onPasteData };
+
+  const scheduleCaretReveal = (): void => {
+    if (revealFrameRef.current) return;
+    revealFrameRef.current = requestAnimationFrame(() => {
+      revealFrameRef.current = 0;
+      const editor = editorRef.current;
+      if (editor) revealSessionChatComposerCaret(editor);
+    });
+  };
+
+  useEffect(() => () => cancelAnimationFrame(revealFrameRef.current), []);
 
   const readSelection = (): typeof selectionRef.current => {
     const editor = editorRef.current;
@@ -199,6 +212,7 @@ export function SessionChatPlainInput({
     const position = Math.min(caret, next.length);
     selectionRef.current = { end: position, focus: position, start: position };
     setEditorSelection(editor, position);
+    scheduleCaretReveal();
   };
 
   const insertText = (text: string): boolean => {
@@ -217,6 +231,7 @@ export function SessionChatPlainInput({
     selectionRef.current = { end: caret, focus: caret, start: caret };
     valueRef.current = next;
     callbacksRef.current.onChange(next, caret);
+    scheduleCaretReveal();
     return true;
   };
 
@@ -357,6 +372,7 @@ export function SessionChatPlainInput({
     valueRef.current = canonical;
     selectionRef.current = editorSelection(editor);
     callbacksRef.current.onChange(canonical, caret);
+    scheduleCaretReveal();
   };
 
   const copySelection = (event: ClipboardEvent<HTMLDivElement>, cut: boolean): void => {
@@ -379,6 +395,7 @@ export function SessionChatPlainInput({
     setEditorSelection(editor, selection.start);
     valueRef.current = next;
     callbacksRef.current.onChange(next, selection.start);
+    scheduleCaretReveal();
   };
 
   const revealReferenceSource = (event: MouseEvent<HTMLDivElement>): void => {
@@ -408,13 +425,14 @@ export function SessionChatPlainInput({
     setEditorSelection(editor, caret);
     valueRef.current = next;
     callbacksRef.current.onChange(next, caret);
+    scheduleCaretReveal();
   };
 
   return (
     <div
       aria-invalid={invalid}
       aria-multiline='true'
-      className='ghostex-chat-composer-input ghostex-chat-composer-plain-input max-h-40 min-w-0 flex-1 overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none'
+      className='ghostex-chat-composer-input ghostex-chat-composer-plain-input scroll-fade-y max-h-40 min-w-0 flex-1 overflow-y-auto bg-transparent text-sm leading-6 text-foreground outline-none'
       contentEditable
       data-empty={initialValue === '' ? 'true' : 'false'}
       data-placeholder={placeholder}

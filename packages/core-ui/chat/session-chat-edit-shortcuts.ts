@@ -1,4 +1,5 @@
 import { detectghostexHotkeyPlatform } from '@/packages/shared/ghostex-hotkeys';
+import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 import type { SessionChatComposerKeyEvent } from './session-chat-composer';
 
 export type SessionChatTextEditCommand =
@@ -21,7 +22,7 @@ export type SessionChatTextEditCommand =
  */
 export function sessionChatTerminalShortcut(event: SessionChatComposerKeyEvent): SessionChatTextEditCommand | null {
   if (event.isComposing || !event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return null;
-  switch (event.key.toLowerCase()) {
+  switch (shortcutKeyFromKeyboardEvent(event)) {
     case 'u':
       return 'killLineLeft';
     case 'k':
@@ -61,7 +62,7 @@ export function sessionChatEditingShortcut(event: SessionChatComposerKeyEvent): 
     if (word) return backward ? 'deleteWordLeft' : 'deleteWordRight';
   }
   if (!primary || event.altKey) return null;
-  const key = event.key.toLowerCase();
+  const key = shortcutKeyFromKeyboardEvent(event);
   if (key === 'z') return event.shiftKey ? 'redo' : 'undo';
   if (key === 'v') return 'paste';
   if (event.shiftKey) return null;
