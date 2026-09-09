@@ -1,3 +1,8 @@
+import { importDraftRecovery } from '@/packages/core-ui/chat/session-chat-draft-recovery';
+import { replayDraftSaves } from '@/packages/core-ui/chat/session-chat-draft-outbox';
+import { reconcileSessionChatDraftsFromServer } from '@/packages/core-ui/chat/session-chat-draft-storage';
+import type { GxserverListSessionChatDraftsResult } from '@/packages/shared/gxserver-protocol';
+import type { SessionChatDraftHandoff } from '@/packages/shared/session-chat-queue';
 import { AccountPrivacyContext } from '@/packages/core-ui/accounts/account-text';
 import { createAccountSwitchTransport } from './account-switch';
 import { createSessionChatDiagnosticRecorder } from '@/packages/core-ui/chat/session-chat-diagnostics';
@@ -69,6 +74,7 @@ import {
 } from '@/packages/core-ui/chat/session-chat-view';
 import type { SessionChatBarExtension } from '@/packages/core-ui/chat/session-chat-extension-panel';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
+import { sessionChatDraftClientId } from '@/packages/core-ui/chat/session-chat-queue';
 
 /*
 CDXC:SessionChat 2026-07-31:
@@ -98,6 +104,7 @@ declare global {
     ghostexSetHideAccountEmails?: (hidden: unknown) => void;
     ghostexSetSessionChatTheme?: (theme: unknown) => void;
     ghostexSetSessionChatTranscriptWidthPercent?: (widthPercent: unknown) => void;
+    ghostexSetSessionChatFileEditPreviews?: (enabled: unknown) => void;
     ghostexSetSessionChatVerboseMode?: (verboseMode: unknown) => void;
   }
 }
@@ -117,7 +124,7 @@ interface ChatBridgeNamespace {
   onSessionChatFocusComposerRequested?: () => void;
   onSessionChatEvictionProbeRequested?: (nonce: string) => void;
   onSessionChatHandoffToTerminalRequested?: () => void;
-  onSessionChatInsertPromptRequested?: (payload: { content?: unknown }) => void;
+  onSessionChatInsertPromptRequested?: (payload: SessionChatDraftHandoff) => void;
   onSessionChatStashPromptRequested?: () => void;
   onSessionChatExtensionRequested?: (payload: GhostexChatBarPanelToggleMessage) => void;
   onSessionChatExtensionBridgeMessage?: (payload: unknown) => void;
@@ -398,7 +405,7 @@ function createGpuiSessionChatTransport(
       });
     },
     async send(text, imagePaths, draftVersion) {
-      await rpc(bootstrap, '/api/sendSessionChatMessage', {
+      return rpc<{ queuedPromptId?: string }>(bootstrap, '/api/sendSessionChatMessage', {
         projectId,
         sessionId,
         text,
@@ -777,9 +784,32 @@ function createGpuiSessionChatComposerBridge(
     providesPaneFocus: true,
     register(actions) {
       const namespace = chatBridgeNamespace();
-      const insertPrompt = (payload: { content?: unknown }): void => {
+      const receiving = new Set<string>();
+      const received = new Set<string>();
+      const insertPrompt = (payload: SessionChatDraftHandoff): void => {
+        if (payload.handoffId) {
+          if (receiving.has(payload.handoffId)) return;
+          const id = payload.handoffId;
+          receiving.add(id);
+          void (received.has(id) ? Promise.resolve() : actions.receiveDraftHandoff(payload))
+            .then(async () => {
+              received.add(id);
+              await rpc(bootstrap, '/api/acknowledgeSessionChatDraftHandoff', {
+                projectId,
+                sessionId,
+                handoffId: payload.handoffId,
+              });
+              postSessionChatHostAction('draftHandoffToChatComplete', { handoffId: payload.handoffId });
+            })
+            .catch(() => {
+              postSessionChatHostAction('draftHandoffToChatRetry', { handoffId: payload.handoffId });
+            })
+            .finally(() => receiving.delete(id));
+          return;
+        }
         if (typeof payload?.content === 'string' && payload.content.length > 0) {
-          actions.insertPrompt(payload.content);
+          if (payload.append) actions.appendPrompt(payload.content);
+          else actions.insertPrompt(payload.content);
         }
       };
       let registered = true;
@@ -832,6 +862,8 @@ function createGpuiSessionChatComposerBridge(
           .then((handoff) => {
             postSessionChatHostAction('draftHandoffToTerminalComplete', {
               content: handoff.content,
+              handoffId: handoff.handoffId,
+              draftVersion: handoff.draftVersion,
               stashedPromptId: handoff.stashedPromptId ?? '',
             });
           })
@@ -1197,6 +1229,27 @@ function GpuiSessionChatPage({
   transport,
 }: GpuiSessionChatPageProps) {
   const sessionKey = `${projectId}:${sessionId}`;
+  const remoteMachineId = new URLSearchParams(window.location.search).get('remoteMachineId');
+  const draftSessionKey = remoteMachineId ? `remote-${remoteMachineId}:${sessionKey}` : sessionKey;
+  useEffect(() => {
+    if (!remoteMachineId) return;
+    const prefix = `remote-${remoteMachineId}:`;
+    replayDraftSaves(prefix, async (draft, projectId, sessionId) => {
+      await rpc(bootstrap, '/api/setSessionChatDraft', {
+        projectId,
+        sessionId,
+        content: draft.content,
+        draftVersion: draft.version,
+        clientId: sessionChatDraftClientId(),
+      });
+    });
+    void rpc<GxserverListSessionChatDraftsResult>(bootstrap, '/api/listSessionChatDrafts', {})
+      .then((result) => {
+        importDraftRecovery(result.recoveryDrafts, prefix);
+        reconcileSessionChatDraftsFromServer(result.drafts, prefix);
+      })
+      .catch(() => {});
+  }, [bootstrap, remoteMachineId]);
   const [sessionTitle, setSessionTitle] = useState('');
   const [extensions, setExtensions] = useState<GhostexInstalledExtension[]>([]);
   const extensionsRef = useRef<GhostexInstalledExtension[]>([]);
@@ -1570,11 +1623,12 @@ function GpuiSessionChatPage({
           onChatBarPanelStateChange={updatePanelState}
           onDelayedActions={() => postSessionChatHostAction('delayedActions')}
           {...(remote ? {} : { onSelectForkBranch: focusForkBranch })}
-          sessionKey={sessionKey}
+          sessionKey={draftSessionKey}
           sessionTitle={sessionTitle}
           theme={theme}
           transport={transport}
           verboseMode={chatVerboseMode}
+          fileEditPreviews={chatFileEditPreviews}
         />
       </div>
     </AccountPrivacyContext>
@@ -1616,6 +1670,7 @@ let chatCustomTranscriptWidthEnabled = searchParams.get('customTranscriptWidthEn
 let chatTranscriptWidthPercent = clampSessionChatTranscriptWidthPercent(
   Number(searchParams.get('transcriptWidthPercent')) || DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT
 );
+let chatFileEditPreviews = searchParams.get('fileEditPreviews') === 'true';
 let chatVerboseMode = searchParams.get('verboseMode') === 'true';
 let renderReadyChat: ((theme: SessionChatTheme) => void) | null = null;
 
@@ -1676,6 +1731,10 @@ window.ghostexSetSessionChatCustomTranscriptWidthEnabled = (value) => {
 window.ghostexSetSessionChatTranscriptWidthPercent = (value) => {
   chatTranscriptWidthPercent = clampSessionChatTranscriptWidthPercent(Number(value));
   applyDocumentChatTranscriptWidthPercent(chatTranscriptWidthPercent);
+};
+window.ghostexSetSessionChatFileEditPreviews = (value) => {
+  chatFileEditPreviews = value === true;
+  renderReadyChat?.(chatTheme);
 };
 window.ghostexSetSessionChatVerboseMode = (value) => {
   chatVerboseMode = value === true;

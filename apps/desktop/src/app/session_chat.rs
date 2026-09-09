@@ -24,20 +24,15 @@ use crate::app::session_chat_context_menu::GpuiSessionChatFileResolutionError;
 use crate::app::window::*;
 use crate::*;
 
-/*
-CDXC:Drafts 2026-08-24:
-A draft moving from the chat composer to the terminal is never held in memory
-alone. The page saves it to Saved Prompts BEFORE it clears the composer, and
-this record carries that row's id next to the text, so the row is deleted only
-after a terminal confirms the paste. Every other outcome — a failed paste, a
-chat surface torn down mid-move, a session that never remounts — drops this
-record and leaves the row standing in Saved Prompts, where the user can get the
-text back by hand. Losing the text is the one outcome this shape forbids.
-*/
+/// CDXC:Drafts 2026-09-10 DECISION:
+/// User: view switches must preserve unsent text with durable identities, acknowledged transfers, and independent recovery history.
+/// The composer saves its exact revision before vacating; the server retains recovery after terminal placement, superseding the temporary-stash-only handoff.
 #[derive(Clone, Debug)]
 pub(crate) struct GpuiSessionChatDraftHandoff {
     /// Exact composer text the terminal must receive.
     pub(crate) content: String,
+    pub(crate) handoff_id: String,
+    pub(crate) draft_version: Option<serde_json::Value>,
     /// The Saved Prompts row holding the durable copy, when this handoff
     /// created it. `None` means the save matched a prompt the user had already
     /// saved by hand, which must stay in Saved Prompts.
@@ -94,8 +89,28 @@ impl GhostexGpuiApp {
             .get(&self.workspace_terminal_key_for_shell_session(session_id)?)
     }
 
-    /// CDXC:AgentProviders 2026-09-07 DECISION:
-    /// During account switching, the chat body says "Switching Claude account to" (or Codex) with the selected email below it. Keep its existing page alive so switching does not reload the conversation.
+    /// CDXC:Drafts 2026-09-09 WHY:
+    /// Rendering a draft's chat child is not enough to keep it visible: workspace reconciliation also controls the native page's visibility. Both paths use this same placeholder gate.
+    pub(crate) fn session_account_switch_placeholder_progress(
+        &self,
+        session_id: TerminalSessionId,
+    ) -> Option<&SessionAccountSwitchProgress> {
+        let progress = self.session_account_switch_progress(session_id)?;
+        let key = self.workspace_terminal_key_for_shell_session(session_id)?;
+        let is_draft = self
+            .sidebar_gxserver_presentation_focus_state
+            .active_project_tab_sessions
+            .as_ref()
+            .is_some_and(|sessions| {
+                sessions
+                    .iter()
+                    .any(|session| session.key == key && session.is_draft)
+            });
+        (!is_draft).then_some(progress)
+    }
+
+    /// CDXC:AgentProviders 2026-09-09 DECISION:
+    /// During account switching, prompted sessions show "Switching Claude account to" (or Codex) with the selected email below it while retaining their page. Drafts keep their existing chat visible throughout the background switch, superseding the earlier placeholder rule for drafts only.
     pub(crate) fn set_session_account_switch_progress(
         &mut self,
         key: GpuiWorkspaceTerminalSessionKey,
@@ -120,13 +135,23 @@ impl GhostexGpuiApp {
             let Some(email) = progress["email"].as_str() else {
                 return;
             };
-            self.account_switch_progress.insert(key, SessionAccountSwitchProgress {
-                title: format!("Switching {provider} account to"),
-                email: email.to_string(),
-                provider: if provider == "Claude" { "claude" } else { "codex" },
-                indicator: progress["indicator"].as_str().unwrap_or_default().to_string(),
-                page_generation,
-            });
+            self.account_switch_progress.insert(
+                key,
+                SessionAccountSwitchProgress {
+                    title: format!("Switching {provider} account to"),
+                    email: email.to_string(),
+                    provider: if provider == "Claude" {
+                        "claude"
+                    } else {
+                        "codex"
+                    },
+                    indicator: progress["indicator"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string(),
+                    page_generation,
+                },
+            );
         }
         self.reconcile_agents_chat_surfaces(cx);
         cx.notify();
@@ -387,7 +412,23 @@ impl GhostexGpuiApp {
             );
             return;
         }
+        if action == "draftHandoffToChatComplete" {
+            if self
+                .pending_session_chat_received_drafts
+                .get(&session_id)
+                .and_then(|value| value.get("handoffId"))
+                == message.get("handoffId")
+            {
+                self.pending_session_chat_received_drafts
+                    .remove(&session_id);
+            }
+            return;
+        }
+        if action == "draftHandoffToChatRetry" {
+            return;
+        }
         if action == "composerReady" {
+            self.deliver_pending_session_chat_received_draft(session_id, cx);
             if self.agents_chat_mode_sessions.contains(&session_id)
                 && self.agents_chat_surfaces.contains_key(&session_id)
             {
@@ -431,7 +472,10 @@ impl GhostexGpuiApp {
             return;
         }
         if action == "draftHandoffToTerminalComplete" {
-            if !self.pending_session_chat_draft_handoffs.remove(&session_id) {
+            if !self
+                .pending_session_chat_draft_handoffs
+                .contains(&session_id)
+            {
                 return;
             }
             let content = message
@@ -460,6 +504,18 @@ impl GhostexGpuiApp {
                 self.pending_session_terminal_composer_insert.insert(
                     session_id,
                     GpuiSessionChatDraftHandoff {
+                        handoff_id: message
+                            .get("handoffId")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| {
+                                format!(
+                                    "draft-{}-{}",
+                                    std::process::id(),
+                                    gpui_remote_install_unique_id()
+                                )
+                            }),
+                        draft_version: message.get("draftVersion").cloned(),
                         content,
                         stashed_prompt_id,
                     },
@@ -467,6 +523,14 @@ impl GhostexGpuiApp {
                 if !self.deliver_pending_session_terminal_composer_insert(session_id, cx) {
                     self.schedule_pending_session_terminal_composer_insert_delivery(session_id, cx);
                 }
+            }
+            if message
+                .get("content")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .is_empty()
+            {
+                self.pending_session_chat_draft_handoffs.remove(&session_id);
             }
             self.reconcile_agents_chat_surfaces(cx);
             return;
@@ -712,6 +776,16 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
+        #[cfg(target_os = "macos")]
+        if self.companion_reveal.is_some()
+            && matches!(
+                self.shell_focus,
+                ShellFocusTarget::ProjectEditorCompanion(_)
+            )
+            && cef_parent_native_view(window).ok() != Some(self.companion_native_parent())
+        {
+            return;
+        }
         self.cancel_session_chat_eviction_probe(session_id);
         if self.pending_session_chat_composer_focus != Some(session_id) {
             return;
@@ -930,6 +1004,9 @@ impl GhostexGpuiApp {
         if self
             .session_chat_composer_ready_sessions
             .contains(&session_id)
+            && !self
+                .session_chat_draft_capture_in_flight
+                .contains(&session_id)
             && self.pending_session_chat_draft_handoffs.insert(session_id)
             && let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned()
         {
@@ -942,14 +1019,7 @@ impl GhostexGpuiApp {
         self.toggle_agents_session_chat_mode(session_id, cx);
     }
 
-    /*
-    CDXC:Drafts 2026-08-24:
-    The single point where a handed-off draft stops being recoverable, reached
-    only from a terminal drain that has confirmed the text reached the pty.
-    Nothing else may delete the row: an unconfirmed paste keeps the pending
-    record so the next focus handoff retries it, and a dropped record leaves
-    the row in Saved Prompts on purpose.
-    */
+    /// Release a legacy temporary stash after placement; the independent draft journal remains until submission or explicit discard.
     pub(crate) fn release_session_chat_draft_handoff_stash(
         &self,
         handoff: GpuiSessionChatDraftHandoff,
@@ -1000,7 +1070,10 @@ impl GhostexGpuiApp {
             // stays: reaching the composer is not a confirmed terminal paste.
             self.pending_session_terminal_composer_insert
                 .remove(&session_id);
-            self.deliver_session_chat_composer_insert(session_id, handoff.content, cx);
+            self.pending_session_chat_draft_handoffs.remove(&session_id);
+            self.pending_session_chat_received_drafts.insert(session_id, serde_json::json!({"content":handoff.content,"draftVersion":handoff.draft_version,"handoffId":handoff.handoff_id}));
+            self.deliver_pending_session_chat_received_draft(session_id, cx);
+            self.schedule_session_chat_received_draft_delivery(session_id, cx);
             return true;
         }
         self.dispatch_session_chat_terminal_draft_handoff(session_id, handoff, cx)

@@ -81,6 +81,7 @@ pub async fn clear_session_chat_composer(
 async fn place_session_chat_draft(
     target: &super::SessionChatSendTarget,
     content: &str,
+    state_dir: &std::path::Path,
 ) -> Result<serde_json::Value, crate::domain::DomainStateError> {
     if content.len() > crate::zmx::GXSERVER_ZMX_SEND_TEXT_LIMIT_BYTES {
         return Err(crate::domain::DomainStateError {
@@ -90,9 +91,34 @@ async fn place_session_chat_draft(
     }
     let agent = crate::session_chat_composer::session_chat_composer_agent_id(&target.session)
         .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(&target.session));
-    let mut steps = super::build_session_chat_message_steps(agent.as_deref(), content, &[], false);
-    // Staging a draft owns the same clear/paste transaction, without submitting a turn.
-    steps.pop();
+    // Capture already saves and clears the old input through the agent's editor.
+    // A second clear burst here would erase keystrokes typed after that handshake.
+    let mut steps = vec![
+        super::SessionChatSendStep::WaitForComposer {
+            agent: agent.clone(),
+            settle_ms: super::SESSION_CHAT_COMPOSER_WAIT_SETTLE_MS,
+            timeout_ms: super::SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
+        },
+        super::SessionChatSendStep::PreserveTerminalDraft {
+            replacement: Some(content.to_string()),
+            state_dir: state_dir.to_path_buf(),
+            prompt_editor_input: if agent.as_deref() == Some("grok") {
+                super::SESSION_CHAT_GROK_PROMPT_EDITOR_INPUT
+            } else {
+                super::SESSION_CHAT_PROMPT_EDITOR_INPUT
+            }
+            .to_string(),
+        },
+        super::SessionChatSendStep::WaitForComposer {
+            agent: agent.clone(),
+            settle_ms: super::SESSION_CHAT_COMPOSER_WAIT_SETTLE_MS,
+            timeout_ms: super::SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
+        },
+        super::SessionChatSendStep::Write(super::build_session_chat_paste_bytes(content)),
+    ];
+    if let Some(verify) = super::session_chat_verify_step(content) {
+        steps.push(verify);
+    }
     super::execute_session_chat_send(
         &target.project_id,
         &target.session_id,
@@ -141,7 +167,86 @@ pub(crate) async fn handle_replace_session_chat_draft_http(
             },
         );
     };
-    match place_session_chat_draft(&target, content).await {
+    let db = match crate::storage::open_gxserver_database(&state.paths) {
+        Ok(db) => db,
+        Err(error) => {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: error.to_string(),
+                },
+            )
+        }
+    };
+    let id = params
+        .get("handoffId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let staged = (|| {
+        if let Some(previous) = crate::session_chat_draft_handoffs::result(
+            &db,
+            &target.project_id,
+            &target.session_id,
+            &id,
+        )? {
+            if previous["content"].as_str() != Some(content) {
+                return Err(DomainStateError::bad_request(
+                    "A draft transfer ID cannot be reused for different text.",
+                ));
+            }
+            if previous["state"] == "placed" || previous["state"] == "received" {
+                return Ok(Some(previous));
+            }
+            return Err(DomainStateError::bad_request(
+                "This transfer is already pending. Its text remains in Recovered.",
+            ));
+        }
+        if let Some(version) = crate::session_chat_draft_versions::parse(&params)? {
+            crate::session_chat_draft_versions::require_saved(
+                &db,
+                &target.project_id,
+                &target.session_id,
+                content,
+                &version,
+            )?;
+        }
+        let version = crate::session_chat_draft_versions::parse(&params)?.unwrap_or(
+            crate::session_chat_draft_versions::DraftVersion {
+                draft_id: uuid::Uuid::new_v4().to_string(),
+                revision: 1,
+            },
+        );
+        crate::session_chat_draft_handoffs::stage(
+            &db,
+            &target.project_id,
+            &target.session_id,
+            &id,
+            content,
+            &version,
+            "terminal",
+        )?;
+        Ok(None)
+    })();
+    match staged {
+        Ok(Some(result)) => {
+            return routed_json(
+                Some(endpoint_path),
+                axum::http::StatusCode::OK,
+                crate::protocol::rpc_success(request_id, result),
+            )
+        }
+        Err(error) => return domain_error_response(endpoint_path, request_id, error),
+        Ok(None) => {}
+    }
+    match place_session_chat_draft(&target, content, &state.paths.app_state_dir)
+        .await
+        .and_then(|result| {
+            crate::session_chat_draft_handoffs::placed(&db, &id)?;
+            Ok(result)
+        }) {
         Ok(result) => routed_json(
             Some(endpoint_path),
             axum::http::StatusCode::OK,

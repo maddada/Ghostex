@@ -1,8 +1,21 @@
+import type { SessionChatDraftHandoff } from '@/packages/shared/session-chat-queue';
+import {
+  registerDraftWriter,
+  flushDraftSaves,
+  subscribeDraftSaveStatus,
+  draftSaveStatus,
+  hasPendingDraftSaves,
+} from './session-chat-draft-outbox';
+import { preserveDraftRevision, retireDraftRecovery } from './session-chat-draft-recovery';
 import type { SessionChatDraftVersion } from '@/packages/shared/session-chat-queue';
 import { sessionChatDraftFingerprint } from './session-chat-draft-diagnostics';
 import { sessionChatCaretMovement, type SessionChatCaretMovement } from './session-chat-caret-navigation';
 import type { SessionChatTextEditCommand } from './session-chat-edit-shortcuts';
 import './session-chat-composer-focus.css';
+import './session-chat-composer-images.css';
+import { SessionChatReferenceMenuItems } from './session-chat-reference-menu-items';
+import { SessionChatDraftConflict } from './session-chat-draft-conflict';
+import { useSessionChatReferenceInteractions } from './use-session-chat-reference-interactions';
 // Session chat composer (upstream chat spec §1.1/§11.6 port). Enter sends by
 // default, hosts can reserve it for newlines, Escape interrupts, the IME guard swallows
 // composition Enter, ArrowUp/Down recall draft history, and Alt+ArrowUp in an
@@ -33,7 +46,6 @@ import {
   IconClipboard,
   IconCopy,
   IconCut,
-  IconDeviceMobileMessage,
   IconFile,
   IconLoader2,
   IconPlayerStopFilled,
@@ -149,6 +161,8 @@ export interface SessionChatComposerHandle {
   flushDraft: () => void;
   focus: () => void;
   getDraft: () => string;
+  handoffDraft: () => Promise<SessionChatDraftHandoff>;
+  receiveDraftHandoff: (handoff: SessionChatDraftHandoff) => Promise<void>;
   /** Insert a Saved Prompt at the caret as one editor operation. */
   insertSavedPrompt: (text: string) => boolean;
   /**
@@ -177,9 +191,11 @@ export interface SessionChatComposerHandle {
  */
 export interface SessionChatComposerKeyEvent {
   altKey: boolean;
+  code?: string;
   ctrlKey: boolean;
   isComposing: boolean;
   key: string;
+  keyCode?: number;
   metaKey: boolean;
   shiftKey: boolean;
   preventDefault: () => void;
@@ -369,7 +385,11 @@ export interface SessionChatComposerProps {
    * option catalog pass nothing.
    */
   optionPills?: ReactNode;
-  /** Desktop and web use the bundled Lexical input; mobile keeps its plain input. */
+  /**
+   * CDXC:SessionChat 2026-09-09 DECISION:
+   * User: share the same Lexical editing behavior across desktop, web, and mobile while preserving the existing mobile controls and keyboard layout.
+   * Lexical is the default even when the composer is mounted without SessionChatView.
+   */
   inputBackend?: 'lexical' | 'plain';
   /** Palette used by the chat-owned prompt input. */
   theme?: SessionChatTheme;
@@ -457,8 +477,6 @@ const SESSION_CHAT_STOP_BUTTON_COOLDOWN_MS = 2_000;
  * copy, and one dropped request left the sent message on the daemon as an
  * "unsent draft" that every later app start restored into the composer.
  */
-const SESSION_CHAT_DRAFT_SYNC_RETRY_MS = 2_000;
-const SESSION_CHAT_DRAFT_SYNC_MAX_RETRIES = 3;
 
 function linkedImageReferenceHrefs(text: string): string[] {
   return [...text.matchAll(LINKED_IMAGE_REFERENCE_PATTERN)].map((match) => match[1]?.trim() ?? '').filter(Boolean);
@@ -542,9 +560,11 @@ function readFileAsDataUrl(file: File): Promise<string> {
 function reactKeyEventAdapter(event: KeyboardEvent<HTMLElement>): SessionChatComposerKeyEvent {
   return {
     altKey: event.altKey,
+    code: event.code,
     ctrlKey: event.ctrlKey,
     isComposing: event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229,
     key: event.key,
+    keyCode: event.keyCode,
     metaKey: event.metaKey,
     preventDefault: () => event.preventDefault(),
     shiftKey: event.shiftKey,
@@ -564,7 +584,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       hostActions,
       renderAccountMenu,
       isWorking,
-      inputBackend,
+      inputBackend = 'lexical',
       nativeContextMenu = false,
       onAttachFile,
       onDelayedActions,
@@ -607,12 +627,21 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     ref
   ) {
     const [draft, setDraft] = useState(() => readStoredSessionChatDraft(sessionKey));
+    const parkedDraftRef = useRef(readStoredSessionChatDraftEntry(sessionKey)?.parked === true);
+    const [saveStatus, setSaveStatus] = useState(() => draftSaveStatus(sessionKey));
+    useEffect(() => subscribeDraftSaveStatus(() => setSaveStatus(draftSaveStatus(sessionKey))), [sessionKey]);
+    useEffect(() => {
+      if (sessionKey && draftSync?.canSync)
+        registerDraftWriter(sessionKey, (entry) => draftSync.push(entry.content, entry.version));
+    }, [sessionKey, draftSync?.canSync, draftSync?.push]);
+
     const draftVersionRef = useRef<SessionChatDraftVersion | undefined>(
       readStoredSessionChatDraftEntry(sessionKey)?.submitted
         ? undefined
         : readStoredSessionChatDraftEntry(sessionKey)?.version
     );
     const persistComposerDraft = (text: string, submitted = false) => {
+      parkedDraftRef.current = false;
       const version = nextSessionChatDraftVersion(draftVersionRef.current);
       draftVersionRef.current = version;
       return writeStoredSessionChatDraft(sessionKey, text, undefined, version, submitted);
@@ -634,6 +663,29 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
      * is, and a mention is only "being typed" when the caret sits at its end.
      */
     const [caret, setCaret] = useState<number | null>(null);
+    const referenceInteractions = useSessionChatReferenceInteractions(draft);
+    const [clickedImageReference, setClickedImageReference] = useState<{
+      path: string;
+      caret: number | null;
+      draft: string;
+    } | null>(null);
+    /**
+     * CDXC:SessionChat 2026-09-09 DECISION:
+     * User: hovering or clicking an image reference or placing the caret in it outlines its preview image in white across desktop, web, and mobile chat inputs.
+     */
+    const activeImagePath = useMemo(() => {
+      if (referenceInteractions.hoveredImagePath !== null) return referenceInteractions.hoveredImagePath;
+      if (clickedImageReference?.draft === draft && clickedImageReference.caret === caret) {
+        return clickedImageReference.path;
+      }
+      if (caret === null) return null;
+      for (const match of draft.matchAll(LINKED_IMAGE_REFERENCE_PATTERN)) {
+        if (caret >= match.index && caret <= match.index + match[0].length) {
+          return match[1]?.trim() ?? null;
+        }
+      }
+      return null;
+    }, [caret, clickedImageReference, draft, referenceInteractions.hoveredImagePath]);
     const [pastedImages, setPastedImages] = useState<readonly PastedImagePreview[]>([]);
     const [pendingImagePastes, setPendingImagePastes] = useState(0);
     const pendingImagePastesRef = useRef(0);
@@ -829,6 +881,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       persistComposerDraft(next);
       setDraft(next);
       setCaret(caretOffset);
+      setClickedImageReference(null);
       setSendError(null);
       setHistory((current) => resetSessionChatComposerHistoryIndex(current));
       if (sessionChatSlashQuery(next) === null) {
@@ -885,6 +938,9 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         draftEmptyRef.current &&
         pendingImagePastesRef.current === 0 &&
         pendingComposerOperationsRef.current === 0 &&
+        pendingDraftTransfersRef.current === 0 &&
+        !hasPendingDraftSaves(sessionKey) &&
+        draftSaveStatus(sessionKey) === '' &&
         !composingRef.current &&
         !sendInFlightRef.current &&
         !pendingFocusRef.current &&
@@ -976,6 +1032,102 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         input.focus();
       },
       getDraft: () => getInputApi()?.getValue() ?? draftRef.current,
+      handoffDraft: async () => {
+        const content = getInputApi()?.getValue() ?? draftRef.current;
+        if (content === '') return { content: '' };
+        if (
+          !sessionKey ||
+          !draftSync?.canSync ||
+          composingRef.current ||
+          pendingImagePastesRef.current > 0 ||
+          pendingComposerOperationsRef.current > 0 ||
+          sendInFlightRef.current
+        ) {
+          throw new Error('The draft is still being prepared. It has been kept in Chat.');
+        }
+        const entry = readStoredSessionChatDraftEntry(sessionKey);
+        const saved = entry?.text === content && entry.version ? entry : persistComposerDraft(content);
+        const version = saved.version!;
+        pendingDraftTransfersRef.current++;
+        try {
+          await flushDraftSaves(sessionKey);
+          await draftSync.push(content, version);
+          if (
+            (getInputApi()?.getValue() ?? draftRef.current) !== content ||
+            draftVersionRef.current?.draftId !== version.draftId ||
+            draftVersionRef.current?.revision !== version.revision
+          ) {
+            throw new Error('The draft changed during transfer. It has been kept in Chat.');
+          }
+          // Moving an editor is not sending its draft. Keep its identity and durable text.
+          preserveDraftRevision({ sessionKey, text: content, updatedAt: saved.updatedAt ?? Date.now(), version });
+          writeStoredSessionChatDraft(sessionKey, content, saved.updatedAt, version, false, true);
+          parkedDraftRef.current = true;
+          composerTouchedRef.current = false;
+          draftVersionRef.current = undefined;
+          draftRef.current = '';
+          setDraft('');
+          setCaret(0);
+          getInputApi()?.applyValue('', 0);
+          return { content, draftVersion: version, handoffId: crypto.randomUUID() };
+        } finally {
+          pendingDraftTransfersRef.current--;
+        }
+      },
+      receiveDraftHandoff: async (handoff) => {
+        if (!sessionKey || !draftSync?.canSync) throw new Error('Draft saving is unavailable.');
+        if (!getInputApi()) throw new Error('The Chat input is not ready.');
+        if (
+          handoff.draftVersion &&
+          draftSync.synced?.consumedDrafts?.some(
+            (receipt) =>
+              receipt.draftId === handoff.draftVersion!.draftId && receipt.revision >= handoff.draftVersion!.revision
+          )
+        )
+          return;
+        const current = getInputApi()?.getValue() ?? draftRef.current;
+        const stored = readStoredSessionChatDraftEntry(sessionKey);
+        if (handoff.draftVersion)
+          preserveDraftRevision({
+            sessionKey,
+            text: handoff.content,
+            version: handoff.draftVersion,
+            updatedAt: Date.now(),
+          });
+        if (
+          handoff.draftVersion &&
+          stored?.version &&
+          stored.version.draftId === handoff.draftVersion.draftId &&
+          stored &&
+          !stored.parked &&
+          !parkedDraftRef.current &&
+          current === stored.text &&
+          stored.version!.revision >= handoff.draftVersion!.revision
+        ) {
+          await flushDraftSaves(sessionKey);
+          return;
+        }
+        if (current !== '' && current !== handoff.content) {
+          // The late transfer remains independently recoverable; newer typing owns this editor.
+          setIncomingDraft({
+            content: handoff.content,
+            version: handoff.draftVersion,
+            originClientId: 'gxserver-draft-handoff',
+            updatedAt: new Date().toISOString(),
+          });
+          return;
+        }
+        parkedDraftRef.current = false;
+        draftVersionRef.current = handoff.draftVersion;
+        const accepted = writeStoredSessionChatDraft(sessionKey, handoff.content, undefined, handoff.draftVersion);
+        draftVersionRef.current = accepted.version;
+        composerTouchedRef.current = true;
+        draftRef.current = handoff.content;
+        setDraft(handoff.content);
+        setCaret(handoff.content.length);
+        getInputApi()?.applyValue(handoff.content, handoff.content.length);
+        await flushDraftSaves(sessionKey);
+      },
       insertSavedPrompt: (text: string): boolean => {
         const input = getInputApi();
         if (!input) {
@@ -1002,9 +1154,11 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         let handled = false;
         handleKeyDown({
           altKey: event.altKey,
+          code: event.code,
           ctrlKey: event.ctrlKey,
           isComposing: event.isComposing,
           key: event.key,
+          keyCode: event.keyCode,
           metaKey: event.metaKey,
           shiftKey: event.shiftKey,
           preventDefault: () => {
@@ -1146,48 +1300,57 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         traceDraft('deliveryBegin', { sent: sessionChatDraftFingerprint(text) });
         await onSend(text, submittedDraft.version);
       })();
+      /*
+      CDXC:SessionChat 2026-09-10 WHY:
+      Local draft cleanup can throw after delivery was acknowledged. Only rejection of the send itself may restore the prompt; treating cleanup as a failed send offers an already-delivered message for resending.
+      */
       void sendRequest
-        .then(() => {
-          traceDraft('deliveryAcknowledged', {
-            sent: sessionChatDraftFingerprint(text),
-            localMatchesSent: readStoredSessionChatDraft(sessionKey) === text,
-          });
-          clearStoredSessionChatDraftIfUnchanged(sessionKey, submittedDraft);
-          traceDraft('localClearSettled');
-          recordSentSessionChatMessage(text, sessionKey);
-        })
-        .catch((error: unknown) => {
-          traceDraft('deliveryRejected', {
-            code: gxserverRpcErrorCode(error),
-            sent: sessionChatDraftFingerprint(text),
-          });
-          // Do not overwrite a next draft typed while the send was in flight.
-          // Put the failed message first so retrying still preserves send order.
-          restoreComposerText(text);
-          /*
+        .then(
+          () => {
+            traceDraft('deliveryAcknowledged', {
+              sent: sessionChatDraftFingerprint(text),
+              localMatchesSent: readStoredSessionChatDraft(sessionKey) === text,
+            });
+            clearStoredSessionChatDraftIfUnchanged(sessionKey, submittedDraft);
+            traceDraft('localClearSettled');
+            recordSentSessionChatMessage(text, sessionKey);
+          },
+          (error: unknown) => {
+            traceDraft('deliveryRejected', {
+              code: gxserverRpcErrorCode(error),
+              sent: sessionChatDraftFingerprint(text),
+            });
+            // Do not overwrite a next draft typed while the send was in flight.
+            // Put the failed message first so retrying still preserves send order.
+            restoreComposerText(text);
+            /*
           CDXC:SessionChat 2026-09-04: the user's own Escape cancelled this
           send before its Enter (`sendCancelled`). Nothing failed and the
           "Interrupted the agent" row already says what happened, so no error.
           */
-          if (gxserverRpcErrorCode(error) === 'sendCancelled') {
-            return;
-          }
-          /*
+            if (gxserverRpcErrorCode(error) === 'sendCancelled') {
+              return;
+            }
+            /*
           CDXC:SessionChat 2026-08-26:
           `composerNotReady` means the daemon wrote NOTHING — the agent CLI has
           no input box on screen yet (booting, or a trust/auth/setup screen owns
           the terminal). That is a fixable state with a place to go, so it gets
           its own notice; every other rejection keeps the generic sentence.
           */
-          const code = gxserverRpcErrorCode(error);
-          setSendErrorCode(code);
-          setSendError(
-            (code === 'composerNotReady' || code === 'composerNotCleared') &&
-              error instanceof Error &&
-              error.message !== ''
-              ? error.message
-              : 'Message could not be sent. Your draft was restored.'
-          );
+            const code = gxserverRpcErrorCode(error);
+            setSendErrorCode(code);
+            setSendError(
+              (code === 'composerNotReady' || code === 'composerNotCleared') &&
+                error instanceof Error &&
+                error.message !== ''
+                ? error.message
+                : 'Message could not be sent. Your draft was restored.'
+            );
+          }
+        )
+        .catch((error: unknown) => {
+          console.error('[session-chat] Could not update local composer state after sending.', error);
         })
         .finally(() => {
           sendInFlightRef.current = false;
@@ -1253,8 +1416,12 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
             await draftSync.push(stored, submittedDraft.version);
           }
           await controller.queuePrompt(text, submittedDraft.version);
-          recordSentSessionChatMessage(text, sessionKey);
-          clearStoredSessionChatDraftIfUnchanged(sessionKey, submittedDraft);
+          try {
+            recordSentSessionChatMessage(text, sessionKey);
+            clearStoredSessionChatDraftIfUnchanged(sessionKey, submittedDraft);
+          } catch (error: unknown) {
+            console.error('[session-chat] Could not update local composer state after queueing.', error);
+          }
         } catch {
           restoreComposerText(text);
           setSendError('The prompt could not be queued. Your draft was restored.');
@@ -1367,66 +1534,20 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     /** True once anything mutated the composer — typing, load, send, clear. */
     const composerTouchedRef = useRef(false);
     const pendingDraftTransfersRef = useRef(0);
-    const draftSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const lastPushedVersionRef = useRef<string | null>(null);
-    const draftSyncRetriesRef = useRef(0);
     /** Set by the unmount cleanup so a late failure cannot arm a timer into a dead composer. */
     const draftSyncUnmountedRef = useRef(false);
     const pushDraftIfChanged = (): void => {
-      const controller = draftSync;
-      traceDraft('syncCheck', { canSync: controller?.canSync === true });
-      if (!controller?.canSync || !composerTouchedRef.current) {
-        return;
-      }
+      if (!draftSync?.canSync || !sessionKey || !composerTouchedRef.current || parkedDraftRef.current) return;
       const content = getInputApi()?.getValue() ?? draftRef.current;
-      // The blank field is optimistic until delivery succeeds. A blur or
-      // unmount must not erase the durable unsent message while it is in flight.
-      if (content === '' && pendingDraftTransfersRef.current > 0) {
-        return;
-      }
+      if (content === '' && pendingDraftTransfersRef.current > 0) return;
       const stored = readStoredSessionChatDraftEntry(sessionKey);
       if (
         !draftVersionRef.current ||
         stored?.text !== content ||
         stored.version?.draftId !== draftVersionRef.current.draftId
-      ) {
+      )
         persistComposerDraft(content);
-      }
-      const version = draftVersionRef.current;
-      const versionKey = version ? `${version.draftId}:${version.revision}` : null;
-      if (content === lastPushedDraftRef.current && versionKey === lastPushedVersionRef.current) {
-        return;
-      }
-      lastPushedDraftRef.current = content;
-      lastPushedVersionRef.current = versionKey;
-      const pushed = sessionChatDraftFingerprint(content);
-      traceDraft('syncBegin', { pushed, version });
-      void controller
-        .push(content, version)
-        .then(() => {
-          traceDraftRef.current('syncAcknowledged', { pushed, version });
-          draftSyncRetriesRef.current = 0;
-        })
-        .catch(() => {
-          traceDraftRef.current('syncRejected', { pushed, retryCount: draftSyncRetriesRef.current });
-          // Forget the push so the next flush sends the live value again, and
-          // schedule that flush instead of waiting for a keystroke that may
-          // never come: after a send the composer is empty and idle, and the
-          // empty push is exactly the one that must not be lost.
-          lastPushedDraftRef.current = null;
-          if (
-            draftSyncUnmountedRef.current ||
-            draftSyncTimerRef.current !== null ||
-            draftSyncRetriesRef.current >= SESSION_CHAT_DRAFT_SYNC_MAX_RETRIES
-          ) {
-            return;
-          }
-          draftSyncRetriesRef.current += 1;
-          draftSyncTimerRef.current = setTimeout(() => {
-            draftSyncTimerRef.current = null;
-            pushDraftRef.current();
-          }, SESSION_CHAT_DRAFT_SYNC_RETRY_MS);
-        });
+      void flushDraftSaves(sessionKey).catch(() => {});
     };
     const pushDraftRef = useRef(pushDraftIfChanged);
     pushDraftRef.current = pushDraftIfChanged;
@@ -1450,10 +1571,6 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       if (!composerTouchedRef.current) {
         return;
       }
-      if (draftSyncTimerRef.current !== null) {
-        clearTimeout(draftSyncTimerRef.current);
-        draftSyncTimerRef.current = null;
-      }
       // Save every rendered edit, including deletion. The transport serializes
       // revisions; successful sending still awaits its final exact save.
       pushDraftRef.current();
@@ -1461,12 +1578,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     useEffect(() => {
       draftSyncUnmountedRef.current = false;
       return () => {
-        // The unmount cleanup above already flushes; the pending timer must
-        // not fire into a dead composer after it.
         draftSyncUnmountedRef.current = true;
-        if (draftSyncTimerRef.current !== null) {
-          clearTimeout(draftSyncTimerRef.current);
-        }
       };
     }, []);
 
@@ -1474,6 +1586,11 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const draftClientId = draftSync?.clientId ?? '';
     useEffect(() => {
       if (!syncedDraft) {
+        return;
+      }
+      if (sessionKey) retireDraftRecovery(sessionKey, syncedDraft.consumedDrafts ?? []);
+      if (parkedDraftRef.current || syncedDraft.parked) {
+        setIncomingDraft(null);
         return;
       }
       const composerText = getInputApi()?.getValue() ?? draftRef.current;
@@ -1497,8 +1614,13 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         pushDraftRef.current();
         return;
       }
+      // CDXC:Drafts 2026-09-10 WHY:
+      // A restart can return this draft under the old outbox writer ID; its stable draft identity still lets an untouched composer recover a newer revision quietly.
       const recovered =
-        retired || (!composerTouchedRef.current && syncedDraft.originClientId === draftClientId)
+        retired ||
+        (!composerTouchedRef.current &&
+          (syncedDraft.originClientId === draftClientId ||
+            (stored?.version && syncedDraft.version?.draftId === stored.version.draftId)))
           ? recoverSessionChatDraft(stored, syncedDraft)
           : null;
       if (recovered) {
@@ -1531,6 +1653,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         shouldOfferSessionChatDraft({
           clientId: draftClientId,
           composerText,
+          localVersion: stored?.version,
           incoming: syncedDraft,
           lastHandledUpdatedAt: lastHandledDraftAtRef.current,
         })
@@ -1543,6 +1666,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
         setIncomingDraft(syncedDraft);
         return;
       }
+      setIncomingDraft(null);
       if (isNewerSessionChatDraftStamp(syncedDraft.updatedAt, lastHandledDraftAtRef.current)) {
         traceDraft('serverRestoreIgnored', {
           incoming: sessionChatDraftFingerprint(syncedDraft.content),
@@ -1562,6 +1686,10 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       }
       lastHandledDraftAtRef.current = incomingDraft.updatedAt;
       // Only ever reached by pressing Use: nothing above writes the composer.
+      const existing = readStoredSessionChatDraftEntry(sessionKey);
+      if (existing && sessionKey)
+        preserveDraftRevision({ ...existing, sessionKey, updatedAt: existing.updatedAt ?? Date.now() });
+      draftVersionRef.current = undefined;
       loadComposerText(incomingDraft.content);
       setIncomingDraft(null);
     };
@@ -2058,6 +2186,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
      */
     const handleCaretChange = (nextCaret: number): void => {
       setCaret(nextCaret);
+      setClickedImageReference((current) => (current?.caret === nextCaret ? current : null));
       const selection = getInputApi()?.getSelection();
       if (
         historyRef.current.index !== null &&
@@ -2424,19 +2553,19 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           ) : sendError ? (
             <FieldError className='px-2'>{sendError}</FieldError>
           ) : null}
+          {saveStatus ? (
+            <div className='px-2 text-xs text-muted-foreground' role='status'>
+              {saveStatus}
+            </div>
+          ) : null}
           <SessionChatAgentTasksPanel tasks={agentTasks ?? null} />
           <SessionChatAgentFleetStrip fleet={agentFleet ?? null} />
           {incomingDraft ? (
-            <div className='ghostex-chat-draft-conflict' role='status'>
-              <IconDeviceMobileMessage aria-hidden='true' size={14} stroke={1.8} />
-              <span className='ghostex-chat-draft-conflict-text'>Newer draft from another device</span>
-              <button className='ghostex-chat-draft-conflict-action' onClick={acceptIncomingDraft} type='button'>
-                Use
-              </button>
-              <button className='ghostex-chat-draft-conflict-action' onClick={dismissIncomingDraft} type='button'>
-                Dismiss
-              </button>
-            </div>
+            <SessionChatDraftConflict
+              draft={incomingDraft}
+              onUse={acceptIncomingDraft}
+              onDismiss={dismissIncomingDraft}
+            />
           ) : null}
           <div
             className={cn(
@@ -2446,8 +2575,38 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
             data-scroll-collapsed={collapsed ? 'true' : undefined}
             data-pane-focused={paneFocused ? 'true' : undefined}
             ref={composerContainerRef}
-            onPointerDownCapture={expandComposer}
-            onKeyDownCapture={expandComposer}
+            onPointerDownCapture={() => {
+              expandComposer();
+              referenceInteractions.cancelImageOpen();
+            }}
+            onMouseDownCapture={(event) => {
+              if (event.detail > 1) referenceInteractions.cancelImageOpen();
+            }}
+            onDoubleClickCapture={referenceInteractions.cancelImageOpen}
+            onPointerOver={(event) => referenceInteractions.hoverReference(event.target)}
+            onPointerOut={(event) => referenceInteractions.hoverReference(event.relatedTarget)}
+            onPointerLeave={() => referenceInteractions.hoverReference(null)}
+            onKeyDownCapture={() => {
+              expandComposer();
+              referenceInteractions.cancelImageOpen();
+            }}
+            onClick={(event) => {
+              referenceInteractions.clickReference(event);
+              const reference =
+                event.target instanceof Element
+                  ? event.target.closest<HTMLElement>('[data-ghostex-reference-path]')
+                  : null;
+              const path = reference?.dataset.ghostexReferencePath;
+              setClickedImageReference(
+                path
+                  ? {
+                      path,
+                      caret: getInputApi()?.getSelection().end ?? caret,
+                      draft,
+                    }
+                  : null
+              );
+            }}
             onCompositionStartCapture={() => {
               composingRef.current = true;
             }}
@@ -2485,7 +2644,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
             {pastedImages.length > 0 || pendingImagePastes > 0 ? (
               <div className='flex flex-wrap items-center gap-2 pb-2'>
                 {pastedImages.map((image) => (
-                  <div className='relative' key={image.id}>
+                  <div className='ghostex-chat-composer-image relative' key={image.id}>
                     <button
                       aria-label='View pasted image'
                       className='block rounded-lg'
@@ -2501,12 +2660,13 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                       <img
                         alt='Pasted image'
                         className='h-12 w-12 rounded-lg border border-input object-cover'
+                        data-reference-active={activeImagePath === image.path ? 'true' : undefined}
                         src={image.dataUrl}
                       />
                     </button>
                     <button
                       aria-label='Remove image'
-                      className='absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full border border-input bg-card text-muted-foreground hover:text-foreground'
+                      className='ghostex-chat-composer-image-remove absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full border border-input bg-card text-muted-foreground hover:text-foreground'
                       onClick={() => removePastedImage(image)}
                       type='button'
                     >
@@ -2562,52 +2722,64 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                   : {})}
               />
             ) : null}
-            {nativeContextMenu ? (
-              <div className='ghostex-chat-composer-row flex min-w-0 select-text items-end gap-2 pb-1.5'>
-                {composerInput}
-              </div>
-            ) : (
-              <ContextMenu
-                onOpenChange={(open) => {
-                  if (open) {
-                    setContextSelection(getInputApi()?.getSelection() ?? { end: 0, start: 0 });
-                  }
-                }}
+            <ContextMenu
+              disabled={nativeContextMenu && referenceInteractions.contextReference === null}
+              onOpenChange={(open) => {
+                if (open) {
+                  setContextSelection(getInputApi()?.getSelection() ?? { end: 0, start: 0 });
+                }
+              }}
+            >
+              <ContextMenuTrigger
+                className='ghostex-chat-composer-row flex min-w-0 select-text items-end gap-2 pb-1.5'
+                onPointerDownCapture={(event) => referenceInteractions.captureReferenceContext(event.target)}
+                onContextMenuCapture={(event) => referenceInteractions.captureReferenceContext(event.target)}
+                style={
+                  nativeContextMenu && referenceInteractions.contextReference === null
+                    ? { WebkitTouchCallout: 'default' }
+                    : undefined
+                }
               >
-                <ContextMenuTrigger className='ghostex-chat-composer-row flex min-w-0 select-text items-end gap-2 pb-1.5'>
-                  {composerInput}
-                </ContextMenuTrigger>
-                <ContextMenuContent>
+                {composerInput}
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                {referenceInteractions.contextReference !== null ? (
                   <ContextMenuGroup>
-                    <ContextMenuItem
-                      disabled={contextSelection.start === contextSelection.end}
-                      onClick={() => copyContextSelection(true)}
-                    >
-                      <IconCut aria-hidden='true' />
-                      Cut
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      disabled={contextSelection.start === contextSelection.end}
-                      onClick={() => copyContextSelection(false)}
-                    >
-                      <IconCopy aria-hidden='true' />
-                      Copy
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={pasteFromContextMenu}>
-                      <IconClipboard aria-hidden='true' />
-                      Paste
-                    </ContextMenuItem>
+                    <SessionChatReferenceMenuItems href={referenceInteractions.contextReference} />
                   </ContextMenuGroup>
-                  <ContextMenuSeparator />
-                  <ContextMenuGroup>
-                    <ContextMenuItem disabled={draft.length === 0} onClick={() => getInputApi()?.selectAll()}>
-                      <IconSelectAll aria-hidden='true' />
-                      Select all
-                    </ContextMenuItem>
-                  </ContextMenuGroup>
-                </ContextMenuContent>
-              </ContextMenu>
-            )}
+                ) : (
+                  <>
+                    <ContextMenuGroup>
+                      <ContextMenuItem
+                        disabled={contextSelection.start === contextSelection.end}
+                        onClick={() => copyContextSelection(true)}
+                      >
+                        <IconCut aria-hidden='true' />
+                        Cut
+                      </ContextMenuItem>
+                      <ContextMenuItem
+                        disabled={contextSelection.start === contextSelection.end}
+                        onClick={() => copyContextSelection(false)}
+                      >
+                        <IconCopy aria-hidden='true' />
+                        Copy
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={pasteFromContextMenu}>
+                        <IconClipboard aria-hidden='true' />
+                        Paste
+                      </ContextMenuItem>
+                    </ContextMenuGroup>
+                    <ContextMenuSeparator />
+                    <ContextMenuGroup>
+                      <ContextMenuItem disabled={draft.length === 0} onClick={() => getInputApi()?.selectAll()}>
+                        <IconSelectAll aria-hidden='true' />
+                        Select all
+                      </ContextMenuItem>
+                    </ContextMenuGroup>
+                  </>
+                )}
+              </ContextMenuContent>
+            </ContextMenu>
             <div className='ghostex-chat-composer-footer flex w-full items-center justify-between gap-2'>
               <div className='ghostex-chat-composer-footer-options flex min-w-0 items-center gap-0.5'>
                 {optionPills}

@@ -7,19 +7,21 @@ import type { SessionChatDraftVersion, SessionChatDraft } from '@/packages/share
  */
 
 import { sessionChatDraftFingerprint, type SessionChatDraftDiagnosticLog } from './session-chat-draft-diagnostics';
+import { queueDraftSave, acknowledgeDraftSave, reportDraftStorageFailure } from './session-chat-draft-outbox';
+import {
+  preserveDraftRevision,
+  recoveryDraftEntries,
+  dismissDraftRecovery,
+  retireDraftRecovery,
+} from './session-chat-draft-recovery';
 import { recordDeliveredSessionChatDrafts } from './session-chat-sent-history';
 
 const SESSION_CHAT_DRAFT_STORAGE_PREFIX = 'ghostex.sessionChat.draft.';
 
-/** Recovered drafts older than this are deleted on enumeration. */
-const RECOVERED_DRAFT_MAX_AGE_MS = 5 * 24 * 60 * 60 * 1000;
-
-/** Drafts shorter than this (trimmed) are noise ("ok", a stray letter). */
-const RECOVERED_DRAFT_MIN_CHARS = 3;
-
 export type RecoveredSessionChatDraft = {
   /** The raw `<sessionKey>` portion of the storage key. */
   sessionKey: string;
+  recoveryId?: string;
   projectId: string | undefined;
   sessionId: string | undefined;
   text: string;
@@ -30,6 +32,7 @@ export type RecoveredSessionChatDraft = {
 export type DecodedStoredDraft = {
   version?: SessionChatDraftVersion;
   submitted?: boolean;
+  parked?: boolean;
   text: string;
   updatedAt: number | undefined;
 };
@@ -61,6 +64,7 @@ function decodeStoredDraft(raw: string): DecodedStoredDraft {
         text: entry.text,
         updatedAt: entry.updatedAt,
         submitted: entry.submitted === true,
+        parked: entry.parked === true,
         version:
           version &&
           typeof version.draftId === 'string' &&
@@ -81,7 +85,9 @@ export function readStoredSessionChatDraft(sessionKey: string | undefined): stri
     return '';
   }
   const raw = draftStorage()?.getItem(draftStorageKey(sessionKey));
-  return raw === null || raw === undefined ? '' : decodeStoredDraft(raw).text;
+  if (raw === null || raw === undefined) return '';
+  const entry = decodeStoredDraft(raw);
+  return entry.parked ? '' : entry.text;
 }
 
 /**
@@ -106,7 +112,8 @@ export function writeStoredSessionChatDraft(
   draft: string,
   updatedAt?: number,
   version?: SessionChatDraftVersion,
-  submitted = false
+  submitted = false,
+  parked = false
 ): DecodedStoredDraft {
   const previous = readStoredSessionChatDraftEntry(sessionKey);
   const entry: DecodedStoredDraft = {
@@ -118,12 +125,25 @@ export function writeStoredSessionChatDraft(
         ? nextSessionChatDraftVersion(previous?.submitted ? undefined : previous?.version)
         : undefined),
     submitted,
+    parked,
   };
   if (sessionKey) {
+    if (previous?.text && !previous.submitted && !draft.startsWith(previous.text)) {
+      preserveDraftRevision({ ...previous, sessionKey, updatedAt: previous.updatedAt ?? Date.now() });
+    }
+    if (updatedAt === undefined && !submitted && !parked && entry.version) {
+      queueDraftSave({ sessionKey, content: draft, version: entry.version, updatedAt: entry.updatedAt! });
+    }
+    if (submitted && entry.version) {
+      acknowledgeDraftSave(sessionKey, entry.version);
+      retireDraftRecovery(sessionKey, [entry.version]);
+    }
     try {
-      draftStorage()?.setItem(draftStorageKey(sessionKey), JSON.stringify(entry));
+      const storage = draftStorage();
+      if (!storage) throw new Error('Draft storage unavailable');
+      storage.setItem(draftStorageKey(sessionKey), JSON.stringify(entry));
     } catch {
-      /* The live draft remains available if storage is unavailable. */
+      reportDraftStorageFailure(sessionKey);
     }
   }
   return entry;
@@ -132,7 +152,7 @@ export function writeStoredSessionChatDraft(
 /** Resolve an untouched cache against durable identity/version state, including clears. */
 export function recoverSessionChatDraft(
   stored: DecodedStoredDraft | null,
-  incoming: Pick<SessionChatDraft, 'content' | 'updatedAt' | 'version' | 'consumedDrafts'>
+  incoming: Pick<SessionChatDraft, 'content' | 'updatedAt' | 'version' | 'consumedDrafts' | 'parked'>
 ): DecodedStoredDraft | null {
   const retired =
     stored?.version &&
@@ -146,13 +166,31 @@ export function recoverSessionChatDraft(
         (receipt) => receipt.draftId === incoming.version?.draftId && receipt.revision >= incoming.version.revision
       );
     if (incoming.version && !incomingConsumed && incoming.content !== '') {
-      return { text: incoming.content, updatedAt: Date.parse(incoming.updatedAt), version: incoming.version };
+      return {
+        text: incoming.content,
+        updatedAt: Date.parse(incoming.updatedAt),
+        version: incoming.version,
+        parked: incoming.parked,
+      };
     }
     return { text: '', updatedAt: Date.parse(incoming.updatedAt), version: stored.version, submitted: true };
   }
+  if (
+    stored?.version &&
+    incoming.version?.draftId === stored.version.draftId &&
+    incoming.version.revision === stored.version.revision &&
+    Boolean(stored.parked) !== Boolean(incoming.parked)
+  ) {
+    return { ...stored, parked: incoming.parked };
+  }
   if (stored?.version && incoming.version?.draftId === stored.version.draftId) {
     return incoming.version.revision > stored.version.revision
-      ? { text: incoming.content, updatedAt: Date.parse(incoming.updatedAt), version: incoming.version }
+      ? {
+          text: incoming.content,
+          updatedAt: Date.parse(incoming.updatedAt),
+          version: incoming.version,
+          parked: incoming.parked,
+        }
       : null;
   }
   // Another draft's retirement says nothing about this client's unsent text.
@@ -167,7 +205,7 @@ export function recoverSessionChatDraft(
     return null;
   const incomingAt = Date.parse(incoming.updatedAt);
   if (stored && (stored.updatedAt === undefined || stored.updatedAt >= incomingAt)) return null;
-  return { text: incoming.content, updatedAt: incomingAt, version: incoming.version };
+  return { text: incoming.content, updatedAt: incomingAt, version: incoming.version, parked: incoming.parked };
 }
 
 /**
@@ -179,6 +217,10 @@ export function clearStoredSessionChatDraftIfUnchanged(
   sessionKey: string | undefined,
   submitted: DecodedStoredDraft | string | null
 ): void {
+  if (sessionKey && submitted && typeof submitted !== 'string' && submitted.version) {
+    retireDraftRecovery(sessionKey, [submitted.version]);
+    acknowledgeDraftSave(sessionKey, submitted.version);
+  }
   const current = readStoredSessionChatDraftEntry(sessionKey);
   // The mobile host's pre-mount acknowledgement carries text only. Composer
   // sends capture an entry so later edits must also match its version.
@@ -196,19 +238,10 @@ export function clearStoredSessionChatDraftIfUnchanged(
   }
 }
 
-/*
- * CDXC:Drafts 2026-08-28:
- * An explicit delete (the Recovered row's trash action) writes a STAMPED BLANK
- * entry rather than removing the key. gxserver holds a durable copy of every
- * draft and `reconcileSessionChatDraftsFromServer` heals this cache from it at
- * boot — a bare removal would just resurrect the deleted draft on the next
- * launch. The blank entry is a tombstone: newer than the server copy, so the
- * reconcile refuses it, hidden from the Recovered list (blank is below the
- * noise threshold), and swept by the same 5-day retention as every other
- * entry — matching the reconcile's own 5-day cutoff, so nothing outlives it.
- */
+/** Explicit recovery deletion is a durable local tombstone, independent of the current input. */
 export function deleteStoredSessionChatDraft(sessionKey: string): void {
   writeStoredSessionChatDraft(sessionKey, '');
+  for (const [id, entry] of recoveryDraftEntries()) if (entry.sessionKey === sessionKey) dismissDraftRecovery(id);
 }
 
 /**
@@ -220,7 +253,7 @@ export function deleteStoredSessionChatDraft(sessionKey: string): void {
 export function reconcileSessionChatDraftsFromServer(
   drafts: readonly (Pick<
     SessionChatDraft,
-    'content' | 'updatedAt' | 'version' | 'consumedDrafts' | 'deliveredDrafts'
+    'content' | 'updatedAt' | 'version' | 'consumedDrafts' | 'parked' | 'deliveredDrafts'
   > & {
     projectId: string;
     sessionId: string;
@@ -233,7 +266,6 @@ export function reconcileSessionChatDraftsFromServer(
     diagnosticLog?.('sessionChat.draft.bootStorageUnavailable', {});
     return;
   }
-  const now = Date.now();
   for (const draft of drafts) {
     recordDeliveredSessionChatDrafts(draft.deliveredDrafts);
     const serverAt = Date.parse(draft.updatedAt);
@@ -241,6 +273,7 @@ export function reconcileSessionChatDraftsFromServer(
       continue;
     }
     const sessionKey = `${sessionKeyPrefix}${draft.projectId}:${draft.sessionId}`;
+    retireDraftRecovery(sessionKey, draft.consumedDrafts ?? []);
     const stored = readStoredSessionChatDraftEntry(sessionKey);
     const details = {
       sessionKey,
@@ -248,7 +281,7 @@ export function reconcileSessionChatDraftsFromServer(
       stored: stored ? { ...sessionChatDraftFingerprint(stored.text), updatedAt: stored.updatedAt } : null,
     };
     const recovered = recoverSessionChatDraft(stored, draft);
-    if (!recovered || (recovered.text !== '' && now - serverAt > RECOVERED_DRAFT_MAX_AGE_MS)) {
+    if (!recovered) {
       diagnosticLog?.('sessionChat.draft.bootRestoreSkipped', details);
       continue;
     }
@@ -277,54 +310,35 @@ function parseDraftSessionKey(sessionKey: string): { projectId: string | undefin
   return { projectId: parts[parts.length - 2] || undefined, sessionId: parts[parts.length - 1] || undefined };
 }
 
-/*
- * Lists every surviving composer draft for the Recovered view, enforcing the
- * retention rules in one pass: drafts older than five days are deleted, legacy
- * timestamp-less values are re-stamped now so their five-day clock starts, and
- * trivial drafts are hidden (but kept — the composer may be mid-typing them).
- */
+/** Current drafts and independent checkpoints remain available until explicitly retired. */
 export function listRecoveredSessionChatDrafts(): RecoveredSessionChatDraft[] {
   const storage = draftStorage();
-  if (!storage) {
-    return [];
-  }
-  const draftKeys: string[] = [];
-  for (let index = 0; index < storage.length; index += 1) {
-    const key = storage.key(index);
-    if (key?.startsWith(SESSION_CHAT_DRAFT_STORAGE_PREFIX)) {
-      draftKeys.push(key);
-    }
-  }
-  const now = Date.now();
+  if (!storage) return [];
   const recovered: RecoveredSessionChatDraft[] = [];
-  for (const key of draftKeys) {
+  for (let index = 0; index < storage.length; index++) {
+    const key = storage.key(index);
+    if (!key?.startsWith(SESSION_CHAT_DRAFT_STORAGE_PREFIX)) continue;
     const raw = storage.getItem(key);
-    if (raw === null) {
-      continue;
-    }
+    if (!raw) continue;
     const sessionKey = key.slice(SESSION_CHAT_DRAFT_STORAGE_PREFIX.length);
-    const decoded = decodeStoredDraft(raw);
-    let updatedAt = decoded.updatedAt;
-    try {
-      if (updatedAt === undefined) {
-        updatedAt = now;
-        storage.setItem(key, JSON.stringify({ ...decoded, updatedAt }));
-      } else if (now - updatedAt > RECOVERED_DRAFT_MAX_AGE_MS) {
-        storage.removeItem(key);
-        continue;
-      }
-    } catch {
-      // A failed re-stamp still lists the draft; retention retries next open.
-    }
-    if (decoded.text.trim().length < RECOVERED_DRAFT_MIN_CHARS) {
-      continue;
-    }
+    const entry = decodeStoredDraft(raw);
+    if (entry.text === '' || entry.submitted) continue;
     recovered.push({
       sessionKey,
       ...parseDraftSessionKey(sessionKey),
-      text: decoded.text,
-      updatedAt: updatedAt ?? now,
+      text: entry.text,
+      updatedAt: entry.updatedAt ?? Date.now(),
     });
   }
-  return recovered.sort((left, right) => right.updatedAt - left.updatedAt);
+  for (const [recoveryId, entry] of recoveryDraftEntries()) {
+    if (recovered.some((draft) => draft.sessionKey === entry.sessionKey && draft.text === entry.text)) continue;
+    recovered.push({
+      sessionKey: entry.sessionKey,
+      recoveryId,
+      ...parseDraftSessionKey(entry.sessionKey),
+      text: entry.text,
+      updatedAt: entry.updatedAt,
+    });
+  }
+  return recovered.sort((a, b) => b.updatedAt - a.updatedAt);
 }

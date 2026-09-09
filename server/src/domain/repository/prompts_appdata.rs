@@ -105,6 +105,29 @@ impl<'a> DomainRepository<'a> {
             optional_trimmed_string_param(params, "projectId")?,
             optional_trimmed_string_param(params, "sessionId")?,
         );
+        let captured_version = if params.get("draftHandoff").and_then(Value::as_bool) == Some(true)
+        {
+            match (project_id.as_deref(), session_id.as_deref()) {
+                (Some(project), Some(session)) => {
+                    let version = crate::session_chat_draft_handoffs::returned_version(
+                        self.db, project, session, &content,
+                    )?;
+                    let transaction = self.db.unchecked_transaction().map_err(sql_error)?;
+                    crate::session_chat_draft_recovery::record(
+                        &transaction,
+                        project,
+                        session,
+                        &content,
+                        &version,
+                    )?;
+                    transaction.commit().map_err(sql_error)?;
+                    Some(version)
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
         let cwd = optional_trimmed_string_param(params, "cwd")?;
         let timestamp = now_iso();
         if let Some(prompt_id) = requested_prompt_id {
@@ -253,7 +276,7 @@ impl<'a> DomainRepository<'a> {
         let prompt = read_stashed_prompt_row(self.db, &prompt_id)?.ok_or_else(|| {
             DomainStateError::corrupt_state("Stashed prompt vanished during save.")
         })?;
-        Ok(json!({ "created": created, "prompt": prompt }))
+        Ok(json!({ "created": created, "prompt": prompt, "draftVersion": captured_version }))
     }
 
     pub fn list_stashed_prompts(&self, params: &Map<String, Value>) -> DomainResult<Value> {
@@ -341,6 +364,8 @@ impl<'a> DomainRepository<'a> {
             "prompts": prompts,
             "tags": read_stashed_prompt_tags(self.db)?,
             "deliveredDrafts": crate::session_chat_delivered_drafts::read(self.db, None)?,
+            "recoveryDrafts": crate::session_chat_draft_recovery::read(self.db)?,
+            "drafts": crate::session_chat_queue::list_session_chat_drafts_value(self.db)?["drafts"],
         }))
     }
 

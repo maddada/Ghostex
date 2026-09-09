@@ -833,7 +833,7 @@ fn stash_saved_prompt_editor_content(
         return;
     }
     let content_chars = content.chars().count();
-    match stash_prompt_content_via_gxserver(&content, originating_session_id) {
+    match stash_prompt_content_via_gxserver(&content, originating_session_id, false) {
         Ok(_) => append_prompt_editor_timeline_log(
             "cli.monaco.promptStashed",
             json!({ "contentChars": content_chars, "ok": true, "requestId": request_id }),
@@ -853,8 +853,9 @@ fn stash_saved_prompt_editor_content(
 fn stash_prompt_content_via_gxserver(
     content: &str,
     originating_session_id: Option<&str>,
+    draft_handoff: bool,
 ) -> Result<Value, CliError> {
-    let mut params = json!({ "content": content });
+    let mut params = json!({ "content": content, "draftHandoff": draft_handoff });
     let parts: Vec<&str> = originating_session_id.unwrap_or("").split(':').collect();
     if parts.len() == 2
         && matches_session_ref_part(parts[0], b'P', 3)
@@ -955,7 +956,11 @@ fn consume_prompt_stash_request(
         return true;
     }
     let content_chars = content.chars().count();
-    match stash_prompt_content_via_gxserver(&content, originating_session_id) {
+    match stash_prompt_content_via_gxserver(
+        &content,
+        originating_session_id,
+        handoff_request_id.is_some(),
+    ) {
         Ok(result) => {
             // Clear the composer only after the stash is durable; on failure
             // the file (and therefore the composer) stays untouched.
@@ -964,6 +969,8 @@ fn consume_prompt_stash_request(
                 write_prompt_handoff_response(
                     request_id,
                     &json!({
+                        "content": content,
+                        "draftVersion": result.get("draftVersion"),
                         "created": result.get("created").and_then(Value::as_bool).unwrap_or(false),
                         "ok": true,
                         "promptId": result

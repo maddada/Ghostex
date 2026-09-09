@@ -822,7 +822,9 @@ impl GhostexGpuiApp {
         #[cfg(target_os = "macos")]
         self.begin_programmatic_focus();
         #[cfg(any(target_os = "macos", target_os = "windows"))]
-        cef::focus_gpui_root_view(self.parent_ns_view);
+        let focus_root = cef_parent_native_view(window).unwrap_or(self.parent_ns_view);
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        cef::focus_gpui_root_view(focus_root);
         let focus_handle = view.read(cx).focus_handle(cx);
         window.focus(&focus_handle, cx);
         #[cfg(target_os = "macos")]
@@ -838,7 +840,7 @@ impl GhostexGpuiApp {
             terminal target as part of this canonical focus handoff.
             */
             update_gpui_keyboard_router_composited_terminal_focus(
-                self.parent_ns_view,
+                focus_root,
                 target,
                 true,
                 self.first_responder_target,
@@ -992,6 +994,12 @@ impl GhostexGpuiApp {
             }
         }
 
+        #[cfg(target_os = "macos")]
+        if self.companion_reveal.is_some()
+            && cef_parent_native_view(window).ok() != Some(self.companion_native_parent())
+        {
+            return;
+        }
         let Some(slot_id) = self.pending_project_editor_companion_terminal_text_focus_slot else {
             return;
         };
@@ -1195,32 +1203,7 @@ impl GhostexGpuiApp {
         }
         self.pending_agents_terminal_text_focus_slot = None;
         self.sync_agents_terminal_ghostty_surface_focus_with_appkit_handoff(true);
-        /*
-        CDXC:Drafts 2026-08-24:
-        A multi-line draft must reach the agent's composer as ONE paste, not as
-        N submitted lines, and it already does: these bytes go to
-        `ghostty_surface_text`, whose callback is Ghostty's own paste completion
-        (`Surface.completeClipboardPaste`). That encoder reads the live terminal
-        state and adds the `ESC[200~`/`ESC[201~` fenceposts itself when
-        bracketed-paste mode is on (and rewrites newlines to CR when it is not),
-        exactly like the gpui-engine pipeline's `send_paste`. Do NOT pre-frame
-        the draft here: the same encoder replaces raw `ESC` bytes with spaces
-        before wrapping, so a hand-written fencepost would arrive as literal
-        "[200~" text inside the agent's prompt.
-        */
-        if let Some(handoff) = self
-            .pending_session_terminal_composer_insert
-            .get(&slot_id.session_id)
-            .cloned()
-            && self.send_text_bytes_to_mounted_agents_terminal_surface(
-                slot_id,
-                handoff.content.as_bytes(),
-            )
-        {
-            self.pending_session_terminal_composer_insert
-                .remove(&slot_id.session_id);
-            self.release_session_chat_draft_handoff_stash(handoff, cx);
-        }
+        self.deliver_pending_session_terminal_composer_insert(slot_id.session_id, cx);
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -1304,18 +1287,7 @@ impl GhostexGpuiApp {
         }
         self.pending_project_editor_companion_terminal_text_focus_slot = None;
         self.sync_project_editor_companion_terminal_ghostty_surface_focus_with_appkit_handoff(true);
-        if let Some(handoff) = self
-            .pending_session_terminal_composer_insert
-            .get(&slot_id.session_id)
-            .cloned()
-            && self.send_text_bytes_to_focused_project_editor_companion_terminal_surface(
-                handoff.content.as_bytes(),
-            )
-        {
-            self.pending_session_terminal_composer_insert
-                .remove(&slot_id.session_id);
-            self.release_session_chat_draft_handoff_stash(handoff, cx);
-        }
+        self.deliver_pending_session_terminal_composer_insert(slot_id.session_id, cx);
     }
 
     #[cfg(not(target_os = "macos"))]

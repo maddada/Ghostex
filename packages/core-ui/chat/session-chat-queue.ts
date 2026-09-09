@@ -8,6 +8,7 @@
 // touches it. These rows are prompts the agent has never seen.
 
 import type { SessionChatDraft, SessionChatQueuedPrompt } from '../../shared/session-chat';
+import type { SessionChatDraftVersion } from '@/packages/shared/session-chat-queue';
 import { PointerActivationConstraints } from '@dnd-kit/dom';
 
 /**
@@ -153,6 +154,8 @@ function draftClientIdStorage(): Storage | null {
 }
 
 /**
+ * CDXC:Drafts 2026-09-10 WHY:
+ * Startup outbox replay must use this same persisted identity as the composer; a separate outbox client ID made a restart label this computer's own draft as another device's.
  * This client's opaque draft-origin id. Persisted so a reload keeps the same
  * identity: a fresh id every mount would make the client's own last push look
  * like another device and pop the conflict bar against itself.
@@ -186,7 +189,7 @@ export function isNewerSessionChatDraftStamp(candidate: string, reference: strin
 }
 
 /**
- * The "Newer draft from another device" rule, all three conditions together.
+ * Offer a different saved draft only when it is still relevant to the live composer.
  * Deliberately conservative:
  *
  * - a draft this client wrote is its own echo and never offered;
@@ -205,11 +208,20 @@ export function shouldOfferSessionChatDraft(params: {
   lastHandledUpdatedAt: string | null;
   /** Live composer text, so an identical draft never nags. */
   composerText: string;
+  localVersion?: SessionChatDraftVersion;
 }): boolean {
-  const { clientId, composerText, incoming, lastHandledUpdatedAt } = params;
-  if (!incoming || incoming.originClientId === clientId) {
+  const { clientId, composerText, incoming, lastHandledUpdatedAt, localVersion } = params;
+  if (!incoming || incoming.parked || incoming.originClientId === clientId) {
     return false;
   }
+  if (
+    incoming.version &&
+    ((localVersion?.draftId === incoming.version.draftId && localVersion.revision >= incoming.version.revision) ||
+      incoming.consumedDrafts?.some(
+        (receipt) => receipt.draftId === incoming.version!.draftId && receipt.revision >= incoming.version!.revision
+      ))
+  )
+    return false;
   if (incoming.content === composerText || incoming.content.trim() === '') {
     return false;
   }

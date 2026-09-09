@@ -1,3 +1,6 @@
+import { importDraftRecovery } from '@/packages/core-ui/chat/session-chat-draft-recovery';
+import { replayDraftSaves } from '@/packages/core-ui/chat/session-chat-draft-outbox';
+import { sessionChatDraftClientId } from '@/packages/core-ui/chat/session-chat-queue';
 /*
 CDXC:Drafts 2026-08-28:
 The sidebar's share of the draft-session lifecycle. gxserver owns the marker,
@@ -39,17 +42,26 @@ export const gpuiSidebarRuntimeDraftSessionMethods = {
    * `reconcileSessionChatDraftsFromServer`; this method only fetches.
    */
   reconcileSessionChatDraftCache(this: GpuiSidebarRuntime): void {
-    if (didReconcileSessionChatDrafts) {
-      return;
-    }
     const client = this.client;
     if (!client) {
       return;
     }
+    replayDraftSaves('', async (draft, projectId, sessionId) => {
+      if (!this.client) throw new Error('The server is disconnected.');
+      await this.client.rpc('/api/setSessionChatDraft', {
+        projectId,
+        sessionId,
+        content: draft.content,
+        draftVersion: draft.version,
+        clientId: sessionChatDraftClientId(),
+      });
+    });
+    if (didReconcileSessionChatDrafts) return;
     didReconcileSessionChatDrafts = true;
     void client
       .rpc<GxserverListSessionChatDraftsResult>('/api/listSessionChatDrafts')
       .then((result) => {
+        importDraftRecovery(result.recoveryDrafts);
         reconcileSessionChatDraftsFromServer(result.drafts ?? [], '', (event, details) => {
           try {
             postAppModalHostMessage(

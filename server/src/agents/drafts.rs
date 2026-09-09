@@ -689,7 +689,6 @@ pub(crate) fn switch_draft_agent(
     if let Some(title) = next_draft_agent_title(
         &project,
         &session,
-        previous_agent_id.as_deref(),
         resolved.get("title").and_then(Value::as_str),
     ) {
         update.insert("title".to_string(), json!(title));
@@ -774,7 +773,9 @@ const DRAFT_SWITCH_SHELL_SETTLE_MS: u64 = 800;
 /// history — with the plan's own trailing Enter stripped. That Enter is a
 /// separate step in the sequence below, and sending both would submit twice:
 /// the second one would land in the agent CLI that the first one started.
-fn draft_switch_reuse_command(resolved: &Map<String, Value>) -> Result<String, DomainStateError> {
+pub(crate) fn draft_switch_reuse_command(
+    resolved: &Map<String, Value>,
+) -> Result<String, DomainStateError> {
     let command = resolved
         .get("launchSettings")
         .and_then(|settings| settings.get("agentLaunchPlan"))
@@ -807,7 +808,7 @@ writer of an agent pty keeps them separate (see SESSION_CHAT_CLEAR_INPUT_SETTLE_
 in `session_chat_send`): a submit that coalesces into the body's stdin chunk is
 inserted as literal text instead of running it.
 */
-fn build_draft_agent_switch_steps(
+pub(crate) fn build_draft_agent_switch_steps(
     command: &str,
 ) -> Vec<crate::session_chat_send::SessionChatSendStep> {
     use crate::session_chat_send::SessionChatSendStep;
@@ -834,19 +835,15 @@ fn build_draft_agent_switch_steps(
 fn next_draft_agent_title(
     project: &Value,
     session: &Value,
-    previous_agent_id: Option<&str>,
     next_title: Option<&str>,
 ) -> Option<String> {
     let next_title = next_title?;
     let current_title = read_text_value(session, "title")?;
-    let previous_default = create_agent_session_default_title(
-        read_text_from_map(
-            &resolve_project_agent_config(project, previous_agent_id.unwrap_or_default(), None),
-            "name",
-        )
-        .as_deref(),
-        previous_agent_id,
-    );
-    (current_title == previous_default && current_title != next_title)
+    let previous_default = project_agent_session_default_title(project, session);
+    let is_placeholder = session
+        .pointer("/runtimeSettings/titleSource")
+        .and_then(Value::as_str)
+        == Some("placeholder");
+    ((is_placeholder || current_title == previous_default) && current_title != next_title)
         .then(|| next_title.to_string())
 }

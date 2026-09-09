@@ -9,7 +9,7 @@ use serde_json::{Map, Value};
 
 use crate::{domain::DomainStateError, session_chat_queue::SessionChatDraft};
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DraftVersion {
     pub draft_id: String,
@@ -46,10 +46,11 @@ pub fn read(
     session: &str,
 ) -> Result<Option<SessionChatDraft>, DomainStateError> {
     let mut draft = db.query_row(
-        "SELECT content, originClientId, updatedAt, draftId, revision FROM session_chat_drafts WHERE projectId=?1 AND sessionId=?2",
+        "SELECT content, originClientId, updatedAt, draftId, revision, parked FROM session_chat_drafts WHERE projectId=?1 AND sessionId=?2",
         params![project, session], |row| {
             let id: Option<String> = row.get(3)?;
             Ok(SessionChatDraft {
+                parked: row.get(5)?,
                 content: row.get(0)?, origin_client_id: row.get(1)?, updated_at: row.get(2)?,
                 version: id.map(|draft_id| Ok::<_, rusqlite::Error>(DraftVersion { draft_id, revision: row.get(4)? })).transpose()?,
                 consumed_drafts: Vec::new(),
@@ -93,6 +94,44 @@ pub fn save(
         "SELECT revision, content, consumed FROM session_chat_draft_versions WHERE projectId=?1 AND sessionId=?2 AND draftId=?3",
         params![project, session, version.draft_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     ).optional().map_err(sql_error)?;
+    if current
+        .as_ref()
+        .is_some_and(|(revision, previous, consumed)| {
+            *revision == version.revision && previous != content && *consumed < version.revision
+        })
+    {
+        use sha2::{Digest, Sha256};
+        let identity = format!(
+            "conflict-{:x}",
+            Sha256::digest(
+                format!("{}:{}:{}", version.draft_id, version.revision, content).as_bytes()
+            )
+        );
+        crate::session_chat_draft_recovery::record(
+            &transaction,
+            project,
+            session,
+            content,
+            &DraftVersion {
+                draft_id: identity,
+                revision: 1,
+            },
+        )?;
+        transaction.commit().map_err(sql_error)?;
+        return Err(DomainStateError::bad_request("Two editors changed the same draft revision. Both versions are in Recovered; edit the input to continue syncing."));
+    }
+    if current
+        .as_ref()
+        .is_none_or(|(_, _, consumed)| *consumed < version.revision)
+    {
+        crate::session_chat_draft_recovery::record(
+            &transaction,
+            project,
+            session,
+            content,
+            version,
+        )?;
+    }
     let obsolete = current.as_ref().is_some_and(|(revision, _, consumed)| {
         *consumed >= version.revision || *revision > version.revision
     });
@@ -109,9 +148,12 @@ pub fn save(
         ).map_err(sql_error)?;
         transaction.execute(
             "INSERT INTO session_chat_drafts(projectId,sessionId,content,originClientId,updatedAt,draftId,revision) VALUES (?1,?2,?3,?4,?5,?6,?7)
-             ON CONFLICT(projectId,sessionId) DO UPDATE SET content=excluded.content,originClientId=excluded.originClientId,updatedAt=excluded.updatedAt,draftId=excluded.draftId,revision=excluded.revision",
+             ON CONFLICT(projectId,sessionId) DO UPDATE SET content=excluded.content,originClientId=excluded.originClientId,updatedAt=excluded.updatedAt,draftId=excluded.draftId,revision=excluded.revision,parked=0",
             params![project, session, content, client, now, version.draft_id, version.revision],
         ).map_err(sql_error)?;
+    }
+    if client == "gxserver-draft-handoff" && !obsolete {
+        transaction.execute("UPDATE session_chat_drafts SET parked=0 WHERE projectId=?1 AND sessionId=?2 AND draftId=?3 AND revision=?4",params![project,session,version.draft_id,version.revision]).map_err(sql_error)?;
     }
     let result = read(&transaction, project, session)?
         .ok_or_else(|| DomainStateError::bad_request("Draft state is missing."))?;
@@ -159,6 +201,7 @@ pub fn consume_in(
     session: &str,
     version: &DraftVersion,
 ) -> Result<(), DomainStateError> {
+    transaction.execute("UPDATE session_chat_draft_handoffs SET state='consumed' WHERE projectId=?1 AND sessionId=?2 AND draftId=?3 AND revision<=?4",params![project,session,version.draft_id,version.revision]).map_err(sql_error)?;
     transaction.execute(
         "UPDATE session_chat_draft_versions SET consumed=MAX(consumed,?4),content=CASE WHEN revision<=?4 THEN '' ELSE content END WHERE projectId=?1 AND sessionId=?2 AND draftId=?3",
         params![project, session, version.draft_id, version.revision],

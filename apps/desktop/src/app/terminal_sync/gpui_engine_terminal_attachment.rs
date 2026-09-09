@@ -348,7 +348,7 @@ impl GhostexGpuiApp {
             let Some(pane_id) = pane_id else {
                 return false;
             };
-            self.active_mode = TitlebarMode::Agents;
+            self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.agents_workspace.select_tab(pane_id, shell_session_id);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
             self.scroll_workspace_pane_active_tab(pane_id);
@@ -394,6 +394,7 @@ impl GhostexGpuiApp {
         &mut self,
         combined_session_id: &str,
         content: &str,
+        preserve_existing: bool,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         if content.is_empty() {
@@ -411,6 +412,13 @@ impl GhostexGpuiApp {
             return false;
         };
         if self.agents_chat_mode_sessions.contains(&shell_session_id) {
+            if preserve_existing {
+                return self.append_recovered_prompt_into_session_chat(
+                    shell_session_id,
+                    content,
+                    cx,
+                );
+            }
             return self.insert_prompt_into_session_chat(shell_session_id, content, cx);
         }
         // A session focused in a project-editor companion pane receives the
@@ -427,7 +435,7 @@ impl GhostexGpuiApp {
             let Some(pane_id) = pane_id else {
                 return false;
             };
-            self.active_mode = TitlebarMode::Agents;
+            self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.agents_workspace.select_tab(pane_id, shell_session_id);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
             self.scroll_workspace_pane_active_tab(pane_id);

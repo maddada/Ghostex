@@ -1,3 +1,4 @@
+import { importDraftRecovery, dismissDraftRecovery } from './chat/session-chat-draft-recovery';
 import { SearchableDropdownContent } from '../components/ui/searchable-dropdown';
 import {
   deleteSentSessionChatMessage,
@@ -46,9 +47,11 @@ import {
   resolveWorkspaceProjectIconDataUrl,
 } from '../shared/workspace-project-appearance';
 import { AppTooltip, TooltipProvider } from './app-tooltip';
+import { DelayedLoadingIndicator } from './delayed-loading-indicator';
 import {
   deleteStoredSessionChatDraft,
   listRecoveredSessionChatDrafts,
+  reconcileSessionChatDraftsFromServer,
   type RecoveredSessionChatDraft,
 } from './chat/session-chat-draft-storage';
 import { SidebarCommandIconGlyph } from './sidebar-command-icon';
@@ -265,7 +268,7 @@ function recoveredDraftAsPrompt(
     cwd: null,
     projectId: draft.projectId ?? null,
     projectName: (draft.projectId && projectNamesById.get(draft.projectId)) || null,
-    promptId: `${RECOVERED_PROMPT_ID_PREFIX}${draft.sessionKey}`,
+    promptId: `${RECOVERED_PROMPT_ID_PREFIX}${draft.recoveryId ? `history:${draft.recoveryId}` : draft.sessionKey}`,
     sessionId: draft.sessionId ?? null,
     updatedAt,
   };
@@ -424,8 +427,7 @@ export function StashedPromptsModal({
 
   /*
    * CDXC:Drafts 2026-08-28:
-   * Enumerating localStorage is synchronous and also runs the retention pass
-   * (five-day expiry), so it happens once per open rather than per render.
+   * Enumerating recovery storage is synchronous, so it happens once per open rather than per render.
    */
   useEffect(() => {
     if (isOpen) {
@@ -522,6 +524,9 @@ export function StashedPromptsModal({
       }
       setPrompts(event.data.prompts);
       recordDeliveredSessionChatDrafts(event.data.deliveredDrafts ?? []);
+      importDraftRecovery(event.data.recoveryDrafts ?? []);
+      reconcileSessionChatDraftsFromServer(event.data.drafts ?? []);
+      setRecoveredDrafts(listRecoveredSessionChatDrafts());
       setTags(event.data.tags ?? []);
     };
     window.addEventListener('message', handleMessage);
@@ -760,8 +765,9 @@ export function StashedPromptsModal({
 
   const deleteRecoveredDraft = (prompt: GxserverStashedPrompt) => {
     const sessionKey = recoveredDraftSessionKey(prompt.promptId);
-    deleteStoredSessionChatDraft(sessionKey);
-    setRecoveredDrafts((current) => current.filter((draft) => draft.sessionKey !== sessionKey));
+    if (sessionKey.startsWith('history:')) dismissDraftRecovery(sessionKey.slice('history:'.length));
+    else deleteStoredSessionChatDraft(sessionKey);
+    setRecoveredDrafts(listRecoveredSessionChatDrafts());
   };
 
   /*
@@ -1150,7 +1156,7 @@ export function StashedPromptsModal({
                           ? 'No recovered drafts came from this session.'
                           : effectiveScope === 'project'
                             ? 'No recovered drafts came from this project.'
-                            : 'No recovered drafts. Unsent composer text from the last 5 days shows up here.'
+                            : 'No recovered drafts. Unsent text and earlier draft versions show up here.'
                         : tagFilter.kind === 'tag'
                           ? 'No saved prompts carry this tag yet.'
                           : tagFilter.kind === 'untagged'
@@ -1165,7 +1171,7 @@ export function StashedPromptsModal({
                 {!isListReady || visiblePrompts.length > 0 ? (
                   <CommandGroup>
                     {!isListReady ? (
-                      <div className='ghostex-stashed-prompts-empty'>Loading saved prompts…</div>
+                      <DelayedLoadingIndicator label='Loading saved prompts...' loading />
                     ) : (
                       groupedVisiblePrompts.map((group) => (
                         <section className='previous-sessions-day-group' key={group.dayLabel}>

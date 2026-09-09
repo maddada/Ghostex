@@ -136,6 +136,7 @@ export const GXSERVER_RENDERER_COMMAND_ACTIONS = [
   'openBrowser',
   'openBrowserPane',
   'openPaths',
+  'openSettings',
   'readResourcesSnapshot',
   'restartSession',
   'renameCommand',
@@ -146,6 +147,7 @@ export const GXSERVER_RENDERER_COMMAND_ACTIONS = [
   'setVisibleCount',
   'switchProject',
   'toggleSidebarCollapsed',
+  'updateSettingsPatch',
   'waitFor',
 ] as const;
 
@@ -272,6 +274,7 @@ export type GxserverEndpointPath =
   | '/api/sendSessionChatQueuedPrompt'
   | '/api/setSessionChatDraft'
   | '/api/listSessionChatDrafts'
+  | '/api/acknowledgeSessionChatDraftHandoff'
   | '/api/exportSessionTranscript'
   | '/api/sendSessionText'
   | '/api/sendSessionMessage'
@@ -932,7 +935,9 @@ export interface GxserverListStashedPromptsParams {
 }
 
 export interface GxserverListStashedPromptsResult {
+  drafts?: GxserverSessionChatDraftListEntry[];
   deliveredDrafts?: import('./session-chat-queue').SessionChatDeliveredDraft[];
+  recoveryDrafts?: import('./session-chat-queue').SessionChatRecoveryDraft[];
   prompts: readonly GxserverStashedPrompt[];
   /** The tag catalogue, so the modal paints its rail and its rows together. */
   tags?: readonly GxserverStashedPromptTag[];
@@ -2337,7 +2342,9 @@ export interface GxserverSessionLifecycleParams {
  * last synced push, which is what the reconcile compares against.
  */
 export interface GxserverSessionChatDraftListEntry {
+  parked?: boolean;
   deliveredDrafts?: import('./session-chat-queue').SessionChatDeliveredDraft[];
+  recoveryDrafts?: import('./session-chat-queue').SessionChatRecoveryDraft[];
   version?: SessionChatDraftVersion;
   consumedDrafts?: SessionChatDraftVersion[];
   originClientId?: string;
@@ -2349,6 +2356,7 @@ export interface GxserverSessionChatDraftListEntry {
 
 export interface GxserverListSessionChatDraftsResult {
   drafts: GxserverSessionChatDraftListEntry[];
+  recoveryDrafts?: import('./session-chat-queue').SessionChatRecoveryDraft[];
 }
 
 /*
@@ -3035,6 +3043,7 @@ export interface GxserverPresentationSubscribeMessage {
 
 export interface GxserverPresentationSearchParams {
   externalOnly?: boolean;
+  refreshExternalSessions?: boolean;
   cursor?: string;
   includeActive?: boolean;
   includePrevious?: boolean;

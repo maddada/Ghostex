@@ -1565,6 +1565,27 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 32;
     "#,
     },
+    Migration {
+        id: "0033_session_chat_draft_recovery",
+        sql: r#"
+      ALTER TABLE session_chat_drafts ADD COLUMN parked INTEGER NOT NULL DEFAULT 0;
+      CREATE TABLE session_chat_draft_recovery (
+        projectId TEXT NOT NULL, sessionId TEXT NOT NULL, draftId TEXT NOT NULL,
+        revision INTEGER NOT NULL, content TEXT NOT NULL, updatedAt TEXT NOT NULL,
+        checkpoint INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (projectId,sessionId,draftId,revision)
+      );
+      INSERT INTO session_chat_draft_recovery(projectId,sessionId,draftId,revision,content,updatedAt)
+        SELECT projectId,sessionId,draftId,revision,content,updatedAt FROM session_chat_draft_versions WHERE content<>'' AND revision>consumed;
+      CREATE TABLE session_chat_draft_handoffs (
+        id TEXT PRIMARY KEY, projectId TEXT NOT NULL, sessionId TEXT NOT NULL,
+        content TEXT NOT NULL, draftId TEXT NOT NULL, revision INTEGER NOT NULL,
+        direction TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending', updatedAt TEXT NOT NULL
+      );
+      CREATE INDEX session_chat_draft_handoffs_session ON session_chat_draft_handoffs(projectId,sessionId,updatedAt);
+      PRAGMA user_version = 33;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1613,10 +1634,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 32);
+        assert_eq!(user_version, 33);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 32);
+        assert_eq!(schema_migration_count(&db), 33);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1640,6 +1661,7 @@ mod tests {
                 "idx_stashed_prompt_tag_links_tag".to_string(),
                 "idx_stashed_prompts_agent_session".to_string(),
                 "idx_stashed_prompts_updated".to_string(),
+                "session_chat_draft_handoffs_session".to_string(),
             ]
         );
         assert_eq!(

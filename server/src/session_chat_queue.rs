@@ -67,6 +67,7 @@ pub struct SessionChatQueuedPrompt {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionChatDraft {
+    pub parked: bool,
     pub content: String,
     pub updated_at: String,
     pub origin_client_id: String,
@@ -223,6 +224,7 @@ pub fn is_session_chat_queue_endpoint(endpoint_path: &str) -> bool {
             | "/api/removeSessionChatQueuedPrompt"
             | "/api/reorderSessionChatQueue"
             | "/api/setSessionChatDraft"
+            | "/api/acknowledgeSessionChatDraftHandoff"
     )
 }
 
@@ -237,6 +239,11 @@ pub fn handle_session_chat_queue_endpoint(
     let db = open_gxserver_database(paths).map_err(internal_error)?;
     let (project_id, session_id) = require_target(&db, server_id, params)?;
     let (value, broadcast) = match endpoint_path {
+        "/api/acknowledgeSessionChatDraftHandoff" => {
+            let id = required_text(params, "handoffId")?;
+            crate::session_chat_draft_recovery::acknowledge(&db, &project_id, &session_id, &id)?;
+            (json!({ "acknowledged": true }), false)
+        }
         "/api/readSessionChatQueue" => {
             let snapshot = read_snapshot(&db, &project_id, &session_id)?;
             (snapshot_value(&snapshot), false)
@@ -784,6 +791,7 @@ fn set_draft(
         )));
     }
     let mut draft = SessionChatDraft {
+        parked: false,
         content: content.to_string(),
         origin_client_id: client_id.to_string(),
         updated_at: now_iso(),
@@ -909,7 +917,7 @@ pub fn list_session_chat_drafts_value(db: &Connection) -> Result<Value, DomainSt
             drafts.push(value);
         }
     }
-    Ok(json!({ "drafts": drafts }))
+    Ok(json!({ "drafts": drafts, "recoveryDrafts": crate::session_chat_draft_recovery::read(db)? }))
 }
 
 /// Text an armed Delayed Send must deliver instead of a bare Enter: the
@@ -917,6 +925,9 @@ pub fn list_session_chat_drafts_value(db: &Connection) -> Result<Value, DomainSt
 /// hand the terminal composer's text off into this draft, so an Enter fired
 /// into the pty would land on an empty input line and silently drop the
 /// message the user staged.
+///
+/// CDXC:DelayedSend 2026-09-09 DECISION:
+/// User: spaces and newlines count as empty. Whitespace-only chat drafts must not take priority over terminal input.
 pub fn armed_delayed_send_draft(
     db: &Connection,
     project_id: &str,
@@ -924,7 +935,7 @@ pub fn armed_delayed_send_draft(
 ) -> Result<Option<SessionChatDraft>, DomainStateError> {
     Ok(read_snapshot(db, project_id, session_id)?
         .draft
-        .filter(|draft| !draft.content.trim().is_empty()))
+        .filter(|draft| !draft.parked && !draft.content.trim().is_empty()))
 }
 
 /// Clears the synced composer draft after a Delayed Send delivered it. The

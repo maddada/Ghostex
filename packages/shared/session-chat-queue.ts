@@ -55,10 +55,11 @@ on another device shows what was already typed. Pushed on blur / leaving the
 session / backgrounding — NOT per keystroke. It is a sync channel, not a
 replacement for a host's own local draft cache.
 
-Conflict rule: never clobber. A client that receives a draft with a newer
-`updatedAt`, different `content` and a different `originClientId` shows a
-one-line "Newer draft from another device: Use / Dismiss" bar above the
-composer instead of overwriting a non-empty local composer.
+Conflict rule: never clobber. An untouched composer can recover a newer revision
+of its own draft identity. Older revisions and the client's own echoes do not
+offer a conflict. Different unsent text from another client is offered in a
+saved-draft bar with a preview and Use / Dismiss actions; a client ID alone does
+not identify a physical device.
 */
 /** An identity stays stable across edits; revisions include deletions. */
 export interface SessionChatDraftVersion {
@@ -67,6 +68,8 @@ export interface SessionChatDraftVersion {
 }
 
 export interface SessionChatDraft {
+  /** Text remains recoverable while the terminal owns editing it. */
+  parked?: boolean;
   deliveredDrafts?: SessionChatDeliveredDraft[];
   version?: SessionChatDraftVersion;
   /** Durable receipts, retained even after a subsequent draft is saved. */
@@ -233,4 +236,19 @@ export interface GxserverSetSessionChatDraftParams {
 
 export interface GxserverSetSessionChatDraftResult {
   draft: SessionChatDraft;
+}
+
+export interface SessionChatRecoveryDraft {
+  id: string;
+  projectId: string;
+  sessionId: string;
+  content: string;
+  updatedAt: string;
+  version: SessionChatDraftVersion;
+}
+export interface SessionChatDraftHandoff {
+  append?: boolean;
+  content: string;
+  draftVersion?: SessionChatDraftVersion;
+  handoffId?: string;
 }

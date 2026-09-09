@@ -516,6 +516,13 @@ impl GhostexGpuiApp {
             cef::SidebarBridgeEvent::ProjectBoardConversationResponse(payload) => {
                 self.receive_sidebar_project_board_conversation_response_payload(&payload, cx);
             }
+            cef::SidebarBridgeEvent::RefusedPageNavigation(url) => {
+                // Same rule as a clicked transcript link: embedded Browser
+                // while "Open links in embedded browser" is on, else the
+                // system browser (CDXC:SessionChat 2026-09-09 in
+                // cef/shell/request_handling.rs).
+                self.open_session_chat_link(&url, false, false, window, cx);
+            }
         }
     }
 
@@ -706,7 +713,7 @@ impl GhostexGpuiApp {
         {
             return;
         }
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
         self.sync_active_browser_tab_to_surface(window, cx);
@@ -765,7 +772,7 @@ impl GhostexGpuiApp {
             .find_renderer_open_reuse_tab(&url, message.reuse)
         {
             self.browser_tabs.select_tab_in_pane(pane_id, tab_id);
-            self.active_mode = TitlebarMode::Browser;
+            self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
             self.set_shell_focus(ShellFocusTarget::BrowserPane(
                 self.browser_tabs.focused_pane,
             ));
@@ -783,7 +790,7 @@ impl GhostexGpuiApp {
             return;
         };
         self.request_sidebar_browser_tab_reveal(created_tab_id);
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(
             self.browser_tabs.focused_pane,
@@ -1093,6 +1100,10 @@ impl GhostexGpuiApp {
         }
         #[cfg(target_os = "windows")]
         {
+            if message.preferred_interface == GpuiPreferredAgentInterface::Chat {
+                self.request_windows_agent_chat_launch(message, cx);
+                return;
+            }
             /*
             CDXC:PlatformSupport 2026-08-11:
             Project-header agents on Windows use one Rust-owned WSL operation
@@ -1271,8 +1282,39 @@ impl GhostexGpuiApp {
         }
 
         let attach_started_at = Instant::now();
+        let open_chat_early = placement == GpuiWorkspaceTerminalFocusPlacement::Tab
+            && self
+                .pending_agents_chat_launch_intents
+                .contains(&GpuiWorkspaceTerminalSessionKey::Local(key.clone()));
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
+            if open_chat_early {
+                let preview_key = key.clone();
+                let preview = background
+                    .spawn(async move {
+                        gpui_gxserver_rpc_result(
+                            "/api/attachSessionMetadata",
+                            &serde_json::json!({
+                                "projectId": preview_key.project_id,
+                                "sessionId": preview_key.session_id,
+                            }),
+                            std::time::Duration::from_secs(15),
+                        )
+                    })
+                    .await;
+                if let Ok(metadata) = preview {
+                    let _ = this.update(cx, |this, cx| {
+                        if this.local_workspace_latest_focus_key.as_ref() == Some(&key) {
+                            this.show_pending_agents_chat_launch(
+                                GpuiWorkspaceTerminalSessionKey::Local(key.clone()),
+                                &metadata,
+                                requested_pane_id,
+                                cx,
+                            );
+                        }
+                    });
+                }
+            }
             let prepare_key = key.clone();
             let result = background
                 .spawn(async move {
@@ -1631,6 +1673,20 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.deliver_pending_session_chat_received_draft(session_id, cx);
+        if self
+            .pending_session_chat_draft_handoffs
+            .contains(&session_id)
+            || self
+                .session_chat_draft_capture_in_flight
+                .contains(&session_id)
+            || self
+                .pending_session_chat_received_drafts
+                .contains_key(&session_id)
+        {
+            return;
+        }
+        let expected_session = self.workspace_terminal_key_for_shell_session(session_id);
         let request = if let Some(key) = self.agents_chat_local_key_for_session(session_id) {
             let params = serde_json::json!({
                 "projectId": key.project_id,
@@ -1664,20 +1720,59 @@ impl GhostexGpuiApp {
                 )
             })
         };
+        self.session_chat_draft_capture_in_flight.insert(session_id);
         cx.spawn(async move |this, cx| {
-            let Ok(result) = request.await else {
-                return;
-            };
-            let content = result
-                .get("content")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            if content.is_empty() {
-                return;
-            }
+            let result = request.await;
             let _ = this.update(cx, |this, cx| {
-                this.deliver_session_chat_composer_insert(session_id, content, cx);
+                if this.workspace_terminal_key_for_shell_session(session_id) != expected_session {
+                    return;
+                }
+                this.session_chat_draft_capture_in_flight
+                    .remove(&session_id);
+                let Ok(result) = result else {
+                    return;
+                };
+                let content = result
+                    .get("content")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                if content.is_empty() {
+                    return;
+                }
+                if result
+                    .get("handoffId")
+                    .and_then(serde_json::Value::as_str)
+                    .is_none()
+                {
+                    // Launch drafts already live in durable session state.
+                    this.deliver_session_chat_composer_insert(session_id, content, cx);
+                    return;
+                }
+                if !this.agents_chat_mode_sessions.contains(&session_id) {
+                    let id = format!(
+                        "{}-return",
+                        result
+                            .get("handoffId")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default()
+                    );
+                    this.pending_session_terminal_composer_insert.insert(
+                        session_id,
+                        crate::app::session_chat::GpuiSessionChatDraftHandoff {
+                            content,
+                            handoff_id: id,
+                            draft_version: result.get("draftVersion").cloned(),
+                            stashed_prompt_id: None,
+                        },
+                    );
+                    this.deliver_pending_session_terminal_composer_insert(session_id, cx);
+                    return;
+                }
+                this.pending_session_chat_received_drafts
+                    .insert(session_id, result);
+                this.deliver_pending_session_chat_received_draft(session_id, cx);
+                this.schedule_session_chat_received_draft_delivery(session_id, cx);
             });
         })
         .detach();
@@ -1998,8 +2093,15 @@ impl GhostexGpuiApp {
             ("projectId", project_id),
             ("sessionId", gxserver_session_id),
             ("agentId", agent.to_string()),
-            ("hideAccountEmails", shared_settings::shared_sidebar_settings_snapshot().object()
-                .get("hideAccountEmails").and_then(serde_json::Value::as_bool).unwrap_or(false).to_string()),
+            (
+                "hideAccountEmails",
+                shared_settings::shared_sidebar_settings_snapshot()
+                    .object()
+                    .get("hideAccountEmails")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+                    .to_string(),
+            ),
             (
                 "theme",
                 gpui_session_chat_theme_from_settings(
@@ -2028,6 +2130,13 @@ impl GhostexGpuiApp {
                 .to_string(),
             ),
             (
+                "fileEditPreviews",
+                gpui_session_chat_file_edit_previews_from_settings(
+                    shared_settings::shared_sidebar_settings_snapshot().object(),
+                )
+                .to_string(),
+            ),
+            (
                 "verboseMode",
                 gpui_session_chat_verbose_mode_from_settings(
                     shared_settings::shared_sidebar_settings_snapshot().object(),
@@ -2045,6 +2154,9 @@ impl GhostexGpuiApp {
             ),
         ];
         if remote {
+            if let Some(key) = self.agents_chat_remote_key_for_session(session_id) {
+                params.push(("remoteMachineId", key.remote_machine_id));
+            }
             params.push(("remote", "true".to_string()));
         }
         Some(append_url_query_params(base_url, &params))
@@ -2133,18 +2245,21 @@ impl GhostexGpuiApp {
                     return;
                 }
                 self.close_gpui_app_modal_window_and_restore_command_focus(cx);
-                self.focus_local_workspace_terminal_from_message(
-                    &GpuiSidebarWorkspaceTerminalFocusMessage {
-                        force_remount: false,
-                        placement: GpuiWorkspaceTerminalFocusPlacement::Tab,
-                        placement_target_session_id: None,
-                        preferred_interface: GpuiPreferredAgentInterface::Terminal,
-                        project_id,
-                        session_id,
-                        startup_restore: false,
-                    },
-                    cx,
-                );
+                // CDXC:PromptSearch 2026-09-10 WHY:
+                // Direct native focus skipped the sidebar presentation update and project-switch coordination, so a result could attach into the outgoing workspace or leave its sidebar row hidden.
+                // Use the modal session activation route, then the same reveal request as the titlebar button to expand and scroll the owning sidebar containers.
+                let sidebar_session_id =
+                    gpui_combined_presentation_session_id(&project_id, &session_id);
+                if self.dispatch_gpui_command_palette_session_focus(&sidebar_session_id, cx) {
+                    self.reveal_sidebar_session(&sidebar_session_id, cx);
+                } else {
+                    self.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Could not open session",
+                        "The sidebar is not ready. Try opening the search result again.",
+                        cx,
+                    );
+                }
             }
             "launchSession" => {
                 let command = message
@@ -2232,9 +2347,13 @@ impl GhostexGpuiApp {
         capability that the app-owned Source surface receives.
         */
         let trusted_clipboard_origin = Some(url.clone());
+        #[cfg(target_os = "macos")]
+        let chat_parent = self.companion_native_parent();
+        #[cfg(not(target_os = "macos"))]
+        let chat_parent = self.parent_ns_view;
         let surface = match CefSurface::try_new(
             format!("ghostex-gpui-session-chat-{}", session_id.0),
-            self.parent_ns_view,
+            chat_parent,
             url,
             "session-chat".to_string(),
             prepaint_background,
@@ -2356,7 +2475,9 @@ impl GhostexGpuiApp {
         let mut visibility_changed = false;
         for (session_id, surface) in &self.agents_chat_surfaces {
             let visible = visible_session_ids.contains(session_id)
-                && self.session_account_switch_progress(*session_id).is_none();
+                && self
+                    .session_account_switch_placeholder_progress(*session_id)
+                    .is_none();
             surface.update(cx, |surface, _| surface.set_visible(visible));
             /*
             CDXC:SessionChat 2026-08-24:
@@ -2440,6 +2561,12 @@ impl GhostexGpuiApp {
             || self
                 .pending_session_terminal_composer_insert
                 .contains_key(&session_id)
+            || self
+                .pending_session_chat_received_drafts
+                .contains_key(&session_id)
+            || self
+                .session_chat_draft_capture_in_flight
+                .contains(&session_id)
             || self.pending_session_chat_composer_focus == Some(session_id)
             || self
                 .pending_session_chat_composer_insert
@@ -2515,6 +2642,10 @@ impl GhostexGpuiApp {
         self.pending_session_terminal_composer_insert
             .remove(&session_id);
         self.pending_session_chat_draft_handoffs.remove(&session_id);
+        self.session_chat_draft_capture_in_flight
+            .remove(&session_id);
+        self.pending_session_chat_received_drafts
+            .remove(&session_id);
         if let Some(surface) = self.agents_chat_surfaces.remove(&session_id) {
             surface.update(cx, |surface, _| surface.set_visible(false));
         }
@@ -2557,8 +2688,14 @@ impl GhostexGpuiApp {
         self.pending_agents_chat_launch_intents.clear();
         self.pending_session_terminal_composer_insert.clear();
         self.pending_session_chat_draft_handoffs.clear();
+        self.session_chat_draft_capture_in_flight.clear();
+        self.pending_session_chat_received_drafts.clear();
         for (session_id, surface) in &self.agents_chat_surfaces {
-            self.record_session_chat_lifecycle(*session_id, "sessionChat.nativePageParked", "projectSwitch");
+            self.record_session_chat_lifecycle(
+                *session_id,
+                "sessionChat.nativePageParked",
+                "projectSwitch",
+            );
             surface.update(cx, |surface, _| surface.set_visible(false));
             // A parked surface is hidden by definition, so it must carry the
             // eviction clock into the park or it would age forever. Same
@@ -2611,7 +2748,11 @@ impl GhostexGpuiApp {
         */
         for (session_id, surface) in &self.agents_chat_surfaces {
             let bootstrap = self.agents_session_chat_gxserver_bootstrap(*session_id);
-            self.record_session_chat_lifecycle(*session_id, "sessionChat.nativePageRestored", "projectSwitch");
+            self.record_session_chat_lifecycle(
+                *session_id,
+                "sessionChat.nativePageRestored",
+                "projectSwitch",
+            );
             surface.update(cx, |surface, _| {
                 surface.refresh_session_chat_gxserver_bootstrap(bootstrap);
             });
