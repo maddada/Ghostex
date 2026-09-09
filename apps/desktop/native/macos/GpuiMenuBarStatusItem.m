@@ -221,9 +221,9 @@ static void GhostexGpuiMenuBarStatusDrawPaddedTitle(NSString *title,
   [title drawInRect:textRect withAttributes:attributes];
 }
 
-static NSString *GhostexGpuiMenuBarStatusRelativeTime(NSString *timestamp) {
+static NSDate *GhostexGpuiMenuBarStatusDate(NSString *timestamp) {
   if (timestamp.length == 0) {
-    return @"";
+    return nil;
   }
 
   static NSISO8601DateFormatter *fractionalFormatter = nil;
@@ -238,8 +238,12 @@ static NSString *GhostexGpuiMenuBarStatusRelativeTime(NSString *timestamp) {
     secondFormatter.formatOptions = NSISO8601DateFormatWithInternetDateTime;
   });
 
-  NSDate *date = [fractionalFormatter dateFromString:timestamp]
-                     ?: [secondFormatter dateFromString:timestamp];
+  return [fractionalFormatter dateFromString:timestamp]
+             ?: [secondFormatter dateFromString:timestamp];
+}
+
+static NSString *GhostexGpuiMenuBarStatusRelativeTime(NSString *timestamp) {
+  NSDate *date = GhostexGpuiMenuBarStatusDate(timestamp);
   if (date == nil) {
     return @"";
   }
@@ -816,6 +820,8 @@ static const CGFloat GhostexGpuiMenuBarStatusProjectSectionSpacing = 10.0;
 static const CGFloat GhostexGpuiMenuBarStatusProjectTitleCardGap = 4.0;
 static const CGFloat GhostexGpuiMenuBarStatusProjectCardHorizontalPadding = 6.0;
 static const CGFloat GhostexGpuiMenuBarStatusProjectCardVerticalPadding = 6.0;
+static const NSTimeInterval GhostexGpuiMenuBarStatusIdleSessionMaximumAge =
+    2.0 * 60.0 * 60.0;
 
 - (instancetype)init {
   self = [super init];
@@ -1059,15 +1065,48 @@ static const CGFloat GhostexGpuiMenuBarStatusProjectCardVerticalPadding = 6.0;
   return button;
 }
 
-- (NSArray<GhostexGpuiMenuBarStatusProjectModel *> *)nonEmptyProjects {
-  NSMutableArray<GhostexGpuiMenuBarStatusProjectModel *> *nonEmptyProjects =
+/**
+ CDXC:StatusPet 2026-09-09 DECISION:
+ User: the macOS menu dropdown shows idle sessions only when they were active within the past two hours, always shows working and attention sessions, and lists projects containing working or attention sessions first.
+ */
+- (NSArray<GhostexGpuiMenuBarStatusProjectModel *> *)visibleProjects {
+  NSDate *now = [NSDate date];
+  NSMutableArray<GhostexGpuiMenuBarStatusProjectModel *> *activeProjects =
+      [NSMutableArray array];
+  NSMutableArray<GhostexGpuiMenuBarStatusProjectModel *> *idleProjects =
       [NSMutableArray array];
   for (GhostexGpuiMenuBarStatusProjectModel *project in self.projects) {
-    if (project.sessions.count > 0) {
-      [nonEmptyProjects addObject:project];
+    NSMutableArray<GhostexGpuiMenuBarStatusSessionModel *> *visibleSessions =
+        [NSMutableArray array];
+    BOOL hasActiveSession = NO;
+    for (GhostexGpuiMenuBarStatusSessionModel *session in project.sessions) {
+      BOOL isActive =
+          session.status == GhostexGpuiMenuBarStatusKindWorking ||
+          session.status == GhostexGpuiMenuBarStatusKindAttention;
+      NSDate *lastActiveAt = GhostexGpuiMenuBarStatusDate(session.lastActiveAt);
+      BOOL isRecent =
+          lastActiveAt != nil &&
+          [now timeIntervalSinceDate:lastActiveAt] <=
+              GhostexGpuiMenuBarStatusIdleSessionMaximumAge;
+      if (!isActive && !isRecent) {
+        continue;
+      }
+      [visibleSessions addObject:session];
+      hasActiveSession = hasActiveSession || isActive;
     }
+    if (visibleSessions.count == 0) {
+      continue;
+    }
+
+    GhostexGpuiMenuBarStatusProjectModel *visibleProject =
+        [[GhostexGpuiMenuBarStatusProjectModel alloc] init];
+    visibleProject.projectId = project.projectId;
+    visibleProject.title = project.title;
+    visibleProject.sessions = visibleSessions;
+    [(hasActiveSession ? activeProjects : idleProjects) addObject:visibleProject];
   }
-  return nonEmptyProjects;
+  [activeProjects addObjectsFromArray:idleProjects];
+  return activeProjects;
 }
 
 - (void)rebuildRows {
@@ -1078,7 +1117,7 @@ static const CGFloat GhostexGpuiMenuBarStatusProjectCardVerticalPadding = 6.0;
   }
 
   NSArray<GhostexGpuiMenuBarStatusProjectModel *> *projects =
-      [self nonEmptyProjects];
+      [self visibleProjects];
   if (projects.count == 0) {
     [_rowsStack addArrangedSubview:[self emptyLabel]];
   } else {
@@ -1217,7 +1256,7 @@ static const CGFloat GhostexGpuiMenuBarStatusProjectCardVerticalPadding = 6.0;
 
 - (CGFloat)preferredRowsHeight {
   NSArray<GhostexGpuiMenuBarStatusProjectModel *> *projects =
-      [self nonEmptyProjects];
+      [self visibleProjects];
   if (projects.count == 0) {
     return GhostexGpuiMenuBarStatusEmptyHeight;
   }

@@ -83,22 +83,24 @@ pub(crate) fn gpui_session_attention_notification_candidates(
     next: &GpuiSidebarSessionStatusIndicatorsState,
 ) -> Vec<GpuiSessionAttentionNotificationCandidate> {
     /*
-    CDXC:Notifications 2026-06-26-06:56:
-    Attention notification detection is an edge detector over the sanitized status model, not a payload replay or count watcher. A row is eligible only when its bounded session id was absent from the previous attention set and the next row itself carries a bounded title/project title already accepted by the parser.
+    CDXC:Notifications 2026-09-09 WHY:
+    Startup publishes an empty placeholder before loading session rows, so suppressing only the first snapshot still replays historical attention as macOS banners.
+    Require an observed non-attention row to transition into attention; rows first appearing during startup or reconnect establish their baseline silently.
     */
-    let previous_attention_session_ids = previous
+    let previous_session_statuses = previous
         .projects
         .iter()
         .flat_map(|project| project.sessions.iter())
-        .filter(|session| session.status == GpuiStatusIndicatorStatus::Attention)
-        .map(|session| session.session_id.as_str())
-        .collect::<HashSet<_>>();
+        .map(|session| (session.session_id.as_str(), session.status))
+        .collect::<HashMap<_, _>>();
     let mut emitted_session_ids = HashSet::new();
     let mut candidates = Vec::new();
     for project in &next.projects {
         for session in &project.sessions {
             if session.status != GpuiStatusIndicatorStatus::Attention
-                || previous_attention_session_ids.contains(session.session_id.as_str())
+                || !previous_session_statuses
+                    .get(session.session_id.as_str())
+                    .is_some_and(|status| *status != GpuiStatusIndicatorStatus::Attention)
                 || !emitted_session_ids.insert(session.session_id.as_str())
             {
                 continue;
