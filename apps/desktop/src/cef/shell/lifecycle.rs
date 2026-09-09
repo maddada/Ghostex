@@ -270,69 +270,84 @@ wrap_focus_handler! {
     }
 }
 
-/*
-CDXC:Hotkeys 2026-08-12:
-Windowed CEF owns keyboard focus in its Chromium child HWND on Windows, so
-GPUI's Ctrl+=, Ctrl+-, and Ctrl+0 bindings cannot observe those keystrokes.
-Install this handler only on Browser, main project-workarea, and Session Chat
-clients (the same surfaces registered for macOS keyboard zoom) and consume the
-Windows primary-modifier chord through Chromium's browser-host zoom API.
-Sidebar, modal, titlebar, companion, and DevTools clients deliberately receive
-no handler. The macOS AppKit responder path remains unchanged.
-*/
+#[cfg(target_os = "macos")]
+type SurfaceKeyOsEvent<'a> = *mut u8;
 #[cfg(target_os = "windows")]
+type SurfaceKeyOsEvent<'a> = Option<&'a mut cef::sys::MSG>;
+#[cfg(target_os = "linux")]
+type SurfaceKeyOsEvent<'a> = Option<&'a mut cef::sys::XEvent>;
+
+/*
+CDXC:Browser 2026-09-09 SEE-ALSO:
+Browser CEF child views own page keystrokes, so history must be handled here as well as the GPUI Browser key context in main.rs.
+Other pages keep their page-owned shortcuts; Windows retains its existing surface zoom commands.
+*/
 wrap_keyboard_handler! {
-    pub(crate) struct GhostexGpuiWindowsZoomKeyboardHandler;
+    pub(crate) struct GhostexGpuiSurfaceKeyboardHandler {
+        zoom_enabled: bool,
+        page_metadata_handler: Option<BrowserPageMetadataHandler>,
+    }
 
     impl KeyboardHandler {
         fn on_pre_key_event(
             &self,
             browser: Option<&mut cef::Browser>,
             event: Option<&KeyEvent>,
-            _os_event: Option<&mut cef::sys::MSG>,
+            _os_event: SurfaceKeyOsEvent<'_>,
             _is_keyboard_shortcut: Option<&mut c_int>,
         ) -> c_int {
-            const VK_0: c_int = 0x30;
-            const VK_OEM_PLUS: c_int = 0xBB;
-            const VK_OEM_MINUS: c_int = 0xBD;
-            const CONTROL_DOWN: u32 =
-                cef::sys::cef_event_flags_t::EVENTFLAG_CONTROL_DOWN.0 as u32;
-            const ALT_DOWN: u32 = cef::sys::cef_event_flags_t::EVENTFLAG_ALT_DOWN.0 as u32;
-            const COMMAND_DOWN: u32 =
-                cef::sys::cef_event_flags_t::EVENTFLAG_COMMAND_DOWN.0 as u32;
-
             let Some(event) = event else {
                 return 0;
             };
-            if event.type_ != KeyEventType::RAWKEYDOWN
-                || event.modifiers & CONTROL_DOWN == 0
-                || event.modifiers & (ALT_DOWN | COMMAND_DOWN) != 0
-            {
+            if event.type_ != KeyEventType::RAWKEYDOWN && event.type_ != KeyEventType::KEYDOWN {
                 return 0;
             }
-            let command = match event.windows_key_code {
-                VK_OEM_PLUS => ZoomCommand::IN,
-                VK_OEM_MINUS => ZoomCommand::OUT,
-                VK_0 => ZoomCommand::RESET,
-                _ => return 0,
+            let control = cef::sys::cef_event_flags_t::EVENTFLAG_CONTROL_DOWN.0 as u32;
+            let command = cef::sys::cef_event_flags_t::EVENTFLAG_COMMAND_DOWN.0 as u32;
+            let alt = cef::sys::cef_event_flags_t::EVENTFLAG_ALT_DOWN.0 as u32;
+            let shift = cef::sys::cef_event_flags_t::EVENTFLAG_SHIFT_DOWN.0 as u32;
+            let modifiers = event.modifiers & (control | command | alt | shift);
+            let (history_key, history_modifier) = if cfg!(target_os = "macos") {
+                (0x59, command)
+            } else {
+                (0x48, control)
             };
-            let Some(host) = browser.and_then(|browser| browser.host()) else {
-                return 0;
-            };
-            host.zoom(command);
-            1
+            if event.windows_key_code == history_key && modifiers == history_modifier {
+                if let Some(handler) = &self.page_metadata_handler {
+                    handler(BrowserPageMetadataEvent::HistoryRequested);
+                    return 1;
+                }
+            }
+            #[cfg(target_os = "windows")]
+            if event.type_ == KeyEventType::RAWKEYDOWN
+                && self.zoom_enabled
+                && modifiers & control != 0
+                && modifiers & (alt | command) == 0
+            {
+                let zoom = match event.windows_key_code {
+                    0xBB => ZoomCommand::IN,
+                    0xBD => ZoomCommand::OUT,
+                    0x30 => ZoomCommand::RESET,
+                    _ => return 0,
+                };
+                if let Some(host) = browser.and_then(|browser| browser.host()) {
+                    host.zoom(zoom);
+                    return 1;
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            let _ = (browser, self.zoom_enabled);
+            0
         }
     }
 }
 
-#[cfg(target_os = "windows")]
-pub(crate) fn keyboard_zoom_handler(enabled: bool) -> Option<KeyboardHandler> {
-    enabled.then(GhostexGpuiWindowsZoomKeyboardHandler::new)
-}
-
-#[cfg(not(target_os = "windows"))]
-pub(crate) fn keyboard_zoom_handler(_enabled: bool) -> Option<KeyboardHandler> {
-    None
+pub(crate) fn surface_keyboard_handler(
+    zoom_enabled: bool,
+    page_metadata_handler: Option<BrowserPageMetadataHandler>,
+) -> Option<KeyboardHandler> {
+    (page_metadata_handler.is_some() || (cfg!(target_os = "windows") && zoom_enabled))
+        .then(|| GhostexGpuiSurfaceKeyboardHandler::new(zoom_enabled, page_metadata_handler))
 }
 pub(crate) fn cef_normalized_origin(value: &str) -> Option<String> {
     // Mirrors macOS `GhostexCEFNormalizedOrigin`: lowercased scheme://host with

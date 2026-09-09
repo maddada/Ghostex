@@ -51,7 +51,6 @@ use cef::{
     wrap_load_handler, wrap_permission_handler, wrap_render_process_handler, wrap_request_handler,
     wrap_resource_handler, wrap_resource_request_handler, wrap_task, wrap_v8_handler,
 };
-#[cfg(target_os = "windows")]
 use cef::{
     ImplKeyboardHandler, KeyEvent, KeyEventType, WrapKeyboardHandler, wrap_keyboard_handler,
 };
@@ -128,7 +127,6 @@ const SIDEBAR_GXSERVER_BOOTSTRAP_INITIAL_ACTIVE_PROJECT_ID_JS_FIELD: &str =
     "initialActiveProjectId";
 const SIDEBAR_GXSERVER_BOOTSTRAP_FOCUSED_SESSION_ID_JS_FIELD: &str = "focusedSessionId";
 const SIDEBAR_GXSERVER_BOOTSTRAP_VISIBLE_SESSION_IDS_JS_FIELD: &str = "visibleSessionIds";
-const CEF_BROWSER_PAGE_BACKGROUND_COLOR: u32 = 0xFFFF_FFFF;
 const CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID: c_int = 26_001;
 // Stable Chromium content-context commands used by the production macOS CEF
 // host (cef_command_ids.h).

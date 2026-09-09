@@ -564,7 +564,6 @@ pub(crate) fn apply_browser_page_appearance(browser: &cef::Browser) {
     macOS system detection must read the OS preference independently of NSApp's appearance, which can be pinned by the host.
     Apply the preference per Browser renderer because the Default profile shares its request context with app UI.
     On other platforms, an empty feature list restores Chromium's live system detection instead of overriding it with the old hardcoded light value.
-    The unspecified document canvas stays Chrome-like white.
     */
     let mut media_params = match cef::dictionary_value_create() {
         Some(params) => params,
@@ -604,7 +603,8 @@ pub(crate) fn apply_browser_page_appearance(browser: &cef::Browser) {
         Some(color) => color,
         None => return,
     };
-    for (key, value) in [("r", 255), ("g", 255), ("b", 255)] {
+    for (key, shift) in [("r", 16), ("g", 8), ("b", 0)] {
+        let value = ((CEF_BROWSER_PAGE_BACKGROUND_COLOR >> shift) & 0xff) as c_int;
         color.set_int(Some(&CefString::from(key)), value);
     }
     color.set_double(Some(&CefString::from("a")), 1.0);
@@ -680,6 +680,14 @@ impl CefBrowser {
         let keyboard_zoom_enabled = page_metadata_handler.is_some()
             || project_workarea_bridge_event_handler.is_some()
             || app_modal_host_bridge_surface == Some(AppModalHostBridgeSurface::SessionChat);
+        /*
+        CDXC:CefRuntime 2026-09-09 DECISION:
+        User: disable two-finger zoom in every built-in CEF view and modal, including Code, but preserve it in browser pages and custom views.
+        Browser pages and custom views use system page appearance; extension payloads also keep their own gesture behavior.
+        */
+        #[cfg(target_os = "macos")]
+        let pinch_zoom_disabled =
+            !uses_system_page_appearance && extension_bridge_surface.is_none();
         /*
         CDXC:CefRuntime 2026-07-11:
         CreateBrowserSync returns null when the per-profile request context's
@@ -788,7 +796,15 @@ impl CefBrowser {
             .as_ref()
             .map(ManageDocsResourceScope::request_handler)
             .or_else(|| {
-                is_shared_sidebar_surface.then(GhostexGpuiSidebarRendererRequestHandler::new)
+                sidebar_bridge_event_handler
+                    .clone()
+                    .filter(|_| is_shared_sidebar_surface)
+                    .map(|handler| {
+                        GhostexGpuiSidebarRendererRequestHandler::new(
+                            sidebar_page_entry_identity(url),
+                            handler,
+                        )
+                    })
             })
             .or_else(|| {
                 // Browser panes are the only surface with a shell popup path,
@@ -798,6 +814,8 @@ impl CefBrowser {
                     .clone()
                     .map(GhostexGpuiBrowserRequestHandler::new)
             });
+        let keyboard_handler =
+            surface_keyboard_handler(keyboard_zoom_enabled, page_metadata_handler.clone());
         let browser_lifecycle_handler = page_metadata_handler.clone();
         let load_handler = if let Some(surface) = extension_bridge_surface
             .clone()
@@ -863,7 +881,7 @@ impl CefBrowser {
             request_handler,
             permission_handler,
             Some(GhostexGpuiCefFocusHandler::new()),
-            keyboard_zoom_handler(keyboard_zoom_enabled),
+            keyboard_handler,
             drag_handler,
         ));
         let mut request_context = cef_request_context_for_profile(profile)
@@ -892,6 +910,8 @@ impl CefBrowser {
         if let Some(host) = browser.host() {
             let native_view = platform::native_view_ptr(host.window_handle());
             platform::prepare_native_view_for_focus(native_view);
+            #[cfg(target_os = "macos")]
+            platform::set_native_view_pinch_zoom_disabled(native_view, pinch_zoom_disabled);
             /*
             CDXC:FocusRouting 2026-07-22:
             The shared sidebar is chrome, not a work surface: clicking its
@@ -1046,6 +1066,41 @@ impl CefBrowser {
         set_cef_native_view_hidden(native_view, !visible);
         platform::set_native_view_visible(native_view, visible);
         self.last_visible.set(Some(visible));
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn update_sidebar_hover_reveal(
+        &self,
+        root: *mut c_void,
+        enabled: bool,
+        width: f64,
+        titlebar_height: f64,
+        on_right: bool,
+        companion_hidden: bool,
+        requested: bool,
+    ) -> (bool, bool) {
+        self.native_view().map_or((false, false), |view| {
+            platform::update_sidebar_hover_reveal(
+                view,
+                root,
+                enabled,
+                width,
+                titlebar_height,
+                on_right,
+                companion_hidden,
+                requested,
+            )
+        })
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn reparent_native_view(&self, parent: *mut c_void, from: *mut c_void) {
+        if self
+            .native_view()
+            .is_some_and(|view| platform::reparent_pane_native_view(view, parent, from))
+        {
+            *self.last_bounds.borrow_mut() = None;
+        }
     }
 
     pub fn order_front(&self) {
@@ -1344,6 +1399,10 @@ impl CefBrowser {
 
 impl Drop for CefBrowser {
     fn drop(&mut self) {
+        #[cfg(target_os = "macos")]
+        if let Some(view) = self.native_view() {
+            platform::dispose_sidebar_hover_reveal(view);
+        }
         if let Some(host) = self.browser.borrow().host() {
             let native_view = platform::native_view_ptr(host.window_handle());
             unregister_native_view_browser(native_view);

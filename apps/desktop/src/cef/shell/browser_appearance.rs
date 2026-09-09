@@ -1,5 +1,10 @@
 use super::*;
 
+/// CDXC:Browser 2026-09-09 DECISION:
+/// User: make the browser's white startup flashes full black.
+/// Keep CEF's initial background and the renderer's default canvas override identical so appearance updates cannot reintroduce the flash.
+pub(crate) const CEF_BROWSER_PAGE_BACKGROUND_COLOR: u32 = 0xFF00_0000;
+
 /// CDXC:Browser 2026-09-08 DECISION:
 /// User: replace the three new-tab/split options in the Browser overflow menu with System, Light, and Dark appearance detection, defaulting to System.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
