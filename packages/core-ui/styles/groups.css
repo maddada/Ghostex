@@ -266,8 +266,7 @@
   background: color-mix(in srgb, var(--workspace-project-theme-color) 12%, transparent);
 }
 
-.group[data-workspace-custom-theme='true'] .group-collapse-button,
-.group[data-workspace-custom-theme='true'] .group-title {
+.group[data-workspace-custom-theme='true'] .group-collapse-button {
   color: color-mix(in srgb, var(--workspace-project-theme-color) 74%, var(--app-foreground) 26%);
 }
 
@@ -611,6 +610,13 @@
   display: inline-flex;
 }
 
+/* CDXC:Theming 2026-09-09 DECISION:
+ * User: all sidebar project names use the same #b4b8bf as Quick Access text, including active and hovered projects.
+ */
+.group[data-project-group='true'] {
+  --sidebar-project-title-color: #b4b8bf;
+}
+
 .group-title {
   text-transform: uppercase;
 }
@@ -631,7 +637,7 @@
 
 .group-title-button:hover .group-title,
 .group-title-button:focus-visible .group-title {
-  color: var(--app-foreground);
+  color: var(--sidebar-project-title-color, var(--app-foreground));
 }
 
 .group-title-button[data-disabled='true'] {
@@ -640,7 +646,7 @@
 
 .group-title-button[data-disabled='true']:hover .group-title,
 .group-title-button[data-disabled='true']:focus-visible .group-title {
-  color: inherit;
+  color: var(--sidebar-project-title-color, inherit);
 }
 
 .group-title-button:focus-visible {
@@ -656,7 +662,7 @@
 }
 
 .group-title {
-  color: color-mix(in srgb, var(--app-foreground) 74%, var(--app-muted) 26%);
+  color: var(--sidebar-project-title-color, color-mix(in srgb, var(--app-foreground) 74%, var(--app-muted) 26%));
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -790,6 +796,29 @@
   justify-content: flex-start;
 }
 
+.group-agent-menu-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border-radius: 6px;
+}
+
+.group-agent-menu-row[data-selected='true'],
+.group-agent-menu-row:has(.group-agent-menu-launch:hover),
+.group-agent-menu-row:has(.group-agent-menu-launch:focus-visible) {
+  background: var(--app-context-menu-hover-background, #202020);
+}
+
+.group-agent-menu-launch {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.group-agent-menu-row > .group-agent-menu-launch:hover,
+.group-agent-menu-row > .group-agent-menu-launch:focus-visible {
+  background: transparent;
+}
+
 .group-agent-menu-item[data-selected='true'],
 .group-agent-menu-item:hover,
 .group-agent-menu-item:focus-visible {
@@ -806,7 +835,7 @@
   /*
    * CDXC:AgentLauncher 2026-05-10-14:18
    * Keep the selected row neutral; its brighter semibold label communicates
-   * selection without competing with the right-aligned chat capability icon.
+   * selection without competing with the trailing accounts / chat chrome.
    */
   color: inherit;
 }
@@ -825,12 +854,53 @@
   font-weight: 600;
 }
 
+.group-agent-menu-row[data-selected='true'] .group-agent-menu-label {
+  color: var(--app-foreground);
+  font-weight: 600;
+}
+
+.group-agent-menu-accounts {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  color: var(--app-muted);
+  opacity: 0.58;
+}
+
+button.group-agent-menu-account-button {
+  /* CDXC:AgentLauncher 2026-09-09 DECISION: User: the profile/count sub-button owns a rounded 5px hover surface matching session cards, with its own visible hover outline instead of inheriting the full launcher-row hover. */
+  /* The element selector keeps the radius above the later global :is(button, ...) reset. */
+  justify-content: center;
+  min-width: 28px;
+  padding: 5px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+}
+
+.group-agent-menu-account-button:hover,
+.group-agent-menu-account-button:focus-visible {
+  background: color-mix(in srgb, var(--app-foreground) 10%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--app-foreground) 18%, transparent);
+  outline-offset: -1px;
+  opacity: 0.9;
+}
+
+.group-agent-menu-accounts-count {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .group-agent-menu-chat-support {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  margin-left: auto;
+  margin-left: 6px;
+  margin-right: 5px;
   color: var(--app-muted);
   opacity: 0.58;
 }
@@ -1047,7 +1117,7 @@
 }
 
 .group[data-active='true'] .group-title {
-  color: var(--app-foreground);
+  color: var(--sidebar-project-title-color, var(--app-foreground));
 }
 
 .group[data-collapsed='true'] {
@@ -1093,7 +1163,7 @@
 
 .group-title-button[data-empty-project='true']:hover .group-title,
 .group-title-button[data-empty-project='true']:focus-visible .group-title {
-  color: var(--app-foreground);
+  color: var(--sidebar-project-title-color, var(--app-foreground));
 }
 
 .group-head:hover .group-header-actions,
@@ -1647,7 +1717,8 @@ section.project-collection.project-collection-drag-ghost {
 }
 
 .project-collection-projects {
-  padding: 3px 0 0 7px;
+  margin-right: calc(-1 * var(--reference-sidebar-scrollbar-shift-right, 0px));
+  padding: 3px var(--reference-sidebar-scrollbar-shift-right, 0px) 0 7px;
   position: relative;
 }
 
@@ -1884,11 +1955,11 @@ section.project-collection.project-collection-drag-ghost {
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .group-title {
-  color: #a5a5a5;
+  color: var(--sidebar-project-title-color, #a5a5a5);
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .group[data-active='true'] .group-title {
-  color: #a5a5a5;
+  color: var(--sidebar-project-title-color, #a5a5a5);
 }
 
 .project-title-tooltip-content {
@@ -1940,13 +2011,13 @@ section.project-collection.project-collection-drag-ghost {
  *
  * CDXC:Projects 2026-06-12-20:21:
  * Active project rows should not add a bullet marker. Make the active project
- * title the active state by rendering it full white and one font-weight step
- * above the normal 500-weight project title.
+ * title the active state with a heavier font weight. The shared project-name
+ * color now applies to active projects too.
  */
 .sidebar-reference-layout[data-reference-sidebar='true']
   .group[data-project-group='true'][data-active='true']
   .group-title {
-  color: #ffffff;
+  color: var(--sidebar-project-title-color, #ffffff);
   font-weight: 700;
 }
 

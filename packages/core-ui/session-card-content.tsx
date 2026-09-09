@@ -1665,8 +1665,9 @@ export function OverflowTooltipText({
    *
    * CDXC:Tooltips 2026-05-26-22:29:
    * Session title tooltips should keep metadata and provider/session id rows at
-   * their existing base weight while making only the first title row slightly
-   * bolder, so the title scans as the primary label without making ids heavier.
+   * the shared tooltip font while the first title row matches the visible
+   * session-card title (15.55px / weight 300), so overflow text reads as the
+   * same label rather than a smaller bold caption.
    *
    * CDXC:Tooltips 2026-05-28-04:33:
    * Quick-session hover tooltips must paint above surrounding Projects content.

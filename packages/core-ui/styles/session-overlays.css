@@ -301,8 +301,18 @@
 }
 
 .session-local-tooltip-title {
+  /*
+   * CDXC:Tooltips 2026-03-09:
+   * Session-card title tooltips must match the visible row title, not the
+   * compact app-wide tooltip chrome. Reference sidebar titles are 15.55px /
+   * weight 300; a 12px / 650 title row reads as a smaller bold caption of the
+   * same string. Metadata lines keep the shared tooltip font.
+   */
   color: var(--ghostex-tooltip-strong-foreground, rgba(255, 255, 255, 0.94));
-  font-weight: 650;
+  font-size: 15.55px;
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 20px;
 }
 
 .session-local-tooltip-meta {

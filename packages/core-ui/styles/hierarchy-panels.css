@@ -23,6 +23,16 @@
 
 .sidebar-reference-layout[data-reference-sidebar='true'] {
   --sidebar-active-session-border: #ffffff;
+  /*
+   * CDXC:Sessions 2026-03-09:
+   * User: selected-session chrome matches the dark chat composer
+   * (session-chat-composer-focus.css / chat.css). Collapsed groups, collapsed
+   * collections, collapsed section rows, and unselected Spaces that still own
+   * that session reuse the same fill, outline, and inner highlight.
+   */
+  --sidebar-composer-surface: #141414;
+  --sidebar-composer-outline: rgb(255 255 255 / 5%);
+  --sidebar-composer-highlight: rgb(255 255 255 / 3%);
 }
 
 .reference-sidebar-section-heading {
@@ -71,8 +81,11 @@
 }
 
 .reference-sidebar-section-row[data-collapsed='true'][data-contains-active-session='true'] {
+  background: var(--sidebar-composer-surface);
+  border: 1px solid var(--sidebar-composer-outline);
   border-radius: 5px;
-  box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border);
+  box-shadow: inset 0 1px var(--sidebar-composer-highlight);
+  box-sizing: border-box;
 }
 
 /*
@@ -275,8 +288,14 @@ section.project-collection > .project-collection-header:hover {
   background: color-mix(in srgb, var(--project-collection-color) 22%, transparent);
 }
 
-section.project-collection[data-collapsed='true'][data-contains-active-session='true'] > .project-collection-header {
-  box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border);
+section.project-collection[data-collapsed='true'][data-contains-active-session='true'] > .project-collection-header,
+section.project-collection[data-collapsed='true'][data-contains-active-session='true']
+  > .project-collection-header:hover {
+  background: var(--sidebar-composer-surface);
+  border: 1px solid var(--sidebar-composer-outline);
+  border-radius: 5px;
+  box-shadow: inset 0 1px var(--sidebar-composer-highlight);
+  box-sizing: border-box;
 }
 
 /*
@@ -287,7 +306,7 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
 .project-collection-title,
 .project-collection-title-input,
 .sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-title {
-  color: color-mix(in srgb, var(--app-foreground) 92%, #ffffff 8%);
+  color: var(--sidebar-project-title-color, color-mix(in srgb, var(--app-foreground) 92%, #ffffff 8%));
   font-size: 15.55px;
   letter-spacing: 0.01em;
   text-transform: none;
@@ -531,8 +550,8 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
 /*
  * All surfaced rows start from the previous light treatment: 30% foreground
  * over the expanded-group surface, including the group's selected tint.
- * Active rows mix that base 10% toward black; surfaced-but-unfocused rows mix
- * the same base 40% toward black.
+ * Active rows use the chat composer fill (#141414); surfaced-but-unfocused
+ * rows mix the light base 40% toward black.
  * Rows outside a project collection use the neutral expanded group surface as
  * their base.
  */
@@ -544,7 +563,13 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
   --session-surface: color-mix(in srgb, var(--app-background) 90%, #000000 10%);
   --session-light-surface: color-mix(in srgb, var(--session-expanded-group-surface) 70%, var(--app-foreground) 30%);
   --session-hover-surface: color-mix(in srgb, var(--session-expanded-group-surface) 78%, var(--app-foreground) 22%);
-  --session-focused-surface: color-mix(in srgb, var(--session-light-surface) 90%, #000000 10%);
+  /*
+   * CDXC:Sessions 2026-03-09:
+   * User: the selected session must use the chat composer surface, not a
+   * derived hierarchy tint. Dark composer fill is #141414
+   * (session-chat-composer-focus.css / chat.css).
+   */
+  --session-focused-surface: var(--sidebar-composer-surface);
   --session-visible-surface: color-mix(in srgb, var(--session-light-surface) 60%, #000000 40%);
   --session-visible-hover-overlay: color-mix(in srgb, var(--app-foreground) 8%, transparent);
   border-radius: 5px;
@@ -565,17 +590,39 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session[data-focused='true'] {
   /*
-   * The focused row owns its active outline directly. Do not make this depend
-   * on ancestor propagation, and do not let hover/focus-visible shadows replace
-   * it while the session remains active.
+   * CDXC:Sessions 2026-03-09:
+   * User: selected-session outline, inner highlight, and background must match
+   * the chat composer (session-chat-composer-focus.css): 1px
+   * rgb(255 255 255 / 5%) outline, inset 0 1px rgb(255 255 255 / 3%) top
+   * highlight, #141414 fill. Keep the 2px white ring off the button itself;
+   * a box-shadow on the bled row loses its left edge, so the chrome lives on
+   * ::after inset by the scroll-row bleed.
    */
-  box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border) !important;
+  box-shadow: none !important;
+}
+
+.sidebar-reference-layout[data-reference-sidebar='true'] .session[data-focused='true']::after {
+  background: var(--sidebar-composer-surface);
+  border: 1px solid var(--sidebar-composer-outline);
+  border-radius: 5px;
+  box-shadow: inset 0 1px var(--sidebar-composer-highlight);
+  inset: 0 0 0 var(--reference-sidebar-scroll-row-bleed-left, 7px);
+  opacity: 1;
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true']
   .group[data-collapsed='true'][data-contains-active-session='true']
-  > .group-head::before {
-  box-shadow: inset 0 0 0 2px var(--sidebar-active-session-border) !important;
+  > .group-head::before,
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-collapsed='true'][data-contains-active-session='true']
+  > .group-head:hover::before,
+.sidebar-reference-layout[data-reference-sidebar='true']
+  .group[data-collapsed='true'][data-contains-active-session='true']
+  > .group-head:has(:focus-visible)::before {
+  background: var(--sidebar-composer-surface) !important;
+  border: 1px solid var(--sidebar-composer-outline);
+  box-shadow: inset 0 1px var(--sidebar-composer-highlight) !important;
+  box-sizing: border-box;
 }
 
 /*

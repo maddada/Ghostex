@@ -20,16 +20,21 @@ body {
 /*
  * GPUI can surface several sessions at once through terminal splits, Browser
  * splits, and project-editor companion panes. Keep every surfaced row visible,
- * while reserving the stronger treatment for the session or Browser tab that
- * actually owns focus. The focused opacity is 40% above the shared sidebar's
- * 0.62 baseline; the visible tier is 20% below that focused treatment.
+ * while reserving the opaque composer surface for the session or Browser tab
+ * that actually owns focus. The visible tier stays translucent below that.
  */
 .gpui-sidebar .sidebar-reference-layout[data-reference-sidebar='true'] .session[data-visible='true']::after {
   opacity: 0.7;
 }
 
 .gpui-sidebar .sidebar-reference-layout[data-reference-sidebar='true'] .session[data-focused='true']::after {
-  opacity: 0.87;
+  /*
+   * CDXC:Sessions 2026-03-09:
+   * The selected row is the opaque chat-composer surface (#141414). A reduced
+   * opacity here mixed that fill with the sidebar and made it miss the input
+   * box. Hover/visible tiers still use the translucent treatment below.
+   */
+  opacity: 1;
 }
 
 .gpui-sidebar
