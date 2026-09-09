@@ -299,6 +299,70 @@ pub(crate) fn find_workspace_split_mut(
     }
 }
 
+pub(crate) fn workspace_split_resize_group_id(
+    node: &WorkspaceNode,
+    split_id: WorkspaceSplitId,
+    ancestor_group: Option<(WorkspaceSplitAxis, WorkspaceSplitId)>,
+) -> Option<WorkspaceSplitId> {
+    let WorkspaceNode::Split(split) = node else {
+        return None;
+    };
+    let group = ancestor_group
+        .filter(|(axis, _)| *axis == split.axis)
+        .unwrap_or((split.axis, split.id));
+    if split.id == split_id {
+        return Some(group.1);
+    }
+    workspace_split_resize_group_id(&split.first, split_id, Some(group))
+        .or_else(|| workspace_split_resize_group_id(&split.second, split_id, Some(group)))
+}
+
+fn workspace_split_group_pane_count(node: &WorkspaceNode, axis: WorkspaceSplitAxis) -> usize {
+    match node {
+        WorkspaceNode::Split(split) if split.axis == axis => {
+            workspace_split_group_pane_count(&split.first, axis)
+                + workspace_split_group_pane_count(&split.second, axis)
+        }
+        _ => 1,
+    }
+}
+
+/// CDXC:Workarea 2026-09-09 WHY:
+/// Binary split ratios divide space after their own handle is removed, but each child branch also contains its nested handles.
+/// Include those handles in branch sizes so a three-pane row has equal pane widths instead of a few pixels of drift from simple one-third/two-thirds ratios.
+pub(crate) fn equalize_workspace_split_group(
+    split: &mut WorkspaceSplit,
+    content_span: f32,
+) -> bool {
+    let first_count = workspace_split_group_pane_count(&split.first, split.axis) as f32;
+    let second_count = workspace_split_group_pane_count(&split.second, split.axis) as f32;
+    let pane_count = first_count + second_count;
+    let pane_span =
+        (content_span - (pane_count - 2.0) * WORKSPACE_SPLIT_HANDLE_THICKNESS) / pane_count;
+    if !pane_span.is_finite() || pane_span <= 0.0 {
+        return false;
+    }
+    let first_span =
+        first_count * pane_span + (first_count - 1.0) * WORKSPACE_SPLIT_HANDLE_THICKNESS;
+    let ratio = workspace_split_ratio(first_span / content_span);
+    let mut changed = (split.ratio - ratio).abs() > f32::EPSILON;
+    split.ratio = ratio;
+    for (child, span) in [
+        (&mut split.first, content_span * ratio),
+        (&mut split.second, content_span * (1.0 - ratio)),
+    ] {
+        if let WorkspaceNode::Split(child_split) = child.as_mut()
+            && child_split.axis == split.axis
+        {
+            changed |= equalize_workspace_split_group(
+                child_split,
+                span - WORKSPACE_SPLIT_HANDLE_THICKNESS,
+            );
+        }
+    }
+    changed
+}
+
 pub(crate) fn workspace_node_contains_pane(node: &WorkspaceNode, pane_id: WorkspacePaneId) -> bool {
     find_workspace_leaf(node, pane_id).is_some()
 }

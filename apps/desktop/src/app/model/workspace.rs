@@ -955,13 +955,24 @@ impl WorkspaceModel {
         true
     }
 
-    pub(crate) fn reset_split_ratio(&mut self, split_id: WorkspaceSplitId) -> bool {
-        let Some(default_ratio) = find_workspace_split(&self.root, split_id)
-            .map(|split| workspace_split_ratio(split.default_ratio))
-        else {
+    /// CDXC:Workarea 2026-09-09 DECISION:
+    /// User: double-clicking either divider between three side-by-side or stacked Agents panes makes all three equal in width or height.
+    /// This replaces resetting only the clicked split to its saved default ratio.
+    pub(crate) fn equalize_split_panes(
+        &mut self,
+        split_id: WorkspaceSplitId,
+        layout_metrics: &HashMap<WorkspaceSplitId, SplitResizeMetrics>,
+    ) -> bool {
+        let Some(group_id) = workspace_split_resize_group_id(&self.root, split_id, None) else {
             return false;
         };
-        self.set_split_ratio(split_id, default_ratio)
+        let Some(metrics) = layout_metrics.get(&group_id) else {
+            return false;
+        };
+        let Some(split) = find_workspace_split_mut(&mut self.root, group_id) else {
+            return false;
+        };
+        equalize_workspace_split_group(split, metrics.content_span)
     }
 
     pub(crate) fn split_drag_ratio_bounds(
