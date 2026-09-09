@@ -831,7 +831,6 @@ export function SidebarReferenceSectionHeader({
   sessionTagListItems,
   title,
   showHidden = false,
-  useColoredAgentIcons = false,
 }: {
   activeSessionsSortMode?: SidebarActiveSessionsSortMode;
   actionsAlwaysVisible?: boolean;
@@ -869,7 +868,6 @@ export function SidebarReferenceSectionHeader({
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
   title: string;
   showHidden?: boolean;
-  useColoredAgentIcons?: boolean;
 }) {
   /**
    * CDXC:Sidebar 2026-05-08-01:41
@@ -935,7 +933,6 @@ export function SidebarReferenceSectionHeader({
   const trailingRemoteConnectionControl = leadingRemoteConnectionControl ? undefined : remoteConnectionControl;
   const primaryAgent = agents.find((agent) => agent.agentId === primaryAgentId) ?? agents[0];
   const primaryAgentLabel = primaryAgent?.name ?? 'Agent';
-  const primaryAgentIconColorMode = useColoredAgentIcons ? 'brand' : 'monochrome';
   const normalizedSessionTagListItems = useMemo(
     () => normalizeSidebarSessionTagListItems(sessionTagListItems),
     [sessionTagListItems]
@@ -1151,7 +1148,7 @@ export function SidebarReferenceSectionHeader({
                 tooltipAlign='end'
                 type='button'
               >
-                <ProjectAgentLauncherIcon agent={primaryAgent} colorMode={primaryAgentIconColorMode} />
+                <ProjectAgentLauncherIcon agent={primaryAgent} colorMode='brand' />
               </SidebarFixedTooltipButton>
               <SidebarFixedTooltipButton
                 aria-expanded={agentMenuPosition !== undefined}

@@ -568,15 +568,21 @@ describe('reference sidebar group spacing styles', () => {
      * CDXC:Projects 2026-06-25-12:20:
      * The Show more state should keep rendering all project sessions, but the
      * expanded body must become a bounded inner scroll area using plain vertical
-     * overflow instead of scroll masks.
+     * overflow.
      *
      * CDXC:Projects 2026-06-29-17:53:
      * Inner project scrolling should chain to the main sidebar when the nested
      * list reaches an edge, so this rule must not contain overscroll.
      *
      * CDXC:Sidebar 2026-06-30-01:59:
-     * The fast sidebar path removes scroll masks and per-scroll glow state from
-     * expanded project bodies.
+     * The fast sidebar path removes per-scroll glow state from expanded project
+     * bodies.
+     *
+     * CDXC:Sidebar 2026-09-09 DECISION:
+     * User: the expanded inner scroller wears the chat transcript's scroll-edge
+     * fade (the shadcn scroll-fade-y utility), not the sidebar's snap-in
+     * vertical-scroll-fade-mask, and only while the body is expanded and
+     * scrollable.
      */
     expect(sessionGroupSectionSource).toContain('shouldScrollExpandedProjectSessionList');
     expect(sessionGroupSectionSource).toContain('getExpandedProjectSessionListScrollHeight');
@@ -586,6 +592,9 @@ describe('reference sidebar group spacing styles', () => {
     expect(sessionGroupSectionSource).not.toContain('setExpandedProjectSessionListScrollHeight');
     expect(sessionGroupSectionSource).not.toContain('projectSessionListScrollBoundarySessionId');
     expect(sessionGroupSectionSource).not.toContain('vertical-scroll-fade-mask');
+    expect(sessionGroupSectionSource).toContain(
+      "shouldScrollExpandedProjectSessionList && !isGroupSessionsBodyVisuallyCollapsed ? ' scroll-fade-y' : ''"
+    );
     expect(sessionGroupSectionSource).not.toContain('data-scroll-glow');
     expect(sessionGroupSectionSource).toContain(
       'data-project-session-list-scrollable={String(shouldScrollExpandedProjectSessionList)}'

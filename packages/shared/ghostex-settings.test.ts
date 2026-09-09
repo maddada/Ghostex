@@ -629,14 +629,12 @@ describe('normalizeghostexSettings', () => {
         hideBrowserFaviconUntilHover: true,
         hideSessionAgentIconUntilHover: false,
         showProjectIcons: false,
-        useColoredSessionAgentIcons: true,
       })
     ).toMatchObject({
       hideProjectHeaderDiffStats: false,
       hideBrowserFaviconUntilHover: true,
       hideSessionAgentIconUntilHover: false,
       showProjectIcons: false,
-      useColoredSessionAgentIcons: true,
     });
   });
 
@@ -662,22 +660,6 @@ describe('normalizeghostexSettings', () => {
         showProjectEditorDiffFileCount: true,
       })
     ).toBeUndefined();
-    /*
-     * CDXC:Icons 2026-06-29-23:58:
-     * Colored agent icons are an independent Session Cards preference, not a
-     * sidebar density preset. Toggling color mode must not make the current
-     * preset become Custom.
-     */
-    expect(DEFAULT_ghostex_SETTINGS.useColoredSessionAgentIcons).toBe(true);
-    expect(normalizeghostexSettings({ useColoredSessionAgentIcons: true })).toMatchObject({
-      useColoredSessionAgentIcons: true,
-    });
-    expect(
-      getSidebarSettingsPresetId({
-        ...DEFAULT_ghostex_SETTINGS,
-        useColoredSessionAgentIcons: true,
-      })
-    ).toBe('recommended');
   });
 
   test('hides session-card last active timestamps by default unless explicitly shown', () => {

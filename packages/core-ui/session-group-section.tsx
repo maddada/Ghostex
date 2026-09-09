@@ -527,7 +527,6 @@ export type SessionGroupSectionProps = {
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
   showHeaderActions?: boolean;
   showSessionDropPositionIndicators?: boolean;
-  useColoredAgentIcons?: boolean;
   vscode: WebviewApi;
 };
 
@@ -736,7 +735,6 @@ export function SessionGroupSection({
   sessionTagListItems,
   showHeaderActions = true,
   showSessionDropPositionIndicators = true,
-  useColoredAgentIcons = false,
   vscode,
 }: SessionGroupSectionProps) {
   const launchAccountsTransport = useMemo(() => vscode.requestGroupAccounts
@@ -912,7 +910,6 @@ export function SessionGroupSection({
    */
   const debuggingMode = useSidebarStore((state) => state.hud.debuggingMode);
   const agents = useSidebarStore((state) => state.hud.agents);
-  const projectAgentLauncherIconColorMode = useColoredAgentIcons ? 'brand' : 'monochrome';
   const hideProjectHeaderDiffStats = useSidebarStore(
     (state) => state.hud.settings?.hideProjectHeaderDiffStats ?? DEFAULT_ghostex_SETTINGS.hideProjectHeaderDiffStats
   );
@@ -1011,37 +1008,32 @@ export function SessionGroupSection({
     orderedSessionIds.length > projectSessionListCollapsedCount;
   const renderedSessionIds =
     shouldShowProjectSessionListToggle && !isProjectSessionListCollapsed ? orderedSessionIds : visibleSessionIds;
-  const renderedNonDraftSessionIds = renderedSessionIds.filter(
-    (sessionId) => sessionsById[sessionId]?.isDraft !== true
-  );
-  const renderedBrowserSessionIds = renderedNonDraftSessionIds.filter((sessionId) => {
+  const renderedBrowserSessionIds = renderedSessionIds.filter((sessionId) => {
     return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'browser';
   });
-  const renderedPinnedSessionIds = renderedNonDraftSessionIds.filter((sessionId) => {
+  const renderedPinnedSessionIds = renderedSessionIds.filter((sessionId) => {
     return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'pinned';
   });
-  const renderedUnpinnedSessionIds = renderedNonDraftSessionIds.filter((sessionId) => {
+  const renderedUnpinnedSessionIds = renderedSessionIds.filter((sessionId) => {
     return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'sessions';
   });
-  const renderedParkedSessionIds = renderedNonDraftSessionIds.filter((sessionId) => {
+  const renderedParkedSessionIds = renderedSessionIds.filter((sessionId) => {
     return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'parked';
   });
   const projectSessionSectionCounts = orderedSessionIds.reduce<Record<ProjectSessionSection, number>>(
     (counts, sessionId) => {
-      if (sessionsById[sessionId]?.isDraft !== true) {
-        counts[getProjectSessionSection(sessionsById[sessionId], enableSessionParking)] += 1;
-      }
+      counts[getProjectSessionSection(sessionsById[sessionId], enableSessionParking)] += 1;
       return counts;
     },
     { browser: 0, parked: 0, pinned: 0, sessions: 0 }
   );
   const shouldRenderSessionKindLabels =
-    renderedBrowserSessionIds.length > 0 && renderedBrowserSessionIds.length < renderedNonDraftSessionIds.length;
+    renderedBrowserSessionIds.length > 0 && renderedBrowserSessionIds.length < renderedSessionIds.length;
   const firstBrowserSessionId = renderedBrowserSessionIds[0];
   const firstPinnedSessionId = renderedPinnedSessionIds[0];
   const firstUnpinnedSessionId = renderedUnpinnedSessionIds[0];
   const firstParkedSessionId = renderedParkedSessionIds[0];
-  const firstTerminalSessionId = renderedNonDraftSessionIds.find((sessionId) => {
+  const firstTerminalSessionId = renderedSessionIds.find((sessionId) => {
     const session = sessionsById[sessionId];
     return session?.kind !== 'browser' && session?.sessionKind !== 'browser';
   });
@@ -1055,7 +1047,6 @@ export function SessionGroupSection({
   const expandedVisibleSessionIds = projectContext
     ? visibleSessionIds.filter(
         (sessionId) =>
-          sessionsById[sessionId]?.isDraft === true ||
           !collapsedProjectSessionSections[getProjectSessionSection(sessionsById[sessionId], enableSessionParking)]
       )
     : visibleSessionIds;
@@ -2528,7 +2519,7 @@ export function SessionGroupSection({
                               >
                                 <ProjectAgentLauncherIcon
                                   agent={primaryProjectAgent}
-                                  colorMode={projectAgentLauncherIconColorMode}
+                                  colorMode='brand'
                                 />
                               </ProjectHeaderActionButton>
                               <ProjectHeaderActionButton
@@ -2593,7 +2584,7 @@ export function SessionGroupSection({
         {shouldRenderGroupSessionsBody ? (
           <div
             aria-hidden={isGroupSessionsBodyVisuallyCollapsed}
-            className='group-sessions-shell sidebar-collapse-shell'
+            className={`group-sessions-shell sidebar-collapse-shell${shouldScrollExpandedProjectSessionList && !isGroupSessionsBodyVisuallyCollapsed ? ' scroll-fade-y' : ''}`}
             data-collapsed={String(isGroupSessionsBodyVisuallyCollapsed)}
             inert={isGroupSessionsBodyVisuallyCollapsed ? true : undefined}
             data-project-session-list-clipped={String(shouldClipProjectSessionList)}
@@ -2632,9 +2623,17 @@ export function SessionGroupSection({
                     const session = sessionsById[sessionId];
                     const projectSessionSection = getProjectSessionSection(session, enableSessionParking);
                     const isProjectSessionSectionCollapsed =
-                      session?.isDraft !== true &&
                       (Boolean(projectContext) || (isChatCollection && projectSessionSection === 'parked')) &&
                       collapsedProjectSessionSections[projectSessionSection];
+                    /*
+                     * CDXC:Sessions 2026-09-10 WHY:
+                     * The gap after the last pinned row is keyed to the next session, but belongs above that session's section heading, even when the next section is collapsed.
+                     */
+                    const isPinnedSectionEndGap =
+                      Boolean(projectContext) &&
+                      sessionIndex > 0 &&
+                      projectSessionSection !== 'pinned' &&
+                      getProjectSessionSection(sessionsById[renderedSessionIds[sessionIndex - 1]], enableSessionParking) === 'pinned';
                     const isProjectSessionListOverflowRow =
                       shouldClipProjectSessionList && !visibleSessionIdSet.has(sessionId);
                     const sessionIdsBelowStartIndex = isProjectSessionListOverflowRow ? undefined : sessionIndex + 1;
@@ -2653,6 +2652,13 @@ export function SessionGroupSection({
 
                     return (
                       <Fragment key={sessionId}>
+                        {isPinnedSectionEndGap && !collapsedProjectSessionSections.pinned && shouldRenderSessionRowGaps ? (
+                          <div
+                            aria-hidden
+                            className='pinned-session-drop-gap'
+                            data-active={String(pinnedSessionDropGapKey === getSessionDropGapKeyBefore(sessionId))}
+                          />
+                        ) : null}
                         {projectContext && sessionId === firstBrowserSessionId ? (
                           <ProjectSessionSectionToggle
                             count={projectSessionSectionCounts.browser}
@@ -2691,7 +2697,7 @@ export function SessionGroupSection({
                         {!projectContext && shouldRenderSessionKindLabels && sessionId === firstTerminalSessionId ? (
                           <div className='session-kind-label'>Sessions</div>
                         ) : null}
-                        {!isProjectSessionSectionCollapsed && shouldRenderSessionRowGaps ? (
+                        {!isPinnedSectionEndGap && !isProjectSessionSectionCollapsed && shouldRenderSessionRowGaps ? (
                           <div
                             aria-hidden
                             className='pinned-session-drop-gap'
@@ -2749,7 +2755,6 @@ export function SessionGroupSection({
                         ) : null}
                         {!projectContext &&
                         !isProjectSessionSectionCollapsed &&
-                        session?.isDraft !== true &&
                         sessionsById[sessionId]?.isPinned === true &&
                         orderedSessionIds[sessionIndex + 1] !== undefined &&
                         sessionsById[orderedSessionIds[sessionIndex + 1]]?.isPinned !== true ? (
