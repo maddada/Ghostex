@@ -115,7 +115,7 @@ impl GhostexGpuiApp {
                 */
                 windows_terminal_backend::reset();
                 self.replay_sidebar_gxserver_bootstrap(cx);
-                self.start_gpui_local_gxserver_bootstrap(cx);
+                self.start_gpui_local_gxserver_bootstrap(true, cx);
             }
         }
     }

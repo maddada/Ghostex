@@ -91,7 +91,7 @@ impl GhostexGpuiApp {
                 }
                 let _ = this.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
                 if should_restart {
-                    this.start_gpui_local_gxserver_bootstrap(cx);
+                    this.start_gpui_local_gxserver_bootstrap(true, cx);
                 }
             });
         })

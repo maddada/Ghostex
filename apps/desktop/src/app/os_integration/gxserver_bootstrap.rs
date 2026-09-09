@@ -27,10 +27,15 @@ impl GhostexGpuiApp {
     /// Startup daemon bootstrap, mirroring the macOS GxserverClient contract:
     /// reuse a healthy protocol-matched daemon silently, surface protocol and
     /// toolchain problems honestly, and otherwise launch the bundled daemon
-    /// (app-independent; quitting Ghostex never stops it) while a persistent
-    /// status toast tracks progress. Unlike macOS this does not gate window
-    /// creation; the shell shows its normal disconnected state until healthy.
-    pub(crate) fn start_gpui_local_gxserver_bootstrap(&mut self, cx: &mut gpui::Context<Self>) {
+    /// (app-independent; quitting Ghostex never stops it), optionally showing
+    /// a persistent status toast while it tracks progress. Unlike macOS this
+    /// does not gate window creation; the shell shows its normal disconnected
+    /// state until healthy.
+    pub(crate) fn start_gpui_local_gxserver_bootstrap(
+        &mut self,
+        show_loading_toast: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
         #[cfg(target_os = "windows")]
         let windows_first_run_setup_active =
             self.windows_first_run_setup_state != GpuiWindowsFirstRunSetupState::Ready;
@@ -167,6 +172,7 @@ impl GhostexGpuiApp {
                             persist_gpui_first_run_onboarding_state(&state);
                         }
                         this.replay_sidebar_gxserver_bootstrap(cx);
+                        this.refresh_titlebar_accounts(cx);
                         this.start_gpui_portless_setup_prompt_check(cx);
                         this.start_gpui_first_run_onboarding(cx);
                         /*
@@ -287,15 +293,17 @@ impl GhostexGpuiApp {
                 });
                 return;
             };
-            let _ = this.update(cx, |this, cx| {
-                this.show_gpui_gxserver_bootstrap_toast(
-                    "info",
-                    "Loading sessions",
-                    "Starting gxserver and loading projects.",
-                    true,
-                    cx,
-                );
-            });
+            if show_loading_toast {
+                let _ = this.update(cx, |this, cx| {
+                    this.show_gpui_gxserver_bootstrap_toast(
+                        "info",
+                        "Loading sessions",
+                        "Starting gxserver and loading projects.",
+                        true,
+                        cx,
+                    );
+                });
+            }
             let spawn_result = cx
                 .background_executor()
                 .spawn(async move { gpui_spawn_local_gxserver_daemon(&binary) })
@@ -335,6 +343,7 @@ impl GhostexGpuiApp {
                                 );
                             }
                             this.replay_sidebar_gxserver_bootstrap(cx);
+                            this.refresh_titlebar_accounts(cx);
                             this.start_gpui_portless_setup_prompt_check(cx);
                             /*
                             CDXC:Onboarding 2026-08-18:

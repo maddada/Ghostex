@@ -205,7 +205,7 @@ impl GhostexGpuiApp {
     pub(crate) fn retry_windows_first_run_setup(&mut self, cx: &mut gpui::Context<Self>) {
         windows_terminal_backend::reset();
         self.windows_first_run_setup_state = GpuiWindowsFirstRunSetupState::Checking;
-        self.start_gpui_local_gxserver_bootstrap(cx);
+        self.start_gpui_local_gxserver_bootstrap(true, cx);
         cx.notify();
     }
 
