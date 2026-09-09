@@ -216,6 +216,7 @@ pub(crate) struct GpuiPreviousSessionsRequest {
     pub(crate) session_tags: Option<Vec<String>>,
     pub(crate) project_id: Option<String>,
     pub(crate) external_only: bool,
+    pub(crate) refresh_external_sessions: bool,
 }
 
 #[derive(Default)]

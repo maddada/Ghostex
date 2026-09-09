@@ -125,6 +125,10 @@ pub(crate) fn gpui_previous_sessions_request_from_command(
             .get("externalOnly")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false),
+        refresh_external_sessions: command
+            .get("refreshExternalSessions")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
         cursor,
         limit,
         query,
@@ -435,6 +439,10 @@ pub(crate) fn gpui_previous_sessions_list_params(
         serde_json::json!(request.external_only),
     );
     params.insert(
+        "refreshExternalSessions".to_string(),
+        serde_json::json!(request.refresh_external_sessions),
+    );
+    params.insert(
         "limit".to_string(),
         serde_json::Value::Number(serde_json::Number::from(request.limit as u64)),
     );
@@ -560,6 +568,8 @@ pub(crate) fn gpui_stashed_prompts_result_message(
         "tags": tags,
         "type": "stashedPromptsResult",
         "deliveredDrafts": result.as_ref().and_then(|result| result.get("deliveredDrafts")),
+        "recoveryDrafts": result.as_ref().and_then(|result| result.get("recoveryDrafts")),
+        "drafts": result.as_ref().and_then(|result| result.get("drafts")),
     })
 }
 

@@ -6,19 +6,24 @@ use crate::{
     paths::GxserverPaths,
 };
 use rusqlite::{Connection, Transaction, TransactionBehavior};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
-    io::{BufRead, BufReader, Read, Seek, SeekFrom},
+    io::{self, BufRead, BufReader, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
 
 static SCANNED: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
+mod scan_cache;
+use scan_cache::ScanCache;
+
+#[derive(Deserialize, Serialize)]
 struct Conversation {
-    agent: &'static str,
+    agent: String,
     id: String,
     cwd: String,
     title: String,
@@ -37,6 +42,7 @@ pub(crate) fn discover(
     db: &Connection,
     server_id: &str,
     paths: &GxserverPaths,
+    refresh: bool,
 ) -> Result<(), DomainStateError> {
     let home = paths
         .isolated_agent_home_dir
@@ -46,13 +52,39 @@ pub(crate) fn discover(
         .get_or_init(Default::default)
         .lock()
         .map_err(error)?;
-    if scanned.contains(&paths.state_db_file) {
+    if !refresh && scanned.contains(&paths.state_db_file) {
         return Ok(());
     }
-    let conversations = scan(home, paths.isolated_agent_home_dir.is_none());
+    let mut cache = ScanCache::load(db)?;
+    let conversations = scan(home, paths.isolated_agent_home_dir.is_none(), &mut cache)?;
+    db.execute_batch("CREATE TABLE IF NOT EXISTS external_session_receipts (agent TEXT NOT NULL, conversationId TEXT NOT NULL, PRIMARY KEY(agent, conversationId))").map_err(error)?;
+    let receipts = db
+        .prepare("SELECT agent, conversationId FROM external_session_receipts")
+        .map_err(error)?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(error)?
+        .collect::<Result<HashSet<_>, _>>()
+        .map_err(error)?;
+    let conversations: Vec<_> = conversations
+        .into_iter()
+        .filter(|conversation| {
+            !receipts.contains(&(conversation.agent.clone(), conversation.id.clone()))
+        })
+        .collect();
+    if conversations.is_empty() && !cache.has_changes() {
+        scanned.insert(paths.state_db_file.clone());
+        return Ok(());
+    }
     let transaction =
         Transaction::new_unchecked(db, TransactionBehavior::Immediate).map_err(error)?;
-    transaction.execute_batch("CREATE TABLE IF NOT EXISTS external_session_receipts (agent TEXT NOT NULL, conversationId TEXT NOT NULL, PRIMARY KEY(agent, conversationId))").map_err(error)?;
+    if conversations.is_empty() {
+        cache.save(&transaction)?;
+        transaction.commit().map_err(error)?;
+        scanned.insert(paths.state_db_file.clone());
+        return Ok(());
+    }
     let repository = DomainRepository::new(&transaction, server_id);
     let known: HashSet<String> = repository
         .list_sessions(None)?
@@ -79,7 +111,7 @@ pub(crate) fn discover(
         .filter_map(|p| Some((project_key(p.get("path")?.as_str()?), p)))
         .collect();
     for conversation in conversations {
-        let inserted = transaction.execute("INSERT OR IGNORE INTO external_session_receipts (agent, conversationId) VALUES (?1, ?2)", (conversation.agent, &conversation.id)).map_err(error)?;
+        let inserted = transaction.execute("INSERT OR IGNORE INTO external_session_receipts (agent, conversationId) VALUES (?1, ?2)", (&conversation.agent, &conversation.id)).map_err(error)?;
         if inserted == 0 || known.contains(&conversation.id) {
             continue;
         }
@@ -107,6 +139,7 @@ pub(crate) fn discover(
             }
         }).as_object().unwrap())?;
     }
+    cache.save(&transaction)?;
     transaction.commit().map_err(error)?;
     scanned.insert(paths.state_db_file.clone());
     Ok(())
@@ -127,7 +160,11 @@ fn directories(path: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-fn scan(home: &Path, use_environment: bool) -> Vec<Conversation> {
+fn scan(
+    home: &Path,
+    use_environment: bool,
+    cache: &mut ScanCache,
+) -> Result<Vec<Conversation>, DomainStateError> {
     let mut claude_roots = vec![home.join(".claude")];
     claude_roots.extend(directories(&home.join(".claude-profiles")));
     let mut codex_roots = vec![home.join(".codex")];
@@ -141,25 +178,22 @@ fn scan(home: &Path, use_environment: bool) -> Vec<Conversation> {
         }
     }
     let mut conversations = HashMap::new();
+    let mut visited = HashSet::new();
     for (agent, roots) in [("claude", claude_roots), ("codex", codex_roots)] {
         for root in roots {
+            let Ok(root) = fs::canonicalize(root) else {
+                continue;
+            };
+            if !visited.insert((agent, root.clone())) {
+                continue;
+            }
             let mut files = Vec::new();
             let mut titles = HashMap::new();
             if agent == "codex" {
-                if let Ok(file) = File::open(root.join("session_index.jsonl")) {
-                    for line in BufReader::new(file.take(64 * 1024 * 1024))
-                        .lines()
-                        .map_while(Result::ok)
-                    {
-                        if let Ok(row) = serde_json::from_str::<Value>(&line) {
-                            if let (Some(id), Some(title)) =
-                                (row["id"].as_str(), row["thread_name"].as_str())
-                            {
-                                titles.insert(id.to_lowercase(), title.to_string());
-                            }
-                        }
-                    }
-                }
+                let index = root.join("session_index.jsonl");
+                titles = cache
+                    .read(&index, || read_codex_titles(&index))?
+                    .unwrap_or_default();
             }
             if agent == "claude" {
                 for base in ["projects", "projects2"] {
@@ -172,7 +206,9 @@ fn scan(home: &Path, use_environment: bool) -> Vec<Conversation> {
                 collect_files(&root.join("archived_sessions"), 3, &mut files);
             }
             for path in files {
-                if let Some(mut conversation) = read_conversation(agent, path, root.clone()) {
+                if let Some(mut conversation) = cache.read(&path, || {
+                    read_conversation(agent, path.clone(), root.clone())
+                })? {
                     if let Some(title) = titles
                         .get(&conversation.id)
                         .filter(|title| !title.trim().is_empty())
@@ -193,7 +229,20 @@ fn scan(home: &Path, use_environment: bool) -> Vec<Conversation> {
             }
         }
     }
-    conversations.into_values().flatten().collect()
+    Ok(conversations.into_values().flatten().collect())
+}
+
+fn read_codex_titles(path: &Path) -> io::Result<Option<HashMap<String, String>>> {
+    let file = File::open(path)?;
+    let mut titles = HashMap::new();
+    for line in BufReader::new(file.take(64 * 1024 * 1024)).lines() {
+        if let Ok(row) = serde_json::from_str::<Value>(&line?) {
+            if let (Some(id), Some(title)) = (row["id"].as_str(), row["thread_name"].as_str()) {
+                titles.insert(id.to_lowercase(), title.chars().take(180).collect());
+            }
+        }
+    }
+    Ok(Some(titles))
 }
 
 fn collect_files(root: &Path, depth: usize, files: &mut Vec<PathBuf>) {
@@ -214,22 +263,21 @@ fn read_conversation(
     agent: &'static str,
     path: PathBuf,
     agent_home: PathBuf,
-) -> Option<Conversation> {
-    let mut file = File::open(&path).ok()?;
-    let metadata = file.metadata().ok()?;
-    let updated: chrono::DateTime<chrono::Utc> = metadata.modified().ok()?.into();
+) -> io::Result<Option<Conversation>> {
+    let mut file = File::open(&path)?;
+    let metadata = file.metadata()?;
+    let updated: chrono::DateTime<chrono::Utc> = metadata.modified()?.into();
     let mut id = String::new();
     let mut cwd = String::new();
     let mut title = String::new();
     // Read a bounded prefix for identity and first prompt, then a bounded tail
     // for user-assigned titles. Transcript bodies can be hundreds of MB.
     let mut prefix = Vec::new();
-    (&mut file).take(256 * 1024).read_to_end(&mut prefix).ok()?;
+    (&mut file).take(256 * 1024).read_to_end(&mut prefix)?;
     let mut tail = Vec::new();
     if metadata.len() > 256 * 1024 {
-        file.seek(SeekFrom::Start(metadata.len().saturating_sub(64 * 1024)))
-            .ok()?;
-        file.read_to_end(&mut tail).ok()?;
+        file.seek(SeekFrom::Start(metadata.len().saturating_sub(64 * 1024)))?;
+        (&mut file).take(64 * 1024).read_to_end(&mut tail)?;
     }
     for data in [&prefix, &tail] {
         for line in BufReader::new(data.as_slice())
@@ -240,12 +288,12 @@ fn read_conversation(
                 continue;
             };
             if row.get("isSidechain").and_then(Value::as_bool) == Some(true) {
-                return None;
+                return Ok(None);
             }
             if agent == "codex" && row["type"] == "session_meta" {
                 let payload = &row["payload"];
                 if payload["source"].get("subagent").is_some() || payload["source"] == "subagent" {
-                    return None;
+                    return Ok(None);
                 }
                 id = payload["id"].as_str().unwrap_or_default().to_lowercase();
                 cwd = payload["cwd"].as_str().unwrap_or_default().to_string();
@@ -297,7 +345,7 @@ fn read_conversation(
         || cwd.is_empty()
         || !Path::new(&cwd).is_absolute()
     {
-        return None;
+        return Ok(None);
     }
     if title.is_empty() {
         title = format!(
@@ -306,13 +354,13 @@ fn read_conversation(
             &id[..8]
         );
     }
-    Some(Conversation {
-        agent,
+    Ok(Some(Conversation {
+        agent: agent.to_string(),
         id,
         cwd,
         title: title.chars().take(180).collect(),
         path,
         agent_home,
         updated: updated.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-    })
+    }))
 }

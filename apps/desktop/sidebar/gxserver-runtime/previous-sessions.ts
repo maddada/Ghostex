@@ -74,6 +74,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
                 sessionTags,
                 projectId: message.projectId,
                 externalOnly: message.externalOnly,
+                refreshExternalSessions: message.refreshExternalSessions,
               })
               .catch((): GxserverPresentationSearchResponse => ({ results: [] }))
           : Promise.resolve<GxserverPresentationSearchResponse>({ results: [] }),
@@ -94,6 +95,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
                   : `unmatched:${message.projectId}`
                 : undefined,
               externalOnly: message.externalOnly,
+              refreshExternalSessions: message.refreshExternalSessions,
             }
           ).catch((): GxserverPresentationSearchResponse => ({ results: [] }))
         ),
