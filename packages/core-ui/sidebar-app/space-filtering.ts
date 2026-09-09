@@ -3,6 +3,7 @@ import {
   isUnassignedSidebarSpaceProject,
   OTHER_SIDEBAR_SPACE_ID,
 } from '../../shared/sidebar-spaces-other';
+import type { SidebarSessionItem } from '../../shared/session-grid-contract';
 import type { SidebarProjectCollectionsState } from '../project-collections';
 import type { SidebarSpace, SidebarSpacesState } from '../spaces';
 import { createProjectCollectionIdByProjectId, type SidebarProjectGroupLookup } from './drag-drop-geometry';
@@ -134,6 +135,70 @@ export type SelectedSidebarSpace =
   | { kind: 'other'; spaceId: typeof OTHER_SIDEBAR_SPACE_ID; spaces: readonly SidebarSpace[] }
   | { kind: 'space'; space: SidebarSpace; spaceId: string };
 
+export type SidebarSpaceSessionSummary = {
+  attentionCount: number;
+  workingCount: number;
+};
+
+/**
+ * Aggregate live session activity for every user Space and the built-in Other
+ * view from the section's complete project inventory. Each Space uses the same
+ * collection, project, and worktree membership predicate as the visible list,
+ * so its count cannot disagree with what appears after selecting it.
+ */
+export function createSidebarSpaceSessionSummaries({
+  collectionState,
+  groupIds,
+  groupsById,
+  resolveProjectId,
+  sessionIdsByGroup,
+  sessionsById,
+  spacesState,
+}: {
+  collectionState: SidebarProjectCollectionsState;
+  groupIds: readonly string[];
+  groupsById: SidebarProjectGroupLookup;
+  resolveProjectId: (groupId: string) => string | undefined;
+  sessionIdsByGroup: Readonly<Record<string, readonly string[] | undefined>>;
+  sessionsById: Readonly<Record<string, Pick<SidebarSessionItem, 'activity'> | undefined>>;
+  spacesState: SidebarSpacesState;
+}): Record<string, SidebarSpaceSessionSummary> {
+  const orderedSpaces = spacesState.order.flatMap((spaceId) =>
+    spacesState.spaces[spaceId] ? [spacesState.spaces[spaceId]] : []
+  );
+  const selections: SelectedSidebarSpace[] = [
+    ...orderedSpaces.map((space) => ({ kind: 'space' as const, space, spaceId: space.spaceId })),
+    { kind: 'other', spaceId: OTHER_SIDEBAR_SPACE_ID, spaces: orderedSpaces },
+  ];
+  const summaries: Record<string, SidebarSpaceSessionSummary> = {};
+
+  for (const selection of selections) {
+    const isVisibleInSpace = createSelectedSidebarSpaceVisibility({
+      collectionState,
+      groupIds,
+      groupsById,
+      resolveProjectId,
+      selection,
+    });
+    const sessionIds = new Set(
+      groupIds.filter(isVisibleInSpace).flatMap((groupId) => sessionIdsByGroup[groupId] ?? [])
+    );
+    let attentionCount = 0;
+    let workingCount = 0;
+    for (const sessionId of sessionIds) {
+      const activity = sessionsById[sessionId]?.activity;
+      if (activity === 'working') {
+        workingCount += 1;
+      } else if (activity === 'attention') {
+        attentionCount += 1;
+      }
+    }
+    summaries[selection.spaceId] = { attentionCount, workingCount };
+  }
+
+  return summaries;
+}
+
 /**
  * CDXC:Spaces 2026-09-02:
  * The default selection rule, in one place: a section with nothing stored — and
@@ -236,4 +301,41 @@ export function resolveSidebarSpaceForRevealedGroup({
       return space && createSidebarSpaceGroupVisibility({ ...visibility, space })(targetGroupId);
     }) ?? OTHER_SIDEBAR_SPACE_ID
   );
+}
+
+/**
+ * CDXC:Sessions 2026-03-09:
+ * User: an unselected Space that still owns the focused session must show the
+ * composer chrome. Resolve the Space for the first matching group in this
+ * section, or undefined when the focused session is not in this section.
+ */
+export function resolveSidebarSpaceIdContainingActiveSession({
+  groupIdsContainingActiveSession,
+  sectionGroupIds,
+  spacesState,
+  selectedSpaceId,
+  ...visibility
+}: {
+  groupIdsContainingActiveSession: ReadonlySet<string>;
+  sectionGroupIds: readonly string[];
+  spacesState: SidebarSpacesState | undefined;
+  selectedSpaceId: string | undefined;
+  collectionState: SidebarProjectCollectionsState;
+  groupsById: SidebarProjectGroupLookup;
+  resolveProjectId: (groupId: string) => string | undefined;
+}): string | undefined {
+  if (!spacesState) {
+    return undefined;
+  }
+  const targetGroupId = sectionGroupIds.find((groupId) => groupIdsContainingActiveSession.has(groupId));
+  if (!targetGroupId) {
+    return undefined;
+  }
+  return resolveSidebarSpaceForRevealedGroup({
+    targetGroupId,
+    spacesState,
+    selectedSpaceId,
+    ...visibility,
+    groupIds: sectionGroupIds,
+  });
 }

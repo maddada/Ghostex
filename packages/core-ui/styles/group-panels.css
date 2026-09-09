@@ -316,15 +316,17 @@
    * is done in JS (handleSessionsShellWheel in session-group-section.tsx)
    * because CSS cannot express "chain to parent but never rubber-band".
    *
-   * CDXC:Sidebar 2026-06-30-01:59:
-   * Expanded project bodies should not use scroll masks or scroll-linked fade
-   * state. Plain overflow keeps long projects usable while avoiding compositor
-   * work during every scroll frame.
+   * CDXC:Sidebar 2026-09-09 DECISION:
+   * User: this inner project scroller shows the same scroll-edge fade as the chat transcript, so rows dim into the edges while more rows exist beyond them.
+   * This supersedes the 2026-06-30 removal of scroll masks from expanded project bodies.
+   * The fade is the shadcn scroll-fade-y utility, added in session-group-section.tsx only while the body is expanded and scrollable, because a mask on the overflow-visible body would clip the connector rail above it.
    */
   max-height: var(--project-session-list-scroll-height, calc(var(--sidebar-collapse-content-height) + 4px));
+  margin-right: calc(-1 * var(--reference-sidebar-scrollbar-shift-right, 0px));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: none;
+  padding-right: var(--reference-sidebar-scrollbar-shift-right, 0px);
   /*
    * The global sidebar reset hides every scrollbar via `scrollbar-width:
    * none`, and Chromium ignores ::-webkit-scrollbar styling unless the
@@ -713,6 +715,15 @@ body[data-custom-sidebar-titlebar-colors='true'] .sidebar-reference-layout[data-
   --reference-sidebar-scroll-row-bleed-right: 0px;
   --reference-sidebar-footer-edge-bleed-left: 8px;
   --reference-sidebar-edge-bleed-right: 1px;
+  /*
+   * CDXC:Sidebar 2026-09-09 DECISION:
+   * User: move the project session-list scrollbar further right without moving
+   * anything else in the sidebar. The scroll chain (panel, scroll shell, main
+   * scroller, collection body, project scroller) grows to the right by this
+   * amount with a matching right padding, so every row keeps its exact box and
+   * only the 2px inner scrollbar shifts into the sidebar's right gutter.
+   */
+  --reference-sidebar-scrollbar-shift-right: 0px;
   /* The root's own horizontal padding, for chrome that must reach the page edge. */
   --reference-sidebar-page-inset-left: 8px;
   --reference-sidebar-page-inset-right: 1px;
@@ -811,6 +822,7 @@ body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'
    */
   --reference-sidebar-page-inset-left: 14px;
   --reference-sidebar-page-inset-right: 6px;
+  --reference-sidebar-scrollbar-shift-right: 4px;
   border-right: 1px solid #252525;
   margin-left: 0;
   padding-left: 14px;
@@ -823,7 +835,7 @@ body.native-sidebar-body .sidebar-reference-layout[data-reference-sidebar='true'
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'],
-.sidebar-reference-layout[data-reference-sidebar='true'] * {
+.sidebar-reference-layout[data-reference-sidebar='true'] :not(.sidebar-space-session-status-count) {
   font-weight: 300 !important;
 }
 
@@ -1639,9 +1651,15 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
    * text/icon columns stay stable while hover and active surfaces start at 0px.
    */
   margin-left: calc(-1 * var(--reference-sidebar-scroll-edge-bleed-left));
-  margin-right: calc(-1 * var(--reference-sidebar-edge-bleed-right));
+  margin-right: calc(
+    -1 * (var(--reference-sidebar-edge-bleed-right) + var(--reference-sidebar-scrollbar-shift-right, 0px))
+  );
   min-height: 0;
-  width: calc(100% + var(--reference-sidebar-scroll-edge-bleed-left) + var(--reference-sidebar-edge-bleed-right));
+  padding-right: var(--reference-sidebar-scrollbar-shift-right, 0px);
+  width: calc(
+    100% + var(--reference-sidebar-scroll-edge-bleed-left) + var(--reference-sidebar-edge-bleed-right) +
+      var(--reference-sidebar-scrollbar-shift-right, 0px)
+  );
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-top {
@@ -1908,15 +1926,16 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
   display: block;
   gap: 0;
   height: calc(100% - var(--reference-sidebar-scroll-top-offset, 15px));
+  margin-right: calc(-1 * var(--reference-sidebar-scrollbar-shift-right, 0px));
   margin-top: var(--reference-sidebar-scroll-top-offset, 15px);
-  padding-right: 0;
+  padding-right: var(--reference-sidebar-scrollbar-shift-right, 0px);
   scrollbar-width: none;
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-scroll-shell {
   margin-left: 0;
-  margin-right: 0;
-  width: 100%;
+  margin-right: calc(-1 * var(--reference-sidebar-scrollbar-shift-right, 0px));
+  width: calc(100% + var(--reference-sidebar-scrollbar-shift-right, 0px));
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-content::-webkit-scrollbar {
@@ -2730,6 +2749,7 @@ manual mode visibly selected without adding text to the section row.
   justify-content: center;
   line-height: 1;
   padding: 0;
+  position: relative;
   width: 28px;
 }
 
@@ -2739,6 +2759,22 @@ manual mode visibly selected without adding text to the section row.
   color: color-mix(in srgb, var(--app-foreground) 86%, transparent);
 }
 
+/*
+ * CDXC:Spaces 2026-09-09 DECISION:
+ * User: Space icons drag the way project headers do. The moving icon is an app-owned fixed ghost that paints the button's hover fill (the same rule the project ghost follows), sits above every sidebar layer, and never takes pointer input. Selected and active-session fills below still win for those Spaces.
+ */
+.sidebar-space-filter-button.sidebar-space-drag-ghost {
+  background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
+  color: color-mix(in srgb, var(--app-foreground) 86%, transparent);
+  cursor: default;
+  margin: 0;
+  pointer-events: none;
+  position: fixed;
+  transform: none;
+  transition: none;
+  z-index: 10000;
+}
+
 .sidebar-space-filter-button[data-selected='true'] {
   background: color-mix(in srgb, var(--app-foreground) 12%, transparent);
   border-color: color-mix(in srgb, var(--app-foreground) 16%, transparent);
@@ -2746,9 +2782,61 @@ manual mode visibly selected without adding text to the section row.
   color: color-mix(in srgb, var(--app-foreground) 94%, transparent);
 }
 
+/*
+ * CDXC:Sessions 2026-03-09:
+ * User: the Space that owns the currently active session, when that Space is
+ * not the selected view, must use the same composer fill / outline / inner
+ * highlight as the selected session card. Keep the circular button radius.
+ */
+.sidebar-space-filter-button[data-contains-active-session='true']:not([data-selected='true']) {
+  background: var(--sidebar-composer-surface, #141414);
+  border-color: var(--sidebar-composer-outline, rgb(255 255 255 / 5%));
+  border-radius: 999px;
+  box-shadow: inset 0 1px var(--sidebar-composer-highlight, rgb(255 255 255 / 3%));
+  color: color-mix(in srgb, var(--app-foreground) 94%, transparent);
+  overflow: hidden;
+}
+
 .sidebar-space-filter-button[data-dragging='true'] {
+  /*
+   * The grabbed Space stays in the row as a faint placeholder, like a project
+   * header under reorder, so the row never opens a hole where it was picked up.
+   */
   cursor: grabbing;
-  opacity: 0.55;
+  opacity: 0.3;
+}
+
+/*
+ * Space reorder insertion line: the same neutral 2px line the project drop
+ * line uses, stood upright in the 4px gap beside the target button.
+ */
+.sidebar-space-filter-button[data-space-drop-position]::before {
+  background: #c8cdd5;
+  border-radius: 1px;
+  bottom: 5px;
+  content: '';
+  opacity: 0.72;
+  pointer-events: none;
+  position: absolute;
+  top: 5px;
+  width: 2px;
+  z-index: 8;
+}
+
+.sidebar-space-filter-button[data-space-drop-position='before']::before {
+  left: -4px;
+}
+
+.sidebar-space-filter-button[data-space-drop-position='after']::before {
+  right: -4px;
+}
+
+/*
+ * The active-session button clips its overflow, which would also clip a line
+ * that lives in the gap beside it; only the drop target is unclipped.
+ */
+.sidebar-space-filter-track .sidebar-space-filter-button[data-space-drop-position] {
+  overflow: visible;
 }
 
 /*
@@ -2766,6 +2854,61 @@ manual mode visibly selected without adding text to the section row.
 
 .sidebar-space-filter-icon {
   flex: 0 0 auto;
+}
+
+.sidebar-space-filter-track .sidebar-space-filter-button[data-has-session-status='true'] {
+  overflow: visible;
+}
+
+.sidebar-space-session-status {
+  align-items: center;
+  display: inline-flex;
+  font-variant-numeric: tabular-nums;
+  gap: 2px;
+  justify-content: center;
+  left: 50%;
+  line-height: 1;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  translate: -50% -50%;
+  white-space: nowrap;
+}
+
+@font-face {
+  font-display: block;
+  font-family: 'Ghostex Space Status JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  /* CEF inlines this stylesheet into a file:// page, so the font must travel with it. */
+  src: url('../assets/fonts/JetBrainsMonoNerdFont-Bold-Digits.ttf?inline') format('truetype');
+}
+
+.sidebar-space-session-status-count {
+  color: var(--done-attention-color, #95d7f6);
+  font: 700 9px/1 'Ghostex Space Status JetBrains Mono';
+  font-synthesis: none;
+  letter-spacing: -0.04em;
+  /*
+   * CDXC:Spaces 2026-09-10 WHY:
+   * The production sidebar's universal 300 !important rule overrode these counts, and its inlined CSS resolved the external font beside index.html instead of assets/, leaving CEF with a failed font face. Exempt the counts from that lightweight rule and inline the digit subset so the real JetBrains Mono Bold face loads in the packaged page. The same-color stroke gives the 9px numerals the requested extra-bold appearance.
+   */
+  -webkit-text-stroke: 0.65px currentColor;
+  paint-order: stroke fill;
+  text-shadow:
+    0 1px 2px var(--app-background),
+    0 0 4px var(--app-background);
+}
+
+.sidebar-space-session-status-count[data-activity='working'] {
+  color: #f8ad07;
+}
+
+.sidebar-space-session-status[data-menu='true'] {
+  flex: none;
+  margin-left: auto;
+  position: static;
+  translate: none;
 }
 
 .sidebar-space-filter-menu-name {

@@ -1,0 +1,247 @@
+:root:has(.ssid-study),
+body:has(.ssid-study),
+#root:has(.ssid-study) {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ssid-study {
+  --ssid-attention: #95d7f6;
+  --ssid-working: #f8ad07;
+  background: #090a0b;
+  box-sizing: border-box;
+  color: #eceef1;
+  color-scheme: dark;
+  font:
+    13px/1.5 Inter,
+    system-ui,
+    sans-serif;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: 100%;
+}
+
+.ssid-study *,
+.ssid-study *::before,
+.ssid-study *::after {
+  box-sizing: border-box;
+}
+
+.ssid-study-content {
+  margin-inline: auto;
+  max-width: 980px;
+  min-height: 100%;
+  padding: 50px clamp(20px, 5vw, 76px) 56px;
+}
+
+.ssid-study-header {
+  align-items: flex-end;
+  display: flex;
+  gap: 32px;
+  justify-content: space-between;
+  margin-bottom: 34px;
+}
+
+.ssid-eyebrow {
+  color: #74777d;
+  font:
+    10px/1.5 ui-monospace,
+    SFMono-Regular,
+    monospace;
+  letter-spacing: 0.14em;
+  margin: 0 0 11px;
+}
+
+.ssid-study-header h1 {
+  font-size: 27px;
+  font-weight: 550;
+  letter-spacing: -0.7px;
+  line-height: 1.2;
+  margin: 0 0 9px;
+}
+
+.ssid-study-header > div:first-child > p:last-child {
+  color: #91959c;
+  margin: 0;
+  max-width: 650px;
+}
+
+.ssid-legend {
+  align-items: center;
+  background: #141517;
+  border: 1px solid #2b2d31;
+  border-radius: 8px;
+  display: flex;
+  flex: none;
+  gap: 12px;
+  padding: 8px 11px;
+}
+
+.ssid-legend > span {
+  align-items: baseline;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 4px;
+}
+
+.ssid-legend small {
+  color: #92959b;
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ssid-legend-working {
+  color: var(--ssid-working);
+}
+.ssid-legend-attention {
+  color: var(--ssid-attention);
+}
+
+.ssid-preview-grid {
+  align-items: start;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) 272px;
+}
+
+.ssid-preview-column {
+  background: #111214;
+  border: 1px solid #292b2f;
+  border-radius: 12px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.ssid-preview-label {
+  color: #a9acb1;
+  font-size: 11px;
+  font-weight: 560;
+  margin: 0 0 11px;
+}
+
+.ssid-sidebar-preview {
+  background: #050505;
+  border: 1px solid #2c2e32;
+  border-radius: 9px;
+  box-shadow: inset 0 1px 0 #ffffff05;
+  min-height: 230px;
+  overflow: hidden;
+  padding: 19px 15px 13px;
+}
+
+.ssid-space-strip {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 5px;
+}
+
+.ssid-space-item {
+  align-items: center;
+  display: flex;
+  flex: none;
+  justify-content: center;
+  position: relative;
+  width: 28px;
+}
+
+.ssid-space-button,
+.ssid-more-space {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #898d93;
+  display: inline-flex;
+  flex: none;
+  font: inherit;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  width: 28px;
+}
+
+.ssid-space-button[aria-pressed='true'] {
+  background: #ffffff1f;
+  border-color: #ffffff29;
+  color: #f0f1f3;
+}
+
+.ssid-space-name {
+  display: none;
+}
+
+.ssid-more-space {
+  margin-left: 1px;
+}
+
+.ssid-project-placeholder {
+  border-top: 1px solid #1c1e21;
+  display: grid;
+  gap: 7px;
+  margin-top: 17px;
+  padding: 14px 4px 6px;
+}
+
+.ssid-project-placeholder > span {
+  align-items: center;
+  border: 1px solid transparent;
+  color: #777a80;
+  display: flex;
+  font-size: 11px;
+  gap: 8px;
+  height: 29px;
+  padding: 0 7px;
+}
+
+.ssid-project-placeholder > span:first-child {
+  border-color: #4b4e53;
+  border-radius: 5px;
+  color: #cfd1d4;
+}
+
+.ssid-project-placeholder i {
+  background: #aaaeb4;
+  border-radius: 3px;
+  display: block;
+  height: 15px;
+  opacity: 0.7;
+  width: 15px;
+}
+
+.ssid-preview-explanation {
+  color: #71757b;
+  font-size: 9px;
+  line-height: 1.45;
+  margin: 11px 2px 0;
+}
+
+.ssid-footnote {
+  color: #74777d;
+  font-size: 11px;
+  padding-top: 28px;
+}
+
+@media (max-width: 760px) {
+  .ssid-study-content {
+    padding: 28px 18px 40px;
+  }
+  .ssid-study-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ssid-preview-grid {
+    grid-template-columns: 1fr;
+  }
+  .ssid-preview-column[data-narrow='true'] {
+    max-width: 272px;
+  }
+}

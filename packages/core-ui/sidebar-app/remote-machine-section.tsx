@@ -5,6 +5,7 @@ import type { RemoteMachineSettings } from '../../shared/ghostex-settings';
 import { createRemoteMachineDragData } from '../sidebar-dnd';
 import { getSidebarReorderActivationConstraints } from '../sidebar-reorder-activation';
 import { SpaceFilterRow } from '../space-filter-row';
+import type { SidebarSpaceSessionSummary } from './space-filtering';
 import { createRemoteSidebarSpaceSectionKey } from './space-filtering';
 import type { SidebarSpacesState } from '../spaces';
 import type { WebviewApi } from '../webview-api';
@@ -71,6 +72,7 @@ export function remoteMachineFailureLabel(status: RemoteMachineRuntimeStatus['st
  * This section only renders the machine's Space row and project list.
  */
 export function RemoteMachineSidebarSection({
+  activeSessionSpaceId,
   index,
   isDragPreviewSource,
   machine,
@@ -83,10 +85,12 @@ export function RemoteMachineSidebarSection({
   renderProjectCollection,
   renderProjectGroup,
   selectedSpaceId,
+  sessionSummaryBySpaceId,
   spaces,
   status,
   vscode,
 }: {
+  activeSessionSpaceId?: string;
   index: number;
   isDragPreviewSource: boolean;
   machine: RemoteMachineSettings;
@@ -101,6 +105,7 @@ export function RemoteMachineSidebarSection({
   onReorderSpaces: (orderedSpaceIds: string[]) => void;
   onSelectSpace: (spaceId: string) => void;
   selectedSpaceId?: string;
+  sessionSummaryBySpaceId?: Readonly<Record<string, SidebarSpaceSessionSummary>>;
   spaces?: SidebarSpacesState;
   vscode: WebviewApi;
   projectCollectionItems?: readonly SidebarProjectCollectionRenderItem[];
@@ -152,12 +157,14 @@ export function RemoteMachineSidebarSection({
     >
       {spaces ? (
         <SpaceFilterRow
+          activeSessionSpaceId={activeSessionSpaceId}
           collapsed={false}
           onReorderSpaces={onReorderSpaces}
           onSelectSpace={onSelectSpace}
           remoteMachineId={machine.id}
           sectionKey={createRemoteSidebarSpaceSectionKey(machine.id)}
           selectedSpaceId={selectedSpaceId}
+          sessionSummaryBySpaceId={sessionSummaryBySpaceId}
           spaces={spaces}
           vscode={vscode}
         />

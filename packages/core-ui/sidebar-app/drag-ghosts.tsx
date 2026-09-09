@@ -1,6 +1,8 @@
 import { IconCaretRightFilled, IconCloud } from '@tabler/icons-react';
 import type { CSSProperties } from 'react';
 import { DEFAULT_ghostex_SETTINGS } from '../../shared/ghostex-settings';
+import type { SidebarCommandIcon } from '../../shared/sidebar-command-icons';
+import { SidebarCommandIconGlyph } from '../sidebar-command-icon';
 import { SidebarProjectIcon, type SidebarProjectIconProps } from '../sidebar-project-icon';
 import { useSidebarStore } from '../sidebar-store';
 
@@ -41,6 +43,25 @@ export type SidebarRemoteMachineDragPreview = {
   machineId: string;
   pointerOffsetY: number;
   title: string;
+  top: number;
+  width: number;
+};
+
+/*
+ * CDXC:Spaces 2026-09-09 WHY:
+ * The Space row is horizontal, so its ghost is the project ghost turned on its side: it keeps the grabbed button's top edge and height, moves only along x, and keeps the pointer's initial horizontal offset so vertical drift never lifts the icon off the row.
+ * It carries the resolved icon rather than the Space record because space-filter-row.tsx owns the icon resolver and imports this file.
+ */
+export type SidebarSpaceDragPreview = {
+  color: string;
+  containsActiveSession: boolean;
+  height: number;
+  icon: SidebarCommandIcon;
+  left: number;
+  name: string;
+  pointerOffsetX: number;
+  selected: boolean;
+  spaceId: string;
   top: number;
   width: number;
 };
@@ -162,6 +183,39 @@ export function RemoteMachineDragGhost({ preview }: { preview: SidebarRemoteMach
     </div>
   );
 }
+export function SpaceDragGhost({ preview }: { preview: SidebarSpaceDragPreview }) {
+  const style = {
+    '--sidebar-space-color': preview.color,
+    height: `${preview.height}px`,
+    left: `${preview.left}px`,
+    top: `${preview.top}px`,
+    width: `${preview.width}px`,
+  } as CSSProperties;
+
+  /*
+   * The ghost reuses the real button's classes and data attributes so a selected
+   * or active-session Space keeps its own fill while moving; every other Space
+   * moves with the button's hover fill, matching the project drag ghost.
+   */
+  return (
+    <div
+      aria-hidden='true'
+      className='sidebar-space-filter-button sidebar-space-filter-space sidebar-space-drag-ghost'
+      data-contains-active-session={String(preview.containsActiveSession)}
+      data-selected={String(preview.selected)}
+      style={style}
+      title={preview.name}
+    >
+      <SidebarCommandIconGlyph
+        className='sidebar-space-filter-icon'
+        color={preview.color}
+        icon={preview.icon}
+        size={16}
+      />
+    </div>
+  );
+}
+
 export function ProjectListEndUngroupDropZone({ active, scopeId }: { active: boolean; scopeId: string }) {
   return (
     <div
