@@ -823,6 +823,7 @@ const CURSOR_EFFORT_LABELS: &[(&str, &str)] = &[
     ("xHigh", "xhigh"),
     ("XHigh", "xhigh"),
     ("Medium", "medium"),
+    ("Minimal", "minimal"),
     ("Ultra", "ultra"),
     ("None", "none"),
     ("Med", "medium"),
@@ -874,7 +875,7 @@ fn split_cursor_model_context_and_effort(
     (segment.to_string(), None, None)
 }
 
-fn match_cursor_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
+pub(crate) fn match_cursor_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
     let segments = line_segments(line);
     if segments.len() < 3 || !is_cursor_usage_segment(segments.last()?) {
         return None;
@@ -1712,7 +1713,13 @@ fn read_session_chat_statusline_selection(
         claude_status: claude_statusline_status_value(payload),
         codex_status: None,
     };
-    (selection.model.is_some() || selection.effort.is_some()).then_some(selection)
+    // CDXC:AgentProviders 2026-09-09 WHY:
+    // Claude's reported usage is useful before model or effort detection succeeds; do not discard the statusline stats with an unrecognized choice.
+    (selection.model.is_some()
+        || selection.effort.is_some()
+        || selection.context_usage.is_some()
+        || selection.claude_status.is_some())
+    .then_some(selection)
 }
 
 /*
@@ -2023,7 +2030,12 @@ fn merge_session_chat_option_selections(
     if let Some(terminal) = terminal {
         overlay_session_chat_option_selection(&mut merged, terminal);
     }
-    (merged.model.is_some() || merged.effort.is_some() || merged.mode.is_some()).then_some(merged)
+    (merged.model.is_some()
+        || merged.effort.is_some()
+        || merged.mode.is_some()
+        || merged.context_usage.is_some()
+        || merged.claude_status.is_some())
+    .then_some(merged)
 }
 
 /// Full detection for one session: resolve structured transcript metadata,
@@ -2867,7 +2879,9 @@ impl SessionChatOptionDetector {
                     {
                         let mut detected = entry.value.clone();
                         detected.notice = detected.notice.filter(|notice| {
-                            crate::session_chat_notice_progress::visible(project_id, session_id, notice)
+                            crate::session_chat_notice_progress::visible(
+                                project_id, session_id, notice,
+                            )
                         });
                         return detected;
                     }
@@ -3103,7 +3117,11 @@ impl SessionChatOptionDetector {
             if let Ok(db) = open_gxserver_database(&self.paths) {
                 let repository = DomainRepository::new(&db, self.server_id.as_str());
                 crate::session_chat_notice_progress::refresh(
-                    &repository, project_id, session_id, agent, notice,
+                    &repository,
+                    project_id,
+                    session_id,
+                    agent,
+                    notice,
                 );
             }
         }

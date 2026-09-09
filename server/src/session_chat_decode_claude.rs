@@ -615,10 +615,9 @@ pub fn decode_claude_turn_lifecycle(
         let stop_reason = message
             .and_then(|inner| inner.get("stop_reason"))
             .and_then(Value::as_str);
-        let stop_reason_absent = message
-            .and_then(|inner| inner.get("stop_reason"))
-            .map(Value::is_null)
-            .unwrap_or(true);
+        // CDXC:SessionChat 2026-09-09 WHY:
+        // Claude streams text and thinking with an explicit null stop_reason before later tool calls or end_turn; treating null as a historical missing field folds live subagent work immediately.
+        let stop_reason_absent = message.is_none_or(|inner| !inner.contains_key("stop_reason"));
         let is_terminal = stop_reason
             .is_some_and(|reason| CLAUDE_TERMINAL_STOP_REASONS.contains(&reason))
             || (stop_reason_absent

@@ -695,7 +695,13 @@ pub fn detect_session_chat_composer_ready(
             screen_tail,
         );
     }
-    if signature_matches(signature, &lines) {
+    let matches = if agent == "cursor" {
+        let raw_lines: Vec<_> = screen_text.lines().map(strip_ansi_sgr).collect();
+        input::cursor_input_region(&raw_lines).is_some()
+    } else {
+        signature_matches(signature, &lines)
+    };
+    if matches {
         SessionChatComposerReadiness::ready(screen_tail)
     } else {
         SessionChatComposerReadiness::not_ready(

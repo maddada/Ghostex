@@ -48,6 +48,66 @@ fn row(line: &str) -> Option<TerminalDialogRow> {
 
 const DIRECTORY_TRUST_ID_PREFIX: &str = "codex-directory-trust:";
 
+/// CDXC:AgentScreenDetection 2026-09-09 WHY:
+/// Codex's extended-thinking menu has an informational footer instead of the usual Escape/Enter hints, so the generic dialog parser misses its choices.
+/// The request keeps running; expose its two rows without adding a cancel action that would interrupt it.
+fn extended_thinking_dialog(lines: &[String]) -> Option<TerminalDialog> {
+    let heading = lines
+        .iter()
+        .rposition(|line| clean(line).starts_with("Our systems are thinking"))?;
+    let content = &lines[heading..];
+    let first_row = content.iter().position(|line| row(line).is_some())?;
+    let title = content[..first_row]
+        .iter()
+        .map(|line| clean(line))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if title != "Our systems are thinking a bit more about this request before responding." {
+        return None;
+    }
+    let rows: Vec<_> = content.iter().filter_map(|line| row(line)).collect();
+    if rows.len() != 2
+        || rows[0].number != 1
+        || rows[0].label != "Dismiss and keep waiting"
+        || rows[1].number != 2
+        || rows[1].label != "Learn more"
+        || rows.iter().filter(|row| row.selected).count() != 1
+    {
+        return None;
+    }
+    let last_row = content.iter().rposition(|line| row(line).is_some())?;
+    let remaining = &content[last_row + 1..];
+    // A returned composer means this menu is only old terminal output.
+    if remaining.iter().any(|line| clean(line).starts_with('›')) {
+        return None;
+    }
+    let footer = remaining
+        .iter()
+        .map(|line| clean(line))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !footer.starts_with("No action is required. Codex will keep waiting") {
+        return None;
+    }
+    let identity = serde_json::to_string(&(&title, &rows, &footer)).ok()?;
+    Some(TerminalDialog {
+        id: format!("{:x}", Sha256::digest(identity.as_bytes())),
+        title,
+        body: String::new(),
+        footer,
+        rows,
+        input: None,
+        input_value: String::new(),
+        actions: Vec::new(),
+    })
+}
+
 /// CDXC:AgentScreenDetection 2026-09-06 WHY:
 /// Codex redraws the directory heading into scrollback during onboarding, so only the final heading belongs to the live trust dialog.
 /// Its trust shortcut selects Yes but requires Enter to commit; treating it like the ordinary numbered menus leaves the dialog open.
@@ -138,6 +198,9 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
         .into_iter()
         .rev()
         .collect();
+    if let Some(dialog) = extended_thinking_dialog(&lines) {
+        return Some(dialog);
+    }
     let end = lines.iter().rposition(|line| !line.trim().is_empty())?;
     let footer_index = (end.saturating_sub(3)..=end).rev().find(|&i| {
         let line = clean(&lines[i]).to_ascii_lowercase();

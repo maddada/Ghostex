@@ -139,6 +139,15 @@ mod tests {
         )
         .expect("historical terminal");
         assert_eq!(historical.state, SessionChatTurnLifecycleState::Completed);
+        for content in [
+            r#"[{"type":"text","text":"I will inspect the files."}]"#,
+            r#"[{"type":"thinking","thinking":"Checking the implementation."}]"#,
+        ] {
+            let streaming = format!(
+                r#"{{"type":"assistant","uuid":"streaming","message":{{"stop_reason":null,"content":{content}}}}}"#
+            );
+            assert!(decode_claude_turn_lifecycle(&streaming, "fb").is_none());
+        }
         let working = decode_claude_turn_lifecycle(
             r#"{"type":"user","uuid":"u1","message":{"role":"user","content":"go"}}"#,
             "fb",
@@ -151,6 +160,47 @@ mod tests {
             "fb",
         )
         .is_none());
+    }
+
+    #[test]
+    fn subagent_tail_lifecycle_stays_working_until_completion() {
+        for (agent, lines) in [
+            (SessionChatTranscriptAgent::Claude, vec![
+                r#"{"type":"user","uuid":"u1","isSidechain":true,"message":{"role":"user","content":"Inspect the code."}}"#,
+                r#"{"type":"assistant","uuid":"a1","isSidechain":true,"message":{"stop_reason":null,"content":[{"type":"text","text":"I will inspect the files."}]}}"#,
+                r#"{"type":"assistant","uuid":"a2","isSidechain":true,"message":{"stop_reason":null,"content":[{"type":"thinking","thinking":"Checking the implementation."}]}}"#,
+                r#"{"type":"assistant","uuid":"a3","isSidechain":true,"message":{"stop_reason":"tool_use","content":[{"type":"tool_use","id":"tool1","name":"Read","input":{"file_path":"app.ts"}}]}}"#,
+                r#"{"type":"user","uuid":"u2","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool1","content":"source"}]}}"#,
+                r#"{"type":"assistant","uuid":"a4","isSidechain":true,"message":{"stop_reason":"end_turn","content":[{"type":"text","text":"Finished the inspection."}]}}"#,
+            ]),
+            (SessionChatTranscriptAgent::Codex, vec![
+                r#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#,
+                r#"{"type":"event_msg","payload":{"type":"user_message","message":"Inspect the code."}}"#,
+                r#"{"type":"response_item","payload":{"type":"function_call","id":"fc1","call_id":"call1","name":"exec_command","arguments":"{\"cmd\":\"cat app.ts\"}"}}"#,
+                r#"{"type":"response_item","payload":{"type":"function_call_output","call_id":"call1","output":"source"}}"#,
+                r#"{"type":"event_msg","payload":{"type":"agent_message","message":"Finished the inspection."}}"#,
+                r#"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}"#,
+            ]),
+        ] {
+            for count in 1..=lines.len() {
+                let path = write_temp_transcript(&lines[..count]);
+                // Keep only one message to prove pagination cannot lose the active turn's start.
+                let page = read_session_chat_tail_page(agent, &path, 1, None).expect("child page");
+                fs::remove_file(path).expect("remove transcript");
+                let SessionChatTailPage::Page { lifecycle, .. } = page else {
+                    panic!("missing child transcript");
+                };
+                assert_eq!(
+                    lifecycle.expect("child lifecycle").state,
+                    if count == lines.len() {
+                        SessionChatTurnLifecycleState::Completed
+                    } else {
+                        SessionChatTurnLifecycleState::Working
+                    },
+                    "{agent:?} after {count} records",
+                );
+            }
+        }
     }
 
     #[test]

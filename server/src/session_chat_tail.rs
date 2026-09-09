@@ -214,16 +214,16 @@ pub fn read_session_chat_transcript_tail_file(
         *ignore_next_malformed_record = false;
         codex_stats.observe(&line, true);
         found_usage.set(codex_stats.context.is_some());
-        // A long tool burst can put the latest usage before the message page.
-        // Continue looking for stats without retaining another page of messages.
-        if *stable_message_count > limit && !branch.keep_scanning(line_offset) {
-            return;
-        }
         let fallback_id = transcript_fallback_id(file_path, line_offset);
         if lifecycle.is_none() {
             if let Some(decode_lifecycle) = decode_lifecycle {
                 *lifecycle = decode_lifecycle(&line, &fallback_id);
             }
+        }
+        // A long tool burst can put the latest usage before the message page.
+        // Continue looking for stats without retaining another page of messages.
+        if *stable_message_count > limit && !branch.keep_scanning(line_offset) {
+            return;
         }
         let decoded = decode(&line, &fallback_id);
         let row_lineage = lineage.and_then(|extract| extract(&line, &fallback_id));
@@ -310,6 +310,8 @@ pub fn read_session_chat_transcript_tail_file(
             }
             scanning = stable_message_count <= limit
                 || branch.keep_scanning(line_offset)
+                // A long tool burst can push the turn's start outside the visible page.
+                || (end_offset.is_none() && decode_lifecycle.is_some() && lifecycle.is_none())
                 || (codex && end_offset.is_none() && !found_usage.get());
             segment_end = index;
         }
