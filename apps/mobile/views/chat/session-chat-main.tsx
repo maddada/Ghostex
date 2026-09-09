@@ -106,6 +106,7 @@ interface MobileChatConfig {
   theme?: SessionChatTheme;
   transcriptWidthPercent?: number;
   verboseMode?: boolean;
+  fileEditPreviews?: boolean;
 }
 
 interface MobileChatPresentation {
@@ -114,6 +115,7 @@ interface MobileChatPresentation {
   theme: SessionChatTheme;
   transcriptWidthPercent: number;
   verboseMode: boolean;
+  fileEditPreviews: boolean;
 }
 
 interface BridgeResponse {
@@ -423,6 +425,7 @@ let presentationState: MobileChatPresentation = {
   theme: 'dark',
   transcriptWidthPercent: DEFAULT_TRANSCRIPT_WIDTH_PERCENT,
   verboseMode: false,
+  fileEditPreviews: false,
 };
 const presentationListeners = new Set<() => void>();
 
@@ -468,6 +471,8 @@ window.ghostexMobileChatSetPresentation = (state) => {
       typeof state?.transcriptWidthPercent === 'number'
         ? clampTranscriptWidthPercent(state.transcriptWidthPercent)
         : presentationState.transcriptWidthPercent,
+    fileEditPreviews:
+      typeof state?.fileEditPreviews === 'boolean' ? state.fileEditPreviews : presentationState.fileEditPreviews,
     verboseMode: typeof state?.verboseMode === 'boolean' ? state.verboseMode : presentationState.verboseMode,
   };
   if (
@@ -475,6 +480,7 @@ window.ghostexMobileChatSetPresentation = (state) => {
     next.fontFamily === presentationState.fontFamily &&
     next.theme === presentationState.theme &&
     next.transcriptWidthPercent === presentationState.transcriptWidthPercent &&
+    next.fileEditPreviews === presentationState.fileEditPreviews &&
     next.verboseMode === presentationState.verboseMode
   ) {
     return;
@@ -831,7 +837,7 @@ function createMobileSessionChatTransport(): SessionChatTransport {
       });
     },
     async send(text, imagePaths, draftVersion) {
-      await bridgeCall('send', {
+      return bridgeCall<{ queuedPromptId?: string }>('send', {
         text,
         draftVersion,
         ...(imagePaths && imagePaths.length > 0 ? { imagePaths } : {}),
@@ -1026,7 +1032,7 @@ function MobileSessionChat({
   transport: SessionChatTransport;
 }) {
   const { working } = useSyncExternalStore(subscribeHostState, readHostState, readHostState);
-  const { customTranscriptWidthEnabled, theme, verboseMode } = useSyncExternalStore(
+  const { customTranscriptWidthEnabled, theme, verboseMode, fileEditPreviews } = useSyncExternalStore(
     subscribePresentation,
     readPresentation,
     readPresentation
@@ -1077,6 +1083,7 @@ function MobileSessionChat({
         theme={theme}
         transport={transport}
         verboseMode={verboseMode}
+        fileEditPreviews={fileEditPreviews}
         working={working}
       />
       <StashedPromptsModal
@@ -1112,6 +1119,7 @@ void waitForConfig().then((config) => {
     theme: normalizeSessionChatTheme(config.theme),
     transcriptWidthPercent: config.transcriptWidthPercent,
     verboseMode: config.verboseMode,
+    fileEditPreviews: config.fileEditPreviews,
   });
   root.render(
     <MobileSessionChat

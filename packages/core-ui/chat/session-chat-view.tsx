@@ -1,4 +1,7 @@
+import type { SessionChatDraftHandoff } from '@/packages/shared/session-chat-queue';
+import { SessionChatFileChangePreviewContext } from './session-chat-file-change-card';
 import type { SessionChatDraftVersion } from '@/packages/shared/session-chat-queue';
+import type { AccountsTransport } from '@/packages/shared/agent-accounts';
 import { useAccounts } from '@/packages/core-ui/accounts/use-accounts';
 import { SessionAccountsPanel } from '@/packages/core-ui/accounts/session-panel';
 // SessionChatView — root layout (upstream chat spec §11.1 port): message list
@@ -59,6 +62,7 @@ import {
   sessionChatTerminalNoticeDismissKey,
 } from './session-chat-terminal-notice-card';
 import { SessionChatSessionOptionPills, useSessionChatSessionOptions } from './session-chat-option-pills';
+import { modelPickerProvider } from './session-chat-model-picker-request';
 import {
   resolveSessionChatStarredContextDetails,
   useSessionChatContextDetailsClock,
@@ -142,13 +146,12 @@ export interface SessionChatStashedPrompt {
 }
 
 /** The draft that left the composer, and the durable copy that outlives it. */
-export interface SessionChatComposerHandoff {
+export interface SessionChatComposerHandoff extends SessionChatDraftHandoff {
   /** Exact text the terminal must receive. Empty means nothing moved. */
   content: string;
   /**
-   * Saved Prompts row holding `content` until the host confirms a terminal
-   * actually took it. The host deletes this row only on that confirmation;
-   * on every other outcome the row stays, so the text is never only in RAM.
+   * Legacy hosts may attach a temporary Saved Prompts row. Current transfers
+   * retain their revision in durable draft recovery after placement.
    */
   stashedPromptId?: string;
 }
@@ -160,7 +163,9 @@ export interface SessionChatHostComposerActions {
   clearDraft: (expectedContent: string) => boolean;
   focus: () => void;
   handoffToTerminal: () => Promise<SessionChatComposerHandoff>;
+  receiveDraftHandoff: (handoff: SessionChatDraftHandoff) => Promise<void>;
   insertPrompt: (content: string) => boolean;
+  appendPrompt: (content: string) => boolean;
   requestStash: () => void;
 }
 
@@ -252,7 +257,7 @@ export interface SessionChatViewProps {
    * paths are inert.
    */
   hostLinks?: SessionChatHostLinks;
-  /** Desktop and web use the bundled Lexical input; mobile keeps its plain input. */
+  /** Defaults to the shared Lexical input on desktop, web, and mobile. */
   inputBackend?: 'lexical' | 'plain';
   /** Chat-only palette. It does not change the host application's chrome. */
   theme?: SessionChatTheme;
@@ -260,6 +265,8 @@ export interface SessionChatViewProps {
   customTranscriptWidthEnabled?: boolean;
   /** Reveal thinking-owned tool calls without requiring a click. */
   verboseMode?: boolean;
+  /** Show seven-line file edit previews instead of collapsed rows. */
+  fileEditPreviews?: boolean;
   /** Presentation of the transcript search box (see SessionChatSearch). */
   searchLayout?: 'inline' | 'overlay';
   /** Lets a native host open transcript search from its own chrome. */
@@ -440,7 +447,7 @@ export function SessionChatView({
   hostComposerBridge,
   hostSessionNoteBridge,
   hostLinks,
-  inputBackend,
+  inputBackend = 'lexical',
   nativeSelectionMenus = false,
   onSwitchToTerminalForAgentPicker,
   onDelayedActions,
@@ -459,6 +466,7 @@ export function SessionChatView({
   theme = 'dark',
   transport,
   verboseMode = false,
+  fileEditPreviews = false,
   working,
 }: SessionChatViewProps) {
   useEffect(() => {
@@ -540,8 +548,6 @@ export function SessionChatView({
   const readStateAgent = draftAgentRow?.baseAgentId ?? chat.agent ?? null;
   const accountProvider = (readStateAgent ?? agentLabel)?.toLowerCase();
   const accountsEnabled = accountProvider === 'claude' || accountProvider === 'codex';
-  const accountState = useAccounts(transport.accounts, true, accountsEnabled);
-  const activeAccount = accountState.data?.accounts.find((a) => a.id === accountState.data?.session?.accountId);
   const chatRefresh = chat.refresh;
   useEffect(() => {
     setReadAgentEntry({ agent: readStateAgent, transport });
@@ -587,6 +593,13 @@ export function SessionChatView({
   // Unmount, and a move to another session: a follow-up read belongs to the
   // draft it was armed for and to nothing else.
   useEffect(() => clearDraftAgentSwitchTimers, [clearDraftAgentSwitchTimers, transport]);
+  const refreshAfterDraftSwitch = useCallback((): void => {
+    chatRefresh();
+    // The new CLI is launched after the switch request returns.
+    for (const delay of DRAFT_AGENT_SWITCH_REREAD_DELAYS_MS) {
+      draftAgentSwitchTimersRef.current.push(setTimeout(chatRefresh, delay));
+    }
+  }, [chatRefresh]);
   const switchDraftAgent = useMemo(() => {
     const switchAgent = transport.switchDraftAgent?.bind(transport);
     return switchAgent
@@ -614,15 +627,28 @@ export function SessionChatView({
           try {
             await switchAgent({ agentId });
           } finally {
-            chatRefresh();
-            // The new CLI is launched after this call returns; see the delays.
-            for (const delay of DRAFT_AGENT_SWITCH_REREAD_DELAYS_MS) {
-              draftAgentSwitchTimersRef.current.push(setTimeout(chatRefresh, delay));
-            }
+            refreshAfterDraftSwitch();
           }
         }
       : undefined;
-  }, [chatRefresh, clearDraftAgentSwitchTimers, transport]);
+  }, [refreshAfterDraftSwitch, clearDraftAgentSwitchTimers, transport]);
+  /** CDXC:Drafts 2026-09-09 DECISION: User: switching a draft between accounts must keep the text in its input box, as switching its agent does. */
+  const accountsTransport = useMemo<AccountsTransport | undefined>(() => {
+    const accounts = transport.accounts?.bind(transport);
+    if (!accounts) return undefined;
+    return async (params) => {
+      if (params.operation !== 'select') return accounts(params);
+      composerRef.current?.flushDraft();
+      clearDraftAgentSwitchTimers();
+      try {
+        return await accounts(params);
+      } finally {
+        refreshAfterDraftSwitch();
+      }
+    };
+  }, [clearDraftAgentSwitchTimers, refreshAfterDraftSwitch, transport]);
+  const accountState = useAccounts(accountsTransport, true, accountsEnabled);
+  const activeAccount = accountState.data?.accounts.find((a) => a.id === accountState.data?.session?.accountId);
   const initialTranscriptLoading = chat.view.kind === 'loading';
   /*
   How far the blank hold has been allowed to progress. Keyed to the moment
@@ -854,36 +880,9 @@ export function SessionChatView({
   }, [hostComposerBridge, refreshStashedPromptCount]);
   const handoffComposerDraft = useCallback(async (): Promise<SessionChatComposerHandoff> => {
     const composer = composerRef.current;
-    const draft = composer?.getDraft() ?? '';
-    if (!draft.trim()) {
-      if (draft.length > 0) {
-        composer?.clearDraft(draft);
-      }
-      return { content: '' };
-    }
-    const stashPrompt = hostComposerBridge?.stashPrompt;
-    if (!stashPrompt) {
-      /*
-      Clearing the composer here would make the host's in-memory copy the only
-      copy of the text. A host that cannot stash simply cannot move a draft, so
-      say so and stay in chat with every character intact.
-      */
-      throw new Error('This host cannot move the draft out of chat.');
-    }
-    const stashed = await stashPrompt(draft, { transient: true });
-    // The exact snapshot that became durable must still own the composer.
-    // If more text arrived during the save, remain in chat with all text
-    // intact instead of switching with a partial draft. The stash row created
-    // above stays in Saved Prompts: a visible duplicate is the correct price
-    // for never being able to lose the text.
-    if (composerRef.current?.clearDraft(draft) !== true) {
-      throw new Error('The draft changed while it was being moved.');
-    }
-    return {
-      content: draft,
-      ...(stashed?.promptId ? { stashedPromptId: stashed.promptId } : {}),
-    };
-  }, [hostComposerBridge]);
+    if (!composer) throw new Error('The Chat input is not ready.');
+    return composer.handoffDraft();
+  }, []);
   useEffect(() => {
     if (!hostComposerBridge || initialTranscriptLoading) {
       return;
@@ -894,7 +893,13 @@ export function SessionChatView({
       clearDraft: (expectedContent) => composerRef.current?.clearDraft(expectedContent) ?? false,
       focus: () => composerRef.current?.focus(),
       handoffToTerminal: handoffComposerDraft,
+      receiveDraftHandoff: (handoff) => {
+        const composer = composerRef.current;
+        if (!composer) return Promise.reject(new Error('The Chat input is not ready.'));
+        return composer.receiveDraftHandoff(handoff);
+      },
       insertPrompt: (content) => composerRef.current?.insertSavedPrompt(content) ?? false,
+      appendPrompt: (content) => composerRef.current?.appendText(content) ?? false,
       requestStash: stashComposerDraft,
     });
   }, [handoffComposerDraft, hostComposerBridge, initialTranscriptLoading, setPaneFocused, stashComposerDraft]);
@@ -1263,11 +1268,12 @@ export function SessionChatView({
         }
       : undefined;
   }, [readStateAgent, transport]);
+  /** CDXC:SessionChat 2026-09-09 DECISION: Grok Build models and efforts change directly from chat. Every quick-picker provider needs the durable delivery callback, including on draft sessions. */
   const queueModel = useMemo(() => {
     const select = transport.selectSessionChatModel?.bind(transport);
     return select &&
       chat.pendingModelSelection !== undefined &&
-      (readStateAgent === 'codex' || readStateAgent === 'claude')
+      modelPickerProvider(readStateAgent ?? undefined) !== undefined
       ? async (params: {
           model: string;
           effort: string;
@@ -1589,47 +1595,48 @@ export function SessionChatView({
     emptyKind === 'starting' || emptyKind === 'empty';
 
   return (
-    <TooltipProvider>
-      <div
-        className={cn(
-          // The app theme zeroes --radius for its square chrome; restore the
-          // shadcn default inside the chat so bubbles and cards keep their
-          // rounded look. The scope class lifts the SquareTheme border-radius
-          // override (packages/core-ui/styles.css) for controls inside the chat.
-          'ghostex-session-chat-scope relative flex h-full min-h-0 flex-col bg-background text-foreground outline-none [--radius:0.625rem]',
-          theme === 'dark' && 'dark',
-          className
-        )}
-        data-chat-custom-transcript-width={customTranscriptWidthEnabled ? 'true' : 'false'}
-        data-chat-theme={theme}
-        {...(nativeSelectionMenus
-          ? {}
-          : { onContextMenu: (event: MouseEvent<HTMLDivElement>) => event.preventDefault() })}
-        onKeyDownCapture={handleKeyDownCapture}
-        onPasteCapture={handlePasteCapture}
-        onCopyCapture={handleCopyCutCapture}
-        onCutCapture={handleCopyCutCapture}
-        onDragOverCapture={handleDragOverCapture}
-        onDropCapture={handleDropCapture}
-        ref={chatRootRef}
-        tabIndex={-1}
-      >
-        <SessionChatImageViewerProvider
-          {...(loadImageDataUrl ? { loadImage: loadImageDataUrl } : {})}
-          {...(saveImageAs ? { saveImageAs } : {})}
-          {...(sessionTitle ? { sessionTitle } : {})}
+    <SessionChatFileChangePreviewContext value={fileEditPreviews}>
+      <TooltipProvider>
+        <div
+          className={cn(
+            // The app theme zeroes --radius for its square chrome; restore the
+            // shadcn default inside the chat so bubbles and cards keep their
+            // rounded look. The scope class lifts the SquareTheme border-radius
+            // override (packages/core-ui/styles.css) for controls inside the chat.
+            'ghostex-session-chat-scope relative flex h-full min-h-0 flex-col bg-background text-foreground outline-none [--radius:0.625rem]',
+            theme === 'dark' && 'dark',
+            className
+          )}
+          data-chat-custom-transcript-width={customTranscriptWidthEnabled ? 'true' : 'false'}
+          data-chat-theme={theme}
+          {...(nativeSelectionMenus
+            ? {}
+            : { onContextMenu: (event: MouseEvent<HTMLDivElement>) => event.preventDefault() })}
+          onKeyDownCapture={handleKeyDownCapture}
+          onPasteCapture={handlePasteCapture}
+          onCopyCapture={handleCopyCutCapture}
+          onCutCapture={handleCopyCutCapture}
+          onDragOverCapture={handleDragOverCapture}
+          onDropCapture={handleDropCapture}
+          ref={chatRootRef}
+          tabIndex={-1}
         >
-          <SessionChatHostLinksProvider {...(hostLinks ? { links: hostLinks } : {})}>
-            <SessionChatSubagentViewer key={sessionKey} read={readSubagent} theme={theme}>
-              <div className='relative flex min-h-0 flex-1 flex-col'>
-                <SessionChatSearch
-                  {...(hostSearchBridge ? { hostBridge: hostSearchBridge } : {})}
-                  layout={searchLayout}
-                  rootRef={chatRootRef}
-                  searchRevision={chat.messages}
-                />
-                <div className='relative flex min-h-0 flex-1 flex-col' ref={composerInset.hostRef}>
-                  {/*
+          <SessionChatImageViewerProvider
+            {...(loadImageDataUrl ? { loadImage: loadImageDataUrl } : {})}
+            {...(saveImageAs ? { saveImageAs } : {})}
+            {...(sessionTitle ? { sessionTitle } : {})}
+          >
+            <SessionChatHostLinksProvider {...(hostLinks ? { links: hostLinks } : {})}>
+              <SessionChatSubagentViewer key={sessionKey} read={readSubagent} theme={theme}>
+                <div className='relative flex min-h-0 flex-1 flex-col'>
+                  <SessionChatSearch
+                    {...(hostSearchBridge ? { hostBridge: hostSearchBridge } : {})}
+                    layout={searchLayout}
+                    rootRef={chatRootRef}
+                    searchRevision={chat.messages}
+                  />
+                  <div className='relative flex min-h-0 flex-1 flex-col' ref={composerInset.hostRef}>
+                    {/*
                 CDXC:SessionFork 2026-08-28:
                 The chat has no title bar of its own (desktop draws the title
                 natively, the web app draws it in the workspace chrome), so the
@@ -1637,55 +1644,17 @@ export function SessionChatView({
                 renders nothing at all until the daemon reports a family of two
                 or more, which is why an unforked session shows no empty row.
                 */}
-                  <div className='mx-auto flex w-full max-w-3xl flex-none justify-end px-4 pt-1 empty:hidden'>
-                    <SessionChatForkBranchSwitcher
-                      {...(loadForkBranches ? { loadBranches: loadForkBranches } : {})}
-                      {...(onSelectForkBranch ? { onSelectBranch: onSelectForkBranch } : {})}
-                      sessionKey={sessionKey ?? 'session-chat'}
-                    />
-                  </div>
-                  <div className='flex min-h-0 flex-1 flex-col'>
-                    {chat.view.kind === 'ready' ? (
-                      nativeSelectionMenus ? (
-                        <div className='relative flex min-h-0 flex-1 select-text' ref={transcriptRef}>
-                          <SessionChatMessageList
-                            composerCollapsed={composerCollapsed}
-                            hasMore={chat.hasMore}
-                            isWorking={transcriptWorking}
-                            loadingEarlier={chat.loadingEarlier}
-                            messages={chat.messages}
-                            onLoadEarlier={chat.loadEarlier}
-                            {...(hostComposerBridge?.stashPrompt ? { onSavePrompt: saveTranscriptPrompt } : {})}
-                            {...(listMessageMarkdownPaths ? { listMessageMarkdownPaths } : {})}
-                            {...(rewindToMessage
-                              ? { canRewind, onRewound: holdRewoundPromptInComposer, rewindToMessage, rewindAgent }
-                              : {})}
-                            {...(saveMessageMarkdown ? { saveMessageMarkdown } : {})}
-                            sessionTitle={sessionTitle}
-                            theme={theme}
-                            summaryMode={summaryMode}
-                            verboseMode={verbose}
-                          />
-                          <TranscriptSelectionToolbar
-                            addToChatEnabled={!questionActive}
-                            containerRef={transcriptRef}
-                            onAddToChat={addTranscriptTextToChat}
-                          />
-                        </div>
-                      ) : (
-                        <ContextMenu
-                          onOpenChangeComplete={(open) => {
-                            if (!open && focusComposerAfterTranscriptMenuCloseRef.current) {
-                              focusComposerAfterTranscriptMenuCloseRef.current = false;
-                              window.requestAnimationFrame(() => composerRef.current?.focus());
-                            }
-                          }}
-                        >
-                          <ContextMenuTrigger
-                            className='flex min-h-0 flex-1 select-text'
-                            onContextMenu={captureTranscriptContext}
-                            ref={transcriptRef}
-                          >
+                    <div className='mx-auto flex w-full max-w-3xl flex-none justify-end px-4 pt-1 empty:hidden'>
+                      <SessionChatForkBranchSwitcher
+                        {...(loadForkBranches ? { loadBranches: loadForkBranches } : {})}
+                        {...(onSelectForkBranch ? { onSelectBranch: onSelectForkBranch } : {})}
+                        sessionKey={sessionKey ?? 'session-chat'}
+                      />
+                    </div>
+                    <div className='flex min-h-0 flex-1 flex-col'>
+                      {chat.view.kind === 'ready' ? (
+                        nativeSelectionMenus ? (
+                          <div className='relative flex min-h-0 flex-1 select-text' ref={transcriptRef}>
                             <SessionChatMessageList
                               composerCollapsed={composerCollapsed}
                               hasMore={chat.hasMore}
@@ -1704,127 +1673,165 @@ export function SessionChatView({
                               summaryMode={summaryMode}
                               verboseMode={verbose}
                             />
-                          </ContextMenuTrigger>
-                          <ContextMenuContent>
-                            <ContextMenuGroup>
-                              {transcriptFilePath !== null ? (
-                                <>
-                                  <ContextMenuItem onClick={copyTranscriptFilePath}>
-                                    <IconCopy aria-hidden='true' />
-                                    Copy Path
-                                  </ContextMenuItem>
-                                  {hostLinks?.locateFile ? (
-                                    <ContextMenuItem onClick={() => hostLinks.locateFile?.(transcriptFilePath)}>
-                                      <IconFolder aria-hidden='true' />
-                                      Locate File
+                            <TranscriptSelectionToolbar
+                              addToChatEnabled={!questionActive}
+                              containerRef={transcriptRef}
+                              onAddToChat={addTranscriptTextToChat}
+                            />
+                          </div>
+                        ) : (
+                          <ContextMenu
+                            onOpenChangeComplete={(open) => {
+                              if (!open && focusComposerAfterTranscriptMenuCloseRef.current) {
+                                focusComposerAfterTranscriptMenuCloseRef.current = false;
+                                window.requestAnimationFrame(() => composerRef.current?.focus());
+                              }
+                            }}
+                          >
+                            <ContextMenuTrigger
+                              className='flex min-h-0 flex-1 select-text'
+                              onContextMenu={captureTranscriptContext}
+                              ref={transcriptRef}
+                            >
+                              <SessionChatMessageList
+                                composerCollapsed={composerCollapsed}
+                                hasMore={chat.hasMore}
+                                isWorking={transcriptWorking}
+                                loadingEarlier={chat.loadingEarlier}
+                                messages={chat.messages}
+                                onLoadEarlier={chat.loadEarlier}
+                                {...(hostComposerBridge?.stashPrompt ? { onSavePrompt: saveTranscriptPrompt } : {})}
+                                {...(listMessageMarkdownPaths ? { listMessageMarkdownPaths } : {})}
+                                {...(rewindToMessage
+                                  ? { canRewind, onRewound: holdRewoundPromptInComposer, rewindToMessage, rewindAgent }
+                                  : {})}
+                                {...(saveMessageMarkdown ? { saveMessageMarkdown } : {})}
+                                sessionTitle={sessionTitle}
+                                theme={theme}
+                                summaryMode={summaryMode}
+                                verboseMode={verbose}
+                              />
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuGroup>
+                                {transcriptFilePath !== null ? (
+                                  <>
+                                    <ContextMenuItem onClick={copyTranscriptFilePath}>
+                                      <IconCopy aria-hidden='true' />
+                                      Copy Path
                                     </ContextMenuItem>
-                                  ) : null}
-                                </>
-                              ) : null}
-                              {transcriptWebUrl !== null ? (
-                                <>
-                                  <ContextMenuItem onClick={copyTranscriptWebUrl}>
+                                    {hostLinks?.locateFile ? (
+                                      <ContextMenuItem onClick={() => hostLinks.locateFile?.(transcriptFilePath)}>
+                                        <IconFolder aria-hidden='true' />
+                                        Locate File
+                                      </ContextMenuItem>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                                {transcriptWebUrl !== null ? (
+                                  <>
+                                    <ContextMenuItem onClick={copyTranscriptWebUrl}>
+                                      <IconCopy aria-hidden='true' />
+                                      Copy URL
+                                    </ContextMenuItem>
+                                    {hostLinks?.openUrl ? (
+                                      <>
+                                        <ContextMenuItem
+                                          onClick={() =>
+                                            hostLinks.openUrl?.(transcriptWebUrl, {
+                                              external: false,
+                                              forceEmbedded: true,
+                                            })
+                                          }
+                                        >
+                                          <IconBrowser aria-hidden='true' />
+                                          Open in Embedded Browser
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                          onClick={() => hostLinks.openUrl?.(transcriptWebUrl, { external: true })}
+                                        >
+                                          <IconExternalLink aria-hidden='true' />
+                                          Open in External Browser
+                                        </ContextMenuItem>
+                                      </>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                                {(transcriptFilePath === null && transcriptWebUrl === null) ||
+                                transcriptSelection !== '' ? (
+                                  <ContextMenuItem
+                                    disabled={transcriptSelection === ''}
+                                    onClick={copyTranscriptSelection}
+                                  >
                                     <IconCopy aria-hidden='true' />
-                                    Copy URL
+                                    Copy
                                   </ContextMenuItem>
-                                  {hostLinks?.openUrl ? (
-                                    <>
-                                      <ContextMenuItem
-                                        onClick={() =>
-                                          hostLinks.openUrl?.(transcriptWebUrl, {
-                                            external: false,
-                                            forceEmbedded: true,
-                                          })
-                                        }
-                                      >
-                                        <IconBrowser aria-hidden='true' />
-                                        Open in Embedded Browser
-                                      </ContextMenuItem>
-                                      <ContextMenuItem
-                                        onClick={() => hostLinks.openUrl?.(transcriptWebUrl, { external: true })}
-                                      >
-                                        <IconExternalLink aria-hidden='true' />
-                                        Open in External Browser
-                                      </ContextMenuItem>
-                                    </>
-                                  ) : null}
-                                </>
-                              ) : null}
-                              {(transcriptFilePath === null && transcriptWebUrl === null) ||
-                              transcriptSelection !== '' ? (
-                                <ContextMenuItem
-                                  disabled={transcriptSelection === ''}
-                                  onClick={copyTranscriptSelection}
-                                >
-                                  <IconCopy aria-hidden='true' />
-                                  Copy
-                                </ContextMenuItem>
-                              ) : null}
-                              {transcriptSelection !== '' ? (
-                                <ContextMenuItem disabled={questionActive} onClick={addTranscriptSelectionToChat}>
-                                  <IconBlockquote aria-hidden='true' />
-                                  Add to Chat
-                                </ContextMenuItem>
-                              ) : null}
-                            </ContextMenuGroup>
-                          </ContextMenuContent>
-                        </ContextMenu>
-                      )
-                    ) : showNewSessionWelcome ? (
-                      <NewSessionWelcome
-                        agentLabel={resolvedAgentLabel}
-                        {...(draftAgentRow ? { agentIcon: draftAgentRow.icon, agentName: draftAgentRow.name } : {})}
-                        showTitle={showNewSessionWelcomeTitle && !bottomCardVisible}
-                      />
-                    ) : emptyKind ? (
-                      chat.view.kind === 'error' ? (
-                        <EmptyState
-                          detail={sessionChatEmptyStateCopy('error').detail}
-                          title={sessionChatEmptyStateCopy('error').title}
+                                ) : null}
+                                {transcriptSelection !== '' ? (
+                                  <ContextMenuItem disabled={questionActive} onClick={addTranscriptSelectionToChat}>
+                                    <IconBlockquote aria-hidden='true' />
+                                    Add to Chat
+                                  </ContextMenuItem>
+                                ) : null}
+                              </ContextMenuGroup>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        )
+                      ) : showNewSessionWelcome ? (
+                        <NewSessionWelcome
+                          agentLabel={resolvedAgentLabel}
+                          {...(draftAgentRow ? { agentIcon: draftAgentRow.icon, agentName: draftAgentRow.name } : {})}
+                          showTitle={showNewSessionWelcomeTitle && !bottomCardVisible}
                         />
-                      ) : (
-                        <EmptyState
-                          detail={sessionChatEmptyStateCopy(emptyKind, resolvedAgentLabel).detail}
-                          title={sessionChatEmptyStateCopy(emptyKind, resolvedAgentLabel).title}
+                      ) : emptyKind ? (
+                        chat.view.kind === 'error' ? (
+                          <EmptyState
+                            detail={sessionChatEmptyStateCopy('error').detail}
+                            title={sessionChatEmptyStateCopy('error').title}
+                          />
+                        ) : (
+                          <EmptyState
+                            detail={sessionChatEmptyStateCopy(emptyKind, resolvedAgentLabel).detail}
+                            title={sessionChatEmptyStateCopy(emptyKind, resolvedAgentLabel).title}
+                          />
+                        )
+                      ) : null}
+                    </div>
+                    {/* The composer band overlays the transcript; use-session-chat-composer-inset.ts keeps the transcript's end clear beneath it. */}
+                    <div
+                      className='ghostex-chat-composer-overlay absolute inset-x-0 bottom-0 z-20'
+                      data-chat-composer-overlay='true'
+                      ref={composerInset.overlayRef}
+                    >
+                      <div className='mx-auto grid w-full max-w-3xl gap-2 px-4 pt-2 pb-3'>
+                        <SessionChatWorkingStrip activity={chat.terminalActivity} working={chat.sessionWorking} />
+                        <SessionChatTerminalNoticeCard
+                          canSend={canSend}
+                          notice={chat.terminalNotice}
+                          onAnswerChoice={answerNoticeChoice}
+                          onAnswerDialog={chat.answerPrompt}
+                          onSendKeys={sendNoticeKeys}
+                          onVisibleChange={setNoticeCardVisible}
+                          showShortcutLabels={showShortcutLabels}
+                          {...(sessionKey !== undefined ? { sessionKey } : {})}
+                          {...(hostActions?.onSwitchToTerminal
+                            ? { onSwitchToTerminal: hostActions.onSwitchToTerminal }
+                            : {})}
+                          {...(hostActions?.switchViewShortcut
+                            ? { switchToTerminalShortcut: hostActions.switchViewShortcut }
+                            : {})}
                         />
-                      )
-                    ) : null}
-                  </div>
-                  {/* The composer band overlays the transcript; use-session-chat-composer-inset.ts keeps the transcript's end clear beneath it. */}
-                  <div
-                    className='ghostex-chat-composer-overlay absolute inset-x-0 bottom-0 z-20'
-                    data-chat-composer-overlay='true'
-                    ref={composerInset.overlayRef}
-                  >
-                    <div className='mx-auto grid w-full max-w-3xl gap-2 px-4 pt-2 pb-3'>
-                      <SessionChatWorkingStrip activity={chat.terminalActivity} working={chat.sessionWorking} />
-                      <SessionChatTerminalNoticeCard
-                        canSend={canSend}
-                        notice={chat.terminalNotice}
-                        onAnswerChoice={answerNoticeChoice}
-                        onAnswerDialog={chat.answerPrompt}
-                        onSendKeys={sendNoticeKeys}
-                        onVisibleChange={setNoticeCardVisible}
-                        showShortcutLabels={showShortcutLabels}
-                        {...(sessionKey !== undefined ? { sessionKey } : {})}
-                        {...(hostActions?.onSwitchToTerminal
-                          ? { onSwitchToTerminal: hostActions.onSwitchToTerminal }
-                          : {})}
-                        {...(hostActions?.switchViewShortcut
-                          ? { switchToTerminalShortcut: hostActions.switchViewShortcut }
-                          : {})}
-                      />
-                      <SessionChatInteractiveCard
-                        canSend={canSend}
-                        onAnswer={chat.answerPrompt}
-                        onInterrupt={interrupt}
-                        onShowingChange={setInteractiveCardVisible}
-                        onShowingQuestionChange={setQuestionActive}
-                        onSwitchToTerminal={hostActions?.onSwitchToTerminal}
-                        prompt={interactivePrompt}
-                        showShortcutLabels={showShortcutLabels}
-                      />
-                      {/*
+                        <SessionChatInteractiveCard
+                          canSend={canSend}
+                          onAnswer={chat.answerPrompt}
+                          onInterrupt={interrupt}
+                          onShowingChange={setInteractiveCardVisible}
+                          onShowingQuestionChange={setQuestionActive}
+                          onSwitchToTerminal={hostActions?.onSwitchToTerminal}
+                          prompt={interactivePrompt}
+                          showShortcutLabels={showShortcutLabels}
+                        />
+                        {/*
                   While a question card shows, the composer hides instead of
                   unmounting: unmounting disposed the Monaco editor on every
                   question flip (a visible hitch) and destroyed the caret
@@ -1833,167 +1840,172 @@ export function SessionChatView({
                   state. display:contents keeps the grid layout identical
                   when visible.
                   */}
-                      <div className={questionActive ? 'hidden' : 'contents'}>
-                        {noteOpen && readSessionNote && saveSessionNote ? (
-                          <SessionChatNotePanel
-                            /*
+                        <div className={questionActive ? 'hidden' : 'contents'}>
+                          {noteOpen && readSessionNote && saveSessionNote ? (
+                            <SessionChatNotePanel
+                              /*
                         NOT the bare sessionKey: the composer sibling below
                         already uses it, and duplicate keys among siblings
                         break reconciliation (the panel stopped unmounting on
                         close). The prefix keeps the per-session state reset
                         without colliding.
                         */
-                            key={`session-note:${sessionKey}`}
+                              key={`session-note:${sessionKey}`}
+                              inputBackend={inputBackend}
+                              onClose={closeSessionNote}
+                              onHasNoteChange={setSessionNoteHasText}
+                              readNote={readSessionNote}
+                              saveNote={saveSessionNote}
+                              theme={theme}
+                            />
+                          ) : null}
+                          <SessionChatComposer
+                            paneFocused={paneFocused}
+                            agentFleet={chat.agentFleet}
+                            agentTasks={chat.agentTasks}
+                            {...(diagnosticLog ? { diagnosticLog } : {})}
+                            sendBlockedReason={composerSendBlockedReason}
+                            draftSync={chat.draft}
+                            isWorking={chat.working}
+                            key={sessionKey}
                             inputBackend={inputBackend}
-                            onClose={closeSessionNote}
-                            onHasNoteChange={setSessionNoteHasText}
-                            readNote={readSessionNote}
-                            saveNote={saveSessionNote}
+                            nativeContextMenu={nativeSelectionMenus}
+                            queue={chat.queue}
+                            scrollCollapseEnabled={
+                              chat.view.kind === 'ready' && !questionActive && !nativeSelectionMenus
+                            }
+                            onScrollCollapsedChange={setComposerCollapsed}
+                            transcriptRef={transcriptRef}
+                            sessionKey={sessionKey}
                             theme={theme}
+                            onAttachFile={attachFile}
+                            onInterrupt={interrupt}
+                            onLoadImagePreview={loadImageDataUrl}
+                            onNativeDropPaths={nativeDropPaths}
+                            onPasteImage={pasteImage}
+                            onPickPaths={pickPaths}
+                            {...(readTerminalTail ? { onReadTerminalTail: readTerminalTail } : {})}
+                            onSend={send}
+                            sendOnEnter={sendOnEnter}
+                            {...(draftAwareHostActions ? { hostActions: draftAwareHostActions } : {})}
+                            {...(accountsEnabled && transport.accounts
+                              ? {
+                                  renderAccountMenu: (close: () => void) => (
+                                    <SessionAccountsPanel
+                                      {...accountState}
+                                      contextUsage={detectedOptions?.contextUsage}
+                                      close={close}
+                                    />
+                                  ),
+                                }
+                              : {})}
+                            {...(onDelayedActions ? { onDelayedActions } : {})}
+                            {...(sessionNoteAvailable ? { onSessionNote: toggleSessionNote } : {})}
+                            sessionNoteActive={noteOpen}
+                            sessionNoteHasText={sessionNoteHasText}
+                            showShortcutLabels={showShortcutLabels}
+                            summaryMode={summaryMode}
+                            verboseMode={verbose}
+                            {...(showVerbosePill ? { onToggleSummary: toggleSummary } : {})}
+                            {...(showVerbosePill ? { onToggleVerbose: toggleVerbose } : {})}
+                            {...(hostComposerBridge?.stashPrompt ? { onStash: stashComposerDraft } : {})}
+                            {...(hostComposerBridge?.showStashedPrompts
+                              ? { onShowStashedPrompts: hostComposerBridge.showStashedPrompts }
+                              : {})}
+                            stashedPromptCount={stashedPromptCount}
+                            {...(reportDraftState ? { onDraftEmptyChange: reportComposerDraftState } : {})}
+                            optionPills={
+                              <>
+                                <SessionChatSessionOptionPills
+                                  canSend={canSend}
+                                  canSendKey={chat.sendKey !== undefined}
+                                  controller={sessionOptions}
+                                  accountIndicator={
+                                    activeAccount ? activeAccount.indicator || activeAccount.selector : undefined
+                                  }
+                                  detectedOptions={detectedOptions}
+                                  {...(draftAgents ? { draftAgents } : {})}
+                                  {...(chat.sessionAgentId !== null ? { draftAgentId: chat.sessionAgentId } : {})}
+                                  {...(switchDraftAgent ? { onSwitchDraftAgent: switchDraftAgent } : {})}
+                                  isWorking={chat.working}
+                                  screenProbed={chat.screenProbed}
+                                  onQueueModel={queueModel}
+                                  pendingModelSelection={chat.pendingModelSelection}
+                                  onDispatchCommand={send}
+                                  onDispatchKey={async (key, marker) => {
+                                    await chat.sendKey?.(key, marker);
+                                  }}
+                                  {...(pickModel ? { onPickModel: pickModel } : {})}
+                                  contextDetailsSession={contextDetailsSession}
+                                  contextDetailsStatus={contextDetailsStatus}
+                                  onEditContextDetails={() => setContextDetailsOpen(true)}
+                                  onSwitchingChange={setSessionOptionSwitching}
+                                  {...(onSwitchToTerminalForAgentPicker || hostActions?.onSwitchToTerminal
+                                    ? {
+                                        onSwitchToTerminal:
+                                          onSwitchToTerminalForAgentPicker ??
+                                          hostActions?.onSwitchToTerminalForAgentPicker ??
+                                          hostActions?.onSwitchToTerminal,
+                                      }
+                                    : {})}
+                                />
+                              </>
+                            }
+                            placeholder={
+                              !canSend
+                                ? 'Input is held by another device.'
+                                : terminalChoicePending
+                                  ? chat.terminalNotice?.dialog?.rows.length === 0
+                                    ? 'Use the controls above to continue.'
+                                    : noticeCardVisible
+                                      ? 'Answer the question above to continue.'
+                                      : 'Applying your answer…'
+                                  : sessionOptionSwitching
+                                    ? 'Switching Claude mode…'
+                                    : undefined
+                            }
+                            ref={composerRef}
+                            slashCommands={slashCommands}
+                            slashHeading={sessionChatSlashHeadingForAgent(resolvedAgentLabel)}
+                            skills={skills}
+                            files={files}
+                            filesLoading={filesLoading}
+                            onRequestFiles={requestFiles}
+                            fileHeading='Project files'
+                            skillHeading={`${draftAgentRow?.name ?? displayAgentName(resolvedAgentLabel) ?? 'Agent'} skills`}
+                          />
+                          <SessionChatStatusLine items={starredContextDetails} />
+                        </div>
+                        <SessionChatContextDetailsDialog
+                          onOpenChange={setContextDetailsOpen}
+                          open={contextDetailsOpen}
+                          session={contextDetailsSession}
+                          agent={contextDetailsAgent}
+                          status={contextDetailsStatus}
+                          theme={theme}
+                        />
+                        {chatBarPanelState?.open && chatBarExtensions.length > 0 ? (
+                          <SessionChatExtensionPanel
+                            activeExtensionId={chatBarPanelState.activeExtensionId}
+                            extensions={chatBarExtensions}
+                            minimized={chatBarPanelState.minimized}
+                            onActiveExtensionChange={(activeExtensionId) =>
+                              onChatBarPanelStateChange?.({ activeExtensionId, minimized: false, open: true })
+                            }
+                            onBridgeRequest={onChatBarBridgeRequest}
+                            onClose={() => onChatBarPanelStateChange?.({ open: false })}
+                            onMinimizedChange={(minimized) => onChatBarPanelStateChange?.({ minimized })}
                           />
                         ) : null}
-                        <SessionChatComposer
-                          paneFocused={paneFocused}
-                          agentFleet={chat.agentFleet}
-                          agentTasks={chat.agentTasks}
-                          {...(diagnosticLog ? { diagnosticLog } : {})}
-                          sendBlockedReason={composerSendBlockedReason}
-                          draftSync={chat.draft}
-                          isWorking={chat.working}
-                          key={sessionKey}
-                          inputBackend={inputBackend}
-                          nativeContextMenu={nativeSelectionMenus}
-                          queue={chat.queue}
-                          scrollCollapseEnabled={chat.view.kind === 'ready' && !questionActive && !nativeSelectionMenus}
-                          onScrollCollapsedChange={setComposerCollapsed}
-                          transcriptRef={transcriptRef}
-                          sessionKey={sessionKey}
-                          theme={theme}
-                          onAttachFile={attachFile}
-                          onInterrupt={interrupt}
-                          onLoadImagePreview={loadImageDataUrl}
-                          onNativeDropPaths={nativeDropPaths}
-                          onPasteImage={pasteImage}
-                          onPickPaths={pickPaths}
-                          {...(readTerminalTail ? { onReadTerminalTail: readTerminalTail } : {})}
-                          onSend={send}
-                          sendOnEnter={sendOnEnter}
-                          {...(draftAwareHostActions ? { hostActions: draftAwareHostActions } : {})}
-                          {...(accountsEnabled && transport.accounts
-                            ? {
-                                renderAccountMenu: (close: () => void) => (
-                                  <SessionAccountsPanel
-                                    {...accountState}
-                                    contextUsage={detectedOptions?.contextUsage}
-                                    close={close}
-                                  />
-                                ),
-                              }
-                            : {})}
-                          {...(onDelayedActions ? { onDelayedActions } : {})}
-                          {...(sessionNoteAvailable ? { onSessionNote: toggleSessionNote } : {})}
-                          sessionNoteActive={noteOpen}
-                          sessionNoteHasText={sessionNoteHasText}
-                          showShortcutLabels={showShortcutLabels}
-                          summaryMode={summaryMode}
-                          verboseMode={verbose}
-                          {...(showVerbosePill ? { onToggleSummary: toggleSummary } : {})}
-                          {...(showVerbosePill ? { onToggleVerbose: toggleVerbose } : {})}
-                          {...(hostComposerBridge?.stashPrompt ? { onStash: stashComposerDraft } : {})}
-                          {...(hostComposerBridge?.showStashedPrompts
-                            ? { onShowStashedPrompts: hostComposerBridge.showStashedPrompts }
-                            : {})}
-                          stashedPromptCount={stashedPromptCount}
-                          {...(reportDraftState ? { onDraftEmptyChange: reportComposerDraftState } : {})}
-                          optionPills={
-                            <>
-                              <SessionChatSessionOptionPills
-                                canSend={canSend}
-                                canSendKey={chat.sendKey !== undefined}
-                                controller={sessionOptions}
-                                accountIndicator={activeAccount ? activeAccount.indicator || activeAccount.selector : undefined}
-                                detectedOptions={detectedOptions}
-                                {...(draftAgents ? { draftAgents } : {})}
-                                {...(chat.sessionAgentId !== null ? { draftAgentId: chat.sessionAgentId } : {})}
-                                {...(switchDraftAgent ? { onSwitchDraftAgent: switchDraftAgent } : {})}
-                                isWorking={chat.working}
-                                screenProbed={chat.screenProbed}
-                                onQueueModel={queueModel}
-                                pendingModelSelection={chat.pendingModelSelection}
-                                onDispatchCommand={send}
-                                onDispatchKey={async (key, marker) => {
-                                  await chat.sendKey?.(key, marker);
-                                }}
-                                {...(pickModel ? { onPickModel: pickModel } : {})}
-                                contextDetailsSession={contextDetailsSession}
-                                contextDetailsStatus={contextDetailsStatus}
-                                onEditContextDetails={() => setContextDetailsOpen(true)}
-                                onSwitchingChange={setSessionOptionSwitching}
-                                {...(onSwitchToTerminalForAgentPicker || hostActions?.onSwitchToTerminal
-                                  ? {
-                                      onSwitchToTerminal:
-                                        onSwitchToTerminalForAgentPicker ??
-                                        hostActions?.onSwitchToTerminalForAgentPicker ??
-                                        hostActions?.onSwitchToTerminal,
-                                    }
-                                  : {})}
-                              />
-                            </>
-                          }
-                          placeholder={
-                            !canSend
-                              ? 'Input is held by another device.'
-                              : terminalChoicePending
-                                ? chat.terminalNotice?.dialog?.rows.length === 0
-                                  ? 'Use the controls above to continue.'
-                                  : noticeCardVisible
-                                    ? 'Answer the question above to continue.'
-                                    : 'Applying your answer…'
-                                : sessionOptionSwitching
-                                  ? 'Switching Claude mode…'
-                                  : undefined
-                          }
-                          ref={composerRef}
-                          slashCommands={slashCommands}
-                          slashHeading={sessionChatSlashHeadingForAgent(resolvedAgentLabel)}
-                          skills={skills}
-                          files={files}
-                          filesLoading={filesLoading}
-                          onRequestFiles={requestFiles}
-                          fileHeading='Project files'
-                          skillHeading={`${draftAgentRow?.name ?? displayAgentName(resolvedAgentLabel) ?? 'Agent'} skills`}
-                        />
-                        <SessionChatStatusLine items={starredContextDetails} />
                       </div>
-                      <SessionChatContextDetailsDialog
-                        onOpenChange={setContextDetailsOpen}
-                        open={contextDetailsOpen}
-                        session={contextDetailsSession}
-                        agent={contextDetailsAgent}
-                        status={contextDetailsStatus}
-                        theme={theme}
-                      />
-                      {chatBarPanelState?.open && chatBarExtensions.length > 0 ? (
-                        <SessionChatExtensionPanel
-                          activeExtensionId={chatBarPanelState.activeExtensionId}
-                          extensions={chatBarExtensions}
-                          minimized={chatBarPanelState.minimized}
-                          onActiveExtensionChange={(activeExtensionId) =>
-                            onChatBarPanelStateChange?.({ activeExtensionId, minimized: false, open: true })
-                          }
-                          onBridgeRequest={onChatBarBridgeRequest}
-                          onClose={() => onChatBarPanelStateChange?.({ open: false })}
-                          onMinimizedChange={(minimized) => onChatBarPanelStateChange?.({ minimized })}
-                        />
-                      ) : null}
                     </div>
                   </div>
                 </div>
-              </div>
-            </SessionChatSubagentViewer>
-          </SessionChatHostLinksProvider>
-        </SessionChatImageViewerProvider>
-      </div>
-    </TooltipProvider>
+              </SessionChatSubagentViewer>
+            </SessionChatHostLinksProvider>
+          </SessionChatImageViewerProvider>
+        </div>
+      </TooltipProvider>
+    </SessionChatFileChangePreviewContext>
   );
 }

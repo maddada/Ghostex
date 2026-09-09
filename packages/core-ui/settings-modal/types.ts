@@ -201,6 +201,7 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'sessionChatCustomTranscriptWidthEnabled',
     'sessionChatTranscriptWidthPercent',
     'sessionChatVerboseMode',
+    'sessionChatFileEditPreviews',
   ],
   sidebar: [
     'sidebarSettingsPreset',
@@ -235,7 +236,6 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'enableSessionParking',
     'sleepSessionWhenParking',
     'renameSessionOnDoubleClick',
-    'useColoredSessionAgentIcons',
     'showSessionCloseContextMenuAction',
     'sidebarSessionTagListItems',
   ],
@@ -354,7 +354,7 @@ export const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
   // CDXC:Icons 2026-06-25-21:50: App Icon owns the persisted Dock icon source id selection.
   appIcon: ['appIconSourceId'],
   sidebarTags: ['sidebarSessionTagListItems'],
-  sessionCards: ['useColoredSessionAgentIcons', 'showSessionCloseContextMenuAction'],
+  sessionCards: ['showSessionCloseContextMenuAction'],
   debugging: ['debuggingMode', ...DEBUGGING_MODE_DEPENDENT_SETTING_KEYS],
   terminalBehavior: [
     'terminalScrollbackLimitMb',

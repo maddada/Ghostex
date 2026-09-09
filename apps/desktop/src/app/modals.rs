@@ -1998,17 +1998,31 @@ impl GhostexGpuiApp {
         let chat_transcript_width_script = format!(
             "window.ghostexSetSessionChatTranscriptWidthPercent?.({chat_transcript_width_percent});undefined;"
         );
+        let chat_file_edit_previews =
+            gpui_session_chat_file_edit_previews_from_settings(settings_snapshot.object());
+        let chat_file_edit_previews_script = format!(
+            "window.ghostexSetSessionChatFileEditPreviews?.({chat_file_edit_previews});undefined;"
+        );
         let chat_verbose_mode =
             gpui_session_chat_verbose_mode_from_settings(settings_snapshot.object());
         let chat_verbose_mode_script =
             format!("window.ghostexSetSessionChatVerboseMode?.({chat_verbose_mode});undefined;");
-        let hide_account_emails = settings_snapshot.object().get("hideAccountEmails")
-            .and_then(serde_json::Value::as_bool).unwrap_or(false);
-        let account_privacy_script = format!("window.ghostexSetHideAccountEmails?.({hide_account_emails});undefined;");
+        let hide_account_emails = settings_snapshot
+            .object()
+            .get("hideAccountEmails")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let account_privacy_script =
+            format!("window.ghostexSetHideAccountEmails?.({hide_account_emails});undefined;");
         for surface in self.agents_chat_surfaces.values().chain(
-            self.parked_agents_chat_runtimes_by_project.values().flat_map(|parked| parked.surfaces.values())
+            self.parked_agents_chat_runtimes_by_project
+                .values()
+                .flat_map(|parked| parked.surfaces.values()),
         ) {
-            surface.update(cx, |surface, _| surface.execute_app_owned_script(&account_privacy_script));
+            surface.update(cx, |surface, _| {
+                surface.execute_app_owned_script(&account_privacy_script);
+                surface.execute_app_owned_script(&chat_file_edit_previews_script);
+            });
         }
         for surface in self.agents_chat_surfaces.values() {
             surface.update(cx, |surface, _| {

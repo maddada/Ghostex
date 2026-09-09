@@ -75,6 +75,10 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
   );
 }
 
+.ghostex-session-chat-scope {
+  container: ghostex-session-chat / inline-size;
+}
+
 .ghostex-session-chat-scope[data-chat-custom-transcript-width='true'] [data-slot='message-scroller-content'] {
   width: calc(var(--ghostex-session-chat-transcript-width-percent, 75) * 1%);
   max-width: calc(100% - 60px);
@@ -204,12 +208,12 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
   background: #343434;
 }
 
-/*
- * The Chat message width setting only applies above 1070px. At 1070px and
- * below the transcript goes full-bleed regardless of the percentage, so
- * narrow panes and phones never squeeze the conversation further.
+/* CDXC:SessionChat 2026-09-09 DECISION:
+ * User: narrow chats on desktop, web, and mobile should align with the composer, reusing the existing width cutoff.
+ * Measure the chat pane, since the host window can stay wide while a split pane is narrow.
+ * At the existing 1070px cutoff and below, remove the percentage inset and retain the shared px-4 padding.
  */
-@media (max-width: 1070px) {
+@container ghostex-session-chat (max-width: 1070px) {
   .ghostex-session-chat-scope[data-chat-custom-transcript-width='true'] [data-slot='message-scroller-content'] {
     max-width: 100%;
     width: 100%;
@@ -240,6 +244,7 @@ body[data-session-chat-theme='light'] .ghostex-session-chat-popup {
   --input: var(--border);
   --ring: oklch(70.5% 0.015 286.067);
   --info-foreground: oklch(48.8% 0.243 264.376);
+  --chat-primary-foreground: var(--foreground);
   /* Inline code and file chips get their own fill instead of --muted. --muted
      sits within a percent of the page in both themes, which is enough for a
      block that also has size and a header, but an inline card is a few
@@ -296,15 +301,16 @@ body[data-session-chat-theme='dark'] .ghostex-session-chat-popup {
   --input: color-mix(in srgb, #fff 8%, transparent);
   --ring: oklch(55.6% 0 0);
   --info-foreground: oklch(70.7% 0.165 254.624);
+  /* CDXC:SessionChat 2026-09-09 DECISION:
+     User: dark-mode composer text and icons, user-message text, and agent transcript text use #b4b8c0 instead of full white. */
+  --chat-primary-foreground: #b4b8c0;
   /* See the light theme. The 4%-white --muted lands on #0d0d0d at roughly
      #151515, which is where the "the chips are too dark" reading comes from;
      these are opaque rather than mixed with transparent so a chip reads the
      same on the page, inside a bubble, and inside an alert. */
   --chat-inline-code-surface: color-mix(in srgb, var(--foreground) 11%, var(--background));
   --chat-inline-code-border: color-mix(in srgb, var(--foreground) 18%, transparent);
-  /* CDXC:SessionChat 2026-09-05 DECISION:
-     User: change the chat's #d1d1d1 prose to #b4b8bf so it is easier on the eyes. */
-  --chat-prose-foreground: #b4b8bf;
+  --chat-prose-foreground: var(--chat-primary-foreground);
   /* Same five families lifted for a dark background: the light theme's shades
      go muddy on this near-black, so each one moves up to its brighter
      sibling. */
@@ -565,7 +571,7 @@ body[data-session-chat-bullets='off'] .ghostex-session-chat-popup {
 .ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-user-bubble > [data-slot='bubble-content'] {
   background: #141414;
   border-radius: 1rem;
-  color: #fcfcfc;
+  color: var(--chat-primary-foreground);
   padding: 0.75rem;
 }
 
@@ -655,8 +661,8 @@ body[data-session-chat-bullets='off'] .ghostex-session-chat-popup {
   color: var(--muted-foreground);
   /* CDXC:SessionChat 2026-08-22: prose. Reasoning renders as bulleted
      markdown paragraphs in the same flow, under the same bullet, as the answer
-     — so it is the same kind of object and takes the same size. Its lane is
-     told apart by colour (--muted-foreground), not by a size step. */
+     — so it is the same kind of object and takes the same size. Light mode
+     keeps its muted lane; dark mode uses the shared transcript foreground. */
   font-size: 0.875rem;
   font-style: normal;
   display: flex;
@@ -707,7 +713,12 @@ body[data-session-chat-bullets='off'] .ghostex-session-chat-popup {
 }
 
 .ghostex-chat-thinking-trigger:hover {
-  color: var(--foreground);
+  color: var(--chat-primary-foreground);
+}
+
+.ghostex-session-chat-scope[data-chat-theme='dark']
+  :is(.ghostex-chat-agent-message, .ghostex-chat-thinking-row, .ghostex-chat-tool-run) {
+  color: var(--chat-primary-foreground);
 }
 
 /* The reasoning disclosure's gutter is the transcript's gutter. It used to be
@@ -965,6 +976,10 @@ and a copy still carries the markdown.
   color: var(--muted-foreground);
   flex: 0 0 auto;
   font-weight: 400;
+}
+
+.ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-work-heading {
+  color: var(--chat-primary-foreground);
 }
 
 .ghostex-chat-work-preview {
@@ -1438,22 +1453,23 @@ the markdown block) rather than pinned to a tier of its own.
    per-kind tint and the dotted-underline hover instead of the neutral fill.
    The status line's copy button opts out too: the user wants it to look
    exactly like the plain text items beside it, with no hover fill.
-   The minimap rail also owns its transparent appearance; the generic hover fill would paint a gray pill behind its marks. */
+   The minimap rail also owns its transparent appearance; the generic hover fill would paint a gray pill behind its marks.
+   File-change cards own their button fills and spacing, including underline-only path links and padded disclosure actions. */
 .ghostex-session-chat-scope[data-chat-theme='dark']
   button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
     .ghostex-chat-reference-pill
-  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail),
+  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail, .ghostex-chat-file-change-card button),
 body[data-session-chat-theme='dark']
   .ghostex-session-chat-popup
   button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
     .ghostex-chat-reference-pill
-  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail) {
+  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail, .ghostex-chat-file-change-card button) {
   background-color: transparent;
-  color: var(--foreground);
+  color: var(--chat-primary-foreground);
 }
 
 .ghostex-session-chat-scope[data-chat-theme='dark']
@@ -1461,7 +1477,7 @@ body[data-session-chat-theme='dark']
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
     .ghostex-chat-reference-pill
-  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail):not(
+  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail, .ghostex-chat-subagent-link, .ghostex-chat-file-change-card button):not(
     :disabled
   ):hover,
 body[data-session-chat-theme='dark']
@@ -1470,7 +1486,7 @@ body[data-session-chat-theme='dark']
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
     .ghostex-chat-reference-pill
-  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail):not(
+  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail, .ghostex-chat-subagent-link, .ghostex-chat-file-change-card button):not(
     :disabled
   ):hover {
   background-color: #333333;
@@ -1503,8 +1519,17 @@ body[data-session-chat-theme='dark']
   border-radius: 9999px;
 }
 
+/* CDXC:SessionChat 2026-09-09 DECISION:
+   User: model and effort labels in the desktop, mobile, and web composer use a 13px regular weight, and the agent icon has 2px more trailing space. This supersedes the larger 14px medium weight. */
+.ghostex-chat-footer-control.ghostex-chat-model-pill,
 .ghostex-chat-footer-control.ghostex-chat-options-pill {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
+.ghostex-chat-model-pill-icon {
+  display: inline-flex;
+  margin-inline-end: 2px;
 }
 
 .ghostex-chat-footer-control:not(:disabled):hover {
@@ -1818,6 +1843,9 @@ so the swap barely moves the composer row.
   width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
+  --scroll-fade-size: min(12%, 1lh);
+  --scroll-fade-reveal: 1lh;
+  scroll-padding-block: 1lh;
 }
 
 /* The mobile/WebView backend keeps canonical Markdown in its component model
@@ -2213,12 +2241,8 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    — the only markdown surface that runs at full strength — is the only one
    that steps down.
 
-   The user's bubble is deliberately left at full strength too: it sits on its
-   own fill (--accent in light, #141414 in dark), which in dark is barely a
-   shade off the page, so the text is most of what makes the bubble read as an
-   object. It is also short, it is the thing you scan for when you scroll back,
-   and it almost never contains headings — so there is no hierarchy to win
-   there and only contrast to lose.
+   The user's bubble stays at the theme's primary chat strength too: foreground
+   in light mode and the shared softer transcript foreground in dark mode.
 
    Overridable from an ancestor (see session-chat-prose-hierarchy.stories.tsx,
    which reverts one pane to var(--foreground) to show the before state). */
@@ -2226,12 +2250,12 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   color: var(--chat-prose-foreground);
 }
 
-/* Headings keep the full-strength colour, so the step down above reads as
+/* Headings keep the primary chat colour, so the step down above reads as
    hierarchy instead of as a dimmer message. h6 is not listed: it already sits
    in the muted lane below (GitHub does the same), and it is the label-ish
    heading rather than a section title. */
 .ghostex-chat-agent-message .ghostex-chat-markdown :is(h1, h2, h3, h4, h5) {
-  color: var(--foreground);
+  color: var(--chat-primary-foreground);
 }
 
 .ghostex-chat-markdown p,
@@ -3011,7 +3035,9 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   overflow: hidden;
 }
 
-.app-modal-host-native-window-body[data-app-modal-fixed-window='true'] .ghostex-chat-table-modal [data-slot='dialog-close'] {
+.app-modal-host-native-window-body[data-app-modal-fixed-window='true']
+  .ghostex-chat-table-modal
+  [data-slot='dialog-close'] {
   display: inline-flex;
 }
 

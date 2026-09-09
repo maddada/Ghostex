@@ -49,6 +49,8 @@ import {
 import { normalizeSessionChatImageTranscriptMessages } from './session-chat-image-transcript-markers';
 import { normalizeSessionChatLocalCommandMessages } from './session-chat-local-command-transcript';
 import { SessionChatTerminalToolRow } from './session-chat-terminal-tool-row';
+import { SessionChatFileChangeCards, SessionChatFileChangeInteractionContext } from './session-chat-file-change-card';
+import { splitSessionChatFileChanges } from './session-chat-file-changes';
 import { isSessionChatTerminalToolMessage, sessionChatTerminalToolActivity } from './session-chat-terminal-status';
 import { Bubble, BubbleContent } from '../../components/ui/bubble';
 import { Marker, MarkerContent, MarkerIcon } from '../../components/ui/marker';
@@ -747,6 +749,7 @@ function userTurnCopyMarkdown(markdown: string, images: readonly { path?: string
 }
 
 function MessageRow({
+  hideFileChanges = false,
   isStreaming = false,
   message,
   onRewind,
@@ -762,6 +765,7 @@ function MessageRow({
    * not be re-tokenized per chunk, and must not enter the highlight cache).
    */
   isStreaming?: boolean;
+  hideFileChanges?: boolean;
   message: SessionChatMessage;
   /** Set only when this transcript may be rewound; see the list's prop. */
   onRewind?: (request: SessionChatRewindRequest) => void;
@@ -773,7 +777,9 @@ function MessageRow({
   showAssistantCopy: boolean;
   verboseMode: boolean;
 }) {
-  const { prose, tools } = splitSessionChatBlocks(message.blocks);
+  const { prose, tools: allTools } = splitSessionChatBlocks(message.blocks);
+  const { tools, changes } = splitSessionChatFileChanges(allTools);
+  const fileCards = hideFileChanges ? null : <SessionChatFileChangeCards changes={changes} messageId={message.id} />;
   const markdown = prose
     .filter((block) => block.type === 'text')
     .map((block) => (block.type === 'text' ? block.text : ''))
@@ -781,7 +787,7 @@ function MessageRow({
   const images = prose.filter((block) => block.type === 'image-ref');
 
   // No ghost bubbles: skip entirely when there is nothing to show.
-  if (markdown.length === 0 && images.length === 0 && tools.length === 0) {
+  if (markdown.length === 0 && images.length === 0 && tools.length === 0 && (hideFileChanges || changes.length === 0)) {
     return null;
   }
 
@@ -916,13 +922,16 @@ function MessageRow({
    */
   if (isReasoning && markdown.length > 0 && images.length === 0) {
     return (
-      <ReasoningRow
-        isStreaming={isStreaming}
-        markdown={markdown}
-        questionPairsAsRows={questionPairsAsRows}
-        tools={tools}
-        verboseMode={verboseMode}
-      />
+      <>
+        <ReasoningRow
+          isStreaming={isStreaming}
+          markdown={markdown}
+          questionPairsAsRows={questionPairsAsRows}
+          tools={tools}
+          verboseMode={verboseMode}
+        />
+        {fileCards}
+      </>
     );
   }
 
@@ -988,6 +997,7 @@ function MessageRow({
             <SessionChatToolRun blocks={tools} questionPairsAsRows={questionPairsAsRows} />
           )
         ) : null}
+        {fileCards}
         {showCopy ? <CopyFooter anchoredToAssistantMarker markdown={markdown} onSaveMarkdown={onSaveMarkdown} /> : null}
       </MessageContent>
     </Message>
@@ -1146,7 +1156,8 @@ function finalAssistantMessageIds(messages: readonly SessionChatMessage[], isWor
  */
 function completedWorkRenderItems(
   messages: readonly SessionChatMessage[],
-  isWorking: boolean
+  isWorking: boolean,
+  interactedMessageIds: ReadonlySet<string>
 ): SessionChatRenderItem[] {
   const items: SessionChatRenderItem[] = [];
   const activeStart = isWorking ? activeResponseStartIndex(messages) : messages.length;
@@ -1174,7 +1185,9 @@ function completedWorkRenderItems(
         break;
       }
     }
-    if (finalIndex < 0 || index >= activeStart) {
+    const interactedInlineDiff = turnMessages.some((turnMessage) => interactedMessageIds.has(turnMessage.id));
+    const interactedGroupedDiff = interactedMessageIds.has(message.id);
+    if (finalIndex < 0 || (index >= activeStart && !interactedGroupedDiff) || interactedInlineDiff) {
       items.push({ kind: 'message', message });
       for (const turnMessage of turnMessages) {
         items.push({ kind: 'message', message: turnMessage });
@@ -1240,6 +1253,12 @@ function hoistedQuestionExchanges(
   return out;
 }
 
+/** CDXC:SessionChat 2026-09-10 DECISION:
+ * User: when a turn shows "Worked for", collapse all its file changes under a separate "N files changed" section directly below it.
+ * User: do not automatically collapse work or file sections while reading code, and keep the diff header visible after expanding or collapsing it.
+ * Preserve an interacted turn's presentation for the lifetime of this transcript; regrouping on the last diff collapse unmounted the very header we needed to reveal.
+ * Completed turns keep their identity across final-reply updates so an open Files changed section and its expanded diffs stay mounted.
+ */
 function CompletedWork({
   onExpand,
   onSaveMarkdown,
@@ -1266,6 +1285,14 @@ function CompletedWork({
   const collapsedWork = turn.work.filter((message) => !isVisibleAssistantArtifact(message));
   const hasWork = collapsedWork.length > 0;
   const questionExchanges = useMemo(() => hoistedQuestionExchanges(turn.work), [turn.work]);
+  const fileChanges = useMemo(
+    () =>
+      [...turn.work, turn.final].flatMap(
+        (message) => splitSessionChatFileChanges(splitSessionChatBlocks(message.blocks).tools).changes
+      ),
+    [turn.work, turn.final]
+  );
+  const changedFileCount = new Set(fileChanges.map((change) => change.path)).size;
 
   return (
     <div className='ghostex-chat-completed-turn'>
@@ -1311,6 +1338,7 @@ function CompletedWork({
           >
             {collapsedWork.map((message) => (
               <MessageRow
+                hideFileChanges
                 key={message.id}
                 message={message}
                 questionPairsAsRows
@@ -1321,8 +1349,22 @@ function CompletedWork({
           </SessionChatExpansion>
         ) : null}
       </div>
+      {changedFileCount > 0 ? (
+        <SessionChatDisclosure
+          label={`${changedFileCount} ${changedFileCount === 1 ? 'file' : 'files'} changed`}
+          onExpand={onExpand}
+        >
+          <SessionChatFileChangeCards changes={fileChanges} messageId={turn.user.id} />
+        </SessionChatDisclosure>
+      ) : null}
       {visibleArtifacts.map((message) => (
-        <MessageRow key={message.id} message={message} showAssistantCopy={false} verboseMode={verboseMode} />
+        <MessageRow
+          hideFileChanges
+          key={message.id}
+          message={message}
+          showAssistantCopy={false}
+          verboseMode={verboseMode}
+        />
       ))}
       {questionExchanges.length > 0 ? (
         <Message align='start' className='pb-4' data-role='question-exchange'>
@@ -1334,6 +1376,7 @@ function CompletedWork({
         </Message>
       ) : null}
       <MessageRow
+        hideFileChanges
         message={turn.final}
         onSaveMarkdown={onSaveMarkdown}
         showAssistantCopy={showAssistantCopy}
@@ -1383,6 +1426,23 @@ export function SessionChatMessageList({
   theme = 'dark',
   verboseMode = false,
 }: SessionChatMessageListProps) {
+  /** CDXC:SessionChat 2026-09-10 WHY:
+   * Both resize-follow paths could scroll past a diff header after it was revealed. A diff toggle pauses them until the reader navigates or sends again.
+   */
+  const [fileNavigationActive, setFileNavigationActive] = useState(false);
+  const fileNavigationActiveRef = useRef(false);
+  const resumeFileScrolling = useCallback(() => {
+    fileNavigationActiveRef.current = false;
+    setFileNavigationActive(false);
+  }, []);
+  const [interactedMessageIds, setInteractedMessageIds] = useState<ReadonlySet<string>>(() => new Set());
+  const reportFileInteraction = useCallback((messageId: string) => {
+    fileNavigationActiveRef.current = true;
+    setFileNavigationActive(true);
+    shouldFollowBottomRef.current = false;
+    viewportRef.current?.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'false');
+    setInteractedMessageIds((current) => (current.has(messageId) ? current : new Set([...current, messageId])));
+  }, []);
   const loadingEarlierRef = useRef(loadingEarlier);
   loadingEarlierRef.current = loadingEarlier;
   const hasMoreRef = useRef(hasMore);
@@ -1424,7 +1484,7 @@ export function SessionChatMessageList({
     }
     const observer = new ResizeObserver(() => {
       const viewport = viewportRef.current;
-      if (viewport && shouldFollowBottomRef.current && !composerCollapsedRef.current) {
+      if (viewport && shouldFollowBottomRef.current && !composerCollapsedRef.current && !fileNavigationActiveRef.current) {
         viewport.scrollTop = viewport.scrollHeight;
       }
     });
@@ -1464,6 +1524,7 @@ export function SessionChatMessageList({
     (event: React.UIEvent<HTMLDivElement>): void => {
       const viewport = event.currentTarget;
       shouldFollowBottomRef.current =
+        !fileNavigationActiveRef.current &&
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= AUTO_SCROLL_EDGE_THRESHOLD_PX;
       viewport.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, shouldFollowBottomRef.current ? 'true' : 'false');
       viewport.setAttribute('data-user-scrolling', 'true');
@@ -1492,7 +1553,10 @@ export function SessionChatMessageList({
     [messages]
   );
 
-  const renderItems = useMemo(() => completedWorkRenderItems(rendered, isWorking), [isWorking, rendered]);
+  const renderItems = useMemo(
+    () => completedWorkRenderItems(rendered, isWorking, interactedMessageIds),
+    [isWorking, rendered, interactedMessageIds]
+  );
   const copyableAssistantMessageIds = useMemo(
     () => finalAssistantMessageIds(rendered, isWorking),
     [isWorking, rendered]
@@ -1512,9 +1576,14 @@ export function SessionChatMessageList({
     return null;
   }, [rendered]);
 
+  useEffect(() => {
+    if (pendingMessageId !== null) resumeFileScrolling();
+  }, [pendingMessageId, resumeFileScrolling]);
+
   return (
+    <SessionChatFileChangeInteractionContext value={reportFileInteraction}>
     <MessageScrollerProvider
-      autoScroll={!composerCollapsed}
+      autoScroll={!composerCollapsed && !fileNavigationActive}
       defaultScrollPosition='end'
       scrollEdgeThreshold={AUTO_SCROLL_EDGE_THRESHOLD_PX}
     >
@@ -1526,6 +1595,14 @@ export function SessionChatMessageList({
             its default focus ring on them; a transcript is not a control. */}
         <MessageScrollerViewport
           className='outline-none [direction:rtl]'
+          onWheel={resumeFileScrolling}
+          onTouchMove={resumeFileScrolling}
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) resumeFileScrolling();
+          }}
+          onKeyDown={(event) => {
+            if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) resumeFileScrolling();
+          }}
           onScroll={handleScroll}
           preserveScrollOnPrepend
           ref={viewportRef}
@@ -1572,7 +1649,7 @@ export function SessionChatMessageList({
                     key={
                       item.kind === 'message'
                         ? item.message.id
-                        : `completed-work:${item.turn.user.id}:${item.turn.final.id}`
+                        : `completed-work:${item.turn.user.id}`
                     }
                     messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
                     // No row is a scroll anchor: anchoring a message to the top of
@@ -1620,7 +1697,7 @@ export function SessionChatMessageList({
                 ))}
           </MessageScrollerContent>
         </MessageScrollerViewport>
-        <MessageScrollerButton className='ghostex-chat-scroll-bottom-button' />
+        <MessageScrollerButton className='ghostex-chat-scroll-bottom-button' onClick={resumeFileScrolling} />
       </MessageScroller>
       {saveMessageMarkdown && listMessageMarkdownPaths ? (
         <SessionChatSaveMarkdownDialog
@@ -1652,5 +1729,6 @@ export function SessionChatMessageList({
         />
       ) : null}
     </MessageScrollerProvider>
+    </SessionChatFileChangeInteractionContext>
   );
 }
