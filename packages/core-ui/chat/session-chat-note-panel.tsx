@@ -28,13 +28,13 @@ export interface SessionChatNotePanelProps {
   onHasNoteChange: (hasNote: boolean) => void;
   readNote: () => Promise<{ agentSessionId?: string; note?: string }>;
   saveNote: (note: string) => Promise<void>;
-  /** Desktop and web use Lexical; mobile keeps its plain note input. */
+  /** Defaults to the same Lexical input as the chat composer on every host. */
   inputBackend?: 'lexical' | 'plain';
   theme: SessionChatTheme;
 }
 
 export function SessionChatNotePanel({
-  inputBackend,
+  inputBackend = 'lexical',
   onClose,
   onHasNoteChange,
   readNote,
@@ -260,9 +260,11 @@ export function SessionChatNotePanel({
           onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
             handleKeyDown({
               altKey: event.altKey,
+              code: event.code,
               ctrlKey: event.ctrlKey,
               isComposing: event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229,
               key: event.key,
+              keyCode: event.keyCode,
               metaKey: event.metaKey,
               preventDefault: () => {
                 event.preventDefault();
