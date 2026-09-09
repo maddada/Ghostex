@@ -37,6 +37,9 @@
   --ghostex-composer-scrollbar-opacity: 0;
   transition: --ghostex-composer-scrollbar-opacity 350ms ease;
   tab-size: 4;
+  --scroll-fade-size: min(12%, 1lh);
+  --scroll-fade-reveal: 1lh;
+  scroll-padding-block: 1lh;
 }
 
 .ghostex-chat-composer-lexical-content > p {

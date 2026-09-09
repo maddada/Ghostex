@@ -1,0 +1,15 @@
+.ghostex-chat-composer-image img[data-reference-active='true'] {
+  outline: 2px solid white;
+  outline-offset: 1px;
+}
+
+/* CDXC:SessionChat 2026-09-09 DECISION:
+ * User: the image preview's X button only appears while hovering that thumbnail.
+ */
+.ghostex-chat-composer-image-remove {
+  visibility: hidden;
+}
+
+.ghostex-chat-composer-image:hover .ghostex-chat-composer-image-remove {
+  visibility: visible;
+}

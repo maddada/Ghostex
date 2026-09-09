@@ -1,4 +1,4 @@
-export type SessionChatReferenceKind = 'file' | 'folder' | 'image' | 'skill';
+export type SessionChatReferenceKind = 'file' | 'folder' | 'image' | 'skill' | 'url';
 
 export interface SessionChatComposerReference {
   end: number;
@@ -75,6 +75,7 @@ export function sessionChatReferenceKind(label: string, path: string): SessionCh
   if (explicit && (explicit !== 'skill' || /(?:^|[\\/])SKILL\.md$/i.test(path))) {
     return explicit;
   }
+  if (/^https?:\/\//i.test(path)) return 'url';
   if (IMAGE_PATH_PATTERN.test(path)) {
     return 'image';
   }
@@ -144,7 +145,7 @@ function linkedDestination(text: string, destinationStart: number): { end: numbe
   return null;
 }
 
-/** Finds local file and skill links, including descriptive labels, for every composer backend. */
+/** Finds file, skill, image, and HTTP(S) links for every composer backend. */
 export function sessionChatComposerReferences(text: string): SessionChatComposerReference[] {
   const references: SessionChatComposerReference[] = [];
   for (const match of text.matchAll(REFERENCE_LABEL_PATTERN)) {
@@ -163,7 +164,8 @@ export function sessionChatComposerReferences(text: string): SessionChatComposer
     const pathWithoutPosition = destination.path.replace(/:\d+(?:-\d+|:\d+)?$/, '');
     if (
       destination.path.startsWith('#') ||
-      (/^[a-z][a-z0-9+.-]*:/i.test(pathWithoutPosition) && !/^(?:[a-z]:[\\/]|file:\/\/)/i.test(pathWithoutPosition))
+      (/^[a-z][a-z0-9+.-]*:/i.test(pathWithoutPosition) &&
+        !/^(?:[a-z]:[\\/]|file:\/\/|https?:\/\/)/i.test(pathWithoutPosition))
     ) {
       continue;
     }
