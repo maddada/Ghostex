@@ -93,6 +93,32 @@ pub(crate) struct GpuiNativeResourcesSnapshot {
 }
 
 impl GpuiNativeResourcesSnapshot {
+    /// CDXC:Resources 2026-09-09 DECISION:
+    /// User: remove closed sessions from the UI immediately and finish closing them in the background.
+    /// The open dropdown owns a fixed snapshot, so provider cleanup cannot remove its rows for it.
+    pub(crate) fn remove_closed_session(&mut self, session_id: &str) {
+        let mut removed_count = 0;
+        let mut removed_idle_count = 0;
+        let mut retain = |row: &GpuiNativeResourceRow| {
+            if row.session_id.as_deref() != Some(session_id) {
+                return true;
+            }
+            removed_count += 1;
+            removed_idle_count += usize::from(row.sleep_candidate);
+            false
+        };
+        self.session_rows.retain(&mut retain);
+        for group in &mut self.other_project_groups {
+            group.rows.retain(&mut retain);
+        }
+        self.other_project_groups
+            .retain(|group| !group.rows.is_empty());
+        self.sleep_all_session_count = self.sleep_all_session_count.saturating_sub(removed_count);
+        self.inactive_terminal_sleep_count = self
+            .inactive_terminal_sleep_count
+            .saturating_sub(removed_idle_count);
+    }
+
     pub(crate) fn session_sections(
         &self,
     ) -> impl Iterator<Item = (&str, &[GpuiNativeResourceRow])> {
