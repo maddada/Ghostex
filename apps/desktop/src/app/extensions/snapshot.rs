@@ -257,6 +257,7 @@ fn parse_project_metadata(value: &serde_json::Value) -> Option<GpuiExtensionProj
         .or_else(|| text(object.get("machineName")))
         .map(str::to_string);
     Some(GpuiExtensionProjectMetadata {
+        git_remote_origin_url: text(object.get("gitRemoteOriginUrl")).map(str::to_string),
         project_id,
         name: text(object.get("title"))
             .or_else(|| text(object.get("name")))
@@ -270,6 +271,9 @@ fn parse_project_metadata(value: &serde_json::Value) -> Option<GpuiExtensionProj
             .map(str::to_string),
         worktree_name: worktree
             .and_then(|value| text(value.get("name")))
+            .map(str::to_string),
+        parent_project_id: worktree
+            .and_then(|value| text(value.get("parentProjectId")))
             .map(str::to_string),
         parent_project_name: worktree
             .and_then(|value| text(value.get("parentProjectName")))

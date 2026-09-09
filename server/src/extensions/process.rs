@@ -582,7 +582,7 @@ fn failed_status(url: String, pid: Option<u32>, error: String) -> ExtensionRunti
     }
 }
 
-fn configure_process_group(command: &mut Command) {
+pub(crate) fn configure_process_group(command: &mut Command) {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -596,7 +596,7 @@ fn configure_process_group(command: &mut Command) {
     }
 }
 
-fn terminate_process_group(child: &mut Child) {
+pub(crate) fn terminate_process_group(child: &mut Child) {
     #[cfg(unix)]
     {
         let process_group_id = child.id() as libc::pid_t;

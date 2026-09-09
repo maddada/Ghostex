@@ -84,7 +84,7 @@ fn serve_extension_static_sync(registry: &ExtensionRegistry, request_path: &str)
     }
 }
 
-fn decode_relative_path(value: &str) -> Result<PathBuf, ()> {
+pub(crate) fn decode_relative_path(value: &str) -> Result<PathBuf, ()> {
     let bytes = value.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -128,7 +128,7 @@ fn decode_hex(byte: u8) -> Option<u8> {
     }
 }
 
-fn extension_content_type(path: &std::path::Path) -> &'static str {
+pub(crate) fn extension_content_type(path: &std::path::Path) -> &'static str {
     match path.extension().and_then(|extension| extension.to_str()) {
         Some("html") => "text/html; charset=utf-8",
         Some("js" | "mjs") => "text/javascript; charset=utf-8",

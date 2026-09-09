@@ -157,6 +157,7 @@ pub(crate) struct GpuiExtensionsSnapshot {
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct GpuiExtensionProjectMetadata {
+    pub(crate) git_remote_origin_url: Option<String>,
     pub(crate) project_id: String,
     pub(crate) name: String,
     pub(crate) path: Option<String>,
@@ -164,6 +165,7 @@ pub(crate) struct GpuiExtensionProjectMetadata {
     pub(crate) is_worktree: bool,
     pub(crate) worktree_branch: Option<String>,
     pub(crate) worktree_name: Option<String>,
+    pub(crate) parent_project_id: Option<String>,
     pub(crate) parent_project_name: Option<String>,
 }
 
