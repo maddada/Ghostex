@@ -19,6 +19,7 @@ export { formatSessionChatDuration } from './session-chat-duration';
 import {
   CODEX_CONTEXT_DETAIL_ROWS,
   SHARED_CONTEXT_DETAIL_ROWS,
+  savedAccountRateLimits,
   type AdditionalContextDetailRowId,
   type ContextDetailStatus,
   type ContextDetailsAgent,
@@ -81,7 +82,7 @@ export interface SessionChatContextDetailRowDefinition {
   description: string;
   /** Shown in the popover on a fresh install. Starred is never a default. */
   recommended: boolean;
-  /** Null when Claude did not report what the row needs; the row is skipped. */
+  /** Null when the agent has not reported a value; popovers omit it and starred items show unavailable. */
   value: (input: SessionChatContextDetailRowInput) => string | null;
   /**
    * Text a click on the status line item copies, with the toast title. User:
@@ -142,15 +143,16 @@ export const SESSION_CHAT_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetail
     id: 'rateLimits',
     group: 'usage',
     label: 'Rate limits',
-    description: '5h and 7d usage, 5h reset countdown',
+    description: 'Main usage windows and resets from the linked account, or the session when unlinked',
     recommended: true,
     value: ({ status, now }) => {
+      if (status.account) return savedAccountRateLimits(status.account, now);
       const fiveHour = status.rateLimits?.fiveHour;
       const sevenDay = status.rateLimits?.sevenDay;
       const reset = isFinite(fiveHour?.resetsAt) ? formatCountdown(fiveHour.resetsAt, now) : null;
       return joinParts([
-        isFinite(fiveHour?.usedPercentage) ? `5h ${formatPercentage(fiveHour.usedPercentage)}` : null,
-        isFinite(sevenDay?.usedPercentage) ? `7d ${formatPercentage(sevenDay.usedPercentage)}` : null,
+        isFinite(fiveHour?.usedPercentage) ? `5h: ${formatPercentage(fiveHour.usedPercentage)}` : null,
+        isFinite(sevenDay?.usedPercentage) ? `7d: ${formatPercentage(sevenDay.usedPercentage)}` : null,
         reset ? `resets ${reset}` : null,
       ]);
     },
@@ -338,13 +340,15 @@ const CODEX_ROWS: readonly SessionChatContextDetailRowDefinition[] = [
       if (row.id === 'rateLimits')
         return {
           ...row,
-          description: 'Usage windows last reported by Codex',
+          description: 'Main usage windows and resets from the linked account, or Codex when unlinked',
           value: ({ status, now, session }) =>
-            joinParts(
-              CODEX_CONTEXT_DETAIL_ROWS.filter((row) => row.id === 'primaryLimit' || row.id === 'secondaryLimit').map(
-                (row) => row.value({ status, now, session })
-              )
-            ),
+            status.account
+              ? savedAccountRateLimits(status.account, now)
+              : joinParts(
+                  CODEX_CONTEXT_DETAIL_ROWS.filter(
+                    (row) => row.id === 'primaryLimit' || row.id === 'secondaryLimit'
+                  ).map((row) => row.value({ status, now, session }))
+                ),
         };
       return row;
     }
@@ -519,24 +523,66 @@ export function useSessionChatContextDetailsPreferences(
   );
 }
 
-/** CDXC:AgentProviders 2026-09-08 DECISION:
- * User: an export icon copies current settings to the other agent, matching fields as closely as possible.
- * Matching rows copy visibility, stars, and order; unmatched destination fields retain their settings.
+/**
+ * These map display preferences, not metric values. The destination keeps its own label and units.
+ * Aggregate rows can receive several narrower selections: any selected source keeps the destination selected.
  */
-export function copySessionChatContextDetailsPreferences(
+const SIMILAR_CONTEXT_DETAIL_ROWS: Record<
+  ContextDetailsAgent,
+  Partial<Record<SessionChatContextDetailRowId, SessionChatContextDetailRowId>>
+> = {
+  claude: {
+    promptCache: 'cacheRatio',
+    cost: 'lastTurnDuration',
+  },
+  codex: {
+    cacheRatio: 'promptCache',
+    totalInputTokens: 'lastRequest',
+    totalTokens: 'lastRequest',
+    cachedTokens: 'lastRequest',
+    cacheWriteTokens: 'lastRequest',
+    turnTokens: 'lastRequest',
+    reasoningTokens: 'totalOutputTokens',
+    primaryLimit: 'rateLimits',
+    secondaryLimit: 'rateLimits',
+    credits: 'accountSpending',
+    lastTurnDuration: 'cost',
+    firstTokenTime: 'cost',
+  },
+};
+
+/** CDXC:AgentProviders 2026-09-09 DECISION:
+ * User: provide Copy to and Copy from buttons and map to the most similar fields, extending the original export-only behavior.
+ * Copy visibility, stars, and order; preserve destination-only settings. Import edits the open draft, while export saves to the other agent.
+ */
+export function mapSessionChatContextDetailsPreferences(
   source: SessionChatContextDetailsPreferences,
-  from: ContextDetailsAgent
-): { matched: number; skipped: number } {
+  from: ContextDetailsAgent,
+  currentDestination: SessionChatContextDetailsPreferences
+): { preferences: SessionChatContextDetailsPreferences; matched: number; skipped: number } {
   const to = from === 'claude' ? 'codex' : 'claude';
-  const destination = normalizeSessionChatContextDetailsPreferences(readSessionChatContextDetailsPreferences(to), to);
+  const destination = normalizeSessionChatContextDetailsPreferences(currentDestination, to);
   const sourceRows = sessionChatContextDetailRows(from);
-  const matched = sourceRows.filter((row) => ROWS_BY_AGENT[to].has(row.id));
-  const matchingIds = new Set(matched.map((row) => row.id));
-  const previousStarredOrder = orderedSessionChatStarredRows(destination, to).map((row) => row.id);
-  for (const row of matched) {
-    destination.shown[row.id] = isSessionChatContextDetailShown(source, row);
-    destination.starred[row.id] = isSessionChatContextDetailStarred(source, row);
+  const mapping = new Map<SessionChatContextDetailRowId, SessionChatContextDetailRowId>();
+  for (const row of sourceRows) {
+    const target = ROWS_BY_AGENT[to].has(row.id) ? row.id : SIMILAR_CONTEXT_DETAIL_ROWS[from][row.id];
+    if (target && ROWS_BY_AGENT[to].has(target)) mapping.set(row.id, target);
   }
+  const matchingIds = new Set(mapping.values());
+  const previousStarredOrder = orderedSessionChatStarredRows(destination, to).map((row) => row.id);
+  for (const target of matchingIds) {
+    const rows = sourceRows.filter((row) => mapping.get(row.id) === target);
+    destination.shown[target] = rows.some((row) => isSessionChatContextDetailShown(source, row));
+    destination.starred[target] = rows.some((row) => isSessionChatContextDetailStarred(source, row));
+  }
+  const mappedOrder = (rows: readonly SessionChatContextDetailRowDefinition[]) => [
+    ...new Set(
+      rows.flatMap((row) => {
+        const target = mapping.get(row.id);
+        return target ? [target] : [];
+      })
+    ),
+  ];
   // Replace matching slots in their existing group, preserving the relative order of unrelated fields.
   const mergeOrder = (existing: SessionChatContextDetailRowId[], incoming: SessionChatContextDetailRowId[]) => {
     let index = 0;
@@ -546,22 +592,24 @@ export function copySessionChatContextDetailsPreferences(
     return [...merged, ...incoming.slice(index)];
   };
   for (const group of SESSION_CHAT_CONTEXT_DETAIL_GROUPS) {
-    const incoming = orderedSessionChatContextDetailRows(source, group.id, from)
-      .filter((row) => matchingIds.has(row.id))
-      .map((row) => row.id);
+    const incoming = mappedOrder(orderedSessionChatContextDetailRows(source, group.id, from));
     destination.order[group.id] = mergeOrder(
       orderedSessionChatContextDetailRows(destination, group.id, to).map((row) => row.id),
       incoming
     );
   }
-  destination.starredOrder = mergeOrder(
-    previousStarredOrder,
-    orderedSessionChatStarredRows(source, from)
-      .filter((row) => matchingIds.has(row.id))
-      .map((row) => row.id)
-  );
-  writeSessionChatContextDetailsPreferences(destination, to);
-  return { matched: matched.length, skipped: sourceRows.length - matched.length };
+  destination.starredOrder = mergeOrder(previousStarredOrder, mappedOrder(orderedSessionChatStarredRows(source, from)));
+  return { preferences: destination, matched: mapping.size, skipped: sourceRows.length - mapping.size };
+}
+
+export function copySessionChatContextDetailsPreferences(
+  source: SessionChatContextDetailsPreferences,
+  from: ContextDetailsAgent
+): { matched: number; skipped: number } {
+  const to = from === 'claude' ? 'codex' : 'claude';
+  const result = mapSessionChatContextDetailsPreferences(source, from, readSessionChatContextDetailsPreferences(to));
+  writeSessionChatContextDetailsPreferences(result.preferences, to);
+  return { matched: result.matched, skipped: result.skipped };
 }
 
 /** Wall clock that re-renders the countdowns every half minute. */
@@ -672,7 +720,10 @@ export function orderedSessionChatStarredRows(
   return [...ordered, ...starred.filter((row) => !seen.has(row.id))];
 }
 
-/** The starred rows with a value, in the status line's order. */
+/** CDXC:AgentProviders 2026-09-09 DECISION:
+ * User: items starred in context details must always remain visible in the status line.
+ * A missing value is labeled unavailable so refreshes cannot remove the item or imply zero usage.
+ */
 export function resolveSessionChatStarredContextDetails(
   status: ContextDetailStatus | undefined,
   preferences: SessionChatContextDetailsPreferences,
@@ -680,17 +731,17 @@ export function resolveSessionChatStarredContextDetails(
   session: SessionChatContextDetailSession | null,
   agent: ContextDetailsAgent = 'claude'
 ): SessionChatContextDetailItem[] {
-  if (!status) {
-    return [];
-  }
   const items: SessionChatContextDetailItem[] = [];
+  const input = { status: status ?? {}, now, session };
   for (const row of orderedSessionChatStarredRows(preferences, agent)) {
-    const value = row.value({ status, now, session });
-    if (value === null) {
-      continue;
-    }
-    const copy = row.copy?.({ status, now, session }) ?? null;
-    items.push({ id: row.id, label: row.label, value, ...(copy ? { copy } : {}) });
+    const value = row.value(input);
+    const copy = value == null ? null : (row.copy?.(input) ?? null);
+    items.push({
+      id: row.id,
+      label: row.label,
+      value: value ?? `${row.label}: unavailable`,
+      ...(copy ? { copy } : {}),
+    });
   }
   return items;
 }

@@ -16,6 +16,8 @@
 // records the terminal never shows either (system reminders, hook plumbing)
 // stay hidden.
 
+import { agentModelCatalogEffortLabel } from '../../shared/agent-model-catalog';
+import { currentAgentModelCatalog } from '../../shared/agent-model-catalog-store';
 import type { SessionChatMessage } from '../../shared/session-chat';
 import { parseSessionChatCommandEnvelope } from './session-chat-command-envelope';
 
@@ -341,12 +343,15 @@ export function classifySessionChatSuppressedTurn(message: SessionChatMessage): 
   if (label === 'Local command output') {
     const model = modelSetByCommandOutput(text);
     if (model) {
-      return { kind: 'status', label: `Set model to ${model.model}` };
+      return { kind: 'status', label: `Set model to ${model.model.replaceAll('`', '')}` };
     }
     const effort = effortSetByCommandOutput(text);
     if (effort) {
-      // CDXC:SessionChat 2026-09-04 DECISION: User: show successful `/effort` and `/fast` changes as their own completed-action pills beside the separately recorded model change.
-      return { kind: 'status', label: `Set effort level to ${effort}` };
+      // CDXC:SessionChat 2026-09-09 DECISION: User: show successful `/effort` and `/fast` changes as their own completed-action pills beside the separately recorded model change, and render the effort with the same display capitalization used everywhere else in chat.
+      return {
+        kind: 'status',
+        label: `Set effort level to ${agentModelCatalogEffortLabel(currentAgentModelCatalog(), effort)}`,
+      };
     }
     const fastMode = fastModeSetByCommandOutput(text);
     if (fastMode) {

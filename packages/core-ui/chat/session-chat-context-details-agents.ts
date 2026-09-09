@@ -1,4 +1,5 @@
 import type { AgentAccount } from '@/packages/shared/agent-accounts';
+import { accountUsageLabel } from '@/packages/shared/account-usage-label';
 import { formatResetCountdown } from '@/packages/shared/reset-countdown';
 import type {
   SessionChatClaudeStatus,
@@ -115,6 +116,10 @@ function formatWindowDuration(minutes: number): string {
   return `${minutes}m`;
 }
 
+/**
+ * CDXC:AgentProviders 2026-09-09 DECISION:
+ * User: usage-window labels throughout the app use a colon (7d: 50%, 5h: 50%), without "used" in the chat popover or status line.
+ */
 function windowValue(
   used: number | undefined,
   resetsAt: number | undefined,
@@ -128,7 +133,29 @@ function windowValue(
       : resetsAt * 1000 > now
         ? `resets ${formatResetCountdown(resetsAt * 1000 - now)}`
         : 'reset due';
-  return join([label, `${Math.round(used)}% used`, reset]);
+  return join([`${label ? `${label}: ` : ''}${Math.round(used)}%`, reset]);
+}
+
+/** CDXC:AgentProviders 2026-09-09 WHY:
+ * Rate limits belong to the account, including before a draft has made a request or written transcript usage.
+ * Linked sessions read the same main usage windows as Accounts; model-specific allowances remain separate rows.
+ */
+export function savedAccountRateLimits(account: AgentAccount, now: number): string | null {
+  return join(
+    account.usage
+      .filter(
+        (window) =>
+          !window.model && ['fiveHour', 'sevenDay', ':primary_window', ':secondary_window'].includes(window.id)
+      )
+      .map((window) =>
+        windowValue(
+          window.usedPercent,
+          window.resetsAt ? Date.parse(window.resetsAt) / 1000 : undefined,
+          now,
+          accountUsageLabel(window)
+        )
+      )
+  );
 }
 
 function tokensRow(
@@ -374,7 +401,7 @@ export const SHARED_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetailRowDef
               window.usedPercent,
               window.resetsAt ? Date.parse(window.resetsAt) / 1000 : undefined,
               now,
-              window.label
+              accountUsageLabel(window)
             )
           )
       ),

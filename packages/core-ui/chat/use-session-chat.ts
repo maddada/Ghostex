@@ -424,9 +424,23 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           sessionChatOptionEvidencePriority(detected[field]?.source) >
           sessionChatOptionEvidencePriority(current?.[field]?.source)
       );
-      return current && !strongerEvidence && Date.parse(current.detectedAt) > Date.parse(detected.detectedAt)
-        ? current
-        : detected;
+      const nextOptions =
+        current && !strongerEvidence && Date.parse(current.detectedAt) > Date.parse(detected.detectedAt)
+          ? current
+          : detected;
+      // CDXC:AgentProviders 2026-09-09 WHY:
+      // Terminal option captures, Claude statusline payloads, and Codex transcript stats arrive independently; an options-only reply does not clear reported usage.
+      // Keep the chosen options' evidence ordering, but allow the seed read to fill stats omitted by a newer terminal capture.
+      const codexStatus = nextOptions.codexStatus ?? detected.codexStatus ?? current?.codexStatus;
+      const claudeStatus = nextOptions.claudeStatus ?? detected.claudeStatus ?? current?.claudeStatus;
+      const contextUsage = nextOptions.contextUsage ?? detected.contextUsage ?? current?.contextUsage;
+      if (!codexStatus && !claudeStatus && !contextUsage) return nextOptions;
+      return {
+        ...nextOptions,
+        codexStatus,
+        claudeStatus,
+        contextUsage,
+      };
     });
   }, []);
   const selectedOptionsDetectedAt = selectedOptions?.detectedAt ?? null;
@@ -1309,12 +1323,21 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     });
   }, [boundaried]);
 
+  useEffect(() => {
+    const failedIds = new Set(
+      queuePrompts?.filter((prompt) => prompt.state === 'failed').map((prompt) => prompt.id)
+    );
+    if (pending.some((entry) => entry.queuedPromptId && failedIds.has(entry.queuedPromptId))) {
+      setPending((current) => current.filter((entry) => !entry.queuedPromptId || !failedIds.has(entry.queuedPromptId)));
+    }
+  }, [queuePrompts, pending]);
+
   // --- Working / status derivation -------------------------------------------
   // Three independent starts: the `working` flag on read results/snapshots,
   // the server's activity-transition state frames, and the host's own hook
   // signal. Settling is owned by an idle transition, a terminal turn
   // lifecycle, or a local interrupt.
-  const optimisticWorking = pending.length > 0;
+  const optimisticWorking = pending.some((entry) => !entry.queuedPromptId);
   const compacting = terminalActivity?.kind === 'compacting';
   const workingSignal =
     optimisticWorking || compacting || serverWorking || serverStatus === 'working' || externalWorking === true;
@@ -1516,7 +1539,13 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         );
       }
       try {
-        await transport.send(text, imagePaths, draftVersion);
+        const receipt = await transport.send(text, imagePaths, draftVersion);
+        if (receipt?.queuedPromptId && pendingId !== null) {
+          const id = pendingId;
+          setPending((current) =>
+            current.map((entry) => (entry.id === id ? { ...entry, queuedPromptId: receipt.queuedPromptId } : entry))
+          );
+        }
       } catch (sendError) {
         if (pendingId !== null) {
           const dropId = pendingId;
@@ -1615,6 +1644,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       const result = await call({ promptId });
       if (!closedRef.current) {
         setQueuePrompts(result.queue);
+        setPending((current) => current.filter((entry) => entry.queuedPromptId !== promptId));
       }
       // The removed row rides back on the answer so Edit can pull its text into
       // the composer without having cached it across the round trip.

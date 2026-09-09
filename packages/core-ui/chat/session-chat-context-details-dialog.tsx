@@ -4,7 +4,7 @@
 // dialogs: the chat runs inside CEF on desktop and in a browser tab on web, so
 // no native child window is involved. Edits are a draft until Save.
 
-import { IconFileExport, IconGripVertical, IconStar, IconStarFilled, IconX } from '@tabler/icons-react';
+import { IconFileImport, IconFileExport, IconGripVertical, IconStar, IconStarFilled, IconX } from '@tabler/icons-react';
 import { PointerActivationConstraints, PointerSensor } from '@dnd-kit/dom';
 import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
@@ -27,6 +27,7 @@ import { createAppToastRequest } from '@/packages/shared/app-toast-contract';
 import type { ContextDetailStatus, ContextDetailsAgent } from './session-chat-context-details-agents';
 import {
   copySessionChatContextDetailsPreferences,
+  mapSessionChatContextDetailsPreferences,
   DEFAULT_SESSION_CHAT_CONTEXT_DETAILS_PREFERENCES,
   SESSION_CHAT_CONTEXT_DETAIL_GROUPS,
   isSessionChatContextDetailShown,
@@ -133,6 +134,34 @@ export function SessionChatContextDetailsDialog({
     }));
   };
 
+  const otherAgent = agent === 'claude' ? 'codex' : 'claude';
+  const otherAgentName = otherAgent === 'claude' ? 'Claude Code' : 'Codex';
+  const transferSettings = (direction: 'to' | 'from') => {
+    let message;
+    try {
+      let result: { matched: number; skipped: number };
+      if (direction === 'to') {
+        result = copySessionChatContextDetailsPreferences(draft, agent);
+      } else {
+        const imported = mapSessionChatContextDetailsPreferences(
+          readSessionChatContextDetailsPreferences(otherAgent),
+          otherAgent,
+          draft
+        );
+        setDraft(imported.preferences);
+        result = imported;
+      }
+      message = createAppToastRequest(
+        'success',
+        `Settings copied ${direction} ${otherAgentName}`,
+        `${result.matched} selections mapped. ${result.skipped} fields have no counterpart.${direction === 'from' ? ' Save to apply these changes.' : ''}`
+      );
+    } catch {
+      message = createAppToastRequest('error', 'Could not copy settings', 'The browser could not save the settings.');
+    }
+    postAppModalHostMessage(message, 'SessionChatContextDetails:copy');
+  };
+
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent
@@ -142,36 +171,32 @@ export function SessionChatContextDetailsDialog({
         )}
       >
         <DialogHeader>
-          <div className='flex items-center justify-between gap-2 pr-7'>
+          <div className='flex w-full items-center justify-between gap-2'>
             <DialogTitle>Context details</DialogTitle>
-            <AppTooltip content={`Copy settings to ${agent === 'claude' ? 'Codex' : 'Claude Code'}`}>
-              <Button
-                aria-label={`Copy settings to ${agent === 'claude' ? 'Codex' : 'Claude Code'}`}
-                size='icon-xs'
-                variant='ghost'
-                type='button'
-                onClick={() => {
-                  let message;
-                  try {
-                    const result = copySessionChatContextDetailsPreferences(draft, agent);
-                    message = createAppToastRequest(
-                      'success',
-                      `Settings copied to ${agent === 'claude' ? 'Codex' : 'Claude Code'}`,
-                      `${result.matched} matching fields copied. ${result.skipped} fields have no counterpart.`
-                    );
-                  } catch {
-                    message = createAppToastRequest(
-                      'error',
-                      'Could not copy settings',
-                      'The browser could not save the settings.'
-                    );
-                  }
-                  postAppModalHostMessage(message, 'SessionChatContextDetails:copy');
-                }}
-              >
-                <IconFileExport className='size-3.5' />
-              </Button>
-            </AppTooltip>
+            <div className='ml-auto flex shrink-0 items-center gap-1'>
+              <AppTooltip content={`Copy settings from ${otherAgentName}`}>
+                <Button
+                  aria-label={`Copy settings from ${otherAgentName}`}
+                  size='icon-xs'
+                  variant='ghost'
+                  type='button'
+                  onClick={() => transferSettings('from')}
+                >
+                  <IconFileImport className='size-3.5' />
+                </Button>
+              </AppTooltip>
+              <AppTooltip content={`Copy settings to ${otherAgentName}`}>
+                <Button
+                  aria-label={`Copy settings to ${otherAgentName}`}
+                  size='icon-xs'
+                  variant='ghost'
+                  type='button'
+                  onClick={() => transferSettings('to')}
+                >
+                  <IconFileExport className='size-3.5' />
+                </Button>
+              </AppTooltip>
+            </div>
           </div>
           <DialogDescription>
             Pick the rows shown under the context meter in {agent === 'claude' ? 'Claude Code' : 'Codex'} sessions. Drag
