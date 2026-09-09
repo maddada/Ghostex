@@ -1,5 +1,6 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import type { SessionChatToolCallBlock, SessionChatToolResultBlock } from '@/packages/shared/session-chat';
+import { AppTooltip } from '../app-tooltip';
 
 export interface SessionChatSubagentTarget {
   selector: string;
@@ -11,22 +12,29 @@ export const SessionChatSubagentContext = createContext<{
   agentPath?: string;
 } | null>(null);
 
-export function SessionChatSubagentLink({ selector, name }: SessionChatSubagentTarget) {
+/** CDXC:Tooltips 2026-09-09 DECISION: User: subagent transcript links use the same styled tooltip as chat skill references. */
+export function SessionChatSubagentLink({
+  selector,
+  name,
+  children,
+}: SessionChatSubagentTarget & { children?: ReactNode }) {
   const viewer = useContext(SessionChatSubagentContext);
-  if (!viewer || selector === '/root' || selector === viewer.agentPath) return <>{name}</>;
+  if (!viewer || selector === '/root' || selector === viewer.agentPath) return <>{children ?? name}</>;
   return (
-    <button
-      className='ghostex-chat-subagent-link'
-      type='button'
-      aria-haspopup='dialog'
-      title={`View ${name}'s transcript`}
-      onClick={(event) => {
-        event.stopPropagation();
-        viewer.open({ name, selector });
-      }}
-    >
-      {name}
-    </button>
+    <AppTooltip content='View subagent transcript' side='top'>
+      <button
+        className='ghostex-chat-subagent-link'
+        type='button'
+        aria-haspopup='dialog'
+        aria-label={`View ${name}'s transcript`}
+        onClick={(event) => {
+          event.stopPropagation();
+          viewer.open({ name, selector });
+        }}
+      >
+        {children ?? name}
+      </button>
+    </AppTooltip>
   );
 }
 

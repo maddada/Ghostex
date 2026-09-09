@@ -13,9 +13,15 @@
   cursor: pointer;
 }
 
+/* CDXC:SessionChat 2026-09-09 DECISION: User: subagent links show only a dotted underline on hover, with no background fill. */
 .ghostex-session-chat-scope button.ghostex-chat-subagent-link:hover {
-  text-decoration: underline;
+  background: transparent;
+  text-decoration: underline dotted;
   text-underline-offset: 3px;
+}
+
+.ghostex-session-chat-scope .ghostex-chat-agent-fleet button.ghostex-chat-subagent-link {
+  color: inherit;
 }
 
 .ghostex-session-chat-scope button.ghostex-chat-subagent-link:focus-visible {

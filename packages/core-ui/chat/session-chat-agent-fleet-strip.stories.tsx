@@ -22,8 +22,7 @@ Everything is local — no gxserver, no transport, no daemon. The queue
 controller below is the same shape useSessionChat hands the composer, with
 every capability on, so the strip renders every control a live session would.
 
-This story keeps the plain input backend, which is the same path the mobile bundle
-takes. The queue and fleet rows are identical either way.
+This story uses the shared default Lexical input, just like desktop, web, and mobile.
 
 The clocks tick for real: they interpolate from the fleet's `detectedAt`, a
 fixed timestamp here, exactly as they do against a live daemon.

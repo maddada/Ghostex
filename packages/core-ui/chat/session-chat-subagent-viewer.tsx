@@ -8,6 +8,7 @@ import { SessionChatMessageList } from './session-chat-message-list';
 import { SessionChatSubagentContext, type SessionChatSubagentTarget } from './session-chat-subagent-link';
 import type { SessionChatTransport } from './session-chat-transport';
 import { useSessionChatSubagent } from './use-session-chat-subagent';
+import { useSessionChatWorkingHold } from './use-session-chat-working-hold';
 import './session-chat-subagent.css';
 
 function SubagentTranscript({
@@ -22,6 +23,7 @@ function SubagentTranscript({
   theme: SessionChatTheme;
 }) {
   const { page, error, loadingEarlier, loadEarlier, retry } = useSessionChatSubagent(read, target.selector);
+  const isWorking = useSessionChatWorkingHold(page?.lifecycle?.state === 'working');
   const context = useMemo(
     () => ({ open, agentPath: page?.subagent?.name.startsWith('/') ? page.subagent.name : '/root' }),
     [open, page?.subagent?.name]
@@ -46,11 +48,10 @@ function SubagentTranscript({
         <div className='flex min-h-0 flex-1 flex-col'>
           <SessionChatMessageList
             messages={page.messages}
-            isWorking={page.lifecycle?.state === 'working'}
+            isWorking={isWorking}
             hasMore={page.hasMore && !error}
             loadingEarlier={loadingEarlier}
             onLoadEarlier={loadEarlier}
-            verboseMode
             theme={theme}
             sessionTitle={target.name}
           />
@@ -63,6 +64,8 @@ function SubagentTranscript({
 /**
  * CDXC:SessionChat 2026-09-07 DECISION:
  * User: clicking a subagent's name in the chat transcript shows that subagent's transcript in a popup with a backdrop over the main chat.
+ * CDXC:SessionChat 2026-09-09 DECISION:
+ * User: subagent transcripts default to the same normal display as main chat, with verbose and summarized modes off.
  */
 export function SessionChatSubagentViewer({
   children,

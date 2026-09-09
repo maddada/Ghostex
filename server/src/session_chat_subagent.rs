@@ -20,6 +20,9 @@ use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
 use crate::storage::open_gxserver_database;
 
+#[path = "session_chat_subagent_fleet.rs"]
+mod fleet;
+
 struct ChildTranscript {
     id: String,
     name: String,
@@ -238,6 +241,11 @@ pub(crate) async fn handle_read_subagent(
         let (family, root_id, root_path) = resolved?;
         let root = resolve_session_chat_transcript_path(family, Some(&root_id), root_path.as_deref())
             .ok_or_else(|| anyhow::anyhow!("The main transcript is not available yet."))?;
+        let selector = if let Some(snapshot) = selector.strip_prefix("fleet:") {
+            fleet::resolve_fleet_selector(&root, family, snapshot)?
+        } else {
+            selector
+        };
         let child = match family {
             SessionChatTranscriptAgent::Codex => codex_child(&root, &root_id, &selector)?,
             _ => claude_child(&root, &selector)?,
