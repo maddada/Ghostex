@@ -30,6 +30,7 @@ pub enum BrowserPopupPlacement {
 pub type BrowserPopupOpenHandler = Rc<dyn Fn(String, BrowserPopupPlacement)>;
 
 pub enum BrowserPageMetadataEvent {
+    HistoryRequested,
     AddressChanged(String),
     CloseRequested,
     FaviconUrlChanged(Option<String>),
@@ -120,6 +121,8 @@ pub enum SidebarBridgeEvent {
     BrowserTabFocus(String),
     ProjectBoardConversationResponse(String),
     ResourcesSnapshotRequest(String),
+    /// A first-party page tried to navigate its own main frame somewhere else; the payload is the refused URL.
+    RefusedPageNavigation(String),
 }
 
 pub type SidebarBridgeEventHandler = Rc<dyn Fn(SidebarBridgeEvent)>;

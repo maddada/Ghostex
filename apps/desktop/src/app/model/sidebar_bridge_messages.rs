@@ -129,6 +129,7 @@ pub(crate) fn gpui_sidebar_bridge_event_must_follow_pending_project_switch(
             | cef::SidebarBridgeEvent::BrowserWorkareaReadiness(_)
             | cef::SidebarBridgeEvent::ProjectWorkareaReadiness(_)
             | cef::SidebarBridgeEvent::ManageFileWorkareaOperationRequest(_)
+            | cef::SidebarBridgeEvent::RefusedPageNavigation(_)
     )
 }
 

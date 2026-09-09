@@ -400,10 +400,55 @@ wrap_resource_request_handler! {
     }
 }
 
+/*
+CDXC:SessionChat 2026-09-09 DECISION:
+User: a first-party page (sidebar, session chat) must never navigate itself
+away; if anything tries, the URL opens where a clicked link would go, in the
+embedded Browser or the system browser depending on "Open links in embedded
+browser". The chat pane has real browser history, so an un-intercepted link
+in a transcript (a Storybook URL inside a tool-call block, 2026-09-09) used
+to replace chat.html with that page until the user pressed Back. Only
+main-frame navigations to a different document are refused; reloads and
+query changes of the page's own entry, and every sub-frame load, pass.
+*/
+pub(crate) fn sidebar_page_entry_identity(url: &str) -> String {
+    get_url_without_query_or_fragment(url).to_string()
+}
+
 wrap_request_handler! {
-    pub(crate) struct GhostexGpuiSidebarRendererRequestHandler;
+    pub(crate) struct GhostexGpuiSidebarRendererRequestHandler {
+        entry_identity: String,
+        sidebar_bridge_event_handler: SidebarBridgeEventHandler,
+    }
 
     impl RequestHandler {
+        fn on_before_browse(
+            &self,
+            _browser: Option<&mut cef::Browser>,
+            frame: Option<&mut Frame>,
+            request: Option<&mut Request>,
+            _user_gesture: c_int,
+            _is_redirect: c_int,
+        ) -> c_int {
+            let is_main_frame = frame.map(|frame| frame.is_main() != 0).unwrap_or(true);
+            if !is_main_frame {
+                return 0;
+            }
+            let Some(request_url) = request.map(|request| CefString::from(&request.url()).to_string())
+            else {
+                return 0;
+            };
+            if sidebar_page_entry_identity(&request_url) == self.entry_identity {
+                return 0;
+            }
+            if request_url.starts_with("http://") || request_url.starts_with("https://") {
+                (self.sidebar_bridge_event_handler)(SidebarBridgeEvent::RefusedPageNavigation(
+                    request_url,
+                ));
+            }
+            1
+        }
+
         fn on_render_view_ready(&self, browser: Option<&mut cef::Browser>) {
             append_sidebar_renderer_lifecycle(
                 "gpui.sidebar.rendererReady",

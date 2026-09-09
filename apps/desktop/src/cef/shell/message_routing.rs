@@ -232,6 +232,8 @@ pub enum SidebarBridgeEvent {
     BrowserTabFocus(String),
     ProjectBoardConversationResponse(String),
     ResourcesSnapshotRequest(String),
+    /// A first-party page tried to navigate its own main frame somewhere else; the payload is the refused URL.
+    RefusedPageNavigation(String),
 }
 
 pub type SidebarBridgeEventHandler = StdRc<dyn Fn(SidebarBridgeEvent)>;
@@ -355,6 +357,7 @@ pub struct SidebarGxserverBootstrap {
 }
 
 pub enum BrowserPageMetadataEvent {
+    HistoryRequested,
     AddressChanged(String),
     CloseRequested,
     FaviconUrlChanged(Option<String>),
