@@ -31,6 +31,7 @@ export type GhostexOfficialExtensionSettingsKey = Extract<
   | 'docsViewTabHidden'
   | 'extensionsTitlebarButtonHidden'
   | 'gitActionsTitlebarButtonHidden'
+  | 'helpTitlebarButtonHidden'
   | 'kanbanViewTabHidden'
   | 'openInTitlebarButtonHidden'
   | 'quickActionsTitlebarButtonHidden'
@@ -49,6 +50,7 @@ export type GhostexOfficialExtensionId =
   | 'docs'
   | 'extensionsButton'
   | 'gitActions'
+  | 'help'
   | 'kanban'
   | 'openIn'
   | 'quickActions'
@@ -73,8 +75,7 @@ export const GHOSTEX_OFFICIAL_EXTENSIONS: readonly GhostexOfficialExtension[] = 
     title: 'Code editor',
   },
   {
-    description:
-      'Open websites alongside your project and keep useful pages organized without leaving Ghostex.',
+    description: 'Open websites alongside your project and keep useful pages organized without leaving Ghostex.',
     id: 'browser',
     placement: 'view',
     settingsKey: 'browserViewTabHidden',
@@ -107,6 +108,14 @@ export const GHOSTEX_OFFICIAL_EXTENSIONS: readonly GhostexOfficialExtension[] = 
     placement: 'titlebar-button',
     settingsKey: 'tipsAndTricksTitlebarButtonHidden',
     title: 'Tips & Tricks',
+  },
+  {
+    description:
+      'Title bar button with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.',
+    id: 'help',
+    placement: 'titlebar-button',
+    settingsKey: 'helpTitlebarButtonHidden',
+    title: 'Ghostex Help',
   },
   {
     description: 'Title bar button that lists development servers running on this computer.',

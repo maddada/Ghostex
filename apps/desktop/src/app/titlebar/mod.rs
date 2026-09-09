@@ -7,12 +7,13 @@
 // its own `impl GhostexGpuiApp` block, so no glob re-export is needed here
 // (inherent methods resolve on the type regardless of which module defines
 // them). See docs/2026-08-22/repo-restructure/SPLITS.md C1.
-pub(crate) mod action_execution;
 pub(crate) mod account_usage;
+pub(crate) mod action_execution;
 pub(crate) mod browser_menu;
 pub(crate) mod browser_toolbar_buttons;
 pub(crate) mod dropdown_panels;
 pub(crate) mod extension_buttons;
+pub(crate) mod help_menu;
 pub(crate) mod icon_button_and_browser_toolbar;
 pub(crate) mod menu_triggers;
 pub(crate) mod open_targets_and_window_controls;
@@ -24,6 +25,7 @@ pub(crate) mod resources_session_inventory;
 pub(crate) mod resources_session_sleep;
 pub(crate) mod resources_snapshot;
 pub(crate) mod resources_snapshot_export;
+pub(crate) mod session_reveal;
 pub(crate) mod settings_and_action_state;
 pub(crate) mod titlebar_buttons;
 pub(crate) mod titlebar_buttons_misc;

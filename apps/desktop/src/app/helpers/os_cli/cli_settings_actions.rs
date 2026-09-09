@@ -15,6 +15,7 @@ pub(crate) enum GpuiGhostexCliSettingsAction {
     InstallManageBeadsSkill,
     InstallGenerateTitleSkill,
     InstallMoveCodexSessionSkill,
+    InstallHelpSkill,
     FinishDesktopControlSetup {
         driver_installed: bool,
         was_update: bool,
@@ -35,6 +36,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallManageBeadsSkill => "installManageBeadsSkill",
             Self::InstallGenerateTitleSkill => "installGenerateTitleSkill",
             Self::InstallMoveCodexSessionSkill => "installMoveCodexSessionSkill",
+            Self::InstallHelpSkill => "installHelpSkill",
             Self::FinishDesktopControlSetup { .. } => "installCuaDriver",
             Self::UninstallBundledAgentSkill(_) => "uninstallBundledAgentSkill",
             Self::UninstallBundledAgentSkills => "uninstallBundledAgentSkills",
@@ -52,6 +54,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallManageBeadsSkill => "Ghostex Manage Beads installed",
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session installed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session installed",
+            Self::InstallHelpSkill => "Ghostex Help installed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
             } => "Trycua updated",
@@ -74,6 +77,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallManageBeadsSkill => "Ghostex Manage Beads install failed",
             Self::InstallGenerateTitleSkill => "Ghostex Auto Rename Session install failed",
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session install failed",
+            Self::InstallHelpSkill => "Ghostex Help install failed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
             } => "Trycua update failed",
@@ -179,6 +183,13 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 action,
                 &["move-codex-session", "install-skill"],
                 "Ghostex Move Codex Session",
+            )
+        }
+        GpuiGhostexCliSettingsAction::InstallHelpSkill => {
+            gpui_install_bundled_ghostex_skill_action(
+                action,
+                &["guide", "install-skill"],
+                "Ghostex Help",
             )
         }
         GpuiGhostexCliSettingsAction::FinishDesktopControlSetup {

@@ -51,6 +51,8 @@ export function safeGpuiRendererCommandErrorMessage(error: unknown): string {
   }
   if (
     error.message === 'Invalid renderer command title.' ||
+    error.message === 'Invalid settings patch.' ||
+    error.message === 'Invalid settings tab.' ||
     error.message === 'No matching project was found.' ||
     error.message === 'No matching session was found.' ||
     error.message === 'Renderer command bridge unavailable.' ||

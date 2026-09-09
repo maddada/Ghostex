@@ -48,7 +48,9 @@
     "web:typecheck": "tsc -p apps/web/tsconfig.json --noEmit",
     "desktop:typecheck": "tsc -p apps/desktop/tsconfig.json --noEmit",
     "sandbox:onboarding": "vite --config apps/desktop/test/onboarding-sandbox/vite.config.ts",
-    "typecheck": "tsc --noEmit --pretty false",
+    "help:generate": "bun tooling/ghostex-help/generate.ts",
+    "help:check": "bun tooling/ghostex-help/generate.ts --check",
+    "typecheck": "bun run help:check && tsc --noEmit --pretty false",
     "test": "vitest run"
   },
   "dependencies": {

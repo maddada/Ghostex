@@ -126,6 +126,8 @@ pub(crate) const GHOSTEX_EDITOR_DAEMON_POLL_INTERVAL: Duration = Duration::from_
 
 pub(crate) const WORKSPACE_MIN_WIDTH: f32 = 240.0;
 
+pub(crate) const BROWSER_KEY_CONTEXT: &str = "GhostexBrowser";
+
 pub(crate) const CEF_KEY_CONTEXT: &str = "GhostexGpuiCef";
 
 pub(crate) const TITLEBAR_DROPDOWN_KEY_CONTEXT: &str = "GhostexGpuiTitlebarDropdown";
@@ -161,6 +163,15 @@ pub(crate) const GHOSTTY_MOUSE_PRESSURE_STAGE_NONE: u32 = 0;
 pub(crate) const GHOSTTY_MOUSE_PRESSURE_STAGE_NORMAL: u32 = 1;
 
 pub(crate) const GHOSTTY_MOUSE_PRESSURE_STAGE_DEEP: u32 = 2;
+
+/// CDXC:AgentProviders 2026-09-09 DECISION:
+/// Account labels and adjacent usage numbers use the exact system monospace face shown inside the chat agent icon.
+/// CDXC:AgentProviders 2026-09-09 WHY:
+/// macOS exposes this face to CoreText family lookup as .AppleSystemUIFontMonospaced; SF Mono returns no family and makes GPUI substitute a different font. This matches CSS ui-monospace.
+#[cfg(target_os = "macos")]
+pub(crate) const ACCOUNT_INDICATOR_FONT_FAMILY: &str = ".AppleSystemUIFontMonospaced";
+#[cfg(not(target_os = "macos"))]
+pub(crate) const ACCOUNT_INDICATOR_FONT_FAMILY: &str = "monospace";
 
 pub(crate) const TITLEBAR_HEIGHT: f32 = 28.0;
 
@@ -541,6 +552,8 @@ pub(crate) const GPUI_REMOTE_MACHINE_ID_MAX_CHARS: usize = 80;
 
 pub(crate) const TITLEBAR_ICON_INFO: &str = "titlebar/info-circle.svg";
 
+pub(crate) const TITLEBAR_ICON_HELP: &str = "titlebar/help-circle.svg";
+
 pub(crate) const TITLEBAR_ICON_DEVICE_DESKTOP: &str = "titlebar/device-desktop.svg";
 
 pub(crate) const TITLEBAR_ICON_EXTENSIONS: &str = "titlebar/puzzle.svg";
@@ -703,8 +716,6 @@ pub(crate) const BROWSER_TAB_ACTION_CLUSTER_WIDTH: f32 = 84.0;
 
 pub(crate) const BROWSER_HISTORY_MAX_ENTRIES: usize = 50;
 
-pub(crate) const BROWSER_HISTORY_MENU_MAX_ROWS: usize = 8;
-
 pub(crate) const BROWSER_ADDRESS_ONLY_CEF_URL: &str = "about:blank";
 
 pub(crate) const BROWSER_ZOOM_EPSILON: f64 = 0.001;
@@ -766,6 +777,24 @@ pub(crate) const APP_MODAL_HOST_COMPACT_WINDOW_WIDTH: f32 = 760.0;
 pub(crate) const APP_MODAL_HOST_SIDEBAR_SPACE_EDITOR_WINDOW_HEIGHT: f32 = 380.0;
 
 pub(crate) const APP_MODAL_HOST_PREVIOUS_SESSIONS_WINDOW_HEIGHT: f32 = 680.0;
+
+/*
+ * CDXC:AgentLauncher 2026-09-09 DECISION:
+ * User: the native New Thread picker is sized to its rows: the search field,
+ * the key-hint row, one row per agent up to twelve, the divider, and the
+ * Browser and Terminal rows; more agents scroll. The chrome height is the 6px
+ * top inset, 36px search field, 26px hint row, 2px list inset, 9px divider,
+ * two 36px rows, the 6px bottom inset, and the 2px frame border.
+ */
+pub(crate) const NEW_THREAD_PICKER_WIDTH: f32 = 420.0;
+
+pub(crate) const NEW_THREAD_PICKER_SEARCH_HEIGHT: f32 = 36.0;
+
+pub(crate) const NEW_THREAD_PICKER_ROW_HEIGHT: f32 = 36.0;
+
+pub(crate) const NEW_THREAD_PICKER_MAX_AGENT_ROWS: usize = 12;
+
+pub(crate) const NEW_THREAD_PICKER_CHROME_HEIGHT: f32 = 159.0;
 
 pub(crate) const APP_MODAL_HOST_DELAYED_SEND_WINDOW_WIDTH: f32 = 470.0;
 
@@ -890,6 +919,8 @@ pub(crate) const TITLEBAR_POPUP_EXTENSIONS_WIDTH: f32 = 340.0;
 
 pub(crate) const TITLEBAR_POPUP_TIPS_WIDTH: f32 = 556.0;
 
+pub(crate) const TITLEBAR_POPUP_HELP_WIDTH: f32 = 380.0;
+
 pub(crate) const TITLEBAR_POPUP_RESOURCES_WIDTH: f32 = 656.0;
 
 pub(crate) const TITLEBAR_POPUP_MENU_MAX_HEIGHT: f32 = 420.0;
@@ -952,6 +983,8 @@ pub(crate) const GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY: &str = "gpuiTitlebarT
 pub(crate) const TITLEBAR_ACTION_UNCONFIGURED_PREVIEW: &str = "Set the command";
 
 pub(crate) const TITLEBAR_TIPS_TOOLTIP: &str = "Tips";
+
+pub(crate) const TITLEBAR_HELP_TOOLTIP: &str = "Ghostex Help";
 
 pub(crate) const TITLEBAR_RESOURCES_TOOLTIP: &str = "Resources Monitor";
 
@@ -1044,8 +1077,6 @@ pub(crate) const BROWSER_FEEDBACK_AGENTATION_REACT_MODULE_URL: &str = "https://e
 pub(crate) const BROWSER_FEEDBACK_AGENTATION_REACT_DOM_CLIENT_MODULE_URL: &str =
     "https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0";
 
-pub(crate) const PROJECT_EDITOR_COMPANION_RESTORE_ICON: &str = "titlebar/chevron-right.svg";
-
 /*
 CDXC:Workarea 2026-06-22-06:24:
 GPUI workspace chrome should match the macOS workspace shell constants: terminal tab bars are 36px high, workspace tabs stay in the 170-175px macOS width band, command titlebars and collapsed strips are 26px high, and divider/resize rails remain real layout siblings around 5px with 1px visual separators.
@@ -1084,7 +1115,7 @@ Browser tab right-click context menus are NativeMenus scoped to the clicked Brow
     Native command-panel sessions expose only fixed panel action payloads, so Swift `primaryTabContextMenuActions` produces no Rename Session, Delayed Send, or Close After Done block for command-tab right-click. GPUI command-tab menus must start with eligible Focus only, then scoped Sleep/Close rows, while focused command-palette and modal actions keep their separate routes.
 
         CDXC:Browser 2026-06-22-11:38:
-        Browser History is an OS-owned NativeMenu opened from the toolbar History button, not Back/Forward dropdown chrome or an in-layout GPUI panel. The menu derives labels from sanitized URL history through the existing URL display helper, carries only the target history index in a typed action, and creates a new loaded Browser tab only after the user selects a row.
+        Browser History uses the shared borderless app-modal child window and an independent persistent visit store. The toolbar and Browser-only keyboard shortcut open the same popup.
 
         CDXC:CommandPane 2026-06-22-12:09:
         Browser and command tab bars need the same sticky edge affordance as Agents when the active tab is clipped by horizontal overflow. Render the affordance as fixed-width, visible, non-interactive sibling chrome between the scrollable tab strip and the fixed control cluster; do not use overlays, hidden hit regions, hit-test routing, or synthetic coordinate routing.
@@ -1487,8 +1518,6 @@ pub(crate) const PROJECT_EDITOR_COMPANION_MIN_WIDTH: f32 = 280.0;
 
 pub(crate) const PROJECT_EDITOR_COMPANION_SPLIT_RATIO: f32 = 0.5;
 
-pub(crate) const PROJECT_EDITOR_COMPANION_RESTORE_RAIL_WIDTH: f32 = 32.0;
-
 pub(crate) const PROJECT_EDITOR_AWAKE_MODE_CAP: usize = 3;
 
 pub(crate) const PROJECT_EDITOR_AUTO_SLEEP_POLICY_POLL_INTERVAL: Duration = Duration::from_secs(2);
@@ -1646,6 +1675,8 @@ pub(crate) const DOCS_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "docsViewTabHidden";
 
 pub(crate) const TIPS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
     "tipsAndTricksTitlebarButtonHidden";
+
+pub(crate) const HELP_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str = "helpTitlebarButtonHidden";
 
 pub(crate) const RESOURCES_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
     "resourcesTitlebarButtonHidden";

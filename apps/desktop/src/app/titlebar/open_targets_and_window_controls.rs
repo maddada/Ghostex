@@ -184,7 +184,7 @@ impl GhostexGpuiApp {
         };
         let pinned_extension_buttons = self.render_titlebar_pinned_extension_buttons(window, cx);
         let show_extensions_button = !button_hidden(EXTENSIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY);
-        let controls = h_flex()
+        let buttons = h_flex()
             .flex_shrink_0()
             .mt(px(1.0))
             .h(px(TITLEBAR_CONTROL_HEIGHT))
@@ -214,6 +214,10 @@ impl GhostexGpuiApp {
                 }
                 this
             })
+            .when(
+                !button_hidden(HELP_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
+                |this| this.child(self.render_titlebar_help_button(window, cx)),
+            )
             .when(
                 !button_hidden(TIPS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY),
                 |this| {
@@ -269,6 +273,20 @@ impl GhostexGpuiApp {
                 |this| this.child(self.render_titlebar_open_targets_button(window, cx)),
             )
             .child(self.render_titlebar_extension_popup_panel(window, cx));
+        let controls = h_flex()
+            .flex_shrink(1.0)
+            .min_w_0()
+            .max_w_full()
+            .h_full()
+            .child(
+                h_flex()
+                    .id("ghostex-gpui-titlebar-controls-scroll")
+                    .flex_shrink(1.0)
+                    .min_w_0()
+                    .h_full()
+                    .overflow_x_scroll()
+                    .child(buttons),
+            );
         #[cfg(target_os = "windows")]
         let controls = controls
             .child(

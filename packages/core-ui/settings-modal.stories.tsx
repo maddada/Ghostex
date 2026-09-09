@@ -223,6 +223,7 @@ function SettingsModalStory({
     gxUsable: false,
     installed: true,
     moveCodexSessionSkillInstalled: false,
+    helpSkillInstalled: false,
     type: 'ghostexCliStatus',
   });
 

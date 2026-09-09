@@ -68,6 +68,7 @@ pub(crate) fn titlebar_popup_menu_width(kind: GpuiTitlebarPopupKind) -> f32 {
         | GpuiTitlebarPopupKind::OpenTargets => TITLEBAR_POPUP_COMPACT_WIDTH,
         GpuiTitlebarPopupKind::Extensions => TITLEBAR_POPUP_EXTENSIONS_WIDTH,
         GpuiTitlebarPopupKind::Git => TITLEBAR_POPUP_GIT_WIDTH,
+        GpuiTitlebarPopupKind::Help => TITLEBAR_POPUP_HELP_WIDTH,
         GpuiTitlebarPopupKind::Resources => TITLEBAR_POPUP_RESOURCES_WIDTH,
         GpuiTitlebarPopupKind::Tips => TITLEBAR_POPUP_TIPS_WIDTH,
     }
@@ -1675,7 +1676,7 @@ pub(crate) fn titlebar_project_label_from_latest_sidebar_snapshot(
         .unwrap_or_else(|| TITLEBAR_PROJECT_LABEL_FALLBACK.to_string())
 }
 
-pub(crate) fn cef_parent_native_view(window: &mut Window) -> Result<*mut std::ffi::c_void> {
+pub(crate) fn cef_parent_native_view(window: &Window) -> Result<*mut std::ffi::c_void> {
     /*
     CDXC:CefRuntime 2026-07-04:
     Windowed CEF parents its child views on the GPUI window's native handle:
@@ -1684,8 +1685,7 @@ pub(crate) fn cef_parent_native_view(window: &mut Window) -> Result<*mut std::ff
     arm covers the same id space for completeness). The pointer stays opaque
     past this point; only the cef platform adapters interpret it.
     */
-    let handle = window
-        .window_handle()
+    let handle = raw_window_handle::HasWindowHandle::window_handle(window)
         .map_err(|error| anyhow::anyhow!("failed to read GPUI raw window handle: {error:?}"))?;
     match handle.as_raw() {
         RawWindowHandle::AppKit(handle) => Ok(handle.ns_view.as_ptr()),
@@ -2603,6 +2603,7 @@ pub(crate) struct GpuiCustomView {
     pub(crate) id: ExtensionId,
     pub(crate) title: String,
     pub(crate) url: String,
+    pub(crate) definition: serde_json::Value,
 }
 
 pub(crate) fn gpui_custom_views_from_settings() -> Vec<GpuiCustomView> {
@@ -2620,15 +2621,23 @@ pub(crate) fn gpui_custom_views_from_settings() -> Vec<GpuiCustomView> {
             }
             let id = ExtensionId::new(id)?;
             let title = object.get("name")?.as_str()?.trim();
-            let url = object.get("url")?.as_str()?.trim();
-            let (scheme, rest) = url.split_once("://")?;
-            let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-            if title.is_empty()
-                || !matches!(scheme, "http" | "https")
-                || authority.is_empty()
-                || url.chars().any(char::is_whitespace)
-            {
+            let url = object
+                .get("url")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim();
+            if title.is_empty() {
                 return None;
+            }
+            if object.get("source").is_none() {
+                let (scheme, rest) = url.split_once("://")?;
+                let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+                if !matches!(scheme, "http" | "https")
+                    || authority.is_empty()
+                    || url.chars().any(char::is_whitespace)
+                {
+                    return None;
+                }
             }
             Some(GpuiCustomView {
                 enabled: object
@@ -2638,6 +2647,7 @@ pub(crate) fn gpui_custom_views_from_settings() -> Vec<GpuiCustomView> {
                 id,
                 title: title.to_string(),
                 url: url.to_string(),
+                definition: value.clone(),
             })
         })
         .collect()

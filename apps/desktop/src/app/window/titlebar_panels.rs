@@ -29,6 +29,7 @@ pub(crate) enum GpuiTitlebarPopupKind {
     BrowserActions(BrowserPaneId),
     Extensions,
     Git,
+    Help,
     OpenTargets,
     Resources,
     RemoteSites,
@@ -42,6 +43,7 @@ impl GpuiTitlebarPopupKind {
             Self::BrowserActions(_) => "browserActions",
             Self::Extensions => "extensions",
             Self::Git => "git",
+            Self::Help => "help",
             Self::OpenTargets => "openTargets",
             Self::Resources => "resources",
             Self::RemoteSites => "remoteSites",
@@ -424,6 +426,15 @@ impl Render for GpuiTitlebarPopupWindow {
                     this.update_main_window(cx, |app, window, cx| {
                         app.run_gpui_titlebar_tip(action.tip_index as usize, window, cx);
                     });
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &RunGpuiTitlebarHelpQuestion, window, cx| {
+                    let question_index = action.question_index as usize;
+                    this.update_main_window(cx, move |app, _main_window, cx| {
+                        app.run_gpui_titlebar_help_question(question_index, cx);
+                    });
+                    this.close_from_popup_window(window, cx);
                 }),
             )
             .on_action(cx.listener(
@@ -1535,7 +1546,7 @@ impl GpuiTitlebarReadingPanel {
     ) -> AnyElement {
         let cpu = rows.iter().map(|row| row.cpu).sum::<f64>();
         let memory = rows.iter().map(|row| row.memory_mb).sum::<f64>();
-        let section_key = format!("resource-section-{base_index}");
+        let section_key = format!("resource-section-{label}");
         let hovered = match &self.state {
             GpuiTitlebarReadingPanelState::Resources {
                 hovered_sections, ..
@@ -1571,6 +1582,7 @@ impl GpuiTitlebarReadingPanel {
                     "gpui-titlebar-resource-section-action-{base_index}"
                 ))
                 .ml_auto()
+                .when(action_label == "Sleep Project", |this| this.mr(px(-2.0)))
                 .h(px(22.0))
                 .items_center()
                 .justify_center()
@@ -1660,6 +1672,11 @@ impl GpuiTitlebarReadingPanel {
             .when(base_index > 0, |this| this.mt(px(8.0)))
             .child(
                 resource_section_heading()
+                    // CDXC:Resources 2026-09-09 DECISION:
+                    // User: move Sleep Project up by 4px and right by 2px to leave a gap above the project's session rows and align its right edge.
+                    .when(action_label == Some("Sleep Project"), |this| {
+                        this.mt(px(-4.0)).h(px(28.0)).pb(px(4.0))
+                    })
                     .id(format!(
                         "gpui-titlebar-resource-section-heading-{base_index}"
                     ))
@@ -1678,12 +1695,21 @@ impl GpuiTitlebarReadingPanel {
                             }
                         }
                     }))
-                    .child(label)
+                    .child(
+                        div()
+                            .when(action_label == Some("Sleep Project"), |this| {
+                                this.mt(px(8.0))
+                            })
+                            .child(label),
+                    )
                     .child(if hovered {
                         section_action.unwrap_or_else(|| div().into_any_element())
                     } else {
                         h_flex()
                             .ml_auto()
+                            .when(action_label == Some("Sleep Project"), |this| {
+                                this.mt(px(8.0))
+                            })
                             .gap(px(10.0))
                             .text_color(rgb(0xffffff).opacity(0.52))
                             .child(
@@ -1731,7 +1757,10 @@ impl GpuiTitlebarReadingPanel {
         row_index: usize,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
-        let key = format!("resource-{row_index}");
+        let key = match &row.session_id {
+            Some(session_id) => format!("resource-session-{session_id}"),
+            None => format!("resource-{}-{:?}", row.label, row.pids),
+        };
         let (collapsed, pending_action) = match &self.state {
             GpuiTitlebarReadingPanelState::Resources {
                 expanded_keys,
@@ -1895,10 +1924,14 @@ impl GpuiTitlebarReadingPanel {
                         if closed {
                             if let GpuiTitlebarReadingPanelState::Resources {
                                 pending_actions,
+                                expanded_keys,
+                                snapshot,
                                 ..
                             } = &mut this.state
                             {
-                                pending_actions.insert(key.clone(), "Closing...");
+                                snapshot.remove_closed_session(&session_id);
+                                pending_actions.remove(&key);
+                                expanded_keys.remove(&key);
                             }
                             cx.notify();
                         }

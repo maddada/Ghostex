@@ -1,5 +1,6 @@
 export type BundledGhostexAgentSkillId =
   | 'cli'
+  | 'help'
   | 'browserUse'
   | 'embeddedBrowserUse'
   | 'computerUse'
@@ -66,6 +67,19 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
     id: 'cli',
     name: 'Ghostex CLI',
     skillName: 'ghostex-cli',
+    tier: 'recommended',
+  },
+  /**
+   * CDXC:AgentSkills 2026-09-09 DECISION:
+   * User: ship a bundled help skill named ghostex-help that explains the app and configures its settings, installable like the other bundled skills.
+   */
+  {
+    command: 'ghostex guide install-skill',
+    description:
+      'Let agents explain Ghostex and change its settings for you: ask how a feature works or what a setting does, and the agent answers from the built-in guide and applies the change through the ghostex CLI.',
+    id: 'help',
+    name: 'Ghostex Help',
+    skillName: 'ghostex-help',
     tier: 'recommended',
   },
   {

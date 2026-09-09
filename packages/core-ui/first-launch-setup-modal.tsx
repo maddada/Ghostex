@@ -117,6 +117,7 @@ export type FirstLaunchSetupModalProps = {
   onInstallGenerateTitleSkill?: () => void;
   onInstallGhostexCli?: () => void;
   onInstallMoveCodexSessionSkill?: () => void;
+  onInstallHelpSkill?: () => void;
   onInstallSelectedSkills?: (skillIds: readonly BundledGhostexAgentSkillId[]) => Promise<void> | void;
   onUninstallBundledAgentSkill?: (skillId: BundledGhostexAgentSkillId) => void;
   onOpenAccessibilityPreferences?: () => void;
@@ -414,6 +415,10 @@ const FIRST_LAUNCH_SKILL_CAPABILITIES: Record<BundledGhostexAgentSkillId, { titl
   moveCodexSession: {
     title: 'Continue Codex in another folder',
     description: 'Carry a Codex conversation into a different project folder.',
+  },
+  help: {
+    title: 'Get help inside Ghostex',
+    description: 'Ask an agent how Ghostex works and let it change settings for you.',
   },
 };
 
@@ -830,6 +835,7 @@ export function FirstLaunchSetupModal({
   onInstallGhostexCli,
   onInstallManageBeadsSkill,
   onInstallMoveCodexSessionSkill,
+  onInstallHelpSkill,
   onInstallSelectedSkills,
   onOpenAccessibilityPreferences,
   onOpenScreenRecordingPreferences,
@@ -1012,6 +1018,7 @@ export function FirstLaunchSetupModal({
     generateTitle: onInstallGenerateTitleSkill,
     manageBeads: onInstallManageBeadsSkill,
     moveCodexSession: onInstallMoveCodexSessionSkill,
+    help: onInstallHelpSkill,
   };
 
   const connectSelectedAgents = () => {
@@ -2231,6 +2238,8 @@ function isFirstLaunchSkillInstalled(
       return status?.generateTitleSkillInstalled === true;
     case 'moveCodexSession':
       return status?.moveCodexSessionSkillInstalled === true;
+    case 'help':
+      return status?.helpSkillInstalled === true;
   }
 }
 

@@ -61,6 +61,7 @@ const SKILL_LABELS: Record<BundledSkillId, string> = {
   generateTitle: 'generate title',
   manageBeads: 'project board beads',
   moveCodexSession: 'move codex session',
+  help: 'help',
 };
 
 /** Mirrors server/src/agent_hooks/api.rs read_hook_status (display only). */

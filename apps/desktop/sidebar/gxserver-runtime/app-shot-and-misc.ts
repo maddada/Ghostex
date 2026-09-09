@@ -63,7 +63,8 @@ import type {
 import { openAppModal, postAppModalHostMessage } from '@/packages/core-ui/app-modal-host-bridge';
 import type { AppToastLevel } from '@/packages/shared/app-toast-contract';
 import { createAppToastRequest } from '@/packages/shared/app-toast-contract';
-import type { PreferredAgentInterface } from '@/packages/shared/ghostex-settings';
+import type { PreferredAgentInterface, ghostexSettingsPatch } from '@/packages/shared/ghostex-settings';
+import { SETTINGS_MODAL_NAVIGATION_TABS } from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectSessionId,
   parseGxserverPresentationProjectSessionId,
@@ -102,6 +103,8 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
   resolvePendingNativeAppShotPromptInsertion(pending: GpuiPendingNativeAppShotPromptInsertion, ok: boolean): void;
   rememberNativeAppShotTargetSessionId(sessionId: string): void;
   handleGxserverRendererCommand(command: GxserverRendererCommand): Promise<Record<string, unknown>>;
+  applyRendererSettingsPatch(command: GxserverRendererCommand): Record<string, unknown>;
+  openSettingsFromRendererCommand(command: GxserverRendererCommand): Record<string, unknown>;
   runGxserverRendererCommandButton(
     rawCommandId: string | undefined,
     rendererCommand: GxserverRendererCommand
@@ -571,6 +574,10 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
         return this.runGxserverRendererCommandButton(readGpuiRecordString(command.payload, 'commandId'), command);
       case 'readResourcesSnapshot':
         return this.requestNativeResourcesSnapshot();
+      case 'updateSettingsPatch':
+        return this.applyRendererSettingsPatch(command);
+      case 'openSettings':
+        return this.openSettingsFromRendererCommand(command);
       case 'openBrowser':
       case 'openBrowserPane':
         return this.openEmbeddedBrowserFromRendererCommand(command);
@@ -584,6 +591,75 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       default:
         throw new Error('Unsupported renderer command.');
     }
+  },
+
+  applyRendererSettingsPatch(this: GpuiSidebarRuntime, command: GxserverRendererCommand): Record<string, unknown> {
+    /*
+    CDXC:Settings 2026-09-09 DECISION:
+    User: `ghostex settings set` writes through the running desktop app, never
+    the settings file, so a CLI change takes the exact save and fan-out path a
+    Settings modal save takes (Rust merges the patch onto the stored snapshot
+    and hydrates every surface). The renderer command carries only a flat
+    key/value patch; the CLI validates keys and values against the generated
+    settings catalog before it dispatches.
+    SEE-ALSO: server/src/ghostex_cli/settings.rs, skills/ghostex-help.
+    */
+    const rawPatch = command.payload.patch;
+    if (typeof rawPatch !== 'object' || rawPatch === null || Array.isArray(rawPatch)) {
+      throw new Error('Invalid settings patch.');
+    }
+    const patch = rawPatch as Record<string, unknown>;
+    const keys = Object.keys(patch);
+    if (keys.length === 0 || keys.length > 50) {
+      throw new Error('Invalid settings patch.');
+    }
+    for (const key of keys) {
+      const value = patch[key];
+      const scalar = typeof value === 'boolean' || typeof value === 'string' || typeof value === 'number';
+      if (!scalar || (typeof value === 'number' && !Number.isFinite(value))) {
+        throw new Error('Invalid settings patch.');
+      }
+    }
+    const message: Extract<SidebarToExtensionMessage, { type: 'updateSettingsPatch' }> = {
+      patch: patch as ghostexSettingsPatch,
+      source: 'cli:settings',
+      type: 'updateSettingsPatch',
+    };
+    try {
+      postAppModalHostMessage({ message, type: 'sidebarCommand' }, 'GPUISidebarActions:updateSettingsPatch');
+    } catch {
+      throw new Error('Renderer command bridge unavailable.');
+    }
+    return { accepted: true, keys, ok: true };
+  },
+
+  openSettingsFromRendererCommand(this: GpuiSidebarRuntime, command: GxserverRendererCommand): Record<string, unknown> {
+    /*
+    `ghostex settings open [<key>]` lands on the Settings modal with the tab
+    and search prefilled, the same open message the titlebar Tips rows use, so
+    settings an agent may not write (accounts, remote pairing, tokens) are one
+    command away for the user instead of being edited blind.
+    */
+    const rawTab = readGpuiRecordString(command.payload, 'tab')?.trim();
+    const tab = rawTab || 'settings';
+    if (!(SETTINGS_MODAL_NAVIGATION_TABS as readonly string[]).includes(tab)) {
+      throw new Error('Invalid settings tab.');
+    }
+    const searchQuery = readGpuiRecordString(command.payload, 'searchQuery')?.trim().slice(0, 200) || undefined;
+    try {
+      postAppModalHostMessage(
+        {
+          ...(searchQuery ? { initialSearchQuery: searchQuery } : {}),
+          initialTab: tab,
+          modal: 'settings',
+          type: 'open',
+        },
+        'GPUISidebarActions:openSettings'
+      );
+    } catch {
+      throw new Error('Renderer command bridge unavailable.');
+    }
+    return { ok: true, searchQuery: searchQuery ?? null, tab };
   },
 
   runGxserverRendererCommandButton(

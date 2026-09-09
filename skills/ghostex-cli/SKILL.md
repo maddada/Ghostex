@@ -63,6 +63,8 @@ above. Route to a specialized skill only when its domain applies:
 - Use `$ghostex-auto-rename-session` when asked to generate a session title.
 - Use `$ghostex-move-codex-session` to fork a Codex session into another
   folder.
+- Use `$ghostex-help` to explain how a Ghostex feature works or to change an
+  app setting for the user.
 
 Keep using this skill's inspect, act, and verify loop alongside the specialized
 workflow.

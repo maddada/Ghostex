@@ -70,7 +70,7 @@ export interface GpuiSidebarRuntimeSessionCreateMethods {
   createQuickTerminal(): Promise<void>;
   createQuickAgentSession(agentId: string, accountId?: string): Promise<void>;
   openQuickBrowserTab(): void;
-  openBrowserPaneInGroup(groupId: string): void;
+  openBrowserPaneInGroup(groupId?: string): void;
   createSession(groupId?: string | undefined): Promise<void>;
   createProjectTerminal(message: Extract<SidebarToExtensionMessage, { type: 'createProjectTerminal' }>): Promise<void>;
   startAgentSessionProviderAndSendPrompt(
@@ -99,6 +99,7 @@ export interface GpuiSidebarRuntimeSessionCreateMethods {
   createAgentSession(agentId: string, groupId?: string | undefined, accountId?: string): Promise<void>;
   searchPreviousSessionsByText(): void;
   handleGpuiOsIntegrationCommand(payload: unknown): Promise<void>;
+  createGhostexHelpChat(question: string, projectPath: string): Promise<void>;
   createOsIntegrationTerminal(input: { command?: string; cwd?: string; title?: string }): Promise<void>;
   openOsIntegrationProjectPaths(entries: unknown[]): Promise<void>;
   createAgentSessionForProject(
@@ -234,9 +235,9 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     openQuickHeaderBrowserUrl(this, DEFAULT_BROWSER_LAUNCH_URL);
   },
 
-  openBrowserPaneInGroup(this: GpuiSidebarRuntime, groupId: string): void {
-    const projectId = this.resolveWorkspaceGroupProjectId(groupId);
-    if (!projectId) {
+  openBrowserPaneInGroup(this: GpuiSidebarRuntime, groupId = this.activeGroupId): void {
+    const projectId = groupId ? this.resolveWorkspaceGroupProjectId(groupId) : undefined;
+    if (!groupId || !projectId) {
       return;
     }
     /*
@@ -668,10 +669,10 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
           /*
           CDXC:Drafts 2026-08-28:
           Sidebar agent launches carry no prompt, so the remote gxserver creates
-          a draft row: the CLI still starts in the background below (the
-          promptless `startRemoteAgentSessionAndSendPrompt` call only starts the
-          provider), but the session stays a draft until a first user prompt
-          actually reaches the agent. Never combine with firstUserMessage.
+          a draft row. Chat-first launches start the CLI through native
+          wake/attach; terminal launches start the provider below. The session
+          stays a draft until a first user prompt actually reaches the agent.
+          Never combine with firstUserMessage.
           */
           draft: true,
           projectId: remoteGroup.projectId,
@@ -690,15 +691,6 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
         const createdSessionId = normalizeNonEmptyString(response.session?.sessionId);
         if (createdSessionId) {
           const createdProjectId = normalizeNonEmptyString(response.session?.projectId) ?? remoteGroup.projectId;
-          await this.startRemoteAgentSessionAndSendPrompt(
-            remoteGroup.machineId,
-            createdProjectId,
-            createdSessionId
-          ).catch(() => {
-            this.postRemoteToast('warning', 'Remote agent failed', {
-              description: 'The remote gxserver could not start that agent session.',
-            });
-          });
           this.setRemotePresentationSessionFocus({
             machineId: remoteGroup.machineId,
             projectId: createdProjectId,
@@ -720,6 +712,16 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
               { agentId, groupId, type: 'runSidebarAgent' },
               { preferredInterface: 'chat' }
             );
+          } else {
+            await this.startRemoteAgentSessionAndSendPrompt(
+              remoteGroup.machineId,
+              createdProjectId,
+              createdSessionId
+            ).catch(() => {
+              this.postRemoteToast('warning', 'Remote agent failed', {
+                description: 'The remote gxserver could not start that agent session.',
+              });
+            });
           }
         }
         this.refreshRemotePresentationFromGxserver(remoteGroup.machineId).catch(() => undefined);
@@ -874,6 +876,13 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
       await this.openOsIntegrationProjectPaths(Array.isArray(record.projects) ? record.projects : []);
       return;
     }
+    if (action === 'createGhostexHelpChat') {
+      await this.createGhostexHelpChat(
+        typeof record.question === 'string' ? record.question : '',
+        normalizeNonEmptyString(record.projectPath) ?? ''
+      );
+      return;
+    }
     this.postSidebarActionToast('warning', 'Unsupported OS integration action.');
   },
 
@@ -934,6 +943,63 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     } catch {
       this.postSidebarActionToast('error', 'Open Terminal failed', {
         description: 'gxserver could not create the requested terminal.',
+      });
+    }
+  },
+
+  /*
+  CDXC:Onboarding 2026-09-09 DECISION:
+  User: picking a Help menu row must not send the prompt. The Quick agent chat
+  opens with `$ghostex-help <question>` staged as an editable draft, a toast
+  says "Edit the prompt and press Enter to learn more about Ghostex.", and only
+  the user's Enter submits it, because they may want to reword the question.
+  User: do not create a new Quick project per question. Every Help chat lives
+  in one project rooted at the Ghostex config folder (the OS-specific
+  directory Rust resolves through ghostex_paths and passes as projectPath),
+  registered on first use and reused after that.
+  Rust owns the menu and the skill install; the sidebar runtime owns the
+  project lookup, the default prompt agent, and focusing the new session, so
+  the chat takes the same draft launch path as Export transcript.
+  */
+  async createGhostexHelpChat(this: GpuiSidebarRuntime, question: string, projectPath: string): Promise<void> {
+    // Keep the caller's trailing space: the open-ended row stages
+    // `$ghostex-help ` so the user types straight after the skill mention.
+    const draft = question.trimStart();
+    if (!draft.trim()) {
+      return;
+    }
+    const agent = this.resolveSidebarAgent(this.resolveDefaultPromptAgentId());
+    if (!agent?.command) {
+      this.postSidebarActionToast('warning', 'Ghostex Help unavailable', {
+        description: 'Choose a default prompt agent in Settings > Agents first.',
+      });
+      return;
+    }
+    if (!projectPath) {
+      this.postSidebarActionToast('error', 'Ghostex Help failed', {
+        description: 'The Ghostex config folder is unknown, so no project could host the help chat.',
+      });
+      return;
+    }
+    const preferredInterface = resolveEffectivePreferredAgentInterface(
+      createGpuiSidebarSettings(this.runtimeSettings),
+      agent.agentId
+    );
+    try {
+      const project =
+        this.resolveDomainProjectScope({ projectPath }) ??
+        (await this.registerProjectPath({ name: 'Ghostex', path: projectPath }));
+      await this.createAgentSessionRecordForProject(project, agent, '', {
+        draft: true,
+        errorMessage: 'Ghostex could not start the help chat.',
+        firstUserInputDraft: draft,
+        preferredInterface,
+        title: 'Ghostex Help',
+      });
+      this.postSidebarActionToast('info', 'Edit the prompt and press Enter to learn more about Ghostex.');
+    } catch (error) {
+      this.postSidebarActionToast('error', 'Ghostex Help failed', {
+        description: error instanceof Error ? error.message : 'Ghostex could not start the help chat.',
       });
     }
   },

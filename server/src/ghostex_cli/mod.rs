@@ -8,6 +8,7 @@ pub mod browser_mcp;
 pub mod diagnostics;
 pub mod editors;
 pub mod extensions;
+pub mod guide;
 pub mod launchers;
 pub mod output;
 pub mod paired_device;
@@ -18,6 +19,7 @@ pub mod rpc;
 pub mod saved_prompts;
 pub mod selector;
 pub mod sessions;
+pub mod settings;
 pub mod skills;
 pub mod tailcat;
 pub mod tailcat_tunnel;
@@ -76,6 +78,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "fable-5.6-orchestration",
     "find",
     "generate-title",
+    "guide",
     "manage-beads",
     "h",
     "history",
@@ -86,6 +89,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "quick-actions",
     "saved-prompts",
     "server",
+    "settings",
     "tailcat",
     "web",
 ];
@@ -293,6 +297,9 @@ fn is_known_command(name: &str) -> bool {
         "install-generate-title-skill",
         "move-codex-session",
         "install-move-codex-session-skill",
+        "guide",
+        "install-help-skill",
+        "settings",
         "toggle-sidebar",
         "move-sidebar",
         "assert-card",
@@ -743,6 +750,9 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "install-move-codex-session-skill" => {
             skills::install_move_codex_session_skill_command(args)
         }
+        "guide" => guide::guide_command(args),
+        "install-help-skill" => skills::install_help_skill_command(args),
+        "settings" => settings::settings_command(args),
         "toggle-sidebar" => run_bridge_action("toggleSidebarCollapsed", Parser::None, plain, args),
         "move-sidebar" => run_bridge_action("moveSidebar", Parser::None, plain, args),
         "assert-card" => {

@@ -61,6 +61,7 @@ export const BUNDLED_SKILL_IDS = [
   'generateTitle',
   'manageBeads',
   'moveCodexSession',
+  'help',
 ] as const;
 export type BundledSkillId = (typeof BUNDLED_SKILL_IDS)[number];
 

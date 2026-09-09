@@ -171,6 +171,8 @@ export function createGhostexCliStatusMessage(
     ...(skills.moveCodexSession
       ? { moveCodexSessionSkillPath: '~/agents/skills/ghostex-move-codex-session/SKILL.md' }
       : {}),
+    helpSkillInstalled: skills.help,
+    ...(skills.help ? { helpSkillPath: '~/agents/skills/ghostex-help/SKILL.md' } : {}),
     type: 'ghostexCliStatus',
   };
 }

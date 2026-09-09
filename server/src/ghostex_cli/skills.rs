@@ -24,6 +24,7 @@ const GHOSTEX_MANAGE_BEADS_SKILL_NAME: &str = "ghostex-manage-beads";
 const GHOSTEX_FABLE_56_ORCHESTRATION_SKILL_NAME: &str = "ghostex-fable-56-orchestration";
 const GHOSTEX_AUTO_RENAME_SESSION_SKILL_NAME: &str = "ghostex-auto-rename-session";
 const GHOSTEX_MOVE_CODEX_SESSION_SKILL_NAME: &str = "ghostex-move-codex-session";
+const GHOSTEX_HELP_SKILL_NAME: &str = "ghostex-help";
 
 /// JS stringFlag: trimmed non-empty string or nothing.
 fn string_flag(value: Option<String>) -> Option<String> {
@@ -424,6 +425,20 @@ pub fn install_generate_title_skill_command(args: &[String]) -> CliResult<()> {
         "ghostex rename-command --session-id \"${GHOSTEX_GLOBAL_SESSION_REF:-${GHOSTEX_SESSION_ID:-${ZMX_SESSION:-}}}\" --title \"<title>\"",
         &["GHOSTEX_GENERATE_TITLE_SKILL_SOURCE"],
         GHOSTEX_AUTO_RENAME_SESSION_SKILL_NAME,
+    )
+}
+
+pub fn install_help_skill_command(args: &[String]) -> CliResult<()> {
+    /*
+    `$ghostex-help` teaches agents to explain Ghostex from `ghostex guide` and
+    to change settings through `ghostex settings`, so the configure command it
+    advertises is the guide entry point rather than a session command.
+    */
+    install_ghostex_agent_skill(
+        args,
+        "ghostex guide",
+        &["GHOSTEX_HELP_SKILL_SOURCE"],
+        GHOSTEX_HELP_SKILL_NAME,
     )
 }
 

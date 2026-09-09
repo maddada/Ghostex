@@ -6,6 +6,7 @@ import {
   IconDeviceDesktop,
   IconDownload,
   IconGitPullRequest,
+  IconHelpCircle,
   IconLayoutKanban,
   IconLoader2,
   IconPencil,
@@ -70,13 +71,14 @@ const BUNDLED_AGENT_SKILL_TIER_SECTIONS: readonly {
   },
 ];
 
-const BUNDLED_AGENT_SKILL_ICONS: Record<BundledGhostexAgentSkillId, typeof IconBrowser> = {
+export const BUNDLED_AGENT_SKILL_ICONS: Record<BundledGhostexAgentSkillId, typeof IconBrowser> = {
   browserUse: IconBrowser,
   cli: IconTerminal2,
   computerUse: IconDeviceDesktop,
   embeddedBrowserUse: IconBrowser,
   fable56Orchestration: IconSitemap,
   generateTitle: IconPencil,
+  help: IconHelpCircle,
   manageBeads: IconLayoutKanban,
   moveCodexSession: IconGitPullRequest,
 };
@@ -111,7 +113,7 @@ export function BundledAgentSkillsPanel({
       {showHeader ? (
         <div className='flex flex-col gap-1'>
           <h3 className='text-sm font-semibold'>Bundled Agent Skills</h3>
-          <p className='text-xs text-muted-foreground'>
+          <p className='text-[13px] text-muted-foreground'>
             Install the Ghostex skills you want agents to discover. Each skill is copied to ~/.agents/skills and can be
             updated independently.
           </p>
@@ -144,8 +146,8 @@ export function BundledAgentSkillsPanel({
         return (
           <div className='flex flex-col gap-3' key={section.tier}>
             <div className='flex flex-col gap-0.5'>
-              <h4 className='text-xs font-semibold uppercase tracking-wide text-muted-foreground'>{section.title}</h4>
-              <p className='text-xs text-muted-foreground'>{section.description}</p>
+              <h4 className='text-[13px] text-foreground'>{section.title}</h4>
+              <p className='text-[13px] text-muted-foreground'>{section.description}</p>
             </div>
             {trycuaSkills.length > 0 ? (
               <div className='flex flex-col gap-2'>
@@ -157,7 +159,7 @@ export function BundledAgentSkillsPanel({
                   onInstallCuaDriver={onInstallCuaDriver}
                 />
                 <div className='ml-3 flex flex-col gap-3 border-l-2 border-muted-foreground/25 pl-3'>
-                  <p className='text-[11px] font-semibold uppercase tracking-wide text-muted-foreground'>
+                  <p className='text-[13px] text-muted-foreground'>
                     Step 2: install the skills that use {GHOSTEX_TRYCUA_PRODUCT_NAME}
                   </p>
                   {trycuaSkills.map(renderSkill)}
@@ -270,8 +272,8 @@ function BundledAgentSkillRow({
                 </span>
               ) : null}
             </div>
-            <FieldDescription className='text-xs text-muted-foreground'>{skill.description}</FieldDescription>
-            <code className='mt-2 block select-text rounded-none border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground'>
+            <FieldDescription className='text-[13px] text-muted-foreground'>{skill.description}</FieldDescription>
+            <code className='mt-2 block select-text rounded-none border border-border bg-muted/40 px-2.5 py-1.5 text-[13px] text-muted-foreground'>
               {skill.command}
             </code>
           </FieldContent>
@@ -283,7 +285,7 @@ function BundledAgentSkillRow({
               disabled={installDisabled}
               onClick={onInstall}
               type='button'
-              variant={ghostexCliStatusLoading ? 'outline' : 'default'}
+              variant='outline'
             >
               {ghostexCliStatusLoading ? (
                 <>
@@ -360,7 +362,7 @@ function TrycuaPrerequisiteCard({
             </span>
             <FieldContent>
               <div className='mb-1.5 flex flex-wrap items-center gap-2'>
-                <span className='text-[11px] font-semibold uppercase tracking-wide text-muted-foreground'>Step 1</span>
+                <span className='text-[13px] text-muted-foreground'>Step 1</span>
                 <FieldTitle className='text-sm'>{GHOSTEX_TRYCUA_PRODUCT_NAME}</FieldTitle>
                 <span
                   className={cn(
@@ -375,7 +377,7 @@ function TrycuaPrerequisiteCard({
                   {status}
                 </span>
               </div>
-              <FieldDescription className='text-xs text-muted-foreground'>
+              <FieldDescription className='text-[13px] text-muted-foreground'>
                 {GHOSTEX_TRYCUA_PRODUCT_NAME} is a utility that lets any agent control your machine: clicking, typing,
                 and seeing what is on screen. {formatDependentSkillNames(dependentSkillNames)} run through it, so
                 install {GHOSTEX_TRYCUA_PRODUCT_NAME} once and then install those skills below.
@@ -397,7 +399,7 @@ function TrycuaPrerequisiteCard({
                 disabled={ghostexCliStatusLoading || cuaDriverInstalled || !onInstallCuaDriver}
                 onClick={onInstallCuaDriver}
                 type='button'
-                variant={ghostexCliStatusLoading || cuaDriverInstalled ? 'outline' : 'default'}
+                variant='outline'
               >
                 {ghostexCliStatusLoading ? (
                   <IconLoader2 aria-hidden='true' className='animate-spin' data-icon='inline-start' />
@@ -417,12 +419,12 @@ function TrycuaPrerequisiteCard({
         </div>
         {!cuaDriverInstalled && installCommand ? (
           <div className='flex flex-col gap-1.5'>
-            <p className='text-[11px] text-muted-foreground'>
+            <p className='text-[13px] text-muted-foreground'>
               Install {GHOSTEX_TRYCUA_PRODUCT_NAME} runs this command in a command pane terminal so you can watch it
               finish. You can also run it yourself:
             </p>
             <div className='flex items-start gap-1.5'>
-              <code className='block min-w-0 flex-1 overflow-x-auto whitespace-pre rounded-none border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground'>
+              <code className='block min-w-0 flex-1 overflow-x-auto whitespace-pre rounded-none border border-border bg-muted/40 px-2.5 py-1.5 text-[13px] text-muted-foreground'>
                 {installCommand}
               </code>
               <CopyCommandButton command={installCommand} />
@@ -469,7 +471,7 @@ function formatDependentSkillNames(names: readonly string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1] as string}`;
 }
 
-function isBundledGhostexAgentSkillInstalled(
+export function isBundledGhostexAgentSkillInstalled(
   skillId: BundledGhostexAgentSkillId,
   status?: SidebarGhostexCliStatusMessage
 ): boolean {
@@ -492,5 +494,7 @@ function isBundledGhostexAgentSkillInstalled(
       return status?.manageBeadsSkillInstalled === true;
     case 'moveCodexSession':
       return status?.moveCodexSessionSkillInstalled === true;
+    case 'help':
+      return status?.helpSkillInstalled === true;
   }
 }

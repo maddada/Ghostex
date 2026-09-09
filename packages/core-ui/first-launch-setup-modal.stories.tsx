@@ -52,6 +52,8 @@ const installedCliStatus: SidebarGhostexCliStatusMessage = {
   installed: true,
   moveCodexSessionSkillInstalled: true,
   moveCodexSessionSkillPath: '/Users/madda/agents/skills/ghostex-move-codex-session/SKILL.md',
+  helpSkillInstalled: true,
+  helpSkillPath: '/Users/madda/agents/skills/ghostex-help/SKILL.md',
   type: 'ghostexCliStatus',
 };
 
@@ -71,6 +73,7 @@ const missingCliStatus: SidebarGhostexCliStatusMessage = {
   gxUsable: false,
   installed: false,
   moveCodexSessionSkillInstalled: false,
+  helpSkillInstalled: false,
   type: 'ghostexCliStatus',
 };
 

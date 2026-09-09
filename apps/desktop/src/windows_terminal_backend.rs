@@ -54,6 +54,7 @@ pub(crate) struct WindowsWslGhostexCliStatus {
     pub(crate) gx_path: Option<String>,
     pub(crate) gx_usable: bool,
     pub(crate) move_codex_session_skill_path: Option<String>,
+    pub(crate) help_skill_path: Option<String>,
 }
 
 #[allow(dead_code)] // used by the windows path
@@ -210,7 +211,8 @@ printf '%s\n' \
   "$(test -f "$skills_root/ghostex-fable-56-orchestration/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-manage-beads/SKILL.md" && printf 1 || printf 0)" \
   "$(test -f "$skills_root/ghostex-auto-rename-session/SKILL.md" && printf 1 || printf 0)" \
-  "$(test -f "$skills_root/ghostex-move-codex-session/SKILL.md" && printf 1 || printf 0)"
+  "$(test -f "$skills_root/ghostex-move-codex-session/SKILL.md" && printf 1 || printf 0)" \
+  "$(test -f "$skills_root/ghostex-help/SKILL.md" && printf 1 || printf 0)"
 "#,
             posix_single_quote(&package_dir),
         );
@@ -236,6 +238,7 @@ printf '%s\n' \
             "ghostex-manage-beads",
             "ghostex-auto-rename-session",
             "ghostex-move-codex-session",
+            "ghostex-help",
         ];
         let mut skill_paths = Vec::with_capacity(skill_names.len());
         for skill_name in skill_names {
@@ -256,6 +259,7 @@ printf '%s\n' \
             manage_beads_skill_path: skill_paths.next().flatten(),
             generate_title_skill_path: skill_paths.next().flatten(),
             move_codex_session_skill_path: skill_paths.next().flatten(),
+            help_skill_path: skill_paths.next().flatten(),
             ghostex_path,
             gx_blocked_by_existing_command,
             gx_path,

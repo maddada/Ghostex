@@ -454,6 +454,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         | "openBrowser"
         | "openBrowserPane"
         | "openPaths"
+        | "openSettings"
         | "readResourcesSnapshot"
         | "restartSession"
         | "runCommand"
@@ -463,6 +464,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         | "switchProject"
         | "toggleCloseAfterDone"
         | "toggleSidebarCollapsed"
+        | "updateSettingsPatch"
         | "waitFor" => dispatch_gxserver_renderer_command(action, payload, flags),
         other => Err(rpc::unsupported_action_error(other)),
     }
@@ -894,6 +896,11 @@ fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> CliResult<Va
     let mut params = Map::new();
     params.insert("agentId".to_string(), json!(agent_id));
     params.insert("projectId".to_string(), json!(project_id));
+    // CDXC:SessionChat 2026-09-09 SEE-ALSO:
+    // Mobile uses --defer-start to open the durable draft immediately; its background attach owns provider startup.
+    if flags.truthy("deferStart") {
+        params.insert("draft".to_string(), json!(true));
+    }
     /*
     CDXC:Drafts 2026-08-20:
     `--first-input-draft` is the opposite of a first user message: gxserver
@@ -919,6 +926,9 @@ fn create_gxserver_agent_session(payload: &Value, flags: &Flags) -> CliResult<Va
         .or_else(|| payload.get("title").cloned());
     set_or_remove(&mut params, "title", title);
     let created = rpc::call_gxserver_rpc("/api/createAgentSession", &Value::Object(params), flags)?;
+    if flags.truthy("deferStart") {
+        return Ok(created);
+    }
     start_created_session_provider(created, flags)
 }
 

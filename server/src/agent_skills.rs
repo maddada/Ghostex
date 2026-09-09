@@ -21,6 +21,7 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     "ghostex-fable-56-orchestration",
     "ghostex-auto-rename-session",
     "ghostex-move-codex-session",
+    "ghostex-help",
     /*
     CDXC:ProjectBoard 2026-08-24:
     The Project Board beads skill teaches agents `ghostex board associate`, the

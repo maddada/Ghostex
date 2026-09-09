@@ -55,6 +55,7 @@ pub(crate) struct GpuiGhostexCliProbe {
     pub(crate) gx_path: Option<String>,
     pub(crate) gx_usable: bool,
     pub(crate) move_codex_session_skill_path: Option<String>,
+    pub(crate) help_skill_path: Option<String>,
 }
 
 #[cfg(target_os = "windows")]
@@ -74,6 +75,7 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         gx_path: status.gx_path,
         gx_usable: status.gx_usable,
         move_codex_session_skill_path: status.move_codex_session_skill_path,
+        help_skill_path: status.help_skill_path,
     })
 }
 
@@ -108,6 +110,7 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         gx_path: gx_path.as_ref().map(|path| gpui_path_string(path)),
         gx_usable,
         move_codex_session_skill_path: skill_path("ghostex-move-codex-session"),
+        help_skill_path: skill_path("ghostex-help"),
     })
 }
 
@@ -131,6 +134,7 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
     let manage_beads_skill_installed = probe.manage_beads_skill_path.is_some();
     let generate_title_skill_installed = probe.generate_title_skill_path.is_some();
     let move_codex_session_skill_installed = probe.move_codex_session_skill_path.is_some();
+    let help_skill_installed = probe.help_skill_path.is_some();
     let cua_driver_path = gpui_cua_driver_executable_path();
     let cua_app_installed = gpui_is_dir(Path::new("/Applications/CuaDriver.app"));
     let cua_driver_installed = cua_driver_path.is_some() || cua_app_installed;
@@ -271,6 +275,8 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
         "installed": ghostex_usable,
         "moveCodexSessionSkillInstalled": move_codex_session_skill_installed,
         "moveCodexSessionSkillPath": probe.move_codex_session_skill_path,
+        "helpSkillInstalled": help_skill_installed,
+        "helpSkillPath": probe.help_skill_path,
         "type": "ghostexCliStatus",
     })
 }

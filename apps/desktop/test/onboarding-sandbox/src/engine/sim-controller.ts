@@ -109,6 +109,7 @@ const SKILL_INSTALL_COMMANDS: Record<string, BundledSkillId> = {
   installGenerateTitleSkill: 'generateTitle',
   installManageBeadsSkill: 'manageBeads',
   installMoveCodexSessionSkill: 'moveCodexSession',
+  installHelpSkill: 'help',
 };
 
 /** packages/shared/ghostex-agent-skills.ts BundledGhostexAgentSkillId → sandbox skill id. */
@@ -122,6 +123,7 @@ const BUNDLED_SKILL_ID_BY_CONTRACT_ID: Record<string, BundledSkillId> = {
   generateTitle: 'generateTitle',
   manageBeads: 'manageBeads',
   moveCodexSession: 'moveCodexSession',
+  help: 'help',
 };
 
 export function createEngineActions(
@@ -877,6 +879,7 @@ export function createEngineActions(
       case 'installGenerateTitleSkill':
       case 'installManageBeadsSkill':
       case 'installMoveCodexSessionSkill':
+      case 'installHelpSkill':
       case 'installCuaDriver':
       case 'uninstallBundledAgentSkill':
       case 'uninstallBundledAgentSkills':

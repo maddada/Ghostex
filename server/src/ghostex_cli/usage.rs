@@ -147,7 +147,7 @@ pub fn usage() -> String {
             "Create a Quick chat workspace with its first terminal session",
         ),
         format_help_command(
-            "create-agent <agentId> --project-id id [--group-id id] [--first-input-draft text]",
+            "create-agent <agentId> --project-id id [--group-id id] [--first-input-draft text] [--defer-start]",
             "Create and start a configured agent session; --first-input-draft stages text in its input without sending",
         ),
         format_help_command(
@@ -248,6 +248,35 @@ pub fn usage() -> String {
             "run-action <commandId> --project-id id",
             "Run a Terminal action in a session or return a Browser action URL",
         ),
+    ]
+    .join("\n");
+
+    let settings_and_help_commands = [
+        format_help_command(
+            "settings list [--json] [--writable] [--tab id]",
+            "List every app setting with its current value, type, and default",
+        ),
+        format_help_command(
+            "settings get <key> [--json]",
+            "Show one setting's value, meaning, options, and where it lives in Settings",
+        ),
+        format_help_command(
+            "settings set <key> <value> [--json]",
+            "Change an agent-writable setting through the running desktop app",
+        ),
+        format_help_command(
+            "settings reset <key> [--json]",
+            "Restore a setting to its default through the running desktop app",
+        ),
+        format_help_command(
+            "settings open [<key>] [--tab id] [--json]",
+            "Open Settings on a tab, with the setting's row searched",
+        ),
+        format_help_command(
+            "guide [overview|features|settings|hotkeys]",
+            "Print the built-in Ghostex guide, or one chapter of it",
+        ),
+        format_help_command("guide --help", "Show Ghostex Help skill setup"),
     ]
     .join("\n");
 
@@ -378,6 +407,7 @@ pub fn usage() -> String {
             "move-codex-session --help",
             "Show Ghostex Move Codex Session skill setup",
         ),
+        format_help_command("guide --help", "Show Ghostex Help skill setup"),
         format_help_command("toggle-sidebar", "Collapse or expand the sidebar"),
         format_help_command("move-sidebar", "Move the sidebar"),
     ]
@@ -449,6 +479,9 @@ Commands:
 
 Workspace:
 {workspace_commands}
+
+Settings and help:
+{settings_and_help_commands}
 
 Quick actions:
 {quick_action_commands}
@@ -522,7 +555,9 @@ Specialized workflows:
   and the focused help pages. Use $ghostex-embedded-browser-use,
   $ghostex-browser-use, $ghostex-computer-use, $ghostex-manage-beads,
   $ghostex-fable-56-orchestration, $ghostex-auto-rename-session, or
-  $ghostex-move-codex-session when their domain applies.
+  $ghostex-move-codex-session when their domain applies. Use $ghostex-help to
+  explain how a Ghostex feature works or to change an app setting for the user
+  (ghostex guide, ghostex settings).
 "
     .to_string()
 }
@@ -943,6 +978,67 @@ What the skill does:
 
 Self-session command:
   ghostex rename-command --session-id \"${GHOSTEX_GLOBAL_SESSION_REF:-${GHOSTEX_SESSION_ID:-${ZMX_SESSION:-}}}\" --title \"<title>\"
+"
+    .to_string()
+}
+
+pub fn guide_usage() -> String {
+    "Ghostex Help - the built-in guide and the agent skill that explains and configures Ghostex
+
+Usage:
+  gx guide                       Print the overview chapter
+  gx guide <chapter>             Print one chapter: overview, features, settings, hotkeys
+  gx guide list                  List the chapters
+  gx guide --help
+  gx guide install-skill [--json] [--agent <id>...]
+
+Agent skill:
+  Use $ghostex-help when the user asks how a Ghostex feature works, what a
+  setting does, or wants an app setting changed for them.
+
+What the skill teaches:
+  Read ghostex guide (and the settings or hotkeys chapter) before answering,
+  find the exact key with ghostex settings list or get, confirm the change with
+  the user, apply it with ghostex settings set, and verify with settings get.
+  Settings agents may not write are opened for the user with settings open.
+
+Related commands:
+  ghostex settings --help
+"
+    .to_string()
+}
+
+pub fn settings_usage() -> String {
+    "Ghostex Settings - read and change app settings from the command line
+
+Usage:
+  gx settings list [--json] [--writable] [--tab <id>]
+  gx settings get <key> [--json]
+  gx settings set <key> <value> [--json]
+  gx settings reset <key> [--json]
+  gx settings open [<key>] [--tab <id>] [--json]
+  gx settings --help
+
+Keys:
+  Keys are the camelCase settings keys from the built-in catalog (ghostex guide
+  settings). list prints every key with its current value; get explains one.
+
+Values:
+  boolean   true or false (also on/off, yes/no)
+  number    a number; some keys accept only listed values or a min/max/step range
+  enum      exactly one of the listed option values (case-sensitive)
+  text      any text, passed verbatim
+
+Writing:
+  set and reset send the change to the running Ghostex desktop app, which saves
+  it the same way the Settings modal does, then the CLI confirms the saved
+  value. The desktop app must be running. Keys marked read-only for agents
+  (structured values, account and remote-pairing state, secrets, Settings UI
+  actions) cannot be set; use settings open <key> so the user can change them.
+
+Tabs (for --tab):
+  settings integrations extensions osIntegration remote projects agents
+  accounts actions openTargets hotkeys about
 "
     .to_string()
 }

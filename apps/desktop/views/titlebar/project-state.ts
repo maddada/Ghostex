@@ -282,6 +282,7 @@ export function createInitialProjectState(bootstrap: Record<string, unknown>): T
     automateViewTabHidden: settings.automateViewTabHidden,
     docsViewTabHidden: settings.docsViewTabHidden,
     tipsAndTricksTitlebarButtonHidden: settings.tipsAndTricksTitlebarButtonHidden,
+    helpTitlebarButtonHidden: settings.helpTitlebarButtonHidden,
     resourcesTitlebarButtonHidden: settings.resourcesTitlebarButtonHidden,
     devServersTitlebarButtonHidden: settings.devServersTitlebarButtonHidden,
     gitActionsTitlebarButtonHidden: settings.gitActionsTitlebarButtonHidden,
