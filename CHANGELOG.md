@@ -1,5 +1,59 @@
 # Changelog
 
+## 9.1.0 - 2026-09-10
+
+- New Features
+
+  - Ask Ghostex how it works. A new Help button in the titlebar starts a chat with an agent that knows the whole app: it explains a feature, walks you through a setup, or changes the setting for you when you ask.
+  - Your browsing history is searchable, per project. Hold Back or Forward for the pages you visited, or press Cmd+Y (Ctrl+H elsewhere) to search everything.
+  - Cmd+Shift+T opens a New Thread picker for the active project: type to filter your agents, press Tab on Claude or Codex to pick the account, or choose the Browser or Terminal row at the end.
+  - Give a project its own views. Each one runs a command you choose and shows its output beside your work, alongside Agents, Code and Browser.
+  - Drafts you type are now saved to disk as you go, so a restart, a crash, or a lost connection cannot take them. If a newer draft turns up from another device, Ghostex shows it with a preview and lets you keep either one.
+  - File edits in a conversation can show the first lines of the change instead of only the path.
+  - The quick model picker now works for Cursor, Grok Build and Antigravity too, not just Claude and Codex.
+  - Every Space shows how many of its sessions want your attention and how many are working.
+  - Reorder the titlebar's view buttons, and choose which ones appear at all.
+
+- Major Improvements
+
+  - Accounts has its own page in Settings, so every way in leads to the same place, and quick launch starts from your default account.
+  - Every Settings page now shares one look: a heading, then a card of plain rows, one setting per row.
+  - Activating a session reveals it wherever it appears: the sidebar switches Space, opens the project and group, and scrolls the session into view with room around it.
+  - The sessions sidebar, the companion pane and the Commands pane remember how you left them for each view, so switching between Agents, Code and Browser restores that layout.
+  - Starting a chat agent opens its chat right away and connects in the background, instead of waiting on a blank pane.
+  - Opening Previous Sessions and the project lists is much faster: Ghostex no longer rescans every Claude and Codex file on disk each time.
+  - Option+1, 2, 3 and so on now follow the titlebar order you see, so they keep working after you rearrange your views.
+
+- Minor Improvements
+
+  - Shortcuts now follow the key you pressed rather than the character it typed, so Option chords on macOS and non-US layouts such as AZERTY work as recorded.
+  - Subagent transcripts open in the normal chat display, with verbose and summary as choices.
+  - Paste or drop a link into the chat box and it becomes a reference pill like a file or a skill.
+  - A Claude Code compaction shows its progress instead of looking frozen.
+  - The usage rows in context details read your linked account, so they stay right even when the session has not reported yet.
+  - Double-click either divider between three panes to make them all equal.
+  - The compact view dropdown moves to the left of the titlebar, while the full view buttons stay centered.
+  - The companion pane loses its own hide button; the titlebar owns it, and floating it out now fills the window.
+  - Ghostex can trust an agent's project folder for you, so a session no longer stops on that prompt.
+  - The Commands hint stays visible beside the pane buttons.
+  - Extensions can see a project's git remote and which worktree it came from.
+  - Sidebar project names all use one color, and a selected session's chrome matches the chat box.
+  - Chat cards use the same font and line spacing as the rest of the conversation, and the minimap floats over the transcript instead of pushing it aside.
+  - Two-finger zoom is off in Ghostex's own views and modals, and still on for web pages and extensions.
+  - `ghostex guide` prints the app's reference docs, and `ghostex settings` reads and changes settings from the terminal.
+
+- Stabilization
+
+  - Pages no longer flash white while they load.
+  - A link inside a conversation opens in the browser instead of replacing the chat with that page.
+  - Sessions already running when Ghostex starts no longer arrive as attention notifications.
+  - Cursor's newer input box is recognised again, Codex's thinking notice reads as a dialog, and Claude's streaming replies are no longer treated as finished turns.
+  - A new session's title follows the project's own agent rather than a placeholder.
+  - Drafts sort inside the project's Sessions list, below the pinned rows, on desktop and on your phone.
+  - A prompt sent before the agent is ready is held in a queue instead of being lost.
+  - A delayed send no longer closes the window it was typed in.
+  - Closed sessions leave the Resources dropdown right away.
+
 ## 9.0.0 - 2026-09-08
 
 - New Features
