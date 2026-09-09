@@ -34,6 +34,9 @@ impl GhostexGpuiApp {
         };
 
         match message_type {
+            "browserHistoryQuery" | "browserHistoryOpen" => {
+                self.receive_browser_history_message(&message, cx);
+            }
             "accountTitlebarChanged" => self.update_titlebar_account_from_ui(&message, window, cx),
             // CDXC:Settings 2026-09-06 DECISION: Account setup runs its displayed sign-in command with one click in an interactive terminal, using the existing terminal launcher.
             "accountSetup" => {
@@ -586,6 +589,13 @@ impl GhostexGpuiApp {
             "quitResourcesFromTitlebar" => {
                 self.receive_gpui_titlebar_resources_quit_message(&message, window, cx);
             }
+            "primaryAgentLauncherChanged" => {
+                self.sidebar_primary_agent_launcher_id = message["agentId"]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|agent_id| !agent_id.is_empty() && agent_id.len() <= 128)
+                    .map(str::to_string);
+            }
             "startGxserverFromTitlebar" => {
                 self.show_gpui_gxserver_bootstrap_toast(
                     "info",
@@ -594,7 +604,7 @@ impl GhostexGpuiApp {
                     true,
                     cx,
                 );
-                self.start_gpui_local_gxserver_bootstrap(cx);
+                self.start_gpui_local_gxserver_bootstrap(false, cx);
                 self.dispatch_gpui_titlebar_resources_project_state_update(cx);
             }
             "accountSwitchProgress" => {
@@ -618,6 +628,9 @@ impl GhostexGpuiApp {
                 self.set_session_account_switch_progress(key, &message["progress"], None, cx);
             }
             "gxserverPresentationReady" => {
+                self.refresh_gpui_new_thread_picker_agents(cx);
+                self.refresh_gpui_new_thread_picker_accounts(cx);
+                self.ensure_gpui_new_thread_picker_preloaded(cx);
                 if !self.sidebar_timer_presentations_replayed_after_ready {
                     /*
                     CDXC:DelayedSend 2026-07-22:
@@ -825,7 +838,7 @@ impl GhostexGpuiApp {
         let Some(pane_id) = self.agents_workspace.pane_id_for_session(shell_session_id) else {
             return false;
         };
-        self.active_mode = TitlebarMode::Agents;
+        self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
         focus_existing_local_workspace_terminal_tab_model(
             &mut self.agents_workspace,
             &mut self.agents_terminal_runtime_sessions,

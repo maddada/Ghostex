@@ -23,6 +23,7 @@ import { DiscoverGhostexModal } from '@/packages/core-ui/discover-ghostex-modal'
 import { FirstUserMessageModal } from '@/packages/core-ui/first-user-message-modal';
 import { StashedPromptsModal, type StashedPromptsScope } from '@/packages/core-ui/stashed-prompts-modal';
 import { PortlessSetupModal, type PortlessSetupModalMode } from '@/packages/core-ui/portless-setup-modal';
+import { BrowserHistoryModal, type BrowserHistoryTarget } from '@/packages/core-ui/browser-history-modal';
 import { PreviousSessionsModal } from '@/packages/core-ui/previous-sessions-modal';
 import { RecentProjectsModal } from '@/packages/core-ui/recent-projects-modal';
 import { RemoteGxserverInstallModal } from '@/packages/core-ui/remote-gxserver-install-modal';
@@ -116,6 +117,7 @@ type AppModalKind =
   | 'openTargets'
   | 'portlessSetup'
   | 'previousSessions'
+  | 'browserHistory'
   | 'recentProjects'
   | 'firstUserMessage'
   | 'remoteGxserverInstall'
@@ -211,6 +213,8 @@ type AppIconStateMessage = Extract<ExtensionToSidebarMessage, { type: 'appIconSt
 
 type AppModalHostMessage =
   | {
+      paneId?: number;
+      runtimeKey?: number;
       agentDraft?: AgentConfigDraft;
       agentIcon?: SidebarAgentIcon;
       agentId?: string;
@@ -794,7 +798,8 @@ type FirstLaunchSkillInstallAction =
   | 'installFable56OrchestrationSkill'
   | 'installGenerateTitleSkill'
   | 'installManageBeadsSkill'
-  | 'installMoveCodexSessionSkill';
+  | 'installMoveCodexSessionSkill'
+  | 'installHelpSkill';
 
 const FIRST_LAUNCH_SKILL_INSTALL_ACTION_BY_ID: Record<BundledGhostexAgentSkillId, FirstLaunchSkillInstallAction> = {
   browserUse: 'installBrowserUseSkill',
@@ -805,6 +810,7 @@ const FIRST_LAUNCH_SKILL_INSTALL_ACTION_BY_ID: Record<BundledGhostexAgentSkillId
   generateTitle: 'installGenerateTitleSkill',
   manageBeads: 'installManageBeadsSkill',
   moveCodexSession: 'installMoveCodexSessionSkill',
+  help: 'installHelpSkill',
 };
 
 function requestAppModalSettingsAction(action: FirstLaunchSkillInstallAction): Promise<void> {
@@ -1172,6 +1178,7 @@ function AppModalHost() {
     worktreeDelete,
     worktreeRename,
     missingProjectFolder,
+    browserHistory,
     previousSessionsInitialScope,
     previousSessionsOpenRequestSequence,
     commandPaletteInitialQuery,
@@ -1211,8 +1218,6 @@ function AppModalHost() {
   const [ghostexFolderStatsLoading, setGhostexFolderStatsLoading] = useState(false);
   const [osIntegrationStatusLoading, setOSIntegrationStatusLoading] = useState(false);
   const [pluginSettingsStatusLoading, setPluginSettingsStatusLoading] = useState(false);
-  const [isPreviousSessionsInitialLoadReady, setIsPreviousSessionsInitialLoadReady] = useState(false);
-  const [isRecentProjectsInitialLoadReady, setIsRecentProjectsInitialLoadReady] = useState(false);
   const sentNativeFitHeightMeasurementKeysRef = useRef<Set<string>>(new Set());
   const previousSettingsRenderStateLogRef = useRef('');
   const previousFirstLaunchSetupRenderStateLogRef = useRef('');
@@ -1226,6 +1231,7 @@ function AppModalHost() {
   const agents = useSidebarStore((state) => state.hud.agents);
   const commands = useSidebarStore((state) => state.hud.commands);
   const projectSettingsProjects = useSidebarStore((state) => state.hud.projectSettingsProjects ?? []);
+  const projectViewSpaces = useSidebarStore((state) => state.hud.projectViewSpaces);
   const portless = useSidebarStore((state) => state.hud.portless);
   const customThemeColor = useSidebarStore((state) => state.hud.customThemeColor);
   const theme = useSidebarStore((state) => state.hud.theme);
@@ -1299,12 +1305,9 @@ function AppModalHost() {
     portlessSetup,
   });
   /*
-  CDXC:Sessions 2026-08-07:
-  The native app-modal host is hidden until React posts `presented`. Previous
-  Sessions delays that signal until its first gxserver history query resolves;
-  command-palette time preloads the same retained result so switching tabs can
-  present immediately without a loading or premature empty state.
-  */
+   * CDXC:DesignSystem 2026-09-09 DECISION:
+   * User: every Quick Access page appears immediately, then shows its shared spinner-and-text state only if loading is still pending after 500ms. This supersedes hiding Projects and Sessions until their first request resolves.
+   */
   /*
    * CDXC:Settings 2026-06-20-23:02:
    * Settings must not send native `presented` from the generic modal-ready path
@@ -1316,9 +1319,7 @@ function AppModalHost() {
   const isActiveModalRenderable =
     isBaseActiveModalRenderable &&
     (!isSettingsModal || isSettingsRenderable) &&
-    (!isFirstLaunchSetupModal || isFirstLaunchSetupRenderable) &&
-    (activeModal !== 'previousSessions' || isPreviousSessionsInitialLoadReady) &&
-    (activeModal !== 'recentProjects' || isRecentProjectsInitialLoadReady);
+    (!isFirstLaunchSetupModal || isFirstLaunchSetupRenderable);
   /*
    * CDXC:Diagnostics 2026-06-20-20:24:
    * Settings presented diagnostics must not add sidebar revision or hydration
@@ -1447,26 +1448,6 @@ function AppModalHost() {
     isFirstLaunchSetupRenderable,
     revision,
   ]);
-
-  useEffect(() => {
-    if (activeModal !== 'previousSessions') {
-      setIsPreviousSessionsInitialLoadReady(false);
-    }
-  }, [activeModal]);
-
-  const handlePreviousSessionsInitialLoadReady = useCallback(() => {
-    setIsPreviousSessionsInitialLoadReady(true);
-  }, []);
-
-  useEffect(() => {
-    if (activeModal !== 'recentProjects') {
-      setIsRecentProjectsInitialLoadReady(false);
-    }
-  }, [activeModal]);
-
-  const handleRecentProjectsInitialLoadReady = useCallback(() => {
-    setIsRecentProjectsInitialLoadReady(true);
-  }, []);
 
   useEffect(() => {
     const previousDefaultPromptAgentId = previousDefaultPromptAgentIdRef.current;
@@ -1706,12 +1687,12 @@ function AppModalHost() {
 
   return (
     <>
+      {activeModal === 'browserHistory' && browserHistory && <BrowserHistoryModal target={browserHistory} onClose={closeModal} />}
       <PreviousSessionsModal
         initialScope={previousSessionsInitialScope}
         openRequestSequence={previousSessionsOpenRequestSequence}
         isOpen={activeModal === 'previousSessions'}
         onClose={closeModal}
-        onInitialLoadReady={handlePreviousSessionsInitialLoadReady}
         shouldPreload={
           activeModal === 'commandPalette' || activeModal === 'recentProjects' || activeModal === 'stashedPrompts'
         }
@@ -1733,7 +1714,6 @@ function AppModalHost() {
         machineId={recentProjects?.machineId}
         machineName={recentProjects?.machineName}
         onClose={closeModal}
-        onInitialLoadReady={handleRecentProjectsInitialLoadReady}
         vscode={vscode}
       />
       <StashedPromptsModal
@@ -2326,6 +2306,10 @@ function AppModalHost() {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: 'installMoveCodexSessionSkill' });
         }}
+        onInstallHelpSkill={() => {
+          setGhostexCliStatusLoading(true);
+          vscode.postMessage({ type: 'installHelpSkill' });
+        }}
         onInstallCuaDriver={() => {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: 'installCuaDriver' });
@@ -2404,6 +2388,7 @@ function AppModalHost() {
         onClose={closeModal}
         portless={portless}
         projects={projectSettingsProjects}
+        projectViewSpaces={projectViewSpaces}
         settings={settings}
         tailcatRpc={gpuiBootstrapTailcatRpc()}
         vscode={vscode}
@@ -2480,6 +2465,10 @@ function AppModalHost() {
         onInstallMoveCodexSessionSkill={() => {
           setGhostexCliStatusLoading(true);
           vscode.postMessage({ type: 'installMoveCodexSessionSkill' });
+        }}
+        onInstallHelpSkill={() => {
+          setGhostexCliStatusLoading(true);
+          vscode.postMessage({ type: 'installHelpSkill' });
         }}
         onInstallSelectedSkills={requestFirstLaunchInstallSelectedSkills}
         onUninstallBundledAgentSkill={(skillId) => {
@@ -2770,6 +2759,7 @@ function useModalStateFromNative() {
   const [portlessSetup, setPortlessSetup] = useState<PortlessSetupModalState>();
   const [updateAvailable, setUpdateAvailable] = useState<UpdateAvailableModalState>();
   const [agentHookStatus, setAgentHookStatus] = useState<AgentHookStatusMessage>();
+  const [browserHistory, setBrowserHistory] = useState<BrowserHistoryTarget>();
   const [previousSessionsInitialScope, setPreviousSessionsInitialScope] = useState<'all' | 'closed' | 'external'>('all');
   const [previousSessionsOpenRequestSequence, setPreviousSessionsOpenRequestSequence] = useState(0);
   const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState('');
@@ -2792,6 +2782,7 @@ function useModalStateFromNative() {
 
   const clearActiveModalState = useCallback(() => {
     setActiveModal(undefined);
+    setBrowserHistory(undefined);
     setActiveModalRequestId(undefined);
     setAgentHooksRequired(undefined);
     setConfig({});
@@ -3379,9 +3370,7 @@ function useModalStateFromNative() {
                 : undefined
             );
             setSettingsInitialAgentsSection(
-              message.initialAgentsSection === 'agentHooks' || message.initialAgentsSection === 'accounts'
-                ? message.initialAgentsSection
-                : undefined
+              message.initialAgentsSection === 'agentHooks' ? message.initialAgentsSection : undefined
             );
             setSettingsInitialTabOverride(isSettingsModalTab(message.initialTab) ? message.initialTab : undefined);
           } else {
@@ -3391,6 +3380,9 @@ function useModalStateFromNative() {
             setSettingsInitialAgentsSection(undefined);
             setSettingsInitialSearchQuery(undefined);
             setSettingsInitialTabOverride(undefined);
+          }
+          if (message.modal === 'browserHistory' && typeof message.paneId === 'number' && typeof message.runtimeKey === 'number') {
+            setBrowserHistory({ paneId: message.paneId, runtimeKey: message.runtimeKey });
           }
           if (message.modal === 'previousSessions') {
             setPreviousSessionsInitialScope(
@@ -3652,6 +3644,7 @@ function useModalStateFromNative() {
     worktreeDelete,
     worktreeRename,
     missingProjectFolder,
+    browserHistory,
     previousSessionsInitialScope,
     previousSessionsOpenRequestSequence,
     commandPaletteInitialQuery,
@@ -3912,6 +3905,7 @@ function isModalRenderable({
       return worktree !== undefined;
     case 'portlessSetup':
       return portlessSetup !== undefined;
+    case 'browserHistory':
     case 'previousSessions':
     case 'discoverGhostex':
     case 'remoteSetup':

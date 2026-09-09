@@ -7,7 +7,7 @@ import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 /** The Settings → Remote cards a deep link can scroll to. */
 export type SettingsRemoteSection = 'easyConnect' | 'tailscale';
 /** Agents tab card a Settings deep link scrolls to; see AgentsSettingsTab. */
-export type SettingsAgentsSection = 'agentHooks' | 'accounts';
+export type SettingsAgentsSection = 'agentHooks';
 
 export type AppModalKind =
   | 'addProject'
@@ -30,6 +30,7 @@ export type AppModalKind =
   | 'openTargets'
   | 'portlessSetup'
   | 'previousSessions'
+  | 'browserHistory'
   | 'recentProjects'
   | 'firstUserMessage'
   | 'remoteGxserverInstall'
@@ -46,6 +47,7 @@ export type AppModalKind =
   | 'firstLaunchSetup';
 
 export type OpenAppModalMessage =
+  | { modal: 'browserHistory'; paneId: number; runtimeKey: number; type: 'open' }
   | { modal: 'previousSessions'; initialSessionScope?: 'all' | 'closed' | 'external'; type: 'open' }
   | { modal: 'mermaidDiagram'; source: string; type: 'open' }
   | { modal: 'markdownTable'; source: string; type: 'open' }
@@ -68,6 +70,7 @@ export type OpenAppModalMessage =
         | 'missingProjectFolder'
         | 'portlessSetup'
         | 'previousSessions'
+        | 'browserHistory'
         | 'recentProjects'
         | 'remoteGxserverInstall'
         | 'renameSession'

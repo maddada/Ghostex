@@ -221,12 +221,7 @@ impl GhostexGpuiApp {
                                 this.reset_browser_media_permissions_for_pane(pane_id, cx);
                             }
                             BrowserToolbarAction::HistoryMenu => {
-                                this.show_browser_recent_history_menu(
-                                    pane_id,
-                                    event.position,
-                                    window,
-                                    cx,
-                                );
+                                this.show_browser_history_popup(pane_id, window, cx);
                             }
                             BrowserToolbarAction::ProfileMenu => {
                                 this.show_browser_profile_menu(pane_id, event.position, window, cx);

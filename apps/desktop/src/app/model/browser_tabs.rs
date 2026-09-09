@@ -278,11 +278,6 @@ pub(crate) struct BrowserNavigationHistory {
     pub(crate) current_index: Option<usize>,
 }
 
-pub(crate) struct BrowserHistoryRow {
-    pub(crate) index: usize,
-    pub(crate) url: String,
-}
-
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct BrowserFaviconImage {
     pub(crate) image: Arc<Image>,
@@ -335,10 +330,10 @@ pub(crate) struct BrowserTab {
     Browser tab icons may fetch safe HTTP(S) favicons only through a favicon-specific runtime asset source. Keep raw CEF favicon URLs out of shell state and logging, store only a scheme+authority marker on BrowserTab, cap URL length, redirects, body bytes, formats, and decode dimensions, and fall back to the marker or generic icon on every failure.
 
     CDXC:Browser 2026-06-22-10:09:
-    GPUI Browser tabs need their own compact navigation history so the toolbar History menu can show rows for the focused tab without borrowing another tab's CEF internals. Keep history keyed by BrowserTabId and show history through OS-owned NativeMenus, not Back/Forward dropdown toggles, in-layout panels, or overlay hit regions.
+    The per-tab navigation list restores back/forward state. The history popup reads the independent persistent visit store across projects; both remain separate from CEF internals.
 
     CDXC:Telemetry 2026-06-22-10:09:
-    Browser history persistence is limited to sanitized loaded URLs and a current index. Do not store page titles, labels, favicon URLs, query strings, fragments, credentials, cookies, tokens, local paths, command text, stdout/stderr, or user-owned content; rebuild invalid or missing history from the tab's sanitized loaded URL.
+    The per-tab back/forward list stores sanitized loaded URLs and a current index; rebuild invalid or missing navigation from the tab's sanitized loaded URL. Titles and favicons belong to the independent Browser visit store used by the history popup.
 
     CDXC:Browser 2026-06-23-11:14:
     Each GPUI Browser tab carries its selected generated profile id. Changing a tab's profile recreates only that tab's CEF surface with the selected request context, and shell-state persistence stores only this safe numeric id so different tabs keep different profiles across restart without persisting profile names, paths, cookies, credentials, history, or user-entered browser data.
@@ -532,33 +527,6 @@ impl BrowserNavigationHistory {
         true
     }
 
-    pub(crate) fn rows_around_current(&self, max_rows: usize) -> Vec<BrowserHistoryRow> {
-        let Some(current_index) = self
-            .current_index
-            .filter(|index| *index < self.entries.len())
-        else {
-            return Vec::new();
-        };
-        let visible_count = max_rows.max(1).min(self.entries.len());
-        let mut start_index = current_index.saturating_sub(visible_count / 2);
-        if start_index + visible_count > self.entries.len() {
-            start_index = self.entries.len().saturating_sub(visible_count);
-        }
-        let end_index = start_index + visible_count;
-
-        self.entries[start_index..end_index]
-            .iter()
-            .enumerate()
-            .map(|(offset, url)| {
-                let index = start_index + offset;
-                BrowserHistoryRow {
-                    index,
-                    url: url.clone(),
-                }
-            })
-            .collect()
-    }
-
     pub(crate) fn enforce_cap(&mut self) {
         if self.entries.len() <= BROWSER_HISTORY_MAX_ENTRIES {
             return;
@@ -606,7 +574,7 @@ impl BrowserTabModel {
         Popup parity is explicit: only non-empty target URLs create Browser tabs. Empty CEF targets, including script-created blank popups with no transferable URL/content, are handled as no-ops without address-only tab creation, CEF surface creation, shell-state persistence, notification, import, or content-transfer fallback.
 
         CDXC:Browser 2026-06-22-09:02:
-        Browser tabs now need shell-owned pane groups and left/right/top/bottom split order before full multi-CEF rendering exists. Keep BrowserTabId metadata and per-tab CEF ownership in one registry, while split leaves store only tab ids plus active selection so drag grouping and splitting never recreate Browser surfaces or persist raw page titles/query strings.
+        Browser tabs now need shell-owned pane groups and left/right/top/bottom split order before full multi-CEF rendering exists. Keep BrowserTabId metadata and per-tab CEF ownership in one registry, while split leaves store only tab ids plus active selection so drag grouping and splitting never recreate Browser surfaces or persist raw page titles.
 
         CDXC:Browser 2026-06-22-09:55:
         Browser split panes should show the existing loaded CEF surface for each rendered leaf's active tab when Browser is awake and drags are not hiding native views. Restored or inactive loaded tabs without an existing CEF entity render restored/sleeping placeholder bodies until normal selection or wake materializes them, and address-only tabs never borrow another tab's surface.
@@ -1409,17 +1377,6 @@ impl BrowserTabModel {
             .map(BrowserTab::address_value)
             .unwrap_or_default()
     }
-
-    pub(crate) fn pane_history_rows(
-        &self,
-        pane_id: BrowserPaneId,
-        max_rows: usize,
-    ) -> Vec<BrowserHistoryRow> {
-        self.active_tab_for_pane(pane_id)
-            .filter(|tab| tab.state == BrowserTabState::Loaded)
-            .map(|tab| tab.navigation_history.rows_around_current(max_rows))
-            .unwrap_or_default()
-    }
 }
 
 impl BrowserTab {
@@ -1523,6 +1480,10 @@ impl BrowserTabGroup {
 }
 
 pub(crate) fn sanitize_browser_tab_url_for_state(url: &str) -> Option<String> {
+    /*
+    CDXC:Browser 2026-09-09 DECISION:
+    User: after an app restart, a Browser tab must reopen the same complete HTTP(S) URL, including its query string and fragment, rather than only the page path. Continue removing URL credentials before persistence.
+    */
     let trimmed = url.trim();
     if trimmed.is_empty() || trimmed.eq_ignore_ascii_case(BROWSER_ADDRESS_ONLY_CEF_URL) {
         return None;
@@ -1532,16 +1493,14 @@ pub(crate) fn sanitize_browser_tab_url_for_state(url: &str) -> Option<String> {
     if scheme != "http" && scheme != "https" {
         return None;
     }
-    let content_end = rest.find(['?', '#']).unwrap_or(rest.len());
-    let without_query = &rest[..content_end];
-    let authority_end = without_query.find('/').unwrap_or(without_query.len());
-    let authority = &without_query[..authority_end];
-    let path = &without_query[authority_end..];
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    let navigation_suffix = &rest[authority_end..];
     let authority = authority.rsplit('@').next().unwrap_or(authority).trim();
     if authority.is_empty() {
         return None;
     }
-    Some(format!("{scheme}://{authority}{path}"))
+    Some(format!("{scheme}://{authority}{navigation_suffix}"))
 }
 
 pub(crate) fn browser_placeholder_safe_origin_url(sanitized_url: &str) -> Option<String> {

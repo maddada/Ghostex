@@ -192,6 +192,7 @@ impl GhostexGpuiApp {
                     .find(|tab| tab.id == tab_id && tab.url == page_url)
                 {
                     tab.runtime_favicon_image = Some(image);
+                    app.record_browser_history_page(runtime_key, tab_id, "", false);
                     cx.notify();
                 }
             });

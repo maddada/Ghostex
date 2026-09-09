@@ -440,7 +440,7 @@ impl GhostexGpuiApp {
             return false;
         };
 
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
         self.browser_address_input_editing.insert(pane_id);
@@ -479,7 +479,7 @@ impl GhostexGpuiApp {
             return false;
         }
 
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
         if let Some(surface) = self.browser_surface_for_pane(pane_id) {
@@ -765,12 +765,25 @@ impl GhostexGpuiApp {
         let async_cx = cx.to_async();
         let foreground = cx.foreground_executor().clone();
         let runtime_key = self.browser_tabs_runtime_key;
+        let original_project_name = self.project_name.clone();
 
         Rc::new(move |event: cef::BrowserPageMetadataEvent| {
             let remote_favicon_url = match &event {
                 cef::BrowserPageMetadataEvent::FaviconUrlChanged(Some(url)) => Some(url.clone()),
                 _ => None,
             };
+            let navigation = matches!(&event, cef::BrowserPageMetadataEvent::AddressChanged(_));
+            let save_metadata = navigation
+                || matches!(
+                    &event,
+                    cef::BrowserPageMetadataEvent::TitleChanged(_)
+                        | cef::BrowserPageMetadataEvent::FaviconUrlChanged(_)
+                        | cef::BrowserPageMetadataEvent::LoadingStateChanged {
+                            is_loading: false,
+                            ..
+                        }
+                );
+            let original_project_name = original_project_name.clone();
             let app = app.clone();
             let mut async_cx = async_cx.clone();
             foreground
@@ -789,6 +802,14 @@ impl GhostexGpuiApp {
                                 );
                             }
                             None => {}
+                        }
+                        if save_metadata {
+                            this.record_browser_history_page(
+                                runtime_key,
+                                tab_id,
+                                &original_project_name,
+                                navigation,
+                            );
                         }
                         if let Some(url) = remote_favicon_url {
                             this.fetch_remote_tab_favicon(runtime_key, tab_id, url, cx);

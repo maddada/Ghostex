@@ -10,6 +10,7 @@ gpui::actions!(
         OpenCommandPane,
         PasteIntoFocusedTerminal,
         FindInFocusedTerminal,
+        OpenBrowserHistory,
         FindNextInFocusedBrowser,
         FindPreviousInFocusedBrowser,
         ZoomInFocusedSurface,
@@ -279,17 +280,6 @@ pub(crate) struct CloseBrowserTabInPane {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct OpenBrowserHistoryEntryInNewTab {
-    pub(crate) pane_id: u64,
-    pub(crate) index: u64,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
-pub(crate) struct BrowserHistoryMenuLabel;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
-#[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunBrowserFeedbackTool;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
@@ -346,6 +336,12 @@ pub(crate) struct RunGpuiTitlebarTipsHeaderAction {
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarTip {
     pub(crate) tip_index: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct RunGpuiTitlebarHelpQuestion {
+    pub(crate) question_index: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Action)]

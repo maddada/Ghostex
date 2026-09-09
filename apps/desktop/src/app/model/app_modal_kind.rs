@@ -16,6 +16,7 @@ pub(crate) enum GpuiAppModalKind {
     CommandPalette,
     FindPrompts,
     PreviousSessions,
+    BrowserHistory,
     RecentProjects,
     StashedPrompts,
     AgentsHub,
@@ -57,6 +58,7 @@ impl GpuiAppModalKind {
             "commandPalette" => Some(Self::CommandPalette),
             "findPrompts" => Some(Self::FindPrompts),
             "previousSessions" => Some(Self::PreviousSessions),
+            "browserHistory" => Some(Self::BrowserHistory),
             "recentProjects" => Some(Self::RecentProjects),
             "stashedPrompts" => Some(Self::StashedPrompts),
             "agentsHub" => Some(Self::AgentsHub),
@@ -101,6 +103,7 @@ impl GpuiAppModalKind {
             Self::CommandPalette => "commandPalette",
             Self::FindPrompts => "findPrompts",
             Self::PreviousSessions => "previousSessions",
+            Self::BrowserHistory => "browserHistory",
             Self::RecentProjects => "recentProjects",
             Self::StashedPrompts => "stashedPrompts",
             Self::AgentsHub => "agentsHub",
@@ -133,6 +136,7 @@ impl GpuiAppModalKind {
 
     pub(crate) fn window_title(self) -> &'static str {
         match self {
+            Self::BrowserHistory => "Ghostex Browser History",
             Self::AddProject => "Ghostex Add Project",
             Self::AgentHooksRequired => "Ghostex Install Required Hooks",
             Self::Settings => "Ghostex Settings",
@@ -173,6 +177,7 @@ impl GpuiAppModalKind {
 
     pub(crate) fn window_size(self) -> Size<Pixels> {
         match self {
+            Self::BrowserHistory => Self::PreviousSessions.window_size(),
             Self::ModelPicker => size(px(1260.0), px(1050.0)),
             /* All four Quick Access tabs share one stable child-window frame. */
             Self::CommandPalette
@@ -389,6 +394,7 @@ impl GpuiAppModalKind {
                 "type": "open",
             }),
             Self::ModelPicker
+            | Self::BrowserHistory
             | Self::Settings
             | Self::Hotkeys
             | Self::FindPrompts

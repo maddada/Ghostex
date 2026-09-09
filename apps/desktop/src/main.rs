@@ -8,6 +8,7 @@ GPUI still has schema-sized privacy-boundary serde_json::json! payloads outside 
 mod app;
 mod app_icon;
 mod assets;
+mod browser_history;
 mod cef;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod cef_component_window;
@@ -256,6 +257,15 @@ fn main() {
         */
         let shell_key_bindings = vec![
             KeyBinding::new("f12", OpenCommandPane, None),
+            KeyBinding::new(
+                if cfg!(target_os = "macos") {
+                    "cmd-y"
+                } else {
+                    "ctrl-h"
+                },
+                OpenBrowserHistory,
+                Some(BROWSER_KEY_CONTEXT),
+            ),
             gpui_key_binding_from_shared_hotkey("cmd+v", PasteIntoFocusedTerminal, None),
             gpui_key_binding_from_shared_hotkey("cmd+f", FindInFocusedTerminal, None),
             gpui_key_binding_from_shared_hotkey("cmd+g", FindNextInFocusedBrowser, None),
@@ -304,11 +314,6 @@ fn main() {
                 MergeAllTabs,
                 None,
             ),
-            KeyBinding::new("alt-1", SwitchAgentsWorkarea, None),
-            KeyBinding::new("alt-2", SwitchSourceWorkarea, None),
-            KeyBinding::new("alt-3", SwitchBrowserWorkarea, None),
-            KeyBinding::new("alt-4", SwitchKanbanWorkarea, None),
-            KeyBinding::new("alt-5", SwitchManageWorkarea, None),
             gpui_key_binding_from_shared_hotkey("cmd+alt+left", FocusWorkspaceLeft, None),
             gpui_key_binding_from_shared_hotkey("cmd+alt+right", FocusWorkspaceRight, None),
             gpui_key_binding_from_shared_hotkey("cmd+alt+up", FocusWorkspaceUp, None),
@@ -399,7 +404,11 @@ fn main() {
                 });
                 view.update(cx, |app, cx| {
                     app.start_gpui_support_log_maintenance(cx);
-                    app.start_gpui_local_gxserver_bootstrap(cx);
+                    /*
+                    CDXC:ServerDaemon 2026-09-09 DECISION:
+                    User: do not show the "Loading sessions" toast when the app starts.
+                    */
+                    app.start_gpui_local_gxserver_bootstrap(false, cx);
                     app.start_gpui_workspace_open_target_availability_scan(cx);
                     app.start_gpui_updater(cx);
                     cx.on_app_quit(|this, cx| {
@@ -441,6 +450,7 @@ fn main() {
                                 );
                             }
                             app.close_gpui_titlebar_popup(None, window, cx);
+                            app.recycle_gpui_new_thread_picker_preload(cx);
                         }
                     })
                     .detach();

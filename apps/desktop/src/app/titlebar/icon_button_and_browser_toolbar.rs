@@ -237,10 +237,6 @@ impl GhostexGpuiApp {
                 (1.2_f64.powf(surface.read(cx).zoom_level()) * 100.0).round() as i32
             ))
         });
-        let can_show_recent_history = !self
-            .browser_tabs
-            .pane_history_rows(pane_id, BROWSER_HISTORY_MENU_MAX_ROWS)
-            .is_empty();
         /*
         CDXC:Browser 2026-07-27:
         A remembered Block would otherwise be unrecoverable: the page just
@@ -376,7 +372,7 @@ impl GhostexGpuiApp {
                     .child(self.render_browser_toolbar_button(
                         "history",
                         BROWSER_ICON_HISTORY,
-                        can_show_recent_history,
+                        true,
                         Some("History".into()),
                         BrowserToolbarAction::HistoryMenu,
                         pane_id,
