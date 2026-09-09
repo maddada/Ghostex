@@ -1,3 +1,4 @@
+import { shortcutLetterOrDigitFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 import type { SessionGridDirection, TerminalViewMode } from './session-grid-contract-core';
 
 export type ghostexHotkeyActionId =
@@ -11,12 +12,14 @@ export type ghostexHotkeyActionId =
   | 'mergeAllTabs'
   | 'openCommandPalette'
   | 'openSessionSearchPalette'
+  | 'openNewThreadPalette'
   | 'openBrowserPane'
   | 'openSettings'
   | 'openHotkeys'
   | 'moveSidebar'
   | 'openCommandsPanel'
   | 'openExtensions'
+  | 'openGhostexHelp'
   | 'popOutPane'
   | 'promptEditor'
   | 'reloadSession'
@@ -53,6 +56,8 @@ export type ghostexHotkeyActionId =
   | 'switchGitHubView'
   | 'switchKanbanView'
   | 'switchManageView'
+  | 'switchAutomateView'
+  | `switchTitlebarView${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`
   | `runActionSlot${1 | 2 | 3 | 4 | 5}`
   | `jumpToProject${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`
   | `focusSessionSlot${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`;
@@ -97,8 +102,10 @@ export type ghostexHotkeyAction =
   | { id: ghostexHotkeyActionId; kind: 'moveSidebar' }
   | { id: ghostexHotkeyActionId; kind: 'openCommandPalette' }
   | { id: ghostexHotkeyActionId; kind: 'openSessionSearchPalette' }
+  | { id: ghostexHotkeyActionId; kind: 'openNewThreadPalette' }
   | { id: ghostexHotkeyActionId; kind: 'openCommandsPanel' }
   | { id: ghostexHotkeyActionId; kind: 'openExtensions' }
+  | { id: ghostexHotkeyActionId; kind: 'openGhostexHelp' }
   | { id: ghostexHotkeyActionId; kind: 'openDocsFoldersSettings' }
   | { id: ghostexHotkeyActionId; kind: 'openSettings' }
   | { id: ghostexHotkeyActionId; kind: 'openFindPrompts' }
@@ -109,8 +116,9 @@ export type ghostexHotkeyAction =
   | {
       id: ghostexHotkeyActionId;
       kind: 'switchWorkareaView';
-      view: 'agents' | 'github' | 'kanban' | 'manage' | 'source';
+      view: 'agents' | 'github' | 'kanban' | 'manage' | 'source' | 'automate';
     }
+  | { id: ghostexHotkeyActionId; kind: 'switchTitlebarView'; viewIndex: number }
   | { id: ghostexHotkeyActionId; kind: 'terminalToolbarAction'; terminalToolbarAction: ghostexTerminalToolbarAction }
   | { id: ghostexHotkeyActionId; kind: 'toggleCompanionPane' }
   | { id: ghostexHotkeyActionId; kind: 'toggleSidebarCollapsed' }
@@ -182,6 +190,18 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     title: 'Open Quick Access: Recent Sessions',
   },
   {
+    action: { id: 'openNewThreadPalette', kind: 'openNewThreadPalette' },
+    /**
+     * CDXC:AgentLauncher 2026-09-09 DECISION:
+     * User: a hotkey opens a borderless picker that starts a new thread in the active project. It lists the agents with the last-used one preselected at the top, filters as you type, and ends with Browser and Terminal rows. Tab on Claude or Codex drills into that provider's accounts, mirroring the project-header agent dropdown.
+     * SEE-ALSO: packages/core-ui/new-thread-palette.tsx, apps/desktop/src/app/model/app_modal_kind.rs.
+     */
+    defaultKey: 'cmd+shift+t',
+    description: 'Pick an agent, Browser, or Terminal to start in the active project.',
+    id: 'openNewThreadPalette',
+    title: 'New Thread in Active Project',
+  },
+  {
     action: { id: 'openCommandsPanel', kind: 'openCommandsPanel' },
     defaultKey: 'f12',
     description:
@@ -202,6 +222,17 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     description: 'Open the Extensions page in Settings to manage built-in features and installed extensions.',
     id: 'openExtensions',
     title: 'Open Extensions',
+  },
+  /**
+   * CDXC:Onboarding 2026-09-09 DECISION:
+   * User: expose the Ghostex Help entry point in Quick Access as well as the titlebar button.
+   */
+  {
+    action: { id: 'openGhostexHelp', kind: 'openGhostexHelp' },
+    defaultKey: '',
+    description: 'Open the Ghostex Help menu: sample questions an agent can answer and settings it can change for you.',
+    id: 'openGhostexHelp',
+    title: 'Ask Ghostex Help',
   },
   {
     action: { id: 'openHotkeys', kind: 'openHotkeys' },
@@ -275,10 +306,11 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   ...(
     [
       ['switchAgentsView', 'agents', 'alt+1', 'Agents'],
-      ['switchSourceView', 'source', 'alt+2', 'Source'],
-      ['switchGitHubView', 'github', 'alt+3', 'GitHub'],
+      ['switchSourceView', 'source', 'alt+2', 'Code'],
+      ['switchGitHubView', 'github', 'alt+3', 'Browser'],
       ['switchKanbanView', 'kanban', 'alt+4', 'Kanban'],
       ['switchManageView', 'manage', 'alt+5', 'Docs'],
+      ['switchAutomateView', 'automate', '', 'Automate'],
     ] as const
   ).map(([id, view, defaultKey, title]) => ({
     action: {
@@ -287,8 +319,9 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       view,
     },
     /**
-     * CDXC:Hotkeys 2026-06-06-04:36:
-     * Option+1..5 are default workarea view switchers for the five hotkey-backed views: Agents, Source, Browser, Kanban, Docs. Keep these as named actions instead of overloading group/session slots so AppKit, Settings, and sidebar DOM dispatch switch the same project surface.
+     * CDXC:Hotkeys 2026-09-09 DECISION:
+     * User: Option+1, 2, 3, etc. must match the actual titlebar order; direct built-in view shortcuts are unassigned by default.
+     * This replaces the fixed Option+1..5 defaults while preserving user-assigned direct shortcuts.
      *
      * CDXC:Docs 2026-06-20-04:36:
      * Manage is a first-party project workarea beside Kanban, so it needs a named configurable hotkey action instead of sharing another mode's shortcut or command id.
@@ -297,10 +330,22 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * The switchManageView id and "manage" view enum remain compatibility
      * handles, but Settings and command labels should call the feature Docs.
      */
-    defaultKey,
+    defaultKey: '',
+    retiredDefaultKeys: defaultKey ? [defaultKey] : [],
     description: `Switch to ${title} view.`,
     id,
     title: `Switch to ${title}`,
+  })),
+  ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((slot) => ({
+    action: {
+      id: `switchTitlebarView${slot}` as const,
+      kind: 'switchTitlebarView' as const,
+      viewIndex: slot - 1,
+    },
+    defaultKey: `alt+${slot}`,
+    description: `Open view ${slot} in the displayed titlebar order.`,
+    id: `switchTitlebarView${slot}` as const,
+    title: `Switch to Titlebar View ${slot}`,
   })),
   {
     action: {
@@ -925,7 +970,8 @@ export function detectghostexHotkeyPlatform(): ghostexHotkeyPlatform {
 }
 
 export function ghostexHotkeyTextFromKeyboardEvent(
-  event: Pick<KeyboardEvent, 'altKey' | 'code' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'>,
+  event: Pick<KeyboardEvent, 'altKey' | 'code' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'> &
+    Partial<Pick<KeyboardEvent, 'keyCode'>>,
   platform: ghostexHotkeyPlatform = detectghostexHotkeyPlatform()
 ): string | undefined {
   const key = physicalHotkeyKeyFromKeyboardEvent(event);
@@ -976,14 +1022,16 @@ const PHYSICAL_HOTKEY_KEYS_BY_CODE: Readonly<Record<string, string>> = {
   Tab: 'tab',
 };
 
-function physicalHotkeyKeyFromKeyboardEvent(event: Pick<KeyboardEvent, 'code' | 'key'>): string | undefined {
-  const letterMatch = /^Key([A-Z])$/u.exec(event.code);
-  if (letterMatch) {
-    return letterMatch[1]?.toLowerCase();
-  }
-  const digitMatch = /^(?:Digit|Numpad)([0-9])$/u.exec(event.code);
-  if (digitMatch) {
-    return digitMatch[1];
+/**
+ * CDXC:Hotkeys 2026-09-10 WHY:
+ * Letters and digits come from the key's layout-independent identity (keyboard-shortcut-key.ts), not from `KeyboardEvent.code`: a code-only rule stored Cmd+A as "cmd+q" for AZERTY users and could never match an Arabic layout, while GPUI and AppKit match the same chord by the OS letter. Symbols and navigation keys keep their physical-code mapping.
+ */
+function physicalHotkeyKeyFromKeyboardEvent(
+  event: Pick<KeyboardEvent, 'code' | 'key'> & Partial<Pick<KeyboardEvent, 'keyCode'>>
+): string | undefined {
+  const letterOrDigit = shortcutLetterOrDigitFromKeyboardEvent(event);
+  if (letterOrDigit) {
+    return letterOrDigit;
   }
   if (/^F(?:[1-9]|1[0-9]|2[0-4])$/u.test(event.code)) {
     return event.code.toLowerCase();

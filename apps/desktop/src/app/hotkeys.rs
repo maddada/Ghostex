@@ -44,6 +44,17 @@ pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
     if gpui_hotkey_is_reserved(key) {
         return default_key;
     }
+    let retired_view_key = match action_id {
+        "switchAgentsView" => Some("alt+1"),
+        "switchSourceView" => Some("alt+2"),
+        "switchGitHubView" => Some("alt+3"),
+        "switchKanbanView" => Some("alt+4"),
+        "switchManageView" => Some("alt+5"),
+        _ => None,
+    };
+    if retired_view_key.is_some_and(|retired| key.trim().eq_ignore_ascii_case(retired)) {
+        return default_key;
+    }
     if action_id == "toggleChatView"
         && (key.trim().eq_ignore_ascii_case("ctrl+shift+j")
             || key.trim().eq_ignore_ascii_case("cmd+alt+j")
@@ -222,20 +233,32 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("createSession", "cmd+t"),
     ("openCommandPalette", "cmd+shift+p"),
     ("openSessionSearchPalette", "cmd+p"),
+    ("openNewThreadPalette", "cmd+shift+t"),
     ("openCommandsPanel", "f12"),
     ("openSettings", "cmd+,"),
     ("openExtensions", ""),
+    ("openGhostexHelp", ""),
     ("openHotkeys", "cmd+."),
     ("toggleSidebarCollapsed", "cmd+b"),
     ("toggleCompanionPane", "cmd+alt+b"),
     ("moveSidebar", ""),
     ("renameActiveSession", "cmd+r"),
     ("openBrowserPane", "cmd+n"),
-    ("switchAgentsView", "alt+1"),
-    ("switchSourceView", "alt+2"),
-    ("switchGitHubView", "alt+3"),
-    ("switchKanbanView", "alt+4"),
-    ("switchManageView", "alt+5"),
+    ("switchAgentsView", ""),
+    ("switchSourceView", ""),
+    ("switchGitHubView", ""),
+    ("switchKanbanView", ""),
+    ("switchManageView", ""),
+    ("switchAutomateView", ""),
+    ("switchTitlebarView1", "alt+1"),
+    ("switchTitlebarView2", "alt+2"),
+    ("switchTitlebarView3", "alt+3"),
+    ("switchTitlebarView4", "alt+4"),
+    ("switchTitlebarView5", "alt+5"),
+    ("switchTitlebarView6", "alt+6"),
+    ("switchTitlebarView7", "alt+7"),
+    ("switchTitlebarView8", "alt+8"),
+    ("switchTitlebarView9", "alt+9"),
     ("rotatePanesClockwise", "ctrl+shift+l"),
     ("mergeAllTabs", "ctrl+shift+m"),
     ("delayedSend", "ctrl+shift+s"),
@@ -349,10 +372,15 @@ pub(crate) fn normalized_gpui_hotkey_text(value: &str) -> Option<String> {
 }
 
 #[cfg(target_os = "macos")]
+/// Builds the shared hotkey text ("cmd+shift+p") for a native key press.
+/// `shortcut_characters` is the layout-independent key from
+/// GhostexGpuiShortcutCharactersForEvent (GpuiKeyboardShortcuts.m): the Latin
+/// character the layout assigns to the key with Shift applied, so an Arabic or
+/// Cyrillic layout yields the same text as a Latin one.
 pub(crate) fn gpui_native_hotkey_text(
     keycode: u32,
     modifiers: u64,
-    characters_ignoring_modifiers: &str,
+    shortcut_characters: &str,
 ) -> Option<String> {
     const CAPS_LOCK: u64 = 1 << 16;
     const SHIFT: u64 = 1 << 17;
@@ -370,7 +398,7 @@ pub(crate) fn gpui_native_hotkey_text(
         48 => "tab".to_string(),
         36 | 76 => "enter".to_string(),
         _ => {
-            let normalized = characters_ignoring_modifiers.to_ascii_lowercase();
+            let normalized = shortcut_characters.to_ascii_lowercase();
             match normalized.as_str() {
                 "!" if modifiers & SHIFT != 0 => "1".to_string(),
                 "@" if modifiers & SHIFT != 0 => "2".to_string(),
@@ -473,11 +501,40 @@ pub(crate) fn gpui_application_keyboard_command_for_native_text(
     }
 }
 
-/// The Option+1..5 workarea switchers (Agents, Code, Browser, Kanban, Docs).
+/// Positional titlebar shortcuts and direct built-in view shortcuts.
 /// Switching the top-level view is app chrome rather than page content, so it
 /// belongs to the shell no matter which surface owns the keyboard.
 pub(crate) fn gpui_workarea_switch_hotkey_action_id(action_id: &str) -> bool {
     gpui_command_palette_switch_workarea_hotkey_mode(action_id).is_some()
+        || gpui_titlebar_view_hotkey_index(action_id).is_some()
+}
+
+pub(crate) fn gpui_titlebar_view_hotkey_index(action_id: &str) -> Option<usize> {
+    let slot = action_id.strip_prefix("switchTitlebarView")?;
+    if slot.len() != 1 {
+        return None;
+    }
+    let slot = slot.parse::<usize>().ok()?;
+    (1..=9).contains(&slot).then(|| slot - 1)
+}
+
+/// Resolve labels through the same settings, defaults, and migrations as native key bindings.
+pub(crate) fn gpui_configured_hotkey_label(action_id: &str) -> Option<String> {
+    let (_, default_key) = GPUI_DEFAULT_GHOSTEX_HOTKEYS
+        .iter()
+        .find(|(id, _)| *id == action_id)?;
+    let snapshot = shared_settings::shared_sidebar_settings_snapshot();
+    let key = snapshot
+        .object()
+        .get("hotkeys")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|hotkeys| hotkeys.get(action_id))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or(default_key);
+    let key = gpui_migrated_hotkey_for_action(action_id, key, default_key);
+    let key = gpui_platform_hotkey_for_action(action_id, key);
+    gpui_keystroke_from_shared_hotkey(key)?;
+    Some(terminal_element::terminal_overlay_hotkey_chord_label(key))
 }
 
 #[cfg(target_os = "macos")]
@@ -519,7 +576,15 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
     // CDXC:Hotkeys 2026-09-05 DECISION:
     // User: Option+P must always open the focused chat's model picker, including when input focus has left the composer.
     // The picker handler resolves the actual chat pane; sidebar and shell responders must not swallow this command.
-    if matches!(action_id, "openExtensions" | "openModelPicker") {
+    if matches!(
+        action_id,
+        "openExtensions" | "openGhostexHelp" | "openModelPicker"
+    ) {
+        return true;
+    }
+    // CDXC:AgentLauncher 2026-09-09 WHY:
+    // The New Thread picker targets the active project, not the focused surface, so its chord must win from every responder (sidebar, Browser, Session Chat, workareas) the same way the model picker does; otherwise it only works while an Agents terminal has focus.
+    if action_id == "openNewThreadPalette" {
         return true;
     }
     match owner {

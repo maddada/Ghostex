@@ -188,7 +188,7 @@ pub(crate) fn gpui_command_palette_switch_workarea_hotkey_mode(
 ) -> Option<TitlebarMode> {
     /*
     CDXC:CommandPalette 2026-06-26-07:24:
-    Shared command-palette workarea rows post ordinary hotkey ids through `runGhostexHotkeyAction`. GPUI must translate only those exact switch ids to titlebar modes, with the shared GitHub row targeting the current Browser workarea field, then execute through the same titlebar availability and focus route as Option+1..5.
+    Shared command-palette workarea rows post ordinary hotkey ids through `runGhostexHotkeyAction`. GPUI translates these direct built-in switch ids to titlebar modes, keeping the legacy GitHub id mapped to Browser, then executes through the shared titlebar availability and focus route.
     */
     match action_id {
         "switchAgentsView" => Some(TitlebarMode::Agents),
@@ -196,6 +196,7 @@ pub(crate) fn gpui_command_palette_switch_workarea_hotkey_mode(
         "switchGitHubView" => Some(TitlebarMode::Browser),
         "switchKanbanView" => Some(TitlebarMode::Kanban),
         "switchManageView" => Some(TitlebarMode::Manage),
+        "switchAutomateView" => Some(TitlebarMode::Automate),
         _ => None,
     }
 }
