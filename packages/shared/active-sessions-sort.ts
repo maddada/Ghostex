@@ -32,7 +32,7 @@ export function createDisplaySessionLayout({
     /*
     CDXC:Sessions 2026-06-05-12:30:
     Manual Sorting preserves the saved non-draft order inside each session kind. Browser
-    tabs are the first non-draft section, so they stay above other terminals even when
+    tabs are the first section, so they stay above terminals even when
     either kind contains pinned rows.
     */
     return {
@@ -63,9 +63,9 @@ export function getDisplaySessionIdsInOrder(options: CreateDisplaySessionLayoutO
 }
 
 /**
- * CDXC:Sessions 2026-09-08 DECISION:
- * User: pencil-icon draft sessions appear at the very top of each session list, above working sessions, with the newest draft first, on React Native, web and GPUI.
- * Drafts sort by creation time before browser, pinned and activity ordering, including in manual mode.
+ * CDXC:Sessions 2026-09-09 DECISION:
+ * User: drafts belong at the top of the project's "Sessions" subsection, newest first, below the pinned subsection, on React Native, web and GPUI.
+ * This corrects the earlier placement above the project's subsections; browser, pinned and parked membership takes precedence, including in manual mode.
  * SEE-ALSO: apps/mobile/app/src/contract/grouping.ts, server/src/ghostex_cli/sessions.rs.
  */
 function orderProjectSessionsForDisplay(
@@ -75,19 +75,16 @@ function orderProjectSessionsForDisplay(
 ): string[] {
   /**
    * CDXC:Sessions 2026-05-28-12:04:
-   * Pinned non-draft sessions stay above other non-drafts of their kind regardless of
+   * Pinned sessions stay above other sessions of their kind regardless of
    * the active session sort mode. Preserve the existing order inside pinned and
    * unpinned partitions so users can rearrange pinned rows while non-pinned
    * activity/browser ordering remains predictable.
    */
-  const draftSessionIds: string[] = [];
   const browserSessionIds: string[] = [];
   const terminalSessionIds: string[] = [];
 
   for (const sessionId of sessionIds) {
-    if (sessionsById[sessionId]?.isDraft === true) {
-      draftSessionIds.push(sessionId);
-    } else if (isBrowserSession(sessionsById[sessionId])) {
+    if (isBrowserSession(sessionsById[sessionId])) {
       browserSessionIds.push(sessionId);
     } else {
       terminalSessionIds.push(sessionId);
@@ -95,11 +92,6 @@ function orderProjectSessionsForDisplay(
   }
 
   return [
-    ...draftSessionIds.sort((leftId, rightId) => {
-      const leftTime = Date.parse(sessionsById[leftId]?.createdAt ?? '');
-      const rightTime = Date.parse(sessionsById[rightId]?.createdAt ?? '');
-      return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
-    }),
     ...orderSessionKindForDisplay(browserSessionIds, sessionsById, options),
     ...orderSessionKindForDisplay(terminalSessionIds, sessionsById, options),
   ];
@@ -111,6 +103,7 @@ function orderSessionKindForDisplay(
   options: { enableSessionParking?: boolean; sortUnpinnedByLastActivity?: boolean }
 ): string[] {
   const pinnedSessionIds: string[] = [];
+  const draftSessionIds: string[] = [];
   const otherSessionIds: string[] = [];
   const parkedSessionIds: string[] = [];
   for (const sessionId of sessionIds) {
@@ -119,6 +112,8 @@ function orderSessionKindForDisplay(
       pinnedSessionIds.push(sessionId);
     } else if (options.enableSessionParking && session?.isParked === true) {
       parkedSessionIds.push(sessionId);
+    } else if (session?.isDraft === true) {
+      draftSessionIds.push(sessionId);
     } else {
       otherSessionIds.push(sessionId);
     }
@@ -126,6 +121,11 @@ function orderSessionKindForDisplay(
 
   return [
     ...pinnedSessionIds,
+    ...draftSessionIds.sort((leftId, rightId) => {
+      const leftTime = Date.parse(sessionsById[leftId]?.createdAt ?? '');
+      const rightTime = Date.parse(sessionsById[rightId]?.createdAt ?? '');
+      return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0);
+    }),
     ...(options.sortUnpinnedByLastActivity
       ? sortSessionIdsByLastActivity(otherSessionIds, sessionsById)
       : otherSessionIds),

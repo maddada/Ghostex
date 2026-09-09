@@ -17,19 +17,19 @@ export function useImportSessionsIntro(openExternalSessions: () => void) {
   return { isVisible, openImportSessions };
 }
 
-/** CDXC:Sessions 2026-09-08 DECISION:
+/** CDXC:Sessions 2026-09-09 DECISION:
  * User: introduce older sessions at the bottom of the sidebar on first launch, with a dark neutral charcoal, rounded, padded card, 7px side margins, and a whitish outline button.
- * Both its Click here button and Import Sessions immediately below Sessions in the hamburger menu open the External list directly.
+ * User approved a compact layout with the title using the full card width, 14px padding, 10px gaps, and a smaller button under the title. The history icon belongs inside the button so it does not narrow the title.
+ * User approved the single title Continue Claude & Codex sessions and the button label Previous Sessions List.
+ * Both Previous Sessions List and Import Sessions immediately below Sessions in the hamburger menu open the External list directly.
  */
 export function ImportSessionsCard({ onImport }: { onImport: () => void }) {
   return (
     <section className='sidebar-import-sessions-card' aria-label='Continue older sessions'>
-      <span className='sidebar-import-sessions-icon' aria-hidden='true'>
-        <IconHistoryToggle size={20} stroke={1.6} />
-      </span>
-      <p>Want to continue your older sessions?</p>
+      <h3>Continue Claude &amp; Codex sessions</h3>
       <Button variant='outline' className='sidebar-import-sessions-button' onClick={onImport}>
-        Click here
+        <IconHistoryToggle aria-hidden='true' stroke={1.6} />
+        Previous Sessions List
       </Button>
     </section>
   );
