@@ -3,30 +3,32 @@
 }
 
 @media (pointer: fine) {
-  /* The rail owns a real gutter beside the viewport, so its grab area cannot cover transcript controls. */
+  /* CDXC:SessionChat 2026-09-09 DECISION:
+     User: the minimap should float over the transcript on hover without pushing it from the sides.
+     This supersedes the reserved equal side gutters; the transcript stays centered at the composer's width. */
   .ghostex-chat-has-minimap {
     --ghostex-chat-minimap-scale: 1.3;
-    display: grid;
-    /* CDXC:SessionChat 2026-09-08 DECISION:
-       User: center the transcript in the chat view across the GPUI app and other apps.
-       Equal side gutters keep the minimap from shifting the transcript away from the full chat view's center. */
-    grid-template-columns: calc(40px * var(--ghostex-chat-minimap-scale)) minmax(0, 1fr) calc(40px * var(--ghostex-chat-minimap-scale));
-    grid-template-rows: minmax(0, 1fr);
     container-type: inline-size;
   }
 
   .ghostex-chat-minimap {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: calc(40px * var(--ghostex-chat-minimap-scale));
     display: flex;
     min-height: 0;
     align-items: center;
     padding-block: 24px calc(24px + var(--ghostex-chat-composer-overlay, 0px));
     padding-left: calc(12px * var(--ghostex-chat-minimap-scale));
+    pointer-events: none;
     z-index: 1;
   }
 }
 
 .ghostex-chat-minimap-rail {
   position: relative;
+  pointer-events: auto;
   width: calc(28px * var(--ghostex-chat-minimap-scale));
   max-height: 100%;
   flex: none;

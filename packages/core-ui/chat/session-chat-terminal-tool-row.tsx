@@ -1,11 +1,9 @@
 /*
-CDXC:SessionChatTerminalActivity 2026-09-04 DECISION:
-User: the pending tool card carries the painted row's text as its header and
-opens to show the actual tool call text the TUI shows under it, in a mono
-code area like the tool rows' Command block; the card remembers whether it
-was left open or closed, so the next card comes up the same way instead of
-the chat looking frozen while tools run. The header shows only the dot on the
-left, with the expand chevron on the right, and draws no outline of its own.
+CDXC:SessionChat 2026-09-09 DECISION:
+User: the pending tool card's header and command text use the same font as regular chat, superseding the earlier monospace command area.
+The card carries the painted row's text as its header and opens to show the actual tool call text the TUI shows under it.
+It remembers whether it was left open or closed, so the next card comes up the same way instead of the chat looking frozen while tools run.
+The header shows only the dot on the left, with the expand chevron on the right, and draws no outline of its own.
 */
 
 import { useState } from 'react';
@@ -56,7 +54,7 @@ export function SessionChatTerminalToolRow({ activity }: { activity: SessionChat
   return (
     <div
       aria-live='polite'
-      className='ghostex-chat-activity-row ghostex-chat-status-card grid gap-2 rounded-2xl border border-border/65 bg-muted/20 px-4 py-3'
+      className='ghostex-chat-terminal-tool-card ghostex-chat-activity-row ghostex-chat-status-card grid gap-2 rounded-2xl border border-border/65 bg-muted/20 px-4 py-3'
       data-kind={activity.kind}
       role='status'
     >
@@ -65,24 +63,29 @@ export function SessionChatTerminalToolRow({ activity }: { activity: SessionChat
           that already has its own border. */}
       <div
         aria-expanded={open}
-        className={cn('flex min-w-0 items-start gap-2 text-left outline-none', expandable && 'cursor-pointer')}
+        className={cn(
+          'flex min-w-0 items-start gap-2 text-left leading-relaxed outline-none',
+          expandable && 'cursor-pointer'
+        )}
         onClick={toggle}
         onKeyDown={onKeyDown}
         role='button'
         tabIndex={expandable ? 0 : -1}
       >
-        <span aria-hidden='true' className='mt-[7px] size-1.5 shrink-0 animate-pulse rounded-full bg-primary' />
-        <span className='min-w-0 flex-1 whitespace-pre-wrap break-words text-sm leading-5 text-foreground/90'>
-          {activity.label}
+        {/* The dot and chevron sit in boxes exactly one text line tall (1lh,
+            from the row's own line-height) and center inside them, so they stay
+            on the first line's centre whatever font size the label inherits,
+            instead of chasing it with hand-tuned pixel margins. */}
+        <span aria-hidden='true' className='flex h-[1lh] shrink-0 items-center'>
+          <span className='size-1.5 animate-pulse rounded-full bg-primary' />
         </span>
+        <span className='min-w-0 flex-1 whitespace-pre-wrap break-words text-foreground/90'>{activity.label}</span>
         {expandable ? (
-          <IconChevronRight
-            aria-hidden='true'
-            className={cn(
-              'ghostex-chat-disclosure-chevron mt-[3px] size-3.5 shrink-0 text-muted-foreground',
-              open && 'is-open'
-            )}
-          />
+          <span aria-hidden='true' className='flex h-[1lh] shrink-0 items-center'>
+            <IconChevronRight
+              className={cn('ghostex-chat-disclosure-chevron size-3.5 text-muted-foreground', open && 'is-open')}
+            />
+          </span>
         ) : null}
       </div>
       {open ? <pre className='ghostex-chat-tool-body'>{detail}</pre> : null}

@@ -71,28 +71,32 @@ export function SessionChatAgentMessageCard({ body, sender }: SessionChatAgentMe
           their pill outline and hover fill, and it is a disclosure on a card
           that already has its own border. */}
       <div
-        className={cn('flex min-w-0 items-start gap-2 text-left outline-none', expandable && 'cursor-pointer')}
+        className={cn(
+          'flex min-w-0 items-start gap-2 text-left leading-relaxed outline-none',
+          expandable && 'cursor-pointer'
+        )}
         onClick={toggle}
       >
-        <span aria-hidden='true' className='mt-[7px] size-1.5 shrink-0 rounded-full bg-primary' />
+        {/* One-line-tall (1lh) boxes center the dot and chevron on the first
+            text line for any inherited font size; see session-chat-terminal-tool-row.tsx. */}
+        <span aria-hidden='true' className='flex h-[1lh] shrink-0 items-center'>
+          <span className='size-1.5 rounded-full bg-primary' />
+        </span>
         <div className='min-w-0 flex-1'>
-          <p className='text-sm leading-5 font-medium text-foreground'>
+          <p className='font-medium text-foreground'>
             Received a message from &ldquo;
             <SessionChatSubagentLink name={name} selector={sender} />
             &rdquo; subagent
           </p>
           {!expanded ? (
-            <p
-              className='mt-1 line-clamp-2 whitespace-pre-wrap break-words text-sm leading-5 text-foreground/90'
-              ref={previewRef}
-            >
+            <p className='mt-1 line-clamp-2 whitespace-pre-wrap break-words text-foreground/90' ref={previewRef}>
               {body}
             </p>
           ) : null}
         </div>
         {expandable ? (
           <button
-            className='ghostex-chat-agent-message-disclosure'
+            className='ghostex-chat-agent-message-disclosure flex h-[1lh] items-center'
             type='button'
             aria-label={expanded ? 'Collapse agent message' : 'Expand agent message'}
             aria-expanded={expanded}
@@ -103,10 +107,7 @@ export function SessionChatAgentMessageCard({ body, sender }: SessionChatAgentMe
           >
             <IconChevronRight
               aria-hidden='true'
-              className={cn(
-                'ghostex-chat-disclosure-chevron mt-[3px] size-3.5 shrink-0 text-muted-foreground',
-                expanded && 'is-open'
-              )}
+              className={cn('ghostex-chat-disclosure-chevron size-3.5 text-muted-foreground', expanded && 'is-open')}
             />
           </button>
         ) : null}

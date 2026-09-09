@@ -71,22 +71,25 @@ export function SessionChatGoalCard({ objective, status, usage }: SessionChatGoa
           that already has its own border. */}
       <div
         aria-expanded={expandable ? expanded : undefined}
-        className={cn('flex min-w-0 items-start gap-2 text-left outline-none', expandable && 'cursor-pointer')}
+        className={cn(
+          'flex min-w-0 items-start gap-2 text-left leading-relaxed outline-none',
+          expandable && 'cursor-pointer'
+        )}
         onClick={toggle}
         onKeyDown={onKeyDown}
         role='button'
         tabIndex={expandable ? 0 : -1}
       >
-        <span
-          aria-hidden='true'
-          className={cn(
-            'mt-[7px] size-1.5 shrink-0 rounded-full',
-            active ? 'animate-pulse bg-primary' : 'bg-muted-foreground/60'
-          )}
-        />
+        {/* One-line-tall (1lh) boxes center the dot and chevron on the first
+            text line for any inherited font size; see session-chat-terminal-tool-row.tsx. */}
+        <span aria-hidden='true' className='flex h-[1lh] shrink-0 items-center'>
+          <span
+            className={cn('size-1.5 rounded-full', active ? 'animate-pulse bg-primary' : 'bg-muted-foreground/60')}
+          />
+        </span>
         <div className='min-w-0 flex-1'>
-          <div className='flex min-w-0 items-center gap-2 leading-5'>
-            <span className='text-sm font-medium text-foreground'>Goal</span>
+          <div className='flex min-w-0 items-center gap-2'>
+            <span className='font-medium text-foreground'>Goal</span>
             <span
               className={cn(
                 'rounded-full px-1.5 py-px text-[11px] leading-4 font-medium',
@@ -102,7 +105,7 @@ export function SessionChatGoalCard({ objective, status, usage }: SessionChatGoa
           {text ? (
             <p
               className={cn(
-                'mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-foreground/90',
+                'mt-1 whitespace-pre-wrap break-words text-foreground/90',
                 // Three lines of the objective while collapsed.
                 !expanded && 'line-clamp-3'
               )}
@@ -113,13 +116,11 @@ export function SessionChatGoalCard({ objective, status, usage }: SessionChatGoa
           ) : null}
         </div>
         {expandable ? (
-          <IconChevronRight
-            aria-hidden='true'
-            className={cn(
-              'ghostex-chat-disclosure-chevron mt-[3px] size-3.5 shrink-0 text-muted-foreground',
-              expanded && 'is-open'
-            )}
-          />
+          <span aria-hidden='true' className='flex h-[1lh] shrink-0 items-center'>
+            <IconChevronRight
+              className={cn('ghostex-chat-disclosure-chevron size-3.5 text-muted-foreground', expanded && 'is-open')}
+            />
+          </span>
         ) : null}
       </div>
     </div>

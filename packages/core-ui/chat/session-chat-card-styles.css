@@ -1,3 +1,15 @@
+.ghostex-chat-terminal-tool-card {
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.ghostex-chat-terminal-tool-card .ghostex-chat-tool-body {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
 /* CDXC:SessionChat 2026-09-06 DECISION:
  * User: card titles, content and buttons match the chat text size. Titles are medium weight and #fcfcfc; content is regular weight and #b4b8bf. Text actions use the outlined Previous/Next button style with regular-weight text. Shortcut text keeps its color and weight and grows by 2px.
  */
