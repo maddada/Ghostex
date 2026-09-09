@@ -1,3 +1,4 @@
+import { normalizeProjectViewTemplates } from './project-views';
 import { clampAgentManagerZoomPercent, clampSidebarThemeSetting } from '../session-grid-contract-session';
 import { normalizeSessionChatTheme } from '../session-chat';
 import { clampCompletionSoundPreference, clampCompletionSoundSetting } from '../completion-sound';
@@ -17,6 +18,7 @@ import { normalizePetId } from '../pets';
 import { normalizeSidebarSessionTagListItems } from '../session-tags';
 import { DEFAULT_ghostex_SETTINGS } from './defaults';
 import { normalizeGhostexCustomViews } from './custom-views';
+import { normalizeTitlebarViewOrder } from './titlebar-view-order';
 import { normalizeDiagnosticLoggingSettings } from './diagnostic-logging';
 import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
@@ -231,6 +233,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'tipsAndTricksTitlebarButtonHidden',
       DEFAULT_ghostex_SETTINGS.tipsAndTricksTitlebarButtonHidden
     ),
+    helpTitlebarButtonHidden: readBoolean(
+      source,
+      'helpTitlebarButtonHidden',
+      DEFAULT_ghostex_SETTINGS.helpTitlebarButtonHidden
+    ),
     resourcesTitlebarButtonHidden: readBoolean(
       source,
       'resourcesTitlebarButtonHidden',
@@ -365,11 +372,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       source,
       'hideSessionAgentIconUntilHover',
       DEFAULT_ghostex_SETTINGS.hideSessionAgentIconUntilHover
-    ),
-    useColoredSessionAgentIcons: readBoolean(
-      source,
-      'useColoredSessionAgentIcons',
-      DEFAULT_ghostex_SETTINGS.useColoredSessionAgentIcons
     ),
     /**
      * CDXC:Browser 2026-05-28-07:38:
@@ -599,11 +601,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readString(source, 'sidebarProjectGroupStyle', DEFAULT_ghostex_SETTINGS.sidebarProjectGroupStyle)
     ),
     sidebarSpacesEnabled: readBoolean(source, 'sidebarSpacesEnabled', DEFAULT_ghostex_SETTINGS.sidebarSpacesEnabled),
-    revealSessionWhenActivating: readBoolean(
-      source,
-      'revealSessionWhenActivating',
-      DEFAULT_ghostex_SETTINGS.revealSessionWhenActivating
-    ),
     expandCollapsedProjectsOnJump: readBoolean(
       source,
       'expandCollapsedProjectsOnJump',
@@ -632,6 +629,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
         'sessionChatTranscriptWidthPercent',
         DEFAULT_ghostex_SETTINGS.sessionChatTranscriptWidthPercent
       )
+    ),
+    sessionChatFileEditPreviews: readBoolean(
+      source,
+      'sessionChatFileEditPreviews',
+      DEFAULT_ghostex_SETTINGS.sessionChatFileEditPreviews
     ),
     sessionChatVerboseMode: readBoolean(
       source,
@@ -873,6 +875,8 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       DEFAULT_ghostex_SETTINGS.showAgentsPaneTabBarWhenUnsplit
     ),
     customViews: normalizeGhostexCustomViews(source.customViews),
+    customViewTemplates: normalizeProjectViewTemplates(source.customViewTemplates),
+    titlebarViewOrder: normalizeTitlebarViewOrder(source.titlebarViewOrder),
     /**
      * CDXC:Titlebar 2026-05-11-00:22
      * Settings owns which titlebar Open In targets are shown. Normalize on read

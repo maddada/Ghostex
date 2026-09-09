@@ -41,6 +41,7 @@ import { hashSidebarCollapseDebugId } from './sidebar-collapse-state-debug';
 import { postSidebarOrderReproLog } from './sidebar-order-repro-log';
 import { getSidebarReorderActivationConstraints } from './sidebar-reorder-activation';
 import { scrollElementIntoViewIfNeeded } from './scroll-into-view-if-needed';
+import { flashRevealedSession } from './sidebar-app/session-reveal-flash';
 import { resetSidebarStore, useSidebarStore } from './sidebar-store';
 import { OTHER_SIDEBAR_SPACE_ID } from '../shared/sidebar-spaces-other';
 import { type SidebarDropData, type SidebarGroupDropTarget, type SidebarSessionDropTarget } from './sidebar-dnd';
@@ -75,9 +76,11 @@ import { SpaceFilterRow } from './space-filter-row';
 import {
   createRemoteSidebarSpaceSectionKey,
   createSelectedSidebarSpaceVisibility,
+  createSidebarSpaceSessionSummaries,
   LOCAL_SIDEBAR_SPACE_SECTION_KEY,
   resolveSelectedSidebarSpace,
   resolveSidebarSpaceForRevealedGroup,
+  resolveSidebarSpaceIdContainingActiveSession,
 } from './sidebar-app/space-filtering';
 import { SidebarTooltipDelayProvider } from './tooltip-delay';
 import { AppTooltip, setSidebarTooltipsSuppressedForDrag, useDismissSidebarTooltipsOnScroll } from './app-tooltip';
@@ -443,7 +446,6 @@ export function SidebarApp({
   const lastCollapseStateHydrateShapeRef = useRef<string | undefined>(undefined);
   const focusedSessionScrollLogSequenceRef = useRef(0);
   const previousFocusedSessionRevealRequestIdRef = useRef(focusedSessionRevealRequestId);
-  const sessionRevealSequenceRef = useRef(0);
   const handledSessionRevealRequestIdRef = useRef<number | undefined>(undefined);
   const pendingSessionRevealScrollRequestIdRef = useRef<number | undefined>(undefined);
 
@@ -1522,6 +1524,27 @@ export function SidebarApp({
       ),
     [displayedWorkspaceGroupIds, groupsById]
   );
+  const allLocalProjectGroupIds = useMemo(
+    () =>
+      effectiveGroupIds.filter(
+        (groupId) =>
+          groupId !== SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID &&
+          !groupsById[groupId]?.isChatCollection &&
+          !groupsById[groupId]?.remoteMachineContext
+      ),
+    [effectiveGroupIds, groupsById]
+  );
+  const allRemoteProjectGroupIdsByMachineId = useMemo(() => {
+    const next: Record<string, string[]> = {};
+    for (const groupId of effectiveGroupIds) {
+      const group = groupsById[groupId];
+      const machineId = group?.remoteMachineContext?.machineId;
+      if (machineId && !group?.isChatCollection) {
+        (next[machineId] ??= []).push(groupId);
+      }
+    }
+    return next;
+  }, [effectiveGroupIds, groupsById]);
   /*
    * CDXC:Spaces 2026-08-27:
    * The Space filter is an intersection applied to each gxserver section's own
@@ -1565,6 +1588,66 @@ export function SidebarApp({
       ),
     [effectiveGroupIds, effectiveSessionIdsByGroup, groupsById, sessionsById]
   );
+  const localActiveSessionSpaceId = useMemo(
+    () =>
+      resolveSidebarSpaceIdContainingActiveSession({
+        collectionState: projectCollections,
+        groupIdsContainingActiveSession,
+        groupsById,
+        resolveProjectId: (groupId) => groupsById[groupId]?.projectContext?.editor.projectId,
+        sectionGroupIds: unfilteredReferenceProjectGroupIds,
+        selectedSpaceId: selectedSpaceIdBySectionKey[LOCAL_SIDEBAR_SPACE_SECTION_KEY],
+        spacesState,
+      }),
+    [
+      groupIdsContainingActiveSession,
+      groupsById,
+      projectCollections,
+      selectedSpaceIdBySectionKey,
+      spacesState,
+      unfilteredReferenceProjectGroupIds,
+    ]
+  );
+  const localSpaceSessionSummaries = useMemo(
+    () =>
+      spacesState
+        ? createSidebarSpaceSessionSummaries({
+            collectionState: projectCollections,
+            groupIds: allLocalProjectGroupIds,
+            groupsById,
+            resolveProjectId: (groupId) => groupsById[groupId]?.projectContext?.editor.projectId,
+            sessionIdsByGroup: effectiveSessionIdsByGroup,
+            sessionsById,
+            spacesState,
+          })
+        : {},
+    [allLocalProjectGroupIds, effectiveSessionIdsByGroup, groupsById, projectCollections, sessionsById, spacesState]
+  );
+  const remoteSpaceSessionSummariesByMachineId = useMemo(() => {
+    const next: Record<string, ReturnType<typeof createSidebarSpaceSessionSummaries>> = {};
+    for (const [machineId, machineSpaces] of Object.entries(remoteSpacesByMachineId)) {
+      next[machineId] = createSidebarSpaceSessionSummaries({
+        collectionState: remoteProjectCollectionsByMachineId[machineId] ?? {
+          collections: [],
+          nextCollectionNumber: 1,
+        },
+        groupIds: allRemoteProjectGroupIdsByMachineId[machineId] ?? [],
+        groupsById,
+        resolveProjectId: (groupId) => groupsById[groupId]?.remoteMachineContext?.projectId,
+        sessionIdsByGroup: effectiveSessionIdsByGroup,
+        sessionsById,
+        spacesState: machineSpaces,
+      });
+    }
+    return next;
+  }, [
+    allRemoteProjectGroupIdsByMachineId,
+    effectiveSessionIdsByGroup,
+    groupsById,
+    remoteProjectCollectionsByMachineId,
+    remoteSpacesByMachineId,
+    sessionsById,
+  ]);
   /*
    * CDXC:RemoteMachines 2026-09-03:
    * The machine tab reports the whole machine, not the sidebar body: every
@@ -2387,21 +2470,6 @@ export function SidebarApp({
     () => Object.values(sessionsById).find((session) => session.isFocused)?.sessionId,
     [sessionsById]
   );
-  /**
-   * CDXC:Sessions 2026-09-07 SEE-ALSO:
-   * revealSessionWhenActivating in shared settings covers every host's focus changes; GPUI also sends revealSidebarSession for repeated activation of the same session.
-   * Local requests use negative ids so host request ids retain their one-shot identity.
-   */
-  useEffect(() => {
-    if (!effectiveSettings.revealSessionWhenActivating || !focusedSessionId) {
-      return;
-    }
-    useSidebarStore.getState().clearFocusedSessionScrollSuppression();
-    setSessionRevealRequest({
-      requestId: --sessionRevealSequenceRef.current,
-      sessionId: focusedSessionId,
-    });
-  }, [effectiveSettings.revealSessionWhenActivating, focusedSessionId]);
   const postMultiSelectSelectionDebugLog = useEffectEvent((event: string, details: Record<string, unknown>) => {
     /*
      * CDXC:Sessions 2026-07-02-07:32:
@@ -2641,11 +2709,13 @@ export function SidebarApp({
        */
       action.kind === 'navigateHistory' ||
       action.kind === 'openCommandsPanel' ||
+      action.kind === 'openNewThreadPalette' ||
       action.kind === 'renameActiveSession' ||
       action.kind === 'runActionSlot' ||
       action.kind === 'setViewMode' ||
       action.kind === 'splitFocusedPane' ||
       action.kind === 'switchWorkareaView' ||
+      action.kind === 'switchTitlebarView' ||
       action.kind === 'terminalToolbarAction' ||
       action.kind === 'toggleCompanionPane'
     ) {
@@ -2932,8 +3002,12 @@ export function SidebarApp({
   }, [focusedSessionId, focusedSessionRevealRequestId]);
 
   /*
+   * CDXC:Sessions 2026-09-09 DECISION:
+   * User: remove the activation-reveal setting and disable automatic reveals on activation now that the titlebar button can reveal the active session on demand.
+   * This supersedes the 2026-09-07 decision to reveal every activated session.
+   *
    * CDXC:Sessions 2026-09-07 WHY:
-   * Activation and explicit reveal requests must leave the session visible in the sidebar.
+   * Explicit reveal requests must leave the session visible in the sidebar.
    * Every collapsed container between the sidebar scroller and the row is
    * expanded for real (the same persisted collapse state the chevrons write, so
    * the expansion sticks), including the row's own kind section, and the row
@@ -3041,6 +3115,7 @@ export function SidebarApp({
       pendingSessionRevealScrollRequestIdRef.current = undefined;
       // CDXC:Sessions 2026-09-07 WHY: A row can be inside the main viewport but clipped by its project's own scroller; native scrollIntoView checks every scroll ancestor.
       revealedRow.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      flashRevealedSession(revealedRow);
     };
     const animationFrameId = window.requestAnimationFrame(() => {
       if (cancelled) {
@@ -3057,7 +3132,20 @@ export function SidebarApp({
         ancestor && ancestor !== scrollViewport;
         ancestor = ancestor.parentElement
       ) {
-        expandAnimations.push(...ancestor.getAnimations());
+        /*
+         * CDXC:Sessions 2026-09-09 WHY:
+         * The project scroll-edge fade uses scroll-driven animations whose finished promises stay pending until scrolling reaches the end, so awaiting them prevents the reveal scroll itself.
+         * Only the collapse shell's height transition must finish before measuring the row.
+         */
+        if (ancestor.classList.contains('sidebar-collapse-shell')) {
+          expandAnimations.push(
+            ...ancestor
+              .getAnimations()
+              .filter(
+                (animation) => animation instanceof CSSTransition && animation.transitionProperty === 'max-height'
+              )
+          );
+        }
       }
       if (expandAnimations.length === 0) {
         scrollRevealedRowIntoView();
@@ -3565,7 +3653,6 @@ export function SidebarApp({
         sessionTagListItems={sidebarSessionTagListItems}
         showHeaderActions={true}
         showSessionDropPositionIndicators={true}
-        useColoredAgentIcons={effectiveSettings.useColoredSessionAgentIcons}
         vscode={vscode}
       />
     );
@@ -3581,7 +3668,6 @@ export function SidebarApp({
           data-reference-sidebar='true'
           data-sidebar-machine-tabs={String(remoteMachines.length > 0)}
           data-sidebar-side={effectiveSettings.sidebarSide}
-          data-session-agent-icon-color-mode={effectiveSettings.useColoredSessionAgentIcons ? 'colored' : 'monochrome'}
           ref={setReferenceLayoutElement}
           style={
             {
@@ -3702,11 +3788,13 @@ export function SidebarApp({
                          */}
                         {!shouldHideReferenceSectionsForSearchEmptyState && isLocalMachineTabSelected && spacesState ? (
                           <SpaceFilterRow
+                            activeSessionSpaceId={localActiveSessionSpaceId}
                             collapsed={false}
                             onReorderSpaces={reorderLocalSpaces}
                             onSelectSpace={(spaceId) => selectSidebarSpace(LOCAL_SIDEBAR_SPACE_SECTION_KEY, spaceId)}
                             sectionKey={LOCAL_SIDEBAR_SPACE_SECTION_KEY}
                             selectedSpaceId={selectedLocalSpace?.spaceId}
+                            sessionSummaryBySpaceId={localSpaceSessionSummaries}
                             spaces={spacesState}
                             vscode={vscode}
                           />
@@ -3971,13 +4059,22 @@ export function SidebarApp({
                                       selectedSessionIds={selectedSidebarSessionIds}
                                       showHeaderActions={true}
                                       showSessionDropPositionIndicators={false}
-                                      useColoredAgentIcons={effectiveSettings.useColoredSessionAgentIcons}
                                       vscode={vscode}
                                     />
                                   );
                                 };
+                                const machineActiveSessionSpaceId = resolveSidebarSpaceIdContainingActiveSession({
+                                  collectionState: machineProjectCollections,
+                                  groupIdsContainingActiveSession,
+                                  groupsById,
+                                  resolveProjectId: (groupId) => groupsById[groupId]?.remoteMachineContext?.projectId,
+                                  sectionGroupIds: machineProjectGroupIds,
+                                  selectedSpaceId: machineSelectedSpace?.spaceId,
+                                  spacesState: machineSpaces,
+                                });
                                 return (
                                   <RemoteMachineSidebarSection
+                                    activeSessionSpaceId={machineActiveSessionSpaceId}
                                     index={index}
                                     key={machine.id}
                                     machine={machine}
@@ -3994,6 +4091,7 @@ export function SidebarApp({
                                       selectSidebarSpace(createRemoteSidebarSpaceSectionKey(machine.id), spaceId)
                                     }
                                     selectedSpaceId={machineSelectedSpace?.spaceId}
+                                    sessionSummaryBySpaceId={remoteSpaceSessionSummariesByMachineId[machine.id]}
                                     spaces={machineSpaces}
                                     projectCollectionItems={machineCollectionItems}
                                     projectUngroupDropIndicatorScopeId={projectUngroupDropIndicatorScopeId}

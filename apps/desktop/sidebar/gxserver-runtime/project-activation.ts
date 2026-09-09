@@ -20,21 +20,6 @@ const activations = new WeakMap<GpuiSidebarRuntime, Promise<void>>();
 let revealRequestId = Date.now();
 
 /**
- * CDXC:Sessions 2026-09-07 SEE-ALSO:
- * The shared SidebarApp follows focus changes; native and CLI activation also emit a request so reactivating an already-focused hidden session reveals it again.
- */
-export function revealGpuiActivatedSession(runtime: GpuiSidebarRuntime, sessionId: string): void {
-  if (!createGpuiSidebarSettings(runtime.runtimeSettings).revealSessionWhenActivating) {
-    return;
-  }
-  runtime.messageSource.postMessage({
-    requestId: ++revealRequestId,
-    sessionId,
-    type: 'revealSidebarSession',
-  });
-}
-
-/**
  * CDXC:Projects 2026-09-05 DECISION:
  * User: remember each project's last selected agent or terminal across restarts, including sleeping sessions and closed projects.
  * Native tab/pane focus and sidebar focus both write this selection; agent activity timestamps do not represent the user's selection.

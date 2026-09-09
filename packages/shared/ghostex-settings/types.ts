@@ -6,6 +6,7 @@ import { type ghostexHotkeySettings } from '../ghostex-hotkeys';
 import { type CustomWorkspaceOpenTarget, type WorkspaceOpenTargetAvailability } from '../workspace-open-targets';
 import { type PetId } from '../pets';
 import { type SidebarSessionTagListItem } from '../session-tags';
+import type { ProjectViewTemplate } from './project-views';
 import { type GhostexCustomView } from './custom-views';
 import { type DiagnosticLoggingSettings } from './diagnostic-logging';
 import { type RemoteMachineSettings } from './remote-machines';
@@ -281,6 +282,7 @@ export type ghostexSettings = {
    * The menus and commands remain available through their other entry points.
    */
   tipsAndTricksTitlebarButtonHidden: boolean;
+  helpTitlebarButtonHidden: boolean;
   resourcesTitlebarButtonHidden: boolean;
   devServersTitlebarButtonHidden: boolean;
   extensionsTitlebarButtonHidden: boolean;
@@ -373,13 +375,6 @@ export type ghostexSettings = {
   /** Show project artwork or the folder/worktree fallback beside project names. */
   showProjectIcons: boolean;
   hideSessionAgentIconUntilHover: boolean;
-  /**
-   * CDXC:Icons 2026-06-29-23:58:
-   * Session-card agent logos are monochrome by default for compatibility, but
-   * Settings needs an independent toggle for colored brand artwork. Favorite
-   * state must not recolor the agent logo to gold.
-   */
-  useColoredSessionAgentIcons: boolean;
   hideBrowserFaviconUntilHover: boolean;
   showCloseButtonOnSessionCards: boolean;
   hideLastActiveTimeOnSessionCards: boolean;
@@ -501,11 +496,6 @@ export type ghostexSettings = {
    */
   sidebarSpacesEnabled: boolean;
   /**
-   * CDXC:Sessions 2026-09-07 DECISION:
-   * User: "Reveal session when activating" reveals every activated session in the sidebar, including titlebar Back/Forward, CLI activation, Space selection, scrolling, and expanding its project and group.
-   */
-  revealSessionWhenActivating: boolean;
-  /**
    * CDXC:Hotkeys 2026-06-15-11:12:
    * Jump to Project shortcuts should reveal the target project row when it was collapsed, because the keyboard action is also a navigation intent in the visible Projects sidebar area.
    */
@@ -530,6 +520,10 @@ export type ghostexSettings = {
    * this (packages/core-ui/chat/session-chat-verbose-override.ts).
    */
   sessionChatVerboseMode: boolean;
+  /** CDXC:SessionChat 2026-09-09 DECISION:
+   * User: file edits default to a single collapsed row; Chat settings can opt into seven-line previews.
+   */
+  sessionChatFileEditPreviews: boolean;
   /**
    * CDXC:Theming 2026-06-15-11:24:
    * Custom chrome colors are scoped to the sidebar and native titlebar only.
@@ -656,6 +650,8 @@ export type ghostexSettings = {
    */
   showAgentsPaneTabBarWhenUnsplit: boolean;
   customViews: GhostexCustomView[];
+  customViewTemplates: ProjectViewTemplate[];
+  titlebarViewOrder: string[];
   customWorkspaceOpenTargets: CustomWorkspaceOpenTarget[];
   workspaceOpenTargetAvailability: WorkspaceOpenTargetAvailability;
   workspaceOpenTargetHiddenIds: string[];
@@ -690,6 +686,7 @@ export type ghostexSettings = {
 export type ghostexSettingsPatch = Partial<ghostexSettings>;
 
 export type ghostexSettingsUpdateSource =
+  | 'cli:settings'
   | 'firstLaunch:preferences'
   | 'settings:bulk'
   | 'settings:control'

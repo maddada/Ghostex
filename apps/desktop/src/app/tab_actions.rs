@@ -329,7 +329,7 @@ impl GhostexGpuiApp {
             ShellFocusTarget::ProjectEditorCompanion(mode)
                 if self.active_mode == mode
                     && mode.is_project_editor_mode()
-                    && self.project_editor_shell.left_companion_visible =>
+                    && self.project_editor_companion_is_visible() =>
             {
                 self.add_agents_registered_terminal_tab(self.agents_workspace.focused_pane, cx);
             }
@@ -345,7 +345,7 @@ impl GhostexGpuiApp {
                         TitlebarMode::Kanban | TitlebarMode::Automate | TitlebarMode::Manage
                     ) =>
             {
-                let companion_focused = if self.project_editor_shell.left_companion_visible {
+                let companion_focused = if self.project_editor_companion_is_visible() {
                     self.focus_project_editor_companion(mode, window, cx);
                     self.shell_focus == ShellFocusTarget::ProjectEditorCompanion(mode)
                 } else {
@@ -1459,7 +1459,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self.active_mode == mode && self.project_editor_shell.left_companion_visible {
+        if self.active_mode == mode && self.project_editor_companion_is_visible() {
             self.mark_project_editor_mode_awake(mode, cx);
             self.agents_terminal_runtime_sessions
                 .reconcile_with_workspace(&self.agents_workspace);
@@ -1541,7 +1541,7 @@ impl GhostexGpuiApp {
     ) {
         if self.active_mode != mode
             || !mode.is_project_editor_mode()
-            || !self.project_editor_shell.left_companion_visible
+            || !self.project_editor_companion_is_visible()
         {
             return;
         }
@@ -1586,7 +1586,7 @@ impl GhostexGpuiApp {
                     #[cfg(target_os = "windows")]
                     {
                         let companion_context_is_current = this.active_mode == mode
-                            && this.project_editor_shell.left_companion_visible
+                            && this.project_editor_companion_is_visible()
                             && this.project_editor_shell.left_companion_split_enabled
                             && this.project_editor_companion_active_project_id().as_deref()
                                 == Some(key.project_id.as_str());
@@ -1623,7 +1623,7 @@ impl GhostexGpuiApp {
                     #[cfg(not(target_os = "windows"))]
                     {
                         if this.active_mode == mode
-                            && this.project_editor_shell.left_companion_visible
+                            && this.project_editor_companion_is_visible()
                             && this.project_editor_shell.left_companion_split_enabled
                             && this.project_editor_companion_active_project_id().as_deref()
                                 == Some(key.project_id.as_str())
@@ -1770,7 +1770,7 @@ impl GhostexGpuiApp {
         */
         if self.active_mode != mode
             || !mode.is_project_editor_mode()
-            || !self.project_editor_shell.left_companion_visible
+            || !self.project_editor_companion_is_visible()
         {
             return false;
         }
@@ -1810,6 +1810,9 @@ impl GhostexGpuiApp {
         ) else {
             return false;
         };
+
+        #[cfg(target_os = "macos")]
+        self.close_floating_companion(cx);
 
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
         self.set_shell_focus(focus);
@@ -2056,7 +2059,7 @@ impl GhostexGpuiApp {
         Keyboard directional focus and placeholder body activation are separate intents. Cmd-Alt focus may select a sleeping project-editor main placeholder without waking Source, Browser, Kanban, Automate, or Docs, while explicit body activation remains the path that wakes the selected surface.
 
         CDXC:FocusRouting 2026-07-29-05:03:
-        Left focus from a project-editor main pane treats the collapsed companion restore rail as a navigation target: restore the companion in normal layout and focus its selected session. Visible companions continue through geometry-based left/right focus, while collapsing explicitly transfers focus back to the main pane.
+        Left focus from a project-editor main pane restores a hidden companion as a navigation target: restore the companion in normal layout and focus its selected session. Visible companions continue through geometry-based left/right focus, while collapsing explicitly transfers focus back to the main pane.
         */
         let active_mode = self.active_mode;
         let focus_is_project_editor_main = match self.shell_focus {
@@ -2068,7 +2071,7 @@ impl GhostexGpuiApp {
         };
         if direction == WorkspaceFocusDirection::Left
             && active_mode.is_project_editor_mode()
-            && !self.project_editor_shell.left_companion_visible
+            && !self.project_editor_companion_is_visible()
             && focus_is_project_editor_main
             && self.restore_project_editor_companion(active_mode, window, cx)
         {
@@ -2374,7 +2377,7 @@ impl GhostexGpuiApp {
             return false;
         }
 
-        if self.project_editor_shell.left_companion_visible
+        if self.project_editor_companion_is_visible()
             && self
                 .project_editor_companion_bounds_for_mode(mode)
                 .is_none()
@@ -2413,7 +2416,7 @@ impl GhostexGpuiApp {
     ) -> Vec<FocusCandidate> {
         let mut candidates = Vec::new();
 
-        if self.project_editor_shell.left_companion_visible {
+        if self.project_editor_companion_is_visible() {
             if let Some(bounds) = self.project_editor_companion_bounds_for_mode(mode) {
                 candidates.push(FocusCandidate {
                     target: SpatialFocusTarget::ProjectEditorCompanion(mode),
@@ -2533,7 +2536,7 @@ impl GhostexGpuiApp {
     ) -> Vec<SpatialFocusTarget> {
         project_editor_render_order_focus_targets_for_state(
             mode,
-            self.project_editor_shell.left_companion_visible,
+            self.project_editor_companion_is_visible(),
             self.project_editor_shell.is_mode_awake(mode),
             self.browser_tabs.rendered_leaf_order(),
             self.command_pane.is_expanded(),
@@ -2612,11 +2615,17 @@ impl GhostexGpuiApp {
         self.browser_leaf_layout_bounds.clear();
         self.command_group_layout_bounds.clear();
         self.command_terminal_mount_slot_bounds.clear();
-        self.project_editor_companion_terminal_mount_slot_bounds
-            .clear();
+        #[cfg(target_os = "macos")]
+        let companion_floating = self.companion_reveal.is_some();
+        #[cfg(not(target_os = "macos"))]
+        let companion_floating = false;
+        if !companion_floating {
+            self.project_editor_companion_terminal_mount_slot_bounds
+                .clear();
+            self.project_editor_companion_layout_bounds = None;
+        }
         self.command_pane_layout_bounds = None;
         self.project_editor_surface_layout_bounds = None;
-        self.project_editor_companion_layout_bounds = None;
         self.agents_terminal_mount_slot_bounds.clear();
         self.agents_terminal_startup_body_slot_geometries.clear();
         self.agents_terminal_parked_owner_body_slot_geometries

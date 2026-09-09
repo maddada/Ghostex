@@ -328,6 +328,38 @@ impl CefSurface {
         self.browser.set_visible(visible);
     }
 
+    #[cfg(target_os = "macos")]
+    pub(crate) fn reparent_native_view(
+        &self,
+        parent: *mut std::ffi::c_void,
+        from: *mut std::ffi::c_void,
+    ) {
+        self.browser.reparent_native_view(parent, from);
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn update_sidebar_hover_reveal(
+        &mut self,
+        root: *mut std::ffi::c_void,
+        collapsed: bool,
+        width: f32,
+        on_right: bool,
+        companion_hidden: bool,
+        requested: bool,
+    ) -> bool {
+        let (revealed, expand_companion) = self.browser.update_sidebar_hover_reveal(
+            root,
+            collapsed,
+            width as f64,
+            TITLEBAR_HEIGHT as f64,
+            on_right,
+            companion_hidden,
+            requested,
+        );
+        self.set_visible(!collapsed || revealed);
+        expand_companion
+    }
+
     pub(crate) fn order_front(&mut self) {
         self.browser.order_front();
     }
@@ -335,6 +367,10 @@ impl CefSurface {
 
 impl Render for CefSurface {
     fn render(&mut self, window: &mut Window, cx: &mut gpui::Context<Self>) -> impl IntoElement {
+        #[cfg(target_os = "macos")]
+        if let Ok(parent) = cef_parent_native_view(window) {
+            self.reparent_native_view(parent, std::ptr::null_mut());
+        }
         let view = cx.entity().clone();
         let browser = self.browser.clone();
         let focus_handle = self.focus_handle.clone();

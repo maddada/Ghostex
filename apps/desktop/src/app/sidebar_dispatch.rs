@@ -2012,6 +2012,7 @@ impl GhostexGpuiApp {
         self.sidebar_collapsed = gpui_next_sidebar_collapsed_state(self.sidebar_collapsed);
         self.cancel_sidebar_divider_interaction_state();
         self.update_sidebar_cef_surface_visibility(cx);
+        self.persist_shell_layout_state();
         cx.notify();
     }
 
@@ -2027,14 +2028,74 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn update_sidebar_cef_surface_visibility(&mut self, cx: &mut gpui::Context<Self>) {
+        self.update_sidebar_reveal(false, cx);
+    }
+
+    pub(crate) fn update_sidebar_reveal(&mut self, requested: bool, cx: &mut gpui::Context<Self>) {
+        #[cfg(target_os = "macos")]
+        if self.companion_reveal.is_some() {
+            if requested {
+                self.close_floating_companion(cx);
+            } else {
+                self.sync_floating_companion(cx);
+                if self.companion_reveal.is_some() {
+                    return;
+                }
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = requested;
         /*
         CDXC:Sidebar 2026-07-05:
         Sidebar collapse still removes the sidebar and divider from normal GPUI layout on the next render, but the native CEF child view must hide/show immediately at the toggle boundary. This keeps the titlebar button visually instant without adding overlays, zero-width fallbacks, hit-test rerouting, or persisting a collapsed width.
         */
-        let visible = gpui_sidebar_chrome_visible(self.sidebar_collapsed);
         if let Some(sidebar) = self.sidebar.clone() {
-            sidebar.update(cx, |surface, _| surface.set_visible(visible));
+            let expand_companion = sidebar.update(cx, |surface, _| {
+                #[cfg(target_os = "macos")]
+                {
+                    surface.update_sidebar_hover_reveal(
+                        self.parent_ns_view,
+                        self.sidebar_collapsed,
+                        self.sidebar_width,
+                        self.sidebar_side == GpuiSidebarSide::Right,
+                        self.active_mode.is_project_editor_mode()
+                            && !self.project_editor_shell.left_companion_visible,
+                        requested,
+                    )
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    surface.set_visible(gpui_sidebar_chrome_visible(self.sidebar_collapsed));
+                    false
+                }
+            });
+            if expand_companion {
+                #[cfg(target_os = "macos")]
+                self.open_floating_companion(cx);
+            }
         }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn start_sidebar_hover_reveal_polling(&self, cx: &mut gpui::Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(60))
+                    .await;
+                if this
+                    .update(cx, |this, cx| {
+                        if this.sidebar_collapsed || this.companion_reveal.is_some() {
+                            this.update_sidebar_cef_surface_visibility(cx);
+                        }
+                    })
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     pub(crate) fn apply_gpui_sidebar_side_from_saved_settings(

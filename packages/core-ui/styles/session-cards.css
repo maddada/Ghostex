@@ -2,6 +2,14 @@
   position: relative;
 }
 
+/*
+ * CDXC:Sessions 2026-09-09 DECISION:
+ * User: give revealed sessions 50px of scroll padding so they are clearly visible instead of sitting against the scroll area's edge.
+ */
+[data-sidebar-session-id] {
+  scroll-margin-block: 50px;
+}
+
 .session-frame[data-group-connector='true'] {
   margin-left: calc(19px * var(--sidebar-density-scale));
   z-index: 1;
@@ -1278,9 +1286,7 @@
         var(--session-composer-draft-dot-inset)
     );
     position-anchor: --session-leading-icon;
-    top: calc(
-      anchor(top) - var(--session-queued-prompt-badge-overhang) + var(--session-composer-draft-dot-inset)
-    );
+    top: calc(anchor(top) - var(--session-queued-prompt-badge-overhang) + var(--session-composer-draft-dot-inset));
   }
 }
 
@@ -1310,13 +1316,12 @@
   transition: opacity 120ms ease;
 }
 
-.sidebar-reference-layout[data-session-agent-icon-color-mode='colored'] .session-floating-agent-icon,
-.sidebar-reference-layout[data-session-agent-icon-color-mode='colored'] .session-header-agent-icon {
+.sidebar-reference-layout .session-floating-agent-icon,
+.sidebar-reference-layout .session-header-agent-icon {
   /*
-   * CDXC:Icons 2026-06-29-23:58:
-   * The Session Cards color toggle switches agent-logo spans from mask tinting
-   * to image backgrounds. Keep the same element box and opacity rules so the
-   * setting changes only logo color treatment, not layout or hover behavior.
+   * CDXC:Icons 2026-09-09 DECISION:
+   * User: remove the colored agent icons setting everywhere.
+   * The existing colored default now applies without a configurable color mode.
    */
   background-color: transparent;
   background-image: var(--session-agent-logo-colored);
@@ -1610,10 +1615,8 @@
 .session-tag-colored-icon[data-session-tag='favorite'],
 .session-tag-agent-icon[data-session-tag='favorite'] {
   /*
-   * CDXC:Icons 2026-06-29-23:58:
-   * Favorite should not tint the underlying agent icon gold, but Favorite is
-   * still a selected session tag. The tag star itself stays colored like every
-   * other tag while agent-logo color follows the Session Cards icon setting.
+   * CDXC:Icons 2026-09-09 WHY:
+   * Favorite colors the tag star, while the underlying agent logo keeps its brand artwork.
    */
   color: color-mix(in srgb, #ffdf75 78%, #c78b12 22%);
 }
@@ -2219,7 +2222,8 @@ body[data-custom-sidebar-titlebar-colors='true']
 /*
  * Focused and unfocused surfaced panes both keep their hierarchy-panel surface
  * visible at full opacity. Their actual colors come from --session-surface:
- * focused is 10% darker than the light base; unfocused is 40% darker.
+ * focused is the chat composer fill; unfocused is 40% darker than the light
+ * base.
  */
 .sidebar-reference-layout[data-reference-sidebar='true'] .session[data-focused='true']::after {
   opacity: 1;

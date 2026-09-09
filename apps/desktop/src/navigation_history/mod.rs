@@ -129,6 +129,7 @@ impl GhostexGpuiApp {
             .flex_shrink_0()
             .items_center()
             .child(self.render_titlebar_navigation_history_button(true, cx))
+            .child(self.render_titlebar_session_reveal_button(cx))
             .child(self.render_titlebar_navigation_history_button(false, cx))
     }
 

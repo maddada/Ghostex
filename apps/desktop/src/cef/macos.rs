@@ -20,6 +20,23 @@ const CEF_FRAMEWORK_EXECUTABLE_RELATIVE_PATH: &str =
     "Chromium Embedded Framework.framework/Chromium Embedded Framework";
 
 unsafe extern "C" {
+    fn GhostexGpuiReparentPaneNativeView(
+        view: *mut c_void,
+        parent: *mut c_void,
+        from: *mut c_void,
+    ) -> bool;
+    fn GhostexGpuiSidebarRevealUpdate(
+        sidebar: *mut c_void,
+        root: *mut c_void,
+        enabled: bool,
+        width: c_double,
+        titlebar_height: c_double,
+        on_right: bool,
+        companion_hidden: bool,
+        requested: bool,
+        expand_companion: *mut bool,
+    ) -> bool;
+    fn GhostexGpuiSidebarRevealDispose(sidebar: *mut c_void);
     fn GhostexGpuiCEFPrepareApplication();
     fn GhostexGpuiCEFSystemUsesDarkPageAppearance() -> bool;
     fn GhostexGpuiCEFInstallApplicationHooks();
@@ -45,6 +62,7 @@ unsafe extern "C" {
     fn GhostexGpuiCEFOrderNativeViewFront(native_view: *mut c_void);
     fn GhostexGpuiCEFRemoveNativeViewFromSuperview(native_view: *mut c_void);
     fn GhostexGpuiCEFPrepareNativeViewForFocus(native_view: *mut c_void);
+    fn GhostexGpuiCEFSetNativeViewPinchZoomDisabled(native_view: *mut c_void, disabled: bool);
     fn GhostexGpuiCEFSetNativeViewMouseFocusPassive(native_view: *mut c_void, passive: bool);
     fn GhostexGpuiCEFSetNativeViewPassiveFocusGrant(native_view: *mut c_void, granted: bool);
     fn GhostexGpuiCEFReturnFocusToGpuiRootFromNativeView(native_view: *mut c_void);
@@ -60,6 +78,45 @@ unsafe extern "C" {
     fn GhostexGpuiCEFSetSidebarPointerTrackingView(native_view: *mut c_void);
     fn GhostexGpuiCEFReportSidebarPointerOutside();
     fn GhostexGpuiCEFRefreshSidebarPointerInside();
+}
+
+pub(super) fn reparent_pane_native_view(
+    view: *mut c_void,
+    parent: *mut c_void,
+    from: *mut c_void,
+) -> bool {
+    unsafe { GhostexGpuiReparentPaneNativeView(view, parent, from) }
+}
+
+pub(super) fn update_sidebar_hover_reveal(
+    sidebar: *mut c_void,
+    root: *mut c_void,
+    enabled: bool,
+    width: f64,
+    titlebar_height: f64,
+    on_right: bool,
+    companion_hidden: bool,
+    requested: bool,
+) -> (bool, bool) {
+    let mut expand_companion = false;
+    let revealed = unsafe {
+        GhostexGpuiSidebarRevealUpdate(
+            sidebar,
+            root,
+            enabled,
+            width,
+            titlebar_height,
+            on_right,
+            companion_hidden,
+            requested,
+            &mut expand_companion,
+        )
+    };
+    (revealed, expand_companion)
+}
+
+pub(super) fn dispose_sidebar_hover_reveal(sidebar: *mut c_void) {
+    unsafe { GhostexGpuiSidebarRevealDispose(sidebar) }
 }
 
 /// Keeps the CEF framework loaded for the lifetime of the CEF runtime.
@@ -227,6 +284,12 @@ pub(super) fn prepare_native_view_for_focus(native_view: *mut c_void) {
 pub(super) fn set_native_view_mouse_focus_passive(native_view: *mut c_void, passive: bool) {
     unsafe {
         GhostexGpuiCEFSetNativeViewMouseFocusPassive(native_view, passive);
+    }
+}
+
+pub(super) fn set_native_view_pinch_zoom_disabled(native_view: *mut c_void, disabled: bool) {
+    unsafe {
+        GhostexGpuiCEFSetNativeViewPinchZoomDisabled(native_view, disabled);
     }
 }
 

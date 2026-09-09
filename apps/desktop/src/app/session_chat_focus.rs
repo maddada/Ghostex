@@ -10,6 +10,12 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
         force: bool,
     ) {
+        #[cfg(target_os = "macos")]
+        if let Some(reveal) = self.companion_reveal.as_ref()
+            && cef_parent_native_view(window).ok() != Some(reveal.native_view)
+        {
+            return;
+        }
         for (session_id, surface) in &self.agents_chat_surfaces {
             let focused = window.is_window_active()
                 && self.agents_chat_mode_sessions.contains(session_id)
@@ -25,7 +31,7 @@ impl GhostexGpuiApp {
                         })
                 } else {
                     self.active_mode.is_project_editor_mode()
-                        && self.project_editor_shell.left_companion_visible
+                        && self.project_editor_companion_is_visible()
                         && self.project_editor_companion_focused_terminal_session_id()
                             == Some(*session_id)
                         && self.project_editor_companion_border_state(self.active_mode, window)

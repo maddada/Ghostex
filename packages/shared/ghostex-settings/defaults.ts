@@ -115,6 +115,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   automateViewTabHidden: false,
   docsViewTabHidden: false,
   tipsAndTricksTitlebarButtonHidden: false,
+  helpTitlebarButtonHidden: false,
   resourcesTitlebarButtonHidden: false,
   devServersTitlebarButtonHidden: false,
   extensionsTitlebarButtonHidden: false,
@@ -226,16 +227,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * while showing detailed sidebar status chrome.
    */
   hideSessionAgentIconUntilHover: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideSessionAgentIconUntilHover,
-  /**
-   * CDXC:Icons 2026-06-29-23:58:
-   * New installs use colored agent logos so session identity stays visually
-   * distinct without requiring a separate opt-in.
-   *
-   * CDXC:Icons 2026-06-30-22:40:
-   * The same setting colors the selected agent launcher icon in project and
-   * Quick headers, so the visible picker identity matches session cards.
-   */
-  useColoredSessionAgentIcons: true,
   /**
    * CDXC:Browser 2026-05-28-07:38:
    * Browser page favicons are page identity, not agent chrome. Keep them
@@ -387,7 +378,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   sidebarProjectGroupStyle: 'branched',
   sidebarSpacesEnabled: false,
-  revealSessionWhenActivating: true,
   expandCollapsedProjectsOnJump: true,
   showLessForExpandedProjectJumps: false,
   /**
@@ -401,6 +391,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   sessionChatCustomTranscriptWidthEnabled: false,
   sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
   sessionChatVerboseMode: false,
+  sessionChatFileEditPreviews: false,
   /**
    * CDXC:Theming 2026-06-15-11:24:
    * Custom sidebar/titlebar colors are scoped to the sidebar and titlebar.
@@ -528,6 +519,8 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   clickToWakeSleepingSessions: true,
   showAgentsPaneTabBarWhenUnsplit: false,
   customViews: [],
+  customViewTemplates: [],
+  titlebarViewOrder: [],
   /**
    * CDXC:Titlebar 2026-05-11-00:22
    * The titlebar Open In menu is configurable: built-in editor targets can be

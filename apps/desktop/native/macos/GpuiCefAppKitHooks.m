@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#import "GpuiKeyboardShortcuts.h"
 #import "GpuiNavigationGestures.h"
 #import "GpuiWindowCorners.h"
 #import <Carbon/Carbon.h>
@@ -34,10 +35,12 @@ void GhostexGpuiCEFLogNativeMouseDown(void *nativeView, double eventWindowX,
 void GhostexGpuiCEFClearActiveNativeView(void);
 int GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView(void *nativeView);
 void GhostexGpuiCEFRefreshSystemPageAppearances(void);
+void GhostexGpuiSidebarRevealFocusEditable(void *sidebar);
+bool GhostexGpuiSidebarRevealReturnFocus(void *sidebar);
 void GhostexGpuiFirstResponderDidChange(void *gpuiRootView, void *responder);
 int GhostexGpuiKeyboardRouteNativeEvent(void *gpuiRootView, int action,
                                         uint32_t keyCode, uint64_t modifiers,
-                                        const char *charactersIgnoringModifiers,
+                                        const char *shortcutCharacters,
                                         const char *characters);
 int GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys(void *gpuiRootView);
 int GhostexGpuiKeyboardOwnerIsSessionChat(void *gpuiRootView);
@@ -72,6 +75,8 @@ static const void *GhostexGpuiRootPointerTrackingAreaKey =
     &GhostexGpuiRootPointerTrackingAreaKey;
 static const void *GhostexGpuiCEFMouseFocusPassiveKey =
     &GhostexGpuiCEFMouseFocusPassiveKey;
+static const void *GhostexGpuiCEFPinchZoomDisabledKey =
+    &GhostexGpuiCEFPinchZoomDisabledKey;
 static const void *GhostexGpuiCEFPassiveFocusGrantKey =
     &GhostexGpuiCEFPassiveFocusGrantKey;
 static BOOL g_ghostexGpuiCEFMessagePumpWorkPending = NO;
@@ -217,18 +222,29 @@ static void GhostexGpuiSidebarPointerTrackingReport(BOOL inside) {
   GhostexGpuiSidebarPointerInsideChanged(inside);
 }
 
+/*
+ CDXC:Sidebar 2026-09-09 DECISION:
+ User: retain native stale-hover protection, but determine pointer presence from the visible sidebar's screen position and refresh it as the floating panel opens, animates, and closes.
+ A floating sidebar lives in a nonactivating child window; the event's window identity must not gate hover presence.
+ SEE-ALSO: GpuiSidebarReveal.m refreshes this same reporter when the panel moves under a stationary pointer.
+*/
 static BOOL
 GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSPoint screenPoint) {
   NSView *sidebarView = g_ghostexGpuiSidebarPointerTrackingView;
   NSWindow *window = sidebarView.window;
-  if (!sidebarView || !window || !window.isVisible ||
-      sidebarView.isHiddenOrHasHiddenAncestor) {
+  if (!sidebarView || !window || !window.isVisible || window.miniaturized ||
+      !NSApp.active || sidebarView.isHiddenOrHasHiddenAncestor) {
     return NO;
   }
-  NSPoint locationInWindow = [window convertPointFromScreen:screenPoint];
-  NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds
+  NSRect frameInWindow = [sidebarView convertRect:sidebarView.visibleRect
                                            toView:nil];
-  return NSPointInRect(locationInWindow, frameInWindow);
+  NSRect contentInWindow = [window.contentView convertRect:window.contentView.bounds
+                                                   toView:nil];
+  NSRect visibleFrame = NSIntersectionRect(frameInWindow, contentInWindow);
+  if (NSIsEmptyRect(visibleFrame) ||
+      !NSPointInRect(screenPoint, [window convertRectToScreen:visibleFrame])) return NO;
+  // A menu or another window covering this rectangle must still clear stale hover.
+  return [NSWindow windowNumberAtPoint:screenPoint belowWindowWithWindowNumber:0] == window.windowNumber;
 }
 
 /*
@@ -306,21 +322,16 @@ static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent *event) {
   if (!sidebarView) {
     return;
   }
-  BOOL inside = NO;
   NSWindow *window = event.window;
   if (isDown) {
     // A window that never got armed at registration time (view not yet in a
     // window) still delivers button events, so re-arm from one of those.
     sidebarView.window.acceptsMouseMovedEvents = YES;
   }
-  if (window && sidebarView.window == window &&
-      !sidebarView.isHiddenOrHasHiddenAncestor) {
-    NSRect frameInWindow = [sidebarView convertRect:sidebarView.bounds
-                                             toView:nil];
-    inside = NSPointInRect(event.locationInWindow, frameInWindow);
-  }
+  BOOL inside = GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSEvent.mouseLocation);
   GhostexGpuiSidebarPointerTrackingReport(inside);
-  if (isDown && !inside) {
+  // Click ownership still matters: another child window can cover the sidebar.
+  if (isDown && (!inside || window != sidebarView.window)) {
     GhostexGpuiSidebarOutsideMouseDown();
   }
 }
@@ -514,14 +525,12 @@ GhostexGpuiCEFDocsEditorHotkeysOwnKeyboardInWindow(NSWindow *window) {
         objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
     NSView *gpuiRootView = observer.gpuiRootView;
     int action = event.type == NSEventTypeKeyUp ? 3 : (event.isARepeat ? 2 : 1);
-    NSString *charactersIgnoringModifiers =
-        event.charactersIgnoringModifiers ?: @"";
+    NSString *shortcutCharacters = GhostexGpuiShortcutCharactersForEvent(event);
     NSString *characters = event.characters ?: @"";
     if (gpuiRootView && gpuiRootView.window == window &&
         GhostexGpuiKeyboardRouteNativeEvent(
             (__bridge void *)gpuiRootView, action, (uint32_t)event.keyCode,
-            (uint64_t)event.modifierFlags,
-            charactersIgnoringModifiers.UTF8String,
+            (uint64_t)event.modifierFlags, shortcutCharacters.UTF8String,
             characters.UTF8String) != 0) {
       return;
     }
@@ -1214,6 +1223,10 @@ void GhostexGpuiCEFReturnFocusToGpuiRootFromNativeView(void *nativeView) {
     return;
   }
 
+  if (GhostexGpuiSidebarRevealReturnFocus(nativeView)) {
+    return;
+  }
+
   GhostexGpuiFirstResponderObserver *observer =
       objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
   NSView *gpuiRootView = observer.gpuiRootView;
@@ -1379,6 +1392,62 @@ static void GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(NSView *view) {
   }
 }
 
+/*
+ CDXC:Sidebar 2026-09-09 WHY:
+ Chromium 148's RenderWidgetHostViewCocoa already tracks mouse movement with NSTrackingActiveAlways, but shouldIgnoreMouseEvent rejects movement when its window is neither main nor key.
+ Moving the sidebar into a nonactivating child panel therefore disables CSS hover even with the native-pointer-inside gate set correctly.
+ Use Chromium's kWhenInActiveApp policy for the floating sidebar's mouse and tooltip acceptance so hovering does not need to take keyboard focus from the workspace.
+ Both AcceptMouseEvents and AcceptTooltipEvents define kWhenInActiveApp as the C++ int enum value 1 in content/public/browser/render_widget_host_view_mac_delegate.h.
+*/
+static int GhostexGpuiCEFBrowserViewHoverAcceptance(id self, SEL _cmd) {
+  NSView *sidebar = g_ghostexGpuiSidebarPointerTrackingView;
+  if (sidebar.window.parentWindow &&
+      GhostexGpuiNativeViewContainsResponder((__bridge void *)sidebar,
+                                             (__bridge void *)self)) {
+    return 1;
+  }
+  struct objc_super superInfo = {
+      .receiver = self,
+      .super_class = class_getSuperclass(object_getClass(self)),
+  };
+  int (*sendSuper)(struct objc_super *, SEL) = (void *)objc_msgSendSuper;
+  return sendSuper(&superInfo, _cmd);
+}
+
+void GhostexGpuiCEFSetNativeViewPinchZoomDisabled(void *nativeView,
+                                                 bool disabled) {
+  NSView *view = (__bridge NSView *)nativeView;
+  if (view) {
+    objc_setAssociatedObject(view, GhostexGpuiCEFPinchZoomDisabledKey,
+                             @(disabled), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  }
+}
+
+/*
+ CDXC:CefRuntime 2026-09-09 WHY:
+ Stop magnification on the receiving CEF view before Chromium scales the page, including embedded editor frames and descendants created after navigation.
+ The policy lives on the browser root and is set by cef/shell/browser.rs; ordinary scrolling and keyboard zoom use separate event paths.
+*/
+static void GhostexGpuiCEFBrowserViewMagnify(id self, SEL _cmd, NSEvent *event) {
+  for (NSView *view = self; view; view = view.superview) {
+    NSNumber *disabled =
+        objc_getAssociatedObject(view, GhostexGpuiCEFPinchZoomDisabledKey);
+    if (disabled) {
+      if (disabled.boolValue) {
+        return;
+      }
+      break;
+    }
+  }
+  struct objc_super superInfo = {
+      .receiver = self,
+      .super_class = class_getSuperclass(object_getClass(self)),
+  };
+  void (*sendSuper)(struct objc_super *, SEL, NSEvent *) =
+      (void *)objc_msgSendSuper;
+  sendSuper(&superInfo, _cmd, event);
+}
+
 static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView *view) {
   Class originalClass = object_getClass(view);
   if (!originalClass) {
@@ -1400,8 +1469,22 @@ static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView *view) {
       return;
     }
 
+    // These selectors belong to Chromium's render widget, not its container views.
+    for (NSString *name in @[@"acceptsMouseEventsOption", @"acceptsTooltipEvents"]) {
+      SEL selector = NSSelectorFromString(name);
+      Method method = class_getInstanceMethod(originalClass, selector);
+      if (method) {
+        class_addMethod(subclass, selector,
+                        (IMP)GhostexGpuiCEFBrowserViewHoverAcceptance,
+                        method_getTypeEncoding(method));
+      }
+    }
     class_addMethod(subclass, @selector(mouseDown:),
                     (IMP)GhostexGpuiCEFBrowserViewMouseDown, "v@:@");
+    class_addMethod(subclass, @selector(magnifyWithEvent:),
+                    (IMP)GhostexGpuiCEFBrowserViewMagnify, "v@:@");
+    class_addMethod(subclass, @selector(smartMagnifyWithEvent:),
+                    (IMP)GhostexGpuiCEFBrowserViewMagnify, "v@:@");
     class_addMethod(subclass, @selector(acceptsFirstResponder),
                     (IMP)GhostexGpuiCEFBrowserViewAcceptsFirstResponder, "c@:");
     class_addMethod(subclass, @selector(selectAll:),
@@ -1770,7 +1853,8 @@ static BOOL GhostexGpuiCEFEventIsCommandA(NSEvent *event) {
   }
 
   return
-      [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"a"];
+      [GhostexGpuiShortcutCharactersForEvent(event).lowercaseString
+          isEqualToString:@"a"];
 }
 
 static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent *event) {
@@ -1790,7 +1874,8 @@ static BOOL GhostexGpuiCEFEventIsCommandF(NSEvent *event) {
   }
 
   return
-      [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"f"];
+      [GhostexGpuiShortcutCharactersForEvent(event).lowercaseString
+          isEqualToString:@"f"];
 }
 
 static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent *event) {
@@ -1812,7 +1897,8 @@ static BOOL GhostexGpuiCEFEventIsCommandOptionF(NSEvent *event) {
   }
 
   return
-      [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"f"];
+      [GhostexGpuiShortcutCharactersForEvent(event).lowercaseString
+          isEqualToString:@"f"];
 }
 
 static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent *event) {
@@ -1832,7 +1918,8 @@ static BOOL GhostexGpuiCEFEventIsCommandY(NSEvent *event) {
   }
 
   return
-      [event.charactersIgnoringModifiers.lowercaseString isEqualToString:@"y"];
+      [GhostexGpuiShortcutCharactersForEvent(event).lowercaseString
+          isEqualToString:@"y"];
 }
 
 static GhostexGpuiCEFEditCommand
@@ -1852,7 +1939,7 @@ GhostexGpuiCEFClipboardEditCommandForEvent(NSEvent *event) {
     return GhostexGpuiCEFEditCommandNone;
   }
 
-  NSString *key = event.charactersIgnoringModifiers.lowercaseString;
+  NSString *key = GhostexGpuiShortcutCharactersForEvent(event).lowercaseString;
   if ([key isEqualToString:@"x"]) {
     return GhostexGpuiCEFEditCommandCut;
   }
@@ -1878,7 +1965,7 @@ GhostexGpuiCEFZoomCommandForEvent(NSEvent *event) {
   }
 
   modifiers &= ~NSEventModifierFlagCommand;
-  NSString *key = event.charactersIgnoringModifiers;
+  NSString *key = GhostexGpuiShortcutCharactersForEvent(event);
   if ((modifiers == 0 || modifiers == NSEventModifierFlagShift) &&
       ([key isEqualToString:@"="] || [key isEqualToString:@"+"])) {
     return GhostexGpuiCEFZoomCommandIn;
@@ -1986,6 +2073,7 @@ void GhostexGpuiCEFFocusNativeView(void *nativeView) {
   if (!GhostexGpuiCEFMarkNativeViewFocused(nativeView)) {
     GhostexGpuiCEFClearActiveNativeView();
   }
+  GhostexGpuiSidebarRevealFocusEditable(nativeView);
   [window makeFirstResponder:view];
 }
 
