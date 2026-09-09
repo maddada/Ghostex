@@ -364,7 +364,8 @@ pub(crate) fn repair_session_working_directory_title(
             && read_text_from_map(&runtime_settings, "titleMetadataSource").is_none();
     if title_came_only_from_terminal && is_terminal_auto_working_directory_title(&session) {
         let default_title = if session.get("kind").and_then(Value::as_str) == Some("agent") {
-            create_agent_session_default_title(None, session.get("agentId").and_then(Value::as_str))
+            let project = repository.get_project(&lifecycle.project_id)?;
+            project_agent_session_default_title(project.as_ref().unwrap_or(&Value::Null), &session)
         } else {
             "Terminal Session".to_string()
         };

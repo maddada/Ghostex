@@ -13,7 +13,16 @@ pub(crate) fn project_session_title(session: &Value) -> Map<String, Value> {
         .unwrap_or_else(|| DEFAULT_TERMINAL_SESSION_TITLE.to_string());
     let title_source = session_title_source(session, &title);
     let agent_id = string_field(session, "agentId");
-    let primary_candidate = session_card_primary_title(&title, agent_id.as_deref());
+    let mut primary_candidate = session_card_primary_title(&title, agent_id.as_deref());
+    if title_source == "placeholder" {
+        let family = crate::agents::session_agent_family_id(&Value::Null, session);
+        if matches!(family.as_deref(), Some("claude" | "codex")) {
+            primary_candidate = Some(crate::agents::create_agent_session_default_title(
+                None,
+                family.as_deref(),
+            ));
+        }
+    }
     let trusted_resume_title = trusted_resume_title(&title, &title_source);
     let primary_title = primary_candidate;
     let terminal_title: Option<String> = None;

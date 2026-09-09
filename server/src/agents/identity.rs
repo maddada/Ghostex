@@ -190,14 +190,14 @@ pub(crate) fn apply_session_state_update(
             title = candidate.title;
             runtime_settings.insert("titleSource".to_string(), json!(candidate.title_source));
             reason = candidate.reason;
-        } else if let Some(agent_id) = next_agent.as_deref() {
+        } else if next_agent.is_some() {
             /*
             Plain terminals promoted by a live WSL agent process or its first
             hook should immediately gain the same neutral agent-aware title as
             sessions created from the agent launcher. Keep it a placeholder so
             first-prompt auto-title generation remains eligible to replace it.
             */
-            title = create_agent_session_default_title(None, Some(agent_id));
+            title = project_agent_session_default_title(&project, &current_with_identity);
             runtime_settings.insert("titleSource".to_string(), json!("placeholder"));
             reason = "agent-default-title-applied".to_string();
         }

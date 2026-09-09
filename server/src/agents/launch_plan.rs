@@ -200,23 +200,13 @@ pub(crate) fn create_agent_session_params_for_project(
         .entry("lifecycleState".to_string())
         .or_insert_with(|| Value::String("running".to_string()));
     if read_text(&normalized, "title").is_none() {
-        normalized.insert(
-            "title".to_string(),
-            Value::String(create_agent_session_default_title(
-                read_text_from_map(&agent_config, "name").as_deref(),
-                normalized.get("agentId").and_then(Value::as_str),
-            )),
-        );
+        let default_title =
+            project_agent_session_default_title(project, &Value::Object(normalized.clone()));
+        normalized.insert("title".to_string(), Value::String(default_title));
         /*
-        CDXC:SessionTitles 2026-09-03:
-        The launcher's default title is `<agent display name> Session`, and for
-        a custom agent that name is whatever the user typed ("Claude 71"). The
-        first-prompt auto-title gates only knew the built-in spellings ("Claude
-        Session", "Codex Session"), so a custom agent's default title counted
-        as a real, user-chosen title and the session was never auto-named.
-        Stamp the default as a placeholder, the same source the live-identity
-        promotion already uses for this title, so the gates can recognise it
-        without a list of names.
+        CDXC:SessionTitles 2026-09-09 WHY:
+        Custom-agent defaults previously used configured names such as "Claude 71 Session", which the first-prompt auto-title gates mistook for user-chosen titles.
+        Stamp every launcher default as a placeholder so auto-naming depends on its source rather than a list of display names.
         */
         if !runtime_settings
             .get("titleSource")
@@ -234,6 +224,27 @@ pub(crate) fn create_agent_session_params_for_project(
         Value::Object(runtime_settings),
     );
     Ok(normalized)
+}
+
+/// CDXC:SessionTitles 2026-09-09 DECISION:
+/// User: empty Claude/Codex sessions show "∗ Claude Session" / "∗ Codex Session", never the custom agent name or ID created for an account.
+/// Identity updates used the custom configuration ID as a display name and overwrote the launcher's placeholder title.
+/// SEE-ALSO: agents/identity.rs, agents/session_state_ingest.rs, agents/drafts.rs, presentation/session_attributes.rs.
+pub(crate) fn project_agent_session_default_title(project: &Value, session: &Value) -> String {
+    let agent_id = read_text_value(session, "agentId");
+    let family = session_agent_family_id(project, session);
+    if matches!(family.as_deref(), Some("claude" | "codex")) {
+        return create_agent_session_default_title(None, family.as_deref());
+    }
+    let agent_config = resolve_project_agent_config(
+        project,
+        agent_id.as_deref().unwrap_or_default(),
+        Some(&object_field(session, "launchSettings")),
+    );
+    create_agent_session_default_title(
+        read_text_from_map(&agent_config, "name").as_deref(),
+        agent_id.as_deref(),
+    )
 }
 
 pub(crate) fn create_agent_session_default_title(
