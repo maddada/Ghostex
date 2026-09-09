@@ -169,7 +169,8 @@ describe('discover ghostex modal source', () => {
       '.ghostex-settings-shadcn .discover-ghostex-feature-title {',
       '.ghostex-settings-shadcn .discover-ghostex-feature-description {'
     );
-    expect(featureTitleStyles).toContain('font-size: 1.22rem;');
+    // The Settings restyle moved every heading onto the shared typography tokens.
+    expect(featureTitleStyles).toContain('font-size: var(--settings-text-display);');
     expect(featureTitleStyles).toContain('max-width: none;');
 
     const featureDescriptionStyles = sourceBetween(

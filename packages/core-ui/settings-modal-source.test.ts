@@ -397,8 +397,8 @@ describe('settings modal source', () => {
      */
     const betaSearch = sourceBetween(
       settingsModalSearchCatalogSource,
-      "beta: getSettingsSectionSearch(settingsSearchQuery, 'Experimental', [",
-      "debugging: getSettingsSectionSearch(settingsSearchQuery, 'Debugging', ["
+      "beta: {\n      title: 'Experimental',",
+      "debugging: {\n      title: 'Debugging',"
     );
     const betaSection = sourceBetween(
       settingsModalSource,
@@ -542,8 +542,8 @@ describe('settings modal source', () => {
     const terminalSectionKeys = sourceBetween(settingsModalTypesSource, 'terminal: [', 'tools: [');
     const terminalSearch = sourceBetween(
       settingsModalSearchCatalogSource,
-      "terminal: getSettingsSectionSearch(settingsSearchQuery, 'Terminal', [",
-      "terminalBehavior: getSettingsSectionSearch(settingsSearchQuery, 'Terminal Behavior', ["
+      "terminal: {\n      title: 'Terminal',",
+      "terminalBehavior: {\n      title: 'Terminal Behavior',"
     );
     const terminalSection = sourceBetween(
       settingsModalSource,

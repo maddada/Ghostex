@@ -75,11 +75,18 @@ describe('normalizeghostexHotkeySettings', () => {
     expect(DEFAULT_ghostex_HOTKEYS.jumpToProject1).toBe('cmd+ctrl+1');
     expect(DEFAULT_ghostex_HOTKEYS.jumpToProject9).toBe('cmd+ctrl+9');
     expect(DEFAULT_ghostex_HOTKEYS.focusSessionSlot1).toBe('cmd+1');
-    expect(DEFAULT_ghostex_HOTKEYS.switchAgentsView).toBe('alt+1');
-    expect(DEFAULT_ghostex_HOTKEYS.switchSourceView).toBe('alt+2');
-    expect(DEFAULT_ghostex_HOTKEYS.switchGitHubView).toBe('alt+3');
-    expect(DEFAULT_ghostex_HOTKEYS.switchKanbanView).toBe('alt+4');
-    expect(DEFAULT_ghostex_HOTKEYS.switchManageView).toBe('alt+5');
+    /*
+     * CDXC:Hotkeys 2026-09-10:
+     * Option+1..9 are positional titlebar-view slots, so the direct built-in
+     * view actions ship unassigned; see the DECISION in ghostex-hotkeys.ts.
+     */
+    expect(DEFAULT_ghostex_HOTKEYS.switchTitlebarView1).toBe('alt+1');
+    expect(DEFAULT_ghostex_HOTKEYS.switchTitlebarView9).toBe('alt+9');
+    expect(DEFAULT_ghostex_HOTKEYS.switchAgentsView).toBe('');
+    expect(DEFAULT_ghostex_HOTKEYS.switchSourceView).toBe('');
+    expect(DEFAULT_ghostex_HOTKEYS.switchGitHubView).toBe('');
+    expect(DEFAULT_ghostex_HOTKEYS.switchKanbanView).toBe('');
+    expect(DEFAULT_ghostex_HOTKEYS.switchManageView).toBe('');
     /**
      * CDXC:Hotkeys 2026-05-17-01:18:
      * Action launch hotkeys are positional so Settings can bind the first five
@@ -139,11 +146,11 @@ describe('normalizeghostexHotkeySettings', () => {
   });
 
   test('matches workarea view switcher hotkeys', () => {
-    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+1')).toBe('switchAgentsView');
-    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+2')).toBe('switchSourceView');
-    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+3')).toBe('switchGitHubView');
-    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+4')).toBe('switchKanbanView');
-    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+5')).toBe('switchManageView');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+1')).toBe('switchTitlebarView1');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+2')).toBe('switchTitlebarView2');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+3')).toBe('switchTitlebarView3');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+4')).toBe('switchTitlebarView4');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'alt+5')).toBe('switchTitlebarView5');
   });
 
   test('keeps browser bracket tab navigation as alternate defaults', () => {

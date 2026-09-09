@@ -113,7 +113,12 @@ describe('session chat session-option catalogs', () => {
     expect(catalogFor('pi').model.dispatch).toEqual({ kind: 'terminal-handoff' });
     expect(sessionChatSessionOptionCatalog(null)).toBeNull();
     expect(sessionChatSessionOptionCatalog('unknown-agent')).toBeNull();
-    expect(sessionChatOptionCommandNames('grok')).toEqual([]);
+    expect(sessionChatOptionCommandNames('pi')).toEqual([]);
+    expect(sessionChatOptionCommandNames('unknown-agent')).toEqual([]);
+    // Cursor, Grok Build and Antigravity now drive the quick model picker.
+    expect(sessionChatOptionCommandNames('cursor')).toEqual(['model']);
+    expect(sessionChatOptionCommandNames('grok')).toEqual(['model']);
+    expect(sessionChatOptionCommandNames('antigravity')).toEqual(['model']);
   });
 
   it('shares one catalog between claude and openclaude', () => {
