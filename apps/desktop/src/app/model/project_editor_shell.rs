@@ -119,16 +119,61 @@ ids, the identical vocabulary the parked workspace model already stores, so
 they are meaningful only alongside that model and are validated against it on
 restore.
 */
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct GpuiProjectViewState {
     pub(crate) active_mode: TitlebarMode,
-    pub(crate) companion_visible: bool,
+    pub(crate) panes_by_mode: HashMap<String, GpuiViewPaneState>,
     pub(crate) companion_split_enabled: bool,
     pub(crate) companion_width_ratio: f32,
     pub(crate) companion_split_ratio: f32,
     pub(crate) companion_top_session_id: Option<TerminalSessionId>,
     pub(crate) companion_bottom_session_id: Option<TerminalSessionId>,
     pub(crate) companion_focused_slot: ProjectEditorCompanionTerminalSlot,
+}
+
+/// CDXC:Workarea 2026-09-09 DECISION:
+/// User: remember the sessions sidebar, companion, and Commands pane visibility separately per project and view, so Browser can stay wide while Agents keeps its panes open.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct GpuiViewPaneState {
+    pub(crate) sidebar_collapsed: bool,
+    pub(crate) companion_visible: bool,
+    pub(crate) command_mode: CommandPaneMode,
+    pub(crate) command_last_expanded_mode: CommandPaneMode,
+}
+
+impl GpuiViewPaneState {
+    pub(crate) fn default_for_mode(mode: TitlebarMode) -> Self {
+        Self {
+            sidebar_collapsed: mode != TitlebarMode::Agents,
+            companion_visible: false,
+            command_mode: CommandPaneMode::Collapsed,
+            command_last_expanded_mode: CommandPaneMode::Pinned,
+        }
+    }
+
+    fn to_json(self) -> serde_json::Value {
+        serde_json::json!({
+            "sidebarCollapsed": self.sidebar_collapsed,
+            "companionVisible": self.companion_visible,
+            "commandMode": self.command_mode.element_slug(),
+            "commandLastExpandedMode": self.command_last_expanded_mode.element_slug(),
+        })
+    }
+
+    fn from_json(value: &serde_json::Value) -> Option<Self> {
+        let object = value.as_object()?;
+        let command_last_expanded_mode =
+            CommandPaneMode::from_slug(object.get("commandLastExpandedMode")?.as_str()?)?;
+        if command_last_expanded_mode == CommandPaneMode::Collapsed {
+            return None;
+        }
+        Some(Self {
+            sidebar_collapsed: json_bool_field(object, "sidebarCollapsed")?,
+            companion_visible: json_bool_field(object, "companionVisible")?,
+            command_mode: CommandPaneMode::from_slug(object.get("commandMode")?.as_str()?)?,
+            command_last_expanded_mode,
+        })
+    }
 }
 
 pub(crate) struct ProjectEditorShellModel {
@@ -401,7 +446,9 @@ pub(crate) fn project_view_state_to_shell_state_json(
 ) -> serde_json::Value {
     serde_json::json!({
         "activeMode": state.active_mode.element_slug(),
-        "companionVisible": state.companion_visible,
+        "panesByMode": state.panes_by_mode.iter().map(|(mode, panes)| {
+            (mode.clone(), panes.to_json())
+        }).collect::<serde_json::Map<_, _>>(),
         "companionSplitEnabled": state.companion_split_enabled,
         "companionWidthRatio": json_number_f32(project_editor_companion_width_ratio(
             state.companion_width_ratio,
@@ -428,7 +475,19 @@ pub(crate) fn project_view_state_from_shell_state(
         .and_then(TitlebarMode::from_slug)?;
     Some(GpuiProjectViewState {
         active_mode,
-        companion_visible: json_bool_field(object, "companionVisible").unwrap_or(true),
+        panes_by_mode: object
+            .get("panesByMode")
+            .and_then(serde_json::Value::as_object)
+            .map(|modes| {
+                modes
+                    .iter()
+                    .filter_map(|(mode, value)| {
+                        TitlebarMode::from_slug(mode)?;
+                        Some((mode.clone(), GpuiViewPaneState::from_json(value)?))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
         companion_split_enabled: json_bool_field(object, "companionSplitEnabled").unwrap_or(false),
         companion_width_ratio: json_f32_field(object, "companionWidthRatio")
             .map(project_editor_companion_width_ratio)

@@ -869,7 +869,7 @@ impl GhostexGpuiApp {
             return;
         };
 
-        self.active_mode = TitlebarMode::Agents;
+        self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
         self.set_shell_focus(ShellFocusTarget::AgentsPane(
             self.agents_workspace.focused_pane,
         ));
@@ -920,7 +920,7 @@ impl GhostexGpuiApp {
             return;
         };
 
-        self.active_mode = TitlebarMode::Agents;
+        self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
         self.set_shell_focus(ShellFocusTarget::AgentsPane(inserted_pane_id));
         self.update_active_mode_cef_child_visibility(cx);
         self.scroll_workspace_pane_active_tab(inserted_pane_id);
@@ -2411,7 +2411,7 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:Workarea 2026-06-22-06:45:
-        Agents workspace split handles are real five-pixel layout siblings with one-pixel visual separators. Dragging a horizontal handle updates the left/right split ratio, dragging a vertical handle updates the top/bottom ratio, and double-click resets that split to the shell default 0.5 ratio while persisting only placeholder shell layout state.
+        Agents workspace split handles are real five-pixel layout siblings with one-pixel visual separators. Dragging a horizontal handle updates the left/right split ratio and dragging a vertical handle updates the top/bottom ratio while persisting shell layout state.
         */
         window.prevent_default();
         cx.stop_propagation();
@@ -2419,7 +2419,9 @@ impl GhostexGpuiApp {
         self.workspace_split_drag = None;
 
         if event.click_count >= 2 {
-            let reset_ratio = self.agents_workspace.reset_split_ratio(split_id);
+            let reset_ratio = self
+                .agents_workspace
+                .equalize_split_panes(split_id, &self.workspace_split_layout_metrics);
             let cleared_hover = self.clear_workspace_split_hover_state();
             if reset_ratio {
                 self.persist_shell_layout_state();
@@ -2790,7 +2792,7 @@ impl GhostexGpuiApp {
 
         self.project_editor_companion_drag = None;
 
-        if self.active_mode != mode || !self.project_editor_shell.left_companion_visible {
+        if self.active_mode != mode || !self.project_editor_companion_is_visible() {
             return;
         }
 
@@ -2886,7 +2888,7 @@ impl GhostexGpuiApp {
         self.project_editor_companion_split_drag = None;
 
         if self.active_mode != mode
-            || !self.project_editor_shell.left_companion_visible
+            || !self.project_editor_companion_is_visible()
             || self
                 .project_editor_companion_secondary_terminal_session_id
                 .is_none()

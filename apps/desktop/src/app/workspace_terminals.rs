@@ -311,9 +311,7 @@ impl GhostexGpuiApp {
         persist_gpui_gxserver_presentation_focus_state(
             &self.sidebar_gxserver_presentation_focus_state,
         );
-        if self.active_mode.is_project_editor_mode()
-            && self.project_editor_shell.left_companion_visible
-        {
+        if self.active_mode.is_project_editor_mode() && self.project_editor_companion_is_visible() {
             let mode = self.active_mode;
             let focus_companion =
                 self.shell_focus == ShellFocusTarget::ProjectEditorCompanion(mode);
@@ -373,7 +371,7 @@ impl GhostexGpuiApp {
         reconciliation updates content without stealing focus from the editor.
         */
         let mode = self.active_mode;
-        if !mode.is_project_editor_mode() || !self.project_editor_shell.left_companion_visible {
+        if !mode.is_project_editor_mode() || !self.project_editor_companion_is_visible() {
             return false;
         }
         let Some(project_id) = self
@@ -618,9 +616,23 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn current_project_view_state(&self) -> GpuiProjectViewState {
+        let mut panes_by_mode = self
+            .agents_workspace_project_id
+            .as_ref()
+            .and_then(|id| self.project_view_states_by_project.get(id))
+            .map(|state| state.panes_by_mode.clone())
+            .unwrap_or_default();
+        let mut panes = self.saved_view_pane_state(self.active_mode);
+        panes.sidebar_collapsed = self.sidebar_collapsed;
+        panes.companion_visible = self.project_editor_shell.left_companion_visible;
+        if self.command_pane_project_id == self.agents_workspace_project_id {
+            panes.command_mode = self.command_pane.mode;
+            panes.command_last_expanded_mode = self.command_pane.last_expanded_mode;
+        }
+        panes_by_mode.insert(self.active_mode.element_slug(), panes);
         GpuiProjectViewState {
             active_mode: self.available_titlebar_mode_or_agents(self.active_mode),
-            companion_visible: self.project_editor_shell.left_companion_visible,
+            panes_by_mode,
             companion_split_enabled: self.project_editor_shell.left_companion_split_enabled,
             companion_width_ratio: self.project_editor_shell.left_companion_width_ratio,
             companion_split_ratio: self.project_editor_shell.left_companion_split_ratio,
@@ -671,11 +683,13 @@ impl GhostexGpuiApp {
             .agents_workspace_project_id
             .as_ref()
             .and_then(|project_id| self.project_view_states_by_project.get(project_id))
-            .copied()
+            .cloned()
         else {
+            self.apply_view_pane_state(cx);
+            self.focus_default_surface_for_active_mode();
+            self.update_active_mode_cef_child_visibility(cx);
             return;
         };
-        self.project_editor_shell.left_companion_visible = state.companion_visible;
         self.project_editor_shell.left_companion_split_enabled = state.companion_split_enabled;
         self.project_editor_shell.left_companion_width_ratio = state.companion_width_ratio;
         self.project_editor_shell.left_companion_split_ratio = state.companion_split_ratio;
@@ -687,15 +701,16 @@ impl GhostexGpuiApp {
             .filter(|session_id| self.agents_workspace.has_session(*session_id));
         self.project_editor_companion_focused_terminal_slot = state.companion_focused_slot;
         let target_mode = self.available_titlebar_mode_or_agents(state.active_mode);
-        if self.active_mode != target_mode {
-            self.active_mode = target_mode;
-            self.set_shell_focus(default_shell_focus_for_mode(
-                target_mode,
-                &self.agents_workspace,
-                &self.project_editor_shell,
-            ));
-            self.update_active_mode_cef_child_visibility(cx);
-        }
+        // The outgoing project was already captured before the workspace swap.
+        // Do not record its live pane values under the incoming project here.
+        self.active_mode = target_mode;
+        self.apply_view_pane_state(cx);
+        self.set_shell_focus(default_shell_focus_for_mode(
+            target_mode,
+            &self.agents_workspace,
+            &self.project_editor_shell,
+        ));
+        self.update_active_mode_cef_child_visibility(cx);
     }
 
     pub(crate) fn agents_remote_connect_status_for_session(
@@ -1594,7 +1609,7 @@ impl GhostexGpuiApp {
         key: &GpuiWorkspaceTerminalSessionKey,
     ) -> bool {
         if !self.active_mode.is_project_editor_mode()
-            || !self.project_editor_shell.left_companion_visible
+            || !self.project_editor_companion_is_visible()
             // CDXC:SessionChat 2026-09-05 WHY: An explicit chat launch must expose the Agents composer; keeping Code or Docs open would focus its terminal companion instead.
             || self.pending_agents_chat_launch_intents.contains(key)
         {
@@ -1992,7 +2007,7 @@ impl GhostexGpuiApp {
             self.should_keep_project_editor_open_for_local_workspace_terminal_focus(key);
         let project_editor_mode = self.active_mode;
         if !keep_editor_mode {
-            self.active_mode = TitlebarMode::Agents;
+            self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
         }
         /*
         CDXC:FocusRouting 2026-06-26-06:34:
@@ -2127,7 +2142,7 @@ impl GhostexGpuiApp {
                 cx,
             );
         } else {
-            self.active_mode = TitlebarMode::Agents;
+            self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
             self.set_sidebar_focus_border_handoff_target(session_id);
             self.request_agents_session_text_focus_handoff(
@@ -2198,7 +2213,7 @@ impl GhostexGpuiApp {
             }
         };
         self.activate_preferred_agents_chat_launch_intent(session_id, cx);
-        self.active_mode = TitlebarMode::Agents;
+        self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
         self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
         self.set_sidebar_focus_border_handoff_target(session_id);
         self.request_agents_session_text_focus_handoff(

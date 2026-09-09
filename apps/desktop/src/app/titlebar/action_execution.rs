@@ -81,7 +81,7 @@ impl GhostexGpuiApp {
             self.copy_path_for_disabled_project_workarea(&url, "Browser", cx);
             return;
         }
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(
             self.browser_tabs.focused_pane,
         ));
@@ -162,7 +162,7 @@ impl GhostexGpuiApp {
                 },
                 payload,
             );
-        self.active_mode = TitlebarMode::Agents;
+        self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
         self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
         self.scroll_workspace_pane_active_tab(pane_id);
         self.persist_shell_layout_state();

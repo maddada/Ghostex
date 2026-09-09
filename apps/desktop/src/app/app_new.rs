@@ -54,11 +54,28 @@ impl GhostexGpuiApp {
             .unwrap_or(DEFAULT_SIDEBAR_WIDTH)
             .clamp(SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH);
         let command_pane_initial_content_height = command_pane_content_height(window);
-        let shell_layout_state = GpuiShellLayoutState::load_or_default(
+        let mut shell_layout_state = GpuiShellLayoutState::load_or_default(
             command_pane_initial_content_height,
             ProjectScopedWorkareaAvailability::from_env_bridge(),
             &shared_settings_snapshot,
         );
+        let restored_panes = shell_layout_state
+            .agents_workspace_project_id
+            .as_ref()
+            .and_then(|id| shell_layout_state.project_view_states_by_project.get(id))
+            .and_then(|state| {
+                state
+                    .panes_by_mode
+                    .get(&shell_layout_state.active_mode.element_slug())
+            })
+            .copied();
+        if let Some(panes) = restored_panes {
+            shell_layout_state
+                .project_editor_shell
+                .left_companion_visible = panes.companion_visible;
+            shell_layout_state.command_pane.mode = panes.command_mode;
+            shell_layout_state.command_pane.last_expanded_mode = panes.command_last_expanded_mode;
+        }
         let restored_command_gxserver_session_mappings =
             command_gxserver_session_mappings_from_command_model(&shell_layout_state.command_pane);
         let restored_command_remote_action_sessions =
@@ -150,12 +167,13 @@ impl GhostexGpuiApp {
                 titlebar_git_menu_state: None,
                 titlebar_actions_snapshot: Vec::new(),
                 titlebar_actions_refresh_in_flight: false,
+                project_views: crate::app::project_views::ProjectViews::default(),
                 extensions_snapshot: GpuiExtensionsSnapshot::default(),
                 extension_projects: HashMap::new(),
                 extension_session_details: HashMap::new(),
                 extensions_refresh_in_flight: false,
                 titlebar_accounts: Vec::new(),
-                titlebar_accounts_refresh_in_flight: false,
+                titlebar_accounts_refresh_in_flight: Default::default(),
                 titlebar_accounts_revision: 0,
                 titlebar_tips_unread_count: TITLEBAR_TIP_IDS.len() as u64,
                 updater_started: false,
@@ -238,6 +256,8 @@ impl GhostexGpuiApp {
                 pending_session_chat_composer_insert: HashMap::new(),
                 pending_session_terminal_composer_insert: HashMap::new(),
                 pending_session_chat_draft_handoffs: HashSet::new(),
+                session_chat_draft_capture_in_flight: HashSet::new(),
+                pending_session_chat_received_drafts: HashMap::new(),
                 pending_session_chat_image_saves: HashMap::new(),
                 session_chat_queued_counts: HashMap::new(),
                 session_chat_queued_count_refresh_in_flight: false,
@@ -247,6 +267,14 @@ impl GhostexGpuiApp {
                 sidebar_command_pane_sessions_snapshot: String::new(),
                 sidebar_agents_delayed_sends_snapshot: String::new(),
                 sidebar_timer_presentations_replayed_after_ready: false,
+                sidebar_primary_agent_launcher_id: None,
+                new_thread_picker_window: None,
+                new_thread_picker: None,
+                new_thread_picker_visible: false,
+                new_thread_picker_preloaded_agent_count: 0,
+                new_thread_picker_accounts: None,
+                new_thread_picker_agents: None,
+                new_thread_picker_agents_refresh_in_flight: false,
                 command_delayed_send_timers: HashMap::new(),
                 command_delayed_send_generation: 0,
                 command_delayed_send_countdown_ticker_active: false,
@@ -274,6 +302,7 @@ impl GhostexGpuiApp {
                 workspace_leaf_layout_bounds: HashMap::new(),
                 browser_leaf_layout_bounds: HashMap::new(),
                 command_group_layout_bounds: HashMap::new(),
+                command_group_minimize_tooltip_visible: HashMap::new(),
                 command_pane_layout_bounds: None,
                 project_editor_surface_layout_bounds: None,
                 project_editor_companion_layout_bounds: None,
@@ -400,7 +429,9 @@ impl GhostexGpuiApp {
                 sidebar_side,
                 command_pane_side,
                 sidebar_width,
-                sidebar_collapsed: false,
+                sidebar_collapsed: restored_panes.is_some_and(|panes| panes.sidebar_collapsed),
+                #[cfg(target_os = "macos")]
+                companion_reveal: None,
                 sidebar_drag: None,
                 sidebar_divider_hovering: false,
                 sidebar_divider_hover_visible: false,
@@ -448,6 +479,7 @@ impl GhostexGpuiApp {
                 titlebar_dropdown_previous_focus_handle: None,
                 titlebar_popup_menu: None,
                 titlebar_popup_window: None,
+                titlebar_help_button_bounds: Rc::new(std::cell::Cell::new(None)),
                 titlebar_extension_popup_generation: 0,
                 titlebar_extension_popup: None,
                 titlebar_tips_panel_open: false,
@@ -556,6 +588,8 @@ impl GhostexGpuiApp {
             }
             this.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
             this.start_project_editor_auto_sleep_policy_polling(cx);
+            #[cfg(target_os = "macos")]
+            this.start_sidebar_hover_reveal_polling(cx);
             this.start_command_action_status_polling(cx);
             this.start_session_chat_queued_count_polling(cx);
             this.start_agents_chat_surface_eviction_polling(cx);

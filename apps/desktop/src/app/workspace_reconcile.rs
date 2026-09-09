@@ -316,7 +316,7 @@ impl GhostexGpuiApp {
                 return false;
             };
 
-            self.active_mode = TitlebarMode::Agents;
+            self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.agents_workspace.select_tab(pane_id, shell_session_id);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
             self.scroll_workspace_pane_active_tab(pane_id);
@@ -370,7 +370,7 @@ impl GhostexGpuiApp {
                 return false;
             };
 
-            self.active_mode = TitlebarMode::Agents;
+            self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.agents_workspace.select_tab(pane_id, shell_session_id);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
             self.scroll_workspace_pane_active_tab(pane_id);
@@ -875,6 +875,8 @@ impl GhostexGpuiApp {
         if self.agents_workspace_project_id == new_project_id {
             return false;
         }
+        #[cfg(target_os = "macos")]
+        self.close_floating_companion(cx);
         self.source_code_server_runtime
             .pending_remote_prompt_editor_request = None;
         self.capture_outgoing_project_view_state();
@@ -1174,6 +1176,7 @@ impl GhostexGpuiApp {
             )
         });
         self.command_pane_project_id = new_project_id;
+        self.apply_command_view_pane_state();
 
         /*
         CDXC:CommandPane 2026-07-10:
@@ -1346,6 +1349,12 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         match event {
+            cef::BrowserPageMetadataEvent::HistoryRequested => {
+                if let Some(pane_id) = find_browser_leaf_id_for_tab(&self.browser_tabs.root, tab_id)
+                {
+                    self.show_browser_history_popup(pane_id, window, cx);
+                }
+            }
             cef::BrowserPageMetadataEvent::AddressChanged(url) => {
                 /*
                 CDXC:Browser 2026-06-22-07:23:
@@ -1382,7 +1391,7 @@ impl GhostexGpuiApp {
                 CEF page titles change the visible Browser tab-strip label while the app runs.
 
                 CDXC:Browser 2026-07-12:
-                Shell-state serialization now persists the bounded last displayed title (`cachedTitle`) so restart keeps the same label; raw titles still never enter history or URL persistence.
+                Shell-state serialization now persists the bounded last displayed title (`cachedTitle`) so restart keeps the same label; the independent Browser visit store also saves titles for the history popup.
                 */
                 if self.browser_tabs.record_page_title_change(tab_id, title) {
                     cx.notify();
@@ -1391,7 +1400,7 @@ impl GhostexGpuiApp {
             cef::BrowserPageMetadataEvent::FaviconUrlChanged(favicon_url) => {
                 /*
                 CDXC:Browser 2026-06-22-09:11:
-                CEF favicon metadata may update Browser tab chrome at runtime, but favicon URLs can reveal page-owned or user-specific state. Store them only on the in-memory BrowserTab record, never persist them, and repaint without touching shell-state JSON.
+                CEF favicon metadata updates Browser tab chrome and the independent saved visit store, without changing shell-state JSON.
                 */
                 if self
                     .browser_tabs
@@ -1483,7 +1492,7 @@ impl GhostexGpuiApp {
             return;
         }
 
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         if !self.browser_tabs.focus_pane(pane_id) {
             return;
@@ -1550,7 +1559,7 @@ impl GhostexGpuiApp {
         if !self.browser_tabs.focus_pane(pane_id) {
             return false;
         }
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
         self.update_active_mode_cef_child_visibility(cx);
@@ -1749,86 +1758,6 @@ impl GhostexGpuiApp {
         self.titlebar_mode_available(TitlebarMode::Browser)
     }
 
-    pub(crate) fn show_browser_recent_history_menu(
-        &self,
-        pane_id: BrowserPaneId,
-        position: gpui::Point<Pixels>,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let rows = self
-            .browser_tabs
-            .pane_history_rows(pane_id, BROWSER_HISTORY_MENU_MAX_ROWS);
-        if rows.is_empty() {
-            return;
-        }
-
-        let mut item_count = 0;
-        let mut menu = NativeMenu::new()
-            .menu_with_disabled("History", true, Box::new(BrowserHistoryMenuLabel))
-            .separator();
-        for row in rows {
-            let Some(sanitized_url) = sanitize_browser_tab_url_for_state(&row.url) else {
-                continue;
-            };
-            item_count += 1;
-            menu = menu.menu(
-                browser_tab_title_for_url(&sanitized_url),
-                Box::new(OpenBrowserHistoryEntryInNewTab {
-                    pane_id: pane_id.0,
-                    index: row.index as u64,
-                }),
-            );
-        }
-        if item_count == 0 {
-            return;
-        }
-        menu.show(position, window, cx);
-    }
-
-    pub(crate) fn open_browser_history_entry_in_new_tab(
-        &mut self,
-        pane_id: BrowserPaneId,
-        index: usize,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if !self.titlebar_mode_available(TitlebarMode::Browser) {
-            return;
-        }
-        let Some(row) = self
-            .browser_tabs
-            .pane_history_rows(pane_id, BROWSER_HISTORY_MENU_MAX_ROWS)
-            .into_iter()
-            .find(|row| row.index == index)
-        else {
-            return;
-        };
-        let Some(url) = sanitize_browser_tab_url_for_state(&row.url) else {
-            return;
-        };
-        if !self.browser_tabs.focus_pane(pane_id) {
-            return;
-        }
-        let created_tab_id = self.browser_tabs.add_loaded_popup_tab(
-            url.clone(),
-            self.browser_profiles.active_profile_id(),
-            cef::BrowserPopupPlacement::Selected,
-        );
-        let Some(created_tab_id) = created_tab_id else {
-            return;
-        };
-        self.request_sidebar_browser_tab_reveal(created_tab_id);
-        self.browser_url = url;
-        self.active_mode = TitlebarMode::Browser;
-        self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
-        self.sync_active_browser_tab_to_surface(window, cx);
-        self.scroll_browser_pane_active_tab(pane_id);
-        self.persist_shell_layout_state();
-        cx.notify();
-    }
-
     pub(crate) fn remove_browser_surface(
         &mut self,
         tab_id: BrowserTabId,
@@ -1955,7 +1884,7 @@ impl GhostexGpuiApp {
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
             return;
         }
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.add_browser_tab(window, cx);
     }
 
@@ -1969,7 +1898,7 @@ impl GhostexGpuiApp {
             return;
         }
         if self.browser_tabs.focus_pane(pane_id) {
-            self.active_mode = TitlebarMode::Browser;
+            self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
             self.add_browser_tab(window, cx);
         }
     }
@@ -1997,7 +1926,7 @@ impl GhostexGpuiApp {
         ) {
             self.request_sidebar_browser_tab_reveal(created_tab_id);
             self.browser_url = default_url;
-            self.active_mode = TitlebarMode::Browser;
+            self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
             self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
             self.set_shell_focus(ShellFocusTarget::BrowserPane(
                 self.browser_tabs.focused_pane,
@@ -2166,7 +2095,7 @@ impl GhostexGpuiApp {
             cx.notify();
             return;
         }
-        self.active_mode = TitlebarMode::Browser;
+        self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
         self.set_shell_focus(ShellFocusTarget::BrowserPane(
             self.browser_tabs.focused_pane,
@@ -2207,7 +2136,7 @@ impl GhostexGpuiApp {
         }
         let previous_shell_focus = self.shell_focus;
         let previous_first_responder_target = self.first_responder_target;
-        self.active_mode = mode;
+        self.change_active_mode_with_pane_state(mode, cx);
         /*
         CDXC:CodeEditor 2026-07-05:
         Opening Source, Browser, Kanban, Automate, or Docs is an activation

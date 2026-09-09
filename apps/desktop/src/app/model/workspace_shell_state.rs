@@ -162,7 +162,7 @@ pub(crate) fn gpui_workspace_shell_state_json(app: &GhostexGpuiApp) -> serde_jso
 pub(crate) fn persist_gpui_workspace_shell_state(app: &GhostexGpuiApp) {
     /*
     CDXC:Telemetry 2026-06-23-13:18:
-    Phase 10 persistence re-audit keeps this as the only GPUI-owned workspace shell-state writer. It may write writer-owned layout/focus/tab/profile/lifecycle metadata, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, plus the `petOverlayActivitiesVisible` UI boolean only; pet activity payloads, pet titles, raw settings JSON, terminal content, command text, stdout/stderr, project paths, file paths, raw URLs/query/fragment, page titles, profile paths, cookies, credentials, tokens, raw payloads, private user content, and runtime surface data must stay out at the serializer boundary.
+    Phase 10 persistence re-audit keeps this as the only GPUI-owned workspace shell-state writer. It may write writer-owned layout/focus/tab/profile/lifecycle metadata, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, complete sanitized Browser HTTP(S) URLs, plus the `petOverlayActivitiesVisible` UI boolean only; pet activity payloads, pet titles, raw settings JSON, terminal content, command text, stdout/stderr, project paths, file paths, page titles, profile paths, cookies, URL credentials, raw payloads, unrelated private user content, and runtime surface data must stay out at the serializer boundary.
     */
     let path = gpui_workspace_shell_state_path();
     if let Some(parent) = path.parent() {
