@@ -197,7 +197,11 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   showNotificationOnTerminalBell: false,
   createSessionOnSidebarDoubleClick: false,
-  enableSessionParking: false,
+  /**
+   * CDXC:Sessions 2026-09-10 DECISION:
+   * User: enable parking by default, but keep sleep on park disabled by default.
+   */
+  enableSessionParking: true,
   sleepSessionWhenParking: false,
   /**
    * CDXC:Telemetry 2026-08-26:

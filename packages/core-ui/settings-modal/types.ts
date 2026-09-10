@@ -568,6 +568,9 @@ export const DIAGNOSTIC_LOGGING_GROUPS: readonly ['macOS', 'GPUI', 'gxserver'] =
  * Show Advanced persists as a Settings preference so advanced rows stay visible
  * after restart until the user disables the switch.
  *
+ * CDXC:Sessions 2026-09-10 DECISION:
+ * User: parking is a standard feature, so its settings are visible without Show Advanced.
+ *
  * CDXC:Settings 2026-08-26:
  * Sidebar presentation details and double-click card renaming are advanced
  * preferences. Completion sounds, macOS attention notification,
@@ -586,8 +589,6 @@ export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
   'sidebarDefaultWidthPx',
   'projectSessionListCollapsedCount',
   'createSessionOnSidebarDoubleClick',
-  'enableSessionParking',
-  'sleepSessionWhenParking',
   'renameSessionOnDoubleClick',
   'showSessionCloseContextMenuAction',
   'accentColor',

@@ -273,9 +273,11 @@ type SleepBelowDebugDetailsInput = {
 type SidebarBulkSessionContextMenuAvailability = {
   closableSessionIds: string[];
   fullReloadableSessionIds: string[];
+  parkableSessionIds: string[];
   pinnableSessionIds: string[];
   sleepableSessionIds: string[];
   taggableSessionIds: string[];
+  unparkableSessionIds: string[];
   unpinnableSessionIds: string[];
   wakeableSessionIds: string[];
 };
@@ -892,6 +894,7 @@ export function SortableSessionCard({
   const sidebarSessionsByIdForMenu = useSidebarStore.getState().sessionsById;
   const bulkActionAvailability = isBulkContextMenu
     ? getSidebarBulkSessionContextMenuAvailability({
+        enableSessionParking,
         sessionIds: effectiveSelectedSessionIds,
         sessionsById: sidebarSessionsByIdForMenu,
       })
@@ -1279,6 +1282,7 @@ export function SortableSessionCard({
     const nextMenuCounts = shouldOpenBulkContextMenu
       ? getSidebarBulkSessionContextMenuCounts({
           availability: getSidebarBulkSessionContextMenuAvailability({
+            enableSessionParking,
             sessionIds: nextSelectedSessionIds,
             sessionsById: useSidebarStore.getState().sessionsById,
           }),
@@ -1772,6 +1776,25 @@ export function SortableSessionCard({
     });
   };
 
+  const requestSetSelectedSessionsParked = (parked: boolean) => {
+    const targetSessionIds = parked
+      ? (bulkActionAvailability?.parkableSessionIds ?? EMPTY_SESSION_IDS)
+      : (bulkActionAvailability?.unparkableSessionIds ?? EMPTY_SESSION_IDS);
+    if (targetSessionIds.length === 0) {
+      return;
+    }
+
+    dismissBulkContextMenu();
+    clearSessionSelection('bulkSetParked');
+    runSidebarBulkContextMenuActionInBackground(targetSessionIds, (targetSessionId) => {
+      vscode.postMessage({
+        parked,
+        sessionId: targetSessionId,
+        type: 'setSessionParked',
+      });
+    });
+  };
+
   const requestSetSelectedSessionTag = (tag: SidebarSessionTag | undefined) => {
     const targetSessionIds = bulkActionAvailability?.taggableSessionIds ?? EMPTY_SESSION_IDS;
     if (targetSessionIds.length === 0) {
@@ -1914,6 +1937,26 @@ export function SortableSessionCard({
       key: 'unpin-selected',
       label: 'Unpin selected',
       onClick: () => requestSetSelectedSessionsPinned(false),
+    });
+  }
+  /**
+   * CDXC:Sessions 2026-09-10 DECISION:
+   * User: add Park selected to the selected-session context menu.
+   */
+  if (bulkActionAvailability && bulkActionAvailability.parkableSessionIds.length > 0) {
+    bulkPrimaryActions.push({
+      icon: <IconArchive aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'park-selected',
+      label: 'Park selected',
+      onClick: () => requestSetSelectedSessionsParked(true),
+    });
+  }
+  if (bulkActionAvailability && bulkActionAvailability.unparkableSessionIds.length > 0) {
+    bulkPrimaryActions.push({
+      icon: <IconArchive aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
+      key: 'unpark-selected',
+      label: 'Unpark selected',
+      onClick: () => requestSetSelectedSessionsParked(false),
     });
   }
   if (bulkActionAvailability && bulkActionAvailability.fullReloadableSessionIds.length > 0) {
@@ -2977,9 +3020,11 @@ export function canWakeSidebarSession(session: SidebarSessionItem | undefined): 
 }
 
 function getSidebarBulkSessionContextMenuAvailability({
+  enableSessionParking,
   sessionIds,
   sessionsById,
 }: {
+  enableSessionParking: boolean;
   sessionIds: readonly string[];
   sessionsById: Record<string, SidebarSessionItem | undefined>;
 }): SidebarBulkSessionContextMenuAvailability {
@@ -3000,14 +3045,19 @@ function getSidebarBulkSessionContextMenuAvailability({
   }
 
   const sessionForId = (sessionId: string) => sessionsById[sessionId];
+  const parkingSessionIds = enableSessionParking
+    ? concreteSessionIds.filter((sessionId) => !isSidebarBrowserSession(sessionsById[sessionId]!))
+    : EMPTY_SESSION_IDS;
   return {
     closableSessionIds: concreteSessionIds,
     fullReloadableSessionIds: concreteSessionIds.filter((sessionId) =>
       supportsSelectedSessionFullReload(sessionForId(sessionId), sessionId)
     ),
+    parkableSessionIds: parkingSessionIds.filter((sessionId) => sessionForId(sessionId)?.isParked !== true),
     pinnableSessionIds: concreteSessionIds.filter((sessionId) => sessionForId(sessionId)?.isPinned !== true),
     sleepableSessionIds: concreteSessionIds.filter((sessionId) => canSleepSidebarSession(sessionForId(sessionId))),
     taggableSessionIds: concreteSessionIds.filter((sessionId) => canTagSelectedSidebarSession(sessionForId(sessionId))),
+    unparkableSessionIds: parkingSessionIds.filter((sessionId) => sessionForId(sessionId)?.isParked === true),
     unpinnableSessionIds: concreteSessionIds.filter((sessionId) => sessionForId(sessionId)?.isPinned === true),
     wakeableSessionIds: concreteSessionIds.filter((sessionId) => canWakeSidebarSession(sessionForId(sessionId))),
   };
@@ -3026,6 +3076,8 @@ function getSidebarBulkSessionContextMenuCounts({
     Number(hasSessionTagSubmenu && availability.taggableSessionIds.length > 0) +
     Number(availability.pinnableSessionIds.length > 0) +
     Number(availability.unpinnableSessionIds.length > 0) +
+    Number(availability.parkableSessionIds.length > 0) +
+    Number(availability.unparkableSessionIds.length > 0) +
     Number(availability.fullReloadableSessionIds.length > 0);
   const destructiveItemCount = Number(availability.closableSessionIds.length > 0);
   const sectionLengths = [primaryItemCount, destructiveItemCount].filter((count) => count > 0);
