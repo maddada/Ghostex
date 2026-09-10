@@ -132,10 +132,10 @@ export function SessionChatActivityRow({ activity, className }: SessionChatActiv
           />
         </div>
       ) : null}
-      {/* CDXC:SessionChat 2026-09-10 DECISION: User: Claude Code compaction shows "Send message to queue it after compaction". */}
+      {/* CDXC:SessionChat 2026-09-10 DECISION: User: Claude Code compaction shows "Send a message to queue it after compaction". */}
       {activity.kind === 'compacting' ? (
         <p className='ghostex-chat-card-hint text-xs text-muted-foreground'>
-          Send message to queue it after compaction
+          Send a message to queue it after compaction
         </p>
       ) : null}
     </div>
