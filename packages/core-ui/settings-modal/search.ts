@@ -466,6 +466,18 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
         title: 'Official Extensions',
       },
       {
+        id: 'accountUsage',
+        settings: [
+          {
+            key: 'accountTitlebarUsage',
+            title: 'Titlebar account usage',
+            subtitle:
+              'Show or hide usage stats for saved Claude and Codex accounts in the desktop titlebar. Star accounts to pin their usage.',
+          },
+        ],
+        title: 'Titlebar account usage',
+      },
+      {
         id: 'store',
         settings: [
           {

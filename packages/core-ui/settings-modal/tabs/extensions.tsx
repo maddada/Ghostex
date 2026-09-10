@@ -69,6 +69,7 @@ import {
 import { type WebviewApi } from '../../webview-api';
 import { ExtensionsBrowserDetail, ExtensionsBrowserList, useExtensionsBrowserState } from '../../extensions-modal';
 import { createExtensionsModalTransport } from '../../extensions-modal/transport';
+import { TitlebarAccountUsageSection } from '../../accounts/titlebar-settings-section';
 import { TitlebarViewOrderDialog } from './titlebar-view-order-dialog';
 import { titlebarViewOrderItems } from '@/packages/shared/ghostex-settings/titlebar-view-order';
 import { createSettingsCustomViewDragData, getSettingsCustomViewDragData, moveId } from '../drag-data';
@@ -358,6 +359,10 @@ export function ExtensionsSettingsTab({
                   </OfficialExtensionGroup>
                 ) : null}
               </SettingsSection>
+            ) : null}
+
+            {shouldShowSettingsSection(search.sections.accountUsage) ? (
+              <TitlebarAccountUsageSection active={isActive} hideEmails={settings.hideAccountEmails} />
             ) : null}
 
             {transport && shouldShowSettingsSection(search.sections.store) ? (
