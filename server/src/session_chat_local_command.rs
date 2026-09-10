@@ -27,8 +27,10 @@ half of the escaped-markup contract).
 */
 
 use std::fs::{self, OpenOptions};
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use serde_json::{json, Map, Value};
 
@@ -53,7 +55,7 @@ pub(crate) const ESCAPED_MARKUP_ATTRIBUTE: &str = "data-ghostex-escaped=\"html\"
 
 #[derive(Clone, Debug)]
 pub struct SessionChatLocalCommand {
-    /// `<sent_at_ms>-<sequence>`: unique per session and stable once written,
+    /// Unique per command and stable once written,
     /// so the output record can find its row and the client can dedupe.
     pub id: String,
     /// Command token including the slash, e.g. `/rename`.
@@ -63,6 +65,8 @@ pub struct SessionChatLocalCommand {
     /// What the CLI printed, once the screen diff settled. `None` until then.
     pub output: Option<String>,
     pub sent_at_ms: i64,
+    /// Last transcript row before dispatch; an empty id means the transcript was empty.
+    pub anchor_message_id: Option<String>,
 }
 
 impl SessionChatLocalCommand {
@@ -86,6 +90,10 @@ impl SessionChatLocalCommand {
                 .and_then(Value::as_str)
                 .map(str::to_string),
             sent_at_ms: record.get("sentAt").and_then(Value::as_i64).unwrap_or(0),
+            anchor_message_id: record
+                .get("anchorMessageId")
+                .and_then(Value::as_str)
+                .map(str::to_string),
         })
     }
 
@@ -98,6 +106,9 @@ impl SessionChatLocalCommand {
             map.insert("output".to_string(), json!(output));
         }
         map.insert("sentAt".to_string(), json!(self.sent_at_ms));
+        if let Some(anchor) = &self.anchor_message_id {
+            map.insert("anchorMessageId".to_string(), json!(anchor));
+        }
         Value::Object(map)
     }
 
@@ -200,23 +211,74 @@ pub fn record_session_chat_local_command(
     session_id: &str,
     text: &str,
 ) -> Option<String> {
+    let row = prepare_session_chat_local_command(text)?;
+    persist_session_chat_local_command(project_id, session_id, &row)?;
+    Some(row.id)
+}
+
+pub(crate) fn prepare_session_chat_local_command(text: &str) -> Option<SessionChatLocalCommand> {
     let (command, args) = parse_session_chat_local_command(text)?;
-    let sent_at_ms = chrono::Utc::now().timestamp_millis();
-    let existing = load_session_chat_local_commands(project_id, session_id);
-    let sequence = existing
-        .iter()
-        .filter(|row| row.sent_at_ms == sent_at_ms)
-        .count();
-    let row = SessionChatLocalCommand {
-        id: format!("{sent_at_ms}-{sequence}"),
+    Some(SessionChatLocalCommand {
+        id: uuid::Uuid::new_v4().to_string(),
         command,
         args,
         output: None,
-        sent_at_ms,
-    };
-    append(project_id, session_id, &row)?;
-    compact_if_needed(project_id, session_id, existing.len() + 1);
-    Some(row.id)
+        sent_at_ms: chrono::Utc::now().timestamp_millis(),
+        anchor_message_id: None,
+    })
+}
+
+// CDXC:SessionChat 2026-09-10 WHY:
+// Time-only page bounds dropped a command sent in the gap between adjacent pages. Persist the actual preceding transcript row so exactly one page owns it.
+pub(crate) fn anchor_session_chat_local_command(
+    command: &mut SessionChatLocalCommand,
+    session: &Value,
+) {
+    let agent = crate::session_chat_follower::session_chat_agent_for_session(session);
+    let last = crate::session_chat::resolve_session_chat_transcript_agent(agent.as_deref())
+        .and_then(|agent| {
+            let path = crate::session_chat::resolve_session_chat_transcript_path(
+                agent,
+                crate::server::read_runtime_text(session, "agentSessionId").as_deref(),
+                crate::server::read_runtime_text(session, "agentSessionPath").as_deref(),
+            )?;
+            match crate::session_chat_fork_stitch::read_session_chat_tail_page_stitched(
+                agent, &path, 1, None,
+            )
+            .ok()?
+            .page
+            {
+                crate::session_chat::SessionChatTailPage::Page { messages, .. } => {
+                    messages.last().map(|message| message.id.clone())
+                }
+                _ => None,
+            }
+        });
+    command.anchor_message_id = Some(last.unwrap_or_default());
+}
+
+// CDXC:SessionChat 2026-09-10 WHY:
+// Appends, output updates and compaction share a lock so replacing a compacted file cannot discard a concurrent write.
+// Fixed lock stripes bound memory without serializing every session's archive I/O.
+fn archive_lock(project_id: &str, session_id: &str) -> MutexGuard<'static, ()> {
+    static LOCKS: OnceLock<[Mutex<()>; 32]> = OnceLock::new();
+    let locks = LOCKS.get_or_init(|| std::array::from_fn(|_| Mutex::new(())));
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    (project_id, session_id).hash(&mut hash);
+    locks[hash.finish() as usize % locks.len()]
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+}
+
+pub(crate) fn persist_session_chat_local_command(
+    project_id: &str,
+    session_id: &str,
+    row: &SessionChatLocalCommand,
+) -> Option<()> {
+    let _guard = archive_lock(project_id, session_id);
+    append(project_id, session_id, row)?;
+    compact_if_needed(project_id, session_id, LOCAL_COMMAND_LIMIT);
+    Some(())
 }
 
 /// Attach (or replace) the output of an archived command. Called every time the
@@ -227,7 +289,8 @@ pub fn attach_session_chat_local_command_output(
     id: &str,
     output: &str,
 ) {
-    let rows = load_session_chat_local_commands(project_id, session_id);
+    let _guard = archive_lock(project_id, session_id);
+    let rows = load_unlocked(project_id, session_id);
     let Some(row) = rows.iter().find(|row| row.id == id) else {
         return;
     };
@@ -240,6 +303,7 @@ pub fn attach_session_chat_local_command_output(
         ..row.clone()
     };
     append(project_id, session_id, &updated);
+    compact_if_needed(project_id, session_id, rows.len());
 }
 
 /// Archived rows, oldest first, one per id with the last record's output.
@@ -247,6 +311,11 @@ pub fn load_session_chat_local_commands(
     project_id: &str,
     session_id: &str,
 ) -> Vec<SessionChatLocalCommand> {
+    let _guard = archive_lock(project_id, session_id);
+    load_unlocked(project_id, session_id)
+}
+
+fn load_unlocked(project_id: &str, session_id: &str) -> Vec<SessionChatLocalCommand> {
     let Some(path) = session_file(project_id, session_id) else {
         return Vec::new();
     };
@@ -291,7 +360,7 @@ fn compact_if_needed(project_id: &str, session_id: &str, row_count: usize) {
     if lines <= LOCAL_COMMAND_LINE_LIMIT && row_count <= LOCAL_COMMAND_LIMIT {
         return;
     }
-    let rows = load_session_chat_local_commands(project_id, session_id);
+    let rows = load_unlocked(project_id, session_id);
     let body = rows
         .iter()
         .map(|row| row.to_value().to_string())
@@ -383,8 +452,10 @@ pub fn session_chat_local_command_output(
     if agent == Some("codex") {
         return crate::session_chat_codex_dialog::codex_command_output(before, after);
     }
-    let before_history = screen_history(before);
-    let after_history = screen_history(after);
+    let before = normalize_local_command_screen(agent, before);
+    let after = normalize_local_command_screen(agent, after);
+    let before_history = screen_history(&before);
+    let after_history = screen_history(&after);
     let mut cut_off = false;
     /*
     Claude echoes the command it intercepted onto its own composer line and
@@ -450,6 +521,17 @@ pub fn session_chat_local_command_output(
     Some(output.chars().take(LOCAL_COMMAND_OUTPUT_CHARS).collect())
 }
 
+fn normalize_local_command_screen(agent: Option<&str>, screen: &str) -> String {
+    if agent == Some("claude")
+        && crate::session_chat_diff_panel::claude_diff_panel_on_screen(screen)
+        && crate::session_chat_claude_dialog::detect_claude_dialog(screen).is_none()
+    {
+        crate::session_chat_screen_pane::strip_side_pane(screen)
+    } else {
+        screen.to_string()
+    }
+}
+
 fn result_branch(lines: &[String]) -> Vec<String> {
     lines
         .iter()
@@ -498,7 +580,10 @@ fn screen_history(text: &str) -> Vec<String> {
             .to_string()
         })
         .collect();
-    if let Some(composer) = lines.iter().rposition(|line| is_composer_line(line)) {
+    // Only the framed input is the current composer. A dialog can leave earlier command echoes visible above it.
+    if let Some(composer) = lines.iter().enumerate().rposition(|(index, line)| {
+        is_composer_line(line) && index > 0 && is_frame_line(&lines[index - 1])
+    }) {
         lines.truncate(composer);
     }
     while lines.last().is_some_and(|line| {
@@ -529,8 +614,8 @@ fn is_right_aligned_notice(line: &str) -> bool {
 fn is_composer_line(line: &str) -> bool {
     let trimmed = line.trim();
     let cleaned = trimmed.trim_matches(['│', '┃', '▌']).trim();
-    cleaned.starts_with('❯')
-        || cleaned.starts_with('›')
+    ((line.len() - line.trim_start().len() <= 1)
+        && (cleaned.starts_with('❯') || cleaned.starts_with('›')))
         || (trimmed.contains('│') && cleaned.starts_with('>'))
 }
 
@@ -609,8 +694,17 @@ pub fn select_session_chat_local_commands(
         .collect();
     let recorded = recorded_command_texts(messages);
     rows.into_iter()
-        .filter(|row| !recorded.contains(&row.text()))
         .filter(|row| {
+            !transcript_records_command_result(&row.command) || !recorded.contains(&row.text())
+        })
+        .filter(|row| {
+            if let Some(anchor) = row.anchor_message_id.as_deref() {
+                return if anchor.is_empty() {
+                    !has_more
+                } else {
+                    messages.iter().any(|message| message.id == anchor)
+                };
+            }
             let Some(&first) = stamps.first() else {
                 // No timestamped transcript row to anchor against: the tail
                 // page carries the trail, a pagination page never invents it.
@@ -662,7 +756,58 @@ pub fn merge_session_chat_local_commands(
         return messages;
     }
     let mut merged = messages;
+    let mut replaced_ids = std::collections::HashMap::new();
     for row in rows {
+        // Pair one native envelope with one send; earlier identical commands must keep their own results.
+        let native = merged.iter().position(|message| {
+            message.role == SessionChatRole::User
+                && !message.id.starts_with("local-command:")
+                && message
+                    .timestamp
+                    .is_some_and(|at| at >= row.sent_at_ms && at - row.sent_at_ms < 30_000)
+                && recorded_command_texts(std::slice::from_ref(message)).first()
+                    == Some(&row.text())
+        });
+        if let Some(at) = native {
+            let replay = local_command_messages(row);
+            let native_output = merged.get(at + 1).is_some_and(|message| {
+                crate::session_chat_decode_claude::message_text(message)
+                    .trim_start()
+                    .starts_with("<local-command-stdout>")
+            });
+            // Keep native offsets and timestamps for pagination, but give both halves the stable archive identity.
+            replaced_ids.insert(merged[at].id.clone(), replay[0].id.clone());
+            merged[at].id = replay[0].id.clone();
+            merged[at].blocks = replay[0].blocks.clone();
+            if native_output {
+                merged[at + 1].id = format!("local-command:{}:output", row.id);
+            } else if let Some(output) = replay.get(1) {
+                merged.insert(at + 1, output.clone());
+            }
+            continue;
+        }
+        if let Some(anchor) = row.anchor_message_id.as_deref() {
+            let at = if anchor.is_empty() {
+                Some(0)
+            } else {
+                merged
+                    .iter()
+                    .position(|message| {
+                        message.id == anchor || replaced_ids.get(anchor) == Some(&message.id)
+                    })
+                    .map(|at| at + 1)
+            };
+            if let Some(mut at) = at {
+                while merged
+                    .get(at)
+                    .is_some_and(|message| message.id.starts_with("local-command:"))
+                {
+                    at += 1;
+                }
+                merged.splice(at..at, local_command_messages(row));
+                continue;
+            }
+        }
         for synthesized in local_command_messages(row) {
             let at = merged
                 .iter()
@@ -707,6 +852,7 @@ mod tests {
             args: args.to_string(),
             output: output.map(str::to_string),
             sent_at_ms,
+            anchor_message_id: None,
         }
     }
 

@@ -100,6 +100,7 @@ impl SessionChatAppCommand {
             map.insert("title".to_string(), json!(title));
         }
         if self.local_command {
+            map.insert("archiveId".to_string(), json!(self.durable_id));
             map.insert("localCommand".to_string(), json!(true));
         }
         map.insert("sentAt".to_string(), json!(self.sent_at));
@@ -218,7 +219,8 @@ pub(crate) fn begin_local_command_output(
     let rows = guard
         .entry((project_id.to_string(), session_id.to_string()))
         .or_default();
-    if crate::session_chat_codex_dialog::detect_codex_dialog(&screen).is_some()
+    if agent == Some("codex")
+        && crate::session_chat_codex_dialog::detect_codex_dialog(&screen).is_some()
         && rows.iter().any(|row| row.screen_baseline.is_some())
     {
         return;
@@ -244,6 +246,55 @@ pub(crate) fn begin_local_command_output(
         recorded: now,
     });
     prune(rows, now);
+}
+
+pub(crate) fn commit_local_command(
+    project_id: &str,
+    session_id: &str,
+    mut command: crate::session_chat_local_command::SessionChatLocalCommand,
+) {
+    let Ok(mut guard) = store().lock() else {
+        return;
+    };
+    let rows = guard
+        .entry((project_id.to_string(), session_id.to_string()))
+        .or_default();
+    if let Some(row) = rows
+        .iter()
+        .find(|row| row.durable_id.as_deref() == Some(&command.id))
+    {
+        command.output = row.output.clone();
+    } else {
+        rows.push(SessionChatAppCommand {
+            id: command.id.clone(),
+            command: command.text(),
+            title: None,
+            output: None,
+            goal: None,
+            local_command: true,
+            durable_id: Some(command.id.clone()),
+            screen_agent: None,
+            screen_baseline: None,
+            sent_at: chrono::DateTime::from_timestamp_millis(command.sent_at_ms)
+                .unwrap_or_default()
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            title_metadata_baseline: None,
+            title_metadata_baseline_captured: false,
+            recorded: Instant::now(),
+        });
+        prune(rows, Instant::now());
+    }
+    crate::session_chat_local_command::persist_session_chat_local_command(
+        project_id, session_id, &command,
+    );
+}
+
+pub(crate) fn discard_local_command(project_id: &str, session_id: &str, id: &str) {
+    if let Ok(mut guard) = store().lock() {
+        if let Some(rows) = guard.get_mut(&(project_id.to_string(), session_id.to_string())) {
+            rows.retain(|row| row.durable_id.as_deref() != Some(id));
+        }
+    }
 }
 
 pub(crate) fn stop_local_command_output(project_id: &str, session_id: &str) {
@@ -295,16 +346,16 @@ fn refresh_rows(
         };
         /*
         CDXC:SessionChat 2026-09-10 WHY:
-        Outside Codex a later capture may only GROW the result. Claude's panels
+        Outside Codex a later capture must not shorten the result. Claude's panels
         (`/status`) close into a one-line dismissal and its notices repaint under
         the result, so "the newest diff wins" replaced a full status panel with a
-        stray footer line. Codex keeps last-wins: its `/mcp` repaints in place.
+        stray footer line. A longer repaint can replace a loading message or restore a clipped top.
+        Codex keeps last-wins: its `/mcp` repaints in place.
         */
         if row.screen_agent.as_deref() != Some("codex")
-            && row
-                .output
-                .as_deref()
-                .is_some_and(|current| !current.is_empty() && !output.starts_with(current))
+            && row.output.as_deref().is_some_and(|current| {
+                !current.is_empty() && output.chars().count() < current.chars().count()
+            })
         {
             continue;
         }

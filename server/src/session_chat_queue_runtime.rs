@@ -317,7 +317,12 @@ impl SessionChatQueueRuntime {
             standing; that is exactly the "next stop" this clock waits for.
             Every other attention still holds the row.
             */
-            if matches!(session.pointer("/runtimeSettings/accountRecovery/status").and_then(Value::as_str), Some("waiting" | "retrying" | "needsAttention")) {
+            if matches!(
+                session
+                    .pointer("/runtimeSettings/accountRecovery/status")
+                    .and_then(Value::as_str),
+                Some("waiting" | "retrying" | "needsAttention")
+            ) {
                 self.reset_gate(&key);
                 continue;
             }
@@ -651,8 +656,15 @@ pub(crate) async fn send_session_chat_message_internal(
     source: SessionChatMessageSource,
 ) -> std::result::Result<usize, DomainStateError> {
     send_session_chat_message_with_draft(
-        state, project_id, session_id, text, image_paths, source, None,
-    ).await
+        state,
+        project_id,
+        session_id,
+        text,
+        image_paths,
+        source,
+        None,
+    )
+    .await
 }
 
 pub(crate) async fn send_session_chat_message_with_draft(
@@ -669,7 +681,9 @@ pub(crate) async fn send_session_chat_message_with_draft(
             code: "internalError",
             message: error.to_string(),
         })?;
-        crate::session_chat_draft_versions::require_saved(&db, project_id, session_id, text, version)?;
+        crate::session_chat_draft_versions::require_saved(
+            &db, project_id, session_id, text, version,
+        )?;
     }
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
@@ -745,16 +759,44 @@ pub(crate) async fn send_session_chat_message_with_draft(
     // Recheck automatic delivery against the fresh capture: the scheduler's
     // cached notice may predate a quota, authentication, or agent error.
     // Explicit Send now is a retry.
-    if matches!(source, SessionChatMessageSource::AutomaticRecovery | SessionChatMessageSource::AccountSwitch(_)) {
+    if matches!(
+        source,
+        SessionChatMessageSource::AutomaticRecovery | SessionChatMessageSource::AccountSwitch(_)
+    ) {
         let current = resolve_session_chat_send_target(state, &params, "automaticRecovery")?;
-        let armed = current.session.pointer("/runtimeSettings/accountRecovery/status").and_then(Value::as_str) == Some("retrying")
+        let armed = current
+            .session
+            .pointer("/runtimeSettings/accountRecovery/status")
+            .and_then(Value::as_str)
+            == Some("retrying")
             && match source {
-                SessionChatMessageSource::AccountSwitch(claim) => current.session.pointer("/runtimeSettings/accountRecovery/claim").and_then(Value::as_str) == Some(claim.to_string().as_str()),
+                SessionChatMessageSource::AccountSwitch(claim) => {
+                    current
+                        .session
+                        .pointer("/runtimeSettings/accountRecovery/claim")
+                        .and_then(Value::as_str)
+                        == Some(claim.to_string().as_str())
+                }
                 _ => true,
             };
-        let blocked = detection.notice.as_ref().is_some_and(|n| n.blocks_queued_delivery() && !matches!(n.kind.as_str(), "streamError" | "usageLimit" | "agentError"));
-        if !armed || !detection.captured || detection.composer.state != crate::session_chat_composer::SessionChatComposerState::Ready || detection.prompt.is_some() || crate::session_chat_send::transcript_pending_question_prompt(&current.session).is_some() || detection.activity.is_some() || blocked {
-            return Err(DomainStateError { code: "accountRecoveryNotReady", message: "Automatic recovery is waiting for the session to be ready.".into() });
+        let blocked = detection.notice.as_ref().is_some_and(|n| {
+            n.blocks_queued_delivery()
+                && !matches!(n.kind.as_str(), "streamError" | "usageLimit" | "agentError")
+        });
+        if !armed
+            || !detection.captured
+            || detection.composer.state
+                != crate::session_chat_composer::SessionChatComposerState::Ready
+            || detection.prompt.is_some()
+            || crate::session_chat_send::transcript_pending_question_prompt(&current.session)
+                .is_some()
+            || detection.activity.is_some()
+            || blocked
+        {
+            return Err(DomainStateError {
+                code: "accountRecoveryNotReady",
+                message: "Automatic recovery is waiting for the session to be ready.".into(),
+            });
         }
     }
     if source == SessionChatMessageSource::AutomaticQueue {
@@ -785,7 +827,11 @@ pub(crate) async fn send_session_chat_message_with_draft(
     clients read it from /api/readSessionTerminalTail instead.
     */
     let dismiss_claude_settings = detection.composer.should_dismiss_with_escape();
-    if detection.composer.blocks_message_for(terminal_agent.as_deref()) && !dismiss_claude_settings {
+    if detection
+        .composer
+        .blocks_message_for(terminal_agent.as_deref())
+        && !dismiss_claude_settings
+    {
         return Err(DomainStateError {
             code: "composerNotReady",
             message: detection
@@ -829,7 +875,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
     takes any line-leading slash command: Claude records a transcript envelope
     for a handful of its own and nothing for the rest, so guessing which ones
     print would just recreate the gap this closes. The archived row is written
-    before the send, so the trail exists even if the capture finds nothing.
+    after a successful send, even if the capture finds nothing; failed sends leave no history.
     Commands whose result the transcript already records are left out: their
     status pill (or compaction row) is the one result row they get.
     */
@@ -842,28 +888,37 @@ pub(crate) async fn send_session_chat_message_with_draft(
     } else {
         local_command.is_some()
     };
-    let durable_id = local_command.as_ref().and_then(|_| {
-        crate::session_chat_local_command::record_session_chat_local_command(
-            &target.project_id,
-            &target.session_id,
-            text,
-        )
-    });
-    crate::session_chat_app_command::stop_local_command_output(
-        &target.project_id,
-        &target.session_id,
-    );
+    let mut archive_command = local_command
+        .as_ref()
+        .and_then(|_| crate::session_chat_local_command::prepare_session_chat_local_command(text));
+    if let Some(mut command) = archive_command.take() {
+        let session = target.session.clone();
+        archive_command = tokio::task::spawn_blocking(move || {
+            crate::session_chat_local_command::anchor_session_chat_local_command(
+                &mut command,
+                &session,
+            );
+            command
+        })
+        .await
+        .ok();
+    }
+    let durable_id = archive_command.as_ref().map(|row| row.id.clone());
     if capture_local_output {
         steps.insert(
             0,
             crate::session_chat_send::SessionChatSendStep::BeginLocalCommandOutput {
                 agent: terminal_agent.clone(),
                 command: text.to_string(),
-                durable_id,
+                durable_id: durable_id.clone(),
             },
         );
         steps.push(crate::session_chat_send::SessionChatSendStep::FinishLocalCommandOutput);
     }
+    steps.insert(
+        0,
+        crate::session_chat_send::SessionChatSendStep::StopLocalCommandOutput,
+    );
     crate::session_chat_returned_prompt::record_session_chat_send_started(
         &target.project_id,
         &target.session_id,
@@ -879,6 +934,13 @@ pub(crate) async fn send_session_chat_message_with_draft(
     )
     .await
     {
+        if let Some(id) = durable_id.as_deref() {
+            crate::session_chat_app_command::discard_local_command(
+                &target.project_id,
+                &target.session_id,
+                id,
+            );
+        }
         /*
         CDXC:AgentScreenDetection 2026-08-19:
         The case this feature exists for — the agent CLI in this pane is dead —
@@ -936,6 +998,18 @@ pub(crate) async fn send_session_chat_message_with_draft(
             message: error.message,
         });
     }
+    if let Some(command) = archive_command {
+        let project_id = target.project_id.clone();
+        let session_id = target.session_id.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            crate::session_chat_app_command::commit_local_command(
+                &project_id,
+                &session_id,
+                command,
+            );
+        })
+        .await;
+    }
     crate::session_chat_returned_prompt::record_session_chat_send_submitted(
         &target.project_id,
         &target.session_id,
@@ -980,9 +1054,10 @@ pub(crate) async fn send_session_chat_message_with_draft(
         &target.session,
         match source {
             SessionChatMessageSource::Composer => "chat",
-            SessionChatMessageSource::AutomaticQueue | SessionChatMessageSource::AutomaticRecovery | SessionChatMessageSource::AccountSwitch(_) | SessionChatMessageSource::ManualQueue => {
-                "queue"
-            }
+            SessionChatMessageSource::AutomaticQueue
+            | SessionChatMessageSource::AutomaticRecovery
+            | SessionChatMessageSource::AccountSwitch(_)
+            | SessionChatMessageSource::ManualQueue => "queue",
         },
     );
     /*
@@ -1030,10 +1105,16 @@ pub(crate) async fn send_session_chat_message_with_draft(
             message: error.to_string(),
         })?;
         crate::session_chat_draft_versions::consume(
-            &db, &target.project_id, &target.session_id, version,
+            &db,
+            &target.project_id,
+            &target.session_id,
+            version,
         )?;
         crate::session_chat_draft_diagnostics::log(
-            &state.logger, "consumed", &target.project_id, &target.session_id,
+            &state.logger,
+            "consumed",
+            &target.project_id,
+            &target.session_id,
             json!({ "version": version }),
         );
         broadcast_session_chat_queue_state(state, &target.project_id, &target.session_id);
@@ -1299,7 +1380,6 @@ fn retire_sent_session_chat_draft(
         broadcast_session_chat_queue_state(state, project_id, session_id);
     }
 }
-
 
 /// Re-arms a draft's launch activity-suppression window after Ghostex typed one
 /// of its OWN commands (a model/effort pick) into the terminal, so the churn

@@ -4,10 +4,7 @@
 
 import type { SessionChatAppCommand, SessionChatMessage } from '../../shared/session-chat';
 import { parseSessionChatCommandEnvelope } from './session-chat-command-envelope';
-import {
-  SESSION_CHAT_ESCAPED_MARKUP_ATTRIBUTE,
-  sessionChatLocalCommandTexts,
-} from './session-chat-local-command-transcript';
+import { sessionChatLocalCommandTexts } from './session-chat-local-command-transcript';
 
 export const SESSION_CHAT_PENDING_SEND_LIMIT = 8;
 export const SESSION_CHAT_COMMAND_MARKER_LIMIT = 8;
@@ -103,6 +100,8 @@ export interface SessionChatCommandMarker {
    * would either retire the marker on sight or strand it forever.
    */
   compactionRecordsBefore?: number;
+  /** Server identities already visible when this send began, independent of clock skew. */
+  localCommandIdsBefore?: readonly string[];
 }
 
 let pendingSendCounter = 0;
@@ -460,7 +459,8 @@ export function appendSessionChatCommandMarker(
   command: string,
   sentAt: number = Date.now(),
   label?: string,
-  compactionRecordsBefore?: number
+  compactionRecordsBefore?: number,
+  localCommandIdsBefore?: readonly string[]
 ): readonly SessionChatCommandMarker[] {
   const next = [
     ...markers,
@@ -470,6 +470,7 @@ export function appendSessionChatCommandMarker(
       sentAt,
       ...(label ? { label } : {}),
       ...(compactionRecordsBefore === undefined ? {} : { compactionRecordsBefore }),
+      ...(localCommandIdsBefore === undefined ? {} : { localCommandIdsBefore }),
     },
   ];
   return next.length > SESSION_CHAT_COMMAND_MARKER_LIMIT
@@ -557,15 +558,11 @@ export function sessionChatAppCommandsAsMessages(
     })
   );
   return commands.flatMap((entry) => {
-    /*
-     * CDXC:SessionChat 2026-09-10 WHY:
-     * Checked before the output rows, not only after them. gxserver archives
-     * every slash command the user sends and replays it into the messages as a
-     * `<command-name>` envelope, so from the first read carrying the archived
-     * row onwards this live acknowledgement IS that row — rendering both would
-     * show one command twice.
-     */
-    if (recorded.has(normalizeSessionChatPendingText(entry.command))) {
+    // A live archive row retires only against its own persisted occurrence.
+    if (entry.archiveId && transcript.some((message) => message.id === `local-command:${entry.archiveId}`)) {
+      return [];
+    }
+    if (!entry.archiveId && entry.localCommand && recorded.has(normalizeSessionChatPendingText(entry.command))) {
       return [];
     }
     /*
@@ -615,6 +612,9 @@ export function sessionChatAppCommandsAsMessages(
         },
       ];
     }
+    if (recorded.has(normalizeSessionChatPendingText(entry.command))) {
+      return [];
+    }
     const commandMatch = entry.command.trim().match(/^\/(?:rename|name|title)(?:\s+(.+))?$/is);
     if (commandMatch) {
       const title = entry.title?.trim() || commandMatch[1]?.trim();
@@ -657,31 +657,79 @@ export function sessionChatAppCommandsAsMessages(
  * acknowledgement, or the archived envelope a read replays — the marker is the
  * same fact twice, drawn as a user bubble beside a `Slash command` row.
  */
+export function sessionChatLocalCommandIdentities(
+  appCommands: readonly SessionChatAppCommand[],
+  messages: readonly SessionChatMessage[]
+): { id: string; text: string }[] {
+  const covered = new Map<string, string>();
+  for (const entry of appCommands.filter((entry) => entry.localCommand)) {
+    covered.set(entry.archiveId ?? entry.id, normalizeSessionChatPendingText(entry.command));
+  }
+  for (const message of messages) {
+    if (!message.id.startsWith('local-command:') || message.id.endsWith(':output')) continue;
+    const envelope = parseSessionChatCommandEnvelope(
+      message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('\n')
+    );
+    if (envelope)
+      covered.set(
+        message.id.slice('local-command:'.length),
+        normalizeSessionChatPendingText(`${envelope.name} ${envelope.args}`)
+      );
+  }
+  return [...covered].map(([id, text]) => ({ id, text }));
+}
+
 export function retireSessionChatMarkersCoveredByLocalCommands(
   markerMessages: readonly SessionChatMessage[],
   appCommands: readonly SessionChatAppCommand[],
-  messages: readonly SessionChatMessage[]
+  messages: readonly SessionChatMessage[],
+  markers: readonly SessionChatCommandMarker[] = []
 ): SessionChatMessage[] {
-  const covered = new Set(
-    appCommands.filter((entry) => entry.localCommand).map((entry) => normalizeSessionChatPendingText(entry.command))
-  );
-  for (const message of messages) {
-    const text = message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('\n');
-    if (!text.includes(SESSION_CHAT_ESCAPED_MARKUP_ATTRIBUTE)) {
-      continue;
-    }
-    const envelope = parseSessionChatCommandEnvelope(text);
-    if (envelope) {
-      covered.add(normalizeSessionChatPendingText(`${envelope.name} ${envelope.args}`));
-    }
-  }
-  if (covered.size === 0) {
-    return [...markerMessages];
-  }
+  const covered = sessionChatLocalCommandIdentities(appCommands, messages);
+  const consumed = new Set<string>();
   return markerMessages.filter((message) => {
-    const text = message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('\n');
-    return message.role !== 'user' || !covered.has(normalizeSessionChatPendingText(text));
+    if (message.role !== 'user') return true;
+    const marker = markers.find((entry) => `command:${entry.id}` === message.id);
+    const text = normalizeSessionChatPendingText(
+      message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('\n')
+    );
+    const match = covered.find(
+      (entry) => entry.text === text && !consumed.has(entry.id) && !marker?.localCommandIdsBefore?.includes(entry.id)
+    );
+    if (!match) return true;
+    consumed.add(match.id);
+    return false;
   });
+}
+
+/** Keep the archived command's position while live probes refine its result. */
+export function reconcileSessionChatLocalCommandOutput(
+  messages: readonly SessionChatMessage[],
+  commands: readonly SessionChatAppCommand[]
+): SessionChatMessage[] {
+  const result = [...messages];
+  for (const command of commands) {
+    if (!command.localCommand || !command.archiveId || !command.output) continue;
+    const id = `local-command:${command.archiveId}`;
+    const at = result.findIndex((message) => message.id === id);
+    if (at < 0) continue;
+    const output: SessionChatMessage = {
+      ...result[at]!,
+      id: `${id}:output`,
+      blocks: [{ type: 'text', text: sessionChatLocalCommandTexts(command.command, command.output)[1]! }],
+      timestamp: (result[at]!.timestamp ?? 0) + 1,
+    };
+    const outputAt = result.findIndex((message) => message.id === output.id);
+    if (outputAt >= 0) {
+      const existing = result[outputAt]!;
+      // A native transcript result remains authoritative over a screen capture.
+      const native = existing.blocks.some(
+        (block) => block.type === 'text' && block.text.trimStart().startsWith('<local-command-stdout>')
+      );
+      if (!native) result[outputAt] = output;
+    } else result.splice(at + 1, 0, output);
+  }
+  return result;
 }
 
 export function isSessionChatClearCommand(command: string): boolean {

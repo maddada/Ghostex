@@ -2113,6 +2113,11 @@ pub fn detect_session_chat_terminal_state(
     let capture = crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id)
         .ok()
         .map(|mut capture| {
+            if !capture.truncated {
+                crate::session_chat_app_command::refresh_local_command_output(
+                    project_id, session_id, &capture.text,
+                );
+            }
             // CDXC:SessionChatTerminalActivity 2026-09-06 WHY:
             // The close helper rechecks the diff header, so passing the stripped conversation made auto-close reject the pane we had just detected.
             if agent == Some(SessionChatOptionAgent::Claude)
@@ -2145,18 +2150,6 @@ pub fn detect_session_chat_terminal_state(
                 &capture.text,
             );
         }
-        /*
-        CDXC:SessionChat 2026-09-10 WHY:
-        Every agent, not only Codex: a command whose result paints after its
-        first line (a picker, a fetch) has nothing but this shared probe to
-        refine the row. It only diffs sessions holding a live baseline, so a
-        session that ran no local command pays nothing.
-        */
-        crate::session_chat_app_command::refresh_local_command_output(
-            project_id,
-            session_id,
-            &capture.text,
-        );
     }
     let notice = screen.and_then(|capture| {
         crate::session_chat_notice::classify_session_chat_terminal_notice(agent_id, &capture.text)

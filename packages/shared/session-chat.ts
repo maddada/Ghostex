@@ -613,6 +613,8 @@ export interface SessionChatAppCommand {
    * replay takes over.
    */
   localCommand?: boolean;
+  /** Stable identity shared with the archived command and its output. */
+  archiveId?: string;
   /** ISO-8601 millis. */
   sentAt: string;
 }

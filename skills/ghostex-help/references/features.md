@@ -98,6 +98,9 @@ Session Chat renders the same agent session as a chat GUI: composer with
 image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session.
+Slash commands sent from chat stay in the conversation after a reload, together
+with any captured output. Long command output expands when clicked; model, effort,
+Fast mode, and compaction results keep their status rows.
 Toggle chat and terminal for a session with one click on the pane header or
 the pane hotkey. Compatible agents can default to chat. File writes and code
 edits appear outside the tool groups while the agent works. When a turn shows

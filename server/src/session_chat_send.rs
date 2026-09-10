@@ -772,6 +772,7 @@ pub enum SessionChatSendStep {
     GuardCodexInterrupt,
     /// Recheck the transcript pager and cross-client visibility at the front of the queue.
     CloseUnwatchedCodexTranscriptPager,
+    StopLocalCommandOutput,
     /// Baseline the screen so the command's own output can be read back off it.
     /// `durable_id` is set for a slash command the user sent from chat, which is
     /// archived in `session_chat_local_command.rs`.
@@ -1435,6 +1436,11 @@ async fn run_session_chat_send_worker(
                     ) {
                         break;
                     }
+                }
+                SessionChatSendStep::StopLocalCommandOutput => {
+                    crate::session_chat_app_command::stop_local_command_output(
+                        &project_id, &session_id,
+                    );
                 }
                 SessionChatSendStep::BeginLocalCommandOutput {
                     agent,

@@ -30,8 +30,10 @@ export function decodeSessionChatEscapedMarkup(text: string): string {
  * archive, so the live row and the archived one are the same row twice.
  */
 export function sessionChatLocalCommandTexts(command: string, output?: string): string[] {
-  const [name, ...rest] = command.trim().split(/\s+/);
-  const args = rest.join(' ');
+  const trimmed = command.trim();
+  const separator = trimmed.search(/\s/);
+  const name = separator < 0 ? trimmed : trimmed.slice(0, separator);
+  const args = separator < 0 ? '' : trimmed.slice(separator).trim();
   // The space between the two markers is load-bearing: readers strip the
   // markup to get the text, and without it the name and its arguments would
   // become one word.

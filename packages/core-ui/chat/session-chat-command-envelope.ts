@@ -14,8 +14,8 @@ import {
 
 // The optional attribute list is gxserver's replayed envelope (see
 // session-chat-local-command-transcript.ts): same tags, marked escaped.
-const COMMAND_NAME = /<command-name(?:\s[^>]*)?>([\s\S]*?)<\/command-name>/;
-const COMMAND_ARGS = /<command-args(?:\s[^>]*)?>([\s\S]*?)<\/command-args>/;
+const COMMAND_NAME = /<command-name(\s[^>]*)?>([\s\S]*?)<\/command-name>/;
+const COMMAND_ARGS = /<command-args(\s[^>]*)?>([\s\S]*?)<\/command-args>/;
 
 export interface SessionChatCommandEnvelope {
   name: string;
@@ -28,14 +28,15 @@ export function parseSessionChatCommandEnvelope(text: string): SessionChatComman
     // Ordinary prompts, XML pastes.
     return null;
   }
-  const name = COMMAND_NAME.exec(trimmed)?.[1]?.trim();
+  const nameMatch = COMMAND_NAME.exec(trimmed);
+  const name = nameMatch?.[2]?.trim();
   if (!name) {
     return null;
   }
-  const decode = trimmed.includes(SESSION_CHAT_ESCAPED_MARKUP_ATTRIBUTE)
-    ? decodeSessionChatEscapedMarkup
-    : (value: string): string => value;
-  return { args: decode(COMMAND_ARGS.exec(trimmed)?.[1]?.trim() ?? ''), name: decode(name) };
+  const decode = (value: string, attributes?: string): string =>
+    attributes?.includes(SESSION_CHAT_ESCAPED_MARKUP_ATTRIBUTE) ? decodeSessionChatEscapedMarkup(value) : value;
+  const argsMatch = COMMAND_ARGS.exec(trimmed);
+  return { args: decode(argsMatch?.[2]?.trim() ?? '', argsMatch?.[1]), name: decode(name, nameMatch?.[1]) };
 }
 
 export function surfaceSkillInvocationUserTurns(
@@ -45,7 +46,11 @@ export function surfaceSkillInvocationUserTurns(
   let changed = false;
   const out: SessionChatMessage[] = [];
   for (const message of messages) {
-    if (message.role !== 'user' || !message.blocks.every((block) => block.type === 'text')) {
+    if (
+      message.id.startsWith('local-command:') ||
+      message.role !== 'user' ||
+      !message.blocks.every((block) => block.type === 'text')
+    ) {
       out.push(message);
       continue;
     }

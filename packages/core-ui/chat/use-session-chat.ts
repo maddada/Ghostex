@@ -72,6 +72,8 @@ import {
   normalizeSessionChatPendingText,
   pruneSessionChatPendingSends,
   retireSessionChatMarkersCoveredByLocalCommands,
+  reconcileSessionChatLocalCommandOutput,
+  sessionChatLocalCommandIdentities,
   SESSION_CHAT_PENDING_SEND_LIMIT,
   sessionChatAppCommandsAsMessages,
   sessionChatCommandMarkersAsMessages,
@@ -1325,9 +1327,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   }, [boundaried]);
 
   useEffect(() => {
-    const failedIds = new Set(
-      queuePrompts?.filter((prompt) => prompt.state === 'failed').map((prompt) => prompt.id)
-    );
+    const failedIds = new Set(queuePrompts?.filter((prompt) => prompt.state === 'failed').map((prompt) => prompt.id));
     if (pending.some((entry) => entry.queuedPromptId && failedIds.has(entry.queuedPromptId))) {
       setPending((current) => current.filter((entry) => !entry.queuedPromptId || !failedIds.has(entry.queuedPromptId)));
     }
@@ -1383,6 +1383,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
 
   // --- Composition (§11.1 order: markers → streaming → pending) --------------
   const messages = useMemo(() => {
+    const transcript = reconcileSessionChatLocalCommandOutput(boundaried, appCommands);
     const pendingMessages = sessionChatPendingSendsAsMessages(visibleSessionChatPendingSends(pending, boundaried));
     const authoritativeText = new Set(
       boundaried
@@ -1396,12 +1397,13 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         compactionRecords
       ).filter((message) => message.role !== 'user' || !authoritativeText.has(normalizedSessionChatText(message))),
       appCommands,
-      boundaried
+      transcript,
+      markers
     );
     const visibleTerminalStatuses = unreconciledSessionChatTerminalStatuses(terminalStatusMessages, boundaried);
     const tail: SessionChatMessage[] = [
       ...visibleTerminalStatuses,
-      ...sessionChatAppCommandsAsMessages(appCommands, boundaried),
+      ...sessionChatAppCommandsAsMessages(appCommands, transcript),
       ...markerMessages,
     ];
     const streamingText = deriveSessionChatStreamingText({
@@ -1416,7 +1418,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       tail.push(terminalTool);
     }
     tail.push(...pendingMessages);
-    return [...boundaried, ...tail];
+    return [...transcript, ...tail];
   }, [
     appCommands,
     boundaried,
@@ -1532,6 +1534,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         // Snapshot the compactions already on record, so a `/compact` marker
         // retires against ITS OWN compaction rather than an earlier one.
         const compactionRecordsBefore = countSessionChatCompactionRecords(mergerRef.current.list);
+        const localCommandIdsBefore = sessionChatLocalCommandIdentities(appCommands, mergerRef.current.list).map(
+          (entry) => entry.id
+        );
         commandMarkerSentAt = Date.now();
         setMarkers((current) =>
           appendSessionChatCommandMarker(
@@ -1539,7 +1544,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
             text.trim(),
             commandMarkerSentAt ?? Date.now(),
             undefined,
-            compactionRecordsBefore
+            compactionRecordsBefore,
+            localCommandIdsBefore
           )
         );
       }
@@ -1566,7 +1572,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         throw sendError;
       }
     },
-    [commandCatalog, transport]
+    [appCommands, commandCatalog, transport]
   );
 
   /**

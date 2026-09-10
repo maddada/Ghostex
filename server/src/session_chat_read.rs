@@ -690,6 +690,17 @@ pub(crate) async fn handle_read_session_chat_http(
         Err(error) => Err(error),
     };
 
+    let archive_project = project_id.clone();
+    let archive_session = session_id.clone();
+    let archived = tokio::task::spawn_blocking(move || {
+        crate::session_chat_local_command::load_session_chat_local_commands(
+            &archive_project,
+            &archive_session,
+        )
+    })
+    .await
+    .unwrap_or_default();
+
     match read_outcome {
         Ok(Ok(crate::session_chat::SessionChatTailPage::Page {
             codex_stats,
@@ -734,10 +745,7 @@ pub(crate) async fn handle_read_session_chat_http(
             */
             let local_commands =
                 crate::session_chat_local_command::select_session_chat_local_commands(
-                    crate::session_chat_local_command::load_session_chat_local_commands(
-                        &project_id,
-                        &session_id,
-                    ),
+                    archived,
                     &messages,
                     before_offset.is_none(),
                     has_more,
@@ -796,12 +804,19 @@ pub(crate) async fn handle_read_session_chat_http(
             {
                 result.insert("prompt".to_string(), value);
             }
-            result.insert("messages".to_string(), json!([]));
+            let commands = crate::session_chat_local_command::merge_session_chat_local_commands(
+                Vec::new(),
+                &archived,
+            );
+            let has_commands = !commands.is_empty();
+            result.insert("messages".to_string(), json!(commands));
             result.insert("hasMore".to_string(), json!(false));
             result.insert("beforeOffset".to_string(), json!(0));
             result.insert(
                 "status".to_string(),
-                json!(if lifecycle_running {
+                json!(if has_commands {
+                    "ready"
+                } else if lifecycle_running {
                     "starting"
                 } else {
                     "empty"
