@@ -243,13 +243,20 @@ export function validateProductAgainstPlan({ manifest, plan, record, version }) 
  * The whole set. `readProvenance(directory)` returns the parsed record or null;
  * injecting it keeps this function pure for the fixture tests.
  */
-export function collectPublishProvenance({ manifests, plan, readProvenance, version }) {
+export function collectPublishProvenance({
+  manifests,
+  plan,
+  products = plan.expectedPlatforms,
+  readProvenance,
+  version,
+}) {
   const records = {};
   for (const manifest of manifests) {
     const record = readProvenance(manifest.directory);
     records[manifest.platform] = validateProductAgainstPlan({ manifest, plan, record, version });
   }
-  for (const product of plan.expectedPlatforms) {
+  /* A staged publish validates only its own stage's products; the full plan is covered once every stage has run. */
+  for (const product of products) {
     if (!records[product]) refuseProduct(product, 'the plan expects it but no validated provenance record arrived');
   }
   return records;
@@ -381,13 +388,18 @@ export function buildReleaseProvenanceRecord({
  * same fingerprints, the same artifact digests. Anything else means the live
  * release is not the release this run validated.
  */
-export function assertLiveProvenanceMatches({ live, record }) {
+export function assertLiveProvenanceMatches({ live, record, subset = false }) {
   const published = validateReleaseProvenance(live);
   if (published.version !== record.version || published.tag !== record.tag) {
     refuse(`the published ${published.tag} provenance does not describe ${record.tag}`);
   }
-  const publishedProducts = Object.keys(published.products).sort();
   const computedProducts = Object.keys(record.products).sort();
+  /* A re-run stage compares only its own products: later stages may already have merged theirs in. */
+  const publishedProducts = subset
+    ? Object.keys(published.products)
+        .filter((product) => record.products[product])
+        .sort()
+    : Object.keys(published.products).sort();
   if (JSON.stringify(publishedProducts) !== JSON.stringify(computedProducts)) {
     refuse(
       `the published provenance records ${publishedProducts.join(', ')} but this run validated ` +

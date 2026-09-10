@@ -435,11 +435,29 @@ jobs:
       plan: ${{ needs.prepare.outputs.plan }}
     secrets: inherit
 
-  publish:
-    # Atomicity gate. For every product the plan resolved: an action of `build`
-    # or `reuse` must have produced a successful job, and `skip` must have
-    # produced a skipped one. A failed or cancelled job can never satisfy either
-    # branch, so an incomplete artifact set cannot reach the publisher.
+  # CDXC:Release 2026-09-10 DECISION:
+  # User: macOS goes live first, as soon as its build is done; after that each
+  # remaining product goes live the moment its own build finishes, in whatever
+  # order that happens. So there is no single publish gate any more. The
+  # `publish_macos` stage keeps the atomicity gate for its own products (macOS
+  # and the gxserver runtimes it embeds), creates the tag and the release, and
+  # advances Sparkle. Every other stage needs only that stage and its own
+  # builds, amends the live release with its products, and runs concurrently
+  # with its siblings (tooling/release-gpui/publish-stage.mjs owns the stage
+  # membership; amend-existing.mjs merges the shared provenance and notes with
+  # a read-merge-verify loop). Measured on 9.1.0 this puts macOS live at about
+  # minute 23 instead of 30, and Linux right behind it instead of behind
+  # Android.
+  #
+  # A stage that fails leaves the release partial: the products already
+  # published stay live, and the failed stage is re-run from the Actions UI or
+  # added later with `release:actions amend`. That is the accepted price of
+  # staggering.
+  #
+  # Each gate keeps the shape of the old atomicity gate: a `build` or `reuse`
+  # action must have produced a successful job, and `skip` a skipped one, so a
+  # failed or cancelled job can never satisfy either branch.
+  publish_macos:
     if: >-
       ${{
         always() &&
@@ -449,13 +467,7 @@ jobs:
         ((needs.prepare.outputs.job_code_server_x64 != 'skip' && needs.code_server_x64.result == 'success') || (needs.prepare.outputs.job_code_server_x64 == 'skip' && needs.code_server_x64.result == 'skipped')) &&
         ((needs.prepare.outputs.job_code_server_arm64 != 'skip' && needs.code_server_arm64.result == 'success') || (needs.prepare.outputs.job_code_server_arm64 == 'skip' && needs.code_server_arm64.result == 'skipped')) &&
         ((needs.prepare.outputs.reuse_count != '0' && needs.reuse.result == 'success') || (needs.prepare.outputs.reuse_count == '0' && needs.reuse.result == 'skipped')) &&
-        ((needs.prepare.outputs.job_macos == 'build' && needs.macos.result == 'success') || (needs.prepare.outputs.job_macos != 'build' && needs.macos.result == 'skipped')) &&
-        ((needs.prepare.outputs.job_linux_x64 == 'build' && needs.linux_x64.result == 'success') || (needs.prepare.outputs.job_linux_x64 != 'build' && needs.linux_x64.result == 'skipped')) &&
-        ((needs.prepare.outputs.job_windows_x64 == 'build' && needs.windows_x64.result == 'success') || (needs.prepare.outputs.job_windows_x64 != 'build' && needs.windows_x64.result == 'skipped')) &&
-        ((needs.prepare.outputs.job_windows_arm64 == 'build' && needs.windows_arm64.result == 'success') || (needs.prepare.outputs.job_windows_arm64 != 'build' && needs.windows_arm64.result == 'skipped')) &&
-        ((needs.prepare.outputs.job_android == 'build' && needs.android.result == 'success') || (needs.prepare.outputs.job_android != 'build' && needs.android.result == 'skipped')) &&
-        ((needs.prepare.outputs.job_wsl_x64 == 'build' && needs.gxserver_wsl_windows_x64.result == 'success') || (needs.prepare.outputs.job_wsl_x64 != 'build' && needs.gxserver_wsl_windows_x64.result == 'skipped')) &&
-        ((needs.prepare.outputs.job_wsl_arm64 == 'build' && needs.gxserver_wsl_windows_arm64.result == 'success') || (needs.prepare.outputs.job_wsl_arm64 != 'build' && needs.gxserver_wsl_windows_arm64.result == 'skipped'))
+        ((needs.prepare.outputs.job_macos == 'build' && needs.macos.result == 'success') || (needs.prepare.outputs.job_macos != 'build' && needs.macos.result == 'skipped'))
       }}
     needs:
       - prepare
@@ -465,15 +477,10 @@ jobs:
       - code_server_arm64
       - reuse
       - macos
-      - linux_x64
-      - windows_x64
-      - windows_arm64
-      - android
-      - gxserver_wsl_windows_x64
-      - gxserver_wsl_windows_arm64
     uses: ./.github/workflows/release-gpui-publish.yml
     with:
       version: ${{ inputs.version }}
+      stage: macos
       expected_platforms: ${{ needs.prepare.outputs.expected_platforms }}
       prerelease: ${{ inputs.prerelease }}
       # Scope-aware, but deliberately keyed on "macOS is in scope" rather than
@@ -482,6 +489,104 @@ jobs:
       # not exist yet and Sparkle must still advance. plan.feeds.sparkle is the
       # reporting value; this is the operational one.
       update_sparkle: ${{ inputs.update_sparkle && needs.prepare.outputs.job_macos != 'skip' }}
+      windows_signed: ${{ inputs.sign_windows }}
+      plan: ${{ needs.prepare.outputs.plan }}
+    secrets: inherit
+
+  publish_linux:
+    if: >-
+      ${{
+        always() &&
+        needs.prepare.result == 'success' &&
+        needs.publish_macos.result == 'success' &&
+        ((needs.prepare.outputs.job_linux_x64 == 'build' && needs.linux_x64.result == 'success') || (needs.prepare.outputs.job_linux_x64 != 'build' && needs.linux_x64.result == 'skipped'))
+      }}
+    needs:
+      - prepare
+      - publish_macos
+      - linux_x64
+    uses: ./.github/workflows/release-gpui-publish.yml
+    with:
+      version: ${{ inputs.version }}
+      stage: linux
+      expected_platforms: ${{ needs.prepare.outputs.expected_platforms }}
+      prerelease: ${{ inputs.prerelease }}
+      update_sparkle: false
+      windows_signed: ${{ inputs.sign_windows }}
+      plan: ${{ needs.prepare.outputs.plan }}
+    secrets: inherit
+
+  publish_android:
+    if: >-
+      ${{
+        always() &&
+        needs.prepare.result == 'success' &&
+        needs.publish_macos.result == 'success' &&
+        ((needs.prepare.outputs.job_android == 'build' && needs.android.result == 'success') || (needs.prepare.outputs.job_android != 'build' && needs.android.result == 'skipped'))
+      }}
+    needs:
+      - prepare
+      - publish_macos
+      - android
+    uses: ./.github/workflows/release-gpui-publish.yml
+    with:
+      version: ${{ inputs.version }}
+      stage: android
+      expected_platforms: ${{ needs.prepare.outputs.expected_platforms }}
+      prerelease: ${{ inputs.prerelease }}
+      update_sparkle: false
+      windows_signed: ${{ inputs.sign_windows }}
+      plan: ${{ needs.prepare.outputs.plan }}
+    secrets: inherit
+
+  publish_windows_x64:
+    # The WSL bootstrap is not a build input of the Windows package but ships
+    # beside it (companion product), so the two publish together.
+    if: >-
+      ${{
+        always() &&
+        needs.prepare.result == 'success' &&
+        needs.publish_macos.result == 'success' &&
+        ((needs.prepare.outputs.job_windows_x64 == 'build' && needs.windows_x64.result == 'success') || (needs.prepare.outputs.job_windows_x64 != 'build' && needs.windows_x64.result == 'skipped')) &&
+        ((needs.prepare.outputs.job_wsl_x64 == 'build' && needs.gxserver_wsl_windows_x64.result == 'success') || (needs.prepare.outputs.job_wsl_x64 != 'build' && needs.gxserver_wsl_windows_x64.result == 'skipped'))
+      }}
+    needs:
+      - prepare
+      - publish_macos
+      - windows_x64
+      - gxserver_wsl_windows_x64
+    uses: ./.github/workflows/release-gpui-publish.yml
+    with:
+      version: ${{ inputs.version }}
+      stage: windows-x64
+      expected_platforms: ${{ needs.prepare.outputs.expected_platforms }}
+      prerelease: ${{ inputs.prerelease }}
+      update_sparkle: false
+      windows_signed: ${{ inputs.sign_windows }}
+      plan: ${{ needs.prepare.outputs.plan }}
+    secrets: inherit
+
+  publish_windows_arm64:
+    if: >-
+      ${{
+        always() &&
+        needs.prepare.result == 'success' &&
+        needs.publish_macos.result == 'success' &&
+        ((needs.prepare.outputs.job_windows_arm64 == 'build' && needs.windows_arm64.result == 'success') || (needs.prepare.outputs.job_windows_arm64 != 'build' && needs.windows_arm64.result == 'skipped')) &&
+        ((needs.prepare.outputs.job_wsl_arm64 == 'build' && needs.gxserver_wsl_windows_arm64.result == 'success') || (needs.prepare.outputs.job_wsl_arm64 != 'build' && needs.gxserver_wsl_windows_arm64.result == 'skipped'))
+      }}
+    needs:
+      - prepare
+      - publish_macos
+      - windows_arm64
+      - gxserver_wsl_windows_arm64
+    uses: ./.github/workflows/release-gpui-publish.yml
+    with:
+      version: ${{ inputs.version }}
+      stage: windows-arm64
+      expected_platforms: ${{ needs.prepare.outputs.expected_platforms }}
+      prerelease: ${{ inputs.prerelease }}
+      update_sparkle: false
       windows_signed: ${{ inputs.sign_windows }}
       plan: ${{ needs.prepare.outputs.plan }}
     secrets: inherit

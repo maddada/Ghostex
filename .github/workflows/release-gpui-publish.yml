@@ -40,6 +40,16 @@ on:
         required: false
         default: ''
         type: string
+      # CDXC:Release 2026-09-10 DECISION: User: macOS goes live first, then each
+      # product as soon as its own build finishes. A staged release calls this
+      # workflow once per stage (see tooling/release-gpui/publish-stage.mjs): the
+      # `macos` stage creates the release, every other stage amends it. Empty
+      # means the classic single publish of the whole scope.
+      stage:
+        description: Publish stage of a staged release (macos, linux, android, windows-x64, windows-arm64)
+        required: false
+        default: ''
+        type: string
   workflow_dispatch:
     inputs:
       version:
@@ -81,7 +91,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: ghostex-gpui-publish-${{ inputs.version }}
+  # One group per stage: the stages of a staged release run concurrently on
+  # purpose, and a shared group would cancel all but one pending stage.
+  group: ghostex-gpui-publish-${{ inputs.version }}${{ inputs.stage != '' && format('-{0}', inputs.stage) || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -122,18 +134,21 @@ jobs:
           GHOSTEX_RELEASE_UPDATE_SPARKLE: ${{ inputs.update_sparkle && '1' || '0' }}
           GHOSTEX_RELEASE_WINDOWS_SIGNED: ${{ inputs.windows_signed && '1' || '0' }}
           GHOSTEX_RELEASE_AMEND_PRODUCTS: ${{ inputs.amend_products }}
+          GHOSTEX_RELEASE_STAGE: ${{ inputs.stage }}
         run: >-
-          node tooling/release-gpui/${{ inputs.amend && 'amend-existing.mjs' || 'assemble.mjs' }}
+          node tooling/release-gpui/${{ (inputs.amend || (inputs.stage != '' && inputs.stage != 'macos')) && 'amend-existing.mjs' || 'assemble.mjs' }}
           "${{ inputs.version }}"
           build/release-gpui/workflow-artifacts
       # The vendor-maintained `ghostex-bin` AUR package tracks the portable
       # Linux tarball of the release that was just published. Its template,
       # scriptlet, and the one-time AUR account setup live in
       # tooling/packaging/aur/ghostex-bin/. This never runs for a prerelease: Arch users
-      # follow stable releases only.
+      # follow stable releases only. In a staged release only the linux stage
+      # runs it: the tarball is that stage's, and the sibling stages would
+      # otherwise race to push the same package.
       - name: Decide whether the ghostex-bin AUR package can be updated
         id: aur_gate
-        if: ${{ !inputs.prerelease }}
+        if: ${{ !inputs.prerelease && (inputs.stage == '' || inputs.stage == 'linux') }}
         env:
           # `if:` conditions cannot read `secrets`, so secret availability is
           # resolved into a step output here and gates the step below instead.

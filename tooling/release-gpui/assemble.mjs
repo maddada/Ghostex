@@ -16,6 +16,7 @@ import { spawnSync } from 'node:child_process';
 import { validateOnDemandManifestV2 } from './on-demand-manifest.mjs';
 import { validateWindowsUpdateFeed } from './windows-update-feed.mjs';
 import { renderCustomerDownloadNotes } from './customer-downloads.mjs';
+import { INITIAL_PUBLISH_STAGE, resolvePublishStage } from './publish-stage.mjs';
 import { releaseProvenanceAssetName } from './provenance.mjs';
 import {
   PRODUCT_PROVENANCE_FILE,
@@ -59,6 +60,22 @@ const plan = readPublishPlan({
   readTextFile: (file) => readFileSync(file, 'utf8'),
 });
 assertPlanMatchesScope({ expectedPlatforms: [...expected], plan, version });
+
+/*
+ * CDXC:Release 2026-09-10 WHY:
+ * In a staged release this script runs as the first stage only: it creates the
+ * tag and the release with the macOS DMG and the gxserver runtimes it embeds,
+ * and the later stages amend that release (amend-existing.mjs). `expected` stays
+ * the whole scope so the plan check above is unchanged; `publishing` is what
+ * this invocation actually uploads. See publish-stage.mjs.
+ */
+const stage = (process.env.GHOSTEX_RELEASE_STAGE ?? '').trim();
+const publishStage = stage ? resolvePublishStage({ plan, stage }) : null;
+if (publishStage && !publishStage.initial) {
+  throw new Error(`assemble.mjs creates the release in the ${INITIAL_PUBLISH_STAGE} stage; ${stage} is an amend stage`);
+}
+const publishing = new Set(publishStage ? publishStage.products : expected);
+if (publishStage) console.log(`Publish stage ${stage}: ${[...publishing].join(', ') || '(no products; tag and notes only)'}`);
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -272,6 +289,8 @@ for (const artifactDirectory of readdirSync(artifactsRoot, { withFileTypes: true
   if (manifest.schemaVersion !== 1 || manifest.version !== version || !expected.has(manifest.platform)) {
     throw new Error(`Unexpected manifest ${manifestPath}: ${JSON.stringify(manifest)}`);
   }
+  // A later stage's build may already have finished; its artifact is that stage's to publish.
+  if (!publishing.has(manifest.platform)) continue;
   const contract = artifactContracts.get(manifest.platform);
   if (contract === undefined) throw new Error(`No release artifact contract is defined for ${manifest.platform}`);
   if (
@@ -297,10 +316,10 @@ for (const artifactDirectory of readdirSync(artifactsRoot, { withFileTypes: true
   manifests.push({ directory, ...manifest });
 }
 const received = new Set(manifests.map((manifest) => manifest.platform));
-for (const platform of expected) {
+for (const platform of publishing) {
   if (!received.has(platform)) throw new Error(`Enabled platform produced no validated manifest: ${platform}`);
 }
-if (received.size !== expected.size || manifests.length !== expected.size) {
+if (received.size !== publishing.size || manifests.length !== publishing.size) {
   throw new Error('Received duplicate or unexpected platform manifests');
 }
 
@@ -314,6 +333,7 @@ if (received.size !== expected.size || manifests.length !== expected.size) {
 const productProvenance = collectPublishProvenance({
   manifests,
   plan,
+  products: [...publishing],
   readProvenance: (directory) => {
     const file = path.join(directory, PRODUCT_PROVENANCE_FILE);
     if (!existsSync(file)) return null;
@@ -510,20 +530,25 @@ function validateLiveRelease(liveRelease, { verifyProvenanceDigest = true } = {}
   if (Boolean(liveRelease.prerelease) !== expectedPrerelease) {
     throw new Error(`Live release prerelease=${liveRelease.prerelease}; expected ${expectedPrerelease}`);
   }
-  if (liveRelease.assets?.length !== expectedAssets.size) {
+  // A staged release grows as later stages amend it, so the first stage only checks its own assets.
+  if (!publishStage && liveRelease.assets?.length !== expectedAssets.size) {
     throw new Error(`Live release has ${liveRelease.assets?.length ?? 0} assets; expected ${expectedAssets.size}`);
   }
-  for (const asset of liveRelease.assets) {
-    if (asset.name === provenanceAssetName && !verifyProvenanceDigest) continue;
-    const expectedSha = expectedAssets.get(asset.name);
+  const liveByName = new Map((liveRelease.assets ?? []).map((asset) => [asset.name, asset]));
+  for (const [name, expectedSha] of expectedAssets) {
+    if (name === provenanceAssetName && !verifyProvenanceDigest) continue;
+    const asset = liveByName.get(name);
     const liveSha =
-      typeof asset.digest === 'string' && asset.digest.startsWith('sha256:')
+      typeof asset?.digest === 'string' && asset.digest.startsWith('sha256:')
         ? asset.digest.slice('sha256:'.length)
         : null;
-    if (!expectedSha || liveSha !== expectedSha) {
-      throw new Error(
-        `Live asset digest mismatch for ${asset.name}: ${liveSha ?? 'missing'} != ${expectedSha ?? 'unexpected asset'}`
-      );
+    if (liveSha !== expectedSha) {
+      throw new Error(`Live asset digest mismatch for ${name}: ${liveSha ?? 'missing'} != ${expectedSha}`);
+    }
+  }
+  if (!publishStage) {
+    for (const asset of liveRelease.assets ?? []) {
+      if (!expectedAssets.has(asset.name)) throw new Error(`Live release carries an unexpected asset: ${asset.name}`);
     }
   }
 }
@@ -571,6 +596,7 @@ if (existingReleaseResult.status === 0) {
       )
     ),
     record: releaseProvenance,
+    subset: Boolean(publishStage),
   });
   if (macos && updateSparkle && !appcastReferencesRelease(readLiveAppcast(), buildNumber, version)) {
     const taggedAppcast = run('git', ['show', `${tag}:appcast.xml`], { capture: true });

@@ -30,19 +30,14 @@ import {
   mergeAmendProvenance,
   mergeReleaseNotes,
   mutateArtifactNames,
+  packDependencies,
 } from './amend-existing-lib.mjs';
 import { productDefinition } from './product-inputs.mjs';
+import { plannedAssetNames, resolvePublishStage } from './publish-stage.mjs';
 
 const [version, artifactsRoot] = process.argv.slice(2);
 if (!/^\d+\.\d+\.\d+$/u.test(version ?? '')) throw new Error('Version must be MAJOR.MINOR.PATCH');
 if (!artifactsRoot || !existsSync(artifactsRoot)) throw new Error(`Artifact root is missing: ${artifactsRoot}`);
-
-const mutate = (process.env.GHOSTEX_RELEASE_AMEND_PRODUCTS ?? '')
-  .split(',')
-  .map((value) => value.trim())
-  .filter(Boolean);
-if (mutate.length === 0) throw new Error('GHOSTEX_RELEASE_AMEND_PRODUCTS is empty');
-for (const productId of mutate) productDefinition(productId);
 
 const expected = new Set(
   (process.env.GHOSTEX_RELEASE_EXPECTED_PLATFORMS ?? '')
@@ -59,6 +54,35 @@ const plan = readPublishPlan({
   readTextFile: (file) => readFileSync(file, 'utf8'),
 });
 assertPlanMatchesScope({ expectedPlatforms: [...expected], plan, version });
+
+/*
+ * CDXC:Release 2026-09-10 WHY:
+ * Two callers. The standalone amend workflow names its mutate set explicitly
+ * (GHOSTEX_RELEASE_AMEND_PRODUCTS) after resolve-amend-scope.mjs expanded it
+ * against the live provenance. A stage of a staged release (GHOSTEX_RELEASE_STAGE)
+ * mutates exactly its own stage's in-scope products, runs concurrently with its
+ * sibling stages, and only needs the artifacts of those products plus the gxserver
+ * runtimes they embed. See publish-stage.mjs.
+ */
+const stage = (process.env.GHOSTEX_RELEASE_STAGE ?? '').trim();
+const publishStage = stage ? resolvePublishStage({ plan, stage }) : null;
+if (publishStage?.initial) throw new Error(`the ${stage} stage creates the release; it is published by assemble.mjs`);
+const mutate = publishStage
+  ? publishStage.products
+  : (process.env.GHOSTEX_RELEASE_AMEND_PRODUCTS ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+if (publishStage && mutate.length === 0) {
+  console.log(`Publish stage ${stage}: none of its products is in this release's scope; nothing to publish.`);
+  process.exit(0);
+}
+if (mutate.length === 0) throw new Error('GHOSTEX_RELEASE_AMEND_PRODUCTS is empty');
+for (const productId of mutate) productDefinition(productId);
+const needed = publishStage
+  ? new Set([...mutate, ...mutate.flatMap(packDependencies).filter((productId) => expected.has(productId))])
+  : expected;
+if (publishStage) console.log(`Publish stage ${stage}: ${mutate.join(', ')}`);
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -112,6 +136,8 @@ for (const artifactDirectory of readdirSync(artifactsRoot, { withFileTypes: true
   if (manifest.schemaVersion !== 1 || manifest.version !== version || !expected.has(manifest.platform)) {
     throw new Error(`Unexpected manifest ${manifestPath}: ${JSON.stringify(manifest)}`);
   }
+  // A sibling stage's artifact is that stage's to publish.
+  if (!needed.has(manifest.platform)) continue;
   if (
     manifest.platform === 'android' &&
     (manifest.source_kind !== 'react-native-mobile' || manifest.application_id !== 'io.ghostex')
@@ -146,7 +172,7 @@ for (const artifactDirectory of readdirSync(artifactsRoot, { withFileTypes: true
 }
 
 const received = new Set(manifests.map((manifest) => manifest.platform));
-for (const platform of expected) {
+for (const platform of needed) {
   if (!received.has(platform)) throw new Error(`Enabled platform produced no validated manifest: ${platform}`);
 }
 for (const productId of mutate) {
@@ -256,34 +282,77 @@ for (const arch of ['x64', 'arm64']) {
 }
 
 const tag = `v${version}`;
-const releaseJson = run(
-  'gh',
-  ['release', 'view', tag, '--repo', 'maddada/Ghostex', '--json', 'assets,body,isDraft,isPrerelease,url'],
-  { capture: true }
-);
-const liveRelease = JSON.parse(releaseJson);
-if (liveRelease.isDraft || liveRelease.isPrerelease) {
-  throw new Error(`${tag} must be an existing public stable release`);
+const provenanceName = releaseProvenanceAssetName(version);
+
+/* A sibling stage's `--clobber` removes the provenance asset for a moment; reads and writes retry through that window. */
+function readLiveRelease() {
+  let lastError;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      const release = JSON.parse(
+        run('gh', ['release', 'view', tag, '--repo', 'maddada/Ghostex', '--json', 'assets,body,isDraft,isPrerelease,url'], {
+          capture: true,
+        })
+      );
+      if (!(release.assets ?? []).some((candidate) => candidate.name === provenanceName)) {
+        throw new Error(`${release.url} carries no ${provenanceName}`);
+      }
+      // `gh release view --json assets` reports GraphQL node ids, which the REST asset endpoint rejects; download by name.
+      const provenance = validateReleaseProvenance(
+        JSON.parse(
+          run('gh', ['release', 'download', tag, '--repo', 'maddada/Ghostex', '--pattern', provenanceName, '--output', '-'], {
+            capture: true,
+          })
+        )
+      );
+      return { provenance, release };
+    } catch (error) {
+      lastError = error;
+      spawnSync('sleep', ['3']);
+    }
+  }
+  throw lastError;
+}
+
+function uploadProvenanceAsset(file) {
+  let lastError;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      run('gh', ['release', 'upload', tag, '--repo', 'maddada/Ghostex', file, '--clobber']);
+      return;
+    } catch (error) {
+      lastError = error;
+      spawnSync('sleep', ['3']);
+    }
+  }
+  throw lastError;
+}
+
+const first = readLiveRelease();
+const liveRelease = first.release;
+if (liveRelease.isDraft) throw new Error(`${tag} is still a draft`);
+const expectPrerelease = publishStage ? process.env.GHOSTEX_RELEASE_PRERELEASE === '1' : false;
+if (Boolean(liveRelease.isPrerelease) !== expectPrerelease) {
+  throw new Error(
+    publishStage
+      ? `${tag} prerelease=${liveRelease.isPrerelease}; this stage expected ${expectPrerelease}`
+      : `${tag} must be an existing public stable release`
+  );
 }
 if (!run('git', ['tag', '-l', tag], { capture: true })) {
   throw new Error(`GitHub release ${tag} exists without a fetched local tag`);
 }
 const tagCommit = run('git', ['rev-list', '-n', '1', tag], { capture: true });
-if (spawnSync('git', ['merge-base', '--is-ancestor', tagCommit, sourceCommit]).status !== 0) {
-  throw new Error(`Existing ${tag} commit ${tagCommit} is not an ancestor of source ${sourceCommit}`);
+/*
+ * A standalone amend runs from a later main that already contains the tag. A
+ * stage of a staged release runs from the commit the release was built from,
+ * and it is the tag (with the appcast commit the first stage made) that
+ * contains that commit.
+ */
+const [ancestor, descendant] = publishStage ? [sourceCommit, tagCommit] : [tagCommit, sourceCommit];
+if (spawnSync('git', ['merge-base', '--is-ancestor', ancestor, descendant]).status !== 0) {
+  throw new Error(`Existing ${tag} commit ${tagCommit} and source ${sourceCommit} do not contain each other`);
 }
-
-const provenanceName = releaseProvenanceAssetName(version);
-const liveProvenanceAsset = (liveRelease.assets ?? []).find((asset) => asset.name === provenanceName);
-if (!liveProvenanceAsset) throw new Error(`${liveRelease.url} carries no ${provenanceName}`);
-// CDXC:Release 2026-09-10 WHY: `gh release view --json assets` reports GraphQL node ids (RA_...), which the REST asset endpoint rejects. Download by name instead.
-const liveProvenance = validateReleaseProvenance(
-  JSON.parse(
-    run('gh', ['release', 'download', tag, '--repo', 'maddada/Ghostex', '--pattern', provenanceName, '--output', '-'], {
-      capture: true,
-    })
-  )
-);
 
 assertLiveDependencyAlignment({
   liveAssets: liveRelease.assets,
@@ -292,57 +361,92 @@ assertLiveDependencyAlignment({
 });
 
 const mutatedRecords = Object.fromEntries(mutate.map((productId) => [productId, productProvenance[productId]]));
-const mergedProvenance = mergeAmendProvenance({
-  amendPlan: plan,
-  live: liveProvenance,
-  mutatedRecords,
-  publishedAt: new Date().toISOString(),
-  sourceSha: sourceCommit,
-  version,
-  workflowRunId: Number(process.env.GITHUB_RUN_ID ?? 0),
-});
-const provenanceAssetPath = path.join(artifactsRoot, provenanceName);
-writeFileSync(provenanceAssetPath, `${JSON.stringify(mergedProvenance, null, 2)}\n`);
-const provenanceSha = sha256(provenanceAssetPath);
-
 const mutatedManifests = manifests.filter((manifest) => mutate.includes(manifest.platform));
-const notesPath = path.join(artifactsRoot, `amend-notes-${version}.md`);
-const releaseAssetNames = new Set((liveRelease.assets ?? []).map((asset) => asset.name));
 for (const manifest of mutatedManifests) {
-  for (const artifact of manifest.artifacts) releaseAssetNames.add(artifact.name);
+  for (const artifact of manifest.artifacts) {
+    run('gh', ['release', 'upload', tag, '--repo', 'maddada/Ghostex', artifact.path, '--clobber']);
+  }
 }
-const updatedBody = mergeReleaseNotes({
-  assetNames: [...releaseAssetNames],
-  liveBody: liveRelease.body,
-  version,
-});
-writeFileSync(notesPath, updatedBody);
 
-const uploadPaths = [
-  ...mutatedManifests.flatMap((manifest) => manifest.artifacts.map((artifact) => artifact.path)),
-  provenanceAssetPath,
-];
-for (const file of uploadPaths) {
-  run('gh', ['release', 'upload', tag, '--repo', 'maddada/Ghostex', file, '--clobber']);
-}
-run('gh', ['release', 'edit', tag, '--repo', 'maddada/Ghostex', '--notes-file', notesPath]);
-
-const mutateNames = mutateArtifactNames({ mutate, version });
-let verified;
-for (let attempt = 0; attempt < 12; attempt += 1) {
-  verified = JSON.parse(
-    run('gh', ['release', 'view', tag, '--repo', 'maddada/Ghostex', '--json', 'assets,body,url'], {
-      capture: true,
-    })
+function sameProductRecord(left, right) {
+  const digests = (record) =>
+    [...record.artifacts]
+      .map((artifact) => `${artifact.name}\0${artifact.sha256}\0${artifact.size}`)
+      .sort()
+      .join('|');
+  return (
+    Boolean(left && right) &&
+    left.action === right.action &&
+    left.fingerprint === right.fingerprint &&
+    digests(left) === digests(right)
   );
-  const provenanceAsset = verified.assets.find((asset) => asset.name === provenanceName);
-  if (provenanceAsset?.digest === `sha256:${provenanceSha}`) break;
-  spawnSync('sleep', ['2']);
 }
+const normalizeBody = (body) => String(body ?? '').replaceAll('\r\n', '\n').trimEnd();
+
+/*
+ * CDXC:Release 2026-09-10 WHY:
+ * Sibling stages of a staged release amend this release at the same time, and
+ * the provenance record and the notes are the only state they share. Each stage
+ * merges its products into whatever is live, writes, then re-reads: when a
+ * sibling's write raced past ours and dropped our products, we merge again from
+ * its state. Every write is "live plus mine", so the loop converges as soon as
+ * the last writer has seen everyone else's products. A standalone amend has no
+ * siblings and settles on the first pass.
+ */
+const provenanceAssetPath = path.join(artifactsRoot, provenanceName);
+const notesPath = path.join(artifactsRoot, `amend-notes-${version}.md`);
+let mergedProvenance;
+let verified;
+for (let attempt = 0; ; attempt += 1) {
+  const live = attempt === 0 ? first : readLiveRelease();
+  mergedProvenance = mergeAmendProvenance({
+    amendPlan: plan,
+    live: live.provenance,
+    mutatedRecords,
+    publishedAt: new Date().toISOString(),
+    sourceSha: sourceCommit,
+    version,
+    workflowRunId: Number(process.env.GITHUB_RUN_ID ?? 0),
+  });
+  writeFileSync(provenanceAssetPath, `${JSON.stringify(mergedProvenance, null, 2)}\n`);
+  const provenanceSha = sha256(provenanceAssetPath);
+  const releaseAssetNames = new Set((live.release.assets ?? []).map((asset) => asset.name));
+  for (const manifest of mutatedManifests) {
+    for (const artifact of manifest.artifacts) releaseAssetNames.add(artifact.name);
+  }
+  writeFileSync(notesPath, mergeReleaseNotes({ assetNames: [...releaseAssetNames], liveBody: live.release.body, version }));
+  uploadProvenanceAsset(provenanceAssetPath);
+  run('gh', ['release', 'edit', tag, '--repo', 'maddada/Ghostex', '--notes-file', notesPath]);
+
+  let after;
+  for (let poll = 0; poll < 12; poll += 1) {
+    after = readLiveRelease();
+    const provenanceAsset = after.release.assets.find((asset) => asset.name === provenanceName);
+    if (provenanceAsset?.digest === `sha256:${provenanceSha}`) break;
+    spawnSync('sleep', ['2']);
+  }
+  const liveNames = after.release.assets.map((asset) => asset.name);
+  const provenanceSettled = mutate.every((productId) =>
+    sameProductRecord(after.provenance.products[productId], mutatedRecords[productId])
+  );
+  const notesSettled =
+    normalizeBody(mergeReleaseNotes({ assetNames: liveNames, liveBody: after.release.body, version })) ===
+    normalizeBody(after.release.body);
+  if (provenanceSettled && notesSettled) {
+    verified = after.release;
+    break;
+  }
+  if (attempt >= 8) {
+    throw new Error(`${tag} did not settle after ${attempt + 1} merge attempts (provenance ${provenanceSettled}, notes ${notesSettled})`);
+  }
+  console.log(`A sibling publish raced this stage's write to ${tag}; merging again (attempt ${attempt + 2}).`);
+}
+
+/* Nothing outside this run's plan may change; in a staged release, sibling stages' assets are that plan's. */
 assertUnrelatedAssetsUnchanged({
   afterAssets: verified.assets,
   beforeAssets: liveRelease.assets,
-  mutateNames,
+  mutateNames: publishStage ? plannedAssetNames({ plan, version }) : mutateArtifactNames({ mutate, version }),
 });
 for (const manifest of mutatedManifests) {
   for (const artifact of manifest.artifacts) {
