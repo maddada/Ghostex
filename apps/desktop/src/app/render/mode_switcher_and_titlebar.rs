@@ -192,6 +192,9 @@ impl GhostexGpuiApp {
             )
     }
 
+    /// CDXC:Titlebar 2026-09-10 WHY:
+    /// The centered titlebar gives the left region a zero flex basis; auto-sized descendants can retain their minimum measured width and collapse the project label even with space available.
+    /// Both the project slot and its label must grow into the width allocated by their parent.
     pub(crate) fn render_project_slot(
         &self,
         show_compact_mode_dropdown: bool,
@@ -205,7 +208,7 @@ impl GhostexGpuiApp {
         h_flex()
             .ml(px(TITLEBAR_PROJECT_LEFT))
             .mt(px(1.0))
-            .flex_shrink(1.0)
+            .flex_1()
             .h(px(TITLEBAR_CONTROL_HEIGHT))
             .max_w(px(620.0))
             .min_w_0()
@@ -233,6 +236,7 @@ impl GhostexGpuiApp {
             .child(
                 h_flex()
                     .h(px(TITLEBAR_CONTROL_HEIGHT))
+                    .flex_1()
                     .max_w(px(210.0))
                     .min_w_0()
                     .items_center()
