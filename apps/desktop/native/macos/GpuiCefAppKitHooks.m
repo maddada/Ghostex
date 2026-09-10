@@ -330,9 +330,19 @@ static void GhostexGpuiSidebarPointerTrackingObserveEvent(NSEvent *event) {
   }
   BOOL inside = GhostexGpuiSidebarPointerTrackingContainsScreenPoint(NSEvent.mouseLocation);
   GhostexGpuiSidebarPointerTrackingReport(inside);
-  // Click ownership still matters: another child window can cover the sidebar.
-  if (isDown && (!inside || window != sidebarView.window)) {
-    GhostexGpuiSidebarOutsideMouseDown();
+  if (isDown) {
+    /*
+     CDXC:Sidebar 2026-09-10 WHY:
+     Hover uses the live pointer, but dismissal must use the mouse-down event's location: the pointer can already be back over the sidebar when a queued Agents-area click is processed.
+     The event's window also distinguishes clicks in child windows covering the sidebar, without depending on current hover or application activation state.
+    */
+    BOOL clickedSidebar = window && window == sidebarView.window &&
+        !sidebarView.isHiddenOrHasHiddenAncestor &&
+        NSPointInRect([sidebarView convertPoint:event.locationInWindow fromView:nil],
+                      sidebarView.visibleRect);
+    if (!clickedSidebar) {
+      GhostexGpuiSidebarOutsideMouseDown();
+    }
   }
 }
 

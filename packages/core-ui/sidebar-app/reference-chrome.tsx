@@ -143,7 +143,7 @@ export function SidebarReferenceTopChrome({
   settings: ghostexSettings;
   showKeepAwakeButton: boolean;
 }) {
-  const topControlRowRef = useRef<HTMLDivElement>(null);
+  const primaryMenuRef = useRef<HTMLDivElement>(null);
   const [openMenu, setOpenMenu] = useState<SidebarReferencePrimaryMenuKind>();
   const settingsMenuHotkeys = normalizeghostexHotkeySettings(settings.hotkeys);
 
@@ -153,7 +153,7 @@ export function SidebarReferenceTopChrome({
     }
 
     const handleOutsidePointerDown = (event: PointerEvent) => {
-      if (isNode(event.target) && topControlRowRef.current?.contains(event.target)) {
+      if (isNode(event.target) && primaryMenuRef.current?.contains(event.target)) {
         return;
       }
       setOpenMenu(undefined);
@@ -267,17 +267,12 @@ export function SidebarReferenceTopChrome({
         <IconArrowRight className='reference-sidebar-window-icon' size={17} stroke={1.9} />
       </div>
       <nav aria-label='Sidebar primary navigation' className='reference-sidebar-primary-nav'>
-        <div
-          aria-label='Sidebar search and menu'
-          className='reference-sidebar-search-more-row'
-          ref={topControlRowRef}
-          role='group'
-        >
+        <div aria-label='Sidebar search and menu' className='reference-sidebar-search-more-row' role='group'>
           <SidebarReferenceSearchNavItem
             onSearch={onSearch}
             shortcut={formatSidebarMenuHotkeyLabel(settingsMenuHotkeys.openSessionSearchPalette)}
           />
-          <div className='reference-sidebar-primary-menu-cell'>
+          <div className='reference-sidebar-primary-menu-cell' ref={primaryMenuRef}>
             <SidebarReferenceShortcutButton
               ariaExpanded={Boolean(openMenu)}
               ariaHaspopup='menu'
@@ -1330,10 +1325,16 @@ export function SidebarReferenceSectionHeader({
           }}
           onDismiss={() => setAgentMenuPosition(undefined)}
         >
-          <AgentLauncherMenuItems agents={agents} primaryAgentId={primaryAgent?.agentId}
-            transport={accountsTransport} onRun={runAgent} onConfigure={() => {
-              setAgentMenuPosition(undefined); onConfigureAgents?.();
-            }} />
+          <AgentLauncherMenuItems
+            agents={agents}
+            primaryAgentId={primaryAgent?.agentId}
+            transport={accountsTransport}
+            onRun={runAgent}
+            onConfigure={() => {
+              setAgentMenuPosition(undefined);
+              onConfigureAgents?.();
+            }}
+          />
         </SidebarContextMenuPortal>
       ) : null}
     </div>
