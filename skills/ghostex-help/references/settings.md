@@ -35,8 +35,8 @@ How to use this file:
 - **Show Less Count** `projectSessionListCollapsedCount` (number 1 to 50 default 10) [advanced]: Number of project sessions kept visible after Show less.
 - **Sidebar Interface Size** `agentManagerZoomPercent` (number 50 to 200 default 100): Scale the sidebar interface.
 - **Double-click empty sidebar space to create a session** `createSessionOnSidebarDoubleClick` (boolean, default false) [advanced]: Create a session from empty sidebar space.
-- **Enable session parking** `enableSessionParking` (boolean, default false) [advanced]: Move deferred sessions into a collapsible Parked section at the bottom of the sidebar.
-- **Sleep session when parking** `sleepSessionWhenParking` (boolean, default false) [advanced]: Sleep a session automatically when it is moved into the Parked section.
+- **Enable session parking** `enableSessionParking` (boolean, default true): Move deferred sessions into a collapsible Parked section at the bottom of the sidebar.
+- **Sleep session when parking** `sleepSessionWhenParking` (boolean, default false): Sleep a session automatically when it is moved into the Parked section.
 - **Double-click session cards to rename** `renameSessionOnDoubleClick` (boolean, default false) [advanced]: Makes clicking on a session respond a bit slower so we can detect the double click
 #### Session Cards
 
@@ -289,6 +289,9 @@ How to use this file:
 - **Open In** `openIn` (Settings UI row without a settings key; use `ghostex settings open`): Title bar button that opens the active project in another app.
 - **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): Title bar button that opens this Extensions page.
 - **Chromium runtime (CEF)** `cef` (Settings UI row without a settings key; use `ghostex settings open`): Inspect or reinstall the Chromium runtime used by Ghostex web surfaces.
+### Titlebar account usage
+
+- **Titlebar account usage** `accountTitlebarUsage` (Settings UI row without a settings key; use `ghostex settings open`): Show or hide usage stats for saved Claude and Codex accounts in the desktop titlebar. Star accounts to pin their usage.
 ### Extensions Store
 
 - **Extension store** `store` (Settings UI row without a settings key; use `ghostex settings open`): Browse audited extensions, install them, and manage what is already installed.

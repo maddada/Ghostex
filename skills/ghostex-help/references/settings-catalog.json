@@ -383,8 +383,7 @@
       "section": "sidebar",
       "sectionTitle": "Sidebar",
       "type": "boolean",
-      "default": false,
-      "advanced": true,
+      "default": true,
       "agentWritable": true
     },
     {
@@ -399,7 +398,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
       "agentWritable": true
     },
     {
@@ -6142,6 +6140,17 @@
       "tabTitle": "Extensions",
       "section": "official",
       "sectionTitle": "Official Extensions",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "accountTitlebarUsage",
+      "title": "Titlebar account usage",
+      "subtitle": "Show or hide usage stats for saved Claude and Codex accounts in the desktop titlebar. Star accounts to pin their usage.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "accountUsage",
+      "sectionTitle": "Titlebar account usage",
       "type": "ui",
       "agentWritable": false
     },

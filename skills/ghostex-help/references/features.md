@@ -62,8 +62,12 @@ the selected Space.
   details at once; the individual rows below it are marked Advanced.
 - Session cards: agent icon, favicon, close button, last-active time, git
   stats, colored icons, and rename-on-double-click are all toggles.
-- Parking: with `enableSessionParking`, deferred sessions move to a Parked
-  section at the bottom (optionally sleeping them).
+- Parking is enabled by default. Right-click a session and choose Park, or
+  select several sessions and choose Park selected, to move them into the
+  collapsible Parked section at the bottom. Use Unpark or Unpark selected to
+  bring them back. Parking keeps sessions running unless Sleep session when
+  parking is enabled (off by default). Both settings are in General > Sidebar
+  without Show Advanced: `enableSessionParking`, `sleepSessionWhenParking`.
 - Remote machines appear as their own sidebar sections when connected.
 
 Related settings: everything under General > Sidebar, `agentManagerZoomPercent`
@@ -98,6 +102,13 @@ Session Chat renders the same agent session as a chat GUI: composer with
 image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session.
+Claude children stay in the Subagents card while the terminal lists them, including
+between monitor events. Idle children are labelled Idle and their clocks pause;
+click a child's name or task to open its transcript.
+For Codex and Claude, the Subagents card and popup title show the child's latest
+model and effort in compact form, such as Opus 5 High or Astra xHigh. Hover to see
+the agent type, such as Explore or general-purpose. Unrecorded model values are
+labelled Model not recorded.
 Slash commands sent from chat stay in the conversation after a reload, together
 with any captured output. Long command output expands when clicked; model, effort,
 Fast mode, and compaction results keep their status rows.
@@ -132,7 +143,13 @@ retire the submitted draft without clearing a newer one.
 If another saved draft is available, hover over or click its preview icon to
 read the full text above the icon before choosing Use or Dismiss.
 
-Related settings: `preferredAgentInterface`, `sessionChatTheme`,
+Hide emails in Settings > Accounts also masks email addresses in the status
+line below the chat box, the context meter's More details popover, and the
+Context details dialog previews and hover text. It also covers account choices
+and selected dropdown values, account setup and reconnect fields, and account
+errors and recovery messages in Settings, launchers, and the titlebar usage popup.
+
+Related settings: `hideAccountEmails`, `preferredAgentInterface`, `sessionChatTheme`,
 `sessionChatFontFamily`, `sessionChatCustomTranscriptWidthEnabled`,
 `sessionChatTranscriptWidthPercent`, `sessionChatVerboseMode`,
 `sessionChatFileEditPreviews`,
@@ -163,6 +180,12 @@ completions for chat and notifications. Agent approvals ("accept all") is a
 per-machine default with per-project overrides. Actions (Settings > Actions)
 are saved terminal commands or browser URLs shown on project headers and in
 the titlebar Actions menu; Global Actions apply to every project.
+
+Agents Hub lets you browse and edit agent files in Skills, MDs, Hooks, and
+Configs & MCPs. In MDs, expand Shared agent markdown to see the files in your
+shared agent folder, then select a filename to read or edit it. Expand the
+profile instruction groups the same way. Use Refresh to reload files from
+disk and Save to write your edits.
 
 Cross-agent orchestration is built in: any agent with the `$ghostex-cli`
 skill installed can run `ghostex` to start other agents and steer them. For
@@ -272,12 +295,18 @@ docs directory), `hideProjectHeaderDiffStats`,
   (Code, Browser, Kanban, Automate, Docs, Chromium runtime), the Extension
   store for audited third-party extensions, and Your views (custom URLs,
   Storybook, Linear, GitHub Issues, dev server commands, HTML reports).
+  Its Titlebar account usage section lets you star saved Claude and Codex
+  accounts to show their usage in the desktop titlebar, or unstar them to hide
+  it. These are the same per-account stars available in Settings > Accounts.
 - Settings > Open In chooses which apps appear on session and project Open In
   menus and adds custom open targets.
 - Settings > Integrations installs the bundled agent skills (Ghostex CLI,
   Ghostex Help, Computer Use and Browser Use through Trycua, Embedded Browser
   Use, Project Board Beads) and shows their install status. Skills are copied
-  into the global skill folders every agent CLI reads.
+  into the global skill folders every agent CLI reads. When the computer is
+  online they are downloaded from the Ghostex GitHub repository, so skill fixes
+  arrive between releases, and installed skills are refreshed automatically
+  each time Ghostex starts. Offline installs use the copy inside the app.
 - Tips (titlebar) teaches features one card at a time; Resources lists dev
   servers, ports, docs, project links, and per-session CPU and RAM; Help
   (titlebar question mark) opens sample questions; picking one opens a
