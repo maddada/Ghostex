@@ -56,6 +56,21 @@ pub fn dispatch_agent_endpoint(
     params: &Map<String, Value>,
     zmx_context: Option<&ZmxServerContext>,
 ) -> Result<AgentEndpointOutput, AgentEndpointError> {
+    // CDXC:SessionTitles 2026-09-10 WHY:
+    // Hooks and terminal observations replace runtime settings as a whole. Their reads must share a write transaction with their updates, or they can resurrect a title worker's completed running flag. Provider lifecycle operations keep their separate process-owning path.
+    let updates_session_metadata = matches!(
+        endpoint_path,
+        "/api/requestSessionRename"
+            | "/api/cancelFirstPromptAutoTitle"
+            | "/api/ingestSessionStateEvent"
+            | "/api/ingestTerminalTitleEvent"
+            | "/api/updateAgentActivity"
+            | "/api/ingestAgentHookEvent"
+    );
+    let transaction = (updates_session_metadata && db.is_autocommit())
+        .then(|| rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate))
+        .transpose()
+        .map_err(sql_error)?;
     let output = match endpoint_path {
         "/api/readAgentSettings" => AgentEndpointOutput {
             presentation_session: None,
@@ -187,5 +202,8 @@ pub fn dispatch_agent_endpoint(
             .into())
         }
     };
+    if let Some(transaction) = transaction {
+        transaction.commit().map_err(sql_error)?;
+    }
     Ok(output)
 }

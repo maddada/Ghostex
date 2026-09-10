@@ -547,21 +547,21 @@ pub(crate) fn schedule_first_prompt_auto_title_job(
     cannot apply or fail the replacement job after it eventually exits.
     */
     tokio::spawn(async move {
-        if let Err(()) = run_first_prompt_auto_title_job(
+        let _ = run_first_prompt_auto_title_job(
             state.clone(),
             project_id.clone(),
             session_id.clone(),
             attempt_id.clone(),
         )
-        .await
-        {
-            mark_first_prompt_auto_title_failed_if_current_attempt(
-                &state,
-                &project_id,
-                &session_id,
-                &attempt_id,
-            );
-        }
+        .await;
+        // CDXC:SessionTitles 2026-09-10 WHY:
+        // A prompt replaced during the await exits successfully without applying a title. Every finished worker must retire a claim it still owns; completed, cancelled and superseded attempts are already excluded by the attempt check.
+        mark_first_prompt_auto_title_failed_if_current_attempt(
+            &state,
+            &project_id,
+            &session_id,
+            &attempt_id,
+        );
     });
 }
 
@@ -1332,22 +1332,20 @@ pub(crate) async fn handle_generate_session_title_http(
     let job_project_id = project_id.clone();
     let job_session_id = session_id.clone();
     tokio::spawn(async move {
-        if let Err(()) = run_manual_session_title_generation_job(
+        let _ = run_manual_session_title_generation_job(
             job_state.clone(),
             job_project_id.clone(),
             job_session_id.clone(),
             text,
             attempt_id.clone(),
         )
-        .await
-        {
-            mark_first_prompt_auto_title_failed_if_current_attempt(
-                &job_state,
-                &job_project_id,
-                &job_session_id,
-                &attempt_id,
-            );
-        }
+        .await;
+        mark_first_prompt_auto_title_failed_if_current_attempt(
+            &job_state,
+            &job_project_id,
+            &job_session_id,
+            &attempt_id,
+        );
     });
     routed_json(
         Some(endpoint_path),

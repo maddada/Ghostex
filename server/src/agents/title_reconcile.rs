@@ -84,12 +84,21 @@ pub(crate) fn reconcile_agent_metadata_title_for_session(
     Ok(result.changed)
 }
 
+/// CDXC:SessionTitles 2026-09-10 WHY:
+/// Metadata sync and the title worker write the same runtime settings, so the read/modify/write must be atomic to prevent an old running flag from overwriting the worker's completed state.
+/// Adopting Codex's final name also finishes its waiting attempt, even if the worker is already gone; manual Generate Name keeps ownership of its replacement title.
 pub(crate) fn reconcile_agent_metadata_title(
     repository: &DomainRepository<'_>,
     lifecycle: &LifecycleParams,
     home_dir: &Path,
     pending_mismatch_status: &str,
 ) -> Result<AgentTitleReconcileResult, DomainStateError> {
+    let db = repository.connection();
+    let transaction = db
+        .is_autocommit()
+        .then(|| rusqlite::Transaction::new_unchecked(db, rusqlite::TransactionBehavior::Immediate))
+        .transpose()
+        .map_err(sql_error)?;
     let Some(session) = repository.get_session(&lifecycle.project_id, &lifecycle.session_id)?
     else {
         return Ok(AgentTitleReconcileResult {
@@ -167,6 +176,25 @@ pub(crate) fn reconcile_agent_metadata_title(
     if let Some(status) = pending_status {
         next_runtime_settings.insert("pendingAgentTitleRequestStatus".to_string(), json!(status));
     }
+    let completed_codex_auto_title = identity.agent_id.as_deref() == Some("codex")
+        && read_text_from_map(&runtime_settings, "gxserverFirstPromptAutoTitleStatus").as_deref()
+            == Some("running")
+        && !runtime_settings.contains_key("gxserverManualTitleGenerationRequestedAt")
+        && !is_codex_provisional_thread_name(
+            read_text_from_map(&runtime_settings, "firstUserMessage").as_deref(),
+            &metadata_title.title,
+        );
+    if completed_codex_auto_title {
+        next_runtime_settings.remove(FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY);
+        next_runtime_settings.insert(
+            "gxserverFirstPromptAutoTitleStatus".to_string(),
+            json!("skipped"),
+        );
+        next_runtime_settings.insert(
+            "gxserverFirstPromptAutoTitleReason".to_string(),
+            json!("agentAutoTitle"),
+        );
+    }
     let codex_fork_auto_title_pending = identity.agent_id.as_deref() == Some("codex")
         && runtime_settings
             .get("forkFirstPromptAutoTitlePending")
@@ -178,8 +206,8 @@ pub(crate) fn reconcile_agent_metadata_title(
         next_runtime_settings.remove("gxserverForkInitialRenameUpdatedAt");
         next_runtime_settings.insert("autoTitleFromFirstPrompt".to_string(), Value::Bool(true));
     }
-    let needs_update = session.get("title").and_then(Value::as_str)
-        != Some(metadata_title.title.as_str())
+    let needs_update = completed_codex_auto_title
+        || session.get("title").and_then(Value::as_str) != Some(metadata_title.title.as_str())
         || runtime_settings.get("titleSource") != next_runtime_settings.get("titleSource")
         || runtime_settings.get("titleMetadataSource")
             != next_runtime_settings.get("titleMetadataSource")
@@ -215,6 +243,9 @@ pub(crate) fn reconcile_agent_metadata_title(
     );
     update.insert("title".to_string(), Value::String(metadata_title.title));
     let updated = repository.update_session(&update)?;
+    if let Some(transaction) = transaction {
+        transaction.commit().map_err(sql_error)?;
+    }
     Ok(AgentTitleReconcileResult {
         changed: true,
         metadata_title_found: true,

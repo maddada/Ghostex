@@ -106,6 +106,24 @@ pub(crate) fn dispatch_agent_http_blocking(
             let should_schedule_first_prompt_auto_title =
                 result.get("reason").and_then(Value::as_str)
                     == Some("first-prompt-auto-title-claimed");
+            // CDXC:SessionTitles 2026-09-10 WHY:
+            // The claim is already persisted. Start its worker before publishing presentation, whose error return used to strand a running claim without any task to finish it. This ordering covers every provider.
+            if should_schedule_first_prompt_auto_title {
+                if let Some(session) = result.get("session") {
+                    if let (Some(project_id), Some(session_id), Some(attempt_id)) = (
+                        read_session_text(session, "projectId"),
+                        read_session_text(session, "sessionId"),
+                        read_runtime_text(session, FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY),
+                    ) {
+                        schedule_first_prompt_auto_title_job(
+                            state.clone(),
+                            project_id,
+                            session_id,
+                            attempt_id,
+                        );
+                    }
+                }
+            }
             /*
             CDXC:Drafts 2026-08-28 (live-pane switching):
             Everything the daemon has detected off this session's screen belongs
@@ -200,22 +218,6 @@ pub(crate) fn dispatch_agent_http_blocking(
             if should_queue_agent_title_metadata_check {
                 if let Some((project_id, session_id)) = presentation_session {
                     schedule_agent_title_metadata_check(state.clone(), project_id, session_id);
-                }
-            }
-            if should_schedule_first_prompt_auto_title {
-                if let Some(session) = result.get("session") {
-                    if let (Some(project_id), Some(session_id), Some(attempt_id)) = (
-                        read_session_text(session, "projectId"),
-                        read_session_text(session, "sessionId"),
-                        read_runtime_text(session, FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY),
-                    ) {
-                        schedule_first_prompt_auto_title_job(
-                            state.clone(),
-                            project_id,
-                            session_id,
-                            attempt_id,
-                        );
-                    }
                 }
             }
             if let Some(target) = fork_initial_rename {

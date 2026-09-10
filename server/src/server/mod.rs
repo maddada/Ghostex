@@ -182,6 +182,7 @@ pub mod telemetry_tasks;
 #[cfg(test)]
 mod tests;
 pub mod title_generation;
+pub(crate) mod title_job_recovery;
 pub mod typed_operation_http;
 pub mod worktree_ops;
 pub mod ws;
@@ -450,6 +451,7 @@ pub async fn run_gxserver_foreground(
             details: Some(json!({ "removed": removed_retired_skills })),
         });
     }
+    crate::agent_skills_remote::spawn_startup_skill_refresh(paths.clone(), logger.clone());
     let started_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     // Install age for the analytics heartbeat, taken before `identity` is
     // consumed by the runtime metadata below.
@@ -539,6 +541,7 @@ pub async fn run_gxserver_foreground(
         }
     })?;
 
+    title_job_recovery::recover_title_jobs_after_restart(&paths)?;
     write_runtime_metadata(&paths, &metadata)?;
     let _ = logger.log_routine(
         DiagnosticLogScenario::ServerLifecycle,
