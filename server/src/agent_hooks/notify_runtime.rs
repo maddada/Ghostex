@@ -453,7 +453,7 @@ fn post_gxserver_hook_event(
     params.insert("eventName".to_string(), json!(event_name));
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("rawEventName".to_string(), json!(event_name));
-    if agent_key == "codex" {
+    if matches!(agent_key, "codex" | "claude") {
         if let Some(source) = payload.get("source").and_then(Value::as_str) {
             params.insert("hookSource".to_string(), json!(source));
         }

@@ -3825,6 +3825,9 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
    Around four rows, then scroll: a wide fan-out must never push the input off
    the pane. Same rule the queue strip follows, for the same reason. */
 .ghostex-chat-agent-fleet-rows {
+  /* CDXC:SessionChat 2026-09-10 DECISION: User: the Subagents scroll area has the same top and bottom scroll fade as the composer. */
+  --scroll-fade-size: min(12%, 1lh);
+  --scroll-fade-reveal: 1lh;
   align-items: center;
   column-gap: 0.375rem;
   display: grid;

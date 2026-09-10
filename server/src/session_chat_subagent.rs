@@ -22,11 +22,14 @@ use crate::storage::open_gxserver_database;
 
 #[path = "session_chat_subagent_fleet.rs"]
 mod fleet;
+#[path = "session_chat_subagent_model.rs"]
+pub(crate) mod model;
 
 struct ChildTranscript {
     id: String,
     name: String,
     path: PathBuf,
+    agent_type: Option<String>,
 }
 
 fn codex_child(root: &Path, root_id: &str, selector: &str) -> anyhow::Result<ChildTranscript> {
@@ -73,6 +76,10 @@ fn codex_child(root: &Path, root_id: &str, selector: &str) -> anyhow::Result<Chi
             id: id.clone(),
             name,
             path: PathBuf::from(path),
+            agent_type: spawn
+                .and_then(|spawn| spawn.get("agent_role"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
         };
         if id == selector {
             return Ok(child);
@@ -109,6 +116,7 @@ fn claude_child(root: &Path, selector: &str) -> anyhow::Result<ChildTranscript> 
                 id: selector.to_string(),
                 name: selector.to_string(),
                 path,
+                agent_type: None,
             });
         }
     }
@@ -199,6 +207,7 @@ fn claude_child(root: &Path, selector: &str) -> anyhow::Result<ChildTranscript> 
         path: directory.join(format!("agent-{id}.jsonl")),
         id,
         name,
+        agent_type: None,
     })
 }
 
@@ -253,12 +262,24 @@ pub(crate) async fn handle_read_subagent(
         match read_session_chat_tail_page(family, &child.path, limit, before_offset)? {
             SessionChatTailPage::NotFound => anyhow::bail!("This subagent's transcript is not available yet."),
             SessionChatTailPage::Page { messages, lifecycle, has_more, before_offset, .. } => {
+                let mut details = serde_json::to_value(model::read(&child.path, family)?)?;
+                details["id"] = json!(child.id);
+                details["name"] = json!(child.name);
+                let agent_type = if family == SessionChatTranscriptAgent::Claude {
+                    match File::open(child.path.with_extension("meta.json")) {
+                        Ok(file) => serde_json::from_reader::<_, Value>(file.take(64 * 1024))?
+                            .get("agentType").and_then(Value::as_str).map(str::to_string),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                        Err(error) => return Err(error.into()),
+                    }
+                } else { child.agent_type };
+                if let Some(agent_type) = agent_type { details["agentType"] = json!(agent_type); }
                 let mut result = json!({
                     "status": if messages.is_empty() { "empty" } else { "ready" },
                     "messages": messages, "hasMore": has_more, "beforeOffset": before_offset,
                     "epoch": 0, "seq": 0,
                     "agent": if family == SessionChatTranscriptAgent::Codex { "codex" } else { "claude" },
-                    "agentSessionId": child.id, "subagent": { "id": child.id, "name": child.name },
+                    "agentSessionId": child.id, "subagent": details,
                 });
                 if let Some(lifecycle) = lifecycle { result["lifecycle"] = serde_json::to_value(lifecycle)?; }
                 Ok(result)

@@ -1,27 +1,68 @@
-import { createContext, useContext, type ReactNode } from 'react';
-import type { SessionChatToolCallBlock, SessionChatToolResultBlock } from '@/packages/shared/session-chat';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import type {
+  SessionChatSubagentInfo,
+  SessionChatToolCallBlock,
+  SessionChatToolResultBlock,
+} from '@/packages/shared/session-chat';
 import { AppTooltip } from '../app-tooltip';
 
 export interface SessionChatSubagentTarget {
   selector: string;
   name: string;
+  agentType?: string;
+  task?: string;
+  model?: string;
+  effort?: string;
 }
 
 export const SessionChatSubagentContext = createContext<{
   open: (target: SessionChatSubagentTarget) => void;
+  readInfo?: (selector: string) => Promise<SessionChatSubagentInfo>;
   agentPath?: string;
 } | null>(null);
 
-/** CDXC:Tooltips 2026-09-09 DECISION: User: subagent transcript links use the same styled tooltip as chat skill references. */
+/** CDXC:Tooltips 2026-09-10 DECISION: User: subagent transcript links use the same styled tooltip as chat skill references; show the agent type in the same regular font as "View subagent transcript", with no model name. */
 export function SessionChatSubagentLink({
   selector,
   name,
+  agentType,
+  task,
+  model,
+  effort,
   children,
 }: SessionChatSubagentTarget & { children?: ReactNode }) {
   const viewer = useContext(SessionChatSubagentContext);
+  const [hovered, setHovered] = useState(false);
+  const [info, setInfo] = useState<SessionChatSubagentInfo | null>(null);
+  const readInfo = viewer?.readInfo;
+  useEffect(() => {
+    if (!hovered || !readInfo) return;
+    let cancelled = false;
+    setInfo(null);
+    void readInfo(selector).then(
+      (next) => {
+        if (!cancelled) setInfo(next);
+      },
+      () => {
+        if (!cancelled) setInfo(null);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [hovered, readInfo, selector]);
   if (!viewer || selector === '/root' || selector === viewer.agentPath) return <>{children ?? name}</>;
   return (
-    <AppTooltip content='View subagent transcript' side='top'>
+    <AppTooltip
+      content={
+        <div className='space-y-2'>
+          <div>{info?.agentType ?? agentType ?? name}</div>
+          <div>View subagent transcript</div>
+        </div>
+      }
+      onOpenChange={setHovered}
+      side='top'
+    >
       <button
         className='ghostex-chat-subagent-link'
         type='button'
@@ -29,7 +70,7 @@ export function SessionChatSubagentLink({
         aria-label={`View ${name}'s transcript`}
         onClick={(event) => {
           event.stopPropagation();
-          viewer.open({ name, selector });
+          viewer.open({ name, selector, agentType, task, model, effort });
         }}
       >
         {children ?? name}
@@ -79,5 +120,12 @@ export function sessionChatToolSubagent(
     text(output?.agent_id) ?? text(output?.agentId) ?? /\bagentId:\s*([a-zA-Z0-9_-]+)/.exec(result?.output ?? '')?.[1];
   const selector =
     id ?? text(output?.task_name) ?? (task ? (task.startsWith('/') ? task : `${agentPath}/${task}`) : name);
-  return selector ? { selector, name: name ?? selector } : null;
+  return selector
+    ? {
+        selector,
+        name: name ?? selector,
+        agentType: text(input?.subagent_type) ?? text(input?.agent_type),
+        task: text(input?.description),
+      }
+    : null;
 }

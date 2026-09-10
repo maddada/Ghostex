@@ -221,19 +221,21 @@ pub(crate) fn resolve_session_chat_read_state(
         }
         None => 0u8.hash(&mut hasher),
     }
-    /*
-    CDXC:AgentScreenDetection 2026-08-23:
-    Everything a fleet row shows EXCEPT its clock. Split differently from the
-    progress row above, which hashes all of its numbers: a fleet clock moves
-    every second for as long as the agent runs, so hashing it would make this
-    500ms loop re-read the whole transcript forever, while a token counter moves
-    only when an agent did something and is worth waking a poller for. The
-    client ticks the clocks itself from `detectedAt`.
-    */
+    // CDXC:SessionStatus 2026-09-10 WHY:
+    // Long-poll clients must see idle/resumed and unavailable transitions even when the lead transcript and child progress text are unchanged. Renew the observation lease on a coarse cadence without hashing the ticking elapsed clocks.
     match screen.fleet {
         Some(fleet) => {
+            fleet.stale.hash(&mut hasher);
+            crate::session_chat_fleet_transcript::parse_time(&fleet.detected_at)
+                .map(|at| at / 15_000)
+                .hash(&mut hasher);
             for agent in &fleet.agents {
+                agent.id.hash(&mut hasher);
+                agent.started_at.hash(&mut hasher);
+                agent.working.hash(&mut hasher);
                 agent.name.hash(&mut hasher);
+                agent.model.hash(&mut hasher);
+                agent.effort.hash(&mut hasher);
                 agent.task.hash(&mut hasher);
                 agent.tokens.hash(&mut hasher);
                 agent.nested.hash(&mut hasher);

@@ -13,14 +13,15 @@ use crate::session_chat_options::{
 use crate::storage::open_gxserver_database;
 
 /// CDXC:SessionStatus 2026-09-06 WHY:
-/// A crashed Codex child may leave an open spawn edge and an unfinished turn on disk. A root startup/resume starts a new process run; old child turns must not make that resumed thread work forever. Compaction keeps the current children alive.
-pub(crate) fn record_codex_start(
+/// A crashed child may leave an unfinished turn on disk. A root startup/resume starts a new process run; old child turns must not make that resumed thread work forever. Compaction keeps the current children alive.
+pub(crate) fn record_agent_start(
     repository: &DomainRepository<'_>,
     session: &serde_json::Value,
     params: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<Option<serde_json::Value>, crate::domain::DomainStateError> {
     use serde_json::{json, Value};
-    if params.get("agentName").and_then(Value::as_str) != Some("codex")
+    let agent = params.get("agentName").and_then(Value::as_str);
+    if !matches!(agent, Some("codex" | "claude"))
         || !params
             .get("eventName")
             .and_then(Value::as_str)
@@ -42,7 +43,12 @@ pub(crate) fn record_codex_start(
         .cloned()
         .unwrap_or_default();
     runtime.insert(
-        "sessionChatCodexStartedAt".to_string(),
+        if agent == Some("claude") {
+            "sessionChatClaudeStartedAt"
+        } else {
+            "sessionChatCodexStartedAt"
+        }
+        .to_string(),
         json!(crate::domain::now_iso()),
     );
     let update = json!({
@@ -53,6 +59,21 @@ pub(crate) fn record_codex_start(
     repository
         .update_session(update.as_object().unwrap())
         .map(Some)
+}
+
+pub(crate) fn read_fleet(
+    session: &serde_json::Value,
+    screen: Option<&str>,
+) -> anyhow::Result<Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>> {
+    match session_chat_option_agent(session_chat_agent_for_session(session).as_deref()) {
+        Some(SessionChatOptionAgent::Claude) => {
+            crate::session_chat_claude_fleet::read_claude_fleet(session, screen)
+        }
+        Some(SessionChatOptionAgent::Codex) => {
+            crate::session_chat_codex_fleet::read_codex_fleet(session)
+        }
+        _ => Ok(None),
+    }
 }
 
 pub(crate) fn spawn_fleet_status_task(state: &Arc<AppState>) -> tokio::task::JoinHandle<()> {
@@ -109,64 +130,72 @@ fn refresh_fleet_status(state: &AppState) {
         }
         // This daemon-wide observer reads evidence only. The full chat detector
         // can dismiss a Claude diff panel, which belongs to the user's open chat.
+        let capture = if session_chat_option_agent(agent.as_deref())
+            == Some(SessionChatOptionAgent::Claude)
+        {
+            crate::zmx::read_zmx_session_history_capture(&repository, project_id, session_id)
+                .ok()
+                .filter(|capture| !capture.truncated)
+        } else {
+            None
+        };
+        let fleet = read_fleet(
+            &session,
+            capture.as_ref().map(|capture| capture.text.as_str()),
+        )
+        .unwrap_or_else(|_| {
+            state
+                .session_chat_option_cache
+                .lock()
+                .ok()
+                .and_then(|cache| cache.get(&key).and_then(|entry| entry.value.fleet.clone()))
+                .map(|fleet| fleet.unavailable())
+        });
         let observation = match session_chat_option_agent(agent.as_deref()) {
-            Some(SessionChatOptionAgent::Codex) => {
-                crate::session_chat_codex_fleet::read_codex_fleet(&session)
-                    .ok()
-                    .map(|fleet| (fleet, None))
-            }
-            Some(SessionChatOptionAgent::Claude) => crate::zmx::read_zmx_session_history_capture(
-                &repository,
-                project_id,
-                session_id,
-            )
-            .ok()
-            .filter(|capture| !capture.truncated)
-            .map(|capture| {
-                (
-                    crate::session_chat_agent_fleet::detect_session_chat_agent_fleet(
-                        agent.as_deref(),
-                        &capture.text,
-                    ),
-                    crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
-                        agent.as_deref(),
-                        &capture.text,
-                    ),
+            Some(SessionChatOptionAgent::Codex) => Some(None),
+            Some(SessionChatOptionAgent::Claude) => capture.map(|capture| {
+                crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
+                    agent.as_deref(),
+                    &capture.text,
                 )
             }),
             _ => None,
         };
-        let Some((fleet, activity)) = observation else {
-            continue;
-        };
-        let monitor = crate::session_chat_terminal_activity::is_session_chat_monitor_activity(
-            activity.as_ref(),
-        );
+        let activity = observation.as_ref().and_then(|activity| activity.as_ref());
+        let monitor =
+            crate::session_chat_terminal_activity::is_session_chat_monitor_activity(activity);
         if let Ok(mut cache) = state.session_chat_option_cache.lock() {
             if let Some(entry) = cache.get_mut(&key) {
-                entry.projected_fleet = Some(fleet.is_some());
-                entry.projected_monitor = Some(monitor);
+                entry.projected_fleet =
+                    Some(fleet.as_ref().is_some_and(|fleet| fleet.is_working()));
+                if observation.is_some() {
+                    entry.projected_monitor = Some(monitor);
+                }
                 entry.value.fleet = fleet.clone();
                 entry.value.fleet_observed = true;
             }
         }
-        if fleet.is_some()
+        if fleet.as_ref().is_some_and(|fleet| fleet.is_working())
             != crate::session_chat_compacting::session_chat_fleet_detected_at(&session).is_some()
         {
             publisher.publish_fleet(
                 project_id,
                 session_id,
-                fleet.as_ref().map(|fleet| fleet.detected_at.as_str()),
+                fleet
+                    .as_ref()
+                    .filter(|fleet| fleet.is_working())
+                    .map(|fleet| fleet.detected_at.as_str()),
             );
         }
-        if monitor
-            != crate::session_chat_compacting::session_chat_monitor_detected_at(&session).is_some()
+        if observation.is_some()
+            && monitor
+                != crate::session_chat_compacting::session_chat_monitor_detected_at(&session)
+                    .is_some()
         {
             publisher.publish_monitor(
                 project_id,
                 session_id,
                 activity
-                    .as_ref()
                     .filter(|_| monitor)
                     .map(|activity| activity.detected_at.as_str()),
             );

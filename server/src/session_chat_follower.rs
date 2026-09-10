@@ -1701,8 +1701,8 @@ pub async fn run_session_chat_follower(
                 detection HAD run and would hold its loading skeleton for the
                 life of the session.
                 */
-                // Only a successful fleet observation can retire it. Codex reads
-                // child rollouts; Claude reads its live screen. Clocks tick locally.
+                // Both providers read child lifecycles. Unreadable evidence publishes
+                // an unavailable roster so local clocks cannot impersonate live work.
                 let fleet_changed = detection.fleet_observed
                     && !crate::session_chat_agent_fleet::same_session_chat_agent_fleet(
                         detection.fleet.as_ref(),

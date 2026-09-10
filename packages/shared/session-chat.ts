@@ -619,43 +619,27 @@ export interface SessionChatAppCommand {
   sentAt: string;
 }
 
-/*
-CDXC:AgentScreenDetection 2026-08-23:
-Sub-agents Claude Code is running, which exist ONLY on its terminal
-screen — nothing about them reaches transcript JSONL:
-
-      ⏺ main
-      ◯ general-purpose  Fixing tool-ro… 12m 36s · ↓ 171.9k tokens
-
-Without this a chat surface can say nothing better than "the agent is working"
-while three agents are working. The `main` row is the block's header, not a
-member: it is the agent the user is already talking to, and the chat IS its
-output, so only the rows below it arrive here.
-
-The name arrives with its `(+1)` marker split off into `nested`, because the CLI
-space-pads the name column to align every task and leaving the marker in would
-misalign it while making one row's agent type read as a different type.
-
-`task` comes ellipsized by the terminal that painted it — the CLI truncated it
-to a column, and re-truncating in CSS is the client's business. `elapsedSeconds`
-is read off the screen or omitted; a client must never estimate it, but it
-SHOULD tick locally from `detectedAt`, which is minted with the seconds it
-belongs to. Never treat those two as independent: the clock is
-`elapsedSeconds + (now - detectedAt)`, so they only agree while they describe
-the same instant. The server holds a fleet still by not republishing it — the
-roster and the token counters decide that, the clocks never do.
-
-Carried by read results and by snapshot/replaced/state frames with `prompt`
-semantics — omitted ⇒ CLEARED, which is how a client learns the fleet is done.
-Never gated on the main agent working: sub-agents outlive the turn that
-spawned them.
-*/
+/**
+ * CDXC:SessionStatus 2026-09-10 WHY:
+ * Both providers report persisted child lifecycle evidence, independently of the lead turn.
+ * Omission clears the roster. Failed reads mark it stale; validUntil bounds animations when a connection stops delivering fresh observations.
+ * SEE-ALSO: server/src/session_chat_agent_fleet.rs.
+ */
 export interface SessionChatSubAgent {
+  /** Exact provider child identity; names need not be unique. */
+  id?: string;
+  /** Idle Claude children may remain in the terminal roster between turns. */
+  status?: 'working' | 'idle';
+  /** Current turn start, in Unix milliseconds; changes when a child resumes. */
+  startedAt?: number;
   /** Agent type as the CLI names it (`general-purpose`). */
   name: string;
-  /** What it is doing, already ellipsized by the terminal. */
+  /** Latest child-specific model and effort, supplied with the roster. */
+  model?: string;
+  effort?: string;
+  /** Persisted task description. */
   task?: string;
-  /** Seconds the CLI reported, only when it painted them. */
+  /** Provider elapsed time sampled at detectedAt; held still while idle. */
   elapsedSeconds?: number;
   /**
    * The token counter exactly as painted (`↓ 155.4k tokens`), arrow and all.
@@ -671,10 +655,14 @@ export interface SessionChatSubAgent {
 }
 
 export interface SessionChatAgentFleet {
-  /** Screen order, never empty: no sub-agents means no fleet at all. */
+  /** Stable provider order, never empty. */
   agents: SessionChatSubAgent[];
-  /** ISO-8601 millis; stable for the roster, so local clocks can tick. */
+  /** ISO-8601 millis, paired with this sample's elapsedSeconds. */
   detectedAt: string;
+  /** The provider could not verify the last roster. */
+  stale?: boolean;
+  /** Clock/pulse lease, renewed only by successful provider observations. */
+  validUntil?: string;
 }
 
 /*
@@ -738,9 +726,18 @@ export interface GxserverReadSessionChatParams {
  */
 export const SESSION_CHAT_FORK_BOUNDARY_ID_PREFIX = 'fork-boundary:';
 
+/** Latest model and effort reported by this child's own transcript. */
+export interface SessionChatSubagentInfo {
+  id: string;
+  name: string;
+  agentType?: string;
+  model?: string;
+  effort?: string;
+}
+
 export interface GxserverReadSessionChatResult {
   /** Present only for a child transcript read, independent of the main chat stream. */
-  subagent?: { id: string; name: string };
+  subagent?: SessionChatSubagentInfo;
   messages: SessionChatMessage[];
   lifecycle?: SessionChatTurnLifecycle;
   hasMore: boolean;

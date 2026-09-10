@@ -319,13 +319,9 @@ pub struct SessionChatTerminalDetection {
     notice is the second one: it must never cost a spawn.
     */
     pub activity: Option<crate::session_chat_terminal_activity::SessionChatTerminalActivity>,
-    /*
-    CDXC:AgentScreenDetection 2026-08-23: the sub-agents the screen is
-    painting. Fourth reading of the same capture, same reason as the second and
-    third: it must never cost a spawn.
-    */
+    /// Child lifecycle evidence, independent of the terminal capture.
     pub fleet: Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>,
-    /// Claude requires a whole screen; Codex requires a readable spawn graph and child rollouts.
+    /// Whether to publish the fleet state, including empty or explicitly unavailable observations.
     pub fleet_observed: bool,
     /*
     CDXC:SessionChat 2026-09-03: Claude's task list, read from its
@@ -2115,7 +2111,9 @@ pub fn detect_session_chat_terminal_state(
         .map(|mut capture| {
             if !capture.truncated {
                 crate::session_chat_app_command::refresh_local_command_output(
-                    project_id, session_id, &capture.text,
+                    project_id,
+                    session_id,
+                    &capture.text,
                 );
             }
             // CDXC:SessionChatTerminalActivity 2026-09-06 WHY:
@@ -2188,26 +2186,26 @@ pub fn detect_session_chat_terminal_state(
             )
         })
     };
-    let (fleet, fleet_observed) = if agent == Some(SessionChatOptionAgent::Codex) {
+    let (fleet, fleet_observed) = if matches!(
+        agent,
+        Some(SessionChatOptionAgent::Codex | SessionChatOptionAgent::Claude)
+    ) {
         match repository
             .get_session(project_id, session_id)
             .ok()
             .flatten()
-            .and_then(|session| crate::session_chat_codex_fleet::read_codex_fleet(&session).ok())
-        {
+            .and_then(|session| {
+                crate::session_chat_fleet_status::read_fleet(
+                    &session,
+                    screen.map(|capture| capture.text.as_str()),
+                )
+                .ok()
+            }) {
             Some(fleet) => (fleet, true),
             None => (None, false),
         }
     } else {
-        (
-            screen.and_then(|capture| {
-                crate::session_chat_agent_fleet::detect_session_chat_agent_fleet(
-                    agent_id,
-                    &capture.text,
-                )
-            }),
-            screen.is_some(),
-        )
+        (None, true)
     };
     let prompt = screen.and_then(|capture| {
         crate::session_chat::detect_cursor_question_prompt(agent_id, &capture.text)
@@ -2956,12 +2954,19 @@ impl SessionChatOptionDetector {
                     );
                 }
             }
-            let detected_fleet = if detected.fleet_observed {
-                Some(detected.fleet.is_some())
-            } else {
-                detected.fleet = cache.get(&key).and_then(|entry| entry.value.fleet.clone());
-                previous_fleet
-            };
+            if !detected.fleet_observed {
+                detected.fleet = cache
+                    .get(&key)
+                    .and_then(|entry| entry.value.fleet.clone())
+                    .map(|fleet| fleet.unavailable());
+                detected.fleet_observed = true;
+            }
+            let detected_fleet = Some(
+                detected
+                    .fleet
+                    .as_ref()
+                    .is_some_and(|fleet| fleet.is_working()),
+            );
             if detected_fleet != previous_fleet {
                 if let Some(active) = detected_fleet {
                     fleet_transition =

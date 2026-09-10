@@ -1,39 +1,14 @@
-/*
-CDXC:AgentScreenDetection 2026-08-23:
-The sub-agents Claude is running, lifted off its terminal screen and put where
-the chat can see them. gxserver parses the block the CLI pins below its
-statusline (server/src/session_chat_agent_fleet.rs); nothing about it reaches
-transcript JSONL, so without this the chat can only say "the agent is working"
-while three agents are working.
+/**
+ * CDXC:SessionStatus 2026-09-10 WHY:
+ * A retained roster is not evidence of continued work. Pause both providers' clocks and pulses when verification fails or fresh observations stop arriving.
+ * Provider IDs keep repeated names and resumed turns linked to the exact child transcript.
+ */
 
-It stands directly above the composer and OUTSIDE it, deliberately. The queue
-strip lives inside the composer container because a queued prompt is part of
-what the user is about to say; this is the opposite — work already underway,
-owned by the agent, that the user cannot edit. Two strips, two containers, no
-competition for the same row shape.
-
-Rows lay out on ONE grid rather than each flexing on its own, so every task
-starts at the same x no matter how long the names above it are, and every token
-counter ends on the same edge. The name track sizes to the widest name and
-stops; every cell is therefore rendered even when empty, because a missing cell
-would shift that row's remaining columns out of the shared alignment.
-
-A narrow pane drops whole columns instead of squeezing the task into nothing —
-counter first, then clock, then name — because the task is the only part that
-says what is actually happening. Those steps are container queries in chat.css;
-the transcript link's accessible label still names the agent after the name
-column is gone.
-
-Every row's clock ticks LOCALLY from `detectedAt`, which gxserver mints with the
-seconds it belongs to. It republishes a fleet only when the roster or a token
-counter moves, never for a clock, so without interpolating here the times would
-sit frozen between the samples that actually changed something.
-*/
-
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { SessionChatAgentFleet } from '../../shared/session-chat';
 import { formatSessionChatActivityElapsed, sessionChatActivityElapsedSeconds } from './session-chat-activity-row';
 import { SessionChatSubagentLink } from './session-chat-subagent-link';
+import { SessionChatSubagentModel } from './session-chat-subagent-model';
 
 /** How often the local clocks re-render between server samples. */
 const FLEET_CLOCK_TICK_MS = 1_000;
@@ -44,17 +19,32 @@ export interface SessionChatAgentFleetStripProps {
 }
 
 export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStripProps) {
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const [scrollable, setScrollable] = useState(false);
+  const agentCount = fleet?.agents.length ?? 0;
+  // CDXC:SessionChat 2026-09-10 WHY: Scroll animations can retain their last fade after the roster shrinks to fit; remove the mask when there is no overflow.
+  useLayoutEffect(() => {
+    const rows = rowsRef.current;
+    if (!rows) return;
+    const measure = () => setScrollable(rows.scrollHeight > rows.clientHeight);
+    const observer = new ResizeObserver(measure);
+    observer.observe(rows);
+    measure();
+    return () => observer.disconnect();
+  }, [agentCount]);
   const [now, setNow] = useState(() => Date.now());
   const detectedAt = fleet?.detectedAt ?? null;
-  // Only run a timer while there is a roster whose clocks can advance.
+  const validUntil = fleet?.validUntil ? Date.parse(fleet.validUntil) : null;
+  const stale = fleet?.stale === true || (validUntil !== null && (!Number.isFinite(validUntil) || now >= validUntil));
+  // Keep checking the observation lease even when every row's elapsed clock is idle.
   useEffect(() => {
-    if (detectedAt === null) {
+    if (detectedAt === null || stale) {
       return;
     }
     setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), FLEET_CLOCK_TICK_MS);
     return () => clearInterval(timer);
-  }, [detectedAt]);
+  }, [detectedAt, stale]);
 
   const agents = fleet?.agents ?? [];
   if (!fleet || agents.length === 0) {
@@ -65,11 +55,18 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
   // agent types can be resolved against the provider's ordered launch records.
   const roster = agents.map((agent) => ({
     name: agent.name,
-    startedAt: agent.elapsedSeconds === undefined ? null : Date.parse(fleet.detectedAt) - agent.elapsedSeconds * 1000,
+    startedAt:
+      agent.startedAt ??
+      (agent.elapsedSeconds === undefined ? null : Date.parse(fleet.detectedAt) - agent.elapsedSeconds * 1000),
   }));
 
   return (
-    <div aria-label='Subagents' className='ghostex-chat-prompt-card ghostex-chat-agent-fleet' role='group'>
+    <div
+      aria-label='Subagents'
+      className='ghostex-chat-prompt-card ghostex-chat-agent-fleet'
+      role='group'
+      data-stale={stale || undefined}
+    >
       <div className='ghostex-chat-agent-fleet-header'>
         {/* CDXC:SessionChat 2026-09-07 DECISION: User: the title is "Subagents", without a hyphen or all caps. */}
         <span className='ghostex-chat-card-title ghostex-chat-agent-fleet-title'>Subagents</span>
@@ -79,40 +76,64 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
           </span>
         ) : null}
       </div>
-      <div className='ghostex-chat-agent-fleet-rows' role='list'>
+      {stale ? (
+        <div className='ghostex-chat-card-hint' role='status'>
+          Subagent status unavailable
+        </div>
+      ) : null}
+      <div ref={rowsRef} className={`ghostex-chat-agent-fleet-rows${scrollable ? ' scroll-fade-y' : ''}`} role='list'>
         {agents.map((agent, index) => {
-          const selector = `fleet:${JSON.stringify({ agents: roster, index })}`;
-          const transcriptName = agent.task ? `${agent.name}: ${agent.task}` : agent.name;
+          const idle = agent.status === 'idle';
+          const working = !stale && !idle;
+          const selector = agent.id ?? `fleet:${JSON.stringify({ agents: roster, index })}`;
+          const transcriptTarget = {
+            name: agent.task ?? agent.name,
+            selector,
+            agentType: agent.name,
+            task: agent.task,
+            model: agent.model,
+            effort: agent.effort,
+          };
           const elapsed = sessionChatActivityElapsedSeconds(
             {
               detectedAt: fleet.detectedAt,
               ...(agent.elapsedSeconds === undefined ? {} : { elapsedSeconds: agent.elapsedSeconds }),
             },
-            now
+            working ? now : Date.parse(fleet.detectedAt)
           );
           return (
             <div
               className='ghostex-chat-agent-fleet-row'
-              // Claude runs several agents of one type at once, so the name is
-              // not a key. Position is: the block keeps screen order.
-              key={`${index}:${agent.name}`}
+              key={agent.id ?? `${index}:${agent.name}`}
               role='listitem'
+              data-status={stale ? 'unavailable' : idle ? 'idle' : 'working'}
             >
-              <span aria-hidden='true' className='ghostex-chat-agent-fleet-pulse' />
+              <span
+                aria-hidden='true'
+                className='ghostex-chat-agent-fleet-pulse'
+                style={
+                  !working ? { animation: 'none', backgroundColor: 'var(--muted-foreground)', opacity: 0.5 } : undefined
+                }
+              />
               <span className='ghostex-chat-card-content ghostex-chat-agent-fleet-name'>
-                <SessionChatSubagentLink name={transcriptName} selector={selector}>
-                  {agent.name}
+                <SessionChatSubagentLink {...transcriptTarget}>
+                  <SessionChatSubagentModel info={agent} />
                 </SessionChatSubagentLink>
               </span>
               {/* Task and marker share one cell: `+2` reads as belonging to the
                   work on its left, and staying out of the clock's column keeps
                   a marked row aligned with every unmarked one. */}
               <span className='ghostex-chat-agent-fleet-work'>
+                {/* CDXC:SessionChat 2026-09-10 DECISION: User: put the ‣ separator at the start of the status cell so it aligns across subagent rows regardless of model label width. */}
+                {agent.task || (idle && !stale) || agent.nested ? (
+                  <span aria-hidden='true' className='ghostex-chat-card-content shrink-0'>
+                    ‣
+                  </span>
+                ) : null}
+                {idle && !stale ? <span className='ghostex-chat-card-hint'>Idle</span> : null}
                 <span className='ghostex-chat-card-content ghostex-chat-agent-fleet-task'>
                   {agent.task ? (
-                    <SessionChatSubagentLink name={transcriptName} selector={selector}>
-                      {agent.task}
-                    </SessionChatSubagentLink>
+                    <SessionChatSubagentLink {...transcriptTarget}>{agent.task}</SessionChatSubagentLink>
                   ) : (
                     ''
                   )}

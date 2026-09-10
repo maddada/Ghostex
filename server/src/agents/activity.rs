@@ -226,7 +226,7 @@ pub(crate) fn ingest_agent_hook_event(
         return Ok(Value::Object(result));
     }
     if let Some(restarted) =
-        crate::session_chat_fleet_status::record_codex_start(repository, &session, params)?
+        crate::session_chat_fleet_status::record_agent_start(repository, &session, params)?
     {
         session = restarted;
         changed = true;
@@ -601,6 +601,7 @@ pub(crate) fn claim_first_prompt_auto_title(
     runtime_settings.remove("gxserverFirstPromptAutoTitleCancelledAt");
     runtime_settings.remove("gxserverFirstPromptAutoTitleCancelledPrompt");
     runtime_settings.remove("gxserverFirstPromptAutoTitleReason");
+    runtime_settings.remove("gxserverManualTitleGenerationRequestedAt");
     runtime_settings.insert("firstUserMessage".to_string(), json!(prompt));
     runtime_settings.insert(
         "gxserverFirstPromptAutoTitleStatus".to_string(),
