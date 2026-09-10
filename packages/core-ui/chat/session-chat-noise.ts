@@ -20,10 +20,14 @@ import { agentModelCatalogEffortLabel } from '../../shared/agent-model-catalog';
 import { currentAgentModelCatalog } from '../../shared/agent-model-catalog-store';
 import type { SessionChatMessage } from '../../shared/session-chat';
 import { parseSessionChatCommandEnvelope } from './session-chat-command-envelope';
+import { decodeSessionChatEscapedMarkup } from './session-chat-local-command-transcript';
 
 const LEADING_TAG_NAME = /^<([a-z][a-z0-9-]*)(?:[\s>]|$)/;
 const MARKUP_TAG = /<\/?[a-z][a-z0-9-]*(?:\s[^>]*)?>/gi;
-const CODEX_ESCAPED_LOCAL_COMMAND = /^<bash-(?:input|stdout) data-ghostex-escaped="html">/i;
+// Any marker whose payload gxserver escaped: Codex's `!` commands, and the
+// slash commands it archives and replays (session-chat-local-command-transcript).
+const ESCAPED_HARNESS_MARKER =
+  /^<(?:bash-(?:input|stdout)|command-name|local-command-stdout) data-ghostex-escaped="html">/i;
 
 /*
  * /compact's local-command stdout is just a dim "Compacted" wrapped in ANSI
@@ -285,10 +289,10 @@ export function sessionChatMessageText(message: SessionChatMessage): string {
 /** Text left once the harness markup is removed — "" ⇒ nothing to expand. */
 export function sessionChatSuppressedTurnBody(text: string): string {
   const body = text.replace(MARKUP_TAG, '').trim();
-  if (!CODEX_ESCAPED_LOCAL_COMMAND.test(text.trimStart())) {
+  if (!ESCAPED_HARNESS_MARKER.test(text.trimStart())) {
     return body;
   }
-  return body.replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
+  return decodeSessionChatEscapedMarkup(body);
 }
 
 export type SessionChatSuppressedTurn =
@@ -400,6 +404,17 @@ export function isSessionChatHiddenMessage(message: SessionChatMessage): boolean
 export function sessionChatSuppressedTurnLabel(message: SessionChatMessage): string | null {
   const suppressed = classifySessionChatSuppressedTurn(message);
   return suppressed?.kind === 'collapsed' || suppressed?.kind === 'status' ? suppressed.label : null;
+}
+
+/**
+ * CDXC:SessionChat 2026-09-10 DECISION:
+ * User: a slash command the reader sent starts its own turn in the chat summary.
+ * Claude answers each intercepted command with "No response requested.", and
+ * while a command row only continued the turn before it, that reply became the
+ * turn's final message and folded the real answer away under "Worked for".
+ */
+export function isSessionChatCommandTurn(message: SessionChatMessage): boolean {
+  return message.role === 'user' && sessionChatSuppressedTurnLabel(message) === 'Slash command';
 }
 
 export interface SessionChatSuppressedTurnPresentation {

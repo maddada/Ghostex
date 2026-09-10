@@ -71,6 +71,7 @@ import {
   nextSessionChatPendingSendId,
   normalizeSessionChatPendingText,
   pruneSessionChatPendingSends,
+  retireSessionChatMarkersCoveredByLocalCommands,
   SESSION_CHAT_PENDING_SEND_LIMIT,
   sessionChatAppCommandsAsMessages,
   sessionChatCommandMarkersAsMessages,
@@ -1389,10 +1390,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         .map(normalizedSessionChatText)
         .filter(Boolean)
     );
-    const markerMessages = sessionChatCommandMarkersAsMessages(
-      retireSessionChatInterruptMarkers(markers, boundaried),
-      compactionRecords
-    ).filter((message) => message.role !== 'user' || !authoritativeText.has(normalizedSessionChatText(message)));
+    const markerMessages = retireSessionChatMarkersCoveredByLocalCommands(
+      sessionChatCommandMarkersAsMessages(
+        retireSessionChatInterruptMarkers(markers, boundaried),
+        compactionRecords
+      ).filter((message) => message.role !== 'user' || !authoritativeText.has(normalizedSessionChatText(message))),
+      appCommands,
+      boundaried
+    );
     const visibleTerminalStatuses = unreconciledSessionChatTerminalStatuses(terminalStatusMessages, boundaried);
     const tail: SessionChatMessage[] = [
       ...visibleTerminalStatuses,

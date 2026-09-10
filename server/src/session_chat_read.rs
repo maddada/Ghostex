@@ -720,7 +720,33 @@ pub(crate) async fn handle_read_session_chat_http(
                     &mut lifecycle,
                 );
             }
-            let status = if before_offset.is_none() && messages.is_empty() && !has_more {
+            /*
+            CDXC:SessionChat 2026-09-10 DECISION:
+            User: the slash commands he sends from chat must still be shown
+            after a reload. They are replayed from gxserver's own archive as the
+            envelope the CLI would have written, anchored to the transcript row
+            they followed so scroll-back puts them where they happened.
+
+            Selected here, merged below the prompt scan: the interactive prompt
+            state and the question card it drives are read off the CLI's own
+            rows, and a replayed command must not be able to look like an answer
+            to a card the agent is still holding open.
+            */
+            let local_commands =
+                crate::session_chat_local_command::select_session_chat_local_commands(
+                    crate::session_chat_local_command::load_session_chat_local_commands(
+                        &project_id,
+                        &session_id,
+                    ),
+                    &messages,
+                    before_offset.is_none(),
+                    has_more,
+                );
+            let status = if before_offset.is_none()
+                && messages.is_empty()
+                && local_commands.is_empty()
+                && !has_more
+            {
                 "empty"
             } else {
                 "ready"
@@ -743,6 +769,10 @@ pub(crate) async fn handle_read_session_chat_http(
             {
                 result.insert("prompt".to_string(), value);
             }
+            let messages = crate::session_chat_local_command::merge_session_chat_local_commands(
+                messages,
+                &local_commands,
+            );
             result.insert(
                 "messages".to_string(),
                 serde_json::to_value(&messages).unwrap_or(json!([])),

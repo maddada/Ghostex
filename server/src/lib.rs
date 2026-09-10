@@ -74,6 +74,7 @@ pub mod session_chat_grok_blocking;
 pub mod session_chat_hermes;
 pub mod session_chat_hermes_blocking;
 pub mod session_chat_interactive;
+pub mod session_chat_local_command;
 mod session_chat_model_selection;
 pub mod session_chat_notice;
 mod session_chat_notice_progress;

@@ -772,10 +772,15 @@ pub enum SessionChatSendStep {
     GuardCodexInterrupt,
     /// Recheck the transcript pager and cross-client visibility at the front of the queue.
     CloseUnwatchedCodexTranscriptPager,
-    BeginCodexCommandOutput {
+    /// Baseline the screen so the command's own output can be read back off it.
+    /// `durable_id` is set for a slash command the user sent from chat, which is
+    /// archived in `session_chat_local_command.rs`.
+    BeginLocalCommandOutput {
+        agent: Option<String>,
         command: String,
+        durable_id: Option<String>,
     },
-    FinishCodexCommandOutput,
+    FinishLocalCommandOutput,
     /// Revalidate after reaching the front of the send queue, before any dialog input.
     VerifyTerminalDialog {
         agent: String,
@@ -1431,20 +1436,26 @@ async fn run_session_chat_send_worker(
                         break;
                     }
                 }
-                SessionChatSendStep::BeginCodexCommandOutput { command } => {
+                SessionChatSendStep::BeginLocalCommandOutput {
+                    agent,
+                    command,
+                    durable_id,
+                } => {
                     if let Some(screen) = capture_session_terminal_text(&zmx_name).await {
-                        crate::session_chat_app_command::begin_codex_command_output(
+                        crate::session_chat_app_command::begin_local_command_output(
                             &project_id,
                             &session_id,
+                            agent.as_deref(),
                             &command,
+                            durable_id,
                             screen,
                         );
                     }
                 }
-                SessionChatSendStep::FinishCodexCommandOutput => {
+                SessionChatSendStep::FinishLocalCommandOutput => {
                     tokio::time::sleep(Duration::from_millis(250)).await;
                     if let Some(screen) = capture_session_terminal_text(&zmx_name).await {
-                        crate::session_chat_app_command::refresh_codex_command_output(
+                        crate::session_chat_app_command::refresh_local_command_output(
                             &project_id,
                             &session_id,
                             &screen,

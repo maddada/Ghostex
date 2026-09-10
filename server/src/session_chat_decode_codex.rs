@@ -338,16 +338,9 @@ fn codex_event_message(
 }
 
 fn codex_user_shell_marker(tag: &str, body: &str) -> String {
-    let mut escaped = String::with_capacity(body.len());
-    for character in body.chars() {
-        match character {
-            '&' => escaped.push_str("&amp;"),
-            '<' => escaped.push_str("&lt;"),
-            '>' => escaped.push_str("&gt;"),
-            _ => escaped.push(character),
-        }
-    }
-    format!("<{tag} data-ghostex-escaped=\"html\">{escaped}</{tag}>")
+    // Same escaped-markup contract the archived slash commands replay with, so
+    // one client rule decodes both.
+    crate::session_chat_local_command::escaped_marker(tag, body)
 }
 
 /*

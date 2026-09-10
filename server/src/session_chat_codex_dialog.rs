@@ -636,8 +636,10 @@ pub(crate) async fn answer_codex_dialog(
         &target.zmx_name,
         "session-chat-dialog",
         vec![
-            SessionChatSendStep::BeginCodexCommandOutput {
+            SessionChatSendStep::BeginLocalCommandOutput {
+                agent: Some("codex".to_string()),
                 command: dialog.title,
+                durable_id: None,
             },
             SessionChatSendStep::VerifyTerminalDialog {
                 agent: "codex".to_string(),
@@ -645,7 +647,7 @@ pub(crate) async fn answer_codex_dialog(
             },
             SessionChatSendStep::Write(payload),
             SessionChatSendStep::SleepMs(150),
-            SessionChatSendStep::FinishCodexCommandOutput,
+            SessionChatSendStep::FinishLocalCommandOutput,
         ],
     )
     .await
@@ -772,26 +774,8 @@ pub fn codex_command_output(before: &str, after: &str) -> Option<String> {
     }
     let before = history_without_composer(before);
     let after = history_without_composer(after);
-    // Codex repaints old /status cells with refreshed rate-limit timestamps.
-    // Locate the transcript's ending text, rather than requiring its entire
-    // historical prefix to remain byte-identical after a local command.
-    let boundary = (before.len().saturating_sub(16)..before.len()).find_map(|start| {
-        let anchor = &before[start..];
-        if !anchor
-            .iter()
-            .any(|line| line.chars().any(char::is_alphanumeric))
-            || after.len() < anchor.len()
-        {
-            return None;
-        }
-        after
-            .windows(anchor.len())
-            .enumerate()
-            .filter(|(_, window)| *window == anchor)
-            .min_by_key(|(index, _)| index.abs_diff(start))
-            .map(|(index, _)| index + anchor.len())
-    })?;
-    let output = after[boundary..].join("\n").trim().to_string();
+    let output =
+        crate::session_chat_local_command::newly_printed_lines(&before, &after)?.join("\n");
     // A submitted terminal prompt belongs to the JSONL transcript, not this local command.
     let output = output
         .lines()

@@ -606,6 +606,13 @@ export interface SessionChatAppCommand {
   command: string;
   /** Assigned session title; arrives after agent metadata resolves a bare `/rename`. */
   title?: string;
+  /**
+   * The live half of a slash command the USER sent from chat, which gxserver
+   * also archives and replays on the next read. Rendered as the same rows that
+   * archive produces, so the look does not change under the reader when the
+   * replay takes over.
+   */
+  localCommand?: boolean;
   /** ISO-8601 millis. */
   sentAt: string;
 }

@@ -2136,20 +2136,27 @@ pub fn detect_session_chat_terminal_state(
     let terminal = agent
         .zip(screen)
         .and_then(|(agent, capture)| detect_session_chat_selection(agent, &capture.text));
-    if agent == Some(SessionChatOptionAgent::Codex) {
-        if let Some(capture) = screen {
+    if let Some(capture) = screen {
+        if agent == Some(SessionChatOptionAgent::Codex) {
             crate::session_chat_codex_pager::close_codex_transcript_pager_if_unwatched(
                 repository,
                 project_id,
                 session_id,
                 &capture.text,
             );
-            crate::session_chat_app_command::refresh_codex_command_output(
-                project_id,
-                session_id,
-                &capture.text,
-            );
         }
+        /*
+        CDXC:SessionChat 2026-09-10 WHY:
+        Every agent, not only Codex: a command whose result paints after its
+        first line (a picker, a fetch) has nothing but this shared probe to
+        refine the row. It only diffs sessions holding a live baseline, so a
+        session that ran no local command pays nothing.
+        */
+        crate::session_chat_app_command::refresh_local_command_output(
+            project_id,
+            session_id,
+            &capture.text,
+        );
     }
     let notice = screen.and_then(|capture| {
         crate::session_chat_notice::classify_session_chat_terminal_notice(agent_id, &capture.text)
@@ -3416,6 +3423,14 @@ pub(crate) fn schedule_session_chat_option_redetect(
         let mut published_fleet = cached.fleet;
         let mut published_tasks = cached.tasks;
         let mut published_prompt = cached.prompt;
+        /*
+        CDXC:SessionChat 2026-09-10 WHY:
+        Starts empty so the first probe publishes the rows this send created:
+        the send worker's own capture has usually filled a command's output
+        before this burst begins, and nothing else ever pushes it to an open
+        chat — the row used to appear only when switching views forced a read.
+        */
+        let mut published_app_commands = String::new();
         for delay_ms in crate::session_chat_options::SESSION_CHAT_OPTION_REDETECT_DELAYS_MS {
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             let detection = detector
@@ -3452,6 +3467,11 @@ pub(crate) fn schedule_session_chat_option_redetect(
                 published_tasks.as_ref(),
             );
             let prompt_changed = detection.captured && detection.prompt != published_prompt;
+            let app_commands = crate::session_chat_app_command::session_chat_app_commands_identity(
+                &project_id,
+                &session_id,
+            );
+            let app_commands_changed = app_commands != published_app_commands;
             if !options_changed
                 && !options_refreshed
                 && !notice_changed
@@ -3459,9 +3479,11 @@ pub(crate) fn schedule_session_chat_option_redetect(
                 && !fleet_changed
                 && !tasks_changed
                 && !prompt_changed
+                && !app_commands_changed
             {
                 continue;
             }
+            published_app_commands = app_commands;
             if options_changed || options_refreshed {
                 published = detection.options;
             }
@@ -3552,7 +3574,7 @@ pub(crate) fn emit_session_chat_options_state_frame(
     stream.emit_sequenced(
         |seq| {
             let (epoch, _) = stream.current();
-            crate::session_chat::build_session_chat_prompt_state_frame(
+            let mut frame = crate::session_chat::build_session_chat_prompt_state_frame(
                 project_id,
                 session_id,
                 epoch,
@@ -3566,7 +3588,15 @@ pub(crate) fn emit_session_chat_options_state_frame(
                 detected,
                 screen,
                 Some(&queue),
-            )
+            );
+            // The local-command rows a screen probe just refined ride the same
+            // frame the probe publishes, or an open chat never sees them.
+            if let Value::Object(map) = &mut frame {
+                crate::session_chat_app_command::insert_session_chat_app_commands(
+                    map, project_id, session_id,
+                );
+            }
+            frame
         },
         |frame| event_hub.broadcast(frame),
     );
