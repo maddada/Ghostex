@@ -341,7 +341,9 @@ Usage:
   gxserver stop-all  Stop gxserver and kill tracked zmx sessions
   gxserver status    Print gxserver runtime state
   gxserver agent-skills status [skill...] [--json]
-  gxserver agent-skills install <skill...> --source <path> [--json]
+  gxserver agent-skills install <skill...> --source <path> [--offline] [--json]
+  gxserver agent-skills refresh [--json]
+                     Update installed bundled skills from GitHub main
   gxserver setup [--install-root <dir>] [--release-dir <dir>] [--upload-path <file>]
                  [--analytics-role remote|local]
                      Activate an extracted release package (stop old server, link tools).
@@ -402,6 +404,9 @@ async fn run_agent_skills_command(args: Vec<String>) -> Result<()> {
             {
                 params.insert("agentIds".to_string(), json_array(agent_ids.clone()));
             }
+            if parsed.flags.contains("offline") {
+                params.insert("remote".to_string(), Value::Bool(false));
+            }
             if let Some(repository_paths) = parsed.values.get("repository") {
                 params.insert(
                     "repositoryPaths".to_string(),
@@ -421,9 +426,42 @@ async fn run_agent_skills_command(args: Vec<String>) -> Result<()> {
                 print_agent_skill_status(&result);
             }
         }
+        "refresh" => {
+            let result = crate::agent_skills_remote::refresh_installed_bundled_skills(&paths)
+                .map_err(|error| anyhow!("{error}"))?;
+            if parsed.flags.contains("json") {
+                println!("{}", serde_json::to_string_pretty(&result)?);
+            } else {
+                print_agent_skill_refresh(&result);
+            }
+        }
         other => return Err(anyhow!("Unknown gxserver agent-skills command: {other}")),
     }
     Ok(())
+}
+
+fn print_agent_skill_refresh(result: &Value) {
+    let updated = result
+        .get("updated")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let failed = result
+        .get("failed")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    for path in updated.iter().filter_map(Value::as_str) {
+        println!("updated {path}");
+    }
+    for failure in &failed {
+        let skill = failure.get("skill").and_then(Value::as_str).unwrap_or("?");
+        let error = failure.get("error").and_then(Value::as_str).unwrap_or("");
+        eprintln!("failed {skill}: {error}");
+    }
+    if updated.is_empty() && failed.is_empty() {
+        println!("All installed bundled skills already match GitHub main.");
+    }
 }
 
 fn print_agent_skill_status(status: &Value) {
@@ -462,7 +500,13 @@ fn print_agent_skills_help() {
 
 Usage:
   gxserver agent-skills status [skill...] [--repository path] [--json]
-  gxserver agent-skills install <skill...> --source <skills-package-path> [--agent id...] [--json]
+  gxserver agent-skills install <skill...> --source <skills-package-path> [--agent id...] [--offline] [--json]
+  gxserver agent-skills refresh [--json]
+
+  install downloads each skill from GitHub main when it can and falls back to the
+  local package source; --offline skips the download. refresh replaces every
+  installed bundled skill whose files differ from GitHub main (gxserver also does
+  this shortly after it starts).
 "
     );
 }

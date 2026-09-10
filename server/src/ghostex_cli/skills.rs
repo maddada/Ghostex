@@ -200,6 +200,9 @@ fn install_ghostex_agent_skill(
         gxserver_args.push("--agent".to_string());
         gxserver_args.extend(agent_ids);
     }
+    if flags.truthy("offline") {
+        gxserver_args.push("--offline".to_string());
+    }
     if flags.truthy("json") {
         gxserver_args.push("--json".to_string());
         let launch = launchers::resolve_gxserver_cli_launch()?;

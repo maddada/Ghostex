@@ -6,7 +6,7 @@ use std::{
 
 use serde_json::{json, Map, Value};
 
-use crate::{domain::DomainStateError, paths::GxserverPaths};
+use crate::{agent_skills_remote, domain::DomainStateError, paths::GxserverPaths};
 
 pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     /*
@@ -61,11 +61,13 @@ as "Ghostex CLI install failed" because `$ghostex-cli` is the first skill the
 first-launch flow installs. gxserver now copies the bundled skill folders itself
 into exactly the global skill directories that `skills add --global --copy`
 would have written, so an install needs nothing but the app bundle on disk.
-Directory names below mirror the `skills` CLI agent table (universal agents
+Since 2026-09-10 the copied folder comes from GitHub main whenever it can be
+downloaded and verified (agent_skills_remote.rs); the bundle stays the offline
+source. Directory names below mirror the `skills` CLI agent table (universal agents
 resolve to the canonical `~/.agents/skills`).
 */
-const CANONICAL_AGENT_SKILLS_DIR: &str = ".agents/skills";
-const AGENT_SKILL_COPY_EXCLUDED_NAMES: &[&str] = &[".git", "node_modules", ".DS_Store"];
+pub(crate) const CANONICAL_AGENT_SKILLS_DIR: &str = ".agents/skills";
+pub(crate) const AGENT_SKILL_COPY_EXCLUDED_NAMES: &[&str] = &[".git", "node_modules", ".DS_Store"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AgentSkillDiscoveryRoot {
@@ -100,6 +102,22 @@ pub async fn install_agent_skills(
     paths: &GxserverPaths,
     params: &Map<String, Value>,
 ) -> Result<Value, DomainStateError> {
+    let paths = paths.clone();
+    let params = params.clone();
+    tokio::task::spawn_blocking(move || install_agent_skills_blocking(&paths, &params))
+        .await
+        .map_err(|error| DomainStateError {
+            code: "internalError",
+            message: format!("Agent skill install task failed: {error}"),
+        })?
+}
+
+/// Blocking body of `install_agent_skills`: the GitHub download and the folder
+/// copies all block, so the async entry point runs this off the runtime threads.
+fn install_agent_skills_blocking(
+    paths: &GxserverPaths,
+    params: &Map<String, Value>,
+) -> Result<Value, DomainStateError> {
     let package_source =
         normalize_package_source(params.get("packageSource").and_then(Value::as_str))?;
     let skill_names = normalize_agent_skill_names(read_string_array(params, "skillNames")?)?;
@@ -115,10 +133,54 @@ pub async fn install_agent_skills(
     }
     let agent_ids = normalize_agent_skill_agent_ids(read_string_array(params, "agentIds")?);
     let target_roots = agent_skill_install_target_roots(&paths.home_dir, &agent_ids)?;
+    let remote_requested = params
+        .get("remote")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let remote_catalog = (remote_requested && agent_skills_remote::remote_skills_enabled())
+        .then(agent_skills_remote::RemoteSkillsCatalog::fetch);
+    let cache_root = agent_skills_remote::remote_skills_cache_root(paths);
+    let mut remote_errors: Vec<String> = Vec::new();
+    if let Some(Err(error)) = &remote_catalog {
+        remote_errors.push(error.clone());
+    }
     let mut installed_paths = Vec::new();
     let mut summary_lines = Vec::new();
+    let mut skill_sources = Map::new();
     for skill_name in &skill_names {
-        let source_dir = resolve_bundled_skill_source_dir(&package_source, skill_name)?;
+        let remote_dir = match &remote_catalog {
+            Some(Ok(catalog)) if catalog.has_skill(skill_name) => {
+                match catalog.download_skill(skill_name, &cache_root) {
+                    Ok(dir) => Some(dir),
+                    Err(error) => {
+                        remote_errors.push(error);
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+        let source_kind = if remote_dir.is_some() {
+            "github"
+        } else {
+            "bundle"
+        };
+        let source_dir =
+            match remote_dir {
+                Some(dir) => dir,
+                None => resolve_bundled_skill_source_dir(&package_source, skill_name).map_err(
+                    |error| match remote_errors.last() {
+                        Some(remote_error) => DomainStateError {
+                            code: error.code,
+                            message: format!(
+                                "{} The GitHub download also failed: {remote_error}",
+                                error.message
+                            ),
+                        },
+                        None => error,
+                    },
+                )?,
+            };
         let mut installed_count = 0_usize;
         for target_root in &target_roots {
             let destination = target_root.join(skill_name);
@@ -127,9 +189,15 @@ pub async fn install_agent_skills(
                 installed_count += 1;
             }
         }
+        let source_label = if source_kind == "github" {
+            format!("GitHub {}", agent_skills_remote::AGENT_SKILLS_REMOTE_REF)
+        } else {
+            "the app bundle".to_string()
+        };
         summary_lines.push(format!(
-            "Installed {skill_name} into {installed_count} global skill folder(s)."
+            "Installed {skill_name} from {source_label} into {installed_count} global skill folder(s)."
         ));
+        skill_sources.insert(skill_name.clone(), json!(source_kind));
     }
     let install_command =
         describe_agent_skill_install_command(&package_source, &skill_names, &agent_ids);
@@ -140,6 +208,16 @@ pub async fn install_agent_skills(
     status.insert("installCommand".to_string(), json!(install_command));
     status.insert("installedPaths".to_string(), json!(installed_paths));
     status.insert("packageSource".to_string(), json!(package_source));
+    status.insert(
+        "remote".to_string(),
+        json!({
+            "enabled": remote_catalog.is_some(),
+            "errors": remote_errors,
+            "ref": agent_skills_remote::AGENT_SKILLS_REMOTE_REF,
+            "repository": agent_skills_remote::AGENT_SKILLS_REMOTE_REPOSITORY,
+        }),
+    );
+    status.insert("skillSources".to_string(), Value::Object(skill_sources));
     status.insert("stderr".to_string(), json!(""));
     status.insert(
         "stdout".to_string(),
@@ -262,7 +340,7 @@ fn resolve_bundled_skill_source_dir(
 /// `skills add` symlink-mode install) is unlinked rather than followed so the
 /// directory it points at is never deleted. Returns false when the source and
 /// destination are the same folder, which must not be cleaned.
-fn copy_skill_directory_into_place(
+pub(crate) fn copy_skill_directory_into_place(
     source_dir: &Path,
     destination: &Path,
 ) -> Result<bool, DomainStateError> {
@@ -844,7 +922,7 @@ fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
-fn path_string(path: &Path) -> String {
+pub(crate) fn path_string(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }
 

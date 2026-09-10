@@ -296,6 +296,15 @@ Do not add: implementation details, file paths, internal state, debugging and di
 
 The gxserver binary embeds the reference files with `include_str!`, so `ghostex guide` always prints the docs matching the installed CLI; the copies in `~/.agents/skills/ghostex-help` refresh when the skill is reinstalled.
 
+### Bundled agent skills ship from GitHub main, not only from releases
+
+gxserver installs the bundled skills under `skills/` (Ghostex CLI, Ghostex Help, Browser Use, and the rest) by downloading them from this repository's `main` branch, checked against their git blob shas, with the copy inside the app bundle as the offline source. Every gxserver start also refreshes installed skills whose files differ from `main`. Code: `server/src/agent_skills_remote.rs` (download, verification, startup refresh) and `server/src/agent_skills.rs` (install and copy).
+
+- A push to `main` that touches `skills/**` reaches every installed Ghostex on its next start, without a release. Treat skill edits as customer-facing changes and never push a half-finished skill to `main`.
+- A skill must keep working with the CLI verbs of the oldest release still in use. When a skill needs a new verb, say so in the skill text, and prefer `ghostex guide` (embedded in the binary) over copying details into the skill.
+- `bundled_cli_skill_assets` in `apps/desktop/scripts/build-macos-app.sh` still needs every skill name so offline installs and first launch work without a network.
+- `GHOSTEX_AGENT_SKILLS_REMOTE=off` turns the download off. Use it when testing local skill edits from a checkout so a Reinstall does not fetch `main` over them; `gxserver agent-skills install --offline` does the same for one command.
+
 ### Don't write any tests at all except if explicitly asked to do so by the user
 
 ### Never generate fallbacks when the right solution is to actually correct the behavior itself to fix the issue. Fallbacks should be used in rare cases only because they add complexity and hide issues and introduce useless logic.
