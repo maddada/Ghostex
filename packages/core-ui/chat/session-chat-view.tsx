@@ -9,10 +9,9 @@ import { SessionAccountsPanel } from '@/packages/core-ui/accounts/session-panel'
 // the composer while showing. Hosts inject a SessionChatTransport; everything
 // else is derived by useSessionChat.
 
-import { IconBlockquote, IconBrowser, IconCopy, IconExternalLink, IconFolder, IconLoader2 } from '@tabler/icons-react';
+import { IconBlockquote, IconBrowser, IconCopy, IconExternalLink, IconFolder } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, RefObject } from 'react';
-import { Button } from '../../components/ui/button';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -83,6 +82,7 @@ import {
 import { useSessionChat } from './use-session-chat';
 import { useSessionChatWorkingHold } from './use-session-chat-working-hold';
 import { useSessionChatComposerInset } from './use-session-chat-composer-inset';
+import { SessionChatLoadingState } from './session-chat-loading-state';
 
 const INTERACTIVE_TARGET_SELECTOR = [
   'a[href]',
@@ -563,13 +563,10 @@ export function SessionChatView({
   /*
   CDXC:SessionChat 2026-09-04: a prompt Claude handed back to its composer
   comes back into this one, once per id (see session-chat-returned-prompt.ts).
-  Re-runs when the transcript finishes loading, because the composer is not
-  mounted while the view holds the loading state.
   */
   const returnedPrompt = chat.returnedPrompt;
-  const returnedPromptComposerMounted = chat.view.kind !== 'loading';
   useEffect(() => {
-    if (!returnedPrompt || !returnedPromptComposerMounted) {
+    if (!returnedPrompt) {
       return;
     }
     if (hasAppliedSessionChatReturnedPrompt(returnedPrompt.id)) {
@@ -581,7 +578,7 @@ export function SessionChatView({
     }
     markSessionChatReturnedPromptApplied(returnedPrompt.id);
     composer.restoreReturnedPrompt(returnedPrompt.text);
-  }, [returnedPrompt, returnedPromptComposerMounted]);
+  }, [returnedPrompt]);
   const focusComposerAfterTranscriptMenuCloseRef = useRef(false);
   const draftAgentSwitchTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const clearDraftAgentSwitchTimers = useCallback((): void => {
@@ -647,7 +644,7 @@ export function SessionChatView({
       }
     };
   }, [clearDraftAgentSwitchTimers, refreshAfterDraftSwitch, transport]);
-  const accountState = useAccounts(accountsTransport, true, accountsEnabled);
+  const accountState = useAccounts(accountsTransport, true, accountsEnabled, false, chat.sessionAgentId);
   const activeAccount = accountState.data?.accounts.find((a) => a.id === accountState.data?.session?.accountId);
   const initialTranscriptLoading = chat.view.kind === 'loading';
   /*
@@ -878,13 +875,15 @@ export function SessionChatView({
         // Keep the draft intact so a failed stash can be retried.
       });
   }, [hostComposerBridge, refreshStashedPromptCount]);
+  const stashComposerDraftRef = useRef(stashComposerDraft);
+  stashComposerDraftRef.current = stashComposerDraft;
   const handoffComposerDraft = useCallback(async (): Promise<SessionChatComposerHandoff> => {
     const composer = composerRef.current;
     if (!composer) throw new Error('The Chat input is not ready.');
     return composer.handoffDraft();
   }, []);
   useEffect(() => {
-    if (!hostComposerBridge || initialTranscriptLoading) {
+    if (!hostComposerBridge) {
       return;
     }
     return hostComposerBridge.register({
@@ -900,9 +899,9 @@ export function SessionChatView({
       },
       insertPrompt: (content) => composerRef.current?.insertSavedPrompt(content) ?? false,
       appendPrompt: (content) => composerRef.current?.appendText(content) ?? false,
-      requestStash: stashComposerDraft,
+      requestStash: () => stashComposerDraftRef.current(),
     });
-  }, [handoffComposerDraft, hostComposerBridge, initialTranscriptLoading, setPaneFocused, stashComposerDraft]);
+  }, [handoffComposerDraft, hostComposerBridge, setPaneFocused]);
   const reportDraftState = hostComposerBridge?.reportDraftState;
   const reportComposerDraftState = useCallback(
     (empty: boolean) => {
@@ -1053,9 +1052,7 @@ export function SessionChatView({
   const [questionActive, setQuestionActive] = useState(false);
   const diagnosticLogRef = useRef(diagnosticLog);
   diagnosticLogRef.current = diagnosticLog;
-  // Breadcrumbs for the composer-affecting transitions only: a question flip
-  // unmounts the composer, a view-kind change unmounts the whole pane body,
-  // and a prompt-kind change is the raw server signal behind the first two.
+  // Track transcript and question transitions alongside composer focus events.
   const promptKind = chat.prompt?.kind ?? 'none';
   useEffect(() => {
     diagnosticLogRef.current?.('sessionChat.promptKindChanged', { kind: promptKind });
@@ -1548,44 +1545,11 @@ export function SessionChatView({
     }
   }, [addTranscriptTextToChat, transcriptSelection]);
 
-  // The initial read cannot yet distinguish an existing transcript from a
-  // genuinely empty session. Keep that indeterminate phase visually blank so
-  // an existing conversation never flashes the new-session welcome/composer.
-  // Blank is only the FIRST stage though: a read or socket that stalls here
-  // would otherwise leave nothing on screen and no way out but leaving the
-  // session, so the wait becomes visible and then offers a manual recycle.
-  if (initialTranscriptLoading) {
-    return (
-      <div
-        aria-busy='true'
-        className={cn(
-          'ghostex-session-chat-scope flex h-full min-h-0 items-center justify-center bg-background text-foreground [--radius:0.625rem]',
-          theme === 'dark' && 'dark',
-          className
-        )}
-        data-chat-custom-transcript-width={customTranscriptWidthEnabled ? 'true' : 'false'}
-        data-chat-theme={theme}
-        {...(nativeSelectionMenus
-          ? {}
-          : { onContextMenu: (event: MouseEvent<HTMLDivElement>) => event.preventDefault() })}
-      >
-        {loadingStage === 'blank' ? null : (
-          <div className='flex flex-col items-center gap-3 text-muted-foreground text-sm'>
-            <div className='flex items-center gap-2'>
-              <IconLoader2 aria-hidden='true' className='size-4 animate-spin' stroke={2} />
-              <span>Loading conversation…</span>
-            </div>
-            {loadingStage === 'retry' ? (
-              <Button onClick={chat.retry} size='sm' variant='outline'>
-                Retry
-              </Button>
-            ) : null}
-          </div>
-        )}
-      </div>
-    );
-  }
-
+  /*
+  CDXC:SessionChat 2026-09-10 DECISION:
+  User: keep the composer mounted during transcript loading and resyncs; loading feedback belongs in the message area, preserving input and focus.
+  The loading branch must share the composer and its host bridge with every other transcript state.
+  */
   const emptyKind =
     chat.view.kind === 'ready' ? null : chat.view.kind === 'error' ? ('error' as const) : chat.view.kind;
   const bottomCardVisible = noticeCardVisible || interactiveCardVisible;
@@ -1652,7 +1616,9 @@ export function SessionChatView({
                       />
                     </div>
                     <div className='flex min-h-0 flex-1 flex-col'>
-                      {chat.view.kind === 'ready' ? (
+                      {initialTranscriptLoading ? (
+                        <SessionChatLoadingState stage={loadingStage} onRetry={chat.retry} />
+                      ) : chat.view.kind === 'ready' ? (
                         nativeSelectionMenus ? (
                           <div className='relative flex min-h-0 flex-1 select-text' ref={transcriptRef}>
                             <SessionChatMessageList

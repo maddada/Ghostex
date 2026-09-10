@@ -99,7 +99,11 @@ import {
   type SessionChatQueueCapabilities,
 } from './session-chat-queue';
 import type { SessionChatTransport } from './session-chat-transport';
-import { selectSessionChatViewState, type SessionChatViewState } from './session-chat-view-state';
+import {
+  selectSessionChatViewState,
+  sessionChatTranscriptStatusAfterState,
+  type SessionChatViewState,
+} from './session-chat-view-state';
 import { deriveSessionChatWorkingOverride } from './session-chat-working-status';
 
 // Client-side not-found/starting retry patience (upstream chat spec §5.13).
@@ -1072,6 +1076,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           setTranscript(mergerRef.current.list);
         }
         if (event.messages.length > 0) {
+          setServerStatus('ready');
           applySessionChatMergerAppend(mergerRef.current, event.messages);
           // Keep the read window at least as large as what is on screen so a
           // later resync/pagination read cannot answer with less than the
@@ -1096,7 +1101,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         status: event.status,
         working: event.working === true,
       });
-      setServerStatus(event.status);
+      setServerStatus((current) => sessionChatTranscriptStatusAfterState(current, event.status));
       setServerWorking(event.working === true || event.status === 'working');
       if (typeof event.working === 'boolean') {
         setSessionActivityWorking(event.working);
@@ -1433,19 +1438,11 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
 
   const view = selectSessionChatViewState({
     error,
-    hasKnownAgentSession: agentSessionId !== null,
-    /*
-    CDXC:Drafts 2026-08-28:
-    `availableAgents` is the daemon's own draft marker (it is sent for a draft
-    and for nothing else), so its presence is what keeps an agent switch from
-    unmounting this pane. See selectSessionChatViewState.
-    */
-    isDraft: availableAgents !== null,
     messageCount: messages.length,
     status,
   });
-  // Both of these render as "nothing to show yet": 'loading' is the blank hold
-  // (including the working-with-no-messages case), 'starting' the welcome.
+  // 'loading' awaits the initial transcript read; 'starting' keeps the welcome
+  // and composer visible while the follower waits for the first transcript.
   loadingHoldRef.current = view.kind === 'loading' || view.kind === 'starting';
 
   // --- Actions ----------------------------------------------------------------
