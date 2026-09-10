@@ -74,6 +74,36 @@ const mockCatalog: AgentsHubCatalogMessage = {
     hooks: [],
     mds: [
       {
+        description: 'Shared instructions and best-practice markdown linked by agent profiles.',
+        files: [
+          {
+            content: 'Follow the instructions in main.md.',
+            id: 'shared-agents',
+            language: 'markdown',
+            name: 'AGENTS.md',
+            path: '/Users/madda/.agents/AGENTS.md',
+          },
+          {
+            content: '# Shared instructions\n\nInstructions used by every agent profile.',
+            id: 'shared-main',
+            language: 'markdown',
+            name: 'main.md',
+            path: '/Users/madda/.agents/main.md',
+          },
+          {
+            content: '# Best practices\n\nProject workflow guidance.',
+            id: 'shared-best-practices',
+            language: 'markdown',
+            name: 'best-practices.md',
+            path: '/Users/madda/.agents/best-practices.md',
+          },
+        ],
+        id: 'md-shared-agents',
+        name: 'Shared agent markdown',
+        path: '/Users/madda/.agents',
+        profiles: [],
+      },
+      {
         description: 'CLAUDE.md files owned by Claude profiles.',
         files: [
           {
@@ -472,6 +502,10 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Skills: Story = {};
+
+export const MarkdownFiles: Story = {
+  render: () => <AgentsHubModalStory initialTab='mds' />,
+};
 
 export const ProfileTooltip: Story = {
   render: () => (

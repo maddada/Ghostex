@@ -463,7 +463,6 @@ function GroupList({
   vscode: WebviewApi;
 }) {
   const groups = useFilteredGroups(groupsByTab, activeTab, query);
-  const expandable = activeTab !== 'mds';
 
   if (groups.length === 0) {
     return (
@@ -485,30 +484,25 @@ function GroupList({
          * carry their path, description, and profile icons and the list stays
          * as tall as an expanded one.
          */
-        const isCollapsed = expandable && !isExpanded;
+        const isCollapsed = !isExpanded;
         const primaryFile = group.files[0]!;
 
         return (
           <section className={cn('agents-hub-group', isActiveGroup && 'is-active')} key={group.id}>
             <button
+              aria-expanded={isExpanded}
               className='agents-hub-group-main'
               onClick={() => {
-                if (expandable) {
-                  onToggleExpanded(group.id);
-                }
+                onToggleExpanded(group.id);
                 onSelectFile(primaryFile.id);
               }}
               type='button'
             >
               <span className='agents-hub-group-title-row'>
-                {expandable ? (
-                  isExpanded ? (
-                    <IconChevronDown data-icon='inline-start' />
-                  ) : (
-                    <IconChevronRight data-icon='inline-start' />
-                  )
+                {isExpanded ? (
+                  <IconChevronDown data-icon='inline-start' />
                 ) : (
-                  <IconFile data-icon='inline-start' />
+                  <IconChevronRight data-icon='inline-start' />
                 )}
                 <span className='agents-hub-group-title'>{group.name}</span>
                 {!isCollapsed ? (
@@ -525,7 +519,7 @@ function GroupList({
               ) : null}
             </button>
             {!isCollapsed ? <ProfileRow profiles={group.profiles} vscode={vscode} /> : null}
-            {expandable && isExpanded ? (
+            {isExpanded ? (
               <div className='agents-hub-file-list'>
                 {group.files.map((file) => (
                   <button
