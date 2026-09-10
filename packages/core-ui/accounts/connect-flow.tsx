@@ -5,13 +5,14 @@ import { SettingsInput } from '../settings-modal/fields';
 import type { AccountProvider, AccountSetupJob, AgentAccount } from '@/packages/shared/agent-accounts';
 import { getAccountsConnections } from './transport';
 import { accountSetupOwner } from './setup-monitor';
-import { AccountText, useAccountText } from './account-text';
+import { AccountText, useAccountText, useHideAccountEmails } from './account-text';
 import { AppTooltip } from '../app-tooltip';
 
 export function AccountConnectFlow({ machineId, provider, account, initialJob, onComplete }: {
   machineId: string; provider: AccountProvider; account?: AgentAccount; initialJob?: AccountSetupJob; onComplete?: () => void;
 }) {
   const accountText = useAccountText();
+  const hideEmails = useHideAccountEmails();
   const [email, setEmail] = useState(account?.email ?? '');
   const [consent, setConsent] = useState(account?.registered === true);
   const [job, setJob] = useState<AccountSetupJob | undefined>(initialJob);
@@ -65,11 +66,11 @@ export function AccountConnectFlow({ machineId, provider, account, initialJob, o
         <Button type='submit' variant='outline' size='sm' disabled={!code.trim()}>Send code</Button>
       </form>
     </> : <>
-      <label className='gx-account-field'>Email<SettingsInput type='email' disabled={Boolean(account)} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete='email' /></label>
+      <label className='gx-account-field'>Email<SettingsInput type={hideEmails ? 'password' : 'email'} disabled={Boolean(account)} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete={hideEmails ? 'off' : 'email'} /></label>
       {!account?.registered && <label className='gx-account-consent'><Checkbox checked={consent} onCheckedChange={setConsent} /><span>Share conversations between my {provider === 'claude' ? 'Claude' : 'Codex'} accounts.</span></label>}
       <AppTooltip content={<code>{accountText(loginCommand)}</code>}><Button variant='secondary' disabled={starting || !consent || !email.includes('@')} onClick={() => void start()}>{starting ? 'Starting sign-in…' : job?.status === 'failed' ? 'Try again' : account ? 'Reconnect account' : 'Add account'}</Button></AppTooltip>
     </>}
-    {(error || job?.error) && <p role='alert'>{error || job?.error}</p>}
+    {(error || job?.error) && <p role='alert'><AccountText text={error || job?.error || ''} /></p>}
     {(terminal || job?.status === 'failed') && job?.output && <pre className='gx-account-terminal-output'><AccountText text={job.output} /></pre>}
   </div>;
 }

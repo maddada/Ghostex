@@ -99,7 +99,7 @@ export function AgentLauncherMenuItems({
             {error && (
               <>
                 <p className='gx-account-launcher-hint' role='alert'>
-                  {error}
+                  <AccountText text={error} />
                 </p>
                 <button
                   className={rowClass}

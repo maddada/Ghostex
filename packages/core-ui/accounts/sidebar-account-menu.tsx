@@ -64,7 +64,7 @@ export function SidebarAccountMenu({
       <div className='session-context-menu-section'>
         {error && (
           <>
-            <p className='session-saved-account-message' role='alert'>{error}</p>
+            <p className='session-saved-account-message' role='alert'><AccountText text={error} /></p>
             <button className='session-context-menu-item' role='menuitem' disabled={busy}
               onClick={() => void request({ operation: 'session', refresh: true })}>Try again</button>
           </>

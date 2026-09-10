@@ -174,7 +174,7 @@ export function AccountsSettingsSection({
           <SettingsListItem detail='Connect to a computer to manage its accounts.' title='No computer connected' />
         ) : null}
         {connection && error ? (
-          <SettingsListItem detail={error} status='warning' title='Accounts could not be read'>
+          <SettingsListItem detail={<AccountText text={error} />} status='warning' title='Accounts could not be read'>
             <Button
               onClick={() => void request({ operation: 'list', refresh: true })}
               size='sm'
@@ -347,9 +347,7 @@ function AccountManager({
                             </span>
                             {account.email !== account.name || account.usageError ? (
                               <span className='block truncate text-[13px] font-normal text-muted-foreground'>
-                                {account.usageError ?? (
-                                  <AccountText text={account.email || 'Saved login unavailable'} />
-                                )}
+                                <AccountText text={account.usageError ?? (account.email || 'Saved login unavailable')} />
                               </span>
                             ) : null}
                           </span>
@@ -499,6 +497,7 @@ function DefaultAccountRow({
   onChange: (accountId: string | null) => void;
   value: string;
 }) {
+  const formatAccountText = useAccountText();
   const id = useId();
   return (
     <SettingRow
@@ -509,7 +508,7 @@ function DefaultAccountRow({
       <SettingsSelect
         disabled={busy}
         disabledReason='Accounts are being updated.'
-        items={accounts.map((account) => ({ label: account.name, value: account.id }))}
+        items={accounts.map((account) => ({ label: <AccountText text={account.name} />, value: account.id }))}
         onValueChange={(next) => onChange(next || null)}
         value={value}
       >
@@ -519,7 +518,7 @@ function DefaultAccountRow({
         <SettingsSelectContent className='settings-list-select-content'>
           <SelectGroup>
             {accounts.map((account) => (
-              <SelectItem key={account.id} value={account.id} label={account.name}>
+              <SelectItem key={account.id} value={account.id} label={formatAccountText(account.name)}>
                 <AccountLogo provider={account.provider} slot={account.selector} />
                 <AccountText text={account.name} />
               </SelectItem>
@@ -547,6 +546,7 @@ function AccountEditor({
   close: () => void;
 }) {
   const hideEmails = useHideAccountEmails();
+  const formatAccountText = useAccountText();
   const id = useId();
   const [name, setName] = useState(account.name);
   const [indicator, setIndicator] = useState(account.indicator ?? '');
@@ -618,7 +618,7 @@ function AccountEditor({
           <SettingsSelect
             items={accounts
               .filter((other) => other.id !== account.id)
-              .map((other) => ({ label: `Slot ${other.selector} ${other.name}`, value: other.id }))}
+              .map((other) => ({ label: <AccountText text={`Slot ${other.selector} ${other.name}`} />, value: other.id }))}
             onValueChange={(value) => setSwapTarget(value ?? '')}
             value={swapTarget}
           >
@@ -630,7 +630,7 @@ function AccountEditor({
                 {accounts
                   .filter((other) => other.id !== account.id)
                   .map((other) => (
-                    <SelectItem key={other.id} value={other.id} label={`Slot ${other.selector} ${other.name}`}>
+                    <SelectItem key={other.id} value={other.id} label={formatAccountText(`Slot ${other.selector} ${other.name}`)}>
                       Slot {other.selector} · <AccountText text={other.name} />
                     </SelectItem>
                   ))}
@@ -721,6 +721,7 @@ function AccountSetup({
   request: Mutation;
   close: () => void;
 }) {
+  const formatAccountText = useAccountText();
   const id = useId();
   const [selected, setSelected] = useState(
     () =>
@@ -754,7 +755,7 @@ function AccountSetup({
             <SettingsSelect
               items={[
                 { label: 'Sign in to a new account', value: 'new' },
-                ...available.map((a) => ({ label: a.name || a.email, value: a.id })),
+                ...available.map((a) => ({ label: <AccountText text={a.name || a.email} />, value: a.id })),
               ]}
               onValueChange={(value) => setSelected(value ?? 'new')}
               value={selected}
@@ -766,7 +767,7 @@ function AccountSetup({
                 <SelectGroup>
                   <SelectItem value='new'>Sign in to a new account</SelectItem>
                   {available.map((a) => (
-                    <SelectItem key={a.id} value={a.id} label={a.name || a.email}>
+                    <SelectItem key={a.id} value={a.id} label={formatAccountText(a.name || a.email)}>
                       <AccountLogo provider={provider} slot={a.selector} />
                       <AccountText text={a.name || a.email} />
                     </SelectItem>
@@ -785,7 +786,7 @@ function AccountSetup({
             >
               <Switch checked={consent} id={`${id}-consent`} onCheckedChange={setConsent} />
             </SettingRow>
-            <SettingsListItem title={`Add ${accountText(account)}`}>
+            <SettingsListItem title={<>Add <AccountText text={account.name || account.email} /></>}>
               <Button
                 disabled={busy || !consent}
                 onClick={async () => {
@@ -819,8 +820,4 @@ function AccountSetup({
       {body}
     </div>
   );
-}
-
-function accountText(account: AgentAccount) {
-  return account.name || account.email;
 }

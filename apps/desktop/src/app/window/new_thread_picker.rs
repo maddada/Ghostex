@@ -3,7 +3,7 @@
 //! It mirrors the project-header agent dropdown: every agent with its account count and chat badge, the last-used agent first and preselected, typing filters, Up/Down move, Enter starts, Tab or Right on Claude or Codex opens that provider's account list (Left, Backspace on an empty query, or Esc goes back), Esc closes. The highlighted row uses the sidebar's focused-session chrome and is never bolded.
 //! SEE-ALSO: apps/desktop/src/app/new_thread_picker_lifecycle.rs (open, close, data), packages/core-ui/new-thread-palette.tsx (web), packages/core-ui/accounts/agent-launcher-menu.tsx (the dropdown this mirrors).
 use crate::app::helpers::*;
-use crate::app::titlebar::account_usage::account_display_name;
+use crate::app::titlebar::account_usage::{account_display_name, account_display_text};
 use crate::*;
 use gpui::{ScrollHandle, SharedString};
 use gpui_component::Sizable as _;
@@ -1132,7 +1132,7 @@ impl GpuiNewThreadPickerWindow {
                 }
                 if let Some(error) = &self.accounts_error {
                     if self.accounts.is_none() {
-                        children.push(Self::render_hint_text(error.clone()));
+                        children.push(Self::render_hint_text(account_display_text(error)));
                     }
                 }
                 for (position, row) in rows.iter().enumerate() {

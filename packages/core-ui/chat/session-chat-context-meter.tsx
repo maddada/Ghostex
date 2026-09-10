@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../components/ui/popover';
 import type { SessionChatContextUsage } from '../../shared/session-chat';
 import { AppTooltip } from '../app-tooltip';
+import { AccountText } from '../accounts/account-text';
 import type { SessionChatContextDetailGroup } from './session-chat-context-details';
 
 export interface SessionChatContextMeterUsage {
@@ -235,7 +236,9 @@ export function SessionChatContextMeter({
                   {group.items.map((item) => (
                     <div className='ghostex-chat-context-details-row' key={item.id}>
                       <span className='ghostex-chat-context-details-key'>{item.label}</span>
-                      <span className='ghostex-chat-context-details-value'>{item.value}</span>
+                      <span className='ghostex-chat-context-details-value'>
+                        <AccountText text={item.value} />
+                      </span>
                     </div>
                   ))}
                 </div>

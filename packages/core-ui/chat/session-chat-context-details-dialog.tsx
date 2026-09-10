@@ -22,6 +22,7 @@ import { Switch } from '@/packages/components/ui/switch';
 import { cn } from '@/packages/components/utils';
 import type { SessionChatTheme } from '@/packages/shared/session-chat';
 import { AppTooltip } from '../app-tooltip';
+import { AccountText, useAccountText } from '../accounts/account-text';
 import { postAppModalHostMessage } from '../app-modal-host-bridge';
 import { createAppToastRequest } from '@/packages/shared/app-toast-contract';
 import type { ContextDetailStatus, ContextDetailsAgent } from './session-chat-context-details-agents';
@@ -325,6 +326,7 @@ function ContextDetailOptionRow({
   shown: boolean;
   starred: boolean;
 }) {
+  const formatAccountText = useAccountText();
   const kind = `session-chat-context-detail:${group}`;
   const sortable = useSortable({
     accept: kind,
@@ -363,9 +365,9 @@ function ContextDetailOptionRow({
       </div>
       <div
         className='max-w-[13rem] shrink-0 truncate text-[11px] text-muted-foreground tabular-nums'
-        title={sample ?? undefined}
+        title={sample === null ? undefined : formatAccountText(sample)}
       >
-        {sample ?? '—'}
+        {sample === null ? '\u2014' : <AccountText text={sample} />}
       </div>
       <AppTooltip content={starred ? 'Remove from the status line' : 'Show under the chat box'} side='top'>
         <Button

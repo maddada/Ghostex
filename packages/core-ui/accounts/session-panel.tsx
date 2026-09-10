@@ -79,7 +79,7 @@ export function SessionAccountsPanel({
       </div>
       {error && (
         <div className='gx-account-error' role='alert'>
-          {error}
+          <AccountText text={error} />
         </div>
       )}
       {!data ? (
@@ -90,7 +90,7 @@ export function SessionAccountsPanel({
         <>
           {session.recovery && (
             <div className='gx-account-recovery' role='status'>
-              <strong>{session.recovery.reason}</strong>
+              <strong><AccountText text={session.recovery.reason} /></strong>
               {session.recovery.nextAttemptAt && (
                 <p>
                   Next attempt: {new Date(session.recovery.nextAttemptAt).toLocaleString()} · Attempt{' '}
@@ -116,7 +116,7 @@ export function SessionAccountsPanel({
                   <p><AccountText text={current?.email ?? ''} /></p>
                 </div>
               </div>
-              {current?.usageError && <p>{current.usageError}</p>}
+              {current?.usageError && <p><AccountText text={current.usageError} /></p>}
               {current?.usage.length ? (
                 <UsageBars windows={current.usage} />
               ) : (

@@ -4,6 +4,7 @@
 // items because the middle dot already separates the parts inside one value.
 
 import { Fragment } from 'react';
+import { AccountText } from '../accounts/account-text';
 import { createAppToastRequest } from '../../shared/app-toast-contract';
 import { postAppModalHostMessage } from '../app-modal-host-bridge';
 import { AppTooltip } from '../app-tooltip';
@@ -19,6 +20,7 @@ function copyStatusLineItem(copy: { text: string; label: string }): void {
   });
 }
 
+/** CDXC:AgentProviders 2026-09-10 DECISION: Hide emails also applies to the chat status line, context meter details, and Context details dialog previews, including hover text. */
 export function SessionChatStatusLine({ items }: { items: readonly SessionChatContextDetailItem[] }) {
   if (items.length === 0) {
     return null;
@@ -39,12 +41,14 @@ export function SessionChatStatusLine({ items }: { items: readonly SessionChatCo
                 onClick={() => copyStatusLineItem(item.copy!)}
                 type='button'
               >
-                {item.value}
+                <AccountText text={item.value} />
               </button>
             </AppTooltip>
           ) : (
             <AppTooltip content={item.label} side='top'>
-              <span className='ghostex-chat-status-line-item'>{item.value}</span>
+              <span className='ghostex-chat-status-line-item'>
+                <AccountText text={item.value} />
+              </span>
             </AppTooltip>
           )}
         </Fragment>

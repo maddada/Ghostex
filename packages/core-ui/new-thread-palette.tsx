@@ -288,7 +288,7 @@ export function NewThreadPalette({
               {error && (
                 <>
                   <p className='gx-account-launcher-hint' role='alert'>
-                    {error}
+                    <AccountText text={error} />
                   </p>
                   <CommandItem
                     className='new-thread-palette-row'

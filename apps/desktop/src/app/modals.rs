@@ -2014,6 +2014,7 @@ impl GhostexGpuiApp {
             .unwrap_or(false);
         let account_privacy_script =
             format!("window.ghostexSetHideAccountEmails?.({hide_account_emails});undefined;");
+        self.sync_titlebar_account_privacy(cx);
         for surface in self.agents_chat_surfaces.values().chain(
             self.parked_agents_chat_runtimes_by_project
                 .values()

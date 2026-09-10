@@ -51,29 +51,43 @@ fn icon(codex: bool) -> Arc<gpui::Image> {
 /// The account's name as the user wants it shown: masked when Settings hides
 /// account emails. Shared by the titlebar account popup and the New Thread picker.
 pub(crate) fn account_display_name(account: &Value) -> String {
-    let name = text(account, "name");
+    account_display_text(text(account, "name"))
+}
+
+/// CDXC:AgentProviders 2026-09-10 WHY: Account errors can include email addresses too; mask each address while preserving the surrounding explanation in native pickers and usage popups.
+pub(crate) fn account_display_text(value: &str) -> String {
     let hidden = shared_settings::shared_sidebar_settings_snapshot()
         .object()
         .get("hideAccountEmails")
         .and_then(Value::as_bool)
         == Some(true);
-    if hidden {
-        match name.split_once('@') {
-            Some((local, _)) => format!(
-                "{}•••{}@••••••.•••",
-                local.chars().next().unwrap_or('•'),
-                local.chars().last().unwrap_or('•')
-            ),
-            None => name.to_string(),
-        }
-    } else {
-        name.to_string()
+    if !hidden {
+        return value.to_string();
     }
+    value
+        .split_inclusive(char::is_whitespace)
+        .map(|part| {
+            let token = part.trim_end_matches(char::is_whitespace);
+            let whitespace = &part[token.len()..];
+            match token.split_once('@') {
+                Some((local, domain)) if !local.is_empty() && !domain.is_empty() => {
+                    let mut characters = local.chars();
+                    let first = characters.next().unwrap();
+                    let last = characters.last().map(|c| c.to_string()).unwrap_or_default();
+                    format!("{first}•••{last}@••••••.•••{whitespace}")
+                }
+                _ => part.to_string(),
+            }
+        })
+        .collect()
 }
 
 fn popup_account(account: &Value) -> Value {
     let mut account = account.clone();
     account["displayName"] = json!(account_display_name(&account));
+    if let Some(error) = account["usageError"].as_str() {
+        account["usageError"] = json!(account_display_text(error));
+    }
     account
 }
 
@@ -118,6 +132,35 @@ fn badge_lines(account: &Value) -> Vec<String> {
 }
 
 impl GhostexGpuiApp {
+    pub(crate) fn sync_titlebar_account_privacy(&self, cx: &mut gpui::Context<Self>) {
+        let Some(state) = self
+            .titlebar_extension_popup
+            .as_ref()
+            .filter(|state| state.account)
+        else {
+            return;
+        };
+        let Some(panel) = &state.panel else {
+            return;
+        };
+        let Some(account) = self
+            .titlebar_accounts
+            .iter()
+            .find(|account| text(account, "titlebarKey") == state.id.as_str())
+        else {
+            return;
+        };
+        let script = format!(
+            "window.ghostexUpdateAccountUsage?.({});",
+            popup_account(account)
+        );
+        panel.update(cx, |panel, cx| {
+            panel.surface.update(cx, |surface, _| {
+                surface.execute_app_owned_script(&script);
+            });
+        });
+    }
+
     pub(crate) fn update_titlebar_account_from_ui(
         &mut self,
         message: &Value,
