@@ -10,12 +10,16 @@ use chrono::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 use uuid::Uuid;
 
-const FILE_LIST_MAX_ENTRIES: usize = 1_200;
+/// CDXC:Docs 2026-09-10 WHY:
+/// Older screenshots exhausted the 1,200-entry project budget before newer date folders were scanned.
+/// Match the desktop budget and fail explicitly at a limit so a partial tree cannot look complete.
+/// SEE-ALSO: apps/desktop/src/app/helpers/os_cli/process_and_constants.rs.
+const FILE_LIST_MAX_ENTRIES: usize = 20_000;
 const FILE_LIST_MAX_DEPTH: usize = 8;
 /*
 CDXC:Docs 2026-08-09:
-A mounted Docs directory is a notes tree, not a repo, so it gets its own far
-larger bounds. They are still bounds: a directory pointed at a home folder must
+A mounted Docs directory is a notes tree with a bounded walk.
+A directory pointed at a home folder must
 fail loudly naming the cap instead of walking forever or returning a tree that
 silently stops.
 */
@@ -795,7 +799,7 @@ fn project_root_file_entries(root: &Path, context: DocsContext<'_>) -> Result<Ve
     let roots = scan_roots(root, context.additional_docs_folders);
     for relative_path in &roots {
         if entries.len() >= FILE_LIST_MAX_ENTRIES {
-            break;
+            return Err(docs_scan_cap_error());
         }
         let Some(directory) = project_directory(root, relative_path) else {
             continue;
@@ -812,11 +816,6 @@ fn project_root_file_entries(root: &Path, context: DocsContext<'_>) -> Result<Ve
     }
     append_root_artifacts(&mut entries, root, &mut scanned_directory_entries)?;
     for relative_path in &roots {
-        if entries.len() >= FILE_LIST_MAX_ENTRIES
-            || scanned_directory_entries >= FILE_LIST_MAX_ENTRIES
-        {
-            break;
-        }
         let Some(directory) = project_directory(root, relative_path) else {
             continue;
         };
@@ -1001,7 +1000,11 @@ fn append_docs_tree_entries(
 }
 
 fn docs_scan_cap_error() -> String {
-    "Docs contains too many directory entries to list safely.".to_string()
+    format!("Project Docs exceeds the scan limit of {FILE_LIST_MAX_ENTRIES} files and folders.")
+}
+
+fn docs_scan_depth_cap_error() -> String {
+    format!("Project Docs nests deeper than {FILE_LIST_MAX_DEPTH} folders.")
 }
 
 fn docs_tree_entry_cap_error() -> String {
@@ -1060,7 +1063,7 @@ fn append_root_artifacts(
     children.sort_by_key(|child| child.file_name());
     for child in children {
         if entries.len() >= FILE_LIST_MAX_ENTRIES {
-            break;
+            return Err(docs_scan_cap_error());
         }
         let name = child.file_name().to_string_lossy().to_string();
         if name == ".DS_Store" || !is_root_artifact(&name) {
@@ -1091,18 +1094,15 @@ fn append_file_entries(
     depth: usize,
     scanned_directory_entries: &mut usize,
 ) -> Result<(), String> {
-    if entries.len() >= FILE_LIST_MAX_ENTRIES
-        || *scanned_directory_entries >= FILE_LIST_MAX_ENTRIES
-        || depth > FILE_LIST_MAX_DEPTH
-    {
-        return Ok(());
-    }
     let mut children = bounded_directory_entries(
         directory,
         scanned_directory_entries,
         FILE_LIST_MAX_ENTRIES,
         docs_scan_cap_error,
     )?;
+    if depth > FILE_LIST_MAX_DEPTH && !children.is_empty() {
+        return Err(docs_scan_depth_cap_error());
+    }
     children.sort_by(|left, right| {
         let left_is_dir = left.metadata().is_ok_and(|metadata| metadata.is_dir());
         let right_is_dir = right.metadata().is_ok_and(|metadata| metadata.is_dir());
@@ -1114,7 +1114,7 @@ fn append_file_entries(
     let mut directories = Vec::new();
     for child in children {
         if entries.len() >= FILE_LIST_MAX_ENTRIES {
-            break;
+            return Err(docs_scan_cap_error());
         }
         let name = child.file_name().to_string_lossy().to_string();
         if name == ".DS_Store" {
@@ -1145,7 +1145,6 @@ fn append_file_entries(
             && !child
                 .file_type()
                 .is_ok_and(|file_type| file_type.is_symlink())
-            && depth < FILE_LIST_MAX_DEPTH
         {
             directories.push((child.path(), relative_path));
         }

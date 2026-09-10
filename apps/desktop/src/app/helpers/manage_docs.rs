@@ -1331,9 +1331,13 @@ pub(crate) fn manage_project_root_file_entries(
     walked (bounded), so the Docs sidebar never becomes a broad repo browser.
     */
     let mut entries = Vec::new();
+    let mut scanned_directory_entries = 0;
     let scan_roots =
         manage_docs_project_scan_root_relative_paths(root, context.additional_docs_folders_text);
     for relative_path in &scan_roots {
+        if entries.len() >= MANAGE_FILE_LIST_MAX_ENTRIES {
+            return Err(manage_docs_scan_cap_error());
+        }
         let Some(directory) = manage_project_directory(root, relative_path) else {
             continue;
         };
@@ -1350,15 +1354,23 @@ pub(crate) fn manage_project_root_file_entries(
             "size": serde_json::Value::Null,
         }));
     }
-    manage_append_project_root_artifact_file_entries(&mut entries, root)?;
+    manage_append_project_root_artifact_file_entries(
+        &mut entries,
+        root,
+        &mut scanned_directory_entries,
+    )?;
     for relative_path in &scan_roots {
-        if entries.len() >= MANAGE_FILE_LIST_MAX_ENTRIES {
-            break;
-        }
         let Some(directory) = manage_project_directory(root, relative_path) else {
             continue;
         };
-        manage_append_project_file_entries(&mut entries, root, &directory, relative_path, 1)?;
+        manage_append_project_file_entries(
+            &mut entries,
+            root,
+            &directory,
+            relative_path,
+            1,
+            &mut scanned_directory_entries,
+        )?;
     }
     Ok(entries)
 }
@@ -1483,14 +1495,16 @@ pub(crate) fn manage_unavailable_docs_extra_root_entry(
 
 /// The scan budget the gxserver walk enforces, so a folder full of files Docs
 /// does not render costs the same on both sides instead of being free here.
-pub(crate) fn manage_bounded_docs_tree_children(
+pub(crate) fn manage_bounded_docs_children(
     directory: &Path,
     scanned_directory_entries: &mut usize,
+    limit: usize,
+    limit_error: fn() -> String,
 ) -> Result<Vec<fs::DirEntry>, String> {
     let mut children = Vec::new();
     for child in fs::read_dir(directory).map_err(|_| "Could not list project files.".to_string())? {
-        if *scanned_directory_entries >= MANAGE_DOCS_TREE_MAX_ENTRIES {
-            return Err(manage_docs_tree_entry_cap_error());
+        if *scanned_directory_entries >= limit {
+            return Err(limit_error());
         }
         *scanned_directory_entries += 1;
         if let Ok(child) = child {
@@ -1511,7 +1525,12 @@ pub(crate) fn manage_append_docs_tree_entries(
     if depth > MANAGE_DOCS_TREE_MAX_DEPTH {
         return Err(manage_docs_tree_depth_cap_error());
     }
-    let mut children = manage_bounded_docs_tree_children(directory, scanned_directory_entries)?;
+    let mut children = manage_bounded_docs_children(
+        directory,
+        scanned_directory_entries,
+        MANAGE_DOCS_TREE_MAX_ENTRIES,
+        manage_docs_tree_entry_cap_error,
+    )?;
     children.sort_by(|left, right| {
         let left_is_dir = left
             .metadata()
@@ -1596,21 +1615,31 @@ pub(crate) fn manage_docs_tree_depth_cap_error() -> String {
     )
 }
 
+pub(crate) fn manage_docs_scan_cap_error() -> String {
+    format!(
+        "Project Docs exceeds the scan limit of {MANAGE_FILE_LIST_MAX_ENTRIES} files and folders."
+    )
+}
+
+pub(crate) fn manage_docs_scan_depth_cap_error() -> String {
+    format!("Project Docs nests deeper than {MANAGE_FILE_LIST_MAX_DEPTH} folders.")
+}
+
 pub(crate) fn manage_append_project_root_artifact_file_entries(
     entries: &mut Vec<serde_json::Value>,
     root: &Path,
+    scanned_directory_entries: &mut usize,
 ) -> Result<(), String> {
-    if entries.len() >= MANAGE_FILE_LIST_MAX_ENTRIES {
-        return Ok(());
-    }
-    let mut children = fs::read_dir(root)
-        .map_err(|_| "Could not list project files.".to_string())?
-        .filter_map(Result::ok)
-        .collect::<Vec<_>>();
+    let mut children = manage_bounded_docs_children(
+        root,
+        scanned_directory_entries,
+        MANAGE_FILE_LIST_MAX_ENTRIES,
+        manage_docs_scan_cap_error,
+    )?;
     children.sort_by_key(|child| child.file_name());
     for child in children {
         if entries.len() >= MANAGE_FILE_LIST_MAX_ENTRIES {
-            return Ok(());
+            return Err(manage_docs_scan_cap_error());
         }
         let name = child.file_name().to_string_lossy().to_string();
         if name == ".DS_Store" || !manage_is_root_artifact_file_relative_path(&name) {
@@ -1646,14 +1675,17 @@ pub(crate) fn manage_append_project_file_entries(
     directory: &Path,
     relative_directory_path: &str,
     depth: usize,
+    scanned_directory_entries: &mut usize,
 ) -> Result<(), String> {
-    if entries.len() >= MANAGE_FILE_LIST_MAX_ENTRIES || depth > MANAGE_FILE_LIST_MAX_DEPTH {
-        return Ok(());
+    let mut children = manage_bounded_docs_children(
+        directory,
+        scanned_directory_entries,
+        MANAGE_FILE_LIST_MAX_ENTRIES,
+        manage_docs_scan_cap_error,
+    )?;
+    if depth > MANAGE_FILE_LIST_MAX_DEPTH && !children.is_empty() {
+        return Err(manage_docs_scan_depth_cap_error());
     }
-    let mut children = fs::read_dir(directory)
-        .map_err(|_| "Could not list project files.".to_string())?
-        .filter_map(Result::ok)
-        .collect::<Vec<_>>();
     children.sort_by(|left, right| {
         let left_is_dir = left
             .metadata()
@@ -1671,7 +1703,7 @@ pub(crate) fn manage_append_project_file_entries(
     let mut directories = Vec::new();
     for child in children {
         if entries.len() >= MANAGE_FILE_LIST_MAX_ENTRIES {
-            return Ok(());
+            return Err(manage_docs_scan_cap_error());
         }
         let name = child.file_name().to_string_lossy().to_string();
         if name == ".DS_Store" {
@@ -1710,14 +1742,20 @@ pub(crate) fn manage_append_project_file_entries(
                 .file_type()
                 .map(|file_type| file_type.is_symlink())
                 .unwrap_or(false)
-            && depth < MANAGE_FILE_LIST_MAX_DEPTH
         {
             directories.push((child.path(), relative_path));
         }
     }
 
     for (directory, relative_path) in directories {
-        manage_append_project_file_entries(entries, root, &directory, &relative_path, depth + 1)?;
+        manage_append_project_file_entries(
+            entries,
+            root,
+            &directory,
+            &relative_path,
+            depth + 1,
+            scanned_directory_entries,
+        )?;
     }
     Ok(())
 }

@@ -300,13 +300,16 @@ pub(crate) fn file_url(path: &std::path::Path) -> String {
     format!("file:///{}", normalized.trim_start_matches('/'))
 }
 
-pub(crate) const MANAGE_FILE_LIST_MAX_ENTRIES: usize = 1_200;
+/// CDXC:Docs 2026-09-10 WHY:
+/// The 1,200-entry budget was exhausted by older screenshots in maestro_swift, leaving newer date folders empty in the sidebar.
+/// Project scans use the same entry budget as mounted Docs trees and report exhausted limits instead of returning partial listings.
+/// SEE-ALSO: server/src/project_docs.rs.
+pub(crate) const MANAGE_FILE_LIST_MAX_ENTRIES: usize = 20_000;
 pub(crate) const MANAGE_FILE_LIST_MAX_DEPTH: usize = 8;
 /*
 CDXC:Docs 2026-08-09:
 Mirrors `server/src/project_docs.rs`: a mounted Docs directory is a notes
-tree, not a repo, so it gets its own far larger bounds. They are still bounds,
-and hitting one labels that mount with the cap instead of returning a tree that
+tree with a bounded walk. Hitting a limit labels that mount with the cap instead of returning a tree that
 silently stopped.
 */
 pub(crate) const MANAGE_DOCS_TREE_MAX_ENTRIES: usize = 20_000;
