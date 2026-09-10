@@ -93,6 +93,7 @@ struct Style {
     faint: bool,
     inverse: bool,
     foreground_rgb: Option<[u16; 3]>,
+    background_rgb: Option<[u16; 3]>,
 }
 
 struct StyledLine {
@@ -134,20 +135,23 @@ fn styled_lines(screen: &str) -> Vec<StyledLine> {
                                     7 => style.inverse = true,
                                     27 => style.inverse = false,
                                     30..=37 | 39 | 90..=97 => style.foreground_rgb = None,
+                                    40..=47 | 49 | 100..=107 => style.background_rgb = None,
                                     22 => {
                                         style.bold = false;
                                         style.faint = false;
                                     }
                                     38 | 48 | 58 => {
-                                        if values[index] == 38 {
-                                            style.foreground_rgb =
-                                                if values.get(index + 1) == Some(&2) {
-                                                    values
-                                                        .get(index + 2..index + 5)
-                                                        .and_then(|rgb| rgb.try_into().ok())
-                                                } else {
-                                                    None
-                                                };
+                                        let rgb = if values.get(index + 1) == Some(&2) {
+                                            values
+                                                .get(index + 2..index + 5)
+                                                .and_then(|rgb| rgb.try_into().ok())
+                                        } else {
+                                            None
+                                        };
+                                        match values[index] {
+                                            38 => style.foreground_rgb = rgb,
+                                            48 => style.background_rgb = rgb,
+                                            _ => {}
                                         }
                                         index += match values.get(index + 1) {
                                             Some(2) => 4,
@@ -171,6 +175,44 @@ fn styled_lines(screen: &str) -> Vec<StyledLine> {
             }
         })
         .collect()
+}
+
+/// CDXC:AgentScreenDetection 2026-09-10 WHY:
+/// Codex 0.154.0 paints grayscale Braille particles over the composer's blank cells, including its padding and the gap after the prompt marker.
+/// Those non-faint decorations made an empty composer fail clear verification. Only remove particles with the live composer's background and explicit grayscale foreground, preserving ordinary typed Braille and styled input.
+fn clear_codex_composer_particles(lines: &mut [StyledLine]) {
+    let Some((start, background)) = lines.iter().enumerate().rev().find_map(|(i, line)| {
+        let (ch, style) = line.chars.iter().find(|(ch, _)| !ch.is_whitespace())?;
+        (matches!(ch, '›' | '»') && style.bold && !style.faint)
+            .then_some(style.background_rgb)
+            .flatten()
+            .map(|background| (i, background))
+    }) else {
+        return;
+    };
+    for line in &mut lines[start..] {
+        if !line
+            .chars
+            .iter()
+            .any(|(_, style)| style.background_rgb == Some(background))
+        {
+            break;
+        }
+        for (ch, style) in &mut line.chars {
+            if ('\u{2800}'..='\u{28ff}').contains(ch)
+                && !style.bold
+                && !style.faint
+                && !style.inverse
+                && style.background_rgb == Some(background)
+                && style
+                    .foreground_rgb
+                    .is_some_and(|[r, g, b]| r == g && g == b)
+            {
+                *ch = ' ';
+            }
+        }
+        line.text = line.chars.iter().map(|(ch, _)| *ch).collect();
+    }
 }
 
 /// Input only, excluding transcript and footer. Call with a VT capture when proving a draft empty.
@@ -208,7 +250,10 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
             }
         });
     }
-    let lines = styled_lines(screen);
+    let mut lines = styled_lines(screen);
+    if agent == "codex" {
+        clear_codex_composer_particles(&mut lines);
+    }
     let plain: Vec<_> = lines.iter().map(|line| line.text.clone()).collect();
     let region = match agent {
         "claude" | "openclaude" => rule_input_region(&plain, '❯')?,
