@@ -660,15 +660,15 @@
   color: color-mix(in srgb, var(--picker-accent) 65%, white);
 }
 
-/* CDXC:SessionChat 2026-09-09 DECISION: Disabled effort cards stay dimmed but opaque in front of the connecting line; dim their contents and colors instead of the whole card. */
+/* CDXC:SessionChat 2026-09-10 DECISION: Disabled effort cards, icons and labels stay fully opaque in front of the connecting line. Use muted colors only; this replaces dimming their contents with opacity. */
 .ghostex-model-picker .model-picker-effort[data-unavailable] {
-  border-color: #71717b20;
+  border-color: #191a1e;
   background: linear-gradient(145deg, #0b0c0e, #08090b 90%);
-  filter: saturate(0);
+  color: #555862;
   box-shadow: none;
 }
 .ghostex-model-picker .model-picker-effort[data-unavailable] > * {
-  opacity: 0.28;
+  color: inherit;
 }
 .model-picker-line-horizontal,
 .model-picker-axis-left,
