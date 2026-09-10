@@ -1,5 +1,36 @@
 # Changelog
 
+## 9.2.0 - 2026-09-10
+
+- New Features
+
+  - Slash commands you send from chat now stay in the conversation after a reload, together with their output. Long output expands when clicked, and model, effort, Fast mode and compaction results keep their status rows, thanks to @banozz.
+  - Bundled skills (Ghostex CLI, Ghostex Help, Browser Use and the rest) update themselves from GitHub, so a skill fix reaches you without waiting for a release. Installed skills refresh each time Ghostex starts; offline installs use the copy inside the app.
+  - Park selected: select several sessions and park or unpark them together. Parking is on by default now, and its settings no longer hide behind Show Advanced.
+  - The Extensions page has a Titlebar account usage section: star the Claude and Codex accounts whose usage you want to see in the titlebar.
+
+- Major Improvements
+
+  - The Subagents card knows what each subagent is really doing. Claude and Codex children are read from their own transcripts, so idle ones stay listed with paused clocks, each shows its model and effort (Opus 5 High), hovering shows the agent type, and clicking opens that exact transcript. When Ghostex cannot verify the roster it says so instead of animating stale work.
+  - The chat box stays put while a conversation loads or resyncs. Loading shows in the message area, so a draft save or a status change can no longer take the box away while you type.
+  - Hide emails now hides them everywhere: the status line under the chat box, context details, account dropdowns, sign-in fields, error messages, the New Thread picker and the titlebar usage popup.
+  - Session titles no longer get stuck on generating. Interrupted title jobs are retired when Ghostex restarts, and Codex's own thread name finishes the wait.
+
+- Minor Improvements
+
+  - The Agents Hub MDs tab groups your shared agent markdown, and every group expands to its files.
+  - Docs scans up to 20,000 files and folders per project, up from 1,200, and tells you when a project exceeds that instead of quietly showing an incomplete tree.
+  - The titlebar's project name no longer collapses when there is room for it.
+  - Disabled effort cards in the model picker stay opaque, in muted colors.
+
+- Stabilization
+
+  - The Help button and skill installs work again: 9.1.0 did not bundle the Ghostex Help skill, so Install and Help failed with "Ghostex Help install failed".
+  - Sidebar menus close on the click that lands outside them, even when the pointer is already back over the sidebar, and the search button closes an open menu.
+  - Codex 0.154's animated composer particles no longer make an empty chat box look like it has text.
+  - Switching a draft's agent reloads its accounts, so the account menu cannot keep showing the previous provider's list.
+  - The compaction hint reads "Send a message to queue it after compaction".
+
 ## 9.1.0 - 2026-09-10
 
 - New Features
