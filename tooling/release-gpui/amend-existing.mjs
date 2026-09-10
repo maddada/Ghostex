@@ -276,18 +276,12 @@ if (spawnSync('git', ['merge-base', '--is-ancestor', tagCommit, sourceCommit]).s
 const provenanceName = releaseProvenanceAssetName(version);
 const liveProvenanceAsset = (liveRelease.assets ?? []).find((asset) => asset.name === provenanceName);
 if (!liveProvenanceAsset) throw new Error(`${liveRelease.url} carries no ${provenanceName}`);
+// CDXC:Release 2026-09-10 WHY: `gh release view --json assets` reports GraphQL node ids (RA_...), which the REST asset endpoint rejects. Download by name instead.
 const liveProvenance = validateReleaseProvenance(
   JSON.parse(
-    run(
-      'gh',
-      [
-        'api',
-        `repos/maddada/Ghostex/releases/assets/${liveProvenanceAsset.id}`,
-        '-H',
-        'Accept: application/octet-stream',
-      ],
-      { capture: true }
-    )
+    run('gh', ['release', 'download', tag, '--repo', 'maddada/Ghostex', '--pattern', provenanceName, '--output', '-'], {
+      capture: true,
+    })
   )
 );
 

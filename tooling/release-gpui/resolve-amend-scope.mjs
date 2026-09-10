@@ -83,7 +83,8 @@ function liveProductIds(version) {
       `${release.url} has no ${provenanceName}; same-version amend requires a change-aware provenance record`
     );
   }
-  const raw = run('gh', ['api', `repos/${repo}/releases/assets/${asset.id}`, '-H', 'Accept: application/octet-stream']);
+  // CDXC:Release 2026-09-10 WHY: `gh release view --json assets` reports GraphQL node ids (RA_...), which the REST asset endpoint rejects; 9.2.0's first amend failed on that. Download by name instead.
+  const raw = run('gh', ['release', 'download', tag, '--repo', repo, '--pattern', provenanceName, '--output', '-']);
   const provenance = validateReleaseProvenance(JSON.parse(raw));
   return Object.keys(provenance.products);
 }
