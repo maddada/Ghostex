@@ -4,6 +4,10 @@
 
 import type { SessionChatAppCommand, SessionChatMessage } from '../../shared/session-chat';
 import { parseSessionChatCommandEnvelope } from './session-chat-command-envelope';
+import {
+  SESSION_CHAT_ESCAPED_MARKUP_ATTRIBUTE,
+  sessionChatLocalCommandTexts,
+} from './session-chat-local-command-transcript';
 
 export const SESSION_CHAT_PENDING_SEND_LIMIT = 8;
 export const SESSION_CHAT_COMMAND_MARKER_LIMIT = 8;
@@ -553,6 +557,34 @@ export function sessionChatAppCommandsAsMessages(
     })
   );
   return commands.flatMap((entry) => {
+    /*
+     * CDXC:SessionChat 2026-09-10 WHY:
+     * Checked before the output rows, not only after them. gxserver archives
+     * every slash command the user sends and replays it into the messages as a
+     * `<command-name>` envelope, so from the first read carrying the archived
+     * row onwards this live acknowledgement IS that row — rendering both would
+     * show one command twice.
+     */
+    if (recorded.has(normalizeSessionChatPendingText(entry.command))) {
+      return [];
+    }
+    /*
+     * A command the user sent from chat renders as the same two rows the
+     * archive replays. Ghostex's own sends and Codex's dialog answers keep the
+     * surfaces below: those are not commands the reader typed.
+     */
+    if (entry.localCommand) {
+      const rows: SessionChatMessage[] = sessionChatLocalCommandTexts(entry.command, entry.output).map(
+        (text, index) => ({
+          blocks: [{ text, type: 'text' }],
+          id: index === 0 ? `app-command-local:${entry.id}` : `app-command-local:${entry.id}:output`,
+          role: 'user',
+          source: 'client',
+          timestamp: (Date.parse(entry.sentAt) || 0) + index,
+        })
+      );
+      return rows;
+    }
     if (entry.goal) {
       return [
         {
@@ -582,9 +614,6 @@ export function sessionChatAppCommandsAsMessages(
           timestamp: Date.parse(entry.sentAt) || null,
         },
       ];
-    }
-    if (recorded.has(normalizeSessionChatPendingText(entry.command))) {
-      return [];
     }
     const commandMatch = entry.command.trim().match(/^\/(?:rename|name|title)(?:\s+(.+))?$/is);
     if (commandMatch) {
@@ -617,6 +646,41 @@ export function sessionChatAppCommandsAsMessages(
         timestamp: Date.parse(entry.sentAt) || null,
       },
     ];
+  });
+}
+
+/*
+ * CDXC:SessionChat 2026-09-10 WHY:
+ * A command typed from chat still gets its instant client marker: the composer
+ * cannot know whether the daemon it talks to archives commands. Once the
+ * daemon's own row for that command is on screen — the live local-command
+ * acknowledgement, or the archived envelope a read replays — the marker is the
+ * same fact twice, drawn as a user bubble beside a `Slash command` row.
+ */
+export function retireSessionChatMarkersCoveredByLocalCommands(
+  markerMessages: readonly SessionChatMessage[],
+  appCommands: readonly SessionChatAppCommand[],
+  messages: readonly SessionChatMessage[]
+): SessionChatMessage[] {
+  const covered = new Set(
+    appCommands.filter((entry) => entry.localCommand).map((entry) => normalizeSessionChatPendingText(entry.command))
+  );
+  for (const message of messages) {
+    const text = message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('\n');
+    if (!text.includes(SESSION_CHAT_ESCAPED_MARKUP_ATTRIBUTE)) {
+      continue;
+    }
+    const envelope = parseSessionChatCommandEnvelope(text);
+    if (envelope) {
+      covered.add(normalizeSessionChatPendingText(`${envelope.name} ${envelope.args}`));
+    }
+  }
+  if (covered.size === 0) {
+    return [...markerMessages];
+  }
+  return markerMessages.filter((message) => {
+    const text = message.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('\n');
+    return message.role !== 'user' || !covered.has(normalizeSessionChatPendingText(text));
   });
 }
 

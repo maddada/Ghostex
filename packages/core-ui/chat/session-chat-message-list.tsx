@@ -91,6 +91,7 @@ import { SessionChatGoalCard } from './session-chat-goal-card';
 import { SessionChatAgentMessageCard, parseSessionChatAgentMessage } from './session-chat-agent-message-card';
 import {
   dropSessionChatHiddenMessages,
+  isSessionChatCommandTurn,
   sessionChatSuppressedTurnLabel,
   sessionChatSuppressedTurnPresentation,
   type SessionChatStatusRow,
@@ -1044,7 +1045,8 @@ function summaryModeTurns(
     // not started its own response yet: it stays inside the working turn's
     // activeWork instead of opening a turn whose reply would never come.
     const isGenuineUserMessage =
-      message.role === 'user' && message.queued !== true && sessionChatSuppressedTurnLabel(message) === null;
+      (message.role === 'user' && message.queued !== true && sessionChatSuppressedTurnLabel(message) === null) ||
+      isSessionChatCommandTurn(message);
     if (isGenuineUserMessage) {
       current = { active: false, activeWork: [], final: null, user: message };
       turns.push(current);
@@ -1111,7 +1113,7 @@ function finalAssistantMessageIds(messages: readonly SessionChatMessage[], isWor
     // by the reader: the agent is still mid-response on both sides of it.
     // Ending the turn there put a copy affordance under commentary that the
     // agent then kept building on.
-    if (sessionChatSuppressedTurnLabel(message) !== null) {
+    if (sessionChatSuppressedTurnLabel(message) !== null && !isSessionChatCommandTurn(message)) {
       return;
     }
     if (message.role === 'user') {

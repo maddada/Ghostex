@@ -19,9 +19,16 @@ So the app records what IT sent. This is deliberately a short-lived
 ACKNOWLEDGEMENT, not an archive entry: the point is "Ghostex just did this",
 which stops being worth a row once the agent's own record shows up (the client
 drops ours when it finds the matching transcript envelope) or once enough time
-has passed that nobody is still wondering. That also keeps the two agents from
-disagreeing about history — nothing here is ever persisted, so a reload shows
-the transcript and only the transcript.
+has passed that nobody is still wondering. Nothing here is persisted, so a
+reload shows the transcript and only the transcript, and the two agents cannot
+disagree about history.
+
+CDXC:SessionChat 2026-09-10 WHY:
+That last sentence is now true of THIS store only. Commands the user sends from
+chat are archived by session_chat_local_command.rs and replayed into the
+messages on every read, because the user asked for those to survive a reload;
+this store still holds only the live half, including the live half of those
+(`local_command`), and still expires.
 
 The store is keyed by (project, session) and swept lazily on read, the same
 shape as the terminal-notice watchdog map in session_chat_notice.rs.
@@ -58,6 +65,18 @@ pub struct SessionChatAppCommand {
     pub output: Option<String>,
     /// The parsed goal cell behind a Codex `/goal` command's output.
     pub goal: Option<crate::session_chat_codex_goal::SessionChatCodexGoal>,
+    /*
+    CDXC:SessionChat 2026-09-10 WHY:
+    The row is the live half of a command the USER sent from chat, which is
+    archived in session_chat_local_command.rs and replays from there on the next
+    read. Clients render this one as the same two rows the archive produces, so
+    the look does not change under the reader when the archive takes over, and
+    the archived id travels with it so the settled output lands on the same row.
+    */
+    pub local_command: bool,
+    durable_id: Option<String>,
+    /// Whose screen the baseline was captured from, for the output diff.
+    screen_agent: Option<String>,
     screen_baseline: Option<String>,
     /// RFC3339 millis, for display ordering only.
     pub sent_at: String,
@@ -79,6 +98,9 @@ impl SessionChatAppCommand {
         }
         if let Some(title) = self.title.as_deref() {
             map.insert("title".to_string(), json!(title));
+        }
+        if self.local_command {
+            map.insert("localCommand".to_string(), json!(true));
         }
         map.insert("sentAt".to_string(), json!(self.sent_at));
         Value::Object(map)
@@ -150,6 +172,9 @@ fn record_session_chat_app_command_inner(
         title: app_command_title(command),
         output: None,
         goal: None,
+        local_command: false,
+        durable_id: None,
+        screen_agent: None,
         screen_baseline: None,
         sent_at,
         title_metadata_baseline,
@@ -172,10 +197,19 @@ fn app_command_title(command: &str) -> Option<String> {
 /// CDXC:SessionChat 2026-09-05 WHY:
 /// Codex's local commands do not enter its transcript, and asynchronous commands such as /mcp repaint after their initial loading line.
 /// Retain one command's screen baseline until the next send so the shared screen probe can update the same result row.
-pub(crate) fn begin_codex_command_output(
+///
+/// CDXC:SessionChat 2026-09-10 WHY:
+/// Every agent now takes this path, not only Codex: Claude records a transcript
+/// envelope for a handful of its commands and nothing at all for the rest
+/// (`/rename` included), so the screen is the only place its result exists.
+/// `durable_id` is the archived row in session_chat_local_command.rs that this
+/// capture's settled output belongs to.
+pub(crate) fn begin_local_command_output(
     project_id: &str,
     session_id: &str,
+    agent: Option<&str>,
     command: &str,
+    durable_id: Option<String>,
     screen: String,
 ) {
     let Ok(mut guard) = store().lock() else {
@@ -200,6 +234,9 @@ pub(crate) fn begin_codex_command_output(
         title: None,
         output: Some(String::new()),
         goal: None,
+        local_command: durable_id.is_some(),
+        durable_id,
+        screen_agent: agent.map(str::to_string),
         screen_baseline: Some(screen),
         sent_at,
         title_metadata_baseline: None,
@@ -209,7 +246,7 @@ pub(crate) fn begin_codex_command_output(
     prune(rows, now);
 }
 
-pub(crate) fn stop_codex_command_output(project_id: &str, session_id: &str) {
+pub(crate) fn stop_local_command_output(project_id: &str, session_id: &str) {
     if let Ok(mut guard) = store().lock() {
         if let Some(rows) = guard.get_mut(&(project_id.to_string(), session_id.to_string())) {
             for row in rows {
@@ -219,21 +256,61 @@ pub(crate) fn stop_codex_command_output(project_id: &str, session_id: &str) {
     }
 }
 
-pub(crate) fn refresh_codex_command_output(project_id: &str, session_id: &str, screen: &str) {
-    let Ok(mut guard) = store().lock() else {
-        return;
-    };
-    let Some(rows) = guard.get_mut(&(project_id.to_string(), session_id.to_string())) else {
-        return;
-    };
-    prune(rows, Instant::now());
+pub(crate) fn refresh_local_command_output(project_id: &str, session_id: &str, screen: &str) {
+    let mut settled: Vec<(String, String)> = Vec::new();
+    {
+        let Ok(mut guard) = store().lock() else {
+            return;
+        };
+        let Some(rows) = guard.get_mut(&(project_id.to_string(), session_id.to_string())) else {
+            return;
+        };
+        prune(rows, Instant::now());
+        refresh_rows(rows, screen, &mut settled);
+    }
+    // Outside the store lock: the archive writes to disk.
+    for (durable_id, output) in settled {
+        crate::session_chat_local_command::attach_session_chat_local_command_output(
+            project_id,
+            session_id,
+            &durable_id,
+            &output,
+        );
+    }
+}
+
+fn refresh_rows(
+    rows: &mut [SessionChatAppCommand],
+    screen: &str,
+    settled: &mut Vec<(String, String)>,
+) {
     for row in rows.iter_mut().filter(|row| row.screen_baseline.is_some()) {
-        let Some(output) = crate::session_chat_codex_dialog::codex_command_output(
+        let Some(output) = crate::session_chat_local_command::session_chat_local_command_output(
+            row.screen_agent.as_deref(),
+            &row.command,
             row.screen_baseline.as_deref().unwrap_or_default(),
             screen,
         ) else {
             continue;
         };
+        /*
+        CDXC:SessionChat 2026-09-10 WHY:
+        Outside Codex a later capture may only GROW the result. Claude's panels
+        (`/status`) close into a one-line dismissal and its notices repaint under
+        the result, so "the newest diff wins" replaced a full status panel with a
+        stray footer line. Codex keeps last-wins: its `/mcp` repaints in place.
+        */
+        if row.screen_agent.as_deref() != Some("codex")
+            && row
+                .output
+                .as_deref()
+                .is_some_and(|current| !current.is_empty() && !output.starts_with(current))
+        {
+            continue;
+        }
+        if let Some(durable_id) = row.durable_id.as_deref() {
+            settled.push((durable_id.to_string(), output.clone()));
+        }
         if crate::session_chat_codex_goal::command_is_codex_goal(&row.command) {
             if let Some(cell) = crate::session_chat_codex_goal::parse_codex_goal_cell(&output) {
                 row.output = Some(cell.text);

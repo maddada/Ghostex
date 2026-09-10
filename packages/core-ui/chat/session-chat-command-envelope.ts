@@ -7,9 +7,15 @@
 // transcript records must be converted back into readable user turns.
 
 import type { SessionChatMessage } from '../../shared/session-chat';
+import {
+  decodeSessionChatEscapedMarkup,
+  SESSION_CHAT_ESCAPED_MARKUP_ATTRIBUTE,
+} from './session-chat-local-command-transcript';
 
-const COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/;
-const COMMAND_ARGS = /<command-args>([\s\S]*?)<\/command-args>/;
+// The optional attribute list is gxserver's replayed envelope (see
+// session-chat-local-command-transcript.ts): same tags, marked escaped.
+const COMMAND_NAME = /<command-name(?:\s[^>]*)?>([\s\S]*?)<\/command-name>/;
+const COMMAND_ARGS = /<command-args(?:\s[^>]*)?>([\s\S]*?)<\/command-args>/;
 
 export interface SessionChatCommandEnvelope {
   name: string;
@@ -26,7 +32,10 @@ export function parseSessionChatCommandEnvelope(text: string): SessionChatComman
   if (!name) {
     return null;
   }
-  return { args: COMMAND_ARGS.exec(trimmed)?.[1]?.trim() ?? '', name };
+  const decode = trimmed.includes(SESSION_CHAT_ESCAPED_MARKUP_ATTRIBUTE)
+    ? decodeSessionChatEscapedMarkup
+    : (value: string): string => value;
+  return { args: decode(COMMAND_ARGS.exec(trimmed)?.[1]?.trim() ?? ''), name: decode(name) };
 }
 
 export function surfaceSkillInvocationUserTurns(

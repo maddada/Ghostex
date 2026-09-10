@@ -819,20 +819,50 @@ pub(crate) async fn send_session_chat_message_with_draft(
         image_paths,
         dismiss_claude_settings,
     );
-    let capture_codex_output = terminal_agent.as_deref() == Some("codex")
-        && crate::session_chat_codex_dialog::command_has_local_output(text);
-    crate::session_chat_app_command::stop_codex_command_output(
+    /*
+    CDXC:SessionChat 2026-09-10 DECISION:
+    User: a slash command sent from chat must show up in chat for every agent,
+    with its output, and still be there after a reload.
+
+    Codex keeps its curated list because its commands print into a repainting
+    TUI and the list is what says which ones print at all. Every other agent
+    takes any line-leading slash command: Claude records a transcript envelope
+    for a handful of its own and nothing for the rest, so guessing which ones
+    print would just recreate the gap this closes. The archived row is written
+    before the send, so the trail exists even if the capture finds nothing.
+    Commands whose result the transcript already records are left out: their
+    status pill (or compaction row) is the one result row they get.
+    */
+    let local_command = crate::session_chat_local_command::parse_session_chat_local_command(text)
+        .filter(|(command, _)| {
+            !crate::session_chat_local_command::transcript_records_command_result(command)
+        });
+    let capture_local_output = if terminal_agent.as_deref() == Some("codex") {
+        crate::session_chat_codex_dialog::command_has_local_output(text)
+    } else {
+        local_command.is_some()
+    };
+    let durable_id = local_command.as_ref().and_then(|_| {
+        crate::session_chat_local_command::record_session_chat_local_command(
+            &target.project_id,
+            &target.session_id,
+            text,
+        )
+    });
+    crate::session_chat_app_command::stop_local_command_output(
         &target.project_id,
         &target.session_id,
     );
-    if capture_codex_output {
+    if capture_local_output {
         steps.insert(
             0,
-            crate::session_chat_send::SessionChatSendStep::BeginCodexCommandOutput {
+            crate::session_chat_send::SessionChatSendStep::BeginLocalCommandOutput {
+                agent: terminal_agent.clone(),
                 command: text.to_string(),
+                durable_id,
             },
         );
-        steps.push(crate::session_chat_send::SessionChatSendStep::FinishCodexCommandOutput);
+        steps.push(crate::session_chat_send::SessionChatSendStep::FinishLocalCommandOutput);
     }
     crate::session_chat_returned_prompt::record_session_chat_send_started(
         &target.project_id,
@@ -1020,7 +1050,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
     // burst covers it for chat-sent and terminal-typed commands alike
     // (CDXC:AgentScreenDetection), and a second publisher of the same
     // activity only let a later follower frame overwrite what this one showed.
-    if is_option_readback_command || capture_codex_output {
+    if is_option_readback_command || capture_local_output {
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,
