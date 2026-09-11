@@ -17,11 +17,11 @@ use std::time::Instant;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
+use crate::app::context_menu::GpuiContextMenu;
 use anyhow::Result;
 use gpui::Pixels;
 use gpui::Window;
 use gpui_component::WindowExt;
-use crate::app::context_menu::GpuiContextMenu;
 use gpui_component::notification::Notification;
 
 use crate::app::actions::*;

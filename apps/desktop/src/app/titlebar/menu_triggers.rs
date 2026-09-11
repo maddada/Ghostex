@@ -15,10 +15,10 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
+use crate::app::context_menu::GpuiContextMenu;
 use gpui::Bounds;
 use gpui::Pixels;
 use gpui::Window;
-use crate::app::context_menu::GpuiContextMenu;
 
 use crate::app::actions::*;
 use crate::app::consts::*;

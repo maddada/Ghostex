@@ -13,6 +13,7 @@ use std::time::SystemTime;
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
+use crate::app::context_menu::GpuiContextMenu;
 use crate::terminal_surface_host::NativeTerminalSurfaceHost;
 use crate::terminal_surface_lifecycle::NativeTerminalSurfaceLifecycleState;
 use gpui::ClipboardItem;
@@ -20,7 +21,6 @@ use gpui::Entity;
 use gpui::Pixels;
 use gpui::Window;
 use gpui_component::WindowExt;
-use crate::app::context_menu::GpuiContextMenu;
 use gpui_component::notification::Notification;
 
 use crate::app::actions::*;
