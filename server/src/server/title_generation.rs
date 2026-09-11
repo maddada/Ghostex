@@ -1714,7 +1714,9 @@ pub(crate) async fn generate_first_prompt_session_title(
 
 pub(crate) fn normalize_title_generation_agent(value: Option<&str>) -> String {
     match value {
-        Some("cursor" | "claude" | "grok" | "custom") => value.unwrap().to_string(),
+        Some("cursor" | "claude" | "grok" | "pi" | "antigravity" | "custom") => {
+            value.unwrap().to_string()
+        }
         _ => "codex".to_string(),
     }
 }
@@ -1731,6 +1733,8 @@ pub(crate) fn read_title_generation_command(
         "cursor" => Ok("cursor-agent".to_string()),
         "claude" => Ok("claude".to_string()),
         "grok" => Ok("grok".to_string()),
+        "pi" => Ok("pi".to_string()),
+        "antigravity" => Ok("agy".to_string()),
         "custom" => Err("Custom title generation command is not configured.".to_string()),
         _ => Ok("codex".to_string()),
     }
@@ -1764,6 +1768,14 @@ pub(crate) fn build_title_generation_command(
         }
         "grok" => format!(
             "{command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single {}",
+            quote_shell_arg(prompt)
+        ),
+        "pi" => format!(
+            "{command} --no-session -p {}",
+            quote_shell_arg(prompt)
+        ),
+        "antigravity" => format!(
+            "{command} --print --output-format text --dangerously-skip-permissions {}",
             quote_shell_arg(prompt)
         ),
         "custom" => create_here_doc_command(command, delimiter, prompt),

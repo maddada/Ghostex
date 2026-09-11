@@ -896,9 +896,16 @@ export function FirstLaunchSetupModal({
   const [isInstallingSelectedSkills, setIsInstallingSelectedSkills] = useState(false);
   const [pendingSkillInstallIds, setPendingSkillInstallIds] = useState<readonly BundledGhostexAgentSkillId[]>();
   const [skillInstallError, setSkillInstallError] = useState<string>();
-  const titleAndCommitAgents = installedCliAgents.filter((agent) =>
-    SESSION_TITLE_GENERATION_AGENT_OPTIONS.some((option) => option.value !== 'custom' && option.value === agent.agentId)
-  );
+  const effectiveSelectedAgentIds =
+    selectedHookAgentIds ?? new Set(installedCliAgents.map((agent) => agent.agentId));
+  const titleAndCommitAgents = installedCliAgents.filter((agent) => {
+    const status = hookStatusByAgentId.get(agent.agentId)?.status;
+    const connected = status === 'installed' || status === 'notRequired';
+    return (
+      (connected || effectiveSelectedAgentIds.has(agent.agentId)) &&
+      SESSION_TITLE_GENERATION_AGENT_OPTIONS.some((option) => option.value !== 'custom' && option.value === agent.agentId)
+    );
+  });
   const backgroundAgentId =
     backgroundAgentChoice ??
     titleAndCommitAgents.find((agent) => agent.agentId === settings.defaultPromptAgentId)?.agentId ??
@@ -1785,9 +1792,9 @@ function FirstLaunchProjectPage({
             aria-label='Default agent'
             className='first-launch-onb-setting-control'
             onValueChange={(value) => {
-              const option = SESSION_TITLE_GENERATION_AGENT_OPTIONS.find((candidate) => candidate.value === value);
-              if (option && option.value !== 'custom') {
-                onSelectBackgroundAgent(option.value);
+              const option = titleAndCommitAgents.find((candidate) => candidate.agentId === value);
+              if (option) {
+                onSelectBackgroundAgent(option.agentId as SessionTitleGenerationAgent);
               }
             }}
             value={backgroundAgentId}

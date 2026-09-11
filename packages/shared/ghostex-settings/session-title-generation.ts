@@ -9,12 +9,21 @@ export const SESSION_TITLE_GENERATION_AGENT_OPTIONS: ReadonlyArray<{
   { label: 'Cursor CLI', value: 'cursor' },
   { label: 'Claude', value: 'claude' },
   { label: 'Grok Build', value: 'grok' },
+  { label: 'Pi Agent', value: 'pi' },
+  { label: 'Antigravity CLI', value: 'antigravity' },
   { label: 'Custom', value: 'custom' },
 ];
 export const SESSION_TITLE_GENERATION_PROMPT_PLACEHOLDER = '<title generation prompt>';
 
 export function normalizeSessionTitleGenerationAgent(value: string | undefined): SessionTitleGenerationAgent {
-  return value === 'cursor' || value === 'claude' || value === 'grok' || value === 'custom'
+  return (
+    value === 'cursor' ||
+    value === 'claude' ||
+    value === 'grok' ||
+    value === 'pi' ||
+    value === 'antigravity' ||
+    value === 'custom'
+  )
     ? value
     : DEFAULT_ghostex_SETTINGS.sessionTitleGenerationAgent;
 }
@@ -46,6 +55,10 @@ export function getSessionTitleGenerationCommandPreview(
       return createSessionTitleGenerationHereDocPreview(`${permissionCommand} -p --model haiku --effort low`, prompt);
     case 'grok':
       return `${command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single '${prompt}'`;
+    case 'pi':
+      return `${command} --no-session -p '${prompt}'`;
+    case 'antigravity':
+      return `${command} --print --output-format text --dangerously-skip-permissions '${prompt}'`;
     case 'custom':
       return createSessionTitleGenerationHereDocPreview(command, prompt);
   }
@@ -106,6 +119,10 @@ function readSessionTitleGenerationPreviewCommand(
       return 'claude';
     case 'grok':
       return 'grok';
+    case 'pi':
+      return 'pi';
+    case 'antigravity':
+      return 'agy';
     case 'custom':
       return '<custom command>';
   }
