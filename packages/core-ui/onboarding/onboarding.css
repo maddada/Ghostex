@@ -1,0 +1,15 @@
+/*
+ * CDXC:Onboarding 2026-09-11 WHY:
+ * This is the B4 "Extensions" prototype stylesheet ported 1:1, split per panel under styles/, with every selector
+ * scoped under .gx-onboarding and every keyframe prefixed gxob-, because the modal host page also loads
+ * packages/core-ui/styles.css (Tailwind preflight and the app theme) and neither side may leak into the other.
+ * The prototype relied on user-agent defaults for font size, line height, list bullets and button cursors, so
+ * styles/base.css starts with a scoped reset that restores them. @font-face rules are registered at runtime from
+ * fonts.ts, not here (see packages/shared/asset-modules.d.ts).
+ */
+@import './styles/base.css';
+@import './styles/welcome.css';
+@import './styles/agents.css';
+@import './styles/workspace.css';
+@import './styles/mobile.css';
+@import './styles/get-started.css';

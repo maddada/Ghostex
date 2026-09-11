@@ -29,3 +29,15 @@ declare module '*.png' {
    * the image asset can be bundled instead of referenced through a mock-only path.
    */
 }
+
+declare module '*.ttf' {
+  const fontUrl: string;
+  export default fontUrl;
+  /*
+   * CDXC:Onboarding 2026-09-11 WHY:
+   * The onboarding modal ships its own Manrope, DM Sans and IBM Plex Mono files and registers them with runtime
+   * @font-face rules built from these imports, because CSS url() assets get emitted beside the CSS file while the
+   * CEF build inlines the stylesheet into the HTML entry, which breaks relative font paths. JS imports become data
+   * URLs in that bundle (see the '.ttf' loader in apps/desktop/vite.config.ts) and plain asset URLs in Vite/Storybook.
+   */
+}

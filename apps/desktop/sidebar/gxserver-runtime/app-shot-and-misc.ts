@@ -171,7 +171,7 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
   postSidebarCommandRunEnd(commandId: string, originalMessage: SidebarToExtensionMessage): boolean;
   saveSidebarSettingsPatch(message: Extract<SidebarToExtensionMessage, { type: 'updateSettingsPatch' }>): void;
   openExternalUrl(message: Extract<SidebarToExtensionMessage, { type: 'openExternalUrl' }>): void;
-  openAppModal(modal: 'firstLaunchSetup' | 'settings' | 'watchGhostexVideo'): void;
+  openAppModal(modal: 'firstLaunchSetup' | 'onboarding' | 'settings' | 'watchGhostexVideo'): void;
   savePinnedPrompt(message: Extract<SidebarToExtensionMessage, { type: 'savePinnedPrompt' }>): Promise<void>;
   publishAppUserDataHydrate(): void;
 }
@@ -1236,7 +1236,10 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     }
   },
 
-  openAppModal(this: GpuiSidebarRuntime, modal: 'firstLaunchSetup' | 'settings' | 'watchGhostexVideo'): void {
+  openAppModal(
+    this: GpuiSidebarRuntime,
+    modal: 'firstLaunchSetup' | 'onboarding' | 'settings' | 'watchGhostexVideo'
+  ): void {
     /*
     CDXC:AppModal 2026-06-24-11:40:
     Sidebar-origin Settings, first-launch welcome, and tutorial-video requests in GPUI must use the shared app-modal host bridge installed by the CEF sidebar surface. Do not fork Settings React UI, duplicate modal state, or route these first-party modals through fixture/sidebar-only alternate paths.

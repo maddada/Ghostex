@@ -44,7 +44,8 @@ export type AppModalKind =
   | 'stashedPrompts'
   | 'worktree'
   | 'tipsAndTricks'
-  | 'firstLaunchSetup';
+  | 'firstLaunchSetup'
+  | 'onboarding';
 
 export type OpenAppModalMessage =
   | { modal: 'browserHistory'; paneId: number; runtimeKey: number; type: 'open' }

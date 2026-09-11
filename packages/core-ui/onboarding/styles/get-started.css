@@ -1,0 +1,440 @@
+/* Panel 5 and the finished screen: project card, option tiles, summary rows, the mock window and the after-onboarding popups. */
+.gx-onboarding .pcard {
+  background: linear-gradient(180deg, rgba(18, 21, 29, 0.55), rgba(10, 12, 18, 0.55));
+}
+.gx-onboarding .pfield {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px 0 26px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 16.5px;
+  z-index: 2;
+}
+.gx-onboarding .pfield .path {
+  flex: 1;
+}
+.gx-onboarding .choose {
+  font-size: 14.5px;
+  color: #2f4fae;
+  transition: color 0.2s;
+}
+.gx-onboarding .choose:hover {
+  color: #6d93ff;
+}
+.gx-onboarding .picker {
+  position: absolute;
+  z-index: 40;
+  padding: 6px;
+  border-radius: 12px;
+  background: #10131b;
+  border: 1px solid rgba(120, 150, 235, 0.25);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+  animation: gxob-pop2 0.14s ease-out;
+}
+.gx-onboarding .picker button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font: 14px 'IBM Plex Mono';
+  color: #dfe4ee;
+}
+.gx-onboarding .picker button:hover {
+  background: rgba(90, 120, 230, 0.14);
+}
+.gx-onboarding .picker button.on {
+  color: #8fabff;
+}
+.gx-onboarding .pnote {
+  font-size: 12px;
+  color: #7c8598;
+  padding: 6px 12px 4px;
+}
+.gx-onboarding .opt {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.015);
+  text-align: left;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.gx-onboarding .opt .nm {
+  font-size: 17px;
+}
+.gx-onboarding .opt .ss {
+  font-size: 13.5px;
+  margin-top: 7px;
+}
+.gx-onboarding .opt.sel {
+  border-color: rgba(90, 125, 235, 0.42);
+  background: rgba(28, 38, 68, 0.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.gx-onboarding .opt:hover:not(.sel) {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.gx-onboarding .okg {
+  margin-left: auto;
+  color: #fff;
+  background: #16b877;
+  border-radius: 50%;
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  transform: scale(0);
+  transition: transform 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+  flex: none;
+}
+.gx-onboarding .okg.on {
+  transform: none;
+}
+.gx-onboarding .ready {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.45s,
+    transform 0.45s,
+    border-color 0.25s;
+  cursor: pointer;
+}
+.gx-onboarding .ready.on {
+  opacity: 1;
+  transform: none;
+}
+.gx-onboarding .ready:hover {
+  border-color: rgba(125, 162, 255, 0.7);
+}
+.gx-onboarding .ready .rt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font: 600 18px 'DM Sans';
+}
+.gx-onboarding .ready .okg {
+  margin: 0;
+  width: 24px;
+  height: 24px;
+}
+.gx-onboarding .ready .rs {
+  font-size: 15px;
+  color: #c5ccd8;
+  margin-top: 6px;
+}
+.gx-onboarding .sum {
+  padding: 9px 22px;
+}
+.gx-onboarding .sum-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 44px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  text-align: left;
+}
+.gx-onboarding .sum-row:last-child {
+  border-bottom: 0;
+}
+.gx-onboarding .sum-row .k {
+  width: 190px;
+  font: 500 11px 'IBM Plex Mono';
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8e97a8;
+  flex: none;
+}
+.gx-onboarding .sum-row .v {
+  flex: 1;
+  font-size: 14.5px;
+  color: #eef1f7;
+}
+.gx-onboarding .sum-row .edit {
+  font-size: 12px;
+  color: #6d93ff;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.gx-onboarding .sum-row:hover .edit {
+  opacity: 1;
+}
+.gx-onboarding .fwin {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.gx-onboarding .fwin-bar {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  flex: none;
+}
+.gx-onboarding .fwin-t {
+  font-size: 14px;
+  font-weight: 600;
+}
+.gx-onboarding .fwin-tabs {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.gx-onboarding .fwin-tabs span {
+  padding: 5px 11px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: #9aa3b3;
+}
+.gx-onboarding .fwin-tabs span.on {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+.gx-onboarding .fwin-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.gx-onboarding .fwin-side {
+  width: 210px;
+  padding: 16px 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  flex: none;
+}
+.gx-onboarding .fwin-side .label {
+  font-size: 10px;
+  margin-bottom: 10px;
+}
+.gx-onboarding .fs-item {
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+}
+.gx-onboarding .fs-item.on {
+  background: rgba(255, 255, 255, 0.06);
+}
+.gx-onboarding .fs-sess {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(80, 110, 220, 0.1);
+  border: 1px solid rgba(90, 125, 235, 0.3);
+  font-size: 12px;
+  animation: gxob-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.gx-onboarding .fs-sess em {
+  grid-column: 2;
+  font-style: normal;
+  font-size: 10.5px;
+  color: #9aa3b3;
+}
+.gx-onboarding .fs-note {
+  font-size: 11px;
+  color: #7d8697;
+  margin-top: 14px;
+  line-height: 1.45;
+}
+.gx-onboarding .fwin-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gx-onboarding .fm-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12.5px;
+}
+.gx-onboarding .fm-log {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: none;
+}
+.gx-onboarding .fm-log.term {
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.gx-onboarding .fb {
+  max-width: 84%;
+  font-size: 14px;
+  line-height: 1.5;
+  animation: gxob-lineIn 0.3s ease-out;
+}
+.gx-onboarding .fb.me {
+  align-self: flex-end;
+  background: rgba(60, 90, 200, 0.25);
+  border: 1px solid rgba(100, 140, 255, 0.3);
+  padding: 9px 13px;
+  border-radius: 12px;
+}
+.gx-onboarding .fb.bot {
+  color: #dfe4ee;
+}
+.gx-onboarding .fb-who {
+  display: block;
+  font-size: 11px;
+  color: #8e97a8;
+  margin-bottom: 3px;
+}
+.gx-onboarding .fl {
+  font-size: 13px;
+  color: #c9d0dc;
+  animation: gxob-lineIn 0.25s ease-out;
+}
+.gx-onboarding .fl.cmd {
+  color: #eef1f7;
+}
+.gx-onboarding .fl.out,
+.gx-onboarding .fl.bot {
+  color: #9aa3b3;
+}
+.gx-onboarding .typing {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+.gx-onboarding .typing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6d93ff;
+  animation: gxob-breathe 1s ease-in-out infinite;
+}
+.gx-onboarding .typing i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.gx-onboarding .typing i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.gx-onboarding .fm-input {
+  display: flex;
+  align-items: center;
+  margin: 0 20px 18px;
+  padding: 0 10px 0 14px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+}
+.gx-onboarding .fm-input:focus-within {
+  border-color: rgba(110, 150, 255, 0.55);
+}
+.gx-onboarding .fm-input input {
+  flex: 1;
+  font-size: 13.5px;
+}
+.gx-onboarding .kbd {
+  font: 12px 'IBM Plex Mono';
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #c9d0dc;
+}
+.gx-onboarding .choose-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0 4px;
+}
+.gx-onboarding .choose-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.gx-onboarding .choose-card:hover {
+  border-color: rgba(110, 150, 255, 0.55);
+  background: rgba(40, 60, 140, 0.18);
+}
+.gx-onboarding .choose-card svg {
+  color: #6d93ff;
+}
+.gx-onboarding .choose-card b {
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+.gx-onboarding .choose-card em {
+  font-style: normal;
+  font-size: 12.5px;
+  color: #aab2c1;
+}
+.gx-onboarding .rset {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  min-height: 340px;
+  margin-top: 6px;
+}
+.gx-onboarding .rset-nav {
+  width: 130px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 12px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+.gx-onboarding .rset-nav span {
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: #9aa3b3;
+}
+.gx-onboarding .rset-nav span.on {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+.gx-onboarding .rset-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gx-onboarding .rset-qr {
+  border-radius: 8px;
+  flex: none;
+}
+.gx-onboarding .rset-wait {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #c9d0dc;
+}

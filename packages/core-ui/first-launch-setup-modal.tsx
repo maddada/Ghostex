@@ -56,6 +56,7 @@ import {
   applySidebarSettingsPreset,
   getSessionTitleGenerationCommandPreview,
   getSidebarSettingsPresetId,
+  isSessionTitleGenerationAgent,
   normalizeghostexSettings,
   type PreferredAgentInterface,
   type SessionTitleGenerationAgent,
@@ -890,21 +891,53 @@ export function FirstLaunchSetupModal({
   );
   const [selectedHookAgentIds, setSelectedHookAgentIds] = useState<ReadonlySet<string>>();
   const [connectingAgentIds, setConnectingAgentIds] = useState<readonly string[]>([]);
-  const [backgroundAgentChoice, setBackgroundAgentChoice] = useState<SessionTitleGenerationAgent>();
+  const [backgroundAgentChoice, setBackgroundAgentChoice] = useState<string>();
   const [finishError, setFinishError] = useState<string>();
   const [isFinishing, setIsFinishing] = useState(false);
   const [isInstallingSelectedSkills, setIsInstallingSelectedSkills] = useState(false);
   const [pendingSkillInstallIds, setPendingSkillInstallIds] = useState<readonly BundledGhostexAgentSkillId[]>();
   const [skillInstallError, setSkillInstallError] = useState<string>();
-  const titleAndCommitAgents = installedCliAgents.filter((agent) =>
-    SESSION_TITLE_GENERATION_AGENT_OPTIONS.some((option) => option.value !== 'custom' && option.value === agent.agentId)
+  /*
+   * CDXC:Onboarding 2026-09-11 WHY:
+   * The Default agent selector used to list every installed CLI that could
+   * also generate session titles, so agents the user had just left
+   * unconnected still appeared while connected Pi or Antigravity did not
+   * (GitHub issue #125). It now lists the agents connected in the Connect
+   * step (hook installed, no hook needed, or still ticked there); the title
+   * generation setting follows the choice only when that agent can run a
+   * headless title prompt, and the row says which agent names sessions
+   * otherwise. With nothing connected every installed agent stays selectable,
+   * because the first session still needs an agent.
+   */
+  const isAgentConnected = (agentId: string) => {
+    const status = hookStatusByAgentId.get(agentId)?.status;
+    return status === 'installed' || status === 'notRequired';
+  };
+  const connectedCliAgents = installedCliAgents.filter(
+    (agent) => isAgentConnected(agent.agentId) || (selectedHookAgentIds?.has(agent.agentId) ?? true)
   );
+  const defaultAgentCandidates = connectedCliAgents.length > 0 ? connectedCliAgents : installedCliAgents;
   const backgroundAgentId =
-    backgroundAgentChoice ??
-    titleAndCommitAgents.find((agent) => agent.agentId === settings.defaultPromptAgentId)?.agentId ??
-    titleAndCommitAgents.find((agent) => agent.agentId === settings.sessionTitleGenerationAgent)?.agentId ??
-    titleAndCommitAgents[0]?.agentId;
+    (backgroundAgentChoice && defaultAgentCandidates.some((agent) => agent.agentId === backgroundAgentChoice)
+      ? backgroundAgentChoice
+      : undefined) ??
+    defaultAgentCandidates.find((agent) => agent.agentId === settings.defaultPromptAgentId)?.agentId ??
+    defaultAgentCandidates.find((agent) => agent.agentId === settings.sessionTitleGenerationAgent)?.agentId ??
+    defaultAgentCandidates[0]?.agentId;
   const firstProjectSessionAgentId = backgroundAgentId ?? installedCliAgents[0]?.agentId ?? 'terminal';
+  const sessionTitleGenerationAgentFor = (agentId: string): SessionTitleGenerationAgent | undefined =>
+    agentId !== 'custom' && isSessionTitleGenerationAgent(agentId) ? agentId : undefined;
+  const settingsForDefaultAgent = (agentId: string): Partial<ghostexSettings> => {
+    const titleAgent = sessionTitleGenerationAgentFor(agentId);
+    return titleAgent
+      ? { defaultPromptAgentId: agentId, sessionTitleGenerationAgent: titleAgent }
+      : { defaultPromptAgentId: agentId };
+  };
+  const titleGenerationAgentLabel =
+    backgroundAgentId && sessionTitleGenerationAgentFor(backgroundAgentId)
+      ? undefined
+      : (SESSION_TITLE_GENERATION_AGENT_OPTIONS.find((option) => option.value === settings.sessionTitleGenerationAgent)
+          ?.label ?? 'Codex');
 
   useEffect(() => {
     if (!isOpen || agentHookStatus || agentHookStatusLoading) {
@@ -958,6 +991,12 @@ export function FirstLaunchSetupModal({
     }
     setFinishError(undefined);
     setIsFinishing(true);
+    // The selector's resolved default is what the first session starts with,
+    // so persist it even when the user never touched the control; otherwise a
+    // machine without Codex keeps the Codex defaults for prompts and titles.
+    if (backgroundAgentId && backgroundAgentId !== settings.defaultPromptAgentId) {
+      updateSettings(settingsForDefaultAgent(backgroundAgentId));
+    }
     try {
       onFinishFirstLaunch({ agentId: firstProjectSessionAgentId, path });
       onClose();
@@ -1197,13 +1236,8 @@ export function FirstLaunchSetupModal({
               onChangeTerminalWidthMode={(terminalViewWidthMode) => updateSettings({ terminalViewWidthMode })}
               onToggleAgentsPaneTabBar={(enabled) => updateSettings({ showAgentsPaneTabBarWhenUnsplit: enabled })}
               onSelectBackgroundAgent={(agentId) => {
-                if (agentId !== 'custom') {
-                  setBackgroundAgentChoice(agentId);
-                  updateSettings({
-                    defaultPromptAgentId: agentId,
-                    sessionTitleGenerationAgent: agentId,
-                  });
-                }
+                setBackgroundAgentChoice(agentId);
+                updateSettings(settingsForDefaultAgent(agentId));
               }}
               onToggleAttentionNotifications={(enabled) => updateSettings({ showMacOSAttentionNotifications: enabled })}
               onToggleCompletionSound={(enabled) =>
@@ -1212,7 +1246,8 @@ export function FirstLaunchSetupModal({
               preferredInterface={settings.preferredAgentInterface}
               showAgentsPaneTabBar={settings.showAgentsPaneTabBarWhenUnsplit}
               terminalWidthMode={settings.terminalViewWidthMode}
-              titleAndCommitAgents={titleAndCommitAgents}
+              defaultAgentCandidates={defaultAgentCandidates}
+              titleGenerationAgentLabel={titleGenerationAgentLabel}
             />
           ) : activePage === 'preferences' ? (
             <FirstLaunchPreferencesPage onChange={onChange} settings={settings} />
@@ -1713,7 +1748,8 @@ function FirstLaunchProjectPage({
   preferredInterface,
   showAgentsPaneTabBar,
   terminalWidthMode,
-  titleAndCommitAgents,
+  defaultAgentCandidates,
+  titleGenerationAgentLabel,
 }: {
   agentAcceptAllEnabled: boolean;
   attentionNotificationsEnabled: boolean;
@@ -1723,14 +1759,16 @@ function FirstLaunchProjectPage({
   onChangeAgentAcceptAllEnabled: (enabled: boolean) => void;
   onChangePreferredInterface: (preferredInterface: PreferredAgentInterface) => void;
   onChangeTerminalWidthMode: (terminalWidthMode: TerminalViewWidthMode) => void;
-  onSelectBackgroundAgent: (agentId: SessionTitleGenerationAgent) => void;
+  onSelectBackgroundAgent: (agentId: string) => void;
   onToggleAgentsPaneTabBar: (enabled: boolean) => void;
   onToggleAttentionNotifications: (enabled: boolean) => void;
   onToggleCompletionSound: (enabled: boolean) => void;
   preferredInterface: PreferredAgentInterface;
   showAgentsPaneTabBar: boolean;
   terminalWidthMode: TerminalViewWidthMode;
-  titleAndCommitAgents: readonly FirstLaunchSidebarAgent[];
+  defaultAgentCandidates: readonly FirstLaunchSidebarAgent[];
+  /** Set when the chosen default agent cannot generate titles itself; names the agent that does. */
+  titleGenerationAgentLabel: string | undefined;
 }) {
   /*
    * CDXC:Onboarding 2026-08-24:
@@ -1778,21 +1816,24 @@ function FirstLaunchProjectPage({
         </span>
         <span className='first-launch-onb-row-main'>
           <strong>Default agent</strong>
-          <span>Starts your first session and generates session titles and commit messages.</span>
+          <span>
+            {titleGenerationAgentLabel
+              ? `Starts your first session and answers Git and board prompts. Session titles come from ${titleGenerationAgentLabel}; change that under Settings, Agents.`
+              : 'Starts your first session and generates session titles and commit messages.'}
+          </span>
         </span>
         {backgroundAgentId ? (
           <SegmentedControl
             aria-label='Default agent'
             className='first-launch-onb-setting-control'
             onValueChange={(value) => {
-              const option = SESSION_TITLE_GENERATION_AGENT_OPTIONS.find((candidate) => candidate.value === value);
-              if (option && option.value !== 'custom') {
-                onSelectBackgroundAgent(option.value);
+              if (defaultAgentCandidates.some((agent) => agent.agentId === value)) {
+                onSelectBackgroundAgent(value);
               }
             }}
             value={backgroundAgentId}
           >
-            {titleAndCommitAgents.map((agent) => (
+            {defaultAgentCandidates.map((agent) => (
               <SegmentedControlItem key={agent.agentId} value={agent.agentId}>
                 <FirstLaunchAgentLogo agent={agent} />
                 {getFirstLaunchAgentDisplayName(agent)}
@@ -2000,8 +2041,8 @@ function FirstLaunchPreferencesPage({
             Choose the defaults that shape Ghostex.
           </h2>
           <p className='first-launch-setup-description'>
-            These are the settings most likely to affect how Ghostex feels day to day. You can change all of
-            them later from Settings.
+            These are the settings most likely to affect how Ghostex feels day to day. You can change all of them later
+            from Settings.
           </p>
         </div>
       </div>
@@ -2093,10 +2134,7 @@ function FirstLaunchPreferencesPage({
             <select
               className='first-launch-setup-preference-select'
               onChange={(event) =>
-                updateSetting(
-                  'sessionTitleGenerationAgent',
-                  event.currentTarget.value as SessionTitleGenerationAgent
-                )
+                updateSetting('sessionTitleGenerationAgent', event.currentTarget.value as SessionTitleGenerationAgent)
               }
               value={settings.sessionTitleGenerationAgent}
             >
@@ -2130,9 +2168,7 @@ function FirstLaunchPreferencesPage({
               </span>
               <input
                 className='first-launch-setup-preference-input'
-                onChange={(event) =>
-                  updateSetting('customSessionTitleGenerationCommand', event.currentTarget.value)
-                }
+                onChange={(event) => updateSetting('customSessionTitleGenerationCommand', event.currentTarget.value)}
                 placeholder='title-generator'
                 value={settings.customSessionTitleGenerationCommand}
               />

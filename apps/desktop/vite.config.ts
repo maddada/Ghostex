@@ -275,6 +275,7 @@ async function buildInlineCefEntryScript(entryPoint: string, docsOutDir?: string
       '.mp3': 'dataurl',
       '.png': 'dataurl',
       '.svg': 'text',
+      '.ttf': 'dataurl',
       '.wav': 'dataurl',
       '.webp': 'dataurl',
       '.woff': 'dataurl',

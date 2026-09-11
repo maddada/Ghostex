@@ -28,6 +28,10 @@ pub(crate) enum GpuiAppModalKind {
     ConfigureActions,
     OpenTargets,
     FirstLaunchSetup,
+    /// CDXC:Onboarding 2026-09-11 SEE-ALSO:
+    /// `onboarding` is the new five-panel modal, parked until it is finished: first run and Tips > Setup still open `firstLaunchSetup` (user decision, see modals.rs `open_gpui_first_launch_setup_with_sidebar_state`).
+    /// Every guard that treats `FirstLaunchSetup` as "setup in progress" (no-projects close guard, completion on close, `completeFirstLaunchSetup`) must match both; the React side is `isFirstLaunchSetupModalKind` in apps/desktop/views/modal-host.tsx and the component contract is packages/core-ui/onboarding/contract.ts.
+    Onboarding,
     WatchGhostexVideo,
     RemoteGxserverInstall,
     RemoteProjectPicker,
@@ -70,6 +74,7 @@ impl GpuiAppModalKind {
             "configureActions" => Some(Self::ConfigureActions),
             "openTargets" => Some(Self::OpenTargets),
             "firstLaunchSetup" | "tipsAndTricks" => Some(Self::FirstLaunchSetup),
+            "onboarding" => Some(Self::Onboarding),
             "watchGhostexVideo" => Some(Self::WatchGhostexVideo),
             "remoteGxserverInstall" => Some(Self::RemoteGxserverInstall),
             "remoteProjectPicker" => Some(Self::RemoteProjectPicker),
@@ -115,6 +120,7 @@ impl GpuiAppModalKind {
             Self::ConfigureActions => "configureActions",
             Self::OpenTargets => "openTargets",
             Self::FirstLaunchSetup => "firstLaunchSetup",
+            Self::Onboarding => "onboarding",
             Self::WatchGhostexVideo => "watchGhostexVideo",
             Self::RemoteGxserverInstall => "remoteGxserverInstall",
             Self::RemoteProjectPicker => "remoteProjectPicker",
@@ -156,7 +162,7 @@ impl GpuiAppModalKind {
             Self::ConfigureAgents => "Ghostex Configure Agents",
             Self::ConfigureActions => "Ghostex Actions",
             Self::OpenTargets => "Ghostex Open Targets",
-            Self::FirstLaunchSetup => "Welcome to Ghostex",
+            Self::FirstLaunchSetup | Self::Onboarding => "Welcome to Ghostex",
             Self::WatchGhostexVideo => "Ghostex Tutorial Video",
             Self::RemoteGxserverInstall => "Ghostex Remote Setup",
             Self::RemoteProjectPicker => "Ghostex Remote Project",
@@ -288,6 +294,9 @@ impl GpuiAppModalKind {
                 px(APP_MODAL_HOST_REMOTE_SETUP_WINDOW_HEIGHT),
             ),
             Self::FirstLaunchSetup => size(px(1120.0), px(850.0)),
+            // CDXC:Onboarding 2026-09-11 WHY:
+            // The new onboarding renders a 1672x941 stage scaled to fit its window, so the frame keeps that aspect ratio at a size that still fits a 1440x900 screen with the menu bar and Dock.
+            Self::Onboarding => size(px(1400.0), px(788.0)),
             Self::WatchGhostexVideo => size(px(1120.0), px(750.0)),
             // CDXC:SessionChat 2026-09-06 DECISION:
             // User: start only the diagram dialog 20% wider and taller (1248x912, previously 1040x760).
@@ -369,6 +378,7 @@ impl GpuiAppModalKind {
                 | Self::ConfigureActions
                 | Self::OpenTargets
                 | Self::FirstLaunchSetup
+                | Self::Onboarding
                 | Self::AgentsHub
                 | Self::DelayedSend
                 | Self::RenameSession
@@ -410,7 +420,8 @@ impl GpuiAppModalKind {
             | Self::SessionNote
             | Self::WatchGhostexVideo
             | Self::RemoteSetup
-            | Self::FirstLaunchSetup => serde_json::json!({
+            | Self::FirstLaunchSetup
+            | Self::Onboarding => serde_json::json!({
                 "modal": self.modal_id(),
                 "type": "open",
             }),

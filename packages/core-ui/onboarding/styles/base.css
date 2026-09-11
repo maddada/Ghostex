@@ -1,0 +1,921 @@
+/* Stage, chrome, type, surfaces, controls, popups, toast, connectors, window chrome and the reduced-motion rules. */
+.gx-onboarding {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #040507;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: normal;
+  letter-spacing: normal;
+  color: #eef1f7;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+}
+.gx-onboarding *,
+.gx-onboarding *::before,
+.gx-onboarding *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border-width: 0;
+  border-style: solid;
+}
+.gx-onboarding h1,
+.gx-onboarding p,
+.gx-onboarding ul,
+.gx-onboarding b,
+.gx-onboarding em,
+.gx-onboarding code {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+.gx-onboarding b {
+  font-weight: 700;
+}
+.gx-onboarding ul {
+  list-style: disc;
+}
+.gx-onboarding img {
+  display: inline-block;
+  max-width: none;
+  height: auto;
+}
+.gx-onboarding svg {
+  display: inline-block;
+}
+.gx-onboarding button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  border-radius: 0;
+}
+.gx-onboarding button:disabled {
+  cursor: default;
+}
+.gx-onboarding input {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  outline: none;
+  min-width: 0;
+  user-select: text;
+}
+.gx-onboarding :focus-visible {
+  outline: 2px solid rgba(110, 150, 255, 0.8);
+  outline-offset: 2px;
+}
+.gx-onboarding [role='button'],
+.gx-onboarding [role='switch'],
+.gx-onboarding [role='radio'],
+.gx-onboarding [role='checkbox'] {
+  cursor: pointer;
+}
+.gx-onboarding .mono {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+.gx-onboarding .dim {
+  color: #8e97a8;
+}
+.gx-onboarding .ok {
+  color: #3be3a2;
+}
+.gx-onboarding .acc {
+  color: #6d93ff;
+}
+.gx-onboarding .wait {
+  color: #6d93ff;
+}
+.gx-onboarding .dimc2 {
+  color: #8e97a8;
+}
+.gx-onboarding .stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1672px;
+  height: 941px;
+  overflow: hidden;
+  transform-origin: 50% 50%;
+  background: #07080b;
+  isolation: isolate;
+}
+.gx-onboarding .nebula {
+  position: absolute;
+  inset: 0;
+  width: 1672px;
+  height: 941px;
+  z-index: 0;
+}
+.gx-onboarding .divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  z-index: 2;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.09),
+    rgba(255, 255, 255, 0.045) 55%,
+    rgba(255, 255, 255, 0.07)
+  );
+  transition: left 0.6s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.gx-onboarding .vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 80;
+  background: radial-gradient(ellipse 72% 78% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.3) 100%);
+}
+.gx-onboarding .grain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 81;
+  background-repeat: repeat;
+  background-size: 160px 160px;
+  opacity: 0.55;
+}
+.gx-onboarding .lockup {
+  position: absolute;
+  top: 19px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 20;
+  transition: left 0.6s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.gx-onboarding .lockup span {
+  font: 500 17px/1 'DM Sans';
+  color: #e5e9f1;
+}
+.gx-onboarding .counter {
+  position: absolute;
+  top: 28px;
+  width: 120px;
+  text-align: right;
+  font: 400 17px/1 'IBM Plex Mono';
+  letter-spacing: 0.04em;
+  z-index: 20;
+  transition: left 0.6s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.gx-onboarding .counter b {
+  font-weight: 400;
+  color: #29458f;
+}
+.gx-onboarding .counter span {
+  color: #d3d9e4;
+}
+.gx-onboarding .foot {
+  position: absolute;
+  top: 848px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  z-index: 20;
+  transition:
+    left 0.6s cubic-bezier(0.3, 0.7, 0.2, 1),
+    width 0.6s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.gx-onboarding .back {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  font-size: 17px;
+  color: #dfe4ee;
+  height: 44px;
+}
+.gx-onboarding .back:hover:not(:disabled) {
+  color: #fff;
+}
+.gx-onboarding .back:disabled {
+  opacity: 0.35;
+}
+.gx-onboarding .dots {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+}
+.gx-onboarding .dots button {
+  padding: 10px 8px;
+}
+.gx-onboarding .dots i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: #3b4250;
+  transition:
+    width 0.3s,
+    background 0.3s,
+    box-shadow 0.3s;
+}
+.gx-onboarding .dots i.past {
+  background: #5a6272;
+}
+.gx-onboarding .dots button:hover i {
+  background: #7c8598;
+}
+.gx-onboarding .dots i.on {
+  width: 22px;
+  background: #2d55d4;
+  box-shadow: 0 0 10px rgba(60, 100, 255, 0.45);
+}
+.gx-onboarding .next {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 10px;
+  background: rgba(10, 12, 17, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  font-size: 17px;
+  font-weight: 500;
+  transition: border-color 0.2s;
+}
+.gx-onboarding .next:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+.gx-onboarding .next:hover:not(:disabled) svg {
+  transform: translateX(2px);
+}
+.gx-onboarding .next svg {
+  transition: transform 0.2s;
+}
+.gx-onboarding .next:disabled {
+  opacity: 0.38;
+}
+.gx-onboarding .scene {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  animation: gxob-sceneIn 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+.gx-onboarding .scene > * {
+  pointer-events: auto;
+}
+.gx-onboarding .scene > .wires {
+  pointer-events: none;
+}
+@keyframes gxob-sceneIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.gx-onboarding .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font: 500 12.5px/1 'IBM Plex Mono';
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: #cdd3de;
+  white-space: nowrap;
+}
+.gx-onboarding .eyebrow i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2849b8;
+  box-shadow: 0 0 8px rgba(60, 100, 255, 0.55);
+}
+.gx-onboarding .h1 {
+  font-family: Manrope, 'DM Sans', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #f3f5f9;
+}
+.gx-onboarding .h1-2 {
+  background: linear-gradient(92deg, #d5ddff 0%, #aebff5 55%, #93a9ee 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.gx-onboarding .sub {
+  color: #b2b9c6;
+  line-height: 1.45;
+}
+.gx-onboarding .label {
+  font: 500 11.5px/1 'IBM Plex Mono';
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #cfd5e0;
+}
+.gx-onboarding .note {
+  font-size: 16px;
+  color: #aeb6c4;
+}
+.gx-onboarding .note b {
+  color: #eef1f7;
+  font-weight: 600;
+}
+.gx-onboarding .nm {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: #eef1f7;
+  line-height: 1.25;
+}
+.gx-onboarding .nm.b {
+  font-weight: 600;
+  font-size: 15px;
+}
+.gx-onboarding .nm.lg {
+  font-size: 17px;
+}
+.gx-onboarding .ss {
+  font-size: 12.5px;
+  color: #9ea7b6;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+.gx-onboarding .glass {
+  background: linear-gradient(180deg, rgba(21, 24, 33, 0.74), rgba(11, 13, 19, 0.74));
+  border: 1px solid rgba(150, 165, 205, 0.12);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+.gx-onboarding .glass-n {
+  background: linear-gradient(180deg, rgba(13, 19, 38, 0.84), rgba(7, 10, 21, 0.86));
+  border: 1px solid rgba(88, 124, 235, 0.3);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 26px rgba(40, 80, 220, 0.1);
+}
+.gx-onboarding .node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition:
+    border-color 0.25s,
+    box-shadow 0.25s,
+    transform 0.25s,
+    opacity 0.3s;
+}
+.gx-onboarding .ibox {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: #dfe4ee;
+  flex: none;
+}
+.gx-onboarding .abox {
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-right: 18px;
+  flex: none;
+  color: #e8ecf4;
+}
+.gx-onboarding .abox.wide {
+  width: auto;
+  padding: 0 12px;
+}
+.gx-onboarding .abox.sm {
+  width: 40px;
+  height: 40px;
+  margin-right: 12px;
+  border-radius: 10px;
+}
+.gx-onboarding .ic {
+  display: block;
+  flex: none;
+}
+.gx-onboarding .aicon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: #f1f4f9;
+}
+.gx-onboarding .aicon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.gx-onboarding .aicon.codex svg,
+.gx-onboarding .aicon.cursor svg {
+  width: 88%;
+  height: 88%;
+}
+.gx-onboarding .olog {
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
+  place-items: center;
+  flex: none;
+}
+.gx-onboarding .olog-more {
+  display: grid;
+  place-items: center;
+  color: #aab2c1;
+  font-weight: 600;
+  line-height: 1;
+}
+.gx-onboarding .ostrip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.gx-onboarding .ostrip-more {
+  font: 600 11px 'IBM Plex Mono';
+  color: #aab2c1;
+  margin-left: 1px;
+}
+.gx-onboarding .glogo {
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+.gx-onboarding .glogo.glow {
+  filter: drop-shadow(0 0 16px rgba(60, 110, 255, 0.55));
+}
+.gx-onboarding .actions {
+  display: flex;
+  align-items: center;
+}
+.gx-onboarding .cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 10px;
+  font-size: 15.5px;
+  font-weight: 500;
+  padding: 0 20px;
+  color: #fff;
+  white-space: nowrap;
+  transition:
+    filter 0.2s,
+    border-color 0.2s,
+    background 0.2s,
+    transform 0.1s;
+}
+.gx-onboarding .cta:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.gx-onboarding .cta.filled {
+  background: linear-gradient(180deg, #2749c2, #1c3799);
+  border: 1px solid rgba(120, 155, 255, 0.55);
+  box-shadow:
+    0 8px 26px rgba(30, 70, 210, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+.gx-onboarding .cta.filled:hover:not(:disabled) {
+  filter: brightness(1.14);
+}
+.gx-onboarding .cta.outline {
+  background: rgba(8, 10, 14, 0.55);
+  border: 1px solid rgba(215, 222, 238, 0.62);
+}
+.gx-onboarding .cta.outline:hover:not(:disabled) {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+.gx-onboarding .cta:disabled {
+  opacity: 0.5;
+}
+.gx-onboarding .cta svg {
+  transition: transform 0.2s;
+}
+.gx-onboarding .cta:hover:not(:disabled) svg {
+  transform: translateX(3px);
+}
+.gx-onboarding .vbar {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.35);
+  margin: 0 18px 0 22px;
+}
+.gx-onboarding .ghost {
+  font-size: 15.5px;
+  color: #d6dbe5;
+  height: 44px;
+  padding: 0 4px;
+  transition: color 0.2s;
+}
+.gx-onboarding .ghost:hover {
+  color: #fff;
+}
+.gx-onboarding .ghost.dimmer {
+  color: #2c4a9e;
+}
+.gx-onboarding .ghost.dimmer:hover {
+  color: #6d93ff;
+}
+.gx-onboarding .icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  color: #aab2c1;
+  flex: none;
+}
+.gx-onboarding .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+.gx-onboarding .tg {
+  position: relative;
+  flex: none;
+  border-radius: 999px;
+  background: #171a22;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.gx-onboarding .tg::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: #f4f6fa;
+  transition: left 0.22s cubic-bezier(0.3, 0.8, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.gx-onboarding .tg-lg {
+  width: 60px;
+  height: 34px;
+}
+.gx-onboarding .tg-lg::after {
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+}
+.gx-onboarding .tg-lg.on::after {
+  left: 30px;
+}
+.gx-onboarding .tg-md {
+  width: 54px;
+  height: 32px;
+}
+.gx-onboarding .tg-md::after {
+  top: 4px;
+  left: 4px;
+  width: 22px;
+  height: 22px;
+}
+.gx-onboarding .tg-md.on::after {
+  left: 26px;
+}
+.gx-onboarding .tg-sm {
+  width: 32px;
+  height: 19px;
+}
+.gx-onboarding .tg-sm::after {
+  top: 2.5px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+}
+.gx-onboarding .tg-sm.on::after {
+  left: 16px;
+}
+.gx-onboarding .tg.on {
+  background: linear-gradient(180deg, #2d5ae8, #1f44c6);
+  border-color: rgba(140, 170, 255, 0.55);
+  box-shadow: 0 0 14px rgba(50, 90, 240, 0.32);
+}
+.gx-onboarding .menu {
+  position: relative;
+  display: inline-flex;
+}
+.gx-onboarding .more {
+  display: inline-flex;
+  gap: 3px;
+  padding: 8px 6px;
+  border-radius: 6px;
+  align-items: center;
+}
+.gx-onboarding .more i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #b3bac7;
+  display: block;
+}
+.gx-onboarding button.more:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.gx-onboarding .menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 50;
+  min-width: 196px;
+  padding: 5px;
+  border-radius: 10px;
+  background: #11141c;
+  border: 1px solid rgba(140, 160, 220, 0.2);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  animation: gxob-pop2 0.14s ease-out;
+}
+.gx-onboarding .menu-pop.right {
+  right: 0;
+}
+.gx-onboarding .menu-pop.left {
+  left: 0;
+}
+.gx-onboarding .menu-pop button {
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: #dfe4ee;
+  white-space: nowrap;
+  text-align: left;
+}
+.gx-onboarding .menu-pop button:hover {
+  background: rgba(90, 120, 230, 0.16);
+}
+@keyframes gxob-pop2 {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.gx-onboarding .modal-back {
+  position: absolute;
+  inset: 0;
+  z-index: 90;
+  background: rgba(3, 4, 8, 0.6);
+  display: grid;
+  place-items: center;
+  animation: gxob-fade 0.2s;
+}
+@keyframes gxob-fade {
+  from {
+    opacity: 0;
+  }
+}
+.gx-onboarding .modal {
+  padding: 20px 22px;
+  border-color: rgba(120, 150, 235, 0.25);
+  background: #0e1119;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.gx-onboarding .modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font: 700 19px Manrope;
+  letter-spacing: -0.01em;
+  margin-bottom: 10px;
+}
+.gx-onboarding .modal-p {
+  font-size: 14.5px;
+  color: #b3bac7;
+  line-height: 1.5;
+}
+.gx-onboarding .install-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0;
+}
+.gx-onboarding .install-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.gx-onboarding .install-row .nm {
+  width: 96px;
+  flex: none;
+}
+.gx-onboarding .install-row code {
+  flex: 1;
+  font: 12px 'IBM Plex Mono';
+  color: #c9d0dc;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gx-onboarding .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 18px;
+  align-items: center;
+}
+.gx-onboarding .toast {
+  position: absolute;
+  top: 22px;
+  transform: translateX(-50%);
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: rgba(14, 18, 30, 0.96);
+  border: 1px solid rgba(100, 140, 255, 0.35);
+  font-size: 13.5px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  animation: gxob-toastIn 0.25s ease-out;
+  white-space: nowrap;
+}
+.gx-onboarding .toast svg {
+  color: #3be3a2;
+}
+@keyframes gxob-toastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+.gx-onboarding .wires {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  z-index: 0;
+}
+.gx-onboarding .wire-line {
+  fill: none;
+  stroke: rgba(70, 110, 240, 0.55);
+  stroke-width: 1.5;
+  transition: stroke 0.25s;
+}
+.gx-onboarding .wire-glow {
+  fill: none;
+  stroke: rgba(60, 100, 255, 0.2);
+  stroke-width: 6;
+  filter: blur(3px);
+  transition: stroke 0.25s;
+}
+.gx-onboarding .wire.active .wire-line {
+  stroke: rgba(150, 182, 255, 1);
+}
+.gx-onboarding .wire.active .wire-glow {
+  stroke: rgba(80, 130, 255, 0.5);
+}
+.gx-onboarding .wire-dot {
+  fill: #5b85ff;
+  filter: drop-shadow(0 0 4px #4a78ff);
+}
+.gx-onboarding .wire-pulse {
+  fill: #cddaff;
+  filter: drop-shadow(0 0 5px #7a9dff);
+}
+.gx-onboarding .wire {
+  transition: opacity 0.3s;
+}
+.gx-onboarding .wire.off {
+  opacity: 0.28;
+}
+.gx-onboarding .lights {
+  display: flex;
+  gap: 9px;
+  margin-right: 26px;
+}
+.gx-onboarding .lights i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: block;
+}
+.gx-onboarding .lights i:nth-child(1) {
+  background: #ff5f57;
+}
+.gx-onboarding .lights i:nth-child(2) {
+  background: #febc2e;
+}
+.gx-onboarding .lights i:nth-child(3) {
+  background: #28c840;
+}
+.gx-onboarding .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  display: inline-block;
+}
+.gx-onboarding .dot.run {
+  background: #3be3a2;
+  box-shadow: 0 0 6px #3be3a2;
+}
+.gx-onboarding .arow-t {
+  flex: 1;
+  min-width: 0;
+}
+@keyframes gxob-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+.gx-onboarding .eyebrow.center {
+  justify-content: center;
+}
+.gx-onboarding .h1.center {
+  text-align: center;
+}
+.gx-onboarding .sub.center {
+  text-align: center;
+}
+.gx-onboarding .actions.center {
+  justify-content: center;
+}
+.gx-onboarding .ibox.lg {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+}
+.gx-onboarding .cta.sm {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+.gx-onboarding .veil {
+  z-index: 1;
+  transition: clip-path 0.6s cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.gx-onboarding .darkveil-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gx-onboarding .scene,
+  .gx-onboarding .tl,
+  .gx-onboarding .ph-msg,
+  .gx-onboarding .fb,
+  .gx-onboarding .fl,
+  .gx-onboarding .menu-pop,
+  .gx-onboarding .toast,
+  .gx-onboarding .modal-back {
+    animation: none;
+  }
+  .gx-onboarding .ph-pill i,
+  .gx-onboarding .dpill i,
+  .gx-onboarding .typing i,
+  .gx-onboarding .spin,
+  .gx-onboarding .agent-cursor,
+  .gx-onboarding .pd-scanline,
+  .gx-onboarding .dlink-pkt {
+    animation: none;
+  }
+  .gx-onboarding .pv-typed,
+  .gx-onboarding .pv-alert,
+  .gx-onboarding .pv-ev.new,
+  .gx-onboarding .pv-cursor.click::after {
+    animation: none;
+  }
+  .gx-onboarding .divider,
+  .gx-onboarding .lockup,
+  .gx-onboarding .counter,
+  .gx-onboarding .foot,
+  .gx-onboarding .phone,
+  .gx-onboarding .veil,
+  .gx-onboarding .pv-cursor {
+    transition: none;
+  }
+}
+.gx-onboarding .aicon.mask {
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+.gx-onboarding .install-row .nm.link:hover {
+  color: #8fabff;
+}
+.gx-onboarding .modal-actions .ghost:first-child {
+  margin-right: auto;
+}
+.gx-onboarding .guide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

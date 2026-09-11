@@ -1,0 +1,747 @@
+/* Panel 2: agent rows, the scan console, the phase tracker, the extension panels (integration, Computer Use) and their previews. */
+.gx-onboarding .rescan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 14, 20, 0.6);
+  font: 500 13.5px 'DM Sans';
+  color: #dfe4ee;
+}
+.gx-onboarding .rescan:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.gx-onboarding .rescan:disabled {
+  color: #7c8598;
+}
+.gx-onboarding .spin {
+  animation: gxob-spin 1s linear infinite;
+}
+@keyframes gxob-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.gx-onboarding .arow3 {
+  display: flex;
+  align-items: center;
+  padding: 0 20px 0 22px;
+  transition:
+    border-color 0.25s,
+    background 0.25s,
+    opacity 0.3s;
+}
+.gx-onboarding .arow3 .radio {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  flex: none;
+  margin-right: 18px;
+  position: relative;
+  transition: border-color 0.2s;
+}
+.gx-onboarding .arow3.sel .radio {
+  border-color: #e8ecf4;
+}
+.gx-onboarding .arow3.sel .radio::after {
+  content: '';
+  position: absolute;
+  inset: 3.5px;
+  border-radius: 50%;
+  background: #e8ecf4;
+}
+.gx-onboarding .arow3 .radio.off {
+  border-style: dashed;
+  opacity: 0.6;
+}
+.gx-onboarding .arow3.sel {
+  border-color: rgba(170, 188, 240, 0.5);
+  background: linear-gradient(180deg, rgba(28, 33, 48, 0.88), rgba(14, 17, 26, 0.88));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 30px rgba(60, 100, 255, 0.08);
+}
+.gx-onboarding .arow3:hover:not(.sel) {
+  border-color: rgba(180, 195, 235, 0.24);
+}
+.gx-onboarding .arow3.pending {
+  opacity: 0.5;
+}
+.gx-onboarding .arow3 .abox {
+  width: 54px;
+  height: 54px;
+}
+.gx-onboarding .detpill {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  color: #3f63cf;
+  border: 1px solid rgba(63, 99, 207, 0.24);
+  background: rgba(40, 70, 160, 0.07);
+  flex: none;
+}
+.gx-onboarding .detpill.wait {
+  color: #6b7383;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.gx-onboarding .guide-btn {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(22, 25, 34, 0.85);
+  font-size: 15px;
+  font-weight: 500;
+}
+.gx-onboarding .guide-btn:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.gx-onboarding .term {
+  padding: 20px 24px;
+  font-family: 'IBM Plex Mono';
+  border-color: rgba(90, 125, 235, 0.25);
+  background: linear-gradient(180deg, rgba(10, 14, 28, 0.86), rgba(6, 8, 16, 0.9));
+}
+.gx-onboarding .term-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 17px;
+  font-weight: 500;
+  margin-bottom: 22px;
+}
+.gx-onboarding .term-head > span:first-child {
+  flex: 1;
+}
+.gx-onboarding .term-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  color: #aab2c1;
+}
+.gx-onboarding .term-state.done {
+  color: #3be3a2;
+}
+.gx-onboarding .spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-top-color: #c3cad6;
+  animation: gxob-spin 0.9s linear infinite;
+  display: inline-block;
+  flex: none;
+}
+.gx-onboarding .spinner.lg {
+  width: 34px;
+  height: 34px;
+}
+.gx-onboarding .term-lines {
+  display: flex;
+  flex-direction: column;
+}
+.gx-onboarding .tl {
+  height: 25.5px;
+  display: flex;
+  align-items: center;
+  font-size: 15px;
+  color: #c9d0dc;
+  animation: gxob-lineIn 0.25s ease-out;
+}
+.gx-onboarding .tl .ts {
+  color: #aab2c1;
+  width: 112px;
+  flex: none;
+}
+.gx-onboarding .tl .tt {
+  min-width: 248px;
+  flex: none;
+  white-space: nowrap;
+  padding-right: 12px;
+}
+.gx-onboarding .tl .tick {
+  color: #3be3a2;
+  animation: gxob-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.gx-onboarding .tl.done .tt {
+  color: #3be3a2;
+  font-weight: 600;
+}
+@keyframes gxob-lineIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+@keyframes gxob-pop {
+  from {
+    transform: scale(0);
+  }
+}
+.gx-onboarding .caret {
+  width: 9px;
+  height: 17px;
+  background: #aab2c1;
+  animation: gxob-blinkc 1s steps(2) infinite;
+  margin-top: 4px;
+  display: inline-block;
+}
+@keyframes gxob-blinkc {
+  50% {
+    opacity: 0;
+  }
+}
+.gx-onboarding .arow3 .abox {
+  width: 48px;
+  height: 48px;
+  margin-right: 16px;
+}
+.gx-onboarding .arow3 .abox.wide {
+  width: auto;
+  padding: 0 10px;
+}
+.gx-onboarding .detpill.on {
+  color: #3be3a2;
+  border-color: rgba(59, 227, 162, 0.4);
+  background: rgba(59, 227, 162, 0.07);
+}
+.gx-onboarding .curow {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 18px 0 30px;
+  cursor: pointer;
+  transition:
+    border-color 0.25s,
+    background 0.25s;
+}
+.gx-onboarding .curow > div {
+  flex: 1;
+}
+.gx-onboarding .curow:hover {
+  border-color: rgba(180, 195, 235, 0.22);
+}
+.gx-onboarding .curow.on {
+  border-color: rgba(110, 150, 255, 0.42);
+}
+.gx-onboarding .perm-pill {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  color: #c8d2ee;
+  border: 1px solid rgba(150, 175, 255, 0.3);
+  background: rgba(60, 90, 200, 0.12);
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  flex: none;
+}
+.gx-onboarding .tl.hot {
+  margin: 0 -10px;
+  padding: 0 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(60, 90, 200, 0.24), transparent 80%);
+  box-shadow: inset 2px 0 0 #4b73ff;
+}
+.gx-onboarding .tl.hot .tt {
+  color: #fff;
+}
+.gx-onboarding .tl.extra.acc .tt {
+  color: #8fabff;
+}
+.gx-onboarding .tl.extra.ok .tt {
+  color: #3be3a2;
+}
+.gx-onboarding .tl.extra.wait .tt {
+  color: #ffc46b;
+}
+.gx-onboarding .track {
+  display: flex;
+  align-items: center;
+}
+.gx-onboarding .track-chip {
+  flex: none;
+  width: 190px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #7c8598;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(10, 12, 20, 0.72);
+  transition:
+    color 0.3s,
+    border-color 0.3s,
+    background 0.3s,
+    box-shadow 0.3s;
+}
+.gx-onboarding .track-chip.active {
+  color: #eef1f7;
+  border-color: rgba(110, 150, 255, 0.6);
+  background: rgba(24, 32, 58, 0.85);
+  box-shadow: 0 0 24px rgba(60, 100, 255, 0.2);
+}
+.gx-onboarding .track-chip.done {
+  color: #eef1f7;
+  border-color: rgba(59, 227, 162, 0.35);
+}
+.gx-onboarding .track-chip.done svg,
+.gx-onboarding .track-chip.here svg {
+  color: #3be3a2;
+}
+.gx-onboarding .track-chip.here {
+  color: #fff;
+  border-color: rgba(59, 227, 162, 0.55);
+  background: rgba(20, 40, 40, 0.6);
+  box-shadow: 0 0 24px rgba(59, 227, 162, 0.16);
+}
+.gx-onboarding .pd-connect .ph-head {
+  text-align: left;
+}
+.gx-onboarding .track-o {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+}
+.gx-onboarding .track-seg {
+  flex: 1;
+  height: 2px;
+  margin: 0 6px;
+  background: rgba(255, 255, 255, 0.08);
+  transition: background 0.3s;
+}
+.gx-onboarding .track-seg.on {
+  background: linear-gradient(90deg, rgba(59, 227, 162, 0.6), rgba(110, 150, 255, 0.7));
+}
+.gx-onboarding .xtabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.gx-onboarding .xtabs .wtab {
+  height: 34px;
+  padding: 0 13px;
+  font-size: 13px;
+}
+.gx-onboarding .xpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-color: rgba(90, 125, 235, 0.25);
+  background: linear-gradient(180deg, rgba(10, 14, 28, 0.86), rgba(6, 8, 16, 0.9));
+}
+.gx-onboarding .xp-lead {
+  flex: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #dfe4ee;
+}
+.gx-onboarding .xp-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.gx-onboarding .xp-terms {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px 24px;
+}
+.gx-onboarding .xp-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #c9d0dc;
+}
+.gx-onboarding .xp-row em {
+  font: 500 10px/1.7 'IBM Plex Mono';
+  font-style: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7f8aa0;
+}
+.gx-onboarding .pv-int {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+}
+.gx-onboarding .pv-col {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(10, 12, 20, 0.75);
+  opacity: 0.55;
+  transition:
+    opacity 0.25s,
+    border-color 0.25s,
+    box-shadow 0.25s;
+}
+.gx-onboarding .pv-col.lit {
+  opacity: 1;
+  border-color: rgba(110, 150, 255, 0.55);
+  box-shadow: 0 0 26px rgba(60, 100, 255, 0.14);
+}
+.gx-onboarding .pv-col-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+}
+.gx-onboarding .pv-col-h b {
+  font-weight: 600;
+}
+.gx-onboarding .pv-now {
+  font: 500 10px 'IBM Plex Mono';
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8fabff;
+}
+.gx-onboarding .pv-slot {
+  height: 44px;
+}
+.gx-onboarding .pv-alert {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: rgba(30, 36, 52, 0.97);
+  border: 1px solid rgba(255, 180, 70, 0.35);
+  font-size: 10.5px;
+  color: #c9d0dc;
+  animation: gxob-drop 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.gx-onboarding .pv-alert b {
+  display: block;
+  font-size: 11.5px;
+  color: #fff;
+}
+.gx-onboarding .pv-alert.none {
+  justify-content: center;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: none;
+  color: #7c8598;
+  font-size: 11.5px;
+  animation: none;
+}
+.gx-onboarding .pv-srow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+.gx-onboarding .pv-srow .mono {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gx-onboarding .pv-srow .dpill {
+  height: 20px;
+  padding: 0 7px;
+  font-size: 10.5px;
+}
+.gx-onboarding .pv-srow .ic {
+  color: #9aa3b3;
+}
+.gx-onboarding .pv-cap {
+  margin-top: auto;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #9ea7b6;
+}
+.gx-onboarding .pv-files {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 18px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(0, 0, 0, 0.28);
+}
+.gx-onboarding .pv-files .label {
+  flex-basis: 100%;
+  font-size: 10px;
+}
+.gx-onboarding .pv-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 12px 'IBM Plex Mono';
+  color: #c9d0dc;
+}
+.gx-onboarding .pv-file.dim {
+  flex-basis: 100%;
+  font: 12px 'DM Sans';
+  color: #7f8aa0;
+}
+.gx-onboarding .pv-cu {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+.gx-onboarding .pv-cu-who {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  color: #dfe4ee;
+  background: rgba(14, 18, 30, 0.95);
+  border: 1px solid rgba(100, 140, 255, 0.4);
+}
+.gx-onboarding .pv-app {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 12px;
+  background: #0d1018;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.gx-onboarding .pv-app-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 32px;
+  padding: 0 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12px;
+  color: #c9d0dc;
+}
+.gx-onboarding .pv-app-bar .lights.sm {
+  margin: 0;
+}
+.gx-onboarding .pv-lbl {
+  position: absolute;
+  font: 500 10px 'IBM Plex Mono';
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7f8aa0;
+}
+.gx-onboarding .pv-field {
+  position: absolute;
+  left: 20px;
+  width: 190px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 13px;
+  color: #eef1f7;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+.gx-onboarding .pv-field.focus {
+  border-color: rgba(110, 150, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(110, 150, 255, 0.15);
+}
+.gx-onboarding .pv-typed {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  vertical-align: bottom;
+  animation: gxob-typeIn 0.9s steps(14) both;
+}
+@keyframes gxob-typeIn {
+  from {
+    max-width: 0;
+  }
+  to {
+    max-width: 16ch;
+  }
+}
+.gx-onboarding .pv-save {
+  position: absolute;
+  left: 20px;
+  top: 180px;
+  height: 32px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: #2548c4;
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    transform 0.15s,
+    filter 0.15s;
+}
+.gx-onboarding .pv-save.tap {
+  transform: scale(0.93);
+  filter: brightness(1.25);
+}
+.gx-onboarding .pv-cal {
+  position: absolute;
+  left: 232px;
+  right: 14px;
+  top: 46px;
+  bottom: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.gx-onboarding .pv-day {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 7px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  min-width: 0;
+}
+.gx-onboarding .pv-day > b {
+  font: 500 9.5px 'IBM Plex Mono';
+  letter-spacing: 0.08em;
+  color: #7f8aa0;
+}
+.gx-onboarding .pv-ev {
+  padding: 6px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: #c9d0dc;
+  background: rgba(255, 255, 255, 0.07);
+}
+.gx-onboarding .pv-ev.new {
+  color: #fff;
+  background: rgba(60, 90, 200, 0.55);
+  border: 1px solid rgba(130, 165, 255, 0.6);
+  animation: gxob-pop 0.4s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.gx-onboarding .pv-cursor {
+  transition: transform 0.8s cubic-bezier(0.45, 0, 0.2, 1);
+}
+.gx-onboarding .pv-cursor.click::after {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #8fabff;
+  animation: gxob-ring 0.6s ease-out forwards;
+}
+@keyframes gxob-ring {
+  from {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+.gx-onboarding .pv-perms {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.gx-onboarding .pv-perms .label {
+  flex-basis: 100%;
+  font-size: 10px;
+}
+.gx-onboarding .pv-perm {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 13px;
+}
+.gx-onboarding .pv-perm .ic {
+  color: #8fabff;
+}
+.gx-onboarding .pv-perm b {
+  white-space: nowrap;
+}
+.gx-onboarding .pv-perm em {
+  font-style: normal;
+  font-size: 12px;
+  color: #9ea7b6;
+}
+.gx-onboarding .agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  scrollbar-width: none;
+}
+.gx-onboarding .perm-pill .spinner {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+  margin-right: 6px;
+}
+.gx-onboarding .perm-pill.on {
+  color: #3be3a2;
+  border-color: rgba(59, 227, 162, 0.4);
+  background: rgba(59, 227, 162, 0.07);
+}
+.gx-onboarding button.pv-perm.act {
+  cursor: pointer;
+  border-color: rgba(110, 150, 255, 0.45);
+  background: rgba(60, 90, 200, 0.12);
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.gx-onboarding button.pv-perm.act:hover {
+  border-color: rgba(150, 180, 255, 0.7);
+  background: rgba(60, 90, 200, 0.2);
+}
+.gx-onboarding .pv-open {
+  margin-left: auto;
+  font-size: 12px;
+  color: #8fabff;
+  white-space: nowrap;
+}

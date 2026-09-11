@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { notifyAccountsConnectionsChanged } from '@/packages/core-ui/accounts/transport';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import { AddProjectModal } from '@/packages/core-ui/add-project-modal/add-project-modal';
 import type {
@@ -48,6 +48,8 @@ import { SessionChatTableModal } from '@/packages/core-ui/chat/session-chat-mark
 import { WatchGhostexVideoModal } from '@/packages/core-ui/watch-ghostex-video-modal';
 import { UpdateAvailableModal, type UpdateAvailableModalState } from '@/packages/core-ui/update-available-modal';
 import { FirstLaunchSetupModal } from '@/packages/core-ui/first-launch-setup-modal';
+import { OnboardingModal } from '@/packages/core-ui/onboarding';
+import { buildOnboardingDetectedAgents, deriveOnboardingComputerUseState } from './onboarding-host-adapter';
 import { GitFileDiffModal, type GitFileDiffModalDraft } from '@/packages/core-ui/git-file-diff-modal';
 import { GitCommitModal, type GitCommitModalDraft } from '@/packages/core-ui/git-commit-modal';
 import { WorktreeDeleteModal, type WorktreeDeleteModalDraft } from '@/packages/core-ui/worktree-delete-modal';
@@ -79,6 +81,7 @@ import {
 } from '@/packages/shared/workspace-project-appearance';
 import { installAppModalGlobalErrorLogging, logAppModalError } from '@/packages/core-ui/app-modal-error-log';
 import {
+  openAppModal,
   postAppModalHostMessage,
   type SettingsAgentsSection,
   type SettingsRemoteSection,
@@ -131,7 +134,8 @@ type AppModalKind =
   | 'worktree'
   | 'tipsAndTricks'
   | 'updateAvailable'
-  | 'firstLaunchSetup';
+  | 'firstLaunchSetup'
+  | 'onboarding';
 
 /*
  * CDXC:AppModal 2026-07-26-07:55:
@@ -259,6 +263,8 @@ type AppModalHostMessage =
       initialSearchQuery?: string;
       initialTab?: SettingsModalTab;
       latestSidebarStateMessage?: unknown;
+      /** Set only by the automatic first-run open of `onboarding`; see contract.ts `firstRun`. */
+      firstRun?: boolean;
       machineId?: string;
       machineName?: string;
       /** Membership target for a Space created from a group/project menu. */
@@ -701,8 +707,14 @@ function isSettingsModalKind(modal: AppModalKind | undefined): boolean {
   );
 }
 
+/**
+ * CDXC:Onboarding 2026-09-11 SEE-ALSO:
+ * `onboarding` (the new five-panel modal) and `firstLaunchSetup` (the older modal, kept under its own id) share every
+ * first-launch host rule: sidebar hydration before render, CLI/agent status requests, and completion on close.
+ * The native twin of this predicate is the `FirstLaunchSetup | Onboarding` matching in apps/desktop/src/app/modals.rs.
+ */
 function isFirstLaunchSetupModalKind(modal: AppModalKind | undefined): boolean {
-  return modal === 'firstLaunchSetup' || modal === 'tipsAndTricks';
+  return modal === 'firstLaunchSetup' || modal === 'tipsAndTricks' || modal === 'onboarding';
 }
 
 function shouldApplySidebarStateBeforeModalOpen(modal: AppModalKind | undefined): boolean {
@@ -868,9 +880,49 @@ async function requestFirstLaunchInstallSelectedSkills(skillIds: readonly Bundle
   }
 }
 
-function startFirstLaunchCreateProjectSession(agentId: string, path: string): void {
+/*
+ * CDXC:Onboarding 2026-09-11 WHY:
+ * The onboarding's finished screen says "Ghostex is open, <project> is ready", so it may only appear once the
+ * sidebar runtime has actually registered the folder and opened its first session. Same waiter shape as the
+ * Add Project dialog: mint a requestId, post the operation, resolve or reject on the matching
+ * `firstLaunchCreateProjectSessionResult`, with the add-project budget as the ceiling.
+ */
+function requestFirstLaunchCreateProjectSession(agentId: string, path: string): Promise<void> {
   const requestId = `first-launch-project-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  vscode.postMessage({ agentId, path, requestId, type: 'firstLaunchCreateProjectSession' });
+  return new Promise((resolve, reject) => {
+    let timeoutId = 0;
+    const handleMessage = (event: Event) => {
+      const message = (event as CustomEvent<AppModalHostMessage>).detail;
+      if (
+        !message ||
+        typeof message !== 'object' ||
+        message.type !== 'firstLaunchCreateProjectSessionResult' ||
+        message.requestId !== requestId
+      ) {
+        return;
+      }
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      if (!message.ok) {
+        reject(new Error(message.error || 'Ghostex could not open the project.'));
+        return;
+      }
+      resolve();
+    };
+
+    window.addEventListener('ghostex-app-modal-host-message', handleMessage);
+    timeoutId = window.setTimeout(() => {
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      reject(new Error('Opening the project timed out.'));
+    }, ADD_PROJECT_DIALOG_ADD_TIMEOUT_MS);
+    try {
+      vscode.postMessage({ agentId, path, requestId, type: 'firstLaunchCreateProjectSession' });
+    } catch (error) {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+      reject(error);
+    }
+  });
 }
 
 function waitForRemoteProjectDirectoryBrowseResult(requestId: string): Promise<RemoteFilesystemBrowseResult> {
@@ -1166,6 +1218,7 @@ function AppModalHost() {
     activeModal,
     activeModalRequestId,
     addProject,
+    onboardingFirstRun,
     agentHooksRequired,
     agentsHubCatalog,
     agentsHubFileContent,
@@ -1219,6 +1272,93 @@ function AppModalHost() {
   const [ghostexFolderStatsLoading, setGhostexFolderStatsLoading] = useState(false);
   const [osIntegrationStatusLoading, setOSIntegrationStatusLoading] = useState(false);
   const [pluginSettingsStatusLoading, setPluginSettingsStatusLoading] = useState(false);
+  const [onboardingPickedProjectFolder, setOnboardingPickedProjectFolder] = useState<string>();
+  const [onboardingComputerUseInstallRequested, setOnboardingComputerUseInstallRequested] = useState(false);
+  const isOnboardingModal = activeModal === 'onboarding';
+  // Memoized so the onboarding scan log sees a new `agents` array only when a new detection payload arrived.
+  const onboardingAgents = useMemo(() => buildOnboardingDetectedAgents(agentHookStatus), [agentHookStatus]);
+  const onboardingComputerUseState = deriveOnboardingComputerUseState({
+    ghostexCliStatus,
+    installRequested: onboardingComputerUseInstallRequested,
+  });
+  useEffect(() => {
+    if (isOnboardingModal) {
+      return;
+    }
+    setOnboardingPickedProjectFolder(undefined);
+    setOnboardingComputerUseInstallRequested(false);
+  }, [isOnboardingModal]);
+  useEffect(() => {
+    // The Computer Use install request is fulfilled once both the driver and the skill report installed.
+    if (ghostexCliStatus?.cuaDriverInstalled === true && ghostexCliStatus.computerUseSkillInstalled === true) {
+      setOnboardingComputerUseInstallRequested(false);
+    }
+  }, [ghostexCliStatus]);
+  useEffect(() => {
+    /*
+     * The Trycua installer runs as a command-pane Action; its exit reaches the modal host as the
+     * `installCuaDriver` settings-action status (`FinishDesktopControlSetup`). A failed report ends the
+     * onboarding's "installing" state; native already shows the failure toast for it.
+     */
+    if (!isOnboardingModal) {
+      return;
+    }
+    const handleMessage = (event: Event) => {
+      const message = (event as CustomEvent<AppModalHostMessage>).detail;
+      if (!message || typeof message !== 'object' || message.type !== 'sidebarState') {
+        return;
+      }
+      const status = message.message;
+      if (
+        !status ||
+        typeof status !== 'object' ||
+        !('type' in status) ||
+        status.type !== 'settingsActionStatus' ||
+        !('action' in status) ||
+        status.action !== 'installCuaDriver' ||
+        !('available' in status) ||
+        status.available !== false
+      ) {
+        return;
+      }
+      setOnboardingComputerUseInstallRequested(false);
+    };
+    window.addEventListener('ghostex-app-modal-host-message', handleMessage);
+    return () => {
+      window.removeEventListener('ghostex-app-modal-host-message', handleMessage);
+    };
+  }, [isOnboardingModal]);
+  useEffect(() => {
+    /*
+     * The native folder dialog answers `pickFirstLaunchProjectFolder` with this host message. The new
+     * onboarding takes the path as a prop (FirstLaunchSetupModal listens for the event itself).
+     */
+    if (!isOnboardingModal) {
+      return;
+    }
+    const handlePickedFolder = (event: Event) => {
+      const message = (event as CustomEvent<AppModalHostMessage>).detail;
+      if (!message || typeof message !== 'object' || message.type !== 'firstLaunchProjectFolderPicked') {
+        return;
+      }
+      const path = message.path.trim();
+      if (path) {
+        setOnboardingPickedProjectFolder(path);
+      }
+    };
+    window.addEventListener('ghostex-app-modal-host-message', handlePickedFolder);
+    return () => {
+      window.removeEventListener('ghostex-app-modal-host-message', handlePickedFolder);
+    };
+  }, [isOnboardingModal]);
+  useEffect(() => {
+    // FirstLaunchSetupModal requests agent detection from inside the component; OnboardingModal only exposes a rescan.
+    if (!isOnboardingModal || agentHookStatus || agentHookStatusLoading) {
+      return;
+    }
+    setAgentHookStatusLoading(true);
+    vscode.postMessage({ type: 'requestAgentHookStatus' });
+  }, [agentHookStatus, agentHookStatusLoading, isOnboardingModal]);
   const sentNativeFitHeightMeasurementKeysRef = useRef<Set<string>>(new Set());
   const previousSettingsRenderStateLogRef = useRef('');
   const previousFirstLaunchSetupRenderStateLogRef = useRef('');
@@ -1593,7 +1733,14 @@ function AppModalHost() {
   }, [ghostexFolderStats]);
 
   useEffect(() => {
-    if (agentHookStatus) {
+    /*
+     * CDXC:Onboarding 2026-09-11 WHY:
+     * The desktop host posts a merged `agentHookStatus` after each provider probe; only the walk's final
+     * post carries `complete: true`. Clearing the loading marker on the first partial payload made the
+     * onboarding scan log print "Scan complete." while providers were still being probed. Payloads without
+     * the field (install/uninstall replies, remote hosts) are complete.
+     */
+    if (agentHookStatus && agentHookStatus.complete !== false) {
       setAgentHookStatusLoading(false);
     }
   }, [agentHookStatus]);
@@ -1633,7 +1780,7 @@ function AppModalHost() {
     if (activeModal === 'settings') {
       return;
     }
-    if (activeModal !== 'firstLaunchSetup' && activeModal !== 'tipsAndTricks') {
+    if (!isFirstLaunchSetupModalKind(activeModal)) {
       setGhostexCliStatusLoading(false);
       return;
     }
@@ -1688,7 +1835,9 @@ function AppModalHost() {
 
   return (
     <>
-      {activeModal === 'browserHistory' && browserHistory && <BrowserHistoryModal target={browserHistory} onClose={closeModal} />}
+      {activeModal === 'browserHistory' && browserHistory && (
+        <BrowserHistoryModal target={browserHistory} onClose={closeModal} />
+      )}
       <PreviousSessionsModal
         initialScope={previousSessionsInitialScope}
         openRequestSequence={previousSessionsOpenRequestSequence}
@@ -2418,7 +2567,7 @@ function AppModalHost() {
         ghostexCliStatus={ghostexCliStatus}
         ghostexCliStatusLoading={ghostexCliStatusLoading}
         hasProjects={projectSettingsProjects.length > 0}
-        isOpen={isFirstLaunchSetupRenderable}
+        isOpen={isFirstLaunchSetupRenderable && activeModal !== 'onboarding'}
         onChange={(nextSettings) => {
           vscode.postMessage({
             settings: nextSettings,
@@ -2497,7 +2646,9 @@ function AppModalHost() {
           runtime over the workspaceFolderPicked chain, which owns project
           registration + focus.
           */
-          startFirstLaunchCreateProjectSession(agentId, path);
+          void requestFirstLaunchCreateProjectSession(agentId, path).catch((error: unknown) => {
+            logAppModalError('FirstLaunchSetup:createProjectSession', error);
+          });
         }}
         onRequestAgentHookStatus={(agentIds) => {
           setAgentHookStatusLoading(true);
@@ -2510,6 +2661,89 @@ function AppModalHost() {
         settings={settings}
         theme={theme}
         vscode={vscode}
+      />
+      <OnboardingModal
+        agentHookStatus={agentHookStatus}
+        agents={onboardingAgents}
+        agentsLoading={agentHookStatusLoading}
+        browserSkillInstalled={ghostexCliStatus?.browserSkillInstalled === true}
+        computerUseState={onboardingComputerUseState}
+        ghostexCliStatus={ghostexCliStatus}
+        ghostexCliStatusLoading={ghostexCliStatusLoading}
+        firstRun={onboardingFirstRun}
+        hasProjects={projectSettingsProjects.length > 0}
+        isOpen={isFirstLaunchSetupRenderable && activeModal === 'onboarding'}
+        onChange={(nextSettings) => {
+          vscode.postMessage({
+            settings: nextSettings,
+            source: 'firstLaunch:preferences',
+            type: 'updateSettings',
+          });
+        }}
+        onClose={completeFirstLaunchSetup}
+        onFinishFirstLaunch={({ agentId, path }) => requestFirstLaunchCreateProjectSession(agentId, path)}
+        onInstallAgentHooks={(agentIds) => {
+          setAgentHookStatusLoading(true);
+          vscode.postMessage({ agentIds: [...agentIds], type: 'installAgentHooks' });
+        }}
+        onInstallBrowserSkill={() => {
+          setGhostexCliStatusLoading(true);
+          vscode.postMessage({ type: 'installBrowserUseSkill' });
+        }}
+        onInstallComputerUse={() => {
+          /*
+           * Same order as FirstLaunchSetupModal's skill install: Cua Driver first when it is missing,
+           * then the Computer Use skill through the acknowledged settings-action request.
+           */
+          setOnboardingComputerUseInstallRequested(true);
+          setGhostexCliStatusLoading(true);
+          if (ghostexCliStatus?.cuaDriverInstalled !== true) {
+            vscode.postMessage({ type: 'installCuaDriver' });
+          }
+          void requestFirstLaunchInstallSelectedSkills(['computerUse']).catch((error: unknown) => {
+            logAppModalError('Onboarding:installComputerUse', error);
+            setOnboardingComputerUseInstallRequested(false);
+            toast.error('Computer Use could not be turned on', {
+              description:
+                error instanceof Error && error.message
+                  ? error.message
+                  : 'Ghostex could not install the Computer Use skill.',
+              id: 'onboarding-computer-use-install',
+            });
+          });
+        }}
+        onOpenAccessibilityPreferences={() => {
+          vscode.postMessage({ type: 'openAccessibilityPreferences' });
+        }}
+        onOpenExternalUrl={(url) => {
+          vscode.postMessage({ type: 'openExternalUrl', url });
+        }}
+        onOpenInstallGuide={(url) => {
+          vscode.postMessage({ type: 'openExternalUrl', url });
+        }}
+        onOpenRemoteSettings={() => {
+          openAppModal({ initialRemoteSection: 'easyConnect', initialTab: 'remote', modal: 'settings', type: 'open' });
+        }}
+        onOpenScreenRecordingPreferences={() => {
+          vscode.postMessage({ type: 'openScreenRecordingPreferences' });
+        }}
+        onOpenSettings={() => {
+          openAppModal({ modal: 'settings', type: 'open' });
+        }}
+        onPickProjectFolder={() => {
+          vscode.postMessage({ type: 'pickFirstLaunchProjectFolder' });
+        }}
+        onRescanAgents={() => {
+          setAgentHookStatusLoading(true);
+          vscode.postMessage({ type: 'requestAgentHookStatus' });
+        }}
+        onUninstallBrowserSkill={() => {
+          setGhostexCliStatusLoading(true);
+          vscode.postMessage({ skillId: 'browserUse', type: 'uninstallBundledAgentSkill' });
+        }}
+        pickedProjectFolder={onboardingPickedProjectFolder}
+        settings={settings}
+        theme={theme}
       />
       <SessionRenameModal
         agents={agents}
@@ -2750,6 +2984,7 @@ function useModalStateFromNative() {
   const [remoteGxserverInstall, setRemoteGxserverInstall] = useState<RemoteGxserverInstallState>();
   const [remoteProjectPicker, setRemoteProjectPicker] = useState<RemoteProjectPickerState>();
   const [addProject, setAddProject] = useState<AddProjectModalState>();
+  const [onboardingFirstRun, setOnboardingFirstRun] = useState(false);
   const [recentProjects, setRecentProjects] = useState<RecentProjectsModalState>();
   const [renameSession, setRenameSession] = useState<RenameSessionModalState>();
   const [sessionNote, setSessionNote] = useState<SessionNoteModalState>();
@@ -2761,7 +2996,9 @@ function useModalStateFromNative() {
   const [updateAvailable, setUpdateAvailable] = useState<UpdateAvailableModalState>();
   const [agentHookStatus, setAgentHookStatus] = useState<AgentHookStatusMessage>();
   const [browserHistory, setBrowserHistory] = useState<BrowserHistoryTarget>();
-  const [previousSessionsInitialScope, setPreviousSessionsInitialScope] = useState<'all' | 'closed' | 'external'>('all');
+  const [previousSessionsInitialScope, setPreviousSessionsInitialScope] = useState<'all' | 'closed' | 'external'>(
+    'all'
+  );
   const [previousSessionsOpenRequestSequence, setPreviousSessionsOpenRequestSequence] = useState(0);
   const [commandPaletteInitialQuery, setCommandPaletteInitialQuery] = useState('');
   const [commandPaletteOpenRequestSequence, setCommandPaletteOpenRequestSequence] = useState(0);
@@ -2937,6 +3174,7 @@ function useModalStateFromNative() {
            * open-message if/else chain: the dialog has no draft to validate, so
            * every non-addProject open simply clears it.
            */
+          setOnboardingFirstRun(message.modal === 'onboarding' && message.firstRun === true);
           setAddProject(
             message.modal === 'addProject'
               ? {
@@ -3382,7 +3620,11 @@ function useModalStateFromNative() {
             setSettingsInitialSearchQuery(undefined);
             setSettingsInitialTabOverride(undefined);
           }
-          if (message.modal === 'browserHistory' && typeof message.paneId === 'number' && typeof message.runtimeKey === 'number') {
+          if (
+            message.modal === 'browserHistory' &&
+            typeof message.paneId === 'number' &&
+            typeof message.runtimeKey === 'number'
+          ) {
             setBrowserHistory({ paneId: message.paneId, runtimeKey: message.runtimeKey });
           }
           if (message.modal === 'previousSessions') {
@@ -3632,6 +3874,7 @@ function useModalStateFromNative() {
     activeModal,
     activeModalRequestId,
     addProject,
+    onboardingFirstRun,
     agentHooksRequired,
     agentsHubCatalog,
     agentsHubFileContent,
@@ -3913,6 +4156,7 @@ function isModalRenderable({
     case 'watchGhostexVideo':
     case 'tipsAndTricks':
     case 'firstLaunchSetup':
+    case 'onboarding':
       return true;
   }
 }
@@ -3952,9 +4196,9 @@ if (window.__ghostex_APP_MODAL_HOST_SURFACE__ === 'nativeWindow') {
 installAppModalGlobalErrorLogging('AppModals:modalHost');
 // CDXC:Settings 2026-09-07 WHY:
 // CEF can install the server connection after Settings renders, including when reusing another modal's window. Re-read Accounts connections on that existing bootstrap callback instead of retaining the initial empty list.
-const accountsBootstrapBridge = (window as unknown as {
+const accountsBootstrapBridge = window as unknown as {
   ghostexGpui?: { onGxserverBootstrapChanged?: () => void };
-});
+};
 accountsBootstrapBridge.ghostexGpui ??= {};
 accountsBootstrapBridge.ghostexGpui.onGxserverBootstrapChanged = notifyAccountsConnectionsChanged;
 createRoot(document.getElementById('root')!).render(<AppModalHost />);

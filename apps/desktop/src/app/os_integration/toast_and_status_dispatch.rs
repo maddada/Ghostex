@@ -282,7 +282,9 @@ impl GhostexGpuiApp {
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let mut merged: Option<serde_json::Value> = None;
-            for agent_id in gpui_ordered_agent_hook_status_agent_ids(requested_agent_ids) {
+            let agent_ids = gpui_ordered_agent_hook_status_agent_ids(requested_agent_ids);
+            let last_index = agent_ids.len().saturating_sub(1);
+            for (index, agent_id) in agent_ids.into_iter().enumerate() {
                 let payload = background
                     .spawn(async move {
                         gpui_agent_hook_status_message(
@@ -296,7 +298,7 @@ impl GhostexGpuiApp {
                     .get("errorMessage")
                     .and_then(serde_json::Value::as_str)
                     .is_some();
-                let next = if is_error {
+                let mut next = if is_error {
                     payload
                 } else {
                     match merged.as_ref() {
@@ -304,6 +306,17 @@ impl GhostexGpuiApp {
                         None => payload,
                     }
                 };
+                /*
+                CDXC:Onboarding 2026-09-11 WHY:
+                Every partial post looks like a full `agentHookStatus` reply, so
+                the modal host cleared its loading marker after the first
+                provider and the onboarding scan log printed "Scan complete."
+                while later providers were still being probed. `complete` marks
+                the walk's final post (the last provider or the error that stops
+                it); hosts treat a payload without the field as complete because
+                the single-shot install/uninstall replies never carry it.
+                */
+                next["complete"] = serde_json::Value::Bool(is_error || index == last_index);
                 let dispatched = this.update(cx, |this, cx| {
                     this.dispatch_open_gpui_app_modal_sidebar_state_payload(next.clone(), cx);
                     this.dispatch_gpui_titlebar_tips_sidebar_state_payload(&next, cx);

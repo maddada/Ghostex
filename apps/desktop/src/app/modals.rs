@@ -1346,6 +1346,22 @@ impl GhostexGpuiApp {
             self.shell_focus,
             &self.command_pane,
         );
+        /*
+        CDXC:Onboarding 2026-09-11 WHY:
+        A React-initiated switch out of first-launch setup (the onboarding's
+        "Advanced settings later" and queued Remote-settings opens post a plain
+        `open` for Settings) replaces or re-targets the one reusable modal
+        window here, so the later `completeFirstLaunchSetup` message finds
+        Settings as the live modal and is ignored. Count the switch itself as
+        finishing setup, otherwise onboarding reappears on the next launch.
+        Scoped to the new Onboarding modal so the parked-for-now old
+        FirstLaunchSetup keeps its previous behaviour unchanged.
+        */
+        if modal != GpuiAppModalKind::Onboarding
+            && self.gpui_app_modal_current_modal(cx) == Some(GpuiAppModalKind::Onboarding)
+        {
+            self.complete_first_launch_setup();
+        }
         if let Some(handle) = self.app_modal_window.clone() {
             let window_configuration_matches = handle
                 .update(cx, |host, _modal_window, _cx| {
@@ -1501,7 +1517,11 @@ impl GhostexGpuiApp {
                     modal_window.set_window_title("");
                 }
                 modal_window.activate_window();
-                if modal == GpuiAppModalKind::FirstLaunchSetup && !sidebar_has_projects {
+                if matches!(
+                    modal,
+                    GpuiAppModalKind::FirstLaunchSetup | GpuiAppModalKind::Onboarding
+                ) && !sidebar_has_projects
+                {
                     /*
                     First-launch setup is required until the sidebar has a
                     project. Reject native close controls and Cmd-W while it
@@ -1662,7 +1682,10 @@ impl GhostexGpuiApp {
         let closed_modal = handle
             .update(cx, |host, _window, _cx| host.current_modal)
             .ok();
-        if closed_modal == Some(GpuiAppModalKind::FirstLaunchSetup) {
+        if matches!(
+            closed_modal,
+            Some(GpuiAppModalKind::FirstLaunchSetup) | Some(GpuiAppModalKind::Onboarding)
+        ) {
             // Native close is only allowed once the sidebar has a project, so
             // leaving through the window chrome counts as finishing setup.
             self.complete_first_launch_setup();
@@ -1694,6 +1717,12 @@ impl GhostexGpuiApp {
     ) {
         let sidebar_state_message =
             self.with_gpui_command_pane_sidebar_indicators(base_sidebar_state);
+        // CDXC:Onboarding 2026-09-11 DECISION:
+        // User: "lots of changes on the onboarding so let's keep the old one for now"; first run and the
+        // Tips "Setup" button open the old FirstLaunchSetup modal until the new five-panel Onboarding
+        // modal (packages/core-ui/onboarding) is finished. When switching back, open `Onboarding` here
+        // with `"firstRun": true` added to the open message, because the user also decided that only the
+        // first run ever applies Browser + Docs as the enabled views, never a reopen from Tips > Setup.
         let modal = GpuiAppModalKind::FirstLaunchSetup;
         self.open_gpui_app_modal_window(
             modal,
@@ -2007,6 +2036,13 @@ impl GhostexGpuiApp {
             gpui_session_chat_verbose_mode_from_settings(settings_snapshot.object());
         let chat_verbose_mode_script =
             format!("window.ghostexSetSessionChatVerboseMode?.({chat_verbose_mode});undefined;");
+        let chat_hotkeys = settings_snapshot
+            .object()
+            .get("hotkeys")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let chat_hotkeys_script =
+            format!("window.ghostexSetSessionChatHotkeys?.({chat_hotkeys});undefined;");
         let hide_account_emails = settings_snapshot
             .object()
             .get("hideAccountEmails")
@@ -2023,6 +2059,7 @@ impl GhostexGpuiApp {
             surface.update(cx, |surface, _| {
                 surface.execute_app_owned_script(&account_privacy_script);
                 surface.execute_app_owned_script(&chat_file_edit_previews_script);
+                surface.execute_app_owned_script(&chat_hotkeys_script);
             });
         }
         for surface in self.agents_chat_surfaces.values() {

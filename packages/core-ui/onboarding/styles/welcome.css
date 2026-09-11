@@ -1,0 +1,569 @@
+/* Panel 1: the three feature tabs and the live demos on the right (agents together, chat + terminal, desktop + mobile). */
+.gx-onboarding .tabcard {
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.gx-onboarding .tabrow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 96px;
+  padding: 0 14px;
+  border-radius: 11px;
+  text-align: left;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
+}
+.gx-onboarding .tabrow.hl {
+  background: rgba(80, 110, 220, 0.09);
+}
+.gx-onboarding .tabrow.sel {
+  background: linear-gradient(90deg, rgba(60, 90, 200, 0.2), rgba(60, 90, 200, 0.03));
+  box-shadow: inset 0 0 0 1px rgba(110, 150, 255, 0.35);
+}
+.gx-onboarding .tabrow-t {
+  flex: 1;
+  min-width: 0;
+}
+.gx-onboarding .tabrow-t .nm {
+  display: block;
+  font-size: 18px;
+}
+.gx-onboarding .tabrow-t .ss {
+  display: block;
+  font-size: 14px;
+  margin-top: 7px;
+}
+.gx-onboarding .tabrow-c {
+  color: #4a5263;
+  transition:
+    color 0.2s,
+    transform 0.2s;
+}
+.gx-onboarding .tabrow.hl .tabrow-c {
+  color: #6d93ff;
+  transform: translateX(3px);
+}
+.gx-onboarding .dpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font: 500 11.5px 'DM Sans';
+  white-space: nowrap;
+  flex: none;
+  border: 1px solid;
+}
+.gx-onboarding .dpill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.gx-onboarding .dpill.run {
+  color: #3be3a2;
+  background: rgba(59, 227, 162, 0.08);
+  border-color: rgba(59, 227, 162, 0.3);
+}
+.gx-onboarding .dpill.run i {
+  animation: gxob-breathe 1.4s ease-in-out infinite;
+}
+.gx-onboarding .dpill.done {
+  color: #9ec2ff;
+  background: rgba(80, 120, 255, 0.1);
+  border-color: rgba(110, 150, 255, 0.35);
+}
+.gx-onboarding .dpill.idle {
+  color: #7c8598;
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.gx-onboarding .dpill.need {
+  color: #ffc46b;
+  background: rgba(255, 180, 70, 0.08);
+  border-color: rgba(255, 180, 70, 0.35);
+}
+.gx-onboarding .dpill.need i {
+  animation: gxob-breathe 0.8s ease-in-out infinite;
+}
+.gx-onboarding .dcard {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(13, 19, 38, 0.86), rgba(7, 10, 21, 0.88));
+  border: 1px solid rgba(88, 124, 235, 0.26);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    border-color 0.35s,
+    box-shadow 0.35s;
+  animation: gxob-fade 0.35s;
+}
+.gx-onboarding .dcard.lit {
+  border-color: rgba(125, 162, 255, 0.75);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 40px rgba(60, 100, 255, 0.25);
+}
+.gx-onboarding .dcard-h {
+  display: flex;
+  align-items: center;
+  padding: 18px 18px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.gx-onboarding .dcard-t {
+  flex: 1;
+  min-width: 0;
+}
+.gx-onboarding .dcard-t b {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+}
+.gx-onboarding .dcard-t em {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: #8e97a8;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+.gx-onboarding .dcard-log {
+  flex: 1;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gx-onboarding .dl {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: #c9d0dc;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  animation: gxob-lineIn 0.3s ease-out;
+}
+.gx-onboarding .dl.me {
+  align-self: flex-end;
+  background: rgba(60, 90, 200, 0.22);
+  border-color: rgba(100, 140, 255, 0.3);
+  color: #eef1f7;
+}
+.gx-onboarding .dl.acc {
+  color: #aec2ff;
+  border-color: rgba(110, 150, 255, 0.3);
+}
+.gx-onboarding .dl.ok {
+  color: #3be3a2;
+  border-color: rgba(59, 227, 162, 0.25);
+}
+.gx-onboarding .dl.fresh,
+.gx-onboarding .cline.fresh,
+.gx-onboarding .tline.fresh {
+  animation:
+    gxob-lineIn 0.3s ease-out,
+    gxob-glowOnce 1.4s ease-out;
+}
+@keyframes gxob-glowOnce {
+  from {
+    filter: drop-shadow(0 0 7px rgba(120, 160, 255, 0.9));
+  }
+}
+.gx-onboarding .dlink {
+  position: absolute;
+  background: rgba(70, 110, 240, 0.5);
+  box-shadow: 0 0 8px rgba(60, 100, 255, 0.35);
+}
+.gx-onboarding .dlink-end {
+  position: absolute;
+  top: -3.5px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #5b85ff;
+  box-shadow: 0 0 6px #4a78ff;
+}
+.gx-onboarding .dlink-end.l {
+  left: -4px;
+}
+.gx-onboarding .dlink-end.r {
+  right: -4px;
+}
+.gx-onboarding .dlink-pkt {
+  position: absolute;
+  top: -5px;
+  width: 24px;
+  height: 12px;
+  border-radius: 6px;
+  background: #cddaff;
+  box-shadow: 0 0 14px #7a9dff;
+}
+.gx-onboarding .dlink-pkt.r {
+  animation: gxob-pktR 1s cubic-bezier(0.5, 0, 0.3, 1) forwards;
+}
+.gx-onboarding .dlink-pkt.l {
+  animation: gxob-pktL 1s cubic-bezier(0.5, 0, 0.3, 1) forwards;
+}
+@keyframes gxob-pktR {
+  from {
+    left: 0;
+    opacity: 1;
+  }
+  to {
+    left: calc(100% - 24px);
+    opacity: 0.15;
+  }
+}
+@keyframes gxob-pktL {
+  from {
+    left: calc(100% - 24px);
+    opacity: 1;
+  }
+  to {
+    left: 0;
+    opacity: 0.15;
+  }
+}
+.gx-onboarding .dlink-label {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: #dfe4ee;
+  background: rgba(14, 18, 30, 0.95);
+  border: 1px solid rgba(100, 140, 255, 0.35);
+  animation: gxob-fade 0.3s;
+}
+.gx-onboarding .dsess {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 19px;
+  font: 500 12.5px 'IBM Plex Mono';
+  color: #dfe4ee;
+  background: rgba(14, 18, 30, 0.95);
+  border: 1px solid rgba(100, 140, 255, 0.4);
+  box-shadow: 0 0 22px rgba(60, 100, 255, 0.2);
+}
+.gx-onboarding .dpane {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(12, 16, 31, 0.9), rgba(7, 9, 18, 0.92));
+  border: 1px solid rgba(90, 125, 235, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 34px rgba(40, 80, 220, 0.12);
+  overflow: hidden;
+}
+.gx-onboarding .dpane-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 14px;
+  font-weight: 500;
+  color: #e8ecf4;
+  flex: none;
+}
+.gx-onboarding .dpane-h svg {
+  color: #6d93ff;
+}
+.gx-onboarding .dpane-b {
+  flex: 1;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+.gx-onboarding .dpane-b.mono {
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.gx-onboarding .tline {
+  font-size: 12.5px;
+  color: #c9d0dc;
+  white-space: pre;
+  animation: gxob-lineIn 0.25s ease-out;
+}
+.gx-onboarding .tline.cmd {
+  color: #eef1f7;
+}
+.gx-onboarding .tline.me {
+  color: #aec2ff;
+}
+.gx-onboarding .tline.tool {
+  color: #9aa3b3;
+}
+.gx-onboarding .tline.out {
+  color: #3be3a2;
+}
+.gx-onboarding .caret.sm {
+  width: 8px;
+  height: 14px;
+  margin-top: 0;
+}
+.gx-onboarding .cline {
+  font-size: 13px;
+  line-height: 1.45;
+  animation: gxob-lineIn 0.3s ease-out;
+}
+.gx-onboarding .cline.me {
+  align-self: flex-end;
+  max-width: 84%;
+  background: rgba(60, 90, 200, 0.25);
+  border: 1px solid rgba(100, 140, 255, 0.3);
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+.gx-onboarding .cline.tool {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #aab2c1;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.gx-onboarding .cline.tool svg {
+  color: #3be3a2;
+}
+.gx-onboarding .cline.bot {
+  color: #e8ecf4;
+  max-width: 94%;
+}
+.gx-onboarding .cline .who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #8e97a8;
+  margin-bottom: 4px;
+}
+.gx-onboarding .dmon {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(12, 16, 31, 0.95), rgba(7, 9, 18, 0.97));
+  border: 6px solid #1b1e25;
+  box-shadow:
+    0 0 0 1px rgba(90, 125, 235, 0.35),
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(40, 80, 220, 0.14);
+  overflow: hidden;
+}
+.gx-onboarding .dmon-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  flex: none;
+}
+.gx-onboarding .dmon-bar .lights.sm {
+  margin: 0 8px 0 0;
+}
+.gx-onboarding .dmon-body {
+  flex: 1;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.gx-onboarding .dmon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12.5px;
+  transition:
+    border-color 0.3s,
+    background 0.3s;
+}
+.gx-onboarding .dmon-row .mono {
+  flex: 1;
+}
+.gx-onboarding .dmon-row.hot {
+  border-color: rgba(255, 180, 70, 0.4);
+  background: rgba(255, 180, 70, 0.05);
+}
+.gx-onboarding .dmon-detail {
+  margin-top: 4px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: #dfe4ee;
+  animation: gxob-fade 0.35s;
+}
+.gx-onboarding .dmon-neck {
+  position: absolute;
+  background: linear-gradient(180deg, #1b1e25, #12141a);
+}
+.gx-onboarding .dmon-foot {
+  position: absolute;
+  border-radius: 4px;
+  background: #1b1e25;
+}
+.gx-onboarding .dcap {
+  position: absolute;
+  text-align: center;
+  font: 500 11px 'IBM Plex Mono';
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7f8aa0;
+}
+.gx-onboarding .dphone {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  padding-top: 34px;
+  border-radius: 30px;
+  border: 6px solid #1b1e25;
+  background: #05070c;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 40px rgba(40, 80, 220, 0.16);
+  overflow: hidden;
+}
+.gx-onboarding .dphone-island {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 18px;
+  border-radius: 9px;
+  background: #000;
+}
+.gx-onboarding .dphone-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.gx-onboarding .dphone-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px;
+}
+.gx-onboarding .dphone-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 9.5px;
+}
+.gx-onboarding .dphone-row .mono {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gx-onboarding .dphone-row .dpill {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 9px;
+  gap: 4px;
+}
+.gx-onboarding .dphone-banner {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 30px;
+  z-index: 3;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(30, 36, 52, 0.97);
+  border: 1px solid rgba(255, 180, 70, 0.35);
+  font-size: 10px;
+  color: #c9d0dc;
+  animation: gxob-drop 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.gx-onboarding .dphone-banner b {
+  display: block;
+  font-size: 11px;
+  color: #fff;
+}
+.gx-onboarding .dphone-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 10px;
+}
+.gx-onboarding .dpc {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 7px 9px;
+  border-radius: 10px;
+  max-width: 92%;
+  animation: gxob-lineIn 0.3s ease-out;
+}
+.gx-onboarding .dpc.bot {
+  background: rgba(255, 255, 255, 0.05);
+  color: #dfe4ee;
+}
+.gx-onboarding .dpc.me {
+  align-self: flex-end;
+  background: rgba(60, 90, 200, 0.3);
+  border: 1px solid rgba(100, 140, 255, 0.3);
+}
+.gx-onboarding .dpc-quick {
+  display: flex;
+  gap: 6px;
+}
+.gx-onboarding .dpc-quick span {
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(110, 150, 255, 0.4);
+  font-size: 10px;
+  color: #c9d6ff;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+.gx-onboarding .dpc-quick span.tap {
+  background: rgba(60, 90, 200, 0.55);
+  transform: scale(0.93);
+}
+.gx-onboarding .dpc-quick span.picked {
+  background: rgba(60, 90, 200, 0.3);
+}
