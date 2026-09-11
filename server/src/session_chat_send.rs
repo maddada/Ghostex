@@ -29,8 +29,8 @@ use serde_json::{json, Map, Value};
 /*
 CDXC:SessionChat 2026-07-31:
 Session Chat send path (upstream chat spec §7/§8 port). The agent is a TUI, so sending is
-writing bytes to its pty via `zmx send` stdin. The spec's measured discipline is
-preserved verbatim: a Ctrl+U/Ctrl+K clear burst sized by the 2N-1 law, a
+writing bytes to its pty via `zmx send` stdin. Delivery uses an agent-specific,
+screen-verified composer clear, a
 bracketed-paste body with ESC sanitized and newlines normalized to CR, and a
 SEPARATE Enter write (a trailing \r inside the paste burst is read as newline
 text and the message stays staged). What is NOT preserved is the blind 500ms
@@ -917,16 +917,16 @@ pub fn build_session_chat_clear_input_steps(
     agent: Option<&str>,
     text: &str,
 ) -> Vec<SessionChatSendStep> {
-    if crate::agents::identity::normalize_agent_id(agent).as_deref() == Some("grok") {
-        vec![SessionChatSendStep::ClearComposer {
-            agent: "grok".to_string(),
-        }]
+    if let Some(agent) = crate::agents::identity::normalize_agent_id(agent)
+        .filter(|agent| input_replace::supports_verified_composer_clear(agent))
+    {
+        vec![SessionChatSendStep::ClearComposer { agent }]
     } else {
         build_agent_tui_clear_input_steps(None, text)
     }
 }
 
-/// composer wait → clear burst → 150ms settle → image pastes back-to-back →
+/// composer wait → verified agent-specific clear → image pastes back-to-back →
 /// (300ms settle when text follows images) → paste body → screen-verified wait
 /// → SEPARATE Enter.
 pub fn build_session_chat_message_steps(
@@ -1439,7 +1439,8 @@ async fn run_session_chat_send_worker(
                 }
                 SessionChatSendStep::StopLocalCommandOutput => {
                     crate::session_chat_app_command::stop_local_command_output(
-                        &project_id, &session_id,
+                        &project_id,
+                        &session_id,
                     );
                 }
                 SessionChatSendStep::BeginLocalCommandOutput {
@@ -2394,8 +2395,9 @@ mod tests {
                     settle_ms: 0,
                     timeout_ms: 6_000,
                 },
-                SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("hi")),
-                SessionChatSendStep::SleepMs(150),
+                SessionChatSendStep::ClearComposer {
+                    agent: "claude".to_string()
+                },
                 SessionChatSendStep::Write("hi".to_string()),
                 SessionChatSendStep::VerifyPasteLanded {
                     text: "hi".to_string(),
@@ -2419,8 +2421,9 @@ mod tests {
                     settle_ms: 0,
                     timeout_ms: 6_000,
                 },
-                SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("what is this")),
-                SessionChatSendStep::SleepMs(150),
+                SessionChatSendStep::ClearComposer {
+                    agent: "claude".to_string()
+                },
                 SessionChatSendStep::Write(
                     "\u{1b}[200~/tmp/ghostex-paste-1.png\u{1b}[201~".to_string()
                 ),
@@ -2450,8 +2453,9 @@ mod tests {
                     settle_ms: 0,
                     timeout_ms: 6_000,
                 },
-                SessionChatSendStep::Write(build_agent_tui_clear_input_for_text("")),
-                SessionChatSendStep::SleepMs(150),
+                SessionChatSendStep::ClearComposer {
+                    agent: "claude".to_string()
+                },
                 SessionChatSendStep::Write("\u{1b}[200~/tmp/a.png\u{1b}[201~".to_string()),
                 SessionChatSendStep::SleepMs(500),
                 SessionChatSendStep::Write("\r".to_string()),
@@ -2864,11 +2868,13 @@ pub(crate) async fn handle_send_session_chat_message_http(
     // CDXC:SessionChat 2026-09-09 DECISION:
     // User: sending in a new chat is immediate, but delivery waits for the agent's input box. A durable queue receipt lets both apps clear the composer while startup continues.
     if crate::agents::session_is_draft(&target.session) && image_paths.is_empty() {
+        let mut startup_params = params.clone();
+        startup_params.insert("startupSend".to_string(), json!(true));
         return match crate::session_chat_queue::handle_session_chat_queue_endpoint(
             &state.paths,
             state.metadata.server_id.as_str(),
             "/api/queueSessionChatPrompt",
-            &params,
+            &startup_params,
         ) {
             Ok(result) => {
                 crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(

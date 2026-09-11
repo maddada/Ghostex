@@ -10,9 +10,35 @@ use crate::session_chat_composer::{
     detect_session_chat_composer_readiness, session_chat_composer_input, SessionChatComposerState,
 };
 
+#[derive(Clone, Copy)]
+enum ComposerClearMethod {
+    InterruptOnce,
+    KillLines,
+}
+
+fn composer_clear_method(agent: &str) -> Option<ComposerClearMethod> {
+    match agent {
+        "claude" | "codex" | "cursor" | "grok" | "hermes-agent" | "pi" | "omp" => {
+            Some(ComposerClearMethod::InterruptOnce)
+        }
+        "antigravity" | "openclaude" => Some(ComposerClearMethod::KillLines),
+        _ => None,
+    }
+}
+
+pub(super) fn supports_verified_composer_clear(agent: &str) -> bool {
+    composer_clear_method(agent).is_some()
+}
+
 /// CDXC:SessionChat 2026-09-08 DECISION:
 /// User: sending from Chat must clear existing Claude or Codex terminal text and send the chat input. Rewind's restored prompt belongs in Chat, and switching to Terminal must not append another copy.
 /// The clear is checked against the live draft, not sized solely from the replacement text; a longer old draft can require several separately delivered bursts.
+/// CDXC:SessionChat 2026-09-11 DECISION:
+/// User approved agent-specific clearing followed by verification before sending. Spaces and newlines count as empty.
+/// CDXC:SessionChat 2026-09-11 WHY:
+/// The ghostex-web audit cleared populated drafts with one Ctrl+C in seven agents, but Codex and Hermes exited on empty input and Antigravity retained its draft. OpenClaude was unavailable.
+/// Send Ctrl+C only once after positive draft evidence; Antigravity and OpenClaude retain line deletion. See docs/2026-09-09/ctrl-c-agent-tests/RESULTS.md.
+/// Grok must not receive Ctrl+U because it quits to install a pending update.
 pub async fn clear_session_chat_composer(
     project_id: &str,
     session_id: &str,
@@ -22,7 +48,10 @@ pub async fn clear_session_chat_composer(
     cancelled: &(impl Fn() -> bool + Sync + ?Sized),
 ) -> Result<(), SessionChatSendError> {
     let deadline = Instant::now() + Duration::from_millis(SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS);
-    let mut grok_clear_sent = false;
+    let agent = crate::agents::identity::normalize_agent_id(Some(agent))
+        .unwrap_or_else(|| agent.to_string());
+    let method = composer_clear_method(&agent);
+    let mut interrupt_sent = false;
     loop {
         if cancelled() {
             return Err(SessionChatSendError::not_attempted(
@@ -31,13 +60,13 @@ pub async fn clear_session_chat_composer(
         }
         if let Some(screen) = capture_session_terminal_text_vt(zmx_name).await {
             let notice = crate::session_chat_notice::classify_session_chat_terminal_notice(
-                Some(agent),
+                Some(&agent),
                 &screen,
             );
             let ready =
-                detect_session_chat_composer_readiness(Some(agent), &screen, notice.as_ref());
+                detect_session_chat_composer_readiness(Some(&agent), &screen, notice.as_ref());
             if ready.state == SessionChatComposerState::Ready {
-                if let Some(input) = session_chat_composer_input(agent, &screen) {
+                if let Some(input) = session_chat_composer_input(&agent, &screen) {
                     if input.is_empty() {
                         return Ok(());
                     }
@@ -46,15 +75,17 @@ pub async fn clear_session_chat_composer(
                             SESSION_CHAT_SEND_CANCELLED.to_string(),
                         ));
                     }
-                    // CDXC:AgentProviders 2026-09-08 WHY:
-                    // Grok's Ctrl+U quits to install an update. Ctrl+C clears a nonempty draft, but repeating it after the draft disappears can cancel or quit, so send it once and verify.
-                    if agent != "grok" || !grok_clear_sent {
-                        let clear = if agent == "grok" {
-                            grok_clear_sent = true;
-                            "\u{3}".to_string()
-                        } else {
-                            build_agent_tui_clear_input(input.rows + AGENT_TUI_CLEAR_LINE_SLACK)
-                        };
+                    let clear = match method {
+                        Some(ComposerClearMethod::InterruptOnce) if !interrupt_sent => {
+                            interrupt_sent = true;
+                            Some("\u{3}".to_string())
+                        }
+                        Some(ComposerClearMethod::KillLines) => Some(build_agent_tui_clear_input(
+                            input.rows + AGENT_TUI_CLEAR_LINE_SLACK,
+                        )),
+                        _ => None,
+                    };
+                    if let Some(clear) = clear {
                         write_session_chat_payload(
                             project_id, session_id, zmx_name, source, &clear,
                         )
