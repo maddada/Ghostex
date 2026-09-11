@@ -37,7 +37,10 @@ companion toggle and project name. Hovering a view shows its positional shortcut
 - **Automate**: scheduled and triggered agent runs (see Automations).
 - **Docs**: Markdown, HTML, and Excalidraw files from the project's docs
   folders, with a markdown editor and an annotation system that sends notes
-  back to the agent.
+  back to the agent. Folders appear as they load, and search fills in while
+  Updating files is shown. Expand a folder to load it sooner; a loading or error
+  marker means its contents have not been confirmed yet. Use Refresh in the Docs
+  sidebar menu to check for changes immediately.
 
 Related settings: `terminalViewWidthMode`, `webLinkOpenTarget`,
 `markdownFileOpenView`, `htmlFileOpenView`, the Auto Sleep rows
@@ -49,11 +52,25 @@ The sidebar lists projects and their sessions. Project headers carry the git
 branch and diff stats, an agent launcher, Add Worktree, and project actions.
 Session rows show the agent icon, title, status, tags, and last-active time.
 Top chrome holds the Quick section (projectless Quick chats and terminals),
-tag filters, Spaces (saved filters), and More Options: Settings, Search by
+tag filters, Spaces, and More Options: Settings, Search by
 Prompt, Previous Sessions, Mobile & Remote, Extensions, Tips.
+Spaces group projects or groups together; they are not saved filters, and a
+filter cannot be saved as a Space.
 Space icons keep their normal glyph and show amber working-session and blue
-attention-session counts in extra-bold text centered inside each icon, including
+attention-session counts in extra-bold text near the bottom of each icon, including
 the selected Space.
+Switching to a Space brings back what you last had open there: the session you
+last used in that Space, in the view its project was in (Agents, Code, Browser,
+Kanban, Automate, or Docs). If that session was closed, the one before it is
+used; a Space you have never used opens its first project. Choose "Don't switch
+projects" to make a Space switch change only the sidebar filter
+(`sidebarSpaceSwitchBehavior`). "Follow the active session's Space"
+(`sidebarSpaceFollowActiveSession`, off by default) switches the selected Space
+to the one that owns a session you open from outside it, for example through
+Back/Forward, Search by Prompt, a notification, or Previous Sessions; otherwise
+the Space row only marks that Space with a dot.
+Switching projects by any route keeps the project's last view; only clicking a
+session inside the project you are already in switches to Agents.
 
 - Side and width: the sidebar sits left or right (`sidebarSide`, or
   `ghostex move-sidebar`); drag the divider to resize, double-click it to
@@ -66,12 +83,20 @@ the selected Space.
   select several sessions and choose Park selected, to move them into the
   collapsible Parked section at the bottom. Use Unpark or Unpark selected to
   bring them back. Parking keeps sessions running unless Sleep session when
-  parking is enabled (off by default). Both settings are in General > Sidebar
-  without Show Advanced: `enableSessionParking`, `sleepSessionWhenParking`.
+  parking is enabled (off by default). Show tag menu when parking (off by
+  default) makes Park open the Tag as menu so the session can be tagged as it
+  is parked; closing the menu without picking a tag still parks it. Unpark
+  after sending a message (on by default) moves a parked session back out of
+  the Parked section as soon as you send it a message from chat or type a
+  prompt into its terminal; Codex only notices chat sends. All four settings
+  are in General > Sidebar without Show Advanced: `enableSessionParking`,
+  `sleepSessionWhenParking`, `showTagMenuWhenParking`,
+  `unparkAfterSendingMessage`.
 - Remote machines appear as their own sidebar sections when connected.
 
 Related settings: everything under General > Sidebar, `agentManagerZoomPercent`
-(sidebar interface size), `sidebarProjectGroupStyle`, `sidebarSpacesEnabled`.
+(sidebar interface size), `sidebarProjectGroupStyle`, `sidebarSpacesEnabled`,
+`sidebarSpaceSwitchBehavior`, `sidebarSpaceFollowActiveSession`.
 
 ## Sessions
 
@@ -79,11 +104,16 @@ A session is one terminal pane. Sessions persist across app restarts (zmx keeps
 the process alive) and are restored with the agent's resume command. From the
 sidebar or `ghostex`, a session can be focused, renamed, pinned, tagged,
 slept and woken (`ghostex sleep|wake <selector>`), forked, closed, or moved
-between panes and groups. Titles are generated from the first prompt by the
-Title Generation Agent, and `/rename` in chat renames manually.
+between panes and groups. Claude and Codex name their own sessions; Ghostex
+syncs those names without running a first-prompt title job or blocking terminal
+input. Pi and OMP use the Title Generation Agent for first-prompt names.
+Manual Generate Name and `/rename` in chat remain available for Claude and Codex.
 
 - Sleeping frees RAM; Auto Sleep does it after idle minutes; Resources in the
   titlebar sleeps many at once and shows CPU and RAM per session.
+- Drag pinned sessions to reorder them within their project. Rows stay in place
+  while an icon-and-title ghost follows the pointer; the insertion line marks
+  where the session moves when you drop it.
 - Previous Sessions (More Options or Cmd+P) lists every past conversation from
   every agent CLI with resume and fork.
 - Search by Prompt (More Options, or `gx f` in a terminal) fuzzy-searches every
@@ -102,6 +132,15 @@ Session Chat renders the same agent session as a chat GUI: composer with
 image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session.
+Codex rewind continues in a new conversation before the selected prompt and
+returns that prompt for editing. If the chat cannot reconnect after the rewind,
+choose Retry synchronization in the dialog to reconnect without rewinding again
+(`ghostex rewind-session-chat <session> --message-id <message-id>` retries the same pending target).
+Sending in a new chat shows your message immediately in the conversation while
+Ghostex waits for the agent to be ready. It appears once, with a waiting status;
+you can retry or remove it if delivery fails. Prompts you explicitly
+queue stay in the list above the input. This also applies when reopening the chat
+or continuing on another device.
 Claude children stay in the Subagents card while the terminal lists them, including
 between monitor events. Idle children are labelled Idle and their clocks pause;
 click a child's name or task to open its transcript.
@@ -112,6 +151,9 @@ labelled Model not recorded.
 Slash commands sent from chat stay in the conversation after a reload, together
 with any captured output. Long command output expands when clicked; model, effort,
 Fast mode, and compaction results keep their status rows.
+While Claude Code writes a reply, the chat shows the text as it appears in the
+terminal, updated about once a second, and swaps in the saved message the moment
+Claude records it; nothing to enable.
 Toggle chat and terminal for a session with one click on the pane header or
 the pane hotkey. Compatible agents can default to chat. File writes and code
 edits appear outside the tool groups while the agent works. When a turn shows
@@ -137,17 +179,47 @@ keeps a saved copy while the text moves, and a late transfer preserves anything
 you have typed since. Saving and sync retries happen quietly in the background;
 the input only warns if it cannot save on this computer. Open Saved Prompts >
 Recovered for unsent text and earlier versions, including interrupted transfers.
+Recovered shows one entry per session. Identical copies are combined, and
+Earlier versions lets you read, copy, or insert previous text without filling
+the main list with typing edits. Search includes earlier versions too.
 Unsent drafts do not expire after five days, and short drafts remain available.
 Inserting recovered text keeps the text already in your input; confirmed sends
 retire the submitted draft without clearing a newer one.
+Sending a chat message, including a delayed chat send, replaces any text still
+in the terminal input. Ghostex checks that the agent's input is ready and empty
+before inserting the message; spaces and newlines alone count as empty. If it
+cannot confirm this, delivery stops and the chat draft or queued message is kept.
 If another saved draft is available, hover over or click its preview icon to
 read the full text above the icon before choosing Use or Dismiss.
 
-Hide emails in Settings > Accounts also masks email addresses in the status
+Settings > Accounts saves Claude and Codex logins and marks each one Automatic
+or Manual. Quick launch, the main launcher row, and any session started without
+picking an account use the Account for new sessions rule under each
+provider's New session defaults. The automatic rules only consider Automatic
+accounts: Most limit remaining (the default) picks the account with the most
+limit left, Soonest reset the one whose limit resets first, Most used first
+keeps draining the account already in use, and Same as last session reuses the
+account of the last session. Pick a specific account instead to always start
+with it. When the rule finds no account, new sessions use the current CLI login.
+
+Hide emails in Settings > Accounts keeps the first and last characters before
+`@` and shows the same `•••••.•••` for every domain, with no blur effect.
+It also masks email addresses in the status
 line below the chat box, the context meter's More details popover, and the
 Context details dialog previews and hover text. It also covers account choices
 and selected dropdown values, account setup and reconnect fields, and account
 errors and recovery messages in Settings, launchers, and the titlebar usage popup.
+
+The context meter above the chat box opens a popover whose More details rows
+are grouped under Usage & cost, Context & cache, and Session. Its pen icon
+opens the Context details dialog: the filter bar at the top finds a row by its
+title, description, or current value; switch rows on or off, drag them to
+reorder within their group, and star a row to show its value in the status
+line under the chat box. Usage rows hold one value each: 5h limit, 7d limit,
+Model limit (such as Fable), 5h reset, and 7d reset, read from the session's
+saved account, or from the agent itself when the session has no account.
+Claude Code and Codex keep separate choices; the copy buttons in the dialog
+header transfer them between the two.
 
 Related settings: `hideAccountEmails`, `preferredAgentInterface`, `sessionChatTheme`,
 `sessionChatFontFamily`, `sessionChatCustomTranscriptWidthEnabled`,
@@ -277,6 +349,20 @@ Related settings: `completionSound`, `actionCompletionSound`,
 
 ## Git and worktrees
 
+In New Project, paste a folder path, `cd ~/dev/my-app`, a quoted path, or a
+path with shell-escaped spaces to browse it on the local machine. A selected
+machine stays selected; `saved-machine:/path` selects a saved machine by name
+or ID. GitHub, GitLab, Bitbucket, Azure DevOps, and other Git URLs open the
+clone flow. Bare `owner/repo` offers Local folder and GitHub repository;
+the folder path is relative to the current project or the machine's Add
+project starts in folder. Copied `git clone`, `gh repo clone`, and
+`glab repo clone` commands prefill the repository, destination, branch
+(`-b` or `--branch`), and supported options (`--single-branch`, `--depth 1`).
+Repository file links identify the repository; unambiguous branch links
+also prefill the branch. Registered paths offer Open existing project, and
+files inside a Git repository offer its root. Press Enter to continue,
+choose a destination, and review before Clone & Add.
+
 Project headers show the branch and diff stats; the titlebar Git menu offers
 commit, sync with main, PR review by a prompt agent, and related actions with
 persistent running toasts. Add Worktree on a project header creates a git
@@ -298,6 +384,19 @@ docs directory), `hideProjectHeaderDiffStats`,
   Its Titlebar account usage section lets you star saved Claude and Codex
   accounts to show their usage in the desktop titlebar, or unstar them to hide
   it. These are the same per-account stars available in Settings > Accounts.
+  Each button opens that login's live limits, reset times, and extra usage or
+  rate limit resets. More model limits starts collapsed. Click the Codex reset
+  count to see each reset's expiry date. Redeem a reset opens a Codex terminal
+  in the active project's folder, shows it under that project in the sidebar,
+  and redeems the reset expiring soonest for the selected account. The project
+  and account must be on the same computer. If Codex needs attention or the
+  reset cannot be confirmed, continue in that chat. Shared history stays visible
+  below: today's, yesterday's, and the last 30 days' token totals with a daily
+  trend. History combines conversations across accounts of the same provider
+  on that computer, counts shared copies once, and includes cached tokens.
+  Claude and Codex histories stay separate. Switching account buttons changes
+  the live limits; the shared history remains the same. Totals come from saved
+  conversation logs, so they may omit usage whose logs are missing.
 - Settings > Open In chooses which apps appear on session and project Open In
   menus and adds custom open targets.
 - Settings > Integrations installs the bundled agent skills (Ghostex CLI,
