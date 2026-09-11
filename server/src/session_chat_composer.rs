@@ -695,9 +695,15 @@ pub fn detect_session_chat_composer_ready(
             screen_tail,
         );
     }
-    let matches = if agent == "cursor" {
+    let matches = if matches!(agent.as_str(), "cursor" | "hermes-agent" | "pi" | "omp") {
         let raw_lines: Vec<_> = screen_text.lines().map(strip_ansi_sgr).collect();
-        input::cursor_input_region(&raw_lines).is_some()
+        match agent.as_str() {
+            "cursor" => input::cursor_input_region(&raw_lines).is_some(),
+            "hermes-agent" => input::hermes_input_region(&raw_lines).is_some(),
+            "pi" => input::unmarked_rule_input_region(&raw_lines).is_some(),
+            "omp" => input::omp_input_region(&raw_lines).is_some(),
+            _ => unreachable!(),
+        }
     } else {
         signature_matches(signature, &lines)
     };

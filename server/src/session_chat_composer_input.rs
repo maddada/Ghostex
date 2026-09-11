@@ -17,6 +17,42 @@ pub(super) fn rule_input_region(lines: &[String], marker: char) -> Option<Range<
         .then_some(start..foot)
 }
 
+/// CDXC:SessionChat 2026-09-11 WHY:
+/// Clearing must read every logical row: Hermes can prefix its marker with a profile, Pi has no marker, and OMP paints its final input row inside the bottom corners.
+/// Readiness uses these same regions so a populated multiline draft remains eligible for clearing.
+pub(super) fn unmarked_rule_input_region(lines: &[String]) -> Option<Range<usize>> {
+    let foot = lines.iter().rposition(|line| is_horizontal_rule(line))?;
+    let head = lines[..foot]
+        .iter()
+        .rposition(|line| is_titled_horizontal_rule(line))?;
+    Some(head + 1..foot)
+}
+
+pub(super) fn hermes_input_region(lines: &[String]) -> Option<Range<usize>> {
+    let region = unmarked_rule_input_region(lines)?;
+    let start = region.clone().find(|&i| !lines[i].trim().is_empty())?;
+    super::is_profiled_marker_line(&lines[start], '❯').then_some(start..region.end)
+}
+
+pub(super) fn omp_input_region(lines: &[String]) -> Option<Range<usize>> {
+    let foot = lines.iter().rposition(|line| !line.trim().is_empty())?;
+    let bottom = lines[foot].trim();
+    if !bottom.starts_with('╰') || !bottom.ends_with('╯') {
+        return None;
+    }
+    let head = lines[..foot].iter().rposition(|line| {
+        let line = line.trim();
+        line.starts_with('╭') && line.ends_with('╮') && line.contains('π') && line.contains('>')
+    })?;
+    if !lines[head + 1..foot].iter().all(|line| {
+        let line = line.trim();
+        line.starts_with('│') && (line.ends_with('│') || line.ends_with('█'))
+    }) {
+        return None;
+    }
+    Some(head + 1..foot + 1)
+}
+
 /// CDXC:AgentScreenDetection 2026-09-09 WHY:
 /// Cursor 2026.09.08 renders either half-block borders or a background-filled input with blank padding, depending on terminal capabilities.
 /// The borderless layout must have its model/usage footer and context footer below the input, with no open menu after them; an arrow alone also appears in pickers.
@@ -91,6 +127,7 @@ impl SessionChatComposerInput {
 struct Style {
     bold: bool,
     faint: bool,
+    italic: bool,
     inverse: bool,
     foreground_rgb: Option<[u16; 3]>,
     background_rgb: Option<[u16; 3]>,
@@ -132,6 +169,8 @@ fn styled_lines(screen: &str) -> Vec<StyledLine> {
                                     0 => style = Style::default(),
                                     1 => style.bold = true,
                                     2 => style.faint = true,
+                                    3 => style.italic = true,
+                                    23 => style.italic = false,
                                     7 => style.inverse = true,
                                     27 => style.inverse = false,
                                     30..=37 | 39 | 90..=97 => style.foreground_rgb = None,
@@ -255,10 +294,48 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
         clear_codex_composer_particles(&mut lines);
     }
     let plain: Vec<_> = lines.iter().map(|line| line.text.clone()).collect();
+    if agent == "pi" || agent == "omp" {
+        let region = if agent == "pi" {
+            unmarked_rule_input_region(&plain)?
+        } else {
+            omp_input_region(&plain)?
+        };
+        let text = plain[region.clone()]
+            .iter()
+            .map(|line| {
+                if agent == "omp" {
+                    // OMP merges its final input row into ╰─ text ─╯.
+                    let line = line.trim();
+                    let inner = line
+                        .chars()
+                        .skip(1)
+                        .take(line.chars().count().saturating_sub(2))
+                        .collect::<String>();
+                    if line.starts_with('╰') {
+                        let inner = inner.strip_prefix('─').unwrap_or(&inner);
+                        inner.strip_suffix('─').unwrap_or(inner).to_string()
+                    } else {
+                        inner
+                    }
+                } else {
+                    line.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Some(SessionChatComposerInput {
+            text,
+            rows: region.len(),
+            placeholder: false,
+        });
+    }
     let region = match agent {
         "claude" | "openclaude" => rule_input_region(&plain, '❯')?,
         "antigravity" => rule_input_region(&plain, '>')?,
         "cursor" => cursor_input_region(&plain)?,
+        "hermes-agent" => hermes_input_region(&plain)?,
+        // CDXC:AgentScreenDetection 2026-09-11 DECISION:
+        // User: keep Codex 0.153 and earlier working alongside 0.154, with or without stars. The bold prompt and dim placeholder identify input independently of optional particles and background colors.
         "codex" => {
             let start = lines.iter().rposition(|line| {
                 line.chars
@@ -275,7 +352,13 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
         _ => return None,
     };
     let first = &lines[region.start];
-    let marker = first.chars.iter().position(|(ch, _)| !ch.is_whitespace())?;
+    let marker = first.chars.iter().position(|(ch, _)| {
+        if agent == "hermes-agent" {
+            *ch == '❯'
+        } else {
+            !ch.is_whitespace()
+        }
+    })?;
     let body: Vec<_> = first.chars[marker + 1..]
         .iter()
         .chain(
@@ -303,7 +386,10 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
     // Cursor's caret inverts the first placeholder character while the rest stays faint.
     let placeholder = !body.is_empty()
         && body.iter().enumerate().all(|(index, (_, style))| {
-            style.faint || (agent == "cursor" && index == 0 && style.inverse && body.len() > 1)
+            style.faint
+                // Hermes's prompt_toolkit placeholder is italic; editable input inherits the terminal style.
+                || (agent == "hermes-agent" && style.italic)
+                || (agent == "cursor" && index == 0 && style.inverse && body.len() > 1)
         })
         && !text.to_lowercase().contains("[paste");
     Some(SessionChatComposerInput {
