@@ -40,7 +40,7 @@ pub(crate) fn handle_browse_project_directories_http(
         Ok(params) => params,
         Err(error) => return project_path_error_response(endpoint_path, request_id, error),
     };
-    match browse_project_directories(&params, &state.paths.home_dir) {
+    match browse_project_directories_with_inspection(&params, state) {
         Ok(result) => routed_json(
             Some(endpoint_path),
             StatusCode::OK,
@@ -48,6 +48,85 @@ pub(crate) fn handle_browse_project_directories_http(
         ),
         Err(error) => project_path_error_response(endpoint_path, request_id, error),
     }
+}
+
+/// CDXC:AddProject 2026-09-11 DECISION:
+/// User: offer Open existing project for registered paths and the repository root for a pasted file inside a repository.
+/// SEE-ALSO: packages/core-ui/add-project-modal/types.ts, apps/desktop/src/app/helpers/project/add_project_dialog.rs.
+fn browse_project_directories_with_inspection(
+    params: &Map<String, Value>,
+    state: &AppState,
+) -> std::result::Result<Value, ProjectPathHttpError> {
+    let mut result = browse_project_directories(params, &state.paths.home_dir)?;
+    let Some(input) = params.get("inspectPath") else {
+        return Ok(result);
+    };
+    let input = normalize_browse_path_input(Some(input), "inspectPath")?;
+    let path = resolve_browse_target(
+        params.get("cwd").and_then(Value::as_str),
+        &input,
+        &state.paths.home_dir,
+    )?;
+    let metadata = match fs::metadata(&path) {
+        Ok(metadata) => Some(metadata),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(ProjectPathHttpError::bad_request(format!(
+                "Unable to inspect path: {error}"
+            )))
+        }
+    };
+    let kind = match metadata.as_ref() {
+        Some(metadata) if metadata.is_dir() => "directory",
+        Some(_) => "file",
+        None => "missing",
+    };
+    let mut inspection = json!({ "path": path_to_string(&path), "kind": kind });
+    let git_root = if kind == "file" {
+        path.parent()
+            .map(|parent| {
+                resolve_git_root_for_existing_directory(
+                    Some(&json!(path_to_string(parent))),
+                    &state.paths.home_dir,
+                )
+            })
+            .transpose()?
+            .flatten()
+    } else {
+        None
+    };
+    if let Some(root) = &git_root {
+        inspection["gitRoot"] = json!(root);
+    }
+    let project_path = git_root.as_deref().map(Path::new).unwrap_or(&path);
+    if kind != "missing" {
+        let db = open_gxserver_database(&state.paths).map_err(|error| {
+            ProjectPathHttpError::bad_request(format!("Unable to read projects: {error}"))
+        })?;
+        let projects = DomainRepository::new(&db, state.metadata.server_id.as_str())
+            .list_projects()
+            .map_err(|error| ProjectPathHttpError::bad_request(error.message))?;
+        let canonical = fs::canonicalize(project_path).ok();
+        for project in projects {
+            let Some(registered) = project.get("path").and_then(Value::as_str) else {
+                continue;
+            };
+            if project.get("visibility").and_then(Value::as_str) == Some("hidden") {
+                continue;
+            }
+            if Path::new(registered) == project_path
+                || canonical
+                    .as_ref()
+                    .is_some_and(|path| fs::canonicalize(registered).ok().as_ref() == Some(path))
+            {
+                inspection["projectPath"] = json!(registered);
+                inspection["projectId"] = project["projectId"].clone();
+                break;
+            }
+        }
+    }
+    result["inspection"] = inspection;
+    Ok(result)
 }
 
 /*

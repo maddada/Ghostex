@@ -34,7 +34,7 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
   const sshMatch = token.match(/^git@([^:]+):(.+)$/i);
   if (sshMatch) {
     const host = sshMatch[1]?.trim();
-    const path = normalizeRepositoryPath(sshMatch[2] ?? '');
+    const path = normalizeRepositoryPathForHost(host ?? '', sshMatch[2] ?? '');
     if (!host || !path) {
       return undefined;
     }
@@ -47,7 +47,7 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
   const sshUrlMatch = token.match(/^ssh:\/\/(?:[^@/\s]+@)?([^/\s]+)\/(.+)$/i);
   if (sshUrlMatch) {
     const host = sshUrlMatch[1]?.trim();
-    const path = normalizeRepositoryPath(sshUrlMatch[2] ?? '');
+    const path = normalizeRepositoryPathForHost(host ?? '', sshUrlMatch[2] ?? '');
     if (!host || !path) {
       return undefined;
     }
@@ -60,7 +60,7 @@ export function parseRepositoryCloneInput(input: string): ParsedRepositoryCloneI
   const httpMatch = token.match(/^(?:https?:\/\/)?([^/\s]+\.[^/\s]+)\/(.+)$/i);
   if (httpMatch) {
     const host = httpMatch[1]?.trim();
-    const path = normalizeRepositoryPath(httpMatch[2] ?? '');
+    const path = normalizeRepositoryPathForHost(host ?? '', httpMatch[2] ?? '');
     if (!host || !path) {
       return undefined;
     }
@@ -147,6 +147,13 @@ function isRepositoryLikeToken(token: string): boolean {
   );
 }
 
+/** CDXC:AddProject 2026-09-11 SEE-ALSO: server/src/repository_clone.rs preserves Azure clone paths without adding a .git suffix. */
+function normalizeRepositoryPathForHost(host: string, path: string): string {
+  return /^(?:dev\.azure\.com|ssh\.dev\.azure\.com|.+\.visualstudio\.com)$/iu.test(host.split('@').at(-1) ?? host)
+    ? (path.split(/[?#]/u)[0] ?? '').replace(/\/+$/u, '')
+    : normalizeRepositoryPath(path);
+}
+
 function normalizeRepositoryPath(path: string): string {
   const beforeHash = path.split('#')[0] ?? '';
   const beforeQuery = beforeHash.split('?')[0] ?? '';
@@ -155,7 +162,11 @@ function normalizeRepositoryPath(path: string): string {
     .split('/')
     .map((segment) => decodeRepositoryPathSegment(segment))
     .filter(Boolean);
-  const stopIndex = segments.findIndex((segment) => REPOSITORY_BROWSER_PATH_STOP_SEGMENTS.has(segment.toLowerCase()));
+  const stopIndex = /\.git$/iu.test(beforeGitSuffix)
+    ? -1
+    : segments.findIndex(
+        (segment, index) => index >= 2 && REPOSITORY_BROWSER_PATH_STOP_SEGMENTS.has(segment.toLowerCase())
+      );
   const repositorySegments = stopIndex >= 0 ? segments.slice(0, stopIndex) : segments;
   const normalizedPath = repositorySegments.join('/');
   return normalizedPath.endsWith('.git') ? normalizedPath : `${normalizedPath}.git`;

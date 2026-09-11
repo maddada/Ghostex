@@ -35,6 +35,7 @@ export interface AddProjectBrowseInput {
   readonly machineId: string;
   /** The directory portion of the typed query, e.g. "~/dev/". */
   readonly partialPath: string;
+  readonly inspectPath?: string;
 }
 
 export interface AddProjectBrowseEntry {
@@ -46,6 +47,15 @@ export interface AddProjectBrowseResult {
   readonly entries: readonly AddProjectBrowseEntry[];
   /** Server-resolved absolute directory (`~` expanded, path.resolve'd). */
   readonly parentPath: string;
+  readonly inspection?: AddProjectPathInspection;
+}
+
+export interface AddProjectPathInspection {
+  readonly path: string;
+  readonly kind: 'directory' | 'file' | 'missing';
+  readonly projectPath?: string;
+  readonly projectId?: string;
+  readonly gitRoot?: string;
 }
 
 /*

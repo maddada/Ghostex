@@ -64,6 +64,12 @@ import {
   matchesAddProjectFilter,
   orderedAddProjectSources,
 } from './add-project-modal-logic';
+import {
+  classifyAddProjectInput,
+  normalizePastedProjectPath,
+  parseAddProjectCloneInput,
+  type DetectedCloneInput,
+} from './add-project-input';
 import { MiddleEllipsisText } from './middle-ellipsis-text';
 import type {
   AddProjectBrowseEntry,
@@ -299,6 +305,15 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   const browseFilterQuery = isBrowsing && !hasTrailingPathSeparator(query) ? getBrowseLeafPathSegment(query) : '';
   const unsupportedWindowsPath = isUnsupportedWindowsProjectPath(query.trim(), platform);
   const relativePathNeedsActiveProject = isExplicitRelativeProjectPath(query.trim()) && !activeProjectCwd;
+  const detectedInput = useMemo(() => classifyAddProjectInput(query, machines), [query, machines]);
+  const detectionMachine =
+    detectedInput?.kind === 'browse' && detectedInput.machineId
+      ? machines.find((option) => option.machineId === detectedInput.machineId)
+      : (machine ?? machines.find((option) => option.machineId === 'local'));
+  const ambiguousInput =
+    (currentView?.kind === 'machines' || currentView?.kind === 'sources') && detectedInput?.kind === 'ambiguous'
+      ? detectedInput
+      : null;
 
   /* Source-control readiness is probed once per machine when its Sources step opens. */
   useEffect(() => {
@@ -333,9 +348,8 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   }, [currentView?.kind, discoveryByMachineId, machineId]);
 
   /*
-   * No debounce: the request key is the DIRECTORY portion
-   * of the query, so typing a leaf filter never refetches and crossing a `/`
-   * always does.
+   * Inspect the full input as well as listing its parent: a leaf can be an
+   * existing project or a file whose repository root should be offered.
    */
   useEffect(() => {
     if (
@@ -350,10 +364,12 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     const requestId = browseRequestRef.current + 1;
     browseRequestRef.current = requestId;
     setIsBrowsePending(true);
+    setBrowseResult(null);
     void propsRef.current
       .browse({
         machineId,
         partialPath: browseDirectoryPath,
+        ...(!isCloneDestinationStep ? { inspectPath: query } : {}),
         ...(activeProjectCwd ? { cwd: activeProjectCwd } : {}),
       })
       .then((result) => {
@@ -374,6 +390,9 @@ function AddProjectModalBody(props: AddProjectModalProps) {
           setIsBrowsePending(false);
         }
       });
+    return () => {
+      browseRequestRef.current += 1;
+    };
   }, [
     activeProjectCwd,
     browseDirectoryPath,
@@ -382,6 +401,8 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     machineId,
     relativePathNeedsActiveProject,
     unsupportedWindowsPath,
+    query,
+    isCloneDestinationStep,
   ]);
 
   useEffect(() => {
@@ -402,15 +423,26 @@ function AddProjectModalBody(props: AddProjectModalProps) {
   );
 
   const hasHighlightedBrowseItem = highlightedEntry !== null || highlightedItemValue === BROWSE_UP_VALUE;
-  const resolvedAddProjectPath = hasTrailingPathSeparator(query)
-    ? (browseResult?.parentPath ?? query.trim())
-    : (exactEntry?.fullPath ?? query.trim());
-  const canSubmitBrowsePath = isBrowsing && !relativePathNeedsActiveProject && !unsupportedWindowsPath;
+  const pathInspection = !isBrowsePending ? browseResult?.inspection : undefined;
+  const suggestedProjectPath = pathInspection?.projectPath ?? pathInspection?.gitRoot;
+  const resolvedAddProjectPath =
+    suggestedProjectPath ??
+    (hasTrailingPathSeparator(query)
+      ? (browseResult?.parentPath ?? query.trim())
+      : (exactEntry?.fullPath ?? query.trim()));
+  const canSubmitBrowsePath =
+    isBrowsing &&
+    !isBrowsePending &&
+    !relativePathNeedsActiveProject &&
+    !unsupportedWindowsPath &&
+    !(pathInspection?.kind === 'file' && !suggestedProjectPath);
   const willCreateProjectPath =
     canSubmitBrowsePath &&
     !isBrowsePending &&
     query.trim().length > 0 &&
     !hasHighlightedBrowseItem &&
+    !suggestedProjectPath &&
+    pathInspection?.kind !== 'directory' &&
     (hasTrailingPathSeparator(query) ? !browseResult : exactEntry === null);
 
   /*
@@ -429,7 +461,15 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     !unsupportedWindowsPath &&
     !relativePathNeedsActiveProject;
 
-  const submitActionLabel = isCloneDestinationStep ? 'Continue' : willCreateProjectPath ? 'Create & Add' : 'Add';
+  const submitActionLabel = isCloneDestinationStep
+    ? 'Continue'
+    : pathInspection?.projectId
+      ? 'Open existing project'
+      : pathInspection?.gitRoot
+        ? 'Add repository root'
+        : willCreateProjectPath
+          ? 'Create & Add'
+          : 'Add';
   const submitModifierLabel = addProjectModifierLabel(platform);
   const addShortcutLabel = hasHighlightedBrowseItem ? `${submitModifierLabel} Enter` : 'Enter';
   const readiness = useMemo(
@@ -445,6 +485,38 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     setErrorMessage(null);
     setBrowseGeneration((generation) => generation + 1);
   }, []);
+
+  useEffect(() => {
+    if (currentView?.kind !== 'machines' && currentView?.kind !== 'sources') {
+      return;
+    }
+    const targetMachine = detectionMachine;
+    const input = detectedInput;
+    if (!targetMachine || !input) {
+      return;
+    }
+    if (input.kind === 'error') {
+      setErrorMessage(input.message);
+      return;
+    }
+    if (input.kind === 'ambiguous') return;
+    if (input.kind === 'browse') {
+      pushView({ kind: 'browse', machineId: targetMachine.machineId, initialQuery: input.query });
+      return;
+    }
+    setCloneOptions(input);
+    setClonePreview(null);
+    setCloneDestinationPath('');
+    setCloneFlow({
+      remoteUrl: input.remoteUrl,
+      repository: null,
+      repositoryInput: '',
+      source: input.source,
+      step: 'repository',
+    });
+    pushView({ kind: 'clone', machineId: targetMachine.machineId });
+    setQuery(input.query);
+  }, [currentView?.kind, detectedInput, detectionMachine, pushView]);
 
   const popView = useCallback(() => {
     setCloneFlow(null);
@@ -517,16 +589,37 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     pushView({ kind: 'clone', machineId: targetMachineId });
   }
 
+  function chooseDetectedClone(targetMachineId: string, input: DetectedCloneInput): void {
+    startCloneFlow(targetMachineId, input.source);
+    setCloneOptions(input);
+    setQuery(input.query);
+  }
+
+  function resolveInputDestination(path: string, targetMachine = machine): string {
+    const explicit = normalizePastedProjectPath(path);
+    if (explicit && !isExplicitRelativeProjectPath(explicit)) return explicit;
+    const base =
+      targetMachine?.machineId === machineId && activeProjectCwd
+        ? activeProjectCwd
+        : addProjectInitialBrowseQuery(targetMachine ?? null);
+    return `${ensureBrowseDirectoryPath(base)}${path.replace(/^\.\//u, '')}`;
+  }
+
   function enterCloneDestinationStep(next: {
     readonly remoteUrl: string;
     readonly repository: AddProjectRepositoryInfo | null;
     readonly repositoryInput: string;
     readonly source: AddProjectSourceId;
+    readonly destination?: string;
   }): void {
     setCloneFlow({ ...next, step: 'destination' });
     setHighlightedItemValue(null);
     setBrowseResult(null);
-    setQuery(ensureBrowseDirectoryPath(addProjectInitialBrowseQuery(machine)));
+    setQuery(
+      next.destination
+        ? resolveInputDestination(next.destination)
+        : ensureBrowseDirectoryPath(addProjectInitialBrowseQuery(machine))
+    );
     setBrowseGeneration((generation) => generation + 1);
   }
 
@@ -538,13 +631,30 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     if (repositoryInput.length === 0 || busy) {
       return;
     }
-    if (cloneFlow.source === 'url') {
-      enterCloneDestinationStep({
-        remoteUrl: repositoryInput,
-        repository: null,
-        repositoryInput,
-        source: cloneFlow.source,
+    const parsed = parseAddProjectCloneInput(repositoryInput, cloneFlow.source);
+    if (parsed?.kind === 'error') {
+      setErrorMessage(parsed.message);
+      return;
+    }
+    if (parsed?.kind === 'clone') {
+      setCloneOptions({
+        branchName: parsed.branchName,
+        cloneMainOnly: parsed.cloneMainOnly,
+        shallowClone: parsed.shallowClone,
       });
+      if (cloneFlow.source === 'url' || (parsed.source !== 'github' && parsed.source !== 'gitlab')) {
+        enterCloneDestinationStep({
+          remoteUrl: parsed.remoteUrl,
+          repository: null,
+          repositoryInput,
+          source: parsed.source,
+          destination: parsed.destination,
+        });
+        return;
+      }
+    }
+    if (!parsed && cloneFlow.source === 'url') {
+      setErrorMessage('Enter a Git repository URL or clone command.');
       return;
     }
     setBusy('lookup');
@@ -552,17 +662,23 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     try {
       const repository = await propsRef.current.lookupRepository({
         machineId,
-        provider: cloneFlow.source,
-        repository: repositoryInput,
+        provider: (parsed?.source ?? cloneFlow.source) as AddProjectProviderId,
+        repository:
+          parsed?.source === 'gitlab'
+            ? parsed.remoteUrl
+                .replace(/^(?:https?:\/\/|ssh:\/\/(?:[^@/]+@)?|[^@]+@)[^/:]+[/:]/u, '')
+                .replace(/\.git$/u, '')
+            : (parsed?.remoteUrl ?? repositoryInput),
       });
       if (!isMountedRef.current) {
         return;
       }
       enterCloneDestinationStep({
-        remoteUrl: repository.url,
+        remoteUrl: parsed?.remoteUrl ?? repository.url,
         repository,
         repositoryInput,
-        source: cloneFlow.source,
+        source: parsed?.source ?? cloneFlow.source,
+        destination: parsed?.destination,
       });
     } catch (error) {
       if (isMountedRef.current) {
@@ -809,11 +925,42 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     if (isRepositoryStep || isNewFolderStep) {
       return [];
     }
+    if (ambiguousInput && detectionMachine) {
+      const path = resolveInputDestination(ambiguousInput.query, detectionMachine);
+      return [
+        {
+          field: 'inputChoice',
+          icon: <IconFolder className={ADD_PROJECT_ROW_ICON_CLASS} />,
+          title: 'Local folder',
+          description: path,
+          value: 'input:folder',
+          onSelect: () => pushView({ kind: 'browse', machineId: detectionMachine.machineId, initialQuery: path }),
+        },
+        {
+          field: 'inputChoice',
+          icon: sourceIcon('github'),
+          title: 'GitHub repository',
+          description: ambiguousInput.query,
+          value: 'input:github',
+          onSelect: () => chooseDetectedClone(detectionMachine.machineId, ambiguousInput.clone),
+        },
+      ];
+    }
     if (isBrowsing) {
       if (unsupportedWindowsPath || relativePathNeedsActiveProject) {
         return [];
       }
       const browseRows: AddProjectRow[] = [];
+      if (suggestedProjectPath && !isCloneDestinationStep) {
+        browseRows.push({
+          field: 'detectedProject',
+          icon: <IconFolderCheck className={ADD_PROJECT_ROW_ICON_CLASS} />,
+          title: pathInspection?.projectId ? 'Open existing project' : 'Add repository root',
+          description: suggestedProjectPath,
+          value: 'browse:project',
+          onSelect: () => void submitAddProject(suggestedProjectPath),
+        });
+      }
       if (canNavigateUp(browseDirectoryPath)) {
         browseRows.push({
           field: 'directoryUp',
@@ -947,6 +1094,11 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     readiness,
     relativePathNeedsActiveProject,
     unsupportedWindowsPath,
+    ambiguousInput,
+    detectionMachine,
+    suggestedProjectPath,
+    pathInspection,
+    isCloneDestinationStep,
   ]);
 
   const selectableRows = useMemo(() => rows.filter((row) => !row.disabled), [rows]);
@@ -1031,27 +1183,32 @@ function AddProjectModalBody(props: AddProjectModalProps) {
     }
   }
 
-  const emptyStateMessage = isNewFolderStep
-    ? addProjectNewFolderMessage({
-        name: newFolderName ?? '',
-        parentPath: newFolderParentPath,
-      })
-    : addProjectEmptyStateMessage({
-        cloneSource: cloneFlow?.source ?? null,
-        cloneStep: cloneFlow?.step === 'review' ? 'destination' : (cloneFlow?.step ?? null),
-        hasMachines: machines.length > 0,
-        isLoadingMachines,
-        relativePathNeedsActiveProject,
-        unsupportedWindowsPath,
-        willCreateProjectPath,
-      });
-  const groupLabel = isBrowsing
-    ? isCloneDestinationStep
-      ? 'Select where to clone'
-      : 'Directories'
-    : currentView?.kind === 'machines'
-      ? 'Machines'
-      : 'Sources';
+  const emptyStateMessage =
+    pathInspection?.kind === 'file' && !suggestedProjectPath
+      ? 'This is a file outside a Git repository. Choose a project folder.'
+      : isNewFolderStep
+        ? addProjectNewFolderMessage({
+            name: newFolderName ?? '',
+            parentPath: newFolderParentPath,
+          })
+        : addProjectEmptyStateMessage({
+            cloneSource: cloneFlow?.source ?? null,
+            cloneStep: cloneFlow?.step === 'review' ? 'destination' : (cloneFlow?.step ?? null),
+            hasMachines: machines.length > 0,
+            isLoadingMachines,
+            relativePathNeedsActiveProject,
+            unsupportedWindowsPath,
+            willCreateProjectPath,
+          });
+  const groupLabel = ambiguousInput
+    ? 'Choose how to open this'
+    : isBrowsing
+      ? isCloneDestinationStep
+        ? 'Select where to clone'
+        : 'Directories'
+      : currentView?.kind === 'machines'
+        ? 'Machines'
+        : 'Sources';
   const placeholder = isNewFolderStep
     ? 'New folder name'
     : isRepositoryStep

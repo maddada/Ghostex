@@ -19,6 +19,11 @@ pub(crate) fn gpui_add_project_dialog_params(
             let partial_path =
                 gpui_remote_path_like_string_from_command(params, "partialPath", true)?;
             forwarded.insert("partialPath".to_string(), serde_json::json!(partial_path));
+            if let Some(path) =
+                gpui_remote_path_like_string_from_command(params, "inspectPath", false)
+            {
+                forwarded.insert("inspectPath".to_string(), serde_json::json!(path));
+            }
             if let Some(cwd) = gpui_remote_path_like_string_from_command(params, "cwd", false) {
                 forwarded.insert("cwd".to_string(), serde_json::json!(cwd));
             }
@@ -114,7 +119,7 @@ pub(crate) fn gpui_add_project_dialog_translate_local_windows_paths(
     */
     let fields: &[&str] = match operation {
         GpuiAddProjectDialogOperation::Add => &["path"],
-        GpuiAddProjectDialogOperation::Browse => &["partialPath", "cwd"],
+        GpuiAddProjectDialogOperation::Browse => &["partialPath", "cwd", "inspectPath"],
         GpuiAddProjectDialogOperation::PreviewClone | GpuiAddProjectDialogOperation::StartClone => {
             &["destinationPath"]
         }

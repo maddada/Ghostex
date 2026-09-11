@@ -1051,7 +1051,8 @@ function readAddProjectBrowseResult(value: unknown): AddProjectBrowseResult {
   if (!isRemoteFilesystemBrowseResult(value)) {
     throw new Error('The machine returned an unexpected answer.');
   }
-  return { entries: value.entries, parentPath: value.parentPath };
+  const inspection = (value as AddProjectBrowseResult).inspection;
+  return { entries: value.entries, parentPath: value.parentPath, inspection };
 }
 
 function readAddProjectCreateDirectoryResult(
@@ -1880,11 +1881,11 @@ function AppModalHost() {
             path
           )
         }
-        browse={async ({ cwd, machineId, partialPath }) =>
+        browse={async ({ cwd, machineId, partialPath, inspectPath }) =>
           readAddProjectBrowseResult(
             await requestAddProjectDialogOperation('browse', ADD_PROJECT_DIALOG_BROWSE_TIMEOUT_MS, {
               machineId,
-              params: cwd ? { cwd, partialPath } : { partialPath },
+              params: { ...(cwd ? { cwd } : {}), partialPath, ...(inspectPath ? { inspectPath } : {}) },
             })
           )
         }

@@ -156,11 +156,11 @@ export function addProjectRepositoryPlaceholder(source: AddProjectSourceId): str
 }
 
 export function addProjectRepositoryActionLabel(source: AddProjectSourceId): string {
-  return source === 'url' ? 'Continue' : 'Lookup';
+  return source === 'github' || source === 'gitlab' ? 'Lookup' : 'Continue';
 }
 
 export function addProjectPathPlaceholder(isSubmenu: boolean): string {
-  return isSubmenu ? 'Enter path (e.g. ~/projects/my-app)' : 'Enter project path (e.g. ~/projects/my-app)';
+  return isSubmenu ? 'Enter path (e.g. ~/projects/my-app)' : 'Enter project path, GitHub repository, or clone URL';
 }
 
 export function addProjectInitialBrowseQuery(machine: AddProjectMachineOption | null): string {
@@ -198,7 +198,7 @@ export function addProjectEmptyStateMessage(input: AddProjectEmptyStateInput): s
     return 'No machine is available.';
   }
   if (input.cloneStep === 'repository') {
-    if (input.cloneSource === 'url') {
+    if (input.cloneSource === 'url' || input.cloneSource === 'bitbucket' || input.cloneSource === 'azure-devops') {
       return 'Enter a repository, URL, or clone command and press Enter to continue.';
     }
     if (input.cloneSource === 'github') {

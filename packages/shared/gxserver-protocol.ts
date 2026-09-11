@@ -930,6 +930,9 @@ export interface GxserverSaveStashedPromptResult {
 }
 
 export interface GxserverListStashedPromptsParams {
+  /** Omit recovery/sent history when only the saved library is needed. Defaults to true for older clients. */
+  includeRecovery?: boolean;
+  includeDelivered?: boolean;
   /** When present, results are limited to this project plus its worktree family. */
   projectId?: string;
 }
@@ -1059,6 +1062,7 @@ export interface GxserverProjectDirectoryBrowseParams {
   cwd?: string;
   limit?: number;
   partialPath: string;
+  inspectPath?: string;
 }
 
 export interface GxserverProjectDirectoryBrowseEntry {
@@ -1069,6 +1073,13 @@ export interface GxserverProjectDirectoryBrowseEntry {
 export interface GxserverProjectDirectoryBrowseResult {
   entries: GxserverProjectDirectoryBrowseEntry[];
   parentPath: string;
+  inspection?: {
+    path: string;
+    kind: 'directory' | 'file' | 'missing';
+    projectPath?: string;
+    projectId?: string;
+    gitRoot?: string;
+  };
 }
 
 /**
@@ -3164,7 +3175,9 @@ export interface GxserverRewindSessionChatResult {
   targetMessageId: string;
   /** Claude's new active leaf UUID; null before the first prompt or for Codex's new branch. */
   leafId: string | null;
-  /** The rewind succeeded, but the terminal draft cleanup needs attention. */
+  /** Repeating this target only retries synchronization, without sending rewind keys again. */
+  synchronizationPending?: boolean;
+  /** Synchronization or terminal draft cleanup needs attention. */
   warning?: string | null;
 }
 

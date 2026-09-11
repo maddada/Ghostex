@@ -879,7 +879,7 @@ fn parse_repository_clone_input(input: &str) -> Option<ParsedRepositoryCloneInpu
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("git@"))
     {
         let (host, repository_path) = token[4..].split_once(':')?;
-        let repository_path = normalize_repository_path(repository_path);
+        let repository_path = normalize_repository_clone_path_for_host(host, repository_path);
         if host.trim().is_empty() || repository_path.is_empty() {
             return None;
         }
@@ -889,7 +889,7 @@ fn parse_repository_clone_input(input: &str) -> Option<ParsedRepositoryCloneInpu
         });
     }
     if let Some((host, path)) = parse_ssh_repository_token(&token) {
-        let repository_path = normalize_repository_path(path);
+        let repository_path = normalize_repository_clone_path_for_host(host, path);
         if host.trim().is_empty() || repository_path.is_empty() {
             return None;
         }
@@ -899,7 +899,7 @@ fn parse_repository_clone_input(input: &str) -> Option<ParsedRepositoryCloneInpu
         });
     }
     if let Some((host, path)) = parse_http_repository_token(&token) {
-        let repository_path = normalize_repository_path(path);
+        let repository_path = normalize_repository_clone_path_for_host(host, path);
         if host.trim().is_empty() || repository_path.is_empty() || !host.contains('.') {
             return None;
         }
@@ -1015,10 +1015,28 @@ fn parse_http_repository_token(token: &str) -> Option<(&str, &str)> {
     }
 }
 
+/// CDXC:AddProject 2026-09-11 WHY:
+/// Azure clone URLs use _git/repository or v3/organization/project/repository; appending .git changes the repository name.
+/// SEE-ALSO: packages/core-ui/add-project-modal/add-project-input.ts.
+fn normalize_repository_clone_path_for_host(host: &str, path: &str) -> String {
+    let host = host.rsplit('@').next().unwrap_or(host).to_ascii_lowercase();
+    if host == "dev.azure.com" || host == "ssh.dev.azure.com" || host.ends_with(".visualstudio.com")
+    {
+        return path
+            .split(['?', '#'])
+            .next()
+            .unwrap_or_default()
+            .trim_end_matches('/')
+            .to_string();
+    }
+    normalize_repository_path(path)
+}
+
 fn normalize_repository_path(repository_path: &str) -> String {
     let before_hash = repository_path.split('#').next().unwrap_or_default();
     let before_query = before_hash.split('?').next().unwrap_or_default();
     let before_git_suffix = normalize_git_suffix(before_query);
+    let is_clone_path = before_git_suffix.to_ascii_lowercase().ends_with(".git");
     let mut segments: Vec<String> = Vec::new();
     for segment in before_git_suffix.split('/') {
         let segment = decode_repository_path_segment(segment);
@@ -1026,19 +1044,22 @@ fn normalize_repository_path(repository_path: &str) -> String {
             continue;
         }
         let lower = segment.to_ascii_lowercase();
-        if matches!(
-            lower.as_str(),
-            "-" | "branches"
-                | "commit"
-                | "commits"
-                | "issues"
-                | "pull"
-                | "pulls"
-                | "releases"
-                | "src"
-                | "tree"
-                | "wiki"
-        ) {
+        if !is_clone_path
+            && segments.len() >= 2
+            && matches!(
+                lower.as_str(),
+                "-" | "branches"
+                    | "commit"
+                    | "commits"
+                    | "issues"
+                    | "pull"
+                    | "pulls"
+                    | "releases"
+                    | "src"
+                    | "tree"
+                    | "wiki"
+            )
+        {
             break;
         }
         segments.push(segment.to_string());
