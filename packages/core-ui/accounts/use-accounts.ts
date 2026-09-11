@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccountsTransport, AgentAccountsRequest, AgentAccountsState } from '@/packages/shared/agent-accounts';
+import { requestSharedAccounts } from './shared-requests';
 export function useAccounts(
   transport: AccountsTransport | undefined,
   session = false,
@@ -22,7 +23,7 @@ export function useAccounts(
       setRefreshing('refresh' in params && params.refresh === true);
       setError('');
       try {
-        const result = await transport(params);
+        const result = await requestSharedAccounts(transport, params, sessionAgentId);
         if (generation.current === id) setData(result);
         return result;
       } catch (e) {
@@ -36,7 +37,7 @@ export function useAccounts(
         }
       }
     },
-    [transport]
+    [transport, sessionAgentId]
   );
   const request = useCallback(async (params: AgentAccountsRequest) => Boolean(await load(params)), [load]);
   /** CDXC:AgentProviders 2026-09-10 WHY: Switching a draft's agent keeps its transport and can leave account management enabled. Reload on agent identity changes so the menu cannot retain the previous provider's accounts until the next poll. */
