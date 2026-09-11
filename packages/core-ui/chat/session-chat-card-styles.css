@@ -48,19 +48,15 @@
   height: 1.25rem;
 }
 
-/* CDXC:SessionChat 2026-09-07 DECISION:
- * User: task rows remain 2px larger than the title size; sub-agent rows are now 1px smaller than their previous size, with 3px more space between rows. This supersedes the 2px increase for sub-agent rows; the headers keep their existing size.
+/* CDXC:SessionChat 2026-09-11 DECISION:
+ * User: reduce the Subagents row font size by 1px and keep the "Subagents" title size unchanged. This supersedes the 2026-09-07 1px row bump; task rows stay 2px larger than the title size.
  */
-.ghostex-chat-prompt-card :is(.ghostex-chat-agent-tasks-rows, .ghostex-chat-agent-fleet-rows) {
+.ghostex-chat-prompt-card .ghostex-chat-agent-tasks-rows {
   --chat-card-row-text-increase: 2px;
   --chat-card-text-size: calc(0.875rem + var(--chat-card-row-text-increase));
 }
 
-.ghostex-chat-prompt-card .ghostex-chat-agent-fleet-rows {
-  --chat-card-row-text-increase: 1px;
-}
-
-.ghostex-chat-prompt-card :is(.ghostex-chat-agent-tasks-rows, .ghostex-chat-agent-fleet-rows) .ghostex-chat-card-hint {
+.ghostex-chat-prompt-card .ghostex-chat-agent-tasks-rows .ghostex-chat-card-hint {
   font-size: calc(var(--chat-card-hint-base, 0.75rem) + 2px + var(--chat-card-row-text-increase));
 }
 
