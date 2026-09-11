@@ -82,9 +82,10 @@ impl GhostexGpuiApp {
             return;
         }
         self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(
-            self.browser_tabs.focused_pane,
-        ));
+        self.focus_shell_target(
+            ShellFocusTarget::BrowserPane(self.browser_tabs.focused_pane),
+            cx,
+        );
         self.set_browser_address_input_value_unchecked(
             self.browser_tabs.focused_pane,
             url.clone(),
@@ -163,7 +164,7 @@ impl GhostexGpuiApp {
                 payload,
             );
         self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
-        self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+        self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
         self.scroll_workspace_pane_active_tab(pane_id);
         self.persist_shell_layout_state();
         cx.notify();
@@ -315,7 +316,7 @@ impl GhostexGpuiApp {
             );
         }
         if gpui_command_pane_default_action_should_focus_command_pane() {
-            self.focus_command_pane();
+            self.focus_command_pane(cx);
             self.request_command_terminal_text_focus_handoff(slot_id);
         }
         self.begin_titlebar_quick_action_button_cooldown(cx);

@@ -65,8 +65,7 @@ impl Render for FloatingCompanionWindow {
                 .clear();
             app.project_editor_companion_layout_bounds = None;
             if matches!(app.shell_focus, ShellFocusTarget::ProjectEditorCompanion(_)) {
-                app.drain_pending_gpui_engine_terminal_focus(window, cx);
-                app.drain_pending_session_chat_composer_focus_handoff(window, cx);
+                app.drain_pending_keyboard_handoff(window, cx);
             }
             app.sync_session_chat_pane_focus(window, cx, false);
             let width = app.floating_companion_width();
@@ -294,7 +293,7 @@ impl GhostexGpuiApp {
             self.shell_focus,
             ShellFocusTarget::ProjectEditorCompanion(_)
         ) {
-            self.focus_default_surface_for_active_mode();
+            self.focus_default_surface_for_active_mode(cx);
             cef::focus_gpui_root_view(self.parent_ns_view);
         }
         self.project_editor_companion_terminal_mount_slot_bounds

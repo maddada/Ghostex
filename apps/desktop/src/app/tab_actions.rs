@@ -314,7 +314,7 @@ impl GhostexGpuiApp {
                     None,
                     cx,
                 );
-                self.focus_command_pane();
+                self.focus_command_pane(cx);
                 self.request_command_terminal_text_focus_handoff(CommandTerminalBodyMountSlotId {
                     group_id: self.command_pane.focused_group,
                     session_id,
@@ -426,7 +426,7 @@ impl GhostexGpuiApp {
             None,
             cx,
         );
-        self.focus_command_pane();
+        self.focus_command_pane(cx);
         self.request_command_terminal_text_focus_handoff(CommandTerminalBodyMountSlotId {
             group_id,
             session_id,
@@ -507,9 +507,10 @@ impl GhostexGpuiApp {
         }
 
         if self.agents_workspace.merge_all_tabs_into_pane(pane_id) {
-            self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                self.agents_workspace.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                cx,
+            );
             self.workspace_drop_feedback = None;
             self.workspace_split_drag = None;
             self.workspace_split_layout_metrics.clear();
@@ -545,7 +546,7 @@ impl GhostexGpuiApp {
         ) else {
             return;
         };
-        self.set_shell_focus(ShellFocusTarget::AgentsPane(pane_id));
+        self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
         self.workspace_drop_feedback = None;
         self.workspace_split_drag = None;
         self.workspace_split_layout_metrics.clear();
@@ -567,7 +568,7 @@ impl GhostexGpuiApp {
         };
         self.agents_workspace.focus_pane(pane_id);
         if self.agents_workspace.rotate_panes_clockwise() {
-            self.set_shell_focus(ShellFocusTarget::AgentsPane(pane_id));
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.workspace_drop_feedback = None;
             self.workspace_split_drag = None;
             self.workspace_split_layout_metrics.clear();
@@ -941,7 +942,7 @@ impl GhostexGpuiApp {
             );
             self.refresh_gpui_command_close_after_done_timer_for_session(session_id, cx);
         }
-        self.focus_command_pane();
+        self.focus_command_pane(cx);
         self.request_command_terminal_text_focus_handoff(CommandTerminalBodyMountSlotId {
             group_id,
             session_id,
@@ -988,7 +989,7 @@ impl GhostexGpuiApp {
         );
         self.refresh_gpui_command_close_after_done_timer_for_session(session_id, cx);
         self.command_pane.focus_group(group_id);
-        self.focus_command_pane();
+        self.focus_command_pane(cx);
         self.request_command_terminal_text_focus_handoff(CommandTerminalBodyMountSlotId {
             group_id,
             session_id,
@@ -1014,7 +1015,7 @@ impl GhostexGpuiApp {
         {
             return false;
         }
-        self.focus_command_pane();
+        self.focus_command_pane(cx);
         self.request_command_terminal_text_focus_handoff(CommandTerminalBodyMountSlotId {
             group_id,
             session_id,
@@ -1115,9 +1116,9 @@ impl GhostexGpuiApp {
         self.clear_gpui_command_delayed_send_timer(session_id);
         self.clear_gpui_command_close_after_done_timer(session_id);
         if self.command_pane.has_sessions() {
-            self.focus_command_pane();
+            self.focus_command_pane(cx);
         } else {
-            self.restore_previous_non_command_focus_or_default();
+            self.restore_previous_non_command_focus_or_default(cx);
         }
         self.scroll_command_group_active_tab(group_id);
         self.scroll_focused_command_active_tab();
@@ -1168,9 +1169,9 @@ impl GhostexGpuiApp {
             self.clear_command_resize_hover_state_if_command_pane_hidden();
             if focus_policy == CommandPaneScopedTabMutationFocusPolicy::FocusCommandPane {
                 if self.command_pane.has_sessions() {
-                    self.focus_command_pane();
+                    self.focus_command_pane(cx);
                 } else {
-                    self.restore_previous_non_command_focus_or_default();
+                    self.restore_previous_non_command_focus_or_default(cx);
                 }
             }
             self.scroll_command_group_active_tab(group_id);
@@ -1225,7 +1226,7 @@ impl GhostexGpuiApp {
 
         if model_changed {
             if focus_policy == CommandPaneScopedTabMutationFocusPolicy::FocusCommandPane {
-                self.focus_command_pane();
+                self.focus_command_pane(cx);
             }
             self.scroll_command_group_active_tab(group_id);
             self.scroll_focused_command_active_tab();
@@ -1294,10 +1295,10 @@ impl GhostexGpuiApp {
         .then_some("Enter Focus Mode")
     }
 
-    pub(crate) fn focus_command_pane(&mut self) {
+    pub(crate) fn focus_command_pane(&mut self, cx: &mut gpui::Context<Self>) {
         if self.command_pane.has_sessions() {
             self.remember_current_non_command_focus();
-            self.set_shell_focus(ShellFocusTarget::CommandPane);
+            self.focus_shell_target(ShellFocusTarget::CommandPane, cx);
             self.persist_shell_layout_state();
         }
     }
@@ -1341,7 +1342,7 @@ impl GhostexGpuiApp {
             return false;
         };
 
-        self.focus_command_pane();
+        self.focus_command_pane(cx);
         if self.shell_focus != ShellFocusTarget::CommandPane {
             return false;
         }
@@ -1384,7 +1385,7 @@ impl GhostexGpuiApp {
                 | TitlebarMode::Manage
                 | TitlebarMode::Extension(_) => ShellFocusTarget::ProjectEditorSurface(mode),
             };
-            self.set_shell_focus(focus);
+            self.focus_shell_target(focus, cx);
             if mode == TitlebarMode::Browser {
                 self.sync_active_browser_tab_to_surface(window, cx);
             } else {
@@ -1419,18 +1420,7 @@ impl GhostexGpuiApp {
             }
 
             self.focus_project_editor_surface(mode, window, cx);
-            if let Some(slot_key) = ProjectWorkareaCefSurfaceSlotKey::project_placeholder_slots()
-                .into_iter()
-                .find(|slot_key| slot_key.titlebar_mode() == mode)
-                && let Some(surface) = self
-                    .project_workarea_runtime_cef_surfaces
-                    .get(&slot_key)
-                    .map(|owned_surface| owned_surface.surface.clone())
-            {
-                let focus_handle = surface.read(cx).focus_handle.clone();
-                focus_handle.focus(window, cx);
-                surface.update(cx, |surface, _| surface.focus());
-            }
+            self.drain_pending_keyboard_handoff(window, cx);
             return self.shell_focus == ShellFocusTarget::ProjectEditorSurface(mode);
         }
 
@@ -1447,7 +1437,7 @@ impl GhostexGpuiApp {
             | TitlebarMode::Extension(_) => ShellFocusTarget::ProjectEditorSurface(mode),
             TitlebarMode::Agents => return false,
         };
-        self.set_shell_focus(focus);
+        self.focus_shell_target(focus, cx);
         self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         self.shell_focus == focus
@@ -1478,16 +1468,7 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            self.set_shell_focus_with_terminal_handoff(
-                ShellFocusTarget::ProjectEditorCompanion(mode),
-                true,
-            );
-            if let Some(slot_id) = terminal_slot_id {
-                self.request_project_editor_companion_terminal_text_focus_handoff(slot_id);
-                if gpui_engine_view.is_some() {
-                    self.pending_project_editor_companion_terminal_text_focus_slot = None;
-                }
-            }
+            self.focus_shell_target_now(ShellFocusTarget::ProjectEditorCompanion(mode), window, cx);
             self.update_active_mode_cef_child_visibility(cx);
             self.persist_shell_layout_state();
         }
@@ -1815,7 +1796,7 @@ impl GhostexGpuiApp {
         self.close_floating_companion(cx);
 
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
-        self.set_shell_focus(focus);
+        self.focus_shell_target(focus, cx);
         self.focus_project_editor_companion(mode, window, cx);
         self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
@@ -1907,9 +1888,10 @@ impl GhostexGpuiApp {
             self.focus_agents_pane(pane_id, cx);
             if self.agents_workspace.cycle_tab_in_pane(pane_id, reverse) {
                 self.dispatch_gpui_workspace_active_session_attention_acknowledge(pane_id, cx);
-                self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                    self.agents_workspace.focused_pane,
-                ));
+                self.focus_shell_target(
+                    ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                    cx,
+                );
                 self.scroll_workspace_pane_active_tab(pane_id);
                 true
             } else {
@@ -1931,9 +1913,10 @@ impl GhostexGpuiApp {
                 .is_some()
             {
                 self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-                self.set_shell_focus(ShellFocusTarget::BrowserPane(
-                    self.browser_tabs.focused_pane,
-                ));
+                self.focus_shell_target(
+                    ShellFocusTarget::BrowserPane(self.browser_tabs.focused_pane),
+                    cx,
+                );
                 self.sync_active_browser_tab_to_surface(window, cx);
                 self.scroll_focused_browser_pane_active_tab();
                 true
@@ -1945,10 +1928,10 @@ impl GhostexGpuiApp {
         };
 
         if changed {
-            // CDXC:FocusRouting 2026-07-04-09:10: keyboard
-            // cycling must end in the same focus state as clicking the
-            // terminal body when the newly active slot is engine-claimed.
-            self.focus_gpui_engine_terminal_for_focused_mount_slot(window, cx);
+            // CDXC:FocusRouting 2026-07-04 WHY: keyboard tab cycling must end in the same
+            // focus state as clicking the terminal body; before the unified handoff it only
+            // moved the model and left the CEF sidebar as first responder.
+            self.drain_pending_keyboard_handoff(window, cx);
             self.scroll_all_active_tab_strips();
             self.persist_shell_layout_state();
             cx.notify();
@@ -2031,9 +2014,10 @@ impl GhostexGpuiApp {
         self.agents_workspace.focus_pane(pane_id);
 
         if self.active_mode == TitlebarMode::Agents && self.agents_workspace.toggle_focus_mode() {
-            self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                self.agents_workspace.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                cx,
+            );
             self.persist_shell_layout_state();
             cx.notify();
         }

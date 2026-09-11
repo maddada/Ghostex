@@ -1422,7 +1422,7 @@ impl GhostexGpuiApp {
         }
 
         self.change_active_mode_with_pane_state(next_active_mode, cx);
-        self.focus_default_surface_for_active_mode();
+        self.focus_default_surface_for_active_mode(cx);
         self.update_active_mode_cef_child_visibility(cx);
         self.scroll_all_active_tab_strips();
         self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
@@ -1624,7 +1624,7 @@ impl GhostexGpuiApp {
         Native `performStickyActiveTabButton` calls `centerActiveTabInTabStrip`, so Show Active Tab should center the clipped active tab when scroll bounds allow. Keep the softer native-margin reveal helper for ordinary focus/selection scrolling, not this explicit proxy action.
         */
         if self.command_pane.focus_group(group_id) {
-            self.focus_command_pane();
+            self.focus_command_pane(cx);
             self.request_command_group_terminal_text_focus_handoff(group_id);
         }
         command_pane_center_active_tab_in_scroll_handle(&scroll_handle, active_index);

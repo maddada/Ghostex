@@ -185,7 +185,7 @@ impl GhostexGpuiApp {
         self.agents_workspace.select_tab(pane_id, session_id);
         self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
         self.activate_preferred_agents_chat_launch_intent(session_id, cx);
-        self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+        self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
         self.scroll_workspace_pane_active_tab(pane_id);
         self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();

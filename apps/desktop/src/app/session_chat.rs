@@ -435,7 +435,8 @@ impl GhostexGpuiApp {
                 self.session_chat_composer_ready_sessions.insert(session_id);
                 self.flush_pending_chat_bar_extension_toggles(session_id, cx);
             }
-            self.complete_session_chat_composer_focus_handoff(session_id, window, cx);
+            self.cancel_session_chat_eviction_probe(session_id);
+            self.drain_pending_keyboard_handoff(window, cx);
             self.sync_session_chat_pane_focus(window, cx, true);
             /*
             CDXC:Drafts 2026-08-18:
@@ -768,67 +769,6 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
-    }
-
-    pub(crate) fn complete_session_chat_composer_focus_handoff(
-        &mut self,
-        session_id: TerminalSessionId,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        #[cfg(target_os = "macos")]
-        if self.companion_reveal.is_some()
-            && matches!(
-                self.shell_focus,
-                ShellFocusTarget::ProjectEditorCompanion(_)
-            )
-            && cef_parent_native_view(window).ok() != Some(self.companion_native_parent())
-        {
-            return;
-        }
-        self.cancel_session_chat_eviction_probe(session_id);
-        if self.pending_session_chat_composer_focus != Some(session_id) {
-            return;
-        }
-        self.pending_session_chat_composer_focus = None;
-        if !self.agents_chat_mode_sessions.contains(&session_id)
-            || self.focused_agents_or_companion_shell_session_id() != Some(session_id)
-        {
-            return;
-        }
-        let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned() else {
-            return;
-        };
-        let focus_handle = surface.read(cx).focus_handle.clone();
-        focus_handle.focus(window, cx);
-        surface.update(cx, |surface, _| {
-            surface.focus();
-            surface.execute_app_owned_script(
-                "(function(){var ns=window.ghostexGpui;if(ns&&typeof ns.onSessionChatFocusComposerRequested==='function'){ns.onSessionChatFocusComposerRequested();}})(); undefined;",
-            );
-        });
-        if let Some(content) = self
-            .pending_session_chat_composer_insert
-            .remove(&session_id)
-        {
-            let _ = self.insert_prompt_into_session_chat(session_id, &content, cx);
-        }
-    }
-
-    pub(crate) fn drain_pending_session_chat_composer_focus_handoff(
-        &mut self,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(session_id) = self.pending_session_chat_composer_focus else {
-            return;
-        };
-        if self
-            .session_chat_composer_ready_sessions
-            .contains(&session_id)
-        {
-            self.complete_session_chat_composer_focus_handoff(session_id, window, cx);
-        }
     }
 
     pub(crate) fn request_session_chat_image_save(

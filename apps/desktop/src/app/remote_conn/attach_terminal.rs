@@ -289,7 +289,7 @@ impl GhostexGpuiApp {
             // Keep-view focus: the tab is selected, the remembered view stays.
         } else {
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
-            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.request_agents_session_text_focus_handoff(
                 AgentsTerminalBodyMountSlotId {
                     pane_id,
@@ -507,10 +507,7 @@ impl GhostexGpuiApp {
                     // Keep-view focus: the tab is re-armed, the remembered view stays.
                 } else {
                     self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
-                    self.set_shell_focus_with_terminal_handoff(
-                        ShellFocusTarget::AgentsPane(placed_pane_id),
-                        true,
-                    );
+                    self.focus_shell_target(ShellFocusTarget::AgentsPane(placed_pane_id), cx);
                     self.request_agents_session_text_focus_handoff(mount_slot_id, cx);
                 }
                 self.scroll_workspace_pane_active_tab(placed_pane_id);
@@ -610,7 +607,7 @@ impl GhostexGpuiApp {
             // Keep-view focus: the tab is created, the remembered view stays.
         } else {
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
-            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.request_agents_session_text_focus_handoff(mount_slot_id, cx);
         }
         self.scroll_workspace_pane_active_tab(pane_id);

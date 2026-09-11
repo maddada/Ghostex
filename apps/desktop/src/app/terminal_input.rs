@@ -347,44 +347,6 @@ impl GhostexGpuiApp {
         });
     }
 
-    /// The GPUI-engine view backing the focused terminal text target, if
-    /// the focused slot is engine-claimed.
-    pub(crate) fn focused_gpui_engine_terminal_view(
-        &self,
-    ) -> Option<Entity<terminal_element::TerminalView>> {
-        match focused_terminal_text_target(self.active_mode, self.shell_focus)? {
-            FocusedTerminalTextTarget::Agents => {
-                let slot_id = focused_agents_terminal_surface_mount_slot(
-                    self.active_mode,
-                    self.shell_focus,
-                    &self.agents_workspace,
-                )?;
-                self.agents_gpui_engine_terminals
-                    .get(&slot_id.session_id)
-                    .map(|record| record.view.clone())
-            }
-            FocusedTerminalTextTarget::Command => {
-                let slot_id = focused_command_terminal_surface_mount_slot(
-                    self.shell_focus,
-                    &self.command_pane,
-                )?;
-                self.command_gpui_engine_terminals
-                    .get(&slot_id.session_id)
-                    .map(|record| record.view.clone())
-            }
-            FocusedTerminalTextTarget::ProjectEditorCompanion => {
-                let slot_id = focused_project_editor_companion_terminal_surface_mount_slot(
-                    self.active_mode,
-                    self.shell_focus,
-                    self.project_editor_companion_focused_terminal_session_id(),
-                )?;
-                self.agents_gpui_engine_terminals
-                    .get(&slot_id.session_id)
-                    .map(|record| record.view.clone())
-            }
-        }
-    }
-
     pub(crate) fn focused_gpui_engine_terminal_action_target(
         &self,
     ) -> Option<(
@@ -763,7 +725,7 @@ impl GhostexGpuiApp {
         if let Some(focused_session_id) = self.focused_agents_or_companion_shell_session_id()
             && eligible_session_ids.contains(&focused_session_id)
         {
-            self.pending_session_chat_composer_focus = Some(focused_session_id);
+            self.request_keyboard_handoff_for_session(focused_session_id);
         }
         self.reconcile_agents_pane_surfaces(cx);
         self.persist_shell_layout_state();
@@ -827,6 +789,14 @@ impl GhostexGpuiApp {
         cef::focus_gpui_root_view(focus_root);
         let focus_handle = view.read(cx).focus_handle(cx);
         window.focus(&focus_handle, cx);
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            self.composited_terminal_keyboard_owner = Some((focus_root as usize, target));
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            self.composited_terminal_keyboard_owner = Some((self.parent_ns_view as usize, target));
+        }
         #[cfg(target_os = "macos")]
         {
             /*
@@ -849,265 +819,48 @@ impl GhostexGpuiApp {
         }
     }
 
-    /*
-    CDXC:FocusRouting 2026-07-04-09:10:
-    Keyboard tab cycling (focusNextSession/focusPreviousSession, the
-    cmd+shift+]/[ aliases, and ctrl-tab) mutates the workspace/command tab
-    model and app-level shell focus but historically never touched GPUI
-    keyboard focus, so cycling onto an engine-claimed slot after any CEF
-    sidebar interaction left the terminal visible yet dead to typing: the
-    CEF child NSView kept AppKit first responder and the engine element's
-    FocusHandle was never focused. After a successful keyboard switch,
-    resolve the newly focused terminal mount slot from the same shell-focus
-    truth the input pipeline uses and run the exact click-path engine
-    handoff (first responder back to the GPUI parent view, then the element
-    handle). Native and placeholder slots resolve no engine record and are
-    intentionally left on their existing AppKit surface-focus sync.
-    */
-    pub(crate) fn focus_gpui_engine_terminal_for_focused_mount_slot(
-        &mut self,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(target) = self.focused_terminal_text_mount_target() else {
-            return;
-        };
-        let event_target_and_view = match target {
-            FocusedTerminalTextMountTarget::Agents(slot_id) => self
-                .agents_gpui_engine_terminals
-                .get(&slot_id.session_id)
-                .map(|record| {
-                    (
-                        GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
-                        record.view.clone(),
-                    )
-                }),
-            FocusedTerminalTextMountTarget::Command(slot_id) => self
-                .command_gpui_engine_terminals
-                .get(&slot_id.session_id)
-                .map(|record| {
-                    (
-                        GpuiEngineTerminalEventTarget::Command(slot_id.session_id),
-                        record.view.clone(),
-                    )
-                }),
-            FocusedTerminalTextMountTarget::ProjectEditorCompanion(slot_id) => self
-                .agents_gpui_engine_terminals
-                .get(&slot_id.session_id)
-                .map(|record| {
-                    (
-                        GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
-                        record.view.clone(),
-                    )
-                }),
-        };
-        let Some((event_target, view)) = event_target_and_view else {
-            return;
-        };
-        self.focus_gpui_engine_terminal_view(event_target, &view, window, cx);
-    }
-
-    /*
-    CDXC:FocusRouting 2026-07-04-05:45:
-    Session create/attach flows request a terminal text focus handoff that
-    only the native mount-slot canvas used to drain, so engine-claimed slots
-    (which render no native canvas) never received creation-time keyboard
-    focus and typing required understanding that a click was still routed to
-    the CEF sidebar. Drain the same pending slot from render for engine
-    records with the native drain's exact current-slot/focused-target
-    checks, focusing the engine element instead of the shared text service.
-    */
-    pub(crate) fn drain_pending_gpui_engine_terminal_focus(
-        &mut self,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        // CDXC:SessionChat 2026-08-24: a slot armed
-        // before its session entered chat mode must not execute as a focus
-        // grab against the chat composer — the terminal it targets is no
-        // longer the pane's keyboard owner. Drop it instead of waiting.
-        if let Some(slot_id) = self.pending_agents_terminal_text_focus_slot
-            && self.agents_chat_mode_sessions.contains(&slot_id.session_id)
-        {
-            self.pending_agents_terminal_text_focus_slot = None;
-        }
-        if let Some(slot_id) = self.pending_project_editor_companion_terminal_text_focus_slot
-            && self.agents_chat_mode_sessions.contains(&slot_id.session_id)
-        {
-            self.pending_project_editor_companion_terminal_text_focus_slot = None;
-        }
-        // A pending slot whose engine record does not exist yet (spawn still
-        // in flight, or a native-surface slot) must WAIT without blocking the
-        // other two families: an early return here previously starved the
-        // command/companion drains for as long as one stale agents pending
-        // lingered (CDXC:FocusRouting 2026-07-11).
-        if let Some(slot_id) = self.pending_agents_terminal_text_focus_slot {
-            if let Some(view) = self
-                .agents_gpui_engine_terminals
-                .get(&slot_id.session_id)
-                .map(|record| record.view.clone())
-            {
-                if !self
-                    .agents_workspace
-                    .is_current_terminal_body_mount_slot(slot_id)
-                    || self.focused_terminal_text_mount_target()
-                        != Some(FocusedTerminalTextMountTarget::Agents(slot_id))
-                {
-                    self.pending_agents_terminal_text_focus_slot = None;
-                } else {
-                    self.pending_agents_terminal_text_focus_slot = None;
-                    self.focus_gpui_engine_terminal_view(
-                        GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
-                        &view,
-                        window,
-                        cx,
-                    );
-                    self.deliver_pending_session_terminal_composer_insert(slot_id.session_id, cx);
-                    return;
-                }
-            }
-        }
-
-        if let Some(slot_id) = self.pending_command_terminal_text_focus_slot {
-            if let Some(view) = self
-                .command_gpui_engine_terminals
-                .get(&slot_id.session_id)
-                .map(|record| record.view.clone())
-            {
-                if !self
-                    .command_pane
-                    .is_current_terminal_body_mount_slot(slot_id)
-                    || self.focused_terminal_text_mount_target()
-                        != Some(FocusedTerminalTextMountTarget::Command(slot_id))
-                {
-                    self.pending_command_terminal_text_focus_slot = None;
-                } else {
-                    self.pending_command_terminal_text_focus_slot = None;
-                    self.focus_gpui_engine_terminal_view(
-                        GpuiEngineTerminalEventTarget::Command(slot_id.session_id),
-                        &view,
-                        window,
-                        cx,
-                    );
-                    return;
-                }
-            }
-        }
-
-        #[cfg(target_os = "macos")]
-        if self.companion_reveal.is_some()
-            && cef_parent_native_view(window).ok() != Some(self.companion_native_parent())
-        {
-            return;
-        }
-        let Some(slot_id) = self.pending_project_editor_companion_terminal_text_focus_slot else {
-            return;
-        };
-        let Some(view) = self
-            .agents_gpui_engine_terminals
-            .get(&slot_id.session_id)
-            .map(|record| record.view.clone())
-        else {
-            return;
-        };
-        if !self.is_current_project_editor_companion_terminal_body_mount_slot(slot_id) {
-            self.pending_project_editor_companion_terminal_text_focus_slot = None;
-            return;
-        }
-        if self.focused_terminal_text_mount_target()
-            != Some(FocusedTerminalTextMountTarget::ProjectEditorCompanion(
-                slot_id,
-            ))
-        {
-            self.pending_project_editor_companion_terminal_text_focus_slot = None;
-            return;
-        }
-        self.pending_project_editor_companion_terminal_text_focus_slot = None;
-        self.focus_gpui_engine_terminal_view(
-            GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
-            &view,
-            window,
-            cx,
-        );
-        self.deliver_pending_session_terminal_composer_insert(slot_id.session_id, cx);
-    }
-
-    /*
-    CDXC:Diagnostics 2026-08-24:
-    Arming a terminal text-focus slot is what the render drain later executes
-    as a first-responder grab. When it happens while the same session is in
-    chat mode it steals keyboard focus from the chat composer, so each arm
-    leaves a breadcrumb naming the family and whether chat mode was active.
-    */
-    fn log_terminal_text_focus_armed(
-        &self,
-        family: &str,
-        session_label: String,
-        in_chat_mode: bool,
-    ) {
-        support_logs::append(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "gpui.terminalFocus.terminalTextFocusArmed",
-            serde_json::json!({
-                "family": family,
-                "sessionId": session_label,
-                "sessionInChatMode": in_chat_mode,
-                "armed": !in_chat_mode,
-                "shellFocus": format!("{:?}", self.shell_focus),
-                "firstResponderTarget": format!("{:?}", self.first_responder_target),
-            }),
-        );
-    }
-
-    /*
-    CDXC:SessionChat 2026-08-24:
-    A session whose pane shows the chat surface has no mounted terminal, so a
-    terminal text-focus handoff for it can only execute later as a bare
-    first-responder grab that yanks the keyboard out of the chat composer
-    mid-typing. The chat-aware wrappers in workspace_events.rs already re-route
-    such requests to the composer; enforce the same rule here so no direct
-    caller can arm a steal for a chat-mode session. Chat → terminal toggles
-    remove the session from agents_chat_mode_sessions before requesting their
-    handoff, so the legitimate remount path is unaffected.
-    */
+    /// Per-surface request helpers kept for their call sites; each files the one `PendingKeyboardHandoff` that `drain_pending_keyboard_handoff` executes.
     pub(crate) fn request_agents_terminal_text_focus_handoff(
         &mut self,
         slot_id: AgentsTerminalBodyMountSlotId,
     ) {
-        let in_chat_mode = self.agents_chat_mode_sessions.contains(&slot_id.session_id);
-        self.log_terminal_text_focus_armed(
-            "agents",
-            format!("{:?}", slot_id.session_id),
-            in_chat_mode,
-        );
-        if in_chat_mode {
-            return;
-        }
-        self.pending_agents_terminal_text_focus_slot = Some(slot_id);
+        self.request_keyboard_handoff(PendingKeyboardHandoff {
+            target: ShellFocusTarget::AgentsPane(slot_id.pane_id),
+            session_id: Some(slot_id.session_id),
+            command_session_id: None,
+        });
     }
 
     pub(crate) fn request_command_terminal_text_focus_handoff(
         &mut self,
         slot_id: CommandTerminalBodyMountSlotId,
     ) {
-        self.log_terminal_text_focus_armed("command", format!("{:?}", slot_id.session_id), false);
-        self.pending_command_terminal_text_focus_slot = Some(slot_id);
+        self.request_keyboard_handoff(PendingKeyboardHandoff {
+            target: ShellFocusTarget::CommandPane,
+            session_id: None,
+            command_session_id: Some(slot_id.session_id),
+        });
     }
 
     pub(crate) fn request_project_editor_companion_terminal_text_focus_handoff(
         &mut self,
         slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
     ) {
-        let in_chat_mode = self.agents_chat_mode_sessions.contains(&slot_id.session_id);
-        self.log_terminal_text_focus_armed(
-            "projectEditorCompanion",
-            format!("{:?}", slot_id.session_id),
-            in_chat_mode,
-        );
-        if in_chat_mode {
-            return;
+        self.request_keyboard_handoff(PendingKeyboardHandoff {
+            target: ShellFocusTarget::ProjectEditorCompanion(slot_id.mode),
+            session_id: Some(slot_id.session_id),
+            command_session_id: None,
+        });
+    }
+
+    /// The GPUI-engine view backing the focused target, resolved by `shell_keyboard_owner`: a chat-mode session's parked terminal is never returned, so root-forwarded text, paste, and zoom cannot reach a hidden PTY.
+    pub(crate) fn focused_gpui_engine_terminal_view(
+        &self,
+    ) -> Option<Entity<terminal_element::TerminalView>> {
+        match self.shell_keyboard_owner() {
+            ShellKeyboardOwner::EngineTerminal { view, .. } => Some(view),
+            _ => None,
         }
-        self.pending_project_editor_companion_terminal_text_focus_slot = Some(slot_id);
     }
 
     pub(crate) fn request_focused_command_terminal_text_focus_handoff(&mut self) {
@@ -1136,170 +889,6 @@ impl GhostexGpuiApp {
             group_id,
             session_id,
         });
-    }
-
-    pub(crate) fn clear_pending_agents_terminal_text_focus_if_focus_moved(&mut self) {
-        let Some(slot_id) = self.pending_agents_terminal_text_focus_slot else {
-            return;
-        };
-        if self.focused_terminal_text_mount_target()
-            != Some(FocusedTerminalTextMountTarget::Agents(slot_id))
-        {
-            self.pending_agents_terminal_text_focus_slot = None;
-        }
-    }
-
-    pub(crate) fn clear_pending_command_terminal_text_focus_if_focus_moved(&mut self) {
-        let Some(slot_id) = self.pending_command_terminal_text_focus_slot else {
-            return;
-        };
-        if self.focused_terminal_text_mount_target()
-            != Some(FocusedTerminalTextMountTarget::Command(slot_id))
-        {
-            self.pending_command_terminal_text_focus_slot = None;
-        }
-    }
-
-    pub(crate) fn clear_pending_project_editor_companion_terminal_text_focus_if_focus_moved(
-        &mut self,
-    ) {
-        let Some(slot_id) = self.pending_project_editor_companion_terminal_text_focus_slot else {
-            return;
-        };
-        if self.focused_terminal_text_mount_target()
-            != Some(FocusedTerminalTextMountTarget::ProjectEditorCompanion(
-                slot_id,
-            ))
-        {
-            self.pending_project_editor_companion_terminal_text_focus_slot = None;
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    pub(crate) fn drain_pending_agents_terminal_text_focus_handoff(
-        &mut self,
-        slot_id: AgentsTerminalBodyMountSlotId,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.pending_agents_terminal_text_focus_slot != Some(slot_id) {
-            return;
-        }
-        if !self
-            .agents_workspace
-            .is_current_terminal_body_mount_slot(slot_id)
-        {
-            self.pending_agents_terminal_text_focus_slot = None;
-            return;
-        }
-        if self.focused_terminal_text_mount_target()
-            != Some(FocusedTerminalTextMountTarget::Agents(slot_id))
-        {
-            self.pending_agents_terminal_text_focus_slot = None;
-            return;
-        }
-        if !self.agents_terminal_ghostty_surface_matches(slot_id) {
-            return;
-        }
-        self.pending_agents_terminal_text_focus_slot = None;
-        self.sync_agents_terminal_ghostty_surface_focus_with_appkit_handoff(true);
-        self.deliver_pending_session_terminal_composer_insert(slot_id.session_id, cx);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub(crate) fn drain_pending_agents_terminal_text_focus_handoff(
-        &mut self,
-        slot_id: AgentsTerminalBodyMountSlotId,
-        _window: &mut Window,
-        _cx: &mut gpui::Context<Self>,
-    ) {
-        if self.pending_agents_terminal_text_focus_slot == Some(slot_id) {
-            self.pending_agents_terminal_text_focus_slot = None;
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    pub(crate) fn drain_pending_command_terminal_text_focus_handoff(
-        &mut self,
-        slot_id: CommandTerminalBodyMountSlotId,
-        _window: &mut Window,
-        _cx: &mut gpui::Context<Self>,
-    ) {
-        if self.pending_command_terminal_text_focus_slot != Some(slot_id) {
-            return;
-        }
-        if !self
-            .command_pane
-            .is_current_terminal_body_mount_slot(slot_id)
-        {
-            self.pending_command_terminal_text_focus_slot = None;
-            return;
-        }
-        if self.focused_terminal_text_mount_target()
-            != Some(FocusedTerminalTextMountTarget::Command(slot_id))
-        {
-            self.pending_command_terminal_text_focus_slot = None;
-            return;
-        }
-        if !self.command_terminal_ghostty_surface_matches(slot_id) {
-            return;
-        }
-        self.pending_command_terminal_text_focus_slot = None;
-        self.sync_command_terminal_ghostty_surface_focus_with_appkit_handoff(true);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub(crate) fn drain_pending_command_terminal_text_focus_handoff(
-        &mut self,
-        slot_id: CommandTerminalBodyMountSlotId,
-        _window: &mut Window,
-        _cx: &mut gpui::Context<Self>,
-    ) {
-        if self.pending_command_terminal_text_focus_slot == Some(slot_id) {
-            self.pending_command_terminal_text_focus_slot = None;
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    pub(crate) fn drain_pending_project_editor_companion_terminal_text_focus_handoff(
-        &mut self,
-        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
-        _window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if self.pending_project_editor_companion_terminal_text_focus_slot != Some(slot_id) {
-            return;
-        }
-        if !self.is_current_project_editor_companion_terminal_body_mount_slot(slot_id) {
-            self.pending_project_editor_companion_terminal_text_focus_slot = None;
-            return;
-        }
-        if self.focused_terminal_text_mount_target()
-            != Some(FocusedTerminalTextMountTarget::ProjectEditorCompanion(
-                slot_id,
-            ))
-        {
-            self.pending_project_editor_companion_terminal_text_focus_slot = None;
-            return;
-        }
-        if !self.project_editor_companion_terminal_ghostty_surface_matches(slot_id) {
-            return;
-        }
-        self.pending_project_editor_companion_terminal_text_focus_slot = None;
-        self.sync_project_editor_companion_terminal_ghostty_surface_focus_with_appkit_handoff(true);
-        self.deliver_pending_session_terminal_composer_insert(slot_id.session_id, cx);
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub(crate) fn drain_pending_project_editor_companion_terminal_text_focus_handoff(
-        &mut self,
-        slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
-        _window: &mut Window,
-        _cx: &mut gpui::Context<Self>,
-    ) {
-        if self.pending_project_editor_companion_terminal_text_focus_slot == Some(slot_id) {
-            self.pending_project_editor_companion_terminal_text_focus_slot = None;
-        }
     }
 
     pub(crate) fn focused_terminal_text_mount_target(
@@ -1343,7 +932,8 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.drain_pending_agents_terminal_text_focus_handoff(slot_id, window, cx);
+        let _ = slot_id;
+        self.drain_pending_keyboard_handoff(window, cx);
     }
 
     pub(crate) fn register_command_terminal_text_input_handler(
@@ -1354,7 +944,8 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.drain_pending_command_terminal_text_focus_handoff(slot_id, window, cx);
+        let _ = slot_id;
+        self.drain_pending_keyboard_handoff(window, cx);
     }
 
     pub(crate) fn register_project_editor_companion_terminal_text_input_handler(
@@ -1365,9 +956,8 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.drain_pending_project_editor_companion_terminal_text_focus_handoff(
-            slot_id, window, cx,
-        );
+        let _ = slot_id;
+        self.drain_pending_keyboard_handoff(window, cx);
     }
 
     pub(crate) fn terminal_text_service_accepts_text_input(&self, window: &Window) -> bool {
@@ -2459,9 +2049,10 @@ impl GhostexGpuiApp {
         if confirmed {
             self.agents_terminal_runtime_sessions
                 .reconcile_with_workspace(&self.agents_workspace);
-            self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                self.agents_workspace.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                cx,
+            );
             self.scroll_workspace_pane_active_tab(self.agents_workspace.focused_pane);
             self.persist_shell_layout_state();
         }
@@ -2523,10 +2114,10 @@ impl GhostexGpuiApp {
             self.prune_gpui_command_close_after_done_timers_for_command_model();
             self.clear_command_resize_hover_state_if_command_pane_hidden();
             if self.command_pane.has_sessions() {
-                self.set_shell_focus(ShellFocusTarget::CommandPane);
+                self.focus_shell_target(ShellFocusTarget::CommandPane, cx);
                 self.scroll_focused_command_active_tab();
             } else {
-                self.restore_previous_non_command_focus_or_default();
+                self.restore_previous_non_command_focus_or_default(cx);
             }
             self.sync_gpui_keep_awake_automation_from_current_settings(cx);
             self.persist_shell_layout_state();

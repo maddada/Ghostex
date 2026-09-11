@@ -31,7 +31,6 @@ pub(crate) struct ParkedAgentsChatRuntime {
     pub(crate) surface_hidden_since: HashMap<TerminalSessionId, Instant>,
     pub(crate) composer_ready_sessions: HashSet<TerminalSessionId>,
     pub(crate) composer_empty_reports: HashMap<TerminalSessionId, bool>,
-    pub(crate) pending_composer_focus: Option<TerminalSessionId>,
     pub(crate) pending_composer_insert: HashMap<TerminalSessionId, String>,
 }
 
@@ -44,7 +43,6 @@ impl ParkedAgentsChatRuntime {
         self.composer_ready_sessions.contains(&session_id)
             && (!require_empty || self.composer_empty_reports.get(&session_id) == Some(&true))
             && !self.protected_sessions.contains(&session_id)
-            && self.pending_composer_focus != Some(session_id)
             && !self.pending_composer_insert.contains_key(&session_id)
     }
 }

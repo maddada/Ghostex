@@ -169,7 +169,7 @@ impl GhostexGpuiApp {
                         this.command_pane
                             .acknowledge_attention_for_session_activation(session_id)
                     });
-                    this.focus_command_pane();
+                    this.focus_command_pane(cx);
                     if let Some(session_id) = active_session_id {
                         this.request_command_terminal_text_focus_handoff(
                             CommandTerminalBodyMountSlotId {

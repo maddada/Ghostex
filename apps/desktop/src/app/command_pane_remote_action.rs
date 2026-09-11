@@ -196,7 +196,7 @@ impl GhostexGpuiApp {
         self.command_gxserver_attach_pending.insert(session_id);
         self.refresh_sidebar_command_pane_sessions_if_changed(cx);
         if gpui_command_pane_default_action_should_focus_command_pane() {
-            self.focus_command_pane();
+            self.focus_command_pane(cx);
             self.request_command_terminal_text_focus_handoff(slot_id);
         }
         self.begin_titlebar_quick_action_button_cooldown(cx);

@@ -134,6 +134,7 @@ impl GhostexGpuiApp {
                     &self.agents_terminal_runtime_sessions,
                     &self.agents_terminal_ghostty_surfaces,
                 );
+            let keyboard_owner_before = self.keyboard_owner_session();
             let mut shell_state_changed =
                 self.consume_confirmed_agents_terminal_ghostty_surface_closes(cx);
             if shell_state_changed {
@@ -154,9 +155,11 @@ impl GhostexGpuiApp {
             }
 
             if shell_state_changed {
-                self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                    self.agents_workspace.focused_pane,
-                ));
+                self.follow_shell_focus_after_surface_removed(
+                    ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                    keyboard_owner_before,
+                    cx,
+                );
                 self.persist_shell_layout_state();
             }
         }

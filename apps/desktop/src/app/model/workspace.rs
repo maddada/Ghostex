@@ -9,6 +9,8 @@ pub(crate) struct WorkspaceModel {
     pub(crate) terminal_sessions: Vec<TerminalSession>,
     pub(crate) root: WorkspaceNode,
     pub(crate) focused_pane: WorkspacePaneId,
+    /// Most recently focused panes, oldest first. Runtime-only; seeded with the restored focused pane.
+    pub(crate) pane_focus_history: Vec<WorkspacePaneId>,
     pub(crate) focus_mode_pane: Option<WorkspacePaneId>,
     pub(crate) next_pane_id: u64,
     pub(crate) next_split_id: u64,
@@ -22,6 +24,7 @@ impl WorkspaceModel {
             terminal_sessions: Vec::new(),
             root: workspace_empty_leaf_node(pane_id),
             focused_pane: pane_id,
+            pane_focus_history: vec![pane_id],
             focus_mode_pane: None,
             next_pane_id: 2,
             next_split_id: 1,
@@ -108,6 +111,7 @@ impl WorkspaceModel {
                 tab_group: WorkspaceTabGroup { tabs, active_tab },
             }),
             focused_pane: pane_id,
+            pane_focus_history: vec![pane_id],
             focus_mode_pane: None,
             next_pane_id: 2,
             next_split_id: 1,
@@ -315,9 +319,41 @@ impl WorkspaceModel {
 
     pub(crate) fn focus_pane(&mut self, pane_id: WorkspacePaneId) {
         if self.find_leaf_mut(pane_id).is_some() {
-            self.focused_pane = pane_id;
+            self.set_focused_pane(pane_id);
             self.acknowledge_attention_for_active_session_in_pane(pane_id);
         }
+    }
+
+    /// CDXC:FocusRouting 2026-09-11 DECISION:
+    /// User: with splits, typing goes to the last active pane among the panes still shown.
+    /// Every focused-pane write records the pane here so a closed split or a pane that stops being rendered hands focus to the pane the user used last, not to the first leaf of the tree.
+    pub(crate) fn set_focused_pane(&mut self, pane_id: WorkspacePaneId) {
+        const PANE_FOCUS_HISTORY_LIMIT: usize = 32;
+        self.focused_pane = pane_id;
+        self.pane_focus_history.retain(|id| *id != pane_id);
+        self.pane_focus_history.push(pane_id);
+        if self.pane_focus_history.len() > PANE_FOCUS_HISTORY_LIMIT {
+            let excess = self.pane_focus_history.len() - PANE_FOCUS_HISTORY_LIMIT;
+            self.pane_focus_history.drain(..excess);
+        }
+    }
+
+    /// The most recently focused pane that still exists and satisfies `accept`, newest first.
+    pub(crate) fn most_recent_pane_where(
+        &self,
+        accept: impl Fn(&WorkspaceLeaf) -> bool,
+    ) -> Option<WorkspacePaneId> {
+        self.pane_focus_history
+            .iter()
+            .rev()
+            .copied()
+            .find(|pane_id| self.find_leaf(*pane_id).is_some_and(|leaf| accept(leaf)))
+    }
+
+    pub(crate) fn prune_pane_focus_history(&mut self) {
+        let leaves = self.leaf_order();
+        self.pane_focus_history
+            .retain(|pane_id| leaves.contains(pane_id));
     }
 
     pub(crate) fn select_tab(&mut self, pane_id: WorkspacePaneId, session_id: TerminalSessionId) {
@@ -331,7 +367,7 @@ impl WorkspaceModel {
         });
 
         if tab_selected {
-            self.focused_pane = pane_id;
+            self.set_focused_pane(pane_id);
             self.acknowledge_attention_for_session_activation(session_id);
         }
     }
@@ -435,7 +471,7 @@ impl WorkspaceModel {
         };
 
         let focus_changed = self.focused_pane != pane_id;
-        self.focused_pane = pane_id;
+        self.set_focused_pane(pane_id);
 
         let presentation_changed = self
             .terminal_sessions
@@ -507,7 +543,7 @@ impl WorkspaceModel {
 
         if self.terminal_sessions.is_empty() {
             self.root = workspace_empty_leaf_node(pane_id);
-            self.focused_pane = pane_id;
+            self.set_focused_pane(pane_id);
             self.focus_mode_pane = None;
             return true;
         }
@@ -874,12 +910,14 @@ impl WorkspaceModel {
                     self.find_leaf(*pane_id)
                         .is_some_and(|leaf| !leaf.tab_group.tabs.is_empty())
                 })
+                .or_else(|| self.most_recent_pane_where(|leaf| !leaf.tab_group.tabs.is_empty()))
                 .or_else(|| first_workspace_leaf_id(&self.root))
             && self.focused_pane != next_focus
         {
-            self.focused_pane = next_focus;
+            self.set_focused_pane(next_focus);
             changed = true;
         }
+        self.prune_pane_focus_history();
 
         let focus_mode_before = self.focus_mode_pane;
         self.clear_focus_mode_if_invalid();
@@ -908,7 +946,7 @@ impl WorkspaceModel {
         let Some(target_leaf) = self.find_leaf_mut(target_pane_id) else {
             self.root =
                 workspace_leaf_node_from_session_ids(target_pane_id, unassigned_session_ids);
-            self.focused_pane = target_pane_id;
+            self.set_focused_pane(target_pane_id);
             self.focus_mode_pane = None;
             return true;
         };
@@ -1052,7 +1090,7 @@ impl WorkspaceModel {
         leaf.tab_group
             .insert_session_at(WorkspaceTab { session_id }, insertion_index);
         leaf.tab_group.active_tab = session_id;
-        self.focused_pane = pane_id;
+        self.set_focused_pane(pane_id);
         Some(session_id)
     }
 
@@ -1086,7 +1124,7 @@ impl WorkspaceModel {
         leaf.tab_group
             .insert_session_at(WorkspaceTab { session_id }, insertion_index);
         leaf.tab_group.active_tab = session_id;
-        self.focused_pane = pane_id;
+        self.set_focused_pane(pane_id);
         Some((pane_id, session_id))
     }
 
@@ -1185,7 +1223,7 @@ impl WorkspaceModel {
             first: Box::new(current_root),
             second: Box::new(new_leaf),
         });
-        self.focused_pane = pane_id;
+        self.set_focused_pane(pane_id);
         self.focus_mode_pane = None;
         self.normalize_workspace_tree();
         Some(pane_id)
@@ -1222,7 +1260,7 @@ impl WorkspaceModel {
             first: Box::new(current_root),
             second: Box::new(new_leaf),
         });
-        self.focused_pane = pane_id;
+        self.set_focused_pane(pane_id);
         self.focus_mode_pane = None;
         self.normalize_workspace_tree();
         (pane_id, session_id)
@@ -1263,7 +1301,7 @@ impl WorkspaceModel {
             pane_id: target_pane_id,
             tab_group: WorkspaceTabGroup { tabs, active_tab },
         });
-        self.focused_pane = target_pane_id;
+        self.set_focused_pane(target_pane_id);
         self.focus_mode_pane = None;
         self.normalize_workspace_tree();
         true
@@ -1477,7 +1515,7 @@ impl WorkspaceModel {
             .unwrap_or(self.focused_pane);
         if self.find_leaf(target_pane_id).is_none() {
             self.root = workspace_empty_leaf_node(target_pane_id);
-            self.focused_pane = target_pane_id;
+            self.set_focused_pane(target_pane_id);
             self.focus_mode_pane = None;
             changed = true;
         }
@@ -1569,7 +1607,7 @@ impl WorkspaceModel {
                 terminal_session_title_for_id(session_id),
                 TerminalSessionPresentationState::Mounting,
             ));
-            self.focused_pane = pane_id;
+            self.set_focused_pane(pane_id);
             self.focus_mode_pane = None;
             self.normalize_workspace_tree();
             Some((pane_id, session_id))
@@ -1642,7 +1680,7 @@ impl WorkspaceModel {
             .tab_group
             .insert_session_at(tab, insertion_index);
         target_leaf.tab_group.active_tab = session_id;
-        self.focused_pane = target_pane_id;
+        self.set_focused_pane(target_pane_id);
         Some((target_pane_id, session_id))
     }
 
@@ -1687,7 +1725,7 @@ impl WorkspaceModel {
                 title,
                 TerminalSessionPresentationState::Mounting,
             ));
-            self.focused_pane = pane_id;
+            self.set_focused_pane(pane_id);
             self.focus_mode_pane = None;
             self.normalize_workspace_tree();
             Some((pane_id, session_id))
@@ -1750,7 +1788,7 @@ impl WorkspaceModel {
             .tab_group
             .insert_session_at(tab, target_leaf.tab_group.tabs.len());
         target_leaf.tab_group.active_tab = session_id;
-        self.focused_pane = target_pane_id;
+        self.set_focused_pane(target_pane_id);
         self.normalize_workspace_tree();
         true
     }
@@ -1816,7 +1854,7 @@ impl WorkspaceModel {
             dragged_first,
             split_id,
         ) {
-            self.focused_pane = pane_id;
+            self.set_focused_pane(pane_id);
             self.normalize_workspace_tree();
             true
         } else {
@@ -1844,17 +1882,19 @@ impl WorkspaceModel {
         let root_is_empty = collapse_empty_workspace_leaf(&mut self.root, pane_id);
         if root_is_empty {
             self.root = workspace_empty_leaf_node(pane_id);
-            self.focused_pane = pane_id;
+            self.set_focused_pane(pane_id);
         }
 
         if self.focused_pane == pane_id || self.find_leaf(self.focused_pane).is_none() {
             let next_focus = replacement_focus
                 .filter(|pane_id| self.find_leaf(*pane_id).is_some())
+                .or_else(|| self.most_recent_pane_where(|_| true))
                 .or_else(|| first_workspace_leaf_id(&self.root));
             if let Some(next_focus) = next_focus {
-                self.focused_pane = next_focus;
+                self.set_focused_pane(next_focus);
             }
         }
+        self.prune_pane_focus_history();
     }
 
     pub(crate) fn allocate_pane_id(&mut self) -> WorkspacePaneId {

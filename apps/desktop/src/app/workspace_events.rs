@@ -715,7 +715,7 @@ impl GhostexGpuiApp {
         }
         self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
+        self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
         self.sync_active_browser_tab_to_surface(window, cx);
         self.persist_shell_layout_state();
         cx.notify();
@@ -773,9 +773,10 @@ impl GhostexGpuiApp {
         {
             self.browser_tabs.select_tab_in_pane(pane_id, tab_id);
             self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
-            self.set_shell_focus(ShellFocusTarget::BrowserPane(
-                self.browser_tabs.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::BrowserPane(self.browser_tabs.focused_pane),
+                cx,
+            );
             self.commit_browser_address(url, cx);
             self.sync_active_browser_tab_to_surface(window, cx);
             self.scroll_focused_browser_pane_active_tab();
@@ -792,9 +793,10 @@ impl GhostexGpuiApp {
         self.request_sidebar_browser_tab_reveal(created_tab_id);
         self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(
-            self.browser_tabs.focused_pane,
-        ));
+        self.focus_shell_target(
+            ShellFocusTarget::BrowserPane(self.browser_tabs.focused_pane),
+            cx,
+        );
         self.sync_active_browser_tab_to_surface(window, cx);
         self.scroll_focused_browser_pane_active_tab();
         self.persist_shell_layout_state();
@@ -1640,9 +1642,6 @@ impl GhostexGpuiApp {
         // Toggling back to the terminal must always work, even if eligibility
         // inputs (agent icon, session mapping) changed while chat was showing.
         if self.agents_chat_mode_sessions.remove(&session_id) {
-            if self.pending_session_chat_composer_focus == Some(session_id) {
-                self.pending_session_chat_composer_focus = None;
-            }
             // Chat's CEF child owns keyboard focus while visible. Queue the
             // canonical terminal focus handoff for the exact shell-focused
             // slot so the terminal reclaims first responder as it remounts.
@@ -1667,18 +1666,15 @@ impl GhostexGpuiApp {
         let _ = self.show_agents_session_chat_mode(session_id, cx);
     }
 
+    /// Session-level handoff request: the occupant (terminal or chat composer) is resolved when the handoff runs. A chat-mode session needs its page to exist first.
     pub(crate) fn request_agents_session_text_focus_handoff(
         &mut self,
         slot_id: AgentsTerminalBodyMountSlotId,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.request_agents_terminal_text_focus_handoff(slot_id);
         if self.agents_chat_mode_sessions.contains(&slot_id.session_id) {
-            self.pending_agents_terminal_text_focus_slot = None;
-            self.pending_session_chat_composer_focus = Some(slot_id.session_id);
             self.reconcile_agents_pane_surfaces(cx);
-        } else {
-            self.pending_session_chat_composer_focus = None;
-            self.request_agents_terminal_text_focus_handoff(slot_id);
         }
     }
 
@@ -1687,13 +1683,9 @@ impl GhostexGpuiApp {
         slot_id: ProjectEditorCompanionTerminalBodyMountSlotId,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.request_project_editor_companion_terminal_text_focus_handoff(slot_id);
         if self.agents_chat_mode_sessions.contains(&slot_id.session_id) {
-            self.pending_project_editor_companion_terminal_text_focus_slot = None;
-            self.pending_session_chat_composer_focus = Some(slot_id.session_id);
             self.reconcile_agents_pane_surfaces(cx);
-        } else {
-            self.pending_session_chat_composer_focus = None;
-            self.request_project_editor_companion_terminal_text_focus_handoff(slot_id);
         }
     }
 
@@ -1994,7 +1986,7 @@ impl GhostexGpuiApp {
             return false;
         }
         self.agents_chat_mode_sessions.insert(session_id);
-        self.pending_session_chat_composer_focus = Some(session_id);
+        self.request_keyboard_handoff_for_session(session_id);
         /*
         CDXC:Drafts 2026-08-24:
         A handed-off draft that never reached the terminal follows the user
@@ -2058,9 +2050,7 @@ impl GhostexGpuiApp {
 
         self.pending_agents_chat_launch_intents.remove(&key);
         self.agents_chat_mode_sessions.insert(session_id);
-        self.pending_agents_terminal_text_focus_slot = None;
-        self.pending_project_editor_companion_terminal_text_focus_slot = None;
-        self.pending_session_chat_composer_focus = Some(session_id);
+        self.request_keyboard_handoff_for_session(session_id);
         // A staged first-input draft (Handoff / Export's transcript mention)
         // belongs in the chat composer the user is about to see, not in the
         // terminal this launch parks. See `request_session_chat_launch_draft`.
@@ -2610,7 +2600,7 @@ impl GhostexGpuiApp {
             || self
                 .session_chat_draft_capture_in_flight
                 .contains(&session_id)
-            || self.pending_session_chat_composer_focus == Some(session_id)
+            || self.pending_keyboard_handoff_targets_session(session_id)
             || self
                 .pending_session_chat_composer_insert
                 .contains_key(&session_id)
@@ -2668,9 +2658,7 @@ impl GhostexGpuiApp {
         self.session_chat_composer_empty_reports.remove(&session_id);
         self.agents_chat_surface_hidden_since.remove(&session_id);
         self.agents_chat_page_states.remove(&session_id);
-        if self.pending_session_chat_composer_focus == Some(session_id) {
-            self.pending_session_chat_composer_focus = None;
-        }
+        self.drop_pending_keyboard_handoff_for_session(session_id);
         self.pending_session_chat_composer_insert
             .remove(&session_id);
         /*
@@ -2758,7 +2746,6 @@ impl GhostexGpuiApp {
             surface_hidden_since: std::mem::take(&mut self.agents_chat_surface_hidden_since),
             composer_ready_sessions: std::mem::take(&mut self.session_chat_composer_ready_sessions),
             composer_empty_reports: std::mem::take(&mut self.session_chat_composer_empty_reports),
-            pending_composer_focus: self.pending_session_chat_composer_focus.take(),
             pending_composer_insert: std::mem::take(&mut self.pending_session_chat_composer_insert),
         }
     }
@@ -2779,7 +2766,6 @@ impl GhostexGpuiApp {
         self.agents_chat_surface_hidden_since = parked.surface_hidden_since;
         self.session_chat_composer_ready_sessions = parked.composer_ready_sessions;
         self.session_chat_composer_empty_reports = parked.composer_empty_reports;
-        self.pending_session_chat_composer_focus = parked.pending_composer_focus;
         self.pending_session_chat_composer_insert = parked.pending_composer_insert;
         /*
         CDXC:SessionChat 2026-07-31 (extended 2026-08-26):

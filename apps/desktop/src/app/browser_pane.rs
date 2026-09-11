@@ -44,12 +44,6 @@ impl GhostexGpuiApp {
         {
             self.pending_browser_address_focus = None;
         }
-        if self
-            .pending_browser_content_focus
-            .is_some_and(|pane_id| !pane_ids.contains(&pane_id))
-        {
-            self.pending_browser_content_focus = None;
-        }
     }
 
     pub(crate) fn sync_browser_address_inputs(
@@ -70,12 +64,6 @@ impl GhostexGpuiApp {
             .is_some_and(|pane_id| !pane_id_set.contains(&pane_id))
         {
             self.pending_browser_address_focus = None;
-        }
-        if self
-            .pending_browser_content_focus
-            .is_some_and(|pane_id| !pane_id_set.contains(&pane_id))
-        {
-            self.pending_browser_content_focus = None;
         }
 
         for pane_id in pane_ids {
@@ -122,7 +110,6 @@ impl GhostexGpuiApp {
         }
 
         self.drain_pending_browser_address_focus(window, cx);
-        self.drain_pending_browser_content_focus(window, cx);
     }
 
     pub(crate) fn start_find_in_focused_browser(
@@ -142,7 +129,7 @@ impl GhostexGpuiApp {
         self.ensure_browser_surface_for_pane(pane_id, cx);
         self.browser_find_states.entry(tab_id).or_default();
         self.pending_browser_address_focus = None;
-        self.pending_browser_content_focus = None;
+        self.drop_pending_browser_keyboard_handoff();
         self.pending_browser_find_focus = Some(tab_id);
         self.sync_browser_find_inputs(window, cx);
         cx.notify();
@@ -404,7 +391,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.pending_browser_content_focus = None;
+        self.drop_pending_browser_keyboard_handoff();
         self.pending_browser_address_focus = Some(pane_id);
         self.browser_address_input_editing.remove(&pane_id);
         let address_value = self.browser_tabs.address_value_for_pane(pane_id);
@@ -450,21 +437,26 @@ impl GhostexGpuiApp {
         true
     }
 
-    pub(crate) fn request_browser_content_focus(&mut self, pane_id: BrowserPaneId) {
-        self.pending_browser_address_focus = None;
-        self.pending_browser_content_focus = Some(pane_id);
-        self.browser_address_input_editing.remove(&pane_id);
+    /// GPUI chrome inside the Browser pane (address input, find input) is taking the keys; a page handoff still waiting must not steal them back.
+    pub(crate) fn drop_pending_browser_keyboard_handoff(&mut self) {
+        if self.pending_keyboard_handoff.is_some_and(|pending| {
+            matches!(
+                pending.target,
+                ShellFocusTarget::BrowserPane(_) | ShellFocusTarget::BrowserSurface
+            )
+        }) {
+            self.pending_keyboard_handoff = None;
+        }
     }
 
-    pub(crate) fn drain_pending_browser_content_focus(
-        &mut self,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(pane_id) = self.pending_browser_content_focus.take() else {
-            return;
-        };
-        self.focus_browser_content_for_pane(pane_id, window, cx);
+    pub(crate) fn request_browser_content_focus(&mut self, pane_id: BrowserPaneId) {
+        self.pending_browser_address_focus = None;
+        self.browser_address_input_editing.remove(&pane_id);
+        self.request_keyboard_handoff(PendingKeyboardHandoff {
+            target: ShellFocusTarget::BrowserPane(pane_id),
+            session_id: None,
+            command_session_id: None,
+        });
     }
 
     pub(crate) fn focus_browser_content_for_pane(
@@ -481,14 +473,7 @@ impl GhostexGpuiApp {
 
         self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
-        if let Some(surface) = self.browser_surface_for_pane(pane_id) {
-            let focus_handle = surface.read(cx).focus_handle.clone();
-            focus_handle.focus(window, cx);
-            surface.update(cx, |surface, _| surface.focus());
-        } else {
-            window.blur();
-        }
+        self.focus_shell_target_now(ShellFocusTarget::BrowserPane(pane_id), window, cx);
         true
     }
 
@@ -546,7 +531,7 @@ impl GhostexGpuiApp {
             self.request_sidebar_browser_tab_reveal(committed_tab_id);
         }
         self.browser_tabs.focus_pane(pane_id);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
+        self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
         self.load_browser_cef_url_for_pane(pane_id, &url, cx);
         self.request_browser_content_focus(pane_id);
         self.persist_shell_layout_state();

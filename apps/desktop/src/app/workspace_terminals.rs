@@ -689,7 +689,7 @@ impl GhostexGpuiApp {
             .cloned()
         else {
             self.apply_view_pane_state(cx);
-            self.focus_default_surface_for_active_mode();
+            self.focus_default_surface_for_active_mode(cx);
             self.update_active_mode_cef_child_visibility(cx);
             return;
         };
@@ -708,11 +708,14 @@ impl GhostexGpuiApp {
         // Do not record its live pane values under the incoming project here.
         self.active_mode = target_mode;
         self.apply_view_pane_state(cx);
-        self.set_shell_focus(default_shell_focus_for_mode(
-            target_mode,
-            &self.agents_workspace,
-            &self.project_editor_shell,
-        ));
+        self.focus_shell_target(
+            default_shell_focus_for_mode(
+                target_mode,
+                &self.agents_workspace,
+                &self.project_editor_shell,
+            ),
+            cx,
+        );
         self.update_active_mode_cef_child_visibility(cx);
     }
 
@@ -1373,9 +1376,10 @@ impl GhostexGpuiApp {
             self.forget_local_workspace_mappings_for_shell_session(request.shell_session_id, cx);
         }
         if focus_agents_pane_after_mutation {
-            self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                self.agents_workspace.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                cx,
+            );
         }
         self.scroll_workspace_pane_active_tab(self.agents_workspace.focused_pane);
         self.persist_shell_layout_state();
@@ -1672,10 +1676,7 @@ impl GhostexGpuiApp {
         }
         self.sync_project_editor_companion_terminal_selection();
         if focus_companion {
-            self.set_shell_focus_with_terminal_handoff(
-                ShellFocusTarget::ProjectEditorCompanion(mode),
-                true,
-            );
+            self.focus_shell_target(ShellFocusTarget::ProjectEditorCompanion(mode), cx);
             if let Some(slot_id) = self.project_editor_companion_terminal_slot_for_mode(mode) {
                 self.request_project_editor_companion_session_text_focus_handoff(slot_id, cx);
             }
@@ -2048,7 +2049,7 @@ impl GhostexGpuiApp {
                 cx,
             );
         } else {
-            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.set_sidebar_focus_border_handoff_target(shell_session_id);
             self.request_agents_session_text_focus_handoff(
                 AgentsTerminalBodyMountSlotId {
@@ -2293,7 +2294,7 @@ impl GhostexGpuiApp {
             );
         } else {
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
-            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.set_sidebar_focus_border_handoff_target(session_id);
             self.request_agents_session_text_focus_handoff(
                 AgentsTerminalBodyMountSlotId {
@@ -2364,7 +2365,7 @@ impl GhostexGpuiApp {
         };
         self.activate_preferred_agents_chat_launch_intent(session_id, cx);
         self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
-        self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+        self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
         self.set_sidebar_focus_border_handoff_target(session_id);
         self.request_agents_session_text_focus_handoff(
             AgentsTerminalBodyMountSlotId {

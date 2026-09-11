@@ -255,7 +255,6 @@ impl GhostexGpuiApp {
                 agents_chat_surface_hidden_since: HashMap::new(),
                 session_chat_composer_ready_sessions: HashSet::new(),
                 session_chat_composer_empty_reports: HashMap::new(),
-                pending_session_chat_composer_focus: None,
                 pending_session_chat_composer_insert: HashMap::new(),
                 pending_session_terminal_composer_insert: HashMap::new(),
                 pending_session_chat_draft_handoffs: HashSet::new(),
@@ -325,9 +324,8 @@ impl GhostexGpuiApp {
                 project_editor_companion_zmx_refresh_recorded_bounds: HashMap::new(),
                 terminal_text_focus_handle: cx.focus_handle().tab_stop(false),
                 terminal_text_marked_range: None,
-                pending_agents_terminal_text_focus_slot: None,
-                pending_command_terminal_text_focus_slot: None,
-                pending_project_editor_companion_terminal_text_focus_slot: None,
+                pending_keyboard_handoff: None,
+                composited_terminal_keyboard_owner: None,
                 agents_terminal_startup_body_slot_geometries: HashMap::new(),
                 agents_terminal_parked_owner_body_slot_geometries: HashMap::new(),
                 agents_terminal_runtime_sessions: AgentsTerminalRuntimeSessionRegistry::new(),
@@ -509,7 +507,6 @@ impl GhostexGpuiApp {
                 browser_find_input_subscriptions: HashMap::new(),
                 pending_browser_find_focus: None,
                 pending_browser_address_focus: None,
-                pending_browser_content_focus: None,
             };
             this.scroll_all_active_tab_strips();
 

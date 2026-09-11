@@ -81,7 +81,7 @@ pub(crate) fn valid_non_command_shell_focus_with_browser_tabs(
     match focus {
         ShellFocusTarget::AgentsPane(pane_id)
             if active_mode == TitlebarMode::Agents
-                && agents_workspace.find_leaf(pane_id).is_some() =>
+                && agents_workspace.rendered_leaf_order().contains(&pane_id) =>
         {
             Some(focus)
         }

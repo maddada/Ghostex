@@ -70,6 +70,7 @@ impl GhostexGpuiApp {
             .map(|(session_id, _)| *session_id)
             .collect::<Vec<_>>();
         let mut shell_state_changed = false;
+        let keyboard_owner_before = self.keyboard_owner_session();
         for session_id in exited_session_ids {
             self.agents_gpui_engine_terminals.remove(&session_id);
             let Some(pane_id) = self.agents_workspace.pane_id_for_session(session_id) else {
@@ -83,9 +84,11 @@ impl GhostexGpuiApp {
         if shell_state_changed {
             self.agents_terminal_runtime_sessions
                 .reconcile_with_workspace(&self.agents_workspace);
-            self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                self.agents_workspace.focused_pane,
-            ));
+            self.follow_shell_focus_after_surface_removed(
+                ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                keyboard_owner_before,
+                cx,
+            );
             /*
             CDXC:SessionChat 2026-09-11 WHY:
             Closing an exited tab promotes a neighbour to the pane's active tab. When that neighbour is a chat-mode session whose page was evicted while hidden, the body renders "Loading Chat..." and nothing recreates the page: the chat reconcile ran on toggles, project switches and sidebar clicks only, so the placeholder stayed until the user clicked the session in the sidebar.
@@ -305,6 +308,7 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
         let mut shell_state_changed = false;
         let mut completions = Vec::new();
+        let keyboard_owner_before = self.keyboard_owner_session();
         for session_id in exited_session_ids {
             self.command_gpui_engine_terminals.remove(&session_id);
             let Some((group_id, _)) = self
@@ -332,10 +336,14 @@ impl GhostexGpuiApp {
             self.prune_gpui_command_close_after_done_timers_for_command_model();
             self.clear_command_resize_hover_state_if_command_pane_hidden();
             if self.command_pane.has_sessions() {
-                self.set_shell_focus(ShellFocusTarget::CommandPane);
+                self.follow_shell_focus_after_surface_removed(
+                    ShellFocusTarget::CommandPane,
+                    keyboard_owner_before,
+                    cx,
+                );
                 self.scroll_focused_command_active_tab();
             } else {
-                self.restore_previous_non_command_focus_or_default();
+                self.restore_non_command_focus_after_surface_removed(keyboard_owner_before, cx);
             }
             self.sync_gpui_keep_awake_automation_from_current_settings(cx);
             self.persist_shell_layout_state();

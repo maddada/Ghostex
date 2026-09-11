@@ -13,8 +13,8 @@
 // from its siblings.
 pub(crate) mod actions;
 pub(crate) mod consts;
-pub(crate) mod core;
 pub(crate) mod context_menu;
+pub(crate) mod core;
 pub(crate) mod element;
 pub(crate) mod extensions;
 pub(crate) mod ffi;
@@ -34,6 +34,7 @@ pub(crate) mod companion_reveal;
 pub(crate) mod delayed_send;
 pub(crate) mod drag_resize;
 pub(crate) mod focus;
+pub(crate) mod keyboard_owner;
 pub(crate) mod modals;
 pub(crate) mod new_thread_picker_lifecycle;
 pub(crate) mod os_integration;

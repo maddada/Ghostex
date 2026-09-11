@@ -25,6 +25,42 @@ pub(crate) enum ShellFocusTarget {
     ProjectEditorCompanion(TitlebarMode),
 }
 
+/// CDXC:FocusRouting 2026-09-11 WHY:
+/// One keyboard handoff request for the whole shell. It names the shell focus it was made for, so a later focus change drops it, and the session or command tab that must still be in front when it runs, so a tab switch in the same pane drops it too.
+/// It replaces four per-surface pending slots (agents, command, companion, chat composer) plus browser and workarea pending flags, each with its own drain and its own staleness rules.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PendingKeyboardHandoff {
+    pub(crate) target: ShellFocusTarget,
+    pub(crate) session_id: Option<TerminalSessionId>,
+    pub(crate) command_session_id: Option<CommandSessionId>,
+}
+
+/// The session that physically owned the keyboard when a snapshot was taken; see `keyboard_owner_session`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum KeyboardOwnerSession {
+    Agents(TerminalSessionId),
+    Command(CommandSessionId),
+}
+
+/// What currently occupies the shell-focused target and can take the keyboard.
+/// Resolved from the models at the moment it is needed, never stored.
+pub(crate) enum ShellKeyboardOwner {
+    EngineTerminal {
+        target: GpuiEngineTerminalEventTarget,
+        view: Entity<terminal_element::TerminalView>,
+        session_id: Option<TerminalSessionId>,
+    },
+    #[cfg(target_os = "macos")]
+    NativeTerminal(FocusedTerminalTextMountTarget),
+    /// A running or mounting terminal whose surface does not exist yet; the handoff waits for it.
+    TerminalMounting,
+    ChatComposer(TerminalSessionId),
+    BrowserPage(BrowserPaneId),
+    WorkareaPage(TitlebarMode),
+    /// Sleeping placeholders, empty panes, sleeping workareas: nothing to focus, the GPUI root keeps the keys for wake-on-type.
+    Nothing,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FirstResponderTerminalSurface {
     Agents(TerminalSessionId),

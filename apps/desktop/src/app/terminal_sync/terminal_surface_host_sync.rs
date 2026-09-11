@@ -264,6 +264,7 @@ impl GhostexGpuiApp {
                     &self.command_pane,
                     &self.command_terminal_ghostty_surfaces,
                 );
+            let keyboard_owner_before = self.keyboard_owner_session();
             let mut shell_state_changed = consume_confirmed_command_terminal_ghostty_surface_closes(
                 &mut self.command_pane,
                 &mut self.command_terminal_close_confirms,
@@ -285,10 +286,14 @@ impl GhostexGpuiApp {
                 self.prune_gpui_command_close_after_done_timers_for_command_model();
                 self.clear_command_resize_hover_state_if_command_pane_hidden();
                 if self.command_pane.has_sessions() {
-                    self.set_shell_focus(ShellFocusTarget::CommandPane);
+                    self.follow_shell_focus_after_surface_removed(
+                        ShellFocusTarget::CommandPane,
+                        keyboard_owner_before,
+                        cx,
+                    );
                     self.scroll_focused_command_active_tab();
                 } else {
-                    self.restore_previous_non_command_focus_or_default();
+                    self.restore_non_command_focus_after_surface_removed(keyboard_owner_before, cx);
                 }
                 self.sync_gpui_keep_awake_automation_from_current_settings(cx);
                 self.persist_shell_layout_state();

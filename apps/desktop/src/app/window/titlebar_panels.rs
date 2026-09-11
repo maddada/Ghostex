@@ -2135,9 +2135,7 @@ impl Render for GpuiTitlebarReadingPanel {
         resource_panel_frame().child(match self.state {
             GpuiTitlebarReadingPanelState::Tips { .. } => self.render_tips(cx),
             GpuiTitlebarReadingPanelState::Resources { .. } => self.render_resources(cx),
-            GpuiTitlebarReadingPanelState::Notifications { .. } => {
-                self.render_notifications(cx)
-            }
+            GpuiTitlebarReadingPanelState::Notifications { .. } => self.render_notifications(cx),
         })
     }
 }

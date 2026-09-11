@@ -617,9 +617,6 @@ pub struct GhostexGpuiApp {
     /// entry means the state is unknown (report lost or page never loaded) and
     /// unknown must never read as "empty" to a pass that destroys pages.
     pub(crate) session_chat_composer_empty_reports: HashMap<TerminalSessionId, bool>,
-    /// One-shot terminal-to-chat keyboard handoff, completed only after the
-    /// target page reports that its composer bridge is mounted.
-    pub(crate) pending_session_chat_composer_focus: Option<TerminalSessionId>,
     pub(crate) pending_session_chat_composer_insert: HashMap<TerminalSessionId, String>,
     /// Chat-to-terminal drafts waiting for the exact terminal owner to remount.
     /// Each entry names the Saved Prompts row that holds the same text, so
@@ -824,22 +821,11 @@ pub struct GhostexGpuiApp {
     */
     pub(crate) terminal_text_focus_handle: FocusHandle,
     pub(crate) terminal_text_marked_range: Option<TerminalTextMarkedRange>,
-    /*
-    CDXC:FocusRouting 2026-06-27-14:59:
-    Sidebar-created GPUI terminals and agents must become type-ready like macOS sidebar launches. Track one exact Agents mount slot until its real Ghostty surface exists, then focus the existing GPUI terminal text service from the mounted body instead of adding keyboard fallbacks, overlays, or input rerouting.
-    */
-    pub(crate) pending_agents_terminal_text_focus_slot: Option<AgentsTerminalBodyMountSlotId>,
-    /*
-    CDXC:FocusRouting 2026-07-04:
-    Command-pane terminal creation and wake paths must become type-ready after
-    the rendered terminal body actually exists. Track one exact command mount
-    slot until either the GPUI-rendered terminal entity or native text handler
-    is ready, then focus that terminal without adding broad key routing,
-    overlays, fallback focused surfaces, or persistent shell fields.
-    */
-    pub(crate) pending_command_terminal_text_focus_slot: Option<CommandTerminalBodyMountSlotId>,
-    pub(crate) pending_project_editor_companion_terminal_text_focus_slot:
-        Option<ProjectEditorCompanionTerminalBodyMountSlotId>,
+    /// The one outstanding keyboard handoff; see keyboard_owner.rs.
+    /// Session and command creation, wake, and chat launch paths become type-ready through it: the request waits until the terminal surface or chat composer actually exists, then focuses it once.
+    pub(crate) pending_keyboard_handoff: Option<PendingKeyboardHandoff>,
+    /// The composited terminal the keyboard router currently treats as owner, with the native root it was claimed on, so a terminal that stops rendering can be released.
+    pub(crate) composited_terminal_keyboard_owner: Option<(usize, GpuiEngineTerminalEventTarget)>,
     pub(crate) agents_terminal_startup_body_slot_geometries:
         HashMap<AgentsTerminalStartupBodySlotId, AgentsTerminalStartupBodyGeometry>,
     pub(crate) agents_terminal_parked_owner_body_slot_geometries:
@@ -1157,7 +1143,6 @@ pub struct GhostexGpuiApp {
     pub(crate) browser_find_input_subscriptions: HashMap<BrowserTabId, gpui::Subscription>,
     pub(crate) pending_browser_find_focus: Option<BrowserTabId>,
     pub(crate) pending_browser_address_focus: Option<BrowserPaneId>,
-    pub(crate) pending_browser_content_focus: Option<BrowserPaneId>,
 }
 
 impl Drop for GhostexGpuiApp {
@@ -1395,8 +1380,8 @@ impl Render for GhostexGpuiApp {
         self.sync_terminal_close_confirm_dialog(window, cx);
         self.sync_terminal_paste_confirmation_dialog(window, cx);
         self.sync_terminal_search_inputs(window, cx);
-        self.drain_pending_gpui_engine_terminal_focus(window, cx);
-        self.drain_pending_session_chat_composer_focus_handoff(window, cx);
+        self.sync_composited_terminal_keyboard_owner(window, cx);
+        self.drain_pending_keyboard_handoff(window, cx);
         self.sync_session_chat_pane_focus(window, cx, false);
         self.refresh_zmx_persistence_focused_terminal_if_changed(cx);
         let sidebar_chrome_visible = gpui_sidebar_chrome_visible(self.sidebar_collapsed);

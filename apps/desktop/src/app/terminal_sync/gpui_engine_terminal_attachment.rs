@@ -350,7 +350,7 @@ impl GhostexGpuiApp {
             };
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.agents_workspace.select_tab(pane_id, shell_session_id);
-            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
         }
         if let Some(view) = self
@@ -437,7 +437,7 @@ impl GhostexGpuiApp {
             };
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.agents_workspace.select_tab(pane_id, shell_session_id);
-            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
         }
         if let Some(view) = self

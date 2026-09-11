@@ -658,9 +658,12 @@ impl GhostexGpuiApp {
             );
             self.end_programmatic_focus();
         }
-        self.clear_pending_agents_terminal_text_focus_if_focus_moved();
-        self.clear_pending_command_terminal_text_focus_if_focus_moved();
-        self.clear_pending_project_editor_companion_terminal_text_focus_if_focus_moved();
+        if self
+            .pending_keyboard_handoff
+            .is_some_and(|pending| pending.target != focus)
+        {
+            self.pending_keyboard_handoff = None;
+        }
     }
 
     pub(crate) fn begin_sidebar_focus_border_handoff(&mut self, cx: &mut gpui::Context<Self>) {
@@ -952,7 +955,14 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn restore_previous_non_command_focus_or_default(&mut self) {
+    /// CDXC:FocusRouting 2026-09-11 DECISION:
+    /// User: typing must reach the pane that is visible in front of them after the command pane is expanded and hidden again (F12, the chevron, or any other route), without clicking to re-activate it.
+    /// `set_shell_focus` only records intent, so hiding the command pane left AppKit first responder on the GPUI root and GPUI focus on the now-unrendered command terminal: chat panes received nothing and terminal panes lost Enter, Backspace, arrows, and chords.
+    /// Restore therefore always ends with the same keyboard handoff the click, tab-select, and mode-switch routes perform.
+    pub(crate) fn restore_previous_non_command_focus_or_default(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let focus = restored_non_command_shell_focus_or_default_with_browser_tabs(
             self.previous_non_command_focus,
             self.active_mode,
@@ -960,15 +970,18 @@ impl GhostexGpuiApp {
             &self.project_editor_shell,
             &self.browser_tabs,
         );
-        self.set_shell_focus(focus);
+        self.focus_shell_target(focus, cx);
     }
 
-    pub(crate) fn focus_default_surface_for_active_mode(&mut self) {
-        self.set_shell_focus(default_shell_focus_for_mode(
-            self.active_mode,
-            &self.agents_workspace,
-            &self.project_editor_shell,
-        ));
+    pub(crate) fn focus_default_surface_for_active_mode(&mut self, cx: &mut gpui::Context<Self>) {
+        self.focus_shell_target(
+            default_shell_focus_for_mode(
+                self.active_mode,
+                &self.agents_workspace,
+                &self.project_editor_shell,
+            ),
+            cx,
+        );
     }
 
     pub(crate) fn focus_agents_pane(
@@ -978,39 +991,17 @@ impl GhostexGpuiApp {
     ) {
         self.agents_workspace.focus_pane(pane_id);
         self.sync_project_editor_companion_terminal_selection();
-        self.set_shell_focus(ShellFocusTarget::AgentsPane(
-            self.agents_workspace.focused_pane,
-        ));
         let focused_pane = self.agents_workspace.focused_pane;
-        let requested_terminal_focus = self
-            .agents_workspace
-            .active_session_in_pane(focused_pane)
-            .map(|session_id| AgentsTerminalBodyMountSlotId {
-                pane_id: focused_pane,
-                session_id,
-            })
-            .filter(|slot_id| {
-                self.agents_workspace
-                    .is_current_terminal_body_mount_slot(*slot_id)
-            });
-        if let Some(slot_id) = requested_terminal_focus {
-            /*
-            CDXC:FocusRouting 2026-07-15:
-            Pane-level focus actions (adjacent-group hotkeys, pane chrome, and
-            directional navigation) must finish at the selected mounted
-            terminal, not only update shell focus. Request the same exact
-            mount-slot handoff used by session activation so the next render
-            focuses either the GPUI engine handle or the native terminal host.
-            */
-            self.request_agents_session_text_focus_handoff(slot_id, cx);
-        }
+        self.focus_shell_target(ShellFocusTarget::AgentsPane(focused_pane), cx);
         support_logs::append(
             support_logs::GpuiSupportLog::TerminalFocus,
             "gpui.terminalFocus.agentsPaneFocusRequested",
             serde_json::json!({
                 "pane": focused_pane.0,
-                "session": requested_terminal_focus.map(|slot_id| slot_id.session_id.0),
-                "mountSlotFocusRequested": requested_terminal_focus.is_some(),
+                "session": self
+                    .agents_workspace
+                    .active_session_in_pane(focused_pane)
+                    .map(|session_id| session_id.0),
             }),
         );
         self.dispatch_gpui_workspace_active_session_attention_acknowledge(focused_pane, cx);
@@ -1102,19 +1093,10 @@ impl GhostexGpuiApp {
         self.agents_workspace.select_tab(pane_id, session_id);
         self.dispatch_gpui_workspace_session_attention_acknowledge(session_id, cx);
         self.sync_project_editor_companion_terminal_selection();
-        self.set_shell_focus(ShellFocusTarget::AgentsPane(
-            self.agents_workspace.focused_pane,
-        ));
-        let selected_slot_id = AgentsTerminalBodyMountSlotId {
-            pane_id: self.agents_workspace.focused_pane,
-            session_id,
-        };
-        if self
-            .agents_workspace
-            .is_current_terminal_body_mount_slot(selected_slot_id)
-        {
-            self.request_agents_session_text_focus_handoff(selected_slot_id, cx);
-        }
+        self.focus_shell_target(
+            ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+            cx,
+        );
         self.scroll_workspace_pane_active_tab(pane_id);
         self.persist_shell_layout_state();
         if let Some(key) = self.local_workspace_key_for_shell_session(session_id) {
@@ -1193,9 +1175,10 @@ impl GhostexGpuiApp {
             .toggle_focus_mode_from_tab_double_click(pane_id, session_id)
         {
             self.dispatch_gpui_workspace_session_attention_acknowledge(session_id, cx);
-            self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                self.agents_workspace.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                cx,
+            );
             self.scroll_workspace_pane_active_tab(pane_id);
             self.scroll_workspace_pane_active_tab(self.agents_workspace.focused_pane);
             self.persist_shell_layout_state();
@@ -1251,7 +1234,7 @@ impl GhostexGpuiApp {
             */
             let focus = ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane);
             let shell_focus_changed = self.shell_focus != focus;
-            self.set_shell_focus(focus);
+            self.focus_shell_target(focus, cx);
             if shell_focus_changed || attention_acknowledged {
                 self.scroll_workspace_pane_active_tab(pane_id);
                 self.persist_shell_layout_state();
@@ -1283,7 +1266,7 @@ impl GhostexGpuiApp {
             .acknowledge_attention_for_session_activation(session_id);
         let focus = ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane);
         let shell_focus_changed = self.shell_focus != focus;
-        self.set_shell_focus(focus);
+        self.focus_shell_target(focus, cx);
         if model_changed || shell_focus_changed || attention_acknowledged {
             self.scroll_workspace_pane_active_tab(pane_id);
             self.persist_shell_layout_state();
@@ -1356,13 +1339,7 @@ impl GhostexGpuiApp {
             .acknowledge_attention_for_session_activation(slot_id.session_id);
         let focus = ShellFocusTarget::AgentsPane(slot_id.pane_id);
         let shell_focus_changed = self.shell_focus != focus;
-        self.set_shell_focus_with_terminal_handoff(focus, true);
-        // GPUI-engine slots key/IME-focus their own element focus handle.
-        // Native libghostty slots already received the exact AppKit responder
-        // handoff above and must keep it: focusing GPUI's legacy text service
-        // here steals keyDown from the host NSView, reducing terminal input to
-        // committed text and dropping physical/modifier keys such as Tab and
-        // Option/Alt chords.
+        self.focus_shell_target_now(focus, window, cx);
         if workspace_focus_changed || shell_focus_changed || attention_acknowledged {
             self.scroll_workspace_pane_active_tab(slot_id.pane_id);
             self.persist_shell_layout_state();
@@ -1926,11 +1903,7 @@ impl GhostexGpuiApp {
             );
         }
         self.remember_current_non_command_focus();
-        self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::CommandPane, true);
-        self.request_command_terminal_text_focus_handoff(slot_id);
-        if gpui_engine_view.is_some() {
-            self.pending_command_terminal_text_focus_slot = None;
-        }
+        self.focus_shell_target_now(ShellFocusTarget::CommandPane, window, cx);
         self.scroll_command_group_active_tab(slot_id.group_id);
         self.persist_shell_layout_state();
         if attention_acknowledged {
@@ -2400,9 +2373,10 @@ impl GhostexGpuiApp {
             return false;
         }
         self.forget_local_workspace_mappings_for_shell_session(session_id, cx);
-        self.set_shell_focus(ShellFocusTarget::AgentsPane(
-            self.agents_workspace.focused_pane,
-        ));
+        self.focus_shell_target(
+            ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+            cx,
+        );
         self.scroll_workspace_pane_active_tab(self.agents_workspace.focused_pane);
         self.persist_shell_layout_state();
         self.sync_gpui_keep_awake_automation_from_current_settings(cx);
@@ -2643,9 +2617,10 @@ impl GhostexGpuiApp {
         {
             return;
         }
-        self.set_shell_focus(ShellFocusTarget::AgentsPane(
-            self.agents_workspace.focused_pane,
-        ));
+        self.focus_shell_target(
+            ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+            cx,
+        );
         self.scroll_workspace_pane_active_tab(self.agents_workspace.focused_pane);
         self.persist_shell_layout_state();
         cx.notify();

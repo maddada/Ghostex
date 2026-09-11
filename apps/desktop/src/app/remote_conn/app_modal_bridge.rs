@@ -879,7 +879,7 @@ impl GhostexGpuiApp {
             pane_id,
             shell_session_id,
         );
-        self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+        self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
         self.set_sidebar_focus_border_handoff_target(shell_session_id);
         self.request_agents_session_text_focus_handoff(
             AgentsTerminalBodyMountSlotId {

@@ -407,7 +407,7 @@ impl GhostexGpuiApp {
 
         self.command_pane
             .acknowledge_attention_for_session_activation(session_id);
-        self.focus_command_pane();
+        self.focus_command_pane(cx);
         self.scroll_command_group_active_tab(group_id);
         self.scroll_focused_command_active_tab();
         self.persist_shell_layout_state();
@@ -1771,7 +1771,7 @@ impl GhostexGpuiApp {
             return false;
         }
 
-        self.focus_command_pane();
+        self.focus_command_pane(cx);
         self.scroll_command_group_active_tab(target.group_id);
         self.scroll_focused_command_active_tab();
         self.persist_shell_layout_state();

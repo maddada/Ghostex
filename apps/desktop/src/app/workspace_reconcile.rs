@@ -318,7 +318,7 @@ impl GhostexGpuiApp {
 
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.agents_workspace.select_tab(pane_id, shell_session_id);
-            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
 
             let slot_id = AgentsTerminalBodyMountSlotId {
@@ -372,7 +372,7 @@ impl GhostexGpuiApp {
 
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.agents_workspace.select_tab(pane_id, shell_session_id);
-            self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
+            self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
 
             let slot_id = AgentsTerminalBodyMountSlotId {
@@ -1084,9 +1084,10 @@ impl GhostexGpuiApp {
         self.pending_workspace_tab_click = None;
 
         if matches!(self.shell_focus, ShellFocusTarget::AgentsPane(_)) {
-            self.set_shell_focus(ShellFocusTarget::AgentsPane(
-                self.agents_workspace.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::AgentsPane(self.agents_workspace.focused_pane),
+                cx,
+            );
         }
         if matches!(
             self.previous_non_command_focus,
@@ -1219,7 +1220,7 @@ impl GhostexGpuiApp {
         self.command_close_after_done_timers.clear();
         self.clear_command_resize_hover_state_if_command_pane_hidden();
         if self.shell_focus == ShellFocusTarget::CommandPane && !self.command_pane.has_sessions() {
-            self.restore_previous_non_command_focus_or_default();
+            self.restore_previous_non_command_focus_or_default(cx);
         }
         self.scroll_focused_command_active_tab();
         self.sync_gpui_keep_awake_automation_from_current_settings(cx);
@@ -1319,15 +1320,15 @@ impl GhostexGpuiApp {
         self.hovered_browser_tab = None;
         self.pending_browser_find_focus = None;
         self.pending_browser_address_focus = None;
-        self.pending_browser_content_focus = None;
 
         if matches!(
             self.shell_focus,
             ShellFocusTarget::BrowserPane(_) | ShellFocusTarget::BrowserSurface
         ) {
-            self.set_shell_focus(ShellFocusTarget::BrowserPane(
-                self.browser_tabs.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::BrowserPane(self.browser_tabs.focused_pane),
+                cx,
+            );
         }
         /*
         CDXC:Browser 2026-08-26:
@@ -1497,7 +1498,7 @@ impl GhostexGpuiApp {
         if !self.browser_tabs.focus_pane(pane_id) {
             return;
         }
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
+        self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
 
         if let Some(surface) = self.browser_surface_for_pane(pane_id) {
             surface.update(cx, |surface, _| match action {
@@ -1561,7 +1562,7 @@ impl GhostexGpuiApp {
         }
         self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
+        self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
         self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
         true
@@ -1806,7 +1807,7 @@ impl GhostexGpuiApp {
         }
         if self.browser_tabs.select_tab_in_pane(pane_id, tab_id) {
             self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-            self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
+            self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
             self.sync_active_browser_tab_to_surface(window, cx);
             self.scroll_browser_pane_active_tab(pane_id);
             self.persist_shell_layout_state();
@@ -1825,7 +1826,7 @@ impl GhostexGpuiApp {
         }
         if self.browser_tabs.focus_pane(pane_id) {
             self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-            self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
+            self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
             self.sync_active_browser_tab_to_surface(window, cx);
             self.scroll_browser_pane_active_tab(pane_id);
             self.persist_shell_layout_state();
@@ -1856,7 +1857,7 @@ impl GhostexGpuiApp {
         self.browser_url = default_url;
         let pane_id = self.browser_tabs.focused_pane;
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(pane_id));
+        self.focus_shell_target(ShellFocusTarget::BrowserPane(pane_id), cx);
         self.sync_active_browser_tab_to_surface(window, cx);
         self.scroll_focused_browser_pane_active_tab();
         self.persist_shell_layout_state();
@@ -1928,9 +1929,10 @@ impl GhostexGpuiApp {
             self.browser_url = default_url;
             self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
             self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-            self.set_shell_focus(ShellFocusTarget::BrowserPane(
-                self.browser_tabs.focused_pane,
-            ));
+            self.focus_shell_target(
+                ShellFocusTarget::BrowserPane(self.browser_tabs.focused_pane),
+                cx,
+            );
             self.sync_active_browser_tab_to_surface(window, cx);
             self.scroll_focused_browser_pane_active_tab();
             self.persist_shell_layout_state();
@@ -2010,9 +2012,10 @@ impl GhostexGpuiApp {
             return true;
         }
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(
-            self.browser_tabs.focused_pane,
-        ));
+        self.focus_shell_target(
+            ShellFocusTarget::BrowserPane(self.browser_tabs.focused_pane),
+            cx,
+        );
         self.sync_active_browser_tab_to_surface(window, cx);
         if let Some(source_pane_id) = source_pane_id {
             self.scroll_browser_pane_active_tab(source_pane_id);
@@ -2097,9 +2100,10 @@ impl GhostexGpuiApp {
         }
         self.change_active_mode_with_pane_state(TitlebarMode::Browser, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Browser, cx);
-        self.set_shell_focus(ShellFocusTarget::BrowserPane(
-            self.browser_tabs.focused_pane,
-        ));
+        self.focus_shell_target(
+            ShellFocusTarget::BrowserPane(self.browser_tabs.focused_pane),
+            cx,
+        );
         self.sync_active_browser_tab_to_surface(window, cx);
         self.scroll_focused_browser_pane_active_tab();
         self.persist_shell_layout_state();
@@ -2159,7 +2163,7 @@ impl GhostexGpuiApp {
                 .project_editor_companion_terminal_slot_for_mode(mode)
                 .is_some();
         if !restore_companion_focus {
-            self.focus_default_surface_for_active_mode();
+            self.focus_default_surface_for_active_mode(cx);
         }
         let requested_agents_terminal_focus =
             if let Some(FocusedTerminalTextMountTarget::Agents(slot_id)) =

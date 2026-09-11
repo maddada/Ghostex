@@ -597,6 +597,7 @@ pub(crate) fn workspace_model_from_shell_state(
         terminal_sessions,
         root,
         focused_pane,
+        pane_focus_history: vec![focused_pane],
         focus_mode_pane: None,
         next_pane_id,
         next_split_id,
