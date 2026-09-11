@@ -1,6 +1,5 @@
 import { createPortal } from 'react-dom';
 import {
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -263,7 +262,7 @@ export function SidebarContextMenuPortal({
     : `${menuClassName} vertical-scroll-fade-mask`;
   const [viewportClampedMenuStyle, setViewportClampedMenuStyle] = useState<CSSProperties>();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     return registerSidebarContextMenuDismissHandler(onDismiss);
   }, [onDismiss]);
 
@@ -299,7 +298,7 @@ export function SidebarContextMenuPortal({
     };
   }, [activeMenuRef, menuStyle]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onDismiss();
@@ -324,6 +323,16 @@ export function SidebarContextMenuPortal({
       window.removeEventListener('blur', handleWindowBlur);
     };
   }, [onDismiss]);
+
+  useLayoutEffect(() => {
+    /**
+     * CDXC:ContextMenus 2026-09-11 WHY:
+     * The desktop sidebar normally leaves native focus on the active pane, so a menu that never takes focus cannot receive window blur when that pane is clicked again.
+     * Focus the open menu after installing dismissal handlers; the CEF focused-node bridge grants native focus to this marked menu and its descendants until it closes.
+     * SEE-ALSO: apps/desktop/src/bin/ghostex_gpui_cef_helper.rs.
+     */
+    activeMenuRef.current?.focus({ preventScroll: true });
+  }, [activeMenuRef]);
 
   return createPortal(
     <>
@@ -353,6 +362,7 @@ export function SidebarContextMenuPortal({
       />
       <div
         className={resolvedMenuClassName}
+        data-sidebar-context-menu-focus='true'
         onClick={(event) => {
           event.stopPropagation();
         }}
@@ -363,6 +373,7 @@ export function SidebarContextMenuPortal({
         ref={activeMenuRef}
         role='menu'
         style={viewportClampedMenuStyle ?? menuStyle}
+        tabIndex={-1}
       >
         {children}
       </div>

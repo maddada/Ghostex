@@ -260,7 +260,27 @@ wrap_render_process_handler! {
             if !is_sidebar {
                 return;
             }
-            let focused = node.is_some_and(|node| node.is_editable() != 0);
+            // CDXC:ContextMenus 2026-09-11 WHY:
+            // Open sidebar menus must own native focus so clicking the previously focused terminal or browser produces the blur that dismisses them.
+            // Keep the grant while a menu item is focused, and release it when the menu is removed, through the existing sidebar focus protocol.
+            // SEE-ALSO: packages/core-ui/sidebar-context-menu-portal.tsx.
+            let focused = node.is_some_and(|node| {
+                if node.is_editable() != 0 {
+                    return true;
+                }
+                let attribute = CefString::from("data-sidebar-context-menu-focus");
+                let mut current = Some(node.clone());
+                while let Some(node) = current {
+                    if node.is_element() != 0
+                        && CefString::from(&node.element_attribute(Some(&attribute))).to_string()
+                            == "true"
+                    {
+                        return true;
+                    }
+                    current = node.parent();
+                }
+                false
+            });
             let changed = SIDEBAR_EDITABLE_FOCUS_BY_BROWSER_ID.with(|states| {
                 let mut states = states.borrow_mut();
                 if states.get(&browser_id) == Some(&focused) {

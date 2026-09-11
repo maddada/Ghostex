@@ -138,7 +138,8 @@ wrap_client! {
                 background never moves AppKit first responder away from the
                 active terminal. The only way the sidebar may take keyboard
                 focus is this fixed bridge message, sent when its page focuses
-                a real editable element (search, rename). It is consumed here
+                a real editable element (search, rename) or an open sidebar context menu.
+                It is consumed here
                 as a native focus transfer for the sending browser; it carries
                 no app data and never reaches the app event handler.
                 */
