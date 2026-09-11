@@ -420,47 +420,58 @@ fn plan_session(
         return Ok(None);
     }
     let attempts = recovery["attempt"].as_u64().unwrap_or(0);
+    // CDXC:AgentProviders 2026-09-11 WHY:
+    // Restored sessions can display a saved login through its configured home without a persisted accountId. Checking only that field delayed their first usage-limit switch by five minutes even when another account was ready.
+    // Use the same identity as the account panel, exclude it from candidates, and let an available replacement release that initial wait. Failed switch attempts still keep their retry backoff.
+    let current_id = super::session_identity::display_account_id(
+        &registry,
+        provider,
+        &session,
+        &state.paths.home_dir,
+    )
+    .map(str::to_string);
+    let model = detection
+        .options
+        .as_ref()
+        .and_then(|o| o.selection.model.as_ref())
+        .map(|m| m.value.clone())
+        .unwrap_or_default();
+    let switch_account = if notice.kind == "usageLimit" && policy.at_limit == LimitAction::Switch {
+        ranked(
+            &registry,
+            snapshot,
+            provider,
+            current_id.as_deref(),
+            &model,
+            policy.priority,
+        )
+        .first()
+        .map(|account| account.id.clone())
+    } else {
+        None
+    };
     if recovery.is_null() || recovery["status"].as_str() != Some("waiting") {
         recovery = json!({"status":"waiting","reason":notice.title,"trigger":notice.kind,"attempt":attempts,"nextAttemptAt":(now+backoff(attempts)).to_rfc3339(),"updatedAt":now.to_rfc3339()});
         if notice.kind == "usageLimit"
-            && session
-                .pointer("/runtimeSettings/accountId")
-                .and_then(Value::as_str)
-                .is_some()
+            && (current_id.is_some() || switch_account.is_some())
             && attempts == 0
         {
             recovery["nextAttemptAt"] = json!(now.to_rfc3339());
         }
         save(state, repo, &session, recovery.clone())?;
     }
-    if time(recovery.get("nextAttemptAt")).is_some_and(|t| t > now) {
+    if time(recovery.get("nextAttemptAt")).is_some_and(|t| t > now)
+        && !(attempts == 0 && switch_account.is_some())
+    {
         return Ok(None);
     }
     let mut session = session;
     if notice.kind == "usageLimit" {
-        let current_id = session
-            .pointer("/runtimeSettings/accountId")
-            .and_then(Value::as_str);
         let current = snapshot
             .accounts
             .iter()
-            .find(|a| Some(endpoint::account_id(a).as_str()) == current_id);
-        let model = detection
-            .options
-            .as_ref()
-            .and_then(|o| o.selection.model.as_ref())
-            .map(|m| m.value.clone())
-            .unwrap_or_default();
-        let candidates = ranked(
-            &registry,
-            snapshot,
-            provider,
-            current_id,
-            &model,
-            policy.priority,
-        );
-        if policy.at_limit == LimitAction::Switch && !candidates.is_empty() {
-            let id = &candidates[0].id;
+            .find(|a| Some(endpoint::account_id(a).as_str()) == current_id.as_deref());
+        if let Some(id) = switch_account {
             if let Err(error) = endpoint::select(
                 state,
                 repo,
@@ -468,7 +479,8 @@ fn plan_session(
                 snapshot,
                 &project,
                 &session,
-                Some(id),
+                Some(&id),
+                super::continuation::SwitchSource::Automatic,
             ) {
                 recovery["reason"] = json!(error.message);
                 recovery["nextAttemptAt"] = json!((now + backoff(attempts)).to_rfc3339());

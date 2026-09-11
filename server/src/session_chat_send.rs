@@ -850,6 +850,14 @@ pub enum SessionChatSendStep {
         home_dir: PathBuf,
         timeout_ms: u64,
     },
+    /// Keep the restart sequence exclusive until the selected login is running and ready.
+    WaitForAccountReady {
+        agent: String,
+        expected_identity: String,
+        home_dir: PathBuf,
+        previous_process_id: Option<i64>,
+        timeout_ms: u64,
+    },
     ClearComposer {
         agent: String,
     },
@@ -1453,6 +1461,39 @@ async fn run_session_chat_send_worker(
                 clear_pending = false;
             }
             match step {
+                SessionChatSendStep::WaitForAccountReady {
+                    agent,
+                    expected_identity,
+                    home_dir,
+                    previous_process_id,
+                    timeout_ms,
+                } => {
+                    let cancelled = || job_generation != generation.load(Ordering::SeqCst);
+                    if let Err(error) =
+                        crate::accounts::restart_verification::wait_for_account_ready(
+                            &zmx_name,
+                            &agent,
+                            &expected_identity,
+                            &home_dir,
+                            previous_process_id,
+                            timeout_ms,
+                            &cancelled,
+                        )
+                        .await
+                    {
+                        outcome = Err(if cancelled() {
+                            SessionChatSendError::not_attempted(
+                                SESSION_CHAT_SEND_CANCELLED.to_string(),
+                            )
+                        } else {
+                            SessionChatSendError::new(
+                                SessionChatSendFailure::ComposerNotReady,
+                                error,
+                            )
+                        });
+                        break;
+                    }
+                }
                 SessionChatSendStep::WaitForAgentExit {
                     home_dir,
                     timeout_ms,

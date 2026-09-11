@@ -6,14 +6,25 @@ use crate::{
 use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
 
-/// CDXC:AgentProviders 2026-09-09 DECISION:
-/// Account switches on prompted sessions send one literal "." once the agent input is ready, regardless of auto-continue defaults. Drafts keep their input unsent and receive no continuation, superseding the earlier every-switch rule for drafts only.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SwitchSource {
+    Manual,
+    Automatic,
+}
+
+/// CDXC:AgentProviders 2026-09-11 DECISION:
+/// User: manually switching accounts must not send a "." or start a turn, even on a prompted session. This supersedes the earlier continuation after every prompted switch.
+/// Automatic switches send one literal "." once the agent input is ready. Drafts keep their input unsent, and configured same-account error recovery keeps its own continuation flow.
 /// Stop or a manual send cancels the claim; an uncertain delivery is never replayed.
 pub(crate) fn start(
     state: &AppState,
     repo: &DomainRepository<'_>,
     session: &Value,
+    source: SwitchSource,
 ) -> Result<(), DomainStateError> {
+    if source == SwitchSource::Manual {
+        return Ok(());
+    }
     let project = session["projectId"]
         .as_str()
         .unwrap_or_default()

@@ -1,4 +1,4 @@
-use super::endpoint;
+use super::{continuation::SwitchSource, endpoint};
 use crate::{
     domain::{DomainRepository, DomainStateError},
     logging::{GxserverLogInput, LogLevel},
@@ -46,10 +46,10 @@ fn apply_account_settings(runtime: &mut Map<String, Value>, settings: &Value) {
 
 /// CDXC:AgentProviders 2026-09-11 DECISION:
 /// User: an account switch on a running Claude or Codex session must not sleep and wake the daemon: "we don't need to close the terminal, we just do /exit on the claude/codex session in the terminal and then write the resume command".
-/// The daemon and every attached terminal stay alive. The CLI is told to exit from its own composer, its process is confirmed gone from the daemon's process tree, and the resume command a wake would have used is typed into that same shell.
+/// The daemon and every attached terminal stay alive. The CLI is told to exit from its own composer, its process is confirmed gone from the daemon's process tree, and one exact account-specific resume command is typed into that same shell.
 /// Nothing closes on the desktop or the web, so the chat page and the terminal tab survive the switch, and the cycle that took a minute on a session with running subagents is gone.
 /// The sleep-and-wake cycle remains for a running session whose daemon is already gone: there is no CLI to exit there.
-/// SEE-ALSO: server/src/accounts/endpoint.rs (select), server/src/accounts/continuation.rs (the dot after the restart), server/src/agents/drafts.rs (the draft variant of the same in-place switch), server/src/session_chat_send.rs (WaitForAgentExit).
+/// SEE-ALSO: server/src/accounts/endpoint.rs (select), server/src/accounts/continuation.rs (the dot after automatic switches), server/src/agents/drafts.rs (the draft variant of the same in-place switch), server/src/session_chat_send.rs (WaitForAgentExit).
 pub(crate) struct RestartPlan {
     agent: String,
     resume_command: String,
@@ -57,6 +57,8 @@ pub(crate) struct RestartPlan {
     cli_running: bool,
     dismiss_claude_settings: bool,
     account_settings: Value,
+    expected_identity: String,
+    previous_process_id: Option<i64>,
 }
 
 /// Whether the session's zmx daemon is alive, so the CLI inside it can be exited and resumed in place.
@@ -92,21 +94,35 @@ pub(crate) fn plan(
         })?;
     let settings = crate::agents::read_agent_settings(repository.db)?;
     let resume_command =
-        crate::zmx::get_provider_restart_startup_text_for_session(project, session, &settings)
-            .map(|text| text.trim_end_matches(['\r', '\n']).trim().to_string())
+        crate::agents::account_switch_resume_command(project, session, &settings)
             .filter(|text| !text.is_empty())
             .ok_or_else(|| {
                 DomainStateError::bad_request(
-                    "No saved conversation is available to resume on the selected account.",
+                    "This account switch needs an exact saved conversation and a single-line agent command.",
                 )
             })?;
     let zmx_name = crate::zmx::provider_zmx_session_name(session)?;
-    let cli_running = crate::zmx::read_zmx_session_process_identities(
+    let identities = crate::zmx::read_zmx_session_process_identities(
         std::slice::from_ref(&zmx_name),
         &state.paths.home_dir,
     )
-    .map(|identities| identities.contains_key(&zmx_name))
-    .unwrap_or(true);
+    .map_err(|_| {
+        DomainStateError::bad_request(
+            "Could not inspect the current agent before switching accounts.",
+        )
+    })?;
+    let current_process = identities.get(&zmx_name);
+    let cli_running = current_process.is_some();
+    let previous_process_id = current_process.and_then(|identity| identity.process_id);
+    let registry = super::store::read(repository.db)?;
+    let expected_identity = registry
+        .accounts
+        .iter()
+        .find(|account| {
+            Some(account.id.as_str()) == session["runtimeSettings"]["accountId"].as_str()
+        })
+        .map(|account| account.identity.clone())
+        .ok_or_else(|| DomainStateError::bad_request("Choose a saved account before switching."))?;
     let dismiss_claude_settings = cli_running
         && crate::session_chat_options::SessionChatOptionDetector::new(state)
             .detect_blocking(
@@ -125,15 +141,18 @@ pub(crate) fn plan(
         cli_running,
         dismiss_claude_settings,
         account_settings: Value::Object(account_settings),
+        expected_identity,
+        previous_process_id,
     })
 }
 
-/// Exits the CLI and resumes it on the saved account. The continuation dot starts only once the resume command has been typed, so it can never reach the CLI that is being replaced.
+/// Exits the CLI and resumes it on the saved account. Automatic switches continue only after the new login and its ready composer have been verified.
 pub(crate) fn start(
     state: &AppState,
     repository: &DomainRepository<'_>,
     session: &Value,
     plan: RestartPlan,
+    source: SwitchSource,
 ) -> Result<(), DomainStateError> {
     let project_id = session["projectId"]
         .as_str()
@@ -176,13 +195,23 @@ pub(crate) fn start(
     } else {
         Vec::new()
     };
-    steps.push(SessionChatSendStep::Write(plan.resume_command));
+    steps.push(SessionChatSendStep::Write(format!(
+        " {}",
+        plan.resume_command
+    )));
     steps.push(SessionChatSendStep::SleepMs(
         crate::session_chat_send::SESSION_CHAT_SUBMIT_DELAY_MS,
     ));
     steps.push(SessionChatSendStep::Write(
         crate::session_chat_send::SESSION_CHAT_SUBMIT.to_string(),
     ));
+    steps.push(SessionChatSendStep::WaitForAccountReady {
+        agent: plan.agent,
+        expected_identity: plan.expected_identity,
+        home_dir: state.paths.home_dir.clone(),
+        previous_process_id: plan.previous_process_id,
+        timeout_ms: 30_000,
+    });
     let completion = crate::session_chat_send::enqueue_session_write_sequence_with_completion(
         session,
         &project_id,
@@ -213,6 +242,7 @@ pub(crate) fn start(
             session_id,
             attempt,
             plan.account_settings,
+            source,
             result,
             started,
         )
@@ -227,6 +257,7 @@ async fn finish(
     session_id: String,
     attempt: String,
     account_settings: Value,
+    source: SwitchSource,
     result: Result<(), SessionChatSendError>,
     started: Instant,
 ) {
@@ -259,6 +290,7 @@ async fn finish(
                 .and_then(Value::as_bool)
                 != Some(true);
             runtime.remove("accountSwitchAttempt");
+            runtime.remove("accountRecovery");
             apply_account_settings(&mut runtime, &account_settings);
             let Ok(row) = endpoint::update_session(&repo, &row, runtime) else {
                 return;
@@ -297,7 +329,7 @@ async fn finish(
                 &session_id,
             );
             if continue_turn {
-                let _ = super::continuation::start(&state, &repo, &row);
+                let _ = super::continuation::start(&state, &repo, &row, source);
             }
             let _ = endpoint::publish(&state, &repo, &row);
         }
@@ -327,7 +359,7 @@ fn fail(state: &AppState, repo: &DomainRepository<'_>, row: &Value, error: &str)
         "accountRecovery".into(),
         json!({
             "status": "needsAttention", "trigger": "accountSwitch", "attempt": 0,
-            "reason": format!("{error} The account was not changed. Select it again to retry."),
+            "reason": format!("{error} The account switch was not confirmed. Check the terminal before retrying."),
             "updatedAt": chrono::Utc::now().to_rfc3339()
         }),
     );

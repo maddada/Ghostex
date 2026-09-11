@@ -1,4 +1,4 @@
-use super::{helpers, launch, model::*, store};
+use super::{continuation::SwitchSource, helpers, launch, model::*, store};
 use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
@@ -344,7 +344,7 @@ pub(crate) fn dispatch(
                     ));
                 }
             }
-            if choice == NewSessionAccount::MostRemaining {
+            if choice == NewSessionAccount::Auto {
                 registry.new_session_accounts.remove(&provider);
             } else {
                 registry.new_session_accounts.insert(provider, choice);
@@ -410,6 +410,7 @@ pub(crate) fn dispatch(
                     &project,
                     &session,
                     Some(required(params, "accountId")?),
+                    SwitchSource::Manual,
                 )?;
                 let selected = get_session(&repository, params)?;
                 if selected
@@ -484,6 +485,7 @@ pub(crate) fn select(
     project: &Value,
     session: &Value,
     id: Option<&str>,
+    source: SwitchSource,
 ) -> Result<(), DomainStateError> {
     let provider = launch::provider(project, session)
         .ok_or_else(|| DomainStateError::bad_request("Unsupported account provider."))?;
@@ -616,7 +618,7 @@ pub(crate) fn select(
     if let Some(command) = reuse_command {
         super::drafts::switch_in_live_provider(repository, &updated, &command)?;
     } else if let Some(plan) = restart {
-        super::restart::start(state, repository, &updated, plan)?;
+        super::restart::start(state, repository, &updated, plan, source)?;
     } else if was_running {
         cycle(state, repository, &updated, "/api/wakeSession")?;
     }
@@ -625,9 +627,9 @@ pub(crate) fn select(
         session["projectId"].as_str().unwrap_or(""),
         session["sessionId"].as_str().unwrap_or(""),
     );
-    // The in-place restart starts the continuation itself, once the resume command has been typed; starting it here would let the dot reach the CLI that is about to exit.
+    // The in-place restart starts an automatic continuation only after verifying the new login; starting it here would let the dot reach the CLI that is about to exit.
     if !restarting_in_place {
-        super::continuation::start(state, repository, session)?;
+        super::continuation::start(state, repository, session, source)?;
     }
     crate::session_chat_options::session_chat_terminal_notice_publisher(
         state,

@@ -1,6 +1,6 @@
 use super::{helpers, model::*, store};
 use crate::{
-    agents::quote_shell_arg,
+    agents::{command_word, quote_shell_arg, reusable_account_command},
     domain::{DomainRepository, DomainStateError},
 };
 use rusqlite::Connection;
@@ -60,46 +60,6 @@ pub(crate) fn with_account_command(
     Err(invalid())
 }
 
-// Read just enough shell spelling to locate the invocation; arguments are retained verbatim, including quotes and expansions.
-fn command_word(command: &str, from: usize) -> Option<(usize, usize, String)> {
-    let start = from + command.get(from..)?.len() - command.get(from..)?.trim_start().len();
-    if start == command.len() {
-        return None;
-    }
-    let mut word = String::new();
-    let mut quote = None;
-    let mut escaped = false;
-    for (relative, ch) in command[start..].char_indices() {
-        if escaped {
-            word.push(ch);
-            escaped = false;
-            continue;
-        }
-        if ch == '\\' && quote != Some('\'') {
-            escaped = true;
-            continue;
-        }
-        if quote == Some(ch) {
-            quote = None;
-            continue;
-        }
-        if quote.is_none() {
-            if matches!(ch, '\'' | '"') {
-                quote = Some(ch);
-                continue;
-            }
-            if ch.is_whitespace() {
-                return Some((start, start + relative, word));
-            }
-        }
-        word.push(ch);
-    }
-    if quote.is_some() || escaped {
-        return None;
-    }
-    Some((start, command.len(), word))
-}
-
 pub(crate) fn provider(project: &Value, session: &Value) -> Option<Provider> {
     match crate::agents::session_agent_family_id(project, session).as_deref() {
         Some("claude") => Some(Provider::Claude),
@@ -130,10 +90,10 @@ pub(crate) fn assign(
         .get("accountBaseCommand")
         .or_else(|| runtime.get("agentCommand"))
         .and_then(Value::as_str)
-        .unwrap_or(account.provider.id())
-        .to_string();
+        .unwrap_or(account.provider.id());
+    let base = reusable_account_command(base, account.provider.id())?;
     let command = with_account_command(&base, account.provider, &command)?;
-    runtime.entry("accountBaseCommand").or_insert(json!(base));
+    runtime.insert("accountBaseCommand".into(), json!(base));
     for (k, v) in [
         ("accountId", json!(account.id)),
         ("accountProvider", json!(account.provider)),

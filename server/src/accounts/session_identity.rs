@@ -20,24 +20,7 @@ pub(crate) fn display_account_id<'a>(
         return Some(id);
     }
     let root = configured_home(session, provider)?;
-    let path = match provider {
-        Provider::Codex => root.join("auth.json"),
-        Provider::Claude if root == home.join(".claude") => home.join(".claude.json"),
-        Provider::Claude => root.join(".claude.json"),
-    };
-    let data: Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
-    let identity = match provider {
-        Provider::Codex => data.pointer("/tokens/account_id")?.as_str()?.to_string(),
-        Provider::Claude => {
-            let account = data.get("oauthAccount")?;
-            let email = account.get("emailAddress")?.as_str()?;
-            let organization = account.get("organizationUuid")?.as_str()?;
-            if email.is_empty() || organization.is_empty() {
-                return None;
-            }
-            format!("{}:{organization}", email.to_lowercase())
-        }
-    };
+    let identity = login_identity(provider, &root, home)?;
     registry
         .accounts
         .iter()
@@ -45,6 +28,27 @@ pub(crate) fn display_account_id<'a>(
             account.provider == provider && !identity.is_empty() && account.identity == identity
         })
         .map(|account| account.id.as_str())
+}
+
+pub(crate) fn login_identity(provider: Provider, root: &Path, home: &Path) -> Option<String> {
+    let path = match provider {
+        Provider::Codex => root.join("auth.json"),
+        Provider::Claude if root == home.join(".claude") => home.join(".claude.json"),
+        Provider::Claude => root.join(".claude.json"),
+    };
+    let data: Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    match provider {
+        Provider::Codex => Some(data.pointer("/tokens/account_id")?.as_str()?.to_string()),
+        Provider::Claude => {
+            let account = data.get("oauthAccount")?;
+            let email = account.get("emailAddress")?.as_str()?;
+            let organization = account.get("organizationUuid")?.as_str()?;
+            if email.is_empty() || organization.is_empty() {
+                return None;
+            }
+            Some(format!("{}:{organization}", email.to_lowercase()))
+        }
+    }
 }
 
 fn configured_home(session: &Value, provider: Provider) -> Option<PathBuf> {

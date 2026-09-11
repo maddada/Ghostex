@@ -113,6 +113,34 @@ pub(crate) fn get_agent_startup_text_for_session(
         .filter(|value| !value.trim().is_empty())
 }
 
+/// CDXC:AgentProviders 2026-09-11 DECISION:
+/// User: account switching submits one clean account-specific resume command in the existing terminal, without the restore script or title-lookup fallback.
+pub(crate) fn account_switch_resume_command(
+    project: &Value,
+    session: &Value,
+    settings: &Map<String, Value>,
+) -> Option<String> {
+    let input = to_agent_resume_input(project, session, settings);
+    let command = input.agent_command.as_deref()?;
+    let resume = match input.agent_id.as_deref()? {
+        "claude" => {
+            let reference = get_claude_session_reference(&input)?;
+            let id = get_claude_session_id(Some(&reference))?;
+            build_claude_resume_invocation(command, &quote_shell_arg(&id))
+        }
+        "codex" => {
+            let id = get_codex_session_reference(&input)?;
+            if !is_uuid(&id) {
+                return None;
+            }
+            build_codex_resume_invocation(command, &quote_shell_arg(&id))
+        }
+        _ => return None,
+    };
+    // A raw shell write must be one input line, including custom command arguments.
+    (!resume.chars().any(char::is_control)).then_some(resume)
+}
+
 #[derive(Clone)]
 pub(crate) struct AgentResumeInput {
     agent_command: Option<String>,
@@ -161,20 +189,26 @@ pub(crate) fn to_agent_resume_input(
     let agent_id = resume_agent_family_id(configured_agent_id, &agent_config, &launch_settings);
     let stored_agent_command = read_text_from_map(&runtime_settings, "agentCommand");
     let configured_agent_command = read_text_from_map(&agent_config, "command");
-    let base_command = read_text_from_map(&runtime_settings, "accountCommand")
-        .or_else(|| stored_agent_command.clone())
-        .filter(|command| !is_one_time_agent_session_command(agent_id.as_deref(), command))
-        .or_else(|| {
-            configured_agent_command
+    let base_command =
+        if let Some(command) = read_text_from_map(&runtime_settings, "accountCommand") {
+            reusable_account_command(&command, agent_id.as_deref().unwrap_or_default()).ok()
+        } else {
+            stored_agent_command
+                .clone()
                 .filter(|command| !is_one_time_agent_session_command(agent_id.as_deref(), command))
-        })
-        .or_else(|| {
-            agent_id
-                .as_deref()
-                .and_then(default_agent_command)
-                .map(str::to_string)
-        })
-        .or(stored_agent_command);
+                .or_else(|| {
+                    configured_agent_command.filter(|command| {
+                        !is_one_time_agent_session_command(agent_id.as_deref(), command)
+                    })
+                })
+                .or_else(|| {
+                    agent_id
+                        .as_deref()
+                        .and_then(default_agent_command)
+                        .map(str::to_string)
+                })
+                .or(stored_agent_command)
+        };
     let runtime_command = agent_id
         .as_ref()
         .and_then(|agent_id| {
