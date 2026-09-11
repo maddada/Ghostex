@@ -50,12 +50,9 @@ import {
   normalizeGpuiCommandPaneSessions,
   normalizeGpuiWorkspaceSessionDelayedSends,
 } from './helpers/command-pane';
-import {
-  readStoredGpuiRemoteGroupOrder,
-  readStoredGpuiRemoteLastSeenPresentations,
-  readStoredGpuiRemoteRecentProjects,
-} from './helpers/recent-projects';
+import { readStoredGpuiRemoteGroupOrder, readStoredGpuiRemoteRecentProjects } from './helpers/recent-projects';
 import { normalizeNonEmptyString } from './helpers/records';
+import { GpuiRemoteLastSeenStore } from './helpers/remote-last-seen';
 import {
   normalizeGpuiSidebarRemoteEvent,
   parseGpuiRemotePresentationProjectId,
@@ -501,6 +498,7 @@ export class GpuiSidebarRuntime {
    */
   remoteSidebarHuds = new Map<string, GpuiRemoteSidebarHud>();
   remoteLastSeenPresentations = new Map<string, GxserverPresentationSnapshot>();
+  remoteLastSeenStore = new GpuiRemoteLastSeenStore();
   remoteLastSeenPersistTimeoutId: number | undefined;
   remoteReconnectAttempts = new Map<string, number>();
   remoteReconnectInFlight = new Set<string>();
@@ -558,7 +556,7 @@ export class GpuiSidebarRuntime {
     this.runtimeSettings = currentGpuiRuntimeSettings();
     this.remoteRecentProjectsByMachineId = readStoredGpuiRemoteRecentProjects();
     this.remoteGroupOrderByMachineId = readStoredGpuiRemoteGroupOrder();
-    this.remoteLastSeenPresentations = readStoredGpuiRemoteLastSeenPresentations();
+    this.remoteLastSeenPresentations = this.remoteLastSeenStore.read();
     this.workspaceGroups = readStoredGpuiWorkspaceSessionGroupsState();
     for (const sessionId of readStoredGpuiCloseAfterDoneSessionIds()) {
       this.closeAfterDoneTimersBySessionId.set(sessionId, {});

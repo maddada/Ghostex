@@ -36,7 +36,6 @@ import {
   haveSameSidebarProjectionValue,
   resolveGpuiSidebarAgentIcon,
 } from './helpers/presentation-projection';
-import { writeStoredGpuiRemoteLastSeenPresentations } from './helpers/recent-projects';
 import {
   createGpuiRemotePresentationProjectId,
   createGpuiRemotePresentationSessionId,
@@ -1249,22 +1248,29 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
   },
 
   captureRemoteLastSeenPresentations(this: GpuiSidebarRuntime): void {
-    let changed = false;
-    for (const [machineId, snapshot] of this.remotePresentations) {
-      if (this.remoteLastSeenPresentations.get(machineId) !== snapshot) {
-        this.remoteLastSeenPresentations.set(machineId, snapshot);
-        changed = true;
+    if (this.runtimeSettings?.settings === undefined) return;
+    const savedMachineIds = new Set(
+      createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.map((machine) => machine.id)
+    );
+    for (const machineId of this.remoteLastSeenPresentations.keys()) {
+      if (!savedMachineIds.has(machineId)) {
+        this.remoteLastSeenPresentations.delete(machineId);
+        this.remoteLastSeenStore.queue(machineId, null);
       }
     }
-    if (!changed) {
-      return;
+    for (const [machineId, snapshot] of this.remotePresentations) {
+      if (savedMachineIds.has(machineId) && this.remoteLastSeenPresentations.get(machineId) !== snapshot) {
+        this.remoteLastSeenPresentations.set(machineId, snapshot);
+        this.remoteLastSeenStore.queue(machineId, snapshot);
+      }
     }
-    if (this.remoteLastSeenPersistTimeoutId !== undefined) {
+    if (!this.remoteLastSeenStore.hasPending || this.remoteLastSeenPersistTimeoutId !== undefined) {
       return;
     }
     this.remoteLastSeenPersistTimeoutId = window.setTimeout(() => {
       this.remoteLastSeenPersistTimeoutId = undefined;
-      writeStoredGpuiRemoteLastSeenPresentations(this.remoteLastSeenPresentations);
+      this.remoteLastSeenStore.flush();
+      if (this.remoteLastSeenStore.hasPending) this.captureRemoteLastSeenPresentations();
     }, GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_PERSIST_DELAY_MS);
   },
 

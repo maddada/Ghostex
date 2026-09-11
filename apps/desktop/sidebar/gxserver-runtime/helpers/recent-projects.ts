@@ -3,14 +3,10 @@ CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import {
-  GPUI_REMOTE_GROUP_ORDER_STORAGE_KEY,
-  GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY,
-  GPUI_REMOTE_RECENT_PROJECTS_STORAGE_KEY,
-} from '../constants';
+import { GPUI_REMOTE_GROUP_ORDER_STORAGE_KEY, GPUI_REMOTE_RECENT_PROJECTS_STORAGE_KEY } from '../constants';
 import { normalizeGpuiSidebarTheme } from './bootstrap';
 import { normalizeNonEmptyString } from './records';
-import { createGpuiRemotePresentationProjectId, isPresentationSnapshot } from './remote-presentation';
+import { createGpuiRemotePresentationProjectId } from './remote-presentation';
 import { normalizeGpuiProjectPath } from './worktrees';
 import type { ghostexSettings } from '@/packages/shared/ghostex-settings';
 import type {
@@ -164,46 +160,6 @@ export function writeStoredGpuiRemoteGroupOrder(orderByMachineId: ReadonlyMap<st
     localStorage.setItem(GPUI_REMOTE_GROUP_ORDER_STORAGE_KEY, JSON.stringify(Object.fromEntries(orderByMachineId)));
   } catch {
     // CEF storage may be unavailable in tests or early bootstrap; the in-memory order still drives this session.
-  }
-}
-
-export function readStoredGpuiRemoteLastSeenPresentations(): Map<string, GxserverPresentationSnapshot> {
-  try {
-    const raw: unknown = JSON.parse(localStorage.getItem(GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY) ?? '{}');
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      return new Map();
-    }
-    const next = new Map<string, GxserverPresentationSnapshot>();
-    for (const [machineId, snapshot] of Object.entries(raw)) {
-      if (!machineId.trim() || !isPresentationSnapshot(snapshot)) {
-        continue;
-      }
-      next.set(machineId, snapshot);
-    }
-    return next;
-  } catch {
-    return new Map();
-  }
-}
-
-export function writeStoredGpuiRemoteLastSeenPresentations(
-  presentationsByMachineId: ReadonlyMap<string, GxserverPresentationSnapshot>
-): void {
-  /*
-  CDXC:RemoteMachines 2026-07-12:
-  Last-seen remote presentations are the same sanitized snapshots the sidebar
-  already renders (project titles/paths, session titles, states). Persisting
-  them app-client-locally lets disconnected machines keep their faded project
-  view across restarts; no tokens, SSH details, or daemon internals exist in
-  these snapshots.
-  */
-  try {
-    localStorage.setItem(
-      GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY,
-      JSON.stringify(Object.fromEntries(presentationsByMachineId))
-    );
-  } catch {
-    // CEF storage may be unavailable in tests or early bootstrap; the in-memory copy still drives this session.
   }
 }
 
