@@ -340,7 +340,7 @@ export interface SessionChatComposerProps {
   verboseMode?: boolean;
   /** Toggle the per-session Verbose mode override. Omitted hides the action. */
   onToggleVerbose?: () => void;
-  /** Per-session Summary mode value shown below Verbose mode in the actions menu. */
+  /** Per-session Summary mode value shown in the toolbar, or More actions at compact widths. */
   summaryMode?: boolean;
   /** Toggle the per-session Summary mode. Omitted hides the action. */
   onToggleSummary?: () => void;

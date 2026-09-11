@@ -185,6 +185,9 @@ export function SessionChatComposerActions({
   const maximizeLabel = maximized ? 'Exit maximize' : 'Maximize';
   const verboseLabel = verboseMode ? 'Verbose mode on' : 'Verbose mode off';
   const VerboseIcon = verboseMode ? IconEyeFilled : IconEyeOff;
+  const summaryLabel = summaryMode ? 'Summary mode on' : 'Summary mode off';
+  const SummaryIcon = summaryMode ? IconListCheck : IconListDetails;
+  const summaryShortcut = formatSidebarHotkeyLabel(sessionChatSummaryToggleHotkey());
 
   /*
   Host actions that carry `input` (Rename) swap the footer's control row for an
@@ -286,8 +289,7 @@ export function SessionChatComposerActions({
   const agentHostActions = foldedHostActions.filter((action) => AGENT_HOST_ACTION_IDS.has(action.id));
   const otherHostActions = foldedHostActions.filter((action) => !AGENT_HOST_ACTION_IDS.has(action.id));
 
-  // Chat presentation toggles, Delayed actions, and Close After Done live only
-  // inside the dots menu, on every footer width, so both menus share them.
+  // Verbose mode, Delayed actions, and Close After Done are shared by both menus.
   const verboseMenuItem = onToggleVerbose ? (
     <DropdownMenuCheckboxItem
       className={cn('whitespace-nowrap', verboseMode && 'font-medium')}
@@ -315,11 +317,9 @@ export function SessionChatComposerActions({
         }
       }}
     >
-      {summaryMode ? <IconListCheck aria-hidden='true' /> : <IconListDetails aria-hidden='true' />}
+      <SummaryIcon aria-hidden='true' />
       Summary mode
-      {showShortcutLabels ? (
-        <DropdownMenuShortcut>{formatSidebarHotkeyLabel(sessionChatSummaryToggleHotkey())}</DropdownMenuShortcut>
-      ) : null}
+      {showShortcutLabels ? <DropdownMenuShortcut>{summaryShortcut}</DropdownMenuShortcut> : null}
     </DropdownMenuCheckboxItem>
   ) : null;
   const delayedActionsMenuItem =
@@ -387,7 +387,6 @@ export function SessionChatComposerActions({
   );
   const hasBaseMenuItems =
     verboseMenuItem !== null ||
-    summaryMenuItem !== null ||
     delayedActionsMenuItem !== null ||
     closeAfterDoneMenuItem !== null ||
     splitRightHostAction !== undefined;
@@ -501,7 +500,6 @@ export function SessionChatComposerActions({
                   */}
                   <DropdownMenuLabel>Chat</DropdownMenuLabel>
                   {verboseMenuItem}
-                  {summaryMenuItem}
                   {delayedActionsMenuItem}
                   {closeAfterDoneMenuItem}
                   {/* CDXC:SessionChat 2026-09-05 DECISION: User: add Split Right below Close After Done in the chat composer's More menu. */}
@@ -511,6 +509,21 @@ export function SessionChatComposerActions({
               {hostMenuSections(hasBaseMenuItems)}
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : null}
+        {/* CDXC:SessionChat 2026-09-11 DECISION: User: show Summary mode between More actions and Session note when there is room; keep it in More actions in the compact toolbar. */}
+        {onToggleSummary ? (
+          <AppTooltip content={withShortcut(summaryLabel, summaryShortcut)}>
+            <Button
+              aria-label='Summary mode'
+              aria-pressed={summaryMode}
+              className={cn('ghostex-chat-footer-control rounded-full', summaryMode && 'text-foreground')}
+              onClick={onToggleSummary}
+              size='icon-sm'
+              variant={summaryMode ? 'secondary' : 'ghost'}
+            >
+              <SummaryIcon aria-hidden='true' stroke={2} />
+            </Button>
+          </AppTooltip>
         ) : null}
         {onSessionNote ? (
           <AppTooltip content={withShortcut('Session note', hostActions?.sessionNoteShortcut)}>
