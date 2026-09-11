@@ -500,6 +500,14 @@ export function useSidebarDragHandlers({
   }) satisfies DragDropEventHandlers['onDragMove'];
 
   const handleDragOver = ((event) => {
+    /**
+     * CDXC:Sessions 2026-09-11 DECISION:
+     * User: session rows stay in their original slots throughout a drag; only the insertion line and row ghost move, and the list reorders on drop.
+     * dnd-kit's optimistic sorting plugin is shared by the provider, so other sortables can register it even though session cards omit it. Cancel its hover reorder before it moves the source and placeholder DOM.
+     */
+    if (getSidebarDropData(event.operation.source)?.kind === 'session') {
+      event.preventDefault();
+    }
     const nativeEvent = getDragNativeEvent(event);
     updateGroupDragPreviewFromEvent(setGroupDragPreview, nativeEvent);
     updateGroupDragPreviewFromEvent(setProjectCollectionDragPreview, nativeEvent);

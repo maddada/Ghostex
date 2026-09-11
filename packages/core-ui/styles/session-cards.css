@@ -250,6 +250,9 @@
  * being carried, not as the dimmed placeholder styling it inherits.
  */
 .session-frame[data-dnd-dragging='true'] {
+  /* The measured rect already includes the row's sidebar bleed margins. */
+  margin: 0 !important;
+  width: var(--dnd-width) !important;
   background: color-mix(in srgb, var(--app-card) 94%, #ffffff 6%);
   box-shadow:
     0 10px 24px color-mix(in srgb, #000000 24%, transparent),
@@ -264,6 +267,25 @@
 .session-frame[data-dnd-dragging='true']::before,
 .session-frame[data-dnd-dragging='true']::after {
   content: none;
+}
+
+/*
+ * CDXC:Sessions 2026-09-11 DECISION:
+ * User: the session drag ghost matches the original row's width, style, font, leading icon, and title, without the spinner or last-active details on the right.
+ * Keep clone feedback's actual row DOM and its title column so truncation and typography match the source; hide trailing chrome without changing its layout.
+ */
+.session-frame[data-dnd-dragging='true'] .session-head-trailing,
+.session-frame[data-dnd-dragging='true'] > .session-status-dot,
+.session-frame[data-dnd-dragging='true'] .session-pinned-floating-button,
+.session-frame[data-dnd-dragging='true'] .session-note-dot,
+.session-frame[data-dnd-dragging='true'] .session-composer-draft-dot,
+.session-frame[data-dnd-dragging='true'] .session-queued-prompt-badge {
+  visibility: hidden !important;
+}
+
+.session-frame[data-dnd-dragging='true'] .session-floating-agent-icon,
+.session-frame[data-dnd-dragging='true'] .session-floating-agent-tabler-icon {
+  opacity: 1 !important;
 }
 
 .session[data-sleeping='true'] {
