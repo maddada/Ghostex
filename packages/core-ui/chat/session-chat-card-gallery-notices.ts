@@ -338,7 +338,7 @@ export const DETECTED_NOTICE_EXAMPLES = [
       "source": "screen",
       "detectedAt": "2026-09-06T12:00:00.000Z",
       "title": "Claude Code is waiting on a usage limit",
-      "detail": "Claude Code is showing its usage-limit wait screen. Handle the wait in the terminal before sending.",
+      "detail": "Claude Code hit a usage limit and will continue on its own when the limit resets. Sending a message now cancels that wait and sends it on the current account.",
       "screenTail": "Usage limit reached",
       "actions": [
         {
