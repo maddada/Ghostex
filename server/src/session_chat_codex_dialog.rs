@@ -47,6 +47,73 @@ fn row(line: &str) -> Option<TerminalDialogRow> {
 }
 
 const DIRECTORY_TRUST_ID_PREFIX: &str = "codex-directory-trust:";
+const UPDATE_PROMPT_ID_PREFIX: &str = "codex-update-prompt:";
+
+/// CDXC:AgentScreenDetection 2026-09-11 DECISION:
+/// User: the Codex update prompt card must read nicely, and its option must not show the raw install command.
+/// The card names both versions and says in words how Codex installs the update; the exact command stays readable under the card's terminal output, since the notice keeps the real screen for this dialog.
+/// SEE-ALSO: Codex tui/src/update_prompt.rs (the modal) and tui/src/update_action.rs (the commands it prints); server/src/session_chat_notice.rs keeps the screen tail.
+fn update_prompt_dialog(mut dialog: TerminalDialog) -> TerminalDialog {
+    let Some((_, versions)) = dialog.title.split_once("Update available!") else {
+        return dialog;
+    };
+    let Some((current, latest)) = versions
+        .split_once("->")
+        .map(|(current, latest)| (current.trim(), latest.trim()))
+        .filter(|(current, latest)| !current.is_empty() && !latest.is_empty())
+    else {
+        return dialog;
+    };
+    let Some(update_row) = dialog
+        .rows
+        .first()
+        .filter(|row| row.label.starts_with("Update now"))
+    else {
+        return dialog;
+    };
+    if dialog.rows.len() < 2
+        || dialog.rows[1..]
+            .iter()
+            .any(|row| !row.label.starts_with("Skip"))
+    {
+        return dialog;
+    }
+    // A narrow screen wraps the command into the row's continuation lines.
+    let command = format!(
+        "{} {}",
+        update_row.label,
+        update_row.description.as_deref().unwrap_or_default()
+    );
+    let method = if command.contains("brew ") {
+        "through Homebrew"
+    } else if command.contains("pnpm ") {
+        "through pnpm"
+    } else if command.contains("npm ") {
+        "through npm"
+    } else if command.contains("bun ") {
+        "through bun"
+    } else if command.contains("vp ") {
+        "through Vite+"
+    } else if command.contains("install.sh") || command.contains("install.ps1") {
+        "with the official Codex installer"
+    } else {
+        "with the install method it was set up with"
+    };
+    let (current, latest) = (current.to_string(), latest.to_string());
+    dialog.id = format!("{UPDATE_PROMPT_ID_PREFIX}{}", dialog.id);
+    dialog.title = format!("Update Codex to {latest}?");
+    dialog.body = format!(
+        "This session runs Codex {current}. Update now installs {latest} {method}. Codex quits to install it, so start it again in this session afterwards."
+    );
+    dialog.footer = "Choose an option to continue.".to_string();
+    dialog.actions.clear();
+    dialog.rows[0].label = "Update now".to_string();
+    dialog.rows[0].description = None;
+    if dialog.rows[1].label == "Skip" {
+        dialog.rows[1].label = "Skip for now".to_string();
+    }
+    dialog
+}
 
 /// CDXC:AgentScreenDetection 2026-09-09 WHY:
 /// Codex's extended-thinking menu has an informational footer instead of the usual Escape/Enter hints, so the generic dialog parser misses its choices.
@@ -204,13 +271,7 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
     let end = lines.iter().rposition(|line| !line.trim().is_empty())?;
     let footer_index = (end.saturating_sub(3)..=end).rev().find(|&i| {
         let line = clean(&lines[i]).to_ascii_lowercase();
-        (line.contains("esc")
-            && (line.contains("close")
-                || line.contains("cancel")
-                || line.contains("go back")
-                || line.contains("quit")
-                || line.contains("exit")
-                || line.contains("back")))
+        crate::session_chat_codex_blocking::is_codex_modal_footer(&line)
             || line == "q to quit"
             || line.starts_with("press enter to continue")
             || line.starts_with("press space to select or enter to save")
@@ -445,7 +506,7 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
     actions.push("cancel".to_string());
     let identity = content.join("\n") + &footer;
     let id = format!("{:x}", Sha256::digest(identity.as_bytes()));
-    Some(TerminalDialog {
+    Some(update_prompt_dialog(TerminalDialog {
         id,
         title,
         body: body.trim().to_string(),
@@ -454,12 +515,16 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
         input,
         input_value,
         actions,
-    })
+    }))
 }
 
 impl TerminalDialog {
     pub(crate) fn is_codex_directory_trust(&self) -> bool {
         self.id.starts_with(DIRECTORY_TRUST_ID_PREFIX)
+    }
+
+    pub(crate) fn is_codex_update_prompt(&self) -> bool {
+        self.id.starts_with(UPDATE_PROMPT_ID_PREFIX)
     }
 
     fn payload(&self, params: &Map<String, Value>) -> Result<String, DomainStateError> {

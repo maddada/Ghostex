@@ -31,6 +31,7 @@ export const DIALOG_EXAMPLES = [
   }),
   picker('Implement this plan?', ['Yes, implement this plan', 'No, stay in Plan mode'], 'Update the shared card styles, then review the gallery.'),
   picker('Trust folder "example"?', ['Trust and continue', 'Quit Codex'], '/workspace/example\n\nOnly continue if you trust this folder’s contents.'),
+  picker('Update Codex to 0.154.0?', ['Update now', 'Skip for now', 'Skip until next version'], 'This session runs Codex 0.153.4. Update now installs 0.154.0 with the official Codex installer. Codex quits to install it, so start it again in this session afterwards.'),
   picker('Select model', ['Default model (recommended)', 'Fast model', 'Reasoning model']),
   picker('Select reasoning effort', ['Low', 'Medium (recommended)', 'High', 'Extra high']),
   picker('Choose an import source', ['Local file', 'Previous conversation']),

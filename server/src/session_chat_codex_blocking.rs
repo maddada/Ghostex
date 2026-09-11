@@ -77,7 +77,7 @@ fn strip_box_border(line: &str) -> &str {
 }
 
 fn is_codex_composer_line(line: &str) -> bool {
-    let Some(rest) = strip_box_border(line).strip_prefix('\u{203a}') else {
+    let Some(rest) = strip_box_border(line).strip_prefix(['›', '»']) else {
         return false;
     };
     let rest = rest.trim_start();
@@ -123,14 +123,40 @@ fn latest_selected_choice(lines: &[String]) -> Option<usize> {
         .rposition(|line| is_selected_numbered_choice(line))
 }
 
-fn latest_modal_footer(lines: &[String]) -> Option<usize> {
-    lines.iter().rposition(|line| {
-        let line = line.to_ascii_lowercase();
-        let dismisses =
-            line.contains("go back") || line.contains("cancel") || line.contains("close");
-        let accepts = line.contains("confirm") || line.contains("select");
-        dismisses && (line.contains("esc") || (line.contains("press") && accepts))
+/// CDXC:AgentScreenDetection 2026-09-11 WHY:
+/// Transcript prose containing "esc" (even inside "description") and "close" used to count as a live dialog whenever a capture missed the composer during a repaint.
+/// Require a keyboard-hint row and an Escape dismissal action; absence of a composer alone does not establish a dialog.
+pub(crate) fn is_codex_modal_footer(line: &str) -> bool {
+    let line = strip_box_border(line).to_ascii_lowercase();
+    let hint = line.strip_prefix("press ").unwrap_or(&line);
+    if !["esc ", "enter ", "space ", "tab ", "↑", "↓", "←", "→"]
+        .iter()
+        .any(|prefix| hint.starts_with(prefix))
+    {
+        return false;
+    }
+    let words: Vec<_> = hint
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect();
+    words.iter().enumerate().any(|(index, word)| {
+        if *word != "esc" {
+            return false;
+        }
+        let action = &words[index + 1..];
+        let action = action.strip_prefix(&["to"]).unwrap_or(action);
+        matches!(
+            action.first(),
+            Some(&"close" | &"cancel" | &"back" | &"quit" | &"exit")
+        ) || action.starts_with(&["go", "back"])
     })
+}
+
+fn latest_modal_footer(lines: &[String]) -> Option<usize> {
+    // Like the answerable dialog parser, only the final four rows can own a footer.
+    (lines.len().saturating_sub(4)..lines.len())
+        .rev()
+        .find(|&index| is_codex_modal_footer(&lines[index]))
 }
 
 fn live_named_screen(
