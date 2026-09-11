@@ -14,6 +14,7 @@
 pub(crate) mod actions;
 pub(crate) mod consts;
 pub(crate) mod core;
+pub(crate) mod context_menu;
 pub(crate) mod element;
 pub(crate) mod extensions;
 pub(crate) mod ffi;

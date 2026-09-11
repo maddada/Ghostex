@@ -11,7 +11,7 @@ use gpui::Bounds;
 use gpui::Keystroke;
 use gpui::Pixels;
 use gpui::Window;
-use gpui_component::native_menu::NativeMenu;
+use crate::app::context_menu::GpuiContextMenu;
 
 use crate::app::actions::*;
 use crate::app::consts::*;
@@ -588,7 +588,7 @@ impl GhostexGpuiApp {
             return;
         };
         let action_pane_id = pane_id.0;
-        let menu = NativeMenu::new()
+        let menu = GpuiContextMenu::new()
             .menu(
                 "Split Sideways",
                 Box::new(SplitPaneRightWithNewTerminal {
@@ -634,7 +634,7 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:ContextMenus 2026-06-22-11:19:
-        Individual Agents workspace tabs need an OS-owned NativeMenu at the right-click position. The menu is scoped to the clicked pane id and session id, contains only tab-level commands, and must not duplicate far-right pane/layout actions such as new terminal, splits, or bottom row.
+        Individual Agents workspace tabs need an owned GPUI popup window at the right-click position. The menu is scoped to the clicked pane id and session id, contains only tab-level commands, and must not duplicate far-right pane/layout actions such as new terminal, splits, or bottom row.
 
         CDXC:ContextMenus 2026-06-26-06:57:
         Agents right-click tab menus now mirror native pane tabs instead of Browser-style tab menus: no Select Tab row, no direct Close Tab row, optional Focus when real Focus mode can run, Sleep scopes before Close scopes, and scope resolution confined to the clicked pane tab group.
@@ -652,7 +652,7 @@ impl GhostexGpuiApp {
                 .is_some_and(|session| {
                     session.presentation_state == TerminalSessionPresentationState::Sleeping
                 });
-        let mut menu = NativeMenu::new();
+        let mut menu = GpuiContextMenu::new();
 
         // Rename and direct Sleep are the primary clicked-session actions.
         // Rename is gxserver-backed, while Sleep also applies to an unmapped
@@ -752,7 +752,7 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:ContextMenus 2026-06-22-11:27:
-        Individual Browser tabs need an OS-owned NativeMenu at the right-click position. The menu is scoped to the clicked Browser pane and tab ids, contains only tab-level Select Tab and Close Tab commands, and relies on the existing Browser selection/close helpers so address sync, CEF visibility, split/reorder state, favicon runtime state, history, and last-tab address-only placeholder behavior stay unchanged.
+        Individual Browser tabs need an owned GPUI popup window at the right-click position. The menu is scoped to the clicked Browser pane and tab ids, contains only tab-level Select Tab and Close Tab commands, and relies on the existing Browser selection/close helpers so address sync, CEF visibility, split/reorder state, favicon runtime state, history, and last-tab address-only placeholder behavior stay unchanged.
         */
         let tab_exists = self
             .browser_tabs
@@ -762,7 +762,7 @@ impl GhostexGpuiApp {
             return;
         }
 
-        NativeMenu::new()
+        GpuiContextMenu::new()
             .menu(
                 "Select Tab",
                 Box::new(SelectBrowserTabInPane {
@@ -791,7 +791,7 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:ContextMenus 2026-06-22-11:31:
-        Individual command-pane tabs, including collapsed-strip tabs, need an OS-owned NativeMenu at the right-click position. The menu is scoped to the clicked command group id and session id and contains macOS-style Close Left/Right/Others commands. Tab selection and collapsed-strip expansion stay on left-click activation, not right-click menu rows.
+        Individual command-pane tabs, including collapsed-strip tabs, need an owned GPUI popup window at the right-click position. The menu is scoped to the clicked command group id and session id and contains macOS-style Close Left/Right/Others commands. Tab selection and collapsed-strip expansion stay on left-click activation, not right-click menu rows.
 
             CDXC:CommandPane 2026-06-25-11:20:
             Scoped command tab rows carry only group id, session id, and a fixed scope enum; they do not carry command text, paths, terminal output, or cross-pane identifiers.
@@ -834,7 +834,7 @@ impl GhostexGpuiApp {
             .command_pane
             .session(session_id)
             .is_some_and(|session| session.is_sleeping);
-        let mut menu = NativeMenu::new();
+        let mut menu = GpuiContextMenu::new();
 
         if self
             .command_pane
@@ -1141,7 +1141,7 @@ impl GhostexGpuiApp {
         Bulk command-tab closes must reuse the same close ownership as single command tabs. Every resolved sibling tab is removed from the command model immediately (macOS command close parity, no close-request deferral); the target list is resolved before mutation so Close Left/Right/Others cannot drift while tabs are removed.
 
         CDXC:ContextMenus 2026-06-25-18:38:
-        Scoped Close menu rows are lifecycle requests, not native tab-context primary actions. Do not transfer shell focus just because a NativeMenu scoped close removed sibling tabs; direct tab close and focused-session close still use the focus-restoring single-tab close path.
+        Scoped Close menu rows are lifecycle requests, not native tab-context primary actions. Do not transfer shell focus just because a GPUI popup menu scoped close removed sibling tabs; direct tab close and focused-session close still use the focus-restoring single-tab close path.
         */
         if scope == CommandPaneTabCloseScope::Close {
             return self.close_command_pane_tab(group_id, session_id, cx);
@@ -1202,7 +1202,7 @@ impl GhostexGpuiApp {
         Sleeping a command tab preserves the Close After Done armed flag but clears any active runtime deadline immediately. The three-minute Done watcher must not keep counting down while the tab is sleeping; wake/Done refresh starts a fresh countdown.
 
         CDXC:ContextMenus 2026-06-25-18:38:
-        Scoped Sleep menu rows dispatch through `paneTabSleepRequested` in native without first focusing the clicked terminal. Preserve GPUI shell focus for NativeMenu scoped sleep while focused command Sleep keeps command-pane focus ownership.
+        Scoped Sleep menu rows dispatch through `paneTabSleepRequested` in native without first focusing the clicked terminal. Preserve GPUI shell focus for GPUI popup menu scoped sleep while focused command Sleep keeps command-pane focus ownership.
         */
         let session_ids = self
             .command_pane

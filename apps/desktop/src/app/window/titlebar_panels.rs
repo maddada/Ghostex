@@ -27,6 +27,7 @@ impl Default for GpuiTitlebarAnchoredDropdownState {
 pub(crate) enum GpuiTitlebarPopupKind {
     Actions,
     BrowserActions(BrowserPaneId),
+    ContextMenu,
     Extensions,
     Git,
     Help,
@@ -41,6 +42,7 @@ impl GpuiTitlebarPopupKind {
         match self {
             Self::Actions => "actions",
             Self::BrowserActions(_) => "browserActions",
+            Self::ContextMenu => "contextMenu",
             Self::Extensions => "extensions",
             Self::Git => "git",
             Self::Help => "help",

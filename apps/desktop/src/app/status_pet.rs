@@ -27,7 +27,7 @@ use gpui::div;
 use gpui::img;
 use gpui::px;
 use gpui_component::h_flex;
-use gpui_component::native_menu::NativeMenu;
+use crate::app::context_menu::GpuiContextMenu;
 use gpui_component::v_flex;
 
 use crate::app::actions::*;
@@ -468,12 +468,12 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:StatusPet 2026-06-26-11:17:
-        The visible GPUI pet surface uses an OS-owned NativeMenu with Sleep Pet first and Go to Ghostex second, matching the native pet host. Menu actions carry no session/project/path/settings payloads; Sleep Pet writes only `petOverlayEnabled: false`, and Go to Ghostex raises the GPUI app/window without selecting a session.
+        The visible GPUI pet surface uses an owned GPUI popup window with Sleep Pet first and Go to Ghostex second, matching the native pet host. Menu actions carry no session/project/path/settings payloads; Sleep Pet writes only `petOverlayEnabled: false`, and Go to Ghostex raises the GPUI app/window without selecting a session.
         */
         if !self.sidebar_pet_overlay.enabled {
             return;
         }
-        NativeMenu::new()
+        GpuiContextMenu::new()
             .menu("Sleep Pet", Box::new(SleepGpuiPetOverlay))
             .menu("Go to Ghostex", Box::new(GoToGhostexFromGpuiPetOverlay))
             .show(position, window, cx);

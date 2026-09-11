@@ -70,7 +70,7 @@ impl GhostexGpuiApp {
                     if id == "settings" {
                         /*
                         CDXC:AppModal 2026-06-24-11:09:
-                        The GPUI titlebar Settings glyph owns the app-modal menu for Settings, Hotkeys, and Command Palette. Keep the menu as OS-owned NativeMenu actions that all route to the shared React modal host, rather than leaving Hotkeys or Command Palette without a titlebar path or adding GPUI-local placeholder UI.
+                        The GPUI titlebar Settings glyph owns the app-modal menu for Settings, Hotkeys, and Command Palette. Keep the menu as owned GPUI popup window actions that all route to the shared React modal host, rather than leaving Hotkeys or Command Palette without a titlebar path or adding GPUI-local placeholder UI.
 
                             CDXC:Sessions 2026-06-24-11:53:
                             The same Settings glyph menu owns Previous Sessions access so the GPUI titlebar opens the production shared modal and its gxserver bridge, not a separate GPUI-local history picker.
@@ -186,7 +186,7 @@ impl GhostexGpuiApp {
         Browser Back and Forward controls must read their enabled state from the selected loaded tab's existing CEF surface and must no-op when that surface cannot navigate. Reload must call CEF `reload()` on the selected loaded surface instead of loading the shell URL again, so Chromium keeps ownership of history, POST/cache behavior, and address-only placeholder tabs remain unloaded.
 
         CDXC:Browser 2026-06-22-11:50:
-        The right-side Browser controls follow current macOS parity: zoom reset appears only when the active CEF surface is zoomed, the feedback button launches Agentation, History and Profile remain OS NativeMenus, DevTools toggles through the active CEF surface, and the removed Appearance control does not reserve toolbar space or hit area.
+        The right-side Browser controls follow current macOS parity: zoom reset appears only when the active CEF surface is zoomed, the feedback button launches Agentation, History uses the app-modal host and Profile uses the shared GPUI popup window, DevTools toggles through the active CEF surface, and the removed Appearance control does not reserve toolbar space or hit area.
 
         CDXC:Browser 2026-06-23-11:04:
         The Browser feedback toolbar starts Agentation through CEF main-frame JavaScript injection. Keep github.com and *.github.com disabled before injection, and keep the toolbar surface status private by showing only bounded page-data-free notifications for missing CEF surfaces or frames.

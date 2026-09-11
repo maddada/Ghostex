@@ -99,6 +99,7 @@ impl GhostexGpuiApp {
         let menu_scrollable = matches!(
             kind,
             GpuiTitlebarPopupKind::Actions
+                | GpuiTitlebarPopupKind::ContextMenu
                 | GpuiTitlebarPopupKind::BrowserActions(_)
                 | GpuiTitlebarPopupKind::Extensions
                 | GpuiTitlebarPopupKind::Git
@@ -212,6 +213,7 @@ impl GhostexGpuiApp {
             return;
         }
 
+        self.context_menu = None;
         self.titlebar_popup_menu = None;
         if let Some(popup_window) = self.titlebar_popup_window.take() {
             let _ = popup_window.update(cx, |_, popup_window, _| {
@@ -251,6 +253,7 @@ impl GhostexGpuiApp {
             }),
         );
         if should_clear {
+            self.context_menu = None;
             self.titlebar_popup_menu = None;
             self.titlebar_popup_window = None;
             self.titlebar_dropdown_previous_focus_handle = None;
@@ -270,6 +273,12 @@ impl GhostexGpuiApp {
     ) -> GpuiTitlebarPopupContent {
         let _profile = crate::profiling::span(crate::profiling::Metric::PopupBuild);
         match kind {
+            GpuiTitlebarPopupKind::ContextMenu => {
+                GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
+                    self.context_menu.as_ref().expect("context menu supplied before opening")
+                        .build(menu, menu_width, menu_max_height, menu_scrollable)
+                }))
+            }
             GpuiTitlebarPopupKind::BrowserActions(pane_id) => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
                     self.build_gpui_browser_actions_popup_menu(

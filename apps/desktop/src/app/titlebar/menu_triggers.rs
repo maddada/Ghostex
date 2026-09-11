@@ -18,7 +18,7 @@
 use gpui::Bounds;
 use gpui::Pixels;
 use gpui::Window;
-use gpui_component::native_menu::NativeMenu;
+use crate::app::context_menu::GpuiContextMenu;
 
 use crate::app::actions::*;
 use crate::app::consts::*;
@@ -100,18 +100,18 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:AppModal 2026-06-24-11:09:
-        The GPUI titlebar Settings glyph opens this NativeMenu so Settings, Hotkeys, and Command Palette all have typed titlebar actions into the shared React app-modal host. Keep this menu OS-owned and action-backed, with no visual-only dropdown, fake control, WebKit surface, overlay, hidden hit region, or generic fallback behavior.
+        The GPUI titlebar Settings glyph opens this GPUI popup menu so Settings, Hotkeys, and Command Palette all have typed titlebar actions into the shared React app-modal host. Keep this menu in an owned popup window and action-backed, with no visual-only dropdown, fake control, WebKit surface, overlay, hidden hit region, or generic fallback behavior.
 
         CDXC:Sessions 2026-06-24-11:53:
-        Previous Sessions is exposed from the same titlebar NativeMenu so GPUI opens the shared history/restore modal through a typed app-modal action rather than duplicating the React UI or adding an overlay surface.
+        Previous Sessions is exposed from the same titlebar GPUI popup menu so GPUI opens the shared history/restore modal through a typed app-modal action rather than duplicating the React UI or adding an overlay surface.
 
         CDXC:AgentLauncher 2026-06-24-12:26:
         Agents Hub belongs in the same typed GPUI app-modal route as the Settings utility surfaces. The menu action must open the shared React Hub in the owned CEF app-modal host while Rust supplies the real filesystem catalog/content bridge instead of duplicate modal UI or fallback rows.
 
         CDXC:Settings 2026-06-24-12:22:
-        Configure Agents, Configure Actions, and Open Targets belong in the same typed NativeMenu because macOS/React already treat them as Settings-modal entry points. Keep the menu action-backed so GPUI opens the shared Settings host with the requested initial tab instead of introducing a second modal surface.
+        Configure Agents, Configure Actions, and Open Targets belong in the same typed GPUI popup menu because macOS/React already treat them as Settings-modal entry points. Keep the menu action-backed so GPUI opens the shared Settings host with the requested initial tab instead of introducing a second modal surface.
         */
-        NativeMenu::new()
+        GpuiContextMenu::new()
             .menu("Settings", Box::new(OpenGpuiSettingsModal))
             .menu("Extensions", Box::new(OpenGpuiExtensionsModal))
             .menu("Hotkeys", Box::new(OpenGpuiHotkeysModal))
@@ -132,9 +132,9 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:Titlebar 2026-07-04-01:00:
-        The compact titlebar mode picker is an OS-owned NativeMenu for narrow windows. Rows are projected from the same titlebar_mode_switcher_items list as the center tabs, disabled states stay disabled in Quick/projectless contexts, and selections dispatch through set_active_mode rather than mutating active_mode directly.
+        The compact titlebar mode picker is an owned GPUI popup window for narrow windows. Rows are projected from the same titlebar_mode_switcher_items list as the center tabs, disabled states stay disabled in Quick/projectless contexts, and selections dispatch through set_active_mode rather than mutating active_mode directly.
         */
-        let mut menu = NativeMenu::new();
+        let mut menu = GpuiContextMenu::new();
         for item in self.titlebar_mode_switcher_items() {
             let action = Box::new(SelectGpuiTitlebarMode {
                 mode_index: item.mode.switcher_index(),
@@ -163,12 +163,12 @@ impl GhostexGpuiApp {
         /*
         CDXC:Titlebar 2026-08-11:
         Right-clicking blank titlebar chrome or a workarea mode button should
-        expose the page that owns titlebar visibility. Keep this as an OS-owned
-        NativeMenu action into the existing Settings > Extensions route (the
+        expose the page that owns titlebar visibility. Keep this as an owned GPUI popup
+        action into the existing Settings > Extensions route (the
         page formerly called Customize); normal titlebar layout and hit testing
         remain unchanged.
         */
-        NativeMenu::new()
+        GpuiContextMenu::new()
             .menu("Extensions", Box::new(OpenGpuiExtensionsModal))
             .show(position, window, cx);
     }

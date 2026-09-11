@@ -64,7 +64,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let mut menu = gpui_component::native_menu::NativeMenu::new();
+        let mut menu = crate::app::context_menu::GpuiContextMenu::new();
         for (label, operation) in [
             ("Start / Restart", "restart"),
             ("Stop", "stop"),

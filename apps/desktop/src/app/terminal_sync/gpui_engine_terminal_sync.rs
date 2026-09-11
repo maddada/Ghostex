@@ -580,7 +580,12 @@ impl GhostexGpuiApp {
                 if self.agents_gpui_engine_terminal_is_zmx_client(session_id)
         );
         let view = cx.new(|cx| {
-            let mut view = terminal_element::TerminalView::from_model(model, event_rx, font, cx);
+            let mut view = terminal_element::TerminalView::from_model(model, event_rx, font, Box::new(|position, can_copy, window, cx| {
+                crate::app::context_menu::GpuiContextMenu::new()
+                    .menu_with_disabled("Copy", !can_copy, Box::new(terminal_element::TerminalContextMenuCopy))
+                    .menu("Paste", Box::new(terminal_element::TerminalContextMenuPaste))
+                    .show(position, window, cx);
+            }), cx);
             view.apply_settings(view_settings);
             if uses_zmx_visibility_claims {
                 view.enable_zmx_visibility_claims();

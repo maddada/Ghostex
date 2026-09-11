@@ -1091,19 +1091,19 @@ CDXC:Terminal 2026-06-22-23:33:
 Full-width secondary terminal creation is a distinct Agents shell action from pane-local Split Below. It wraps the entire existing Agents workspace tree as the top branch, appends a selected Mounting terminal in a bottom row, and keeps startup honest without fake Running state, libghostty mount, process launch, command text, stdout/stderr, or terminal content.
 
 CDXC:CommandPane 2026-06-22-11:15:
-The far-right Agents pane overflow is a NativeMenu scoped to the clicked pane id. It exposes pane/layout actions only, omits per-tab close commands, dispatches GPUI actions through the root render tree, and reuses the existing placeholder-only shell mutations without overlapping GPUI panels, hidden hit regions, libghostty mounts, terminal processes, command text, or terminal content.
+The far-right Agents pane overflow is a GPUI popup menu scoped to the clicked pane id. It exposes pane/layout actions only, omits per-tab close commands, dispatches GPUI actions through the root render tree, and reuses the existing placeholder-only shell mutations without overlapping GPUI panels, hidden hit regions, libghostty mounts, terminal processes, command text, or terminal content.
 
 CDXC:CommandPane 2026-06-22-13:17:
 Merge All Tabs is Agents-workspace-only parity. The pane menu and Ctrl+Shift+M flatten only the Agents split tree into one clicked or focused tab group, preserve terminal placeholder ids and presentation states, select the target pane's active session when possible, clear Focus mode because split geometry is removed, and never merge command-pane, Browser, Source, Kanban, Manage, project-editor, libghostty, process, command text, or terminal content state.
 
 CDXC:ContextMenus 2026-06-22-11:19:
-Agents tab right-click context menus are separate from the far-right pane overflow: they are NativeMenus scoped to the clicked pane/session ids, expose only Select Tab and Close Tab, and keep pane/layout actions out of per-tab menus.
+Agents tab right-click context menus are separate from the far-right pane overflow: they are GPUI popup menus scoped to the clicked pane/session ids, expose only Select Tab and Close Tab, and keep pane/layout actions out of per-tab menus.
 
 CDXC:ContextMenus 2026-06-22-11:27:
-Browser tab right-click context menus are NativeMenus scoped to the clicked Browser pane id and Browser tab id. They expose only Select Tab and Close Tab, reuse the existing Browser selection and close semantics, and must not include pane split/layout, toolbar, history, project-editor, overlay, hidden hit-region, or hit-test-routing behavior.
+Browser tab right-click context menus are GPUI popup menus scoped to the clicked Browser pane id and Browser tab id. They expose only Select Tab and Close Tab, reuse the existing Browser selection and close semantics, and must not include pane split/layout, toolbar, history, project-editor, overlay, hidden hit-region, or hit-test-routing behavior.
 
     CDXC:ContextMenus 2026-06-22-11:31:
-    Command-pane tab right-click context menus are NativeMenus scoped to the clicked command group and command session. They expose scoped close rows while tab selection and collapsed-strip expansion stay on left-click tab activation.
+    Command-pane tab right-click context menus are GPUI popup menus scoped to the clicked command group and command session. They expose scoped close rows while tab selection and collapsed-strip expansion stay on left-click tab activation.
 
     CDXC:ContextMenus 2026-06-27-05:07:
     Command-tab context menus must stay outside Action process ownership: run-start metadata, status-file polling, completion feedback, and exit cleanup own live Action status, while menu actions may only select/sleep/close the scoped tab without inspecting command text, output, paths, env, logs, status-file contents, Browser/CEF state, overlays, hidden hit regions, or hit-test routing.

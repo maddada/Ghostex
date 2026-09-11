@@ -80,7 +80,7 @@ use gpui::{
     point, prelude::FluentBuilder as _, px, size,
 };
 use gpui_component::{
-    native_menu::NativeMenu,
+
     tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement, Tooltip},
 };
 
@@ -564,7 +564,10 @@ pub struct TerminalLayout {
 /// Entity that owns a live terminal: the P1b model, the latest snapshot, and
 /// the shaped-row cache. Rendered by [`TerminalElement`]; its own `Render`
 /// impl just emits that element so `cx.notify()` re-renders naturally.
+pub type TerminalContextMenuHandler = Box<dyn Fn(Point<Pixels>, bool, &mut Window, &mut App)>;
+
 pub struct TerminalView {
+    context_menu_handler: TerminalContextMenuHandler,
     model: TerminalModel,
     font: TerminalFontConfig,
     /// Settings/config-derived size restored by the focused-surface reset shortcut.
@@ -630,11 +633,12 @@ impl TerminalView {
     pub fn spawn(
         config: TerminalSpawnConfig,
         font: TerminalFontConfig,
+        context_menu_handler: TerminalContextMenuHandler,
         cx: &mut Context<Self>,
     ) -> anyhow::Result<Self> {
         let (sink, event_rx) = Self::event_channel();
         let model = TerminalModel::spawn(config, sink)?;
-        Ok(Self::from_model(model, event_rx, font, cx))
+        Ok(Self::from_model(model, event_rx, font, context_menu_handler, cx))
     }
 
     /// Sink/receiver pair for [`from_model`](Self::from_model), letting
@@ -658,6 +662,7 @@ impl TerminalView {
         model: TerminalModel,
         mut event_rx: futures::channel::mpsc::UnboundedReceiver<TerminalEvent>,
         font: TerminalFontConfig,
+        context_menu_handler: TerminalContextMenuHandler,
         cx: &mut Context<Self>,
     ) -> Self {
         let configured_font_size = font.size;
@@ -690,6 +695,7 @@ impl TerminalView {
         .detach();
 
         Self {
+            context_menu_handler,
             model,
             font,
             configured_font_size,
@@ -1299,6 +1305,15 @@ impl TerminalView {
             return;
         }
 
+        if self.marked_text.is_none()
+            && let Some(input) = terminal_word_navigation_input(keystroke)
+        {
+            let _ = self.model.write_input(input);
+            self.after_send_input(cx);
+            cx.stop_propagation();
+            return;
+        }
+
         // Plain option-modified text keys belong to the IME/insertText path
         // while option is not acting as alt: dead keys compose there
         // (option-e + e -> é) and option-symbols (ß, ∫) arrive as committed
@@ -1425,6 +1440,9 @@ impl TerminalView {
     fn handle_key_up(&mut self, event: &KeyUpEvent) {
         let keystroke = &event.keystroke;
         self.last_modifiers = keystroke.modifiers;
+        if terminal_word_navigation_input(keystroke).is_some() {
+            return;
+        }
         let (key, unshifted_codepoint) = keystroke_vt_key(keystroke);
         let _ = self.model.send_key(&VtKeyInput {
             action: VtKeyAction::Release,
@@ -1746,20 +1764,13 @@ impl TerminalView {
         /*
         CDXC:ContextMenus 2026-07-11:
         Match the managed macOS libghostty surface menu exactly: terminal body
-        right-clicks open an OS-owned Copy/Paste menu, Copy reflects the live
+        right-clicks ask the embedding host for its Copy/Paste menu, Copy reflects the live
         selection, and a terminal application that consumed mouse reporting
         above suppresses the menu. The menu is attached to this terminal's real
         hitbox and focus node; no overlay or hit-test rerouting is involved.
         */
         if event.button == MouseButton::Right {
-            NativeMenu::new()
-                .menu_with_disabled(
-                    "Copy",
-                    self.selection.is_none(),
-                    Box::new(TerminalContextMenuCopy),
-                )
-                .menu("Paste", Box::new(TerminalContextMenuPaste))
-                .show(event.position, window, cx);
+            (self.context_menu_handler)(event.position, self.selection.is_some(), window, cx);
             cx.stop_propagation();
             return;
         }
@@ -3680,6 +3691,27 @@ fn build_row_layout(
         bg_spans,
         overline_spans,
         runs,
+    }
+}
+
+/// CDXC:Terminal 2026-09-11 WHY:
+/// Ghostty's macOS Option+Left/Right bindings send ESC-b/f independently of `macos-option-as-alt`; libghostty-vt only encodes keys and does not apply those bindings.
+/// Passing these arrows to the encoder instead produces modified-arrow sequences that shell prompts can leave behind as literal D/C characters.
+fn terminal_word_navigation_input(keystroke: &Keystroke) -> Option<&'static [u8]> {
+    let modifiers = &keystroke.modifiers;
+    if !cfg!(target_os = "macos")
+        || !modifiers.alt
+        || modifiers.shift
+        || modifiers.control
+        || modifiers.platform
+        || modifiers.function
+    {
+        return None;
+    }
+    match keystroke.key.as_str() {
+        "left" => Some(b"\x1bb"),
+        "right" => Some(b"\x1bf"),
+        _ => None,
     }
 }
 

@@ -20,7 +20,7 @@ use gpui::Entity;
 use gpui::Pixels;
 use gpui::Window;
 use gpui_component::WindowExt;
-use gpui_component::native_menu::NativeMenu;
+use crate::app::context_menu::GpuiContextMenu;
 use gpui_component::notification::Notification;
 
 use crate::app::actions::*;
@@ -1654,7 +1654,7 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:Browser 2026-06-23-11:14:
-        Browser Profiles are a normal GPUI Browser toolbar feature. The menu reflects real shell profile state through an OS-owned NativeMenu with checked generated profile rows and New Profile; do not use GPUI overlays, hidden hit regions, hit-test routing, or user-entered profile names.
+        Browser Profiles are a normal GPUI Browser toolbar feature. The menu reflects real shell profile state through an owned GPUI popup window with checked generated profile rows and New Profile; do not use GPUI overlays, hidden hit regions, hit-test routing, or user-entered profile names.
         */
         if !self.prepare_browser_toolbar_right_action(pane_id, cx) {
             return;
@@ -1665,7 +1665,7 @@ impl GhostexGpuiApp {
             .active_tab_for_pane(pane_id)
             .map(|tab| tab.profile_id)
             .unwrap_or_else(|| self.browser_profiles.active_profile_id());
-        let mut menu = NativeMenu::new();
+        let mut menu = GpuiContextMenu::new();
         for profile_id in self.browser_profiles.profile_ids() {
             menu = menu.menu_with_check(
                 profile_id.display_label(),
@@ -1753,7 +1753,7 @@ impl GhostexGpuiApp {
     pub(crate) fn browser_profile_actions_available(&self) -> bool {
         /*
         CDXC:Browser 2026-06-23-11:28:
-        Profile menu actions are registered globally like other NativeMenu commands, so the handler boundary must repeat the Browser availability gate. Stale or direct action dispatch cannot create, select, persist, or touch CEF profile state outside the Browser workspace.
+        Profile menu actions are registered globally like other GPUI popup menu commands, so the handler boundary must repeat the Browser availability gate. Stale or direct action dispatch cannot create, select, persist, or touch CEF profile state outside the Browser workspace.
         */
         self.titlebar_mode_available(TitlebarMode::Browser)
     }

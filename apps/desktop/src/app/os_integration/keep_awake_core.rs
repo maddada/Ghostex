@@ -21,7 +21,7 @@ use anyhow::Result;
 use gpui::Pixels;
 use gpui::Window;
 use gpui_component::WindowExt;
-use gpui_component::native_menu::NativeMenu;
+use crate::app::context_menu::GpuiContextMenu;
 use gpui_component::notification::Notification;
 
 use crate::app::actions::*;
@@ -38,7 +38,7 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:KeepAwake 2026-06-24-13:16:
-        The GPUI Keep Awake titlebar control is a menu launcher on both left-click and right-click, matching macOS titlebar semantics. The OS-owned NativeMenu exposes only the shared duration choices, the running-only stop action, and Power Settings; it must not become a direct toggle, React overlay, hidden hit region, persistent runtime store, or broad process killer.
+        The GPUI Keep Awake titlebar control is a menu launcher on both left-click and right-click, matching macOS titlebar semantics. The owned GPUI popup window exposes only the shared duration choices, the running-only stop action, and Power Settings; it must not become a direct toggle, React overlay, hidden hit region, persistent runtime store, or broad process killer.
         */
         let settings =
             shared_settings::shared_sidebar_settings_snapshot().keep_awake_titlebar_settings();
@@ -56,7 +56,7 @@ impl GhostexGpuiApp {
             .keep_awake_runtime
             .as_ref()
             .map(|runtime| runtime.duration_minutes);
-        let mut menu = NativeMenu::new().menu_with_disabled(
+        let mut menu = GpuiContextMenu::new().menu_with_disabled(
             "Keep awake period",
             true,
             Box::new(GpuiKeepAwakeMenuLabel),

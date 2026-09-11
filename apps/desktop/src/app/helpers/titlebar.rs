@@ -64,6 +64,7 @@ pub(crate) fn titlebar_popup_menu_width(kind: GpuiTitlebarPopupKind) -> f32 {
     match kind {
         GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_RESOURCES_WIDTH,
         GpuiTitlebarPopupKind::Actions
+        | GpuiTitlebarPopupKind::ContextMenu
         | GpuiTitlebarPopupKind::BrowserActions(_)
         | GpuiTitlebarPopupKind::OpenTargets => TITLEBAR_POPUP_COMPACT_WIDTH,
         GpuiTitlebarPopupKind::Extensions => TITLEBAR_POPUP_EXTENSIONS_WIDTH,
@@ -111,8 +112,12 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
     let max_left = main_window_bounds.origin.x.as_f32() + main_window_bounds.size.width.as_f32()
         - width
         - horizontal_margin;
-    let desired_left =
-        main_window_bounds.origin.x.as_f32() + trigger_bounds.top_right().x.as_f32() - width;
+    let desired_left = main_window_bounds.origin.x.as_f32()
+        + if kind == GpuiTitlebarPopupKind::ContextMenu {
+            trigger_bounds.left().as_f32()
+        } else {
+            trigger_bounds.top_right().x.as_f32() - width
+        };
     let left = desired_left.clamp(min_left, max_left.max(min_left));
     let below_top = main_window_bounds.origin.y.as_f32()
         + trigger_bounds.bottom().as_f32()
@@ -133,7 +138,7 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
         };
 
     Bounds {
-        origin: point(px(left), px(top)),
+        origin: point(px(left), px(top.clamp(main_window_bounds.origin.y.as_f32() + horizontal_margin, (bottom_limit - height).max(main_window_bounds.origin.y.as_f32() + horizontal_margin)))),
         size: size(px(width), px(height)),
     }
 }
@@ -1413,7 +1418,7 @@ pub(crate) fn titlebar_popup_menu_background() -> Hsla {
 }
 
 pub(crate) fn titlebar_popup_menu_border_color() -> Hsla {
-    rgb(0x303030).into()
+    rgb(0x3f3f3f).into()
 }
 
 pub(crate) fn apply_gpui_component_dark_theme(cx: &mut App) {

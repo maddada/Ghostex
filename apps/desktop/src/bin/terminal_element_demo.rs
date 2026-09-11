@@ -137,6 +137,12 @@ fn main() {
                             family: "JetBrainsMono Nerd Font".into(),
                             ..TerminalFontConfig::default()
                         },
+                        Box::new(|position, can_copy, window, cx| {
+                            gpui_component::native_menu::NativeMenu::new()
+                                .menu_with_disabled("Copy", !can_copy, Box::new(terminal_element::TerminalContextMenuCopy))
+                                .menu("Paste", Box::new(terminal_element::TerminalContextMenuPaste))
+                                .show(position, window, cx);
+                        }),
                         cx,
                     )
                     .expect("spawn demo terminal")
