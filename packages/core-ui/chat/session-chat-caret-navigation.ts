@@ -9,6 +9,7 @@ export interface SessionChatCaretMovement {
 /**
  * CDXC:SessionChat 2026-09-06 DECISION:
  * User: background Shift+Enter inserts a newline at the saved caret; arrows, including Option/Cmd arrows, restore input focus and move the caret unless a picker owns the key.
+ * CDXC:SessionChat 2026-09-11 DECISION: User: the configurable Scroll Chat to Bottom shortcut (Ctrl+Shift+Down by default) takes priority over caret selection in chat.
  */
 export function sessionChatCaretMovement(event: SessionChatComposerKeyEvent): SessionChatCaretMovement | null {
   if (event.isComposing || Number(event.altKey) + Number(event.ctrlKey) + Number(event.metaKey) > 1) {

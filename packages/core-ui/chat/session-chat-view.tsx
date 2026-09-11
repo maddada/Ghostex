@@ -22,7 +22,8 @@ import {
 import { cn } from '@/packages/components/utils';
 import type { GxserverSessionForkBranch } from '../../shared/gxserver-protocol';
 import type { SessionChatTheme } from '../../shared/session-chat';
-import { ghostexHotkeyTextFromKeyboardEvent } from '../../shared/ghostex-hotkeys';
+import { ghostexHotkeyTextFromKeyboardEvent, type ghostexHotkeySettings } from '../../shared/ghostex-hotkeys';
+import { useSessionChatScrollToBottom } from './use-session-chat-scroll-to-bottom';
 import { AppTooltip, TooltipProvider } from '../app-tooltip';
 import { displayAgentName, NewSessionWelcome } from './session-chat-new-session-welcome';
 import { SessionChatComposer, type SessionChatComposerHandle } from './session-chat-composer';
@@ -236,6 +237,8 @@ export interface SessionChatViewProps {
   sessionTitle?: string;
   /** Top-right Terminal View / Agent Actions cluster (see the type doc). */
   hostActions?: SessionChatHostActions;
+  /** Effective host hotkeys; omitted hosts use the shared defaults. */
+  hotkeys?: ghostexHotkeySettings;
   /** Host-only terminal switch for an agent-owned model picker. */
   onSwitchToTerminalForAgentPicker?: () => void;
   /** Native-host requests that must act on this chat composer's draft. */
@@ -445,6 +448,7 @@ export function SessionChatView({
   customTranscriptWidthEnabled = false,
   diagnosticLog,
   hostActions,
+  hotkeys,
   hostComposerBridge,
   hostSessionNoteBridge,
   hostLinks,
@@ -736,34 +740,10 @@ export function SessionChatView({
     writeStoredSessionChatSummary(sessionKey, next);
     setSummaryMode(next);
   }, [sessionKey, summaryMode]);
-  const [scrollToBottomRequest, setScrollToBottomRequest] = useState(0);
-  /*
-  CDXC:SessionChat 2026-09-11 DECISION:
-  User: Option+Down (Alt+Down elsewhere) scrolls the chat to the bottom at any
-  time, so the end is reachable without the mouse while the stream hold keeps
-  the viewport up. Window-level like the summary hotkey so it also fires while
-  the composer has focus, but only for the chat that contains the focused
-  element, since the web workspace can show several chats side by side.
-  */
-  useEffect(() => {
-    const handleScrollToBottomHotkey = (event: globalThis.KeyboardEvent): void => {
-      if (event.key !== 'ArrowDown' || !event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) {
-        return;
-      }
-      const root = chatRootRef.current;
-      const target = event.target;
-      if (!root || !(target instanceof Node) || (target !== document.body && !root.contains(target))) {
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      if (!event.repeat) {
-        setScrollToBottomRequest((current) => current + 1);
-      }
-    };
-    window.addEventListener('keydown', handleScrollToBottomHotkey, true);
-    return () => window.removeEventListener('keydown', handleScrollToBottomHotkey, true);
-  }, []);
+  const { request: scrollToBottomRequest, label: scrollToBottomShortcutLabel } = useSessionChatScrollToBottom(
+    chatRootRef,
+    hotkeys
+  );
   useEffect(() => {
     const handleSummaryHotkey = (event: globalThis.KeyboardEvent): void => {
       if (ghostexHotkeyTextFromKeyboardEvent(event) !== sessionChatSummaryToggleHotkey()) {
@@ -1631,6 +1611,7 @@ export function SessionChatView({
                             <SessionChatMessageList
                               composerCollapsed={composerCollapsed}
                               scrollToBottomRequest={scrollToBottomRequest}
+                              scrollToBottomShortcutLabel={scrollToBottomShortcutLabel}
                               hasMore={chat.hasMore}
                               isWorking={transcriptWorking}
                               loadingEarlier={chat.loadingEarlier}
@@ -1672,6 +1653,7 @@ export function SessionChatView({
                               <SessionChatMessageList
                                 composerCollapsed={composerCollapsed}
                                 scrollToBottomRequest={scrollToBottomRequest}
+                                scrollToBottomShortcutLabel={scrollToBottomShortcutLabel}
                                 hasMore={chat.hasMore}
                                 isWorking={transcriptWorking}
                                 loadingEarlier={chat.loadingEarlier}

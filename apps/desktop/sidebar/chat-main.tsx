@@ -105,6 +105,7 @@ declare global {
     ghostexSetSessionChatTheme?: (theme: unknown) => void;
     ghostexSetSessionChatTranscriptWidthPercent?: (widthPercent: unknown) => void;
     ghostexSetSessionChatFileEditPreviews?: (enabled: unknown) => void;
+    ghostexSetSessionChatHotkeys?: (hotkeys: unknown) => void;
     ghostexSetSessionChatVerboseMode?: (verboseMode: unknown) => void;
   }
 }
@@ -1618,6 +1619,7 @@ function GpuiSessionChatPage({
           customTranscriptWidthEnabled={chatCustomTranscriptWidthEnabled}
           diagnosticLog={postSessionChatDiagnosticLog}
           hostActions={GPUI_SESSION_CHAT_HOST_ACTIONS}
+          hotkeys={normalizeghostexHotkeySettings(hotkeysValue)}
           hostComposerBridge={composerBridge}
           hostLinks={GPUI_SESSION_CHAT_HOST_LINKS}
           inputBackend='lexical'
@@ -1664,7 +1666,7 @@ try {
 } catch {
   hotkeysValue = {};
 }
-const GPUI_SESSION_CHAT_HOST_ACTIONS = createGpuiSessionChatHostActions(hotkeysValue);
+let GPUI_SESSION_CHAT_HOST_ACTIONS = createGpuiSessionChatHostActions(hotkeysValue);
 let hideAccountEmails = searchParams.get('hideAccountEmails') === 'true';
 let chatTheme = normalizeSessionChatTheme(searchParams.get('theme'));
 let chatFontFamily = searchParams.get('fontFamily')?.trim() ?? '';
@@ -1736,6 +1738,11 @@ window.ghostexSetSessionChatTranscriptWidthPercent = (value) => {
 };
 window.ghostexSetSessionChatFileEditPreviews = (value) => {
   chatFileEditPreviews = value === true;
+  renderReadyChat?.(chatTheme);
+};
+window.ghostexSetSessionChatHotkeys = (value) => {
+  hotkeysValue = value;
+  GPUI_SESSION_CHAT_HOST_ACTIONS = createGpuiSessionChatHostActions(value);
   renderReadyChat?.(chatTheme);
 };
 window.ghostexSetSessionChatVerboseMode = (value) => {

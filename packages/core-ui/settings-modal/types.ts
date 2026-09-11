@@ -11,6 +11,7 @@ export function getHotkeySettingsSectionId(
   definition: (typeof GHOSTEX_HOTKEY_DEFINITIONS)[number]
 ): HotkeySettingsSectionId {
   switch (definition.action.kind) {
+    case 'chatAction':
     case 'focusedPaneAction':
     case 'renameActiveSession':
     case 'splitFocusedPane':

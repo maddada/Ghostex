@@ -500,6 +500,7 @@ export function CommandPalette({
         definition.id !== 'openSessionSearchPalette' &&
         definition.id !== 'openExtensions' &&
         definition.action.kind !== 'runActionSlot' &&
+        definition.action.kind !== 'chatAction' &&
         !paneActionIds.has(definition.id) &&
         !hiddenWorkareaCommandIds.has(definition.id)
     ).map(createBuiltInCommand);

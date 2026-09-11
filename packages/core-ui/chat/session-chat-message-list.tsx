@@ -26,7 +26,9 @@ import {
   IconSparkles,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { detectghostexHotkeyPlatform } from '../../shared/ghostex-hotkeys';
+import { normalizeghostexHotkeySettings } from '../../shared/ghostex-hotkeys';
+import { formatSidebarHotkeyLabel } from '../hotkey-label';
+import { useSessionChatScrollMomentum } from './use-session-chat-scroll-momentum';
 import {
   SESSION_CHAT_FORK_BOUNDARY_ID_PREFIX,
   type SessionChatMessage,
@@ -140,7 +142,7 @@ const STREAM_HOLD_TOP_MARGIN_PX = 12;
 
 /** The chat's Scroll to bottom chord (session-chat-view.tsx dispatches it). */
 export function scrollToBottomHotkeyLabel(): string {
-  return detectghostexHotkeyPlatform() === 'mac' ? '⌥+↓' : 'Alt+Down';
+  return formatSidebarHotkeyLabel(normalizeghostexHotkeySettings({}).scrollChatToBottom ?? '');
 }
 const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
 /** Terminal-pane parity: the conversation scrollbar fades out this long after
@@ -151,6 +153,7 @@ export interface SessionChatMessageListProps extends SessionChatStartupSendActio
   composerCollapsed?: boolean;
   /** Bumped by the view's Scroll to bottom hotkey; each change jumps to the end. */
   scrollToBottomRequest?: number;
+  scrollToBottomShortcutLabel?: string;
   messages: readonly SessionChatMessage[];
   isWorking: boolean;
   hasMore: boolean;
@@ -1439,6 +1442,7 @@ function ScrollToLatestSend({ pendingMessageId }: { pendingMessageId: string | n
 export function SessionChatMessageList({
   composerCollapsed = false,
   scrollToBottomRequest = 0,
+  scrollToBottomShortcutLabel = scrollToBottomHotkeyLabel(),
   hasMore,
   isWorking,
   loadingEarlier,
@@ -1481,6 +1485,7 @@ export function SessionChatMessageList({
   hasMoreRef.current = hasMore;
   const contentRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const cancelScrollMomentum = useSessionChatScrollMomentum(viewportRef);
   const shouldFollowBottomRef = useRef(true);
   // A collapsed composer means the reader scrolled into history; streaming growth must not pull them back to the end.
   const composerCollapsedRef = useRef(composerCollapsed);
@@ -1498,7 +1503,7 @@ export function SessionChatMessageList({
   hold while the synthetic streaming row is in the list. A reader scroll during
   the hold ends the anchoring, and the viewport then stays wherever they put it
   when the transcript's row replaces the stream. Scroll to bottom (the pill or
-  Option+Down) releases the hold for the rest of that stream, so following
+  the configured shortcut) releases the hold for the rest of that stream, so following
   resumes at once; otherwise following resumes when the stream ends.
   */
   const streamOnScreen = messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
@@ -1538,8 +1543,9 @@ export function SessionChatMessageList({
       viewport.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'true');
       viewport.removeAttribute(STREAM_HOLD_ATTRIBUTE);
       setViewportScrollTop(viewport.scrollHeight);
+      cancelScrollMomentum();
     }
-  }, [resumeFileScrolling, setViewportScrollTop]);
+  }, [cancelScrollMomentum, resumeFileScrolling, setViewportScrollTop]);
   useEffect(() => {
     if (scrollToBottomRequest > 0) {
       jumpToBottom();
@@ -1838,15 +1844,16 @@ export function SessionChatMessageList({
             </MessageScrollerContent>
           </MessageScrollerViewport>
           {/* CDXC:SessionChat 2026-09-11 DECISION:
-              User: the scroll-to-bottom pill reads "Scroll to bottom (⌥+↓)" so the
+              User: the scroll-to-bottom pill shows the configured shortcut so the
               end is reachable from the keyboard at any time; keep it small, no icon,
               fully circular. */}
           <MessageScrollerButton
+            behavior='instant'
             className='ghostex-chat-scroll-bottom-button h-6 rounded-full px-2.5 text-[11px] font-medium'
             onClick={jumpToBottom}
             size='xs'
           >
-            Scroll to bottom ({scrollToBottomHotkeyLabel()})
+            Scroll to bottom{scrollToBottomShortcutLabel ? ` (${scrollToBottomShortcutLabel})` : ''}
           </MessageScrollerButton>
         </MessageScroller>
         {saveMessageMarkdown && listMessageMarkdownPaths ? (
