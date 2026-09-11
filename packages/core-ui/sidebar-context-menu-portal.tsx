@@ -267,6 +267,12 @@ export function SidebarContextMenuPortal({
   }, [onDismiss]);
 
   useLayoutEffect(() => {
+    /**
+     * CDXC:ContextMenus 2026-09-11 WHY:
+     * On the desktop app these two notifications are also what makes an open menu hold native focus, so a click back into a pane blurs the page and dismisses it.
+     * The runtime counts them and merges the result with editable focus in the CEF helper, so the menu itself never needs DOM focus and no menu, flyout, or submenu has to be marked. Do not reintroduce a focus() here or a focus-tracking attribute on the menu: inferring the grant from the focused node is what closed menus on every submenu switch and flyout click.
+     * SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, apps/desktop/src/bin/ghostex_gpui_cef_helper.rs.
+     */
     notifySidebarContextMenuOpened(vscode);
     return () => {
       notifySidebarContextMenuClosed(vscode);
@@ -324,16 +330,6 @@ export function SidebarContextMenuPortal({
     };
   }, [onDismiss]);
 
-  useLayoutEffect(() => {
-    /**
-     * CDXC:ContextMenus 2026-09-11 WHY:
-     * The desktop sidebar normally leaves native focus on the active pane, so a menu that never takes focus cannot receive window blur when that pane is clicked again.
-     * Focus the open menu after installing dismissal handlers; the CEF focused-node bridge grants native focus to this marked menu and its descendants until it closes.
-     * SEE-ALSO: apps/desktop/src/bin/ghostex_gpui_cef_helper.rs.
-     */
-    activeMenuRef.current?.focus({ preventScroll: true });
-  }, [activeMenuRef]);
-
   return createPortal(
     <>
       <button
@@ -362,7 +358,6 @@ export function SidebarContextMenuPortal({
       />
       <div
         className={resolvedMenuClassName}
-        data-sidebar-context-menu-focus='true'
         onClick={(event) => {
           event.stopPropagation();
         }}
@@ -373,7 +368,6 @@ export function SidebarContextMenuPortal({
         ref={activeMenuRef}
         role='menu'
         style={viewportClampedMenuStyle ?? menuStyle}
-        tabIndex={-1}
       >
         {children}
       </div>

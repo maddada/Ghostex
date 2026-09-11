@@ -101,6 +101,9 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   ): void;
   transitionSession(sessionId: string, action: 'close' | 'sleep'): Promise<void>;
   copySessionDetails(message: Extract<SidebarToExtensionMessage, { type: 'copySessionDetails' }>): void;
+  noteSidebarContextMenuOpened(): void;
+  noteSidebarContextMenuClosed(): void;
+  syncSidebarContextMenuFocusGrant(): void;
   fullReloadSession(sessionId: string): Promise<void>;
   splitSessionRight(sessionId: string): Promise<void>;
   switchSessionAgent(sessionId: string, agentId: string): Promise<void>;
@@ -522,6 +525,36 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     } catch {
       this.handleUnsupportedSidebarMessage(message);
     }
+  },
+
+  /*
+  CDXC:ContextMenus 2026-09-11 WHY:
+  The sidebar is mouse-focus passive, so an open context menu must ask for native focus explicitly or a click back into the terminal never blurs the page and the menu stays open.
+  The portal reports opened/closed per menu instance; this counts them and forwards one held/released signal through the fixed editableFocus bridge, where the CEF helper merges it with editable focus.
+  The release is deferred to a microtask on purpose: when one menu closes and another opens in the same React commit (right-click a different row, Rename from a menu), the count dips to zero and back within one task, and an eager release-then-regrant reaches the page as a window blur that dismisses the new menu.
+  SEE-ALSO: packages/core-ui/sidebar-context-menu-portal.tsx, apps/desktop/src/bin/ghostex_gpui_cef_helper.rs.
+  */
+  noteSidebarContextMenuOpened(this: GpuiSidebarRuntime): void {
+    this.openSidebarContextMenuCount += 1;
+    this.syncSidebarContextMenuFocusGrant();
+  },
+
+  noteSidebarContextMenuClosed(this: GpuiSidebarRuntime): void {
+    this.openSidebarContextMenuCount = Math.max(0, this.openSidebarContextMenuCount - 1);
+    queueMicrotask(() => this.syncSidebarContextMenuFocusGrant());
+  },
+
+  syncSidebarContextMenuFocusGrant(this: GpuiSidebarRuntime): void {
+    const held = this.openSidebarContextMenuCount > 0;
+    if (held === this.sidebarContextMenuFocusHeld) {
+      return;
+    }
+    const bridge = window.ghostexGpui?.postSidebarEditableFocus;
+    if (!bridge) {
+      return;
+    }
+    this.sidebarContextMenuFocusHeld = held;
+    bridge(held ? 'focused' : 'blurred');
   },
 
   async fullReloadSession(this: GpuiSidebarRuntime, sessionId: string): Promise<void> {

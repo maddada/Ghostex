@@ -80,7 +80,7 @@ impl GhostexGpuiApp {
                     } else if id == "keep-awake" {
                         /*
                         CDXC:KeepAwake 2026-06-24-13:16:
-                        Keep Awake titlebar clicks open the OS-owned duration menu instead of toggling caffeinate directly. Runtime start/stop stays inside menu actions so users can choose the same shared duration semantics as macOS.
+                        Keep Awake titlebar clicks open the owned GPUI duration menu instead of toggling caffeinate directly. Runtime start/stop stays inside menu actions so users can choose the same shared duration semantics as macOS.
                         */
                         this.show_gpui_keep_awake_menu(event.position, window, cx);
                     } else if id == "resources" {

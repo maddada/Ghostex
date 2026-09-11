@@ -79,10 +79,19 @@ impl GhostexGpuiApp {
 
         let main_app = cx.entity().downgrade();
         let content_height = self.titlebar_popup_content_height(kind);
+        let content_width = if kind == GpuiTitlebarPopupKind::ContextMenu {
+            self.context_menu
+                .as_ref()
+                .expect("context menu supplied before opening")
+                .content_width(window)
+        } else {
+            titlebar_popup_menu_width(kind)
+        };
         let popup_bounds = titlebar_popup_window_bounds_for_trigger_bounds(
             kind,
             trigger_bounds,
             content_height,
+            content_width,
             window,
         );
         let popup_height = popup_bounds.size.height.as_f32();
@@ -275,7 +284,9 @@ impl GhostexGpuiApp {
         match kind {
             GpuiTitlebarPopupKind::ContextMenu => {
                 GpuiTitlebarPopupContent::Menu(PopupMenu::build(window, cx, |menu, _, _| {
-                    self.context_menu.as_ref().expect("context menu supplied before opening")
+                    self.context_menu
+                        .as_ref()
+                        .expect("context menu supplied before opening")
                         .build(menu, menu_width, menu_max_height, menu_scrollable)
                 }))
             }
@@ -339,6 +350,12 @@ impl GhostexGpuiApp {
                 let snapshot = self.gpui_native_resources_snapshot(cx);
                 GpuiTitlebarPopupContent::Reading(
                     cx.new(|_| GpuiTitlebarReadingPanel::resources(main_app, snapshot)),
+                )
+            }
+            GpuiTitlebarPopupKind::Notifications => {
+                let feed = self.notification_feed_state.clone();
+                GpuiTitlebarPopupContent::Reading(
+                    cx.new(|_| GpuiTitlebarReadingPanel::notifications(main_app, feed)),
                 )
             }
             GpuiTitlebarPopupKind::Tips => {

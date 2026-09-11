@@ -17,6 +17,7 @@ struct ContextMenuRow {
 
 /// CDXC:ContextMenus 2026-09-11 DECISION:
 /// User: convert titlebar, Agents-tab, command-tab, and other shell context menus to the shared GPUI popup so they stay above CEF on Linux, using the same menu across desktop platforms.
+/// Size each menu to its labels so short menus such as Copy/Paste stay compact.
 /// Menu contents and typed actions stay with their callers; the existing titlebar popup window owns layout, input, and dismissal.
 #[derive(Default)]
 pub(crate) struct GpuiContextMenu {
@@ -112,6 +113,30 @@ impl GpuiContextMenu {
         });
     }
 
+    pub(crate) fn content_width(&self, window: &Window) -> f32 {
+        let style = window.text_style();
+        let label_width = self
+            .rows
+            .iter()
+            .flatten()
+            .map(|row| {
+                let line = window.text_system().shape_line(
+                    row.label.clone(),
+                    px(TITLEBAR_POPUP_MENU_ROW_TEXT_SIZE),
+                    &[style.to_run(row.label.len())],
+                    None,
+                );
+                // PopupMenu adds 8px row insets, 4px outer padding, and a 1px border.
+                let check_width = if row.checked { 28.0 } else { 0.0 };
+                line.width.as_f32() + 26.0 + check_width
+            })
+            .fold(0.0_f32, f32::max);
+        label_width
+            .ceil()
+            .clamp(96.0, 400.0)
+            .min((window.bounds().size.width.as_f32() - 16.0).max(0.0))
+    }
+
     pub(crate) fn content_height(&self) -> f32 {
         titlebar_popup_menu_height_for_rows(
             &self
@@ -154,6 +179,7 @@ impl GpuiContextMenu {
                         .flex()
                         .flex_1()
                         .min_w_0()
+                        .text_ellipsis()
                         .items_center()
                         .min_h(px(TITLEBAR_POPUP_MENU_ROW_HEIGHT))
                         .text_size(px(TITLEBAR_POPUP_MENU_ROW_TEXT_SIZE))

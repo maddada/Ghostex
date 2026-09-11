@@ -79,10 +79,7 @@ use gpui::{
     UTF16Selection, UnderlineStyle as GpuiUnderlineStyle, Window, canvas, div, fill, outline,
     point, prelude::FluentBuilder as _, px, size,
 };
-use gpui_component::{
-
-    tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement, Tooltip},
-};
+use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement, Tooltip};
 
 use crate::ghostty_vt::{
     VtCellWide, VtDirty, VtKey, VtKeyAction, VtKeyInput, VtMods, VtMouseAction, VtMouseButton,
@@ -561,11 +558,11 @@ pub struct TerminalLayout {
     scrollbar: Option<ScrollbarLayout>,
 }
 
+pub type TerminalContextMenuHandler = Box<dyn Fn(Point<Pixels>, bool, &mut Window, &mut App)>;
+
 /// Entity that owns a live terminal: the P1b model, the latest snapshot, and
 /// the shaped-row cache. Rendered by [`TerminalElement`]; its own `Render`
 /// impl just emits that element so `cx.notify()` re-renders naturally.
-pub type TerminalContextMenuHandler = Box<dyn Fn(Point<Pixels>, bool, &mut Window, &mut App)>;
-
 pub struct TerminalView {
     context_menu_handler: TerminalContextMenuHandler,
     model: TerminalModel,

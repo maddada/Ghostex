@@ -21,7 +21,8 @@ use sidebar_bridge_manifest::{
     PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL,
     PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD, SIDEBAR_BRIDGE_FUNCTION_SPECS,
     SIDEBAR_BRIDGE_PAYLOAD_MAX_CHARS, SIDEBAR_EDITABLE_FOCUS_PROCESS_MESSAGE_NAME,
-    SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE, WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT,
+    SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE, SidebarBridgeFunctionId,
+    WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT,
     WEBKIT_EXTENSION_HOST_MESSAGE_HANDLER_JS_OBJECT, WEBKIT_JS_OBJECT,
     WEBKIT_MESSAGE_HANDLERS_JS_OBJECT, WEBKIT_NATIVE_HOST_MESSAGE_HANDLER_JS_OBJECT,
     WEBKIT_POST_MESSAGE_JS_FUNCTION, project_workarea_bridge_function_spec_for_js_function,
@@ -107,8 +108,65 @@ struct SidebarGxserverBootstrap {
     visible_session_ids: Vec<String>,
 }
 
+/*
+CDXC:ContextMenus 2026-09-11 WHY:
+The sidebar focus grant is one merged state, not two independent signals. Editable focus comes from Blink's focused-node callback; "a context menu is open" comes from the page through the fixed editableFocus bridge function, forwarded by the desktop runtime from the portal's opened/closed notifications.
+An earlier version marked the menu element and inferred the grant from which DOM node was focused. That released the grant whenever a focused menu item was unmounted (a submenu switch) or focus landed in a sibling flyout portal (Copy Details, Tag as, Switch Account), and it released-then-regranted when one menu closed as another opened, which the page saw as a window blur that dismissed the new menu.
+Merging both inputs here means the grant only changes when the combined answer changes, so DOM focus can move anywhere inside the sidebar while a menu is open.
+SEE-ALSO: packages/core-ui/sidebar-context-menu-portal.tsx, apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, apps/desktop/src/cef/shell/native_view.rs.
+*/
+#[derive(Clone, Copy, Default)]
+struct SidebarFocusState {
+    context_menu_open: bool,
+    editable_focused: bool,
+    granted: bool,
+}
+
 thread_local! {
-    static SIDEBAR_EDITABLE_FOCUS_BY_BROWSER_ID: RefCell<HashMap<c_int, bool>> = RefCell::new(HashMap::new());
+    static SIDEBAR_FOCUS_STATE_BY_BROWSER_ID: RefCell<HashMap<c_int, SidebarFocusState>> = RefCell::new(HashMap::new());
+}
+
+fn update_sidebar_focus_grant(
+    browser: &mut cef::Browser,
+    update: impl FnOnce(&mut SidebarFocusState),
+) {
+    let browser_id = browser.identifier();
+    let transition = SIDEBAR_FOCUS_STATE_BY_BROWSER_ID.with(|states| {
+        let mut states = states.borrow_mut();
+        let state = states.entry(browser_id).or_default();
+        update(state);
+        let granted = state.editable_focused || state.context_menu_open;
+        if state.granted == granted {
+            return None;
+        }
+        state.granted = granted;
+        Some(granted)
+    });
+    let Some(granted) = transition else {
+        return;
+    };
+    let Some(main_frame) = browser.main_frame() else {
+        return;
+    };
+    let mut message = match cef::process_message_create(Some(&CefString::from(
+        SIDEBAR_EDITABLE_FOCUS_PROCESS_MESSAGE_NAME,
+    ))) {
+        Some(message) => message,
+        None => return,
+    };
+    let Some(arguments) = message.argument_list() else {
+        return;
+    };
+    arguments.set_size(1);
+    arguments.set_string(
+        0,
+        Some(&CefString::from(if granted {
+            "focused"
+        } else {
+            "blurred"
+        })),
+    );
+    main_frame.send_process_message(ProcessId::BROWSER, Some(&mut message));
 }
 
 fn main() {
@@ -223,7 +281,7 @@ wrap_render_process_handler! {
     impl RenderProcessHandler {
         fn on_browser_destroyed(&self, browser: Option<&mut cef::Browser>) {
             if let Some(browser_id) = browser.as_ref().map(|browser| browser.identifier()) {
-                SIDEBAR_EDITABLE_FOCUS_BY_BROWSER_ID
+                SIDEBAR_FOCUS_STATE_BY_BROWSER_ID
                     .with(|states| states.borrow_mut().remove(&browser_id));
             }
         }
@@ -251,7 +309,6 @@ wrap_render_process_handler! {
             let Some(browser) = browser else {
                 return;
             };
-            let browser_id = browser.identifier();
             let is_sidebar = browser.main_frame().is_some_and(|frame| {
                 let frame_url = CefString::from(&frame.url()).to_string();
                 app_modal_host_bridge_surface_for_frame_url(&frame_url)
@@ -260,56 +317,8 @@ wrap_render_process_handler! {
             if !is_sidebar {
                 return;
             }
-            // CDXC:ContextMenus 2026-09-11 WHY:
-            // Open sidebar menus must own native focus so clicking the previously focused terminal or browser produces the blur that dismisses them.
-            // Keep the grant while a menu item is focused, and release it when the menu is removed, through the existing sidebar focus protocol.
-            // SEE-ALSO: packages/core-ui/sidebar-context-menu-portal.tsx.
-            let focused = node.is_some_and(|node| {
-                if node.is_editable() != 0 {
-                    return true;
-                }
-                let attribute = CefString::from("data-sidebar-context-menu-focus");
-                let mut current = Some(node.clone());
-                while let Some(node) = current {
-                    if node.is_element() != 0
-                        && CefString::from(&node.element_attribute(Some(&attribute))).to_string()
-                            == "true"
-                    {
-                        return true;
-                    }
-                    current = node.parent();
-                }
-                false
-            });
-            let changed = SIDEBAR_EDITABLE_FOCUS_BY_BROWSER_ID.with(|states| {
-                let mut states = states.borrow_mut();
-                if states.get(&browser_id) == Some(&focused) {
-                    return false;
-                }
-                states.insert(browser_id, focused);
-                true
-            });
-            if !changed {
-                return;
-            }
-            let Some(main_frame) = browser.main_frame() else {
-                return;
-            };
-            let mut message = match cef::process_message_create(Some(&CefString::from(
-                SIDEBAR_EDITABLE_FOCUS_PROCESS_MESSAGE_NAME,
-            ))) {
-                Some(message) => message,
-                None => return,
-            };
-            let Some(arguments) = message.argument_list() else {
-                return;
-            };
-            arguments.set_size(1);
-            arguments.set_string(
-                0,
-                Some(&CefString::from(if focused { "focused" } else { "blurred" })),
-            );
-            main_frame.send_process_message(ProcessId::BROWSER, Some(&mut message));
+            let editable_focused = node.is_some_and(|node| node.is_editable() != 0);
+            update_sidebar_focus_grant(browser, |state| state.editable_focused = editable_focused);
         }
 
         fn on_context_created(
@@ -611,6 +620,30 @@ wrap_v8_handler! {
                 set_v8_bool_return(retval, false);
                 return 1;
             };
+
+            if spec.id == SidebarBridgeFunctionId::SidebarEditableFocus {
+                // The page declares "a sidebar context menu is open" here. It is merged with
+                // Blink's editable-focus state in update_sidebar_focus_grant rather than
+                // forwarded as-is, so the two inputs can never send contradictory grants.
+                let context_menu_open = match payload.as_str() {
+                    "focused" => true,
+                    "blurred" => false,
+                    _ => {
+                        set_v8_bool_return(retval, false);
+                        return 1;
+                    }
+                };
+                let handled = cef::v8_context_get_current_context()
+                    .and_then(|context| context.browser())
+                    .map(|mut browser| {
+                        update_sidebar_focus_grant(&mut browser, |state| {
+                            state.context_menu_open = context_menu_open;
+                        });
+                    })
+                    .is_some();
+                set_v8_bool_return(retval, handled);
+                return 1;
+            }
 
             let sent = send_sidebar_bridge_process_message(spec.process_message_name, &payload);
             set_v8_bool_return(retval, sent);
