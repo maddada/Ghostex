@@ -117,6 +117,8 @@
 }
 .ghostex-model-picker .model-picker-tile:disabled {
   pointer-events: none;
+  /* CDXC:SessionChat 2026-09-11 WHY: The app-wide disabled-button opacity makes even opaque card backgrounds reveal the axis line; picker cards dim through their own colors instead. */
+  opacity: 1;
 }
 .ghostex-model-picker .model-picker-tile:hover {
   border-color: color-mix(in srgb, var(--picker-accent) 70%, white);
@@ -660,11 +662,11 @@
   color: color-mix(in srgb, var(--picker-accent) 65%, white);
 }
 
-/* CDXC:SessionChat 2026-09-10 DECISION: Disabled effort cards, icons and labels stay fully opaque in front of the connecting line. Use muted colors only; this replaces dimming their contents with opacity. */
+/* CDXC:SessionChat 2026-09-11 DECISION: Disabled effort cards, icons and labels stay fully opaque in front of the connecting line. Use more muted colors to distinguish them from selectable, inactive efforts; this replaces dimming their contents with opacity. */
 .ghostex-model-picker .model-picker-effort[data-unavailable] {
-  border-color: #191a1e;
-  background: linear-gradient(145deg, #0b0c0e, #08090b 90%);
-  color: #555862;
+  border-color: #15161a;
+  background: linear-gradient(145deg, #0a0b0d, #08090b 90%);
+  color: #3e4048;
   box-shadow: none;
 }
 .ghostex-model-picker .model-picker-effort[data-unavailable] > * {
