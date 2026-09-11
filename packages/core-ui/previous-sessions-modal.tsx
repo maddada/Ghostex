@@ -29,7 +29,12 @@ import { TooltipProvider } from './app-tooltip';
 import { QuickAccessSearchInput } from './quick-access-search-input';
 import { QuickAccessHeader } from './quick-access-tabs';
 import { DelayedLoadingIndicator } from './delayed-loading-indicator';
-import { SessionTagIcon, getSidebarSessionTagLabel, type SidebarSessionTagFilter } from './session-tag-ui';
+import {
+  SessionTagIcon,
+  getSidebarSessionTagLabel,
+  useSessionTagCatalogs,
+  type SidebarSessionTagFilter,
+} from './session-tag-ui';
 import type { WebviewApi } from './webview-api';
 import type {
   ExtensionToSidebarMessage,
@@ -131,9 +136,7 @@ function parseSessionTimestamp(value: string | undefined): number {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-function groupQuickAccessSessionsByDay(
-  sessions: readonly QuickAccessSessionItem[]
-): QuickAccessSessionDayGroup[] {
+function groupQuickAccessSessionsByDay(sessions: readonly QuickAccessSessionItem[]): QuickAccessSessionDayGroup[] {
   const formatter = new Intl.DateTimeFormat(undefined, {
     day: 'numeric',
     month: 'long',
@@ -171,12 +174,12 @@ export function PreviousSessionsModal({
   const sessionIdsByGroup = useSidebarStore((state) => state.sessionIdsByGroup);
   const sessionsById = useSidebarStore((state) => state.sessionsById);
   const showDebugSessionNumbers = useSidebarStore((state) => state.hud.debuggingMode);
-  const sidebarSessionTagListItems = useSidebarStore(
-    (state) => state.hud.settings?.sidebarSessionTagListItems
-  );
+  const sidebarSessionTagListItems = useSidebarStore((state) => state.hud.settings?.sidebarSessionTagListItems);
+  const localCustomSessionTags = useSidebarStore((state) => state.customSessionTags);
+  const sessionTagCatalogs = useSessionTagCatalogs();
   const previousSessionTagFilterItems = useMemo(
-    () => normalizeSidebarSessionTagListItems(sidebarSessionTagListItems),
-    [sidebarSessionTagListItems]
+    () => normalizeSidebarSessionTagListItems(sidebarSessionTagListItems, localCustomSessionTags),
+    [localCustomSessionTags, sidebarSessionTagListItems]
   );
   const enabledPreviousSessionTagFilterSet = useMemo(
     () => new Set(getEnabledVisibleSidebarSessionTagFilters(previousSessionTagFilterItems)),
@@ -184,12 +187,10 @@ export function PreviousSessionsModal({
   );
   const [selectedSessionTagFilters, setSelectedSessionTagFilters] = useState<SidebarSessionTagFilter[]>([]);
   const [isTagFilterMenuOpen, setIsTagFilterMenuOpen] = useState(false);
-  const [remotePreviousSessions, setRemotePreviousSessions] = useState<
-    SidebarPreviousSessionItem[] | undefined
-  >(undefined);
-  const [remotePreviousSessionsCursor, setRemotePreviousSessionsCursor] = useState<string | undefined>(
+  const [remotePreviousSessions, setRemotePreviousSessions] = useState<SidebarPreviousSessionItem[] | undefined>(
     undefined
   );
+  const [remotePreviousSessionsCursor, setRemotePreviousSessionsCursor] = useState<string | undefined>(undefined);
   const [isLoadingMorePreviousSessions, setIsLoadingMorePreviousSessions] = useState(false);
   const [resolvedPreviousSessionsQueryKey, setResolvedPreviousSessionsQueryKey] = useState<string>();
   const [searchQuery, setSearchQuery] = useState('');
@@ -252,16 +253,12 @@ export function PreviousSessionsModal({
       const projectId = groupProjectFilterId(group);
       if (projectId && !options.has(projectId)) options.set(projectId, { projectId, name: group.title });
     }
-    return [...options.values()].sort(
-      (a, b) => a.name.localeCompare(b.name) || a.projectId.localeCompare(b.projectId)
-    );
+    return [...options.values()].sort((a, b) => a.name.localeCompare(b.name) || a.projectId.localeCompare(b.projectId));
   }, [groupsById, projectOptions]);
   const hasHistoryFilters = hasTagFilters || !!selectedProjectId || showExternalOnly;
   const filteredOpenSessions = useMemo(() => {
     const tagFilteredSessions = hasTagFilters
-      ? openSessions.filter((item) =>
-          sessionMatchesSidebarTagFilters(item.session, selectedSessionTagFilters)
-        )
+      ? openSessions.filter((item) => sessionMatchesSidebarTagFilters(item.session, selectedSessionTagFilters))
       : openSessions;
     const matchedSessions = new Set(
       filterSidebarSessionItems(
@@ -318,20 +315,11 @@ export function PreviousSessionsModal({
       ].sort((left, right) => right.timestamp - left.timestamp || left.key.localeCompare(right.key)),
     [filteredOpenSessions, showClosedSessionsOnly, showExternalOnly, visibleClosedSessions]
   );
-  const groupedSessions = useMemo(
-    () => groupQuickAccessSessionsByDay(visibleSessionItems),
-    [visibleSessionItems]
-  );
+  const groupedSessions = useMemo(() => groupQuickAccessSessionsByDay(visibleSessionItems), [visibleSessionItems]);
 
   const hasClosedSessionsResolved = remotePreviousSessions !== undefined || previousSessions.length > 0;
   const currentPreviousSessionsQueryKey = useMemo(
-    () =>
-      getPreviousSessionsQueryKey(
-        searchQuery,
-        selectedSessionTagFilters,
-        selectedProjectId,
-        showExternalOnly
-      ),
+    () => getPreviousSessionsQueryKey(searchQuery, selectedSessionTagFilters, selectedProjectId, showExternalOnly),
     [searchQuery, selectedSessionTagFilters, selectedProjectId, showExternalOnly]
   );
   const hasResolvedCurrentPreviousSessionsQuery =
@@ -600,9 +588,7 @@ export function PreviousSessionsModal({
         !event.shiftKey &&
         (isSearchInputTarget || !isEditableKeyboardTarget(event.target))
       ) {
-        const selectedSession = visibleSessionItems.find(
-          (item) => item.key === selectedSessionKeyRef.current
-        );
+        const selectedSession = visibleSessionItems.find((item) => item.key === selectedSessionKeyRef.current);
         if (selectedSession) {
           event.preventDefault();
           event.stopPropagation();
@@ -611,12 +597,7 @@ export function PreviousSessionsModal({
         }
       }
 
-      if (
-        !searchInput ||
-        isSearchInputTarget ||
-        isEditableKeyboardTarget(event.target) ||
-        !isTextEditingKey(event)
-      ) {
+      if (!searchInput || isSearchInputTarget || isEditableKeyboardTarget(event.target) || !isTextEditingKey(event)) {
         return;
       }
 
@@ -725,9 +706,7 @@ export function PreviousSessionsModal({
           const next = { ...current };
           for (const result of sizeResults) {
             next[result.key] =
-              typeof result.sizeBytes === 'number' &&
-              Number.isFinite(result.sizeBytes) &&
-              result.sizeBytes >= 0
+              typeof result.sizeBytes === 'number' && Number.isFinite(result.sizeBytes) && result.sizeBytes >= 0
                 ? result.sizeBytes
                 : null;
           }
@@ -1073,7 +1052,7 @@ export function PreviousSessionsModal({
                               data-checked={isSelected}
                               aria-selected={isSelected}
                               value={item.id}
-                              keywords={[getSidebarSessionTagLabel(filter)].filter(
+                              keywords={[getSidebarSessionTagLabel(filter, sessionTagCatalogs)].filter(
                                 (label) => label !== undefined
                               )}
                               disabled={!item.enabled}
@@ -1087,7 +1066,7 @@ export function PreviousSessionsModal({
                                 stroke={1.8}
                                 tag={filter}
                               />
-                              {getSidebarSessionTagLabel(filter)}
+                              {getSidebarSessionTagLabel(filter, sessionTagCatalogs)}
                             </CommandItem>
                           );
                         })}

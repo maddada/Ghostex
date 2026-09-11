@@ -40,6 +40,7 @@ import {
   createGpuiRemotePresentationProjectId,
   createGpuiRemotePresentationSessionId,
   createGpuiRemotePresentationSidebarGroups,
+  isCustomSessionTagsState,
   isSidebarProjectCollectionsState,
   isSidebarSpacesState,
   parseGpuiRemotePresentationGroupId,
@@ -68,6 +69,7 @@ import {
   visibleCountForGxserverPresentationSidebarSessions,
 } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
+  GxserverCustomSessionTagsState,
   GxserverPresentationDelta,
   GxserverPresentationSession,
   GxserverPresentationSnapshot,
@@ -115,6 +117,7 @@ export interface GpuiSidebarRuntimeSidebarGroupMethods {
   createHydrateMessage(groups: SidebarSessionGroup[], hud: SidebarHudState): SidebarHydrateMessage;
   remoteSidebarProjectCollectionsByMachineId(): Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
   remoteSidebarSpacesByMachineId(): Readonly<Record<string, GxserverSidebarSpacesState>>;
+  remoteCustomSessionTagsByMachineId(): Readonly<Record<string, GxserverCustomSessionTagsState>>;
   createSidebarGroups(presentation: GxserverPresentationSnapshot): SidebarSessionGroup[];
   withQuickAutomationsOverviewGroup(groups: SidebarSessionGroup[]): SidebarSessionGroup[];
   createQuickAutomationsSidebarSession(): SidebarSessionItem;
@@ -306,6 +309,9 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       }
       if (isSidebarSpacesState(snapshot.sidebarSpaces)) {
         this.forwardRemoteSidebarSpacesFromGxserver(machineId, snapshot.sidebarSpaces);
+      }
+      if (isCustomSessionTagsState(snapshot.customSessionTags)) {
+        this.forwardRemoteCustomSessionTagsFromGxserver(machineId, snapshot.customSessionTags);
       }
     }
     const previousGroups = this.latestGroups;
@@ -724,6 +730,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     groups: SidebarSessionGroup[],
     hud: SidebarHudState
   ): SidebarHydrateMessage {
+    const localCustomSessionTags = this.presentation?.customSessionTags;
     return {
       groups,
       hud,
@@ -731,6 +738,15 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       previousSessions: [],
       remoteSidebarProjectCollectionsByMachineId: this.remoteSidebarProjectCollectionsByMachineId(),
       remoteSidebarSpacesByMachineId: this.remoteSidebarSpacesByMachineId(),
+      /*
+      CDXC:Sessions 2026-09-11 WHY:
+      Unlike Spaces, the LOCAL custom tag catalog also rides hydrate: SidebarApp's
+      store seeds `customSessionTags` from hydrate/sessionState, and a hydrate
+      that re-publishes after the first `customSessionTagsChanged` must not
+      leave the catalog empty until the next live change.
+      */
+      remoteCustomSessionTagsByMachineId: this.remoteCustomSessionTagsByMachineId(),
+      ...(isCustomSessionTagsState(localCustomSessionTags) ? { customSessionTags: localCustomSessionTags } : {}),
       revision: ++this.revision,
       type: 'hydrate',
     };
@@ -776,6 +792,26 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     for (const [machineId, snapshot] of this.remotePresentations) {
       if (savedMachineIds.has(machineId) && isSidebarSpacesState(snapshot.sidebarSpaces)) {
         result[machineId] = snapshot.sidebarSpaces;
+      }
+    }
+    return result;
+  },
+
+  remoteCustomSessionTagsByMachineId(
+    this: GpuiSidebarRuntime
+  ): Readonly<Record<string, GxserverCustomSessionTagsState>> {
+    const result: Record<string, GxserverCustomSessionTagsState> = {};
+    const savedMachineIds = new Set(
+      createGpuiSidebarSettings(this.runtimeSettings).remoteMachines.map((machine) => machine.id)
+    );
+    for (const [machineId, snapshot] of this.remoteLastSeenPresentations) {
+      if (savedMachineIds.has(machineId) && isCustomSessionTagsState(snapshot.customSessionTags)) {
+        result[machineId] = snapshot.customSessionTags;
+      }
+    }
+    for (const [machineId, snapshot] of this.remotePresentations) {
+      if (savedMachineIds.has(machineId) && isCustomSessionTagsState(snapshot.customSessionTags)) {
+        result[machineId] = snapshot.customSessionTags;
       }
     }
     return result;

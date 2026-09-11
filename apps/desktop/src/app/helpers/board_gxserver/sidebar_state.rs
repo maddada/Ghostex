@@ -106,6 +106,25 @@ pub(crate) fn gpui_read_gxserver_app_user_data(timeout: Duration) -> GpuiAppModa
         .unwrap_or_default()
 }
 
+/// CDXC:Sessions 2026-09-11 WHY:
+/// The app-modal host hydrates from this Rust-built message, not from the
+/// sidebar runtime's hydrate, so the Settings modal only sees the custom session
+/// tag catalog if Rust reads it from the local daemon here. Remote catalogs stay
+/// with the sidebar runtime, which is the only side holding remote connections.
+pub(crate) fn gpui_read_gxserver_custom_session_tags(
+    timeout: Duration,
+) -> Option<serde_json::Value> {
+    let result = gpui_gxserver_rpc_result(
+        "/api/readCustomSessionTags",
+        &serde_json::json!({}),
+        timeout,
+    )
+    .ok()?;
+    let catalog = result.get("customSessionTags")?.as_object()?;
+    (catalog.get("order")?.is_array() && catalog.get("tags")?.is_object())
+        .then(|| serde_json::Value::Object(catalog.clone()))
+}
+
 pub(crate) fn gpui_save_gxserver_pinned_prompt(
     content: &str,
     title: &str,

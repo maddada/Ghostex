@@ -12,6 +12,7 @@ import {
 import type { GxserverPresentationSidebarProjectOverlay } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
   GxserverFirstPromptTitleGenerationAgent,
+  GxserverCustomSessionTagsState,
   GxserverPresentationDelta,
   GxserverPresentationProject,
   GxserverPresentationSession,
@@ -126,6 +127,11 @@ export type GpuiSidebarHostMessage =
          * `runSidebarAgent`, `createSession`, and `openBrowserPaneInGroup`
          * join it for the New Thread picker, another app-modal window whose
          * launches must land in this runtime's active-project handlers.
+         *
+         * CDXC:Sessions 2026-09-11 WHY:
+         * `updateCustomSessionTags` joins it because the Settings modal
+         * creates tags from the app-modal host window, so its catalog write
+         * arrives through Rust exactly like a note or rename confirm.
          */
         type:
           | 'cancelDelayedSend'
@@ -137,7 +143,8 @@ export type GpuiSidebarHostMessage =
           | 'runSidebarAgent'
           | 'scheduleDelayedSend'
           | 'setSessionNote'
-          | 'toggleCloseAfterDone';
+          | 'toggleCloseAfterDone'
+          | 'updateCustomSessionTags';
       }
     >;
 
@@ -336,6 +343,11 @@ export type GpuiSidebarRemotePresentationEvent = {
         revision: number;
         sidebarSpaces: GxserverSidebarSpacesState;
         type: 'sidebarSpacesChanged';
+      }
+    | {
+        customSessionTags: GxserverCustomSessionTagsState;
+        revision: number;
+        type: 'customSessionTagsChanged';
       }
     | {
         groups: GxserverWorkspaceSessionGroupsState;
@@ -771,7 +783,8 @@ export type GpuiWorkspaceTerminalFocusPlacement = 'splitRight';
 
 export type GpuiWorkspaceTerminalRuntimeActionPayload =
   | {
-      action: 'closeSession' | 'exportTranscript' | 'forkSession' | 'fullReloadSession' | 'openSessionNote' | 'sleepSession';
+      action:
+        'closeSession' | 'exportTranscript' | 'forkSession' | 'fullReloadSession' | 'openSessionNote' | 'sleepSession';
       projectId: string;
       sessionId: string;
     }

@@ -12,6 +12,7 @@ import {
   readJson,
 } from './helpers/records';
 import {
+  isCustomSessionTagsState,
   isGpuiSessionChatEventMessage,
   isPresentationDelta,
   isPresentationSnapshot,
@@ -26,6 +27,7 @@ import type {
 } from './types-and-protocol';
 import type {
   GxserverAppUserData,
+  GxserverCustomSessionTagsState,
   GxserverEndpointPath,
   GxserverPresentationDelta,
   GxserverPresentationSnapshot,
@@ -114,6 +116,13 @@ export class GpuiGxserverClient {
     return sidebarSpaces;
   }
 
+  async updateCustomSessionTags(state: GxserverCustomSessionTagsState): Promise<unknown> {
+    const { customSessionTags } = await this.rpc<{
+      customSessionTags?: unknown;
+    }>('/api/updateCustomSessionTags', { state });
+    return customSessionTags;
+  }
+
   async fetchAppUserData(): Promise<GxserverAppUserData> {
     return this.rpc<GxserverAppUserData>('/api/readAppUserData');
   }
@@ -153,6 +162,7 @@ export class GpuiGxserverClient {
     clientId,
     lastRevision,
     onClose,
+    onCustomSessionTags,
     onDelta,
     onError,
     onGlobalSidebarCommands,
@@ -168,6 +178,7 @@ export class GpuiGxserverClient {
     clientId: string;
     lastRevision: number;
     onClose: () => void;
+    onCustomSessionTags?: (state: GxserverCustomSessionTagsState) => void;
     onDelta: (delta: GxserverPresentationDelta, revision: number) => void;
     onError: () => void;
     onGlobalSidebarCommands?: () => void;
@@ -237,6 +248,14 @@ export class GpuiGxserverClient {
       }
       if (message.type === 'sidebarSpacesChanged' && onSidebarSpaces && isSidebarSpacesState(message.sidebarSpaces)) {
         onSidebarSpaces(message.sidebarSpaces);
+        return;
+      }
+      if (
+        message.type === 'customSessionTagsChanged' &&
+        onCustomSessionTags &&
+        isCustomSessionTagsState(message.customSessionTags)
+      ) {
+        onCustomSessionTags(message.customSessionTags);
         return;
       }
       if (message.type === 'workspaceGroupsChanged' && onWorkspaceGroups && parseObject(message.groups)) {

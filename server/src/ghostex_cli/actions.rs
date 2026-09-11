@@ -85,6 +85,7 @@ pub enum Parser {
     WaitFor,
     SidebarProjectCollectionsState,
     SidebarSpacesState,
+    CustomSessionTagsState,
     /// session selector plus readSessionChat paging/long-poll flags.
     SessionChatRead,
     /// session selector plus the project agent id for a draft-agent switch.
@@ -262,6 +263,12 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         }
         "readSidebarSpaces" => rpc::call_gxserver_rpc("/api/readSidebarSpaces", payload, flags),
         "updateSidebarSpaces" => rpc::call_gxserver_rpc("/api/updateSidebarSpaces", payload, flags),
+        "readCustomSessionTags" => {
+            rpc::call_gxserver_rpc("/api/readCustomSessionTags", payload, flags)
+        }
+        "updateCustomSessionTags" => {
+            rpc::call_gxserver_rpc("/api/updateCustomSessionTags", payload, flags)
+        }
         "closeSession" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/killSession", &params, flags)
@@ -283,8 +290,13 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/switchDraftAgent", &params, flags)
         }
-        "renameSession" | "tagSession" => {
+        "renameSession" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/updateSession", &params, flags)
+        }
+        "tagSession" => {
+            let payload = resolve_custom_session_tag_for_tag_session(payload, flags)?;
+            let params = with_resolved_gxserver_session_params(&payload, flags)?;
             rpc::call_gxserver_rpc("/api/updateSession", &params, flags)
         }
         "requestSessionRename" => {
@@ -1151,6 +1163,7 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
             parse_sidebar_project_collections_state(rest, flags)?
         }
         Parser::SidebarSpacesState => parse_sidebar_spaces_state(rest, flags)?,
+        Parser::CustomSessionTagsState => parse_custom_session_tags_state(rest, flags)?,
         Parser::SessionChatRead => parse_session_chat_read(rest, flags),
         Parser::SessionChatDraftAgent => parse_session_chat_draft_agent(rest, flags)?,
         Parser::SessionChatKey => parse_session_chat_key(rest, flags)?,
@@ -1930,29 +1943,92 @@ fn parse_session_tag(rest: &[String], flags: &Flags) -> CliResult<Value> {
     };
     let raw_tag_string = js_string(&raw_tag);
     let normalized_tag = raw_tag_string.trim().to_lowercase();
-    let session_tag: Option<String> = if CLEAR_SESSION_TAG_VALUES.contains(&normalized_tag.as_str())
-    {
-        None
-    } else {
-        Some(normalized_tag)
-    };
-    if let Some(tag) = &session_tag {
-        if !SIDEBAR_SESSION_TAGS.contains(&tag.as_str()) {
-            return Err(CliError::Other(format!(
-                "Unknown session tag \"{raw_tag_string}\". Use one of: {tag_list}, or none."
-            )));
-        }
-    }
     let mut map = parse_session_selector(rest, flags);
-    map.insert(
-        "isFavorite".to_string(),
-        Value::Bool(session_tag.as_deref() == Some("favorite")),
-    );
-    map.insert(
-        "sessionTag".to_string(),
-        session_tag.map(Value::String).unwrap_or(Value::Null),
-    );
+    /*
+    CDXC:Sessions 2026-09-11 WHY:
+    Built-in tags and clear words resolve here, but a custom tag is only known
+    to the daemon catalog, and this parser has no rpc access. Anything that is
+    neither is carried as `customSessionTagQuery` (the user's text, so the
+    error can echo it) for the tagSession bridge branch to resolve against the
+    catalog by name or id; the daemon never receives that key.
+    */
+    if CLEAR_SESSION_TAG_VALUES.contains(&normalized_tag.as_str()) {
+        map.insert("isFavorite".to_string(), Value::Bool(false));
+        map.insert("sessionTag".to_string(), Value::Null);
+    } else if SIDEBAR_SESSION_TAGS.contains(&normalized_tag.as_str()) {
+        map.insert(
+            "isFavorite".to_string(),
+            Value::Bool(normalized_tag == "favorite"),
+        );
+        map.insert("sessionTag".to_string(), Value::String(normalized_tag));
+    } else {
+        map.insert(
+            "customSessionTagQuery".to_string(),
+            Value::String(raw_tag_string.trim().to_string()),
+        );
+    }
     Ok(Value::Object(map))
+}
+
+/// Resolve a `customSessionTagQuery` left by `parse_session_tag` against the
+/// daemon's custom tag catalog: an exact id match first, then a
+/// case-insensitive name match in catalog order. Payloads without the query
+/// key pass through untouched, so built-in tags cost no extra round trip.
+fn resolve_custom_session_tag_for_tag_session(payload: &Value, flags: &Flags) -> CliResult<Value> {
+    let Some(query) = payload.get("customSessionTagQuery").and_then(Value::as_str) else {
+        return Ok(payload.clone());
+    };
+    // Same daemon the session write goes to: a global session ref in the
+    // payload can select a remote server, and its catalog is the one that
+    // names the tag.
+    let target = rpc::resolve_gxserver_server_target(flags, payload)?;
+    let catalog =
+        rpc::request_gxserver_rpc(&target, "/api/readCustomSessionTags", &json!({}), flags)?;
+    let catalog = catalog.get("customSessionTags").unwrap_or(&Value::Null);
+    let tags = catalog.get("tags").and_then(Value::as_object);
+    let ordered_tags: Vec<&Value> = catalog
+        .get("order")
+        .and_then(Value::as_array)
+        .map(|order| {
+            order
+                .iter()
+                .filter_map(|id| tags?.get(id.as_str()?))
+                .collect()
+        })
+        .unwrap_or_default();
+    let query_lower = query.to_lowercase();
+    let resolved = ordered_tags
+        .iter()
+        .find(|tag| tag.get("tagId").and_then(Value::as_str) == Some(query))
+        .or_else(|| {
+            ordered_tags.iter().find(|tag| {
+                tag.get("name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|name| name.to_lowercase() == query_lower)
+            })
+        })
+        .and_then(|tag| tag.get("tagId").and_then(Value::as_str));
+    let Some(tag_id) = resolved else {
+        let mut choices: Vec<String> = SIDEBAR_SESSION_TAGS
+            .iter()
+            .map(|tag| (*tag).to_string())
+            .collect();
+        choices.extend(
+            ordered_tags
+                .iter()
+                .filter_map(|tag| tag.get("name").and_then(Value::as_str))
+                .map(|name| format!("\"{name}\"")),
+        );
+        return Err(CliError::Other(format!(
+            "Unknown session tag \"{query}\". Use one of: {}, or none.",
+            choices.join(", ")
+        )));
+    };
+    let mut object = payload.as_object().cloned().unwrap_or_default();
+    object.remove("customSessionTagQuery");
+    object.insert("isFavorite".to_string(), Value::Bool(false));
+    object.insert("sessionTag".to_string(), Value::String(tag_id.to_string()));
+    Ok(Value::Object(object))
 }
 
 /*
@@ -2307,6 +2383,34 @@ fn parse_sidebar_spaces_state(rest: &[String], flags: &Flags) -> CliResult<Value
     Ok(json!({ "state": state }))
 }
 
+/// `ghostex update-custom-session-tags --state-json '<json>'`: a full
+/// read-modify-write of the custom tag catalog, passed through untouched so
+/// gxserver owns normalization exactly as it does for Spaces.
+fn parse_custom_session_tags_state(rest: &[String], flags: &Flags) -> CliResult<Value> {
+    let state_json = flag_json(flags, "stateJson")
+        .or_else(|| flag_json(flags, "state"))
+        .unwrap_or_else(|| Value::String(join_rest(rest, 0)));
+    let state_text = match state_json {
+        Value::String(text) => text,
+        _ => String::new(),
+    };
+    if state_text.trim().is_empty() {
+        return Err(CliError::Other(
+            "update-custom-session-tags requires --state-json '<json>' with the full custom session tags state."
+                .to_string(),
+        ));
+    }
+    let state: Value = serde_json::from_str(&state_text)
+        .map_err(|error| CliError::Other(format!("Invalid --state-json: {error}")))?;
+    if !state.is_object() {
+        return Err(CliError::Other(
+            "update-custom-session-tags --state-json must be a JSON object with tags and order."
+                .to_string(),
+        ));
+    }
+    Ok(json!({ "state": state }))
+}
+
 // ---------------------------------------------------------------------------
 // JS-coercion helpers
 // ---------------------------------------------------------------------------
@@ -2550,11 +2654,20 @@ mod tests {
             format!("Missing session tag. Use one of: {list}, or none.")
         );
 
+        // Anything that is not a built-in tag or a clear word is deferred to the
+        // tagSession bridge branch, which resolves it against the daemon's custom
+        // tag catalog (by id or case-insensitive name) and produces the error.
         let (rest, flags) = parsed(&["--session-id", "G1abc", "--tag", "Nonsense"]);
-        let error = parse_session_tag(&rest, &flags).expect_err("unknown tag");
+        let payload = parse_session_tag(&rest, &flags).expect("deferred custom tag");
         assert_eq!(
-            error.to_string(),
-            format!("Unknown session tag \"Nonsense\". Use one of: {list}, or none.")
+            payload,
+            json!({ "customSessionTagQuery": "Nonsense", "sessionId": "G1abc" })
+        );
+        let (rest, flags) = parsed(&["--session-id", "G1abc", "--tag", "custom-abcd"]);
+        let payload = parse_session_tag(&rest, &flags).expect("deferred custom tag id");
+        assert_eq!(
+            payload,
+            json!({ "customSessionTagQuery": "custom-abcd", "sessionId": "G1abc" })
         );
     }
 

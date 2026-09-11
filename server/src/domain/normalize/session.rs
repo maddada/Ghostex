@@ -570,6 +570,15 @@ pub(crate) fn normalize_optional_session_tag(
         | "blocked" | "low-priority" | "on-hold" | "done" | "bug" | "feature" | "design" => {
             Ok(Some(tag.to_string()))
         }
+        /*
+        CDXC:Sessions 2026-09-11 WHY:
+        A custom tag id is accepted by shape only, not by catalog membership:
+        the catalog can be edited on another client between a tag's creation
+        and the session write, and `/api/updateCustomSessionTags` already
+        clears ids the catalog drops, so a membership check here would only
+        race that write.
+        */
+        _ if crate::custom_session_tags::is_custom_session_tag_id(tag) => Ok(Some(tag.to_string())),
         _ => Err(DomainStateError::bad_request(
             "sessionTag must be a supported session tag.",
         )),

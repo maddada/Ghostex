@@ -99,7 +99,15 @@ import {
 import { type BundledGhostexAgentSkillId } from '../shared/ghostex-agent-skills';
 import { type FirstLaunchSetupMainSettingKey } from '../shared/first-launch-setup-settings';
 import { PET_CONTROLS_VISIBLE } from '../shared/pets';
-import { areSidebarSessionTagListItemsEqual } from '../shared/session-tags';
+import {
+  areSidebarSessionTagListItemsEqual,
+  createCustomSessionTag,
+  deleteCustomSessionTag,
+  EMPTY_CUSTOM_SESSION_TAGS_STATE,
+  reorderCustomSessionTags,
+  type CustomSessionTagsState,
+} from '../shared/session-tags';
+import { useSidebarStore } from './sidebar-store';
 import { type WebviewApi } from './webview-api';
 import {
   ActionButtonPairField,
@@ -306,6 +314,10 @@ export type SettingsModalProps = {
    */
   tailcatRpc?: RemoteSetupRpc;
   theme?: SidebarTheme;
+  /**
+   * Writes the local daemon's custom session tag catalog through the host. Absent on hosts with no daemon connection, which hides Add tag and the delete buttons in Sidebar Tags.
+   */
+  onUpdateCustomSessionTags?: (state: CustomSessionTagsState) => void;
   vscode?: WebviewApi;
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
   ghostexCliStatusLoading?: boolean;
@@ -377,6 +389,7 @@ export function SettingsModal({
   settings,
   tailcatRpc,
   theme = 'dark-blue',
+  onUpdateCustomSessionTags,
   vscode,
   ghostexCliStatus,
   ghostexCliStatusLoading = false,
@@ -393,6 +406,15 @@ export function SettingsModal({
   const isFirstLaunchSetup = presentation === 'firstLaunchSetup';
   const normalizedInitialSettings = normalizeghostexSettings(settings);
   const [draft, setDraft] = useState<ghostexSettings>(normalizedInitialSettings);
+  /*
+   * CDXC:Sessions 2026-09-11 WHY:
+   * The custom tag catalog is daemon-owned, not a setting: Settings reads it from the hydrated sidebar store and writes each create, delete, or reorder straight through to the local daemon (optimistic store update first, then the host message), so it never rides the settings draft and a cancelled Settings edit cannot roll a created tag back.
+   */
+  const customSessionTags = useSidebarStore((state) => state.customSessionTags);
+  const writeCustomSessionTags = (next: CustomSessionTagsState) => {
+    useSidebarStore.getState().setCustomSessionTagsForMachine(undefined, next);
+    onUpdateCustomSessionTags?.(next);
+  };
   /*
    * CDXC:Settings 2026-06-28-18:14:
    * Show Advanced must use the persisted settings draft as its single source of
@@ -1148,31 +1170,29 @@ export function SettingsModal({
                               />
                             ) : null}
                             {/*
-                             * CDXC:Spaces 2026-09-11 DECISION:
-                             * User: the Space switch behaviour and the follow toggle cascade
-                             * under the Spaces switch and are disabled until it is on, like
-                             * "Sleep session when parking" under session parking.
+                             * CDXC:Settings 2026-09-11 DECISION:
+                             * User: a setting that only applies while another setting is on is hidden until that setting is on, not shown disabled. This supersedes the same-day decision to show the Space rows disabled with a "Turn on Spaces first" tooltip, and applies to every cascade in Settings (parking, VS Code Insiders, App Shots).
+                             * The wider trigger is a per-row opt-in so its two labels fit; the standard dropdown width is unchanged for other rows.
                              */}
-                            {mainSettingVisible(settingsSearch.sidebar, 'sidebarSpaceSwitchBehavior') ? (
+                            {draft.sidebarSpacesEnabled &&
+                            mainSettingVisible(settingsSearch.sidebar, 'sidebarSpaceSwitchBehavior') ? (
                               <SelectField
                                 description='Reopen the session you last had open in a Space when you switch to it, in the view its project was in. If that session is closed, the one before it is used; a Space with nothing remembered opens its first project.'
-                                disabled={!draft.sidebarSpacesEnabled}
-                                disabledReason='Turn on “Spaces” first.'
                                 label='When switching to a Space'
                                 {...getSettingModificationProps('sidebarSpaceSwitchBehavior')}
                                 onChange={(value) =>
                                   updateDraft('sidebarSpaceSwitchBehavior', value as SidebarSpaceSwitchBehavior)
                                 }
                                 options={SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS}
+                                triggerWidth='16rem'
                                 value={draft.sidebarSpaceSwitchBehavior}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.sidebar, 'sidebarSpaceFollowActiveSession') ? (
+                            {draft.sidebarSpacesEnabled &&
+                            mainSettingVisible(settingsSearch.sidebar, 'sidebarSpaceFollowActiveSession') ? (
                               <ToggleField
                                 checked={draft.sidebarSpaceFollowActiveSession}
                                 description='Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward, Search by Prompt, a notification, or Previous Sessions.'
-                                disabled={!draft.sidebarSpacesEnabled}
-                                disabledReason='Turn on “Spaces” first.'
                                 label="Follow the active session's Space"
                                 {...getSettingModificationProps('sidebarSpaceFollowActiveSession')}
                                 onChange={(checked) => updateDraft('sidebarSpaceFollowActiveSession', checked)}
@@ -1395,34 +1415,32 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('enableSessionParking', checked)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.sidebar, 'sleepSessionWhenParking') ? (
+                            {/* Hidden, not disabled, while parking is off: see the CDXC:Settings 2026-09-11 decision on the Space rows above. */}
+                            {draft.enableSessionParking &&
+                            mainSettingVisible(settingsSearch.sidebar, 'sleepSessionWhenParking') ? (
                               <ToggleField
                                 checked={draft.sleepSessionWhenParking}
                                 description='Sleep a session through its normal lifecycle immediately after it is parked.'
-                                disabled={!draft.enableSessionParking}
-                                disabledReason='Turn on “Enable session parking” first.'
                                 label='Sleep session when parking'
                                 {...getSettingModificationProps('sleepSessionWhenParking')}
                                 onChange={(checked) => updateDraft('sleepSessionWhenParking', checked)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.sidebar, 'showTagMenuWhenParking') ? (
+                            {draft.enableSessionParking &&
+                            mainSettingVisible(settingsSearch.sidebar, 'showTagMenuWhenParking') ? (
                               <ToggleField
                                 checked={draft.showTagMenuWhenParking}
                                 description='Open the Tag as menu when a session is parked so it can be tagged right away.'
-                                disabled={!draft.enableSessionParking}
-                                disabledReason='Turn on “Enable session parking” first.'
                                 label='Show tag menu when parking'
                                 {...getSettingModificationProps('showTagMenuWhenParking')}
                                 onChange={(checked) => updateDraft('showTagMenuWhenParking', checked)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.sidebar, 'unparkAfterSendingMessage') ? (
+                            {draft.enableSessionParking &&
+                            mainSettingVisible(settingsSearch.sidebar, 'unparkAfterSendingMessage') ? (
                               <ToggleField
                                 checked={draft.unparkAfterSendingMessage}
                                 description='Move a parked session out of the Parked section when you send it a message from chat or its terminal.'
-                                disabled={!draft.enableSessionParking}
-                                disabledReason='Turn on “Enable session parking” first.'
                                 label='Unpark after sending a message'
                                 {...getSettingModificationProps('unparkAfterSendingMessage')}
                                 onChange={(checked) => updateDraft('unparkAfterSendingMessage', checked)}
@@ -1465,6 +1483,23 @@ export function SettingsModal({
                           <SettingsSection sectionRef={sidebarTagsSectionRef} title='Sidebar Tags'>
                             {mainSettingVisible(settingsSearch.sidebarTags, 'sidebarSessionTagListItems') ? (
                               <SidebarTagListSettingsField
+                                customSessionTags={onUpdateCustomSessionTags ? customSessionTags : undefined}
+                                onCreateCustomTag={(tag) =>
+                                  writeCustomSessionTags(
+                                    createCustomSessionTag(customSessionTags ?? EMPTY_CUSTOM_SESSION_TAGS_STATE, tag)
+                                      .state
+                                  )
+                                }
+                                onCustomTagOrderChange={(orderedTagIds) => {
+                                  if (customSessionTags) {
+                                    writeCustomSessionTags(reorderCustomSessionTags(customSessionTags, orderedTagIds));
+                                  }
+                                }}
+                                onDeleteCustomTag={(tagId) => {
+                                  if (customSessionTags) {
+                                    writeCustomSessionTags(deleteCustomSessionTag(customSessionTags, tagId));
+                                  }
+                                }}
                                 isModified={
                                   !areSidebarSessionTagListItemsEqual(
                                     draft.sidebarSessionTagListItems,
@@ -1810,13 +1845,13 @@ export function SettingsModal({
                                 onChange={(checked) => updateDraft('codeServerLinkVscodeUserConfig', checked)}
                               />
                             ) : null}
-                            {mainSettingVisible(settingsSearch.editor, 'codeServerUseVscodeInsidersUserConfig') ? (
+                            {/* Hidden, not disabled, while VS Code settings are not linked: see the CDXC:Settings 2026-09-11 decision on the Space rows. */}
+                            {draft.codeServerLinkVscodeUserConfig &&
+                            mainSettingVisible(settingsSearch.editor, 'codeServerUseVscodeInsidersUserConfig') ? (
                               <ToggleField
                                 advanced={isAdvancedMainSetting('codeServerUseVscodeInsidersUserConfig')}
                                 checked={draft.codeServerUseVscodeInsidersUserConfig}
                                 description='Use the VS Code Insiders user settings directory.'
-                                disabled={!draft.codeServerLinkVscodeUserConfig}
-                                disabledReason='Turn on “Link VS Code user settings” first.'
                                 label='Use VS Code Insiders settings'
                                 onChange={(checked) => updateDraft('codeServerUseVscodeInsidersUserConfig', checked)}
                               />

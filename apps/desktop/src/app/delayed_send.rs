@@ -127,7 +127,7 @@ impl GhostexGpuiApp {
         self.forget_command_gxserver_session_for_closed_tab(session_id, cx);
         self.clear_command_resize_hover_state_if_command_pane_hidden();
         if !self.command_pane.has_sessions() && self.shell_focus == ShellFocusTarget::CommandPane {
-            self.restore_previous_non_command_focus_or_default();
+            self.restore_previous_non_command_focus_or_default(cx);
         }
         self.scroll_command_group_active_tab(group_id);
         self.scroll_focused_command_active_tab();
@@ -1949,6 +1949,17 @@ impl GhostexGpuiApp {
             */
             "sidebarSpaceEditorResult" => {
                 self.forward_gpui_sidebar_space_editor_result_to_sidebar(command, cx);
+            }
+            /*
+            CDXC:Sessions 2026-09-11 WHY:
+            The Settings modal creates custom session tags from the app-modal
+            host window, so its catalog write arrives here instead of from the
+            sidebar page. Like `setSessionNote` it is forwarded to the sidebar
+            runtime, which owns the gxserver client, the write-through debounce,
+            and the local/remote machine routing, and nothing is applied here.
+            */
+            "updateCustomSessionTags" => {
+                self.forward_gpui_custom_session_tags_update_to_sidebar(command, cx);
             }
             "confirmAgentHookLaunch" => {
                 let bounded_text = |key: &str, max_len: usize| {

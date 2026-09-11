@@ -2402,6 +2402,9 @@ function AppModalHost() {
         initialSearchQuery={settingsInitialSearchQuery}
         initialTab={settingsInitialTab}
         isOpen={isSettingsRenderable}
+        onUpdateCustomSessionTags={(state) => {
+          vscode.postMessage({ state, type: 'updateCustomSessionTags' });
+        }}
         onChange={(nextSettings, source = 'settings:bulk') => {
           vscode.postMessage({
             settings: nextSettings,

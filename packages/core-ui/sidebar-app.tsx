@@ -656,9 +656,11 @@ export function SidebarApp({
     };
   }, []);
 
+  const localCustomSessionTags = useSidebarStore((state) => state.customSessionTags);
+  const applyCustomSessionTagsChangedMessage = useSidebarStore((state) => state.applyCustomSessionTagsChangedMessage);
   const sidebarSessionTagListItems = useMemo(
-    () => normalizeSidebarSessionTagListItems(effectiveSettings.sidebarSessionTagListItems),
-    [effectiveSettings.sidebarSessionTagListItems]
+    () => normalizeSidebarSessionTagListItems(effectiveSettings.sidebarSessionTagListItems, localCustomSessionTags),
+    [effectiveSettings.sidebarSessionTagListItems, localCustomSessionTags]
   );
   const enabledVisibleSidebarSessionTagSet = useMemo(
     () => new Set(getEnabledVisibleSidebarSessionTagFilters(sidebarSessionTagListItems)),
@@ -1028,6 +1030,11 @@ export function SidebarApp({
       if (!areSidebarProjectCollectionsStatesEqual(adopted, projectCollections)) {
         setProjectCollections(adopted);
       }
+      return;
+    }
+
+    if (event.data.type === 'customSessionTagsChanged') {
+      applyCustomSessionTagsChangedMessage(event.data);
       return;
     }
 

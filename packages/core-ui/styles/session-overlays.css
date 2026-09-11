@@ -353,3 +353,125 @@
     scale: 1;
   }
 }
+
+/*
+ * CDXC:Sessions 2026-09-11 WHY:
+ * The New tag form renders inline at the bottom of the Tag as submenu (and in Settings) rather than in a nested popover, because the submenu is already a portaled child of a context menu and a third layer of popup is easy to lose under the sidebar rows.
+ */
+.session-tag-submenu:has(.session-tag-menu-new-tag-form form) {
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
+
+.session-tag-menu-new-tag-form {
+  margin-top: 5px;
+  padding-top: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 60%, transparent);
+}
+
+.custom-session-tag-editor {
+  display: grid;
+  gap: 8px;
+  padding: 4px 2px 2px;
+}
+
+.custom-session-tag-editor-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--app-foreground);
+}
+
+.custom-session-tag-editor-preview-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-session-tag-editor-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--app-foreground);
+  background: color-mix(in srgb, var(--app-foreground) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  border-radius: 6px;
+  outline: none;
+}
+
+.custom-session-tag-editor-input:focus-visible {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+}
+
+.custom-session-tag-editor .command-icon-picker-fields {
+  margin: 0;
+}
+
+.custom-session-tag-editor-compact .command-config-label {
+  display: none;
+}
+
+.custom-session-tag-editor-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.custom-session-tag-editor-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.custom-session-tag-editor-swatch[data-selected='true'] {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 2px var(--app-background, #161616),
+    0 0 0 3px #fff;
+}
+
+.custom-session-tag-editor-swatch:focus-visible {
+  outline: 1px solid #fff;
+  outline-offset: 2px;
+}
+
+.custom-session-tag-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.custom-session-tag-editor-button {
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--app-foreground);
+  background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.custom-session-tag-editor-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--app-foreground) 14%, transparent);
+}
+
+.custom-session-tag-editor-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.custom-session-tag-editor-button-primary {
+  background: color-mix(in srgb, var(--app-foreground) 16%, transparent);
+}

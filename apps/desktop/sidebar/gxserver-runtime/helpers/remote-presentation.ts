@@ -16,6 +16,7 @@ import type { ghostexSettings } from '@/packages/shared/ghostex-settings';
 import type { GxserverPresentationCloseAfterDoneProjection } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import { createGxserverPresentationSidebarGroups } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
+  GxserverCustomSessionTagsState,
   GxserverPresentationDelta,
   GxserverPresentationSession,
   GxserverPresentationSnapshot,
@@ -337,6 +338,17 @@ export function isSidebarSpacesState(value: unknown): value is GxserverSidebarSp
   );
 }
 
+export function isCustomSessionTagsState(value: unknown): value is GxserverCustomSessionTagsState {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as GxserverCustomSessionTagsState).tags === 'object' &&
+    !Array.isArray((value as GxserverCustomSessionTagsState).tags) &&
+    Array.isArray((value as GxserverCustomSessionTagsState).order)
+  );
+}
+
 export function isGpuiSessionChatEventMessage(
   value: Record<string, unknown>
 ): value is Record<string, unknown> & GxserverSessionChatEvent {
@@ -463,6 +475,21 @@ export function normalizeGpuiSidebarRemoteEvent(value: unknown): GpuiSidebarRemo
         revision: payload.revision,
         sidebarSpaces: payload.sidebarSpaces,
         type: 'sidebarSpacesChanged',
+      },
+      remoteMachineId,
+      type: 'remoteGxserverPresentation',
+    };
+  }
+  if (
+    payload.type === 'customSessionTagsChanged' &&
+    isCustomSessionTagsState(payload.customSessionTags) &&
+    typeof payload.revision === 'number'
+  ) {
+    return {
+      payload: {
+        customSessionTags: payload.customSessionTags,
+        revision: payload.revision,
+        type: 'customSessionTagsChanged',
       },
       remoteMachineId,
       type: 'remoteGxserverPresentation',

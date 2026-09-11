@@ -4,13 +4,13 @@ pub mod args;
 pub mod attach;
 pub mod automations;
 pub mod board;
-pub mod notify;
 pub mod browser_mcp;
 pub mod diagnostics;
 pub mod editors;
 pub mod extensions;
 pub mod guide;
 pub mod launchers;
+pub mod notify;
 pub mod output;
 pub mod paired_device;
 pub mod picker;
@@ -220,6 +220,8 @@ fn is_known_command(name: &str) -> bool {
         "update-sidebar-project-collections",
         "read-sidebar-spaces",
         "update-sidebar-spaces",
+        "read-custom-session-tags",
+        "update-custom-session-tags",
         "close-session",
         "restart-session",
         "fork-session",
@@ -459,6 +461,15 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "update-sidebar-spaces" => run_bridge_action(
             "updateSidebarSpaces",
             Parser::SidebarSpacesState,
+            fail_on_not_ok,
+            args,
+        ),
+        "read-custom-session-tags" => {
+            run_bridge_action("readCustomSessionTags", Parser::None, fail_on_not_ok, args)
+        }
+        "update-custom-session-tags" => run_bridge_action(
+            "updateCustomSessionTags",
+            Parser::CustomSessionTagsState,
             fail_on_not_ok,
             args,
         ),

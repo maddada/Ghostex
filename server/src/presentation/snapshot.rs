@@ -49,6 +49,7 @@ pub fn read_presentation_snapshot(
     insert_workspace_groups_presentation_payload(&mut snapshot, db)?;
     insert_sidebar_project_collections_presentation_payload(&mut snapshot, db)?;
     insert_sidebar_spaces_presentation_payload(&mut snapshot, db)?;
+    insert_custom_session_tags_presentation_payload(&mut snapshot, db)?;
     Ok(snapshot)
 }
 

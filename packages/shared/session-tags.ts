@@ -139,7 +139,8 @@ export function normalizeCustomSessionTagsState(candidate: unknown): CustomSessi
       break;
     }
     const raw = candidates.get(tagId)!;
-    const icon = typeof raw.icon === 'string' && raw.icon.trim() ? raw.icon.trim().slice(0, 64) : DEFAULT_CUSTOM_SESSION_TAG_ICON;
+    const icon =
+      typeof raw.icon === 'string' && raw.icon.trim() ? raw.icon.trim().slice(0, 64) : DEFAULT_CUSTOM_SESSION_TAG_ICON;
     tags[tagId] = {
       color: normalizeSessionTagColor(raw.color, order.length),
       icon,
@@ -503,9 +504,13 @@ export function normalizeSidebarSessionTagListItems(
       normalized.splice(
         insertAt,
         0,
-        ...missing.map(
-          (tagId): SidebarSessionTagListItem => ({ enabled: true, id: tagId, tag: tagId, type: 'tag', visible: true })
-        )
+        ...missing.map((tagId): SidebarSessionTagListItem => ({
+          enabled: true,
+          id: tagId,
+          tag: tagId,
+          type: 'tag',
+          visible: true,
+        }))
       );
     }
   }
@@ -514,7 +519,9 @@ export function normalizeSidebarSessionTagListItems(
 }
 
 /** The relative order of the custom tags inside a tag filter list, which is written back to the daemon catalog. */
-export function getCustomSessionTagOrderFromListItems(items: readonly SidebarSessionTagListItem[]): CustomSessionTagId[] {
+export function getCustomSessionTagOrderFromListItems(
+  items: readonly SidebarSessionTagListItem[]
+): CustomSessionTagId[] {
   return items.flatMap((item) => (item.type === 'tag' && isCustomSessionTagId(item.tag) ? [item.tag] : []));
 }
 

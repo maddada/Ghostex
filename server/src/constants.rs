@@ -125,4 +125,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0033_session_chat_draft_recovery",
     "0034_session_chat_startup_sends",
     "0035_notification_feed",
+    "0036_custom_session_tags",
 ];

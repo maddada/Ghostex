@@ -62,6 +62,10 @@ use crate::{
         GXSERVER_CAPABILITIES, GXSERVER_JSON_BODY_LIMIT_BYTES, GXSERVER_PRODUCT,
         GXSERVER_PROTOCOL_HEADER, GXSERVER_PROTOCOL_VERSION,
     },
+    custom_session_tags::{
+        clear_session_tags_missing_from_catalog, read_custom_session_tags,
+        update_custom_session_tags,
+    },
     delayed_sends::DelayedSendRuntime,
     domain::{
         read_domain_rpc_params, read_optional_project_id, read_project_id, read_session_id,
@@ -180,8 +184,8 @@ pub mod commit_message_generation;
 pub mod http_endpoints;
 pub mod http_infra;
 pub mod presentation_delta;
-pub mod project_paths;
 mod project_docs_http;
+pub mod project_paths;
 pub mod session_state_sync;
 pub mod telemetry_http;
 pub mod telemetry_tasks;
@@ -1975,6 +1979,53 @@ async fn route_http(
                 Ok(json!({ "sidebarSpaces": spaces }))
             },
         ),
+        "/api/readCustomSessionTags" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, _, _| {
+                read_custom_session_tags(db).map(|tags| json!({ "customSessionTags": tags }))
+            },
+        ),
+        "/api/updateCustomSessionTags" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, db, params, _| {
+                /*
+                CDXC:Sessions 2026-09-11 WHY:
+                Tag editors write-through-sync the whole normalized catalog
+                after each local edit, exactly like Spaces. A tag deleted from
+                the catalog is cleared from every session that carried it
+                inside the same sequenced write, so no client ever sees a
+                session pointing at an id the daemon no longer knows; each
+                cleared session then gets its ordinary presentation delta so
+                sidebars drop the marker without a full snapshot reload.
+                */
+                let (tags, cleared) = {
+                    let _event_sequence = lock_presentation_event_sequence(&state)?;
+                    let tags = update_custom_session_tags(db, params)?;
+                    let cleared = clear_session_tags_missing_from_catalog(db, &tags)?;
+                    let revision = increment_presentation_revision(db)?;
+                    state.event_hub.broadcast(json!({
+                        "protocolVersion": GXSERVER_PROTOCOL_VERSION,
+                        "revision": revision,
+                        "serverId": state.metadata.server_id.clone(),
+                        "customSessionTags": tags.clone(),
+                        "type": "customSessionTagsChanged",
+                    }));
+                    (tags, cleared)
+                };
+                for (project_id, session_id) in &cleared {
+                    schedule_presentation_session_delta(
+                        &state, db, repository, project_id, session_id,
+                    )?;
+                }
+                Ok(json!({ "customSessionTags": tags }))
+            },
+        ),
         "/api/readAppUserData" => handle_domain_http(
             &state,
             endpoint.path,
@@ -2256,7 +2307,9 @@ async fn route_http(
         | "/api/runBeadsAction" => {
             handle_typed_operation_http(&state, endpoint.path, request_id, &body_json).await
         }
-        "/api/runProjectDocsAction" => project_docs_http::handle(state.clone(), endpoint.path, request_id, body_json).await,
+        "/api/runProjectDocsAction" => {
+            project_docs_http::handle(state.clone(), endpoint.path, request_id, body_json).await
+        }
         "/api/startBoardWork" => {
             handle_board_start_work_http(&state, endpoint.path, request_id, &body_json).await
         }

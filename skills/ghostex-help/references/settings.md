@@ -47,7 +47,7 @@ How to use this file:
 - **Show Close option in context menu** `showSessionCloseContextMenuAction` (boolean, default false) [advanced]: Show the Close item in session context menus.
 #### Sidebar Tags
 
-- **Tag Filter List** `sidebarSessionTagListItems` (structured value; change it in Settings, not with `ghostex settings set`): Reorder, hide, or disable sidebar tag filters and their separators.
+- **Tag Filter List** `sidebarSessionTagListItems` (structured value; change it in Settings, not with `ghostex settings set`): Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.
 ### Appearance
 
 #### Theming

@@ -57,6 +57,24 @@ pub(crate) fn insert_sidebar_spaces_presentation_payload(
     Ok(())
 }
 
+pub(crate) fn insert_custom_session_tags_presentation_payload(
+    snapshot: &mut Value,
+    db: &Connection,
+) -> Result<(), DomainStateError> {
+    /*
+    CDXC:Sessions 2026-09-11 WHY:
+    Session rows in this same snapshot carry custom tag ids, so the catalog
+    that resolves them to a name, icon, and color rides along; a client that
+    had to fetch it separately would render "Custom tag" placeholders until the
+    second round trip landed.
+    */
+    let tags = crate::custom_session_tags::read_custom_session_tags(db)?;
+    if let Some(snapshot) = snapshot.as_object_mut() {
+        snapshot.insert("customSessionTags".to_string(), tags);
+    }
+    Ok(())
+}
+
 /*
 CDXC:SessionChat 2026-08-21:
 `queuedPromptCount` is the sidebar badge's whole input: how many Ghostex-owned

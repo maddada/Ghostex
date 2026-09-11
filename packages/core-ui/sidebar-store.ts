@@ -4,7 +4,13 @@ import { createDefaultSidebarCommandButtons } from '../shared/sidebar-commands';
 import { DEFAULT_COMPLETION_SOUND, getCompletionSoundLabel } from '../shared/completion-sound';
 import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings } from '../shared/ghostex-settings';
 import { createDefaultSidebarGitState, type SidebarGitFileDiffDraft } from '../shared/sidebar-git';
+import {
+  areCustomSessionTagsStatesEqual,
+  normalizeCustomSessionTagsState,
+  type CustomSessionTagsState,
+} from '../shared/session-tags';
 import type {
+  CustomSessionTagsChangedMessage,
   SidebarCommandRunStateClearedMessage,
   SidebarCommandRunStateChangedMessage,
   SidebarDaemonSessionsStateMessage,
@@ -31,6 +37,12 @@ export type SidebarGroupRecord = Omit<SidebarSessionGroup, 'sessions'>;
 
 type SidebarStoreDataState = {
   commandRunStates: Record<string, SidebarCommandRunFeedbackState>;
+  /**
+   * CDXC:Sessions 2026-09-11 WHY:
+   * The local daemon's custom session tag catalog and each remote daemon's, keyed by machine id. They live in the store rather than SidebarApp state because tag glyphs and labels render from many components (cards, menus, Settings rows, Previous Sessions) that have no prop path from SidebarApp. `undefined` means the local daemon has not delivered a catalog yet.
+   */
+  customSessionTags: CustomSessionTagsState | undefined;
+  remoteCustomSessionTagsByMachineId: Record<string, CustomSessionTagsState>;
   daemonSessionsState: SidebarDaemonSessionsStateMessage | undefined;
   focusedSessionScrollSuppression: SidebarFocusedSessionScrollSuppression | undefined;
   gitCommitDraft: SidebarPromptGitCommitMessage | undefined;
@@ -61,6 +73,7 @@ export type SidebarFocusedSessionScrollSuppression = {
 type SidebarStoreActions = {
   applyCommandRunStateClearedMessage: (message: SidebarCommandRunStateClearedMessage) => void;
   applyCommandRunStateMessage: (message: SidebarCommandRunStateChangedMessage) => void;
+  applyCustomSessionTagsChangedMessage: (message: CustomSessionTagsChangedMessage) => void;
   applyGroupsChangedMessage: (message: SidebarGroupsChangedMessage) => void;
   applyHudChangedMessage: (message: SidebarHudChangedMessage) => void;
   applyOrderSyncResultMessage: (message: SidebarOrderSyncResultMessage) => void;
@@ -78,6 +91,8 @@ type SidebarStoreActions = {
   suppressNextFocusedSessionScroll: (reason: SidebarFocusedSessionScrollSuppressionReason, nowMs?: number) => void;
   setGitCommitDraft: (message: SidebarPromptGitCommitMessage | undefined) => void;
   setGitFileDiffDraft: (draft: SidebarGitFileDiffDraft | undefined) => void;
+  /** Optimistic local write of one daemon's catalog before its ack arrives; `undefined` machine id means the local daemon. */
+  setCustomSessionTagsForMachine: (machineId: string | undefined, state: CustomSessionTagsState) => void;
 };
 
 export type SidebarStoreState = SidebarStoreDataState & SidebarStoreActions;
@@ -87,6 +102,7 @@ const FOCUSED_SESSION_SCROLL_SUPPRESSION_TTL_MS = 5_000;
 export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
   return {
     commandRunStates: {},
+    customSessionTags: undefined,
     daemonSessionsState: undefined,
     focusedSessionScrollSuppression: undefined,
     gitCommitDraft: undefined,
@@ -132,6 +148,7 @@ export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
     pendingFocusedSessionId: undefined,
     pinnedPrompts: [],
     previousSessions: [],
+    remoteCustomSessionTagsByMachineId: {},
     revision: 0,
     sessionIdsByGroup: {},
     sessionsById: {},
@@ -172,8 +189,20 @@ export const useSidebarStore = create<SidebarStoreState>((set, get) => ({
       };
     });
   },
+  applyCustomSessionTagsChangedMessage: (message) => {
+    set((state) =>
+      applyCustomSessionTagsForMachineState(
+        state,
+        message.remoteMachineId,
+        normalizeCustomSessionTagsState(message.customSessionTags)
+      )
+    );
+  },
   applyGroupsChangedMessage: (message) => {
     set((state) => applyGroupsChangedMessageState(state, message));
+  },
+  setCustomSessionTagsForMachine: (machineId, nextState) => {
+    set((state) => applyCustomSessionTagsForMachineState(state, machineId, nextState));
   },
   applyHudChangedMessage: (message) => {
     set((state) => applyHudChangedMessageState(state, message));
@@ -315,6 +344,7 @@ function applySidebarMessageState(
   const normalizedGroups = normalizeSidebarGroups(state, reconciledGroups.groups);
   const nextHud = preserveSidebarHudReferences(state.hud, normalizeHydratedSidebarHud(message.hud));
   return {
+    ...applyCustomSessionTagsFromSidebarMessage(state, message),
     commandRunStates: reconcileSidebarCommandRunFeedbackStates(
       state.commandRunStates,
       message.hud.commands.map((command) => command.commandId)
@@ -331,6 +361,53 @@ function applySidebarMessageState(
     sessionIdsByGroup: normalizedGroups.sessionIdsByGroup,
     sessionsById: normalizedGroups.sessionsById,
     workspaceGroupIds: normalizedGroups.workspaceGroupIds,
+  };
+}
+
+/**
+ * Same local/remote asymmetry as Spaces: the remote map is replaced whenever the message carries it (always on hydrate), while an absent local catalog means "not carried by this transport" and leaves the store untouched.
+ */
+function applyCustomSessionTagsFromSidebarMessage(
+  state: SidebarStoreState,
+  message: SidebarHydrateMessage | SidebarSessionStateMessage
+): Pick<SidebarStoreState, 'customSessionTags' | 'remoteCustomSessionTagsByMachineId'> {
+  let customSessionTags = state.customSessionTags;
+  if (message.customSessionTags !== undefined) {
+    const next = normalizeCustomSessionTagsState(message.customSessionTags);
+    customSessionTags = areCustomSessionTagsStatesEqual(customSessionTags, next) ? customSessionTags : next;
+  }
+  let remoteCustomSessionTagsByMachineId = state.remoteCustomSessionTagsByMachineId;
+  if (message.type === 'hydrate' || message.remoteCustomSessionTagsByMachineId !== undefined) {
+    const nextRemote: Record<string, CustomSessionTagsState> = {};
+    let changed = false;
+    for (const [machineId, raw] of Object.entries(message.remoteCustomSessionTagsByMachineId ?? {})) {
+      const next = normalizeCustomSessionTagsState(raw);
+      const previous = remoteCustomSessionTagsByMachineId[machineId];
+      nextRemote[machineId] = previous && areCustomSessionTagsStatesEqual(previous, next) ? previous : next;
+      changed ||= nextRemote[machineId] !== previous;
+    }
+    changed ||= Object.keys(nextRemote).length !== Object.keys(remoteCustomSessionTagsByMachineId).length;
+    if (changed) {
+      remoteCustomSessionTagsByMachineId = nextRemote;
+    }
+  }
+  return { customSessionTags, remoteCustomSessionTagsByMachineId };
+}
+
+function applyCustomSessionTagsForMachineState(
+  state: SidebarStoreState,
+  machineId: string | undefined,
+  next: CustomSessionTagsState
+): Partial<SidebarStoreState> | SidebarStoreState {
+  if (!machineId) {
+    return areCustomSessionTagsStatesEqual(state.customSessionTags, next) ? state : { customSessionTags: next };
+  }
+  const previous = state.remoteCustomSessionTagsByMachineId[machineId];
+  if (previous && areCustomSessionTagsStatesEqual(previous, next)) {
+    return state;
+  }
+  return {
+    remoteCustomSessionTagsByMachineId: { ...state.remoteCustomSessionTagsByMachineId, [machineId]: next },
   };
 }
 

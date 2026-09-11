@@ -21,6 +21,7 @@ import {
   IconRefresh,
   IconSparkles,
   IconSwitchHorizontal,
+  IconPlus,
   IconTag,
   IconX,
 } from '@tabler/icons-react';
@@ -45,7 +46,14 @@ import {
 import { getSidebarSessionLifecycleState, type SidebarSessionItem } from '../shared/session-grid-contract';
 import { SidebarAccountMenu } from './accounts/sidebar-account-menu';
 import { resolveSessionChatTranscriptAgent } from '../shared/session-chat';
-import { getEnabledVisibleSidebarSessionTagSections, type SidebarSessionTagListItem } from '../shared/session-tags';
+import {
+  createCustomSessionTag,
+  getEnabledVisibleSidebarSessionTagSections,
+  EMPTY_CUSTOM_SESSION_TAGS_STATE,
+  type CustomSessionTagsState,
+  type SidebarSessionTagListItem,
+} from '../shared/session-tags';
+import { CustomSessionTagEditorForm, nextCustomSessionTagColorIndex } from './custom-session-tag-editor';
 import { buildSidebarSessionDetailsClipboardText } from '../shared/session-details-copy';
 import {
   getSessionCardTitleTooltip,
@@ -154,6 +162,9 @@ type SessionContextMenuAction = {
   submenu?: 'advanced' | 'session-tags' | 'switch-account';
 };
 
+/** The park a Tag as submenu opened from Park will commit once a row is chosen. */
+type PendingPark = { clearSelection: boolean; sessionIds: readonly string[] };
+
 export type SidebarSessionSelectionChangeRequest = {
   groupId: string;
   mode: 'additive' | 'clear' | 'range';
@@ -237,9 +248,11 @@ export function getSessionCardAccessibleLabel({ isFocused, title }: { isFocused:
 
 export function getSessionTagSubmenuSections({
   currentSessionTag,
+  customTags,
   sessionTagListItems,
 }: {
   currentSessionTag?: SidebarSessionTag;
+  customTags?: CustomSessionTagsState;
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
 }) {
   /*
@@ -250,6 +263,7 @@ export function getSessionTagSubmenuSections({
    * custom-tagged sessions can still clear their selected marker.
    */
   return getEnabledVisibleSidebarSessionTagSections(sessionTagListItems, {
+    customTags,
     includeTags: currentSessionTag ? [currentSessionTag] : [],
   });
 }
@@ -737,39 +751,18 @@ export function SortableSessionCard({
   /**
    * CDXC:Sessions 2026-09-11 DECISION:
    * User: add a "Show tag menu when parking" setting under the parking toggle.
-   * With it on, Park opens the Tag as submenu so the session can be tagged in the same gesture.
-   * The park itself is committed when the context menu closes, not when Park is clicked: parking first moves the card into the Parked section, and a collapsed Parked section unmounts the card and takes the open menu with it.
-   * Every way of closing the menu (a tag choice, Escape, a click elsewhere, another menu action) still parks, so the extra step can add a tag but never cancels the park.
+   * With it on, Park opens the Tag as submenu so the session can be tagged in the same gesture, and the park happens only when a row in that menu is chosen: a tag, or the keep-tag row at the top.
+   * User: dismissing the menu without choosing a row (Escape, a click elsewhere, another menu action) must not park; an unconfirmed park is no park.
+   * The park is committed from the chosen row rather than when Park is clicked because parking first moves the card into the Parked section, and a collapsed Parked section unmounts the card and takes the open menu with it.
+   * User: clicking the tag the session already has while parking keeps that tag; the ordinary Tag as toggle-off does not apply to this menu.
+   * User: Tag as and Park swap the submenu between them instead of one blocking the other; clicking the open one again closes it.
    */
-  const pendingParkRef = useRef<{ clearSelection: boolean; sessionIds: readonly string[] } | undefined>(undefined);
+  const [pendingPark, setPendingPark] = useState<PendingPark>();
   useEffect(() => {
-    if (contextMenuPosition) {
-      return;
+    if (!tagSubmenuPosition || !contextMenuPosition) {
+      setPendingPark(undefined);
     }
-    const pendingPark = pendingParkRef.current;
-    if (!pendingPark) {
-      return;
-    }
-    pendingParkRef.current = undefined;
-    if (pendingPark.clearSelection) {
-      onSessionSelectionChange?.({ groupId, mode: 'clear', reason: 'bulkSetParked', sessionId });
-      runSidebarBulkContextMenuActionInBackground(pendingPark.sessionIds, (targetSessionId) => {
-        vscode.postMessage({
-          parked: true,
-          sessionId: targetSessionId,
-          type: 'setSessionParked',
-        });
-      });
-      return;
-    }
-    for (const targetSessionId of pendingPark.sessionIds) {
-      vscode.postMessage({
-        parked: true,
-        sessionId: targetSessionId,
-        type: 'setSessionParked',
-      });
-    }
-  }, [contextMenuPosition, groupId, onSessionSelectionChange, sessionId, vscode]);
+  }, [contextMenuPosition, tagSubmenuPosition]);
   const [advancedSubmenuPosition, setAdvancedSubmenuPosition] = useState<ContextMenuPosition>();
   const [switchAccountSubmenuPosition, setSwitchAccountSubmenuPosition] = useState<ContextMenuPosition>();
   const [completionFlashRunId, setCompletionFlashRunId] = useState(0);
@@ -943,14 +936,42 @@ export function SortableSessionCard({
         sessionsById: sidebarSessionsByIdForMenu,
       })
     : currentSessionTag;
+  /*
+   * CDXC:Sessions 2026-09-11 WHY:
+   * A session's Tag as menu lists the catalog of the daemon that owns the session: a remote session resolves its machine's catalog, a local one the local daemon's, so a tag created from this menu lands in the daemon that will store the session's `sessionTag`.
+   */
+  const sessionTagOwnerMachineId = sessionGroup?.remoteMachineContext?.machineId;
+  const sessionTagCatalog = useSidebarStore((state) =>
+    sessionTagOwnerMachineId
+      ? state.remoteCustomSessionTagsByMachineId[sessionTagOwnerMachineId]
+      : state.customSessionTags
+  );
   const sessionTagSubmenuSections = getSessionTagSubmenuSections({
     currentSessionTag: contextMenuSessionTag,
+    customTags: sessionTagCatalog,
     sessionTagListItems,
   });
   const sessionTagSubmenuItemCount = sessionTagSubmenuSections.reduce(
     (count, section) => count + section.options.length,
     0
   );
+  const [isNewTagFormOpen, setIsNewTagFormOpen] = useState(false);
+  const canCreateCustomTag = !isBulkContextMenu;
+  const createCustomTagFromSubmenu = (tag: { color: string; icon: string; name: string }) => {
+    /*
+     * CDXC:Sessions 2026-09-11 DECISION:
+     * User: New tag at the bottom of the Tag as menu creates the tag and applies it to this session in one step. The catalog is written through to the owning daemon, and the store is updated first so the row shows the new glyph before the ack arrives.
+     */
+    const created = createCustomSessionTag(sessionTagCatalog ?? EMPTY_CUSTOM_SESSION_TAGS_STATE, tag);
+    useSidebarStore.getState().setCustomSessionTagsForMachine(sessionTagOwnerMachineId, created.state);
+    vscode.postMessage({
+      ...(sessionTagOwnerMachineId ? { remoteMachineId: sessionTagOwnerMachineId } : {}),
+      state: created.state,
+      type: 'updateCustomSessionTags',
+    });
+    setIsNewTagFormOpen(false);
+    requestSetSessionTag(created.tagId);
+  };
   const sessionTitleTooltip = getSessionCardTitleTooltip({
     alwaysShowStateTooltip: isRemoteSession,
     session,
@@ -1776,6 +1797,40 @@ export function SortableSessionCard({
     setContextMenuSelectedSessionIds(EMPTY_SESSION_IDS);
   };
 
+  const commitPendingPark = () => {
+    if (!pendingPark) {
+      return;
+    }
+    if (pendingPark.clearSelection) {
+      clearSessionSelection('bulkSetParked');
+      runSidebarBulkContextMenuActionInBackground(pendingPark.sessionIds, (targetSessionId) => {
+        vscode.postMessage({
+          parked: true,
+          sessionId: targetSessionId,
+          type: 'setSessionParked',
+        });
+      });
+      return;
+    }
+    for (const targetSessionId of pendingPark.sessionIds) {
+      vscode.postMessage({
+        parked: true,
+        sessionId: targetSessionId,
+        type: 'setSessionParked',
+      });
+    }
+  };
+
+  const requestParkKeepingTags = () => {
+    if (isBulkContextMenu) {
+      dismissBulkContextMenu();
+    } else {
+      setContextMenuPosition(undefined);
+      setTagSubmenuPosition(undefined);
+    }
+    commitPendingPark();
+  };
+
   const requestSetSelectedSessionsSleeping = (sleeping: boolean) => {
     const targetSessionIds = sleeping
       ? (bulkActionAvailability?.sleepableSessionIds ?? EMPTY_SESSION_IDS)
@@ -1853,6 +1908,7 @@ export function SortableSessionCard({
         type: 'setSessionTag',
       });
     });
+    commitPendingPark();
   };
 
   const requestFullReloadSelectedSessions = () => {
@@ -1894,21 +1950,30 @@ export function SortableSessionCard({
       sessionTag: tag ?? null,
       type: 'setSessionTag',
     });
+    commitPendingPark();
   };
 
-  const openSessionTagSubmenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    if (tagSubmenuPosition) {
+  /**
+   * Opens the tag submenu under the clicked row. With `nextPendingPark` it is
+   * Park's menu, without it Tag as's; opening one while the other is showing
+   * swaps them, and clicking the row that owns the open menu closes it.
+   */
+  const openSessionTagSubmenu = (event: ReactMouseEvent<HTMLButtonElement>, nextPendingPark?: PendingPark) => {
+    if (tagSubmenuPosition && Boolean(nextPendingPark) === Boolean(pendingPark)) {
       setTagSubmenuPosition(undefined);
       return;
     }
+    setPendingPark(nextPendingPark);
     setAdvancedSubmenuPosition(undefined);
     setSwitchAccountSubmenuPosition(undefined);
     const bounds = event.currentTarget.getBoundingClientRect();
     const submenuWidth = 204;
+    setIsNewTagFormOpen(false);
+    const parkRowCount = nextPendingPark ? 1 : 0;
     const submenuHeight =
       CONTEXT_MENU_VERTICAL_PADDING_PX +
-      sessionTagSubmenuItemCount * CONTEXT_MENU_ITEM_HEIGHT_PX +
-      Math.max(0, sessionTagSubmenuSections.length - 1) * 10;
+      (sessionTagSubmenuItemCount + parkRowCount + Number(canCreateCustomTag)) * CONTEXT_MENU_ITEM_HEIGHT_PX +
+      Math.max(0, sessionTagSubmenuSections.length - 1 + parkRowCount + Number(canCreateCustomTag)) * 10;
     setTagSubmenuPosition({
       x: getCenteredSidebarMenuX(submenuWidth),
       y: Math.max(
@@ -1936,16 +2001,12 @@ export function SortableSessionCard({
     });
   };
 
-  const requestParkWithTagMenu = (
-    event: ReactMouseEvent<HTMLButtonElement>,
-    pendingPark: { clearSelection: boolean; sessionIds: readonly string[] }
-  ) => {
-    pendingParkRef.current = pendingPark;
-    if (!tagSubmenuPosition) {
-      openSessionTagSubmenu(event);
-    }
-  };
   const parkOpensTagMenu = showTagMenuWhenParking && sessionTagSubmenuItemCount > 0;
+  const parkKeepTagLabel = isBulkContextMenu
+    ? 'Keep current tags'
+    : contextMenuSessionTag
+      ? 'Keep current tag'
+      : 'Park without a tag';
 
   const bulkPrimaryActions: SessionContextMenuAction[] = [];
   if (bulkActionAvailability && bulkActionAvailability.sleepableSessionIds.length > 0) {
@@ -2005,7 +2066,7 @@ export function SortableSessionCard({
       key: 'park-selected',
       label: 'Park selected',
       onClick: bulkParkOpensTagMenu
-        ? (event) => requestParkWithTagMenu(event, { clearSelection: true, sessionIds: parkableSessionIds })
+        ? (event) => openSessionTagSubmenu(event, { clearSelection: true, sessionIds: parkableSessionIds })
         : () => requestSetSelectedSessionsParked(true),
       ...(bulkParkOpensTagMenu ? { submenu: 'session-tags' as const } : {}),
     });
@@ -2091,7 +2152,7 @@ export function SortableSessionCard({
       key: 'park',
       label: session.isParked ? 'Unpark' : 'Park',
       onClick: singleParkOpensTagMenu
-        ? (event) => requestParkWithTagMenu(event, { clearSelection: false, sessionIds: [session.sessionId] })
+        ? (event) => openSessionTagSubmenu(event, { clearSelection: false, sessionIds: [session.sessionId] })
         : () => requestSetParked(!session.isParked),
       ...(singleParkOpensTagMenu ? { submenu: 'session-tags' as const } : {}),
     });
@@ -2880,7 +2941,8 @@ export function SortableSessionCard({
                     onClick={(event) => action.onClick(event)}
                     aria-expanded={
                       action.submenu === 'session-tags'
-                        ? Boolean(tagSubmenuPosition)
+                        ? Boolean(tagSubmenuPosition) &&
+                          (action.key === 'park' || action.key === 'park-selected') === Boolean(pendingPark)
                         : action.submenu === 'advanced'
                           ? Boolean(advancedSubmenuPosition)
                           : undefined
@@ -2937,16 +2999,31 @@ export function SortableSessionCard({
                * label rows. Keep the grouped sections and dividers for scan
                * structure without spending vertical space on heading text.
                */}
+              {pendingPark ? (
+                <div className='session-tag-menu-section session-tag-menu-park-section'>
+                  <button
+                    aria-label={parkKeepTagLabel}
+                    className='session-context-menu-item session-tag-menu-item'
+                    onClick={requestParkKeepingTags}
+                    role='menuitem'
+                    type='button'
+                  >
+                    <IconArchive aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+                    <span className='session-tag-menu-item-label'>{parkKeepTagLabel}</span>
+                  </button>
+                </div>
+              ) : null}
               {sessionTagSubmenuSections.map((section) => (
                 <div className='session-tag-menu-section' key={section.label}>
                   {section.options.map((option) => {
                     const isSelected = contextMenuSessionTag === option.value;
-                    const optionLabel = getSidebarSessionTagLabel(option.value);
+                    const optionLabel = option.label;
+                    const clearsTag = isSelected && !pendingPark;
                     return (
                       <button
                         aria-checked={isSelected}
                         aria-label={
-                          isSelected
+                          clearsTag
                             ? isBulkContextMenu
                               ? `Remove ${optionLabel} tag from selected sessions`
                               : `Remove ${optionLabel} tag`
@@ -2958,7 +3035,7 @@ export function SortableSessionCard({
                         data-selected={String(isSelected)}
                         key={option.value}
                         onClick={() => {
-                          const nextTag = isSelected ? undefined : option.value;
+                          const nextTag = clearsTag ? undefined : option.value;
                           if (isBulkContextMenu) {
                             requestSetSelectedSessionTag(nextTag);
                             return;
@@ -2988,6 +3065,29 @@ export function SortableSessionCard({
                   })}
                 </div>
               ))}
+              {canCreateCustomTag ? (
+                <div className='session-tag-menu-section session-tag-menu-new-tag-form'>
+                  {isNewTagFormOpen ? (
+                    <CustomSessionTagEditorForm
+                      compact
+                      onCancel={() => setIsNewTagFormOpen(false)}
+                      onSubmit={createCustomTagFromSubmenu}
+                      suggestedColorIndex={nextCustomSessionTagColorIndex(sessionTagCatalog)}
+                    />
+                  ) : (
+                    <button
+                      aria-label='New tag'
+                      className='session-context-menu-item session-tag-menu-item'
+                      onClick={() => setIsNewTagFormOpen(true)}
+                      role='menuitem'
+                      type='button'
+                    >
+                      <IconPlus aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+                      <span className='session-tag-menu-item-label'>New tag…</span>
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </div>,
             document.body
           )

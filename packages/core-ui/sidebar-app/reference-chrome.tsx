@@ -59,7 +59,13 @@ import { formatSidebarHotkeyLabel } from '../hotkey-label';
 import { ProjectAgentLauncherIcon } from '../project-agent-launcher-icon';
 import { registerSidebarContextMenuDismissHandler, SidebarContextMenuPortal } from '../sidebar-context-menu-portal';
 import { SidebarFixedTooltipButton } from '../sidebar-fixed-tooltip-button';
-import { getSidebarSessionTagLabel, SessionTagIcon, type SidebarSessionTagFilter } from '../session-tag-ui';
+import {
+  getSidebarSessionTagLabel,
+  SessionTagIcon,
+  useSessionTagCatalogs,
+  type SidebarSessionTagFilter,
+} from '../session-tag-ui';
+import { useSidebarStore } from '../sidebar-store';
 import type {
   HeaderSortMenuPosition,
   RemoteMachineHeaderConnectionControl,
@@ -662,7 +668,9 @@ export function SidebarReferenceSortFilterDropdown({
     selectedSessionTagFilters,
     showHidden,
   } = projectMenu;
-  const tagListItems = normalizeSidebarSessionTagListItems(projectMenu.sessionTagListItems);
+  const localCustomSessionTags = useSidebarStore((state) => state.customSessionTags);
+  const sessionTagCatalogs = useSessionTagCatalogs();
+  const tagListItems = normalizeSidebarSessionTagListItems(projectMenu.sessionTagListItems, localCustomSessionTags);
   return (
     <div className='reference-sidebar-primary-dropdown' role='menu'>
       <SidebarReferencePrimaryMenuItem icon={IconArrowLeft} label='More' onSelect={onBack} />
@@ -710,7 +718,7 @@ export function SidebarReferenceSortFilterDropdown({
             active={isSelected}
             disabled={!item.enabled}
             key={item.id}
-            label={getSidebarSessionTagLabel(filter) ?? filter}
+            label={getSidebarSessionTagLabel(filter, sessionTagCatalogs) ?? filter}
             leading={
               <SessionTagIcon
                 className='reference-sidebar-primary-menu-icon session-tag-colored-icon'
@@ -928,9 +936,11 @@ export function SidebarReferenceSectionHeader({
   const trailingRemoteConnectionControl = leadingRemoteConnectionControl ? undefined : remoteConnectionControl;
   const primaryAgent = agents.find((agent) => agent.agentId === primaryAgentId) ?? agents[0];
   const primaryAgentLabel = primaryAgent?.name ?? 'Agent';
+  const localCustomSessionTags = useSidebarStore((state) => state.customSessionTags);
+  const sessionTagCatalogs = useSessionTagCatalogs();
   const normalizedSessionTagListItems = useMemo(
-    () => normalizeSidebarSessionTagListItems(sessionTagListItems),
-    [sessionTagListItems]
+    () => normalizeSidebarSessionTagListItems(sessionTagListItems, localCustomSessionTags),
+    [localCustomSessionTags, sessionTagListItems]
   );
   const hasTagFilters = selectedSessionTagFilters.length > 0;
   const hasActions =
@@ -1301,7 +1311,7 @@ export function SidebarReferenceSectionHeader({
                       stroke={1.8}
                       tag={filter}
                     />
-                    {getSidebarSessionTagLabel(filter)}
+                    {getSidebarSessionTagLabel(filter, sessionTagCatalogs)}
                     <IconCheck
                       aria-hidden='true'
                       className='session-context-menu-trailing-icon reference-sidebar-tag-filter-check'

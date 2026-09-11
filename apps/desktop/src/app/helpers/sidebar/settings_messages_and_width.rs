@@ -141,6 +141,7 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
         .iter()
         .map(gpui_pinned_prompt_value)
         .collect::<Vec<_>>();
+    let custom_session_tags = gpui_read_gxserver_custom_session_tags(Duration::from_secs(2));
 
     let mut message = serde_json::json!({
         "groups": [],
@@ -201,6 +202,9 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
     });
     if let Some(portless_state) = portless_state {
         message["hud"]["portless"] = portless_state;
+    }
+    if let Some(custom_session_tags) = custom_session_tags {
+        message["customSessionTags"] = custom_session_tags;
     }
     message
 }

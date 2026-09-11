@@ -29,6 +29,7 @@ import { SidebarFixedTooltipButton } from './sidebar-fixed-tooltip-button';
 import { getSidebarReorderActivationConstraints } from './sidebar-reorder-activation';
 import { useSidebarCollapsiblePresence } from './sidebar-collapse-animation';
 import { getAwakeTerminalAndBrowserCount, getGroupSessionSummary } from './group-session-summary';
+import { getSessionTagCatalogs } from './session-tag-ui';
 import { useSidebarStore } from './sidebar-store';
 import {
   canSleepSidebarSession,
@@ -577,7 +578,7 @@ export function ProjectCollectionSection({
                     role='menuitem'
                     type='button'
                   >
-                    {getSidebarSessionTagLabel(item.tag) ?? item.tag}
+                    {getSidebarSessionTagLabel(item.tag, getSessionTagCatalogs()) ?? item.tag}
                   </button>
                 ) : null
               )}

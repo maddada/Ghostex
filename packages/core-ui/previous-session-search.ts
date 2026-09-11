@@ -7,6 +7,7 @@ import {
   type SidebarSessionTagFilter,
 } from '../shared/session-tags';
 import { getSessionHistoryCardTitle } from './session-history-card-title';
+import { getSessionTagCatalogs } from './session-tag-ui';
 
 export type PreviousSessionsModalDayGroup = {
   dayLabel: string;
@@ -205,7 +206,7 @@ function createSidebarSessionSearchRecord<T extends SidebarSearchableSession>(
       session.terminalTitle,
       session.detail,
       session.sessionNumber,
-      getSidebarSessionTagLabel(getEffectiveSidebarSessionTag(session)),
+      getSidebarSessionTagLabel(getEffectiveSidebarSessionTag(session), getSessionTagCatalogs()),
     ]
       .map((part) => normalizeSessionSearchValue(part))
       .filter(Boolean)

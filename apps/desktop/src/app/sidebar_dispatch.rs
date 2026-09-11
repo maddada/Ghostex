@@ -381,6 +381,89 @@ impl GhostexGpuiApp {
         self.dispatch_gpui_sidebar_host_message(serde_json::Value::Object(message), cx)
     }
 
+    /// Forward an `updateCustomSessionTags` catalog write issued from an
+    /// app-modal window (Settings) to the sidebar runtime, which performs the
+    /// gxserver write exactly as it does for the same message posted by the
+    /// sidebar page. Only a bounded copy of the catalog crosses: tag ids, names,
+    /// icon ids, colors, the order, and the owning machine id.
+    pub(crate) fn forward_gpui_custom_session_tags_update_to_sidebar(
+        &mut self,
+        command: &serde_json::Map<String, serde_json::Value>,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        const MAX_TAGS: usize = 256;
+        let bounded_text = |value: Option<&serde_json::Value>| {
+            value
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|text| !text.is_empty() && text.chars().count() <= 256)
+                .filter(|text| !text.chars().any(char::is_control))
+                .map(str::to_string)
+        };
+        let Some(state) = command.get("state").and_then(serde_json::Value::as_object) else {
+            return false;
+        };
+        let Some(order) = state.get("order").and_then(serde_json::Value::as_array) else {
+            return false;
+        };
+        let Some(tags) = state.get("tags").and_then(serde_json::Value::as_object) else {
+            return false;
+        };
+        if order.len() > MAX_TAGS || tags.len() > MAX_TAGS {
+            return false;
+        }
+        let mut bounded_order = Vec::with_capacity(order.len());
+        for tag_id in order {
+            let Some(tag_id) = bounded_text(Some(tag_id)) else {
+                return false;
+            };
+            bounded_order.push(serde_json::Value::String(tag_id));
+        }
+        let mut bounded_tags = serde_json::Map::new();
+        for (tag_id, tag) in tags {
+            let Some(tag) = tag.as_object() else {
+                return false;
+            };
+            let (Some(key), Some(color), Some(icon), Some(name), Some(inner_tag_id)) = (
+                bounded_text(Some(&serde_json::Value::String(tag_id.clone()))),
+                bounded_text(tag.get("color")),
+                bounded_text(tag.get("icon")),
+                bounded_text(tag.get("name")),
+                bounded_text(tag.get("tagId")),
+            ) else {
+                return false;
+            };
+            bounded_tags.insert(
+                key,
+                serde_json::json!({
+                    "color": color,
+                    "icon": icon,
+                    "name": name,
+                    "tagId": inner_tag_id,
+                }),
+            );
+        }
+        let mut message = serde_json::Map::new();
+        message.insert(
+            "state".to_string(),
+            serde_json::json!({
+                "order": bounded_order,
+                "tags": bounded_tags,
+            }),
+        );
+        message.insert(
+            "type".to_string(),
+            serde_json::json!("updateCustomSessionTags"),
+        );
+        if let Some(remote_machine_id) = bounded_text(command.get("remoteMachineId")) {
+            message.insert(
+                "remoteMachineId".to_string(),
+                serde_json::Value::String(remote_machine_id),
+            );
+        }
+        self.dispatch_gpui_sidebar_host_message(serde_json::Value::Object(message), cx)
+    }
+
     /// Reveal the exported markdown file in the OS file manager. The path comes
     /// from the Rust-held open payload of the dialog that is asking, never from
     /// the modal page's own message, and remote exports hold no local path.
@@ -1697,6 +1780,7 @@ impl GhostexGpuiApp {
         CDXC:CommandPane 2026-06-26-04:59:
         Native command-pane Actions keep completed tabs reusable even when older Action definitions requested close-on-exit. Keep this completion close helper as a stale-record guard only; current runtime completions normalize close-on-exit to false and must not remove the Action-owned command tab after sidebar feedback.
         */
+        let keyboard_owner_before = self.keyboard_owner_session();
         let Some(completed_tab) = self.command_pane.close_completed_action_run_tab(completion)
         else {
             return false;
@@ -1705,9 +1789,13 @@ impl GhostexGpuiApp {
         self.prune_gpui_command_delayed_send_timers_for_command_model();
         self.prune_gpui_command_close_after_done_timers_for_command_model();
         if self.command_pane.has_sessions() {
-            self.focus_command_pane();
+            self.follow_shell_focus_after_surface_removed(
+                ShellFocusTarget::CommandPane,
+                keyboard_owner_before,
+                cx,
+            );
         } else {
-            self.restore_previous_non_command_focus_or_default();
+            self.restore_non_command_focus_after_surface_removed(keyboard_owner_before, cx);
         }
         self.scroll_command_group_active_tab(completed_tab.group_id);
         self.scroll_focused_command_active_tab();
@@ -1751,9 +1839,9 @@ impl GhostexGpuiApp {
         self.forget_command_gxserver_session_for_closed_tab(slot.session_id, cx);
         self.clear_command_resize_hover_state_if_command_pane_hidden();
         if self.command_pane.has_sessions() {
-            self.focus_command_pane();
+            self.focus_command_pane(cx);
         } else {
-            self.restore_previous_non_command_focus_or_default();
+            self.restore_previous_non_command_focus_or_default(cx);
         }
         self.scroll_command_group_active_tab(slot.group_id);
         self.scroll_focused_command_active_tab();

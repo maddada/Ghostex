@@ -22,6 +22,8 @@ import {
 import {
   GPUI_PROJECT_COLLECTIONS_SERVER_SYNC_DELAY_MS,
   GPUI_PROJECT_COLLECTIONS_SERVER_SYNC_RETRY_DELAY_MS,
+  GPUI_CUSTOM_SESSION_TAGS_SERVER_SYNC_DELAY_MS,
+  GPUI_CUSTOM_SESSION_TAGS_SERVER_SYNC_RETRY_DELAY_MS,
   GPUI_SIDEBAR_SPACES_SERVER_SYNC_DELAY_MS,
   GPUI_SIDEBAR_SPACES_SERVER_SYNC_RETRY_DELAY_MS,
   GPUI_WORKSPACE_GROUPS_SERVER_SYNC_DELAY_MS,
@@ -33,6 +35,7 @@ import {
   createGpuiRemotePresentationGroupId,
   createGpuiRemotePresentationProjectId,
   createGpuiRemotePresentationSessionId,
+  isCustomSessionTagsState,
   isSidebarProjectCollectionsState,
   isSidebarSpacesState,
   isWorkspaceSessionGroupsState,
@@ -47,6 +50,7 @@ import {
   parseGxserverPresentationProjectSessionId,
 } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type {
+  GxserverCustomSessionTagsState,
   GxserverSidebarProjectCollectionsState,
   GxserverSidebarSpacesState,
   GxserverWorkspaceSessionGroupsState,
@@ -84,6 +88,11 @@ export interface GpuiSidebarRuntimeWorkspaceGroupMethods {
   forwardSidebarSpacesFromGxserver(state: GxserverSidebarSpacesState): void;
   forwardRemoteSidebarSpacesFromGxserver(remoteMachineId: string, state: GxserverSidebarSpacesState): void;
   updateRemoteSidebarSpaces(remoteMachineId: string, state: GxserverSidebarSpacesState): Promise<void>;
+  queueCustomSessionTagsServerSync(state: GxserverCustomSessionTagsState): void;
+  pushCustomSessionTagsToGxserver(): Promise<void>;
+  forwardCustomSessionTagsFromGxserver(state: GxserverCustomSessionTagsState): void;
+  forwardRemoteCustomSessionTagsFromGxserver(remoteMachineId: string, state: GxserverCustomSessionTagsState): void;
+  updateRemoteCustomSessionTags(remoteMachineId: string, state: GxserverCustomSessionTagsState): Promise<void>;
   updateRemoteWorkspaceGroups(remoteMachineId: string, projectOrder: readonly string[]): Promise<void>;
   createWorkspaceGroup(groupId?: string): void;
   createWorkspaceGroupFromSession(sessionId: string): void;
@@ -382,6 +391,108 @@ export const gpuiSidebarRuntimeWorkspaceGroupMethods = {
       });
     }
     this.forwardRemoteSidebarSpacesFromGxserver(remoteMachineId, response.sidebarSpaces);
+  },
+
+  /*
+  CDXC:Sessions 2026-09-11 SEE-ALSO:
+  The custom session tag catalog relays exactly like Spaces above (debounced
+  local write-through with server forwards suppressed while a push is pending,
+  and a per-machine remote path that never merges into the local catalog).
+  The wire contract is `GxserverCustomSessionTagsState` in
+  packages/shared/gxserver-protocol.ts; the web host mirrors this in
+  apps/web/src/sidebar-runtime/sidebar-runtime.ts.
+  */
+  queueCustomSessionTagsServerSync(this: GpuiSidebarRuntime, state: GxserverCustomSessionTagsState): void {
+    this.latestCustomSessionTagsUpdate = state;
+    this.customSessionTagsServerSyncPending = true;
+    if (this.customSessionTagsServerSyncTimeoutId !== undefined) {
+      window.clearTimeout(this.customSessionTagsServerSyncTimeoutId);
+    }
+    this.customSessionTagsServerSyncTimeoutId = window.setTimeout(() => {
+      this.customSessionTagsServerSyncTimeoutId = undefined;
+      void this.pushCustomSessionTagsToGxserver();
+    }, GPUI_CUSTOM_SESSION_TAGS_SERVER_SYNC_DELAY_MS);
+  },
+
+  async pushCustomSessionTagsToGxserver(this: GpuiSidebarRuntime): Promise<void> {
+    const client = this.client;
+    const pushed = this.latestCustomSessionTagsUpdate;
+    if (!client || !pushed) {
+      return;
+    }
+    try {
+      const normalized = await client.updateCustomSessionTags(pushed);
+      if (this.latestCustomSessionTagsUpdate === pushed) {
+        this.customSessionTagsServerSyncPending = false;
+        if (isCustomSessionTagsState(normalized)) {
+          this.forwardCustomSessionTagsFromGxserver(normalized);
+        }
+      }
+    } catch {
+      if (
+        this.client === client &&
+        this.customSessionTagsServerSyncTimeoutId === undefined &&
+        this.customSessionTagsServerSyncPending
+      ) {
+        this.customSessionTagsServerSyncTimeoutId = window.setTimeout(() => {
+          this.customSessionTagsServerSyncTimeoutId = undefined;
+          void this.pushCustomSessionTagsToGxserver();
+        }, GPUI_CUSTOM_SESSION_TAGS_SERVER_SYNC_RETRY_DELAY_MS);
+      }
+    }
+  },
+
+  forwardCustomSessionTagsFromGxserver(this: GpuiSidebarRuntime, state: GxserverCustomSessionTagsState): void {
+    if (this.customSessionTagsServerSyncPending) {
+      return;
+    }
+    const stateJson = JSON.stringify(state);
+    if (stateJson === this.lastForwardedCustomSessionTagsJson) {
+      return;
+    }
+    this.lastForwardedCustomSessionTagsJson = stateJson;
+    this.messageSource.postMessage({
+      customSessionTags: state,
+      type: 'customSessionTagsChanged',
+    });
+  },
+
+  forwardRemoteCustomSessionTagsFromGxserver(
+    this: GpuiSidebarRuntime,
+    remoteMachineId: string,
+    state: GxserverCustomSessionTagsState
+  ): void {
+    const stateJson = JSON.stringify(state);
+    if (this.lastForwardedRemoteCustomSessionTagsJsonByMachineId.get(remoteMachineId) === stateJson) {
+      return;
+    }
+    this.lastForwardedRemoteCustomSessionTagsJsonByMachineId.set(remoteMachineId, stateJson);
+    this.messageSource.postMessage({
+      customSessionTags: state,
+      remoteMachineId,
+      type: 'customSessionTagsChanged',
+    });
+  },
+
+  async updateRemoteCustomSessionTags(
+    this: GpuiSidebarRuntime,
+    remoteMachineId: string,
+    state: GxserverCustomSessionTagsState
+  ): Promise<void> {
+    const response = await this.requestRemoteGxserver<{
+      customSessionTags?: unknown;
+    }>(remoteMachineId, '/api/updateCustomSessionTags', { state });
+    if (!isCustomSessionTagsState(response.customSessionTags)) {
+      throw new Error('Remote gxserver returned invalid custom session tags.');
+    }
+    const snapshot = this.remotePresentations.get(remoteMachineId);
+    if (snapshot) {
+      this.remotePresentations.set(remoteMachineId, {
+        ...snapshot,
+        customSessionTags: response.customSessionTags,
+      });
+    }
+    this.forwardRemoteCustomSessionTagsFromGxserver(remoteMachineId, response.customSessionTags);
   },
 
   async updateRemoteWorkspaceGroups(

@@ -1,6 +1,15 @@
 import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
-import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ComponentProps,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { flushSync } from 'react-dom';
 import ColorPicker from 'react-best-gradient-color-picker';
 import { cn } from '@/packages/components/utils';
@@ -70,10 +79,14 @@ import {
 import { type SessionChatTheme } from '../../shared/session-chat';
 import { PET_OPTIONS, type PetId } from '../../shared/pets';
 import {
+  getCustomSessionTagOrderFromListItems,
   getSidebarSessionTagListItemLabel,
+  isCustomSessionTagId,
   normalizeSidebarSessionTagListItems,
+  type CustomSessionTagsState,
   type SidebarSessionTagListItem,
 } from '../../shared/session-tags';
+import { CustomSessionTagEditorForm, nextCustomSessionTagColorIndex } from '../custom-session-tag-editor';
 import { PetAvatar } from '../pet-avatar';
 import { SessionTagIcon } from '../session-tag-ui';
 import { createSettingsSidebarTagListItemDragData, getSettingsSidebarTagListItemDragData, moveId } from './drag-data';
@@ -640,6 +653,7 @@ export function SelectField({
   options,
   showScrollButtons,
   supportingContent,
+  triggerWidth,
   value,
 }: {
   advanced?: boolean;
@@ -652,6 +666,11 @@ export function SelectField({
   options: ReadonlyArray<{ label: string; value: string }>;
   showScrollButtons?: boolean;
   supportingContent?: ReactNode;
+  /**
+   * Per-row override of the standard list-row dropdown width (a CSS length), for rows whose
+   * option labels do not fit the standard width. The popup follows the trigger automatically.
+   */
+  triggerWidth?: string;
   value: string;
 } & SettingModificationProps) {
   const id = useId();
@@ -672,7 +691,12 @@ export function SelectField({
         onValueChange={onChange}
         value={value}
       >
-        <SelectTrigger className='h-8 w-full px-3' disabled={disabled} id={id}>
+        <SelectTrigger
+          className='h-8 w-full px-3'
+          disabled={disabled}
+          id={id}
+          style={triggerWidth ? ({ '--settings-select-width': triggerWidth } as CSSProperties) : undefined}
+        >
           <SelectValue />
         </SelectTrigger>
         <SettingsSelectContent
@@ -1833,17 +1857,45 @@ export function getDiagnosticLoggingScenarioStateForDuration(
 }
 
 export function SidebarTagListSettingsField({
+  customSessionTags,
   isModified,
   items,
   onChange,
+  onCreateCustomTag,
+  onCustomTagOrderChange,
+  onDeleteCustomTag,
   onResetToDefault,
 }: {
+  /** The local daemon's custom tag catalog; absent on hosts with no daemon connection, which hides Add tag. */
+  customSessionTags?: CustomSessionTagsState;
   isModified: boolean;
   items: readonly SidebarSessionTagListItem[];
   onChange: (items: readonly SidebarSessionTagListItem[]) => void;
+  onCreateCustomTag?: (tag: { color: string; icon: string; name: string }) => void;
+  onCustomTagOrderChange?: (orderedTagIds: readonly string[]) => void;
+  onDeleteCustomTag?: (tagId: string) => void;
   onResetToDefault: () => void;
 }) {
-  const normalizedItems = normalizeSidebarSessionTagListItems(items);
+  /*
+   * CDXC:Sessions 2026-09-11 DECISION:
+   * User: custom tags are added and sorted from the existing Sidebar Tags list. Custom rows sit in the same drag list as the built-in rows (hide, disable, reorder work unchanged) and gain a delete action; the relative order of the custom rows is written back to the daemon catalog so the phone's Tag as menu lists them in the same order.
+   */
+  const normalizedItems = normalizeSidebarSessionTagListItems(items, customSessionTags);
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+  const canAddTags = customSessionTags !== undefined && onCreateCustomTag !== undefined;
+  const emitChange = (nextItems: readonly SidebarSessionTagListItem[]) => {
+    onChange(nextItems);
+    if (onCustomTagOrderChange && customSessionTags) {
+      const nextOrder = getCustomSessionTagOrderFromListItems(nextItems);
+      const sameOrder =
+        nextOrder.length === customSessionTags.order.length &&
+        nextOrder.every((tagId, index) => tagId === customSessionTags.order[index]);
+      if (!sameOrder) {
+        onCustomTagOrderChange(nextOrder);
+      }
+    }
+  };
   const handleDragEnd = ((event) => {
     if (event.canceled || !isSortableOperation(event.operation)) {
       return;
@@ -1861,7 +1913,7 @@ export function SidebarTagListSettingsField({
     }
 
     const itemsById = new Map<string, SidebarSessionTagListItem>(normalizedItems.map((item) => [item.id, item]));
-    onChange(
+    emitChange(
       moveId(
         normalizedItems.map((item) => item.id),
         source.initialIndex,
@@ -1904,7 +1956,7 @@ export function SidebarTagListSettingsField({
   };
 
   return (
-    <details className='group w-full'>
+    <details className='group w-full' ref={detailsRef}>
       {/*
        * CDXC:Sessions 2026-06-13-17:50:
        * The bottom main Settings area starts collapsed and mirrors the
@@ -1930,28 +1982,65 @@ export function SidebarTagListSettingsField({
             />
           </span>
         </div>
-        <SettingButton
-          disabled={!isModified}
-          disabledReason='These tag settings already match the defaults.'
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onResetToDefault();
-          }}
-          type='button'
-          variant='outline'
-        >
-          Reset to Default
-        </SettingButton>
+        <div className='flex shrink-0 items-center gap-2'>
+          {canAddTags ? (
+            <SettingButton
+              disabledReason='Custom tags need a connected server.'
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (detailsRef.current) {
+                  detailsRef.current.open = true;
+                }
+                setIsAddingTag(true);
+              }}
+              type='button'
+              variant='outline'
+            >
+              Add tag
+            </SettingButton>
+          ) : null}
+          <SettingButton
+            disabled={!isModified}
+            disabledReason='These tag settings already match the defaults.'
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onResetToDefault();
+            }}
+            type='button'
+            variant='outline'
+          >
+            Reset to Default
+          </SettingButton>
+        </div>
       </summary>
       <div className='pt-3'>
+        {isAddingTag && canAddTags ? (
+          <div className='settings-management-row mb-2 w-full border border-border bg-muted/20 p-3'>
+            <CustomSessionTagEditorForm
+              onCancel={() => setIsAddingTag(false)}
+              onSubmit={(tag) => {
+                onCreateCustomTag(tag);
+                setIsAddingTag(false);
+              }}
+              suggestedColorIndex={nextCustomSessionTagColorIndex(customSessionTags)}
+            />
+          </div>
+        ) : null}
         <DragDropProvider onDragEnd={handleDragEnd}>
           <div className='flex w-full flex-col gap-2'>
             {normalizedItems.map((item, index) => (
               <SidebarTagListSettingsRow
+                customSessionTags={customSessionTags}
                 index={index}
                 item={item}
                 key={item.id}
+                onDelete={
+                  onDeleteCustomTag && item.type === 'tag' && isCustomSessionTagId(item.tag)
+                    ? () => onDeleteCustomTag(item.tag)
+                    : undefined
+                }
                 onEnabledChange={(enabled) => updateItemEnabled(item.id, enabled)}
                 onVisibleChange={(visible) => updateItemVisible(item.id, visible)}
               />
@@ -1964,13 +2053,18 @@ export function SidebarTagListSettingsField({
 }
 
 export function SidebarTagListSettingsRow({
+  customSessionTags,
   index,
   item,
+  onDelete,
   onEnabledChange,
   onVisibleChange,
 }: {
+  customSessionTags?: CustomSessionTagsState;
   index: number;
   item: SidebarSessionTagListItem;
+  /** Present only on custom tag rows. */
+  onDelete?: () => void;
   onEnabledChange: (enabled: boolean) => void;
   onVisibleChange: (visible: boolean) => void;
 }) {
@@ -1984,7 +2078,7 @@ export function SidebarTagListSettingsRow({
   });
   const { handleRef, isDragging } = sortable;
   const isDimmed = !item.enabled || !item.visible;
-  const label = getSidebarSessionTagListItemLabel(item);
+  const label = getSidebarSessionTagListItemLabel(item, [customSessionTags]);
 
   const setRowRef = (element: HTMLDivElement | null) => {
     setSettingsSortableRowElement(sortable, element);
@@ -2058,6 +2152,25 @@ export function SidebarTagListSettingsRow({
         />
         <TooltipContent sideOffset={6}>{item.visible ? 'Hide' : 'Show'}</TooltipContent>
       </Tooltip>
+      {onDelete ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                aria-label={`Delete ${label}`}
+                className='shrink-0'
+                onClick={onDelete}
+                size='icon'
+                type='button'
+                variant='ghost'
+              >
+                <IconTrash aria-hidden='true' size={16} stroke={1.9} />
+              </Button>
+            }
+          />
+          <TooltipContent sideOffset={6}>Delete tag</TooltipContent>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }

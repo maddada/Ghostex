@@ -19,6 +19,7 @@ import {
 } from './helpers/bootstrap';
 import { sameStringSet } from './helpers/records';
 import {
+  isCustomSessionTagsState,
   isSidebarProjectCollectionsState,
   isSidebarSpacesState,
   parseGpuiRemotePresentationProjectId,
@@ -239,6 +240,9 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       onSidebarSpaces: (state) => {
         this.forwardSidebarSpacesFromGxserver(state);
       },
+      onCustomSessionTags: (state) => {
+        this.forwardCustomSessionTagsFromGxserver(state);
+      },
       onSnapshot: (snapshot) => {
         this.notePresentationStreamAcknowledged();
         this.applyPresentationSnapshot(snapshot, this.hasHydrated ? 'patch' : 'hydrate');
@@ -355,6 +359,9 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     }
     if (isSidebarSpacesState(snapshot.sidebarSpaces)) {
       this.forwardSidebarSpacesFromGxserver(snapshot.sidebarSpaces);
+    }
+    if (isCustomSessionTagsState(snapshot.customSessionTags)) {
+      this.forwardCustomSessionTagsFromGxserver(snapshot.customSessionTags);
     }
     this.adoptWorkspaceGroupsFromGxserver(snapshot.workspaceGroups);
     this.publishPresentation(kind);

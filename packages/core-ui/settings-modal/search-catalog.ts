@@ -557,7 +557,8 @@ export function getSettingsSearchSectionDefinitions() {
             { label: 'Disable tag', value: 'disable' },
             { label: 'Reorder tags', value: 'reorder' },
           ],
-          subtitle: 'Reorder, hide, or disable sidebar tag filters and their separators.',
+          subtitle:
+            'Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.',
           title: 'Tag Filter List',
         },
       ],

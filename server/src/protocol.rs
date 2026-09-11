@@ -427,6 +427,15 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         | "/api/readSidebarSpaces"
         | "/api/updateSidebarSpaces"
+        /*
+        CDXC:Sessions 2026-09-11 WHY:
+        The custom tag catalog belongs to the daemon whose sessions carry the
+        ids, so a remote gxserver section reads and edits its own catalog
+        exactly like its Spaces. The document carries only bounded ids, names,
+        icon ids, and colors.
+        */
+        | "/api/readCustomSessionTags"
+        | "/api/updateCustomSessionTags"
         | "/api/scheduleDelayedSend"
         | "/api/cancelDelayedSend"
         | "/api/readDelayedSends"

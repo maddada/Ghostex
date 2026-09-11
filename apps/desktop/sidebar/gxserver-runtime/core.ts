@@ -130,6 +130,7 @@ import type {
   GxserverSidebarHudResponse,
   GxserverSidebarProjectCollectionsState,
   GxserverSidebarSpacesState,
+  GxserverCustomSessionTagsState,
 } from '@/packages/shared/gxserver-protocol';
 import { NAVIGATION_HISTORY_SCOPE_GPUI } from '@/packages/shared/navigation-history/navigation-history-contract';
 import { EMPTY_NOTIFICATION_FEED_STATE } from '@/packages/shared/notification-feed/notification-feed-contract';
@@ -555,6 +556,11 @@ export class GpuiSidebarRuntime {
   sidebarSpacesServerSyncPending = false;
   lastForwardedSidebarSpacesJson: string | undefined;
   lastForwardedRemoteSidebarSpacesJsonByMachineId = new Map<string, string>();
+  latestCustomSessionTagsUpdate: GxserverCustomSessionTagsState | undefined;
+  customSessionTagsServerSyncTimeoutId: number | undefined;
+  customSessionTagsServerSyncPending = false;
+  lastForwardedCustomSessionTagsJson: string | undefined;
+  lastForwardedRemoteCustomSessionTagsJsonByMachineId = new Map<string, string>();
   workspaceTerminalLifecycleBridgeRetryId: number | undefined;
 
   start(): void {
@@ -629,7 +635,8 @@ export class GpuiSidebarRuntime {
         message.type === 'removeProject' ||
         message.type === 'runSidebarAgent' ||
         message.type === 'setSessionNote' ||
-        message.type === 'toggleCloseAfterDone'
+        message.type === 'toggleCloseAfterDone' ||
+        message.type === 'updateCustomSessionTags'
       ) {
         void this.handleSidebarMessage(message);
         return;
@@ -1100,6 +1107,24 @@ export class GpuiSidebarRuntime {
       this.publishRemotePresentationPatch();
       return;
     }
+    if (remoteEvent.payload.type === 'customSessionTagsChanged') {
+      if (remoteEvent.payload.revision < previous.revision) {
+        this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
+        return;
+      }
+      const snapshot: GxserverPresentationSnapshot = {
+        ...previous,
+        customSessionTags: remoteEvent.payload.customSessionTags,
+        revision: remoteEvent.payload.revision as GxserverPresentationSnapshot['revision'],
+      };
+      this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
+      this.forwardRemoteCustomSessionTagsFromGxserver(
+        remoteEvent.remoteMachineId,
+        remoteEvent.payload.customSessionTags
+      );
+      this.publishRemotePresentationPatch();
+      return;
+    }
     if (remoteEvent.payload.type === 'workspaceGroupsChanged') {
       if (remoteEvent.payload.revision < previous.revision) {
         this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
@@ -1401,6 +1426,13 @@ export class GpuiSidebarRuntime {
           return;
         }
         this.queueSidebarSpacesServerSync(message.state);
+        return;
+      case 'updateCustomSessionTags':
+        if (message.remoteMachineId) {
+          await this.updateRemoteCustomSessionTags(message.remoteMachineId, message.state);
+          return;
+        }
+        this.queueCustomSessionTagsServerSync(message.state);
         return;
       case 'requestPreviousSessions':
         await this.requestPreviousSessions(message);

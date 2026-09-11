@@ -499,7 +499,7 @@
     {
       "key": "sidebarSessionTagListItems",
       "title": "Tag Filter List",
-      "subtitle": "Reorder, hide, or disable sidebar tag filters and their separators.",
+      "subtitle": "Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.",
       "tab": "settings",
       "tabTitle": "General",
       "group": "sidebar",

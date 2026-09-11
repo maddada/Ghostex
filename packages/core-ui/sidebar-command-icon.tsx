@@ -158,6 +158,8 @@ export const SIDEBAR_COMMAND_ICON_OPTIONS = SIDEBAR_COMMAND_ICON_IDS.map((icon) 
 export type SidebarCommandIconGlyphProps = {
   className?: string;
   color?: string;
+  /** Lets tag surfaces keep their `[data-session-tag]` hooks when the glyph draws a custom session tag. */
+  'data-session-tag'?: string;
   icon: SidebarCommandIcon;
   size?: number;
   stroke?: number;
@@ -166,10 +168,20 @@ export type SidebarCommandIconGlyphProps = {
 export function SidebarCommandIconGlyph({
   className,
   color,
+  'data-session-tag': dataSessionTag,
   icon,
   size = 15,
   stroke = 1.8,
 }: SidebarCommandIconGlyphProps) {
   const Icon = ICON_COMPONENT_BY_ID[icon];
-  return <Icon aria-hidden='true' className={className} color={color} size={size} stroke={stroke} />;
+  return (
+    <Icon
+      aria-hidden='true'
+      className={className}
+      color={color}
+      data-session-tag={dataSessionTag}
+      size={size}
+      stroke={stroke}
+    />
+  );
 }

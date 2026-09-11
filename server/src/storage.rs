@@ -1615,6 +1615,45 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 35;
     "#,
     },
+    Migration {
+        id: "0036_custom_session_tags",
+        /*
+        CDXC:Sessions 2026-09-11 WHY:
+        The sessionTag CHECK listed the built-in tags by value, so a custom
+        `custom-…` id could never be persisted. SQLite cannot alter a CHECK in
+        place, and the usual table rebuild is off the table now: dropping
+        `sessions` with foreign keys on cascade-deletes every `delayed_sends`
+        row. Renaming the column, re-adding it with the wider CHECK, copying
+        the values across, and dropping the old column keeps the table, its
+        foreign keys, and its indexes intact; the only visible change is that
+        sessionTag is now the last column, which nothing reads positionally.
+        The GLOB only pins the prefix and character class; the exact id shape
+        is enforced by normalize_optional_session_tag.
+        */
+        sql: r#"
+      ALTER TABLE sessions RENAME COLUMN sessionTag TO sessionTagLegacy;
+      ALTER TABLE sessions ADD COLUMN sessionTag TEXT CHECK (
+        sessionTag IS NULL OR sessionTag IN (
+          'favorite',
+          'high-priority',
+          'research',
+          'todo',
+          'in-progress',
+          'testing',
+          'blocked',
+          'low-priority',
+          'on-hold',
+          'done',
+          'bug',
+          'feature',
+          'design'
+        ) OR sessionTag GLOB 'custom-[a-z0-9]*'
+      );
+      UPDATE sessions SET sessionTag = sessionTagLegacy;
+      ALTER TABLE sessions DROP COLUMN sessionTagLegacy;
+      PRAGMA user_version = 36;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1663,10 +1702,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 35);
+        assert_eq!(user_version, 36);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 35);
+        assert_eq!(schema_migration_count(&db), 36);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1754,13 +1793,13 @@ mod tests {
                 "updatedAt",
                 "lastActiveAt",
                 "sidebarOrder",
-                "sessionTag",
                 "settledAt",
                 "settledOverride",
                 "settledOverrideAt",
                 "snoozedAt",
                 "snoozedUntil",
                 "isParked",
+                "sessionTag",
             ]
         );
         assert_eq!(

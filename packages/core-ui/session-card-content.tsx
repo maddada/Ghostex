@@ -29,6 +29,7 @@ import { getSidebarAgentNameByIcon, type SidebarAgentIcon } from '../shared/side
 import { AGENT_LOGOS, COLORED_AGENT_LOGOS } from './agent-logos';
 import {
   getEffectiveSessionTag,
+  getSessionTagCatalogs,
   getSidebarSessionTagLabel,
   SessionTagIcon,
   type SidebarSessionTag,
@@ -547,7 +548,7 @@ function formatSessionTagTooltipHeadingText(
   headingText: string
 ): string {
   const sessionTag = getEffectiveSessionTag(session);
-  const label = getSidebarSessionTagLabel(sessionTag);
+  const label = getSidebarSessionTagLabel(sessionTag, getSessionTagCatalogs());
   if (!label) {
     return headingText;
   }

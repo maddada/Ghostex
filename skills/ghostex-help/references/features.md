@@ -87,8 +87,9 @@ session inside the project you are already in switches to Agents.
   collapsible Parked section at the bottom. Use Unpark or Unpark selected to
   bring them back. Parking keeps sessions running unless Sleep session when
   parking is enabled (off by default). Show tag menu when parking (off by
-  default) makes Park open the Tag as menu so the session can be tagged as it
-  is parked; closing the menu without picking a tag still parks it. Unpark
+  default) makes Park open the Tag as menu: pick a tag to tag and park in one
+  step, or the Keep current tag row at the top to park as is. Closing that
+  menu without choosing does not park. Unpark
   after sending a message (on by default) moves a parked session back out of
   the Parked section as soon as you send it a message from chat or type a
   prompt into its terminal; Codex only notices chat sends. All four settings
@@ -107,7 +108,17 @@ A session is one terminal pane. Sessions persist across app restarts (zmx keeps
 the process alive) and are restored with the agent's resume command. From the
 sidebar or `ghostex`, a session can be focused, renamed, pinned, tagged,
 slept and woken (`ghostex sleep|wake <selector>`), forked, closed, or moved
-between panes and groups. Claude and Codex name their own sessions; Ghostex
+between panes and groups. A session carries one tag at a time, chosen from the
+Tag as menu (right-click the session): the built-in Priority, Progress, and
+Type tags, plus any custom tags you define. Create a custom tag with New tag at
+the bottom of the Tag as menu (it is applied to that session right away) or
+with Add tag in Settings > General > Sidebar > Sidebar Tags, where custom tags
+appear in the same drag list as the built-in ones: drag to reorder, use the
+switch or eye to hide them from menus and filters, and the trash button to
+delete one (sessions that carried it become untagged). Each custom tag has a
+name, an icon from the shared icon list, and a color from the preset list; the
+mobile app shows the same tags. `ghostex tag-session <selector> <tag>` accepts a
+custom tag by name. Claude and Codex name their own sessions; Ghostex
 syncs those names without running a first-prompt title job or blocking terminal
 input. Pi and OMP use the Title Generation Agent for first-prompt names.
 Manual Generate Name and `/rename` in chat remain available for Claude and Codex.
@@ -208,15 +219,20 @@ Settings > Accounts saves Claude and Codex logins and marks each one Automatic
 or Manual. Quick launch, the main launcher row, and any session started without
 picking an account use the Account for new sessions rule under each
 provider's New session defaults. The automatic rules only consider Automatic
-accounts: Most limit remaining (the default) picks the account with the most
-limit left, Soonest reset the one whose limit resets first, Most used first
-keeps draining the account already in use, and Same as last session reuses the
-account of the last session. Pick a specific account instead to always start
+accounts: Auto (the default) weighs remaining limit against time to reset and
+picks the account that can absorb the most usage before any of its limits
+resets, Most limit remaining picks the account with the most limit left, Soonest
+reset the one whose limit resets first, Most used first keeps draining the
+account already in use, and Same as last session reuses the account of the last
+session. Pick a specific account instead to always start
 with it. When the rule finds no account, new sessions use the current CLI login.
 Switching a running Claude or Codex session to another account, from More
 actions > Switch Account or automatically when its account hits a usage limit,
 exits the CLI inside its own terminal and resumes the same conversation there,
-so the terminal tab and the chat stay open and a "." continues the work.
+so the terminal tab and the chat stay open. A manual switch waits for your next
+message without sending anything. An automatic switch sends a "." to continue
+the interrupted work once the new account is ready. Configured recovery after
+errors can also continue work on the same account.
 Account sign-in terminals open in the active local project's folder and appear
 under that project. Before a first project is chosen, sign-in uses the home folder.
 
@@ -423,8 +439,12 @@ docs directory), `hideProjectHeaderDiffStats`,
   Its Titlebar account usage section lets you star saved Claude and Codex
   accounts to show their usage in the desktop titlebar, or unstar them to hide
   it. These are the same per-account stars available in Settings > Accounts.
-  Each button opens that login's live limits, reset times, and extra usage or
-  rate limit resets. More model limits starts collapsed. Click the Codex reset
+  Claude buttons show the two tightest of the weekly, five-hour, and Fable
+  limits, so the Fable limit is never hidden when it is running out; launcher
+  and picker rows and the Accounts figures use the same two numbers. Each
+  button opens that login's live limits, reset times, and extra usage or rate
+  limit resets, with the Fable limit as a main bar for Claude. More model
+  limits starts collapsed. Click the Codex reset
   count to see each reset's expiry date. Redeem a reset opens a Codex terminal
   in the active project's folder, shows it under that project in the sidebar,
   and redeems the reset expiring soonest for the selected account. The project

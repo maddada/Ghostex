@@ -224,6 +224,14 @@ pub fn usage() -> String {
             "Replace the spaces state; prints the normalized result",
         ),
         format_help_command(
+            "read-custom-session-tags --json",
+            "Print the daemon's custom session tag catalog",
+        ),
+        format_help_command(
+            "update-custom-session-tags --state-json json --json",
+            "Replace the custom session tag catalog; prints the normalized result",
+        ),
+        format_help_command(
             "focus-session <id|--index n|--session-number n>",
             "Focus a session by raw selector",
         ),
@@ -362,7 +370,10 @@ pub fn usage() -> String {
             "sleep-session|pin-session <id> [true|false]",
             "Set raw session flags",
         ),
-        format_help_command("tag-session <id> <tag|none>", "Set or clear a session tag"),
+        format_help_command(
+            "tag-session <id> <tag|none>",
+            "Set or clear a session tag (built-in tag, or a custom tag by name or id)",
+        ),
         format_help_command(
             "delayed-send <id> (--delay-ms <n> | --when-agent-finishes | --when-all-agents-finish) | --cancel",
             "Arm or cancel a Session Automations Enter trigger",

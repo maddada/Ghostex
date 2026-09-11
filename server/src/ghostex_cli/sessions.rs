@@ -545,6 +545,17 @@ fn fetch_live_gxserver_session_list(flags: &Flags) -> CliResult<Value> {
         snapshot.and_then(|snapshot| snapshot.get("sidebarSpaces")),
     );
     /*
+     * CDXC:Sessions 2026-09-11 WHY:
+     * Session rows above carry custom tag ids, and the phone reaches gxserver
+     * only through this CLI, so the catalog that names and colors those ids
+     * rides the same result instead of needing a second SSH exec.
+     */
+    insert_present(
+        &mut result,
+        "customSessionTags",
+        snapshot.and_then(|snapshot| snapshot.get("customSessionTags")),
+    );
+    /*
      * CDXC:StateSync 2026-07-29-00:00:
      * Machine-scoped capability flags travel with the inventory so a client
      * talking to an older daemon hides settle/snooze affordances instead of
@@ -1642,6 +1653,9 @@ fn to_mobile_session_list(result: &Value) -> Value {
     if let Some(spaces) = to_mobile_sidebar_spaces(result.get("sidebarSpaces")) {
         map.insert("sidebarSpaces".to_string(), spaces);
     }
+    if let Some(tags) = to_mobile_custom_session_tags(result.get("customSessionTags")) {
+        map.insert("customSessionTags".to_string(), tags);
+    }
     if let Some(groups) = to_mobile_workspace_groups(result.get("workspaceGroups")) {
         map.insert("workspaceGroups".to_string(), groups);
     }
@@ -1867,6 +1881,67 @@ fn to_mobile_sidebar_spaces(spaces_state: Option<&Value>) -> Option<Value> {
     }))
 }
 
+fn to_mobile_custom_session_tags(tags_state: Option<&Value>) -> Option<Value> {
+    /*
+     * CDXC:Sessions 2026-09-11 WHY:
+     * Mobile keeps the server-normalized {order, tags} contract but re-sanitizes
+     * rows because fallback caches may carry stale shapes, exactly like the
+     * Spaces compactor above it. An empty catalog collapses to an absent key.
+     */
+    let object = tags_state?.as_object()?;
+    let mut tags = Map::new();
+    if let Some(entries) = object.get("tags").and_then(Value::as_object) {
+        for (tag_id, tag) in entries {
+            if !crate::custom_session_tags::is_custom_session_tag_id(tag_id) {
+                continue;
+            }
+            let name = match tag.get("name") {
+                Some(Value::String(text)) if !text.is_empty() => text.clone(),
+                _ => "Tag".to_string(),
+            };
+            let icon = match tag.get("icon") {
+                Some(Value::String(text)) if !text.is_empty() => text.clone(),
+                _ => "sparkles".to_string(),
+            };
+            let color = match tag.get("color") {
+                Some(Value::String(text)) if !text.is_empty() => text.clone(),
+                _ => "#f3cc5f".to_string(),
+            };
+            tags.insert(
+                tag_id.clone(),
+                json!({
+                    "color": color,
+                    "icon": icon,
+                    "name": name,
+                    "tagId": tag_id,
+                }),
+            );
+        }
+    }
+    if tags.is_empty() {
+        return None;
+    }
+    let mut order: Vec<Value> = Vec::new();
+    let mut seen_order_ids = std::collections::HashSet::new();
+    if let Some(entries) = object.get("order").and_then(Value::as_array) {
+        for entry in entries {
+            let Some(id) = entry.as_str() else { continue };
+            if tags.contains_key(id) && seen_order_ids.insert(id.to_string()) {
+                order.push(Value::String(id.to_string()));
+            }
+        }
+    }
+    for tag_id in tags.keys() {
+        if seen_order_ids.insert(tag_id.clone()) {
+            order.push(Value::String(tag_id.clone()));
+        }
+    }
+    Some(json!({
+        "order": order,
+        "tags": tags,
+    }))
+}
+
 fn to_mobile_session_summary(session: &Value) -> Value {
     let s = |key: &str| session.get(key);
     let mut map = Map::new();
@@ -1881,6 +1956,8 @@ fn to_mobile_session_summary(session: &Value) -> Value {
     insert_js(&mut map, "displayTitle", &[s("displayTitle"), s("title")]);
     insert_js(&mut map, "groupId", &[s("groupId")]);
     insert_js(&mut map, "isFavorite", &[s("isFavorite")]);
+    // CDXC:Sessions 2026-09-11 WHY: the summary forwarded only isFavorite, so the phone could never show a non-Favorite tag; sessionTag is the marker every other surface renders.
+    insert_js(&mut map, "sessionTag", &[s("sessionTag")]);
     insert_js(&mut map, "isFocused", &[s("isFocused")]);
     insert_js(&mut map, "isLive", &[s("isLive")]);
     insert_js(&mut map, "isParked", &[s("isParked")]);
