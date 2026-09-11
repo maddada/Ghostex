@@ -165,22 +165,28 @@ mod tests {
     #[test]
     fn subagent_tail_lifecycle_stays_working_until_completion() {
         for (agent, lines) in [
-            (SessionChatTranscriptAgent::Claude, vec![
-                r#"{"type":"user","uuid":"u1","isSidechain":true,"message":{"role":"user","content":"Inspect the code."}}"#,
-                r#"{"type":"assistant","uuid":"a1","isSidechain":true,"message":{"stop_reason":null,"content":[{"type":"text","text":"I will inspect the files."}]}}"#,
-                r#"{"type":"assistant","uuid":"a2","isSidechain":true,"message":{"stop_reason":null,"content":[{"type":"thinking","thinking":"Checking the implementation."}]}}"#,
-                r#"{"type":"assistant","uuid":"a3","isSidechain":true,"message":{"stop_reason":"tool_use","content":[{"type":"tool_use","id":"tool1","name":"Read","input":{"file_path":"app.ts"}}]}}"#,
-                r#"{"type":"user","uuid":"u2","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool1","content":"source"}]}}"#,
-                r#"{"type":"assistant","uuid":"a4","isSidechain":true,"message":{"stop_reason":"end_turn","content":[{"type":"text","text":"Finished the inspection."}]}}"#,
-            ]),
-            (SessionChatTranscriptAgent::Codex, vec![
-                r#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#,
-                r#"{"type":"event_msg","payload":{"type":"user_message","message":"Inspect the code."}}"#,
-                r#"{"type":"response_item","payload":{"type":"function_call","id":"fc1","call_id":"call1","name":"exec_command","arguments":"{\"cmd\":\"cat app.ts\"}"}}"#,
-                r#"{"type":"response_item","payload":{"type":"function_call_output","call_id":"call1","output":"source"}}"#,
-                r#"{"type":"event_msg","payload":{"type":"agent_message","message":"Finished the inspection."}}"#,
-                r#"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}"#,
-            ]),
+            (
+                SessionChatTranscriptAgent::Claude,
+                vec![
+                    r#"{"type":"user","uuid":"u1","isSidechain":true,"message":{"role":"user","content":"Inspect the code."}}"#,
+                    r#"{"type":"assistant","uuid":"a1","isSidechain":true,"message":{"stop_reason":null,"content":[{"type":"text","text":"I will inspect the files."}]}}"#,
+                    r#"{"type":"assistant","uuid":"a2","isSidechain":true,"message":{"stop_reason":null,"content":[{"type":"thinking","thinking":"Checking the implementation."}]}}"#,
+                    r#"{"type":"assistant","uuid":"a3","isSidechain":true,"message":{"stop_reason":"tool_use","content":[{"type":"tool_use","id":"tool1","name":"Read","input":{"file_path":"app.ts"}}]}}"#,
+                    r#"{"type":"user","uuid":"u2","isSidechain":true,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"tool1","content":"source"}]}}"#,
+                    r#"{"type":"assistant","uuid":"a4","isSidechain":true,"message":{"stop_reason":"end_turn","content":[{"type":"text","text":"Finished the inspection."}]}}"#,
+                ],
+            ),
+            (
+                SessionChatTranscriptAgent::Codex,
+                vec![
+                    r#"{"type":"event_msg","payload":{"type":"task_started","turn_id":"t1"}}"#,
+                    r#"{"type":"event_msg","payload":{"type":"user_message","message":"Inspect the code."}}"#,
+                    r#"{"type":"response_item","payload":{"type":"function_call","id":"fc1","call_id":"call1","name":"exec_command","arguments":"{\"cmd\":\"cat app.ts\"}"}}"#,
+                    r#"{"type":"response_item","payload":{"type":"function_call_output","call_id":"call1","output":"source"}}"#,
+                    r#"{"type":"event_msg","payload":{"type":"agent_message","message":"Finished the inspection."}}"#,
+                    r#"{"type":"event_msg","payload":{"type":"task_complete","turn_id":"t1"}}"#,
+                ],
+            ),
         ] {
             for count in 1..=lines.len() {
                 let path = write_temp_transcript(&lines[..count]);
@@ -301,9 +307,7 @@ mod tests {
                 text_block(
                     "<bash-input data-ghostex-escaped=\"html\">printf 'BANG_TEST\\n'</bash-input>"
                 ),
-                text_block(
-                    "<bash-stdout data-ghostex-escaped=\"html\">BANG_TEST</bash-stdout>"
-                ),
+                text_block("<bash-stdout data-ghostex-escaped=\"html\">BANG_TEST</bash-stdout>"),
             ]
         );
 

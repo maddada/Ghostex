@@ -605,7 +605,16 @@ pub(crate) fn switch_draft_agent(
     */
     let mut runtime_settings = object_field(&session, "runtimeSettings");
     for key in [
-        "accountId", "accountName", "accountColor", "accountProvider", "accountBaseCommand", "accountCommand", "accountRecovery", "accountRecoverySuppressed", "accountPolicyDefault", "accountPolicyOverride",
+        "accountId",
+        "accountName",
+        "accountColor",
+        "accountProvider",
+        "accountBaseCommand",
+        "accountCommand",
+        "accountRecovery",
+        "accountRecoverySuppressed",
+        "accountPolicyDefault",
+        "accountPolicyOverride",
         "agentActivity",
         "agentSessionId",
         "agentSessionPath",

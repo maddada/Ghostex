@@ -3,7 +3,7 @@ use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
 
 /// CDXC:AgentProviders 2026-09-09 DECISION:

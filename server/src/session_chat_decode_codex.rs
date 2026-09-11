@@ -221,7 +221,9 @@ fn codex_event_message(
                 let output = if formatted_output.trim().is_empty() {
                     format!(
                         "Exit code: {}",
-                        item.get("exit_code").and_then(Value::as_i64).unwrap_or_default()
+                        item.get("exit_code")
+                            .and_then(Value::as_i64)
+                            .unwrap_or_default()
                     )
                 } else {
                     formatted_output.trim_end().to_string()

@@ -134,12 +134,17 @@ pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHisto
 }
 
 #[cfg(unix)]
-pub(crate) fn read_zmx_session_screen_capture_vt(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
+pub(crate) fn read_zmx_session_screen_capture_vt(
+    zmx_name: &str,
+) -> Result<ZmxHistoryCapture, String> {
     read_zmx_session_screen_capture_format(zmx_name, 1)
 }
 
 #[cfg(unix)]
-fn read_zmx_session_screen_capture_format(zmx_name: &str, format: u8) -> Result<ZmxHistoryCapture, String> {
+fn read_zmx_session_screen_capture_format(
+    zmx_name: &str,
+    format: u8,
+) -> Result<ZmxHistoryCapture, String> {
     let socket_path = zmx_session_socket_path(zmx_name);
     let mut stream = std::os::unix::net::UnixStream::connect(&socket_path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::ConnectionRefused {
@@ -258,12 +263,17 @@ pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHisto
 }
 
 #[cfg(not(unix))]
-pub(crate) fn read_zmx_session_screen_capture_vt(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
+pub(crate) fn read_zmx_session_screen_capture_vt(
+    zmx_name: &str,
+) -> Result<ZmxHistoryCapture, String> {
     read_zmx_session_screen_capture_format(zmx_name, true)
 }
 
 #[cfg(not(unix))]
-fn read_zmx_session_screen_capture_format(zmx_name: &str, vt: bool) -> Result<ZmxHistoryCapture, String> {
+fn read_zmx_session_screen_capture_format(
+    zmx_name: &str,
+    vt: bool,
+) -> Result<ZmxHistoryCapture, String> {
     let zmx = require_bundled_zmx()?;
     let result = run_zmx_interaction_command(
         build_zmx_screen_capture_command(

@@ -59,9 +59,16 @@ pub(crate) fn create_agent_session_params_for_project(
     let configured_command = read_text_from_map(&agent_config, "command")
         .or_else(|| read_text_from_map(&launch_settings, "agentCommand"));
     if let Some(command) = configured_command.as_ref() {
-        runtime_settings.entry("accountBaseCommand").or_insert(json!(command));
+        runtime_settings
+            .entry("accountBaseCommand")
+            .or_insert(json!(command));
     }
-    let account_command = crate::accounts::launch::apply_new_session(db, &agent_id, agent_icon.as_deref(), &mut runtime_settings)?;
+    let account_command = crate::accounts::launch::apply_new_session(
+        db,
+        &agent_id,
+        agent_icon.as_deref(),
+        &mut runtime_settings,
+    )?;
     let launch_plan = build_agent_launch_plan(AgentLaunchInput {
         accept_all_mode: read_text_from_map(&agent_config, "acceptAllMode")
             .or_else(|| read_text_from_map(&launch_settings, "acceptAllMode")),
