@@ -635,7 +635,13 @@ impl TerminalView {
     ) -> anyhow::Result<Self> {
         let (sink, event_rx) = Self::event_channel();
         let model = TerminalModel::spawn(config, sink)?;
-        Ok(Self::from_model(model, event_rx, font, context_menu_handler, cx))
+        Ok(Self::from_model(
+            model,
+            event_rx,
+            font,
+            context_menu_handler,
+            cx,
+        ))
     }
 
     /// Sink/receiver pair for [`from_model`](Self::from_model), letting

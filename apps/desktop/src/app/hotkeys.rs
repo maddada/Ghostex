@@ -471,9 +471,7 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
             .collect::<HashSet<_>>();
         for (action_id, key) in persisted_hotkeys {
             // CDXC:SessionChat 2026-09-11 WHY: Chat owns this configurable chord in its capture handler, including editor focus; binding it natively would swallow the page key or affect terminals.
-            if action_id == "scrollChatToBottom"
-                || known_action_ids.contains(action_id.as_str())
-            {
+            if action_id == "scrollChatToBottom" || known_action_ids.contains(action_id.as_str()) {
                 continue;
             }
             if key

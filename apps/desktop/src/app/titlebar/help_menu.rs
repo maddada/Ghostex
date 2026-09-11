@@ -3,9 +3,6 @@
 
 use std::time::Duration;
 
-use gpui::div;
-use gpui::prelude::FluentBuilder as _;
-use gpui::px;
 use gpui::AnyElement;
 use gpui::FontWeight;
 use gpui::InteractiveElement as _;
@@ -15,10 +12,13 @@ use gpui::MouseDownEvent;
 use gpui::ParentElement as _;
 use gpui::Styled as _;
 use gpui::Window;
+use gpui::div;
+use gpui::prelude::FluentBuilder as _;
+use gpui::px;
+use gpui_component::ElementExt as _;
 use gpui_component::menu::PopupMenu;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
-use gpui_component::ElementExt as _;
 
 use super::popup_menu_builders::titlebar_popup_menu_with_scroll_behavior;
 use crate::app::consts::*;

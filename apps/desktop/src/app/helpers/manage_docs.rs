@@ -14,12 +14,12 @@ use std::{
 
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Security::Cryptography::{
-    BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
+    BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
 };
 
 use anyhow::Result;
 use futures::StreamExt as _;
-use gpui::{prelude::FluentBuilder as _, Action, AppContext as _, Entity, ParentElement as _};
+use gpui::{Action, AppContext as _, Entity, ParentElement as _, prelude::FluentBuilder as _};
 
 use crate::app::helpers::*;
 use crate::*;
