@@ -47,14 +47,31 @@ pub fn read_remote_access_identity() -> Result<RemoteAccessIdentity> {
 }
 
 /// macOS keeps the user-facing name in `ComputerName` (what Sharing shows),
-/// which can differ from the kernel hostname; every other OS shows `hostname`.
+/// which can differ from the kernel hostname. Unix reads the kernel value
+/// directly so a minimal gxserver PATH does not make remote pairing fail.
 fn read_computer_name() -> Result<String> {
     if cfg!(target_os = "macos") {
         if let Some(name) = read_first_line("scutil", &["--get", "ComputerName"]) {
             return Ok(name);
         }
     }
+    #[cfg(unix)]
+    if let Some(name) = read_unix_hostname() {
+        return Ok(name);
+    }
     read_first_line("hostname", &[]).with_context(|| "read this computer's name")
+}
+
+#[cfg(unix)]
+fn read_unix_hostname() -> Option<String> {
+    let mut buffer = [0_u8; 256];
+    let status = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
+    if status != 0 {
+        return None;
+    }
+    let length = buffer.iter().position(|byte| *byte == 0)?;
+    let hostname = std::str::from_utf8(&buffer[..length]).ok()?.trim();
+    (!hostname.is_empty()).then(|| hostname.to_string())
 }
 
 fn read_login_username() -> Result<String> {
