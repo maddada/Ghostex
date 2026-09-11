@@ -1,4 +1,4 @@
-import { normalizeAccountIndicatorInput } from '@/packages/shared/agent-accounts';
+import { NEW_SESSION_ACCOUNT_RULES, normalizeAccountIndicatorInput } from '@/packages/shared/agent-accounts';
 import { AccountIndicator } from './indicator';
 import { AccountTitlebarStar } from './titlebar-star';
 import { AccountConnectFlow } from './connect-flow';
@@ -34,6 +34,7 @@ import type {
   AgentAccount,
   AgentAccountsRequest,
   AgentAccountsState,
+  NewSessionAccountChoice,
 } from '@/packages/shared/agent-accounts';
 import {
   getAccountsConnections,
@@ -347,7 +348,9 @@ function AccountManager({
                             </span>
                             {account.email !== account.name || account.usageError ? (
                               <span className='block truncate text-[13px] font-normal text-muted-foreground'>
-                                <AccountText text={account.usageError ?? (account.email || 'Saved login unavailable')} />
+                                <AccountText
+                                  text={account.usageError ?? (account.email || 'Saved login unavailable')}
+                                />
                               </span>
                             ) : null}
                           </span>
@@ -458,8 +461,9 @@ function AccountManager({
                         accounts={accounts}
                         busy={busy}
                         label={label}
-                        onChange={(accountId) => void request({ operation: 'defaultAccount', provider, accountId })}
-                        value={data.defaultAccounts[provider] ?? ''}
+                        choice={data.newSessionAccounts?.[provider] ?? { rule: 'mostRemaining' }}
+                        onChange={(choice) => void request({ operation: 'defaultAccount', provider, choice })}
+                        resolved={defaultAccount}
                       />
                       <PolicySettingRows
                         scope={`${provider} defaults`}
@@ -484,38 +488,57 @@ function AccountManager({
   );
 }
 
+/** CDXC:AgentProviders 2026-09-11 DECISION: User: the row lists the automatic rules first, Most limit remaining on top as the default, then each saved account so one specific account can be pinned instead. Choices saved before these rules existed migrate to Most limit remaining. SEE-ALSO: server/src/accounts/default_account.rs. */
 function DefaultAccountRow({
   accounts,
   busy,
+  choice,
   label,
   onChange,
-  value,
+  resolved,
 }: {
   accounts: AgentAccount[];
   busy: boolean;
+  choice: NewSessionAccountChoice;
   label: string;
-  onChange: (accountId: string | null) => void;
-  value: string;
+  onChange: (choice: NewSessionAccountChoice) => void;
+  resolved: AgentAccount | undefined;
 }) {
   const formatAccountText = useAccountText();
   const id = useId();
+  const value = choice.rule === 'pinned' ? choice.id : choice.rule;
+  const ruleLabel = (rule: (typeof NEW_SESSION_ACCOUNT_RULES)[number]) =>
+    rule.rule === choice.rule && resolved ? `${rule.label} · ${formatAccountText(resolved.name)}` : rule.label;
   return (
     <SettingRow
-      description={`Quick launch starts new ${label} sessions with this saved account. Existing sessions keep their saved settings.`}
+      description={`Quick launch starts new ${label} sessions with this account. The automatic rules only consider accounts set to Automatic: Most limit remaining picks the account with the most limit left, Soonest reset the one whose limit resets first, Most used first keeps draining the account already in use, and Same as last session reuses the account of the last session. Existing sessions keep their saved settings.`}
       htmlFor={id}
       label='Account for new sessions'
     >
       <SettingsSelect
         disabled={busy}
         disabledReason='Accounts are being updated.'
-        items={accounts.map((account) => ({ label: <AccountText text={account.name} />, value: account.id }))}
-        onValueChange={(next) => onChange(next || null)}
+        items={[
+          ...NEW_SESSION_ACCOUNT_RULES.map((rule) => ({ label: ruleLabel(rule), value: rule.rule })),
+          ...accounts.map((account) => ({ label: <AccountText text={account.name} />, value: account.id })),
+        ]}
+        onValueChange={(next) => {
+          const rule = NEW_SESSION_ACCOUNT_RULES.find((candidate) => candidate.rule === next);
+          onChange(rule ? { rule: rule.rule } : { rule: 'pinned', id: next });
+        }}
         value={value}
       >
         <SelectTrigger aria-label={`${label} account for new sessions`} className='h-8 px-3' id={id}>
           <SelectValue />
         </SelectTrigger>
         <SettingsSelectContent className='settings-list-select-content'>
+          <SelectGroup>
+            {NEW_SESSION_ACCOUNT_RULES.map((rule) => (
+              <SelectItem key={rule.rule} value={rule.rule} label={ruleLabel(rule)}>
+                {ruleLabel(rule)}
+              </SelectItem>
+            ))}
+          </SelectGroup>
           <SelectGroup>
             {accounts.map((account) => (
               <SelectItem key={account.id} value={account.id} label={formatAccountText(account.name)}>
@@ -618,7 +641,10 @@ function AccountEditor({
           <SettingsSelect
             items={accounts
               .filter((other) => other.id !== account.id)
-              .map((other) => ({ label: <AccountText text={`Slot ${other.selector} ${other.name}`} />, value: other.id }))}
+              .map((other) => ({
+                label: <AccountText text={`Slot ${other.selector} ${other.name}`} />,
+                value: other.id,
+              }))}
             onValueChange={(value) => setSwapTarget(value ?? '')}
             value={swapTarget}
           >
@@ -630,7 +656,11 @@ function AccountEditor({
                 {accounts
                   .filter((other) => other.id !== account.id)
                   .map((other) => (
-                    <SelectItem key={other.id} value={other.id} label={formatAccountText(`Slot ${other.selector} ${other.name}`)}>
+                    <SelectItem
+                      key={other.id}
+                      value={other.id}
+                      label={formatAccountText(`Slot ${other.selector} ${other.name}`)}
+                    >
                       Slot {other.selector} · <AccountText text={other.name} />
                     </SelectItem>
                   ))}
@@ -786,7 +816,13 @@ function AccountSetup({
             >
               <Switch checked={consent} id={`${id}-consent`} onCheckedChange={setConsent} />
             </SettingRow>
-            <SettingsListItem title={<>Add <AccountText text={account.name || account.email} /></>}>
+            <SettingsListItem
+              title={
+                <>
+                  Add <AccountText text={account.name || account.email} />
+                </>
+              }
+            >
               <Button
                 disabled={busy || !consent}
                 onClick={async () => {

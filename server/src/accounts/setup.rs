@@ -1,7 +1,7 @@
 use super::{endpoint, helpers, model::Provider, store};
 use crate::{domain::DomainStateError, server::AppState};
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use serde_json::{Map, Value, json};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use serde_json::{json, Map, Value};
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -48,7 +48,7 @@ pub(crate) fn cancel_all(state: &AppState) {
 }
 
 fn response(jobs: Vec<Value>) -> Value {
-    json!({"accounts":[],"helpers":[],"defaults":{"claude":{},"codex":{}},"defaultAccounts":{},"setupJobs":jobs})
+    json!({"accounts":[],"helpers":[],"defaults":{"claude":{},"codex":{}},"defaultAccounts":{},"newSessionAccounts":{},"setupJobs":jobs})
 }
 fn field<'a>(params: &'a Map<String, Value>, key: &str) -> Result<&'a str, DomainStateError> {
     params

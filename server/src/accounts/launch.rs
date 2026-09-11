@@ -158,19 +158,17 @@ pub(crate) fn apply_new_session(
         _ => return Ok(None),
     };
     let registry = store::read(db)?;
-    // CDXC:AgentProviders 2026-09-09 DECISION: User: use the current CLI login until an account is added to Ghostex for that provider, then use its saved accounts. This replaces the saved-account requirement; a normal CLI launch needs no account switcher and starts with automatic continuation off.
+    // CDXC:AgentProviders 2026-09-11 DECISION: User: use the current CLI login until an account is added to Ghostex for that provider (2026-09-09); once accounts exist, a launch without an explicit account uses the provider's Account for new sessions rule from Settings (Most limit remaining by default, see default_account.rs), which supersedes the lowest-slot choice. When that rule yields no account the launch keeps the current CLI login, so a normal CLI launch needs no account switcher and starts with automatic continuation off.
+    let snapshot = super::runtime::current_snapshot();
     let id = runtime
         .get("accountId")
         .and_then(Value::as_str)
-        .or_else(|| registry.default_accounts.get(&provider).map(String::as_str));
-    let Some(id) = id.or_else(|| {
-        registry
-            .accounts
-            .iter()
-            .filter(|a| a.provider == provider)
-            .min_by_key(|a| a.selector.parse::<u32>().unwrap_or(u32::MAX))
-            .map(|a| a.id.as_str())
-    }) else {
+        .map(str::to_string)
+        .or_else(|| {
+            super::default_account::quick_launch_account(&registry, &snapshot, provider)
+                .map(|a| a.id.clone())
+        });
+    let Some(id) = id else {
         runtime.insert("accountPolicyDefault".into(), json!(Policy::default()));
         return Ok(None);
     };
@@ -192,7 +190,9 @@ pub(crate) fn apply_new_session(
             .unwrap_or_default()));
     let home = home()?;
     let cmd = command(&home, account)?;
-    Ok(Some(assign(runtime, account, cmd)?))
+    let assigned = assign(runtime, account, cmd)?;
+    super::default_account::record_last_used(db, &registry, provider, &account.id)?;
+    Ok(Some(assigned))
 }
 pub(crate) fn home() -> Result<PathBuf, DomainStateError> {
     std::env::var_os("HOME")

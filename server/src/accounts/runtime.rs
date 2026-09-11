@@ -1,25 +1,36 @@
 use super::{helpers, model::*};
 use std::{
+    collections::BTreeMap,
     path::Path,
-    sync::{Mutex, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
+/// CDXC:AgentProviders 2026-09-11 WHY:
+/// The discovered-usage snapshot is process-wide rather than a field of AccountRuntime because new-session launch (`launch::apply_new_session`) runs from automations, board start-work, worktree ops, and drafts, which hold only a database handle and no AppState, yet must pick the account with the most limit remaining.
+static SNAPSHOT: RwLock<Snapshot> = RwLock::new(Snapshot {
+    accounts: Vec::new(),
+    errors: BTreeMap::new(),
+    fetched_at: None,
+});
+pub(crate) fn current_snapshot() -> Snapshot {
+    SNAPSHOT.read().unwrap_or_else(|e| e.into_inner()).clone()
+}
 #[derive(Default)]
 pub(crate) struct AccountRuntime {
     pub setup_jobs: super::setup::SetupJobs,
     pub mutations: Mutex<()>,
+    pub history: Arc<super::history::HistoryRuntime>,
     poll_gate: Mutex<()>,
-    snapshot: RwLock<Snapshot>,
 }
 impl AccountRuntime {
     pub fn invalidate(&self) {
-        self.snapshot.write().unwrap_or_else(|e| e.into_inner()).fetched_at = None;
+        SNAPSHOT
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .fetched_at = None;
     }
     pub fn snapshot(&self) -> Snapshot {
-        self.snapshot
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        current_snapshot()
     }
     pub fn refresh(&self, home: &Path, force: bool) -> Snapshot {
         let cached = self.snapshot();
@@ -63,7 +74,7 @@ impl AccountRuntime {
             }
         });
         next.fetched_at = Some(Instant::now());
-        *self.snapshot.write().unwrap_or_else(|e| e.into_inner()) = next.clone();
+        *SNAPSHOT.write().unwrap_or_else(|e| e.into_inner()) = next.clone();
         next
     }
 }

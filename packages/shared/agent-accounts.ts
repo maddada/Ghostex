@@ -32,6 +32,13 @@ export interface AccountUsageWindow {
   resetsAt?: string;
   model?: string;
 }
+export interface AccountUsageHistory {
+  status: 'ready' | 'partial';
+  hasData: boolean;
+  days: { date: string; tokens: number }[];
+  updatedAt: string;
+  timeZone: string;
+}
 export interface AgentAccount {
   id: string;
   provider: AccountProvider;
@@ -46,6 +53,8 @@ export interface AgentAccount {
   status: 'ready' | 'loginRequired' | 'unavailable' | 'identityChanged';
   usage: AccountUsageWindow[];
   resetCredits?: number;
+  resetCreditDetails?: { id: string; expiresAt: string | null }[] | null;
+  resetCreditsError?: string | null;
   showInTitlebar?: boolean;
   usageUpdatedAt?: string;
   usageError?: string;
@@ -66,12 +75,26 @@ export interface AccountRecovery {
   nextAttemptAt?: string;
   updatedAt: string;
 }
+export type NewSessionAccountRule = 'mostRemaining' | 'soonestReset' | 'mostUsed' | 'lastUsed';
+export type NewSessionAccountChoice = { rule: NewSessionAccountRule } | { rule: 'pinned'; id: string };
+/** Automatic rules for the account that starts new sessions, in the order the Settings dropdown lists them. */
+export const NEW_SESSION_ACCOUNT_RULES: { rule: NewSessionAccountRule; label: string }[] = [
+  { rule: 'mostRemaining', label: 'Most limit remaining' },
+  { rule: 'soonestReset', label: 'Soonest reset' },
+  { rule: 'mostUsed', label: 'Most used first' },
+  { rule: 'lastUsed', label: 'Same as last session' },
+];
 export interface AgentAccountsState {
+  usageHistory?: Partial<Record<AccountProvider, AccountUsageHistory>> | null;
+  accountCounts?: Record<AccountProvider, number>;
   setupJobs?: AccountSetupJob[];
   accounts: AgentAccount[];
   helpers: AccountHelper[];
   defaults: Record<AccountProvider, AccountPolicy>;
+  /** Effective account for new sessions per provider, resolved by gxserver from the provider's rule. */
   defaultAccounts: Partial<Record<AccountProvider, string>>;
+  /** Per-provider rule from Settings; absent means Most limit remaining. */
+  newSessionAccounts?: Partial<Record<AccountProvider, NewSessionAccountChoice>>;
   session?: {
     provider: AccountProvider;
     accountId: string | null;
@@ -81,61 +104,28 @@ export interface AgentAccountsState {
   };
 }
 
-/** CDXC:AgentProviders 2026-09-09 DECISION: User: quick launch starts with the saved default account. If that account has any usage window at 100%, the provider's saved switch/wait and account-preference rules choose the account for the new session. SEE-ALSO: server/src/accounts/recovery.rs. */
-export function quickLaunchAccountId(
-  state: AgentAccountsState,
-  provider: AccountProvider
-): string | undefined {
-  const accounts = state.accounts.filter((account) => account.registered && account.provider === provider);
-  const selected =
-    accounts.find((account) => account.id === state.defaultAccounts[provider]) ??
-    accounts.toSorted((left, right) => Number(left.selector) - Number(right.selector))[0];
-  if (!selected || !selected.usage.some((window) => window.usedPercent >= 100)) return selected?.id;
-
-  const policy = state.defaults[provider] ?? DEFAULT_ACCOUNT_POLICY;
-  if (!policy.enabled || policy.atLimit !== 'switch') return selected.id;
-
-  const score = (account: AgentAccount) =>
-    account.usage.reduce((highest, window) => Math.max(highest, window.usedPercent), 0);
-  const reset = (account: AgentAccount) =>
-    account.usage.reduce<number | undefined>((earliest, window) => {
-      const timestamp = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;
-      if (!Number.isFinite(timestamp)) return earliest;
-      return earliest === undefined ? timestamp : Math.min(earliest, timestamp);
-    }, undefined);
-  const candidates = accounts
-    .filter(
-      (account) =>
-        account.id !== selected.id &&
-        account.eligible &&
-        account.status === 'ready' &&
-        !account.usageError &&
-        account.usage.length > 0 &&
-        account.usage.every((window) => window.usedPercent < 100)
-    )
-    .toSorted((left, right) => {
-      if (policy.priority === 'leastUsed') return score(left) - score(right) || left.id.localeCompare(right.id);
-      if (policy.priority === 'mostUsed') return score(right) - score(left) || left.id.localeCompare(right.id);
-      const leftReset = reset(left);
-      const rightReset = reset(right);
-      const resetOrder =
-        leftReset === undefined
-          ? rightReset === undefined
-            ? 0
-            : 1
-          : rightReset === undefined
-            ? -1
-            : policy.priority === 'latestReset'
-              ? rightReset - leftReset
-              : leftReset - rightReset;
-      return resetOrder || left.id.localeCompare(right.id);
-    });
-  return candidates[0]?.id ?? selected.id;
+/**
+ * CDXC:AgentProviders 2026-09-11 DECISION:
+ * User: quick launch starts new sessions with the account chosen by the provider's Account for new sessions rule (Most limit remaining by default, or Soonest reset, Most used first, Same as last session, or one pinned account). This supersedes the 2026-09-09 saved default account and its at-limit switch step. gxserver resolves the rule once from the registry and the live usage snapshot and publishes the result as `defaultAccounts`, so every surface reads the same answer instead of ranking accounts itself. When the rule yields no account there is no entry and the launch keeps the current CLI login.
+ * SEE-ALSO: server/src/accounts/default_account.rs.
+ */
+export function quickLaunchAccountId(state: AgentAccountsState, provider: AccountProvider): string | undefined {
+  return state.defaultAccounts[provider];
 }
 
 export type AgentAccountsRequest =
+  | { operation: 'prepareReset'; id: string }
+  | { operation: 'titlebar'; cachedOnly?: boolean }
   | { operation: 'setTitlebar'; id: string; shown: boolean }
-  | { operation: 'setupStart'; owner: string; provider: AccountProvider; email: string; shareHistory: true; accountId?: string; selector?: string }
+  | {
+      operation: 'setupStart';
+      owner: string;
+      provider: AccountProvider;
+      email: string;
+      shareHistory: true;
+      accountId?: string;
+      selector?: string;
+    }
   | { operation: 'setupStatus'; owner: string }
   | { operation: 'setupInput'; owner: string; jobId: string; input: string }
   | { operation: 'setupCancel' | 'setupAcknowledge'; owner: string; jobId: string }
@@ -145,7 +135,7 @@ export type AgentAccountsRequest =
   | { operation: 'remove'; id: string }
   | { operation: 'swapSlots'; firstId: string; secondId: string }
   | { operation: 'defaults'; provider: AccountProvider; policy: AccountPolicy }
-  | { operation: 'defaultAccount'; provider: AccountProvider; accountId: string | null }
+  | { operation: 'defaultAccount'; provider: AccountProvider; choice: NewSessionAccountChoice }
   | { operation: 'session'; refresh?: boolean }
   | { operation: 'sessionPolicy'; policy: AccountPolicy | null }
   | { operation: 'select'; accountId: string | null }

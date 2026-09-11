@@ -75,8 +75,22 @@ pub(crate) struct Registry {
     pub accounts: Vec<SavedAccount>,
     #[serde(default)]
     pub defaults: BTreeMap<Provider, Policy>,
+    /// CDXC:AgentProviders 2026-09-11 DECISION:
+    /// User: the new-session account choice is stored under `newSessionAccounts`, a different key from the pre-9.3 `defaultAccounts`, so every choice saved before the automatic rules existed is dropped on read and those users migrate to Most limit remaining. A missing entry means Most limit remaining.
     #[serde(default)]
-    pub default_accounts: BTreeMap<Provider, String>,
+    pub new_session_accounts: BTreeMap<Provider, NewSessionAccount>,
+    /// The account of the most recent session launched or switched per provider, kept for the Same as last session rule.
+    #[serde(default)]
+    pub last_used_accounts: BTreeMap<Provider, String>,
+}
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", tag = "rule")]
+pub(crate) enum NewSessionAccount {
+    MostRemaining,
+    SoonestReset,
+    MostUsed,
+    LastUsed,
+    Pinned { id: String },
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,8 +116,16 @@ pub(crate) struct DiscoveredAccount {
     pub shared_history: bool,
     pub usage: Vec<UsageWindow>,
     pub reset_credits: Option<u64>,
+    pub reset_credit_details: Option<Vec<ResetCredit>>,
+    pub reset_credits_error: Option<String>,
     pub usage_updated_at: Option<String>,
     pub usage_error: Option<String>,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResetCredit {
+    pub id: String,
+    pub expires_at: Option<String>,
 }
 #[derive(Clone, Default)]
 pub(crate) struct Snapshot {
