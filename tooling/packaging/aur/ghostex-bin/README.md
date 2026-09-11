@@ -191,7 +191,7 @@ each shared library. Keep the two in step when either changes.
 | `libxkbcommon0`                                      | `libxkbcommon`                                                                |
 | `libxrandr2`                                         | `libxrandr`                                                                   |
 | `libxshmfence1`                                      | `libxshmfence`                                                                |
-| `wmctrl`                                             | `wmctrl` (in `extra`, not AUR-only)                                           |
+| `wmctrl` (Recommends)                                | `wmctrl` as `optdepends` (in `extra`); only used to raise an already running window on X11 |
 | —                                                    | `hicolor-icon-theme` (owns the theme directory this package's icon goes into) |
 
 ## Known caveats

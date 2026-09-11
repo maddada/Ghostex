@@ -50,8 +50,8 @@ depends=(
   'nspr'
   'nss'
   'pango'
-  'wmctrl'
 )
+optdepends=('wmctrl: raise the running Ghostex window from the ghostex command on X11')
 provides=("ghostex=${pkgver}")
 conflicts=('ghostex')
 options=('!strip' '!debug')

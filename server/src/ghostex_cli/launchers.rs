@@ -523,38 +523,101 @@ fn spawn_detached_desktop(launch: &Launch) -> CliResult<()> {
     Ok(())
 }
 
+/// Whether `exe` (a `/proc/<pid>/exe` link target) is a Ghostex desktop
+/// process: the packaged runtime that the `Ghostex` bootstrap execs into, the
+/// bootstrap itself while it installs the Chromium component, or a dev build.
+/// The bare `Ghostex` name is only trusted next to the CEF helper so an
+/// unrelated binary with that name does not count as the app.
+#[cfg(any(target_os = "linux", test))]
+fn is_linux_ghostex_desktop_executable(exe: &Path) -> bool {
+    let Some(name) = exe.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    // An upgrade that replaced the binary on disk leaves the running process
+    // with a " (deleted)" suffix; it is still the app.
+    let name = name.strip_suffix(" (deleted)").unwrap_or(name);
+    match name {
+        "ghostex-gpui-runtime" | "ghostex-gpui" => true,
+        "Ghostex" => exe
+            .parent()
+            .is_some_and(|dir| dir.join("ghostex-gpui-cef-helper").exists()),
+        _ => false,
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_ghostex_desktop_process_running() -> bool {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return false;
+    };
+    let own_pid = std::process::id();
+    entries.filter_map(Result::ok).any(|entry| {
+        let file_name = entry.file_name();
+        let Some(pid) = file_name.to_str().and_then(|name| name.parse::<u32>().ok()) else {
+            return false;
+        };
+        if pid == own_pid {
+            return false;
+        }
+        std::fs::read_link(entry.path().join("exe"))
+            .is_ok_and(|exe| is_linux_ghostex_desktop_executable(&exe))
+    })
+}
+
+/// Raise the window of the Ghostex desktop process that is already running.
+/// wmctrl needs an X11 window manager that publishes `_NET_CLIENT_LIST`; under
+/// Wayland the Ghostex window lives on XWayland and compositors such as niri
+/// do not publish that list there, so wmctrl cannot even inspect windows. That
+/// case is reported, not treated as "not running".
+#[cfg(any(target_os = "linux", test))]
+fn activate_running_linux_desktop() -> CliResult<()> {
+    let listing = Command::new("wmctrl").args(["-l", "-x"]).output();
+    let listing = match listing {
+        Ok(listing) if listing.status.success() => listing,
+        _ => {
+            println!(
+                "Ghostex is already running. Switch to its window from your desktop; raising it from here needs an X11 session with wmctrl installed."
+            );
+            return Ok(());
+        }
+    };
+    let windows = String::from_utf8_lossy(&listing.stdout);
+    let Some(window_id) = linux_ghostex_window_id(&windows) else {
+        println!("Ghostex is already running and its window is not open yet.");
+        return Ok(());
+    };
+    let status = Command::new("wmctrl")
+        .args(["-i", "-a", window_id])
+        .status()
+        .map_err(|error| {
+            CliError::Other(format!(
+                "Could not activate the Ghostex Linux window: {error}"
+            ))
+        })?;
+    if !status.success() {
+        return Err(CliError::Other(
+            "Could not activate the existing Ghostex Linux window.".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// CDXC:PlatformSupport 2026-09-11 WHY:
+/// The desktop entry runs `ghostex` with no arguments, and this used to decide whether the app was running by listing X11 windows with wmctrl, failing outright when the listing failed.
+/// On Wayland compositors without an EWMH client list on XWayland (niri, GitHub issue #123) that meant Ghostex never launched at all.
+/// Whether the app is running is now read from /proc, which does not depend on the display server; wmctrl is only used to raise a window that is known to exist, so it is a weak package dependency, not a hard one.
 #[cfg(any(target_os = "linux", test))]
 fn activate_or_launch_linux_desktop() -> CliResult<()> {
+    if linux_ghostex_desktop_process_running() {
+        return activate_running_linux_desktop();
+    }
+    // The desktop app itself renders through X11 (XWayland on Wayland
+    // sessions), so a missing DISPLAY means it cannot start.
     if !std::env::var("DISPLAY").is_ok_and(|display| !display.trim().is_empty()) {
         return Err(CliError::Other(
-            "Ghostex desktop activation requires an X11 DISPLAY.".to_string(),
+            "Ghostex desktop needs an X11 DISPLAY (XWayland on Wayland sessions) to start."
+                .to_string(),
         ));
-    }
-    let listing = Command::new("wmctrl").args(["-l", "-x"]).output().map_err(|error| {
-        CliError::Other(format!(
-            "Ghostex Linux desktop activation requires wmctrl. Install or reinstall the Ghostex desktop package: {error}"
-        ))
-    })?;
-    if !listing.status.success() {
-        return Err(CliError::Other(
-            "Could not inspect X11 windows to activate Ghostex.".to_string(),
-        ));
-    }
-    if let Some(window_id) = linux_ghostex_window_id(&String::from_utf8_lossy(&listing.stdout)) {
-        let status = Command::new("wmctrl")
-            .args(["-i", "-a", window_id])
-            .status()
-            .map_err(|error| {
-                CliError::Other(format!(
-                    "Could not activate the Ghostex Linux window: {error}"
-                ))
-            })?;
-        if !status.success() {
-            return Err(CliError::Other(
-                "Could not activate the existing Ghostex Linux window.".to_string(),
-            ));
-        }
-        return Ok(());
     }
     let launch = resolve_linux_desktop_launch_from_cli(&current_cli_executable())?;
     spawn_detached_desktop(&launch)
@@ -1231,7 +1294,21 @@ mod tests {
     #[test]
     fn linux_window_listing_matches_only_the_ghostex_window_class() {
         let _activation_entrypoint = activate_or_launch_linux_desktop as fn() -> CliResult<()>;
+        let _running_activation = activate_running_linux_desktop as fn() -> CliResult<()>;
+        let _process_probe = linux_ghostex_desktop_process_running as fn() -> bool;
         let _wsl_detector = is_wsl as fn() -> bool;
+        assert!(is_linux_ghostex_desktop_executable(Path::new(
+            "/opt/ghostex/ghostex-gpui-runtime"
+        )));
+        assert!(is_linux_ghostex_desktop_executable(Path::new(
+            "/opt/ghostex/ghostex-gpui-runtime (deleted)"
+        )));
+        assert!(!is_linux_ghostex_desktop_executable(Path::new(
+            "/opt/ghostex/ghostex-gpui-cef-helper"
+        )));
+        assert!(!is_linux_ghostex_desktop_executable(Path::new(
+            "/usr/bin/Ghostex"
+        )));
         let listing =
             "0x01  0 code.Code host Editor - Ghostex\n0x02  0 ghostex.Ghostex host Ghostex\n";
         assert_eq!(linux_ghostex_window_id(listing), Some("0x02"));
