@@ -24,9 +24,18 @@ pub fn read_presentation_snapshot(
     sessions: Vec<Value>,
 ) -> Result<Value, DomainStateError> {
     let repository = DomainRepository::new(db, server_id);
-    let mut snapshot = project_snapshot(
+    /*
+    CDXC:SessionFork 2026-09-11 WHY:
+    Callers hand this the presentation-scoped list (`list_presentation_sessions`),
+    which omits the closed rows that supersession and branch counts still depend
+    on. Families therefore come from the narrow fork-row read over the whole
+    registry, exactly as the per-session delta below derives them.
+    */
+    let families = SessionForkFamilies::build(&repository.list_session_fork_rows()?);
+    let mut snapshot = project_snapshot_with_families(
         repository.list_projects()?,
         sessions,
+        &families,
         read_presentation_revision(db)?,
         sidebar_v2_selected,
     );
@@ -50,7 +59,7 @@ pub fn search_presentation_sessions(
 ) -> Result<Value, DomainStateError> {
     let repository = DomainRepository::new(db, server_id);
     let projects = repository.list_projects()?;
-    let sessions = repository.list_sessions(None)?;
+    let sessions = repository.list_session_search_rows()?;
     search_sessions(projects, sessions, params)
 }
 
@@ -61,17 +70,22 @@ pub fn list_previous_sessions(
 ) -> Result<Value, DomainStateError> {
     let repository = DomainRepository::new(db, server_id);
     let projects = repository.list_projects()?;
-    let sessions = repository.list_sessions(None)?;
+    let sessions = repository.list_session_search_rows()?;
     let mut previous_params = params.clone();
     previous_params.insert("includeActive".to_string(), Value::Bool(false));
     previous_params.insert("includePrevious".to_string(), Value::Bool(true));
+    let session_project_ids = sessions
+        .iter()
+        .filter_map(|session| session.get("projectId").and_then(Value::as_str))
+        .collect::<std::collections::HashSet<_>>();
     let project_options = projects
         .iter()
         .filter(|project| project.get("visibility").and_then(Value::as_str) != Some("hidden"))
         .filter(|project| {
-            sessions
-                .iter()
-                .any(|session| session["projectId"] == project["projectId"])
+            project
+                .get("projectId")
+                .and_then(Value::as_str)
+                .is_some_and(|id| session_project_ids.contains(id))
         })
         .map(|project| {
             json!({
@@ -225,13 +239,13 @@ pub fn read_presentation_revision(db: &Connection) -> Result<i64, DomainStateErr
         .unwrap_or(1))
 }
 
+#[cfg(test)]
 pub(crate) fn project_snapshot(
     projects: Vec<Value>,
     sessions: Vec<Value>,
     revision: i64,
     sidebar_v2_selected: bool,
 ) -> Value {
-    let generated_at = now_iso();
     /*
     CDXC:SessionFork 2026-08-28:
     Derived once over every registry row, then stamped onto each projected
@@ -240,6 +254,20 @@ pub(crate) fn project_snapshot(
     closes.
     */
     let families = SessionForkFamilies::build(&sessions);
+    project_snapshot_with_families(projects, sessions, &families, revision, sidebar_v2_selected)
+}
+
+/// `project_snapshot` with the fork families supplied by the caller, for the
+/// case where `sessions` is a presentation-scoped subset of the registry the
+/// families were derived from.
+pub(crate) fn project_snapshot_with_families(
+    projects: Vec<Value>,
+    sessions: Vec<Value>,
+    families: &SessionForkFamilies,
+    revision: i64,
+    sidebar_v2_selected: bool,
+) -> Value {
+    let generated_at = now_iso();
     let mut projects_sorted = projects;
     projects_sorted.sort_by_key(project_sort_key);
     let mut presentation_projects = Vec::new();

@@ -100,6 +100,27 @@ fn refresh_fleet_status(state: &AppState) {
         return;
     };
     let publisher = crate::session_chat_compacting::SessionChatCompactingPublisher::new(state);
+    /*
+    CDXC:SessionStatus 2026-09-11 WHY:
+    `current_process` asks the process-identity cache for one session at a
+    time. Prime the shared snapshot with every candidate first so the whole
+    pass is served from one `zmx list` + `ps` probe instead of one per session.
+    */
+    let candidate_names = sessions
+        .iter()
+        .filter(|session| {
+            matches!(
+                session_chat_option_agent(session_chat_agent_for_session(session).as_deref()),
+                Some(SessionChatOptionAgent::Claude | SessionChatOptionAgent::Codex)
+            )
+        })
+        .filter_map(|session| session.get("zmxName").and_then(serde_json::Value::as_str))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    let _ = crate::zmx::read_cached_zmx_session_process_identities(
+        &candidate_names,
+        &state.paths.home_dir,
+    );
     for session in sessions {
         let agent = session_chat_agent_for_session(&session);
         if !matches!(

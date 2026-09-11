@@ -40,6 +40,82 @@ fn sql_error(error: rusqlite::Error) -> DomainStateError {
     }
 }
 
+fn draft_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SessionChatDraft> {
+    let id: Option<String> = row.get(3)?;
+    Ok(SessionChatDraft {
+        parked: row.get(5)?,
+        content: row.get(0)?,
+        origin_client_id: row.get(1)?,
+        updated_at: row.get(2)?,
+        version: id
+            .map(|draft_id| {
+                Ok::<_, rusqlite::Error>(DraftVersion {
+                    draft_id,
+                    revision: row.get(4)?,
+                })
+            })
+            .transpose()?,
+        consumed_drafts: Vec::new(),
+        delivered_drafts: Vec::new(),
+    })
+}
+
+/// CDXC:Drafts 2026-09-11 WHY:
+/// Recovery listed every session with three separate queries per session, even for empty drafts.
+/// Bulk reads keep receipts and delivery history intact with three queries for the entire draft list.
+pub fn read_all(
+    db: &Connection,
+) -> Result<Vec<(String, String, SessionChatDraft)>, DomainStateError> {
+    let mut statement = db.prepare(
+        "SELECT content,originClientId,updatedAt,draftId,revision,parked,projectId,sessionId FROM session_chat_drafts ORDER BY updatedAt DESC"
+    ).map_err(sql_error)?;
+    let mut drafts = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                draft_from_row(row)?,
+            ))
+        })
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    let positions: std::collections::HashMap<_, _> = drafts
+        .iter()
+        .enumerate()
+        .map(|(index, (project, session, _))| ((project.clone(), session.clone()), index))
+        .collect();
+    let mut statement = db.prepare(
+        "SELECT projectId,sessionId,draftId,consumed FROM session_chat_draft_versions WHERE consumed>0 ORDER BY draftId"
+    ).map_err(sql_error)?;
+    let receipts = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                DraftVersion {
+                    draft_id: row.get(2)?,
+                    revision: row.get(3)?,
+                },
+            ))
+        })
+        .map_err(sql_error)?;
+    for receipt in receipts {
+        let (project, session, version) = receipt.map_err(sql_error)?;
+        if let Some(&index) = positions.get(&(project, session)) {
+            drafts[index].2.consumed_drafts.push(version);
+        }
+    }
+    for delivery in crate::session_chat_delivered_drafts::read(db, None)? {
+        if let Some(&index) =
+            positions.get(&(delivery.project_id.clone(), delivery.session_id.clone()))
+        {
+            drafts[index].2.delivered_drafts.push(delivery);
+        }
+    }
+    Ok(drafts)
+}
+
 pub fn read(
     db: &Connection,
     project: &str,
@@ -47,16 +123,7 @@ pub fn read(
 ) -> Result<Option<SessionChatDraft>, DomainStateError> {
     let mut draft = db.query_row(
         "SELECT content, originClientId, updatedAt, draftId, revision, parked FROM session_chat_drafts WHERE projectId=?1 AND sessionId=?2",
-        params![project, session], |row| {
-            let id: Option<String> = row.get(3)?;
-            Ok(SessionChatDraft {
-                parked: row.get(5)?,
-                content: row.get(0)?, origin_client_id: row.get(1)?, updated_at: row.get(2)?,
-                version: id.map(|draft_id| Ok::<_, rusqlite::Error>(DraftVersion { draft_id, revision: row.get(4)? })).transpose()?,
-                consumed_drafts: Vec::new(),
-                delivered_drafts: Vec::new(),
-            })
-        },
+        params![project, session], draft_from_row,
     ).optional().map_err(sql_error)?;
     if let Some(draft) = draft.as_mut() {
         draft.delivered_drafts =

@@ -44,16 +44,30 @@ pub fn list_session_fork_branches(
         .to_string();
 
     let repository = DomainRepository::new(db, server_id);
-    let sessions = repository.list_sessions(None)?;
-    let families = SessionForkFamilies::build(&sessions);
+    /*
+    CDXC:SessionFork 2026-09-11 WHY:
+    Families come from the narrow fork-row read and only the family's own rows
+    are hydrated. Listing and hydrating the whole registry here made this one
+    of the costliest requests a chat header could send on a large registry.
+    */
+    let fork_rows = repository.list_session_fork_rows()?;
+    let families = SessionForkFamilies::build(&fork_rows);
+    let project_of = |member_id: &str| {
+        fork_rows
+            .iter()
+            .find(|row| string_field(row, "sessionId").as_deref() == Some(member_id))
+            .and_then(|row| string_field(row, "projectId"))
+    };
 
     let mut branches: Vec<(i64, String, Value)> = Vec::new();
     for member_id in families.family_session_ids(&session_id) {
-        let Some(session) = sessions.iter().find(|candidate| {
-            string_field(candidate, "sessionId").as_deref() == Some(member_id.as_str())
-        }) else {
+        let Some(member_project_id) = project_of(member_id) else {
             continue;
         };
+        let Some(session) = repository.get_session(&member_project_id, member_id)? else {
+            continue;
+        };
+        let session = &session;
         let mut branch = Map::new();
         branch.insert("projectId".to_string(), value_field(session, "projectId"));
         branch.insert("sessionId".to_string(), Value::String(member_id.clone()));
@@ -93,10 +107,8 @@ pub fn list_session_fork_branches(
     the same control unconditionally instead of branching on an empty list.
     */
     if branches.is_empty() {
-        if let Some(session) = sessions.iter().find(|candidate| {
-            string_field(candidate, "projectId").as_deref() == Some(project_id.as_str())
-                && string_field(candidate, "sessionId").as_deref() == Some(session_id.as_str())
-        }) {
+        if let Some(session) = repository.get_session(&project_id, &session_id)? {
+            let session = &session;
             let last_active_ms = parse_iso_ms(&last_active_at(session)).unwrap_or(0);
             let mut branch = Map::new();
             branch.insert("projectId".to_string(), value_field(session, "projectId"));

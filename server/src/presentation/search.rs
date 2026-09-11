@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
@@ -86,6 +88,7 @@ pub(crate) fn search_sessions(
     let project_id_filter = normalize_project_id_filter(params.get("projectId"));
     let tags = normalize_session_tags(params.get("sessionTags"))?;
     let families = SessionForkFamilies::build(&sessions);
+    let projects_by_id = search_projects_by_id(&projects);
     let mut candidates = sessions
         .into_iter()
         .filter(|session| project_id_filter.matches(session))
@@ -95,16 +98,17 @@ pub(crate) fn search_sessions(
             (active && include_active) || (!active && include_previous)
         })
         .filter_map(|session| {
-            let project = projects.iter().find(|project| {
-                string_field(project, "projectId") == string_field(&session, "projectId")
-            });
+            let project = projects_by_id
+                .get(&session.get("projectId").and_then(Value::as_str))
+                .copied();
             match_session(project, &session, &query).map(|matched| (session, matched))
         })
         .collect::<Vec<_>>();
-    candidates.sort_by(|(left, _), (right, _)| {
-        last_active_at(right)
-            .cmp(&last_active_at(left))
-            .then_with(|| string_field(left, "sessionId").cmp(&string_field(right, "sessionId")))
+    candidates.sort_by_cached_key(|(session, _)| {
+        (
+            std::cmp::Reverse(last_active_at(session)),
+            string_field(session, "sessionId"),
+        )
     });
     let total = candidates.len();
     let page = candidates
@@ -112,9 +116,9 @@ pub(crate) fn search_sessions(
         .skip(offset)
         .take(limit)
         .map(|(session, matched)| {
-            let project = projects.iter().find(|project| {
-                string_field(project, "projectId") == string_field(&session, "projectId")
-            });
+            let project = projects_by_id
+                .get(&session.get("projectId").and_then(Value::as_str))
+                .copied();
             let mut result = search_result(project, &session, matched);
             if let (Some(output), Some(session_id)) =
                 (result.as_object_mut(), string_field(&session, "sessionId"))
@@ -159,6 +163,7 @@ pub(crate) fn search_previous_sessions(
     beside its own continuation forever.
     */
     let families = SessionForkFamilies::build(&sessions);
+    let projects_by_id = search_projects_by_id(&projects);
     let mut candidates = sessions
         .into_iter()
         .filter(is_previous_session_history_candidate)
@@ -185,16 +190,17 @@ pub(crate) fn search_previous_sessions(
             (active && include_active) || (!active && include_previous)
         })
         .filter_map(|session| {
-            let project = projects.iter().find(|project| {
-                string_field(project, "projectId") == string_field(&session, "projectId")
-            });
+            let project = projects_by_id
+                .get(&session.get("projectId").and_then(Value::as_str))
+                .copied();
             match_session(project, &session, &query).map(|matched| (session, matched))
         })
         .collect::<Vec<_>>();
-    candidates.sort_by(|(left, _), (right, _)| {
-        previous_session_closed_at(right)
-            .cmp(&previous_session_closed_at(left))
-            .then_with(|| string_field(left, "sessionId").cmp(&string_field(right, "sessionId")))
+    candidates.sort_by_cached_key(|(session, _)| {
+        (
+            std::cmp::Reverse(previous_session_closed_at(session)),
+            string_field(session, "sessionId"),
+        )
     });
     let total = candidates.len();
     let page = candidates
@@ -202,9 +208,9 @@ pub(crate) fn search_previous_sessions(
         .skip(offset)
         .take(limit)
         .map(|(session, matched)| {
-            let project = projects.iter().find(|project| {
-                string_field(project, "projectId") == string_field(&session, "projectId")
-            });
+            let project = projects_by_id
+                .get(&session.get("projectId").and_then(Value::as_str))
+                .copied();
             let mut result = search_result(project, &session, matched);
             if let Some(output) = result.as_object_mut() {
                 output.insert(
@@ -464,4 +470,14 @@ pub(crate) fn push_owned_field(
     if let Some(value) = value {
         fields.push((field, value));
     }
+}
+
+fn search_projects_by_id(projects: &[Value]) -> HashMap<Option<&str>, &Value> {
+    let mut by_id = HashMap::with_capacity(projects.len());
+    for project in projects {
+        by_id
+            .entry(project.get("projectId").and_then(Value::as_str))
+            .or_insert(project);
+    }
+    by_id
 }

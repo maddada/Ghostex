@@ -32,22 +32,49 @@ struct CachedExistingSessionNames {
     names: HashSet<String>,
 }
 
-#[derive(PartialEq, Eq, Hash)]
-struct ProcessIdentitiesCacheKey {
-    home_dir: PathBuf,
-    session_names: Vec<String>,
-}
+/*
+CDXC:Zmx 2026-09-11 WHY:
+This cache used to be keyed by the exact requested name set. The fleet-status
+pass asks for one session at a time (`current_process`), the sync passes ask
+for every running candidate at once, and an open chat asks for its own session,
+so none of them ever shared an entry and each caller spawned its own
+`zmx list` + `ps -axo` shell: with 85 running sessions that was one snapshot
+per session every five seconds and a large share of gxserver's idle CPU.
+
+The cache now remembers every name asked for within the last minute and, on a
+miss, probes for that whole set, so any lookup inside the TTL is served from
+the one snapshot no matter how the caller sliced its names. The reply is still
+filtered to the names the caller asked for.
+*/
+const ZMX_PROBE_RECENT_NAMES_WINDOW: Duration = Duration::from_secs(60);
 
 struct CachedProcessIdentities {
     fetched_at: Instant,
+    home_dir: PathBuf,
+    /// The names the snapshot was probed for; a lookup is a hit only when every
+    /// requested name is in here.
+    names: HashSet<String>,
     identities: HashMap<String, ZmxProcessIdentity>,
+}
+
+#[derive(Default)]
+struct ProcessIdentitiesCache {
+    /// Every name requested recently, with the time it was last requested.
+    recent_names: HashMap<String, Instant>,
+    snapshot: Option<CachedProcessIdentities>,
 }
 
 static EXISTING_SESSION_NAMES_CACHE: OnceLock<Mutex<Option<CachedExistingSessionNames>>> =
     OnceLock::new();
-static PROCESS_IDENTITIES_CACHE: OnceLock<
-    Mutex<HashMap<ProcessIdentitiesCacheKey, CachedProcessIdentities>>,
-> = OnceLock::new();
+static PROCESS_IDENTITIES_CACHE: OnceLock<Mutex<ProcessIdentitiesCache>> = OnceLock::new();
+
+pub(crate) fn invalidate_zmx_process_identity_cache() {
+    if let Some(cache) = PROCESS_IDENTITIES_CACHE.get() {
+        if let Ok(mut cache) = cache.lock() {
+            cache.snapshot = None;
+        }
+    }
+}
 
 /// Presentation-freshness read of the live zmx session names, served from a
 /// two-second cache. Never use this where authoritative provider state is
@@ -73,8 +100,8 @@ pub fn read_cached_zmx_existing_session_names() -> Result<HashSet<String>, ZmxEn
 }
 
 /// Presentation-freshness read of the live zmx process identities, served from
-/// a two-second cache keyed by the exact requested session-name set and home
-/// directory.
+/// a two-second cache shared by every caller: a miss probes for the union of
+/// all recently requested names, and the result is filtered to `session_names`.
 pub fn read_cached_zmx_session_process_identities(
     session_names: &[String],
     home_dir: &Path,
@@ -82,31 +109,55 @@ pub fn read_cached_zmx_session_process_identities(
     if session_names.is_empty() {
         return Ok(HashMap::new());
     }
-    let key = ProcessIdentitiesCacheKey {
-        home_dir: home_dir.to_path_buf(),
-        session_names: {
-            let mut names = session_names.to_vec();
-            names.sort();
-            names.dedup();
-            names
-        },
-    };
-    let cache = PROCESS_IDENTITIES_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Ok(mut guard) = cache.lock() {
-        guard.retain(|_, entry| entry.fetched_at.elapsed() < ZMX_PROBE_CACHE_TTL);
-        if let Some(entry) = guard.get(&key) {
-            return Ok(entry.identities.clone());
+    let cache =
+        PROCESS_IDENTITIES_CACHE.get_or_init(|| Mutex::new(ProcessIdentitiesCache::default()));
+    let probe_names = {
+        let Ok(mut guard) = cache.lock() else {
+            return read_zmx_session_process_identities(session_names, home_dir);
+        };
+        let now = Instant::now();
+        for name in session_names {
+            guard.recent_names.insert(name.clone(), now);
         }
-    }
-    let identities = read_zmx_session_process_identities(session_names, home_dir)?;
+        guard.recent_names.retain(|_, requested_at| {
+            now.duration_since(*requested_at) < ZMX_PROBE_RECENT_NAMES_WINDOW
+        });
+        if let Some(snapshot) = guard.snapshot.as_ref().filter(|snapshot| {
+            snapshot.fetched_at.elapsed() < ZMX_PROBE_CACHE_TTL
+                && snapshot.home_dir == home_dir
+                && session_names
+                    .iter()
+                    .all(|name| snapshot.names.contains(name))
+        }) {
+            return Ok(select_identities(&snapshot.identities, session_names));
+        }
+        let mut names = guard.recent_names.keys().cloned().collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    let identities = read_zmx_session_process_identities(&probe_names, home_dir)?;
+    let selected = select_identities(&identities, session_names);
     if let Ok(mut guard) = cache.lock() {
-        guard.insert(
-            key,
-            CachedProcessIdentities {
-                fetched_at: Instant::now(),
-                identities: identities.clone(),
-            },
-        );
+        guard.snapshot = Some(CachedProcessIdentities {
+            fetched_at: Instant::now(),
+            home_dir: home_dir.to_path_buf(),
+            names: probe_names.into_iter().collect(),
+            identities,
+        });
     }
-    Ok(identities)
+    Ok(selected)
+}
+
+fn select_identities(
+    identities: &HashMap<String, ZmxProcessIdentity>,
+    session_names: &[String],
+) -> HashMap<String, ZmxProcessIdentity> {
+    session_names
+        .iter()
+        .filter_map(|name| {
+            identities
+                .get(name)
+                .map(|identity| (name.clone(), identity.clone()))
+        })
+        .collect()
 }

@@ -8,8 +8,8 @@ use crate::domain::{
     insert_optional_string, merge_session_update, normalize_create_agent_session_params,
     normalize_domain_lifecycle_state, normalize_existing_directory_path, normalize_session_input,
     normalize_session_order_ids, normalize_settled_override, normalize_zmx_provider_state, now_iso,
-    parse_object_map, path_basename, project_path_state, read_optional_text, read_project_id,
-    read_string_field, read_unvalidated_project_lookup_id, read_unvalidated_session_lookup_id,
+    path_basename, project_path_state, read_optional_text, read_project_id, read_string_field,
+    read_unvalidated_project_lookup_id, read_unvalidated_session_lookup_id,
     reject_stopped_session_revive, session_from_row, session_insert_params, session_row_from_sql,
     sql_error, DomainRepository, DomainResult, DomainStateError, ProjectPathState,
     SessionLifecycleFields,
@@ -70,7 +70,10 @@ impl<'a> DomainRepository<'a> {
     /// Discovery records stopped history, including conversations whose old worktree has been removed.
     /// Running the launch-time directory check here aborted the entire import and hid both external sessions and project facets.
     /// Normal creation and restore still validate the project directory before reaching the shared insertion path.
-    pub(crate) fn import_external_session(&self, params: &Map<String, Value>) -> DomainResult<Value> {
+    pub(crate) fn import_external_session(
+        &self,
+        params: &Map<String, Value>,
+    ) -> DomainResult<Value> {
         if params.get("lifecycleState").and_then(Value::as_str) != Some("stopped")
             || params
                 .get("runtimeSettings")
@@ -413,13 +416,30 @@ impl<'a> DomainRepository<'a> {
     /// just enough lifecycle to tell an active row from a closed one. Every key
     /// carries exactly the value `session_from_row` would have produced for it,
     /// so family derivation is identical to the full-list version.
+    ///
+    /// CDXC:SessionFork 2026-09-11 WHY:
+    /// Family derivation reads six scalar keys and one array out of three JSON columns, but this statement used to hand back the whole columns and parse every object into serde maps, on every presentation delta and every snapshot poll.
+    /// On a registry with 8,600 stopped rows that parse was the single largest CPU cost of an otherwise idle gxserver.
+    /// SQLite's json_extract pulls just those keys in C and leaves the rest of each column unparsed; the `json_type` guards keep the exact `Value::as_str` / `as_array` semantics the family reader applies to a fully hydrated row.
     pub fn list_session_fork_rows(&self) -> DomainResult<Vec<Value>> {
         let mut statement = self
             .db
             .prepare(
                 r#"
-                SELECT projectId, sessionId, lifecycleState, providerStateJson,
-                       launchSettingsJson, runtimeSettingsJson, restoredFromSessionId
+                SELECT projectId, sessionId, lifecycleState,
+                       CASE WHEN json_type(providerStateJson, '$.lifecycleState') = 'text'
+                            THEN json_extract(providerStateJson, '$.lifecycleState') END,
+                       CASE WHEN json_type(launchSettingsJson, '$.forkedFromSessionId') = 'text'
+                            THEN json_extract(launchSettingsJson, '$.forkedFromSessionId') END,
+                       CASE WHEN json_type(runtimeSettingsJson, '$.forkedFromSessionId') = 'text'
+                            THEN json_extract(runtimeSettingsJson, '$.forkedFromSessionId') END,
+                       CASE WHEN json_type(runtimeSettingsJson, '$.agentSessionId') = 'text'
+                            THEN json_extract(runtimeSettingsJson, '$.agentSessionId') END,
+                       CASE WHEN json_type(runtimeSettingsJson, '$.sessionPersistenceProvider') = 'text'
+                            THEN json_extract(runtimeSettingsJson, '$.sessionPersistenceProvider') END,
+                       CASE WHEN json_type(runtimeSettingsJson, '$.previousAgentSessionIds') = 'array'
+                            THEN json_extract(runtimeSettingsJson, '$.previousAgentSessionIds') END,
+                       restoredFromSessionId
                 FROM sessions
                 ORDER BY updatedAt DESC, projectId ASC, sessionId ASC
                 "#,
@@ -431,10 +451,13 @@ impl<'a> DomainRepository<'a> {
                     project_id: row.get(0)?,
                     session_id: row.get(1)?,
                     lifecycle_state: row.get(2)?,
-                    provider_state_json: row.get(3)?,
-                    launch_settings_json: row.get(4)?,
-                    runtime_settings_json: row.get(5)?,
-                    restored_from_session_id: row.get(6)?,
+                    provider_lifecycle_state: row.get(3)?,
+                    launch_forked_from_session_id: row.get(4)?,
+                    runtime_forked_from_session_id: row.get(5)?,
+                    agent_session_id: row.get(6)?,
+                    session_persistence_provider: row.get(7)?,
+                    previous_agent_session_ids_json: row.get(8)?,
+                    restored_from_session_id: row.get(9)?,
                 })
             })
             .map_err(sql_error)?
@@ -442,6 +465,85 @@ impl<'a> DomainRepository<'a> {
             .map_err(sql_error)?;
         rows.into_iter()
             .map(|row| session_fork_row_value(&self.server_id, row))
+            .collect()
+    }
+
+    /// The project's rows that can satisfy `identities_match` for an agent
+    /// identity: same agent session id or same agent session path. A superset
+    /// of the in-memory match (agent-family checks stay with the caller), read
+    /// without hydrating the rest of the project.
+    ///
+    /// CDXC:SessionIdentity 2026-09-11 WHY:
+    /// The live-process identity pass runs on every presentation poll and, while a session's title is still a placeholder, re-hunts a trusted title among the project's other rows each time.
+    /// That hunt hydrated the whole project, 7,000 stopped rows included, for every such session on every poll; it was the largest CPU cost left in gxserver after the presentation reads were scoped.
+    /// SEE-ALSO: `select_trusted_title_for_identity` and `live_process_identity_update_is_noop` in agents/identity.rs.
+    pub fn list_sessions_matching_identity(
+        &self,
+        project_id: &str,
+        agent_session_id: Option<&str>,
+        agent_session_path: Option<&str>,
+    ) -> DomainResult<Vec<Value>> {
+        if agent_session_id.is_none() && agent_session_path.is_none() {
+            return Ok(Vec::new());
+        }
+        let mut statement = self
+            .db
+            .prepare(
+                r#"
+                SELECT * FROM sessions
+                WHERE projectId = ?1
+                  AND (trim(json_extract(runtimeSettingsJson, '$.agentSessionId')) = ?2
+                       OR trim(json_extract(runtimeSettingsJson, '$.agentSessionPath')) = ?3)
+                ORDER BY updatedAt DESC, sessionId ASC
+                "#,
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(
+                params![project_id, agent_session_id, agent_session_path],
+                session_row_from_sql,
+            )
+            .map_err(sql_error)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        rows.into_iter()
+            .map(|row| session_from_row(&self.server_id, row))
+            .collect()
+    }
+
+    /// `list_sessions` narrowed to the rows a presentation snapshot can
+    /// publish: every row that is not durably `stopped`, plus the stopped rows
+    /// `should_include_presentation_session` keeps (pinned, parked, favorite,
+    /// or tagged). The SQL predicate is a superset of that in-memory check,
+    /// which still runs on the result, so a snapshot built from this list is
+    /// identical to one built from the full registry.
+    ///
+    /// CDXC:StateSync 2026-09-11 WHY:
+    /// The snapshot poll and the presentation subscribe hydrated every row of the registry on each call and then discarded all but the pinned stopped ones; with 8,600 stopped rows next to 190 live ones that was a third of an idle gxserver's CPU.
+    /// Fork families are not derived from this list; they need the whole registry and come from `list_session_fork_rows`.
+    /// SEE-ALSO: `select_presentation_sessions` in presentation/session_projection.rs, `should_include_presentation_session` in presentation/session_attributes.rs.
+    pub fn list_presentation_sessions(&self) -> DomainResult<Vec<Value>> {
+        let mut statement = self
+            .db
+            .prepare(
+                r#"
+                SELECT * FROM sessions
+                WHERE lifecycleState <> 'stopped'
+                   OR isPinned = 1
+                   OR isParked = 1
+                   OR isFavorite = 1
+                   OR (sessionTag IS NOT NULL AND sessionTag <> '')
+                ORDER BY updatedAt DESC, projectId ASC, sessionId ASC
+                "#,
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], session_row_from_sql)
+            .map_err(sql_error)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        rows.into_iter()
+            .map(|row| session_from_row(&self.server_id, row))
             .collect()
     }
 
@@ -657,41 +759,66 @@ struct SessionForkRow {
     project_id: String,
     session_id: String,
     lifecycle_state: String,
-    provider_state_json: String,
-    launch_settings_json: String,
-    runtime_settings_json: String,
+    provider_lifecycle_state: Option<String>,
+    launch_forked_from_session_id: Option<String>,
+    runtime_forked_from_session_id: Option<String>,
+    agent_session_id: Option<String>,
+    session_persistence_provider: Option<String>,
+    /// The `previousAgentSessionIds` array as JSON text, present only when the
+    /// stored value is an array.
+    previous_agent_session_ids_json: Option<String>,
     restored_from_session_id: Option<String>,
 }
 
 fn session_fork_row_value(server_id: &str, row: SessionForkRow) -> DomainResult<Value> {
     let row_id = format!("{}/{}", row.project_id, row.session_id);
     let zmx_name = create_zmx_session_name(server_id, &row.project_id, &row.session_id);
-    let provider_state = normalize_zmx_provider_state(
-        parse_object_map(
-            &row.provider_state_json,
-            "providerStateJson",
-            "session",
-            &row_id,
-        )?,
-        &zmx_name,
+    let mut provider_state = Map::new();
+    insert_optional_string(
+        &mut provider_state,
+        "lifecycleState",
+        row.provider_lifecycle_state,
     );
+    let provider_state = normalize_zmx_provider_state(provider_state, &zmx_name);
     let mut hidden = Map::new();
     insert_optional_string(
         &mut hidden,
         "restoredFromSessionId",
         row.restored_from_session_id,
     );
+    let mut launch_settings = Map::new();
+    insert_optional_string(
+        &mut launch_settings,
+        "forkedFromSessionId",
+        row.launch_forked_from_session_id,
+    );
+    let mut runtime_settings = Map::new();
+    insert_optional_string(
+        &mut runtime_settings,
+        "agentSessionId",
+        row.agent_session_id,
+    );
+    insert_optional_string(
+        &mut runtime_settings,
+        "forkedFromSessionId",
+        row.runtime_forked_from_session_id,
+    );
+    insert_optional_string(
+        &mut runtime_settings,
+        "sessionPersistenceProvider",
+        row.session_persistence_provider,
+    );
+    if let Some(previous_ids_json) = row.previous_agent_session_ids_json {
+        let previous_ids: Value = serde_json::from_str(&previous_ids_json).map_err(|error| {
+            DomainStateError::corrupt_state(format!(
+                "session {row_id} runtimeSettingsJson.previousAgentSessionIds did not decode: {error}"
+            ))
+        })?;
+        runtime_settings.insert("previousAgentSessionIds".to_string(), previous_ids);
+    }
     let mut session = Map::new();
     session.insert("hiddenMetadata".to_string(), Value::Object(hidden));
-    session.insert(
-        "launchSettings".to_string(),
-        Value::Object(parse_object_map(
-            &row.launch_settings_json,
-            "launchSettingsJson",
-            "session",
-            &row_id,
-        )?),
-    );
+    session.insert("launchSettings".to_string(), Value::Object(launch_settings));
     session.insert(
         "lifecycleState".to_string(),
         Value::String(normalize_domain_lifecycle_state(Some(&Value::String(
@@ -702,12 +829,7 @@ fn session_fork_row_value(server_id: &str, row: SessionForkRow) -> DomainResult<
     session.insert("providerState".to_string(), Value::Object(provider_state));
     session.insert(
         "runtimeSettings".to_string(),
-        Value::Object(parse_object_map(
-            &row.runtime_settings_json,
-            "runtimeSettingsJson",
-            "session",
-            &row_id,
-        )?),
+        Value::Object(runtime_settings),
     );
     session.insert("sessionId".to_string(), Value::String(row.session_id));
     Ok(Value::Object(session))

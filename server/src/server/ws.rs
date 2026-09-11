@@ -353,11 +353,16 @@ pub(crate) fn send_presentation_snapshot_for_subscription(
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     /*
     CDXC:StateSync 2026-09-01:
-    One `list_sessions` feeds both sync passes and the snapshot projection.
+    One session list feeds both sync passes and the snapshot projection.
     The passes can mutate rows, so re-read only when one of them reports an
     actual change.
+
+    CDXC:StateSync 2026-09-11 WHY:
+    Presentation-scoped, for the same reason as `/api/readPresentationSnapshot`:
+    the passes act on `running` rows and the projection drops unpinned stopped
+    rows, so the full registry read only burned CPU.
     */
-    let sessions = repository.list_sessions(None).unwrap_or_default();
+    let sessions = repository.list_presentation_sessions().unwrap_or_default();
     let sidecars_changed =
         sync_session_state_sidecars(state, &db, &repository, &sessions, "presentation-subscribe")
             .unwrap_or(false);
@@ -371,7 +376,7 @@ pub(crate) fn send_presentation_snapshot_for_subscription(
     )
     .unwrap_or(false);
     let sessions = if sidecars_changed || identities_changed {
-        repository.list_sessions(None).unwrap_or(sessions)
+        repository.list_presentation_sessions().unwrap_or(sessions)
     } else {
         sessions
     };
