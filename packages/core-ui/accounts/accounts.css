@@ -587,14 +587,6 @@ details[open] > .gx-account-policy-summary > svg {
   flex-shrink: 0;
 }
 
-/* CDXC:AgentProviders 2026-09-07 DECISION: Hidden addresses retain their end characters; the entire domain is blurred. Render substitute glyphs so selecting or hovering cannot reveal the original domain. */
-.gx-account-hidden-domain {
-  display: inline-block;
-  user-select: none;
-}
-.gx-account-hidden-domain > span {
-  filter: blur(4px);
-}
 .gx-account-privacy-description {
   display: block;
   margin-top: 4px;

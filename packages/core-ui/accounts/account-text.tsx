@@ -10,12 +10,9 @@ export function useHideAccountEmails() {
 }
 export function useAccountText() {
   const hidden = useHideAccountEmails();
-  return (text: string) => hidden ? maskAccountText(text) : text;
+  return (text: string) => (hidden ? maskAccountText(text) : text);
 }
 export function AccountText({ text }: { text: string }) {
   const format = useAccountText();
-  const display = format(text);
-  return <span className='gx-account-text'>{display.split(/(@••••••\.•••)/u).map((part, index) => part === '@••••••.•••'
-    ? <span key={index} className='gx-account-hidden-domain' aria-label='hidden domain'><span aria-hidden='true'>{part}</span></span>
-    : part)}</span>;
+  return <span className='gx-account-text'>{format(text)}</span>;
 }

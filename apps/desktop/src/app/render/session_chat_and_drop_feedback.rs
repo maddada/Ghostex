@@ -84,7 +84,7 @@ impl GhostexGpuiApp {
                     Some((address, _)) => {
                         let chars: Vec<_> = address.chars().collect();
                         format!(
-                            "{}•••{}@••••••.•••",
+                            "{}•••{}@•••••.•••",
                             chars.first().copied().unwrap_or('•'),
                             if chars.len() > 1 {
                                 chars.last().unwrap().to_string()
