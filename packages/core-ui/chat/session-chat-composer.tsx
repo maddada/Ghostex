@@ -270,6 +270,10 @@ export interface SessionChatComposerProps {
   slashHeading?: string;
   /** Skills available to this session's agent, resolved on its machine. */
   skills?: readonly SessionChatSkill[];
+  skillsLoading?: boolean;
+  skillsError?: string;
+  /** Reopening the picker or pressing Retry can repeat a failed skill read. */
+  onRequestSkills?: () => void;
   /** Section heading shown above the skill mention rows. */
   skillHeading?: string;
   /**
@@ -596,6 +600,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       onPickPaths,
       onReadTerminalTail,
       onRequestFiles,
+      onRequestSkills,
       onSend,
       onSessionNote,
       onShowStashedPrompts,
@@ -617,6 +622,8 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       slashCommands,
       slashHeading,
       skills,
+      skillsLoading = false,
+      skillsError,
       skillHeading,
       stashedPromptCount = 0,
       summaryMode = false,
@@ -812,7 +819,10 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       () => (skillQuery !== null && !skillDismissed ? filterSessionChatSkills(skills ?? [], skillQuery) : []),
       [skillDismissed, skillQuery, skills]
     );
-    const skillOpen = skillMatches.length > 0 && !slashOpen;
+    const skillPickerActive = skillQuery !== null && !skillDismissed && !slashOpen;
+    const skillOpen =
+      skillPickerActive &&
+      (skillMatches.length > 0 || skillsLoading || !!skillsError || (skills?.length === 0 && !!onRequestSkills));
     const highlightedSkillIndex = Math.min(skillIndex, Math.max(skillMatches.length - 1, 0));
     const fileQuery = trigger?.kind === 'path' ? trigger.query : null;
     const fileMatches = useMemo(
@@ -844,6 +854,10 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       transcriptRef,
     });
 
+    useEffect(() => {
+      if (skillPickerActive) onRequestSkills?.();
+    }, [skillPickerActive, onRequestSkills]);
+
     // Lazy list: the first "@" of a session asks the host for the project files.
     useEffect(() => {
       if (filePickerActive && files === undefined) {
@@ -872,6 +886,20 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       fileListRef.current?.querySelector('[data-highlighted="true"]')?.scrollIntoView({ block: 'nearest' });
     }, [highlightedFileIndex, fileOpen]);
 
+    /**
+     * CDXC:SessionChat 2026-09-11 WHY:
+     * Picker dismissal belongs to the current mention; caret-only moves must re-arm it too, or Escape can hide a later $ or @ elsewhere in the draft.
+     */
+    const rearmMentionPickers = (text: string, nextCaret: number): void => {
+      const nextTrigger = detectSessionChatComposerTrigger(text, nextCaret);
+      if (nextTrigger?.kind !== 'skill' || nextTrigger.start !== trigger?.start) {
+        setSkillDismissed(false);
+      }
+      if (nextTrigger?.kind !== 'path' || nextTrigger.start !== trigger?.start) {
+        setFileDismissed(false);
+      }
+    };
+
     const updateDraft = (next: string, nextCaret?: number): void => {
       draftEditRevision.current += 1;
       expandComposer();
@@ -887,15 +915,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       if (sessionChatSlashQuery(next) === null) {
         setSlashDismissed(false);
       }
-      // Leaving a token re-arms its picker, so a dismissed mention does not stay
-      // dismissed for the next one typed in the same draft.
-      const nextTrigger = detectSessionChatComposerTrigger(next, caretOffset);
-      if (nextTrigger?.kind !== 'skill') {
-        setSkillDismissed(false);
-      }
-      if (nextTrigger?.kind !== 'path') {
-        setFileDismissed(false);
-      }
+      rearmMentionPickers(next, caretOffset);
       setSlashIndex(0);
       setSkillIndex(0);
       setFileIndex(0);
@@ -2117,12 +2137,13 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       if (!skillOpen) {
         return false;
       }
-      const highlighted = skillMatches[highlightedSkillIndex];
       if (event.key === 'Escape') {
         event.preventDefault();
         setSkillDismissed(true);
         return true;
       }
+      if (skillMatches.length === 0) return false;
+      const highlighted = skillMatches[highlightedSkillIndex];
       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
         event.preventDefault();
         const delta = event.key === 'ArrowUp' ? -1 : 1;
@@ -2194,6 +2215,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       ) {
         setHistory(resetSessionChatComposerHistoryIndex);
       }
+      if (historyRef.current.index === null) rearmMentionPickers(draftRef.current, nextCaret);
     };
 
     const handleKeyDown = (event: SessionChatComposerKeyEvent): void => {
@@ -2280,8 +2302,9 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           event.preventDefault();
           setHistory(recalled.history);
           setSlashDismissed(true);
-          setSkillDismissed(true);
-          setFileDismissed(true);
+          const recalledTrigger = detectSessionChatComposerTrigger(recalled.draft, recalled.draft.length);
+          setSkillDismissed(recalledTrigger?.kind === 'skill');
+          setFileDismissed(recalledTrigger?.kind === 'path');
           composerTouchedRef.current = true;
           persistComposerDraft(recalled.draft);
           draftRef.current = recalled.draft;
@@ -2297,8 +2320,9 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           event.preventDefault();
           setHistory(recalled.history);
           setSlashDismissed(true);
-          setSkillDismissed(true);
-          setFileDismissed(true);
+          const recalledTrigger = detectSessionChatComposerTrigger(recalled.draft, recalled.draft.length);
+          setSkillDismissed(recalledTrigger?.kind === 'skill');
+          setFileDismissed(recalledTrigger?.kind === 'path');
           composerTouchedRef.current = true;
           persistComposerDraft(recalled.draft);
           draftRef.current = recalled.draft;
@@ -2461,6 +2485,29 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
                 <div className='px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground'>
                   {skillHeading ?? 'Skills'}
                 </div>
+                {skillsLoading ? (
+                  <div className='flex items-center gap-2.5 px-3 py-2 text-sm text-muted-foreground' role='status'>
+                    <IconLoader2 aria-hidden='true' className='size-4 shrink-0 animate-spin' stroke={2} />
+                    Loading skills…
+                  </div>
+                ) : skillsError ? (
+                  <div className='flex items-center justify-between gap-2.5 px-3 py-2 text-sm'>
+                    <span role='status'>{skillsError}</span>
+                    <Button
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={onRequestSkills}
+                      size='sm'
+                      type='button'
+                      variant='outline'
+                    >
+                      Retry
+                    </Button>
+                  </div>
+                ) : skills?.length === 0 ? (
+                  <div className='px-3 py-2 text-sm text-muted-foreground' role='status'>
+                    No skills available.
+                  </div>
+                ) : null}
                 {skillMatches.map((skill, index) => (
                   <button
                     aria-selected={index === highlightedSkillIndex}
