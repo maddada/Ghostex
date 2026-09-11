@@ -93,7 +93,7 @@ export function clampSidebarTooltipDelayMs(value: number): number {
 export type PreferredAgentInterface = 'terminal' | 'chat';
 export type SidebarSettingsPresetId = 'codex' | 'minimal' | 'detailed' | 'recommended';
 export type PromptEditorBackend = 'inherit' | 'monaco';
-export type SessionTitleGenerationAgent = 'codex' | 'cursor' | 'claude' | 'grok' | 'custom';
+export type SessionTitleGenerationAgent = 'codex' | 'cursor' | 'claude' | 'grok' | 'pi' | 'antigravity' | 'custom';
 export type AppShotsHotkey = 'both-command' | 'both-shift' | 'both-option' | 'double-left-shift' | 'double-left-option';
 export type KeepAwakeDurationMinutes = 0 | 120 | 300;
 export type AutoSleepIdleMinutes = 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300;
@@ -283,6 +283,7 @@ export type ghostexSettings = {
    * The menus and commands remain available through their other entry points.
    */
   tipsAndTricksTitlebarButtonHidden: boolean;
+  notificationsTitlebarButtonHidden: boolean;
   helpTitlebarButtonHidden: boolean;
   resourcesTitlebarButtonHidden: boolean;
   devServersTitlebarButtonHidden: boolean;

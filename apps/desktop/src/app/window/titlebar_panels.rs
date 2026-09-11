@@ -31,6 +31,7 @@ pub(crate) enum GpuiTitlebarPopupKind {
     Extensions,
     Git,
     Help,
+    Notifications,
     OpenTargets,
     Resources,
     RemoteSites,
@@ -46,6 +47,7 @@ impl GpuiTitlebarPopupKind {
             Self::Extensions => "extensions",
             Self::Git => "git",
             Self::Help => "help",
+            Self::Notifications => "notifications",
             Self::OpenTargets => "openTargets",
             Self::Resources => "resources",
             Self::RemoteSites => "remoteSites",
@@ -240,6 +242,18 @@ impl GpuiTitlebarPopupWindow {
         if let GpuiTitlebarPopupContent::Reading(panel) = &self.content {
             panel.update(cx, |panel, cx| {
                 panel.update_tips_runtime_status(payload, cx);
+            });
+        }
+    }
+
+    pub(crate) fn update_notifications_feed(
+        &mut self,
+        feed: crate::notification_feed::GpuiNotificationFeedState,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let GpuiTitlebarPopupContent::Reading(panel) = &self.content {
+            panel.update(cx, |panel, cx| {
+                panel.update_notifications_feed(feed, cx);
             });
         }
     }
@@ -496,12 +510,16 @@ pub(crate) enum GpuiTitlebarReadingPanelState {
         pending_actions: HashMap<String, &'static str>,
         snapshot: GpuiNativeResourcesSnapshot,
     },
+    Notifications {
+        feed: crate::notification_feed::GpuiNotificationFeedState,
+        hovered_id: Option<String>,
+    },
 }
 
 pub(crate) struct GpuiTitlebarReadingPanel {
-    main_app: gpui::WeakEntity<GhostexGpuiApp>,
-    scroll_handle: ScrollHandle,
-    state: GpuiTitlebarReadingPanelState,
+    pub(super) main_app: gpui::WeakEntity<GhostexGpuiApp>,
+    pub(super) scroll_handle: ScrollHandle,
+    pub(super) state: GpuiTitlebarReadingPanelState,
 }
 
 #[derive(Clone, Copy)]
@@ -594,13 +612,16 @@ impl GpuiTitlebarReadingPanel {
         }
     }
 
-    fn close_popup(&self, window: &mut Window, cx: &mut gpui::Context<Self>) {
+    pub(super) fn close_popup(&self, window: &mut Window, cx: &mut gpui::Context<Self>) {
         let _ = self.main_app.update_in(cx, |app, _main_window, cx| {
             app.clear_gpui_titlebar_popup_from_window(
                 match self.state {
                     GpuiTitlebarReadingPanelState::Tips { .. } => GpuiTitlebarPopupKind::Tips,
                     GpuiTitlebarReadingPanelState::Resources { .. } => {
                         GpuiTitlebarPopupKind::Resources
+                    }
+                    GpuiTitlebarReadingPanelState::Notifications { .. } => {
+                        GpuiTitlebarPopupKind::Notifications
                     }
                 },
                 cx,
@@ -2114,6 +2135,9 @@ impl Render for GpuiTitlebarReadingPanel {
         resource_panel_frame().child(match self.state {
             GpuiTitlebarReadingPanelState::Tips { .. } => self.render_tips(cx),
             GpuiTitlebarReadingPanelState::Resources { .. } => self.render_resources(cx),
+            GpuiTitlebarReadingPanelState::Notifications { .. } => {
+                self.render_notifications(cx)
+            }
         })
     }
 }

@@ -144,9 +144,9 @@ impl GhostexGpuiApp {
                 }))
         };
 
-        // CDXC:Titlebar 2026-09-10 DECISION:
-        // User: full view buttons stay centered in the window, but the compact dropdown belongs on the left immediately after Next.
-        // This supersedes centering the compact dropdown; equal side regions still keep the full tabs centered.
+        // CDXC:Titlebar 2026-09-11 DECISION:
+        // User: full view buttons stay centered in the window, but the compact dropdown belongs on the left right after the Notifications bell, which follows Next.
+        // This supersedes the 2026-09-10 wording that put the compact dropdown immediately after Next; equal side regions still keep the full tabs centered.
         titlebar
             .on_click(|event, window, _cx| {
                 if event.click_count() != 2 {
@@ -227,6 +227,11 @@ impl GhostexGpuiApp {
             not be.
             */
             .child(self.render_titlebar_navigation_history_buttons(cx))
+            // CDXC:Notifications 2026-09-11 DECISION:
+            // User: the notification bell sits immediately to the right of the Next button.
+            .when(self.titlebar_notification_bell_visible(), |this| {
+                this.child(self.render_titlebar_notification_bell(cx))
+            })
             .when(show_compact_mode_dropdown, |this| {
                 this.child(self.render_compact_mode_dropdown(cx))
             })
@@ -263,9 +268,9 @@ impl GhostexGpuiApp {
             )
     }
 
-    /// CDXC:Workarea 2026-09-10 DECISION:
-    /// User: the companion expand button replaces the minimized companion bar beside Next; when views collapse, the view dropdown goes immediately after Next, before this button.
-    /// This supersedes the companion button's immediate adjacency to Next in compact mode.
+    /// CDXC:Workarea 2026-09-11 DECISION:
+    /// User: the companion expand button replaces the minimized companion bar after the Notifications bell that follows Next; when views collapse, the view dropdown goes right after the bell, before this button.
+    /// This supersedes the 2026-09-10 wording that placed the dropdown and this button immediately after Next.
     pub(crate) fn render_titlebar_companion_toggle(
         &self,
         cx: &mut gpui::Context<Self>,

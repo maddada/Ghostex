@@ -115,6 +115,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   automateViewTabHidden: false,
   docsViewTabHidden: false,
   tipsAndTricksTitlebarButtonHidden: false,
+  notificationsTitlebarButtonHidden: false,
   helpTitlebarButtonHidden: false,
   resourcesTitlebarButtonHidden: false,
   devServersTitlebarButtonHidden: false,

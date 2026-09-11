@@ -2161,6 +2161,16 @@ impl GhostexGpuiApp {
                     self.request_navigation_history_navigation(direction, cx);
                     return;
                 }
+                if let Some(command) =
+                    notification_feed::notification_feed_hotkey_command(action_id)
+                {
+                    if command == "open" {
+                        self.toggle_gpui_titlebar_notifications_popup(window, cx);
+                    } else {
+                        self.request_notification_feed_command(command, None, cx);
+                    }
+                    return;
+                }
                 if action_id == "toggleSidebarCollapsed" {
                     self.toggle_gpui_sidebar_collapsed(cx);
                     return;

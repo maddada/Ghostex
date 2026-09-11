@@ -28,6 +28,7 @@ export type ghostexHotkeyActionId =
   | 'rotatePanesClockwise'
   | 'sleepFocusedSession'
   | 'scrollTerminalToBottom'
+  | 'scrollChatToBottom'
   | 'scrollTerminalToTop'
   | 'stashPrompt'
   | 'stashedPrompts'
@@ -42,6 +43,9 @@ export type ghostexHotkeyActionId =
   | 'focusNextGroup'
   | 'navigateHistoryBack'
   | 'navigateHistoryForward'
+  | 'openNotifications'
+  | 'jumpToLatestUnreadNotification'
+  | 'deferNotificationAndJumpNext'
   | 'focusPreviousSession'
   | 'focusNextSession'
   | 'focusUp'
@@ -92,6 +96,7 @@ export type ghostexTerminalToolbarAction =
   | 'toggleChatView';
 
 export type ghostexHotkeyAction =
+  | { id: 'scrollChatToBottom'; kind: 'chatAction' }
   | { id: ghostexHotkeyActionId; kind: 'createSession' }
   | { id: ghostexHotkeyActionId; kind: 'focusAdjacentGroup'; direction: -1 | 1 }
   | { id: ghostexHotkeyActionId; kind: 'focusDirection'; direction: SessionGridDirection }
@@ -99,6 +104,7 @@ export type ghostexHotkeyAction =
   | { id: ghostexHotkeyActionId; kind: 'focusedPaneAction'; focusedPaneAction: ghostexFocusedPaneAction }
   | { id: ghostexHotkeyActionId; kind: 'jumpToProject'; projectIndex: number }
   | { direction: 'back' | 'forward'; id: ghostexHotkeyActionId; kind: 'navigateHistory' }
+  | { command: 'open' | 'jumpToLatestUnread' | 'deferAndJumpNext'; id: ghostexHotkeyActionId; kind: 'notificationFeed' }
   | { id: ghostexHotkeyActionId; kind: 'moveSidebar' }
   | { id: ghostexHotkeyActionId; kind: 'openCommandPalette' }
   | { id: ghostexHotkeyActionId; kind: 'openSessionSearchPalette' }
@@ -142,6 +148,17 @@ export type ghostexHotkeyDefinition = {
  * the bindings without changing code or relying on hard-coded VS Code keys.
  */
 export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
+  {
+    action: { id: 'scrollChatToBottom', kind: 'chatAction' },
+    /** CDXC:SessionChat 2026-09-11 DECISION:
+     * User: Ctrl+Shift+Down scrolls chat to the bottom, including while typing, replacing the editor's selection or multi-cursor command in chat. Make it configurable; this supersedes Option+Down.
+     */
+    defaultKey: 'ctrl+shift+down',
+    windowsLinuxDefaultKey: 'cmd+shift+down',
+    description: 'Scroll chat to the bottom, including while typing in the composer.',
+    id: 'scrollChatToBottom',
+    title: 'Scroll Chat to Bottom',
+  },
   {
     action: { id: 'createSession', kind: 'createSession' },
     /**
@@ -664,6 +681,33 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     id: 'navigateHistoryForward',
     title: 'Forward',
     windowsLinuxDefaultKey: 'cmd+alt+]',
+  },
+  /*
+   * CDXC:Notifications 2026-09-11 DECISION:
+   * User: the notification feed gets an open key, a jump-to-latest-unread key,
+   * and a defer-and-jump-next key so unread agent turns can be walked from the
+   * keyboard. The native titlebar bell owns these on the desktop app.
+   */
+  {
+    action: { command: 'open', id: 'openNotifications', kind: 'notificationFeed' },
+    defaultKey: 'cmd+i',
+    description: 'Open the Notifications panel under the titlebar bell.',
+    id: 'openNotifications',
+    title: 'Open Notifications',
+  },
+  {
+    action: { command: 'jumpToLatestUnread', id: 'jumpToLatestUnreadNotification', kind: 'notificationFeed' },
+    defaultKey: 'cmd+shift+u',
+    description: 'Jump to the session of the latest unread notification and mark it read.',
+    id: 'jumpToLatestUnreadNotification',
+    title: 'Jump to Latest Unread Notification',
+  },
+  {
+    action: { command: 'deferAndJumpNext', id: 'deferNotificationAndJumpNext', kind: 'notificationFeed' },
+    defaultKey: 'cmd+ctrl+u',
+    description: 'Push the current session to the back of the unread queue and jump to the next unread notification.',
+    id: 'deferNotificationAndJumpNext',
+    title: 'Mark as Oldest Unread and Jump to Next',
   },
   {
     action: { id: 'focusPreviousSession', kind: 'focusSessionSlot', slotNumber: -1 },

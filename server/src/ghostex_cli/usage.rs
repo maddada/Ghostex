@@ -158,6 +158,10 @@ pub fn usage() -> String {
             "board associate <bead-id> [--session-id id]",
             "Link a running session to a Project Board bead; defaults to the calling session",
         ),
+        format_help_command(
+            "notify --title text [--body text] [--session-id id]",
+            "Post a notification to the Ghostex bell for a session; defaults to the calling session",
+        ),
         format_help_command("run-agent <agentId>", "Run a configured agent button"),
         format_help_command(
             "run-command <commandId>",
@@ -1259,4 +1263,16 @@ mod tests {
             "ghostex rename-command --session-id \"${GHOSTEX_GLOBAL_SESSION_REF:-${GHOSTEX_SESSION_ID:-${ZMX_SESSION:-}}}\" --title \"<title>\""
         ));
     }
+}
+
+pub fn notify_usage() -> String {
+    r#"Usage:
+  ghostex notify --title <text> [--body <text>] [--session-id <alias|id|title>] [--json]
+  gx notify --title <text>
+
+Posts a notification to the Ghostex titlebar bell for a session. Without --session-id the
+calling session is used, read from the Ghostex session environment every pane exports.
+The row shows the title, the session's project, and the body, and counts as unread until
+the session is opened or the row is marked read."#
+        .to_string()
 }

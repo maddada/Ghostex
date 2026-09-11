@@ -77,6 +77,11 @@ use crate::{
         GxserverLogger, LogLevel, LogQueryError,
     },
     navigation_history::{navigate_history, read_navigation_history, record_navigation_visit},
+    notification_feed::{
+        create_notification_endpoint, read_notification_feed_endpoint,
+        update_notification_feed_endpoint, NOTIFICATION_FEED_CREATE_ENDPOINT,
+        NOTIFICATION_FEED_READ_ENDPOINT, NOTIFICATION_FEED_UPDATE_ENDPOINT,
+    },
     paths::{get_gxserver_paths, GxserverPaths},
     platform::shell::command_shell,
     portless::{
@@ -1804,6 +1809,29 @@ async fn route_http(
             request_id,
             &body_json,
             |_, _, params, _| navigate_history(params),
+        ),
+        NOTIFICATION_FEED_READ_ENDPOINT => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, _, _| read_notification_feed_endpoint(db),
+        ),
+        NOTIFICATION_FEED_UPDATE_ENDPOINT => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |_, db, params, _| update_notification_feed_endpoint(&state, db, params),
+        ),
+        NOTIFICATION_FEED_CREATE_ENDPOINT => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, db, params, _| {
+                create_notification_endpoint(&state, repository, db, params)
+            },
         ),
         "/api/readWorkspaceSessionGroups" => handle_domain_http(
             &state,

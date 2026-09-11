@@ -923,6 +923,8 @@ pub(crate) const TITLEBAR_POPUP_HELP_WIDTH: f32 = 380.0;
 
 pub(crate) const TITLEBAR_POPUP_RESOURCES_WIDTH: f32 = 656.0;
 
+pub(crate) const TITLEBAR_POPUP_NOTIFICATIONS_WIDTH: f32 = 520.0;
+
 pub(crate) const TITLEBAR_POPUP_MENU_MAX_HEIGHT: f32 = 420.0;
 
 pub(crate) const TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT: f32 = 650.0;
@@ -1675,6 +1677,9 @@ pub(crate) const DOCS_VIEW_TAB_HIDDEN_SETTINGS_KEY: &str = "docsViewTabHidden";
 
 pub(crate) const TIPS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
     "tipsAndTricksTitlebarButtonHidden";
+
+pub(crate) const NOTIFICATIONS_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str =
+    "notificationsTitlebarButtonHidden";
 
 pub(crate) const HELP_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str = "helpTitlebarButtonHidden";
 

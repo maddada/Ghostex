@@ -2859,6 +2859,8 @@ export function SidebarApp({
        * other host-owned navigation rows here.
        */
       action.kind === 'navigateHistory' ||
+      // Host-owned like Back/Forward: the native bell and the sidebar runtime act on the id.
+      action.kind === 'notificationFeed' ||
       action.kind === 'openCommandsPanel' ||
       action.kind === 'openNewThreadPalette' ||
       action.kind === 'renameActiveSession' ||
@@ -3965,16 +3967,16 @@ export function SidebarApp({
                */}
               <div className='session-groups-top' />
               {/*
-            CDXC:Sidebar 2026-06-30-01:59:
-            The sidebar's project list must scroll as fast as the browser can move it.
-            Do not apply the vertical scroll mask or sticky-header gradient geometry here; the user explicitly accepts losing those visual fades to remove scroll-linked paint work.
+            CDXC:Sidebar 2026-09-11 DECISION:
+            User: the main sidebar scroller shows the chat transcript's scroll-edge fade at both ends, so rows dim as they slide under the pinned Space row and off the bottom edge.
+            This supersedes the 2026-06-30 decision that dropped every fade from this scroller for scroll throughput. The fade is the CSS-only scroll-fade-y utility (a scroll-linked mask, no JS scroll subscription); group-panels.css offsets its top edge below the sticky Space row so the pinned buttons never fade.
           */}
               <div
                 className='session-groups-scroll-shell'
                 data-scrollable-y={String(sessionGroupsHaveScrollableOverflow)}
               >
                 <div
-                  className='session-groups-content'
+                  className='session-groups-content scroll-fade-y'
                   data-scrollable-y={String(sessionGroupsHaveScrollableOverflow)}
                   ref={sessionGroupsContentRef}
                 >

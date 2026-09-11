@@ -234,6 +234,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'tipsAndTricksTitlebarButtonHidden',
       DEFAULT_ghostex_SETTINGS.tipsAndTricksTitlebarButtonHidden
     ),
+    notificationsTitlebarButtonHidden: readBoolean(
+      source,
+      'notificationsTitlebarButtonHidden',
+      DEFAULT_ghostex_SETTINGS.notificationsTitlebarButtonHidden
+    ),
     helpTitlebarButtonHidden: readBoolean(
       source,
       'helpTitlebarButtonHidden',

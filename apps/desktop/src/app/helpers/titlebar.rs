@@ -70,6 +70,7 @@ pub(crate) fn titlebar_popup_menu_width(kind: GpuiTitlebarPopupKind) -> f32 {
         GpuiTitlebarPopupKind::Extensions => TITLEBAR_POPUP_EXTENSIONS_WIDTH,
         GpuiTitlebarPopupKind::Git => TITLEBAR_POPUP_GIT_WIDTH,
         GpuiTitlebarPopupKind::Help => TITLEBAR_POPUP_HELP_WIDTH,
+        GpuiTitlebarPopupKind::Notifications => TITLEBAR_POPUP_NOTIFICATIONS_WIDTH,
         GpuiTitlebarPopupKind::Resources => TITLEBAR_POPUP_RESOURCES_WIDTH,
         GpuiTitlebarPopupKind::Tips => TITLEBAR_POPUP_TIPS_WIDTH,
     }
@@ -95,13 +96,14 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
     kind: GpuiTitlebarPopupKind,
     trigger_bounds: Bounds<Pixels>,
     content_height: f32,
+    width: f32,
     window: &Window,
 ) -> Bounds<Pixels> {
     let main_window_bounds = window.bounds();
-    let width = titlebar_popup_menu_width(kind);
     let max_height = match kind {
         GpuiTitlebarPopupKind::Resources
         | GpuiTitlebarPopupKind::Tips
+        | GpuiTitlebarPopupKind::Notifications
         | GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT,
         _ => TITLEBAR_POPUP_MENU_MAX_HEIGHT,
     };
@@ -112,8 +114,14 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
     let max_left = main_window_bounds.origin.x.as_f32() + main_window_bounds.size.width.as_f32()
         - width
         - horizontal_margin;
+    // The Notifications bell sits in the left titlebar region, so its dropdown
+    // grows to the right from the trigger like a context menu instead of
+    // hanging off the trigger's right edge like the right-region buttons.
     let desired_left = main_window_bounds.origin.x.as_f32()
-        + if kind == GpuiTitlebarPopupKind::ContextMenu {
+        + if matches!(
+            kind,
+            GpuiTitlebarPopupKind::ContextMenu | GpuiTitlebarPopupKind::Notifications
+        ) {
             trigger_bounds.left().as_f32()
         } else {
             trigger_bounds.top_right().x.as_f32() - width
@@ -137,8 +145,15 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
             above_top
         };
 
+    let top = if kind == GpuiTitlebarPopupKind::ContextMenu {
+        let min_top = main_window_bounds.origin.y.as_f32() + horizontal_margin;
+        top.clamp(min_top, (bottom_limit - height).max(min_top))
+    } else {
+        top
+    };
+
     Bounds {
-        origin: point(px(left), px(top.clamp(main_window_bounds.origin.y.as_f32() + horizontal_margin, (bottom_limit - height).max(main_window_bounds.origin.y.as_f32() + horizontal_margin)))),
+        origin: point(px(left), px(top)),
         size: size(px(width), px(height)),
     }
 }

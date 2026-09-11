@@ -33,6 +33,7 @@ export type GhostexOfficialExtensionSettingsKey = Extract<
   | 'gitActionsTitlebarButtonHidden'
   | 'helpTitlebarButtonHidden'
   | 'kanbanViewTabHidden'
+  | 'notificationsTitlebarButtonHidden'
   | 'openInTitlebarButtonHidden'
   | 'quickActionsTitlebarButtonHidden'
   | 'resourcesTitlebarButtonHidden'
@@ -52,6 +53,7 @@ export type GhostexOfficialExtensionId =
   | 'gitActions'
   | 'help'
   | 'kanban'
+  | 'notifications'
   | 'openIn'
   | 'quickActions'
   | 'resources'
@@ -108,6 +110,13 @@ export const GHOSTEX_OFFICIAL_EXTENSIONS: readonly GhostexOfficialExtension[] = 
     placement: 'titlebar-button',
     settingsKey: 'tipsAndTricksTitlebarButtonHidden',
     title: 'Tips & Tricks',
+  },
+  {
+    description: 'Title bar bell that lists what your agents finished or need from you.',
+    id: 'notifications',
+    placement: 'titlebar-button',
+    settingsKey: 'notificationsTitlebarButtonHidden',
+    title: 'Notifications',
   },
   {
     description:

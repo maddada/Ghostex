@@ -22,6 +22,7 @@ pub mod identity;
 pub mod ids;
 pub mod logging;
 pub mod navigation_history;
+pub mod notification_feed;
 pub mod paths;
 pub mod platform;
 pub mod portless;

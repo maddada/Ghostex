@@ -205,11 +205,14 @@ pub(crate) fn gpui_source_workarea_allowed_configured_hotkey_action_id(action_id
     gpui_workarea_switch_hotkey_action_id(action_id)
         || matches!(
             action_id,
-            "focusLeft"
+            "deferNotificationAndJumpNext"
+                | "focusLeft"
                 | "focusRight"
+                | "jumpToLatestUnreadNotification"
                 | "navigateHistoryBack"
                 | "navigateHistoryForward"
                 | "openCommandsPanel"
+                | "openNotifications"
                 | "toggleCompanionPane"
         )
 }

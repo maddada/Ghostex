@@ -287,6 +287,10 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     // CDXC:Navigation 2026-08-19: mirrors packages/shared/ghostex-hotkeys.ts.
     ("navigateHistoryBack", "cmd+ctrl+["),
     ("navigateHistoryForward", "cmd+ctrl+]"),
+    // CDXC:Notifications 2026-09-11: mirrors packages/shared/ghostex-hotkeys.ts.
+    ("openNotifications", "cmd+i"),
+    ("jumpToLatestUnreadNotification", "cmd+shift+u"),
+    ("deferNotificationAndJumpNext", "cmd+ctrl+u"),
     ("focusPreviousSession", "cmd+shift+tab"),
     ("focusNextSession", "cmd+tab"),
     ("focusUp", "cmd+alt+up"),
@@ -466,7 +470,10 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
             .map(|(action_id, _)| *action_id)
             .collect::<HashSet<_>>();
         for (action_id, key) in persisted_hotkeys {
-            if known_action_ids.contains(action_id.as_str()) {
+            // CDXC:SessionChat 2026-09-11 WHY: Chat owns this configurable chord in its capture handler, including editor focus; binding it natively would swallow the page key or affect terminals.
+            if action_id == "scrollChatToBottom"
+                || known_action_ids.contains(action_id.as_str())
+            {
                 continue;
             }
             if key
@@ -598,12 +605,15 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
         )) => matches!(
             action_id,
             "createSession"
+                | "deferNotificationAndJumpNext"
                 | "focusLeft"
                 | "focusNextSession"
                 | "focusPreviousSession"
                 | "focusRight"
+                | "jumpToLatestUnreadNotification"
                 | "navigateHistoryBack"
                 | "navigateHistoryForward"
+                | "openNotifications"
                 | "toggleCompanionPane"
                 | "toggleSidebarCollapsed"
         ),
@@ -611,10 +621,13 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
             FirstResponderCefSurface::Sidebar,
         )) => matches!(
             action_id,
-            "focusNextSession"
+            "deferNotificationAndJumpNext"
+                | "focusNextSession"
                 | "focusPreviousSession"
+                | "jumpToLatestUnreadNotification"
                 | "navigateHistoryBack"
                 | "navigateHistoryForward"
+                | "openNotifications"
                 | "toggleCompanionPane"
                 | "toggleSidebarCollapsed"
         ),
@@ -623,10 +636,13 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
         )) => matches!(
             action_id,
             "createSession"
+                | "deferNotificationAndJumpNext"
                 | "focusLeft"
                 | "focusRight"
+                | "jumpToLatestUnreadNotification"
                 | "navigateHistoryBack"
                 | "navigateHistoryForward"
+                | "openNotifications"
                 | "toggleCompanionPane"
         ),
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(
@@ -634,10 +650,13 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
         )) => matches!(
             action_id,
             "createSession"
+                | "deferNotificationAndJumpNext"
                 | "focusLeft"
                 | "focusRight"
+                | "jumpToLatestUnreadNotification"
                 | "navigateHistoryBack"
                 | "navigateHistoryForward"
+                | "openNotifications"
                 | "toggleCompanionPane"
         ),
         GpuiKeyboardOwner::FirstResponder(FirstResponderTarget::CefSurface(
@@ -699,7 +718,10 @@ pub(crate) fn gpui_configured_hotkey_key_bindings_from_settings() -> Vec<KeyBind
         ),
     ];
     let mut push_binding = |action_id: &str, key: &str| {
-        if key.trim().is_empty() || gpui_hotkey_is_reserved(key) {
+        if action_id == "scrollChatToBottom"
+            || key.trim().is_empty()
+            || gpui_hotkey_is_reserved(key)
+        {
             return;
         }
         let Some(keystroke) = gpui_keystroke_from_shared_hotkey(key) else {

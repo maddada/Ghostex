@@ -4,6 +4,7 @@ pub mod args;
 pub mod attach;
 pub mod automations;
 pub mod board;
+pub mod notify;
 pub mod browser_mcp;
 pub mod diagnostics;
 pub mod editors;
@@ -80,6 +81,7 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "generate-title",
     "guide",
     "manage-beads",
+    "notify",
     "h",
     "history",
     "move-codex-session",
@@ -298,6 +300,7 @@ fn is_known_command(name: &str) -> bool {
         "move-codex-session",
         "install-move-codex-session-skill",
         "guide",
+        "notify",
         "install-help-skill",
         "settings",
         "toggle-sidebar",
@@ -724,6 +727,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "browser-devtools-mcp" | "browser-mcp" => browser_mcp::browser_devtools_mcp_command(args),
         "bd" | "beads" => launchers::beads_command(args),
         "board" => board::board_command(args),
+        "notify" => notify::notify_command(args),
         "server" => server_command(args),
         "tailcat" => tailcat::tailcat_command(args),
         "web" => web::web_command(args),

@@ -132,6 +132,8 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     // Adopt whatever trail this scope already has on the daemon so Back keeps
     // working across an app restart instead of starting from an empty stack.
     void this.navigationHistory.refresh();
+    // The bell count is daemon state too; a fresh stream means a fresh feed read.
+    void this.refreshNotificationFeed();
     // Heal the shared composer draft cache from the daemon's durable copy —
     // an app kill can drop localStorage batches the daemon still holds.
     this.reconcileSessionChatDraftCache();
@@ -226,6 +228,9 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       */
       onGlobalSidebarCommands: () => {
         this.refreshSidebarHudFromClient();
+      },
+      onNotificationFeedChanged: () => {
+        void this.refreshNotificationFeed();
       },
       onRendererCommand: (command) => this.handleGxserverRendererCommand(command),
       onSidebarProjectCollections: (state) => {

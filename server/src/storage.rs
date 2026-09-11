@@ -1593,6 +1593,28 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 34;
     "#,
     },
+    Migration {
+        id: "0035_notification_feed",
+        sql: r#"
+      CREATE TABLE notification_feed (
+        id TEXT PRIMARY KEY,
+        projectId TEXT NOT NULL,
+        sessionId TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        subtitle TEXT NOT NULL,
+        body TEXT NOT NULL,
+        agentName TEXT,
+        attentionEventId TEXT,
+        createdAt TEXT NOT NULL,
+        readAt TEXT,
+        deferredAt TEXT
+      );
+      CREATE INDEX idx_notification_feed_session ON notification_feed(sessionId, createdAt);
+      CREATE INDEX idx_notification_feed_read ON notification_feed(readAt, createdAt);
+      PRAGMA user_version = 35;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1641,10 +1663,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 34);
+        assert_eq!(user_version, 35);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 34);
+        assert_eq!(schema_migration_count(&db), 35);
         assert_eq!(
             explicit_index_names(&db),
             vec![
@@ -1656,6 +1678,8 @@ mod tests {
                 "idx_delayed_sends_due".to_string(),
                 "idx_global_sidebar_commands_order".to_string(),
                 "idx_id_allocations_kind_parent".to_string(),
+                "idx_notification_feed_read".to_string(),
+                "idx_notification_feed_session".to_string(),
                 "idx_portless_domain_project_identity".to_string(),
                 "idx_portless_domain_project_slug".to_string(),
                 "idx_portless_domain_worktree_identity".to_string(),

@@ -405,6 +405,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readNavigationHistory"
         | "/api/recordNavigationVisit"
         | "/api/navigateHistory"
+        /*
+        CDXC:Notifications 2026-09-11 WHY:
+        The notification feed is a sidebar-state document like the trail above:
+        bounded routing ids, display titles, and the agent's last message, read
+        by the desktop bell, the web app, and mobile alike, so it is remote
+        allowed beside the other sidebar-state endpoints.
+        */
+        | "/api/readNotificationFeed"
+        | "/api/updateNotificationFeed"
+        | "/api/createNotification"
         | "/api/readSidebarProjectCollections"
         | "/api/updateSidebarProjectCollections"
         | "/api/assignProjectToSidebarCollection"

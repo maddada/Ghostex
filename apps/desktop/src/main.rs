@@ -16,6 +16,7 @@ mod component_store;
 mod ghostty_kit;
 mod ghostty_vt;
 mod navigation_history;
+mod notification_feed;
 mod plugins_modal;
 mod profiling;
 mod shared_settings;

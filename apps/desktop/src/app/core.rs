@@ -326,6 +326,13 @@ pub struct GhostexGpuiApp {
     value — see `navigation_history` for why the titlebar owns no trail state.
     */
     pub(crate) navigation_history_state: navigation_history::GpuiNavigationHistoryState,
+    /// The notification feed rows and unread count, pushed by the sidebar
+    /// runtime whenever gxserver's feed changes. Render-path read only; see
+    /// `notification_feed` for the ownership split.
+    pub(crate) notification_feed_state: notification_feed::GpuiNotificationFeedState,
+    /// Last painted bounds of the titlebar bell, so the `openNotifications`
+    /// hotkey can anchor the Notifications popup without a click.
+    pub(crate) titlebar_notification_bell_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     pub(crate) titlebar_git_menu_state: Option<GpuiTitlebarGitMenuState>,
     // Titlebar Actions are projected from gxserver's `/api/readSidebarHud`.
     // The render path must only read this cached snapshot; the RPC runs on
@@ -645,6 +652,7 @@ pub struct GhostexGpuiApp {
 
     CDXC:Notifications 2026-06-26-06:56:
     GPUI macOS attention banners are derived only from this sanitized status snapshot on attention transition edges. Keep first-snapshot replay suppression, per-session/global rate state, and notification click routing in runtime memory only; never persist or log titles, ids, paths, URLs, commands, stdout/stderr, settings JSON, tokens, raw payloads, or terminal content.
+    2026-09-11: the persisted notification history is gxserver's notification feed (`notification_feed_state` above is a cached copy of it); this banner path still keeps nothing.
     */
     pub(crate) sidebar_global_actions: Vec<GpuiSidebarGlobalActionState>,
     pub(crate) tab_strip_built_in_buttons: shared_settings::SharedTabStripBuiltInButtons,

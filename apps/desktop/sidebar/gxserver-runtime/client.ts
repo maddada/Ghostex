@@ -156,6 +156,7 @@ export class GpuiGxserverClient {
     onDelta,
     onError,
     onGlobalSidebarCommands,
+    onNotificationFeedChanged,
     onRendererCommand,
     onSessionChatEvent,
     onSidebarProjectCollections,
@@ -170,6 +171,7 @@ export class GpuiGxserverClient {
     onDelta: (delta: GxserverPresentationDelta, revision: number) => void;
     onError: () => void;
     onGlobalSidebarCommands?: () => void;
+    onNotificationFeedChanged?: () => void;
     onRendererCommand?: GpuiRendererCommandHandler;
     onSessionChatEvent?: (event: GxserverSessionChatEvent) => void;
     onSidebarProjectCollections?: (state: GxserverSidebarProjectCollectionsState) => void;
@@ -249,6 +251,11 @@ export class GpuiGxserverClient {
       */
       if (message.type === 'globalSidebarCommandsChanged' && onGlobalSidebarCommands) {
         onGlobalSidebarCommands();
+        return;
+      }
+      // The feed announcement carries no rows either; the handler refetches the feed.
+      if (message.type === 'notificationFeedChanged' && onNotificationFeedChanged) {
+        onNotificationFeedChanged();
         return;
       }
       /*

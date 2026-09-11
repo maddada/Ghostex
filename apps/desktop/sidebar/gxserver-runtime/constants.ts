@@ -218,6 +218,15 @@ dispatches the click here and this runtime performs the same gxserver walk and
 sidebar activation the web app does, so both apps share one implementation.
 */
 export const GPUI_SIDEBAR_NAVIGATION_HISTORY_COMMAND_EVENT_NAME = 'ghostex-gpui-sidebar-navigation-history-command';
+/*
+CDXC:Notifications 2026-09-11:
+The native titlebar owns the bell and the notification panel but not the feed:
+Rust dispatches row clicks and the jump keys here, and this runtime performs the
+gxserver update and the sidebar session activation, so read state and focus
+stay on the one path every client uses.
+*/
+export const GPUI_SIDEBAR_NOTIFICATION_FEED_COMMAND_EVENT_NAME = 'ghostex-gpui-sidebar-notification-feed-command';
+export const GPUI_SIDEBAR_NOTIFICATION_FEED_STATE_MESSAGE_TYPE = 'notificationFeedState';
 export const APP_SHOT_RECENT_TARGET_MS = 60_000;
 export const APP_SHOT_PROMPT_INSERT_RESULT_TIMEOUT_MS = 2_000;
 export const GPUI_STATUS_INDICATOR_MAX_CANDIDATES = 96;

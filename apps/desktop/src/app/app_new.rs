@@ -164,6 +164,8 @@ impl GhostexGpuiApp {
                 sidebar_browser_tab_reveal_request_id: 0,
                 latest_sidebar_project_snapshot: None,
                 navigation_history_state: navigation_history::GpuiNavigationHistoryState::default(),
+                notification_feed_state: notification_feed::GpuiNotificationFeedState::default(),
+                titlebar_notification_bell_bounds: Rc::new(std::cell::Cell::new(None)),
                 titlebar_git_menu_state: None,
                 titlebar_actions_snapshot: Vec::new(),
                 titlebar_actions_refresh_in_flight: false,

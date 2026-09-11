@@ -324,7 +324,10 @@ impl GhostexGpuiApp {
 
     pub(crate) fn titlebar_popup_content_height(&self, kind: GpuiTitlebarPopupKind) -> f32 {
         match kind {
-            GpuiTitlebarPopupKind::ContextMenu => self.context_menu.as_ref().map_or(0.0, |menu| menu.content_height()),
+            GpuiTitlebarPopupKind::ContextMenu => self
+                .context_menu
+                .as_ref()
+                .map_or(0.0, |menu| menu.content_height()),
             GpuiTitlebarPopupKind::Actions => self.titlebar_actions_popup_content_height(),
             GpuiTitlebarPopupKind::BrowserActions(_) => self.browser_actions_popup_content_height(),
             GpuiTitlebarPopupKind::Extensions => {
@@ -348,6 +351,7 @@ impl GhostexGpuiApp {
             GpuiTitlebarPopupKind::OpenTargets => self.titlebar_open_targets_popup_content_height(),
             GpuiTitlebarPopupKind::Resources
             | GpuiTitlebarPopupKind::Tips
+            | GpuiTitlebarPopupKind::Notifications
             | GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT,
         }
     }

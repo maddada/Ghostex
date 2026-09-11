@@ -91,6 +91,12 @@ pub(crate) fn dispatch_agent_http_blocking(
             let fork_initial_rename = fork_initial_rename_target(&endpoint_path, &result);
             log_agent_hook_passive_identity_conflict(state, &endpoint_path, &params, &result);
             log_agent_activity_transition(state, &endpoint_path, &params, &result);
+            crate::notification_feed::observe_agent_activity_result(
+                state,
+                &endpoint_path,
+                &params,
+                &result,
+            );
             let session_chat_state_changed = endpoint_path == "/api/ingestAgentHookEvent"
                 && (result
                     .get("sessionChatPromptChanged")

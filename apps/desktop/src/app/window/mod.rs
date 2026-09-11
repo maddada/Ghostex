@@ -9,6 +9,7 @@ pub(crate) mod modal_host;
 pub(crate) mod new_thread_picker;
 pub(crate) mod remote_sites;
 mod resources_style;
+mod titlebar_notifications_panel;
 pub(crate) mod titlebar_panels;
 pub(crate) mod toast;
 
