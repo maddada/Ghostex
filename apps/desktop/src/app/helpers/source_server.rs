@@ -1572,6 +1572,7 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
     file_path: &Path,
     line: Option<u32>,
     column: Option<u32>,
+    workspace_folder: &Path,
 ) -> Result<(), String> {
     /*
     Hand the validated file to code-server's process-local open queue. If the
@@ -1579,6 +1580,11 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
     session manager keeps only the newest request under this fixed key and
     delivers it on registration. Never launch a second editor server or fall
     back to an external application.
+
+    CDXC:CodeEditor 2026-09-11 WHY:
+    The queue matched the workbench by the file's location, so a chat link to a file outside the project (a home-folder config, another checkout) never found a workbench and stayed queued forever after the "Opening file in Code view" toast.
+    The request now names the project folder whose Code view the app just switched to, and code-server delivers the file to the workbench rooted there.
+    SEE-ALSO: .dependencies/code-server/src/node/vscodeSocket.ts (queued open delivery), apps/desktop/src/windows_terminal_backend.rs (WSL variant).
     */
     let repo_root = source_code_server_resolve_repo_root()?;
     let node_path = source_code_server_resolve_node_path(&repo_root)?;
@@ -1596,6 +1602,8 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
         .arg("--queue-open")
         .arg("--open-request-key")
         .arg("ghostex-source-file-open")
+        .arg("--open-workspace-folder")
+        .arg(workspace_folder)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -1628,11 +1636,13 @@ pub(crate) fn source_code_server_open_file_in_existing_instance(
     file_path: &Path,
     line: Option<u32>,
     column: Option<u32>,
+    workspace_folder: &Path,
 ) -> Result<(), String> {
     let mut command = windows_terminal_backend::source_code_server_open_file_command(
         file_path,
         line,
         column,
+        workspace_folder,
         SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR,
     )?;
     command

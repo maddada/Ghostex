@@ -1193,6 +1193,7 @@ impl GhostexGpuiApp {
                         &pending.file_path,
                         pending.line,
                         pending.column,
+                        &pending.project_path,
                     )
                 })
                 .await;

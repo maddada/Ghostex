@@ -643,6 +643,7 @@ exec "$@" \
         file_path: &Path,
         line: Option<u32>,
         column: Option<u32>,
+        workspace_folder: &Path,
         required_node_major: u64,
     ) -> Result<Command, String> {
         let ResolvedWindowsTerminalBackend::Wsl { distribution } =
@@ -651,6 +652,7 @@ exec "$@" \
             unreachable!("PowerShell is not a selectable Windows terminal backend")
         };
         let wsl_file_path = source_runtime_wsl_path(file_path)?;
+        let wsl_workspace_folder = source_runtime_wsl_path(workspace_folder)?;
         let paths = resolve_wsl_ghostex_paths(&distribution)?;
         let repo_root = paths.data_path("source-runtime/package");
         let user_data_dir = paths.data_path("code-server-runtime-gpui/user-data");
@@ -661,6 +663,7 @@ file_path="$3"
 required_node_major="$4"
 line="$5"
 column="$6"
+workspace_folder="$7"
 node="$repo_root/lib/node"
 test -x "$node"
 test -f "$repo_root/out/node/entry.js"
@@ -687,6 +690,7 @@ exec "$node" "$repo_root/out/node/entry.js" \
     --reuse-window \
     --queue-open \
     --open-request-key ghostex-source-file-open \
+    --open-workspace-folder "$workspace_folder" \
     "$@"
 "#;
         let required_node_major = required_node_major.to_string();
@@ -707,6 +711,7 @@ exec "$node" "$repo_root/out/node/entry.js" \
             required_node_major.as_str(),
             line.as_str(),
             column.as_str(),
+            wsl_workspace_folder.as_str(),
         ]);
         Ok(command)
     }
