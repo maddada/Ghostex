@@ -26,7 +26,9 @@ import {
   IconFolderOpen,
   IconFolderPlus,
   IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
   IconLayoutSidebarRightCollapse,
+  IconLayoutSidebarRightExpand,
   IconMarkdown,
   IconMenu2,
   IconMessagePlus,
@@ -64,10 +66,12 @@ export function ManageSidebarActions({
   onCreateFolder,
   onHideSidebar,
   onOpenDocsFoldersSettings,
+  onPinSidebar,
   onRefresh,
   onRevealOpenFile,
   onSwitchSide,
   onToggleAllDirectories,
+  sidebarPinned,
   sidebarSide,
 }: {
   canRevealOpenFile: boolean;
@@ -80,16 +84,19 @@ export function ManageSidebarActions({
   onCreateFolder: () => void;
   onHideSidebar: () => void;
   onOpenDocsFoldersSettings: () => void;
+  onPinSidebar: () => void;
   onRefresh: () => void;
   onRevealOpenFile: () => void;
   onSwitchSide: () => void;
   onToggleAllDirectories: () => void;
+  sidebarPinned: boolean;
   sidebarSide: ManageSidebarSide;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const HideSidebarIcon = sidebarSide === 'right' ? IconLayoutSidebarRightCollapse : IconLayoutSidebarLeftCollapse;
+  const PinSidebarIcon = sidebarSide === 'right' ? IconLayoutSidebarRightExpand : IconLayoutSidebarLeftExpand;
   const BulkDirectoryIcon = hasExpandedDirectories ? IconArrowsDiagonalMinimize : IconArrowsDiagonal2;
   const bulkDirectoryActionLabel = hasExpandedDirectories ? 'Collapse All' : 'Expand All';
   const isCreating = Boolean(creatingKind) || isCreatingFolder;
@@ -192,9 +199,20 @@ export function ManageSidebarActions({
       >
         <IconMenu2 aria-hidden='true' size={15} stroke={1.8} />
       </button>
-      <button aria-label='Hide file sidebar' className='manage-icon-button' onClick={onHideSidebar} type='button'>
-        <HideSidebarIcon aria-hidden='true' size={15} stroke={1.8} />
-      </button>
+      {sidebarPinned ? (
+        <button aria-label='Hide file sidebar' className='manage-icon-button' onClick={onHideSidebar} type='button'>
+          <HideSidebarIcon aria-hidden='true' size={15} stroke={1.8} />
+        </button>
+      ) : (
+        /*
+         * CDXC:Docs 2026-09-11 WHY:
+         * Hovering the restore control hover-expands the files list, which unmounts that control before a click can land on it, so a mouse user could never re-open a hidden sidebar for good.
+         * While the list is only hover-expanded, the header button in the same corner therefore pins it open instead of hiding it.
+         */
+        <button aria-label='Keep file sidebar open' className='manage-icon-button' onClick={onPinSidebar} type='button'>
+          <PinSidebarIcon aria-hidden='true' size={15} stroke={1.8} />
+        </button>
+      )}
       {createMenuOpen ? (
         <div className='manage-sidebar-menu manage-create-menu' role='menu'>
           <button
@@ -380,7 +398,11 @@ export const ManageFileRow = memo(function ManageFileRow({
       <Icon aria-hidden='true' className='manage-file-icon' size={15} stroke={1.75} />
       <span className='manage-file-name'>{entry.name}</span>
       <span className='manage-file-badges'>
-        {loadState ? <span aria-label={loadState === 'error' ? 'Folder could not load' : 'Folder not loaded yet'}>{loadState === 'error' ? '!' : '…'}</span> : null}
+        {loadState ? (
+          <span aria-label={loadState === 'error' ? 'Folder could not load' : 'Folder not loaded yet'}>
+            {loadState === 'error' ? '!' : '…'}
+          </span>
+        ) : null}
         {annotationCount > 0 ? <span className='manage-count-badge'>{annotationCount}</span> : null}
       </span>
     </button>

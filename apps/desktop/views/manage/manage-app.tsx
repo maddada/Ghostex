@@ -57,11 +57,7 @@ import {
   ManageSidebarSide,
   ManageWebKitWindow,
 } from './types';
-import {
-  ManageFileContextMenu,
-  ManageRenameDialog,
-  ManageSidebarActions,
-} from './file-tree-ui';
+import { ManageFileContextMenu, ManageRenameDialog, ManageSidebarActions } from './file-tree-ui';
 import { ManagePreview } from './preview/manage-preview';
 import { ManageTooltipButton } from './manage-tooltip-button';
 import {
@@ -390,7 +386,18 @@ export function ManageApp() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const projectId = params.get('projectId') ?? '';
   const projectEditorId = params.get('projectEditorId') ?? projectId;
-  const { entries, setEntries, indexing, initialized: indexInitialized, error: indexError, loaded: loadedDirectories, failures: directoryFailures, refreshIndex, prioritizeDirectory, completeEntries } = useManageFileIndex(projectId, projectEditorId, requestManageFiles);
+  const {
+    entries,
+    setEntries,
+    indexing,
+    initialized: indexInitialized,
+    error: indexError,
+    loaded: loadedDirectories,
+    failures: directoryFailures,
+    refreshIndex,
+    prioritizeDirectory,
+    completeEntries,
+  } = useManageFileIndex(projectId, projectEditorId, requestManageFiles);
   const [query, setQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedPath, setSelectedPath] = useState<string>();
@@ -406,9 +413,9 @@ export function ManageApp() {
   const contentAutosaveTimerRef = useRef<number | undefined>(undefined);
   const [error, setError] = useState<string>();
   const [annotationsByPath, setAnnotationsByPath] = useState<Record<string, ManageAnnotation[]>>({});
-  const [, setAnnotationPersistenceState] = useState<
-    'idle' | 'loading' | 'ready' | 'saving' | 'saved' | 'error'
-  >('idle');
+  const [, setAnnotationPersistenceState] = useState<'idle' | 'loading' | 'ready' | 'saving' | 'saved' | 'error'>(
+    'idle'
+  );
   const [sidebarSide, setSidebarSide] = useState<ManageSidebarSide>(() => readStoredManageSidebarSide());
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredManageSidebarWidth());
   const [sidebarHidden, setSidebarHidden] = useState(false);
@@ -484,13 +491,30 @@ export function ManageApp() {
         }
         setPreviewState('ready');
         if (response.deferredGitBaseline && openedFile?.kind === 'text' && isMarkdownPath(path)) {
-          void requestManageFiles({ action: 'gitBaseline', path, projectEditorId, projectId }).then((baselineResponse) => {
-            if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
-            setPreview((current) => current?.path === path ? { ...current, gitBaseline: baselineResponse.gitBaseline ?? { available: false, tracked: false, reason: 'error' } } : current);
-          }).catch(() => {
-            if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
-            setPreview((current) => current?.path === path ? { ...current, gitBaseline: { available: false, tracked: false, reason: 'error' } } : current);
-          });
+          void requestManageFiles({ action: 'gitBaseline', path, projectEditorId, projectId })
+            .then((baselineResponse) => {
+              if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
+              setPreview((current) =>
+                current?.path === path
+                  ? {
+                      ...current,
+                      gitBaseline: baselineResponse.gitBaseline ?? {
+                        available: false,
+                        tracked: false,
+                        reason: 'error',
+                      },
+                    }
+                  : current
+              );
+            })
+            .catch(() => {
+              if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
+              setPreview((current) =>
+                current?.path === path
+                  ? { ...current, gitBaseline: { available: false, tracked: false, reason: 'error' } }
+                  : current
+              );
+            });
         }
       } catch (readError) {
         if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
@@ -528,13 +552,16 @@ export function ManageApp() {
   const refreshFiles = useCallback(() => refreshIndex(true), [refreshIndex]);
 
   useLayoutEffect(() => {
-    const additions = entries.filter((entry) => entry.kind === 'directory' && !discoveredDirectoriesRef.current.has(entry.path));
+    const additions = entries.filter(
+      (entry) => entry.kind === 'directory' && !discoveredDirectoriesRef.current.has(entry.path)
+    );
     if (!additions.length) return;
     for (const entry of additions) discoveredDirectoriesRef.current.add(entry.path);
     setCollapsedDirectoryPaths((current) => {
       const next = new Set(current);
       for (const entry of additions) {
-        if (!expandAllDirectoriesRef.current && !requestedExpandedDirectoriesRef.current.has(entry.path)) next.add(entry.path);
+        if (!expandAllDirectoriesRef.current && !requestedExpandedDirectoriesRef.current.has(entry.path))
+          next.add(entry.path);
       }
       return next;
     });
@@ -546,7 +573,17 @@ export function ManageApp() {
       selectedWasListedRef.current = path;
       return;
     }
-    if (path && (selectedWasListedRef.current !== path || indexing || !indexInitialized || indexError || fileOperation || isDirty || saveState === 'saving')) return;
+    if (
+      path &&
+      (selectedWasListedRef.current !== path ||
+        indexing ||
+        !indexInitialized ||
+        indexError ||
+        fileOperation ||
+        isDirty ||
+        saveState === 'saving')
+    )
+      return;
     const firstFile = entries.find((entry) => entry.kind === 'file');
     if (firstFile) void readFile(firstFile.path);
     else if (path) {
@@ -676,7 +713,9 @@ export function ManageApp() {
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     const handleFilesChanged = () => {
       clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => { void refreshFiles(); }, 120);
+      refreshTimer = setTimeout(() => {
+        void refreshFiles();
+      }, 120);
     };
     window.addEventListener(MANAGE_FILES_CHANGED_EVENT, handleFilesChanged);
     return () => {
@@ -755,8 +794,13 @@ export function ManageApp() {
     const closeHoverSidebar = () => setSidebarHoverExpanded(false);
     const trackSidebarPointer = (event: PointerEvent) => {
       const bounds = sidebarRef.current?.getBoundingClientRect();
-      if (!bounds || event.clientX < bounds.left || event.clientX >= bounds.right ||
-          event.clientY < bounds.top || event.clientY >= bounds.bottom) {
+      if (
+        !bounds ||
+        event.clientX < bounds.left ||
+        event.clientX >= bounds.right ||
+        event.clientY < bounds.top ||
+        event.clientY >= bounds.bottom
+      ) {
         closeHoverSidebar();
       }
     };
@@ -1331,7 +1375,11 @@ export function ManageApp() {
         }
         setAnnotationsByPath((current) => remapManageAnnotationPathsForMove(current, path, nextPath));
         discoveredDirectoriesRef.current = remapManagePathSetForMove(discoveredDirectoriesRef.current, path, nextPath);
-        requestedExpandedDirectoriesRef.current = remapManagePathSetForMove(requestedExpandedDirectoriesRef.current, path, nextPath);
+        requestedExpandedDirectoriesRef.current = remapManagePathSetForMove(
+          requestedExpandedDirectoriesRef.current,
+          path,
+          nextPath
+        );
         setCollapsedDirectoryPaths((current) => remapManagePathSetForMove(current, path, nextPath));
         if (currentEntry.kind === 'file' && renamedFile && selectedPathRef.current === path) {
           selectedPathRef.current = renamedFile.path;
@@ -1405,7 +1453,10 @@ export function ManageApp() {
         }
         setAnnotationsByPath((current) => removeManageAnnotationPathsForDeletedEntry(current, path));
         discoveredDirectoriesRef.current = removeManagePathSetForDeletedEntry(discoveredDirectoriesRef.current, path);
-        requestedExpandedDirectoriesRef.current = removeManagePathSetForDeletedEntry(requestedExpandedDirectoriesRef.current, path);
+        requestedExpandedDirectoriesRef.current = removeManagePathSetForDeletedEntry(
+          requestedExpandedDirectoriesRef.current,
+          path
+        );
         setCollapsedDirectoryPaths((current) => removeManagePathSetForDeletedEntry(current, path));
         setFileContextMenu(undefined);
         if (deletesSelectedPath) {
@@ -1571,8 +1622,16 @@ export function ManageApp() {
           throw new Error(response.error);
         }
         setAnnotationsByPath((current) => remapManageAnnotationPathsForMove(current, entry.path, nextPath));
-        discoveredDirectoriesRef.current = remapManagePathSetForMove(discoveredDirectoriesRef.current, entry.path, nextPath);
-        requestedExpandedDirectoriesRef.current = remapManagePathSetForMove(requestedExpandedDirectoriesRef.current, entry.path, nextPath);
+        discoveredDirectoriesRef.current = remapManagePathSetForMove(
+          discoveredDirectoriesRef.current,
+          entry.path,
+          nextPath
+        );
+        requestedExpandedDirectoriesRef.current = remapManagePathSetForMove(
+          requestedExpandedDirectoriesRef.current,
+          entry.path,
+          nextPath
+        );
         setCollapsedDirectoryPaths((current) => remapManagePathSetForMove(current, entry.path, nextPath));
         if (movedSelectedPath) {
           selectedPathRef.current = movedSelectedPath;
@@ -1756,7 +1815,8 @@ export function ManageApp() {
       if (parentPath) {
         paths.add(parentPath);
       }
-      if (entry.kind === 'directory' && (!loadedDirectories.has(entry.path) || directoryFailures.has(entry.path))) paths.add(entry.path);
+      if (entry.kind === 'directory' && (!loadedDirectories.has(entry.path) || directoryFailures.has(entry.path)))
+        paths.add(entry.path);
     }
     return paths;
   }, [directoryFailures, entries, loadedDirectories]);
@@ -1802,12 +1862,17 @@ export function ManageApp() {
     return filterManageEntriesForSearch(treeOrderedEntries, normalizedQuery);
   }, [collapsedDirectoryPaths, query, treeOrderedEntries]);
   const isFileSearchActive = query.trim().length > 0;
-  const selectTreeEntry = useCallback((entry: ManageFileEntry) => {
-    if (entry.kind === 'file') { void readFile(entry.path); return; }
-    prioritizeDirectory(entry.path);
-    toggleDirectory(entry.path);
-  }, [prioritizeDirectory, readFile, toggleDirectory]);
-
+  const selectTreeEntry = useCallback(
+    (entry: ManageFileEntry) => {
+      if (entry.kind === 'file') {
+        void readFile(entry.path);
+        return;
+      }
+      prioritizeDirectory(entry.path);
+      toggleDirectory(entry.path);
+    },
+    [prioritizeDirectory, readFile, toggleDirectory]
+  );
 
   /**
    * CDXC:Docs 2026-09-07 DECISION:
@@ -1901,10 +1966,15 @@ export function ManageApp() {
                 setSidebarHoverExpanded(false);
               }}
               onOpenDocsFoldersSettings={() => void openDocsFoldersSettings()}
+              onPinSidebar={() => {
+                setSidebarHidden(false);
+                setSidebarHoverExpanded(false);
+              }}
               onRefresh={() => void refreshFiles()}
               onRevealOpenFile={revealOpenFile}
               onSwitchSide={switchSidebarSide}
               onToggleAllDirectories={toggleAllDirectories}
+              sidebarPinned={!sidebarHidden}
               sidebarSide={sidebarSide}
             />
           </div>
