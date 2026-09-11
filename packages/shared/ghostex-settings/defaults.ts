@@ -203,6 +203,12 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   enableSessionParking: true,
   sleepSessionWhenParking: false,
+  showTagMenuWhenParking: false,
+  /**
+   * CDXC:Sessions 2026-09-11 DECISION:
+   * User: "Unpark after sending a message" defaults to on.
+   */
+  unparkAfterSendingMessage: true,
   /**
    * CDXC:Telemetry 2026-08-26:
    * Usage analytics are on by default and opt-out. Events carry only counts and
@@ -382,6 +388,8 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
   sidebarProjectGroupStyle: 'branched',
   sidebarSpacesEnabled: false,
+  sidebarSpaceSwitchBehavior: 'restore',
+  sidebarSpaceFollowActiveSession: false,
   expandCollapsedProjectsOnJump: true,
   showLessForExpandedProjectJumps: false,
   /**

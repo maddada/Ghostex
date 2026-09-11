@@ -90,6 +90,44 @@
       "agentWritable": true
     },
     {
+      "key": "sidebarSpaceSwitchBehavior",
+      "title": "When switching to a Space",
+      "subtitle": "Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Requires Spaces.",
+      "tab": "settings",
+      "tabTitle": "General",
+      "group": "sidebar",
+      "groupTitle": "Sidebar",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "enum",
+      "default": "restore",
+      "options": [
+        {
+          "label": "Restore the Space's projects",
+          "value": "restore"
+        },
+        {
+          "label": "Don't switch projects",
+          "value": "keep"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "sidebarSpaceFollowActiveSession",
+      "title": "Follow the active session's Space",
+      "subtitle": "Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Requires Spaces.",
+      "tab": "settings",
+      "tabTitle": "General",
+      "group": "sidebar",
+      "groupTitle": "Sidebar",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "showProjectIcons",
       "title": "Show project icons",
       "subtitle": "Show project artwork or a folder or worktree icon beside project names.",
@@ -398,6 +436,34 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "showTagMenuWhenParking",
+      "title": "Show tag menu when parking",
+      "subtitle": "Open the Tag as menu when a session is parked so it can be tagged right away.",
+      "tab": "settings",
+      "tabTitle": "General",
+      "group": "sidebar",
+      "groupTitle": "Sidebar",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "unparkAfterSendingMessage",
+      "title": "Unpark after sending a message",
+      "subtitle": "Move a parked session out of the Parked section when you send it a message.",
+      "tab": "settings",
+      "tabTitle": "General",
+      "group": "sidebar",
+      "groupTitle": "Sidebar",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": true,
       "agentWritable": true
     },
     {

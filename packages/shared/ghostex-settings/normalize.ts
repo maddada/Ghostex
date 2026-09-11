@@ -58,6 +58,7 @@ import {
   type PreferredAgentInterface,
   type PromptEditorBackend,
   type SidebarProjectGroupStyle,
+  type SidebarSpaceSwitchBehavior,
   type SidebarSettingsPresetId,
   type SidebarSide,
   type TerminalBackgroundImageFit,
@@ -353,6 +354,16 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'sleepSessionWhenParking',
       DEFAULT_ghostex_SETTINGS.sleepSessionWhenParking
     ),
+    showTagMenuWhenParking: readBoolean(
+      source,
+      'showTagMenuWhenParking',
+      DEFAULT_ghostex_SETTINGS.showTagMenuWhenParking
+    ),
+    unparkAfterSendingMessage: readBoolean(
+      source,
+      'unparkAfterSendingMessage',
+      DEFAULT_ghostex_SETTINGS.unparkAfterSendingMessage
+    ),
     analyticsEnabled: readBoolean(source, 'analyticsEnabled', DEFAULT_ghostex_SETTINGS.analyticsEnabled),
     debuggingMode: readBoolean(source, 'debuggingMode', DEFAULT_ghostex_SETTINGS.debuggingMode),
     diagnosticLogging: normalizeDiagnosticLoggingSettings(source.diagnosticLogging),
@@ -601,6 +612,14 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       readString(source, 'sidebarProjectGroupStyle', DEFAULT_ghostex_SETTINGS.sidebarProjectGroupStyle)
     ),
     sidebarSpacesEnabled: readBoolean(source, 'sidebarSpacesEnabled', DEFAULT_ghostex_SETTINGS.sidebarSpacesEnabled),
+    sidebarSpaceSwitchBehavior: normalizeSidebarSpaceSwitchBehavior(
+      readString(source, 'sidebarSpaceSwitchBehavior', DEFAULT_ghostex_SETTINGS.sidebarSpaceSwitchBehavior)
+    ),
+    sidebarSpaceFollowActiveSession: readBoolean(
+      source,
+      'sidebarSpaceFollowActiveSession',
+      DEFAULT_ghostex_SETTINGS.sidebarSpaceFollowActiveSession
+    ),
     expandCollapsedProjectsOnJump: readBoolean(
       source,
       'expandCollapsedProjectsOnJump',
@@ -1087,6 +1106,10 @@ function normalizeSidebarProjectGroupStyle(value: string | undefined): SidebarPr
   return value === 'quiet' || value === 'header' || value === 'branched'
     ? value
     : DEFAULT_ghostex_SETTINGS.sidebarProjectGroupStyle;
+}
+
+function normalizeSidebarSpaceSwitchBehavior(value: string | undefined): SidebarSpaceSwitchBehavior {
+  return value === 'restore' || value === 'keep' ? value : DEFAULT_ghostex_SETTINGS.sidebarSpaceSwitchBehavior;
 }
 
 /* Both spellings are real user choices: normalizing "terminal" to the default

@@ -63,6 +63,7 @@ import {
   PROMPT_EDITOR_BACKEND_OPTIONS,
   type PromptEditorBackend,
   SIDEBAR_SIDE_OPTIONS,
+  SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
   areDiagnosticLoggingSettingsEqual,
   COMMANDS_PANEL_SIDE_OPTIONS,
@@ -87,6 +88,7 @@ import {
   type SettingsModalNavigationState,
   type CommandsPanelSide,
   type SidebarSide,
+  type SidebarSpaceSwitchBehavior,
   type TerminalBackgroundImageFit,
   type WebLinkOpenTarget,
   type TerminalCursorStyle,
@@ -1146,6 +1148,37 @@ export function SettingsModal({
                               />
                             ) : null}
                             {/*
+                             * CDXC:Spaces 2026-09-11 DECISION:
+                             * User: the Space switch behaviour and the follow toggle cascade
+                             * under the Spaces switch and are disabled until it is on, like
+                             * "Sleep session when parking" under session parking.
+                             */}
+                            {mainSettingVisible(settingsSearch.sidebar, 'sidebarSpaceSwitchBehavior') ? (
+                              <SelectField
+                                description='Reopen the session you last had open in a Space when you switch to it, in the view its project was in. If that session is closed, the one before it is used; a Space with nothing remembered opens its first project.'
+                                disabled={!draft.sidebarSpacesEnabled}
+                                disabledReason='Turn on “Spaces” first.'
+                                label='When switching to a Space'
+                                {...getSettingModificationProps('sidebarSpaceSwitchBehavior')}
+                                onChange={(value) =>
+                                  updateDraft('sidebarSpaceSwitchBehavior', value as SidebarSpaceSwitchBehavior)
+                                }
+                                options={SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS}
+                                value={draft.sidebarSpaceSwitchBehavior}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'sidebarSpaceFollowActiveSession') ? (
+                              <ToggleField
+                                checked={draft.sidebarSpaceFollowActiveSession}
+                                description='Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward, Search by Prompt, a notification, or Previous Sessions.'
+                                disabled={!draft.sidebarSpacesEnabled}
+                                disabledReason='Turn on “Spaces” first.'
+                                label="Follow the active session's Space"
+                                {...getSettingModificationProps('sidebarSpaceFollowActiveSession')}
+                                onChange={(checked) => updateDraft('sidebarSpaceFollowActiveSession', checked)}
+                              />
+                            ) : null}
+                            {/*
                              * CDXC:Settings 2026-06-30-22:22:
                              * Users need every preset-mutated setting directly under the preset selector so applying Recommended, Codex, Minimal, or Detailed has an inspectable effect without hunting through Session Cards, Project rows, or Status Indicators.
                              */}
@@ -1371,6 +1404,28 @@ export function SettingsModal({
                                 label='Sleep session when parking'
                                 {...getSettingModificationProps('sleepSessionWhenParking')}
                                 onChange={(checked) => updateDraft('sleepSessionWhenParking', checked)}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'showTagMenuWhenParking') ? (
+                              <ToggleField
+                                checked={draft.showTagMenuWhenParking}
+                                description='Open the Tag as menu when a session is parked so it can be tagged right away.'
+                                disabled={!draft.enableSessionParking}
+                                disabledReason='Turn on “Enable session parking” first.'
+                                label='Show tag menu when parking'
+                                {...getSettingModificationProps('showTagMenuWhenParking')}
+                                onChange={(checked) => updateDraft('showTagMenuWhenParking', checked)}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'unparkAfterSendingMessage') ? (
+                              <ToggleField
+                                checked={draft.unparkAfterSendingMessage}
+                                description='Move a parked session out of the Parked section when you send it a message from chat or its terminal.'
+                                disabled={!draft.enableSessionParking}
+                                disabledReason='Turn on “Enable session parking” first.'
+                                label='Unpark after sending a message'
+                                {...getSettingModificationProps('unparkAfterSendingMessage')}
+                                onChange={(checked) => updateDraft('unparkAfterSendingMessage', checked)}
                               />
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'renameSessionOnDoubleClick') ? (

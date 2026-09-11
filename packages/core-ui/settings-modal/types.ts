@@ -235,6 +235,8 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'createSessionOnSidebarDoubleClick',
     'enableSessionParking',
     'sleepSessionWhenParking',
+    'showTagMenuWhenParking',
+    'unparkAfterSendingMessage',
     'renameSessionOnDoubleClick',
     'showSessionCloseContextMenuAction',
     'sidebarSessionTagListItems',

@@ -22,6 +22,7 @@ import {
   SIDEBAR_SETTINGS_PRESETS,
   SIDEBAR_SIDE_OPTIONS,
   SIDEBAR_SPACES_ENABLED_OPTIONS,
+  SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS,
   TERMINAL_VIEW_WIDTH_MODE_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
   type ghostexSettings,
@@ -329,6 +330,19 @@ export function getSettingsSearchSectionDefinitions() {
           title: 'Spaces',
         },
         {
+          key: 'sidebarSpaceSwitchBehavior',
+          options: SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS,
+          subtitle:
+            'Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Requires Spaces.',
+          title: 'When switching to a Space',
+        },
+        {
+          key: 'sidebarSpaceFollowActiveSession',
+          subtitle:
+            'Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Requires Spaces.',
+          title: "Follow the active session's Space",
+        },
+        {
           key: 'showProjectIcons',
           subtitle: 'Show project artwork or a folder or worktree icon beside project names.',
           title: 'Show project icons',
@@ -433,6 +447,16 @@ export function getSettingsSearchSectionDefinitions() {
           title: 'Sleep session when parking',
         },
         {
+          key: 'showTagMenuWhenParking',
+          subtitle: 'Open the Tag as menu when a session is parked so it can be tagged right away.',
+          title: 'Show tag menu when parking',
+        },
+        {
+          key: 'unparkAfterSendingMessage',
+          subtitle: 'Move a parked session out of the Parked section when you send it a message.',
+          title: 'Unpark after sending a message',
+        },
+        {
           key: 'renameSessionOnDoubleClick',
           subtitle: RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_SUBTITLE,
           title: RENAME_SESSION_ON_DOUBLE_CLICK_SETTING_LABEL,
@@ -507,7 +531,8 @@ export function getSettingsSearchSectionDefinitions() {
         },
         {
           key: 'sessionChatFileEditPreviews',
-          subtitle: 'Show the first seven code lines in each file edit. Turn off to show only the path and change counts.',
+          subtitle:
+            'Show the first seven code lines in each file edit. Turn off to show only the path and change counts.',
           title: 'Show file edit previews',
         },
         {

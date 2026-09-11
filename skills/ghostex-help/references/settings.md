@@ -18,6 +18,8 @@ How to use this file:
 - **Preset** `sidebarSettingsPreset` (Settings UI row without a settings key; use `ghostex settings open`): Apply a sidebar UI preset or show Custom when controlled settings diverge.
 - **Project group style** `sidebarProjectGroupStyle` (one of quiet | header | branched; default branched): Choose how project groups are marked in the sidebar. Option labels: quiet = Quiet rail, header = Header rail, branched = Branched rail.
 - **Spaces** `sidebarSpacesEnabled` (boolean, default false): Show a row of Space filter buttons in each server's sidebar section.
+- **When switching to a Space** `sidebarSpaceSwitchBehavior` (one of restore | keep; default restore): Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Requires Spaces. Option labels: restore = Restore the Space's projects, keep = Don't switch projects.
+- **Follow the active session's Space** `sidebarSpaceFollowActiveSession` (boolean, default false): Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Requires Spaces.
 - **Show project icons** `showProjectIcons` (boolean, default true) [advanced]: Show project artwork or a folder or worktree icon beside project names.
 - **Hide agent icon until hover** `hideSessionAgentIconUntilHover` (boolean, default false) [advanced]: Hide session agent icons until a session row is hovered.
 - **Hide browser favicon until hover** `hideBrowserFaviconUntilHover` (boolean, default false) [advanced]: Hide browser page favicons until a session row is hovered.
@@ -37,6 +39,8 @@ How to use this file:
 - **Double-click empty sidebar space to create a session** `createSessionOnSidebarDoubleClick` (boolean, default false) [advanced]: Create a session from empty sidebar space.
 - **Enable session parking** `enableSessionParking` (boolean, default true): Move deferred sessions into a collapsible Parked section at the bottom of the sidebar.
 - **Sleep session when parking** `sleepSessionWhenParking` (boolean, default false): Sleep a session automatically when it is moved into the Parked section.
+- **Show tag menu when parking** `showTagMenuWhenParking` (boolean, default false): Open the Tag as menu when a session is parked so it can be tagged right away.
+- **Unpark after sending a message** `unparkAfterSendingMessage` (boolean, default true): Move a parked session out of the Parked section when you send it a message.
 - **Double-click session cards to rename** `renameSessionOnDoubleClick` (boolean, default false) [advanced]: Makes clicking on a session respond a bit slower so we can detect the double click
 #### Session Cards
 

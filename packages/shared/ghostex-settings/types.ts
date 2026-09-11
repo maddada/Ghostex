@@ -33,6 +33,7 @@ export type DefaultEditorCommand =
 export type SidebarSide = 'left' | 'right';
 export type CommandsPanelSide = 'bottom' | 'right';
 export type SidebarProjectGroupStyle = 'quiet' | 'header' | 'branched';
+export type SidebarSpaceSwitchBehavior = 'restore' | 'keep';
 export const MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
 export const MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 1000;
 export const SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS = 100;
@@ -353,6 +354,18 @@ export type ghostexSettings = {
    */
   sleepSessionWhenParking: boolean;
   /**
+   * Opens the Tag as menu when the user parks a session, so the parked session
+   * can be tagged in the same gesture. Off by default like the other park
+   * add-ons; parking stays a one-click action unless the user opts in.
+   */
+  showTagMenuWhenParking: boolean;
+  /**
+   * Unparks a parked session when the user sends it an actual message, from
+   * chat or by typing into its terminal. gxserver applies it, reading this key
+   * from native-sidebar-settings.json; an absent key means on.
+   */
+  unparkAfterSendingMessage: boolean;
+  /**
    * CDXC:Telemetry 2026-08-26:
    * File-level opt-out for the anonymous PostHog usage analytics gxserver
    * sends. Default true. gxserver reads this key straight out of
@@ -495,6 +508,20 @@ export type ghostexSettings = {
    * membership submenus.
    */
   sidebarSpacesEnabled: boolean;
+  /**
+   * CDXC:Spaces 2026-09-11 DECISION:
+   * User: switching Spaces should bring back the state each Space was last in so context switches are faster.
+   * "Restore the Space's projects" (the default) reopens the session last active in that Space, in its project's remembered view, walks back to earlier sessions when the latest one is closed, and opens the Space's first project when nothing is remembered.
+   * "Don't switch projects" keeps the old behaviour: only the sidebar filter changes.
+   * Only meaningful while `sidebarSpacesEnabled` is on.
+   */
+  sidebarSpaceSwitchBehavior: SidebarSpaceSwitchBehavior;
+  /**
+   * CDXC:Spaces 2026-09-11 DECISION:
+   * User: add a toggle, off by default for now, that switches the selected Space to the one owning a session activated from outside it (Back/Forward, Search by Prompt, notifications, Previous Sessions).
+   * The user may remove it after testing, so it stays a plain boolean under the Spaces switch.
+   */
+  sidebarSpaceFollowActiveSession: boolean;
   /**
    * CDXC:Hotkeys 2026-06-15-11:12:
    * Jump to Project shortcuts should reveal the target project row when it was collapsed, because the keyboard action is also a navigation intent in the visible Projects sidebar area.

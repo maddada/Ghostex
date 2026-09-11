@@ -14,6 +14,7 @@ import {
   type PreferredAgentInterface,
   type PromptEditorBackend,
   type SidebarProjectGroupStyle,
+  type SidebarSpaceSwitchBehavior,
   type SidebarSide,
   type WebLinkOpenTarget,
 } from './types';
@@ -122,6 +123,18 @@ export const SIDEBAR_SPACES_ENABLED_OPTIONS: ReadonlyArray<{
 }> = [
   { label: 'Off', value: 'off' },
   { label: 'On', value: 'on' },
+];
+
+/**
+ * CDXC:Spaces 2026-09-11 DECISION:
+ * User: the default, "Restore the Space's projects", is the first entry so the dropdown opens on it.
+ */
+export const SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: SidebarSpaceSwitchBehavior;
+}> = [
+  { label: "Restore the Space's projects", value: 'restore' },
+  { label: "Don't switch projects", value: 'keep' },
 ];
 
 export const PREFERRED_AGENT_INTERFACE_OPTIONS: ReadonlyArray<{
