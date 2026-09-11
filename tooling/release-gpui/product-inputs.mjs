@@ -164,6 +164,8 @@ const GXSERVER_PATHSPECS = Object.freeze([
   { pathspec: 'packages/find/**' },
   { pathspec: ':(exclude)packages/find/target' },
   { pathspec: '.dependencies/zmx' },
+  /* server/package-remote-linux.mjs stages the bundled skills catalog into the package. */
+  { pathspec: 'skills/**' },
   { pathspec: 'tooling/build-remote-gxserver-linux-release.sh' },
   { pathspec: 'tooling/release-ghostex.mjs' },
   { pathspec: 'tooling/release-gpui/prepare-references.sh' },
@@ -418,7 +420,11 @@ const PRODUCT_LIST = [
     kind: 'product',
     pathspecs: [
       ...DESKTOP_APP_PATHSPECS,
-      /* macOS is the only builder that stages bundled sounds and CLI skills. */
+      /*
+       * macOS is the only builder that stages bundled sounds, and the only one
+       * that copies the CLI skills straight into the app bundle (the Linux
+       * packages get them through the gxserver package).
+       */
       { pathspec: 'media/**' },
       { pathspec: 'skills/**' },
       /*

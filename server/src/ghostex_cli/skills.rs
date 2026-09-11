@@ -65,6 +65,18 @@ fn path_dirname(value: &str) -> PathBuf {
     }
 }
 
+/// The `skills/` folder of the gxserver package that owns this CLI
+/// (`<package>/bin/ghostex` → `<package>/skills`).
+///
+/// CDXC:AgentSkills 2026-09-11 WHY:
+/// Only the macOS bundle staged the bundled skills next to the CLI (`Contents/Resources/CLI/skills`).
+/// The Linux desktop package, the WSL runtime and remote Ubuntu hosts all run the CLI from the gxserver Linux package, which shipped no skills, so first-run capability setup on Linux failed with "Could not find ghostex-cli" (GitHub issue #124).
+/// server/package-remote-linux.mjs now stages the repository's `skills/` catalog into that package, and this is the candidate that finds it.
+/// SEE-ALSO: server/package-remote-linux.mjs, apps/desktop/scripts/build-macos-app.sh.
+fn gxserver_package_skills_dir(cli_dir: &std::path::Path) -> PathBuf {
+    launchers::js_path_resolve(&cli_dir.join("..")).join("skills")
+}
+
 pub fn resolve_ghostex_agent_skill_source_dir(
     skill_name: &str,
     env_vars: &[&str],
@@ -76,6 +88,7 @@ pub fn resolve_ghostex_agent_skill_source_dir(
         .map(|env_var| string_flag_env(env_var).map(PathBuf::from))
         .collect();
     candidates.push(Some(cli_dir.join("skills").join(skill_name)));
+    candidates.push(Some(gxserver_package_skills_dir(&cli_dir).join(skill_name)));
     candidates.push(
         source_root
             .as_ref()
@@ -140,6 +153,7 @@ pub fn resolve_ghostex_agent_skill_package_source(
             .map(|candidate| candidate.as_ref().map(|source| path_dirname(source))),
     );
     candidates.push(Some(cli_dir.join("skills")));
+    candidates.push(Some(gxserver_package_skills_dir(&cli_dir)));
     candidates.push(source_root.as_ref().map(|root| root.join("skills")));
     candidates.push(source_root.as_ref().map(|root| root.join("scripts")));
     candidates.push(

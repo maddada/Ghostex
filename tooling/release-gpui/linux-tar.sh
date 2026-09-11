@@ -67,6 +67,7 @@ trap 'rm -f "$FILE_LIST"' EXIT
 
 MEMBERS="$(zstd -dc "$TARBALL" | tar -tf -)"
 for required in ./opt/ghostex/Ghostex ./usr/bin/ghostex ./usr/bin/gx \
+	./opt/ghostex/gxserver/skills/ghostex-cli/SKILL.md \
 	./usr/share/applications/ghostex.desktop ./usr/share/icons/hicolor/256x256/apps/ghostex.png; do
 	grep -qxF "$required" <<<"$MEMBERS" || {
 		echo "Linux tarball is missing $required" >&2

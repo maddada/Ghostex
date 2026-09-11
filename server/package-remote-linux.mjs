@@ -230,6 +230,21 @@ async function buildPackage({ config, outputDir, workRoot }) {
   await copyExecutable(zmxBin, path.join(binsDir, 'zmx'), 'zmx');
 
   /*
+   * CDXC:AgentSkills 2026-09-11 WHY:
+   * `ghostex <skill> install-skill` resolves the bundled skill next to the CLI
+   * that runs it, and the Linux desktop package, the WSL runtime and remote
+   * Ubuntu hosts all run bin/ghostex from this package. Only the macOS bundle
+   * carried the skills, so first-run capability setup on Linux failed with
+   * "Could not find ghostex-cli" (GitHub issue #124). Stage the repository's
+   * skills/ catalog as <package>/skills so the install works offline wherever
+   * this package is used; gxserver still prefers the GitHub main copy when it
+   * can download and verify it.
+   * SEE-ALSO: server/src/ghostex_cli/skills.rs (gxserver_package_skills_dir),
+   * apps/desktop/scripts/build-macos-app.sh (bundled_cli_skill_assets).
+   */
+  await stageBundledSkills(stageDir);
+
+  /*
    * CDXC:RemotePairing 2026-07-13:
    * The remote package used to ship portless, an npm-style package.json
    * manifest, dist/protocol JS/type exports, and the Node ghostex CLI under
@@ -295,8 +310,40 @@ async function buildZigTool({ binName, root, target, workRoot, zigBin }) {
   return path.join(prefix, 'bin', binName);
 }
 
+const BUNDLED_SKILL_COPY_EXCLUDED_NAMES = new Set(['.git', 'node_modules', '.DS_Store']);
+
+/* Every folder under skills/ with a SKILL.md is a bundled skill; the catalog is
+ * the same one gxserver downloads from GitHub main at runtime. */
+async function stageBundledSkills(stageDir) {
+  const sourceRoot = path.join(repoRoot, 'skills');
+  await assertDirectory(sourceRoot, 'bundled skills');
+  const skillNames = [];
+  for (const entry of await readdir(sourceRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || BUNDLED_SKILL_COPY_EXCLUDED_NAMES.has(entry.name)) {
+      continue;
+    }
+    try {
+      await access(path.join(sourceRoot, entry.name, 'SKILL.md'));
+    } catch {
+      continue;
+    }
+    skillNames.push(entry.name);
+  }
+  if (!skillNames.includes('ghostex-cli')) {
+    throw new Error(`Bundled skills under ${sourceRoot} do not include ghostex-cli.`);
+  }
+  skillNames.sort();
+  for (const skillName of skillNames) {
+    await cp(path.join(sourceRoot, skillName), path.join(stageDir, 'skills', skillName), {
+      dereference: true,
+      filter: (source) => !BUNDLED_SKILL_COPY_EXCLUDED_NAMES.has(path.basename(source)),
+      recursive: true,
+    });
+  }
+}
+
 async function validateLinuxPackage(packageDir, config) {
-  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx'];
+  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'skills/ghostex-cli/SKILL.md'];
   for (const relativePath of requiredFiles) {
     await assertFile(path.join(packageDir, relativePath), relativePath);
   }

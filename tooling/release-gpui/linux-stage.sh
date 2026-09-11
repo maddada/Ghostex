@@ -57,6 +57,10 @@ APP_DIR="$REPO_ROOT/apps/desktop/build/linux/Ghostex"
 	echo "Linux build is missing bundled ghostex CLI" >&2
 	exit 1
 }
+[[ -f "$APP_DIR/gxserver/skills/ghostex-cli/SKILL.md" ]] || {
+	echo "Linux build is missing the bundled agent skills in its gxserver package (rebuild it with server/package-remote-linux.mjs)" >&2
+	exit 1
+}
 ON_DEMAND_MANIFEST="$APP_DIR/resources/on-demand-resources.json"
 CEF_COMPONENT_VERSION="$(node -e '
 const fs = require("node:fs");
