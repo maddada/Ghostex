@@ -331,13 +331,13 @@ fn first_prompt_auto_title_decides_provider_strategy_and_filters_meta_prompts() 
         Some("Please can you help me fix flaky tests."),
         false,
     );
-    assert!(decision.should_run);
+    assert!(!decision.should_run);
     assert_eq!(
         decision.normalized_prompt.as_deref(),
         Some("fix flaky tests")
     );
-    assert_eq!(decision.reason, "eligible");
-    assert_eq!(decision.strategy, Some("awaitAgentAutoTitle"));
+    assert_eq!(decision.reason, "agentAutoTitle");
+    assert_eq!(decision.strategy, Some("agentAutoTitle"));
 
     let claude = json!({
         "agentId": "claude",
@@ -345,8 +345,8 @@ fn first_prompt_auto_title_decides_provider_strategy_and_filters_meta_prompts() 
         "title": "Claude Code",
     });
     let decision = decide_first_prompt_auto_title(&claude, Some("Summarize the logs"), false);
-    assert!(decision.should_run);
-    assert_eq!(decision.strategy, Some("sendBareRenameCommand"));
+    assert!(!decision.should_run);
+    assert_eq!(decision.strategy, Some("agentAutoTitle"));
 
     let meta = decide_first_prompt_auto_title(&codex, Some("# AGENTS.md instructions"), false);
     assert!(!meta.should_run);

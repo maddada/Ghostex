@@ -712,20 +712,12 @@ pub(crate) fn decide_first_prompt_auto_title_claim(
         // These agents own first-turn naming; metadata reconciliation adopts it.
         return first_prompt_claim_decision(Some(normalized), "agentAutoTitle", false, strategy);
     }
-    // CDXC:SessionTitles 2026-09-03: Codex's provisional first-words
-    // name may already have been adopted as the title by the time the claim
-    // runs; it is not a real title and must not block the job.
     let current_title = read_text_value(session, "title");
-    let is_codex_provisional_title = strategy == Some("awaitAgentAutoTitle")
-        && current_title
-            .as_deref()
-            .is_some_and(|title| is_codex_provisional_thread_name(prompt, title));
     // CDXC:SessionTitles 2026-09-03: a placeholder title is the
     // launcher's default, whatever its spelling, and never blocks the claim.
     let is_placeholder_title =
         read_text_from_map(&runtime_settings, "titleSource").as_deref() == Some("placeholder");
     if !fork_first_prompt_rearmed
-        && !is_codex_provisional_title
         && !is_placeholder_title
         && !is_first_prompt_claim_generic_title(agent_name.as_deref(), current_title.as_deref())
     {
@@ -763,10 +755,9 @@ pub(crate) fn first_prompt_claim_agent_name(
 
 pub(crate) fn first_prompt_claim_strategy(agent_name: Option<&str>) -> Option<&'static str> {
     match normalize_first_prompt_claim_agent_name(agent_name).as_deref() {
-        Some("claude") => Some("sendBareRenameCommand"),
-        // See first_prompt_auto_title_strategy: Codex names the thread itself
-        // and Ghostex only steps in when its generated title never lands.
-        Some("codex") => Some("awaitAgentAutoTitle"),
+        // CDXC:SessionTitles 2026-09-11 SEE-ALSO:
+        // Keep Claude and Codex claim eligibility aligned with first_prompt_auto_title_strategy in server/title_generation.rs so no running title job blocks terminal input.
+        Some("claude" | "codex") => Some("agentAutoTitle"),
         // See first_prompt_auto_title_strategy: this agent names its own
         // sessions and the metadata sync adopts those names.
         Some("hermes-agent") => Some("agentAutoTitle"),

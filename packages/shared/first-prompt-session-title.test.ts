@@ -40,9 +40,8 @@ describe('first-prompt auto naming current title selection', () => {
         prompt: 'adjust agent icon opacity',
       })
     ).toMatchObject({
-      reason: 'nonGenericCurrentTitle',
+      reason: 'unsupportedAgent',
       shouldAutoName: false,
-      strategy: 'generateTitleAndRename',
     });
   });
 });
@@ -86,14 +85,8 @@ describe('Cursor first-prompt auto naming', () => {
 });
 
 describe('Claude first-prompt auto naming', () => {
-  test('should send a bare rename command strategy for generic titles', () => {
-    /**
-     * CDXC:SessionTitles 2026-06-12-07:08:
-     * Claude Code hook activity can begin before the CLI has a meaningful
-     * session title. Ghostex should stage bare `/rename` for generic Claude
-     * titles and let Claude generate the title itself.
-     */
-    expect(resolveFirstPromptAutoRenameStrategy('claude')).toBe('sendBareRenameCommand');
+  test('should not auto generate titles because Claude names sessions itself', () => {
+    expect(resolveFirstPromptAutoRenameStrategy('claude')).toBeUndefined();
     expect(
       explainFirstPromptAutoRenameDecision({
         agentName: 'claude',
@@ -101,9 +94,8 @@ describe('Claude first-prompt auto naming', () => {
         prompt: 'Implement title overlay cancellation',
       })
     ).toMatchObject({
-      reason: 'eligible',
-      shouldAutoName: true,
-      strategy: 'sendBareRenameCommand',
+      reason: 'unsupportedAgent',
+      shouldAutoName: false,
     });
   });
 });
@@ -112,64 +104,64 @@ describe('first-prompt slash command mentions', () => {
   test('should allow title generation when slash commands are not at the start of a line', () => {
     /**
      * CDXC:SessionTitles 2026-05-30-05:18:
-     * Forked Codex sessions must still generate a first-prompt title when the
+     * Forked Pi sessions must still generate a first-prompt title when the
      * user's natural-language request mentions `/rename` as product behavior.
      * Only short slash-command invocations at the start of a line should
      * suppress auto-title; long prompts should be renamed from their text.
      */
     expect(
       explainFirstPromptAutoRenameDecision({
-        agentName: 'codex',
+        agentName: 'pi',
         currentTitle: 'Terminal Session',
         prompt: 'For all GitHub related terminals, the /rename command should write the action starting with "Git: ".',
       })
     ).toMatchObject({
       reason: 'eligible',
       shouldAutoName: true,
-      strategy: 'generateTitleAndRename',
+      strategy: 'generateTitleAndName',
     });
 
     expect(
       explainFirstPromptAutoRenameDecision({
-        agentName: 'codex',
+        agentName: 'pi',
         currentTitle: 'Terminal Session',
         prompt: 'Please run /compact before continuing',
       })
     ).toMatchObject({
       reason: 'eligible',
       shouldAutoName: true,
-      strategy: 'generateTitleAndRename',
+      strategy: 'generateTitleAndName',
     });
   });
 
   test('should skip only short slash command prompts at the start of a line', () => {
     expect(
       explainFirstPromptAutoRenameDecision({
-        agentName: 'codex',
+        agentName: 'pi',
         currentTitle: 'Terminal Session',
         prompt: '/compact',
       })
     ).toMatchObject({
       reason: 'slashCommand',
       shouldAutoName: false,
-      strategy: 'generateTitleAndRename',
+      strategy: 'generateTitleAndName',
     });
 
     expect(
       explainFirstPromptAutoRenameDecision({
-        agentName: 'codex',
+        agentName: 'pi',
         currentTitle: 'Terminal Session',
         prompt: 'Prep context\n  /compact',
       })
     ).toMatchObject({
       reason: 'slashCommand',
       shouldAutoName: false,
-      strategy: 'generateTitleAndRename',
+      strategy: 'generateTitleAndName',
     });
 
     expect(
       explainFirstPromptAutoRenameDecision({
-        agentName: 'codex',
+        agentName: 'pi',
         currentTitle: 'Terminal Session',
         prompt:
           '/rename Git: update project board action labels so all spawned GitHub terminals keep the action prefix',
@@ -177,7 +169,7 @@ describe('first-prompt slash command mentions', () => {
     ).toMatchObject({
       reason: 'eligible',
       shouldAutoName: true,
-      strategy: 'generateTitleAndRename',
+      strategy: 'generateTitleAndName',
     });
   });
 });

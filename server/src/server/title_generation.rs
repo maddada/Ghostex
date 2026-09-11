@@ -1,5 +1,4 @@
 use super::*;
-use crate::agents::is_codex_provisional_thread_name;
 
 pub(crate) fn schedule_agent_title_metadata_check(
     state: AppState,
@@ -579,7 +578,7 @@ pub(crate) async fn run_first_prompt_auto_title_job(
     session_id: String,
     attempt_id: String,
 ) -> Result<(), ()> {
-    let (project_path, session, prompt, decision) = {
+    let (project_path, session, decision) = {
         let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
         let Some(session) = repository
@@ -597,7 +596,6 @@ pub(crate) async fn run_first_prompt_auto_title_job(
             read_session_text(&project, "path")
                 .unwrap_or_else(|| state.paths.home_dir.to_string_lossy().to_string()),
             session,
-            prompt,
             decision,
         )
     };
@@ -616,81 +614,17 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         return Ok(());
     }
 
-    let awaits_agent_auto_title = decision.strategy == Some("awaitAgentAutoTitle");
-    if awaits_agent_auto_title {
-        match wait_for_codex_auto_title(
-            &state,
-            &project_id,
-            &session_id,
-            &attempt_id,
-            prompt.as_deref(),
-        )
-        .await?
-        {
-            CodexAutoTitleWait::Named => {
-                mark_first_prompt_auto_title_skipped(
-                    &state,
-                    &project_id,
-                    &session_id,
-                    &attempt_id,
-                    "agentAutoTitle",
-                );
-                return Ok(());
-            }
-            CodexAutoTitleWait::Superseded => return Ok(()),
-            CodexAutoTitleWait::Missing => {}
-        }
-    }
-
-    let title = if awaits_agent_auto_title
-        || matches!(
-            decision.strategy,
-            Some("generateTitleAndRename" | "generateTitleAndName")
-        ) {
-        Some(
-            generate_first_prompt_session_title(
-                &state,
-                Some(&project_path),
-                decision.normalized_prompt.as_deref().ok_or(())?,
-                GXSERVER_FIRST_PROMPT_TITLE_SOURCE_MAX_LENGTH,
-                &session,
-            )
-            .await
-            .map_err(|_| ())?,
-        )
-    } else {
-        None
-    };
-
-    let command_text = match decision.strategy {
-        Some("sendBareRenameCommand") => "/rename".to_string(),
-        Some("generateTitleAndName") => format!("/name {}", title.as_deref().ok_or(())?),
-        _ => format!("/rename {}", title.as_deref().ok_or(())?),
-    };
-    let uses_bare_rename = decision.strategy == Some("sendBareRenameCommand");
-    /*
-    CDXC:SessionTitles 2026-08-28:
-    A bare `/rename` asks Claude to name the session from the conversation, so
-    submitting it before the conversation holds a real user message makes
-    Claude name the session after startup noise — `/model` and `/effort` local
-    commands produced sticky names like "set-default-model-opus". Gate the send
-    on the transcript itself: wait briefly for the first visible user prompt to
-    land, and if none arrives mark the attempt cancelled (re-armable by the
-    next explicit prompt submit), never skipped/applied, so the session still
-    gets its auto title once the user actually says something.
-    */
-    if uses_bare_rename
-        && !wait_for_visible_first_user_message(&state, &project_id, &session_id, &attempt_id)
-            .await?
-    {
-        mark_first_prompt_auto_title_cancelled_without_user_message(
-            &state,
-            &project_id,
-            &session_id,
-            &attempt_id,
-        );
-        return Ok(());
-    }
+    let title = generate_first_prompt_session_title(
+        &state,
+        Some(&project_path),
+        decision.normalized_prompt.as_deref().ok_or(())?,
+        GXSERVER_FIRST_PROMPT_TITLE_SOURCE_MAX_LENGTH,
+        &session,
+    )
+    .await
+    .map_err(|_| ())?;
+    let command_text =
+        agent_session_title_command(first_prompt_agent_name(&session).as_deref(), &title);
     {
         let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
         let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
@@ -707,29 +641,6 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         ) {
             return Ok(());
         }
-        // CDXC:SessionTitles 2026-09-03: Codex's own title may have
-        // landed while Ghostex's generation ran. Its name wins; do not
-        // overwrite it with a second one.
-        if awaits_agent_auto_title
-            && codex_has_generated_thread_name(&state, &latest_session, prompt.as_deref())
-        {
-            mark_first_prompt_auto_title_skipped(
-                &state,
-                &project_id,
-                &session_id,
-                &attempt_id,
-                "agentAutoTitle",
-            );
-            return Ok(());
-        }
-        let title_metadata_baseline = uses_bare_rename
-            .then(|| {
-                crate::agents::agent_metadata_title_observation(
-                    &state.paths.home_dir,
-                    &latest_session,
-                )
-            })
-            .flatten();
         /*
         CDXC:SessionChat 2026-08-24:
         Command text, settle, and Enter are ONE queued job. They used to be two
@@ -792,20 +703,11 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         NOTHING to its rollout for a command it intercepts, so without this row
         a session that renamed itself mid-conversation left no trace in chat.
         */
-        if uses_bare_rename {
-            crate::session_chat_app_command::record_session_chat_app_command_with_title_metadata_baseline(
-                &project_id,
-                &session_id,
-                &command_text,
-                title_metadata_baseline,
-            );
-        } else {
-            crate::session_chat_app_command::record_session_chat_app_command(
-                &project_id,
-                &session_id,
-                &command_text,
-            );
-        }
+        crate::session_chat_app_command::record_session_chat_app_command(
+            &project_id,
+            &session_id,
+            &command_text,
+        );
     }
 
     /*
@@ -860,9 +762,7 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         "gxserverFirstPromptAutoTitleStatus".to_string(),
         json!("applied"),
     );
-    if title.is_some() {
-        runtime_settings.insert("titleSource".to_string(), json!("generated"));
-    }
+    runtime_settings.insert("titleSource".to_string(), json!("generated"));
     let mut update = Map::new();
     update.insert("projectId".to_string(), json!(project_id.clone()));
     update.insert("sessionId".to_string(), json!(session_id.clone()));
@@ -870,173 +770,10 @@ pub(crate) async fn run_first_prompt_auto_title_job(
         "runtimeSettings".to_string(),
         Value::Object(runtime_settings),
     );
-    if let Some(title) = title {
-        update.insert("title".to_string(), json!(title));
-    }
+    update.insert("title".to_string(), json!(title));
     repository.update_session(&update).map_err(|_| ())?;
     schedule_delta_for_ids(&state, &project_id, &session_id);
-    let _ = prompt;
     Ok(())
-}
-
-pub(crate) enum CodexAutoTitleWait {
-    /// Codex wrote a real thread name (or the user named the session); Ghostex
-    /// has nothing to add.
-    Named,
-    /// A newer attempt owns the session now.
-    Superseded,
-    /// The wait ran out with only Codex's provisional first-words name (or no
-    /// name at all) in session_index.jsonl.
-    Missing,
-}
-
-/// Whether Codex's session index holds a thread name for this session that is
-/// not the provisional 36-character prefix of `first_prompt`. A title the user
-/// set through Ghostex counts as named as well.
-pub(crate) fn codex_has_generated_thread_name(
-    state: &AppState,
-    session: &Value,
-    first_prompt: Option<&str>,
-) -> bool {
-    if read_runtime_text(session, "titleSource").as_deref() == Some("user") {
-        return true;
-    }
-    crate::agents::read_agent_metadata_title(&state.paths.home_dir, session).is_some_and(
-        |metadata_title| !is_codex_provisional_thread_name(first_prompt, metadata_title.title()),
-    )
-}
-
-/*
-CDXC:SessionTitles 2026-09-03:
-Give Codex's hidden title thread its window before Ghostex generates anything.
-The index is read directly rather than through the session row so the check
-does not depend on the once-a-second metadata sync having run, and the
-database handle is dropped before every await (rusqlite connections cannot be
-held across await points).
-*/
-async fn wait_for_codex_auto_title(
-    state: &AppState,
-    project_id: &str,
-    session_id: &str,
-    attempt_id: &str,
-    first_prompt: Option<&str>,
-) -> Result<CodexAutoTitleWait, ()> {
-    let deadline = Instant::now() + Duration::from_millis(GXSERVER_CODEX_AUTO_TITLE_WAIT_MS);
-    loop {
-        {
-            let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
-            let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-            let Some(session) = repository
-                .get_session(project_id, session_id)
-                .map_err(|_| ())?
-            else {
-                return Ok(CodexAutoTitleWait::Superseded);
-            };
-            if !is_current_first_prompt_auto_title_attempt(&session, attempt_id) {
-                return Ok(CodexAutoTitleWait::Superseded);
-            }
-            if codex_has_generated_thread_name(state, &session, first_prompt) {
-                return Ok(CodexAutoTitleWait::Named);
-            }
-        }
-        if Instant::now() >= deadline {
-            return Ok(CodexAutoTitleWait::Missing);
-        }
-        tokio::time::sleep(Duration::from_millis(GXSERVER_CODEX_AUTO_TITLE_POLL_MS)).await;
-    }
-}
-
-/*
-CDXC:SessionTitles 2026-08-28:
-The transcript is the source of truth for "the user actually said something":
-`recent_session_user_prompts` already filters out `<command-name>` wrappers,
-tool results, and staged slash commands, so a `/model` or `/effort` exchange
-counts as nothing. Polls with the database handle dropped before every await
-(rusqlite connections cannot be held across await points). Returns `true`
-when a visible user prompt exists or when this attempt was superseded — the
-caller's own attempt re-check then decides what to persist.
-*/
-async fn wait_for_visible_first_user_message(
-    state: &AppState,
-    project_id: &str,
-    session_id: &str,
-    attempt_id: &str,
-) -> Result<bool, ()> {
-    const POLL_ATTEMPTS: u32 = 10;
-    const POLL_DELAY_MS: u64 = 1_000;
-    for attempt in 0..POLL_ATTEMPTS {
-        let identity = {
-            let db = open_gxserver_database(&state.paths).map_err(|_| ())?;
-            let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-            let Some(session) = repository
-                .get_session(project_id, session_id)
-                .map_err(|_| ())?
-            else {
-                return Ok(false);
-            };
-            if !is_current_first_prompt_auto_title_attempt(&session, attempt_id) {
-                return Ok(true);
-            }
-            (
-                read_runtime_text(&session, "agentSessionId"),
-                read_runtime_text(&session, "agentSessionPath"),
-            )
-        };
-        if !crate::agent_transcripts::recent_session_user_prompts(
-            "claude",
-            identity.0.as_deref(),
-            identity.1.as_deref(),
-        )
-        .is_empty()
-        {
-            return Ok(true);
-        }
-        if attempt + 1 < POLL_ATTEMPTS {
-            tokio::time::sleep(Duration::from_millis(POLL_DELAY_MS)).await;
-        }
-    }
-    Ok(false)
-}
-
-fn mark_first_prompt_auto_title_cancelled_without_user_message(
-    state: &AppState,
-    project_id: &str,
-    session_id: &str,
-    attempt_id: &str,
-) {
-    let did_update =
-        update_first_prompt_auto_title_runtime(state, project_id, session_id, |runtime| {
-            if read_text_from_map(runtime, FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY).as_deref()
-                != Some(attempt_id)
-                || read_text_from_map(runtime, "gxserverFirstPromptAutoTitleStatus").as_deref()
-                    != Some("running")
-            {
-                return false;
-            }
-            runtime.remove(FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY);
-            if let Some(prompt) = read_text_from_map(runtime, "firstUserMessage") {
-                runtime.insert(
-                    "gxserverFirstPromptAutoTitleCancelledPrompt".to_string(),
-                    json!(prompt),
-                );
-            }
-            runtime.insert(
-                "gxserverFirstPromptAutoTitleCancelledAt".to_string(),
-                json!(now_iso()),
-            );
-            runtime.insert(
-                "gxserverFirstPromptAutoTitleReason".to_string(),
-                json!("noVisibleUserMessage"),
-            );
-            runtime.insert(
-                "gxserverFirstPromptAutoTitleStatus".to_string(),
-                json!("cancelled"),
-            );
-            true
-        });
-    if did_update {
-        schedule_delta_for_ids(state, project_id, session_id);
-    }
 }
 
 pub(crate) fn mark_first_prompt_auto_title_skipped(
@@ -1611,17 +1348,10 @@ pub(crate) fn decide_first_prompt_auto_title(
         return decision(Some(prompt), "agentAutoTitle", false, strategy);
     }
     let current_title = read_session_text(session, "title");
-    // CDXC:SessionTitles 2026-09-03: the adopted provisional Codex
-    // name is not a real title and must not count as non-generic.
-    let is_codex_provisional_title = strategy == Some("awaitAgentAutoTitle")
-        && current_title
-            .as_deref()
-            .is_some_and(|title| is_codex_provisional_thread_name(raw_prompt, title));
     // CDXC:SessionTitles 2026-09-03: see the claim gate.
     let is_placeholder_title =
         read_runtime_text(session, "titleSource").as_deref() == Some("placeholder");
     if !fork_first_prompt_rearmed
-        && !is_codex_provisional_title
         && !is_placeholder_title
         && !is_terminal_auto_working_directory_title(session)
         && !is_generic_agent_session_title(agent_name.as_deref(), current_title.as_deref())
@@ -1651,17 +1381,18 @@ pub(crate) fn first_prompt_agent_name(session: &Value) -> Option<String> {
 
 pub(crate) fn first_prompt_auto_title_strategy(agent_name: Option<&str>) -> Option<&'static str> {
     match normalize_agent_name(agent_name).as_deref() {
-        Some("claude") => Some("sendBareRenameCommand"),
         /*
-        CDXC:SessionTitles 2026-09-03:
-        Codex names the thread itself from the first user turn, so Ghostex
-        must not race it with a second model request. But its generated title
-        is applied by a hidden helper thread that fails silently now and then,
-        leaving the 36-character provisional prompt prefix as the name. The job
-        therefore waits for Codex's real title and generates its own `/rename`
-        only when the provisional name is all Codex ever wrote.
+        CDXC:SessionTitles 2026-09-11 DECISION:
+        User: disable Claude's first-prompt `/rename` after verifying in Ghostex Web that Claude generates its own title without it.
+        Let the normal title sync adopt Claude's name without claiming a job or blocking input; manual rename and Generate Name remain available.
         */
-        Some("codex") => Some("awaitAgentAutoTitle"),
+        Some("claude") => Some("agentAutoTitle"),
+        /*
+        CDXC:SessionTitles 2026-09-11 DECISION:
+        User: disable Ghostex's first-prompt auto-renaming for Codex because Codex names sessions itself and the "Generating title..." blocker prevents typing.
+        This replaces the wait-and-fallback job; metadata sync still adopts Codex titles and manual Generate Name remains available.
+        */
+        Some("codex") => Some("agentAutoTitle"),
         // Names every conversation itself about a second after the first
         // prompt and writes it to `annotations/<id>.pbtxt`, the same file its
         // `/rename` rewrites; the metadata sync adopts both.

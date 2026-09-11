@@ -94,14 +94,6 @@ fn create_codex_agent_session(
     create_agent_session(repository, "codex", agent_session_id, project_path)
 }
 
-fn create_claude_agent_session(
-    repository: &DomainRepository<'_>,
-    agent_session_id: &str,
-    project_path: &Path,
-) -> (LifecycleParams, Value) {
-    create_agent_session(repository, "claude", agent_session_id, project_path)
-}
-
 fn create_pi_agent_session_without_launch_lock(
     repository: &DomainRepository<'_>,
 ) -> (LifecycleParams, Value) {
@@ -162,13 +154,13 @@ fn first_prompt_claim_decision_matches_provider_strategy_and_prompt_normalizatio
         false,
         false,
     );
-    assert!(decision.should_run);
-    assert_eq!(decision.reason, "eligible");
+    assert!(!decision.should_run);
+    assert_eq!(decision.reason, "agentAutoTitle");
     assert_eq!(
         decision.normalized_prompt.as_deref(),
         Some("fix the sidebar")
     );
-    assert_eq!(decision.strategy, Some("awaitAgentAutoTitle"));
+    assert_eq!(decision.strategy, Some("agentAutoTitle"));
 
     let claude = json!({
         "agentId": "claude",
@@ -181,8 +173,8 @@ fn first_prompt_claim_decision_matches_provider_strategy_and_prompt_normalizatio
         false,
         false,
     );
-    assert!(decision.should_run);
-    assert_eq!(decision.strategy, Some("sendBareRenameCommand"));
+    assert!(!decision.should_run);
+    assert_eq!(decision.strategy, Some("agentAutoTitle"));
 
     let pi = json!({
         "agentId": "pi",
@@ -252,7 +244,7 @@ fn first_prompt_claim_decision_skips_non_claimable_prompts_without_running_state
 fn first_prompt_claim_retries_cancelled_job_for_new_submit_or_later_prompt() {
     let first_prompt = "Please cancel this generated title before rename";
     let session = json!({
-        "agentId": "claude",
+        "agentId": "pi",
         "runtimeSettings": {
             "firstUserMessage": first_prompt,
             "gxserverFirstPromptAutoTitleCancelledAt": "2026-06-22T04:00:00.000Z",
@@ -291,8 +283,9 @@ fn first_prompt_claim_retries_cancelled_job_for_new_submit_or_later_prompt() {
 fn user_prompt_submit_hook_rearms_cancelled_identical_prompt() {
     let (temp, db) = open_test_database();
     let repository = DomainRepository::new(&db, "test-server");
-    let (lifecycle, session) = create_claude_agent_session(
+    let (lifecycle, session) = create_agent_session(
         &repository,
+        "pi",
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         temp.path(),
     );
@@ -322,7 +315,7 @@ fn user_prompt_submit_hook_rearms_cancelled_identical_prompt() {
         &repository,
         &lifecycle,
         json!({
-            "agentName": "claude",
+            "agentName": "pi",
             "eventName": "UserPromptSubmit",
             "firstUserMessage": first_prompt,
             "projectId": lifecycle.project_id.clone(),
@@ -362,8 +355,9 @@ fn user_prompt_submit_hook_rearms_cancelled_identical_prompt() {
 fn first_prompt_claim_clears_cancelled_metadata_for_repeated_explicit_prompt() {
     let (temp, db) = open_test_database();
     let repository = DomainRepository::new(&db, "test-server");
-    let (lifecycle, session) = create_claude_agent_session(
+    let (lifecycle, session) = create_agent_session(
         &repository,
+        "pi",
         "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         temp.path(),
     );
@@ -1692,7 +1686,7 @@ fn live_process_identity_claims_codex_id_observed_before_process_promotion() {
 }
 
 #[test]
-fn live_process_identity_replaces_wsl_shell_title_and_claims_codex_auto_title_job() {
+fn live_process_identity_replaces_wsl_shell_title_without_claiming_codex_auto_title_job() {
     let (temp, db) = open_test_database();
     let repository = DomainRepository::new(&db, "test-server");
     let project = repository
@@ -1780,10 +1774,7 @@ fn live_process_identity_replaces_wsl_shell_title_and_claims_codex_auto_title_jo
     )
     .expect("hook result");
 
-    // CDXC:SessionTitles 2026-09-03: the first Codex prompt now
-    // claims the auto-title job, which waits for Codex's own title before
-    // generating one; the title itself is untouched at claim time.
-    assert_eq!(
+    assert_ne!(
         result.get("reason"),
         Some(&json!("first-prompt-auto-title-claimed"))
     );
@@ -1794,7 +1785,7 @@ fn live_process_identity_replaces_wsl_shell_title_and_claims_codex_auto_title_jo
             .get("runtimeSettings")
             .and_then(Value::as_object)
             .and_then(|settings| settings.get("gxserverFirstPromptAutoTitleStatus")),
-        Some(&json!("running"))
+        None
     );
 }
 

@@ -69,18 +69,12 @@ export function resolveFirstPromptAutoRenameStrategy(
   agentName: string | undefined
 ): FirstPromptAutoRenameStrategy | undefined {
   const normalizedAgentName = agentName?.trim().toLowerCase();
-  if (normalizedAgentName === 'claude' || normalizedAgentName === 'claude code') {
+  if (normalizedAgentName === 'claude' || normalizedAgentName === 'claude code' || normalizedAgentName === 'codex') {
     /**
-     * CDXC:SessionTitles 2026-06-12-07:08:
-     * Claude Code can leave newly working sessions at the generic `Claude Code`
-     * title. Send a bare `/rename` for unrenamed Claude sessions because
-     * Claude can generate the title itself from the active conversation.
+     * CDXC:SessionTitles 2026-09-11 SEE-ALSO:
+     * Claude and Codex own first-prompt naming; match the decisions in server/src/server/title_generation.rs and the claim policy in server/src/agents/activity.rs.
      */
-    return 'sendBareRenameCommand';
-  }
-
-  if (normalizedAgentName === 'codex') {
-    return 'generateTitleAndRename';
+    return undefined;
   }
 
   if (

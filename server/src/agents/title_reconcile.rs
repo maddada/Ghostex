@@ -17,28 +17,11 @@ pub(crate) struct AgentMetadataTitle {
     updated_at: Option<String>,
 }
 
-impl AgentMetadataTitle {
-    pub(crate) fn title(&self) -> &str {
-        &self.title
-    }
-}
-
 /*
-CDXC:SessionTitles 2026-09-03:
-Codex 0.152 names a new thread in two steps. When the first user message
-completes it immediately writes a provisional thread_name to
-session_index.jsonl: the whitespace-collapsed prompt cut to 36 characters
-(`THREAD_TITLE_MAX_CHARS` in codex-rs `tui/src/app/thread_title.rs`). It then
-starts a hidden temporary thread to generate the real title and applies that
-only if the thread is still named exactly the provisional string. On this
-machine that hidden step silently failed for about one session in five on
-2026-09-03, and Ghostex, which had handed first-prompt naming to Codex
-entirely, adopted the truncated prompt as the permanent title. This predicate
-lets the first-prompt auto-title job tell the provisional name from a real
-one, so Ghostex can wait for Codex and step in only when Codex never finished.
-The 36-character prefix is deliberately matched on the raw prompt, not on
-Ghostex's filler-stripped normalized prompt, because Codex truncates the text
-it was given.
+CDXC:SessionTitles 2026-09-11 WHY:
+Older Ghostex versions claimed Codex title jobs while waiting for its provisional 36-character prompt prefix to become a generated name.
+Metadata reconciliation still recognizes the provisional prefix to retire those legacy claims when the final title arrives; new Codex sessions never claim a job.
+Compare against the raw prompt because Codex truncates the text it received, before Ghostex strips filler.
 */
 pub(crate) const CODEX_PROVISIONAL_THREAD_NAME_MAX_CHARS: usize = 36;
 
@@ -319,7 +302,18 @@ pub(crate) fn read_agent_metadata_title(
         AgentMetadataTitleSource::CodexSessionIndex {
             agent_session_id,
             index_paths,
-        } => read_codex_session_index_title(&index_paths, &agent_session_id),
+        } => read_codex_session_index_title(&index_paths, &agent_session_id).filter(|metadata| {
+            let initial_title = provisional_fork_title(session);
+            let inherited_title = initial_title
+                .as_deref()
+                .and_then(|title| title.strip_prefix("Fork: "));
+            let pending_title = read_text_from_map(
+                &object_field(session, "runtimeSettings"),
+                "pendingAgentTitleRequestTitle",
+            );
+            pending_title.is_some()
+                || !inherited_title.is_some_and(|title| titles_match(title, &metadata.title))
+        }),
         AgentMetadataTitleSource::HermesStateDb {
             agent_session_id, ..
         } => read_hermes_state_db_title(&agent_session_id),
@@ -327,15 +321,6 @@ pub(crate) fn read_agent_metadata_title(
             read_antigravity_annotation_title(&annotation_path)
         }
     }
-}
-
-/// The current title plus the exact provider record that supplied it.
-pub(crate) fn agent_metadata_title_observation(
-    home_dir: &Path,
-    session: &Value,
-) -> Option<(String, String)> {
-    let metadata_title = read_agent_metadata_title(home_dir, session)?;
-    Some((metadata_title.title, metadata_title.record_revision?))
 }
 
 pub(crate) fn agent_metadata_title_source(
