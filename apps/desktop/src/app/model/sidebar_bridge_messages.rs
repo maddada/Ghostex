@@ -73,6 +73,11 @@ pub(crate) struct GpuiSidebarWorkspaceTerminalFocusMessage {
     /// A sidebar click means "show me this session" and may switch the app to Agents; the restore replay must not, or the view the user quit on is lost.
     /// SEE-ALSO: `autoMaterializeStartupFocusedSession` in apps/desktop/sidebar/gxserver-runtime/presentation-stream.ts, `focus_local_workspace_terminal_from_message` in apps/desktop/src/app/workspace_events.rs.
     pub(crate) startup_restore: bool,
+    /// CDXC:Navigation 2026-09-11 DECISION:
+    /// User: a focus that lands on another project keeps that project's remembered view (Code, Browser, Kanban, Automate, Docs) instead of switching to Agents; only a session click inside the project already active still opens Agents.
+    /// The sidebar runtime sets this when the focused project changes and on a Space restore. Rust then selects the tab in the background and leaves the mode and keyboard focus alone unless the remembered view is Agents, the same rule `startup_restore` applies to the restart replay.
+    /// SEE-ALSO: `focusSession` in apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, `select_local_workspace_terminal_keeping_view` in apps/desktop/src/app/workspace_terminals.rs, `pending_keep_view_remote_focus` in apps/desktop/src/app/core.rs.
+    pub(crate) keep_view: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

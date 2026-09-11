@@ -131,6 +131,7 @@ impl GhostexGpuiApp {
                 .contains(&GpuiWorkspaceTerminalSessionKey::Remote(key.clone()));
         let preview_pane_id = requested_pane_id.unwrap_or(self.agents_workspace.focused_pane);
         let update_reference = reference;
+        let failed_open_key = key.clone();
         let remote_machine_id = key.remote_machine_id;
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
@@ -191,6 +192,7 @@ impl GhostexGpuiApp {
                     );
                 }
                 Err(message) => {
+                    this.pending_keep_view_remote_focus.remove(&failed_open_key);
                     support_logs::append(
                         support_logs::GpuiSupportLog::TerminalFocus,
                         "gpui.remoteAttach.planFailed",
@@ -206,6 +208,14 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+
+    /// Consumes the keep-view intent parked for this remote session by the
+    /// native open action. True only when the remembered view is not Agents,
+    /// so the caller skips the mode switch and the focus handoff; on Agents the
+    /// ordinary path runs, which is a no-op mode change plus the usual focus.
+    fn take_remote_keep_view_focus(&mut self, key: &GpuiRemoteAttachSessionKey) -> bool {
+        self.pending_keep_view_remote_focus.remove(key) && self.active_mode != TitlebarMode::Agents
     }
 
     pub(crate) fn focus_existing_gpui_remote_attach_terminal(
@@ -275,6 +285,8 @@ impl GhostexGpuiApp {
                 true,
                 cx,
             );
+        } else if self.take_remote_keep_view_focus(key) {
+            // Keep-view focus: the tab is selected, the remembered view stays.
         } else {
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);
@@ -491,6 +503,8 @@ impl GhostexGpuiApp {
                         true,
                         cx,
                     );
+                } else if self.take_remote_keep_view_focus(&key) {
+                    // Keep-view focus: the tab is re-armed, the remembered view stays.
                 } else {
                     self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
                     self.set_shell_focus_with_terminal_handoff(
@@ -592,6 +606,8 @@ impl GhostexGpuiApp {
                 true,
                 cx,
             );
+        } else if self.take_remote_keep_view_focus(&key) {
+            // Keep-view focus: the tab is created, the remembered view stays.
         } else {
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.set_shell_focus_with_terminal_handoff(ShellFocusTarget::AgentsPane(pane_id), true);

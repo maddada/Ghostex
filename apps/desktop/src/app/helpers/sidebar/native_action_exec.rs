@@ -50,6 +50,7 @@ pub(crate) fn gpui_sidebar_native_project_path_action_from_json(
             "filePath",
             "placement",
             "preferredInterface",
+            "keepView",
         ]
         .contains(&key.as_str())
     }) {
@@ -103,6 +104,15 @@ pub(crate) fn gpui_sidebar_native_project_path_action_from_json(
     {
         return Err(());
     }
+    let keep_view = match object.get("keepView") {
+        None => false,
+        Some(value) => value.as_bool().ok_or(())?,
+    };
+    if object.contains_key("keepView")
+        && action != GpuiSidebarNativeProjectPathAction::OpenRemoteSessionTerminal
+    {
+        return Err(());
+    }
     let project_id = object
         .get("projectId")
         .and_then(serde_json::Value::as_str)
@@ -121,6 +131,7 @@ pub(crate) fn gpui_sidebar_native_project_path_action_from_json(
         placement,
         preferred_interface,
         project_id,
+        keep_view,
     })
 }
 

@@ -156,6 +156,7 @@ export interface GpuiSidebarRuntimeAppShotAndMiscMethods {
     originalMessage: SidebarToExtensionMessage,
     options?: {
       filePath?: string;
+      keepView?: boolean;
       placement?: GpuiWorkspaceTerminalFocusPlacement;
       preferredInterface?: PreferredAgentInterface;
     }
@@ -1034,6 +1035,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
     originalMessage: SidebarToExtensionMessage,
     options: {
       filePath?: string;
+      keepView?: boolean;
       placement?: GpuiWorkspaceTerminalFocusPlacement;
       preferredInterface?: PreferredAgentInterface;
     } = {}
@@ -1053,6 +1055,7 @@ export const gpuiSidebarRuntimeAppShotAndMiscMethods = {
       ...(options.filePath ? { filePath: options.filePath } : {}),
       ...(options.placement ? { placement: options.placement } : {}),
       ...(options.preferredInterface ? { preferredInterface: options.preferredInterface } : {}),
+      ...(options.keepView ? { keepView: true } : {}),
       projectId: normalizedProjectId,
       type: GPUI_SIDEBAR_NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE,
       version: GPUI_SIDEBAR_NATIVE_PROJECT_PATH_ACTION_MESSAGE_VERSION,

@@ -581,6 +581,13 @@ pub struct GhostexGpuiApp {
     /// One-shot Chat launch requests waiting for a shell-session mapping. The
     /// mapped session enters Chat mode before any terminal focus handoff.
     pub(crate) pending_agents_chat_launch_intents: HashSet<GpuiWorkspaceTerminalSessionKey>,
+    /// CDXC:Navigation 2026-09-11 WHY:
+    /// Remote session opens travel as a native project-path action and finish
+    /// asynchronously through several attach helpers with many callers, so the
+    /// keep-view intent of `GpuiSidebarWorkspaceTerminalFocusMessage.keep_view`
+    /// is parked here per remote key, like the Chat launch intent above, and
+    /// consumed by the helper that would otherwise switch to Agents.
+    pub(crate) pending_keep_view_remote_focus: HashSet<GpuiRemoteAttachSessionKey>,
     pub(crate) agents_chat_page_states: HashMap<TerminalSessionId, SessionChatPageState>,
     pub(crate) session_chat_diagnostics: super::session_chat_diagnostics::SessionChatDiagnostics,
     pub(crate) agents_chat_eviction_running: bool,
@@ -1100,6 +1107,7 @@ pub struct GhostexGpuiApp {
     pub(crate) titlebar_dropdown_focus_handle: FocusHandle,
     pub(crate) titlebar_dropdown_previous_focus_handle: Option<FocusHandle>,
     pub(crate) titlebar_popup_menu: Option<GpuiTitlebarPopupState>,
+    pub(crate) context_menu: Option<crate::app::context_menu::GpuiContextMenu>,
     pub(crate) titlebar_popup_window: Option<WindowHandle<GpuiTitlebarPopupWindow>>,
     /// Last painted bounds of the titlebar Help button, so the `openGhostexHelp`
     /// hotkey can anchor the Help popup without a click.
@@ -1924,7 +1932,7 @@ impl Render for GhostexGpuiApp {
             .on_action(cx.listener(|this, _: &OpenGpuiExtensionsModal, window, cx| {
                 /*
                 CDXC:Titlebar 2026-08-13:
-                NativeMenu dispatches through the main window's rendered
+                GPUI popup menu dispatches through the main window's rendered
                 action tree. Handle Extensions on that tree, alongside the
                 other titlebar menu actions, so right-click selection opens
                 the explicit Settings > Extensions route instead of relying

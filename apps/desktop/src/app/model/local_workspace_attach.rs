@@ -31,6 +31,10 @@ pub(crate) enum GpuiLocalWorkspaceAttachOrigin {
     SidebarFocus,
     SurfacedRestore,
     WakeRecovery,
+    /// A keep-view focus (another project's remembered view stays up) whose
+    /// session has no usable tab yet. Completion inserts or re-arms the tab as
+    /// the pane's active one without switching to Agents or taking focus.
+    BackgroundSelect,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

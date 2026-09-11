@@ -74,7 +74,7 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   focusSession(
     sessionId: string,
     originalMessage?: SidebarToExtensionMessage,
-    options?: { preferredInterface?: PreferredAgentInterface }
+    options?: { keepView?: boolean; preferredInterface?: PreferredAgentInterface }
   ): Promise<void>;
   postSidebarSessionFocusConfirmation(sessionId: string): void;
   focusLocalWorkspaceSession(
@@ -82,6 +82,7 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
     sessionId: string,
     options?: {
       forceRemount?: boolean;
+      keepView?: boolean;
       placement?: GpuiWorkspaceTerminalFocusPlacement;
       preferredInterface?: PreferredAgentInterface;
     }
@@ -92,6 +93,7 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
     placementTargetSessionId?: string,
     options?: {
       forceRemount?: boolean;
+      keepView?: boolean;
       placement?: GpuiWorkspaceTerminalFocusPlacement;
       preferredInterface?: PreferredAgentInterface;
       startupRestore?: boolean;
@@ -140,6 +142,24 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
   isGpuiPresentationChatProjectId(projectId: string): boolean;
   setRemotePresentationSessionFocus(reference: { machineId: string; projectId: string; sessionId: string }): void;
   dropRemotePresentationSessionFocus(machineId: string): void;
+}
+
+/**
+ * Whether focusing a session of `target` moves the sidebar to another project.
+ * A remote selection lives only in `activeGroupId` (a machine-scoped group id)
+ * while `activeProjectId` is local-only, so the two are read together: a local
+ * target switches when a remote group is active or the local id differs, and a
+ * remote target switches unless the active group is that machine's project.
+ */
+function focusChangesActiveProject(
+  runtime: GpuiSidebarRuntime,
+  target: { machineId?: string; projectId: string }
+): boolean {
+  const activeRemote = runtime.activeGroupId ? parseGpuiRemotePresentationGroupId(runtime.activeGroupId) : undefined;
+  if (target.machineId) {
+    return activeRemote?.machineId !== target.machineId || activeRemote.projectId !== target.projectId;
+  }
+  return activeRemote !== undefined || runtime.activeProjectId !== target.projectId;
 }
 
 export const gpuiSidebarRuntimeSessionFocusMethods = {
@@ -237,8 +257,16 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     this: GpuiSidebarRuntime,
     sessionId: string,
     originalMessage?: SidebarToExtensionMessage,
-    options?: { preferredInterface?: PreferredAgentInterface }
+    options?: { keepView?: boolean; preferredInterface?: PreferredAgentInterface }
   ): Promise<void> {
+    /*
+    CDXC:Navigation 2026-09-11 DECISION:
+    User: landing on another project keeps that project's remembered view (Code, Browser, Kanban, Automate, Docs) instead of switching to Agents; only a session click inside the active project still opens Agents.
+    This runtime owns active-project identity, so it is the one place that knows whether a focus changes the project: the sidebar's own project bookkeeping is compared before the focus below moves it. A Space restore passes `keepView` explicitly because it may reopen a session inside the project already active.
+    SEE-ALSO: `keep_view` on GpuiSidebarWorkspaceTerminalFocusMessage in apps/desktop/src/app/model/sidebar_bridge_messages.rs.
+    */
+    const keepViewRequested =
+      options?.keepView === true || (originalMessage?.type === 'focusSession' && originalMessage.keepView === true);
     const browserTab = this.browserTabs.find((candidate) => gpuiBrowserSidebarSessionId(candidate) === sessionId);
     if (browserTab) {
       /*
@@ -265,12 +293,13 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     if (remoteSession) {
       this.acknowledgeSessionAttention(sessionId, 'sidebar-focus');
+      const keepView = keepViewRequested || focusChangesActiveProject(this, remoteSession);
       if (
         this.postRemoteSessionNativeAction(
           'openRemoteSessionTerminal',
           remoteSession,
           originalMessage ?? { sessionId, type: 'focusSession' },
-          options
+          { ...options, keepView }
         )
       ) {
         this.setRemotePresentationSessionFocus(remoteSession);
@@ -290,19 +319,23 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       return;
     }
     this.acknowledgeSessionAttention(sessionId, 'sidebar-focus');
+    const focusOptions = {
+      ...options,
+      keepView: keepViewRequested || focusChangesActiveProject(this, { projectId: reference.projectId }),
+    };
     if (this.isSleepingLocalPresentationSession(reference.projectId, reference.sessionId)) {
       /*
       CDXC:FocusRouting 2026-06-26-23:24:
       Sleeping local session-card clicks must match macOS session activation by committing gxserver `/api/wakeSession` before the Rust workspace materializes the terminal. A plain focus bridge can select the tab but leaves gxserver sleeping, so route this branch through the same Wake path as the sidebar sleep toggle.
       */
-      await this.setSessionSleeping(sessionId, false, options);
+      await this.setSessionSleeping(sessionId, false, focusOptions);
       return;
     }
     /*
     CDXC:FocusRouting 2026-06-26-04:42:
     Local GPUI sidebar clicks must match the macOS sidebar ownership model: the SidebarApp adapter applies local focus immediately and publishes the CEF bootstrap focus hint, but it must not call gxserver `/api/focusSession`. That endpoint is an external renderer-command route and can bounce focus when another renderer is the first open gxserver subscriber.
     */
-    this.focusLocalWorkspaceSession(reference.projectId, reference.sessionId, options);
+    this.focusLocalWorkspaceSession(reference.projectId, reference.sessionId, focusOptions);
     this.publishPresentation('patch');
   },
 
@@ -344,6 +377,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     sessionId: string,
     options?: {
       forceRemount?: boolean;
+      keepView?: boolean;
       placement?: GpuiWorkspaceTerminalFocusPlacement;
       preferredInterface?: PreferredAgentInterface;
     }
@@ -368,6 +402,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     placementTargetSessionId?: string,
     options?: {
       forceRemount?: boolean;
+      keepView?: boolean;
       placement?: GpuiWorkspaceTerminalFocusPlacement;
       preferredInterface?: PreferredAgentInterface;
       startupRestore?: boolean;
@@ -387,6 +422,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       ...(options?.placement ? { placement: options.placement } : {}),
       ...(options?.preferredInterface ? { preferredInterface: options.preferredInterface } : {}),
       ...(options?.startupRestore ? { startupRestore: true } : {}),
+      ...(options?.keepView ? { keepView: true } : {}),
       projectId,
       sessionId,
       type: GPUI_SIDEBAR_WORKSPACE_TERMINAL_FOCUS_MESSAGE_TYPE,

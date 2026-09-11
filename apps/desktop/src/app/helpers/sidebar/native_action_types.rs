@@ -22,6 +22,9 @@ pub(crate) struct GpuiSidebarNativeProjectPathActionMessage {
     pub(crate) placement: GpuiWorkspaceTerminalFocusPlacement,
     pub(crate) preferred_interface: GpuiPreferredAgentInterface,
     pub(crate) project_id: String,
+    /// Only `openRemoteSessionTerminal` carries it; the remote twin of
+    /// `GpuiSidebarWorkspaceTerminalFocusMessage::keep_view`.
+    pub(crate) keep_view: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

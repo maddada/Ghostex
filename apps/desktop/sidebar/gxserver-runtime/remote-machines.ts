@@ -121,7 +121,11 @@ export interface GpuiSidebarRuntimeRemoteMachineMethods {
     >,
     reference: { machineId: string; projectId: string; sessionId: string },
     originalMessage: SidebarToExtensionMessage,
-    options?: { placement?: GpuiWorkspaceTerminalFocusPlacement; preferredInterface?: PreferredAgentInterface }
+    options?: {
+      keepView?: boolean;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+    }
   ): boolean;
   postRemoteProjectNativeAction(
     action: Extract<
@@ -776,7 +780,11 @@ export const gpuiSidebarRuntimeRemoteMachineMethods = {
     >,
     reference: { machineId: string; projectId: string; sessionId: string },
     originalMessage: SidebarToExtensionMessage,
-    options: { placement?: GpuiWorkspaceTerminalFocusPlacement; preferredInterface?: PreferredAgentInterface } = {}
+    options: {
+      keepView?: boolean;
+      placement?: GpuiWorkspaceTerminalFocusPlacement;
+      preferredInterface?: PreferredAgentInterface;
+    } = {}
   ): boolean {
     return this.postNativeProjectPathAction(
       action,

@@ -928,6 +928,19 @@ impl GhostexGpuiApp {
             self.pending_agents_chat_launch_intents
                 .insert(GpuiWorkspaceTerminalSessionKey::Local(key.clone()));
         }
+        /*
+        CDXC:Navigation 2026-09-11 DECISION:
+        User: landing on another project keeps that project's remembered view; only a session click inside the active project still opens Agents.
+        The project swap that preceded this focus already restored the destination's view, so a keep-view focus must not overwrite it: the tab is selected in the background and attached silently when it has no live terminal yet.
+        A remembered Agents view, or a Code/Docs companion that can show the session, takes the ordinary path below.
+        */
+        if message.keep_view
+            && self.active_mode != TitlebarMode::Agents
+            && !self.should_keep_project_editor_open_for_local_workspace_terminal_focus(&key)
+        {
+            self.select_local_workspace_terminal_keeping_view(&key, cx);
+            return;
+        }
         // macOS TerminalFocusDebugLog parity (scenario native.terminal.focus):
         // bounded gxserver ids only.
         support_logs::append(
@@ -1389,6 +1402,24 @@ impl GhostexGpuiApp {
                             return;
                         }
                     }
+                    GpuiLocalWorkspaceAttachOrigin::BackgroundSelect => {
+                        // The view stayed on another mode while the plan was
+                        // prepared, so `local_workspace_latest_focus_key` was
+                        // never set for this request. The workspace must still
+                        // belong to the project and the sidebar must still show
+                        // the session as focused, or the tab would land in the
+                        // wrong workspace or override a newer selection.
+                        if this.agents_workspace_project_id.as_deref()
+                            != Some(key.project_id.as_str())
+                            || this
+                                .sidebar_gxserver_presentation_focus_state
+                                .focused_session_id
+                                .as_deref()
+                                != Some(key.session_id.as_str())
+                        {
+                            return;
+                        }
+                    }
                 }
                 match result {
                     Ok(plan) => match completion_origin {
@@ -1408,6 +1439,14 @@ impl GhostexGpuiApp {
                                 this.persist_shell_layout_state();
                                 cx.notify();
                             }
+                        }
+                        GpuiLocalWorkspaceAttachOrigin::BackgroundSelect => {
+                            let _ = this.open_gpui_local_workspace_terminal_keeping_view(
+                                key,
+                                plan,
+                                requested_pane_id,
+                                cx,
+                            );
                         }
                         GpuiLocalWorkspaceAttachOrigin::SidebarFocus
                         | GpuiLocalWorkspaceAttachOrigin::WakeRecovery => {
@@ -1437,7 +1476,11 @@ impl GhostexGpuiApp {
                         }
                     },
                     Err(message) => {
-                        if completion_origin == GpuiLocalWorkspaceAttachOrigin::SurfacedRestore {
+                        if matches!(
+                            completion_origin,
+                            GpuiLocalWorkspaceAttachOrigin::SurfacedRestore
+                                | GpuiLocalWorkspaceAttachOrigin::BackgroundSelect
+                        ) {
                             return;
                         }
                         this.cancel_sidebar_focus_border_handoff();

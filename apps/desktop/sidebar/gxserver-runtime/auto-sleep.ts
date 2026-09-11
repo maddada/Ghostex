@@ -49,6 +49,7 @@ export interface GpuiSidebarRuntimeAutoSleepMethods {
     options?: {
       automatic?: boolean;
       forceRemount?: boolean;
+      keepView?: boolean;
       placement?: GpuiWorkspaceTerminalFocusPlacement;
       preferredInterface?: PreferredAgentInterface;
     }
@@ -271,6 +272,7 @@ export const gpuiSidebarRuntimeAutoSleepMethods = {
     options?: {
       automatic?: boolean;
       forceRemount?: boolean;
+      keepView?: boolean;
       placement?: GpuiWorkspaceTerminalFocusPlacement;
       preferredInterface?: PreferredAgentInterface;
     }

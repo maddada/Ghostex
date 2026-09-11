@@ -78,12 +78,17 @@ impl GhostexGpuiApp {
 
         match message.action {
             GpuiSidebarNativeProjectPathAction::OpenRemoteSessionTerminal => {
+                let remote_key = GpuiRemoteAttachSessionKey::from(&reference);
                 if message.preferred_interface == GpuiPreferredAgentInterface::Chat {
-                    self.pending_agents_chat_launch_intents.insert(
-                        GpuiWorkspaceTerminalSessionKey::Remote(GpuiRemoteAttachSessionKey::from(
-                            &reference,
-                        )),
-                    );
+                    self.pending_agents_chat_launch_intents
+                        .insert(GpuiWorkspaceTerminalSessionKey::Remote(remote_key.clone()));
+                }
+                // Every open re-decides the intent, so a stale keep-view left by
+                // a failed plan cannot silence a later plain click.
+                if message.keep_view {
+                    self.pending_keep_view_remote_focus.insert(remote_key);
+                } else {
+                    self.pending_keep_view_remote_focus.remove(&remote_key);
                 }
                 let placement = match message.placement {
                     GpuiWorkspaceTerminalFocusPlacement::Tab => {

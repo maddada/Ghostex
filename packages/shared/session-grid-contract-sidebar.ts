@@ -2181,6 +2181,12 @@ export type SidebarToExtensionMessage =
   | {
       type: 'focusSession';
       sessionId: string;
+      /**
+       * CDXC:Navigation 2026-09-11 DECISION:
+       * User: landing on another project keeps that project's remembered view instead of switching to Agents.
+       * The desktop runtime infers that from a project change on its own; this flag is for a Space restore, which may reopen a session inside the project already active and must still keep the view.
+       */
+      keepView?: boolean;
     }
   | {
       /**
@@ -2679,6 +2685,8 @@ export type SidebarToExtensionMessage =
       projectId?: string;
       requestId: string;
       type: 'requestStashedPrompts';
+      includeRecovery?: boolean;
+      includeDelivered?: boolean;
     }
   | {
       promptId: string;

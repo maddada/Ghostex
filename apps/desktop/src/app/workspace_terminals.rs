@@ -78,6 +78,7 @@ impl GhostexGpuiApp {
                     project_id: key.project_id.clone(),
                     session_id: key.session_id.clone(),
                     startup_restore: false,
+                    keep_view: false,
                 },
                 cx,
             );
@@ -2075,6 +2076,153 @@ impl GhostexGpuiApp {
         self.persist_shell_layout_state();
         self.update_active_mode_cef_child_visibility(cx);
         cx.notify();
+        true
+    }
+
+    /// CDXC:Navigation 2026-09-11 WHY:
+    /// The keep-view half of the sidebar focus pipeline: the same tab selection, mapping, sidebar publish, and persistence as `focus_existing_gpui_local_workspace_terminal`, without the switch to Agents and without moving keyboard focus into the pane, so a project left on Code, Browser, Kanban, Automate, or Docs comes back exactly there with the session waiting as the active Agents tab.
+    /// `local_workspace_latest_focus_key` is deliberately left alone: a surfaced-restore attach that finds it equal to its own key promotes itself to a click, which is the Agents switch this path exists to avoid.
+    pub(crate) fn select_local_workspace_terminal_keeping_view(
+        &mut self,
+        key: &GpuiLocalWorkspaceSessionKey,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        support_logs::append(
+            support_logs::GpuiSupportLog::TerminalFocus,
+            "gpui.terminalFocus.keptView",
+            serde_json::json!({
+                "projectId": key.project_id,
+                "sessionId": key.session_id,
+            }),
+        );
+        self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
+        if self.select_existing_local_workspace_terminal_keeping_view(key, cx) {
+            self.reconcile_preferred_agents_chat_launch_intents(cx);
+            return;
+        }
+        let attach_intent = self.local_workspace_attach_intent_for_key(key);
+        let requested_pane_id = self
+            .local_workspace_session_mappings
+            .get(key)
+            .copied()
+            .and_then(|shell_session_id| {
+                self.agents_workspace.pane_id_for_session(shell_session_id)
+            })
+            .unwrap_or(self.agents_workspace.focused_pane);
+        self.spawn_local_workspace_attach_plan(
+            key.clone(),
+            attach_intent,
+            requested_pane_id,
+            false,
+            GpuiWorkspaceTerminalFocusPlacement::Tab,
+            GpuiLocalWorkspaceAttachOrigin::BackgroundSelect,
+            cx,
+        );
+    }
+
+    /// Selects an already-mapped tab in place when something local can render
+    /// it (a live terminal owner or a pending attach payload), touching neither
+    /// the mode nor keyboard focus. False means the session has no usable tab
+    /// and the caller attaches it silently.
+    fn select_existing_local_workspace_terminal_keeping_view(
+        &mut self,
+        key: &GpuiLocalWorkspaceSessionKey,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        self.prune_local_workspace_session_mappings();
+        let Some(shell_session_id) = self.local_workspace_session_mappings.get(key).copied() else {
+            return false;
+        };
+        let Some(pane_id) = self.agents_workspace.pane_id_for_session(shell_session_id) else {
+            self.local_workspace_session_mappings.remove(key);
+            self.local_app_shot_session_mappings
+                .retain(|_, mapped_session_id| *mapped_session_id != shell_session_id);
+            return false;
+        };
+        if !self.local_workspace_terminal_can_focus_existing(pane_id, shell_session_id) {
+            return false;
+        }
+        focus_existing_local_workspace_terminal_tab_model(
+            &mut self.agents_workspace,
+            &mut self.agents_terminal_runtime_sessions,
+            pane_id,
+            shell_session_id,
+        );
+        self.activate_preferred_agents_chat_launch_intent(shell_session_id, cx);
+        self.finish_local_workspace_terminal_background_selection(
+            key,
+            pane_id,
+            shell_session_id,
+            cx,
+        );
+        true
+    }
+
+    /// Shared tail of both keep-view paths: reveal the tab in its strip,
+    /// publish the selection to the sidebar, persist, and repaint.
+    fn finish_local_workspace_terminal_background_selection(
+        &mut self,
+        key: &GpuiLocalWorkspaceSessionKey,
+        pane_id: WorkspacePaneId,
+        shell_session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.scroll_workspace_pane_active_tab(pane_id);
+        self.local_app_shot_session_mappings
+            .insert(key.session_id.clone(), shell_session_id);
+        self.dispatch_gpui_workspace_tab_session_selected(
+            key.project_id.as_str(),
+            key.session_id.as_str(),
+            false,
+            false,
+            cx,
+        );
+        self.persist_shell_layout_state();
+        self.update_active_mode_cef_child_visibility(cx);
+        cx.notify();
+    }
+
+    /// Attach completion for `GpuiLocalWorkspaceAttachOrigin::BackgroundSelect`:
+    /// `open_gpui_local_workspace_terminal` minus the Agents switch and the
+    /// focus handoff. The mount-slot payload waits until Agents is shown again.
+    pub(crate) fn open_gpui_local_workspace_terminal_keeping_view(
+        &mut self,
+        key: GpuiLocalWorkspaceSessionKey,
+        plan: GpuiLocalWorkspaceAttachTerminalPlan,
+        requested_pane_id: WorkspacePaneId,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if self.select_existing_local_workspace_terminal_keeping_view(&key, cx) {
+            return true;
+        }
+        let result = insert_gpui_local_workspace_attach_terminal(
+            &mut self.agents_workspace,
+            &mut self.agents_terminal_runtime_sessions,
+            &mut self.agents_terminal_launch_payload_source,
+            &mut self.local_workspace_session_mappings,
+            &mut self.local_app_shot_session_mappings,
+            requested_pane_id,
+            false,
+            key.clone(),
+            plan,
+        );
+        let (pane_id, session_id) = match result {
+            Ok(inserted) => inserted,
+            Err(message) => {
+                support_logs::append(
+                    support_logs::GpuiSupportLog::TerminalFocus,
+                    "gpui.terminalFocus.keptViewAttachFailed",
+                    serde_json::json!({
+                        "projectId": key.project_id,
+                        "reason": message,
+                        "sessionId": key.session_id,
+                    }),
+                );
+                return false;
+            }
+        };
+        self.activate_preferred_agents_chat_launch_intent(session_id, cx);
+        self.finish_local_workspace_terminal_background_selection(&key, pane_id, session_id, cx);
         true
     }
 

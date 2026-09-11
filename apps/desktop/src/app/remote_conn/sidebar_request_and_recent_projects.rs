@@ -217,6 +217,7 @@ impl GhostexGpuiApp {
                     placement: GpuiWorkspaceTerminalFocusPlacement::Tab,
                     preferred_interface: GpuiPreferredAgentInterface::Terminal,
                     project_id,
+                    keep_view: false,
                 },
                 cx,
             );
@@ -238,6 +239,7 @@ impl GhostexGpuiApp {
             placement: GpuiWorkspaceTerminalFocusPlacement::Tab,
             preferred_interface: GpuiPreferredAgentInterface::Terminal,
             project_id,
+            keep_view: false,
         };
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
