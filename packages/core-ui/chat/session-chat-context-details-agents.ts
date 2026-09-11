@@ -18,6 +18,7 @@ import { formatSessionChatDuration } from './session-chat-duration';
 export type ContextDetailsAgent = 'claude' | 'codex';
 export type AdditionalContextDetailRowId =
   | 'contextUsed'
+  | 'contextTokens'
   | 'totalInputTokens'
   | 'totalTokens'
   | 'cachedTokens'
@@ -36,7 +37,8 @@ export type AdditionalContextDetailRowId =
   | 'firstTokenTime'
   | 'model'
   | 'provider'
-  | 'permissions'
+  | 'sandbox'
+  | 'approvalPolicy'
   | 'parentThread'
   | 'startedAt'
   | 'accountName'
@@ -50,7 +52,10 @@ export type AdditionalContextDetailRowId =
 export interface ContextDetailStatus extends SessionChatClaudeStatus {
   codex?: SessionChatCodexStatus;
   account?: AgentAccount;
-  contextUsed?: string;
+  /** The context meter's used share (42%). */
+  contextUsedPercent?: string;
+  /** The context meter's token counts (84k/200k). */
+  contextTokens?: string;
   modelName?: string;
   effortName?: string;
 }
@@ -70,7 +75,6 @@ export function resolveContextDetailStatus(
           version: codex?.version,
           currentDir: codex?.currentDir,
           totalOutputTokens: codex?.totalTokens?.outputTokens,
-          remainingPercentage: usage?.usedPercentage == null ? undefined : 100 - usage.usedPercentage,
           lastRequest: request
             ? {
                 inputTokens:
@@ -89,16 +93,11 @@ export function resolveContextDetailStatus(
     account: account?.provider === agent ? account : undefined,
     modelName: options?.model?.label ?? codex?.model,
     effortName: options?.effort?.label ?? codex?.effort,
-    contextUsed: usage
-      ? [
-          formatSessionChatContextPercentage(usage.usedPercentage),
-          usage.usedTokens === null
-            ? null
-            : `${formatSessionChatContextTokens(usage.usedTokens)}${usage.windowSize === null ? '' : `/${formatSessionChatContextTokens(usage.windowSize)}`}`,
-        ]
-          .filter(Boolean)
-          .join(' · ')
-      : undefined,
+    contextUsedPercent: (usage && formatSessionChatContextPercentage(usage.usedPercentage)) ?? undefined,
+    contextTokens:
+      usage && usage.usedTokens !== null
+        ? `${formatSessionChatContextTokens(usage.usedTokens)}${usage.windowSize === null ? '' : `/${formatSessionChatContextTokens(usage.windowSize)}`}`
+        : undefined,
   };
 }
 
@@ -365,12 +364,20 @@ export const CODEX_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetailRowDefi
     value: ({ status }) => status.codex?.provider ?? null,
   },
   {
-    id: 'permissions',
+    id: 'sandbox',
     group: 'session',
-    label: 'Permissions',
-    description: 'Sandbox and approval policy recorded at turn start',
+    label: 'Sandbox',
+    description: 'Sandbox mode recorded at turn start',
     recommended: false,
-    value: ({ status }) => join([words(status.codex?.sandbox), words(status.codex?.approvalPolicy)]),
+    value: ({ status }) => words(status.codex?.sandbox),
+  },
+  {
+    id: 'approvalPolicy',
+    group: 'session',
+    label: 'Approval policy',
+    description: 'Approval policy recorded at turn start',
+    recommended: false,
+    value: ({ status }) => words(status.codex?.approvalPolicy),
   },
   {
     id: 'parentThread',
@@ -402,9 +409,17 @@ export const SHARED_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetailRowDef
     id: 'contextUsed',
     group: 'context',
     label: 'Context used',
-    description: 'Current context percentage and tokens',
+    description: 'Share of the context window in use',
     recommended: false,
-    value: ({ status }) => status.contextUsed ?? null,
+    value: ({ status }) => status.contextUsedPercent ?? null,
+  },
+  {
+    id: 'contextTokens',
+    group: 'context',
+    label: 'Context tokens',
+    description: 'Tokens in use out of the context window',
+    recommended: false,
+    value: ({ status }) => status.contextTokens ?? null,
   },
   {
     id: 'model',

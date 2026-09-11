@@ -250,21 +250,27 @@ export function SessionChatContextDetailsDialog({
             to reorder within a group. Star a row to show its value under the chat box.
           </DialogDescription>
         </DialogHeader>
-        <InputGroup className='ghostex-chat-context-details-filter h-8'>
-          <InputGroupAddon>
-            <IconSearch aria-hidden='true' />
+        {/* User: the filter bar is rounded, unlike the square inputs elsewhere, so it reads as a search field. */}
+        <InputGroup className='ghostex-chat-context-details-filter h-8 rounded-lg border-border/70 bg-muted/40 dark:bg-muted/25'>
+          <InputGroupAddon className='pl-2.5 text-muted-foreground/80'>
+            <IconSearch aria-hidden='true' className='size-3.5' stroke={2} />
           </InputGroupAddon>
           <InputGroupInput
-            aria-label='Filter rows'
+            aria-label='Search rows'
             autoFocus
-            className='h-8 font-normal'
+            className='h-8 pl-1 text-[13px] font-normal placeholder:text-muted-foreground/60 md:text-[13px]'
             onChange={(event) => setQuery(event.currentTarget.value)}
-            placeholder='Filter rows'
+            placeholder='Search rows'
             value={query}
           />
           {query.length > 0 ? (
-            <InputGroupAddon align='inline-end'>
-              <InputGroupButton aria-label='Clear filter' onClick={() => setQuery('')} size='icon-xs'>
+            <InputGroupAddon align='inline-end' className='pr-1.5'>
+              <InputGroupButton
+                aria-label='Clear search'
+                className='rounded-md text-muted-foreground hover:text-foreground'
+                onClick={() => setQuery('')}
+                size='icon-xs'
+              >
                 <IconX size={13} stroke={2} />
               </InputGroupButton>
             </InputGroupAddon>

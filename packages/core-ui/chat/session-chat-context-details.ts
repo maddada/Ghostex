@@ -37,13 +37,20 @@ export const SESSION_CHAT_CONTEXT_DETAIL_GROUPS: ReadonlyArray<{ id: SessionChat
 
 export type SessionChatContextDetailRowId =
   | AdditionalContextDetailRowId
-  | 'cost'
+  | 'costUsd'
+  | 'sessionTime'
+  | 'apiTime'
   | 'lines'
-  | 'promptCache'
-  | 'lastRequest'
+  | 'cacheState'
+  | 'cacheTimeLeft'
+  | 'cacheHitRate'
+  | 'lastRequestInput'
+  | 'lastRequestOutput'
+  | 'lastRequestCached'
+  | 'lastRequestCacheWrite'
   | 'totalOutputTokens'
-  | 'remaining'
   | 'cacheMisses'
+  | 'cacheLastMiss'
   | 'thinking'
   | 'version'
   | 'outputStyle'
@@ -109,10 +116,6 @@ function formatCountdown(epochSeconds: number, now: number): string | null {
   return formatResetCountdown(remainingMs);
 }
 
-function formatPercentage(value: number): string {
-  return value < 10 ? `${value.toFixed(1).replace(/\.0$/, '')}%` : `${Math.round(value)}%`;
-}
-
 function joinParts(parts: ReadonlyArray<string | null | undefined>): string | null {
   const present = parts.filter((part): part is string => typeof part === 'string' && part.length > 0);
   return present.length > 0 ? present.join(SEPARATOR) : null;
@@ -124,19 +127,59 @@ function baseName(path: string): string {
   return name && name.length > 0 ? name : trimmed;
 }
 
+/** A last-request token count keeps its role word (12k in) because the row stands alone in the status line. */
+function lastRequestRow(
+  id: SessionChatContextDetailRowId,
+  label: string,
+  description: string,
+  field: keyof NonNullable<ContextDetailStatus['lastRequest']>,
+  suffix: string,
+  recommended: boolean
+): SessionChatContextDetailRowDefinition {
+  return {
+    id,
+    group: 'context',
+    label,
+    description,
+    recommended,
+    value: ({ status }) => {
+      const tokens = status.lastRequest?.[field];
+      return isFinite(tokens) ? `${formatSessionChatContextTokens(tokens)} ${suffix}` : null;
+    },
+  };
+}
+
+/** CDXC:SessionChatDetectedOptions 2026-09-11 DECISION:
+ * User: every row holds one value, so a starred row is one item in the status line.
+ * Cost, Prompt cache, Last request, Context used and the Codex Permissions rows were split into one row per value, Remaining context was removed as the inverse of Context used, and Account extra usage left the Codex catalog because Codex accounts never report a spend window.
+ * The split rows keep the recommended state of the row they came from, so the popover shows the same information by default as before.
+ */
 export const SESSION_CHAT_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetailRowDefinition[] = [
   {
-    id: 'cost',
+    id: 'costUsd',
     group: 'usage',
     label: 'Cost',
-    description: 'Total spend, session time, API time',
+    description: 'Total spend this session',
+    recommended: true,
+    value: ({ status }) => (isFinite(status.cost?.totalUsd) ? formatUsd(status.cost.totalUsd) : null),
+  },
+  {
+    id: 'sessionTime',
+    group: 'usage',
+    label: 'Session time',
+    description: 'Wall-clock time since the session started',
     recommended: true,
     value: ({ status }) =>
-      joinParts([
-        isFinite(status.cost?.totalUsd) ? formatUsd(status.cost.totalUsd) : null,
-        isFinite(status.cost?.durationMs) ? formatSessionChatDuration(status.cost.durationMs) : null,
-        isFinite(status.cost?.apiDurationMs) ? `API ${formatSessionChatDuration(status.cost.apiDurationMs)}` : null,
-      ]),
+      isFinite(status.cost?.durationMs) ? formatSessionChatDuration(status.cost.durationMs) : null,
+  },
+  {
+    id: 'apiTime',
+    group: 'usage',
+    label: 'API time',
+    description: 'Time spent waiting on the model',
+    recommended: true,
+    value: ({ status }) =>
+      isFinite(status.cost?.apiDurationMs) ? `API ${formatSessionChatDuration(status.cost.apiDurationMs)}` : null,
   },
   ...USAGE_WINDOW_ROWS,
   {
@@ -151,39 +194,71 @@ export const SESSION_CHAT_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetail
         : null,
   },
   {
-    id: 'promptCache',
+    id: 'cacheState',
     group: 'context',
-    label: 'Prompt cache',
-    description: 'Warm state, TTL left, hit ratio',
+    label: 'Cache state',
+    description: 'Whether the prompt cache is warm or cold',
     recommended: true,
-    value: ({ status, now }) => {
-      const cache = status.promptCache;
-      if (!cache || (cache.warm === undefined && !isFinite(cache.hitRatio))) {
-        return null;
-      }
-      const left = cache.warm && isFinite(cache.expiresAt) ? formatCountdown(cache.expiresAt, now) : null;
-      return joinParts([
-        cache.warm === undefined ? null : cache.warm ? 'warm' : 'cold',
-        left ? `${left} left` : null,
-        isFinite(cache.hitRatio) ? `${Math.round(cache.hitRatio * 100)}% hits` : null,
-      ]);
+    value: ({ status }) => {
+      const warm = status.promptCache?.warm;
+      return warm === undefined ? null : warm ? 'cache warm' : 'cache cold';
     },
   },
   {
-    id: 'lastRequest',
+    id: 'cacheTimeLeft',
     group: 'context',
-    label: 'Last request',
-    description: 'Input, output and cached tokens',
+    label: 'Cache time left',
+    description: 'Time before a warm prompt cache expires',
     recommended: true,
-    value: ({ status }) => {
-      const request = status.lastRequest;
-      return joinParts([
-        isFinite(request?.inputTokens) ? `${formatSessionChatContextTokens(request.inputTokens)} in` : null,
-        isFinite(request?.outputTokens) ? `${formatSessionChatContextTokens(request.outputTokens)} out` : null,
-        isFinite(request?.cacheReadTokens) ? `${formatSessionChatContextTokens(request.cacheReadTokens)} cached` : null,
-      ]);
+    value: ({ status, now }) => {
+      const cache = status.promptCache;
+      const left = cache?.warm && isFinite(cache.expiresAt) ? formatCountdown(cache.expiresAt, now) : null;
+      return left ? `${left} left` : null;
     },
   },
+  {
+    id: 'cacheHitRate',
+    group: 'context',
+    label: 'Cache hit rate',
+    description: 'Share of requests served from the prompt cache',
+    recommended: true,
+    value: ({ status }) => {
+      const hitRatio = status.promptCache?.hitRatio;
+      return isFinite(hitRatio) ? `${Math.round(hitRatio * 100)}% hits` : null;
+    },
+  },
+  lastRequestRow(
+    'lastRequestInput',
+    'Last request input',
+    'Input tokens of the latest request',
+    'inputTokens',
+    'in',
+    true
+  ),
+  lastRequestRow(
+    'lastRequestOutput',
+    'Last request output',
+    'Output tokens of the latest request',
+    'outputTokens',
+    'out',
+    true
+  ),
+  lastRequestRow(
+    'lastRequestCached',
+    'Last request cached',
+    'Tokens the latest request read from the cache',
+    'cacheReadTokens',
+    'cached',
+    true
+  ),
+  lastRequestRow(
+    'lastRequestCacheWrite',
+    'Last request cache writes',
+    'Tokens the latest request wrote to the cache',
+    'cacheWriteTokens',
+    'cache writes',
+    false
+  ),
   {
     id: 'totalOutputTokens',
     group: 'context',
@@ -194,25 +269,23 @@ export const SESSION_CHAT_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetail
       isFinite(status.totalOutputTokens) ? formatSessionChatContextTokens(status.totalOutputTokens) : null,
   },
   {
-    id: 'remaining',
-    group: 'context',
-    label: 'Remaining context',
-    description: 'Free share of the window before it compacts',
-    recommended: false,
-    value: ({ status }) => (isFinite(status.remainingPercentage) ? formatPercentage(status.remainingPercentage) : null),
-  },
-  {
     id: 'cacheMisses',
     group: 'context',
     label: 'Cache misses',
-    description: 'Count and the last miss cause',
+    description: 'Prompt cache misses this session',
     recommended: false,
     value: ({ status }) => {
-      const cache = status.promptCache;
-      return isFinite(cache?.misses)
-        ? joinParts([`${cache.misses}`, cache.lastMissCause ? `last: ${cache.lastMissCause}` : null])
-        : null;
+      const misses = status.promptCache?.misses;
+      return isFinite(misses) ? `${misses} ${misses === 1 ? 'miss' : 'misses'}` : null;
     },
+  },
+  {
+    id: 'cacheLastMiss',
+    group: 'context',
+    label: 'Last cache miss',
+    description: 'Cause of the most recent prompt cache miss',
+    recommended: false,
+    value: ({ status }) => status.promptCache?.lastMissCause || null,
   },
   {
     id: 'thinking',
@@ -295,15 +368,18 @@ export const SESSION_CHAT_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetail
 ];
 
 const CODEX_SHARED_ROWS = new Set<SessionChatContextDetailRowId>([
-  'lastRequest',
+  'lastRequestInput',
+  'lastRequestOutput',
+  'lastRequestCached',
+  'lastRequestCacheWrite',
   'totalOutputTokens',
-  'remaining',
   'version',
   'sessionName',
   'folder',
   'thinking',
   ...USAGE_WINDOW_ROWS.map((row) => row.id),
-  ...SHARED_CONTEXT_DETAIL_ROWS.map((row) => row.id),
+  // Codex accounts report no spend window, so the extra-usage row would always be empty there.
+  ...SHARED_CONTEXT_DETAIL_ROWS.map((row) => row.id).filter((id) => id !== 'accountSpending'),
 ]);
 const CODEX_ROWS: readonly SessionChatContextDetailRowDefinition[] = [
   ...SESSION_CHAT_CONTEXT_DETAIL_ROWS.filter((row) => CODEX_SHARED_ROWS.has(row.id)).map(
@@ -339,10 +415,11 @@ function isRowId(value: unknown, agent: ContextDetailsAgent = 'claude'): value i
 }
 
 /**
- * Rows retired on 2026-09-11 for the one-value usage rows (see the decision on
- * `USAGE_WINDOW_ROWS`). A saved preference for a retired row carries over to
- * the rows that now show its values, so a starred "Rate limits" keeps its place
- * in the status line after the update; the next save stores only current ids.
+ * Rows retired on 2026-09-11 when every row became one value (see the
+ * decision on `SESSION_CHAT_CONTEXT_DETAIL_ROWS` and `USAGE_WINDOW_ROWS`). A
+ * saved preference for a retired row carries over to the rows that now show
+ * its values, so a starred "Rate limits" or "Cost" keeps its place in the
+ * status line after the update; the next save stores only current ids.
  */
 const RETIRED_ROW_REPLACEMENTS: ReadonlyMap<string, readonly SessionChatContextDetailRowId[]> = new Map<
   string,
@@ -355,6 +432,11 @@ const RETIRED_ROW_REPLACEMENTS: ReadonlyMap<string, readonly SessionChatContextD
   ['accountModelLimits', ['modelLimit']],
   ['primaryLimit', ['fiveHourLimit', 'fiveHourReset']],
   ['secondaryLimit', ['sevenDayLimit', 'sevenDayReset']],
+  ['cost', ['costUsd', 'sessionTime', 'apiTime']],
+  ['promptCache', ['cacheState', 'cacheTimeLeft', 'cacheHitRate']],
+  ['lastRequest', ['lastRequestInput', 'lastRequestOutput', 'lastRequestCached']],
+  ['remaining', ['contextUsed']],
+  ['permissions', ['sandbox', 'approvalPolicy']],
 ]);
 
 /** The current row ids a saved id stands for: itself, a retired row's replacements, or nothing. */
@@ -536,20 +618,22 @@ const SIMILAR_CONTEXT_DETAIL_ROWS: Record<
   Partial<Record<SessionChatContextDetailRowId, SessionChatContextDetailRowId>>
 > = {
   claude: {
-    promptCache: 'cacheRatio',
-    cost: 'lastTurnDuration',
+    cacheHitRate: 'cacheRatio',
+    sessionTime: 'lastTurnDuration',
+    apiTime: 'lastTurnDuration',
+    accountSpending: 'credits',
   },
   codex: {
-    cacheRatio: 'promptCache',
-    totalInputTokens: 'lastRequest',
-    totalTokens: 'lastRequest',
-    cachedTokens: 'lastRequest',
-    cacheWriteTokens: 'lastRequest',
-    turnTokens: 'lastRequest',
+    cacheRatio: 'cacheHitRate',
+    totalInputTokens: 'lastRequestInput',
+    totalTokens: 'lastRequestInput',
+    cachedTokens: 'lastRequestCached',
+    cacheWriteTokens: 'lastRequestCacheWrite',
+    turnTokens: 'lastRequestInput',
     reasoningTokens: 'totalOutputTokens',
     credits: 'accountSpending',
-    lastTurnDuration: 'cost',
-    firstTokenTime: 'cost',
+    lastTurnDuration: 'apiTime',
+    firstTokenTime: 'apiTime',
   },
 };
 
