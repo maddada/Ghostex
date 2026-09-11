@@ -4419,6 +4419,9 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  * CDXC:Settings 2026-09-09 DECISION:
  * User: every dropdown in a settings row has the same standard width and the same height, instead of each trigger sizing itself to its longest option.
  * Plain and searchable triggers share the pinned control height; a label longer than the standard width truncates in the trigger and in the matching-width popup.
+ *
+ * CDXC:Settings 2026-09-11 DECISION:
+ * User: the "When switching to a Space" trigger and its popup are wider so both labels fit. A row opts in through SelectField's triggerWidth, which sets this variable on its own trigger; the standard width below still applies to every other row.
  */
 .ghostex-settings-shadcn .settings-list-row-control [data-slot='select-trigger'] {
   max-width: 100%;

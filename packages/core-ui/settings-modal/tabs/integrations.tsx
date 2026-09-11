@@ -16,7 +16,6 @@ import {
   SettingsSection,
   SettingsSelect,
   SettingsSelectContent,
-  SettingSwitch,
 } from '../fields';
 import {
   SettingsTabSearch,
@@ -284,45 +283,46 @@ export function IntegrationsSettingsTab({
                 onCheckedChange={onAppShotsEnabledChange}
               />
             </IntegrationSettingsRow>
-            <SettingRow
-              description='Which Command key press captures the frontmost app window.'
-              htmlFor={appShotsHotkeyId}
-              label='App Shots hotkey'
-            >
-              <SettingsSelect
-                disabled={!appShotsEnabled}
-                disabledReason='Turn on App Shots first.'
-                onValueChange={(value) => onAppShotsHotkeyChange(value as AppShotsHotkey)}
-                value={appShotsHotkey}
-              >
-                <SelectTrigger aria-label='App Shots hotkey' id={appShotsHotkeyId}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SettingsSelectContent className='settings-list-select-content'>
-                  <SelectGroup>
-                    {APP_SHOTS_HOTKEY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SettingsSelectContent>
-              </SettingsSelect>
-            </SettingRow>
-            <SettingRow
-              description='Paste the window title and app name together with the image link.'
-              htmlFor={appShotsMetadataId}
-              label='App Shots metadata'
-            >
-              <SettingSwitch
-                aria-label='Include App Shots metadata'
-                checked={appShotsMetadataEnabled}
-                disabled={!appShotsEnabled}
-                disabledReason='Turn on App Shots first.'
-                id={appShotsMetadataId}
-                onCheckedChange={onAppShotsMetadataEnabledChange}
-              />
-            </SettingRow>
+            {/* Hidden, not disabled, while App Shots is off: see the CDXC:Settings 2026-09-11 decision on the Space rows in settings-modal.tsx. */}
+            {appShotsEnabled ? (
+              <>
+                <SettingRow
+                  description='Which Command key press captures the frontmost app window.'
+                  htmlFor={appShotsHotkeyId}
+                  label='App Shots hotkey'
+                >
+                  <SettingsSelect
+                    onValueChange={(value) => onAppShotsHotkeyChange(value as AppShotsHotkey)}
+                    value={appShotsHotkey}
+                  >
+                    <SelectTrigger aria-label='App Shots hotkey' id={appShotsHotkeyId}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SettingsSelectContent className='settings-list-select-content'>
+                      <SelectGroup>
+                        {APP_SHOTS_HOTKEY_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SettingsSelectContent>
+                  </SettingsSelect>
+                </SettingRow>
+                <SettingRow
+                  description='Paste the window title and app name together with the image link.'
+                  htmlFor={appShotsMetadataId}
+                  label='App Shots metadata'
+                >
+                  <Switch
+                    aria-label='Include App Shots metadata'
+                    checked={appShotsMetadataEnabled}
+                    id={appShotsMetadataId}
+                    onCheckedChange={onAppShotsMetadataEnabledChange}
+                  />
+                </SettingRow>
+              </>
+            ) : null}
           </SettingsSection>
         ) : null}
       </div>
