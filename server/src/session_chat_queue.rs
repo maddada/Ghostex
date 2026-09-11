@@ -54,6 +54,7 @@ pub const SESSION_CHAT_QUEUE_RESTART_REASON: &str =
 pub struct SessionChatQueuedPrompt {
     pub id: String,
     pub text: String,
+    pub startup_send: bool,
     /// `queued` | `sending` | `failed`.
     pub state: String,
     /// Set only when `state == "failed"`.
@@ -127,6 +128,11 @@ impl SessionChatQueueSnapshot {
             revision.push_str(&prompt.id);
             revision.push(':');
             revision.push_str(&prompt.state);
+            revision.push_str(if prompt.startup_send {
+                ":startup"
+            } else {
+                ":queue"
+            });
             revision.push(':');
             revision.push_str(&prompt.updated_at);
             revision.push(':');
@@ -262,7 +268,9 @@ pub fn handle_session_chat_queue_endpoint(
                 )?;
             }
             let draft_before_queue = read_snapshot(&transaction, &project_id, &session_id)?.draft;
-            let prompt = append_prompt(&transaction, &project_id, &session_id, &text)?;
+            let startup_send = params.get("startupSend").and_then(Value::as_bool) == Some(true);
+            let prompt =
+                append_prompt(&transaction, &project_id, &session_id, &text, startup_send)?;
             if let Some(version) = version.as_ref() {
                 crate::session_chat_draft_versions::consume_in(
                     &transaction,
@@ -571,7 +579,7 @@ fn read_snapshot(
     let mut statement = db
         .prepare(
             r#"
-            SELECT promptId, text, state, errorMessage, createdAt, updatedAt
+            SELECT promptId, text, state, errorMessage, createdAt, updatedAt, startupSend
             FROM session_chat_queued_prompts
             WHERE projectId = ?1 AND sessionId = ?2
             ORDER BY position, createdAt, promptId
@@ -587,6 +595,7 @@ fn read_snapshot(
                 error_message: row.get(3)?,
                 created_at: row.get(4)?,
                 updated_at: row.get(5)?,
+                startup_send: row.get(6)?,
             })
         })
         .map_err(sql_error)?
@@ -607,6 +616,7 @@ fn append_prompt(
     project_id: &str,
     session_id: &str,
     text: &str,
+    startup_send: bool,
 ) -> Result<SessionChatQueuedPrompt, DomainStateError> {
     let count: i64 = db
         .query_row(
@@ -634,6 +644,7 @@ fn append_prompt(
     let prompt = SessionChatQueuedPrompt {
         id: create_prompt_id(),
         text: text.to_string(),
+        startup_send,
         state: SESSION_CHAT_QUEUE_STATE_QUEUED.to_string(),
         error_message: None,
         created_at: now_iso(),
@@ -643,9 +654,9 @@ fn append_prompt(
         r#"
         INSERT INTO session_chat_queued_prompts (
           promptId, projectId, sessionId, position, text,
-          state, errorMessage, createdAt, updatedAt
+          state, errorMessage, createdAt, updatedAt, startupSend
         )
-        VALUES (?1, ?2, ?3, ?4, ?5, 'queued', NULL, ?6, ?6)
+        VALUES (?1, ?2, ?3, ?4, ?5, 'queued', NULL, ?6, ?6, ?7)
         "#,
         params![
             prompt.id,
@@ -654,6 +665,7 @@ fn append_prompt(
             next_position,
             prompt.text,
             prompt.created_at,
+            prompt.startup_send,
         ],
     )
     .map_err(sql_error)?;
@@ -846,6 +858,8 @@ is a claim about the user's unsent text, and a transient SQLite error is not
 evidence for it. Callers that are only decorating a projection may discard the
 error.
 */
+/// CDXC:Drafts 2026-09-11 WHY:
+/// Parked drafts retain recovery text after a terminal handoff, but the chat composer is empty; including them in either presentation read leaves a false sidebar draft dot.
 pub fn read_session_chat_draft_content(
     db: &Connection,
     project_id: &str,
@@ -853,7 +867,7 @@ pub fn read_session_chat_draft_content(
 ) -> Result<Option<String>, DomainStateError> {
     let content = db
         .query_row(
-            "SELECT content FROM session_chat_drafts WHERE projectId = ?1 AND sessionId = ?2",
+            "SELECT content FROM session_chat_drafts WHERE projectId = ?1 AND sessionId = ?2 AND parked = 0",
             params![project_id, session_id],
             |row| row.get::<_, String>(0),
         )
@@ -862,7 +876,7 @@ pub fn read_session_chat_draft_content(
     Ok(content.filter(|content| !content.trim().is_empty()))
 }
 
-/// Every non-blank synced draft, keyed by `(projectId, sessionId)`. One grouped
+/// Every non-blank, unparked synced draft, keyed by `(projectId, sessionId)`. One grouped
 /// read of a table that holds at most one row per session with unsent text —
 /// never one query per session, because presentation snapshots publish many
 /// times a second on a busy sidebar.
@@ -870,7 +884,7 @@ pub fn read_non_blank_session_chat_draft_contents(
     db: &Connection,
 ) -> std::collections::HashMap<(String, String), String> {
     let Ok(mut statement) = db.prepare(
-        "SELECT projectId, sessionId, content FROM session_chat_drafts WHERE TRIM(content) <> ''",
+        "SELECT projectId, sessionId, content FROM session_chat_drafts WHERE parked = 0 AND TRIM(content) <> ''",
     ) else {
         return std::collections::HashMap::new();
     };
@@ -897,25 +911,13 @@ One bounded list (at most one row per session with unsent text), stamped so
 the client can refuse anything older than what it still holds.
 */
 pub fn list_session_chat_drafts_value(db: &Connection) -> Result<Value, DomainStateError> {
-    let mut statement = db
-        .prepare("SELECT projectId, sessionId FROM session_chat_drafts ORDER BY updatedAt DESC")
-        .map_err(sql_error)?;
-    let keys = statement
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(sql_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(sql_error)?;
     let mut drafts = Vec::new();
-    for (project, session) in keys {
-        if let Some(draft) = crate::session_chat_draft_versions::read(db, &project, &session)? {
-            let mut value = serde_json::to_value(draft)
-                .map_err(|error| DomainStateError::bad_request(error.to_string()))?;
-            value["projectId"] = json!(project);
-            value["sessionId"] = json!(session);
-            drafts.push(value);
-        }
+    for (project, session, draft) in crate::session_chat_draft_versions::read_all(db)? {
+        let mut value = serde_json::to_value(draft)
+            .map_err(|error| DomainStateError::bad_request(error.to_string()))?;
+        value["projectId"] = json!(project);
+        value["sessionId"] = json!(session);
+        drafts.push(value);
     }
     Ok(json!({ "drafts": drafts, "recoveryDrafts": crate::session_chat_draft_recovery::read(db)? }))
 }
@@ -1063,7 +1065,7 @@ fn read_prompt(
 ) -> Result<SessionChatQueuedPrompt, DomainStateError> {
     db.query_row(
         r#"
-        SELECT promptId, text, state, errorMessage, createdAt, updatedAt
+        SELECT promptId, text, state, errorMessage, createdAt, updatedAt, startupSend
         FROM session_chat_queued_prompts
         WHERE promptId = ?1 AND projectId = ?2 AND sessionId = ?3
         "#,
@@ -1076,6 +1078,7 @@ fn read_prompt(
                 error_message: row.get(3)?,
                 created_at: row.get(4)?,
                 updated_at: row.get(5)?,
+                startup_send: row.get(6)?,
             })
         },
     )

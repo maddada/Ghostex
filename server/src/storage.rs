@@ -1586,6 +1586,13 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 33;
     "#,
     },
+    Migration {
+        id: "0034_session_chat_startup_sends",
+        sql: r#"
+      ALTER TABLE session_chat_queued_prompts ADD COLUMN startupSend INTEGER NOT NULL DEFAULT 0;
+      PRAGMA user_version = 34;
+    "#,
+    },
 ];
 
 #[cfg(unix)]
@@ -1634,10 +1641,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 33);
+        assert_eq!(user_version, 34);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 33);
+        assert_eq!(schema_migration_count(&db), 34);
         assert_eq!(
             explicit_index_names(&db),
             vec![

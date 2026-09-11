@@ -20,7 +20,8 @@ thing. That flag means the agent CLI's OWN internal queue (Claude Code's
 `queue-operation` rows) is holding a prompt the user already sent with Enter,
 and it renders inside the transcript. THIS file is Ghostex's queue, which lives
 above the composer and which the agent has never seen. Never reuse
-`SessionChatMessage.queued`, and never render these rows in the transcript.
+`SessionChatMessage.queued`. Explicit queue rows stay above the composer;
+`startupSend` rows are accepted sends rendered with their own delivery status in the transcript.
 */
 
 /**
@@ -37,6 +38,11 @@ export type SessionChatQueuedPromptState = 'queued' | 'sending' | 'failed';
 export interface SessionChatQueuedPrompt {
   /** Server-generated and stable across edits, so a row keeps its identity. */
   id: string;
+  /**
+   * CDXC:SessionChat 2026-09-11 DECISION:
+   * Normal sends held during startup appear only in the transcript, including after reopening or switching devices. Explicitly queued prompts stay above the composer.
+   */
+  startupSend?: boolean;
   /** The exact text that will be sent, attachments already interpolated. */
   text: string;
   state: SessionChatQueuedPromptState;

@@ -64,6 +64,7 @@ function stripSkillChipLines(text: string): string {
 export interface SessionChatPendingSend {
   id: string;
   queuedPromptId?: string;
+  startupDelivery?: SessionChatMessage['startupDelivery'];
   text: string;
   imagePaths?: readonly string[];
   sentAt: number;
@@ -448,7 +449,9 @@ export function sessionChatPendingSendsAsMessages(pending: readonly SessionChatP
     // Lowest priority: the real transcript turn always supersedes.
     source: 'client' as const,
     timestamp: entry.sentAt,
-    ...(entry.sentWhileWorking === true || entry.queuedPromptId ? { queued: true as const } : {}),
+    ...(entry.startupDelivery || entry.queuedPromptId
+      ? { startupDelivery: entry.startupDelivery ?? { promptId: entry.queuedPromptId!, state: 'queued' as const } }
+      : entry.sentWhileWorking ? { queued: true as const } : {}),
   }));
 }
 
