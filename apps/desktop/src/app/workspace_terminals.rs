@@ -343,6 +343,8 @@ impl GhostexGpuiApp {
         self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
         self.reconcile_preferred_agents_chat_launch_intents(cx);
         if workspace_changed {
+            // A sidebar projection that adds or removes tabs can change which chat-mode session a pane shows; its page has to exist before the next render, not after the next click (see the matching reconcile in sync_agents_gpui_engine_terminals).
+            self.reconcile_agents_chat_surfaces(cx);
             self.persist_shell_layout_state();
             self.sync_gpui_keep_awake_automation_from_current_settings(cx);
         }

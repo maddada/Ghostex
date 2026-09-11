@@ -86,6 +86,12 @@ impl GhostexGpuiApp {
             self.set_shell_focus(ShellFocusTarget::AgentsPane(
                 self.agents_workspace.focused_pane,
             ));
+            /*
+            CDXC:SessionChat 2026-09-11 WHY:
+            Closing an exited tab promotes a neighbour to the pane's active tab. When that neighbour is a chat-mode session whose page was evicted while hidden, the body renders "Loading Chat..." and nothing recreates the page: the chat reconcile ran on toggles, project switches and sidebar clicks only, so the placeholder stayed until the user clicked the session in the sidebar.
+            Seen on 2026-09-11 when an automatic account switch cycled a session server-side: its zmx client exited, its tab closed, and the pane sat on "Loading Chat..." for a minute.
+            */
+            self.reconcile_agents_chat_surfaces(cx);
             self.persist_shell_layout_state();
             cx.notify();
         }
@@ -580,12 +586,25 @@ impl GhostexGpuiApp {
                 if self.agents_gpui_engine_terminal_is_zmx_client(session_id)
         );
         let view = cx.new(|cx| {
-            let mut view = terminal_element::TerminalView::from_model(model, event_rx, font, Box::new(|position, can_copy, window, cx| {
-                crate::app::context_menu::GpuiContextMenu::new()
-                    .menu_with_disabled("Copy", !can_copy, Box::new(terminal_element::TerminalContextMenuCopy))
-                    .menu("Paste", Box::new(terminal_element::TerminalContextMenuPaste))
-                    .show(position, window, cx);
-            }), cx);
+            let mut view = terminal_element::TerminalView::from_model(
+                model,
+                event_rx,
+                font,
+                Box::new(|position, can_copy, window, cx| {
+                    crate::app::context_menu::GpuiContextMenu::new()
+                        .menu_with_disabled(
+                            "Copy",
+                            !can_copy,
+                            Box::new(terminal_element::TerminalContextMenuCopy),
+                        )
+                        .menu(
+                            "Paste",
+                            Box::new(terminal_element::TerminalContextMenuPaste),
+                        )
+                        .show(position, window, cx);
+                }),
+                cx,
+            );
             view.apply_settings(view_settings);
             if uses_zmx_visibility_claims {
                 view.enable_zmx_visibility_claims();
