@@ -1712,9 +1712,15 @@ pub(crate) async fn generate_first_prompt_session_title(
     parse_generated_session_title_text(&String::from_utf8_lossy(&output.stdout))
 }
 
+/// CDXC:SessionTitles 2026-09-11 WHY:
+/// Pi and Antigravity CLI generate titles through their non-interactive print modes (`pi -p`, `agy -p`), verified against the real binaries; before that a machine with only those CLIs fell back to the Codex default, which was not installed (GitHub issue #125).
+/// Pi gets `--no-tools --no-context-files --no-session` so a title prompt never runs tools, loads AGENTS.md, or leaves a session behind; Antigravity gets `--disable-slash-commands` so a prompt starting with `/` is not expanded.
+/// SEE-ALSO: packages/shared/ghostex-settings/session-title-generation.ts, which must preview the same commands.
 pub(crate) fn normalize_title_generation_agent(value: Option<&str>) -> String {
     match value {
-        Some("cursor" | "claude" | "grok" | "custom") => value.unwrap().to_string(),
+        Some("cursor" | "claude" | "grok" | "pi" | "antigravity" | "custom") => {
+            value.unwrap().to_string()
+        }
         _ => "codex".to_string(),
     }
 }
@@ -1731,6 +1737,8 @@ pub(crate) fn read_title_generation_command(
         "cursor" => Ok("cursor-agent".to_string()),
         "claude" => Ok("claude".to_string()),
         "grok" => Ok("grok".to_string()),
+        "pi" => Ok("pi".to_string()),
+        "antigravity" => Ok("agy".to_string()),
         "custom" => Err("Custom title generation command is not configured.".to_string()),
         _ => Ok("codex".to_string()),
     }
@@ -1764,6 +1772,14 @@ pub(crate) fn build_title_generation_command(
         }
         "grok" => format!(
             "{command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single {}",
+            quote_shell_arg(prompt)
+        ),
+        "pi" => format!(
+            "{command} -p --no-session --no-tools --no-context-files --thinking low {}",
+            quote_shell_arg(prompt)
+        ),
+        "antigravity" => format!(
+            "{command} -p {} --output-format text --effort low --disable-slash-commands",
             quote_shell_arg(prompt)
         ),
         "custom" => create_here_doc_command(command, delimiter, prompt),

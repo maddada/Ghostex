@@ -144,6 +144,7 @@ export {
   SESSION_TITLE_GENERATION_AGENT_OPTIONS,
   SESSION_TITLE_GENERATION_PROMPT_PLACEHOLDER,
   getSessionTitleGenerationCommandPreview,
+  isSessionTitleGenerationAgent,
 } from './ghostex-settings/session-title-generation';
 export {
   SETTINGS_MODAL_NAVIGATION_TABS,

@@ -1,6 +1,12 @@
 import { DEFAULT_ghostex_SETTINGS } from './defaults';
 import { type SessionTitleGenerationAgent } from './types';
 
+/**
+ * CDXC:SessionTitles 2026-09-11 WHY:
+ * Pi and Antigravity CLI are title-generation agents because both ship a non-interactive print mode (`pi -p`, `agy -p`) that was verified against the real binaries, and a machine with only those two CLIs used to be stuck with the Codex default, which is not installed there (GitHub issue #125).
+ * The values are sidebar agent ids, not executables, because settings and gxserver resolve the command through the sidebar agent registry.
+ * SEE-ALSO: server/src/server/title_generation.rs (normalize_title_generation_agent, build_title_generation_command).
+ */
 export const SESSION_TITLE_GENERATION_AGENT_OPTIONS: ReadonlyArray<{
   label: string;
   value: SessionTitleGenerationAgent;
@@ -9,14 +15,18 @@ export const SESSION_TITLE_GENERATION_AGENT_OPTIONS: ReadonlyArray<{
   { label: 'Cursor CLI', value: 'cursor' },
   { label: 'Claude', value: 'claude' },
   { label: 'Grok Build', value: 'grok' },
+  { label: 'Pi Agent', value: 'pi' },
+  { label: 'Antigravity CLI', value: 'antigravity' },
   { label: 'Custom', value: 'custom' },
 ];
 export const SESSION_TITLE_GENERATION_PROMPT_PLACEHOLDER = '<title generation prompt>';
 
+export function isSessionTitleGenerationAgent(value: string | undefined): value is SessionTitleGenerationAgent {
+  return SESSION_TITLE_GENERATION_AGENT_OPTIONS.some((option) => option.value === value);
+}
+
 export function normalizeSessionTitleGenerationAgent(value: string | undefined): SessionTitleGenerationAgent {
-  return value === 'cursor' || value === 'claude' || value === 'grok' || value === 'custom'
-    ? value
-    : DEFAULT_ghostex_SETTINGS.sessionTitleGenerationAgent;
+  return isSessionTitleGenerationAgent(value) ? value : DEFAULT_ghostex_SETTINGS.sessionTitleGenerationAgent;
 }
 
 export function normalizeCustomSessionTitleGenerationCommand(value: string | undefined): string {
@@ -46,6 +56,10 @@ export function getSessionTitleGenerationCommandPreview(
       return createSessionTitleGenerationHereDocPreview(`${permissionCommand} -p --model haiku --effort low`, prompt);
     case 'grok':
       return `${command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single '${prompt}'`;
+    case 'pi':
+      return `${command} -p --no-session --no-tools --no-context-files --thinking low '${prompt}'`;
+    case 'antigravity':
+      return `${command} -p '${prompt}' --output-format text --effort low --disable-slash-commands`;
     case 'custom':
       return createSessionTitleGenerationHereDocPreview(command, prompt);
   }
@@ -106,6 +120,10 @@ function readSessionTitleGenerationPreviewCommand(
       return 'claude';
     case 'grok':
       return 'grok';
+    case 'pi':
+      return 'pi';
+    case 'antigravity':
+      return 'agy';
     case 'custom':
       return '<custom command>';
   }
