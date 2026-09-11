@@ -20,6 +20,14 @@ fn instance(notice: &SessionChatTerminalNotice) -> String {
     format!("{}\n{}", notice.identity(), notice.detected_at)
 }
 
+/// Whether a transcript error record is the agent reporting a usage limit: Claude's "You've hit your session limit", "You've reached your weekly limit" and "You're out of usage credits", Codex's "hit your usage limit".
+fn transcript_usage_limit_message(message: &str) -> bool {
+    let text = message.to_lowercase();
+    text.contains("usage limit")
+        || text.contains("out of usage credits")
+        || ((text.contains("hit your") || text.contains("reached your")) && text.contains("limit"))
+}
+
 pub(crate) fn has_cleared_error(
     state: &crate::server::AppState,
     project: &str,
@@ -82,6 +90,7 @@ pub(crate) fn refresh(
     };
     let mut response_at = None;
     let mut error_at = None;
+    let mut usage_limit_error_at = None;
     for line in text.lines() {
         let Ok(record) = serde_json::from_str::<Value>(line) else {
             continue;
@@ -117,6 +126,9 @@ pub(crate) fn refresh(
             {
                 error_at = Some(timestamp);
             }
+            if transcript_usage_limit_message(&message) {
+                usage_limit_error_at = Some(timestamp);
+            }
         }
         let codex_response = (record["type"] == "response_item"
             && payload["type"] == "message"
@@ -135,14 +147,12 @@ pub(crate) fn refresh(
         }
     }
     // CDXC:AgentProviders 2026-09-11 WHY:
-    // A limit the transcript records again after the account switch is the new login running out, even though the screen wording is identical to the hidden one. Drop the suppression, in memory and in the row, so the notice can show and the switch pass can act on it.
+    // A limit the transcript records after the account switch is the new login running out, whatever the screen says: the resumed CLI repaints the old limit with other glyphs and wording, so the screen text cannot tell old from new. Only a transcript error written after the switch time lifts the suppression, in memory and in the row, so the notice can show and the switch pass can act on it.
     if notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT {
-        if let Some((identity, since)) =
+        if let Some(since) =
             crate::session_chat_notice::account_usage_notice_suppression(project, session)
         {
-            if identity == notice.identity()
-                && error_at.is_some_and(|error| error > since.timestamp_millis())
-            {
+            if usage_limit_error_at.is_some_and(|error| error > since.timestamp_millis()) {
                 crate::session_chat_notice::lift_account_usage_notice_suppression(project, session);
                 let mut runtime = row["runtimeSettings"]
                     .as_object()

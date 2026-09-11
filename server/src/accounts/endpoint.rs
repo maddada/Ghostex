@@ -411,10 +411,16 @@ pub(crate) fn dispatch(
                     &session,
                     Some(required(params, "accountId")?),
                 )?;
-                registry
-                    .last_used_accounts
-                    .insert(provider, required(params, "accountId")?.to_string());
-                store::write(&db, &registry)?;
+                let selected = get_session(&repository, params)?;
+                if selected
+                    .pointer("/runtimeSettings/accountSwitchAttempt")
+                    .is_none()
+                {
+                    registry
+                        .last_used_accounts
+                        .insert(provider, required(params, "accountId")?.to_string());
+                    store::write(&db, &registry)?;
+                }
             }
             changed_sessions.push(session);
         }
@@ -484,6 +490,18 @@ pub(crate) fn select(
     let current = session
         .pointer("/runtimeSettings/accountId")
         .and_then(Value::as_str);
+    if session
+        .pointer("/runtimeSettings/accountSwitchAttempt")
+        .is_some()
+        && session
+            .pointer("/runtimeSettings/accountRecovery/status")
+            .and_then(Value::as_str)
+            == Some("retrying")
+    {
+        return Err(DomainStateError::bad_request(
+            "Wait for the current account switch to finish before choosing another account.",
+        ));
+    }
     if current == id {
         return Ok(());
     }
@@ -531,21 +549,13 @@ pub(crate) fn select(
         runtime.insert("accountCommand".into(), json!(command));
     }
     runtime.remove("accountRecovery");
-    let old_limit = crate::session_chat_options::cached_session_chat_terminal_notice(
-        state,
-        session["projectId"].as_str().unwrap_or_default(),
-        session["sessionId"].as_str().unwrap_or_default(),
-    )
-    .filter(|notice| notice.kind == "usageLimit")
-    .map(|notice| notice.identity());
+    // Every switch hides usage-limit notices from the switch time on, whether or not the cache held one: the resumed CLI repaints the previous login's limit from the transcript, and that replay must never read as the new login's limit. See `suppress_account_usage_notice`.
     let switched_at = chrono::Utc::now();
-    if let Some(identity) = &old_limit {
-        runtime.insert("accountSuppressedUsageNotice".into(), json!(identity));
-        runtime.insert(
-            "accountSuppressedUsageNoticeAt".into(),
-            json!(switched_at.to_rfc3339()),
-        );
-    }
+    runtime.remove("accountSuppressedUsageNotice");
+    runtime.insert(
+        "accountSuppressedUsageNoticeAt".into(),
+        json!(switched_at.to_rfc3339()),
+    );
     let was_running = session["lifecycleState"].as_str() == Some("running");
     let mut launch_settings = session["launchSettings"]
         .as_object()
@@ -569,8 +579,22 @@ pub(crate) fn select(
     } else {
         None
     };
-    if was_running && !is_draft {
+    // A running conversation whose daemon is alive restarts in place (see accounts/restart.rs). The plan is resolved from the row as it will be saved, so a session that cannot be resumed is refused before anything changes.
+    let restart =
+        if was_running && !is_draft && super::restart::provider_is_live(repository, session) {
+            let mut planned = session.clone();
+            planned["runtimeSettings"] = Value::Object(runtime.clone());
+            planned["launchSettings"] = Value::Object(launch_settings.clone());
+            Some(super::restart::plan(state, repository, project, &planned)?)
+        } else {
+            None
+        };
+    if was_running && !is_draft && restart.is_none() {
         cycle(state, repository, session, "/api/sleepSession")?;
+    }
+    let restarting_in_place = restart.is_some();
+    if restarting_in_place {
+        super::restart::retain_current_account(&mut runtime, session);
     }
     let updated = repository.update_session(
         json!({
@@ -582,16 +606,17 @@ pub(crate) fn select(
         .as_object()
         .unwrap(),
     )?;
-    if let Some(identity) = old_limit {
+    if !restarting_in_place {
         crate::session_chat_notice::suppress_account_usage_notice(
             session["projectId"].as_str().unwrap_or_default(),
             session["sessionId"].as_str().unwrap_or_default(),
-            identity,
             switched_at,
         );
     }
     if let Some(command) = reuse_command {
         super::drafts::switch_in_live_provider(repository, &updated, &command)?;
+    } else if let Some(plan) = restart {
+        super::restart::start(state, repository, &updated, plan)?;
     } else if was_running {
         cycle(state, repository, &updated, "/api/wakeSession")?;
     }
@@ -600,7 +625,10 @@ pub(crate) fn select(
         session["projectId"].as_str().unwrap_or(""),
         session["sessionId"].as_str().unwrap_or(""),
     );
-    super::continuation::start(state, repository, session)?;
+    // The in-place restart starts the continuation itself, once the resume command has been typed; starting it here would let the dot reach the CLI that is about to exit.
+    if !restarting_in_place {
+        super::continuation::start(state, repository, session)?;
+    }
     crate::session_chat_options::session_chat_terminal_notice_publisher(
         state,
         session["projectId"].as_str().unwrap_or_default(),

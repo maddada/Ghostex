@@ -2154,11 +2154,16 @@ pub fn detect_session_chat_terminal_state(
     });
     let options = merge_session_chat_option_selections(transcript, statusline, terminal)
         .map(SessionChatDetectedOptions::new);
+    // A usage limit an account switch is hiding must not veto the composer either: after the switch the resumed CLI repaints the previous login's limit, and the continuation dot and the user's sends have to reach the new login.
     let composer = match screen {
         Some(capture) => crate::session_chat_composer::detect_session_chat_composer_readiness(
             agent_id,
             &capture.text,
-            notice.as_ref(),
+            notice.as_ref().filter(|notice| {
+                !crate::session_chat_notice::account_usage_notice_suppressed(
+                    project_id, session_id, notice,
+                )
+            }),
         ),
         None => crate::session_chat_composer::SessionChatComposerReadiness::default(),
     };
@@ -2848,6 +2853,9 @@ impl SessionChatOptionDetector {
             .unwrap_or_default();
         detected.notice = detected.notice.filter(|notice| {
             crate::session_chat_notice_progress::visible(project_id, session_id, notice)
+                && !crate::session_chat_notice::account_usage_notice_suppressed(
+                    project_id, session_id, notice,
+                )
         });
         detected
     }
@@ -2878,6 +2886,8 @@ impl SessionChatOptionDetector {
                         let mut detected = entry.value.clone();
                         detected.notice = detected.notice.filter(|notice| {
                             crate::session_chat_notice_progress::visible(
+                                project_id, session_id, notice,
+                            ) && !crate::session_chat_notice::account_usage_notice_suppressed(
                                 project_id, session_id, notice,
                             )
                         });
@@ -3152,8 +3162,12 @@ impl SessionChatOptionDetector {
                 );
             }
         }
+        // The cache above keeps the raw notice so a repaint keeps its identity; callers only ever see the visible one, and the account-switch suppression is part of visibility (see `account_usage_notice_suppressed`).
         detected.notice = detected.notice.filter(|notice| {
             crate::session_chat_notice_progress::visible(project_id, session_id, notice)
+                && !crate::session_chat_notice::account_usage_notice_suppressed(
+                    project_id, session_id, notice,
+                )
         });
         detected
     }

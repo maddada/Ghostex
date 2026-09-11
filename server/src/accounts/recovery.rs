@@ -236,19 +236,8 @@ fn restore_session(
         endpoint::update_session(repo, &session, runtime)?;
         session = repo.get_session(pid, sid)?.unwrap_or(session);
     }
-    if let Some(identity) = session
-        .pointer("/runtimeSettings/accountSuppressedUsageNotice")
-        .and_then(Value::as_str)
-    {
-        // A record written before the switch time was stored counts from now: only a limit reported after this start may lift it.
-        let since = time(session.pointer("/runtimeSettings/accountSuppressedUsageNoticeAt"))
-            .unwrap_or_else(Utc::now);
-        crate::session_chat_notice::suppress_account_usage_notice(
-            pid,
-            sid,
-            identity.to_string(),
-            since,
-        );
+    if let Some(since) = time(session.pointer("/runtimeSettings/accountSuppressedUsageNoticeAt")) {
+        crate::session_chat_notice::suppress_account_usage_notice(pid, sid, since);
     }
     if session
         .pointer("/runtimeSettings/accountRecovery/status")

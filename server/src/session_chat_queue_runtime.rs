@@ -783,6 +783,17 @@ pub(crate) async fn send_session_chat_message_with_draft(
             n.blocks_queued_delivery()
                 && !matches!(n.kind.as_str(), "streamError" | "usageLimit" | "agentError")
         });
+        // CDXC:AgentProviders 2026-09-11 WHY:
+        // A resumed CLI repaints the finished turn, and the activity detector classifies its rows ("✻ Sautéed for 2s · done", the last ⏺ message) as activity. Taking that raw reading for "still working" held the continuation dot back for as long as those rows stayed on screen. Activity counts only while the session's hooks say it is working, or while the CLI compacts, the same rule the recovery pass uses.
+        let working = crate::presentation::presentation_activity(
+            &current.session,
+            &chrono::Utc::now().to_rfc3339(),
+        ) == "working";
+        let live_activity = detection.activity.as_ref().is_some_and(|activity| {
+            working
+                || activity.kind
+                    == crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_COMPACTING
+        });
         if !armed
             || !detection.captured
             || detection.composer.state
@@ -790,7 +801,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
             || detection.prompt.is_some()
             || crate::session_chat_send::transcript_pending_question_prompt(&current.session)
                 .is_some()
-            || detection.activity.is_some()
+            || live_activity
             || blocked
         {
             return Err(DomainStateError {

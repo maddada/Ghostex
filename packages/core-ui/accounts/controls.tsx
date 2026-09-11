@@ -1,13 +1,7 @@
 import { useId } from 'react';
 import { accountUsageLabel } from '@/packages/shared/account-usage-label';
 import { formatResetCountdown } from '@/packages/shared/reset-countdown';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/packages/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import { Switch } from '@/packages/components/ui/switch';
 import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
 import {
@@ -42,14 +36,20 @@ export function AccountLogo({
  * User: Codex account badges show the five-hour percentage on the second line when that limit exists; otherwise show available resets as "2rs" or "0rs".
  * Use the main account windows so Spark's separate five-hour limit does not stand in for an absent account limit.
  */
-export function AccountIdentity({ account }: { account: AgentAccount }) {
+export function accountFigureWindows(
+  account: AgentAccount
+): [AccountUsageWindow | undefined, AccountUsageWindow | undefined] {
   const mainWindows = account.usage.filter((window) => !window.model);
-  const first =
-    account.provider === 'codex'
-      ? mainWindows.find((window) => (window.limitWindowSeconds ?? 0) >= 604800)
-      : account.usage[0];
-  const second =
-    account.provider === 'codex' ? mainWindows.find((window) => window.limitWindowSeconds === 18000) : account.usage[1];
+  if (account.provider === 'codex') {
+    return [
+      mainWindows.find((window) => (window.limitWindowSeconds ?? 0) >= 604800),
+      mainWindows.find((window) => window.limitWindowSeconds === 18000),
+    ];
+  }
+  return [account.usage[0], account.usage[1]];
+}
+export function AccountIdentity({ account }: { account: AgentAccount }) {
+  const [first, second] = accountFigureWindows(account);
   const figures = [
     { label: first?.label, value: first ? `${Math.round(first.usedPercent)}%` : '·' },
     second
@@ -77,6 +77,14 @@ export function resetLabel(value?: string) {
   if (!Number.isFinite(time.getTime())) return 'Reset time unavailable';
   const remainingMs = time.getTime() - Date.now();
   return remainingMs > 0 ? `Resets ${formatResetCountdown(remainingMs)}` : 'Reset due';
+}
+/** One "Resets 2h 14m · 3d 6h" line for several limits, in the order given, skipping limits without a reset time. */
+export function resetsLine(windows: AccountUsageWindow[]): string {
+  const remaining = windows
+    .map((window) => (window.resetsAt ? new Date(window.resetsAt).getTime() - Date.now() : Number.NaN))
+    .filter((ms) => Number.isFinite(ms));
+  if (remaining.length === 0) return 'Reset time unavailable';
+  return `Resets ${remaining.map((ms) => (ms > 0 ? formatResetCountdown(ms) : 'due')).join(' · ')}`;
 }
 export function UsageBars({ windows }: { windows: AccountUsageWindow[] }) {
   return (

@@ -8,9 +8,9 @@ import {
 } from '../chat/session-chat-context-meter';
 import { useState } from 'react';
 import { Button } from '@/packages/components/ui/button';
-import type { AgentAccountsRequest, AgentAccountsState } from '@/packages/shared/agent-accounts';
+import type { AgentAccount, AgentAccountsRequest, AgentAccountsState } from '@/packages/shared/agent-accounts';
 import { openAppModal } from '../app-modal-host-bridge';
-import { AccountIdentity, PolicyControls, UsageBars } from './controls';
+import { AccountIdentity, PolicyControls, UsageBars, accountFigureWindows, resetsLine } from './controls';
 /** CDXC:Settings 2026-09-09 DECISION: Account management and provider defaults belong in Settings > Accounts, replacing the section under Agents. The chat panel keeps session switching and recovery controls; its settings icon opens Accounts. Use menu dismissal instead of a Close button, omit the heading subtitle, make Refresh an unframed icon, and keep session controls flat instead of inside a card. */
 export function SessionAccountsPanel({
   data,
@@ -45,7 +45,9 @@ export function SessionAccountsPanel({
       <div className='gx-accounts gx-account-panel'>
         <strong>Current CLI login</strong>
         <p>Add your account to see usage and reset times in Ghostex, even if you only use one account.</p>
-        <Button variant='outline' onClick={manageAccounts}>Add account</Button>
+        <Button variant='outline' onClick={manageAccounts}>
+          Add account
+        </Button>
       </div>
     );
   }
@@ -66,12 +68,7 @@ export function SessionAccountsPanel({
             </Button>
           </AppTooltip>
           <AppTooltip content='Manage accounts in Settings'>
-            <Button
-              aria-label='Manage accounts in Settings'
-              variant='ghost'
-              size='icon-sm'
-              onClick={manageAccounts}
-            >
+            <Button aria-label='Manage accounts in Settings' variant='ghost' size='icon-sm' onClick={manageAccounts}>
               <IconSettings aria-hidden='true' />
             </Button>
           </AppTooltip>
@@ -90,7 +87,9 @@ export function SessionAccountsPanel({
         <>
           {session.recovery && (
             <div className='gx-account-recovery' role='status'>
-              <strong><AccountText text={session.recovery.reason} /></strong>
+              <strong>
+                <AccountText text={session.recovery.reason} />
+              </strong>
               {session.recovery.nextAttemptAt && (
                 <p>
                   Next attempt: {new Date(session.recovery.nextAttemptAt).toLocaleString()} · Attempt{' '}
@@ -112,11 +111,21 @@ export function SessionAccountsPanel({
               <div className='gx-account-current'>
                 {current && <AccountIdentity account={current} />}
                 <div>
-                  <strong><AccountText text={current?.name ?? 'Choose an account'} /></strong>
-                  <p><AccountText text={current?.email ?? ''} /></p>
+                  <strong>
+                    <AccountText text={current?.name ?? 'Choose an account'} />
+                  </strong>
+                  {current?.email && current.email !== current.name ? (
+                    <p>
+                      <AccountText text={current.email} />
+                    </p>
+                  ) : null}
                 </div>
               </div>
-              {current?.usageError && <p><AccountText text={current.usageError} /></p>}
+              {current?.usageError && (
+                <p>
+                  <AccountText text={current.usageError} />
+                </p>
+              )}
               {current?.usage.length ? (
                 <UsageBars windows={current.usage} />
               ) : (
@@ -169,8 +178,10 @@ export function SessionAccountsPanel({
                   >
                     <AccountIdentity account={a} />
                     <span className='gx-account-row-copy'>
-                      <strong><AccountText text={a.name} /></strong>
-                      <small><AccountText text={a.email} /></small>
+                      <strong>
+                        <AccountText text={a.name} />
+                      </strong>
+                      <SwitchAccountDetail account={a} />
                     </span>
                     <span>{a.status === 'ready' ? 'Use account →' : 'Reconnect'}</span>
                   </button>
@@ -227,4 +238,27 @@ export function SessionAccountsPanel({
       )}
     </div>
   );
+}
+
+/**
+ * CDXC:AgentProviders 2026-09-11 DECISION:
+ * User: the chat panel must not print an account's email twice. The account name is the email whenever the login helper has no alias, so the second line of a Switch account row is the email only when the account has a name of its own; otherwise it shows the reset countdowns of the two limits in the badge, in the same order. A usage error takes the line instead, as in Settings. The current-account block above drops the line because the usage bars beneath it already show each reset.
+ */
+function SwitchAccountDetail({ account }: { account: AgentAccount }) {
+  if (account.usageError) {
+    return (
+      <small>
+        <AccountText text={account.usageError} />
+      </small>
+    );
+  }
+  if (account.email && account.email !== account.name) {
+    return (
+      <small>
+        <AccountText text={account.email} />
+      </small>
+    );
+  }
+  const windows = accountFigureWindows(account).filter((window) => window !== undefined);
+  return windows.length ? <small>{resetsLine(windows)}</small> : null;
 }

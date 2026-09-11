@@ -1356,12 +1356,15 @@ const CLAUDE_RULES: &[NoticeRule] = &[
         ],
         quote_evidence: false,
     },
+    // CDXC:AgentProviders 2026-09-11 DECISION:
+    // User: the "Usage limit reached · continuing automatically" screen must not block sending from chat. The CLI's own line says "esc or type to cancel", the input box is on screen, and there is nothing in the chat UI to "clear", so the old "Clear it in the terminal before sending" refusal was wrong.
+    // The notice stays a warning card; a send cancels the CLI's wait and goes to the current account, and the wording says so. Queued prompts keep pausing on every usage-limit kind (`blocks_queued_delivery`).
     NoticeRule {
         kind: SESSION_CHAT_NOTICE_USAGE_LIMIT,
         severity: SessionChatTerminalNoticeSeverity::Warning,
         title: "Claude Code is waiting on a usage limit",
-        detail: "Claude Code is showing its usage-limit wait screen. Handle the wait in the terminal before sending.",
-        blocks_input: true,
+        detail: "Claude Code hit a usage limit and will continue on its own when the limit resets. Sending a message now cancels that wait and sends it on the current account.",
+        blocks_input: false,
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Banner,
@@ -1830,7 +1833,13 @@ pub fn classify_session_chat_terminal_notice(
                 notice.screen_tail = screen.screen_tail();
                 return Some(notice);
             }
-            return Some(dialog.into_notice(SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED));
+            let update_prompt = dialog.is_codex_update_prompt();
+            let mut notice = dialog.into_notice(SESSION_CHAT_NOTICE_CODEX_INPUT_BLOCKED);
+            if update_prompt {
+                // The card's wording replaces Codex's; the terminal output keeps the install command it would run.
+                notice.screen_tail = screen.screen_tail();
+            }
+            return Some(notice);
         }
     }
     let mut advisory_notice = None;
@@ -2182,45 +2191,52 @@ pub fn merge_session_chat_terminal_notices(
 /// After an account switch, hide the usage-limit message already shown for the previous login. Only a different message may appear; timestamps and repeated screen captures do not make it new.
 /// CDXC:AgentProviders 2026-09-11 WHY:
 /// The same wording is what the new login prints when it runs out too, so identity alone hid every later Fable limit on the account the session was switched to, and the switch pass never saw it.
-/// The suppression therefore carries the switch time; `session_chat_notice_progress::refresh` lifts it when the transcript records that limit again after that time, which is a new event, not a repaint.
-/// SEE-ALSO: server/src/accounts/endpoint.rs (select), server/src/accounts/recovery.rs (restore_session).
+/// The suppression therefore carries the switch time; `session_chat_notice_progress::refresh` lifts it when the transcript records a usage limit after that time, which is a new event, not a repaint.
+/// Superseding the identity match of the same day: the resumed CLI repaints the old limit from its transcript with different glyphs and wording ("⏺ … esc or type to cancel" for the "⚠ … esc to cancel" spinner line), so an identity captured before the switch never matched the replay.
+/// The card came back after the switch, blocked the composer with "Clear it in the terminal before sending", and held the continuation dot. The suppression is now by kind: every usage-limit notice stays hidden until the transcript proves a new limit.
+/// SEE-ALSO: server/src/accounts/endpoint.rs (select), server/src/accounts/recovery.rs (restore_session), server/src/session_chat_options.rs (detect_blocking, composer readiness).
 fn suppressed_account_usage_notices(
-) -> &'static Mutex<HashMap<String, (String, chrono::DateTime<chrono::Utc>)>> {
-    static NOTICES: OnceLock<Mutex<HashMap<String, (String, chrono::DateTime<chrono::Utc>)>>> =
+) -> &'static Mutex<HashMap<String, chrono::DateTime<chrono::Utc>>> {
+    static NOTICES: OnceLock<Mutex<HashMap<String, chrono::DateTime<chrono::Utc>>>> =
         OnceLock::new();
     NOTICES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 pub(crate) fn suppress_account_usage_notice(
     project_id: &str,
     session_id: &str,
-    identity: String,
     since: chrono::DateTime<chrono::Utc>,
 ) {
     if let Ok(mut notices) = suppressed_account_usage_notices().lock() {
-        notices.insert(
-            session_chat_notice_key(project_id, session_id),
-            (identity, since),
-        );
+        notices.insert(session_chat_notice_key(project_id, session_id), since);
     }
 }
-/// The suppressed usage-limit identity and the switch time it was recorded at.
+/// The switch time usage-limit notices have been hidden since, when a switch is being hidden.
 pub(crate) fn account_usage_notice_suppression(
     project_id: &str,
     session_id: &str,
-) -> Option<(String, chrono::DateTime<chrono::Utc>)> {
+) -> Option<chrono::DateTime<chrono::Utc>> {
     suppressed_account_usage_notices()
         .lock()
         .ok()
         .and_then(|notices| {
             notices
                 .get(&session_chat_notice_key(project_id, session_id))
-                .cloned()
+                .copied()
         })
 }
 pub(crate) fn lift_account_usage_notice_suppression(project_id: &str, session_id: &str) {
     if let Ok(mut notices) = suppressed_account_usage_notices().lock() {
         notices.remove(&session_chat_notice_key(project_id, session_id));
     }
+}
+/// Whether an account switch is hiding this notice: only usage limits are hidden, and only while the switch suppression is in place.
+pub(crate) fn account_usage_notice_suppressed(
+    project_id: &str,
+    session_id: &str,
+    notice: &SessionChatTerminalNotice,
+) -> bool {
+    notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT
+        && account_usage_notice_suppression(project_id, session_id).is_some()
 }
 
 /// Store lookup and merge for read/frame paths holding a screen classification.
@@ -2229,11 +2245,8 @@ pub fn resolve_session_chat_terminal_notice(
     session_id: &str,
     screen: Option<SessionChatTerminalNotice>,
 ) -> Option<SessionChatTerminalNotice> {
-    let suppressed = account_usage_notice_suppression(project_id, session_id);
     let visible = |notice: &SessionChatTerminalNotice| {
-        (notice.kind != SESSION_CHAT_NOTICE_USAGE_LIMIT
-            || suppressed.as_ref().map(|(identity, _)| identity.as_str())
-                != Some(notice.identity().as_str()))
+        !account_usage_notice_suppressed(project_id, session_id, notice)
             && crate::session_chat_notice_progress::visible(project_id, session_id, notice)
     };
     merge_session_chat_terminal_notices(

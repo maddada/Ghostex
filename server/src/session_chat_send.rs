@@ -7,7 +7,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex, OnceLock,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use tokio::sync::{mpsc, oneshot};
@@ -115,6 +115,12 @@ const SESSION_CHAT_PASTING_INDICATOR_NEEDLE: &str = "Pastingtext";
 /// describes the terminal, not the network: nothing was submitted.
 pub const SESSION_CHAT_PASTE_NOT_ACCEPTED: &str = "The terminal did not accept the pasted message.";
 /// Fallback for a composer wait that timed out without a per-agent reason.
+/// How often `WaitForAgentExit` re-reads the process snapshot.
+const SESSION_CHAT_AGENT_EXIT_POLL_MS: u64 = 400;
+/// Pause after the agent process is gone so the shell has painted its prompt.
+const SESSION_CHAT_AGENT_EXIT_SETTLE_MS: u64 = 300;
+const SESSION_CHAT_SHELL_PROMPT_NOT_REACHED: &str =
+    "The agent did not exit back to the shell, so the resume command was not typed.";
 pub const SESSION_CHAT_COMPOSER_NOT_READY: &str =
     "The agent's input box is not on screen, so nothing was sent.";
 const SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED: &str =
@@ -833,6 +839,17 @@ pub enum SessionChatSendStep {
         settle_ms: u64,
         timeout_ms: u64,
     },
+    /// Hold the sequence until no agent CLI process is left in the session's
+    /// process tree (the account switch's "/exit, then resume" restart). The
+    /// process snapshot is the proof, not the screen: a shell prompt is whatever
+    /// the user configured (powerline glyphs included), and the agent's own
+    /// composer line ends in the same `❯` a zsh prompt does. A CLI that never
+    /// exits aborts the sequence, so the resume command can never be typed into
+    /// a CLI that is still running.
+    WaitForAgentExit {
+        home_dir: PathBuf,
+        timeout_ms: u64,
+    },
     ClearComposer {
         agent: String,
     },
@@ -1271,6 +1288,34 @@ pub fn enqueue_session_write_sequence(
     Ok(())
 }
 
+/// `enqueue_session_write_sequence` for a writer that needs the outcome: the
+/// returned receiver resolves once every step ran, or with the step that
+/// stopped the sequence.
+pub(crate) fn enqueue_session_write_sequence_with_completion(
+    session: &Value,
+    project_id: &str,
+    session_id: &str,
+    source: &str,
+    steps: Vec<SessionChatSendStep>,
+) -> std::result::Result<oneshot::Receiver<Result<(), SessionChatSendError>>, DomainStateError> {
+    let zmx_name = crate::zmx::provider_zmx_session_name(session)?;
+    let (completion_tx, completion_rx) = oneshot::channel();
+    queue_session_chat_send(
+        project_id,
+        session_id,
+        &zmx_name,
+        source,
+        steps,
+        Some(completion_tx),
+        None,
+    )
+    .map_err(|message| DomainStateError {
+        code: "internalError",
+        message,
+    })?;
+    Ok(completion_rx)
+}
+
 /// Enqueues one sequence on the same per-session worker as fire-and-forget
 /// sends, but resolves only after every preservation/write step has completed.
 /// Chat message HTTP calls use this so the composer is cleared only after the
@@ -1408,6 +1453,56 @@ async fn run_session_chat_send_worker(
                 clear_pending = false;
             }
             match step {
+                SessionChatSendStep::WaitForAgentExit {
+                    home_dir,
+                    timeout_ms,
+                } => {
+                    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+                    let mut at_prompt = false;
+                    loop {
+                        if job_generation != generation.load(Ordering::SeqCst) {
+                            outcome = Err(SessionChatSendError::not_attempted(
+                                SESSION_CHAT_SEND_CANCELLED.to_string(),
+                            ));
+                            break;
+                        }
+                        if !session_agent_process_running(&zmx_name, &home_dir).await {
+                            // Give the shell one moment to paint its prompt before the resume command lands on it.
+                            tokio::time::sleep(Duration::from_millis(
+                                SESSION_CHAT_AGENT_EXIT_SETTLE_MS,
+                            ))
+                            .await;
+                            at_prompt = true;
+                            break;
+                        }
+                        if Instant::now() >= deadline {
+                            break;
+                        }
+                        tokio::time::sleep(Duration::from_millis(SESSION_CHAT_AGENT_EXIT_POLL_MS))
+                            .await;
+                    }
+                    if outcome.is_err() {
+                        break;
+                    }
+                    if !at_prompt {
+                        log_session_chat_paste_verification(
+                            LogLevel::Error,
+                            "sessionChatAgentExitNotObserved",
+                            &project_id,
+                            &session_id,
+                            &zmx_name,
+                            &source,
+                            0,
+                            timeout_ms,
+                            SESSION_CHAT_SHELL_PROMPT_NOT_REACHED,
+                        );
+                        outcome = Err(SessionChatSendError::new(
+                            SessionChatSendFailure::ComposerNotReady,
+                            SESSION_CHAT_SHELL_PROMPT_NOT_REACHED.to_string(),
+                        ));
+                        break;
+                    }
+                }
                 SessionChatSendStep::ClearComposer { agent } => {
                     if let Err(error) = clear_session_chat_composer(
                         &project_id,
@@ -1890,6 +1985,19 @@ pub(crate) async fn write_session_chat_payload(
 /// whole — a capture whose tail was dropped cannot prove what is on screen.
 /// Shared with the send-delivery watchdog (session_chat_watchdog.rs), which
 /// takes exactly one of these per timeout event.
+/// Whether an agent CLI (claude, codex, …) is still running inside the session's daemon, read from the process snapshot the identity poller uses. An unreadable snapshot counts as running: a restart must never type into a CLI it could not prove gone.
+pub(crate) async fn session_agent_process_running(zmx_name: &str, home_dir: &Path) -> bool {
+    let name = zmx_name.to_string();
+    let home = home_dir.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        crate::zmx::read_zmx_session_process_identities(std::slice::from_ref(&name), &home)
+            .map(|identities| identities.contains_key(&name))
+            .unwrap_or(true)
+    })
+    .await
+    .unwrap_or(true)
+}
+
 pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
     let zmx_name = zmx_name.to_string();
     let capture =
