@@ -951,6 +951,8 @@ function createGpuiSessionChatComposerBridge(
     async countSessionStashedPrompts(agentSessionId) {
       const result = await rpc<GxserverListStashedPromptsResult>(bootstrap, '/api/listStashedPrompts', {
         projectId,
+        includeRecovery: false,
+        includeDelivered: false,
       });
       return result.prompts.filter(
         (prompt) =>

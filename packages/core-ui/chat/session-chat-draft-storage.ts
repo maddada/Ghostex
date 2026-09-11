@@ -15,6 +15,7 @@ import {
   retireDraftRecovery,
 } from './session-chat-draft-recovery';
 import { recordDeliveredSessionChatDrafts } from './session-chat-sent-history';
+import { SessionChatStorageIndex } from './session-chat-storage-index';
 
 const SESSION_CHAT_DRAFT_STORAGE_PREFIX = 'ghostex.sessionChat.draft.';
 
@@ -22,6 +23,7 @@ export type RecoveredSessionChatDraft = {
   /** The raw `<sessionKey>` portion of the storage key. */
   sessionKey: string;
   recoveryId?: string;
+  earlierVersions?: RecoveredSessionChatDraft[];
   projectId: string | undefined;
   sessionId: string | undefined;
   text: string;
@@ -36,6 +38,11 @@ export type DecodedStoredDraft = {
   text: string;
   updatedAt: number | undefined;
 };
+const draftIndex = new SessionChatStorageIndex<DecodedStoredDraft>(
+  SESSION_CHAT_DRAFT_STORAGE_PREFIX,
+  decodeStoredDraft,
+  () => ''
+);
 
 function draftStorage(): Storage | null {
   try {
@@ -141,7 +148,7 @@ export function writeStoredSessionChatDraft(
     try {
       const storage = draftStorage();
       if (!storage) throw new Error('Draft storage unavailable');
-      storage.setItem(draftStorageKey(sessionKey), JSON.stringify(entry));
+      draftIndex.set(draftStorageKey(sessionKey), entry);
     } catch {
       reportDraftStorageFailure(sessionKey);
     }
@@ -241,7 +248,7 @@ export function clearStoredSessionChatDraftIfUnchanged(
 /** Explicit recovery deletion is a durable local tombstone, independent of the current input. */
 export function deleteStoredSessionChatDraft(sessionKey: string): void {
   writeStoredSessionChatDraft(sessionKey, '');
-  for (const [id, entry] of recoveryDraftEntries()) if (entry.sessionKey === sessionKey) dismissDraftRecovery(id);
+  for (const [id] of recoveryDraftEntries(sessionKey)) dismissDraftRecovery(id);
 }
 
 /**
@@ -288,7 +295,7 @@ export function reconcileSessionChatDraftsFromServer(
     try {
       // The server's stamp, not now: the entry's age (retention, freshness
       // comparisons) must describe the text, not the moment it was healed.
-      storage.setItem(draftStorageKey(sessionKey), JSON.stringify(recovered));
+      draftIndex.set(draftStorageKey(sessionKey), recovered);
       diagnosticLog?.('sessionChat.draft.bootRestoreApplied', details);
     } catch {
       diagnosticLog?.('sessionChat.draft.bootRestoreRejected', details);
@@ -310,18 +317,17 @@ function parseDraftSessionKey(sessionKey: string): { projectId: string | undefin
   return { projectId: parts[parts.length - 2] || undefined, sessionId: parts[parts.length - 1] || undefined };
 }
 
-/** Current drafts and independent checkpoints remain available until explicitly retired. */
+/**
+ * CDXC:Drafts 2026-09-11 WHY:
+ * Listing every recovery checkpoint flooded Recovered with repeated text and tiny typing edits.
+ * Show one row per session, with distinct earlier versions nested under it; keep the underlying checkpoints intact for recovery and consumed-revision tracking.
+ */
 export function listRecoveredSessionChatDrafts(): RecoveredSessionChatDraft[] {
   const storage = draftStorage();
   if (!storage) return [];
   const recovered: RecoveredSessionChatDraft[] = [];
-  for (let index = 0; index < storage.length; index++) {
-    const key = storage.key(index);
-    if (!key?.startsWith(SESSION_CHAT_DRAFT_STORAGE_PREFIX)) continue;
-    const raw = storage.getItem(key);
-    if (!raw) continue;
+  for (const [key, entry] of draftIndex.entries()) {
     const sessionKey = key.slice(SESSION_CHAT_DRAFT_STORAGE_PREFIX.length);
-    const entry = decodeStoredDraft(raw);
     if (entry.text === '' || entry.submitted) continue;
     recovered.push({
       sessionKey,
@@ -331,7 +337,6 @@ export function listRecoveredSessionChatDrafts(): RecoveredSessionChatDraft[] {
     });
   }
   for (const [recoveryId, entry] of recoveryDraftEntries()) {
-    if (recovered.some((draft) => draft.sessionKey === entry.sessionKey && draft.text === entry.text)) continue;
     recovered.push({
       sessionKey: entry.sessionKey,
       recoveryId,
@@ -340,5 +345,22 @@ export function listRecoveredSessionChatDrafts(): RecoveredSessionChatDraft[] {
       updatedAt: entry.updatedAt,
     });
   }
-  return recovered.sort((a, b) => b.updatedAt - a.updatedAt);
+  const sessions = new Map<string, { draft: RecoveredSessionChatDraft; texts: Set<string> }>();
+  for (const entry of recovered.sort((a, b) => b.updatedAt - a.updatedAt)) {
+    const text = entry.text.replace(/\r\n/g, '\n');
+    if (!text.trim()) continue;
+    const group = sessions.get(entry.sessionKey);
+    if (!group) {
+      sessions.set(entry.sessionKey, {
+        // The row represents the session's whole recovery history, so its
+        // delete action must retire that history rather than reveal a duplicate.
+        draft: { ...entry, recoveryId: undefined, earlierVersions: [] },
+        texts: new Set([text]),
+      });
+    } else if (!group.texts.has(text)) {
+      group.texts.add(text);
+      group.draft.earlierVersions!.push(entry);
+    }
+  }
+  return [...sessions.values()].map(({ draft }) => draft);
 }

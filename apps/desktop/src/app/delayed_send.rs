@@ -2797,8 +2797,23 @@ impl GhostexGpuiApp {
                     .get("projectId")
                     .and_then(serde_json::Value::as_str)
                     .map(str::to_string);
+                let include_recovery = command
+                    .get("includeRecovery")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true);
+                let include_delivered = command
+                    .get("includeDelivered")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true);
                 self.run_gpui_app_modal_sidebar_status_task(
-                    move || gpui_stashed_prompts_result_message(&request_id, project_id.as_deref()),
+                    move || {
+                        gpui_stashed_prompts_result_message(
+                            &request_id,
+                            project_id.as_deref(),
+                            include_recovery,
+                            include_delivered,
+                        )
+                    },
                     cx,
                 );
             }
@@ -3236,6 +3251,7 @@ impl GhostexGpuiApp {
                                                 project_id.as_str(),
                                                 session_id.as_str(),
                                             ),
+                                            keep_view: false,
                                         },
                                         cx,
                                     );

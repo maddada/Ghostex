@@ -1,5 +1,6 @@
 import { saveDraftToDisk, readDraftsFromDisk, removeDraftFromDisk } from './session-chat-draft-disk';
 import type { SessionChatDraftVersion } from '@/packages/shared/session-chat-queue';
+import { SessionChatStorageIndex } from './session-chat-storage-index';
 
 /** CDXC:Drafts 2026-09-10 DECISION:
  * User: unsaved edits must survive unavailable connections and retry across restarts, with visible save failures.
@@ -9,6 +10,14 @@ import type { SessionChatDraftVersion } from '@/packages/shared/session-chat-que
 const PREFIX = 'ghostex.sessionChat.outbox.';
 const EVENT = 'ghostex-draft-save-status';
 export type PendingDraft = { sessionKey: string; content: string; version: SessionChatDraftVersion; updatedAt: number };
+const pendingIndex = new SessionChatStorageIndex<PendingDraft>(
+  PREFIX,
+  (raw) => {
+    const entry = JSON.parse(raw) as PendingDraft;
+    return entry.version?.draftId && typeof entry.content === 'string' ? entry : null;
+  },
+  (entry) => entry.sessionKey
+);
 type Writer = (draft: PendingDraft) => Promise<void>;
 type Worker = { write: Writer; running?: Promise<void>; timer?: ReturnType<typeof setTimeout>; failures: number };
 const workers = new Map<string, Worker>();
@@ -45,7 +54,7 @@ function status(sessionKey: string, message: string): void {
 }
 export function hasPendingDraftSaves(sessionKey?: string): boolean {
   if (!sessionKey) return false;
-  return Boolean(workers.get(sessionKey)?.running) || pendingDrafts().some((draft) => draft.sessionKey === sessionKey);
+  return Boolean(workers.get(sessionKey)?.running) || pendingDrafts(sessionKey).length > 0;
 }
 export function draftSaveStatus(sessionKey?: string): string {
   return sessionKey ? (statuses.get(sessionKey) ?? '') : '';
@@ -57,17 +66,14 @@ export function subscribeDraftSaveStatus(callback: () => void): () => void {
 export function reportDraftStorageFailure(sessionKey: string): void {
   status(sessionKey, 'Draft could not be saved on this computer. Keep this view open until saving succeeds.');
 }
-export function pendingDrafts(): PendingDraft[] {
-  const entries = new Map([...diskPending, ...unsaved]);
+export function pendingDrafts(sessionKey?: string): PendingDraft[] {
+  const entries = new Map(
+    [...diskPending, ...unsaved].filter(([, draft]) => sessionKey === undefined || draft.sessionKey === sessionKey)
+  );
   try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const name = localStorage.key(i);
-      if (!name?.startsWith(PREFIX)) continue;
-      const entry = JSON.parse(localStorage.getItem(name)!) as PendingDraft;
-      if (entry.version?.draftId && typeof entry.content === 'string') {
-        const memory = entries.get(name);
-        if (!memory || memory.version.revision < entry.version.revision) entries.set(name, entry);
-      }
+    for (const [name, entry] of pendingIndex.entries(sessionKey)) {
+      const memory = entries.get(name);
+      if (!memory || memory.version.revision < entry.version.revision) entries.set(name, entry);
     }
   } catch {
     /* A failed write remains in unsaved and has a visible error. */
@@ -77,7 +83,7 @@ export function pendingDrafts(): PendingDraft[] {
 export function queueDraftSave(draft: PendingDraft): void {
   const coalesced: PendingDraft[] = [];
   // Coalesce append-only typing; deletion/replacement keeps the preceding pending snapshot.
-  for (const previous of pendingDrafts()) {
+  for (const previous of pendingDrafts(draft.sessionKey)) {
     if (
       previous.sessionKey === draft.sessionKey &&
       previous.version.draftId === draft.version.draftId &&
@@ -89,11 +95,11 @@ export function queueDraftSave(draft: PendingDraft): void {
   }
   unsaved.set(key(draft), draft);
   try {
-    localStorage.setItem(key(draft), JSON.stringify(draft));
+    pendingIndex.set(key(draft), draft);
     unsaved.delete(key(draft));
     // The replacement is stored first. Only then may redundant prefixes be removed.
     for (const previous of coalesced) {
-      localStorage.removeItem(key(previous));
+      pendingIndex.remove(key(previous));
       unsaved.delete(key(previous));
     }
   } catch {
@@ -111,7 +117,7 @@ export function queueDraftSave(draft: PendingDraft): void {
   if (workers.has(draft.sessionKey)) void flushDraftSaves(draft.sessionKey).catch(() => {});
 }
 export function acknowledgeDraftSave(sessionKey: string, version: SessionChatDraftVersion): void {
-  for (const entry of pendingDrafts()) {
+  for (const entry of pendingDrafts(sessionKey)) {
     if (
       entry.sessionKey !== sessionKey ||
       entry.version.draftId !== version.draftId ||
@@ -122,7 +128,7 @@ export function acknowledgeDraftSave(sessionKey: string, version: SessionChatDra
     diskPending.delete(key(entry));
     diskMutation(sessionKey, () => removeDraftFromDisk(entry));
     try {
-      localStorage.removeItem(key(entry));
+      pendingIndex.remove(key(entry));
     } catch (error) {
       reportDraftStorageFailure(sessionKey);
       throw error;
@@ -152,7 +158,7 @@ export function flushDraftSaves(sessionKey: string): Promise<void> {
         reportDraftStorageFailure(sessionKey);
       }
       for (;;) {
-        const entry = pendingDrafts().find((draft) => draft.sessionKey === sessionKey);
+        const entry = pendingDrafts(sessionKey)[0];
         if (!entry) break;
         await worker.write(entry);
         acknowledgeDraftSave(sessionKey, entry.version);

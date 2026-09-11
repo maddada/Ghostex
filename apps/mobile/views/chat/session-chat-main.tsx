@@ -558,13 +558,16 @@ function createMobileSavedPromptsApi(): WebviewApi {
         case 'requestStashedPrompts':
           void bridgeCall<GxserverListStashedPromptsResult>('savedPrompts', {
             action: 'list',
-            payload: {},
+            payload: savedPromptsPayload(record),
           }).then((result) => {
             deliverSavedPromptsMessage({
               prompts: [...result.prompts],
               requestId: message.requestId,
               tags: result.tags ? [...result.tags] : [],
               type: 'stashedPromptsResult',
+              recoveryDrafts: result.recoveryDrafts,
+              drafts: result.drafts,
+              deliveredDrafts: result.deliveredDrafts,
             });
           });
           return;
@@ -703,7 +706,7 @@ function reportQueueCount(queue: readonly SessionChatQueuedPrompt[] | undefined)
   if (queue === undefined) {
     return;
   }
-  const count = queue.filter((prompt) => prompt.state !== 'failed').length;
+  const count = queue.filter((prompt) => !prompt.startupSend && prompt.state !== 'failed').length;
   if (count === reportedQueueCount) {
     return;
   }

@@ -359,14 +359,33 @@ impl<'a> DomainRepository<'a> {
         replace the row's own, because the jump has to land on the session that
         is actually live, not on a row that no longer exists.
         */
-        let prompts = enrich_stashed_prompts_with_sessions(prompts, &self.list_sessions(None)?);
-        Ok(json!({
+        let prompts = enrich_stashed_prompts_with_sessions(prompts, self.db)?;
+        let mut result = json!({
             "prompts": prompts,
             "tags": read_stashed_prompt_tags(self.db)?,
-            "deliveredDrafts": crate::session_chat_delivered_drafts::read(self.db, None)?,
-            "recoveryDrafts": crate::session_chat_draft_recovery::read(self.db)?,
-            "drafts": crate::session_chat_queue::list_session_chat_drafts_value(self.db)?["drafts"],
-        }))
+        });
+        // CDXC:SavedPrompts 2026-09-11 WHY:
+        // Opening the saved library used to load every recovery checkpoint and every session's draft, delaying the visible list as draft history grew.
+        // Clients request history only for its own tab; omitted flags retain the older client contract.
+        if params
+            .get("includeDelivered")
+            .and_then(Value::as_bool)
+            .unwrap_or(true)
+        {
+            result["deliveredDrafts"] =
+                serde_json::to_value(crate::session_chat_delivered_drafts::read(self.db, None)?)
+                    .map_err(|error| DomainStateError::bad_request(error.to_string()))?;
+        }
+        if params
+            .get("includeRecovery")
+            .and_then(Value::as_bool)
+            .unwrap_or(true)
+        {
+            let mut history = crate::session_chat_queue::list_session_chat_drafts_value(self.db)?;
+            result["drafts"] = history["drafts"].take();
+            result["recoveryDrafts"] = history["recoveryDrafts"].take();
+        }
+        Ok(result)
     }
 
     pub fn list_stashed_prompt_tags(&self) -> DomainResult<Value> {
@@ -551,7 +570,8 @@ impl<'a> DomainRepository<'a> {
     pub fn delete_stashed_prompt(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         let prompt_id = required_string_param(params, "promptId")?;
         let deleted_prompt = read_stashed_prompt_row(self.db, prompt_id)?.and_then(|prompt| {
-            enrich_stashed_prompts_with_sessions(vec![prompt], &self.list_sessions(None).ok()?)
+            enrich_stashed_prompts_with_sessions(vec![prompt], self.db)
+                .ok()?
                 .pop()
         });
         let deleted = self
@@ -1006,10 +1026,17 @@ Resolution order per row, against one snapshot of the sessions registry:
    history row never claims the thread. The most recently updated owner wins,
    which is the order `list_sessions` already returns.
 */
-fn enrich_stashed_prompts_with_sessions(prompts: Vec<Value>, sessions: &[Value]) -> Vec<Value> {
+fn enrich_stashed_prompts_with_sessions(
+    prompts: Vec<Value>,
+    db: &Connection,
+) -> DomainResult<Vec<Value>> {
+    if prompts.is_empty() {
+        return Ok(prompts);
+    }
+    let sessions = super::prompts_sessions::read_stashed_prompt_sessions(db)?;
     let mut session_by_key: HashMap<(&str, &str), &Value> = HashMap::new();
     let mut owner_by_agent_session: HashMap<String, &Value> = HashMap::new();
-    for session in sessions {
+    for session in &sessions {
         let Some(project_id) = session.get("projectId").and_then(Value::as_str) else {
             continue;
         };
@@ -1025,7 +1052,7 @@ fn enrich_stashed_prompts_with_sessions(prompts: Vec<Value>, sessions: &[Value])
             }
         }
     }
-    prompts
+    Ok(prompts
         .into_iter()
         .map(|mut prompt| {
             let origin = prompt
@@ -1066,7 +1093,7 @@ fn enrich_stashed_prompts_with_sessions(prompts: Vec<Value>, sessions: &[Value])
             }
             prompt
         })
-        .collect()
+        .collect())
 }
 
 fn read_session_title(session: &Value) -> Option<String> {

@@ -524,6 +524,8 @@ pub(crate) fn gpui_previous_sessions_result_payload(
 pub(crate) fn gpui_stashed_prompts_result_message(
     request_id: &str,
     project_id: Option<&str>,
+    include_recovery: bool,
+    include_delivered: bool,
 ) -> serde_json::Value {
     /*
     CDXC:SavedPrompts 2026-07-29:
@@ -541,6 +543,14 @@ pub(crate) fn gpui_stashed_prompts_result_message(
             serde_json::Value::String(project_id.to_string()),
         );
     }
+    params.insert(
+        "includeRecovery".to_string(),
+        serde_json::json!(include_recovery),
+    );
+    params.insert(
+        "includeDelivered".to_string(),
+        serde_json::json!(include_delivered),
+    );
     let result = gpui_gxserver_rpc_result(
         "/api/listStashedPrompts",
         &serde_json::Value::Object(params),

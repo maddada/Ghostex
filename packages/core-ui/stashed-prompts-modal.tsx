@@ -1,5 +1,6 @@
 import { importDraftRecovery, dismissDraftRecovery } from './chat/session-chat-draft-recovery';
 import { SearchableDropdownContent } from '../components/ui/searchable-dropdown';
+import { SessionChatRecoveredHistory } from './chat/session-chat-recovered-history';
 import {
   deleteSentSessionChatMessage,
   listSentSessionChatMessages,
@@ -308,6 +309,17 @@ export function StashedPromptsModal({
   const [saveError, setSaveError] = useState<string>();
   const [selectedPromptValue, setSelectedPromptValue] = useState('');
   const latestRequestIdRef = useRef<string | undefined>(undefined);
+  const latestHistoryRequestIdsRef = useRef<Partial<Record<'recovered' | 'sent', string>>>({});
+  const [recoveryResult, setRecoveryResult] = useState<Extract<
+    ExtensionToSidebarMessage,
+    { type: 'stashedPromptsResult' }
+  > | null>(null);
+  const [sentResult, setSentResult] = useState<Extract<
+    ExtensionToSidebarMessage,
+    { type: 'stashedPromptsResult' }
+  > | null>(null);
+  const importedRecoveryResultRef = useRef(recoveryResult);
+  const importedSentResultRef = useRef(sentResult);
   const latestSaveRequestIdRef = useRef<string | undefined>(undefined);
   /*
    * CDXC:Drafts 2026-08-28:
@@ -393,8 +405,6 @@ export function StashedPromptsModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setPrompts(undefined);
-      setTags([]);
       setView('saved');
       setRecoveredDrafts([]);
       setScopeProjectId(undefined);
@@ -413,27 +423,42 @@ export function StashedPromptsModal({
       setIsSavingPrompt(false);
       setSaveError(undefined);
       latestRequestIdRef.current = undefined;
+      latestHistoryRequestIdsRef.current = {};
+      setRecoveryResult(null);
+      setSentResult(null);
+      importedRecoveryResultRef.current = null;
+      importedSentResultRef.current = null;
       latestSaveRequestIdRef.current = undefined;
       saveOriginRef.current = 'editor';
     }
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || view !== 'sent') return;
+    if (sentResult && importedSentResultRef.current !== sentResult) {
+      recordDeliveredSessionChatDrafts(sentResult.deliveredDrafts ?? []);
+      importedSentResultRef.current = sentResult;
+    }
     const refresh = (): void => setSentMessages(listSentSessionChatMessages());
     refresh();
     return subscribeSentSessionChatMessages(refresh);
-  }, [isOpen]);
+  }, [isOpen, view, sentResult]);
 
   /*
-   * CDXC:Drafts 2026-08-28:
-   * Enumerating recovery storage is synchronous, so it happens once per open rather than per render.
+   * CDXC:SavedPrompts 2026-09-11 WHY:
+   * Recovery import and storage enumeration blocked the saved library's first paint even while Recovered was hidden.
+   * Load history only when its tab is selected, and retain the saved library across closes so reopening paints it before the refresh completes.
    */
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && view === 'recovered') {
+      if (recoveryResult && importedRecoveryResultRef.current !== recoveryResult) {
+        importDraftRecovery(recoveryResult.recoveryDrafts ?? []);
+        reconcileSessionChatDraftsFromServer(recoveryResult.drafts ?? []);
+        importedRecoveryResultRef.current = recoveryResult;
+      }
       setRecoveredDrafts(listRecoveredSessionChatDrafts());
     }
-  }, [isOpen]);
+  }, [isOpen, view, recoveryResult]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -519,14 +544,18 @@ export function StashedPromptsModal({
       if (event.data?.type !== 'stashedPromptsResult') {
         return;
       }
+      if (event.data.requestId === latestHistoryRequestIdsRef.current.recovered) {
+        setRecoveryResult(event.data);
+        return;
+      }
+      if (event.data.requestId === latestHistoryRequestIdsRef.current.sent) {
+        setSentResult(event.data);
+        return;
+      }
       if (event.data.requestId !== latestRequestIdRef.current) {
         return;
       }
       setPrompts(event.data.prompts);
-      recordDeliveredSessionChatDrafts(event.data.deliveredDrafts ?? []);
-      importDraftRecovery(event.data.recoveryDrafts ?? []);
-      reconcileSessionChatDraftsFromServer(event.data.drafts ?? []);
-      setRecoveredDrafts(listRecoveredSessionChatDrafts());
       setTags(event.data.tags ?? []);
     };
     window.addEventListener('message', handleMessage);
@@ -589,7 +618,6 @@ export function StashedPromptsModal({
     requestCounterRef.current += 1;
     const requestId = `stashed-prompts-${Date.now()}-${requestCounterRef.current}`;
     latestRequestIdRef.current = requestId;
-    setPrompts(undefined);
     /*
      * CDXC:SavedPrompts 2026-08-24:
      * The whole library is loaded on every open and narrowed client-side, so
@@ -601,9 +629,23 @@ export function StashedPromptsModal({
     setScopeProjectId(rawProjectId);
     vscode.postMessage({
       requestId,
+      includeRecovery: false,
+      includeDelivered: false,
       type: 'requestStashedPrompts',
     });
   }, [initialScope, isOpen, rawProjectId, vscode]);
+
+  useEffect(() => {
+    if (!isOpen || view === 'saved' || latestHistoryRequestIdsRef.current[view]) return;
+    const requestId = `stashed-prompts-${view}-${Date.now()}-${++requestCounterRef.current}`;
+    latestHistoryRequestIdsRef.current[view] = requestId;
+    vscode.postMessage({
+      requestId,
+      includeRecovery: view === 'recovered',
+      includeDelivered: view === 'sent',
+      type: 'requestStashedPrompts',
+    });
+  }, [isOpen, view, vscode]);
 
   /*
    * CDXC:SavedPrompts 2026-08-24:
@@ -643,6 +685,16 @@ export function StashedPromptsModal({
     () => recoveredDrafts.map((draft) => recoveredDraftAsPrompt(draft, projectNamesById)),
     [projectNamesById, recoveredDrafts]
   );
+  const recoveredVersionsById = useMemo(
+    () =>
+      new Map(
+        recoveredDrafts.map((draft) => [
+          recoveredDraftAsPrompt(draft, projectNamesById).promptId,
+          (draft.earlierVersions ?? []).map((version) => recoveredDraftAsPrompt(version, projectNamesById)),
+        ])
+      ),
+    [projectNamesById, recoveredDrafts]
+  );
   const sentPrompts = useMemo(
     () =>
       sentMessages.map((message) => ({
@@ -662,8 +714,15 @@ export function StashedPromptsModal({
     if (!query) {
       return activePrompts;
     }
-    return activePrompts.filter((prompt) => stashedPromptSearchText(prompt).includes(query));
-  }, [activePrompts, searchQuery]);
+    return activePrompts.filter(
+      (prompt) =>
+        stashedPromptSearchText(prompt).includes(query) ||
+        (view === 'recovered' &&
+          recoveredVersionsById
+            .get(prompt.promptId)
+            ?.some((version) => stashedPromptSearchText(version).includes(query)))
+    );
+  }, [activePrompts, searchQuery, view, recoveredVersionsById]);
 
   /*
    * CDXC:SavedPrompts 2026-08-24:
@@ -1097,10 +1156,6 @@ export function StashedPromptsModal({
                   if (nextView === 'sent') {
                     hasResolvedDefaultScopeRef.current = true;
                     setScope('all');
-                    setSentMessages(listSentSessionChatMessages());
-                  }
-                  if (nextView === 'recovered') {
-                    setRecoveredDrafts(listRecoveredSessionChatDrafts());
                   }
                 }}
                 onAddPrompt={openAddPrompt}
@@ -1180,6 +1235,10 @@ export function StashedPromptsModal({
                             {group.prompts.map((prompt) =>
                               view !== 'saved' ? (
                                 <RecoveredDraftRow
+                                  earlierVersions={
+                                    view === 'recovered' ? recoveredVersionsById.get(prompt.promptId) : undefined
+                                  }
+                                  onSelectVersion={insertPrompt}
                                   kind={view === 'sent' ? 'message' : 'draft'}
                                   key={prompt.promptId}
                                   onDelete={() => {
@@ -1872,6 +1931,8 @@ function StashedPromptRow({
 }
 
 type RecoveredDraftRowProps = {
+  earlierVersions?: GxserverStashedPrompt[];
+  onSelectVersion?: (prompt: GxserverStashedPrompt) => void;
   kind: 'draft' | 'message';
   onDelete: () => void;
   onJumpToSession: () => void;
@@ -1888,6 +1949,8 @@ type RecoveredDraftRowProps = {
  * session, promote into the saved library, copy, or discard the draft.
  */
 function RecoveredDraftRow({
+  earlierVersions,
+  onSelectVersion,
   kind,
   onDelete,
   onJumpToSession,
@@ -1964,7 +2027,7 @@ function RecoveredDraftRow({
               <IconCopy aria-hidden='true' size={14} stroke={1.9} />
             </button>
             <button
-              aria-label={`Delete ${kind}`}
+              aria-label={earlierVersions?.length ? 'Delete draft and earlier versions' : `Delete ${kind}`}
               className='ghostex-stashed-prompt-action'
               onClick={(event) => {
                 event.preventDefault();
@@ -1984,6 +2047,9 @@ function RecoveredDraftRow({
             </span>
             <span className='ghostex-stashed-prompt-project-name'>{prompt.projectName ?? 'Unknown project'}</span>
           </span>
+          {earlierVersions?.length && onSelectVersion ? (
+            <SessionChatRecoveredHistory versions={earlierVersions} onSelect={onSelectVersion} />
+          ) : null}
           <span className='ghostex-stashed-prompt-time'>{relativeTimeLabel(prompt.updatedAt)}</span>
         </span>
       </span>

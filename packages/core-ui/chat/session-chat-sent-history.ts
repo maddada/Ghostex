@@ -1,9 +1,15 @@
 import type { GxserverStashedPrompt } from '@/packages/shared/gxserver-protocol';
 import type { SessionChatDeliveredDraft } from '@/packages/shared/session-chat-queue';
+import { SessionChatStorageIndex } from './session-chat-storage-index';
 
 const STORAGE_PREFIX = 'ghostex.sessionChat.sent.';
 const CHANGED_EVENT = 'ghostex-session-chat-sent-changed';
 const MAX_SENT_MESSAGES = 50;
+const sentIndex = new SessionChatStorageIndex<GxserverStashedPrompt>(
+  STORAGE_PREFIX,
+  (raw) => JSON.parse(raw) as GxserverStashedPrompt,
+  () => ''
+);
 
 /**
  * CDXC:SavedPrompts 2026-09-08 DECISION:
@@ -11,20 +17,12 @@ const MAX_SENT_MESSAGES = 50;
  * Each send owns a storage key so simultaneous composers cannot overwrite each other's history.
  */
 export function listSentSessionChatMessages(): GxserverStashedPrompt[] {
-  const messages: GxserverStashedPrompt[] = [];
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (!key?.startsWith(STORAGE_PREFIX)) continue;
-    const raw = window.localStorage.getItem(key);
-    if (!raw) continue;
-    const message = JSON.parse(raw) as GxserverStashedPrompt;
-    messages.push(message);
-  }
+  const messages = sentIndex.entries().map(([, message]) => message);
   messages.sort(
     (left, right) => right.createdAt.localeCompare(left.createdAt) || right.promptId.localeCompare(left.promptId)
   );
   for (const message of messages.slice(MAX_SENT_MESSAGES)) {
-    window.localStorage.removeItem(`${STORAGE_PREFIX}${message.promptId}`);
+    sentIndex.remove(`${STORAGE_PREFIX}${message.promptId}`);
   }
   return messages.slice(0, MAX_SENT_MESSAGES);
 }
@@ -48,7 +46,7 @@ export function recordSentSessionChatMessage(
     sessionId: parts.at(-1) || null,
   };
   try {
-    window.localStorage.setItem(`${STORAGE_PREFIX}${message.promptId}`, JSON.stringify(message));
+    sentIndex.set(`${STORAGE_PREFIX}${message.promptId}`, message);
     listSentSessionChatMessages();
     window.dispatchEvent(new Event(CHANGED_EVENT));
     return true;
@@ -77,7 +75,7 @@ export function recordDeliveredSessionChatDrafts(deliveries: readonly SessionCha
 }
 
 export function deleteSentSessionChatMessage(promptId: string): void {
-  window.localStorage.removeItem(`${STORAGE_PREFIX}${promptId}`);
+  sentIndex.remove(`${STORAGE_PREFIX}${promptId}`);
   window.dispatchEvent(new Event(CHANGED_EVENT));
 }
 
