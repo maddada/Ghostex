@@ -4,7 +4,15 @@
 // dialogs: the chat runs inside CEF on desktop and in a browser tab on web, so
 // no native child window is involved. Edits are a draft until Save.
 
-import { IconFileImport, IconFileExport, IconGripVertical, IconStar, IconStarFilled, IconX } from '@tabler/icons-react';
+import {
+  IconFileImport,
+  IconFileExport,
+  IconGripVertical,
+  IconSearch,
+  IconStar,
+  IconStarFilled,
+  IconX,
+} from '@tabler/icons-react';
 import { PointerActivationConstraints, PointerSensor } from '@dnd-kit/dom';
 import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
 import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
@@ -18,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/packages/components/ui/dialog';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/packages/components/ui/input-group';
 import { Switch } from '@/packages/components/ui/switch';
 import { cn } from '@/packages/components/utils';
 import type { SessionChatTheme } from '@/packages/shared/session-chat';
@@ -59,6 +68,19 @@ function moveRow<T>(rows: readonly T[], from: number, to: number): T[] {
   return next;
 }
 
+/** The filter bar matches the row's title, its description, and the value it currently shows. */
+function matchesContextDetailFilter(
+  query: string,
+  row: SessionChatContextDetailRowDefinition,
+  sample: string | null
+): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) {
+    return true;
+  }
+  return [row.label, row.description, sample ?? ''].some((text) => text.toLowerCase().includes(needle));
+}
+
 export function SessionChatContextDetailsDialog({
   agent = 'claude',
   onOpenChange,
@@ -79,11 +101,13 @@ export function SessionChatContextDetailsDialog({
   const [draft, setDraft] = useState<SessionChatContextDetailsPreferences>(() =>
     readSessionChatContextDetailsPreferences(agent)
   );
+  const [query, setQuery] = useState('');
   const now = useSessionChatContextDetailsClock();
 
   useEffect(() => {
     if (open) {
       setDraft(readSessionChatContextDetailsPreferences(agent));
+      setQuery('');
     }
   }, [open, agent]);
 
@@ -125,15 +149,37 @@ export function SessionChatContextDetailsDialog({
     }
     reorderStarred(source.initialIndex, toIndex);
   }) satisfies DragDropEventHandlers['onDragEnd'];
-  const reorder = (group: SessionChatContextDetailGroupId, from: number, to: number) => {
-    setDraft((current) => ({
-      ...current,
-      order: {
-        ...current.order,
-        [group]: moveRow(orderedSessionChatContextDetailRows(current, group, agent), from, to).map((row) => row.id),
-      },
-    }));
+  /**
+   * Moves by row id, not by list index: while the filter bar hides rows, the
+   * dragged list is a subset of the group, so the move is applied to the full
+   * group order by putting the moved row where the target row sits.
+   */
+  const reorder = (
+    group: SessionChatContextDetailGroupId,
+    fromId: SessionChatContextDetailRowDefinition['id'],
+    toId: SessionChatContextDetailRowDefinition['id']
+  ) => {
+    setDraft((current) => {
+      const rows = orderedSessionChatContextDetailRows(current, group, agent);
+      const from = rows.findIndex((row) => row.id === fromId);
+      const to = rows.findIndex((row) => row.id === toId);
+      if (from < 0 || to < 0 || from === to) {
+        return current;
+      }
+      return {
+        ...current,
+        order: { ...current.order, [group]: moveRow(rows, from, to).map((row) => row.id) },
+      };
+    });
   };
+
+  // Groups with no row left after the filter are dropped so a label never renders alone.
+  const filteredGroups = SESSION_CHAT_CONTEXT_DETAIL_GROUPS.map((group) => ({
+    group,
+    rows: orderedSessionChatContextDetailRows(draft, group.id, agent)
+      .map((row) => ({ row, sample: status ? row.value({ status, now, session }) : null }))
+      .filter(({ row, sample }) => matchesContextDetailFilter(query, row, sample)),
+  })).filter(({ rows }) => rows.length > 0);
 
   const otherAgent = agent === 'claude' ? 'codex' : 'claude';
   const otherAgentName = otherAgent === 'claude' ? 'Claude Code' : 'Codex';
@@ -204,50 +250,80 @@ export function SessionChatContextDetailsDialog({
             to reorder within a group. Star a row to show its value under the chat box.
           </DialogDescription>
         </DialogHeader>
+        <InputGroup className='ghostex-chat-context-details-filter h-8'>
+          <InputGroupAddon>
+            <IconSearch aria-hidden='true' />
+          </InputGroupAddon>
+          <InputGroupInput
+            aria-label='Filter rows'
+            autoFocus
+            className='h-8 font-normal'
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            placeholder='Filter rows'
+            value={query}
+          />
+          {query.length > 0 ? (
+            <InputGroupAddon align='inline-end'>
+              <InputGroupButton aria-label='Clear filter' onClick={() => setQuery('')} size='icon-xs'>
+                <IconX size={13} stroke={2} />
+              </InputGroupButton>
+            </InputGroupAddon>
+          ) : null}
+        </InputGroup>
         <div className='ghostex-chat-context-details-dialog-body -mx-1 flex max-h-[60vh] flex-col gap-1 overflow-x-hidden overflow-y-auto px-1'>
-          {SESSION_CHAT_CONTEXT_DETAIL_GROUPS.map((group) => {
-            const rows = orderedSessionChatContextDetailRows(draft, group.id, agent);
-            const handleDragEnd = ((event) => {
-              if (event.canceled || !isSortableOperation(event.operation)) {
-                return;
-              }
-              const { source, target } = event.operation;
-              if (!source) {
-                return;
-              }
-              const toIndex = 'index' in source && typeof source.index === 'number' ? source.index : target?.index;
-              if (toIndex == null || source.initialIndex === toIndex) {
-                return;
-              }
-              reorder(group.id, source.initialIndex, toIndex);
-            }) satisfies DragDropEventHandlers['onDragEnd'];
-            return (
-              <section aria-label={group.label} className='flex flex-col' key={group.id}>
-                <h3 className='ghostex-chat-context-details-group-label mt-2 mb-0.5 px-1 text-[10px] font-medium tracking-[0.06em] text-muted-foreground/70 uppercase'>
-                  {group.label}
-                </h3>
-                {/*
-                One provider per group: a row's sortable only knows its own
-                group's manager, so a drag can never land in another group.
-                */}
-                <DragDropProvider onDragEnd={handleDragEnd}>
-                  {rows.map((row, index) => (
-                    <ContextDetailOptionRow
-                      group={group.id}
-                      index={index}
-                      key={row.id}
-                      onToggleShown={(shown) => toggleShown(row, shown)}
-                      onToggleStarred={() => toggleStarred(row)}
-                      row={row}
-                      sample={status ? row.value({ status, now, session }) : null}
-                      shown={isSessionChatContextDetailShown(draft, row)}
-                      starred={isSessionChatContextDetailStarred(draft, row)}
-                    />
-                  ))}
-                </DragDropProvider>
-              </section>
-            );
-          })}
+          {filteredGroups.length === 0 ? (
+            <p className='ghostex-chat-context-details-empty px-1 py-6 text-center text-[11px] text-muted-foreground'>
+              No rows match “{query.trim()}”.
+            </p>
+          ) : (
+            filteredGroups.map(({ group, rows }) => {
+              const handleDragEnd = ((event) => {
+                if (event.canceled || !isSortableOperation(event.operation)) {
+                  return;
+                }
+                const { source, target } = event.operation;
+                if (!source) {
+                  return;
+                }
+                const toIndex = 'index' in source && typeof source.index === 'number' ? source.index : target?.index;
+                if (toIndex == null || source.initialIndex === toIndex) {
+                  return;
+                }
+                const from = rows[source.initialIndex];
+                const to = rows[toIndex];
+                if (!from || !to) {
+                  return;
+                }
+                reorder(group.id, from.row.id, to.row.id);
+              }) satisfies DragDropEventHandlers['onDragEnd'];
+              return (
+                <section aria-label={group.label} className='flex flex-col' key={group.id}>
+                  <h3 className='ghostex-chat-context-details-group-label mt-2 mb-0.5 px-1 text-[10px] font-medium tracking-[0.06em] text-muted-foreground/70 uppercase'>
+                    {group.label}
+                  </h3>
+                  {/*
+                  One provider per group: a row's sortable only knows its own
+                  group's manager, so a drag can never land in another group.
+                  */}
+                  <DragDropProvider onDragEnd={handleDragEnd}>
+                    {rows.map(({ row, sample }, index) => (
+                      <ContextDetailOptionRow
+                        group={group.id}
+                        index={index}
+                        key={row.id}
+                        onToggleShown={(shown) => toggleShown(row, shown)}
+                        onToggleStarred={() => toggleStarred(row)}
+                        row={row}
+                        sample={sample}
+                        shown={isSessionChatContextDetailShown(draft, row)}
+                        starred={isSessionChatContextDetailStarred(draft, row)}
+                      />
+                    ))}
+                  </DragDropProvider>
+                </section>
+              );
+            })
+          )}
         </div>
         {/*
         The status line's own section, pinned under the scrolling groups: the

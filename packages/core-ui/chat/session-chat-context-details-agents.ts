@@ -1,4 +1,4 @@
-import type { AgentAccount } from '@/packages/shared/agent-accounts';
+import type { AccountUsageWindow, AgentAccount } from '@/packages/shared/agent-accounts';
 import { accountUsageLabel } from '@/packages/shared/account-usage-label';
 import { formatResetCountdown } from '@/packages/shared/reset-countdown';
 import type {
@@ -25,8 +25,11 @@ export type AdditionalContextDetailRowId =
   | 'reasoningTokens'
   | 'turnTokens'
   | 'cacheRatio'
-  | 'primaryLimit'
-  | 'secondaryLimit'
+  | 'fiveHourLimit'
+  | 'sevenDayLimit'
+  | 'modelLimit'
+  | 'fiveHourReset'
+  | 'sevenDayReset'
   | 'credits'
   | 'plan'
   | 'lastTurnDuration'
@@ -38,10 +41,6 @@ export type AdditionalContextDetailRowId =
   | 'startedAt'
   | 'accountName'
   | 'accountEmail'
-  | 'accountLimits'
-  | 'accountPrimaryLimit'
-  | 'accountWeeklyLimit'
-  | 'accountModelLimits'
   | 'accountSpending'
   | 'accountResets'
   | 'accountUsageUpdated'
@@ -116,47 +115,137 @@ function formatWindowDuration(minutes: number): string {
   return `${minutes}m`;
 }
 
-/**
- * CDXC:AgentProviders 2026-09-09 DECISION:
- * User: usage-window labels throughout the app use a colon (7d: 50%, 5h: 50%), without "used" in the chat popover or status line.
- */
-function windowValue(
-  used: number | undefined,
-  resetsAt: number | undefined,
-  now: number,
-  label?: string
-): string | null {
-  if (used === undefined || !Number.isFinite(used)) return null;
-  const reset =
-    resetsAt === undefined || !Number.isFinite(resetsAt)
-      ? null
-      : resetsAt * 1000 > now
-        ? `resets ${formatResetCountdown(resetsAt * 1000 - now)}`
-        : 'reset due';
-  return join([`${label ? `${label}: ` : ''}${Math.round(used)}%`, reset]);
+type UsageWindowKind = 'fiveHour' | 'sevenDay' | 'model';
+
+interface UsageWindowSample {
+  /** The app-wide compact window label (5h, 7d, Fable 7d). */
+  label: string;
+  usedPercent: number;
+  /** Epoch seconds; absent when the source reported no reset time. */
+  resetsAt?: number;
+}
+
+function accountWindowKind(window: AccountUsageWindow): UsageWindowKind | 'spend' {
+  if (window.model) return 'model';
+  if (window.id === 'fiveHour' || window.id === ':primary_window') return 'fiveHour';
+  if (window.id === 'sevenDay' || window.id === ':secondary_window') return 'sevenDay';
+  return window.id === 'spend' ? 'spend' : 'model';
+}
+
+function sessionUsageWindow(status: ContextDetailStatus, kind: UsageWindowKind): UsageWindowSample | null {
+  if (kind === 'model') return null;
+  const fallbackLabel = kind === 'fiveHour' ? '5h' : '7d';
+  const claude = kind === 'fiveHour' ? status.rateLimits?.fiveHour : status.rateLimits?.sevenDay;
+  if (claude && typeof claude.usedPercentage === 'number' && Number.isFinite(claude.usedPercentage)) {
+    return { label: fallbackLabel, usedPercent: claude.usedPercentage, resetsAt: claude.resetsAt };
+  }
+  const codex = kind === 'fiveHour' ? status.codex?.primary : status.codex?.secondary;
+  if (codex && typeof codex.usedPercentage === 'number' && Number.isFinite(codex.usedPercentage)) {
+    return {
+      label: codex.windowMinutes ? formatWindowDuration(codex.windowMinutes) : fallbackLabel,
+      usedPercent: codex.usedPercentage,
+      resetsAt: codex.resetsAt,
+    };
+  }
+  return null;
 }
 
 /** CDXC:AgentProviders 2026-09-09 WHY:
  * Rate limits belong to the account, including before a draft has made a request or written transcript usage.
- * Linked sessions read the same main usage windows as Accounts; model-specific allowances remain separate rows.
+ * A linked session reads the same usage windows as Accounts; only an unlinked session reads the windows its agent last reported.
  */
-export function savedAccountRateLimits(account: AgentAccount, now: number): string | null {
-  return join(
-    account.usage
-      .filter(
-        (window) =>
-          !window.model && ['fiveHour', 'sevenDay', ':primary_window', ':secondary_window'].includes(window.id)
-      )
-      .map((window) =>
-        windowValue(
-          window.usedPercent,
-          window.resetsAt ? Date.parse(window.resetsAt) / 1000 : undefined,
-          now,
-          accountUsageLabel(window)
-        )
-      )
-  );
+function usageWindows(status: ContextDetailStatus, kind: UsageWindowKind): UsageWindowSample[] {
+  if (status.account) {
+    return accountUsageSamples(status.account, kind);
+  }
+  const window = sessionUsageWindow(status, kind);
+  return window ? [window] : [];
 }
+
+function accountUsageSamples(account: AgentAccount, kind: UsageWindowKind | 'spend'): UsageWindowSample[] {
+  return account.usage
+    .filter((window) => accountWindowKind(window) === kind && Number.isFinite(window.usedPercent))
+    .map((window) => {
+      const resetsAt = window.resetsAt ? Date.parse(window.resetsAt) / 1000 : Number.NaN;
+      return {
+        label: accountUsageLabel(window),
+        usedPercent: window.usedPercent,
+        ...(Number.isFinite(resetsAt) ? { resetsAt } : {}),
+      };
+    });
+}
+
+/**
+ * CDXC:AgentProviders 2026-09-09 DECISION:
+ * User: usage-window labels throughout the app use a colon (7d: 50%, 5h: 50%), without "used" in the chat popover or status line.
+ */
+const usagePercentText = (window: UsageWindowSample): string => `${window.label}: ${Math.round(window.usedPercent)}%`;
+
+const usageResetCountdown = (window: UsageWindowSample, now: number): string | null =>
+  window.resetsAt === undefined || !Number.isFinite(window.resetsAt)
+    ? null
+    : window.resetsAt * 1000 > now
+      ? `resets ${formatResetCountdown(window.resetsAt * 1000 - now)}`
+      : 'reset due';
+
+/** The reset rows stand alone in the status line, so each carries its window label (5h resets 2h 47m). */
+const usageResetText = (window: UsageWindowSample, now: number): string | null => {
+  const reset = usageResetCountdown(window, now);
+  return reset ? `${window.label} ${reset}` : null;
+};
+
+function usageWindowRow(
+  id: AdditionalContextDetailRowId,
+  label: string,
+  description: string,
+  kind: UsageWindowKind,
+  recommended: boolean,
+  render: (window: UsageWindowSample, now: number) => string | null
+): SessionChatContextDetailRowDefinition {
+  return {
+    id,
+    label,
+    description,
+    group: 'usage',
+    recommended,
+    value: ({ status, now }) => join(usageWindows(status, kind).map((window) => render(window, now))),
+  };
+}
+
+/** CDXC:AgentProviders 2026-09-11 DECISION:
+ * User: the usage rows are one value each, separately for Claude and Codex: 7d limit, 5h limit, the model limit (Fable), 7d reset and 5h reset.
+ * This replaced the combined "Rate limits" row and the duplicated "Account limits", "Account primary limit", "Account weekly limit", "Account model limits", "Primary limit" and "Secondary limit" rows, whose values repeated each other.
+ * The catalog is static, so every model-scoped window shares the one "Model limit" row; an account with several model windows joins them on that row.
+ * The five-hour and weekly rows are recommended because the retired "Rate limits" row showed exactly those values by default.
+ */
+export const USAGE_WINDOW_ROWS: readonly SessionChatContextDetailRowDefinition[] = [
+  usageWindowRow(
+    'fiveHourLimit',
+    '5h limit',
+    'Five-hour usage from the saved account, or the session when unlinked',
+    'fiveHour',
+    true,
+    usagePercentText
+  ),
+  usageWindowRow(
+    'sevenDayLimit',
+    '7d limit',
+    'Weekly usage from the saved account, or the session when unlinked',
+    'sevenDay',
+    true,
+    usagePercentText
+  ),
+  usageWindowRow(
+    'modelLimit',
+    'Model limit',
+    'Model-specific usage from the saved account, such as Fable',
+    'model',
+    false,
+    usagePercentText
+  ),
+  usageWindowRow('fiveHourReset', '5h reset', 'When the five-hour window resets', 'fiveHour', true, usageResetText),
+  usageWindowRow('sevenDayReset', '7d reset', 'When the weekly window resets', 'sevenDay', false, usageResetText),
+];
 
 function tokensRow(
   id: AdditionalContextDetailRowId,
@@ -216,22 +305,6 @@ export const CODEX_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetailRowDefi
         : null;
     },
   },
-  ...(['primary', 'secondary'] as const).map((key): SessionChatContextDetailRowDefinition => ({
-    id: key === 'primary' ? 'primaryLimit' : 'secondaryLimit',
-    group: 'usage',
-    label: key === 'primary' ? 'Primary limit' : 'Secondary limit',
-    description: 'Account usage window last reported by this Codex session',
-    recommended: false,
-    value: ({ status, now }) => {
-      const window = status.codex?.[key];
-      return windowValue(
-        window?.usedPercentage,
-        window?.resetsAt,
-        now,
-        window?.windowMinutes ? formatWindowDuration(window.windowMinutes) : undefined
-      );
-    },
-  })),
   /** CDXC:AgentProviders 2026-09-08 DECISION:
    * User: show how many usage resets remain from the saved Codex account in context details and the configurable status line.
    */
@@ -357,55 +430,21 @@ export const SHARED_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetailRowDef
     recommended: false,
     value: ({ status }) => status.account?.email || null,
   },
-  ...(
-    [
-      ['accountLimits', 'Account limits', 'All usage windows from the saved account', () => true],
-      [
-        'accountPrimaryLimit',
-        'Account primary limit',
-        'Primary usage window and reset from the saved account',
-        (id: string) => id === 'fiveHour' || id === ':primary_window',
-      ],
-      [
-        'accountWeeklyLimit',
-        'Account weekly limit',
-        'Weekly usage and reset from the saved account',
-        (id: string) => id === 'sevenDay' || id === ':secondary_window',
-      ],
-      [
-        'accountModelLimits',
-        'Account model limits',
-        'Model-specific usage windows from the saved account',
-        (id: string, model?: string) =>
-          Boolean(model) || !['fiveHour', 'sevenDay', 'spend', ':primary_window', ':secondary_window'].includes(id),
-      ],
-      [
-        'accountSpending',
-        'Account extra usage',
-        'Account-wide extra spending allowance, distinct from session cost',
-        (id: string) => id === 'spend',
-      ],
-    ] as const
-  ).map(([id, label, description, matches]): SessionChatContextDetailRowDefinition => ({
-    id,
-    label,
-    description,
+  {
+    id: 'accountSpending',
     group: 'usage',
+    label: 'Account extra usage',
+    description: 'Account-wide extra spending allowance, distinct from session cost',
     recommended: false,
     value: ({ status, now }) =>
-      join(
-        (status.account?.usage ?? [])
-          .filter((window) => matches(window.id, window.model))
-          .map((window) =>
-            windowValue(
-              window.usedPercent,
-              window.resetsAt ? Date.parse(window.resetsAt) / 1000 : undefined,
-              now,
-              accountUsageLabel(window)
+      status.account
+        ? join(
+            accountUsageSamples(status.account, 'spend').map((window) =>
+              join([usagePercentText(window), usageResetCountdown(window, now)])
             )
           )
-      ),
-  })),
+        : null,
+  },
   {
     id: 'accountUsageUpdated',
     group: 'usage',

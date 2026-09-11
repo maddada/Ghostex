@@ -19,7 +19,7 @@ export { formatSessionChatDuration } from './session-chat-duration';
 import {
   CODEX_CONTEXT_DETAIL_ROWS,
   SHARED_CONTEXT_DETAIL_ROWS,
-  savedAccountRateLimits,
+  USAGE_WINDOW_ROWS,
   type AdditionalContextDetailRowId,
   type ContextDetailStatus,
   type ContextDetailsAgent,
@@ -38,7 +38,6 @@ export const SESSION_CHAT_CONTEXT_DETAIL_GROUPS: ReadonlyArray<{ id: SessionChat
 export type SessionChatContextDetailRowId =
   | AdditionalContextDetailRowId
   | 'cost'
-  | 'rateLimits'
   | 'lines'
   | 'promptCache'
   | 'lastRequest'
@@ -139,24 +138,7 @@ export const SESSION_CHAT_CONTEXT_DETAIL_ROWS: readonly SessionChatContextDetail
         isFinite(status.cost?.apiDurationMs) ? `API ${formatSessionChatDuration(status.cost.apiDurationMs)}` : null,
       ]),
   },
-  {
-    id: 'rateLimits',
-    group: 'usage',
-    label: 'Rate limits',
-    description: 'Main usage windows and resets from the linked account, or the session when unlinked',
-    recommended: true,
-    value: ({ status, now }) => {
-      if (status.account) return savedAccountRateLimits(status.account, now);
-      const fiveHour = status.rateLimits?.fiveHour;
-      const sevenDay = status.rateLimits?.sevenDay;
-      const reset = isFinite(fiveHour?.resetsAt) ? formatCountdown(fiveHour.resetsAt, now) : null;
-      return joinParts([
-        isFinite(fiveHour?.usedPercentage) ? `5h: ${formatPercentage(fiveHour.usedPercentage)}` : null,
-        isFinite(sevenDay?.usedPercentage) ? `7d: ${formatPercentage(sevenDay.usedPercentage)}` : null,
-        reset ? `resets ${reset}` : null,
-      ]);
-    },
-  },
+  ...USAGE_WINDOW_ROWS,
   {
     id: 'lines',
     group: 'usage',
@@ -320,7 +302,7 @@ const CODEX_SHARED_ROWS = new Set<SessionChatContextDetailRowId>([
   'sessionName',
   'folder',
   'thinking',
-  'rateLimits',
+  ...USAGE_WINDOW_ROWS.map((row) => row.id),
   ...SHARED_CONTEXT_DETAIL_ROWS.map((row) => row.id),
 ]);
 const CODEX_ROWS: readonly SessionChatContextDetailRowDefinition[] = [
@@ -337,19 +319,6 @@ const CODEX_ROWS: readonly SessionChatContextDetailRowDefinition[] = [
       if (row.id === 'folder') return { ...row, description: "Codex's current working folder" };
       if (row.id === 'totalOutputTokens')
         return { ...row, description: 'Cumulative Codex output, including reasoning tokens' };
-      if (row.id === 'rateLimits')
-        return {
-          ...row,
-          description: 'Main usage windows and resets from the linked account, or Codex when unlinked',
-          value: ({ status, now, session }) =>
-            status.account
-              ? savedAccountRateLimits(status.account, now)
-              : joinParts(
-                  CODEX_CONTEXT_DETAIL_ROWS.filter(
-                    (row) => row.id === 'primaryLimit' || row.id === 'secondaryLimit'
-                  ).map((row) => row.value({ status, now, session }))
-                ),
-        };
       return row;
     }
   ),
@@ -367,6 +336,32 @@ const ROWS_BY_AGENT = {
 };
 function isRowId(value: unknown, agent: ContextDetailsAgent = 'claude'): value is SessionChatContextDetailRowId {
   return typeof value === 'string' && ROWS_BY_AGENT[agent].has(value as SessionChatContextDetailRowId);
+}
+
+/**
+ * Rows retired on 2026-09-11 for the one-value usage rows (see the decision on
+ * `USAGE_WINDOW_ROWS`). A saved preference for a retired row carries over to
+ * the rows that now show its values, so a starred "Rate limits" keeps its place
+ * in the status line after the update; the next save stores only current ids.
+ */
+const RETIRED_ROW_REPLACEMENTS: ReadonlyMap<string, readonly SessionChatContextDetailRowId[]> = new Map<
+  string,
+  readonly SessionChatContextDetailRowId[]
+>([
+  ['rateLimits', ['fiveHourLimit', 'sevenDayLimit', 'fiveHourReset']],
+  ['accountLimits', ['fiveHourLimit', 'sevenDayLimit', 'modelLimit', 'fiveHourReset', 'sevenDayReset']],
+  ['accountPrimaryLimit', ['fiveHourLimit', 'fiveHourReset']],
+  ['accountWeeklyLimit', ['sevenDayLimit', 'sevenDayReset']],
+  ['accountModelLimits', ['modelLimit']],
+  ['primaryLimit', ['fiveHourLimit', 'fiveHourReset']],
+  ['secondaryLimit', ['sevenDayLimit', 'sevenDayReset']],
+]);
+
+/** The current row ids a saved id stands for: itself, a retired row's replacements, or nothing. */
+function currentRowIds(saved: unknown, agent: ContextDetailsAgent): SessionChatContextDetailRowId[] {
+  if (isRowId(saved, agent)) return [saved];
+  const replacements = typeof saved === 'string' ? RETIRED_ROW_REPLACEMENTS.get(saved) : undefined;
+  return replacements ? replacements.filter((id) => isRowId(id, agent)) : [];
 }
 
 // ---------------------------------------------------------------------------
@@ -404,8 +399,18 @@ function normalizeFlags(
   const flags: Partial<Record<SessionChatContextDetailRowId, boolean>> = {};
   if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
     for (const [id, flag] of Object.entries(candidate)) {
-      if (isRowId(id, agent) && typeof flag === 'boolean') {
+      if (typeof flag !== 'boolean') {
+        continue;
+      }
+      if (isRowId(id, agent)) {
         flags[id] = flag;
+        continue;
+      }
+      // A retired row's flag never overrides one saved for a current row.
+      for (const replacement of currentRowIds(id, agent)) {
+        if (flags[replacement] === undefined) {
+          flags[replacement] = flag;
+        }
       }
     }
   }
@@ -421,10 +426,9 @@ function normalizeOrder(
     for (const group of SESSION_CHAT_CONTEXT_DETAIL_GROUPS) {
       const ids = (candidate as Record<string, unknown>)[group.id];
       if (Array.isArray(ids)) {
-        const kept = ids.filter(
-          (id): id is SessionChatContextDetailRowId =>
-            isRowId(id, agent) && ROWS_BY_AGENT[agent].get(id)?.group === group.id
-        );
+        const kept = ids
+          .flatMap((id) => currentRowIds(id, agent))
+          .filter((id) => ROWS_BY_AGENT[agent].get(id)?.group === group.id);
         order[group.id] = [...new Set(kept)];
       }
     }
@@ -445,7 +449,7 @@ export function normalizeSessionChatContextDetailsPreferences(
     starred: normalizeFlags(record.starred, agent),
     order: normalizeOrder(record.order, agent),
     starredOrder: Array.isArray(record.starredOrder)
-      ? [...new Set(record.starredOrder.filter((id): id is SessionChatContextDetailRowId => isRowId(id, agent)))]
+      ? [...new Set(record.starredOrder.flatMap((id) => currentRowIds(id, agent)))]
       : [],
   };
 }
@@ -543,8 +547,6 @@ const SIMILAR_CONTEXT_DETAIL_ROWS: Record<
     cacheWriteTokens: 'lastRequest',
     turnTokens: 'lastRequest',
     reasoningTokens: 'totalOutputTokens',
-    primaryLimit: 'rateLimits',
-    secondaryLimit: 'rateLimits',
     credits: 'accountSpending',
     lastTurnDuration: 'cost',
     firstTokenTime: 'cost',
