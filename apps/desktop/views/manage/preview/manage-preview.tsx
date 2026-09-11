@@ -30,9 +30,8 @@ import {
   ManageAnnotationToolbar,
   ManageCommentPopover,
 } from './annotation-overlays';
-import { ManageExcalidrawEditor } from './excalidraw-editor';
+import { DeferredDrawingEditor as ManageExcalidrawEditor, DeferredMarkdownEditor as ManageMarkdownReviewViewer } from './deferred-editors';
 import { ManageHtmlRenderViewer } from './html-viewer';
-import { ManageMarkdownReviewViewer } from './markdown-review-viewer';
 import { ManagePreviewMessage, isEditableEventTarget } from './preview-shared';
 import { ManageTextEditor } from './text-editor';
 import { ManageTooltipButton } from '../manage-tooltip-button';

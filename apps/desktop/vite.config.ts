@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 import { defineConfig, type Plugin } from 'vite';
+import { writeDocsClassicAssets } from '../../tooling/docs-classic-assets';
 import {
   MERMAID_ASSET_DIR_NAME,
   mermaidClassicScriptEsbuildPlugin,
@@ -94,7 +95,7 @@ function inlineCefHtmlAssets(): Plugin {
         const finalHtml = injectInlineStyleTags(
           replaceCefEntryModuleScript(
             fs.readFileSync(path.join(gpuiRoot, htmlEntry), 'utf8'),
-            await buildInlineCefEntryScript(cefHtmlEntryScripts[htmlEntry])
+            await buildInlineCefEntryScript(cefHtmlEntryScripts[htmlEntry], htmlEntry === 'manage.html' ? outDir : undefined)
           ),
           styleTags
         );
@@ -253,8 +254,8 @@ function replaceCefEntryModuleScript(html: string, bundledScript: string): strin
   throw new Error('Ghostex CEF build did not emit a module script to inline.');
 }
 
-async function buildInlineCefEntryScript(entryPoint: string): Promise<string> {
-  const result = await esbuild.build({
+async function buildInlineCefEntryScript(entryPoint: string, docsOutDir?: string): Promise<string> {
+  const options: esbuild.BuildOptions = {
     absWorkingDir: repoRoot,
     alias: {
       '@': repoRoot,
@@ -285,7 +286,9 @@ async function buildInlineCefEntryScript(entryPoint: string): Promise<string> {
     plugins: [createCefSingleFileEsbuildPlugin()],
     target: ['chrome120'],
     write: false,
-  });
+  };
+  if (docsOutDir) return writeDocsClassicAssets(docsOutDir, options);
+  const result = await esbuild.build(options);
   const script = result.outputFiles.find((file) => file.path === '<stdout>');
   if (!script) {
     throw new Error(`Ghostex CEF esbuild bundle did not emit ${entryPoint}.`);

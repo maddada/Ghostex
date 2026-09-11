@@ -12,4 +12,7 @@ import '@/packages/core-ui/styles/modals.css';
 
 installManageCefBridge();
 
-await import('../views/manage');
+void import('../views/manage').catch((error) => {
+  const root = document.getElementById('root');
+  if (root) root.textContent = `Could not load Docs: ${error instanceof Error ? error.message : String(error)}`;
+});
