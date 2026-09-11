@@ -3500,7 +3500,7 @@
       "default": "monaco",
       "options": [
         {
-          "label": "Monaco editor",
+          "label": "Ghostex editor",
           "value": "monaco"
         },
         {
@@ -5093,6 +5093,7 @@
       "sectionTitle": "Internal state (not user settings)",
       "type": "json",
       "default": {
+        "scrollChatToBottom": "ctrl+shift+down",
         "createSession": "cmd+t",
         "openCommandPalette": "cmd+shift+p",
         "openSessionSearchPalette": "cmd+p",
@@ -5149,6 +5150,9 @@
         "focusNextGroup": "cmd+]",
         "navigateHistoryBack": "cmd+ctrl+[",
         "navigateHistoryForward": "cmd+ctrl+]",
+        "openNotifications": "cmd+i",
+        "jumpToLatestUnreadNotification": "cmd+shift+u",
+        "deferNotificationAndJumpNext": "cmd+ctrl+u",
         "focusPreviousSession": "cmd+shift+tab",
         "focusNextSession": "cmd+tab",
         "focusUp": "cmd+alt+up",
@@ -5463,6 +5467,14 @@
           "value": "grok"
         },
         {
+          "label": "Pi Agent",
+          "value": "pi"
+        },
+        {
+          "label": "Antigravity CLI",
+          "value": "antigravity"
+        },
+        {
           "label": "Custom",
           "value": "custom"
         }
@@ -5541,6 +5553,14 @@
         {
           "label": "Grok Build",
           "value": "grok"
+        },
+        {
+          "label": "Pi Agent",
+          "value": "pi"
+        },
+        {
+          "label": "Antigravity CLI",
+          "value": "antigravity"
         },
         {
           "label": "Custom",
@@ -5972,6 +5992,18 @@
       "agentWritable": true
     },
     {
+      "key": "notificationsTitlebarButtonHidden",
+      "title": "Hide Notifications bell",
+      "subtitle": "Hide the Notifications bell from the titlebar.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "viewOrder",
+      "sectionTitle": "Titlebar views",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "helpTitlebarButtonHidden",
       "title": "Hide Help button",
       "subtitle": "Hide the Ghostex Help button from the titlebar.",
@@ -6114,6 +6146,17 @@
       "key": "tips",
       "title": "Tips & Tricks",
       "subtitle": "Title bar button that opens short tips for getting more out of Ghostex.",
+      "tab": "extensions",
+      "tabTitle": "Extensions",
+      "section": "official",
+      "sectionTitle": "Official Extensions",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "notifications",
+      "title": "Notifications",
+      "subtitle": "Title bar bell that lists what your agents finished or need from you.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -7043,6 +7086,13 @@
   ],
   "hotkeys": [
     {
+      "id": "scrollChatToBottom",
+      "title": "Scroll Chat to Bottom",
+      "description": "Scroll chat to the bottom, including while typing in the composer.",
+      "defaultKey": "ctrl+shift+down",
+      "windowsLinuxDefaultKey": "cmd+shift+down"
+    },
+    {
       "id": "createSession",
       "title": "Create Session",
       "description": "Create a terminal session.",
@@ -7387,6 +7437,24 @@
       "description": "Go forward again after going back.",
       "defaultKey": "cmd+ctrl+]",
       "windowsLinuxDefaultKey": "cmd+alt+]"
+    },
+    {
+      "id": "openNotifications",
+      "title": "Open Notifications",
+      "description": "Open the Notifications panel under the titlebar bell.",
+      "defaultKey": "cmd+i"
+    },
+    {
+      "id": "jumpToLatestUnreadNotification",
+      "title": "Jump to Latest Unread Notification",
+      "description": "Jump to the session of the latest unread notification and mark it read.",
+      "defaultKey": "cmd+shift+u"
+    },
+    {
+      "id": "deferNotificationAndJumpNext",
+      "title": "Mark as Oldest Unread and Jump to Next",
+      "description": "Push the current session to the back of the unread queue and jump to the next unread notification.",
+      "defaultKey": "cmd+ctrl+u"
     },
     {
       "id": "focusPreviousSession",

@@ -268,6 +268,11 @@ const SUPPLEMENTAL_SETTING_ROWS: Record<string, SupplementalRow> = {
     subtitle: 'Hide the Tips button from the titlebar.',
     title: 'Hide Tips button',
   },
+  notificationsTitlebarButtonHidden: {
+    ...titlebarViews,
+    subtitle: 'Hide the Notifications bell from the titlebar.',
+    title: 'Hide Notifications bell',
+  },
   helpTitlebarButtonHidden: {
     ...titlebarViews,
     subtitle: 'Hide the Ghostex Help button from the titlebar.',

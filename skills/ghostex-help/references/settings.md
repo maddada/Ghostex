@@ -120,7 +120,7 @@ How to use this file:
 - **Show quick model & effort picker for Claude and Codex in terminal view** `showQuickModelPickerInTerminal` (boolean, default true): Use the model picker shortcut (Option+P by default) in Claude and Codex terminal sessions. Turn off to use terminal bindings.
 - **Show session id in terminal panes** `showSessionIdInTerminalPanes` (boolean, default false) [advanced]: Show the provider session id in the top-right corner of terminal panes.
 - **Show notification on terminal bell** `showNotificationOnTerminalBell` (boolean, default false): Treat terminal bell events as session attention.
-- **Ctrl+G prompt editor** `promptEditorBackend` (one of monaco | inherit; default monaco) [advanced]: Choose which editor Ctrl+G uses when a terminal prompt asks for $EDITOR. Option labels: monaco = Monaco editor, inherit = Use default from this machine.
+- **Ctrl+G prompt editor** `promptEditorBackend` (one of monaco | inherit; default monaco) [advanced]: Choose which editor Ctrl+G uses when a terminal prompt asks for $EDITOR. Option labels: monaco = Ghostex editor, inherit = Use default from this machine.
 - **WSL distribution** `windowsWslDistribution` (text, default (empty)): Windows only. Exact distro name from `wsl.exe --list --verbose`; blank uses automatic WSL2 discovery.
 #### Terminal Behavior
 
@@ -244,7 +244,7 @@ How to use this file:
 - **Agent approvals** `acceptAll` (Settings UI row without a settings key; use `ghostex settings open`): Choose whether supported agents ask before editing files or running commands. Per-agent settings can override this default.
 - **Agent approvals: accept all** `agentAcceptAllEnabled` (boolean, default false): Start supported agents with approvals turned off (full access) by default. Off keeps each agent CLI default approval mode. Projects can override it.
 - **Default Prompt Agent** `defaultPromptAgentId` (text, default codex): Agent id used when Ghostex sends a prompt on your behalf (for example PR review). Use an id from the configured agents.
-- **Title Generation Agent** `sessionTitleGenerationAgent` (one of codex | cursor | claude | grok | custom; default codex): Headless agent Ghostex uses for first-prompt session title generation. Option labels: codex = Codex, cursor = Cursor CLI, claude = Claude, grok = Grok Build, custom = Custom.
+- **Title Generation Agent** `sessionTitleGenerationAgent` (one of codex | cursor | claude | grok | pi | antigravity | custom; default codex): Headless agent Ghostex uses for first-prompt session title generation. Option labels: codex = Codex, cursor = Cursor CLI, claude = Claude, grok = Grok Build, pi = Pi Agent, antigravity = Antigravity CLI, custom = Custom.
 - **Custom Title Command** `customSessionTitleGenerationCommand` (text, default (empty)): Custom command run with the title prompt on stdin when Title Generation Agent is custom. It should print only the title.
 ### Agents
 
@@ -270,6 +270,7 @@ How to use this file:
 - **Hide Automate view** `automateViewTabHidden` (boolean, default false): Hide the Automate view tab from the titlebar.
 - **Hide Docs view** `docsViewTabHidden` (boolean, default false): Hide the Docs view tab from the titlebar.
 - **Hide Tips button** `tipsAndTricksTitlebarButtonHidden` (boolean, default false): Hide the Tips button from the titlebar.
+- **Hide Notifications bell** `notificationsTitlebarButtonHidden` (boolean, default false): Hide the Notifications bell from the titlebar.
 - **Hide Help button** `helpTitlebarButtonHidden` (boolean, default false): Hide the Ghostex Help button from the titlebar.
 - **Hide Resources button** `resourcesTitlebarButtonHidden` (boolean, default false): Hide the Resources button from the titlebar.
 - **Hide Dev Servers button** `devServersTitlebarButtonHidden` (boolean, default false): Hide the Dev Servers button from the titlebar.
@@ -285,6 +286,7 @@ How to use this file:
 - **Automate** `automate` (Settings UI row without a settings key; use `ghostex settings open`): Turn repeatable project routines into simple workflows you can run whenever you need them.
 - **Docs** `docs` (Settings UI row without a settings key; use `ghostex settings open`): Browse your project’s notes, plans, and reference files together in one focused reading space.
 - **Tips & Tricks** `tips` (Settings UI row without a settings key; use `ghostex settings open`): Title bar button that opens short tips for getting more out of Ghostex.
+- **Notifications** `notifications` (Settings UI row without a settings key; use `ghostex settings open`): Title bar bell that lists what your agents finished or need from you.
 - **Ghostex Help** `help` (Settings UI row without a settings key; use `ghostex settings open`): Title bar button with sample questions that start a Ghostex Help chat: an agent explains the app or changes settings for you.
 - **Dev servers** `devServers` (Settings UI row without a settings key; use `ghostex settings open`): Title bar button that lists development servers running on this computer.
 - **Resources** `resources` (Settings UI row without a settings key; use `ghostex settings open`): Title bar button that opens Ghostex docs, guides, and community links.

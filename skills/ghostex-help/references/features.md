@@ -55,7 +55,10 @@ Top chrome holds the Quick section (projectless Quick chats and terminals),
 tag filters, Spaces, and More Options: Settings, Search by
 Prompt, Previous Sessions, Mobile & Remote, Extensions, Tips.
 Spaces group projects or groups together; they are not saved filters, and a
-filter cannot be saved as a Space.
+filter cannot be saved as a Space. Create one with the "Create space" button
+that fills the Space row while you have none, by right-clicking the Other
+button or a Space icon and choosing New Space, or from the More menu when
+Spaces overflow.
 Space icons keep their normal glyph and show amber working-session and blue
 attention-session counts in extra-bold text near the bottom of each icon, including
 the selected Space.
@@ -132,6 +135,11 @@ Session Chat renders the same agent session as a chat GUI: composer with
 image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session.
+Press Ctrl+Shift+Down to scroll the focused chat to the bottom, including while
+typing. The Scroll to bottom button shows your current shortcut. Both stop any
+ongoing scroll momentum so the conversation settles at the bottom. This takes
+priority over paragraph selection or adding a cursor in the composer; rebind or
+clear Scroll Chat to Bottom in Settings > Hotkeys (`scrollChatToBottom`).
 Codex rewind continues in a new conversation before the selected prompt and
 returns that prompt for editing. If the chat cannot reconnect after the rewind,
 choose Retry synchronization in the dialog to reconnect without rewinding again
@@ -174,6 +182,10 @@ also toggle the diff. After expanding or collapsing, the header stays visible;
 chat scrolls to it if needed. This covers Claude's Write and Edit tools and Codex's apply_patch
 changes.
 
+Summary mode has its own button between More actions and Session note when the
+chat toolbar has room. In a narrow chat, find it under More actions instead.
+The button highlights when Summary mode is on; its tooltip shows the shortcut.
+
 Unsent chat drafts are saved automatically. Switching between Chat and Terminal
 keeps a saved copy while the text moves, and a late transfer preserves anything
 you have typed since. Saving and sync retries happen quietly in the background;
@@ -201,6 +213,12 @@ limit left, Soonest reset the one whose limit resets first, Most used first
 keeps draining the account already in use, and Same as last session reuses the
 account of the last session. Pick a specific account instead to always start
 with it. When the rule finds no account, new sessions use the current CLI login.
+Switching a running Claude or Codex session to another account, from More
+actions > Switch Account or automatically when its account hits a usage limit,
+exits the CLI inside its own terminal and resumes the same conversation there,
+so the terminal tab and the chat stay open and a "." continues the work.
+Account sign-in terminals open in the active local project's folder and appear
+under that project. Before a first project is chosen, sign-in uses the home folder.
 
 Hide emails in Settings > Accounts keeps the first and last characters before
 `@` and shows the same `•••••.•••` for every domain, with no blur effect.
@@ -215,9 +233,10 @@ are grouped under Usage & cost, Context & cache, and Session. Its pen icon
 opens the Context details dialog: the filter bar at the top finds a row by its
 title, description, or current value; switch rows on or off, drag them to
 reorder within their group, and star a row to show its value in the status
-line under the chat box. Usage rows hold one value each: 5h limit, 7d limit,
-Model limit (such as Fable), 5h reset, and 7d reset, read from the session's
-saved account, or from the agent itself when the session has no account.
+line under the chat box. Every row holds one value, for example Cost, Session
+time, and API time, or 5h limit, 7d limit, Model limit (such as Fable), 5h
+reset, and 7d reset, read from the session's saved account, or from the agent
+itself when the session has no account.
 Claude Code and Codex keep separate choices; the copy buttons in the dialog
 header transfer them between the two.
 
@@ -234,9 +253,15 @@ Terminals are embedded Ghostty surfaces. Font, theme, cursor, padding,
 scrollback, clipboard, and scrolling are Settings > General > Terminal rows and
 are written into a managed Ghostty config; the Ghostty settings actions row
 applies the recommended set or opens the raw config. Command-click opens links;
-Cmd+V pastes images as previewable links; the Ctrl+G prompt editor opens Monaco
-or Code for long prompts. Dev Servers detects localhost URLs from output and
+Cmd+V pastes images as previewable links. Ctrl+G opens the Ghostex prompt editor
+or your machine default editor for long prompts. The Ghostex editor uses the
+same text editing controls as the chat composer, with F1 commands, find/replace,
+undo/redo, and image previews. Cmd+S/Ctrl+S or Ctrl+G saves and closes it; Cancel
+leaves the original prompt unchanged. Dev Servers detects localhost URLs from output and
 lists them in Resources.
+
+Terminal links (`ghostex://terminal`) without a folder open in the active local
+project. A folder supplied in the link takes precedence.
 
 Related settings: `terminalFontFamily`, `terminalFontSize`,
 `terminalGhosttyTheme`, `terminalCursorStyle`, `terminalPane*PaddingPx`,
@@ -343,9 +368,21 @@ menu bar badges with running and done counts (click one to jump to the
 session), terminal bell detection, and push notifications on the mobile app.
 The optional status pet in the sidebar mirrors session state.
 
+The Notifications bell sits in the titlebar right after the Next button and
+shows how many notifications are unread. Click it to open the Notifications
+panel: one row per session, newest first, saying whether the agent finished a
+turn or needs your input, with the last thing it said. Click a row to jump to
+that session and mark it read; hover a row to dismiss it; the header has Jump
+to Latest Unread, Mark All Read, and Clear All. Hotkeys: Cmd+I opens the panel,
+Cmd+Shift+U jumps to the latest unread notification, and Cmd+Ctrl+U pushes the
+current session to the back of the unread queue and jumps to the next one.
+Scripts and agent hooks can post their own rows with
+`ghostex notify --title <text> [--body <text>]`.
+
 Related settings: `completionSound`, `actionCompletionSound`,
 `showMacOSAttentionNotifications`, `showNotificationOnTerminalBell`,
-`hideMenuBarSessionStatusIndicators`, `petOverlayEnabled`.
+`hideMenuBarSessionStatusIndicators`, `petOverlayEnabled`,
+`notificationsTitlebarButtonHidden`.
 
 ## Git and worktrees
 
@@ -381,6 +418,8 @@ docs directory), `hideProjectHeaderDiffStats`,
   (Code, Browser, Kanban, Automate, Docs, Chromium runtime), the Extension
   store for audited third-party extensions, and Your views (custom URLs,
   Storybook, Linear, GitHub Issues, dev server commands, HTML reports).
+  Extension commands use the active local project's folder unless the extension
+  supplies a folder; relative folders are resolved inside the active project.
   Its Titlebar account usage section lets you star saved Claude and Codex
   accounts to show their usage in the desktop titlebar, or unstar them to hide
   it. These are the same per-account stars available in Settings > Accounts.
@@ -439,6 +478,8 @@ sidebarSide right`, then `ghostex settings set sidebarDefaultWidthPx 220`
 - "Run an agent on a schedule": see Automations; open the Automate view or
   drive `ghostex automation-save`.
 - "Play a sound and notify me when an agent finishes": `completionSound`
-  (any value except `off`), `showMacOSAttentionNotifications true`, and the
-  menu bar badges via `hideMenuBarSessionStatusIndicators false`.
+  (any value except `off`), `showMacOSAttentionNotifications true`, the
+  menu bar badges via `hideMenuBarSessionStatusIndicators false`, and the
+  titlebar bell (kept visible with `notificationsTitlebarButtonHidden false`)
+  lists every finished turn with what the agent said.
 - "What does the Kanban board do": see Project board (Kanban).

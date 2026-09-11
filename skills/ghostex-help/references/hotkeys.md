@@ -6,6 +6,7 @@ Default bindings are listed for macOS (`cmd`) with the Windows/Linux default whe
 
 | Action | Default | Windows/Linux | What it does | Id |
 | --- | --- | --- | --- | --- |
+| Scroll Chat to Bottom | `ctrl+shift+down` | `cmd+shift+down` | Scroll chat to the bottom, including while typing in the composer. | `scrollChatToBottom` |
 | Create Session | `cmd+t` |  | Create a terminal session. | `createSession` |
 | Open Quick Access: Commands | `cmd+shift+p` |  | Open Ghostex Quick Access on Commands. | `openCommandPalette` |
 | Open Quick Access: Recent Sessions | `cmd+p` |  | Open Ghostex Quick Access on Recent Sessions. | `openSessionSearchPalette` |
@@ -62,6 +63,9 @@ Default bindings are listed for macOS (`cmd`) with the Windows/Linux default whe
 | Next Group | `cmd+]` |  | Focus the next group. | `focusNextGroup` |
 | Back | `cmd+ctrl+[` | `cmd+alt+[` | Go back to the previously active session or project. | `navigateHistoryBack` |
 | Forward | `cmd+ctrl+]` | `cmd+alt+]` | Go forward again after going back. | `navigateHistoryForward` |
+| Open Notifications | `cmd+i` |  | Open the Notifications panel under the titlebar bell. | `openNotifications` |
+| Jump to Latest Unread Notification | `cmd+shift+u` |  | Jump to the session of the latest unread notification and mark it read. | `jumpToLatestUnreadNotification` |
+| Mark as Oldest Unread and Jump to Next | `cmd+ctrl+u` |  | Push the current session to the back of the unread queue and jump to the next unread notification. | `deferNotificationAndJumpNext` |
 | Previous Tab | `cmd+shift+tab` |  | Select the previous tab in the focused split pane. | `focusPreviousSession` |
 | Next Tab | `cmd+tab` |  | Select the next tab in the focused split pane. | `focusNextSession` |
 | Focus Up | `cmd+alt+up` |  | Move focus up. | `focusUp` |
