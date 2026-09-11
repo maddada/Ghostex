@@ -76,7 +76,7 @@ pub(crate) struct Registry {
     #[serde(default)]
     pub defaults: BTreeMap<Provider, Policy>,
     /// CDXC:AgentProviders 2026-09-11 DECISION:
-    /// User: the new-session account choice is stored under `newSessionAccounts`, a different key from the pre-9.3 `defaultAccounts`, so every choice saved before the automatic rules existed is dropped on read and those users migrate to Most limit remaining. A missing entry means Most limit remaining.
+    /// User: the new-session account choice is stored under `newSessionAccounts`, a different key from the pre-9.3 `defaultAccounts`, so every choice saved before the automatic rules existed is dropped on read and those users migrate to Auto. A missing entry means Auto.
     #[serde(default)]
     pub new_session_accounts: BTreeMap<Provider, NewSessionAccount>,
     /// The account of the most recent session launched or switched per provider, kept for the Same as last session rule.
@@ -86,6 +86,7 @@ pub(crate) struct Registry {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", tag = "rule")]
 pub(crate) enum NewSessionAccount {
+    Auto,
     MostRemaining,
     SoonestReset,
     MostUsed,

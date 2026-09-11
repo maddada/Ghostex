@@ -1,8 +1,8 @@
 use super::{endpoint::account_id, model::*};
-use chrono::DateTime;
+use chrono::{DateTime, Utc};
 use std::{cmp::Ordering, collections::BTreeMap};
 /// CDXC:AgentProviders 2026-09-11 DECISION:
-/// User: each provider's account for new sessions follows one rule, with Most limit remaining as the default and top option, then Soonest reset, Most used first, Same as last session, and finally any one pinned account. The automatic rules consider only accounts marked Automatic, never Manual ones; a pinned account and the last-session account are explicit choices and may be Manual. Every automatic rule ranks accounts with usage data before those without, and accounts that still have capacity before exhausted ones, then applies its own order: lowest highest-window usage (most remaining), highest usage (most used first), or earliest reset time (soonest reset), with ties falling to the lower slot. Same as last session reuses the account of the most recent launch or switch for that provider, and ranks by Most limit remaining until one exists. When the rule yields no account the launch keeps the current CLI login.
+/// User: each provider's account for new sessions follows one rule, with Auto (recommended) as the default and top option, then Most limit remaining, Soonest reset, Most used first, Same as last session, and finally any one pinned account. Auto combines remaining limit and reset time into one number: for every usage window, the remaining percent divided by the hours until that window resets, keeping the smallest across the account's windows as its sustainable rate; the account with the highest sustainable rate wins, so capacity about to refresh is spent first and an account whose weekly limit is nearly gone drops down even when its short window is fresh. The automatic rules consider only accounts marked Automatic, never Manual ones; a pinned account and the last-session account are explicit choices and may be Manual. Every automatic rule ranks accounts with usage data before those without, and accounts that still have capacity before exhausted ones, then applies its own order: lowest highest-window usage (most remaining), highest usage (most used first), or earliest reset time (soonest reset), with ties falling to the lower slot. Same as last session reuses the account of the most recent launch or switch for that provider, and ranks by Auto until one exists. When the rule yields no account the launch keeps the current CLI login.
 /// SEE-ALSO: launch::apply_new_session, the `defaultAccounts` and `newSessionAccounts` fields built in endpoint::state_value, packages/shared/agent-accounts.ts `quickLaunchAccountId` and `NEW_SESSION_ACCOUNT_RULES`, packages/core-ui/accounts/manager.tsx, apps/desktop/src/app/window/new_thread_picker.rs.
 pub(crate) fn quick_launch_account<'a>(
     registry: &'a Registry,
@@ -19,7 +19,7 @@ pub(crate) fn quick_launch_account<'a>(
         .new_session_accounts
         .get(&provider)
         .cloned()
-        .unwrap_or(NewSessionAccount::MostRemaining);
+        .unwrap_or(NewSessionAccount::Auto);
     let rule = match rule {
         NewSessionAccount::Pinned { id } => return registered(&id),
         NewSessionAccount::LastUsed => {
@@ -30,7 +30,7 @@ pub(crate) fn quick_launch_account<'a>(
             {
                 return Some(account);
             }
-            NewSessionAccount::MostRemaining
+            NewSessionAccount::Auto
         }
         rule => rule,
     };
@@ -42,6 +42,7 @@ pub(crate) fn quick_launch_account<'a>(
             .filter(|d| d.status == "ready" && d.usage_error.is_none() && !d.usage.is_empty())
     };
     let slot = |account: &SavedAccount| account.selector.parse::<u32>().unwrap_or(u32::MAX);
+    let now = Utc::now();
     registry
         .accounts
         .iter()
@@ -51,7 +52,7 @@ pub(crate) fn quick_launch_account<'a>(
             let by_usage = match (left, right) {
                 (Some(left), Some(right)) => exhausted(left)
                     .cmp(&exhausted(right))
-                    .then_with(|| rank(&rule, left, right)),
+                    .then_with(|| rank(&rule, left, right, now)),
                 (Some(_), None) => Ordering::Less,
                 (None, Some(_)) => Ordering::Greater,
                 (None, None) => Ordering::Equal,
@@ -81,9 +82,42 @@ fn soonest_reset(account: &DiscoveredAccount) -> Option<i64> {
         .map(|t| t.timestamp())
         .min()
 }
+/// Remaining percent per hour until reset, taken over the account's tightest window. Windows without a reset time use their window length; a window that already reset counts as one minute away so its capacity is spent first.
+fn sustainable_rate(account: &DiscoveredAccount, now: DateTime<Utc>) -> Option<f64> {
+    account
+        .usage
+        .iter()
+        .filter_map(|w| {
+            let hours = match w
+                .resets_at
+                .as_deref()
+                .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+            {
+                Some(reset) => {
+                    (reset.with_timezone(&Utc) - now).num_seconds().max(60) as f64 / 3600.
+                }
+                None => w.limit_window_seconds.filter(|s| *s > 0)? as f64 / 3600.,
+            };
+            Some((100. - w.used_percent).max(0.) / hours)
+        })
+        .min_by(f64::total_cmp)
+}
 /// Less is better.
-fn rank(rule: &NewSessionAccount, left: &DiscoveredAccount, right: &DiscoveredAccount) -> Ordering {
+fn rank(
+    rule: &NewSessionAccount,
+    left: &DiscoveredAccount,
+    right: &DiscoveredAccount,
+    now: DateTime<Utc>,
+) -> Ordering {
     match rule {
+        NewSessionAccount::Auto => {
+            match (sustainable_rate(left, now), sustainable_rate(right, now)) {
+                (Some(left), Some(right)) => right.total_cmp(&left),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            }
+        }
         NewSessionAccount::MostRemaining => highest_used(left).total_cmp(&highest_used(right)),
         NewSessionAccount::MostUsed => highest_used(right).total_cmp(&highest_used(left)),
         NewSessionAccount::SoonestReset => match (soonest_reset(left), soonest_reset(right)) {

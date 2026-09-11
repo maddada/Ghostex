@@ -461,9 +461,8 @@ function AccountManager({
                         accounts={accounts}
                         busy={busy}
                         label={label}
-                        choice={data.newSessionAccounts?.[provider] ?? { rule: 'mostRemaining' }}
+                        choice={data.newSessionAccounts?.[provider] ?? { rule: 'auto' }}
                         onChange={(choice) => void request({ operation: 'defaultAccount', provider, choice })}
-                        resolved={defaultAccount}
                       />
                       <PolicySettingRows
                         scope={`${provider} defaults`}
@@ -488,30 +487,26 @@ function AccountManager({
   );
 }
 
-/** CDXC:AgentProviders 2026-09-11 DECISION: User: the row lists the automatic rules first, Most limit remaining on top as the default, then each saved account so one specific account can be pinned instead. Choices saved before these rules existed migrate to Most limit remaining. SEE-ALSO: server/src/accounts/default_account.rs. */
+/** CDXC:AgentProviders 2026-09-11 DECISION: User: the row lists the automatic rules first, Auto (recommended) on top as the default, then each saved account so one specific account can be pinned instead. Choices saved before these rules existed migrate to Auto. SEE-ALSO: server/src/accounts/default_account.rs. */
 function DefaultAccountRow({
   accounts,
   busy,
   choice,
   label,
   onChange,
-  resolved,
 }: {
   accounts: AgentAccount[];
   busy: boolean;
   choice: NewSessionAccountChoice;
   label: string;
   onChange: (choice: NewSessionAccountChoice) => void;
-  resolved: AgentAccount | undefined;
 }) {
   const formatAccountText = useAccountText();
   const id = useId();
   const value = choice.rule === 'pinned' ? choice.id : choice.rule;
-  const ruleLabel = (rule: (typeof NEW_SESSION_ACCOUNT_RULES)[number]) =>
-    rule.rule === choice.rule && resolved ? `${rule.label} · ${formatAccountText(resolved.name)}` : rule.label;
   return (
     <SettingRow
-      description={`Quick launch starts new ${label} sessions with this account. The automatic rules only consider accounts set to Automatic: Most limit remaining picks the account with the most limit left, Soonest reset the one whose limit resets first, Most used first keeps draining the account already in use, and Same as last session reuses the account of the last session. Existing sessions keep their saved settings.`}
+      description={`Quick launch starts new ${label} sessions with this account. The automatic rules only consider accounts set to Automatic: Auto weighs remaining limit against time to reset and picks the account that can absorb the most usage before any of its limits resets, Most limit remaining picks the account with the most limit left, Soonest reset the one whose limit resets first, Most used first keeps draining the account already in use, and Same as last session reuses the account of the last session. Existing sessions keep their saved settings.`}
       htmlFor={id}
       label='Account for new sessions'
     >
@@ -519,7 +514,7 @@ function DefaultAccountRow({
         disabled={busy}
         disabledReason='Accounts are being updated.'
         items={[
-          ...NEW_SESSION_ACCOUNT_RULES.map((rule) => ({ label: ruleLabel(rule), value: rule.rule })),
+          ...NEW_SESSION_ACCOUNT_RULES.map((rule) => ({ label: rule.label, value: rule.rule })),
           ...accounts.map((account) => ({ label: <AccountText text={account.name} />, value: account.id })),
         ]}
         onValueChange={(next) => {
@@ -534,8 +529,8 @@ function DefaultAccountRow({
         <SettingsSelectContent className='settings-list-select-content'>
           <SelectGroup>
             {NEW_SESSION_ACCOUNT_RULES.map((rule) => (
-              <SelectItem key={rule.rule} value={rule.rule} label={ruleLabel(rule)}>
-                {ruleLabel(rule)}
+              <SelectItem key={rule.rule} value={rule.rule} label={rule.label}>
+                {rule.label}
               </SelectItem>
             ))}
           </SelectGroup>

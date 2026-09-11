@@ -75,10 +75,11 @@ export interface AccountRecovery {
   nextAttemptAt?: string;
   updatedAt: string;
 }
-export type NewSessionAccountRule = 'mostRemaining' | 'soonestReset' | 'mostUsed' | 'lastUsed';
+export type NewSessionAccountRule = 'auto' | 'mostRemaining' | 'soonestReset' | 'mostUsed' | 'lastUsed';
 export type NewSessionAccountChoice = { rule: NewSessionAccountRule } | { rule: 'pinned'; id: string };
 /** Automatic rules for the account that starts new sessions, in the order the Settings dropdown lists them. */
 export const NEW_SESSION_ACCOUNT_RULES: { rule: NewSessionAccountRule; label: string }[] = [
+  { rule: 'auto', label: 'Auto (recommended)' },
   { rule: 'mostRemaining', label: 'Most limit remaining' },
   { rule: 'soonestReset', label: 'Soonest reset' },
   { rule: 'mostUsed', label: 'Most used first' },
@@ -93,7 +94,7 @@ export interface AgentAccountsState {
   defaults: Record<AccountProvider, AccountPolicy>;
   /** Effective account for new sessions per provider, resolved by gxserver from the provider's rule. */
   defaultAccounts: Partial<Record<AccountProvider, string>>;
-  /** Per-provider rule from Settings; absent means Most limit remaining. */
+  /** Per-provider rule from Settings; absent means Auto. */
   newSessionAccounts?: Partial<Record<AccountProvider, NewSessionAccountChoice>>;
   session?: {
     provider: AccountProvider;
@@ -106,7 +107,7 @@ export interface AgentAccountsState {
 
 /**
  * CDXC:AgentProviders 2026-09-11 DECISION:
- * User: quick launch starts new sessions with the account chosen by the provider's Account for new sessions rule (Most limit remaining by default, or Soonest reset, Most used first, Same as last session, or one pinned account). This supersedes the 2026-09-09 saved default account and its at-limit switch step. gxserver resolves the rule once from the registry and the live usage snapshot and publishes the result as `defaultAccounts`, so every surface reads the same answer instead of ranking accounts itself. When the rule yields no account there is no entry and the launch keeps the current CLI login.
+ * User: quick launch starts new sessions with the account chosen by the provider's Account for new sessions rule (Auto by default, or Most limit remaining, Soonest reset, Most used first, Same as last session, or one pinned account). This supersedes the 2026-09-09 saved default account and its at-limit switch step. gxserver resolves the rule once from the registry and the live usage snapshot and publishes the result as `defaultAccounts`, so every surface reads the same answer instead of ranking accounts itself. When the rule yields no account there is no entry and the launch keeps the current CLI login.
  * SEE-ALSO: server/src/accounts/default_account.rs.
  */
 export function quickLaunchAccountId(state: AgentAccountsState, provider: AccountProvider): string | undefined {
